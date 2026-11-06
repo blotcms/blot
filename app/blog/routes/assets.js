@@ -166,7 +166,10 @@ assets.use(async (req, res, next) => {
   const listings = new Map();
   const list = (dir) => {
     if (!listings.has(dir))
-      listings.set(dir, folder.listNames(blogID, dir).catch(() => null));
+      listings.set(
+        dir,
+        folder.listNames(blogID, dir).catch(() => null)
+      );
     return listings.get(dir);
   };
 
@@ -244,7 +247,9 @@ assets.use(async (req, res, next) => {
   // Without the parent directory under any casing, only the lowercased path
   // can still exist (the walk prefers exact names, so it follows every other
   // candidate if they exist): this is where a scanner's request usually ends
-  for (const candidate of parent.missing ? candidates.slice(0, 1) : candidates) {
+  for (const candidate of parent.missing
+    ? candidates.slice(0, 1)
+    : candidates) {
     let path;
     try {
       path = await candidate();

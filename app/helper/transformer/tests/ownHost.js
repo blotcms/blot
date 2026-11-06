@@ -5,13 +5,13 @@ describe("helper/transformer/ownHost", function () {
   describe("hostnames", function () {
     it("includes the custom domain, stripped of a leading www.", function () {
       expect(ownHost.hostnames({ domain: "www.example.com" })).toEqual([
-        "example.com"
+        "example.com",
       ]);
     });
 
     it("includes the handle's blot.im subdomain", function () {
       expect(ownHost.hostnames({ handle: "foo" })).toEqual([
-        "foo." + config.host
+        "foo." + config.host,
       ]);
     });
 
@@ -30,7 +30,7 @@ describe("helper/transformer/ownHost", function () {
   describe("resolve", function () {
     var ownHostnames = ownHost.hostnames({
       domain: "example.com",
-      handle: "foo"
+      handle: "foo",
     });
 
     it("resolves a URL on the custom domain to a local path", function () {

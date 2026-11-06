@@ -48,7 +48,8 @@ server.get("/health", function (req, res, next) {
   // Only the internal probe (localhost or a loopback address, e.g. the proxy
   // cutover script's 127.0.0.1): routing is not strict, so this would also
   // catch a customer's /health/ page, which the blog serves.
-  if (req.path !== "/health" || !LOOPBACK_HOSTS.has(req.hostname)) return next();
+  if (req.path !== "/health" || !LOOPBACK_HOSTS.has(req.hostname))
+    return next();
   // do not cache response
   res.set("Cache-Control", "no-store");
   if (drain.isDraining()) return res.status(503).send("Draining");
@@ -127,7 +128,7 @@ server.use(function (req, res, next) {
 // Log response time in development mode
 server.use(trace.init);
 
-server.use(require('./request-logger'));
+server.use(require("./request-logger"));
 
 // Blot is composed of two sub applications.
 

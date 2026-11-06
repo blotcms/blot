@@ -6,12 +6,31 @@ const sandbox = require("sandbox");
 const { MAX_PIXELS, SOURCE_MAX } = require("sandbox/jobs/template-image");
 const { THUMBNAILS } = require("./config");
 const { normalizeShape } = require("sandbox/jobs/image-mask");
-const { parseCrop, normalizedCrop, orientedDimensions: dimensions } = require("sandbox/jobs/crop");
+const {
+  parseCrop,
+  normalizedCrop,
+  orientedDimensions: dimensions,
+} = require("sandbox/jobs/crop");
 
-const SUPPORTED = new Set(["jpeg", "png", "webp", "gif", "tiff", "avif", "svg"]);
-const SIZES = Object.values(THUMBNAILS).map(({ size, crop }) => ({ size, crop: !!crop }));
+const SUPPORTED = new Set([
+  "jpeg",
+  "png",
+  "webp",
+  "gif",
+  "tiff",
+  "avif",
+  "svg",
+]);
+const SIZES = Object.values(THUMBNAILS).map(({ size, crop }) => ({
+  size,
+  crop: !!crop,
+}));
 
-function invalid(message) { const error = new Error(message); error.status = 400; return error; }
+function invalid(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
 
 // The pixel work runs in the sandbox (app/sandbox/jobs/template-image.js). This
 // side keeps the checks that give the user a message: the jail's errors carry
@@ -21,13 +40,27 @@ function invalid(message) { const error = new Error(message); error.status = 400
 // data is rejected before a shared template is forked.
 async function check(sourcePath) {
   let metadata;
-  try { metadata = (await sandbox.run("template-image", { op: "check" }, { path: sourcePath })).meta; }
-  catch (_) { throw invalid("Please choose a valid image"); }
+  try {
+    metadata = (
+      await sandbox.run("template-image", { op: "check" }, { path: sourcePath })
+    ).meta;
+  } catch (_) {
+    throw invalid("Please choose a valid image");
+  }
   const oriented = dimensions(metadata);
-  if (!SUPPORTED.has(metadata.format) || !oriented.width || !oriented.height || oriented.width * oriented.height > MAX_PIXELS) {
+  if (
+    !SUPPORTED.has(metadata.format) ||
+    !oriented.width ||
+    !oriented.height ||
+    oriented.width * oriented.height > MAX_PIXELS
+  ) {
     throw invalid("Please choose a supported image under 100 megapixels");
   }
-  return { width: oriented.width, height: oriented.height, format: metadata.format };
+  return {
+    width: oriented.width,
+    height: oriented.height,
+    format: metadata.format,
+  };
 }
 
 async function validate(sourcePath, crop, shape) {
@@ -43,7 +76,8 @@ async function publish(outputDirectory, files) {
   const temporary = await fs.mkdtemp(join(os.tmpdir(), "blot-template-image-"));
   const published = [];
   try {
-    for (const [name, data] of files) await fs.writeFile(join(temporary, name), data);
+    for (const [name, data] of files)
+      await fs.writeFile(join(temporary, name), data);
     await fs.ensureDir(outputDirectory);
     for (const [name] of files) {
       const destination = join(outputDirectory, name);
@@ -53,13 +87,19 @@ async function publish(outputDirectory, files) {
   } catch (error) {
     await Promise.all(published.map((path) => fs.remove(path).catch(() => {})));
     throw error;
-  } finally { await fs.remove(temporary); }
+  } finally {
+    await fs.remove(temporary);
+  }
 }
 
 function thumbnailResults(names, meta) {
   const results = {};
   Object.keys(THUMBNAILS).forEach((name, i) => {
-    results[name] = { width: meta[i].width, height: meta[i].height, name: names[name] };
+    results[name] = {
+      width: meta[i].width,
+      height: meta[i].height,
+      name: names[name],
+    };
   });
   return results;
 }
@@ -71,26 +111,47 @@ function thumbnailResults(names, meta) {
 // and the crop only applies to the thumbnails, so the crop can be changed later
 // with regenerate(). Otherwise the original is the cropped image. Every
 // thumbnail is cut to `shape`, so templates can use any of them as is.
-async function generate(sourcePath, outputDirectory, crop, { shape: requestedShape, editable } = {}) {
+async function generate(
+  sourcePath,
+  outputDirectory,
+  crop,
+  { shape: requestedShape, editable } = {}
+) {
   const shape = normalizeShape(requestedShape);
   const checked = await check(sourcePath);
   parseCrop(crop, checked.width, checked.height);
 
   const { meta, outputs } = await sandbox.run(
     "template-image",
-    { op: "generate", crop: crop || null, shape, editable: !!editable, sizes: SIZES },
+    {
+      op: "generate",
+      crop: crop || null,
+      shape,
+      editable: !!editable,
+      sizes: SIZES,
+    },
     { path: sourcePath }
   );
 
   const prefix = `image-${uuid()}`;
   const names = { original: `${prefix}-original.webp` };
-  Object.keys(THUMBNAILS).forEach((name) => { names[name] = `${prefix}-${name}.webp`; });
-  await publish(outputDirectory, [names.original].concat(Object.keys(THUMBNAILS).map((name) => names[name]))
-    .map((name, i) => [name, outputs[i]]));
+  Object.keys(THUMBNAILS).forEach((name) => {
+    names[name] = `${prefix}-${name}.webp`;
+  });
+  await publish(
+    outputDirectory,
+    [names.original]
+      .concat(Object.keys(THUMBNAILS).map((name) => names[name]))
+      .map((name, i) => [name, outputs[i]])
+  );
 
   return {
     prefix,
-    original: { name: names.original, width: meta[0].width, height: meta[0].height },
+    original: {
+      name: names.original,
+      width: meta[0].width,
+      height: meta[0].height,
+    },
     crop: editable ? normalizedCrop(crop) : null,
     thumbnails: thumbnailResults(names, meta.slice(1)),
   };
@@ -107,9 +168,22 @@ async function regenerate(sourceBuffer, outputDirectory, crop, requestedShape) {
   );
   const prefix = `image-${uuid()}`;
   const names = {};
-  Object.keys(THUMBNAILS).forEach((name) => { names[name] = `${prefix}-${name}.webp`; });
-  await publish(outputDirectory, Object.keys(THUMBNAILS).map((name, i) => [names[name], outputs[i]]));
+  Object.keys(THUMBNAILS).forEach((name) => {
+    names[name] = `${prefix}-${name}.webp`;
+  });
+  await publish(
+    outputDirectory,
+    Object.keys(THUMBNAILS).map((name, i) => [names[name], outputs[i]])
+  );
   return { thumbnails: thumbnailResults(names, meta) };
 }
 
-module.exports = { generate, regenerate, validate, MAX_PIXELS, SOURCE_MAX, parseCrop, normalizeShape };
+module.exports = {
+  generate,
+  regenerate,
+  validate,
+  MAX_PIXELS,
+  SOURCE_MAX,
+  parseCrop,
+  normalizeShape,
+};

@@ -2,7 +2,6 @@ var { callbackify } = require("util");
 var folder = require("storage/folder");
 var Blog = require("models/blog");
 var User = require("models/user");
-var debug = require("debug")("blot:clients:git:disconnect");
 var database = require("./database");
 var repo = require("./repo");
 

@@ -28,26 +28,36 @@ const MAX_SIZES = 8;
 const MAX_SIZE = 4096;
 const CROP_FIELDS = ["x", "y", "width", "height", "size"];
 
-const open = (input) => sharp(input, { pages: 1, limitInputPixels: MAX_PIXELS });
+const open = (input) =>
+  sharp(input, { pages: 1, limitInputPixels: MAX_PIXELS });
 
 function checkCrop(crop) {
   if (crop === null || crop === undefined) return null;
-  if (typeof crop !== "object" || Array.isArray(crop)) throw new Error("invalid crop");
+  if (typeof crop !== "object" || Array.isArray(crop))
+    throw new Error("invalid crop");
   const out = {};
   for (const field of CROP_FIELDS) {
     const value = crop[field];
     if (value === undefined || value === null || value === "") continue;
-    if (typeof value !== "number" && typeof value !== "string") throw new Error("invalid crop");
+    if (typeof value !== "number" && typeof value !== "string")
+      throw new Error("invalid crop");
     out[field] = value;
   }
   return out;
 }
 
 function checkSizes(sizes) {
-  if (!Array.isArray(sizes) || !sizes.length || sizes.length > MAX_SIZES) throw new Error("invalid sizes");
+  if (!Array.isArray(sizes) || !sizes.length || sizes.length > MAX_SIZES)
+    throw new Error("invalid sizes");
   return sizes.map((options) => {
-    if (!options || typeof options !== "object") throw new Error("invalid size");
-    if (!Number.isInteger(options.size) || options.size < 1 || options.size > MAX_SIZE) throw new Error("invalid size");
+    if (!options || typeof options !== "object")
+      throw new Error("invalid size");
+    if (
+      !Number.isInteger(options.size) ||
+      options.size < 1 ||
+      options.size > MAX_SIZE
+    )
+      throw new Error("invalid size");
     if (typeof options.crop !== "boolean") throw new Error("invalid crop");
     return { size: options.size, crop: options.crop };
   });
@@ -61,9 +71,14 @@ async function thumbnail(base, { size, crop }, shape) {
     withoutEnlargement: !crop,
     position: sharp.strategy.entropy,
   });
-  if (shape === "square") return resized.webp().toBuffer({ resolveWithObject: true });
-  const { data, info } = await resized.png().toBuffer({ resolveWithObject: true });
-  return applyShape(data, info.width, info.height, shape).webp().toBuffer({ resolveWithObject: true });
+  if (shape === "square")
+    return resized.webp().toBuffer({ resolveWithObject: true });
+  const { data, info } = await resized
+    .png()
+    .toBuffer({ resolveWithObject: true });
+  return applyShape(data, info.width, info.height, shape)
+    .webp()
+    .toBuffer({ resolveWithObject: true });
 }
 
 // One at a time, to keep the memory of the jail down
@@ -81,7 +96,10 @@ async function thumbnails(base, sizes, shape) {
 async function check(input) {
   const image = open(input);
   const { format, width, height, orientation } = await image.metadata();
-  await image.rotate().resize({ width: 1, height: 1, fit: "inside" }).toBuffer();
+  await image
+    .rotate()
+    .resize({ width: 1, height: 1, fit: "inside" })
+    .toBuffer();
   return { meta: { format, width, height, orientation }, outputs: [] };
 }
 
@@ -100,7 +118,10 @@ async function generate(args, input) {
   if (args.editable) {
     original = await source
       .clone()
-      .resize(SOURCE_MAX, SOURCE_MAX, { fit: "inside", withoutEnlargement: true })
+      .resize(SOURCE_MAX, SOURCE_MAX, {
+        fit: "inside",
+        withoutEnlargement: true,
+      })
       .webp({ quality: 90 })
       .toBuffer({ resolveWithObject: true });
     const selected = parseCrop(crop, original.info.width, original.info.height);
@@ -114,7 +135,9 @@ async function generate(args, input) {
 
   const made = await thumbnails(base, sizes, shape);
   return {
-    meta: [{ width: original.info.width, height: original.info.height }].concat(made.meta),
+    meta: [{ width: original.info.width, height: original.info.height }].concat(
+      made.meta
+    ),
     outputs: [original.data].concat(made.outputs),
   };
 }

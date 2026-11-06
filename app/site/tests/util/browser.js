@@ -75,8 +75,8 @@ module.exports = function browser(context) {
       const value = state.typed.has(this)
         ? state.typed.get(this)
         : this.tagName === "textarea"
-        ? $el.text()
-        : $el.attr("value") || "";
+          ? $el.text()
+          : $el.attr("value") || "";
 
       params.append(name, value);
     });

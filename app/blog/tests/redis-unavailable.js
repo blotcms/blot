@@ -32,7 +32,9 @@ describe("when redis is unavailable", function () {
 
   it("responds 503, not an incomplete cacheable page, when redis fails while retrieving entries", async function () {
     await this.write({ path: "/a.txt", content: "Hello, A!" });
-    await this.template({ "entries.html": "{{#entries}}{{{html}}}{{/entries}}" });
+    await this.template({
+      "entries.html": "{{#entries}}{{{html}}}{{/entries}}",
+    });
 
     const Entries = require("models/entries");
     spyOn(Entries, "getPage").and.callFake(function () {
@@ -47,9 +49,11 @@ describe("when redis is unavailable", function () {
 
   it("responds 503, not a cacheable 400, when the template cannot be loaded", async function () {
     const Template = require("models/template");
-    spyOn(Template, "getMetadata").and.callFake(function (templateID, callback) {
-      callback(new ClientOfflineError());
-    });
+    spyOn(Template, "getMetadata").and.callFake(
+      function (templateID, callback) {
+        callback(new ClientOfflineError());
+      }
+    );
 
     const res = await this.get("/");
 

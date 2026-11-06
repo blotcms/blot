@@ -33,5 +33,5 @@ describe("rgb", function () {
       expect(result).toEqual("2, 3, 4");
       done();
     });
-  });  
+  });
 });

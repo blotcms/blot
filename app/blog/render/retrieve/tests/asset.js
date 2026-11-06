@@ -76,7 +76,9 @@ describe("asset", function () {
     });
 
     it("keeps the cache-busted URL for a rendered view", async function () {
-      const lambda = await getLambdaFor(request({ "style.css": "0123456789abcdef" }));
+      const lambda = await getLambdaFor(
+        request({ "style.css": "0123456789abcdef" })
+      );
       const render = (text) => text.replace("{{cacheID}}", "123");
 
       expect(lambda("/style.css", render)).toEqual(
@@ -85,7 +87,9 @@ describe("asset", function () {
     });
 
     it("keeps the cache-busted URL on a preview subdomain", async function () {
-      const req = request({ "img/a.png": { path: "/img/a.png", version: "abc12345" } });
+      const req = request({
+        "img/a.png": { path: "/img/a.png", version: "abc12345" },
+      });
       req.preview = true;
       const lambda = await getLambdaFor(req);
       const render = (text) => text.replace("{{cacheID}}", "123");

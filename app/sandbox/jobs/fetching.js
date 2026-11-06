@@ -68,14 +68,19 @@ function checkURL(value) {
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new FetchError("URL is not allowed");
   }
-  if (url.username || url.password) throw new FetchError("URL must not contain credentials");
+  if (url.username || url.password)
+    throw new FetchError("URL must not contain credentials");
   return url;
 }
 
 // Only printable ASCII: these become request headers
 function checkHeader(value, what = "request header") {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || value.length > MAX_HEADER_LENGTH || !/^[\x20-\x7e]*$/.test(value)) {
+  if (
+    typeof value !== "string" ||
+    value.length > MAX_HEADER_LENGTH ||
+    !/^[\x20-\x7e]*$/.test(value)
+  ) {
     throw new FetchError("invalid " + what);
   }
   return value;
@@ -103,13 +108,20 @@ function request(url, { method, headers, ip, deadline, headersTimeout }) {
           : callback(null, ip, family);
     }
     const req = lib.request(url, options, resolve);
-    const timer = setTimeout(() => req.destroy(new FetchError("timed out", { timedOut: true })), wait);
+    const timer = setTimeout(
+      () => req.destroy(new FetchError("timed out", { timedOut: true })),
+      wait
+    );
     req.on("response", () => clearTimeout(timer));
     req.on("error", (err) => {
       clearTimeout(timer);
       // Whatever the connection did is the URL's doing, not a bug: keep its
       // message and its code (ECONNREFUSED...) for the caller
-      reject(err instanceof FetchError ? err : new FetchError(err.message, { code: err.code }));
+      reject(
+        err instanceof FetchError
+          ? err
+          : new FetchError(err.message, { code: err.code })
+      );
     });
     req.end();
   });
@@ -120,14 +132,17 @@ function request(url, { method, headers, ip, deadline, headersTimeout }) {
 function readBody(res, { deadline, maxBytes, tooLarge, truncate }) {
   const left = deadline - Date.now();
   return new Promise((resolve, reject) => {
-    const encoding = String(res.headers["content-encoding"] || "identity").trim().toLowerCase();
+    const encoding = String(res.headers["content-encoding"] || "identity")
+      .trim()
+      .toLowerCase();
     if (encoding !== "identity" && !DECODERS[encoding]) {
       res.destroy();
       return reject(new FetchError("unsupported content encoding"));
     }
 
     const declared = Number(res.headers["content-length"]);
-    const expected = Number.isSafeInteger(declared) && declared >= 0 ? declared : null;
+    const expected =
+      Number.isSafeInteger(declared) && declared >= 0 ? declared : null;
     if (!truncate && expected !== null && expected > maxBytes) {
       res.destroy();
       return reject(new FetchError(tooLarge));
@@ -161,7 +176,10 @@ function readBody(res, { deadline, maxBytes, tooLarge, truncate }) {
 
     const armIdle = () => {
       clearTimeout(idle);
-      idle = setTimeout(() => finish(new FetchError("download stalled")), IDLE_TIMEOUT);
+      idle = setTimeout(
+        () => finish(new FetchError("download stalled")),
+        IDLE_TIMEOUT
+      );
     };
     const whole = setTimeout(
       () => finish(new FetchError("timed out", { timedOut: true })),
@@ -197,11 +215,14 @@ function readBody(res, { deadline, maxBytes, tooLarge, truncate }) {
       chunks.push(chunk);
     });
     if (decoder) {
-      decoder.on("error", () => finish(new FetchError("body could not be decoded")));
+      decoder.on("error", () =>
+        finish(new FetchError("body could not be decoded"))
+      );
       res.pipe(decoder);
     }
     output.on("end", () => {
-      if (!res.complete) return finish(new FetchError("download was cut short"));
+      if (!res.complete)
+        return finish(new FetchError("download was cut short"));
       if (expected !== null && received < expected) {
         return finish(new FetchError("download was cut short"));
       }
@@ -216,7 +237,8 @@ function pickHeaders(res, names) {
   const headers = {};
   for (const [name, header] of Object.entries(names)) {
     const value = res.headers[header];
-    if (typeof value === "string" && value) headers[name] = value.slice(0, MAX_HEADER_LENGTH);
+    if (typeof value === "string" && value)
+      headers[name] = value.slice(0, MAX_HEADER_LENGTH);
   }
   return headers;
 }
@@ -264,9 +286,16 @@ async function fetchURL(url, options) {
     });
     const status = res.statusCode;
 
-    if (redirect === "follow" && status >= 300 && status < 400 && status !== 304 && res.headers.location) {
+    if (
+      redirect === "follow" &&
+      status >= 300 &&
+      status < 400 &&
+      status !== 304 &&
+      res.headers.location
+    ) {
       res.destroy();
-      if (redirects >= MAX_REDIRECTS) throw new FetchError("too many redirects");
+      if (redirects >= MAX_REDIRECTS)
+        throw new FetchError("too many redirects");
       let next;
       try {
         next = new URL(res.headers.location, url).toString();
@@ -287,14 +316,26 @@ async function fetchURL(url, options) {
       throw new FetchError(String(status), { status });
     }
 
-    const result = { status, headers: pickHeaders(res, names), truncated: false };
-    if (method === "HEAD" || (redirect === "manual" && status >= 300 && status < 400)) {
+    const result = {
+      status,
+      headers: pickHeaders(res, names),
+      truncated: false,
+    };
+    if (
+      method === "HEAD" ||
+      (redirect === "manual" && status >= 300 && status < 400)
+    ) {
       res.destroy();
       result.body = Buffer.alloc(0);
       return result;
     }
 
-    const { data, truncated } = await readBody(res, { deadline, maxBytes, tooLarge, truncate });
+    const { data, truncated } = await readBody(res, {
+      deadline,
+      maxBytes,
+      tooLarge,
+      truncate,
+    });
     result.body = data;
     result.truncated = truncated;
     return result;

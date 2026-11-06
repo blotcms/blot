@@ -38,7 +38,8 @@ function parseHeaders(buffer, what) {
 
 function one(headers, name, what) {
   const found = headers.filter((header) => header.name === name);
-  if (found.length !== 1) fail(what, "it must have exactly one " + name + " line");
+  if (found.length !== 1)
+    fail(what, "it must have exactly one " + name + " line");
   return found[0].value;
 }
 
@@ -53,7 +54,9 @@ function parseCommit(buffer) {
   const { headers, message } = parseHeaders(buffer, "commit");
   if (headers[0].name !== "tree") fail("commit", "it must start with its tree");
 
-  const parents = headers.filter((header) => header.name === "parent").map((header) => oidOf(header.value, "commit", "parent"));
+  const parents = headers
+    .filter((header) => header.name === "parent")
+    .map((header) => oidOf(header.value, "commit", "parent"));
   return {
     tree: oidOf(one(headers, "tree", "commit"), "commit", "tree"),
     parents,
@@ -76,10 +79,12 @@ function parseTree(buffer) {
   while (at < buffer.length) {
     const space = buffer.indexOf(32, at);
     const nul = space === -1 ? -1 : buffer.indexOf(0, space);
-    if (nul === -1 || nul + 21 > buffer.length) fail("tree", "an entry is cut short");
+    if (nul === -1 || nul + 21 > buffer.length)
+      fail("tree", "an entry is cut short");
 
     const mode = buffer.toString("latin1", at, space);
-    if (!/^[0-7]{5,6}$/.test(mode)) fail("tree", "an entry has the mode " + JSON.stringify(mode));
+    if (!/^[0-7]{5,6}$/.test(mode))
+      fail("tree", "an entry has the mode " + JSON.stringify(mode));
 
     const nameBytes = buffer.subarray(space + 1, nul);
     const name = nameBytes.toString("utf8");

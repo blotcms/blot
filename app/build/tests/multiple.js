@@ -18,13 +18,21 @@ describe("build multiple", function () {
   it("aggregates convertible files inside a + folder", async function () {
     var root = "/album+";
 
-    await folder.write(this.blog.id, path.join(root, "one.md"), "# One\n\nBody");
+    await folder.write(
+      this.blog.id,
+      path.join(root, "one.md"),
+      "# One\n\nBody"
+    );
     await folder.write(
       this.blog.id,
       path.join(root, "two.md"),
       "## Second\n\n![Image](/album+/cover.jpg)"
     );
-    await folder.write(this.blog.id, path.join(root, "cover.jpg"), Buffer.from("fake"));
+    await folder.write(
+      this.blog.id,
+      path.join(root, "cover.jpg"),
+      Buffer.from("fake")
+    );
 
     var entry = await this.buildEntry("/album+");
 
@@ -41,17 +49,15 @@ describe("build multiple", function () {
     expect(entry.html).toContain(
       '<section class="multi-file-entry" data-file="/album+/two.md" data-index="2" data-extension="md">'
     );
-    expect(entry.html).toContain("<h1 id=\"one\">One</h1>");
+    expect(entry.html).toContain('<h1 id="one">One</h1>');
     expect(entry.html).toContain("<p>Body</p>");
-    expect(entry.html).toContain("<h2 id=\"second\">Second</h2>");
+    expect(entry.html).toContain('<h2 id="second">Second</h2>');
     expect(entry.metadata._sourcePaths.sort()).toEqual([
       "/album+/cover.jpg",
       "/album+/one.md",
       "/album+/two.md",
     ]);
-    expect(entry.dependencies).toEqual([
-      "/album+/cover.jpg",
-    ]);
+    expect(entry.dependencies).toEqual(["/album+/cover.jpg"]);
   });
 
   it("builds the aggregated entry when a child file is targeted", async function () {
@@ -107,7 +113,11 @@ describe("build multiple", function () {
 
     var root = "/album+";
     await folder.write(this.blog.id, path.join(root, "one.md"), "# One");
-    await folder.write(this.blog.id, path.join(root, "cover.jpg"), Buffer.from("fake"));
+    await folder.write(
+      this.blog.id,
+      path.join(root, "cover.jpg"),
+      Buffer.from("fake")
+    );
 
     var entry = await this.buildEntry("/album+");
 
@@ -137,8 +147,16 @@ describe("build multiple", function () {
   it("unions tags even when source files spell the key with different case", async function () {
     var root = "/tagcase+";
 
-    await folder.write(this.blog.id, path.join(root, "one.md"), "Tags: alpha\n\n# One");
-    await folder.write(this.blog.id, path.join(root, "two.md"), "tags: beta\n\n# Two");
+    await folder.write(
+      this.blog.id,
+      path.join(root, "one.md"),
+      "Tags: alpha\n\n# One"
+    );
+    await folder.write(
+      this.blog.id,
+      path.join(root, "two.md"),
+      "tags: beta\n\n# Two"
+    );
 
     var entry = await this.buildEntry("/tagcase+");
 
@@ -193,8 +211,16 @@ describe("build multiple", function () {
   it("lets later source files override a repeated scalar metadata key", async function () {
     var root = "/drafty+";
 
-    await folder.write(this.blog.id, path.join(root, "01.md"), "Draft: no\n\n# One");
-    await folder.write(this.blog.id, path.join(root, "02.md"), "Draft: yes\n\n# Two");
+    await folder.write(
+      this.blog.id,
+      path.join(root, "01.md"),
+      "Draft: no\n\n# One"
+    );
+    await folder.write(
+      this.blog.id,
+      path.join(root, "02.md"),
+      "Draft: yes\n\n# Two"
+    );
 
     var entry = await this.buildEntry("/drafty+");
 
@@ -204,8 +230,16 @@ describe("build multiple", function () {
   it("lets a later source file clear an earlier scalar value", async function () {
     var root = "/undrafty+";
 
-    await folder.write(this.blog.id, path.join(root, "01.md"), "Draft: yes\n\n# One");
-    await folder.write(this.blog.id, path.join(root, "02.md"), "Draft: no\n\n# Two");
+    await folder.write(
+      this.blog.id,
+      path.join(root, "01.md"),
+      "Draft: yes\n\n# One"
+    );
+    await folder.write(
+      this.blog.id,
+      path.join(root, "02.md"),
+      "Draft: no\n\n# Two"
+    );
 
     var entry = await this.buildEntry("/undrafty+");
 
@@ -215,8 +249,16 @@ describe("build multiple", function () {
   it("overrides a repeated scalar key spelled with a different case", async function () {
     var root = "/titlecase+";
 
-    await folder.write(this.blog.id, path.join(root, "01.md"), "Title: First\n\n# One");
-    await folder.write(this.blog.id, path.join(root, "02.md"), "title: Second\n\n# Two");
+    await folder.write(
+      this.blog.id,
+      path.join(root, "01.md"),
+      "Title: First\n\n# One"
+    );
+    await folder.write(
+      this.blog.id,
+      path.join(root, "02.md"),
+      "title: Second\n\n# Two"
+    );
 
     var entry = await this.buildEntry("/titlecase+");
 
@@ -230,27 +272,45 @@ describe("build multiple", function () {
   it("injects a heading when the only h1 is beyond the first three source files", async function () {
     var root = "/long-read+";
 
-    await folder.write(this.blog.id, path.join(root, "01.md"), "Intro paragraph.");
+    await folder.write(
+      this.blog.id,
+      path.join(root, "01.md"),
+      "Intro paragraph."
+    );
     await folder.write(this.blog.id, path.join(root, "02.md"), "More text.");
     await folder.write(this.blog.id, path.join(root, "03.md"), "Still going.");
-    await folder.write(this.blog.id, path.join(root, "04.md"), "# The Real Heading\n\nBody.");
+    await folder.write(
+      this.blog.id,
+      path.join(root, "04.md"),
+      "# The Real Heading\n\nBody."
+    );
 
     var entry = await this.buildEntry("/long-read+");
 
     // prepare/title.js never reaches the 4th file's <h1>, so a heading is
     // injected and the stored title matches what renders at the top.
-    expect(entry.html).toContain(
-      '<h1 class="multi-file-title">Long Read</h1>'
-    );
+    expect(entry.html).toContain('<h1 class="multi-file-title">Long Read</h1>');
     expect(entry.title).toBe("Long Read");
   });
 
   it("does not inject a heading when an early source file has an h1", async function () {
     var root = "/early-head+";
 
-    await folder.write(this.blog.id, path.join(root, "01.md"), "No heading here.");
-    await folder.write(this.blog.id, path.join(root, "02.md"), "# Second File Heading");
-    await folder.write(this.blog.id, path.join(root, "03.md"), "# Third File Heading");
+    await folder.write(
+      this.blog.id,
+      path.join(root, "01.md"),
+      "No heading here."
+    );
+    await folder.write(
+      this.blog.id,
+      path.join(root, "02.md"),
+      "# Second File Heading"
+    );
+    await folder.write(
+      this.blog.id,
+      path.join(root, "03.md"),
+      "# Third File Heading"
+    );
 
     var entry = await this.buildEntry("/early-head+");
 

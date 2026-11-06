@@ -25,7 +25,10 @@ export default function snapshot() {
       .map((line) => line.trim().slice(0, 160));
     console.error(
       clfdate(),
-      `Diagnostic snapshot: loadavg=${os.loadavg().map((n) => n.toFixed(2)).join(",")} processes:\n${rows.join("\n")}`
+      `Diagnostic snapshot: loadavg=${os
+        .loadavg()
+        .map((n) => n.toFixed(2))
+        .join(",")} processes:\n${rows.join("\n")}`
     );
   });
 }

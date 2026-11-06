@@ -59,7 +59,7 @@ module.exports = function (req, res, next) {
         !linkURL.startsWith("/") &&
         !linkURL.startsWith("http://") &&
         !linkURL.startsWith("https://") &&
-        linkURL.slice(0, linkURL.indexOf("/")).indexOf('.') > -1        
+        linkURL.slice(0, linkURL.indexOf("/")).indexOf(".") > -1
       ) {
         req.updates.menu[i].url = "https://" + req.updates.menu[i].url;
       }
@@ -71,7 +71,6 @@ module.exports = function (req, res, next) {
       fallback: req.blog && req.blog.imageExif ? req.blog.imageExif : "off",
     });
   }
-
 
   if (Object.prototype.hasOwnProperty.call(req.updates, "converters")) {
     var converterUpdates = req.updates.converters;
@@ -85,17 +84,17 @@ module.exports = function (req, res, next) {
     }
 
     req.updates.converters = normalizeConverters(converterUpdates, {
-      fallback: req.blog && req.blog.converters ? req.blog.converters : undefined,
+      fallback:
+        req.blog && req.blog.converters ? req.blog.converters : undefined,
     });
 
     extend(req.updates.converters).and(req.blog.converters || {});
   }
 
-
   if (req.updates.plugins) {
     // this bullshit below is because I haven't properly declared
     // the model for blog.plugins so formJSON needs a little help...
-    for (var i in req.updates.plugins) {
+    for (const i in req.updates.plugins) {
       req.updates.plugins[i].enabled = normalizeBooleanOption(
         req.updates.plugins[i].enabled
       );
@@ -103,7 +102,7 @@ module.exports = function (req, res, next) {
     }
 
     if (req.updates.plugins.typeset) {
-      for (var x in req.updates.plugins.typeset.options)
+      for (const x in req.updates.plugins.typeset.options)
         req.updates.plugins.typeset.options[x] = normalizeBooleanOption(
           req.updates.plugins.typeset.options[x]
         );

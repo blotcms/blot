@@ -42,10 +42,12 @@ describe("dashboard folder upload sync lock", function () {
 
     const establishSyncLock = jasmine
       .createSpy("establishSyncLock")
-      .and.returnValue(Promise.resolve({
-        folder: { update: lockState.update },
-        done: lockState.done,
-      }));
+      .and.returnValue(
+        Promise.resolve({
+          folder: { update: lockState.update },
+          done: lockState.done,
+        })
+      );
 
     const fs = {
       readFile: jasmine
@@ -58,15 +60,20 @@ describe("dashboard folder upload sync lock", function () {
       NotFoundError: require("../../storage/folder/errors").NotFoundError,
       exists: jasmine
         .createSpy("exists")
-        .and.callFake(async (blogID, filePath) => filePath.endsWith("skip.txt")),
+        .and.callFake(async (blogID, filePath) =>
+          filePath.endsWith("skip.txt")
+        ),
       stat: jasmine.createSpy("stat").and.returnValue(Promise.resolve({})),
-      writeFrom: jasmine.createSpy("writeFrom").and.returnValue(Promise.resolve()),
+      writeFrom: jasmine
+        .createSpy("writeFrom")
+        .and.returnValue(Promise.resolve()),
     };
 
     const clients = {
       mockClient: {
         write: (blogID, filePath, contents, cb) => {
-          if (filePath === "client-fail.txt") return cb(new Error("client failed"));
+          if (filePath === "client-fail.txt")
+            return cb(new Error("client failed"));
           cb(null);
         },
       },
@@ -105,7 +112,7 @@ describe("dashboard folder upload sync lock", function () {
     expect(establishSyncLock).toHaveBeenCalledTimes(1);
     expect(establishSyncLock).toHaveBeenCalledWith("blog-1");
 
-    expect(lockState.update).toHaveBeenCalledWith('/changed.txt');
+    expect(lockState.update).toHaveBeenCalledWith("/changed.txt");
 
     expect(lockState.done).toHaveBeenCalledTimes(1);
     expect(next).not.toHaveBeenCalled();
@@ -115,24 +122,32 @@ describe("dashboard folder upload sync lock", function () {
     const folderUpdateError = new Error("update failed");
 
     const lockState = {
-      update: jasmine.createSpy("update").and.callFake(async () => { throw folderUpdateError; }),
+      update: jasmine.createSpy("update").and.callFake(async () => {
+        throw folderUpdateError;
+      }),
       done: jasmine.createSpy("done").and.returnValue(Promise.resolve()),
     };
 
     const establishSyncLock = jasmine
       .createSpy("establishSyncLock")
-      .and.returnValue(Promise.resolve({
-        folder: { update: lockState.update },
-        done: lockState.done,
-      }));
+      .and.returnValue(
+        Promise.resolve({
+          folder: { update: lockState.update },
+          done: lockState.done,
+        })
+      );
 
     const fs = {
       remove: jasmine.createSpy("remove").and.returnValue(Promise.resolve()),
     };
 
     const storage = {
-      exists: jasmine.createSpy("exists").and.returnValue(Promise.resolve(false)),
-      writeFrom: jasmine.createSpy("writeFrom").and.returnValue(Promise.resolve()),
+      exists: jasmine
+        .createSpy("exists")
+        .and.returnValue(Promise.resolve(false)),
+      writeFrom: jasmine
+        .createSpy("writeFrom")
+        .and.returnValue(Promise.resolve()),
     };
 
     setModuleMock("sync/establishSyncLock", establishSyncLock, touched);
@@ -167,7 +182,6 @@ describe("dashboard folder upload sync lock", function () {
   });
 });
 
-
 describe("dashboard folder upload prefixed relative paths", function () {
   let touched;
 
@@ -187,16 +201,26 @@ describe("dashboard folder upload prefixed relative paths", function () {
     };
 
     const storage = {
-      exists: jasmine.createSpy("exists").and.returnValue(Promise.resolve(false)),
-      writeFrom: jasmine.createSpy("writeFrom").and.returnValue(Promise.resolve()),
+      exists: jasmine
+        .createSpy("exists")
+        .and.returnValue(Promise.resolve(false)),
+      writeFrom: jasmine
+        .createSpy("writeFrom")
+        .and.returnValue(Promise.resolve()),
     };
 
     const establishSyncLock = jasmine
       .createSpy("establishSyncLock")
-      .and.returnValue(Promise.resolve({
-        folder: { update: jasmine.createSpy("update").and.returnValue(Promise.resolve()) },
-        done: jasmine.createSpy("done").and.returnValue(Promise.resolve()),
-      }));
+      .and.returnValue(
+        Promise.resolve({
+          folder: {
+            update: jasmine
+              .createSpy("update")
+              .and.returnValue(Promise.resolve()),
+          },
+          done: jasmine.createSpy("done").and.returnValue(Promise.resolve()),
+        })
+      );
 
     setModuleMock("sync/establishSyncLock", establishSyncLock, touched);
     setModuleMock("fs-extra", fs, touched);
@@ -210,7 +234,11 @@ describe("dashboard folder upload prefixed relative paths", function () {
       blog: { id: "blog-prefixed" },
       body: {
         relativePaths: JSON.stringify([
-          { field: "upload", index: 0, relativePath: "subfolder/nested/file.md" },
+          {
+            field: "upload",
+            index: 0,
+            relativePath: "subfolder/nested/file.md",
+          },
         ]),
       },
       query: {},

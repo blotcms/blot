@@ -1,7 +1,6 @@
 var getView = require("./getView");
 var async = require("async");
 var ensure = require("helper/ensure");
-var promisify = require("util").promisify;
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
 var {
@@ -62,7 +61,8 @@ module.exports = function getPartials(
     var wrapped = content || "";
 
     for (var i = segments.length - 1; i >= 0; i--) {
-      wrapped = "{{#" + segments[i] + "}}" + wrapped + "{{/" + segments[i] + "}}";
+      wrapped =
+        "{{#" + segments[i] + "}}" + wrapped + "{{/" + segments[i] + "}}";
     }
 
     return wrapped;
@@ -108,7 +108,8 @@ module.exports = function getPartials(
       Object.assign({ viewName: view.name }, wrapOptions)
     );
 
-    if (wrapped.targets.length) mergeRetrieve(retrieve, { cdn: wrapped.targets });
+    if (wrapped.targets.length)
+      mergeRetrieve(retrieve, { cdn: wrapped.targets });
 
     return wrapped.content;
   }
@@ -128,7 +129,8 @@ module.exports = function getPartials(
   function wrapInline(content) {
     var wrapped = wrapInlinePartial(content, wrapOptions.hosts);
 
-    if (wrapped.targets.length) mergeRetrieve(retrieve, { cdn: wrapped.targets });
+    if (wrapped.targets.length)
+      mergeRetrieve(retrieve, { cdn: wrapped.targets });
 
     return wrapped.content;
   }
@@ -137,7 +139,10 @@ module.exports = function getPartials(
     var merged = {};
 
     (inheritedContexts || [""]).forEach(function (contextPath) {
-      var partialContexts = parseTemplate.getPartialContexts(viewContent || "", contextPath);
+      var partialContexts = parseTemplate.getPartialContexts(
+        viewContent || "",
+        contextPath
+      );
 
       Object.keys(partialContexts).forEach(function (partialName) {
         if (!merged[partialName]) merged[partialName] = [];
@@ -230,9 +235,11 @@ module.exports = function getPartials(
               );
 
               Object.keys(nestedPartials).forEach(function (nestedPartial) {
-                nestedPartials[nestedPartial].forEach(function (nestedContextPath) {
-                  addContext(nestedPartial, nestedContextPath);
-                });
+                nestedPartials[nestedPartial].forEach(
+                  function (nestedContextPath) {
+                    addContext(nestedPartial, nestedContextPath);
+                  }
+                );
               });
 
               fetchList(view.partials, finish);

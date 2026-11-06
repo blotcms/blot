@@ -3,7 +3,10 @@ describe("search_results", function () {
 
   it("returns matching entries", async function () {
     await this.write({ path: "/a.txt", content: "Title: Apple\n\nApple body" });
-    await this.write({ path: "/b.txt", content: "Title: Banana\n\nBanana body" });
+    await this.write({
+      path: "/b.txt",
+      content: "Title: Banana\n\nBanana body",
+    });
 
     await this.template(
       { "search.html": `{{#search_results}}{{title}} {{/search_results}}` },
@@ -16,7 +19,10 @@ describe("search_results", function () {
 
   it("lists matching entries when search.html binds only {{#entries}}", async function () {
     await this.write({ path: "/a.txt", content: "Title: Apple\n\nApple body" });
-    await this.write({ path: "/b.txt", content: "Title: Banana\n\nBanana body" });
+    await this.write({
+      path: "/b.txt",
+      content: "Title: Banana\n\nBanana body",
+    });
 
     await this.template(
       { "search.html": `{{query}} {{#entries}}{{title}} {{/entries}}` },
@@ -81,7 +87,9 @@ describe("search_results", function () {
     await this.write({ path: "/a.txt", content: "Title: Apple\n\nApple body" });
 
     await this.template(
-      { "search.html": `{{#search_results}}{{title}} {{url}}{{/search_results}}` },
+      {
+        "search.html": `{{#search_results}}{{title}} {{url}}{{/search_results}}`,
+      },
       { views: { "search.html": { url: "/search" } } }
     );
 

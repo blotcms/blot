@@ -45,7 +45,9 @@ describe("icloud database", function () {
     const listedAfterDelete = await database.list();
     expect(listedAfterDelete).not.toContain(this.blog.id);
 
-    const globalMembersAfterDelete = await client.sMembers(database._globalSetKey());
+    const globalMembersAfterDelete = await client.sMembers(
+      database._globalSetKey()
+    );
     expect(globalMembersAfterDelete).not.toContain(this.blog.id);
   });
 

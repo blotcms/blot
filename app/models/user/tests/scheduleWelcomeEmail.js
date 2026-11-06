@@ -3,7 +3,6 @@ describe("user", function () {
 
   var User = require("models/user");
   var client = require("models/client");
-  var key = require("models/user/key");
 
   var email = require("helper/email");
   var scheduleWelcomeEmail = require("models/user/scheduleWelcomeEmail");
@@ -124,7 +123,10 @@ describe("user", function () {
     it("sets an alarm for a recent user without one", async function () {
       var uid = this.user.uid;
 
-      await setUser(uid, { created: Date.now() - 1000, welcomeEmailSent: false });
+      await setUser(uid, {
+        created: Date.now() - 1000,
+        welcomeEmailSent: false,
+      });
       await alarms.cancel(uid);
 
       await scheduleWelcomeEmail.reconcile({ days: 7 });
@@ -135,7 +137,10 @@ describe("user", function () {
     it("sets nothing for a user who was already sent the email", async function () {
       var uid = this.user.uid;
 
-      await setUser(uid, { created: Date.now() - 1000, welcomeEmailSent: true });
+      await setUser(uid, {
+        created: Date.now() - 1000,
+        welcomeEmailSent: true,
+      });
       await alarms.cancel(uid);
 
       await scheduleWelcomeEmail.reconcile({ days: 7 });

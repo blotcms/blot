@@ -27,7 +27,7 @@ module.exports = function (blogID, handle, callback) {
   if (handle.length < 2) return callback(new Error(TOO_SHORT));
 
   if (handle.length > 70) return callback(new Error(TOO_LONG));
-  
+
   get({ handle: handle }, function (err, blog) {
     // Sometimes we want to check if
     // a handle is in use before creating

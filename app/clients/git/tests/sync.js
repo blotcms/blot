@@ -44,7 +44,10 @@ describe("git client sync", function () {
     // Only the git client misses the event: node needs it to finish the
     // request.
     spyOn(http.ServerResponse.prototype, "on").and.callFake(function (event) {
-      if (event === "finish" && /clients\/git\/(repo\.js|served\/)/.test(new Error().stack))
+      if (
+        event === "finish" &&
+        /clients\/git\/(repo\.js|served\/)/.test(new Error().stack)
+      )
         return this;
       return on.apply(this, arguments);
     });
@@ -98,23 +101,27 @@ describe("git client sync", function () {
     var files = {};
 
     for (var i = 0; i < 3; i++)
-      files["/commit-" + i + "/" + this.fake.lorem.word() + ".txt"] = content(this);
+      files["/commit-" + i + "/" + this.fake.lorem.word() + ".txt"] =
+        content(this);
 
-    for (var path of Object.keys(files)) {
+    for (const path of Object.keys(files)) {
       await this.local.commitFiles({ [path]: files[path] });
     }
 
     await this.local.push();
 
-    for (var path of Object.keys(files)) {
-      expect(await helpers.blogFile(this, path)).toEqual(Buffer.from(files[path]));
+    for (const path of Object.keys(files)) {
+      expect(await helpers.blogFile(this, path)).toEqual(
+        Buffer.from(files[path])
+      );
     }
   });
 
   it("handles two pushes during a single sync", async function () {
     var files = {};
 
-    for (var i = 0; i < 10; i++) files["/first-push/" + i + ".txt"] = content(this);
+    for (var i = 0; i < 10; i++)
+      files["/first-push/" + i + ".txt"] = content(this);
 
     await this.local.commitFiles(files, "Ten files");
 
@@ -138,7 +145,9 @@ describe("git client sync", function () {
 
     await this.local.writeAndPush(path, "Good, World!");
 
-    expect(await helpers.blogFile(this, path)).toEqual(Buffer.from("Good, World!"));
+    expect(await helpers.blogFile(this, path)).toEqual(
+      Buffer.from("Good, World!")
+    );
   });
 
   it("handles a force push", async function () {
@@ -160,7 +169,9 @@ describe("git client sync", function () {
     expect(refused.stderr).toContain("[rejected]");
 
     // ...and nothing changed on Blot's side
-    expect(await helpers.blogFile(this, path)).toEqual(Buffer.from("Hello, World!"));
+    expect(await helpers.blogFile(this, path)).toEqual(
+      Buffer.from("Hello, World!")
+    );
 
     // Spanner in the works! I was worried about this line in the git man
     // pages for rebase: "It is possible that a merge failure will prevent
@@ -173,6 +184,8 @@ describe("git client sync", function () {
 
     await local.writeAndPush("/other-path.txt", "other file");
 
-    expect(await helpers.blogFile(this, path)).toEqual(Buffer.from("Good, World!"));
+    expect(await helpers.blogFile(this, path)).toEqual(
+      Buffer.from("Good, World!")
+    );
   });
 });

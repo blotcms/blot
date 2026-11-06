@@ -25,7 +25,9 @@ describe("referencedIdentifiers", function () {
   });
 
   it("treats every name as referenced when a fragment does not parse", function () {
-    var referenced = referencedIdentifiers("{{title}}", { broken: "{{#open}}" });
+    var referenced = referencedIdentifiers("{{title}}", {
+      broken: "{{#open}}",
+    });
     expect(referenced.has("backlinks")).toBe(true);
   });
 });

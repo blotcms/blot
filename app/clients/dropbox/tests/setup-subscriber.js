@@ -2,8 +2,10 @@ describe("dropbox setup abort subscriber", function () {
   const setupPath = require.resolve("clients/dropbox/routes/setup");
   const subscriberPath = require.resolve("helper/redisSubscriber");
   const syncPath = require.resolve("sync");
-  const getAccountPath = require.resolve("clients/dropbox/routes/setup/getAccount");
-  const createFolderPath = require.resolve("clients/dropbox/routes/setup/createFolder");
+  const getAccountPath =
+    require.resolve("clients/dropbox/routes/setup/getAccount");
+  const createFolderPath =
+    require.resolve("clients/dropbox/routes/setup/createFolder");
   const resetPath = require.resolve("clients/dropbox/sync/reset-from-blot");
   const databasePath = require.resolve("clients/dropbox/database");
 
@@ -89,7 +91,9 @@ describe("dropbox setup abort subscriber", function () {
   }
 
   it("uses redisSubscriber for the abort channel and quits through cleanup", function (done) {
-    const cleanup = jasmine.createSpy("cleanup").and.returnValue(Promise.resolve());
+    const cleanup = jasmine
+      .createSpy("cleanup")
+      .and.returnValue(Promise.resolve());
     const captured = {};
     const setup = loadSetup({ onMessage: captured, cleanup });
     const session = { dropbox: {}, save: jasmine.createSpy("save") };
@@ -104,7 +108,9 @@ describe("dropbox setup abort subscriber", function () {
   });
 
   it("cleans up when an abort message arrives during setup", function (done) {
-    const cleanup = jasmine.createSpy("cleanup").and.returnValue(Promise.resolve());
+    const cleanup = jasmine
+      .createSpy("cleanup")
+      .and.returnValue(Promise.resolve());
     const captured = {};
     let releaseAccount;
     require.cache[subscriberPath] = {

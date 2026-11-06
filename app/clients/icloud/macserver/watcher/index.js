@@ -6,14 +6,24 @@ import {
   getLimiterCount,
 } from "../limiters.js";
 import clfdate from "../util/clfdate.js";
-import { forgetBlog, isKnownDirectory, isUnchanged, recordDirectory, recordPushed, startTracking } from "../pushedFiles.js";
+import {
+  forgetBlog,
+  isKnownDirectory,
+  isUnchanged,
+  recordDirectory,
+  recordPushed,
+  startTracking,
+} from "../pushedFiles.js";
 import { iCloudDriveDirectory } from "../config.js";
 import { constants } from "fs";
 import { join } from "path";
 import * as brctl from "../brctl/index.js";
 import status from "../httpClient/status.js";
 import { performAction } from "./actions.js";
-import { startFsWatch as startFsWatchInternal, stopFsWatch as stopFsWatchInternal } from "./fswatch.js";
+import {
+  startFsWatch as startFsWatchInternal,
+  stopFsWatch as stopFsWatchInternal,
+} from "./fswatch.js";
 import {
   buildBlogPath,
   buildChokidarEventKey,
@@ -39,7 +49,12 @@ import {
 import { realpath } from "fs/promises";
 import path from "path";
 import shouldIgnore from "./shouldIgnore.js";
-import { isActive, markActive, markInactive, markStarting } from "./activeBlogs.js";
+import {
+  isActive,
+  markActive,
+  markInactive,
+  markStarting,
+} from "./activeBlogs.js";
 
 async function exactCaseViaRealpath(p) {
   const resolved = await realpath(p);
@@ -88,19 +103,15 @@ const pruneChokidarEvents = () => {
   }
 };
 
-
 const startChokidarPruneLoop = () => {
   if (chokidarPruneInterval) {
     return;
   }
 
-  chokidarPruneInterval = setInterval(
-    () => {
-      pruneChokidarEvents();
-      pruneEvictionSuppressions();
-    },
-    CHOKIDAR_PRUNE_INTERVAL_MS
-  );
+  chokidarPruneInterval = setInterval(() => {
+    pruneChokidarEvents();
+    pruneEvictionSuppressions();
+  }, CHOKIDAR_PRUNE_INTERVAL_MS);
   chokidarPruneInterval.unref?.();
 };
 
@@ -125,18 +136,28 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
   const entered = new Set();
 
   for (let attempt = 0; attempt <= MAX_WALK_RESTARTS; attempt++) {
-    const interrupted = await walkDirectoryContents(blogID, pathInBlogDirectory, entered);
+    const interrupted = await walkDirectoryContents(
+      blogID,
+      pathInBlogDirectory,
+      entered
+    );
 
     if (!interrupted) return;
 
     if (attempt === MAX_WALK_RESTARTS) break;
 
-    console.log(clfdate(), `Directory contents: eviction suppressed the walk, waiting to restart (${attempt + 1}/${MAX_WALK_RESTARTS}), blogID: ${blogID}, path: ${pathInBlogDirectory}`);
+    console.log(
+      clfdate(),
+      `Directory contents: eviction suppressed the walk, waiting to restart (${attempt + 1}/${MAX_WALK_RESTARTS}), blogID: ${blogID}, path: ${pathInBlogDirectory}`
+    );
 
     if (!(await waitForEvictionSuppressionToClear(blogID))) break;
   }
 
-  console.error(clfdate(), `Directory contents: giving up on walk after eviction suppression, some entries were skipped, blogID: ${blogID}, path: ${pathInBlogDirectory}`);
+  console.error(
+    clfdate(),
+    `Directory contents: giving up on walk after eviction suppression, some entries were skipped, blogID: ${blogID}, path: ${pathInBlogDirectory}`
+  );
 };
 
 // Returns true if any entry was skipped because of eviction suppression.
@@ -168,29 +189,45 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
     // reports it, so it is neither created again nor walked from here:
     // re-walking whole subtrees (and one /mkdir per subfolder) on every
     // report of a big folder would crowd out every blog's uploads
-    if (isDirectory && isKnownDirectory(blogID, childPath) && !entered.has(childPath)) continue;
+    if (
+      isDirectory &&
+      isKnownDirectory(blogID, childPath) &&
+      !entered.has(childPath)
+    )
+      continue;
 
     try {
-      if (!(await exactCaseViaRealpath(buildBlogPath(blogID, childPath)))) continue;
+      if (!(await exactCaseViaRealpath(buildBlogPath(blogID, childPath))))
+        continue;
 
       if (isDirectory) {
         if (!hasRecentChokidarEvent(blogID, childPath, "mkdir")) {
           await performAction(blogID, childPath, "mkdir");
         }
         entered.add(childPath);
-        if (await walkDirectoryContents(blogID, childPath, entered)) interrupted = true;
+        if (await walkDirectoryContents(blogID, childPath, entered))
+          interrupted = true;
       } else if (!hasRecentChokidarEvent(blogID, childPath, "upload")) {
         // if chokidar did report the file it is already being uploaded.
         // Files unchanged since their last push are skipped here, without
         // queueing behind the blog's other actions or logging each one
-        const stat = await fs.stat(buildBlogPath(blogID, childPath)).catch(() => null);
+        const stat = await fs
+          .stat(buildBlogPath(blogID, childPath))
+          .catch(() => null);
         if (stat && isUnchanged(blogID, childPath, stat)) continue;
-        console.log(clfdate(), `Directory contents: upload, blogID: ${blogID}, path: ${childPath}`);
+        console.log(
+          clfdate(),
+          `Directory contents: upload, blogID: ${blogID}, path: ${childPath}`
+        );
         await performAction(blogID, childPath, "upload");
       }
     } catch (error) {
       // performAction has already requested a resync, carry on with the rest
-      console.error(clfdate(), `Error syncing directory contents (${blogID}, ${childPath}):`, error);
+      console.error(
+        clfdate(),
+        `Error syncing directory contents (${blogID}, ${childPath}):`,
+        error
+      );
     }
   }
 
@@ -210,7 +247,11 @@ const directoryWalks = new Map(); // key -> { lastStart, running, timer }
 
 const requestDirectoryWalk = async (blogID, pathInBlogDirectory) => {
   const key = `${blogID}:${pathInBlogDirectory}`;
-  const state = directoryWalks.get(key) || { lastStart: 0, running: false, timer: null };
+  const state = directoryWalks.get(key) || {
+    lastStart: 0,
+    running: false,
+    timer: null,
+  };
   directoryWalks.set(key, state);
 
   if (state.timer) return; // a trailing walk is already scheduled
@@ -222,7 +263,11 @@ const requestDirectoryWalk = async (blogID, pathInBlogDirectory) => {
       () => {
         state.timer = null;
         requestDirectoryWalk(blogID, pathInBlogDirectory).catch((error) =>
-          console.error(clfdate(), `Error walking directory (${blogID}, ${pathInBlogDirectory}):`, error)
+          console.error(
+            clfdate(),
+            `Error walking directory (${blogID}, ${pathInBlogDirectory}):`,
+            error
+          )
         );
       },
       state.running ? DIRECTORY_WALK_MIN_INTERVAL_MS : wait
@@ -240,7 +285,11 @@ const requestDirectoryWalk = async (blogID, pathInBlogDirectory) => {
     state.running = false;
     // forget idle directories once their window has passed
     const forget = setTimeout(() => {
-      if (!state.running && !state.timer && Date.now() - state.lastStart >= DIRECTORY_WALK_MIN_INTERVAL_MS) {
+      if (
+        !state.running &&
+        !state.timer &&
+        Date.now() - state.lastStart >= DIRECTORY_WALK_MIN_INTERVAL_MS
+      ) {
         directoryWalks.delete(key);
       }
     }, DIRECTORY_WALK_MIN_INTERVAL_MS);
@@ -259,7 +308,10 @@ const handleFileEvent = async (event, blogID, filePath) => {
     const pathInBlogDirectory = extractPathInBlogDirectory(filePath);
 
     if (shouldIgnore(pathInBlogDirectory)) {
-      console.log(clfdate(), `Ignoring file event: ${event}, blogID: ${blogID}, path: ${pathInBlogDirectory} because it matches the shouldIgnore filter`);
+      console.log(
+        clfdate(),
+        `Ignoring file event: ${event}, blogID: ${blogID}, path: ${pathInBlogDirectory} because it matches the shouldIgnore filter`
+      );
       return;
     }
 
@@ -287,7 +339,10 @@ const handleFileEvent = async (event, blogID, filePath) => {
       // Check if the directory for the blogID exists
       await fs.access(join(iCloudDriveDirectory, blogID), constants.F_OK);
     } catch (err) {
-      console.warn(clfdate(), `Ignoring event for unregistered blogID: ${blogID}`);
+      console.warn(
+        clfdate(),
+        `Ignoring event for unregistered blogID: ${blogID}`
+      );
       return;
     }
 
@@ -296,11 +351,12 @@ const handleFileEvent = async (event, blogID, filePath) => {
       return;
     }
 
-    console.log(clfdate(), 
+    console.log(
+      clfdate(),
       `Chokidar Event: ${event}, blogID: ${blogID}, path: ${pathInBlogDirectory}`
     );
 
-    // because this runs on macos and the disk is 
+    // because this runs on macos and the disk is
     // case insensitive, we need to verify that the
     // pathInBlogDirectory is the exact same as the path
     // on the disk – if not, we need to issue a remove event
@@ -309,11 +365,18 @@ const handleFileEvent = async (event, blogID, filePath) => {
         const fullPath = buildBlogPath(blogID, pathInBlogDirectory);
         const exactCase = await exactCaseViaRealpath(fullPath);
         if (!exactCase) {
-          console.log(clfdate(), `Chokidar Event: Changing event from add/change to remove for path: ${pathInBlogDirectory} because of case mismatch`);
+          console.log(
+            clfdate(),
+            `Chokidar Event: Changing event from add/change to remove for path: ${pathInBlogDirectory} because of case mismatch`
+          );
           event = "unlink";
         }
       } catch (error) {
-        console.error(clfdate(), `Error verifying exact case for path: ${fullPath}:`, error);
+        console.error(
+          clfdate(),
+          `Error verifying exact case for path: ${pathInBlogDirectory}:`,
+          error
+        );
         return;
       }
     }
@@ -326,31 +389,46 @@ const handleFileEvent = async (event, blogID, filePath) => {
       await mkdirAndSyncContents(blogID, pathInBlogDirectory);
     }
   } catch (error) {
-    console.error(clfdate(), `Error handling file event (${event}, ${filePath}):`, error);
+    console.error(
+      clfdate(),
+      `Error handling file event (${event}, ${filePath}):`,
+      error
+    );
   }
 };
 
-
 const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
   if (!isActive(blogID)) {
-    console.log(clfdate(), `Dropping fs.watch event for inactive blogID: ${blogID}`);
+    console.log(
+      clfdate(),
+      `Dropping fs.watch event for inactive blogID: ${blogID}`
+    );
     return;
   }
 
   // This will skip blog directory deletions
   // but that's OK!
   if (!pathInBlogDirectory) {
-    console.log(clfdate(), `Ignoring FS Watch Event: blogID: ${blogID}, path: ${pathInBlogDirectory} because it is falsy`);
+    console.log(
+      clfdate(),
+      `Ignoring FS Watch Event: blogID: ${blogID}, path: ${pathInBlogDirectory} because it is falsy`
+    );
     return;
   }
 
   if (shouldIgnore(pathInBlogDirectory)) {
-    console.log(clfdate(), `Ignoring FS Watch Event: blogID: ${blogID}, path: ${pathInBlogDirectory} because it matches the shouldIgnore filter`);
+    console.log(
+      clfdate(),
+      `Ignoring FS Watch Event: blogID: ${blogID}, path: ${pathInBlogDirectory} because it matches the shouldIgnore filter`
+    );
     return;
   }
 
   if (isEvictionSuppressed(blogID, pathInBlogDirectory)) {
-    console.log(clfdate(), `Ignoring FS Watch Event: blogID: ${blogID}, path: ${pathInBlogDirectory} because it is in eviction suppression`);
+    console.log(
+      clfdate(),
+      `Ignoring FS Watch Event: blogID: ${blogID}, path: ${pathInBlogDirectory} because it is in eviction suppression`
+    );
     return;
   }
 
@@ -364,7 +442,7 @@ const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
 
     const exactCase = await exactCaseViaRealpath(fullPath);
 
-    // because this runs on macos and the disk is 
+    // because this runs on macos and the disk is
     // case insensitive, we need to verify that the
     // pathInBlogDirectory is the exact same as the path
     // on the disk – if not, we need to issue a remove event
@@ -388,11 +466,17 @@ const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
   }
 
   if (hasRecentChokidarEvent(blogID, pathInBlogDirectory, action)) {
-    console.log(clfdate(), `FS Watch Event: duplicate, action: ${action}, blogID: ${blogID}, path: ${pathInBlogDirectory}`);
+    console.log(
+      clfdate(),
+      `FS Watch Event: duplicate, action: ${action}, blogID: ${blogID}, path: ${pathInBlogDirectory}`
+    );
     return;
   }
 
-  console.log(clfdate(), `FS Watch Event: ${action}, blogID: ${blogID}, path: ${pathInBlogDirectory}`);
+  console.log(
+    clfdate(),
+    `FS Watch Event: ${action}, blogID: ${blogID}, path: ${pathInBlogDirectory}`
+  );
   if (action === "mkdir") {
     await mkdirAndSyncContents(blogID, pathInBlogDirectory);
   } else {
@@ -419,7 +503,11 @@ const initialize = async () => {
       try {
         await brctl.evict(blogPath, { timeoutMs: 60_000 }); // Evict the blog directory
       } catch (error) {
-        console.error(clfdate(), `Failed to evict blog folder (${blogPath}):`, error);
+        console.error(
+          clfdate(),
+          `Failed to evict blog folder (${blogPath}):`,
+          error
+        );
       } finally {
         extendEvictionSuppression(blogID, pathInBlogDirectory);
       }
@@ -495,7 +583,10 @@ const watch = async (blogID) => {
               : null;
 
       if (!blogID) {
-        console.warn(clfdate(), `Failed to parse blogID from path: ${filePath}`);
+        console.warn(
+          clfdate(),
+          `Failed to parse blogID from path: ${filePath}`
+        );
         return;
       }
 
@@ -513,10 +604,20 @@ const watch = async (blogID) => {
       // sync with Blot (their initial events are not pushed), so record them
       // as pushed: a later eviction or re-materialisation of one, which leaves
       // its size and mtime alone, is then skipped without a download.
-      if (recordInitialScan && !initialScanComplete && event === "add" && stats) {
+      if (
+        recordInitialScan &&
+        !initialScanComplete &&
+        event === "add" &&
+        stats
+      ) {
         recordPushed(blogID, pathInBlogDirectory, stats);
       }
-      if (recordInitialScan && !initialScanComplete && event === "addDir" && pathInBlogDirectory) {
+      if (
+        recordInitialScan &&
+        !initialScanComplete &&
+        event === "addDir" &&
+        pathInBlogDirectory
+      ) {
         recordDirectory(blogID, pathInBlogDirectory);
       }
 
@@ -528,11 +629,16 @@ const watch = async (blogID) => {
       }
     })
     .on("ready", () => {
-      console.log(clfdate(), `Initial scan complete for blog folder: ${blogID}`);
+      console.log(
+        clfdate(),
+        `Initial scan complete for blog folder: ${blogID}`
+      );
       initialScanComplete = true; // Mark the initial scan as complete
       markActive(blogID);
     })
-    .on("error", (error) => console.error(clfdate(), `Watcher error: ${error}`));
+    .on("error", (error) =>
+      console.error(clfdate(), `Watcher error: ${error}`)
+    );
 
   blogWatchers.set(blogID, watcher);
   markStarting(blogID);

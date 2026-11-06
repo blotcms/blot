@@ -70,7 +70,9 @@ module.exports = async function (req, res, next) {
 
     if (onFolderMount && !template) {
       const newBaseUrl = req.baseUrl.replace(/\/template-folder$/, "/template");
-      return res.redirect(newBaseUrl + req.originalUrl.slice(req.baseUrl.length));
+      return res.redirect(
+        newBaseUrl + req.originalUrl.slice(req.baseUrl.length)
+      );
     }
 
     const templateMissing = !template;
@@ -85,7 +87,11 @@ module.exports = async function (req, res, next) {
     };
 
     hydrated.owner = hydrated.owner || req.blog.id;
-    hydrated.slug = hydrated.id.split(':').slice(1).join(':') || req.params.templateSlug || slug || "";
+    hydrated.slug =
+      hydrated.id.split(":").slice(1).join(":") ||
+      req.params.templateSlug ||
+      slug ||
+      "";
 
     const nameSource = hydrated.slug || req.params.templateSlug || "";
 
@@ -105,7 +111,9 @@ module.exports = async function (req, res, next) {
     hydrated.isMine = hydrated.owner === req.blog.id;
 
     // locally edited templates are identified by their folder name
-    hydrated.displayName = hydrated.localEditing ? hydrated.slug : hydrated.name;
+    hydrated.displayName = hydrated.localEditing
+      ? hydrated.slug
+      : hydrated.name;
 
     hydrated.checked = hydrated.id === req.blog.template ? "checked" : "";
 

@@ -64,17 +64,32 @@ describe("template", function () {
 
   it("dropView removes the key for the view", function (done) {
     var test = this;
-    expectKeyDeleted("template:" + test.template.id + ":view:*", test.template.id, test.view.name, done);
+    expectKeyDeleted(
+      "template:" + test.template.id + ":view:*",
+      test.template.id,
+      test.view.name,
+      done
+    );
   });
 
   it("dropView removes the URL key for the view", function (done) {
     var test = this;
-    expectKeyDeleted("template:" + test.template.id + ":url:*", test.template.id, test.view.name, done);
+    expectKeyDeleted(
+      "template:" + test.template.id + ":url:*",
+      test.template.id,
+      test.view.name,
+      done
+    );
   });
 
   it("dropView removes the URL patterns key for the view", function (done) {
     var test = this;
-    expectKeyDeleted("template:" + test.template.id + ":url_patterns", test.template.id, test.view.name, done);
+    expectKeyDeleted(
+      "template:" + test.template.id + ":url_patterns",
+      test.template.id,
+      test.view.name,
+      done
+    );
   });
 
   it("dropView returns an error when the template does not exist", function (done) {

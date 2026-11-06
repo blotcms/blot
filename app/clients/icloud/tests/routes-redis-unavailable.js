@@ -77,6 +77,7 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
         callback(freeze())
       );
 
+      // eslint-disable-next-line no-unused-vars
       for (const attempt of [1, 2]) {
         const res = await call(upload, blogID, path, Buffer.from("Hello"));
         expect(res.code).toBe(503);
@@ -95,13 +96,17 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
       const path = "/edit.txt";
       const blogID = this.blog.id;
 
-      expect((await call(upload, blogID, path, Buffer.from("aaaa"))).code).toBe(200);
+      expect((await call(upload, blogID, path, Buffer.from("aaaa"))).code).toBe(
+        200
+      );
 
       spyOn(Entry, "set").and.callFake((id, p, entry, callback) =>
         callback(freeze())
       );
 
-      expect((await call(upload, blogID, path, Buffer.from("aaab"))).code).toBe(503);
+      expect((await call(upload, blogID, path, Buffer.from("aaab"))).code).toBe(
+        503
+      );
 
       // Same size as the version in the database, but no longer on disk, so
       // neither the retry nor a resync mistakes it for up to date
@@ -109,7 +114,9 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
 
       Entry.set.and.callThrough();
 
-      expect((await call(upload, blogID, path, Buffer.from("aaab"))).code).toBe(200);
+      expect((await call(upload, blogID, path, Buffer.from("aaab"))).code).toBe(
+        200
+      );
       expect((await getEntry(blogID, path)).html).toContain("aaab");
     });
 
@@ -132,9 +139,13 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
       const path = "/gone.txt";
       const blogID = this.blog.id;
 
-      expect((await call(upload, blogID, path, Buffer.from("Bye"))).code).toBe(200);
+      expect((await call(upload, blogID, path, Buffer.from("Bye"))).code).toBe(
+        200
+      );
 
-      spyOn(Entry, "drop").and.callFake((id, p, callback) => callback(freeze()));
+      spyOn(Entry, "drop").and.callFake((id, p, callback) =>
+        callback(freeze())
+      );
 
       const res = await call(remove, blogID, path);
       expect(res.code).toBe(503);

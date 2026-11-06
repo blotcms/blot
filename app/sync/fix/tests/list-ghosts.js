@@ -83,7 +83,9 @@ describe("sync/fix/list-ghosts", function () {
 
       // The orphaned raw key at the stale id ("existing-id") is deleted
       // before the entry is re-saved under its real id.
-      expect(client.del).toHaveBeenCalledWith(entryKey("blog-id", "existing-id"));
+      expect(client.del).toHaveBeenCalledWith(
+        entryKey("blog-id", "existing-id")
+      );
 
       done();
     });

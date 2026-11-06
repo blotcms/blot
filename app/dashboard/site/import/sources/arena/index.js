@@ -12,10 +12,13 @@ const { join } = require("path");
 
 async function main({ slug, outputDirectory, status }) {
   status("Fetching posts from Are.na channel " + slug);
-  const { data } = await download(`https://api.are.na/v2/channels/${slug}`, { kind: "text", maxBytes: 8 * 1024 * 1024 });
+  const { data } = await download(`https://api.are.na/v2/channels/${slug}`, {
+    kind: "text",
+    maxBytes: 8 * 1024 * 1024,
+  });
   const json = JSON.parse(data.toString("utf8"));
   lifecycle.check();
-  
+
   const {
     metadata: { description },
     owner,

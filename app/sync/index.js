@@ -11,7 +11,7 @@ const {
   addPendingSync,
   removePendingSync,
   addPendingUpdate,
-  removePendingUpdate
+  removePendingUpdate,
 } = require("./lock-diagnostics-state");
 
 function sync(blogID, callback) {
@@ -53,7 +53,10 @@ function start(blogID, callback) {
       // Resolves to null if the data directory became read-only between
       // the check in sync() and taking the lock (hold.js has released it
       // again): wait for the freeze to lift and start over.
-      const lock = await take(blogID, { syncID, acquiredAt: () => lockAcquiredAt });
+      const lock = await take(blogID, {
+        syncID,
+        acquiredAt: () => lockAcquiredAt,
+      });
 
       if (!lock) {
         log("Data directory became read-only, waiting");
@@ -157,7 +160,10 @@ function start(blogID, callback) {
 
             if (updated) changes = true;
           } catch (manifestError) {
-            log("Error updating CDN manifests of templates", manifestError.message);
+            log(
+              "Error updating CDN manifests of templates",
+              manifestError.message
+            );
           }
 
           // We could do these next two things in parallel

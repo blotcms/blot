@@ -18,7 +18,12 @@ const createCache = require("../cache");
 const createReader = require("../reader");
 const materialize = require("../materialize");
 const createFolderSink = require("../folderSink");
-const { TooLargeError, CorruptError, NotFoundError, NoRoomError } = require("../errors");
+const {
+  TooLargeError,
+  CorruptError,
+  NotFoundError,
+  NoRoomError,
+} = require("../errors");
 
 describe("git store materialize", function () {
   timeout(120 * 1000);
@@ -74,32 +79,61 @@ describe("git store materialize", function () {
 
   // The expected counts for a range, from git diff-tree
   function expectedCounts(from, to) {
-    const changes = repo.diffTree(from && repo.treeOf(from), to && repo.treeOf(to));
-    const written = changes.filter((c) => c.newMode === "100644" || c.newMode === "100755").length;
+    const changes = repo.diffTree(
+      from && repo.treeOf(from),
+      to && repo.treeOf(to)
+    );
+    const written = changes.filter(
+      (c) => c.newMode === "100644" || c.newMode === "100755"
+    ).length;
     return { written, removed: changes.length - written, skipped: 0 };
   }
 
   describe("against git checkout", function () {
     it("writes the files of a first sync, from nothing, and nothing for an empty tree", async function () {
-      const first = repo.commit({ "a.txt": "A", "nested/deeper/b.txt": "B", "empty.txt": "" });
+      const first = repo.commit({
+        "a.txt": "A",
+        "nested/deeper/b.txt": "B",
+        "empty.txt": "",
+      });
       const { reader } = await repo.reader();
 
-      expect(await apply(reader, null, first)).toEqual({ written: 3, removed: 0, skipped: 0 });
+      expect(await apply(reader, null, first)).toEqual({
+        written: 3,
+        removed: 0,
+        skipped: 0,
+      });
       expect(listFiles(folder)).toEqual(repo.checkout(first));
       expect(listFiles(folder)["empty.txt"].contents.length).toBe(0);
 
       // To nothing, and the directories go too
-      expect(await apply(reader, first, null)).toEqual({ written: 0, removed: 3, skipped: 0 });
+      expect(await apply(reader, first, null)).toEqual({
+        written: 0,
+        removed: 3,
+        skipped: 0,
+      });
       expect(listFiles(folder)).toEqual({});
-      expect(await apply(reader, null, null)).toEqual({ written: 0, removed: 0, skipped: 0 });
+      expect(await apply(reader, null, null)).toEqual({
+        written: 0,
+        removed: 0,
+        skipped: 0,
+      });
     });
 
     it("follows a history of additions, edits, removals, renames and mode changes", async function () {
       const commits = [
-        repo.commit({ "a.txt": "A", "same.txt": "Same", "old/name.txt": "Contents", "run.sh": { contents: "#!/bin/sh\n", mode: "100755" } }),
+        repo.commit({
+          "a.txt": "A",
+          "same.txt": "Same",
+          "old/name.txt": "Contents",
+          "run.sh": { contents: "#!/bin/sh\n", mode: "100755" },
+        }),
         repo.commit({ "a.txt": "A, edited", "added/deep/er.txt": "New" }),
         repo.commit({ "old/name.txt": null, "new/name.txt": "Contents" }),
-        repo.commit({ "run.sh": { contents: "#!/bin/sh\n", mode: "100644" }, "a.txt": { contents: "A, edited", mode: "100755" } }),
+        repo.commit({
+          "run.sh": { contents: "#!/bin/sh\n", mode: "100644" },
+          "a.txt": { contents: "A, edited", mode: "100755" },
+        }),
         repo.commit({ "added/deep/er.txt": null, "a.txt": null }),
       ];
       const reader = await expectCheckouts(commits);
@@ -107,12 +141,18 @@ describe("git store materialize", function () {
       // Counts are those of git diff-tree
       await apply(reader, null, commits[0]);
       for (let i = 1; i < commits.length; i++) {
-        expect(await apply(reader, commits[i - 1], commits[i])).toEqual(expectedCounts(commits[i - 1], commits[i]));
+        expect(await apply(reader, commits[i - 1], commits[i])).toEqual(
+          expectedCounts(commits[i - 1], commits[i])
+        );
       }
     });
 
     it("removes the directories a removal leaves empty, and no others", async function () {
-      const first = repo.commit({ "top/only/deep/file.txt": "Only", "top/sibling.txt": "Stays", "kept.txt": "Kept" });
+      const first = repo.commit({
+        "top/only/deep/file.txt": "Only",
+        "top/sibling.txt": "Stays",
+        "kept.txt": "Kept",
+      });
       const second = repo.commit({ "top/only/deep/file.txt": null });
       const { reader } = await repo.reader();
 
@@ -120,31 +160,61 @@ describe("git store materialize", function () {
       fs.mkdirSync(path.join(folder, "was-already-empty"));
       await apply(reader, first, second);
 
-      expect(listFiles(folder)).toEqual({ ...repo.checkout(second), "was-already-empty/": true });
+      expect(listFiles(folder)).toEqual({
+        ...repo.checkout(second),
+        "was-already-empty/": true,
+      });
     });
 
     it("touches only the paths that changed", async function () {
-      const first = repo.commit({ "same.txt": "Same", "changed.txt": "Before" });
-      const second = repo.commit({ "changed.txt": "After", "added.txt": "Added" });
+      const first = repo.commit({
+        "same.txt": "Same",
+        "changed.txt": "Before",
+      });
+      const second = repo.commit({
+        "changed.txt": "After",
+        "added.txt": "Added",
+      });
       const { reader } = await repo.reader();
 
       await apply(reader, null, first);
       fs.writeFileSync(path.join(folder, "same.txt"), "Drifted");
-      fs.writeFileSync(path.join(folder, "untracked.txt"), "Not in the repository");
+      fs.writeFileSync(
+        path.join(folder, "untracked.txt"),
+        "Not in the repository"
+      );
 
       await apply(reader, first, second);
 
-      expect(fs.readFileSync(path.join(folder, "same.txt"), "utf8")).toBe("Drifted");
-      expect(fs.readFileSync(path.join(folder, "untracked.txt"), "utf8")).toBe("Not in the repository");
-      expect(fs.readFileSync(path.join(folder, "changed.txt"), "utf8")).toBe("After");
-      expect(fs.readFileSync(path.join(folder, "added.txt"), "utf8")).toBe("Added");
+      expect(fs.readFileSync(path.join(folder, "same.txt"), "utf8")).toBe(
+        "Drifted"
+      );
+      expect(fs.readFileSync(path.join(folder, "untracked.txt"), "utf8")).toBe(
+        "Not in the repository"
+      );
+      expect(fs.readFileSync(path.join(folder, "changed.txt"), "utf8")).toBe(
+        "After"
+      );
+      expect(fs.readFileSync(path.join(folder, "added.txt"), "utf8")).toBe(
+        "Added"
+      );
     });
 
     it("replaces a file with a directory of the same name, and the reverse", async function () {
       const commits = [
-        repo.commit({ swap: "A file", "other/one.txt": "One", "other/two/three.txt": "Three" }),
+        repo.commit({
+          swap: "A file",
+          "other/one.txt": "One",
+          "other/two/three.txt": "Three",
+        }),
         repo.commit({ swap: null, "swap/inner.txt": "In a directory" }),
-        repo.commit({ "swap/inner.txt": null, swap: "A file again", "other/one.txt": null, "other/two/three.txt": null, other: "A file" }),
+        repo.commit({
+          "swap/inner.txt": null,
+          swap: "A file again",
+          "other/one.txt": null,
+          "other/two/three.txt": null,
+          other: "A file",
+        }),
         repo.commit({ other: null, "other/back.txt": "Back" }),
       ];
 
@@ -155,15 +225,29 @@ describe("git store materialize", function () {
     it("handles names which differ only by case, as different names", async function () {
       const commits = [
         repo.commit({ "Readme.txt": "Contents", "Dir/File.txt": "Nested" }),
-        repo.commit({ "Readme.txt": null, "readme.txt": "Contents", "Dir/File.txt": null, "dir/file.txt": "Nested" }),
-        repo.commit({ "readme.txt": null, "Readme.txt": "Contents", "dir/file.txt": null, "Dir/File.txt": "Nested" }),
+        repo.commit({
+          "Readme.txt": null,
+          "readme.txt": "Contents",
+          "Dir/File.txt": null,
+          "dir/file.txt": "Nested",
+        }),
+        repo.commit({
+          "readme.txt": null,
+          "Readme.txt": "Contents",
+          "dir/file.txt": null,
+          "Dir/File.txt": "Nested",
+        }),
       ];
 
       await expectCheckouts(commits);
     });
 
     it("writes one blob to several paths", async function () {
-      const first = repo.commit({ "one.txt": "Same", "two/copy.txt": "Same", "three.txt": "Same" });
+      const first = repo.commit({
+        "one.txt": "Same",
+        "two/copy.txt": "Same",
+        "three.txt": "Same",
+      });
 
       await expectCheckouts([first]);
     });
@@ -172,7 +256,7 @@ describe("git store materialize", function () {
       const first = repo.commit({
         "日本語/こんにちは 世界.txt": "Japanese",
         "café/crème  brûlée.txt": "Accents and two spaces",
-        "emoji 🎉/it's \"quoted\" $(echo).txt": "Emoji and quotes",
+        'emoji 🎉/it\'s "quoted" $(echo).txt': "Emoji and quotes",
         "tab\tand\nnewline.txt": "Control characters",
       });
 
@@ -218,13 +302,23 @@ describe("git store materialize", function () {
 
       await apply(reader, null, first);
 
-      expect(fs.readFileSync(path.join(folder, "bytes.bin")).equals(bytes)).toBe(true);
-      expect(fs.readFileSync(path.join(folder, "crlf.txt"), "utf8")).toBe("one\r\ntwo\r\n");
+      expect(
+        fs.readFileSync(path.join(folder, "bytes.bin")).equals(bytes)
+      ).toBe(true);
+      expect(fs.readFileSync(path.join(folder, "crlf.txt"), "utf8")).toBe(
+        "one\r\ntwo\r\n"
+      );
     });
 
     it("sets the executable bit from the committed mode, and changes it", async function () {
-      const first = repo.commit({ "run.sh": { contents: "#!/bin/sh\n", mode: "100755" }, "plain.txt": "Plain" });
-      const second = repo.commit({ "run.sh": { contents: "#!/bin/sh\n", mode: "100644" }, "plain.txt": { contents: "Plain", mode: "100755" } });
+      const first = repo.commit({
+        "run.sh": { contents: "#!/bin/sh\n", mode: "100755" },
+        "plain.txt": "Plain",
+      });
+      const second = repo.commit({
+        "run.sh": { contents: "#!/bin/sh\n", mode: "100644" },
+        "plain.txt": { contents: "Plain", mode: "100755" },
+      });
       const { reader } = await repo.reader();
 
       await apply(reader, null, first);
@@ -232,16 +326,32 @@ describe("git store materialize", function () {
       expect(fs.statSync(path.join(folder, "plain.txt")).mode & 0o111).toBe(0);
 
       // Only the modes change, in both directions at once
-      expect(await apply(reader, first, second)).toEqual({ written: 2, removed: 0, skipped: 0 });
+      expect(await apply(reader, first, second)).toEqual({
+        written: 2,
+        removed: 0,
+        skipped: 0,
+      });
       expect(fs.statSync(path.join(folder, "run.sh")).mode & 0o111).toBe(0);
-      expect(fs.statSync(path.join(folder, "plain.txt")).mode & 0o111).not.toBe(0);
+      expect(fs.statSync(path.join(folder, "plain.txt")).mode & 0o111).not.toBe(
+        0
+      );
       expect(listFiles(folder)).toEqual(repo.checkout(second));
     });
 
     it("reads the same with OFS_DELTA and REF_DELTA packs", async function () {
-      const lines = (n) => Array.from({ length: 300 }, (_, i) => "line " + i + (i % 50 === n ? " edited " + n : "")).join("\n") + "\n";
+      const lines = (n) =>
+        Array.from(
+          { length: 300 },
+          (_, i) => "line " + i + (i % 50 === n ? " edited " + n : "")
+        ).join("\n") + "\n";
       const commits = [];
-      for (let n = 0; n < 8; n++) commits.push(repo.commit({ "doc.txt": lines(n), ["post-" + n + ".txt"]: lines(n + 100) }));
+      for (let n = 0; n < 8; n++)
+        commits.push(
+          repo.commit({
+            "doc.txt": lines(n),
+            ["post-" + n + ".txt"]: lines(n + 100),
+          })
+        );
 
       await expectCheckouts(commits);
       fs.rmSync(folder, { recursive: true });
@@ -253,10 +363,16 @@ describe("git store materialize", function () {
   describe("paths which are not safe", function () {
     it("never writes to or removes the folder's .git directory", async function () {
       fs.mkdirSync(path.join(folder, ".git"));
-      fs.writeFileSync(path.join(folder, ".git", "config"), "The live clone's config");
+      fs.writeFileSync(
+        path.join(folder, ".git", "config"),
+        "The live clone's config"
+      );
 
       const first = repo.commitExactly({
-        ".git": { config: "Overwritten", hooks: { "post-checkout": "#!/bin/sh\n" } },
+        ".git": {
+          config: "Overwritten",
+          hooks: { "post-checkout": "#!/bin/sh\n" },
+        },
         ".GIT": { config: "Overwritten" },
         sub: { ".Git": { config: "Overwritten" } },
         "fine.txt": "Fine",
@@ -264,10 +380,21 @@ describe("git store materialize", function () {
       const second = repo.commitExactly({ "fine.txt": "Fine" });
       const { reader } = await repo.reader();
 
-      expect(await apply(reader, null, first)).toEqual({ written: 1, removed: 0, skipped: 4 });
-      expect(await apply(reader, first, second)).toEqual({ written: 0, removed: 0, skipped: 4 });
+      expect(await apply(reader, null, first)).toEqual({
+        written: 1,
+        removed: 0,
+        skipped: 4,
+      });
+      expect(await apply(reader, first, second)).toEqual({
+        written: 0,
+        removed: 0,
+        skipped: 4,
+      });
       expect(listFiles(folder)).toEqual({
-        ".git/config": { contents: Buffer.from("The live clone's config"), mode: "644" },
+        ".git/config": {
+          contents: Buffer.from("The live clone's config"),
+          mode: "644",
+        },
         "fine.txt": { contents: Buffer.from("Fine"), mode: "644" },
       });
       expect(logs.join("\n")).toContain("not safe to write");
@@ -276,19 +403,29 @@ describe("git store materialize", function () {
     it("never writes outside the folder", async function () {
       const first = repo.commitExactly({
         "..": { outside: { "pwned.txt": "Escaped" } },
-        nested: { "..": { "pwned.txt": "Escaped" }, ".": { "pwned.txt": "Escaped" } },
+        nested: {
+          "..": { "pwned.txt": "Escaped" },
+          ".": { "pwned.txt": "Escaped" },
+        },
         "fine.txt": "Fine",
       });
       const { reader } = await repo.reader();
 
-      expect(await apply(reader, null, first)).toEqual({ written: 1, removed: 0, skipped: 3 });
+      expect(await apply(reader, null, first)).toEqual({
+        written: 1,
+        removed: 0,
+        skipped: 3,
+      });
       expect(listFiles(outside)).toEqual({});
       expect(fs.readdirSync(tmp).sort()).toEqual(["folder", "outside"]);
       expect(Object.keys(listFiles(folder))).toEqual(["fine.txt"]);
     });
 
     it("cleans up the empty directories on a re-run, if a removal failed after the file went", async function () {
-      const first = repo.commit({ "top/only/deep/file.txt": "Only", "kept.txt": "Kept" });
+      const first = repo.commit({
+        "top/only/deep/file.txt": "Only",
+        "kept.txt": "Kept",
+      });
       const second = repo.commit({ "top/only/deep/file.txt": null });
       const { reader } = await repo.reader();
 
@@ -320,10 +457,22 @@ describe("git store materialize", function () {
     it("refuses an unsafe path itself if a sink is given one", async function () {
       const sink = createFolderSink({ root: folder });
 
-      for (const bad of ["../x", "a/../x", "/abs", ".git/x", "a//b", "a/.GIT/b", ""]) {
+      for (const bad of [
+        "../x",
+        "a/../x",
+        "/abs",
+        ".git/x",
+        "a//b",
+        "a/.GIT/b",
+        "",
+      ]) {
         let error;
         try {
-          await sink.write(bad, require("stream").Readable.from([Buffer.from("x")]), { mode: 0o644, size: 1 });
+          await sink.write(
+            bad,
+            require("stream").Readable.from([Buffer.from("x")]),
+            { mode: 0o644, size: 1 }
+          );
         } catch (err) {
           error = err;
         }
@@ -333,10 +482,18 @@ describe("git store materialize", function () {
     });
 
     it("skips a name which is not valid UTF-8, and tells which", async function () {
-      const first = repo.commitExactly({ "b\xff.txt": "Not text", dir: { "c\xfe": "Nor this" }, "fine.txt": "Fine" });
+      const first = repo.commitExactly({
+        "b\xff.txt": "Not text",
+        dir: { "c\xfe": "Nor this" },
+        "fine.txt": "Fine",
+      });
       const { reader } = await repo.reader();
 
-      expect(await apply(reader, null, first)).toEqual({ written: 1, removed: 0, skipped: 2 });
+      expect(await apply(reader, null, first)).toEqual({
+        written: 1,
+        removed: 0,
+        skipped: 2,
+      });
       expect(Object.keys(listFiles(folder))).toEqual(["fine.txt"]);
       expect(logs.join("\n")).toContain("not safe to write");
     });
@@ -344,27 +501,45 @@ describe("git store materialize", function () {
     it("replaces a symbolic link in the way of a directory, without following it", async function () {
       fs.symlinkSync(outside, path.join(folder, "linked"));
 
-      const first = repo.commit({ "linked/pwned.txt": "Escaped", "linked/two.txt": "Two" });
+      const first = repo.commit({
+        "linked/pwned.txt": "Escaped",
+        "linked/two.txt": "Two",
+      });
       const { reader } = await repo.reader();
 
-      expect(await apply(reader, null, first)).toEqual({ written: 2, removed: 0, skipped: 0 });
+      expect(await apply(reader, null, first)).toEqual({
+        written: 2,
+        removed: 0,
+        skipped: 0,
+      });
       expect(listFiles(outside)).toEqual({});
-      expect(fs.lstatSync(path.join(folder, "linked")).isDirectory()).toBe(true);
-      expect(fs.readFileSync(path.join(folder, "linked/pwned.txt"), "utf8")).toBe("Escaped");
+      expect(fs.lstatSync(path.join(folder, "linked")).isDirectory()).toBe(
+        true
+      );
+      expect(
+        fs.readFileSync(path.join(folder, "linked/pwned.txt"), "utf8")
+      ).toBe("Escaped");
     });
 
     it("replaces a symbolic link at the path of a file, without writing through it", async function () {
       fs.writeFileSync(path.join(outside, "victim.txt"), "Untouched");
-      fs.symlinkSync(path.join(outside, "victim.txt"), path.join(folder, "file.txt"));
+      fs.symlinkSync(
+        path.join(outside, "victim.txt"),
+        path.join(folder, "file.txt")
+      );
 
       const first = repo.commit({ "file.txt": "Replaced" });
       const { reader } = await repo.reader();
 
       await apply(reader, null, first);
 
-      expect(fs.readFileSync(path.join(outside, "victim.txt"), "utf8")).toBe("Untouched");
+      expect(fs.readFileSync(path.join(outside, "victim.txt"), "utf8")).toBe(
+        "Untouched"
+      );
       expect(fs.lstatSync(path.join(folder, "file.txt")).isFile()).toBe(true);
-      expect(fs.readFileSync(path.join(folder, "file.txt"), "utf8")).toBe("Replaced");
+      expect(fs.readFileSync(path.join(folder, "file.txt"), "utf8")).toBe(
+        "Replaced"
+      );
     });
 
     it("does not remove a file through a symbolic link to a directory", async function () {
@@ -377,23 +552,38 @@ describe("git store materialize", function () {
       fs.symlinkSync(outside, path.join(folder, "linked"));
       await apply(reader, first, second);
 
-      expect(fs.readFileSync(path.join(outside, "file.txt"), "utf8")).toBe("Untouched");
-      expect(fs.lstatSync(path.join(folder, "linked")).isSymbolicLink()).toBe(true);
+      expect(fs.readFileSync(path.join(outside, "file.txt"), "utf8")).toBe(
+        "Untouched"
+      );
+      expect(fs.lstatSync(path.join(folder, "linked")).isSymbolicLink()).toBe(
+        true
+      );
     });
   });
 
   describe("links, submodules and other modes", function () {
     it("does not write a symbolic link, and removes one which was deleted", async function () {
-      const first = repo.commit({ "kept.txt": "Kept", "link.txt": { contents: "kept.txt", mode: "120000" } });
+      const first = repo.commit({
+        "kept.txt": "Kept",
+        "link.txt": { contents: "kept.txt", mode: "120000" },
+      });
       const second = repo.commit({ "link.txt": null });
       const { reader } = await repo.reader();
 
-      expect(await apply(reader, null, first)).toEqual({ written: 1, removed: 0, skipped: 1 });
+      expect(await apply(reader, null, first)).toEqual({
+        written: 1,
+        removed: 0,
+        skipped: 1,
+      });
       expect(Object.keys(listFiles(folder))).toEqual(["kept.txt"]);
 
       // One that was there from before is removed
       fs.symlinkSync("kept.txt", path.join(folder, "link.txt"));
-      expect(await apply(reader, first, second)).toEqual({ written: 0, removed: 1, skipped: 0 });
+      expect(await apply(reader, first, second)).toEqual({
+        written: 0,
+        removed: 1,
+        skipped: 0,
+      });
       expect(Object.keys(listFiles(folder))).toEqual(["kept.txt"]);
     });
 
@@ -406,39 +596,70 @@ describe("git store materialize", function () {
       const { reader } = await repo.reader();
 
       await apply(reader, null, commits[0]);
-      expect(await apply(reader, commits[0], commits[1])).toEqual({ written: 0, removed: 1, skipped: 0 });
+      expect(await apply(reader, commits[0], commits[1])).toEqual({
+        written: 0,
+        removed: 1,
+        skipped: 0,
+      });
       expect(listFiles(folder)).toEqual({});
       await apply(reader, commits[1], commits[2]);
       expect(listFiles(folder)).toEqual(repo.checkout(commits[2]));
     });
 
     it("writes a symbolic link only when asked to", async function () {
-      const first = repo.commit({ "link.txt": { contents: "kept.txt", mode: "120000" }, "kept.txt": "Kept" });
+      const first = repo.commit({
+        "link.txt": { contents: "kept.txt", mode: "120000" },
+        "kept.txt": "Kept",
+      });
       const { reader } = await repo.reader();
 
-      expect(await apply(reader, null, first, { symlinks: true })).toEqual({ written: 2, removed: 0, skipped: 0 });
+      expect(await apply(reader, null, first, { symlinks: true })).toEqual({
+        written: 2,
+        removed: 0,
+        skipped: 0,
+      });
       expect(listFiles(folder)).toEqual(repo.checkout(first));
     });
 
     it("skips a submodule, and removes a file it replaced", async function () {
-      const first = repo.commitExactly({ "fine.txt": "Fine", replaced: "A file" });
+      const first = repo.commitExactly({
+        "fine.txt": "Fine",
+        replaced: "A file",
+      });
       const second = repo.commitExactly({
         "fine.txt": "Fine",
-        replaced: { oid: "0123456789012345678901234567890123456789", mode: "160000" },
-        module: { oid: "0123456789012345678901234567890123456789", mode: "160000" },
+        replaced: {
+          oid: "0123456789012345678901234567890123456789",
+          mode: "160000",
+        },
+        module: {
+          oid: "0123456789012345678901234567890123456789",
+          mode: "160000",
+        },
       });
       const { reader } = await repo.reader();
 
       await apply(reader, null, first);
-      expect(await apply(reader, first, second)).toEqual({ written: 0, removed: 1, skipped: 1 });
+      expect(await apply(reader, first, second)).toEqual({
+        written: 0,
+        removed: 1,
+        skipped: 1,
+      });
       expect(Object.keys(listFiles(folder))).toEqual(["fine.txt"]);
     });
 
     it("skips a mode that is neither 100644 nor 100755", async function () {
-      const first = repo.commitExactly({ odd: { contents: "Odd", mode: "100664" }, "fine.txt": "Fine" });
+      const first = repo.commitExactly({
+        odd: { contents: "Odd", mode: "100664" },
+        "fine.txt": "Fine",
+      });
       const { reader } = await repo.reader();
 
-      expect(await apply(reader, null, first)).toEqual({ written: 1, removed: 0, skipped: 1 });
+      expect(await apply(reader, null, first)).toEqual({
+        written: 1,
+        removed: 0,
+        skipped: 1,
+      });
       expect(Object.keys(listFiles(folder))).toEqual(["fine.txt"]);
     });
   });
@@ -457,10 +678,20 @@ describe("git store materialize", function () {
       const first = {};
       const second = {};
       for (let i = 0; i < 40; i++) {
-        first["dir" + (i % 5) + "/file-" + i + ".txt"] = "First " + i + "\n".repeat(i);
-        second["dir" + (i % 5) + "/file-" + i + ".txt"] = i % 3 ? "Second " + i : null;
+        first["dir" + (i % 5) + "/file-" + i + ".txt"] =
+          "First " + i + "\n".repeat(i);
+        second["dir" + (i % 5) + "/file-" + i + ".txt"] =
+          i % 3 ? "Second " + i : null;
       }
-      return [repo.commit(first), repo.commit({ ...second, "added/new.txt": "New", "dir0": null, "dir0/replaced.txt": "A dir again" })];
+      return [
+        repo.commit(first),
+        repo.commit({
+          ...second,
+          "added/new.txt": "New",
+          dir0: null,
+          "dir0/replaced.txt": "A dir again",
+        }),
+      ];
     }
 
     it("fails clearly if a blob is not in the repository", async function () {
@@ -469,7 +700,9 @@ describe("git store materialize", function () {
       const oid = repo.git(["hash-object", "--stdin"], "B");
 
       // A reader whose packs do not have the blob
-      const missing = Object.assign(Object.create(reader), { stream: (id, o) => (id === oid ? null : reader.stream(id, o)) });
+      const missing = Object.assign(Object.create(reader), {
+        stream: (id, o) => (id === oid ? null : reader.stream(id, o)),
+      });
       const err = await failure(apply(missing, null, first));
 
       expect(err instanceof NotFoundError).toBe(true);
@@ -480,12 +713,22 @@ describe("git store materialize", function () {
       const first = repo.commit({ "a.txt": "A" });
       const { reader } = await repo.reader();
 
-      expect((await failure(apply(reader, null, "0123456789012345678901234567890123456789"))) instanceof NotFoundError).toBe(true);
-      expect((await failure(apply(reader, null, repo.treeOf(first)))) instanceof CorruptError).toBe(true);
+      expect(
+        (await failure(
+          apply(reader, null, "0123456789012345678901234567890123456789")
+        )) instanceof NotFoundError
+      ).toBe(true);
+      expect(
+        (await failure(apply(reader, null, repo.treeOf(first)))) instanceof
+          CorruptError
+      ).toBe(true);
     });
 
     it("never publishes a file whose bytes fail their check at the end of the stream", async function () {
-      const first = repo.commit({ "a.txt": "A".repeat(5000), "b.txt": "B".repeat(5000) });
+      const first = repo.commit({
+        "a.txt": "A".repeat(5000),
+        "b.txt": "B".repeat(5000),
+      });
       const { reader } = await repo.reader();
 
       // What the reader does for a blob which is not the blob it was asked for:
@@ -497,7 +740,9 @@ describe("git store materialize", function () {
             ...blob,
             data: (async function* () {
               yield* blob.data;
-              throw new CorruptError("Object " + id + " read back as a different object");
+              throw new CorruptError(
+                "Object " + id + " read back as a different object"
+              );
             })(),
           };
         },
@@ -510,13 +755,20 @@ describe("git store materialize", function () {
     });
 
     it("fails with the path for a blob stored as a delta that is over the limit, and writes nothing for it", async function () {
-      const lines = (n) => Array.from({ length: 2000 }, (_, i) => "line " + i + (i % 100 === n ? " edited " + n : "")).join("\n") + "\n";
+      const lines = (n) =>
+        Array.from(
+          { length: 2000 },
+          (_, i) => "line " + i + (i % 100 === n ? " edited " + n : "")
+        ).join("\n") + "\n";
       const commits = [];
-      for (let n = 0; n < 6; n++) commits.push(repo.commit({ "big.txt": lines(n) }));
+      for (let n = 0; n < 6; n++)
+        commits.push(repo.commit({ "big.txt": lines(n) }));
 
       const { reader, packs } = await repo.reader({ maxSize: 1024 * 1024 });
       const entries = fx.listEntries(packs[0]);
-      const blobOids = commits.map((c) => repo.git(["rev-parse", c + ":big.txt"]));
+      const blobOids = commits.map((c) =>
+        repo.git(["rev-parse", c + ":big.txt"])
+      );
       const stored = blobOids.map((oid) => entries.find((e) => e.oid === oid));
       const deltaAt = stored.findIndex((e) => e.depth > 0);
 
@@ -534,21 +786,28 @@ describe("git store materialize", function () {
       // A whole object of the same size is fine at the same cap
       const whole = stored.findIndex((e) => e.depth === 0);
       await apply(small, null, commits[whole]);
-      expect(fs.readFileSync(path.join(folder, "big.txt"), "utf8")).toBe(lines(whole));
+      expect(fs.readFileSync(path.join(folder, "big.txt"), "utf8")).toBe(
+        lines(whole)
+      );
 
       // And with room, the delta is written
       fs.rmSync(path.join(folder, "big.txt"));
       await apply(reader, null, commits[deltaAt]);
-      expect(fs.readFileSync(path.join(folder, "big.txt"), "utf8")).toBe(lines(deltaAt));
+      expect(fs.readFileSync(path.join(folder, "big.txt"), "utf8")).toBe(
+        lines(deltaAt)
+      );
     });
 
     // The cap is lowered rather than the blob made 64 MiB: what happens at the
     // cap does not depend on its size
     const CAP = 1024 * 1024;
     const huge = (edit) => {
-      const line = Buffer.from("this line of the huge file is the same on every row of it......\n");
+      const line = Buffer.from(
+        "this line of the huge file is the same on every row of it......\n"
+      );
       const data = Buffer.alloc(3 * 1024 * 1024);
-      for (let at = 0; at < data.length; at += line.length) line.copy(data, at, 0, Math.min(line.length, data.length - at));
+      for (let at = 0; at < data.length; at += line.length)
+        line.copy(data, at, 0, Math.min(line.length, data.length - at));
       if (edit) data.write("EDITED " + edit, 1024 * 1024);
       return data;
     };
@@ -557,20 +816,32 @@ describe("git store materialize", function () {
       const first = repo.commit({ "huge.txt": huge(0), "small.txt": "small" });
       const second = repo.commit({ "huge.txt": huge(1) });
 
-      const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 64 * 1024 * 1024 });
-      const { reader, packs } = await repo.reader({ scratch: cache, maxSize: CAP });
+      const cache = createCache({
+        dir: path.join(tmp, "cache"),
+        maxBytes: 64 * 1024 * 1024,
+      });
+      const { reader, packs } = await repo.reader({
+        scratch: cache,
+        maxSize: CAP,
+      });
       const oid = repo.git(["rev-parse", first + ":huge.txt"]);
       const stored = fx.listEntries(packs[0]).find((e) => e.oid === oid);
 
       expect(stored.depth).toBeGreaterThan(0);
 
       await apply(reader, null, first);
-      expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(0))).toBe(0);
-      expect(fs.readFileSync(path.join(folder, "small.txt"), "utf8")).toBe("small");
+      expect(
+        Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(0))
+      ).toBe(0);
+      expect(fs.readFileSync(path.join(folder, "small.txt"), "utf8")).toBe(
+        "small"
+      );
 
       // And onwards to the version it was a delta of
       await apply(reader, first, second);
-      expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(1))).toBe(0);
+      expect(
+        Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(1))
+      ).toBe(0);
 
       expect(cache.stats().reservedBytes).toBe(0);
       expect(fs.readdirSync(path.join(tmp, "cache", "scratch"))).toEqual([]);
@@ -592,15 +863,27 @@ describe("git store materialize", function () {
       for (let n = 0; n < 4; n++) edited["huge" + n + ".txt"] = huge(n + 1);
       repo.commit(edited);
 
-      const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 64 * 1024 * 1024 });
+      const cache = createCache({
+        dir: path.join(tmp, "cache"),
+        maxBytes: 64 * 1024 * 1024,
+      });
       let peak = 0;
-      const timer = setInterval(() => (peak = Math.max(peak, cache.stats().reservedBytes)), 1);
+      const timer = setInterval(
+        () => (peak = Math.max(peak, cache.stats().reservedBytes)),
+        1
+      );
       const { reader } = await repo.reader({ scratch: cache, maxSize: CAP });
 
       await apply(reader, null, first, { concurrency: 8 });
       clearInterval(timer);
 
-      for (let n = 0; n < 4; n++) expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge" + n + ".txt")), huge(0))).toBe(0);
+      for (let n = 0; n < 4; n++)
+        expect(
+          Buffer.compare(
+            fs.readFileSync(path.join(folder, "huge" + n + ".txt")),
+            huge(0)
+          )
+        ).toBe(0);
       // Two copies of one blob at the most (3 MiB each), not of all of them
       expect(peak).toBeLessThanOrEqual(2 * 3 * 1024 * 1024 + 4096);
       expect(cache.stats().reservedBytes).toBe(0);
@@ -622,7 +905,10 @@ describe("git store materialize", function () {
 
       it("fails with a NoRoomError when the room is taken just now, and works once it is free", async function () {
         const first = build();
-        const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 16 * 1024 * 1024 });
+        const cache = createCache({
+          dir: path.join(tmp, "cache"),
+          maxBytes: 16 * 1024 * 1024,
+        });
         const { reader } = await repo.reader({ scratch: cache, maxSize: CAP });
         const hold = await cache.reserve(14 * 1024 * 1024);
 
@@ -632,13 +918,21 @@ describe("git store materialize", function () {
 
         await hold.release();
         await apply(reader, null, first);
-        expect(Buffer.compare(fs.readFileSync(path.join(folder, "huge.txt")), huge(0))).toBe(0);
+        expect(
+          Buffer.compare(
+            fs.readFileSync(path.join(folder, "huge.txt")),
+            huge(0)
+          )
+        ).toBe(0);
         expect(cache.stats().reservedBytes).toBe(0);
       });
 
       it("fails with a TooLargeError naming the path when the budget could never hold it", async function () {
         const first = build();
-        const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 4 * 1024 * 1024 });
+        const cache = createCache({
+          dir: path.join(tmp, "cache"),
+          maxBytes: 4 * 1024 * 1024,
+        });
         const { reader } = await repo.reader({ scratch: cache, maxSize: CAP });
 
         const err = await failure(apply(reader, null, first));
@@ -648,7 +942,9 @@ describe("git store materialize", function () {
         expect(fs.readdirSync(folder)).toEqual([]);
         expect(cache.stats().reservedBytes).toBe(0);
         const scratch = path.join(tmp, "cache", "scratch");
-        expect(fs.existsSync(scratch) ? fs.readdirSync(scratch) : []).toEqual([]);
+        expect(fs.existsSync(scratch) ? fs.readdirSync(scratch) : []).toEqual(
+          []
+        );
       });
     });
 
@@ -665,9 +961,15 @@ describe("git store materialize", function () {
         await apply(reader, null, first);
         expect(listFiles(folder)).toEqual(repo.checkout(first));
 
-        store.inject("read", { key: /\.pack$/, skip: 25, before: new Error("connection reset") });
+        store.inject("read", {
+          key: /\.pack$/,
+          skip: 25,
+          before: new Error("connection reset"),
+        });
 
-        const err = await failure(apply(reader, first, second, { concurrency }));
+        const err = await failure(
+          apply(reader, first, second, { concurrency })
+        );
         expect(err.message).toBe("connection reset");
         expect(store.pending()).toBe(0);
 
@@ -685,7 +987,10 @@ describe("git store materialize", function () {
       const [first, second] = manyFiles();
       const { reader } = await repo.reader();
 
-      for (const [operation, after] of [["write", 5], ["remove", 3]]) {
+      for (const [operation, after] of [
+        ["write", 5],
+        ["remove", 3],
+      ]) {
         fs.rmSync(folder, { recursive: true });
         fs.mkdirSync(folder);
         await apply(reader, null, first);
@@ -700,7 +1005,15 @@ describe("git store materialize", function () {
           },
         };
 
-        const err = await failure(materialize({ reader, from: first, to: second, sink: failing, concurrency: 3 }));
+        const err = await failure(
+          materialize({
+            reader,
+            from: first,
+            to: second,
+            sink: failing,
+            concurrency: 3,
+          })
+        );
         expect(err.message).toBe("disk full");
         expect(listFiles(folder)).not.toEqual(repo.checkout(second));
 
@@ -727,7 +1040,9 @@ describe("git store materialize", function () {
         },
       };
 
-      const err = await failure(materialize({ reader, from: null, to: first, sink, concurrency: 2 }));
+      const err = await failure(
+        materialize({ reader, from: null, to: first, sink, concurrency: 2 })
+      );
 
       expect(err.message).toBe("boom");
       expect(active).toBe(0);
@@ -736,27 +1051,60 @@ describe("git store materialize", function () {
 
     it("never runs a removal with a write in flight, or a write with a removal in flight", async function () {
       const commits = [
-        repo.commit({ "Readme.txt": "R", "Dir/File.txt": "F", "x/a.txt": "A", "x/b.txt": "B", "y": "A file" }),
-        repo.commit({ "Readme.txt": null, "readme.txt": "R", "Dir/File.txt": null, "dir/file.txt": "F", "x/a.txt": null, "x/c.txt": "C", y: null, "y/z.txt": "Z" }),
+        repo.commit({
+          "Readme.txt": "R",
+          "Dir/File.txt": "F",
+          "x/a.txt": "A",
+          "x/b.txt": "B",
+          y: "A file",
+        }),
+        repo.commit({
+          "Readme.txt": null,
+          "readme.txt": "R",
+          "Dir/File.txt": null,
+          "dir/file.txt": "F",
+          "x/a.txt": null,
+          "x/c.txt": "C",
+          y: null,
+          "y/z.txt": "Z",
+        }),
       ];
       const { reader } = await repo.reader();
       const real = createFolderSink({ root: folder });
       const running = { write: 0, remove: 0 };
       const clashes = [];
-      const wrap = (operation, other) => async (...args) => {
-        running[operation]++;
-        if (running[other]) clashes.push(operation + " " + args[0]);
-        await new Promise((resolve) => setTimeout(resolve, 3));
-        try {
-          return await real[operation](...args);
-        } finally {
-          running[operation]--;
-        }
+      const wrap =
+        (operation, other) =>
+        async (...args) => {
+          running[operation]++;
+          if (running[other]) clashes.push(operation + " " + args[0]);
+          await new Promise((resolve) => setTimeout(resolve, 3));
+          try {
+            return await real[operation](...args);
+          } finally {
+            running[operation]--;
+          }
+        };
+      const sink = {
+        ...real,
+        write: wrap("write", "remove"),
+        remove: wrap("remove", "write"),
       };
-      const sink = { ...real, write: wrap("write", "remove"), remove: wrap("remove", "write") };
 
-      await materialize({ reader, from: null, to: commits[0], sink, concurrency: 8 });
-      await materialize({ reader, from: commits[0], to: commits[1], sink, concurrency: 8 });
+      await materialize({
+        reader,
+        from: null,
+        to: commits[0],
+        sink,
+        concurrency: 8,
+      });
+      await materialize({
+        reader,
+        from: commits[0],
+        to: commits[1],
+        sink,
+        concurrency: 8,
+      });
 
       expect(clashes).toEqual([]);
       expect(listFiles(folder)).toEqual(repo.checkout(commits[1]));
@@ -770,7 +1118,14 @@ describe("git store materialize", function () {
       return new Promise((resolve, reject) => {
         execFile(
           process.execPath,
-          ["--expose-gc", path.join(__dirname, "helpers/measureMaterialize.js"), packDir, folder, String(from), to],
+          [
+            "--expose-gc",
+            path.join(__dirname, "helpers/measureMaterialize.js"),
+            packDir,
+            folder,
+            String(from),
+            to,
+          ],
           function (err, stdout, stderr) {
             if (err) return reject(new Error(err.message + stderr));
             resolve(Number(stdout));
@@ -779,31 +1134,47 @@ describe("git store materialize", function () {
       });
     }
 
-    it("streams a large blob byte for byte, without holding it in memory", async function () {
-      // Random data with NULs and newlines where a parser could be confused,
-      // and far more than a chunk. It ends in a newline too.
-      const blob = Buffer.alloc(48 * 1024 * 1024);
-      const block = crypto.randomBytes(1024 * 1024);
+    it(
+      "streams a large blob byte for byte, without holding it in memory",
+      async function () {
+        // Random data with NULs and newlines where a parser could be confused,
+        // and far more than a chunk. It ends in a newline too.
+        const blob = Buffer.alloc(48 * 1024 * 1024);
+        const block = crypto.randomBytes(1024 * 1024);
 
-      block[0] = 0;
-      block[1] = 10;
-      block[block.length - 1] = 10;
+        block[0] = 0;
+        block[1] = 10;
+        block[block.length - 1] = 10;
 
-      for (let offset = 0; offset < blob.length; offset += block.length) block.copy(blob, offset);
+        for (let offset = 0; offset < blob.length; offset += block.length)
+          block.copy(blob, offset);
 
-      const first = repo.commit({ "big.bin": blob, "after.txt": "After the large file" });
-      const { packs } = await repo.reader();
+        const first = repo.commit({
+          "big.bin": blob,
+          "after.txt": "After the large file",
+        });
+        const { packs } = await repo.reader();
 
-      expect(packs.length).toBe(1);
+        expect(packs.length).toBe(1);
 
-      const growth = await memoryGrowth(path.join(repo.dir, "objects", "pack"), null, first);
+        const growth = await memoryGrowth(
+          path.join(repo.dir, "objects", "pack"),
+          null,
+          first
+        );
 
-      // Buffering the file would add at least its size. Streaming holds a few
-      // megabytes (it was 2 to 10 for 8 to 48 MB blobs).
-      expect(growth).toBeLessThan(blob.length / 3);
-      expect(Buffer.compare(fs.readFileSync(path.join(folder, "big.bin")), blob)).toBe(0);
-      expect(fs.readFileSync(path.join(folder, "after.txt"), "utf8")).toBe("After the large file");
-    }, 120 * 1000);
+        // Buffering the file would add at least its size. Streaming holds a few
+        // megabytes (it was 2 to 10 for 8 to 48 MB blobs).
+        expect(growth).toBeLessThan(blob.length / 3);
+        expect(
+          Buffer.compare(fs.readFileSync(path.join(folder, "big.bin")), blob)
+        ).toBe(0);
+        expect(fs.readFileSync(path.join(folder, "after.txt"), "utf8")).toBe(
+          "After the large file"
+        );
+      },
+      120 * 1000
+    );
   });
 
   describe("requests", function () {
@@ -811,14 +1182,27 @@ describe("git store materialize", function () {
     function history() {
       const commits = [];
       for (let i = 1; i <= 30; i++) {
-        const lines = Array.from({ length: 400 }, (_, n) => "line " + n + (n % 40 === i % 40 ? " edited " + i : "")).join("\n");
-        commits.push(repo.commit({ "docs/big.txt": lines, ["posts/post-" + i + ".txt"]: "Post " + i, "data.bin": crypto.randomBytes(2000) }));
+        const lines = Array.from(
+          { length: 400 },
+          (_, n) => "line " + n + (n % 40 === i % 40 ? " edited " + i : "")
+        ).join("\n");
+        commits.push(
+          repo.commit({
+            "docs/big.txt": lines,
+            ["posts/post-" + i + ".txt"]: "Post " + i,
+            "data.bin": crypto.randomBytes(2000),
+          })
+        );
       }
       commits.push(repo.commit({ "posts/post-3.txt": "Post 3, edited" }));
       return commits;
     }
 
-    const requests = (store) => store.stats.heads + store.stats.reads + store.stats.gets + store.stats.lists;
+    const requests = (store) =>
+      store.stats.heads +
+      store.stats.reads +
+      store.stats.gets +
+      store.stats.lists;
 
     it("takes a few requests for a one-file change, cold and warm", async function () {
       const commits = history();
@@ -831,11 +1215,20 @@ describe("git store materialize", function () {
       const everything = requests(all.store);
 
       // Cold: nothing in the cache
-      const cache = createCache({ dir: path.join(tmp, "cache"), maxBytes: 64 * 1024 * 1024 });
+      const cache = createCache({
+        dir: path.join(tmp, "cache"),
+        maxBytes: 64 * 1024 * 1024,
+      });
       const { store, reader, entries } = await repo.reader({ cache });
 
-      expect(await apply(reader, from, to)).toEqual({ written: 1, removed: 0, skipped: 0 });
-      expect(fs.readFileSync(path.join(folder, "posts/post-3.txt"), "utf8")).toBe("Post 3, edited");
+      expect(await apply(reader, from, to)).toEqual({
+        written: 1,
+        removed: 0,
+        skipped: 0,
+      });
+      expect(
+        fs.readFileSync(path.join(folder, "posts/post-3.txt"), "utf8")
+      ).toBe("Post 3, edited");
 
       const cold = requests(store);
 
@@ -864,7 +1257,11 @@ describe("git store materialize", function () {
       const { reader, store } = await repo.reader();
       const before = requests(store);
 
-      expect(await apply(reader, first, second)).toEqual({ written: 0, removed: 0, skipped: 0 });
+      expect(await apply(reader, first, second)).toEqual({
+        written: 0,
+        removed: 0,
+        skipped: 0,
+      });
       // The two commits, and no tree
       expect(requests(store) - before).toBeLessThan(12);
     });

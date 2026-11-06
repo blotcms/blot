@@ -32,7 +32,7 @@ module.exports = {
   renameLocalTemplate: require("./renameLocalTemplate"),
   removeFromFolder: require("./removeFromFolder"),
   removeEnabledFromAllTemplates: require("./removeEnabledFromAllTemplates"),
-  
+
   package: require("./package"),
   viewModel: require("./viewModel"),
   metadataModel: require("./metadataModel"),

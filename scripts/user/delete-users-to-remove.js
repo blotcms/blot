@@ -18,7 +18,9 @@ function printUsage() {
   console.log("grace period and are due for removal.");
   console.log("");
   console.log("Options:");
-  console.log("  -fast, --fast  list all candidates first and confirm once before deleting");
+  console.log(
+    "  -fast, --fast  list all candidates first and confirm once before deleting"
+  );
   console.log("  -h, --help     show this help output");
 }
 
@@ -69,7 +71,13 @@ function describeCandidateSummary(candidate) {
 function logUserError(user, action, err) {
   console.error(
     colors.red(
-      "Error " + action + " " + user.email + " " + user.uid + ": " +
+      "Error " +
+        action +
+        " " +
+        user.email +
+        " " +
+        user.uid +
+        ": " +
         ((err && err.message) || err)
     )
   );
@@ -135,7 +143,7 @@ function runFastMode(candidates, done) {
   if (!candidates.length) return done(null, 0);
 
   candidates.forEach(function (candidate, index) {
-    console.log((index + 1) + ". " + describeCandidateSummary(candidate));
+    console.log(index + 1 + ". " + describeCandidateSummary(candidate));
   });
 
   var prompt = FAST_CONFIRMATION_PROMPT.replace("<count>", candidates.length);
@@ -148,19 +156,23 @@ function runFastMode(candidates, done) {
 
     var deleted = 0;
 
-    async.eachSeries(candidates, function (candidate, next) {
-      deleteAccount(candidate.user, function (deleteErr) {
-        if (deleteErr) {
-          logUserError(candidate.user, "deleting", deleteErr);
-          return next();
-        }
-        deleted += 1;
-        console.log(colors.green("Deleted " + candidate.user.email));
-        next();
-      });
-    }, function (err) {
-      done(err, deleted);
-    });
+    async.eachSeries(
+      candidates,
+      function (candidate, next) {
+        deleteAccount(candidate.user, function (deleteErr) {
+          if (deleteErr) {
+            logUserError(candidate.user, "deleting", deleteErr);
+            return next();
+          }
+          deleted += 1;
+          console.log(colors.green("Deleted " + candidate.user.email));
+          next();
+        });
+      },
+      function (err) {
+        done(err, deleted);
+      }
+    );
   });
 }
 
@@ -196,7 +208,9 @@ function runInteractiveMode(candidates, done) {
   );
 }
 
-console.log("Scanning for cancelled and overdue users that passed their grace period...");
+console.log(
+  "Scanning for cancelled and overdue users that passed their grace period..."
+);
 if (!FAST_MODE) {
   console.log("Tip: use -fast to review all candidates and confirm once.");
 }

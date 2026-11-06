@@ -35,7 +35,8 @@ const readdir = async (drive, dirId) => {
   // is locally keeps that name, then by id.
   items.sort(
     (a, b) =>
-      renamed.has(a) - renamed.has(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
+      renamed.has(a) - renamed.has(b) ||
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
   );
 
   // Filter out system files that shouldn't be synced to Blot

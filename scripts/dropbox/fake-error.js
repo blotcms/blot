@@ -19,10 +19,7 @@
 
 const fs = require("fs");
 const { promisify } = require("util");
-const {
-  MODES,
-  flagPath,
-} = require("../development/fake-dropbox-errors");
+const { MODES, flagPath } = require("../development/fake-dropbox-errors");
 
 const [command, ...args] = process.argv.slice(2);
 const positional = args.filter((arg) => !arg.startsWith("--"));
@@ -106,7 +103,11 @@ async function main() {
       console.log(mode.padEnd(16), MODES[mode].expect)
     );
   } else if (command === "run") {
-    await run(positional[0], positional[1], args.filter((a) => a.startsWith("--")));
+    await run(
+      positional[0],
+      positional[1],
+      args.filter((a) => a.startsWith("--"))
+    );
   } else if (command === "health") {
     if (!positional[0]) usage();
     await health(positional[0]);
@@ -120,7 +121,9 @@ async function main() {
   } else if (command === "status") {
     console.log(
       "Fake Dropbox error:",
-      fs.existsSync(flagPath) ? "ON (" + fs.readFileSync(flagPath, "utf8") + ")" : "OFF"
+      fs.existsSync(flagPath)
+        ? "ON (" + fs.readFileSync(flagPath, "utf8") + ")"
+        : "OFF"
     );
   } else {
     usage();

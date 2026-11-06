@@ -63,7 +63,8 @@ const invalidPathReason = (original, normalized) => {
   const segments = normalized.split("/");
 
   for (const segment of segments) {
-    if (!segment.trim()) return "This file's path contains an empty folder name";
+    if (!segment.trim())
+      return "This file's path contains an empty folder name";
     if (segment === "." || segment === "..") {
       return "Paths cannot navigate outside the folder you dropped";
     }
@@ -109,7 +110,9 @@ const stripWrapperDirectories = (entries) => {
 // is what reading a binary file as utf-8 would otherwise do.
 const isValidUTF8 = (buffer) => {
   if (buffer.includes(0)) return false;
-  return Buffer.compare(Buffer.from(buffer.toString("utf8"), "utf8"), buffer) === 0;
+  return (
+    Buffer.compare(Buffer.from(buffer.toString("utf8"), "utf8"), buffer) === 0
+  );
 };
 
 // setView runs the view through viewModel, which expects these to be objects.
@@ -214,22 +217,34 @@ const parsePackage = (buffer, problems, warnings) => {
     manifest.name = parsed.name.trim();
   }
 
-  if (parsed.locals && typeof parsed.locals === "object" && !Array.isArray(parsed.locals)) {
+  if (
+    parsed.locals &&
+    typeof parsed.locals === "object" &&
+    !Array.isArray(parsed.locals)
+  ) {
     manifest.locals = parsed.locals;
   } else if (parsed.locals !== undefined) {
-    warnings.push("package.json 'locals' was ignored because it is not an object");
+    warnings.push(
+      "package.json 'locals' was ignored because it is not an object"
+    );
   }
 
-  if (parsed.views && typeof parsed.views === "object" && !Array.isArray(parsed.views)) {
+  if (
+    parsed.views &&
+    typeof parsed.views === "object" &&
+    !Array.isArray(parsed.views)
+  ) {
     manifest.views = parsed.views;
   } else if (parsed.views !== undefined) {
-    warnings.push("package.json 'views' was ignored because it is not an object");
+    warnings.push(
+      "package.json 'views' was ignored because it is not an object"
+    );
   }
 
   return manifest;
 };
 
-module.exports = function parseUploadedTemplate (entries = [], options = {}) {
+module.exports = function parseUploadedTemplate(entries = [], options = {}) {
   const problems = [];
   const warnings = [];
   const ignored = [];
@@ -433,7 +448,8 @@ module.exports = function parseUploadedTemplate (entries = [], options = {}) {
     // string. It does that inside an asynchronous callback which nothing
     // catches, so a number in this array would leave the request hanging
     // rather than failing. Refuse it here instead.
-    const badUrl = invalidUrlReason(view.url) || invalidUrlReason(view.urlPatterns);
+    const badUrl =
+      invalidUrlReason(view.url) || invalidUrlReason(view.urlPatterns);
 
     if (badUrl) {
       problems.push({
@@ -510,7 +526,9 @@ module.exports = function parseUploadedTemplate (entries = [], options = {}) {
 
     for (const name of Object.keys(manifest.views)) {
       if (!uploaded.has(name)) {
-        warnings.push(`package.json describes '${name}' but no such file was uploaded`);
+        warnings.push(
+          `package.json describes '${name}' but no such file was uploaded`
+        );
       }
     }
   }

@@ -52,8 +52,10 @@ function Candidates(blog, entry) {
   var metadataByLowercaseKey = metadataCaseInsensitive(entry.metadata);
   var folderPost = isFolderPostEntry(entry);
 
-  var format = blog.permalink.isCustom ? blog.permalink.custom : blog.permalink.format;
-  
+  var format = blog.permalink.isCustom
+    ? blog.permalink.custom
+    : blog.permalink.format;
+
   // Don't use the permalink format for pages
   // or posts with user specified permalinks.
   if (
@@ -139,9 +141,9 @@ function Candidates(blog, entry) {
     // no file behind it, so they may use their plus-stripped path as URL.
     if (entry.path && candidate === entry.path && !folderPost) return false;
 
-    // Otherwise we are pretty liberal: we allow posts and pages 
-    // to have the same URL as a template view. This lets us set 
-    // an index page for example directly from the folder using 
+    // Otherwise we are pretty liberal: we allow posts and pages
+    // to have the same URL as a template view. This lets us set
+    // an index page for example directly from the folder using
     // the metadata `Link: /`. Think carefuly before changing this.
     return true;
   });
@@ -232,39 +234,40 @@ function setUrl(blogID, entry, callback) {
       candidates,
       function (candidate, index, next) {
         debug("Checking candidate", candidate);
-        check(blogID, candidate, entry.id, function (
-          err,
-          taken,
-          conflictingEntryPath
-        ) {
-          if (err) return callback(err);
+        check(
+          blogID,
+          candidate,
+          entry.id,
+          function (err, taken, conflictingEntryPath) {
+            if (err) return callback(err);
 
-          if (taken) {
-            if (index === 0) {
-              firstCandidateTaken = true;
-              firstCandidateConflictingPath = conflictingEntryPath;
+            if (taken) {
+              if (index === 0) {
+                firstCandidateTaken = true;
+                firstCandidateConflictingPath = conflictingEntryPath;
+              }
+
+              return next();
             }
 
-            return next();
-          }
+            var key = Key(blogID, candidate);
 
-          var key = Key(blogID, candidate);
-
-          redis
-            .set(key, entry.id)
-            .then(function () {
-              return callback(null, {
-                url: candidate,
-                conflictingEntryPath:
-                  firstCandidateTaken && candidate !== firstCandidate
-                    ? firstCandidateConflictingPath
-                    : null,
+            redis
+              .set(key, entry.id)
+              .then(function () {
+                return callback(null, {
+                  url: candidate,
+                  conflictingEntryPath:
+                    firstCandidateTaken && candidate !== firstCandidate
+                      ? firstCandidateConflictingPath
+                      : null,
+                });
+              })
+              .catch(function (err) {
+                return callback(err);
               });
-            })
-            .catch(function (err) {
-              return callback(err);
-            });
-        });
+          }
+        );
       },
       function () {
         // if we exhaust the list of candidates, what should happen?

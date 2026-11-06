@@ -39,7 +39,13 @@ function main(user, callback) {
 
     if (err) {
       console.log(
-        colors.red("User:", user.uid, user.email, "failed to sync:", err.message)
+        colors.red(
+          "User:",
+          user.uid,
+          user.email,
+          "failed to sync:",
+          err.message
+        )
       );
       return callback(err);
     }

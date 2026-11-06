@@ -79,7 +79,8 @@ function activeMode() {
 }
 
 // Only the folder metadata lookup: /drive/v3/files/<id> with no sub-path
-const FOLDER_LOOKUP = /^https:\/\/www\.googleapis\.com\/drive\/v3\/files\/[^/?]+(\?|$)/;
+const FOLDER_LOOKUP =
+  /^https:\/\/www\.googleapis\.com\/drive\/v3\/files\/[^/?]+(\?|$)/;
 
 function install() {
   const { Gaxios } = require("gaxios");
@@ -105,7 +106,9 @@ function install() {
         error: {
           code: fake.status,
           message: fake.message,
-          errors: [{ message: fake.message, domain: "global", reason: fake.reason }],
+          errors: [
+            { message: fake.message, domain: "global", reason: fake.reason },
+          ],
         },
       };
 

@@ -47,13 +47,17 @@ export default async (req, res) => {
     return res.status(400).send("Missing blogID, path, or modifiedTime header");
   }
 
-  console.log(clfdate(), `Received upload request for blogID: ${blogID}, path: ${path}`);
+  console.log(
+    clfdate(),
+    `Received upload request for blogID: ${blogID}, path: ${path}`
+  );
 
   const basePath = resolve(join(iCloudDriveDirectory, blogID));
   const filePath = resolve(join(basePath, normalizedPath));
 
   if (filePath !== basePath && !filePath.startsWith(`${basePath}${sep}`)) {
-    console.error(clfdate(), 
+    console.error(
+      clfdate(),
       "Invalid path: attempted to access parent directory",
       basePath,
       filePath

@@ -19,7 +19,9 @@ describe("typeset plugin", function () {
     await folder.write(this.blog.id, path, contents);
 
     const entry = await new Promise((resolve, reject) =>
-      build(this.blog, path, (err, entry) => (err ? reject(err) : resolve(entry)))
+      build(this.blog, path, (err, entry) =>
+        err ? reject(err) : resolve(entry)
+      )
     );
 
     expect(entry.html).not.toContain('<span class="small-caps">');
@@ -44,7 +46,9 @@ describe("typeset plugin", function () {
     await folder.write(this.blog.id, path, contents);
 
     const entry = await new Promise((resolve, reject) =>
-      build(this.blog, path, (err, entry) => (err ? reject(err) : resolve(entry)))
+      build(this.blog, path, (err, entry) =>
+        err ? reject(err) : resolve(entry)
+      )
     );
 
     expect(entry.html).toContain('<span class="small-caps">NASA</span>');
@@ -68,15 +72,19 @@ describe("typeset plugin", function () {
     }
 
     it("uses the whole paragraph as context across inline tags", function () {
-      expect(run('<p>He said "see <a href="x">this</a> and <em>that</em>" today.</p>')).toEqual(
+      expect(
+        run(
+          '<p>He said "see <a href="x">this</a> and <em>that</em>" today.</p>'
+        )
+      ).toEqual(
         '<p>He said “see <a href="x">this</a> and <em>that</em>” today.</p>'
       );
     });
 
     it("handles apostrophes, years and primes next to inline tags", function () {
-      expect(run("<p>It's the <a href=\"x\">'93</a> class, 5'10\" tall.</p>")).toEqual(
-        '<p>It’s the <a href="x">’93</a> class, 5′10″ tall.</p>'
-      );
+      expect(
+        run("<p>It's the <a href=\"x\">'93</a> class, 5'10\" tall.</p>")
+      ).toEqual('<p>It’s the <a href="x">’93</a> class, 5′10″ tall.</p>');
     });
 
     // A paragraph with no blank lines becomes one huge <p>. Quote
@@ -89,7 +97,7 @@ describe("typeset plugin", function () {
         inner +=
           'He said "see <a href="http://example.com/' +
           inner.length +
-          '">this link</a> and <em>that</em>" it\'s the \'93 <span>thing</span> <br>';
+          "\">this link</a> and <em>that</em>\" it's the '93 <span>thing</span> <br>";
 
       const start = Date.now();
       const result = run("<p>" + inner + "</p>");
@@ -108,7 +116,7 @@ describe("typeset plugin", function () {
     const walk = require("build/plugins/typeset/walk");
 
     const DOCUMENTS = [
-      '<p>He said "Hello" -- and NASA\'s \'big\' rocket... It\'s \'93, 5\'10" tall.</p>',
+      "<p>He said \"Hello\" -- and NASA's 'big' rocket... It's '93, 5'10\" tall.</p>",
       '<p>"<em>quoted</em>" and \'single <a href="x">link</a>\' -- “already” — USA, UK. (FBI)</p><p>A</p>',
       'text outside <p>"inside"</p> more "outside"',
       '<!-- "comment" --><pre>"code" -- NASA</pre><code>\'x\'</code><p>&quot;ent&quot; &#39;s &amp; R&amp;D &lt;tag&gt;</p>',
@@ -117,7 +125,7 @@ describe("typeset plugin", function () {
       '<p>“Curly” ‘quotes’ Wow. Oh "yes" Yo, Total. VW, AVIS</p><script>var a="b"; // --</script>',
       '<table><tr><td>"cell" -- NB</td></tr></table><div class="pull-x">"no"</div>',
       "",
-      '<p></p><p> </p><p>"</p><p>\'</p>',
+      "<p></p><p> </p><p>\"</p><p>'</p>",
     ];
 
     // Every combination of the plugin's options, as prerender passes them

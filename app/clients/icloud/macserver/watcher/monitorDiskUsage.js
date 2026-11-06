@@ -48,7 +48,9 @@ const removeBlog = (blogID) => {
 
 // Sort blogs by their last update time (least recently updated first)
 const sortBlogsByUpdateTime = () => {
-  return Array.from(blogUpdateTimes.entries()).sort(([, timeA], [, timeB]) => timeA - timeB);
+  return Array.from(blogUpdateTimes.entries()).sort(
+    ([, timeA], [, timeB]) => timeA - timeB
+  );
 };
 
 const check = async (evictBlogDirectory) => {
@@ -101,7 +103,10 @@ const check = async (evictBlogDirectory) => {
     }
   }
 
-  console.warn(clfdate(), `Disk usage is still above threshold: ${diskUsage} bytes`);
+  console.warn(
+    clfdate(),
+    `Disk usage is still above threshold: ${diskUsage} bytes`
+  );
 };
 
 const checkDiskSpace = (evictBlogDirectory) => {

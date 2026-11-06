@@ -21,22 +21,66 @@ const OPTIONS = {
     value: "NAME",
     help: "the sync/fix check to run: tag-ghosts (default), entry-ghosts, list-ghosts, menu-ghosts, entries-path-index",
   },
-  repeat: { value: "N", help: "run the check N times (default 1); later runs have a warm client-side cache" },
+  repeat: {
+    value: "N",
+    help: "run the check N times (default 1); later runs have a warm client-side cache",
+  },
   "skip-stats": { help: "don't measure the blog's tags and entry sizes first" },
-  "stats-only": { help: "only measure the blog's tags and entry sizes; don't run the check" },
+  "stats-only": {
+    help: "only measure the blog's tags and entry sizes; don't run the check",
+  },
   out: { value: "DIR" },
 };
 
-const CHECKS = ["tag-ghosts", "entry-ghosts", "list-ghosts", "menu-ghosts", "entries-path-index"];
+const CHECKS = [
+  "tag-ghosts",
+  "entry-ghosts",
+  "list-ghosts",
+  "menu-ghosts",
+  "entries-path-index",
+];
 
 const READ_COMMANDS = new Set([
-  "GET", "MGET", "STRLEN", "EXISTS", "TYPE", "TTL", "PTTL",
-  "SMEMBERS", "SISMEMBER", "SCARD", "SSCAN",
-  "ZCARD", "ZRANGE", "ZREVRANGE", "ZRANGEBYSCORE", "ZREVRANGEBYSCORE", "ZSCORE", "ZRANK", "ZREVRANK", "ZSCAN",
-  "HGET", "HMGET", "HGETALL", "HLEN", "HEXISTS", "HKEYS", "HSCAN",
-  "LRANGE", "LLEN", "LINDEX", "SCAN", "PING",
+  "GET",
+  "MGET",
+  "STRLEN",
+  "EXISTS",
+  "TYPE",
+  "TTL",
+  "PTTL",
+  "SMEMBERS",
+  "SISMEMBER",
+  "SCARD",
+  "SSCAN",
+  "ZCARD",
+  "ZRANGE",
+  "ZREVRANGE",
+  "ZRANGEBYSCORE",
+  "ZREVRANGEBYSCORE",
+  "ZSCORE",
+  "ZRANK",
+  "ZREVRANK",
+  "ZSCAN",
+  "HGET",
+  "HMGET",
+  "HGETALL",
+  "HLEN",
+  "HEXISTS",
+  "HKEYS",
+  "HSCAN",
+  "LRANGE",
+  "LLEN",
+  "LINDEX",
+  "SCAN",
+  "PING",
 ]);
-const READ_CLIENT_SUBCOMMANDS = new Set(["INFO", "ID", "LIST", "GETNAME", "TRACKINGINFO"]);
+const READ_CLIENT_SUBCOMMANDS = new Set([
+  "INFO",
+  "ID",
+  "LIST",
+  "GETNAME",
+  "TRACKINGINFO",
+]);
 
 // How often each connection is pinged. A ping on the shared connection
 // queues behind whatever the check has in flight, exactly as a lock
@@ -49,11 +93,19 @@ const LOCK_TTL_MS = 10 * 1000;
 
 function checkOptions(args) {
   const check = args.check || "tag-ghosts";
-  if (!CHECKS.includes(check)) throw new Error(`--check must be one of ${CHECKS.join(", ")}`);
+  if (!CHECKS.includes(check))
+    throw new Error(`--check must be one of ${CHECKS.join(", ")}`);
   const repeat = args.repeat === undefined ? 1 : Number(args.repeat);
-  if (!(Number.isInteger(repeat) && repeat >= 1)) throw new Error("--repeat must be a positive integer");
-  if (args["stats-only"] && args["skip-stats"]) throw new Error("--stats-only and --skip-stats conflict");
-  return { check, repeat, statsOnly: !!args["stats-only"], skipStats: !!args["skip-stats"] };
+  if (!(Number.isInteger(repeat) && repeat >= 1))
+    throw new Error("--repeat must be a positive integer");
+  if (args["stats-only"] && args["skip-stats"])
+    throw new Error("--stats-only and --skip-stats conflict");
+  return {
+    check,
+    repeat,
+    statsOnly: !!args["stats-only"],
+    skipStats: !!args["skip-stats"],
+  };
 }
 
 let config, client, control;
@@ -70,9 +122,14 @@ function makeReadOnly(Entry) {
   self.sendCommand = function (args, options) {
     const name = String(args[0]).toUpperCase();
     const sub = String(args[1] || "").toUpperCase();
-    if (!READ_COMMANDS.has(name) && !(name === "CLIENT" && READ_CLIENT_SUBCOMMANDS.has(sub))) {
+    if (
+      !READ_COMMANDS.has(name) &&
+      !(name === "CLIENT" && READ_CLIENT_SUBCOMMANDS.has(sub))
+    ) {
       refused[name] = (refused[name] || 0) + 1;
-      return Promise.reject(new Error(`fix-probe is read-only: refused ${name}`));
+      return Promise.reject(
+        new Error(`fix-probe is read-only: refused ${name}`)
+      );
     }
     return sendCommand.call(this, args, options);
   };
@@ -86,7 +143,8 @@ function makeReadOnly(Entry) {
           if (property === "exec" || property === "execAsPipeline") {
             return (callback) => {
               record("MULTI");
-              if (typeof callback === "function") setImmediate(callback, null, []);
+              if (typeof callback === "function")
+                setImmediate(callback, null, []);
               return Promise.resolve([]);
             };
           }
@@ -112,7 +170,14 @@ function makeReadOnly(Entry) {
 // Pings one connection every PING_INTERVAL_MS, never more than one at a time,
 // so outstandingMs() is how long the current ping has waited.
 function pinger(redis) {
-  const stats = { count: 0, maxMs: 0, slow: 0, overTtl: 0, errors: 0, last: null };
+  const stats = {
+    count: 0,
+    maxMs: 0,
+    slow: 0,
+    overTtl: 0,
+    errors: 0,
+    last: null,
+  };
   let sentAt = null;
   const timer = setInterval(() => {
     if (sentAt !== null) return;
@@ -135,7 +200,8 @@ function pinger(redis) {
   timer.unref();
   return {
     stats,
-    outstandingMs: () => (sentAt === null ? 0 : Math.round(performance.now() - sentAt)),
+    outstandingMs: () =>
+      sentAt === null ? 0 : Math.round(performance.now() - sentAt),
     stop: () => clearInterval(timer),
   };
 }
@@ -162,7 +228,12 @@ function readTcp() {
     if (parseInt(parts[2].split(":")[1], 16) !== port) continue;
     const [tx, rx] = parts[4].split(":").map((n) => parseInt(n, 16));
     const localPort = parseInt(parts[1].split(":")[1], 16);
-    sockets[localPort] = { tx, rx, timer: Number(parts[5].split(":")[0]), retransmits: parseInt(parts[6], 16) };
+    sockets[localPort] = {
+      tx,
+      rx,
+      timer: Number(parts[5].split(":")[0]),
+      retransmits: parseInt(parts[6], 16),
+    };
   }
   return { sockets };
 }
@@ -170,7 +241,10 @@ function readTcp() {
 function readRetransSegs() {
   if (config.redis.socket) return null;
   try {
-    const lines = fs.readFileSync("/proc/net/snmp", "utf8").split("\n").filter((l) => l.startsWith("Tcp:"));
+    const lines = fs
+      .readFileSync("/proc/net/snmp", "utf8")
+      .split("\n")
+      .filter((l) => l.startsWith("Tcp:"));
     const names = lines[0].split(/\s+/);
     const values = lines[1].split(/\s+/);
     return Number(values[names.indexOf("RetransSegs")]);
@@ -220,7 +294,9 @@ function redisPorts() {
 
 function percentile(sorted, p) {
   if (!sorted.length) return 0;
-  return sorted[Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))];
+  return sorted[
+    Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length))
+  ];
 }
 
 function distribution(values) {
@@ -249,10 +325,14 @@ async function inBatches(items, size, fn) {
 async function tagStats(blogID, Tags, entryKey) {
   const started = performance.now();
   const slugs = (await control.sMembers(Tags.key.all(blogID))) || [];
-  const members = await inBatches(slugs, 100, (slug) => control.zRange(Tags.key.sortedTag(blogID, slug), 0, -1));
+  const members = await inBatches(slugs, 100, (slug) =>
+    control.zRange(Tags.key.sortedTag(blogID, slug), 0, -1)
+  );
   const unique = Array.from(new Set(members.flat()));
   const sizes = new Map();
-  await inBatches(unique, 500, async (id) => sizes.set(id, await control.strLen(entryKey(blogID, id))));
+  await inBatches(unique, 500, async (id) =>
+    sizes.set(id, await control.strLen(entryKey(blogID, id)))
+  );
 
   // Mirrors resolveEntryIDs in app/sync/fix/tag-ghosts.js: per tag, ids not
   // yet resolved are read in MGETs of 20; hits are memoised, misses are
@@ -277,7 +357,9 @@ async function tagStats(blogID, Tags, entryKey) {
     tagMemberships: members.reduce((n, ids) => n + ids.length, 0),
     uniqueEntries: unique.length,
     missingEntries: missing,
-    entryBytes: distribution(unique.map((id) => sizes.get(id) || 0).filter(Boolean)),
+    entryBytes: distribution(
+      unique.map((id) => sizes.get(id) || 0).filter(Boolean)
+    ),
     mgetBatches: distribution(batchBytes),
     largestEntries: unique
       .map((id) => ({ id, bytes: sizes.get(id) || 0 }))
@@ -310,9 +392,13 @@ function wrapAsync(object, name, out, label) {
 async function getBlog(Blog, identifier) {
   const lower = identifier.toLowerCase();
   const suffix = "." + config.host;
-  const handle = lower.endsWith(suffix) ? lower.slice(0, -suffix.length).split(".").pop() : lower;
+  const handle = lower.endsWith(suffix)
+    ? lower.slice(0, -suffix.length).split(".").pop()
+    : lower;
   for (const by of [{ id: identifier }, { handle }, { domain: lower }]) {
-    const blog = await new Promise((done) => Blog.get(by, (err, blog) => done(err ? null : blog)));
+    const blog = await new Promise((done) =>
+      Blog.get(by, (err, blog) => done(err ? null : blog))
+    );
     if (blog && blog.id) return blog;
   }
   throw new Error("No blog for " + identifier);
@@ -321,7 +407,8 @@ async function getBlog(Blog, identifier) {
 async function main() {
   const parsed = parseArgs(process.argv.slice(2), OPTIONS);
   const options = checkOptions(parsed.options);
-  if (parsed.rest.length !== 1) throw new Error("Pass one blog: its ID, handle or domain");
+  if (parsed.rest.length !== 1)
+    throw new Error("Pass one blog: its ID, handle or domain");
 
   const out = instrument.output(parsed.options.out || "/out");
   // Loaded here rather than at the top, so the wrapper can require this
@@ -340,14 +427,23 @@ async function main() {
   const appPorts = redisPorts();
   control = require("models/redis").createLibraryClient("fix-probe-control");
   await control.ping();
-  const controlPorts = Array.from(redisPorts()).filter((port) => !appPorts.has(port));
+  const controlPorts = Array.from(redisPorts()).filter(
+    (port) => !appPorts.has(port)
+  );
 
   const blog = await getBlog(Blog, parsed.rest[0]);
-  const summary = { args: process.argv.slice(2), release: process.env.BLOT_RELEASE_ID, options, blogID: blog.id };
+  const summary = {
+    args: process.argv.slice(2),
+    release: process.env.BLOT_RELEASE_ID,
+    options,
+    blogID: blog.id,
+  };
   console.log(`[probe] ${blog.id} (${blog.handle})`);
 
   if (!options.skipStats) {
-    console.log("[probe] measuring tags and entry sizes over the control connection...");
+    console.log(
+      "[probe] measuring tags and entry sizes over the control connection..."
+    );
     summary.stats = await tagStats(blog.id, Tags, entryKey);
     console.log("[probe] stats", JSON.stringify(summary.stats, null, 2));
   }
@@ -357,7 +453,13 @@ async function main() {
     const redisTotals = instrument.trackRedis({
       onCommand(scope, name, count, bytes, ms) {
         if (name === "MGET" || ms >= 100) {
-          out.append("commands.ndjson", { t: instrument.now(), name, count, bytes, ms: Math.round(ms) });
+          out.append("commands.ndjson", {
+            t: instrument.now(),
+            name,
+            count,
+            bytes,
+            ms: Math.round(ms),
+          });
         }
       },
     });
@@ -370,7 +472,8 @@ async function main() {
     const controlPing = pinger(control);
     const retransAtStart = readRetransSegs();
     if (config.redis.socket) {
-      summary.tcp = "unavailable: Redis is on a Unix socket, so there are no kernel queues or retransmits";
+      summary.tcp =
+        "unavailable: Redis is on a Unix socket, so there are no kernel queues or retransmits";
       console.log(`[probe] ${summary.tcp}`);
     }
     let previous = nodeSockets();
@@ -423,7 +526,9 @@ async function main() {
         check(blog, (err, report) => done({ err, report }))
       );
       const ms = Math.round(performance.now() - started);
-      console.log(`[probe] ${options.check} run ${run}: ${ms}ms${result.err ? " ERROR " + result.err.message : ""}`);
+      console.log(
+        `[probe] ${options.check} run ${run}: ${ms}ms${result.err ? " ERROR " + result.err.message : ""}`
+      );
       summary.runs.push({
         ms,
         error: result.err ? String(result.err.stack || result.err) : undefined,
@@ -440,14 +545,18 @@ async function main() {
     summary.sampler = sampler.summary();
     summary.sharedPing = shared.stats;
     summary.controlPing = controlPing.stats;
-    summary.retransSegs = retransAtStart === null ? null : readRetransSegs() - retransAtStart;
+    summary.retransSegs =
+      retransAtStart === null ? null : readRetransSegs() - retransAtStart;
     summary.redis = redisTotals.summary();
   }
 
   summary.refusedWrites = refused;
   summary.wouldWrite = wouldWrite;
   out.writeJSON("summary.json", summary);
-  console.log("[probe] summary", JSON.stringify({ ...summary, stats: undefined }, null, 2));
+  console.log(
+    "[probe] summary",
+    JSON.stringify({ ...summary, stats: undefined }, null, 2)
+  );
   process.exit(0);
 }
 

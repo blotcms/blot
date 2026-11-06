@@ -54,7 +54,9 @@ describe("[folder-asset] log", function () {
 
     expect(lines.length).toBe(1);
     expect(lines[0]).toContain("path=/Luke%2015/a.png");
-    expect(lines[0]).toContain(`referer=${ownHost(this.blog)}/Luke%2015/page.html`);
+    expect(lines[0]).toContain(
+      `referer=${ownHost(this.blog)}/Luke%2015/page.html`
+    );
   });
 
   it("logs same_site=0 for a referer on another host", async function () {

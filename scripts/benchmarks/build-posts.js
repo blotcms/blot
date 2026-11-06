@@ -32,7 +32,8 @@ const WORDS = (
 
 function words(random, n) {
   const out = [];
-  for (let i = 0; i < n; i++) out.push(WORDS[Math.floor(random() * WORDS.length)]);
+  for (let i = 0; i < n; i++)
+    out.push(WORDS[Math.floor(random() * WORDS.length)]);
   return out.join(" ");
 }
 
@@ -53,9 +54,12 @@ function post(random, i, kb) {
     let part;
     const kind = n++ % 8;
     if (kind === 2) part = `## ${words(random, 4)}`;
-    else if (kind === 4) part = `> ${words(random, 30)} "${words(random, 4)}" -- ${words(random, 2)}...`;
-    else if (kind === 5) part = [1, 2, 3, 4].map(() => `- ${words(random, 8)}`).join("\n");
-    else if (kind === 7) part = "```\n" + words(random, 20).replace(/ /g, "\n") + "\n```";
+    else if (kind === 4)
+      part = `> ${words(random, 30)} "${words(random, 4)}" -- ${words(random, 2)}...`;
+    else if (kind === 5)
+      part = [1, 2, 3, 4].map(() => `- ${words(random, 8)}`).join("\n");
+    else if (kind === 7)
+      part = "```\n" + words(random, 20).replace(/ /g, "\n") + "\n```";
     else
       part =
         `${words(random, 30)} [${words(random, 2)}](/post-${Math.floor(random() * 100)}) ` +
@@ -94,7 +98,10 @@ async function main() {
 
   const random = seedrandom("build-posts");
   for (let i = 0; i < FILES; i++) {
-    await blog.write({ path: `/Posts/post-${i}.md`, content: post(random, i, KB) });
+    await blog.write({
+      path: `/Posts/post-${i}.md`,
+      content: post(random, i, KB),
+    });
   }
 
   let session;
@@ -147,7 +154,8 @@ async function main() {
       total_ms: Math.round(ms),
       ms_per_file: Math.round((ms / FILES) * 100) / 100,
       proxy_flushes: flushes,
-      cacheid_changed: (await getBlog({ id: blog.id })).cacheID !== cacheIDBefore,
+      cacheid_changed:
+        (await getBlog({ id: blog.id })).cacheID !== cacheIDBefore,
     });
   }
 
@@ -158,7 +166,8 @@ async function main() {
 
   const output = { files: FILES, kb: KB, passes };
   console.log(JSON.stringify(output, null, 2));
-  if (args.output) fs.writeFileSync(args.output, JSON.stringify(output, null, 2));
+  if (args.output)
+    fs.writeFileSync(args.output, JSON.stringify(output, null, 2));
   process.exit(0);
 }
 

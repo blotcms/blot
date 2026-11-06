@@ -193,7 +193,8 @@ function sourcePathsFromHtml(html) {
   if (!isFolderPostHtml(html)) return [];
 
   const paths = [];
-  const pattern = /<section class="multi-file-entry"[^>]*\sdata-file="([^"]*)"/g;
+  const pattern =
+    /<section class="multi-file-entry"[^>]*\sdata-file="([^"]*)"/g;
   let match;
 
   while ((match = pattern.exec(html))) {
@@ -223,7 +224,9 @@ function encodePath(input) {
 // dashboard can list "sub/notes.md" instead of the full "/Album +/sub/notes.md".
 function relativeToFolder(folderPath, sourcePath) {
   const relative = path.relative(folderPath, sourcePath);
-  return relative && !relative.startsWith("..") ? relative : basename(sourcePath);
+  return relative && !relative.startsWith("..")
+    ? relative
+    : basename(sourcePath);
 }
 
 function isSyntheticDependency(dependency) {

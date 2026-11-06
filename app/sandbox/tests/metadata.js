@@ -41,7 +41,10 @@ describe("sandbox metadata job", function () {
   });
 
   it("reads an image from a path", async function () {
-    const file = path.join(os.tmpdir(), "sandbox-metadata-" + Date.now() + ".png");
+    const file = path.join(
+      os.tmpdir(),
+      "sandbox-metadata-" + Date.now() + ".png"
+    );
     await fs.outputFile(file, await image());
 
     try {

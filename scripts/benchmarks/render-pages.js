@@ -99,9 +99,15 @@ async function main() {
     };
   }
 
-  const output = { shape: args.shape || "typical", entries: shape.entries, rounds, results };
+  const output = {
+    shape: args.shape || "typical",
+    entries: shape.entries,
+    rounds,
+    results,
+  };
   console.log(JSON.stringify(output, null, 2));
-  if (args.output) fs.writeFileSync(args.output, JSON.stringify(output, null, 2));
+  if (args.output)
+    fs.writeFileSync(args.output, JSON.stringify(output, null, 2));
   server.close();
   process.exit(0);
 }
@@ -168,7 +174,10 @@ function requester(port, handle) {
           (res) => {
             res.resume();
             res.on("end", () =>
-              resolve({ ms: performance.now() - startedAt, status: res.statusCode })
+              resolve({
+                ms: performance.now() - startedAt,
+                status: res.statusCode,
+              })
             );
           }
         )

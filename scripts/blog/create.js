@@ -55,9 +55,7 @@ function main(email, handle, callback) {
           access(handle, function (err, url) {
             if (err) return callback(err);
 
-            console.log(
-              "Added new blog", handle, "to", email, ":"
-            );
+            console.log("Added new blog", handle, "to", email, ":");
             console.log(url);
             callback(null);
           });

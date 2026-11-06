@@ -18,10 +18,6 @@ describe("indentation", function () {
 
   testIndentation(aIn, aOut);
 
-  var bIn = m("<foo>", "    <bar>", "</foo><baz>", "    <bat>", "</baz>");
-
-  var bOut = m("<foo>", "<bar>", "</foo><baz>", "<bat>", "</baz>");
-
   // testIndentation(bIn, bOut);
 
   var cIn = m("```", "<li>", "  Chet", "</li>", "```");

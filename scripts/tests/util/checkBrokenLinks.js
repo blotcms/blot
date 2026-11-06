@@ -5,16 +5,16 @@ const clfdate = require("helper/clfdate");
 class LinkChecker {
   constructor(fetch, baseUrl, options = {}) {
     this.validateInputs(fetch, baseUrl, options);
-    
+
     this.fetch = fetch;
     this.baseUrl = baseUrl;
     this.options = options;
-    
+
     this.state = {
       checked: new Set(),
       results: {},
       failures: new Map(),
-      skipped: new Set()
+      skipped: new Set(),
     };
   }
 
@@ -36,21 +36,22 @@ class LinkChecker {
 
   formatBrokenLinksError(brokenLinks) {
     return brokenLinks
-      .map(({ page, link, status }) => 
-        `From: ${page}\n  To: ${link}\n      ${status}\n`
+      .map(
+        ({ page, link, status }) =>
+          `From: ${page}\n  To: ${link}\n      ${status}\n`
       )
       .join("\n");
   }
 
   getBrokenLinks() {
     const brokenLinks = [];
-    
+
     for (const page in this.state.results) {
       for (const link in this.state.results[page]) {
         brokenLinks.push({
           page,
           link,
-          status: this.state.results[page][link]
+          status: this.state.results[page][link],
         });
       }
     }
@@ -61,7 +62,7 @@ class LinkChecker {
   addFailure(base, url, statusCode) {
     const basePath = base ? parse(base).pathname : "undefined";
     const pathname = url ? parse(url).pathname : "undefined";
-    
+
     this.state.failures.set(pathname, statusCode);
     this.state.results[basePath] = this.state.results[basePath] || {};
     this.state.results[basePath][pathname] = statusCode;
@@ -69,12 +70,12 @@ class LinkChecker {
 
   async fetchPage(url) {
     const headers = this.options.headers || {};
-    
+
     try {
       return await this.fetch(url, { headers });
     } catch (err) {
       this.log("Error", err.message);
-      throw new Error(err.code || "Network Error");
+      throw new Error(err.code || "Network Error", { cause: err });
     }
   }
 
@@ -88,15 +89,15 @@ class LinkChecker {
     try {
       $ = cheerio.load(body);
     } catch (e) {
-      throw new Error(`Failed to parse HTML: ${e.message}`);
+      throw new Error(`Failed to parse HTML: ${e.message}`, { cause: e });
     }
 
     return $("[href], [src]")
       .map((_, el) => $(el).attr("href") || $(el).attr("src"))
       .get()
       .filter(Boolean)
-      .map(url => resolve(base, url))
-      .filter(url => this.shouldCheckUrl(url, base));
+      .map((url) => resolve(base, url))
+      .filter((url) => this.shouldCheckUrl(url, base));
   }
 
   shouldCheckUrl(url, base) {
@@ -123,7 +124,7 @@ class LinkChecker {
 
     try {
       const response = await this.fetchPage(url);
-      
+
       if (response.status !== 200 && response.status !== 400) {
         this.addFailure(base, url, response.status);
       }
@@ -131,7 +132,7 @@ class LinkChecker {
       if (this.isHtmlResponse(response)) {
         const body = await response.text();
         const urls = await this.parseUrls(url, body);
-        await Promise.all(urls.map(url => this.checkPage(base, url)));
+        await Promise.all(urls.map((url) => this.checkPage(base, url)));
       }
     } catch (error) {
       this.addFailure(base, url, error.message);
@@ -142,7 +143,7 @@ class LinkChecker {
     await this.checkPage(this.baseUrl, this.baseUrl);
 
     const brokenLinks = this.getBrokenLinks();
-    
+
     if (brokenLinks.length > 0) {
       throw new Error(
         "Broken links found:\n" + this.formatBrokenLinksError(brokenLinks)

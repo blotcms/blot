@@ -22,26 +22,59 @@ async function collect(stream) {
 // Options: store, manifest (a function returning the manifest to serve, or a
 // promise of it), cache, limiter, chunkSize, walkLimit and historyLimit (passed
 // to serve)
-async function startServer({ store, cache, manifest, limiter, chunkSize, keepaliveAfter, walkLimit, historyLimit }) {
+async function startServer({
+  store,
+  cache,
+  manifest,
+  limiter,
+  chunkSize,
+  keepaliveAfter,
+  walkLimit,
+  historyLimit,
+}) {
   const results = [];
   const errors = [];
   const requests = [];
 
   const server = http.createServer(async (req, res) => {
-    requests.push(req.method + " " + req.url + (req.headers["git-protocol"] ? " [" + req.headers["git-protocol"] + "]" : ""));
+    requests.push(
+      req.method +
+        " " +
+        req.url +
+        (req.headers["git-protocol"]
+          ? " [" + req.headers["git-protocol"] + "]"
+          : "")
+    );
 
     try {
-      if (req.method === "GET" && req.url.startsWith("/repo.git/info/refs?service=git-upload-pack")) {
+      if (
+        req.method === "GET" &&
+        req.url.startsWith("/repo.git/info/refs?service=git-upload-pack")
+      ) {
         res.setHeader("content-type", CONTENT_TYPE);
         return res.end(advertise(await manifest()));
       }
 
       if (req.method === "POST" && req.url === "/repo.git/git-upload-pack") {
         let body = await collect(req);
-        if (req.headers["content-encoding"] === "gzip") body = zlib.gunzipSync(body);
+        if (req.headers["content-encoding"] === "gzip")
+          body = zlib.gunzipSync(body);
 
         res.setHeader("content-type", RESULT_TYPE);
-        results.push(await serve({ store, cache, manifest: await manifest(), body, out: res, limiter, chunkSize, keepaliveAfter, walkLimit, historyLimit }));
+        results.push(
+          await serve({
+            store,
+            cache,
+            manifest: await manifest(),
+            body,
+            out: res,
+            limiter,
+            chunkSize,
+            keepaliveAfter,
+            walkLimit,
+            historyLimit,
+          })
+        );
         return;
       }
 
@@ -50,7 +83,8 @@ async function startServer({ store, cache, manifest, limiter, chunkSize, keepali
     } catch (err) {
       errors.push(err);
       if (res.headersSent) return res.destroy();
-      res.statusCode = err.code === "BUSY" ? 503 : err.code === "PROTOCOL" ? 400 : 500;
+      res.statusCode =
+        err.code === "BUSY" ? 503 : err.code === "PROTOCOL" ? 400 : 500;
       res.end();
     }
   });
@@ -81,9 +115,18 @@ function runGit(args, { cwd } = {}) {
   };
 
   return new Promise((resolve) => {
-    execFile("git", args, { cwd, env, maxBuffer: 1 << 28 }, (err, stdout, stderr) => {
-      resolve({ code: err ? err.code || 1 : 0, stdout: String(stdout), stderr: String(stderr) });
-    });
+    execFile(
+      "git",
+      args,
+      { cwd, env, maxBuffer: 1 << 28 },
+      (err, stdout, stderr) => {
+        resolve({
+          code: err ? err.code || 1 : 0,
+          stdout: String(stdout),
+          stderr: String(stderr),
+        });
+      }
+    );
   });
 }
 
@@ -91,8 +134,16 @@ function runGit(args, { cwd } = {}) {
 // whose branch master is `head`, with `tags` (name -> oid)
 function manifestOf(packs, head, tags = {}) {
   const refs = head ? { "refs/heads/master": head } : {};
-  for (const [name, oid] of Object.entries(tags)) refs["refs/tags/" + name] = oid;
-  return { ...manifestModule.empty(), seq: 1, writer: "test", head: head ? "refs/heads/master" : null, refs, packs };
+  for (const [name, oid] of Object.entries(tags))
+    refs["refs/tags/" + name] = oid;
+  return {
+    ...manifestModule.empty(),
+    seq: 1,
+    writer: "test",
+    head: head ? "refs/heads/master" : null,
+    refs,
+    packs,
+  };
 }
 
 module.exports = { startServer, runGit, manifestOf, collect };

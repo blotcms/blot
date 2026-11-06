@@ -1,5 +1,5 @@
-const { rateLimit}  = require("express-rate-limit");
-const { RedisStore } = require('rate-limit-redis')
+const { rateLimit } = require("express-rate-limit");
+const { RedisStore } = require("rate-limit-redis");
 const createRedisClient = require("models/redis");
 
 // rate-limit-redis uses the promise API (get/set/del with options), so use
@@ -10,7 +10,7 @@ var limiter = rateLimit({
   store: new RedisStore({
     prefix: "rate-limit:log-in:",
     // Redis store configuration
-		sendCommand: (command, ...args) => client.sendCommand([command, ...args]),
+    sendCommand: (command, ...args) => client.sendCommand([command, ...args]),
   }),
   windowMs: 60000, // one minute window
   max: 120, // 2 attempts per second

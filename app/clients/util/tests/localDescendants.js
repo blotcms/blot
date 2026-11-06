@@ -14,7 +14,12 @@ describe("clients/util localDescendants", function () {
     const paths = await localDescendants(this.blog.id, "/Folder");
 
     expect(paths.sort()).toEqual(
-      ["/Folder/a.txt", "/Folder/empty", "/Folder/sub", "/Folder/sub/b.txt"].sort()
+      [
+        "/Folder/a.txt",
+        "/Folder/empty",
+        "/Folder/sub",
+        "/Folder/sub/b.txt",
+      ].sort()
     );
     expect(paths.indexOf("/Folder/sub")).toBeLessThan(
       paths.indexOf("/Folder/sub/b.txt")

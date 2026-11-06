@@ -12,762 +12,1059 @@ const { createBroker } = require("../broker");
 const test = (name, fn) => it(name, fn);
 
 describe("sandbox broker and jail", function () {
+  // ---- jail.js ----------------------------------------------------------------
 
-// ---- jail.js ----------------------------------------------------------------
+  test("jail: never --user, never binds /usr or /, disables /proc", () => {
+    const argv = jail.args("metadata");
+    assert(!argv.includes("--user"));
+    assert(argv.includes("--disable_proc"));
+    assert(
+      argv.includes("-u") && argv[argv.indexOf("-u") + 1] === "65000:65000:1"
+    );
+    assert(
+      argv.includes("-g") && argv[argv.indexOf("-g") + 1] === "65000:65000:1"
+    );
+    const binds = argv.filter((a, i) => argv[i - 1] === "-R");
+    assert(binds.length > 0);
+    for (const bind of binds)
+      assert(bind !== "/usr" && bind !== "/" && bind !== "/usr/src/app");
+    assert(!argv.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
+    assert(
+      !argv.includes("--disable_clone_newnet"),
+      "network namespace stays on"
+    );
+    assert.deepStrictEqual(argv.slice(-3), jail.JOBS.metadata.command);
+  });
 
-test("jail: never --user, never binds /usr or /, disables /proc", () => {
-  const argv = jail.args("metadata");
-  assert(!argv.includes("--user"));
-  assert(argv.includes("--disable_proc"));
-  assert(argv.includes("-u") && argv[argv.indexOf("-u") + 1] === "65000:65000:1");
-  assert(argv.includes("-g") && argv[argv.indexOf("-g") + 1] === "65000:65000:1");
-  const binds = argv.filter((a, i) => argv[i - 1] === "-R");
-  assert(binds.length > 0);
-  for (const bind of binds) assert(bind !== "/usr" && bind !== "/" && bind !== "/usr/src/app");
-  assert(!argv.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
-  assert(!argv.includes("--disable_clone_newnet"), "network namespace stays on");
-  assert.deepStrictEqual(argv.slice(-3), jail.JOBS.metadata.command);
-});
+  test("jail: binds pandoc's binary, not /usr/local/bin", () => {
+    const argv = jail.args("pandoc");
+    const binds = argv.filter((a, i) => argv[i - 1] === "-R");
+    assert(binds.includes("/usr/local/bin/pandoc"));
+    assert(!binds.includes("/usr/local/bin") && !binds.includes("/usr/local"));
+  });
 
-test("jail: binds pandoc's binary, not /usr/local/bin", () => {
-  const argv = jail.args("pandoc");
-  const binds = argv.filter((a, i) => argv[i - 1] === "-R");
-  assert(binds.includes("/usr/local/bin/pandoc"));
-  assert(!binds.includes("/usr/local/bin") && !binds.includes("/usr/local"));
-});
-
-test("jail: the pandoc job is a worker, pandoc lua running its script, with a heap cap", () => {
-  const j = jail.JOBS.pandoc;
-  assert.deepStrictEqual(j.command, [
-    "/usr/local/bin/pandoc", "+RTS", "-M400M", "-RTS",
-    "lua", "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",
-  ]);
-  assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs/pandoc-worker.lua")));
-  assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
-  // a worker is retired before nsjail's time limit (its whole life) ends it
-  assert(j.worker.maxAgeSeconds + j.worker.requestSeconds < j.timeSeconds);
-  assert(j.worker.requestSeconds >= 10);
-  assert(j.worker.maxIdle >= 1 && j.worker.maxIdle <= 2);
-});
-
-test("jail: passes exactly one environment variable", () => {
-  const argv = jail.args("metadata");
-  assert.deepStrictEqual(
-    argv.filter((a, i) => argv[i - 1] === "-E"),
-    ["NODE_PATH=/usr/src/app/node_modules"]
-  );
-});
-
-test("jail: an unknown job throws", () => {
-  for (const name of ["nope", "", undefined, "__proto__", "constructor", "../metadata"]) {
-    assert.throws(() => jail.args(name), /unknown job/);
-  }
-});
-
-test("jail: every job runs its own file in main.js, within its limits", () => {
-  assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), ["exif", "favicon", "fetch", "fetch-image", "metadata", "pandoc", "parse-html", "resize", "screenshot", "template-image", "thumbnail", "to-png", "unzip"]);
-  for (const [name, j] of Object.entries(jail.JOBS)) {
-    assert(fs.existsSync(path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")));
-    if (name === "pandoc") continue;
-    assert.deepStrictEqual(j.command.slice(-2), ["/usr/src/app/app/sandbox/jobs/main.js", name]);
-    if (j.network) continue;
-    if (name === "parse-html") continue;
+  test("jail: the pandoc job is a worker, pandoc lua running its script, with a heap cap", () => {
+    const j = jail.JOBS.pandoc;
+    assert.deepStrictEqual(j.command, [
+      "/usr/local/bin/pandoc",
+      "+RTS",
+      "-M400M",
+      "-RTS",
+      "lua",
+      "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",
+    ]);
+    assert(
+      fs.existsSync(
+        path.join(__dirname, "../../../../app/sandbox/jobs/pandoc-worker.lua")
+      )
+    );
     assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
-    // a zip is read whole into memory, with its files beside it
-    assert.strictEqual(j.maxInputBytes, (name === "unzip" ? 64 : 256) * 1024 * 1024);
-  }
-  assert.strictEqual(jail.JOBS.unzip.timeSeconds, 30);
-  assert.strictEqual(jail.JOBS.unzip.maxOutputBytes, 60 * 1024 * 1024);
-  for (const name of ["thumbnail", "resize", "to-png"]) {
-    assert.strictEqual(jail.JOBS[name].timeSeconds, 60);
-    assert.strictEqual(jail.JOBS[name].maxOutputBytes, 64 * 1024 * 1024);
-  }
-  assert.strictEqual(jail.JOBS.exif.timeSeconds, 30);
-  assert.strictEqual(jail.JOBS.exif.maxOutputBytes, 1024 * 1024);
-});
+    // a worker is retired before nsjail's time limit (its whole life) ends it
+    assert(j.worker.maxAgeSeconds + j.worker.requestSeconds < j.timeSeconds);
+    assert(j.worker.requestSeconds >= 10);
+    assert(j.worker.maxIdle >= 1 && j.worker.maxIdle <= 2);
+  });
 
-const NETWORK_JOBS = ["screenshot", "fetch-image", "fetch"];
+  test("jail: passes exactly one environment variable", () => {
+    const argv = jail.args("metadata");
+    assert.deepStrictEqual(
+      argv.filter((a, i) => argv[i - 1] === "-E"),
+      ["NODE_PATH=/usr/src/app/node_modules"]
+    );
+  });
 
-test("jail: the parse-html job has no network, a smaller jail and a heap limit under it", () => {
-  const j = jail.JOBS["parse-html"];
-  assert(!j.network);
-  assert.strictEqual(j.memoryBytes, 384 * 1024 * 1024);
-  // the HTML parse-html accepts (2 MiB, app/sandbox/jobs/html.js) and its replacements fit
-  assert(j.maxInputBytes >= 2 * 1024 * 1024 + 4 * 1024 * 1024);
-  const heap = j.command.find((a) => a.startsWith("--max-old-space-size="));
-  assert(Number(heap.split("=")[1]) * 1024 * 1024 < j.memoryBytes);
-  assert(!jail.args("parse-html").includes("--keep_caps"));
-});
-
-test("jail: a job with a network starts as its own uid, in its cgroup, behind the filter", () => {
-  assert.deepStrictEqual(
-    Object.keys(jail.JOBS).filter((name) => jail.JOBS[name].network),
-    NETWORK_JOBS
-  );
-  for (const name of NETWORK_JOBS) {
-    const { file, args } = jail.command(name);
-    assert.strictEqual(file, "/bin/sh");
-    assert.strictEqual(args[3], jail.JOBS[name].cgroups[0]);
-    assert.deepStrictEqual(args.slice(4, 7), ["/sbin/su-exec", "65001:65001", jail.NSJAIL]);
-    assert(args.includes("-u") && args[args.indexOf("-u") + 1] === "65000:65001:1");
-
-    const separator = args.indexOf("--");
-    assert.strictEqual(path.basename(args[separator + 2]), "enter-network.sh");
-    assert.deepStrictEqual(args.slice(-3), jail.JOBS[name].command);
-    for (const cgroup of jail.JOBS[name].cgroups) {
-      assert.strictEqual(jail.command(name, cgroup).args[3], cgroup);
+  test("jail: an unknown job throws", () => {
+    for (const name of [
+      "nope",
+      "",
+      undefined,
+      "__proto__",
+      "constructor",
+      "../metadata",
+    ]) {
+      assert.throws(() => jail.args(name), /unknown job/);
     }
-    assert.throws(() => jail.command(name, "/sandbox-cgroup"), /unknown cgroup/);
-    assert.throws(() => jail.command(name, jail.PROXY_CGROUP), /unknown cgroup/);
-  }
-  assert.deepStrictEqual(jail.JOBS.screenshot.cgroups, [jail.BROWSER_CGROUP]);
-  // a batch of 8 pages (app/sandbox/jobs/screenshot.js)
-  assert.strictEqual(jail.JOBS.screenshot.timeSeconds, 70);
-  assert.strictEqual(jail.JOBS.screenshot.maxOutputBytes, 60 * 1024 * 1024);
-});
+  });
 
-test("jail: the fetch-image job has one cgroup of its own, in the unit's subtree, and a short queue", () => {
-  const j = jail.JOBS["fetch-image"];
-  assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
-  assert.strictEqual(path.dirname(jail.FETCH_CGROUP), "/sandbox-cgroup");
-  assert.notStrictEqual(jail.FETCH_CGROUP, jail.PROXY_CGROUP);
-  assert.deepStrictEqual(j.cgroupLimits, { memoryBytes: 256 * 1024 * 1024, pids: 64 });
-  assert.strictEqual(j.maxQueued, 8);
-});
+  test("jail: every job runs its own file in main.js, within its limits", () => {
+    assert.deepStrictEqual(Object.keys(jail.JOBS).sort(), [
+      "exif",
+      "favicon",
+      "fetch",
+      "fetch-image",
+      "metadata",
+      "pandoc",
+      "parse-html",
+      "resize",
+      "screenshot",
+      "template-image",
+      "thumbnail",
+      "to-png",
+      "unzip",
+    ]);
+    for (const [name, j] of Object.entries(jail.JOBS)) {
+      assert(
+        fs.existsSync(
+          path.join(__dirname, "../../../../app/sandbox/jobs", name + ".js")
+        )
+      );
+      if (name === "pandoc") continue;
+      assert.deepStrictEqual(j.command.slice(-2), [
+        "/usr/src/app/app/sandbox/jobs/main.js",
+        name,
+      ]);
+      if (j.network) continue;
+      if (name === "parse-html") continue;
+      assert.strictEqual(j.memoryBytes, 512 * 1024 * 1024);
+      // a zip is read whole into memory, with its files beside it
+      assert.strictEqual(
+        j.maxInputBytes,
+        (name === "unzip" ? 64 : 256) * 1024 * 1024
+      );
+    }
+    assert.strictEqual(jail.JOBS.unzip.timeSeconds, 30);
+    assert.strictEqual(jail.JOBS.unzip.maxOutputBytes, 60 * 1024 * 1024);
+    for (const name of ["thumbnail", "resize", "to-png"]) {
+      assert.strictEqual(jail.JOBS[name].timeSeconds, 60);
+      assert.strictEqual(jail.JOBS[name].maxOutputBytes, 64 * 1024 * 1024);
+    }
+    assert.strictEqual(jail.JOBS.exif.timeSeconds, 30);
+    assert.strictEqual(jail.JOBS.exif.maxOutputBytes, 1024 * 1024);
+  });
 
-test("jail: the fetch job takes turns in fetch-image's cgroup, adds no memory, and has a queue of its own", () => {
-  const j = jail.JOBS.fetch;
-  assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
-  // the limits are made once, from fetch-image's: no second cgroup, no more memory
-  assert.strictEqual(j.cgroupLimits, undefined);
-  const cgroups = new Set(Object.values(jail.JOBS).flatMap((job) => job.cgroups || []));
-  assert.deepStrictEqual([...cgroups].sort(), [jail.BROWSER_CGROUP, jail.FETCH_CGROUP].sort());
-  assert.strictEqual(j.maxQueued, 16);
-  // a batch has up to 60s of fetching (jobs/fetch.js) and a few seconds to start and end
-  assert.strictEqual(j.timeSeconds, 75);
-  // 32 requests, and a body or more of up to 50 MiB back (the client's reply limit is 64 MiB)
-  assert.strictEqual(j.maxInputBytes, 256 * 1024);
-  assert.strictEqual(j.maxOutputBytes, 52 * 1024 * 1024);
-});
+  const NETWORK_JOBS = ["screenshot", "fetch-image", "fetch"];
 
-test("jail: the unit's sandbox subtree holds the proxy jail, the fetch cgroup and the image jobs' share", () => {
-  const MiB = 1024 * 1024;
-  const subtree = 512 * MiB;
-  const proxy = 128 * MiB; // proxy.js
-  const fetch = jail.JOBS["fetch-image"].cgroupLimits.memoryBytes;
-  assert(proxy + fetch <= subtree);
-  assert.strictEqual(subtree - proxy - fetch, 128 * MiB);
-});
+  test("jail: the parse-html job has no network, a smaller jail and a heap limit under it", () => {
+    const j = jail.JOBS["parse-html"];
+    assert(!j.network);
+    assert.strictEqual(j.memoryBytes, 384 * 1024 * 1024);
+    // the HTML parse-html accepts (2 MiB, app/sandbox/jobs/html.js) and its replacements fit
+    assert(j.maxInputBytes >= 2 * 1024 * 1024 + 4 * 1024 * 1024);
+    const heap = j.command.find((a) => a.startsWith("--max-old-space-size="));
+    assert(Number(heap.split("=")[1]) * 1024 * 1024 < j.memoryBytes);
+    assert(!jail.args("parse-html").includes("--keep_caps"));
+  });
 
-test("jail: a job with a network never binds keys, data or /usr", () => {
-  for (const name of NETWORK_JOBS) {
-    const { args } = jail.command(name);
-    const binds = args.filter((a, i) => args[i - 1] === "-R");
-    assert.strictEqual(binds.includes("/proc"), name === "screenshot", name);
+  test("jail: a job with a network starts as its own uid, in its cgroup, behind the filter", () => {
+    assert.deepStrictEqual(
+      Object.keys(jail.JOBS).filter((name) => jail.JOBS[name].network),
+      NETWORK_JOBS
+    );
+    for (const name of NETWORK_JOBS) {
+      const { file, args } = jail.command(name);
+      assert.strictEqual(file, "/bin/sh");
+      assert.strictEqual(args[3], jail.JOBS[name].cgroups[0]);
+      assert.deepStrictEqual(args.slice(4, 7), [
+        "/sbin/su-exec",
+        "65001:65001",
+        jail.NSJAIL,
+      ]);
+      assert(
+        args.includes("-u") && args[args.indexOf("-u") + 1] === "65000:65001:1"
+      );
+
+      const separator = args.indexOf("--");
+      assert.strictEqual(
+        path.basename(args[separator + 2]),
+        "enter-network.sh"
+      );
+      assert.deepStrictEqual(args.slice(-3), jail.JOBS[name].command);
+      for (const cgroup of jail.JOBS[name].cgroups) {
+        assert.strictEqual(jail.command(name, cgroup).args[3], cgroup);
+      }
+      assert.throws(
+        () => jail.command(name, "/sandbox-cgroup"),
+        /unknown cgroup/
+      );
+      assert.throws(
+        () => jail.command(name, jail.PROXY_CGROUP),
+        /unknown cgroup/
+      );
+    }
+    assert.deepStrictEqual(jail.JOBS.screenshot.cgroups, [jail.BROWSER_CGROUP]);
+    // a batch of 8 pages (app/sandbox/jobs/screenshot.js)
+    assert.strictEqual(jail.JOBS.screenshot.timeSeconds, 70);
+    assert.strictEqual(jail.JOBS.screenshot.maxOutputBytes, 60 * 1024 * 1024);
+  });
+
+  test("jail: the fetch-image job has one cgroup of its own, in the unit's subtree, and a short queue", () => {
+    const j = jail.JOBS["fetch-image"];
+    assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
+    assert.strictEqual(path.dirname(jail.FETCH_CGROUP), "/sandbox-cgroup");
+    assert.notStrictEqual(jail.FETCH_CGROUP, jail.PROXY_CGROUP);
+    assert.deepStrictEqual(j.cgroupLimits, {
+      memoryBytes: 256 * 1024 * 1024,
+      pids: 64,
+    });
+    assert.strictEqual(j.maxQueued, 8);
+  });
+
+  test("jail: the fetch job takes turns in fetch-image's cgroup, adds no memory, and has a queue of its own", () => {
+    const j = jail.JOBS.fetch;
+    assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
+    // the limits are made once, from fetch-image's: no second cgroup, no more memory
+    assert.strictEqual(j.cgroupLimits, undefined);
+    const cgroups = new Set(
+      Object.values(jail.JOBS).flatMap((job) => job.cgroups || [])
+    );
+    assert.deepStrictEqual(
+      [...cgroups].sort(),
+      [jail.BROWSER_CGROUP, jail.FETCH_CGROUP].sort()
+    );
+    assert.strictEqual(j.maxQueued, 16);
+    // a batch has up to 60s of fetching (jobs/fetch.js) and a few seconds to start and end
+    assert.strictEqual(j.timeSeconds, 75);
+    // 32 requests, and a body or more of up to 50 MiB back (the client's reply limit is 64 MiB)
+    assert.strictEqual(j.maxInputBytes, 256 * 1024);
+    assert.strictEqual(j.maxOutputBytes, 52 * 1024 * 1024);
+  });
+
+  test("jail: the unit's sandbox subtree holds the proxy jail, the fetch cgroup and the image jobs' share", () => {
+    const MiB = 1024 * 1024;
+    const subtree = 512 * MiB;
+    const proxy = 128 * MiB; // proxy.js
+    const fetch = jail.JOBS["fetch-image"].cgroupLimits.memoryBytes;
+    assert(proxy + fetch <= subtree);
+    assert.strictEqual(subtree - proxy - fetch, 128 * MiB);
+  });
+
+  test("jail: a job with a network never binds keys, data or /usr", () => {
+    for (const name of NETWORK_JOBS) {
+      const { args } = jail.command(name);
+      const binds = args.filter((a, i) => args[i - 1] === "-R");
+      assert.strictEqual(binds.includes("/proc"), name === "screenshot", name);
+      for (const bind of binds) {
+        assert(
+          !["/", "/usr", "/usr/src/app", "/etc", "/etc/ssl", "/run"].includes(
+            bind
+          ),
+          bind
+        );
+        assert(!bind.startsWith("/etc/ssl/private"), bind);
+        assert(!bind.startsWith("/usr/src/app/data"), bind);
+      }
+      assert(
+        !args.some((a) => /^(-B|--bindmount)/.test(a)),
+        "no writable binds"
+      );
+    }
+  });
+
+  test("jail: the fetch jobs get only NODE_PATH, and none of the browser's binds", () => {
+    for (const name of ["fetch-image", "fetch"]) {
+      const { args } = jail.command(name);
+      assert.deepStrictEqual(
+        args.filter((a, i) => args[i - 1] === "-E"),
+        [
+          "PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+          "NODE_PATH=/usr/src/app/node_modules",
+        ],
+        name
+      );
+      const binds = args.filter((a, i) => args[i - 1] === "-R");
+      for (const bind of [
+        "/proc",
+        "/usr/share/fonts",
+        "/etc/fonts",
+        "/etc/ssl/certs",
+      ]) {
+        assert(!binds.includes(bind), name + " " + bind);
+      }
+    }
+  });
+
+  test("jail: every file a job with a network names exists", () => {
+    for (const name of NETWORK_JOBS) {
+      const { args } = jail.command(name);
+      for (const flag of ["--config", "--seccomp_policy"]) {
+        assert(fs.existsSync(args[args.indexOf(flag) + 1]), flag);
+      }
+      assert(fs.existsSync(args[args.indexOf("--") + 2]));
+    }
+  });
+
+  test("jail: the proxy jail is its own uid, in its cgroup, behind the filter, with no time limit", () => {
+    const { file, args } = jail.proxyCommand("blue");
+    assert.strictEqual(file, "/bin/sh");
+    assert.strictEqual(args[3], jail.PROXY_CGROUP);
+    assert.deepStrictEqual(args.slice(4, 7), [
+      "/sbin/su-exec",
+      "65001:65001",
+      jail.NSJAIL,
+    ]);
+    assert.strictEqual(args[args.indexOf("--time_limit") + 1], "0");
+    assert.strictEqual(
+      path.basename(args[args.indexOf("--") + 2]),
+      "enter-network.sh"
+    );
+    assert(args.includes("BLOT_PROXY_JAIL=1"));
+  });
+
+  test("jail: the proxy jail binds no app, data, keys or /proc", () => {
+    const { args } = jail.proxyCommand("blue");
+    // Its own scripts are a bind. In the image they are under /usr/local/lib.
+    const own = path.dirname(require.resolve("../jail"));
+    const binds = args.filter((a, i) => args[i - 1] === "-R" && a !== own);
     for (const bind of binds) {
-      assert(!["/", "/usr", "/usr/src/app", "/etc", "/etc/ssl", "/run"].includes(bind), bind);
-      assert(!bind.startsWith("/etc/ssl/private"), bind);
-      assert(!bind.startsWith("/usr/src/app/data"), bind);
+      assert(!/^\/(proc|etc\/ssl|usr\/src|usr$|$)/.test(bind), bind);
     }
     assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
-  }
-});
+  });
 
-test("jail: the fetch jobs get only NODE_PATH, and none of the browser's binds", () => {
-  for (const name of ["fetch-image", "fetch"]) {
-    const { args } = jail.command(name);
-    assert.deepStrictEqual(
-      args.filter((a, i) => args[i - 1] === "-E"),
-      ["PATH=/usr/bin:/bin:/usr/sbin:/sbin", "NODE_PATH=/usr/src/app/node_modules"],
-      name
+  test("jail: every job raises its OOM score before nsjail starts, the proxy jail doesn't", () => {
+    const raise = `echo ${jail.OOM_SCORE_ADJ} > /proc/self/oom_score_adj && `;
+    assert.strictEqual(jail.OOM_SCORE_ADJ, 1000);
+    for (const name of Object.keys(jail.JOBS)) {
+      const { file, args } = jail.command(name);
+      assert.strictEqual(file, "/bin/sh", name);
+      assert(args[1].startsWith(raise), name);
+    }
+    const { args } = jail.command("metadata");
+    assert.deepStrictEqual(args.slice(2, 4), ["sh", jail.NSJAIL]);
+    assert.deepStrictEqual(args.slice(4), jail.args("metadata"));
+    assert(!jail.proxyCommand("blue").args[1].includes("oom_score_adj"));
+  });
+
+  test("jail: the OOM score a job's shell sets reaches the program it execs", function () {
+    if (!fs.existsSync("/proc/self/oom_score_adj"))
+      return pending("needs Linux");
+    const { args } = jail.command("metadata");
+    const script = args[1];
+    const { execFileSync } = require("child_process");
+    const out = execFileSync("/bin/sh", [
+      "-c",
+      script,
+      "sh",
+      "/bin/cat",
+      "/proc/self/oom_score_adj",
+    ]);
+    assert.strictEqual(out.toString().trim(), String(jail.OOM_SCORE_ADJ));
+  });
+
+  test("jail: the proxy jail only starts for a unit", () => {
+    for (const unit of ["red", "", undefined, "../blue"]) {
+      assert.throws(() => jail.proxyCommand(unit), /unknown unit/);
+    }
+  });
+
+  test("jail: each proxy config forwards the port the deploy gives that unit, on loopback only", () => {
+    const { SANDBOX } = require("../../../../scripts/deploy/constants");
+    for (const unit of ["blue", "green"]) {
+      const { args } = jail.proxyCommand(unit);
+      const config = fs.readFileSync(
+        args[args.indexOf("--config") + 1],
+        "utf8"
+      );
+      assert(
+        config.includes(
+          `tcp_ports: "127.0.0.1/${SANDBOX.units[unit].proxyPort}:8888"`
+        ),
+        unit
+      );
+    }
+  });
+
+  test("proxy: makes its cgroup, with limits, and clears what an old jail left", () => {
+    const { prepareCgroup } = require("../proxy");
+    const directory = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-proxy-")),
+      "proxy"
     );
-    const binds = args.filter((a, i) => args[i - 1] === "-R");
-    for (const bind of ["/proc", "/usr/share/fonts", "/etc/fonts", "/etc/ssl/certs"]) {
-      assert(!binds.includes(bind), name + " " + bind);
-    }
-  }
-});
-
-test("jail: every file a job with a network names exists", () => {
-  for (const name of NETWORK_JOBS) {
-    const { args } = jail.command(name);
-    for (const flag of ["--config", "--seccomp_policy"]) {
-      assert(fs.existsSync(args[args.indexOf(flag) + 1]), flag);
-    }
-    assert(fs.existsSync(args[args.indexOf("--") + 2]));
-  }
-});
-
-test("jail: the proxy jail is its own uid, in its cgroup, behind the filter, with no time limit", () => {
-  const { file, args } = jail.proxyCommand("blue");
-  assert.strictEqual(file, "/bin/sh");
-  assert.strictEqual(args[3], jail.PROXY_CGROUP);
-  assert.deepStrictEqual(args.slice(4, 7), ["/sbin/su-exec", "65001:65001", jail.NSJAIL]);
-  assert.strictEqual(args[args.indexOf("--time_limit") + 1], "0");
-  assert.strictEqual(path.basename(args[args.indexOf("--") + 2]), "enter-network.sh");
-  assert(args.includes("BLOT_PROXY_JAIL=1"));
-});
-
-test("jail: the proxy jail binds no app, data, keys or /proc", () => {
-  const { args } = jail.proxyCommand("blue");
-  // Its own scripts are a bind. In the image they are under /usr/local/lib.
-  const own = path.dirname(require.resolve("../jail"));
-  const binds = args.filter((a, i) => args[i - 1] === "-R" && a !== own);
-  for (const bind of binds) {
-    assert(!/^\/(proc|etc\/ssl|usr\/src|usr$|$)/.test(bind), bind);
-  }
-  assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
-});
-
-test("jail: every job raises its OOM score before nsjail starts, the proxy jail doesn't", () => {
-  const raise = `echo ${jail.OOM_SCORE_ADJ} > /proc/self/oom_score_adj && `;
-  assert.strictEqual(jail.OOM_SCORE_ADJ, 1000);
-  for (const name of Object.keys(jail.JOBS)) {
-    const { file, args } = jail.command(name);
-    assert.strictEqual(file, "/bin/sh", name);
-    assert(args[1].startsWith(raise), name);
-  }
-  const { args } = jail.command("metadata");
-  assert.deepStrictEqual(args.slice(2, 4), ["sh", jail.NSJAIL]);
-  assert.deepStrictEqual(args.slice(4), jail.args("metadata"));
-  assert(!jail.proxyCommand("blue").args[1].includes("oom_score_adj"));
-});
-
-test("jail: the OOM score a job's shell sets reaches the program it execs", function () {
-  if (!fs.existsSync("/proc/self/oom_score_adj")) return pending("needs Linux");
-  const { args } = jail.command("metadata");
-  const script = args[1];
-  const { execFileSync } = require("child_process");
-  const out = execFileSync("/bin/sh", ["-c", script, "sh", "/bin/cat", "/proc/self/oom_score_adj"]);
-  assert.strictEqual(out.toString().trim(), String(jail.OOM_SCORE_ADJ));
-});
-
-test("jail: the proxy jail only starts for a unit", () => {
-  for (const unit of ["red", "", undefined, "../blue"]) {
-    assert.throws(() => jail.proxyCommand(unit), /unknown unit/);
-  }
-});
-
-test("jail: each proxy config forwards the port the deploy gives that unit, on loopback only", () => {
-  const { SANDBOX } = require("../../../../scripts/deploy/constants");
-  for (const unit of ["blue", "green"]) {
-    const { args } = jail.proxyCommand(unit);
-    const config = fs.readFileSync(args[args.indexOf("--config") + 1], "utf8");
-    assert(config.includes(`tcp_ports: "127.0.0.1/${SANDBOX.units[unit].proxyPort}:8888"`), unit);
-  }
-});
-
-test("proxy: makes its cgroup, with limits, and clears what an old jail left", () => {
-  const { prepareCgroup } = require("../proxy");
-  const directory = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-proxy-")), "proxy");
-  prepareCgroup(directory);
-  prepareCgroup(directory);
-  assert.strictEqual(fs.readFileSync(directory + "/memory.max", "utf8"), String(128 * 1024 * 1024));
-  assert.strictEqual(fs.readFileSync(directory + "/memory.oom.group", "utf8"), "1");
-  assert.strictEqual(fs.readFileSync(directory + "/cgroup.kill", "utf8"), "1");
-});
-
-// ---- node-filter.js ----------------------------------------------------------
-
-// Runs the program as the kernel would, on one call
-function runFilter(lines, { nr, arch, arg0 = 0 }) {
-  let accumulator = 0;
-  for (let pc = 0; pc < lines.length; pc++) {
-    const { code, jt, jf, k } = lines[pc];
-    if (code === 0x20) accumulator = { 0: nr, 4: arch, 16: arg0 }[k];
-    else if (code === 0x06) return k;
-    else if (code === 0x15) pc += accumulator === k ? jt : jf;
-    else if (code === 0x35) pc += accumulator >= k ? jt : jf;
-    else if (code === 0x45) pc += (accumulator & k) !== 0 ? jt : jf;
-    else throw new Error("unknown instruction");
-  }
-  throw new Error("fell off the end");
-}
-
-const ALLOW = 0x7fff0000;
-const EPERM = 0x00050001;
-const ENOSYS = 0x00050026;
-
-for (const name of ["arm64", "x64"]) {
-  const { ARCHES, program } = require("../node-filter");
-  const { audit, refused, clone, clone3 } = ARCHES[name];
-  const lines = program(name);
-  const call = (nr, arg0) => runFilter(lines, { nr, arch: audit, arg0 });
-
-  test(`node filter ${name}: refuses the calls the sandbox added`, () => {
-    for (const nr of Object.values(refused)) assert.strictEqual(call(nr), EPERM);
-    assert.strictEqual(call(clone3), ENOSYS);
+    prepareCgroup(directory);
+    prepareCgroup(directory);
+    assert.strictEqual(
+      fs.readFileSync(directory + "/memory.max", "utf8"),
+      String(128 * 1024 * 1024)
+    );
+    assert.strictEqual(
+      fs.readFileSync(directory + "/memory.oom.group", "utf8"),
+      "1"
+    );
+    assert.strictEqual(
+      fs.readFileSync(directory + "/cgroup.kill", "utf8"),
+      "1"
+    );
   });
 
-  test(`node filter ${name}: refuses a clone with any namespace flag, allows a plain one`, () => {
-    const THREAD = 0x003d0f00;
-    const SIGCHLD = 17;
-    assert.strictEqual(call(clone, THREAD), ALLOW);
-    assert.strictEqual(call(clone, SIGCHLD), ALLOW);
-    for (const flag of [0x00020000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000, 0x40000000]) {
-      assert.strictEqual(call(clone, flag | SIGCHLD), EPERM, flag.toString(16));
+  // ---- node-filter.js ----------------------------------------------------------
+
+  // Runs the program as the kernel would, on one call
+  function runFilter(lines, { nr, arch, arg0 = 0 }) {
+    let accumulator = 0;
+    for (let pc = 0; pc < lines.length; pc++) {
+      const { code, jt, jf, k } = lines[pc];
+      if (code === 0x20) accumulator = { 0: nr, 4: arch, 16: arg0 }[k];
+      else if (code === 0x06) return k;
+      else if (code === 0x15) pc += accumulator === k ? jt : jf;
+      else if (code === 0x35) pc += accumulator >= k ? jt : jf;
+      else if (code === 0x45) pc += (accumulator & k) !== 0 ? jt : jf;
+      else throw new Error("unknown instruction");
     }
-  });
-
-  test(`node filter ${name}: allows ordinary calls, refuses every call from another arch`, () => {
-    for (const nr of [0, 1, 56 + 1000, 221, 63]) assert.strictEqual(call(nr), ALLOW);
-    assert.strictEqual(runFilter(lines, { nr: 1, arch: 0x40000028 }), EPERM);
-    assert.strictEqual(runFilter(lines, { nr: 1, arch: 0x40000003 }), EPERM);
-  });
-}
-
-test("node filter x64: refuses x32 calls", () => {
-  const { ARCHES, program } = require("../node-filter");
-  const lines = program("x64");
-  assert.strictEqual(runFilter(lines, { nr: 0x40000000 + 1, arch: ARCHES.x64.audit }), EPERM);
-});
-
-test("node filter: encodes to eight bytes a line, in order", () => {
-  const { program, encode } = require("../node-filter");
-  const lines = program("arm64");
-  const buffer = encode(lines);
-  assert.strictEqual(buffer.length, lines.length * 8);
-  assert.strictEqual(buffer.readUInt16LE(0), lines[0].code);
-  assert.strictEqual(buffer.readUInt32LE(4), lines[0].k);
-});
-
-test("jail: the filter refuses private, loopback and metadata ranges", () => {
-  const filter = fs.readFileSync(path.join(__dirname, "../egress.nft"), "utf8");
-  for (const range of ["10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7", "fe80::/10", "::ffff:0:0/96"]) {
-    assert(filter.includes(range), range);
+    throw new Error("fell off the end");
   }
-  assert(filter.includes('oif "lo" reject'));
-});
 
-test("jail: the policy file is the one the flags name", () => {
-  const argv = jail.args("metadata");
-  const policy = argv[argv.indexOf("--seccomp_policy") + 1];
-  assert(fs.existsSync(policy));
-});
+  const ALLOW = 0x7fff0000;
+  const EPERM = 0x00050001;
+  const ENOSYS = 0x00050026;
 
-// ---- broker.js ---------------------------------------------------------------
+  for (const name of ["arm64", "x64"]) {
+    const { ARCHES, program } = require("../node-filter");
+    const { audit, refused, clone, clone3 } = ARCHES[name];
+    const lines = program(name);
+    const call = (nr, arg0) => runFilter(lines, { nr, arch: audit, arg0 });
 
-const JOBS = (extra) => ({
-  echo: { command: [], memoryBytes: 0, timeSeconds: 5, maxInputBytes: 1000, maxOutputBytes: 1000, ...extra },
-});
+    test(`node filter ${name}: refuses the calls the sandbox added`, () => {
+      for (const nr of Object.values(refused))
+        assert.strictEqual(call(nr), EPERM);
+      assert.strictEqual(call(clone3), ENOSYS);
+    });
 
-let counter = 0;
-async function withBroker(options, fn) {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-broker-"));
-  const socket = path.join(directory, "broker.sock");
-  const script = options.script || "cat";
-  const broker = createBroker({
-    socket,
-    jobs: options.jobs || JOBS(),
-    maxRunning: options.maxRunning,
-    maxQueued: options.maxQueued,
-    maxQueuedMs: options.maxQueuedMs,
-    log: options.log || (() => {}),
-    clearCgroup: options.clearCgroup,
-    prepareCgroup: options.prepareCgroup,
-    spawnJail: (name, cgroup) => {
-      counter++;
-      if (options.spawned) options.spawned.push(cgroup);
-      if (options.started) options.started.push(name);
-      return spawn("sh", ["-c", script], { stdio: ["pipe", "pipe", "ignore"] });
+    test(`node filter ${name}: refuses a clone with any namespace flag, allows a plain one`, () => {
+      const THREAD = 0x003d0f00;
+      const SIGCHLD = 17;
+      assert.strictEqual(call(clone, THREAD), ALLOW);
+      assert.strictEqual(call(clone, SIGCHLD), ALLOW);
+      for (const flag of [
+        0x00020000, 0x02000000, 0x04000000, 0x08000000, 0x10000000, 0x20000000,
+        0x40000000,
+      ]) {
+        assert.strictEqual(
+          call(clone, flag | SIGCHLD),
+          EPERM,
+          flag.toString(16)
+        );
+      }
+    });
+
+    test(`node filter ${name}: allows ordinary calls, refuses every call from another arch`, () => {
+      for (const nr of [0, 1, 56 + 1000, 221, 63])
+        assert.strictEqual(call(nr), ALLOW);
+      assert.strictEqual(runFilter(lines, { nr: 1, arch: 0x40000028 }), EPERM);
+      assert.strictEqual(runFilter(lines, { nr: 1, arch: 0x40000003 }), EPERM);
+    });
+  }
+
+  test("node filter x64: refuses x32 calls", () => {
+    const { ARCHES, program } = require("../node-filter");
+    const lines = program("x64");
+    assert.strictEqual(
+      runFilter(lines, { nr: 0x40000000 + 1, arch: ARCHES.x64.audit }),
+      EPERM
+    );
+  });
+
+  test("node filter: encodes to eight bytes a line, in order", () => {
+    const { program, encode } = require("../node-filter");
+    const lines = program("arm64");
+    const buffer = encode(lines);
+    assert.strictEqual(buffer.length, lines.length * 8);
+    assert.strictEqual(buffer.readUInt16LE(0), lines[0].code);
+    assert.strictEqual(buffer.readUInt32LE(4), lines[0].k);
+  });
+
+  test("jail: the filter refuses private, loopback and metadata ranges", () => {
+    const filter = fs.readFileSync(
+      path.join(__dirname, "../egress.nft"),
+      "utf8"
+    );
+    for (const range of [
+      "10.0.0.0/8",
+      "127.0.0.0/8",
+      "169.254.0.0/16",
+      "172.16.0.0/12",
+      "192.168.0.0/16",
+      "fc00::/7",
+      "fe80::/10",
+      "::ffff:0:0/96",
+    ]) {
+      assert(filter.includes(range), range);
+    }
+    assert(filter.includes('oif "lo" reject'));
+  });
+
+  test("jail: the policy file is the one the flags name", () => {
+    const argv = jail.args("metadata");
+    const policy = argv[argv.indexOf("--seccomp_policy") + 1];
+    assert(fs.existsSync(policy));
+  });
+
+  // ---- broker.js ---------------------------------------------------------------
+
+  const JOBS = (extra) => ({
+    echo: {
+      command: [],
+      memoryBytes: 0,
+      timeSeconds: 5,
+      maxInputBytes: 1000,
+      maxOutputBytes: 1000,
+      ...extra,
     },
   });
-  await broker.listen();
-  try {
-    await fn(socket, broker);
-  } finally {
-    broker.close();
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
-}
 
-// Sends header and input, returns { header, body } of the reply
-function request(socket, header, input) {
-  return new Promise((resolve, reject) => {
-    const conn = net.connect(socket);
-    const chunks = [];
-    conn.on("data", (c) => chunks.push(c));
-    conn.on("error", () => {});
-    conn.on("close", () => {
-      const all = Buffer.concat(chunks);
-      const end = all.indexOf(10);
-      if (end === -1) return reject(new Error("no reply line"));
-      resolve({ header: JSON.parse(all.subarray(0, end).toString()), body: all.subarray(end + 1) });
+  let counter = 0;
+  async function withBroker(options, fn) {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-broker-"));
+    const socket = path.join(directory, "broker.sock");
+    const script = options.script || "cat";
+    const broker = createBroker({
+      socket,
+      jobs: options.jobs || JOBS(),
+      maxRunning: options.maxRunning,
+      maxQueued: options.maxQueued,
+      maxQueuedMs: options.maxQueuedMs,
+      log: options.log || (() => {}),
+      clearCgroup: options.clearCgroup,
+      prepareCgroup: options.prepareCgroup,
+      spawnJail: (name, cgroup) => {
+        counter++;
+        if (options.spawned) options.spawned.push(cgroup);
+        if (options.started) options.started.push(name);
+        return spawn("sh", ["-c", script], {
+          stdio: ["pipe", "pipe", "ignore"],
+        });
+      },
     });
-    conn.write(header);
-    conn.end(input);
-  });
-}
+    await broker.listen();
+    try {
+      await fn(socket, broker);
+    } finally {
+      broker.close();
+      fs.rmSync(directory, { recursive: true, force: true });
+    }
+  }
 
-const job = '{"job":"echo"}\n';
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-async function until(check) {
-  for (let i = 0; i < 1000 && !check(); i++) await sleep(5);
-  assert(check(), "timed out waiting for the broker");
-}
-
-// A stub jail that stays running until release() is called, so a spec can look
-// at the broker while jails are busy, however slow the machine is
-function hold() {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-hold-")), "go");
-  return {
-    script: `until [ -e ${file} ]; do sleep 0.01; done; cat`,
-    release: () => fs.writeFileSync(file, ""),
-  };
-}
-
-test("broker: bytes after the job line reach the jail and its output comes back", async () => {
-  await withBroker({}, async (socket) => {
-    const reply = await request(socket, job, "hello world");
-    assert.deepStrictEqual(reply.header, { ok: true, length: 11 });
-    assert.strictEqual(reply.body.toString(), "hello world");
-  });
-});
-
-test("broker: the job line and the input may arrive in separate writes", async () => {
-  await withBroker({}, async (socket) => {
-    const reply = await new Promise((resolve) => {
+  // Sends header and input, returns { header, body } of the reply
+  function request(socket, header, input) {
+    return new Promise((resolve, reject) => {
       const conn = net.connect(socket);
       const chunks = [];
       conn.on("data", (c) => chunks.push(c));
-      conn.on("close", () => resolve(Buffer.concat(chunks).toString()));
-      conn.write('{"job":');
-      setTimeout(() => conn.write('"echo"}\nabc'), 20);
-      setTimeout(() => conn.end("def"), 40);
+      conn.on("error", () => {});
+      conn.on("close", () => {
+        const all = Buffer.concat(chunks);
+        const end = all.indexOf(10);
+        if (end === -1) return reject(new Error("no reply line"));
+        resolve({
+          header: JSON.parse(all.subarray(0, end).toString()),
+          body: all.subarray(end + 1),
+        });
+      });
+      conn.write(header);
+      conn.end(input);
     });
-    assert.strictEqual(reply, '{"ok":true,"length":6}\nabcdef');
+  }
+
+  const job = '{"job":"echo"}\n';
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function until(check) {
+    for (let i = 0; i < 1000 && !check(); i++) await sleep(5);
+    assert(check(), "timed out waiting for the broker");
+  }
+
+  // A stub jail that stays running until release() is called, so a spec can look
+  // at the broker while jails are busy, however slow the machine is
+  function hold() {
+    const file = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-hold-")),
+      "go"
+    );
+    return {
+      script: `until [ -e ${file} ]; do sleep 0.01; done; cat`,
+      release: () => fs.writeFileSync(file, ""),
+    };
+  }
+
+  test("broker: bytes after the job line reach the jail and its output comes back", async () => {
+    await withBroker({}, async (socket) => {
+      const reply = await request(socket, job, "hello world");
+      assert.deepStrictEqual(reply.header, { ok: true, length: 11 });
+      assert.strictEqual(reply.body.toString(), "hello world");
+    });
   });
-});
 
-test("broker: an unknown or malformed job is refused before anything starts", async () => {
-  await withBroker({}, async (socket) => {
-    const before = counter;
-    for (const header of ['{"job":"nope"}\n', '{"job":"__proto__"}\n', "garbage\n", '{"job":1}\n', "[]\n"]) {
-      const reply = await request(socket, header, "x");
-      assert.deepStrictEqual(reply.header, { ok: false, error: "unknown-job" }, header);
-    }
-    assert.strictEqual(counter, before);
+  test("broker: the job line and the input may arrive in separate writes", async () => {
+    await withBroker({}, async (socket) => {
+      const reply = await new Promise((resolve) => {
+        const conn = net.connect(socket);
+        const chunks = [];
+        conn.on("data", (c) => chunks.push(c));
+        conn.on("close", () => resolve(Buffer.concat(chunks).toString()));
+        conn.write('{"job":');
+        setTimeout(() => conn.write('"echo"}\nabc'), 20);
+        setTimeout(() => conn.end("def"), 40);
+      });
+      assert.strictEqual(reply, '{"ok":true,"length":6}\nabcdef');
+    });
   });
-});
 
-test("broker: input over the job's limit is input-too-large", async () => {
-  await withBroker({ script: "cat > /dev/null; sleep 5" }, async (socket) => {
-    const reply = await request(socket, job, Buffer.alloc(5000, 1));
-    assert.deepStrictEqual(reply.header, { ok: false, error: "input-too-large" });
-  });
-});
-
-test("broker: a client still sending more than the socket holds gets the refusal", async () => {
-  await withBroker({ script: "cat > /dev/null; sleep 5" }, async (socket) => {
-    const reply = await request(socket, job, Buffer.alloc(16 * 1024 * 1024, 1));
-    assert.deepStrictEqual(reply.header, { ok: false, error: "input-too-large" });
-  });
-});
-
-test("broker: output over the job's limit is output-too-large", async () => {
-  await withBroker({ script: "head -c 5000 /dev/zero; sleep 5" }, async (socket) => {
-    const reply = await request(socket, job, "");
-    assert.deepStrictEqual(reply.header, { ok: false, error: "output-too-large" });
-  });
-});
-
-test("broker: a jail that exits non-zero is failed, one killed by a signal is killed", async () => {
-  await withBroker({ script: "cat > /dev/null; exit 3" }, async (socket) => {
-    assert.deepStrictEqual((await request(socket, job, "x")).header, { ok: false, error: "failed" });
-  });
-  await withBroker({ script: "kill -9 $$" }, async (socket) => {
-    assert.deepStrictEqual((await request(socket, job, "x")).header, { ok: false, error: "killed" });
-  });
-  // nsjail's own exit when the job inside it was killed (SIGKILL)
-  await withBroker({ script: "cat > /dev/null; exit 137" }, async (socket) => {
-    assert.deepStrictEqual((await request(socket, job, "x")).header, { ok: false, error: "killed" });
-  });
-});
-
-test("broker: a jail that outlives its time limit is timeout", async () => {
-  await withBroker({ script: "sleep 30", jobs: JOBS({ timeSeconds: 0.1 }) }, async (socket) => {
-    assert.deepStrictEqual((await request(socket, job, "x")).header, { ok: false, error: "timeout" });
-  });
-});
-
-test("broker: close() kills the running jails and removes the socket", async () => {
-  await withBroker({ script: "exec sleep 30" }, async (socket, broker) => {
-    const conn = net.connect(socket);
-    conn.on("error", () => {});
-    conn.write(job);
-    for (let i = 0; i < 50 && broker.running.size === 0; i++) await sleep(20);
-    assert.strictEqual(broker.running.size, 1);
-    const [{ child }] = [...broker.running];
-    broker.close();
-    for (let i = 0; i < 100 && child.signalCode === null; i++) await sleep(20);
-    assert.strictEqual(child.signalCode, "SIGTERM");
-    assert(!fs.existsSync(socket));
-  });
-});
-
-test("broker: at most maxRunning jails at once, then a queue, then busy", async () => {
-  const held = hold();
-  await withBroker({ script: held.script, maxRunning: 2, maxQueued: 1 }, async (socket, broker) => {
-    let peak = 0;
-    const watch = setInterval(() => (peak = Math.max(peak, broker.running.size)), 5);
-    const replies = [request(socket, job, "n0"), request(socket, job, "n1")];
-    await until(() => broker.running.size === 2);
-    replies.push(request(socket, job, "n2"));
-    await until(() => broker.queue.length === 1);
-
-    // over the queue's limit
-    assert.deepStrictEqual((await request(socket, job, "n3")).header, { ok: false, error: "busy" });
-    assert.strictEqual(broker.running.size, 2);
-    assert.strictEqual(broker.queue.length, 1);
-
-    held.release();
-    const results = await Promise.all(replies);
-    clearInterval(watch);
-    for (let i = 0; i < 3; i++) {
-      assert.deepStrictEqual(results[i].header, { ok: true, length: 2 });
-      assert.strictEqual(results[i].body.toString(), "n" + i);
-    }
-    assert.strictEqual(peak, 2);
-  });
-});
-
-const line = (name) => JSON.stringify({ job: name }) + "\n";
-
-test("broker: a job with its own maxRunning waits for that, and doesn't hold up others", async () => {
-  const jobs = {
-    ...JOBS(),
-    only: { ...JOBS().echo, maxRunning: 1 },
-  };
-  const { script, release } = hold();
-  await withBroker({ jobs, maxRunning: 4, script }, async (socket, broker) => {
-    const first = request(socket, line("only"), "");
-    await until(() => broker.running.size === 1);
-    const second = request(socket, line("only"), "");
-    await until(() => broker.queue.length === 1);
-    assert.strictEqual(broker.running.size, 1);
-
-    const other = request(socket, job, "");
-    await until(() => broker.running.size === 2);
-    assert.strictEqual(broker.queue.length, 1);
-
-    release();
-    for (const reply of await Promise.all([first, second, other])) {
-      assert.strictEqual(reply.header.ok, true);
-    }
-  });
-});
-
-test("broker: what a job leaves in its cgroup is cleared when it ends, and failing to is logged", async () => {
-  const cleared = [];
-  const jobs = JOBS({ cgroups: ["/some/cgroup"] });
-  await withBroker(
-    { jobs, clearCgroup: (directory) => cleared.push(directory) },
-    async (socket) => {
-      const { header } = await request(socket, job, "x");
-      assert.strictEqual(header.ok, true);
-    }
-  );
-  assert.deepStrictEqual(cleared, ["/some/cgroup"]);
-
-  await withBroker(
-    {
-      jobs,
-      clearCgroup: () => {
-        throw Object.assign(new Error("no"), { code: "ENOENT" });
-      },
-    },
-    async (socket) => {
-      const { header } = await request(socket, job, "x");
-      assert.strictEqual(header.ok, true);
-    }
-  );
-});
-
-test("broker: a job in cgroups runs one jail in each, and clears that one after", async () => {
-  const jobs = { ...JOBS(), fetch: { ...JOBS().echo, cgroups: ["/c/1", "/c/2"] } };
-  const spawned = [];
-  const cleared = [];
-  const { script, release } = hold();
-  await withBroker(
-    { jobs, maxRunning: 4, script, spawned, clearCgroup: (directory) => cleared.push(directory) },
-    async (socket, broker) => {
-      const replies = [1, 2, 3].map(() => request(socket, line("fetch"), ""));
-      await until(() => broker.running.size === 2 && broker.queue.length === 1);
-      assert.deepStrictEqual(spawned, ["/c/1", "/c/2"]);
-
-      // the others aren't held up
-      const other = request(socket, job, "");
-      await until(() => broker.running.size === 3);
-
-      release();
-      for (const reply of await Promise.all(replies.concat(other))) {
-        assert.strictEqual(reply.header.ok, true);
+  test("broker: an unknown or malformed job is refused before anything starts", async () => {
+    await withBroker({}, async (socket) => {
+      const before = counter;
+      for (const header of [
+        '{"job":"nope"}\n',
+        '{"job":"__proto__"}\n',
+        "garbage\n",
+        '{"job":1}\n',
+        "[]\n",
+      ]) {
+        const reply = await request(socket, header, "x");
+        assert.deepStrictEqual(
+          reply.header,
+          { ok: false, error: "unknown-job" },
+          header
+        );
       }
-    }
-  );
-  assert.strictEqual(spawned.length, 4);
-  assert(["/c/1", "/c/2"].includes(spawned[3]));
-  assert.strictEqual(spawned[2], null);
-  assert.deepStrictEqual(cleared.slice().sort(), ["/c/1", "/c/2", spawned[3]].sort());
-});
-
-test("broker: a job with its own maxQueued is busy past it, and leaves the rest of the queue to others", async () => {
-  const jobs = { ...JOBS(), fetch: { ...JOBS().echo, maxRunning: 1, maxQueued: 1 } };
-  const { script, release } = hold();
-  await withBroker({ jobs, maxRunning: 1, maxQueued: 4, script }, async (socket, broker) => {
-    const first = request(socket, line("fetch"), "");
-    await until(() => broker.running.size === 1);
-    const second = request(socket, line("fetch"), "");
-    await until(() => broker.queue.length === 1);
-
-    assert.deepStrictEqual((await request(socket, line("fetch"), "")).header, { ok: false, error: "busy" });
-
-    // the broker's queue still has room for other jobs
-    const other = request(socket, job, "");
-    await until(() => broker.queue.length === 2);
-
-    release();
-    for (const reply of await Promise.all([first, second, other])) {
-      assert.strictEqual(reply.header.ok, true);
-    }
+      assert.strictEqual(counter, before);
+    });
   });
-});
 
-test("broker: two jobs in one cgroup take turns, oldest first, each with a queue of its own", async () => {
-  const shared = ["/c/shared"];
-  const jobs = {
-    ...JOBS(),
-    images: { ...JOBS().echo, cgroups: shared, maxQueued: 1 },
-    batch: { ...JOBS().echo, cgroups: shared, maxQueued: 2 },
-  };
-  const { script, release } = hold();
-  await withBroker({ jobs, maxRunning: 4, maxQueued: 8, script, clearCgroup: () => {} }, async (socket, broker) => {
-    const running = request(socket, line("batch"), "");
-    await until(() => broker.running.size === 1);
-
-    // a big import's batches fill their own queue, not the images'
-    const queuedBatch = request(socket, line("batch"), "");
-    const queuedBatch2 = request(socket, line("batch"), "");
-    await until(() => broker.queue.length === 2);
-    assert.deepStrictEqual((await request(socket, line("batch"), "")).header, { ok: false, error: "busy" });
-    const queuedImage = request(socket, line("images"), "");
-    await until(() => broker.queue.length === 3);
-    assert.deepStrictEqual((await request(socket, line("images"), "")).header, { ok: false, error: "busy" });
-
-    // never two at once in the one cgroup, whichever job
-    assert.strictEqual(broker.running.size, 1);
-
-    release();
-    for (const reply of await Promise.all([running, queuedBatch, queuedBatch2, queuedImage])) {
-      assert.strictEqual(reply.header.ok, true);
-    }
+  test("broker: input over the job's limit is input-too-large", async () => {
+    await withBroker({ script: "cat > /dev/null; sleep 5" }, async (socket) => {
+      const reply = await request(socket, job, Buffer.alloc(5000, 1));
+      assert.deepStrictEqual(reply.header, {
+        ok: false,
+        error: "input-too-large",
+      });
+    });
   });
-});
 
-test("broker: jobs in one cgroup alternate, so a long queue of one doesn't hold the cgroup against the other", async () => {
-  const shared = ["/c/shared"];
-  const jobs = {
-    ...JOBS(),
-    images: { ...JOBS().echo, cgroups: shared },
-    batch: { ...JOBS().echo, cgroups: shared },
-  };
-  const started = [];
-  const { script, release } = hold();
-  await withBroker({ jobs, maxRunning: 4, maxQueued: 8, script, started, clearCgroup: () => {} }, async (socket, broker) => {
-    const replies = [request(socket, line("batch"), "")];
-    await until(() => broker.running.size === 1);
-    // three import batches queue up, and then a post build's image
-    for (const name of ["batch", "batch", "images"]) {
-      replies.push(request(socket, line(name), ""));
-      await until(() => broker.queue.length === replies.length - 1);
-    }
-    release();
-    for (const reply of await Promise.all(replies)) assert.strictEqual(reply.header.ok, true);
+  test("broker: a client still sending more than the socket holds gets the refusal", async () => {
+    await withBroker({ script: "cat > /dev/null; sleep 5" }, async (socket) => {
+      const reply = await request(
+        socket,
+        job,
+        Buffer.alloc(16 * 1024 * 1024, 1)
+      );
+      assert.deepStrictEqual(reply.header, {
+        ok: false,
+        error: "input-too-large",
+      });
+    });
   });
-  assert.deepStrictEqual(started, ["batch", "images", "batch", "batch"]);
-});
 
-test("broker: makes the cgroups jobs ask for when it listens, and logs one it can't", async () => {
-  const made = [];
-  const logged = [];
-  const jobs = {
-    ...JOBS(),
-    fetch: { ...JOBS().echo, cgroups: ["/some/fetch-1", "/some/fetch-2"], cgroupLimits: { memoryBytes: 1, pids: 2 } },
-    broken: { ...JOBS().echo, cgroups: ["/some/broken"], cgroupLimits: { memoryBytes: 1, pids: 2 } },
-    browser: { ...JOBS().echo, cgroups: ["/some/browser"] },
-  };
-  await withBroker(
-    {
-      jobs,
-      log: (line) => logged.push(line),
-      prepareCgroup: (directory, limits) => {
-        if (directory === "/some/broken") throw Object.assign(new Error("no"), { code: "EACCES" });
-        made.push([directory, limits]);
+  test("broker: output over the job's limit is output-too-large", async () => {
+    await withBroker(
+      { script: "head -c 5000 /dev/zero; sleep 5" },
+      async (socket) => {
+        const reply = await request(socket, job, "");
+        assert.deepStrictEqual(reply.header, {
+          ok: false,
+          error: "output-too-large",
+        });
+      }
+    );
+  });
+
+  test("broker: a jail that exits non-zero is failed, one killed by a signal is killed", async () => {
+    await withBroker({ script: "cat > /dev/null; exit 3" }, async (socket) => {
+      assert.deepStrictEqual((await request(socket, job, "x")).header, {
+        ok: false,
+        error: "failed",
+      });
+    });
+    await withBroker({ script: "kill -9 $$" }, async (socket) => {
+      assert.deepStrictEqual((await request(socket, job, "x")).header, {
+        ok: false,
+        error: "killed",
+      });
+    });
+    // nsjail's own exit when the job inside it was killed (SIGKILL)
+    await withBroker(
+      { script: "cat > /dev/null; exit 137" },
+      async (socket) => {
+        assert.deepStrictEqual((await request(socket, job, "x")).header, {
+          ok: false,
+          error: "killed",
+        });
+      }
+    );
+  });
+
+  test("broker: a jail that outlives its time limit is timeout", async () => {
+    await withBroker(
+      { script: "sleep 30", jobs: JOBS({ timeSeconds: 0.1 }) },
+      async (socket) => {
+        assert.deepStrictEqual((await request(socket, job, "x")).header, {
+          ok: false,
+          error: "timeout",
+        });
+      }
+    );
+  });
+
+  test("broker: close() kills the running jails and removes the socket", async () => {
+    await withBroker({ script: "exec sleep 30" }, async (socket, broker) => {
+      const conn = net.connect(socket);
+      conn.on("error", () => {});
+      conn.write(job);
+      for (let i = 0; i < 50 && broker.running.size === 0; i++) await sleep(20);
+      assert.strictEqual(broker.running.size, 1);
+      const [{ child }] = [...broker.running];
+      broker.close();
+      for (let i = 0; i < 100 && child.signalCode === null; i++)
+        await sleep(20);
+      assert.strictEqual(child.signalCode, "SIGTERM");
+      assert(!fs.existsSync(socket));
+    });
+  });
+
+  test("broker: at most maxRunning jails at once, then a queue, then busy", async () => {
+    const held = hold();
+    await withBroker(
+      { script: held.script, maxRunning: 2, maxQueued: 1 },
+      async (socket, broker) => {
+        let peak = 0;
+        const watch = setInterval(
+          () => (peak = Math.max(peak, broker.running.size)),
+          5
+        );
+        const replies = [
+          request(socket, job, "n0"),
+          request(socket, job, "n1"),
+        ];
+        await until(() => broker.running.size === 2);
+        replies.push(request(socket, job, "n2"));
+        await until(() => broker.queue.length === 1);
+
+        // over the queue's limit
+        assert.deepStrictEqual((await request(socket, job, "n3")).header, {
+          ok: false,
+          error: "busy",
+        });
+        assert.strictEqual(broker.running.size, 2);
+        assert.strictEqual(broker.queue.length, 1);
+
+        held.release();
+        const results = await Promise.all(replies);
+        clearInterval(watch);
+        for (let i = 0; i < 3; i++) {
+          assert.deepStrictEqual(results[i].header, { ok: true, length: 2 });
+          assert.strictEqual(results[i].body.toString(), "n" + i);
+        }
+        assert.strictEqual(peak, 2);
+      }
+    );
+  });
+
+  const line = (name) => JSON.stringify({ job: name }) + "\n";
+
+  test("broker: a job with its own maxRunning waits for that, and doesn't hold up others", async () => {
+    const jobs = {
+      ...JOBS(),
+      only: { ...JOBS().echo, maxRunning: 1 },
+    };
+    const { script, release } = hold();
+    await withBroker(
+      { jobs, maxRunning: 4, script },
+      async (socket, broker) => {
+        const first = request(socket, line("only"), "");
+        await until(() => broker.running.size === 1);
+        const second = request(socket, line("only"), "");
+        await until(() => broker.queue.length === 1);
+        assert.strictEqual(broker.running.size, 1);
+
+        const other = request(socket, job, "");
+        await until(() => broker.running.size === 2);
+        assert.strictEqual(broker.queue.length, 1);
+
+        release();
+        for (const reply of await Promise.all([first, second, other])) {
+          assert.strictEqual(reply.header.ok, true);
+        }
+      }
+    );
+  });
+
+  test("broker: what a job leaves in its cgroup is cleared when it ends, and failing to is logged", async () => {
+    const cleared = [];
+    const jobs = JOBS({ cgroups: ["/some/cgroup"] });
+    await withBroker(
+      { jobs, clearCgroup: (directory) => cleared.push(directory) },
+      async (socket) => {
+        const { header } = await request(socket, job, "x");
+        assert.strictEqual(header.ok, true);
+      }
+    );
+    assert.deepStrictEqual(cleared, ["/some/cgroup"]);
+
+    await withBroker(
+      {
+        jobs,
+        clearCgroup: () => {
+          throw Object.assign(new Error("no"), { code: "ENOENT" });
+        },
+      },
+      async (socket) => {
+        const { header } = await request(socket, job, "x");
+        assert.strictEqual(header.ok, true);
+      }
+    );
+  });
+
+  test("broker: a job in cgroups runs one jail in each, and clears that one after", async () => {
+    const jobs = {
+      ...JOBS(),
+      fetch: { ...JOBS().echo, cgroups: ["/c/1", "/c/2"] },
+    };
+    const spawned = [];
+    const cleared = [];
+    const { script, release } = hold();
+    await withBroker(
+      {
+        jobs,
+        maxRunning: 4,
+        script,
+        spawned,
+        clearCgroup: (directory) => cleared.push(directory),
+      },
+      async (socket, broker) => {
+        const replies = [1, 2, 3].map(() => request(socket, line("fetch"), ""));
+        await until(
+          () => broker.running.size === 2 && broker.queue.length === 1
+        );
+        assert.deepStrictEqual(spawned, ["/c/1", "/c/2"]);
+
+        // the others aren't held up
+        const other = request(socket, job, "");
+        await until(() => broker.running.size === 3);
+
+        release();
+        for (const reply of await Promise.all(replies.concat(other))) {
+          assert.strictEqual(reply.header.ok, true);
+        }
+      }
+    );
+    assert.strictEqual(spawned.length, 4);
+    assert(["/c/1", "/c/2"].includes(spawned[3]));
+    assert.strictEqual(spawned[2], null);
+    assert.deepStrictEqual(
+      cleared.slice().sort(),
+      ["/c/1", "/c/2", spawned[3]].sort()
+    );
+  });
+
+  test("broker: a job with its own maxQueued is busy past it, and leaves the rest of the queue to others", async () => {
+    const jobs = {
+      ...JOBS(),
+      fetch: { ...JOBS().echo, maxRunning: 1, maxQueued: 1 },
+    };
+    const { script, release } = hold();
+    await withBroker(
+      { jobs, maxRunning: 1, maxQueued: 4, script },
+      async (socket, broker) => {
+        const first = request(socket, line("fetch"), "");
+        await until(() => broker.running.size === 1);
+        const second = request(socket, line("fetch"), "");
+        await until(() => broker.queue.length === 1);
+
+        assert.deepStrictEqual(
+          (await request(socket, line("fetch"), "")).header,
+          { ok: false, error: "busy" }
+        );
+
+        // the broker's queue still has room for other jobs
+        const other = request(socket, job, "");
+        await until(() => broker.queue.length === 2);
+
+        release();
+        for (const reply of await Promise.all([first, second, other])) {
+          assert.strictEqual(reply.header.ok, true);
+        }
+      }
+    );
+  });
+
+  test("broker: two jobs in one cgroup take turns, oldest first, each with a queue of its own", async () => {
+    const shared = ["/c/shared"];
+    const jobs = {
+      ...JOBS(),
+      images: { ...JOBS().echo, cgroups: shared, maxQueued: 1 },
+      batch: { ...JOBS().echo, cgroups: shared, maxQueued: 2 },
+    };
+    const { script, release } = hold();
+    await withBroker(
+      { jobs, maxRunning: 4, maxQueued: 8, script, clearCgroup: () => {} },
+      async (socket, broker) => {
+        const running = request(socket, line("batch"), "");
+        await until(() => broker.running.size === 1);
+
+        // a big import's batches fill their own queue, not the images'
+        const queuedBatch = request(socket, line("batch"), "");
+        const queuedBatch2 = request(socket, line("batch"), "");
+        await until(() => broker.queue.length === 2);
+        assert.deepStrictEqual(
+          (await request(socket, line("batch"), "")).header,
+          { ok: false, error: "busy" }
+        );
+        const queuedImage = request(socket, line("images"), "");
+        await until(() => broker.queue.length === 3);
+        assert.deepStrictEqual(
+          (await request(socket, line("images"), "")).header,
+          { ok: false, error: "busy" }
+        );
+
+        // never two at once in the one cgroup, whichever job
+        assert.strictEqual(broker.running.size, 1);
+
+        release();
+        for (const reply of await Promise.all([
+          running,
+          queuedBatch,
+          queuedBatch2,
+          queuedImage,
+        ])) {
+          assert.strictEqual(reply.header.ok, true);
+        }
+      }
+    );
+  });
+
+  test("broker: jobs in one cgroup alternate, so a long queue of one doesn't hold the cgroup against the other", async () => {
+    const shared = ["/c/shared"];
+    const jobs = {
+      ...JOBS(),
+      images: { ...JOBS().echo, cgroups: shared },
+      batch: { ...JOBS().echo, cgroups: shared },
+    };
+    const started = [];
+    const { script, release } = hold();
+    await withBroker(
+      {
+        jobs,
+        maxRunning: 4,
+        maxQueued: 8,
+        script,
+        started,
+        clearCgroup: () => {},
+      },
+      async (socket, broker) => {
+        const replies = [request(socket, line("batch"), "")];
+        await until(() => broker.running.size === 1);
+        // three import batches queue up, and then a post build's image
+        for (const name of ["batch", "batch", "images"]) {
+          replies.push(request(socket, line(name), ""));
+          await until(() => broker.queue.length === replies.length - 1);
+        }
+        release();
+        for (const reply of await Promise.all(replies))
+          assert.strictEqual(reply.header.ok, true);
+      }
+    );
+    assert.deepStrictEqual(started, ["batch", "images", "batch", "batch"]);
+  });
+
+  test("broker: makes the cgroups jobs ask for when it listens, and logs one it can't", async () => {
+    const made = [];
+    const logged = [];
+    const jobs = {
+      ...JOBS(),
+      fetch: {
+        ...JOBS().echo,
+        cgroups: ["/some/fetch-1", "/some/fetch-2"],
+        cgroupLimits: { memoryBytes: 1, pids: 2 },
+      },
+      broken: {
+        ...JOBS().echo,
+        cgroups: ["/some/broken"],
+        cgroupLimits: { memoryBytes: 1, pids: 2 },
+      },
+      browser: { ...JOBS().echo, cgroups: ["/some/browser"] },
+    };
+    await withBroker(
+      {
+        jobs,
+        log: (line) => logged.push(line),
+        prepareCgroup: (directory, limits) => {
+          if (directory === "/some/broken")
+            throw Object.assign(new Error("no"), { code: "EACCES" });
+          made.push([directory, limits]);
+        },
+      },
+      async (socket) => {
+        const { header } = await request(socket, job, "x");
+        assert.strictEqual(header.ok, true);
+      }
+    );
+    assert.deepStrictEqual(made, [
+      ["/some/fetch-1", { memoryBytes: 1, pids: 2 }],
+      ["/some/fetch-2", { memoryBytes: 1, pids: 2 }],
+    ]);
+    assert(
+      logged.some((line) =>
+        line.includes("job=broken cannot make its cgroup /some/broken: EACCES")
+      )
+    );
+  });
+
+  test("cgroup: makes a jail's cgroup with its limits, and clears what an old jail left", () => {
+    const cgroup = require("../cgroup");
+    const directory = path.join(
+      fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-cgroup-")),
+      "fetch"
+    );
+    cgroup.prepare(directory, { memoryBytes: 384 * 1024 * 1024, pids: 64 });
+    cgroup.prepare(directory, { memoryBytes: 384 * 1024 * 1024, pids: 64 });
+    assert.strictEqual(
+      fs.readFileSync(directory + "/memory.max", "utf8"),
+      String(384 * 1024 * 1024)
+    );
+    assert.strictEqual(
+      fs.readFileSync(directory + "/memory.swap.max", "utf8"),
+      "0"
+    );
+    assert.strictEqual(fs.readFileSync(directory + "/pids.max", "utf8"), "64");
+    assert.strictEqual(
+      fs.readFileSync(directory + "/cgroup.kill", "utf8"),
+      "1"
+    );
+  });
+
+  test("broker: a request that queued too long is busy, not given a jail", async () => {
+    const held = hold();
+    await withBroker(
+      { script: held.script, maxRunning: 1, maxQueuedMs: 50 },
+      async (socket, broker) => {
+        const first = request(socket, job, "a");
+        await until(() => broker.running.size === 1);
+        const second = request(socket, job, "b");
+        await until(() => broker.queue.length === 1);
+        await sleep(100);
+        held.release();
+        assert.deepStrictEqual((await first).header, { ok: true, length: 1 });
+        assert.deepStrictEqual((await second).header, {
+          ok: false,
+          error: "busy",
+        });
+      }
+    );
+  });
+
+  // ---- a job with workers -------------------------------------------------------
+
+  const WORKER = (worker) => ({
+    echo: {
+      command: [],
+      memoryBytes: 0,
+      timeSeconds: 60,
+      maxInputBytes: 1000,
+      maxOutputBytes: 1000,
+      worker: {
+        requestSeconds: 5,
+        requests: 100,
+        maxAgeSeconds: 60,
+        idleSeconds: 60,
+        maxIdle: 2,
+        heavyInputBytes: 500,
+        heavyMs: 5000,
+        ...worker,
       },
     },
-    async (socket) => {
-      const { header } = await request(socket, job, "x");
-      assert.strictEqual(header.ok, true);
-    }
-  );
-  assert.deepStrictEqual(made, [
-    ["/some/fetch-1", { memoryBytes: 1, pids: 2 }],
-    ["/some/fetch-2", { memoryBytes: 1, pids: 2 }],
-  ]);
-  assert(logged.some((line) => line.includes("job=broken cannot make its cgroup /some/broken: EACCES")));
-});
-
-test("cgroup: makes a jail's cgroup with its limits, and clears what an old jail left", () => {
-  const cgroup = require("../cgroup");
-  const directory = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-cgroup-")), "fetch");
-  cgroup.prepare(directory, { memoryBytes: 384 * 1024 * 1024, pids: 64 });
-  cgroup.prepare(directory, { memoryBytes: 384 * 1024 * 1024, pids: 64 });
-  assert.strictEqual(fs.readFileSync(directory + "/memory.max", "utf8"), String(384 * 1024 * 1024));
-  assert.strictEqual(fs.readFileSync(directory + "/memory.swap.max", "utf8"), "0");
-  assert.strictEqual(fs.readFileSync(directory + "/pids.max", "utf8"), "64");
-  assert.strictEqual(fs.readFileSync(directory + "/cgroup.kill", "utf8"), "1");
-});
-
-test("broker: a request that queued too long is busy, not given a jail", async () => {
-  const held = hold();
-  await withBroker({ script: held.script, maxRunning: 1, maxQueuedMs: 50 }, async (socket, broker) => {
-    const first = request(socket, job, "a");
-    await until(() => broker.running.size === 1);
-    const second = request(socket, job, "b");
-    await until(() => broker.queue.length === 1);
-    await sleep(100);
-    held.release();
-    assert.deepStrictEqual((await first).header, { ok: true, length: 1 });
-    assert.deepStrictEqual((await second).header, { ok: false, error: "busy" });
   });
-});
-
-// ---- a job with workers -------------------------------------------------------
-
-const WORKER = (worker) => ({
-  echo: {
-    command: [],
-    memoryBytes: 0,
-    timeSeconds: 60,
-    maxInputBytes: 1000,
-    maxOutputBytes: 1000,
-    worker: {
-      requestSeconds: 5,
-      requests: 100,
-      maxAgeSeconds: 60,
-      idleSeconds: 60,
-      maxIdle: 2,
-      heavyInputBytes: 500,
-      heavyMs: 5000,
-      ...worker,
-    },
-  },
-});
-// A stand-in for app/sandbox/jobs/pandoc-worker.lua, written out (a file under
-// tests/ would be loaded as a spec): it reads requests in frames and answers
-// its pid and the request upper-cased, or does what the request says.
-const FAKE_WORKER = `
+  // A stand-in for app/sandbox/jobs/pandoc-worker.lua, written out (a file under
+  // tests/ would be loaded as a spec): it reads requests in frames and answers
+  // its pid and the request upper-cased, or does what the request says.
+  const FAKE_WORKER = `
 let buffer = Buffer.alloc(0);
 let request = [];
 process.stdin.on("data", (chunk) => {
@@ -797,134 +1094,188 @@ function answer(text) {
   process.stdout.write(Buffer.byteLength(body) + "\\n" + body);
 }
 `;
-const fakeWorkerFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-worker-")), "worker.js");
-fs.writeFileSync(fakeWorkerFile, FAKE_WORKER);
-const fakeWorker = "exec node " + fakeWorkerFile;
+  const fakeWorkerFile = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-worker-")),
+    "worker.js"
+  );
+  fs.writeFileSync(fakeWorkerFile, FAKE_WORKER);
+  const fakeWorker = "exec node " + fakeWorkerFile;
 
-// The worker's pid and its answer
-async function ask(socket, input) {
-  const reply = await request(socket, job, input);
-  if (!reply.header.ok) return reply.header;
-  const [pid, text] = reply.body.toString().split(" ");
-  return { pid, text };
-}
+  // The worker's pid and its answer
+  async function ask(socket, input) {
+    const reply = await request(socket, job, input);
+    if (!reply.header.ok) return reply.header;
+    const [pid, text] = reply.body.toString().split(" ");
+    return { pid, text };
+  }
 
-test("broker: a job with workers answers one request after another from the same jail", async () => {
-  const started = [];
-  await withBroker({ jobs: WORKER(), script: fakeWorker, started }, async (socket, broker) => {
-    const first = await ask(socket, "hello");
-    const second = await ask(socket, "world");
-    assert.strictEqual(first.text, "HELLO");
-    assert.strictEqual(second.text, "WORLD");
-    assert.strictEqual(first.pid, second.pid);
-    assert.strictEqual(started.length, 1);
-    assert.strictEqual(broker.running.size, 0);
+  test("broker: a job with workers answers one request after another from the same jail", async () => {
+    const started = [];
+    await withBroker(
+      { jobs: WORKER(), script: fakeWorker, started },
+      async (socket, broker) => {
+        const first = await ask(socket, "hello");
+        const second = await ask(socket, "world");
+        assert.strictEqual(first.text, "HELLO");
+        assert.strictEqual(second.text, "WORLD");
+        assert.strictEqual(first.pid, second.pid);
+        assert.strictEqual(started.length, 1);
+        assert.strictEqual(broker.running.size, 0);
+      }
+    );
   });
-});
 
-test("broker: a worker's input arrives whole however the client sends it", async () => {
-  await withBroker({ jobs: WORKER({ heavyInputBytes: 1e6 }), script: fakeWorker }, async (socket) => {
-    const reply = await new Promise((resolve) => {
-      const conn = net.connect(socket);
-      const chunks = [];
-      conn.on("data", (c) => chunks.push(c));
-      conn.on("close", () => resolve(Buffer.concat(chunks).toString()));
-      conn.write('{"job":"echo"}\nab');
-      setTimeout(() => conn.write("cd"), 20);
-      setTimeout(() => conn.end("ef"), 40);
+  test("broker: a worker's input arrives whole however the client sends it", async () => {
+    await withBroker(
+      { jobs: WORKER({ heavyInputBytes: 1e6 }), script: fakeWorker },
+      async (socket) => {
+        const reply = await new Promise((resolve) => {
+          const conn = net.connect(socket);
+          const chunks = [];
+          conn.on("data", (c) => chunks.push(c));
+          conn.on("close", () => resolve(Buffer.concat(chunks).toString()));
+          conn.write('{"job":"echo"}\nab');
+          setTimeout(() => conn.write("cd"), 20);
+          setTimeout(() => conn.end("ef"), 40);
+        });
+        assert.match(reply, /^\{"ok":true,"length":\d+\}\n\d+ ABCDEF$/);
+      }
+    );
+  });
+
+  test("broker: workers run requests side by side, and keep at most maxIdle", async () => {
+    const started = [];
+    await withBroker(
+      { jobs: WORKER({ maxIdle: 1 }), script: fakeWorker, started },
+      async (socket) => {
+        const answers = await Promise.all(
+          ["a", "b", "c"].map((text) => ask(socket, text))
+        );
+        assert.deepStrictEqual(
+          answers.map((a) => a.text),
+          ["A", "B", "C"]
+        );
+        assert.strictEqual(new Set(answers.map((a) => a.pid)).size, 3);
+        const after = await ask(socket, "d");
+        assert(
+          answers.some((a) => a.pid === after.pid),
+          "one worker was kept"
+        );
+        assert.strictEqual(started.length, 3);
+      }
+    );
+  });
+
+  test("broker: a worker's big reply comes back whole, and quickly", async () => {
+    const jobs = WORKER();
+    jobs.echo.maxOutputBytes = 64 * 1024 * 1024;
+    await withBroker({ jobs, script: fakeWorker }, async (socket) => {
+      const started = Date.now();
+      const reply = await request(socket, job, "big:" + 32 * 1024 * 1024);
+      assert.deepStrictEqual(reply.header, {
+        ok: true,
+        length: 32 * 1024 * 1024,
+      });
+      assert(reply.body.every((byte) => byte === 120));
+      // joining every chunk as it came took ~10s for 16 MiB
+      assert(
+        Date.now() - started < 3000,
+        "took " + (Date.now() - started) + "ms"
+      );
     });
-    assert.match(reply, /^\{"ok":true,"length":\d+\}\n\d+ ABCDEF$/);
   });
-});
 
-test("broker: workers run requests side by side, and keep at most maxIdle", async () => {
-  const started = [];
-  await withBroker({ jobs: WORKER({ maxIdle: 1 }), script: fakeWorker, started }, async (socket) => {
-    const answers = await Promise.all(["a", "b", "c"].map((text) => ask(socket, text)));
-    assert.deepStrictEqual(answers.map((a) => a.text), ["A", "B", "C"]);
-    assert.strictEqual(new Set(answers.map((a) => a.pid)).size, 3);
-    const after = await ask(socket, "d");
-    assert(answers.some((a) => a.pid === after.pid), "one worker was kept");
-    assert.strictEqual(started.length, 3);
-  });
-});
-
-test("broker: a worker's big reply comes back whole, and quickly", async () => {
-  const jobs = WORKER();
-  jobs.echo.maxOutputBytes = 64 * 1024 * 1024;
-  await withBroker({ jobs, script: fakeWorker }, async (socket) => {
-    const started = Date.now();
-    const reply = await request(socket, job, "big:" + 32 * 1024 * 1024);
-    assert.deepStrictEqual(reply.header, { ok: true, length: 32 * 1024 * 1024 });
-    assert(reply.body.every((byte) => byte === 120));
-    // joining every chunk as it came took ~10s for 16 MiB
-    assert(Date.now() - started < 3000, "took " + (Date.now() - started) + "ms");
-  });
-});
-
-test("broker: arguments a worker refuses are failed, and the worker carries on", async () => {
-  await withBroker({ jobs: WORKER(), script: fakeWorker }, async (socket) => {
-    const before = await ask(socket, "x");
-    assert.deepStrictEqual(await ask(socket, "refuse"), { ok: false, error: "failed" });
-    assert.strictEqual((await ask(socket, "y")).pid, before.pid);
-  });
-});
-
-test("broker: a worker that dies, answers nonsense or is too slow is replaced", async () => {
-  await withBroker({ jobs: WORKER({ requestSeconds: 0.3 }), script: fakeWorker }, async (socket) => {
-    for (const [input, error] of [["die", "failed"], ["garbage", "failed"], ["hang", "timeout"]]) {
+  test("broker: arguments a worker refuses are failed, and the worker carries on", async () => {
+    await withBroker({ jobs: WORKER(), script: fakeWorker }, async (socket) => {
       const before = await ask(socket, "x");
-      assert.deepStrictEqual(await ask(socket, input), { ok: false, error }, input);
-      const after = await ask(socket, "y");
-      assert.strictEqual(after.text, "Y");
-      assert.notStrictEqual(after.pid, before.pid, input);
+      assert.deepStrictEqual(await ask(socket, "refuse"), {
+        ok: false,
+        error: "failed",
+      });
+      assert.strictEqual((await ask(socket, "y")).pid, before.pid);
+    });
+  });
+
+  test("broker: a worker that dies, answers nonsense or is too slow is replaced", async () => {
+    await withBroker(
+      { jobs: WORKER({ requestSeconds: 0.3 }), script: fakeWorker },
+      async (socket) => {
+        for (const [input, error] of [
+          ["die", "failed"],
+          ["garbage", "failed"],
+          ["hang", "timeout"],
+        ]) {
+          const before = await ask(socket, "x");
+          assert.deepStrictEqual(
+            await ask(socket, input),
+            { ok: false, error },
+            input
+          );
+          const after = await ask(socket, "y");
+          assert.strictEqual(after.text, "Y");
+          assert.notStrictEqual(after.pid, before.pid, input);
+        }
+      }
+    );
+  });
+
+  test("broker: a worker is retired after its requests, its age, a heavy request or time idle", async () => {
+    await withBroker(
+      { jobs: WORKER({ requests: 2 }), script: fakeWorker },
+      async (socket) => {
+        const a = await ask(socket, "a");
+        assert.strictEqual((await ask(socket, "b")).pid, a.pid);
+        assert.notStrictEqual((await ask(socket, "c")).pid, a.pid);
+      }
+    );
+    await withBroker({ jobs: WORKER(), script: fakeWorker }, async (socket) => {
+      const a = await ask(socket, "x".repeat(600));
+      assert.notStrictEqual((await ask(socket, "b")).pid, a.pid);
+    });
+    await withBroker(
+      { jobs: WORKER({ idleSeconds: 0.05 }), script: fakeWorker },
+      async (socket) => {
+        const a = await ask(socket, "a");
+        await sleep(200);
+        assert.notStrictEqual((await ask(socket, "b")).pid, a.pid);
+      }
+    );
+    await withBroker(
+      { jobs: WORKER({ maxAgeSeconds: 0 }), script: fakeWorker },
+      async (socket) => {
+        const a = await ask(socket, "a");
+        assert.notStrictEqual((await ask(socket, "b")).pid, a.pid);
+      }
+    );
+  });
+
+  test("broker: a worker's input over the limit is input-too-large, and the worker is replaced", async () => {
+    await withBroker(
+      { jobs: WORKER({ heavyInputBytes: 1e6 }), script: fakeWorker },
+      async (socket) => {
+        const before = await ask(socket, "x");
+        assert.deepStrictEqual(await ask(socket, "x".repeat(2000)), {
+          ok: false,
+          error: "input-too-large",
+        });
+        assert.notStrictEqual((await ask(socket, "y")).pid, before.pid);
+      }
+    );
+  });
+
+  test("broker: the socket is 0660 and a stale one is replaced", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-broker-"));
+    const socket = path.join(directory, "sub", "broker.sock");
+    fs.mkdirSync(path.dirname(socket));
+    fs.writeFileSync(socket, "stale");
+    const broker = createBroker({ socket, jobs: JOBS(), log: () => {} });
+    try {
+      await broker.listen();
+      assert.strictEqual(fs.statSync(socket).mode & 0o777, 0o660);
+      assert.strictEqual(fs.statSync(path.dirname(socket)).mode & 0o777, 0o710);
+    } finally {
+      broker.close();
+      fs.rmSync(directory, { recursive: true, force: true });
     }
   });
-});
-
-test("broker: a worker is retired after its requests, its age, a heavy request or time idle", async () => {
-  await withBroker({ jobs: WORKER({ requests: 2 }), script: fakeWorker }, async (socket) => {
-    const a = await ask(socket, "a");
-    assert.strictEqual((await ask(socket, "b")).pid, a.pid);
-    assert.notStrictEqual((await ask(socket, "c")).pid, a.pid);
-  });
-  await withBroker({ jobs: WORKER(), script: fakeWorker }, async (socket) => {
-    const a = await ask(socket, "x".repeat(600));
-    assert.notStrictEqual((await ask(socket, "b")).pid, a.pid);
-  });
-  await withBroker({ jobs: WORKER({ idleSeconds: 0.05 }), script: fakeWorker }, async (socket) => {
-    const a = await ask(socket, "a");
-    await sleep(200);
-    assert.notStrictEqual((await ask(socket, "b")).pid, a.pid);
-  });
-  await withBroker({ jobs: WORKER({ maxAgeSeconds: 0 }), script: fakeWorker }, async (socket) => {
-    const a = await ask(socket, "a");
-    assert.notStrictEqual((await ask(socket, "b")).pid, a.pid);
-  });
-});
-
-test("broker: a worker's input over the limit is input-too-large, and the worker is replaced", async () => {
-  await withBroker({ jobs: WORKER({ heavyInputBytes: 1e6 }), script: fakeWorker }, async (socket) => {
-    const before = await ask(socket, "x");
-    assert.deepStrictEqual(await ask(socket, "x".repeat(2000)), { ok: false, error: "input-too-large" });
-    assert.notStrictEqual((await ask(socket, "y")).pid, before.pid);
-  });
-});
-
-test("broker: the socket is 0660 and a stale one is replaced", async () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-broker-"));
-  const socket = path.join(directory, "sub", "broker.sock");
-  fs.mkdirSync(path.dirname(socket));
-  fs.writeFileSync(socket, "stale");
-  const broker = createBroker({ socket, jobs: JOBS(), log: () => {} });
-  try {
-    await broker.listen();
-    assert.strictEqual(fs.statSync(socket).mode & 0o777, 0o660);
-    assert.strictEqual(fs.statSync(path.dirname(socket)).mode & 0o777, 0o710);
-  } finally {
-    broker.close();
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
-});
-
 });

@@ -158,7 +158,13 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
 /**
  * Find an empty shared folder that can be used for syncing.
  */
-async function findEmptySharedFolder(blogID, drive, email, status, serviceAccountId) {
+async function findEmptySharedFolder(
+  blogID,
+  drive,
+  email,
+  status,
+  serviceAccountId
+) {
   // Get all shared folders owned by email that aren't already in use
   const existingFolderIDs = await getExistingFolderIDs(email);
   const availableFolders = await getAvailableFolders(
@@ -217,8 +223,9 @@ async function getAvailableFolders(drive, email, existingIDs) {
       supportsAllDrives: true,
       corpora: "allDrives",
       includeItemsFromAllDrives: true,
-      orderBy: 'sharedWithMeTime desc',
-      fields: "nextPageToken, files(id, name, parents, kind, mimeType, owners, sharingUser(emailAddress))",
+      orderBy: "sharedWithMeTime desc",
+      fields:
+        "nextPageToken, files(id, name, parents, kind, mimeType, owners, sharingUser(emailAddress))",
       q: `trashed = false and 
           sharedWithMe = true and 
           mimeType = 'application/vnd.google-apps.folder'`,
@@ -228,14 +235,26 @@ async function getAvailableFolders(drive, email, existingIDs) {
     pageToken = res.data.nextPageToken || null;
   } while (pageToken);
 
-  console.log(clfdate(), 'Google Drive Client', 'getAvailableFolders:', allFiles.length);
+  console.log(
+    clfdate(),
+    "Google Drive Client",
+    "getAvailableFolders:",
+    allFiles.length
+  );
 
   // filter out folders whose sharingUser is not the same as the email, or whose owners do not include the email
   const filteredFolders = allFiles.filter(
-    (file) => file.sharingUser?.emailAddress === email || file.owners && file.owners.some(owner => owner.emailAddress === email)
+    (file) =>
+      file.sharingUser?.emailAddress === email ||
+      (file.owners && file.owners.some((owner) => owner.emailAddress === email))
   );
 
-  console.log(clfdate(), 'Google Drive Client', 'filteredFolders:', filteredFolders.length);
+  console.log(
+    clfdate(),
+    "Google Drive Client",
+    "filteredFolders:",
+    filteredFolders.length
+  );
 
   // filter out folders already in use
   // and folders with a defined (non-undefined) parents array
@@ -245,12 +264,24 @@ async function getAvailableFolders(drive, email, existingIDs) {
     (file) => !existingIDs.includes(file.id) && !file.parents
   );
 
-  console.log(clfdate(), 'Google Drive Client', 'filteredFoldersNotInUse:', filteredFoldersNotInUse.length);
+  console.log(
+    clfdate(),
+    "Google Drive Client",
+    "filteredFoldersNotInUse:",
+    filteredFoldersNotInUse.length
+  );
 
   return filteredFoldersNotInUse;
 }
 
-async function processFolder(folder, drive, blogID, status, isLastFolder, serviceAccountId) {
+async function processFolder(
+  folder,
+  drive,
+  blogID,
+  status,
+  isLastFolder,
+  serviceAccountId
+) {
   // Check folder contents
   const folderContents = await drive.files.list({
     supportsAllDrives: true,
@@ -329,7 +360,9 @@ async function checkEditorPermissions(drive, folderId, serviceAccountId) {
       (perm) =>
         perm.type === "user" &&
         perm.emailAddress === serviceAccountEmail &&
-        (perm.role === "writer" || perm.role === "fileOrganizer" || perm.role === "organizer")
+        (perm.role === "writer" ||
+          perm.role === "fileOrganizer" ||
+          perm.role === "organizer")
     );
   } catch (e) {
     console.error(

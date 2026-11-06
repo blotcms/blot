@@ -30,7 +30,9 @@ async function watch(blogID, dir) {
 
   async function processBatch(paths) {
     const blog = await new Promise((resolve, reject) => {
-      Blog.get({ id: blogID }, (err, blog) => (err ? reject(err) : resolve(blog)));
+      Blog.get({ id: blogID }, (err, blog) =>
+        err ? reject(err) : resolve(blog)
+      );
     });
 
     if (!blog || blog.client !== "local") return close();
@@ -44,7 +46,14 @@ async function watch(blogID, dir) {
       require("./setup")
         .reconcileSource(blogID)
         .then((newDir) => watch(blogID, newDir))
-        .catch((err) => console.error(prefix(), "Unable to move to the new source directory", blogID, err));
+        .catch((err) =>
+          console.error(
+            prefix(),
+            "Unable to move to the new source directory",
+            blogID,
+            err
+          )
+        );
       return;
     }
 

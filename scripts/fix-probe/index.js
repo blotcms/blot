@@ -21,6 +21,7 @@ const { UNIT } = require("../deploy/constants");
 const DEFAULTS = { memory: "2g", oldSpace: UNIT.nodeBMaxOldSpaceSize, cpus: 1 };
 
 // --out is the launcher's: results always come back to data/fix-probe.
+
 const { out, ...probeOptions } = PROBE_OPTIONS;
 
 function usage() {
@@ -38,13 +39,15 @@ ${formatOptions(WRAPPER_OPTIONS)}`);
 
 async function main() {
   const argv = process.argv.slice(2);
-  if (!argv.length || argv.includes("--help") || argv.includes("-h")) return usage();
+  if (!argv.length || argv.includes("--help") || argv.includes("-h"))
+    return usage();
 
   const { options, rest } = parseArgs(argv, WRAPPER_OPTIONS, { strict: false });
   // Catch a typo here rather than in a container on production.
   const parsed = parseArgs(rest, probeOptions);
   checkOptions(parsed.options);
-  if (parsed.rest.length !== 1) throw new Error("Pass one blog: its ID, handle or domain");
+  if (parsed.rest.length !== 1)
+    throw new Error("Pass one blog: its ID, handle or domain");
 
   const { exitCode } = await runProbe({
     tool: "fix-probe",

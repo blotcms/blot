@@ -33,7 +33,10 @@ function main() {
   // build_* metrics.
   const excludePhaseArg = arg("--exclude-phase");
   const excludePhases = excludePhaseArg
-    ? excludePhaseArg.split(",").map((s) => s.trim()).filter(Boolean)
+    ? excludePhaseArg
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
     : [];
 
   if (!resultFile || !fs.existsSync(resultFile)) {
@@ -55,11 +58,15 @@ function main() {
   // Idempotency: don't double-append if the same commit re-runs.
   const history = loadHistory(historyDir, arch);
   if (record.git_sha && history.some((r) => r.git_sha === record.git_sha)) {
-    console.log(`[history] ${arch}: ${record.git_sha} already recorded; skipping append.`);
+    console.log(
+      `[history] ${arch}: ${record.git_sha} already recorded; skipping append.`
+    );
   } else {
     appendRecord(historyDir, arch, record);
     history.push(record);
-    console.log(`[history] ${arch}: appended ${record.git_sha} (${history.length} total).`);
+    console.log(
+      `[history] ${arch}: appended ${record.git_sha} (${history.length} total).`
+    );
   }
 
   const baseline = computeBaseline(history, {

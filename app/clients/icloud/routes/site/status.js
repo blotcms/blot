@@ -35,26 +35,30 @@ const MAX_REASON_LENGTH = 500;
 // shape syncReport.send expects, adding the macserver's reason: its own
 // description of what failed (eg. "upload for Posts/x.md failed after
 // retries"), which older macserver versions don't send.
-const resyncReportSender = (blogID, reason) => async (err, locals, callback) => {
-  let result;
+const resyncReportSender =
+  (blogID, reason) => async (err, locals, callback) => {
+    let result;
 
-  try {
-    result = await notifyResyncRequested(blogID, () =>
-      email.ICLOUD_RESYNC_ISSUE(null, Object.assign({}, locals, { reason }), callback)
-    );
-  } catch (e) {
-    // syncReport logs the failure and won't remember the issue as reported
-    return callback(e);
-  }
+    try {
+      result = await notifyResyncRequested(blogID, () =>
+        email.ICLOUD_RESYNC_ISSUE(
+          null,
+          Object.assign({}, locals, { reason }),
+          callback
+        )
+      );
+    } catch (e) {
+      // syncReport logs the failure and won't remember the issue as reported
+      return callback(e);
+    }
 
-  if (result === "suppressed") {
-    console.log("Resync report suppressed", { blogID });
-    callback();
-  }
-};
+    if (result === "suppressed") {
+      console.log("Resync report suppressed", { blogID });
+      callback();
+    }
+  };
 
 module.exports = async function (req, res) {
-
   const blogID = req.header("blogID");
   const status = req.body;
 
@@ -63,7 +67,7 @@ module.exports = async function (req, res) {
     if (!res.headersSent) {
       res.status(500).send("Internal Server Error");
     }
-  }
+  };
 
   if (!blogID || !status) {
     return res.status(400).send("Missing blogID or status");
@@ -79,7 +83,6 @@ module.exports = async function (req, res) {
   try {
     // store the status in the database
     await database.store(blogID, accountStatus);
-
   } catch (err) {
     return handle("Failed to store status in database", err);
   }
@@ -157,9 +160,12 @@ module.exports = async function (req, res) {
         }
 
         if (!blog || blog.isDisabled || blog.client !== "icloud") {
-          console.log("Resync skipped: blog is gone, disabled or not on iCloud", {
-            blogID,
-          });
+          console.log(
+            "Resync skipped: blog is gone, disabled or not on iCloud",
+            {
+              blogID,
+            }
+          );
           return res.send("ok");
         }
 
@@ -175,12 +181,11 @@ module.exports = async function (req, res) {
         folder.status("Resync requested");
         console.log("Resync requested from iCloud", { blogID, reason });
 
-
         const report = syncReport.create();
 
         // Since we treat the iCloud folder as the source of truth,
         // there is the risk that files added to Blot's folder (e.g. preview files)
-        // or template files which were edited online will be clobbered. 
+        // or template files which were edited online will be clobbered.
         // in in future, we might be able to implement a system to merge
         // but for now we'll just sync down from iCloud.
         //
@@ -199,9 +204,14 @@ module.exports = async function (req, res) {
         // only because of it, Fix() repairs, or a phase that failed. No
         // `client`: that would make send() replace the hourly sweep's
         // memory of what it already reported with just this blog's.
-        await syncReport.send(report, resyncReportSender(blogID, reason), "iCloud:", {
-          getHealth,
-        });
+        await syncReport.send(
+          report,
+          resyncReportSender(blogID, reason),
+          "iCloud:",
+          {
+            getHealth,
+          }
+        );
       } finally {
         dedupEntry.inFlight = false;
         if (dedupEntry.cleanupTimeout) {
@@ -303,7 +313,7 @@ module.exports = async function (req, res) {
       try {
         folder.status("Sync update from iCloud");
         console.log("Sync update from iCloud", status);
-        folder.status("Sync complete");  
+        folder.status("Sync complete");
       } finally {
         await done();
       }

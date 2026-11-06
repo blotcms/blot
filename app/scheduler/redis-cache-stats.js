@@ -1,7 +1,6 @@
 const clfdate = require("helper/clfdate");
 const redisClient = require("models/client");
-const getClientSideCacheStats =
-  require("models/redis").getClientSideCacheStats;
+const getClientSideCacheStats = require("models/redis").getClientSideCacheStats;
 
 // The server's side of client-side caching: keys it tracks for any client.
 // Redis keeps keys for clients which have since disconnected until they are

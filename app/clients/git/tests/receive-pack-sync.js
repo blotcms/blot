@@ -63,7 +63,9 @@ describe("git client push and the sync", function () {
 
     expect(syncs.calls.count()).toBe(1);
     expect(await client.zScore(ALARM, this.blog.id)).toBe(null);
-    expect([await local.head(), await other.head()]).toContain(await local.remoteHead());
+    expect([await local.head(), await other.head()]).toContain(
+      await local.remoteHead()
+    );
   });
 
   it("writes the follow-up before the client is told, and takes it back once synced", async function () {
@@ -111,7 +113,8 @@ describe("git client push and the sync", function () {
 
     // Only the follow-up is written with a transaction on the way to "ok"
     spyOn(client, "multi").and.callFake(function () {
-      if (/helper\/alarm\.js/.test(new Error().stack)) throw new Error("Redis is down");
+      if (/helper\/alarm\.js/.test(new Error().stack))
+        throw new Error("Redis is down");
       return multi.apply(client, arguments);
     });
 
@@ -131,11 +134,16 @@ describe("git client push and the sync", function () {
 
   it("makes Blot's own write wait while the refs are locked", async function () {
     var local = this.local;
-    var held = await lock("blog:" + this.blog.id + ":git:ref-lock", { ttl: 10000, heartbeat: 3000 });
-    var written = false;
-    var writing = write(this.blog.id, "/from-blot.txt", "From Blot").then(function () {
-      written = true;
+    var held = await lock("blog:" + this.blog.id + ":git:ref-lock", {
+      ttl: 10000,
+      heartbeat: 3000,
     });
+    var written = false;
+    var writing = write(this.blog.id, "/from-blot.txt", "From Blot").then(
+      function () {
+        written = true;
+      }
+    );
 
     await sleep(1000);
 
@@ -152,7 +160,10 @@ describe("git client push and the sync", function () {
 
   it("makes a user's push wait while the refs are locked, then applies it", async function () {
     var local = this.local;
-    var held = await lock("blog:" + this.blog.id + ":git:ref-lock", { ttl: 10000, heartbeat: 3000 });
+    var held = await lock("blog:" + this.blog.id + ":git:ref-lock", {
+      ttl: 10000,
+      heartbeat: 3000,
+    });
     var pushed = false;
 
     await local.commitFiles({ "/from-user.txt": "From the user" });
@@ -173,24 +184,35 @@ describe("git client push and the sync", function () {
 
     await local.waitForSync();
 
-    expect(await helpers.blogFile(this, "/from-user.txt")).toEqual(Buffer.from("From the user"));
+    expect(await helpers.blogFile(this, "/from-user.txt")).toEqual(
+      Buffer.from("From the user")
+    );
     await local.expectSynced();
   });
 
-  it("gives up with a message if the refs stay locked", async function () {
-    var local = this.local;
-    var held = await lock("blog:" + this.blog.id + ":git:ref-lock", { ttl: 30000, heartbeat: 10000 });
+  it(
+    "gives up with a message if the refs stay locked",
+    async function () {
+      var local = this.local;
+      var held = await lock("blog:" + this.blog.id + ":git:ref-lock", {
+        ttl: 30000,
+        heartbeat: 10000,
+      });
 
-    await local.commitFiles({ "/locked-out.txt": "Locked out" });
+      await local.commitFiles({ "/locked-out.txt": "Locked out" });
 
-    try {
-      var refused = await local.tryPush();
+      try {
+        var refused = await local.tryPush();
 
-      expect(refused.code).not.toBe(0);
-      expect(refused.stderr).toContain("another change to this repository is being applied");
-      expect(await local.remoteHead()).not.toBe(await local.head());
-    } finally {
-      await held.release();
-    }
-  }, 50 * 1000);
+        expect(refused.code).not.toBe(0);
+        expect(refused.stderr).toContain(
+          "another change to this repository is being applied"
+        );
+        expect(await local.remoteHead()).not.toBe(await local.head());
+      } finally {
+        await held.release();
+      }
+    },
+    50 * 1000
+  );
 });

@@ -39,10 +39,10 @@ var DECLARATION = {
 
 var MODEL = { TYPE: {}, PUBLIC: [], WRITEABLE: [] };
 
-for (var i in DECLARATION) MODEL.TYPE[i] = DECLARATION[i][0];
+for (const i in DECLARATION) MODEL.TYPE[i] = DECLARATION[i][0];
 
-for (var i in DECLARATION) if (DECLARATION[i][1]) MODEL.WRITEABLE.push(i);
+for (const i in DECLARATION) if (DECLARATION[i][1]) MODEL.WRITEABLE.push(i);
 
-for (var i in DECLARATION) if (DECLARATION[i][2]) MODEL.PUBLIC.push(i);
+for (const i in DECLARATION) if (DECLARATION[i][2]) MODEL.PUBLIC.push(i);
 
 module.exports = MODEL;

@@ -46,7 +46,10 @@ describe("removal", function () {
         },
       };
       var startedAt = now - ONE_MONTH_MS * 2 - 86400000;
-      var candidate = removal.removalCandidate(user, overdueFor(user, startedAt));
+      var candidate = removal.removalCandidate(
+        user,
+        overdueFor(user, startedAt)
+      );
       expect(candidate.reason).toEqual("overdue");
     });
 
@@ -58,7 +61,9 @@ describe("removal", function () {
         },
       };
       var startedAt = now - ONE_MONTH_MS - 86400000;
-      expect(removal.removalCandidate(user, overdueFor(user, startedAt))).toBeNull();
+      expect(
+        removal.removalCandidate(user, overdueFor(user, startedAt))
+      ).toBeNull();
     });
 
     it("returns null for a paused subscription even deep in the deletion flow", function () {
@@ -70,7 +75,9 @@ describe("removal", function () {
         },
       };
       var startedAt = now - ONE_MONTH_MS * 2 - 86400000;
-      expect(removal.removalCandidate(user, overdueFor(user, startedAt))).toBeNull();
+      expect(
+        removal.removalCandidate(user, overdueFor(user, startedAt))
+      ).toBeNull();
     });
 
     it("returns null for a paused, cancelled subscription past its grace period", function () {

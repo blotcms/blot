@@ -24,9 +24,7 @@ module.exports = function getPopular(blogID, options, callback) {
   if (options.offset !== undefined) ensure(options.offset, "number");
 
   var limit =
-    options.limit !== undefined
-      ? Math.max(0, Math.floor(options.limit))
-      : 10;
+    options.limit !== undefined ? Math.max(0, Math.floor(options.limit)) : 10;
   var offset =
     options.offset !== undefined ? Math.max(0, Math.floor(options.offset)) : 0;
 
@@ -43,9 +41,14 @@ module.exports = function getPopular(blogID, options, callback) {
       var start = offset;
       var stop = offset + limit - 1;
 
-      const tagScores = await client.zRangeWithScores(popularityKey, start, stop, {
-        REV: true,
-      });
+      const tagScores = await client.zRangeWithScores(
+        popularityKey,
+        start,
+        stop,
+        {
+          REV: true,
+        }
+      );
 
       if (!tagScores || tagScores.length === 0) {
         return callback(null, []);

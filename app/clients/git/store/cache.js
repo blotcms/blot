@@ -102,7 +102,6 @@ const DEFAULTS = {
   diskSlackPercent: 1,
 };
 
-
 const MAX_TOUCHED = 65536;
 
 let sequence = 0;
@@ -124,17 +123,29 @@ function header(length) {
 
 function encode(data) {
   const table = Buffer.alloc(4 * blocksOf(data.length));
-  for (let b = 0; b * BLOCK < data.length; b++) table.writeUInt32BE(zlib.crc32(data.subarray(b * BLOCK, (b + 1) * BLOCK)), 4 * b);
+  for (let b = 0; b * BLOCK < data.length; b++)
+    table.writeUInt32BE(
+      zlib.crc32(data.subarray(b * BLOCK, (b + 1) * BLOCK)),
+      4 * b
+    );
   return Buffer.concat([header(data.length), table, data]);
 }
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs.statfs(where), ...options }) {
-  if (!dir || !(maxBytes > 0)) throw new Error("createCache needs a dir and a positive maxBytes");
+function createCache({
+  dir,
+  maxBytes,
+  minFreePercent = 0,
+  statfs = (where) => fs.statfs(where),
+  ...options
+}) {
+  if (!dir || !(maxBytes > 0))
+    throw new Error("createCache needs a dir and a positive maxBytes");
   const o = { ...DEFAULTS, ...options };
 
-  const id = Date.now().toString(36) + "-" + crypto.randomBytes(4).toString("hex");
+  const id =
+    Date.now().toString(36) + "-" + crypto.randomBytes(4).toString("hex");
   const entriesDir = path.join(dir, "entries");
   const procsDir = path.join(dir, "procs");
   const locksDir = path.join(dir, "locks");
@@ -145,9 +156,17 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   const ownFile = path.join(procsDir, id + ".json");
 
   const entryPath = (name) => path.join(entriesDir, name.slice(0, 2), name);
-  const tmpPath = (name) => path.join(tmpRoot, id + "." + name + "." + ++sequence);
+  const tmpPath = (name) =>
+    path.join(tmpRoot, id + "." + name + "." + ++sequence);
 
-  const counters = { hits: 0, misses: 0, evictions: 0, corrupt: 0, walks: 0, declined: 0 };
+  const counters = {
+    hits: 0,
+    misses: 0,
+    evictions: 0,
+    corrupt: 0,
+    walks: 0,
+    declined: 0,
+  };
 
   // This process: what it has reserved, what it is writing, every byte it has
   // ever written (a counter which only grows), and when it last touched each
@@ -169,7 +188,8 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
 
   // ---- What this process publishes ------------------------------------
 
-  const sinceWalk = (who, total) => Math.max(0, total - ((usage.base && usage.base[who]) || 0));
+  const sinceWalk = (who, total) =>
+    Math.max(0, total - ((usage.base && usage.base[who]) || 0));
 
   async function noteAdded(bytes) {
     addedTotal += bytes;
@@ -199,7 +219,13 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       publishTimer = null;
     }
     publishing = publishing.then(() =>
-      writeJSON(ownFile, { id, pid: process.pid, beat: Date.now(), reserved: reservedBytes + writingBytes, added: addedTotal }).catch(() => {})
+      writeJSON(ownFile, {
+        id,
+        pid: process.pid,
+        beat: Date.now(),
+        reserved: reservedBytes + writingBytes,
+        added: addedTotal,
+      }).catch(() => {})
     );
     return publishing;
   }
@@ -225,13 +251,22 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
     if (!refreshing) {
       refreshing = (async () => {
         const read = await readJSON(usageFile);
-        if (read && Number.isFinite(read.startedAt) && Number.isFinite(read.entryBytes)) usage = { base: {}, ...read };
+        if (
+          read &&
+          Number.isFinite(read.startedAt) &&
+          Number.isFinite(read.entryBytes)
+        )
+          usage = { base: {}, ...read };
 
         const names = await fs.readdir(procsDir).catch(() => []);
         const found = [];
         await mapLimit(names, 16, async (file) => {
-          const other = file.endsWith(".json") && file !== id + ".json" ? await readJSON(path.join(procsDir, file)) : null;
-          if (other && ID.test(other.id) && file === other.id + ".json") found.push(other);
+          const other =
+            file.endsWith(".json") && file !== id + ".json"
+              ? await readJSON(path.join(procsDir, file))
+              : null;
+          if (other && ID.test(other.id) && file === other.id + ".json")
+            found.push(other);
         });
         others = found;
         refreshedAt = Date.now();
@@ -244,7 +279,10 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
 
   function othersReserved() {
     const now = Date.now();
-    return others.reduce((sum, other) => sum + (isLive(other, now) ? other.reserved || 0 : 0), 0);
+    return others.reduce(
+      (sum, other) => sum + (isLive(other, now) ? other.reserved || 0 : 0),
+      0
+    );
   }
 
   // What the entries hold: the last walk's measure and what every process
@@ -253,7 +291,14 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   // twice, never not at all), and what is held by reservations and writes in
   // flight
   function entryEstimate() {
-    return usage.entryBytes + sinceWalk(id, addedTotal) + others.reduce((sum, other) => sum + sinceWalk(other.id, other.added || 0), 0);
+    return (
+      usage.entryBytes +
+      sinceWalk(id, addedTotal) +
+      others.reduce(
+        (sum, other) => sum + sinceWalk(other.id, other.added || 0),
+        0
+      )
+    );
   }
   const heldBytes = () => reservedBytes + writingBytes + othersReserved();
   const estimate = () => entryEstimate() + heldBytes();
@@ -264,13 +309,19 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   let diskReading = null;
   function readDisk(fresh = false) {
     if (!minFreePercent) return Promise.resolve(null);
-    if (!fresh && disk && Date.now() - disk.at < o.refreshMs) return Promise.resolve(disk);
+    if (!fresh && disk && Date.now() - disk.at < o.refreshMs)
+      return Promise.resolve(disk);
     if (!diskReading) {
       diskReading = Promise.resolve()
         .then(() => statfs(dir))
         .then((found) => {
           const total = Number(found.blocks) * Number(found.bsize);
-          disk = { at: Date.now(), free: Number(found.bavail) * Number(found.bsize), total, floor: (total * minFreePercent) / 100 };
+          disk = {
+            at: Date.now(),
+            free: Number(found.bavail) * Number(found.bsize),
+            total,
+            floor: (total * minFreePercent) / 100,
+          };
           return disk;
         })
         .catch(() => null)
@@ -282,12 +333,19 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   // ---- Opening ------------------------------------------------------------
 
   async function open() {
-    await Promise.all([entriesDir, procsDir, locksDir, tmpRoot].map((d) => fs.mkdir(d, { recursive: true })));
+    await Promise.all(
+      [entriesDir, procsDir, locksDir, tmpRoot].map((d) =>
+        fs.mkdir(d, { recursive: true })
+      )
+    );
     await refresh();
     await publishNow();
 
     const heartbeat = setInterval(publishNow, o.heartbeatMs);
-    const due = setInterval(() => Date.now() - usage.at > o.walkEveryMs && requestWalk(), Math.max(1000, Math.floor(o.walkEveryMs / 6)));
+    const due = setInterval(
+      () => Date.now() - usage.at > o.walkEveryMs && requestWalk(),
+      Math.max(1000, Math.floor(o.walkEveryMs / 6))
+    );
     timers.push(heartbeat, due);
     timers.forEach((t) => t.unref());
 
@@ -325,9 +383,19 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       const head = Buffer.alloc(HEADER);
       const { bytesRead } = await handle.read(head, 0, HEADER, 0);
       const { size } = await handle.stat();
-      if (bytesRead === HEADER && head.subarray(0, 4).equals(MAGIC) && head.readUInt32BE(4) === BLOCK) {
+      if (
+        bytesRead === HEADER &&
+        head.subarray(0, 4).equals(MAGIC) &&
+        head.readUInt32BE(4) === BLOCK
+      ) {
         const length = Number(head.readBigUInt64BE(8));
-        if (Number.isSafeInteger(length) && size === entrySize(length)) return { handle, length, dataStart: HEADER + 4 * blocksOf(length), file };
+        if (Number.isSafeInteger(length) && size === entrySize(length))
+          return {
+            handle,
+            length,
+            dataStart: HEADER + 4 * blocksOf(length),
+            file,
+          };
       }
     } catch (err) {
       // a read error is damage too
@@ -359,11 +427,16 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       entry.handle.read(table, 0, table.length, HEADER + 4 * first),
       entry.handle.read(data, 0, data.length, entry.dataStart + from),
     ]);
-    if (t.bytesRead !== table.length || d.bytesRead !== data.length) return null;
+    if (t.bytesRead !== table.length || d.bytesRead !== data.length)
+      return null;
 
     for (let b = first; b <= last; b++) {
-      const block = data.subarray((b - first) * BLOCK, Math.min(data.length, (b - first + 1) * BLOCK));
-      if (zlib.crc32(block) !== table.readUInt32BE(4 * (b - first))) return null;
+      const block = data.subarray(
+        (b - first) * BLOCK,
+        Math.min(data.length, (b - first + 1) * BLOCK)
+      );
+      if (zlib.crc32(block) !== table.readUInt32BE(4 * (b - first)))
+        return null;
     }
     return data.subarray(offset - from, end - from);
   }
@@ -389,7 +462,7 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       return null;
     }
 
-    let data = null;
+    let data;
     try {
       data = await fn(entry);
     } catch (err) {
@@ -412,7 +485,9 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   // The data under `key`, or null. With maxBytes, an entry bigger than that
   // is not read (and is not a miss of the cache's making: it stays).
   function get(key, { maxBytes: most = Infinity } = {}) {
-    return withEntry(key, (entry) => (entry.length > most ? undefined : readBlocks(entry, 0, entry.length)));
+    return withEntry(key, (entry) =>
+      entry.length > most ? undefined : readBlocks(entry, 0, entry.length)
+    );
   }
 
   // Bytes [offset, offset + length) of the data under `key` (short at its
@@ -465,7 +540,10 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
     }
     const space = await readDisk();
 
-    if (estimate() + bytes > maxBytes || (space && space.free - heldBytes() - bytes < space.floor)) {
+    if (
+      estimate() + bytes > maxBytes ||
+      (space && space.free - heldBytes() - bytes < space.floor)
+    ) {
       counters.declined++;
       requestWalk();
       return false;
@@ -502,7 +580,11 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       await fs.writeFile(tmp, encode(data));
       await fs.rename(tmp, entryPath(name));
     } catch (err) {
-      await Promise.all([tmp, entryPath(name)].map((file) => fs.rm(file, { force: true }).catch(() => {})));
+      await Promise.all(
+        [tmp, entryPath(name)].map((file) =>
+          fs.rm(file, { force: true }).catch(() => {})
+        )
+      );
       await finishWrite(bytes, false);
       return false;
     }
@@ -517,7 +599,8 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   // gave more or fewer bytes or failed. A Readable source is destroyed if it
   // is not read to its end.
   async function putStream(key, source, length) {
-    const give = () => source && typeof source.destroy === "function" && source.destroy();
+    const give = () =>
+      source && typeof source.destroy === "function" && source.destroy();
     if (!(await ready) || !Number.isSafeInteger(length) || length < 0) {
       give();
       return false;
@@ -543,8 +626,9 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
 
       for await (const raw of source) {
         const chunk = Buffer.isBuffer(raw) ? raw : Buffer.from(raw);
-        if (written + chunk.length > length) throw new Error("The source is longer than " + length + " bytes");
-        for (let at = 0; at < chunk.length; ) {
+        if (written + chunk.length > length)
+          throw new Error("The source is longer than " + length + " bytes");
+        for (let at = 0; at < chunk.length;) {
           const position = written + at;
           const n = Math.min(BLOCK - (position % BLOCK), chunk.length - at);
           crc = zlib.crc32(chunk.subarray(at, at + n), crc);
@@ -557,7 +641,10 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
         await handle.write(chunk, 0, chunk.length, dataStart + written);
         written += chunk.length;
       }
-      if (written !== length) throw new Error("The source gave " + written + " of " + length + " bytes");
+      if (written !== length)
+        throw new Error(
+          "The source gave " + written + " of " + length + " bytes"
+        );
 
       await handle.write(header(length), 0, HEADER, 0);
       if (table.length) await handle.write(table, 0, table.length, HEADER);
@@ -567,7 +654,11 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
     } catch (err) {
       give();
       if (handle) await handle.close().catch(() => {});
-      await Promise.all([tmp, entryPath(name)].map((file) => fs.rm(file, { force: true }).catch(() => {})));
+      await Promise.all(
+        [tmp, entryPath(name)].map((file) =>
+          fs.rm(file, { force: true }).catch(() => {})
+        )
+      );
       await finishWrite(bytes, false);
       return false;
     }
@@ -596,7 +687,10 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
 
     const reservation = {
       bytes,
-      dir: path.join(scratchRoot, id + "." + ++sequence + "-" + crypto.randomBytes(4).toString("hex")),
+      dir: path.join(
+        scratchRoot,
+        id + "." + ++sequence + "-" + crypto.randomBytes(4).toString("hex")
+      ),
       released: false,
     };
 
@@ -619,7 +713,10 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
     // a while and no longer does (the scratch files of a delta being expanded)
     reservation.shrink = function shrink(less) {
       if (reservation.released) return;
-      if (!(less >= 0) || less > reservation.bytes) throw new Error("Cannot give back " + less + " of " + reservation.bytes + " bytes");
+      if (!(less >= 0) || less > reservation.bytes)
+        throw new Error(
+          "Cannot give back " + less + " of " + reservation.bytes + " bytes"
+        );
       reservedBytes -= less;
       reservation.bytes -= less;
       publishSoon();
@@ -655,13 +752,25 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
     if (taken.reason === "disk") {
       requestWalk();
       throw new NoRoomError(
-        "Not enough room for " + bytes + " bytes of scratch space: the disk has " + Math.max(0, Math.floor(taken.space.free)) +
-          " bytes free, " + taken.outstanding + " of them promised to work in flight, and keeps " + minFreePercent + "% of it free"
+        "Not enough room for " +
+          bytes +
+          " bytes of scratch space: the disk has " +
+          Math.max(0, Math.floor(taken.space.free)) +
+          " bytes free, " +
+          taken.outstanding +
+          " of them promised to work in flight, and keeps " +
+          minFreePercent +
+          "% of it free"
       );
     }
     throw new NoRoomError(
-      "Not enough room for " + bytes + " bytes of scratch space: the cache holds " + maxBytes +
-        " bytes and " + taken.outstanding + " are in use by pushes and writes in flight"
+      "Not enough room for " +
+        bytes +
+        " bytes of scratch space: the cache holds " +
+        maxBytes +
+        " bytes and " +
+        taken.outstanding +
+        " are in use by pushes and writes in flight"
     );
   }
 
@@ -683,7 +792,8 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   // Resolves { ok } or { ok: false, reason: "budget" | "disk", outstanding,
   // space }; when ok, `bytes` stays added to reservedBytes or writingBytes.
   async function take(bytes, kind) {
-    const add = (n) => (kind === "write" ? (writingBytes += n) : (reservedBytes += n));
+    const add = (n) =>
+      kind === "write" ? (writingBytes += n) : (reservedBytes += n);
 
     for (let attempt = 0; ; attempt++) {
       add(bytes);
@@ -698,12 +808,19 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
 
       add(-bytes);
       publishSoon();
-      const failed = { ok: false, reason: diskShort ? "disk" : "budget", outstanding: outstanding - bytes, space };
+      const failed = {
+        ok: false,
+        reason: diskShort ? "disk" : "budget",
+        outstanding: outstanding - bytes,
+        space,
+      };
 
       // Would fit but for the others' claims, which may be withdrawn ones
       // racing this one
       const others = othersReserved();
-      const fitsAlone = total - others <= maxBytes && (!space || space.free - (outstanding - others) >= space.floor);
+      const fitsAlone =
+        total - others <= maxBytes &&
+        (!space || space.free - (outstanding - others) >= space.floor);
       if (attempt < 2 && others > 0 && fitsAlone) {
         await sleep(5 + Math.random() * 45);
         continue;
@@ -730,13 +847,16 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
         return {
           refresh: () => {
             const seconds = Date.now() / 1000;
-            return released ? Promise.resolve() : fs.utimes(file, seconds, seconds).catch(() => {});
+            return released
+              ? Promise.resolve()
+              : fs.utimes(file, seconds, seconds).catch(() => {});
           },
           release: async () => {
             if (released) return;
             released = true;
             const owner = await fs.readFile(file, "utf8").catch(() => null);
-            if (owner === id) await fs.rm(file, { force: true }).catch(() => {});
+            if (owner === id)
+              await fs.rm(file, { force: true }).catch(() => {});
           },
         };
       } catch (err) {
@@ -758,7 +878,9 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
 
   async function writeNote(name, value) {
     if (!(await ready)) return;
-    await writeJSON(path.join(dir, "note-" + name + ".json"), value).catch(() => {});
+    await writeJSON(path.join(dir, "note-" + name + ".json"), value).catch(
+      () => {}
+    );
   }
 
   // ---- Walking --------------------------------------------------------------
@@ -777,9 +899,16 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
   // above its floor
   async function excessOf(entryBytes) {
     const held = heldBytes();
-    let excess = entryBytes + held > o.highWater * maxBytes ? entryBytes + held - o.lowWater * maxBytes : 0;
+    let excess =
+      entryBytes + held > o.highWater * maxBytes
+        ? entryBytes + held - o.lowWater * maxBytes
+        : 0;
     const space = await readDisk(true);
-    if (space && space.free < space.floor) excess = Math.max(excess, space.floor - space.free + (space.total * o.diskSlackPercent) / 100);
+    if (space && space.free < space.floor)
+      excess = Math.max(
+        excess,
+        space.floor - space.free + (space.total * o.diskSlackPercent) / 100
+      );
     return Math.max(0, Math.ceil(excess));
   }
 
@@ -790,7 +919,8 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
     let sum = 0;
     for (const bucket of [...histogram.keys()].sort((a, b) => a - b)) {
       const bytes = histogram.get(bucket);
-      if (sum + bytes >= excess) return { cutoff: bucket, boundary: excess - sum };
+      if (sum + bytes >= excess)
+        return { cutoff: bucket, boundary: excess - sum };
       sum += bytes;
     }
     return { cutoff: Infinity, boundary: 0 };
@@ -827,7 +957,10 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
         const bucket = Math.floor(stat.mtimeMs / o.bucketMs);
         const doomed =
           all ||
-          (plan && stat.mtimeMs < startedAt && (bucket < plan.cutoff || (bucket === plan.cutoff && boundaryFreed < plan.boundary)));
+          (plan &&
+            stat.mtimeMs < startedAt &&
+            (bucket < plan.cutoff ||
+              (bucket === plan.cutoff && boundaryFreed < plan.boundary)));
         if (doomed) {
           if (bucket === (plan && plan.cutoff)) boundaryFreed += stat.size;
           await fs.unlink(file).then(
@@ -855,7 +988,10 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
       const held = await lock("walk", { staleMs: o.walkLockStaleMs });
       if (!held) return { walked: false };
 
-      const beat = setInterval(held.refresh, Math.max(10, Math.floor(o.walkLockStaleMs / 4)));
+      const beat = setInterval(
+        held.refresh,
+        Math.max(10, Math.floor(o.walkLockStaleMs / 4))
+      );
       beat.unref();
       try {
         await publishNow();
@@ -871,15 +1007,23 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
         // The last walk's histogram can only say how old the oldest entries
         // were (whatever was written since is newer); one which does not hold
         // the excess is not used, and this walk measures first
-        let histogram = usage.bucketMs === o.bucketMs && usage.histogram ? new Map(Object.entries(usage.histogram).map(([k, v]) => [Number(k), v])) : null;
+        let histogram =
+          usage.bucketMs === o.bucketMs && usage.histogram
+            ? new Map(
+                Object.entries(usage.histogram).map(([k, v]) => [Number(k), v])
+              )
+            : null;
         let fresh = false;
         let measured = null;
         let freed = 0;
 
         for (let round = 0; round < 3; round++) {
-          const excess = all ? 0 : await excessOf(measured ? measured.entryBytes : entryEstimate());
+          const excess = all
+            ? 0
+            : await excessOf(measured ? measured.entryBytes : entryEstimate());
           if (measured && excess <= 0) break;
-          let plan = excess > 0 && histogram ? planCutoff(histogram, excess) : null;
+          let plan =
+            excess > 0 && histogram ? planCutoff(histogram, excess) : null;
           if (plan && plan.cutoff === Infinity && !fresh) plan = null;
           measured = await pass(plan, startedAt, held, all);
           histogram = measured.histogram;
@@ -889,7 +1033,14 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
         }
 
         const now = Date.now();
-        usage = { startedAt: began, at: now, entryBytes: measured.entryBytes, base, bucketMs: o.bucketMs, histogram: Object.fromEntries(histogram) };
+        usage = {
+          startedAt: began,
+          at: now,
+          entryBytes: measured.entryBytes,
+          base,
+          bucketMs: o.bucketMs,
+          histogram: Object.fromEntries(histogram),
+        };
         await writeJSON(usageFile, usage).catch(() => {});
         await publishNow();
         counters.walks++;
@@ -923,12 +1074,17 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
           const stat = await fs.stat(path.join(root, name)).catch(() => null);
           if (stat && now - stat.mtimeMs < o.staleMs) continue;
         }
-        await fs.rm(path.join(root, name), { recursive: true, force: true }).catch(() => {});
+        await fs
+          .rm(path.join(root, name), { recursive: true, force: true })
+          .catch(() => {});
       }
     }
 
     for (const other of others) {
-      if (!isLive(other, now) && other.beat < startedAt) await fs.rm(path.join(procsDir, other.id + ".json"), { force: true }).catch(() => {});
+      if (!isLive(other, now) && other.beat < startedAt)
+        await fs
+          .rm(path.join(procsDir, other.id + ".json"), { force: true })
+          .catch(() => {});
     }
   }
 
@@ -975,7 +1131,27 @@ function createCache({ dir, maxBytes, minFreePercent = 0, statfs = (where) => fs
     if (walking) await walking.catch(() => {});
   }
 
-  return { ready: () => ready, get, read, size, put, putStream, delete: remove, reserve, lock, readNote, writeNote, walk, settle, stats, clear, close, maxBytes, minFreePercent, id };
+  return {
+    ready: () => ready,
+    get,
+    read,
+    size,
+    put,
+    putStream,
+    delete: remove,
+    reserve,
+    lock,
+    readNote,
+    writeNote,
+    walk,
+    settle,
+    stats,
+    clear,
+    close,
+    maxBytes,
+    minFreePercent,
+    id,
+  };
 }
 
 module.exports = createCache;

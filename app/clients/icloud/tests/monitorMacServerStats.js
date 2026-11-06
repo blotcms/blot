@@ -26,7 +26,9 @@ describe("icloud monitorMacServerStats", function () {
   };
 
   beforeEach(function () {
-    Object.keys(paths).forEach((name) => (originals[name] = require.cache[paths[name]]));
+    Object.keys(paths).forEach(
+      (name) => (originals[name] = require.cache[paths[name]])
+    );
     keys = new Set();
     sent = [];
     response = null;
@@ -47,7 +49,10 @@ describe("icloud monitorMacServerStats", function () {
       if (response instanceof Error) throw response;
       return Buffer.from(JSON.stringify(response ?? null));
     });
-    const record = (name) => (...args) => sent.push(name);
+    const record =
+      (name) =>
+      (...args) =>
+        sent.push(name);
     stub("email", {
       ICLOUD_SERVER_DOWN: record("down"),
       ICLOUD_SERVER_RECOVERED: record("recovered"),
@@ -89,7 +94,8 @@ describe("icloud monitorMacServerStats", function () {
   it("emails the warning tier and the quota tier independently", async function () {
     const { check } = require("../util/monitorMacServerStats");
     response = {
-      disk_bytes_available: (config.icloud.diskSpaceLimit + config.icloud.diskSpaceWarning) / 2,
+      disk_bytes_available:
+        (config.icloud.diskSpaceLimit + config.icloud.diskSpaceWarning) / 2,
       icloud_bytes_available: config.icloud.iCloudSpaceLimit / 2,
     };
 

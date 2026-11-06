@@ -63,7 +63,17 @@ function createMemoryStore({ now = Date.now } = {}) {
   const objects = new Map();
   const modified = new Map();
   const id = "memory:" + ++created;
-  const stats = { heads: 0, reads: 0, bytesRead: 0, gets: 0, notModified: 0, puts: 0, putIfAbsents: 0, deletes: 0, lists: 0 };
+  const stats = {
+    heads: 0,
+    reads: 0,
+    bytesRead: 0,
+    gets: 0,
+    notModified: 0,
+    puts: 0,
+    putIfAbsents: 0,
+    deletes: 0,
+    lists: 0,
+  };
 
   function find(key) {
     const object = objects.get(key);
@@ -74,7 +84,9 @@ function createMemoryStore({ now = Date.now } = {}) {
   async function head(key) {
     stats.heads++;
     const object = objects.get(key);
-    return object ? { size: object.length, lastModified: modified.get(key) } : null;
+    return object
+      ? { size: object.length, lastModified: modified.get(key) }
+      : null;
   }
 
   async function read(key, offset, length) {
@@ -96,10 +108,13 @@ function createMemoryStore({ now = Date.now } = {}) {
       stats.notModified++;
       return { notModified: true, etag };
     }
-    if (object.length > maxBytes) throw new TooLargeError(key + " is larger than " + maxBytes);
+    if (object.length > maxBytes)
+      throw new TooLargeError(key + " is larger than " + maxBytes);
     stats.gets++;
     stats.bytesRead += object.length;
-    return conditional ? { bytes: Buffer.from(object), etag } : Buffer.from(object);
+    return conditional
+      ? { bytes: Buffer.from(object), etag }
+      : Buffer.from(object);
   }
 
   function stream(key, offset = 0, length = Infinity) {
@@ -140,11 +155,24 @@ function createMemoryStore({ now = Date.now } = {}) {
     for (const key of [...objects.keys()].sort()) {
       // A key deleted while the listing is read is left out, as S3 may
       const object = objects.get(key);
-      if (object && key.startsWith(prefix)) yield { key, size: object.length, lastModified: modified.get(key) };
+      if (object && key.startsWith(prefix))
+        yield { key, size: object.length, lastModified: modified.get(key) };
     }
   }
 
-  return { id, stats, head, read, get, stream, put, putIfAbsent, delete: remove, list, objects };
+  return {
+    id,
+    stats,
+    head,
+    read,
+    get,
+    stream,
+    put,
+    putIfAbsent,
+    delete: remove,
+    list,
+    objects,
+  };
 }
 
 module.exports = createMemoryStore;

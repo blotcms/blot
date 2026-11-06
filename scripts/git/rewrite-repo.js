@@ -55,20 +55,35 @@ const rewriteRepo = require("../../app/clients/git/store/rewrite");
 const { parse, objectStore } = require("./target");
 
 async function main() {
-  const { options, positional } = parse(process.argv.slice(2), { flags: ["purge", "dry-run"], values: ["scratch", "cache-mb"] });
+  const { options, positional } = parse(process.argv.slice(2), {
+    flags: ["purge", "dry-run"],
+    values: ["scratch", "cache-mb"],
+  });
   if (positional.length) {
-    throw new Error("Usage: node scripts/git/rewrite-repo.js (--dir <folder> | --bucket <name> [--prefix <p>]) [--purge] [--dry-run] [--scratch <dir>] [--cache-mb <n>]");
+    throw new Error(
+      "Usage: node scripts/git/rewrite-repo.js (--dir <folder> | --bucket <name> [--prefix <p>]) [--purge] [--dry-run] [--scratch <dir>] [--cache-mb <n>]"
+    );
   }
 
   const target = objectStore(options);
   const cacheDir = fs.mkdtempSync(path.join(os.tmpdir(), "git-rewrite-cache-"));
-  const cache = store.createCache({ dir: cacheDir, maxBytes: Number(options["cache-mb"] || 1024) * 1024 * 1024 });
+  const cache = store.createCache({
+    dir: cacheDir,
+    maxBytes: Number(options["cache-mb"] || 1024) * 1024 * 1024,
+  });
   const lock = (fn) => fn();
   const scratchDir = options.scratch ? path.resolve(options.scratch) : null;
 
   let result;
   try {
-    result = await rewriteRepo({ store: target.store, cache, lock, scratchDir, purge: !!options.purge, dryRun: !!options["dry-run"] });
+    result = await rewriteRepo({
+      store: target.store,
+      cache,
+      lock,
+      scratchDir,
+      purge: !!options.purge,
+      dryRun: !!options["dry-run"],
+    });
   } finally {
     fs.rmSync(cacheDir, { recursive: true, force: true });
     if (target.client) target.client.destroy();

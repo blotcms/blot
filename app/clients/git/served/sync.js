@@ -17,7 +17,8 @@ const { promisify } = require("util");
 const database = require("../database");
 const manifest = require("../store/manifest");
 const createReader = require("../store/reader");
-const isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
+const isRedisUnavailableError =
+  require("helper/redisUnavailable").isRedisUnavailableError;
 const materialize = require("./materialize");
 const context = require("./context");
 
@@ -25,8 +26,10 @@ const { EMPTY_TREE } = materialize;
 const MASTER = "refs/heads/master";
 
 // Looked up on the module each time, so a spec can watch them
-const getApplied = (...args) => promisify(database.getApplied.bind(database))(...args);
-const setApplied = (...args) => promisify(database.setApplied.bind(database))(...args);
+const getApplied = (...args) =>
+  promisify(database.getApplied.bind(database))(...args);
+const setApplied = (...args) =>
+  promisify(database.setApplied.bind(database))(...args);
 
 async function hasCommit(reader, oid) {
   try {
@@ -44,7 +47,8 @@ async function sync(blogID, folder) {
   const cache = context.cache();
   const current = await manifest.read(store);
 
-  if (manifest.isEmpty(current)) throw new Error("The git store has no copy of this repository");
+  if (manifest.isEmpty(current))
+    throw new Error("The git store has no copy of this repository");
 
   const commit = current.refs[MASTER];
 
@@ -53,11 +57,18 @@ async function sync(blogID, folder) {
     return;
   }
 
-  const reader = createReader({ store, cache, manifest: current, scratch: cache });
+  const reader = createReader({
+    store,
+    cache,
+    manifest: current,
+    scratch: cache,
+  });
   let base = await getApplied(blogID);
 
   if (base && base !== EMPTY_TREE && !(await hasCommit(reader, base))) {
-    folder.log(`Applied commit ${base} is not in the store, comparing from nothing`);
+    folder.log(
+      `Applied commit ${base} is not in the store, comparing from nothing`
+    );
     base = null;
   }
 
@@ -73,7 +84,13 @@ async function sync(blogID, folder) {
 
   folder.log(`Comparing ${base} with ${commit} in the store`);
 
-  const paths = await materialize({ blogID, reader, from: base, to: commit, log: folder.log });
+  const paths = await materialize({
+    blogID,
+    reader,
+    from: base,
+    to: commit,
+    log: folder.log,
+  });
 
   folder.log(`Found ${paths.length} changes to git repo`);
   paths.forEach((path) => folder.log("/" + path, "changed"));
@@ -87,7 +104,9 @@ async function sync(blogID, folder) {
     // in the database. Stop before recording the commit as applied: the next
     // sync starts from the old one.
     if (err && isRedisUnavailableError(err)) {
-      folder.log("Redis unavailable, the next sync will apply these changes again");
+      folder.log(
+        "Redis unavailable, the next sync will apply these changes again"
+      );
       throw err;
     }
 

@@ -61,7 +61,10 @@ module.exports = async function () {
   });
 
   if (!oneAccountHasPlentyOfSpace) {
-    console.log(prefix(), "No service accounts with plenty of free space found.");
+    console.log(
+      prefix(),
+      "No service accounts with plenty of free space found."
+    );
     email.GOOGLE_DRIVE_SERVICE_ACCOUNT_LOW();
   }
 

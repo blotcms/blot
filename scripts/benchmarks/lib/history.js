@@ -28,7 +28,9 @@ function loadHistory(dir, arch) {
       try {
         return JSON.parse(line);
       } catch (err) {
-        console.warn(`[history] skipping malformed line ${index + 1}: ${err.message}`);
+        console.warn(
+          `[history] skipping malformed line ${index + 1}: ${err.message}`
+        );
         return null;
       }
     })

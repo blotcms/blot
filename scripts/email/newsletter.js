@@ -38,8 +38,8 @@ function main(letter, callback) {
       if (err) return callback(err);
 
       // When we want to preview a newsletter before it goes out
-      if (process.env.PREVIEW_NEWSLETTER === 'true') {
-        emails = ['example@example.com'];
+      if (process.env.PREVIEW_NEWSLETTER === "true") {
+        emails = ["example@example.com"];
       }
 
       async.eachSeries(

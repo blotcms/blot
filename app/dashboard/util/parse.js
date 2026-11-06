@@ -3,6 +3,6 @@
 const MAX_POST_REQUEST_SIZE = "5mb";
 
 module.exports = require("express").urlencoded({
-    extended: false,
-    limit: MAX_POST_REQUEST_SIZE
+  extended: false,
+  limit: MAX_POST_REQUEST_SIZE,
 });

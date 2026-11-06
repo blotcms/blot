@@ -12,7 +12,8 @@ var MAX_AGE_SECONDS = 2 * 60 * 60;
 // new-folder setup runs fast-import (--git-dir= and --work-tree= may come
 // first). receive-pack and upload-pack are only what a container from before
 // the store would still be running.
-var GIT_PROCESS = /^(\S*\/)?git(-|(\s+(-c\s+\S+|--git-dir=\S+|--work-tree=\S+))*\s+)(receive-pack|upload-pack|index-pack|rev-list|pack-objects|fast-import)(\s|$)/;
+var GIT_PROCESS =
+  /^(\S*\/)?git(-|(\s+(-c\s+\S+|--git-dir=\S+|--work-tree=\S+))*\s+)(receive-pack|upload-pack|index-pack|rev-list|pack-objects|fast-import)(\s|$)/;
 
 // The container's busybox ps has no `etimes`, only `etime`, which it prints
 // as mm:ss, then 2h15 (hours, minutes), then 3d04 (days, hours). procps
@@ -24,7 +25,8 @@ function parseElapsed(etime) {
 
   match = /^(\d+)d(\d+)$/.exec(etime);
 
-  if (match) return Number(match[1]) * 24 * 60 * 60 + Number(match[2]) * 60 * 60;
+  if (match)
+    return Number(match[1]) * 24 * 60 * 60 + Number(match[2]) * 60 * 60;
 
   match = /^(?:(\d+)-)?(\d+(?::\d+){1,2})$/.exec(etime);
 
@@ -43,7 +45,10 @@ function parseRssKb(rss) {
 
   if (!match) return NaN;
 
-  return Number(match[1]) * Math.pow(1024, " mgt".indexOf(match[2].toLowerCase() || " "));
+  return (
+    Number(match[1]) *
+    Math.pow(1024, " mgt".indexOf(match[2].toLowerCase() || " "))
+  );
 }
 
 function ps() {
@@ -61,7 +66,9 @@ module.exports = async function stuckProcesses(options) {
   options = options || {};
 
   var maxAgeSeconds =
-    options.maxAgeSeconds === undefined ? MAX_AGE_SECONDS : options.maxAgeSeconds;
+    options.maxAgeSeconds === undefined
+      ? MAX_AGE_SECONDS
+      : options.maxAgeSeconds;
   var output = await (options.ps || ps)();
   var stuck = [];
 

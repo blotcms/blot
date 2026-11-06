@@ -36,7 +36,7 @@ const sessionSecret =
 if (!config.session.secret) {
   console.warn(
     "BLOT_SESSION_SECRET is not set; using a secure ephemeral secret. " +
-      "Dashboard sessions will be invalidated when this process restarts.",
+      "Dashboard sessions will be invalidated when this process restarts."
   );
 }
 

@@ -9,7 +9,10 @@ describe("callers of the sandbox when it fails", function () {
   const sandbox = require("../");
   const folder = require("storage/folder");
 
-  const image = path.join(__dirname, "../../build/thumbnail/tests/images/portrait.jpg");
+  const image = path.join(
+    __dirname,
+    "../../build/thumbnail/tests/images/portrait.jpg"
+  );
   let directory;
 
   beforeEach(async function () {
@@ -60,18 +63,28 @@ describe("callers of the sandbox when it fails", function () {
   });
 
   it("thumbnail transform passes the error to its callback and writes nothing", function (done) {
-    require("build/thumbnail/transform")(image, directory, function (err, result) {
-      expect(err.code).toEqual("SANDBOX_TIMEOUT");
-      expect(result).toBeUndefined();
-      expect(fs.readdirSync(directory)).toEqual([]);
-      done();
-    });
+    require("build/thumbnail/transform")(
+      image,
+      directory,
+      function (err, result) {
+        expect(err.code).toEqual("SANDBOX_TIMEOUT");
+        expect(result).toBeUndefined();
+        expect(fs.readdirSync(directory)).toEqual([]);
+        done();
+      }
+    );
   });
 
   it("thumbnail transform checks the candidate in the same job and writes nothing for one it refuses", function (done) {
     const output = path.join(directory, "thumbnails");
     sandbox.run.and.callFake(function () {
-      return Promise.resolve({ meta: { source: { format: "png", width: 10, height: 300 }, thumbnails: null }, outputs: [] });
+      return Promise.resolve({
+        meta: {
+          source: { format: "png", width: 10, height: 300 },
+          thumbnails: null,
+        },
+        outputs: [],
+      });
     });
     require("build/thumbnail/transform")(image, output, function (err, result) {
       expect(err.message).toEqual("Image (10px wide) is too small");
@@ -80,19 +93,27 @@ describe("callers of the sandbox when it fails", function () {
       expect(fs.existsSync(output)).toBe(false);
       expect(sandbox.run.calls.count()).toEqual(1);
       expect(sandbox.run.calls.argsFor(0)[0]).toEqual("thumbnail");
-      expect(sandbox.run.calls.argsFor(0)[1].accept).toEqual({ formats: ["png", "jpeg", "jpg", "svg", "gif", "webp"], minWidth: 64, minHeight: 64 });
+      expect(sandbox.run.calls.argsFor(0)[1].accept).toEqual({
+        formats: ["png", "jpeg", "jpg", "svg", "gif", "webp"],
+        minWidth: 64,
+        minHeight: 64,
+      });
       done();
     });
   });
 
   it("animated thumbnail transform passes the error to its callback and writes nothing", function (done) {
-    require("build/thumbnail/transform-gif")(image, directory, function (err, result) {
-      expect(err.code).toEqual("SANDBOX_TIMEOUT");
-      expect(result).toBeUndefined();
-      expect(fs.readdirSync(directory)).toEqual([]);
-      expect(sandbox.run.calls.argsFor(0)[1].animated).toBe(true);
-      done();
-    });
+    require("build/thumbnail/transform-gif")(
+      image,
+      directory,
+      function (err, result) {
+        expect(err.code).toEqual("SANDBOX_TIMEOUT");
+        expect(result).toBeUndefined();
+        expect(fs.readdirSync(directory)).toEqual([]);
+        expect(sandbox.run.calls.argsFor(0)[1].animated).toBe(true);
+        done();
+      }
+    );
   });
 
   it("image resize passes the error to its callback and leaves the image alone", function (done) {
@@ -117,12 +138,17 @@ describe("callers of the sandbox when it fails", function () {
   it("img converter fails to convert, as it does when sharp fails", function (done) {
     const test = this;
     const img = require("build/converters/img");
-    const source = path.join(__dirname, "../../build/converters/img/tests/car.heic");
+    const source = path.join(
+      __dirname,
+      "../../build/converters/img/tests/car.heic"
+    );
 
     folder.writeFrom(test.blog.id, "/car.heic", source).then(function () {
       img.read(test.blog, "/car.heic", function (err) {
         expect(err).toBeTruthy();
-        expect(sandbox.run.calls.allArgs().map((a) => a[0])).toContain("to-png");
+        expect(sandbox.run.calls.allArgs().map((a) => a[0])).toContain(
+          "to-png"
+        );
         done();
       });
     }, done.fail);
@@ -131,7 +157,10 @@ describe("callers of the sandbox when it fails", function () {
   it("img converter still reads an image that needs no conversion", function (done) {
     const test = this;
     const img = require("build/converters/img");
-    const source = path.join(__dirname, "../../build/converters/img/tests/bunny.png");
+    const source = path.join(
+      __dirname,
+      "../../build/converters/img/tests/bunny.png"
+    );
 
     folder.writeFrom(test.blog.id, "/bunny.png", source).then(function () {
       img.read(test.blog, "/bunny.png", function (err, html) {
@@ -145,7 +174,10 @@ describe("callers of the sandbox when it fails", function () {
   it("docx converter fails to convert and writes no media", function (done) {
     const test = this;
     const docx = require("build/converters/docx");
-    const source = path.join(__dirname, "../../build/converters/docx/tests/image.docx");
+    const source = path.join(
+      __dirname,
+      "../../build/converters/docx/tests/image.docx"
+    );
 
     folder.writeFrom(test.blog.id, "/image.docx", source).then(function () {
       docx.read(test.blog, "/image.docx", function (err, html) {

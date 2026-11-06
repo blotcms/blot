@@ -25,10 +25,13 @@ const CHUNK_SIZE = 200;
 // still hit the remaining /photo.jpg. The path is
 // percent-encoded (see encodeFolderPath, which also encodes quotes), so
 // decode it - but not the ?query/#hash after it - for the same reason.
-const BAKED_LINK_REGEX = /%%BLOT_CDN%%\/folder\/v-(?:[a-f0-9]+|pending)\/[^/"'\s]+([^?#"'\s]*)/g;
+const BAKED_LINK_REGEX =
+  /%%BLOT_CDN%%\/folder\/v-(?:[a-f0-9]+|pending)\/[^/"'\s]+([^?#"'\s]*)/g;
 
 function stripBakedPrefix(html) {
-  return html.replace(BAKED_LINK_REGEX, (match, path) => decodeFolderPath(path));
+  return html.replace(BAKED_LINK_REGEX, (match, path) =>
+    decodeFolderPath(path)
+  );
 }
 
 function buildSearchText(entry) {
@@ -38,16 +41,23 @@ function buildSearchText(entry) {
     entry.tags.join(" "),
     entry.path,
     stripBakedPrefix(entry.html),
-    Object.values(entry.metadata).join(" ")
-  ].join(" ").toLowerCase();
+    Object.values(entry.metadata).join(" "),
+  ]
+    .join(" ")
+    .toLowerCase();
 }
 
 function isSearchable(entry) {
   const metadataByLowercaseKey = metadataCaseInsensitive(entry.metadata);
 
   if (entry.deleted || entry.draft) return false;
-  if (entry.page && (!metadataByLowercaseKey.search || isFalsy(metadataByLowercaseKey.search))) return false;
-  if (metadataByLowercaseKey.search && isFalsy(metadataByLowercaseKey.search)) return false;
+  if (
+    entry.page &&
+    (!metadataByLowercaseKey.search || isFalsy(metadataByLowercaseKey.search))
+  )
+    return false;
+  if (metadataByLowercaseKey.search && isFalsy(metadataByLowercaseKey.search))
+    return false;
   return true;
 }
 
@@ -65,8 +75,9 @@ module.exports = async function (blogID, query, options, callback) {
 
   ensure(blogID, "string").and(query, "string").and(callback, "function");
 
-  const terms = query.split(/\s+/)
-    .map(term => term.trim().toLowerCase())
+  const terms = query
+    .split(/\s+/)
+    .map((term) => term.trim().toLowerCase())
     .filter(Boolean);
 
   if (!terms.length) {
@@ -81,15 +92,15 @@ module.exports = async function (blogID, query, options, callback) {
   const timedOut = () => Date.now() - startTime > TIMEOUT;
   const results = [];
 
-  const isMatch = entry => {
+  const isMatch = (entry) => {
     if (!isSearchable(entry)) return false;
     const text = buildSearchText(entry);
     return terms.length === 1
       ? text.includes(terms[0])
-      : terms.every(term => text.includes(term));
+      : terms.every((term) => text.includes(term));
   };
 
-  const scanList = async key => {
+  const scanList = async (key) => {
     let cursor = "0";
     do {
       if (timedOut() || results.length >= MAX_COLLECT) return;
@@ -97,7 +108,7 @@ module.exports = async function (blogID, query, options, callback) {
       const scanned = await client.zScan(key, cursor, { COUNT: CHUNK_SIZE });
       cursor = String(scanned.cursor);
 
-      const ids = (scanned.members || []).map(member => member.value);
+      const ids = (scanned.members || []).map((member) => member.value);
       if (!ids.length) continue;
 
       for (const entry of await get(blogID, ids)) {

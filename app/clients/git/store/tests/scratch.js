@@ -18,7 +18,8 @@ const crypto = require("crypto");
 const zlib = require("zlib");
 
 const sha1 = (data) => crypto.createHash("sha1").update(data).digest("hex");
-const blobId = (data) => sha1(Buffer.concat([Buffer.from("blob " + data.length + "\0"), data]));
+const blobId = (data) =>
+  sha1(Buffer.concat([Buffer.from("blob " + data.length + "\0"), data]));
 
 function varint(n) {
   const out = [];
@@ -46,10 +47,21 @@ function entryHeader(type, size) {
 }
 
 // A delta from the sizes and instructions
-const delta = (source, target, ...ops) => Buffer.concat([varint(source), varint(target), ...ops]);
+const delta = (source, target, ...ops) =>
+  Buffer.concat([varint(source), varint(target), ...ops]);
 const copy = (offset, length) =>
-  Buffer.from([0xff, offset & 255, (offset >> 8) & 255, (offset >> 16) & 255, (offset >> 24) & 255, length & 255, (length >> 8) & 255, (length >> 16) & 255]);
-const insert = (text) => Buffer.concat([Buffer.from([text.length]), Buffer.from(text)]);
+  Buffer.from([
+    0xff,
+    offset & 255,
+    (offset >> 8) & 255,
+    (offset >> 16) & 255,
+    (offset >> 24) & 255,
+    length & 255,
+    (length >> 8) & 255,
+    (length >> 16) & 255,
+  ]);
+const insert = (text) =>
+  Buffer.concat([Buffer.from([text.length]), Buffer.from(text)]);
 
 // A pack of a whole blob and one REF_DELTA entry on it, and its index, which
 // names the delta by `name`
@@ -59,18 +71,31 @@ function craft(base, deltaBytes, name) {
   header.writeUInt32BE(2, 4);
   header.writeUInt32BE(2, 8);
 
-  const first = Buffer.concat([entryHeader(3, base.length), zlib.deflateSync(base)]);
-  const second = Buffer.concat([entryHeader(7, deltaBytes.length), Buffer.from(blobId(base), "hex"), zlib.deflateSync(deltaBytes)]);
+  const first = Buffer.concat([
+    entryHeader(3, base.length),
+    zlib.deflateSync(base),
+  ]);
+  const second = Buffer.concat([
+    entryHeader(7, deltaBytes.length),
+    Buffer.from(blobId(base), "hex"),
+    zlib.deflateSync(deltaBytes),
+  ]);
   const body = Buffer.concat([header, first, second]);
-  const pack = Buffer.concat([body, crypto.createHash("sha1").update(body).digest()]);
+  const pack = Buffer.concat([
+    body,
+    crypto.createHash("sha1").update(body).digest(),
+  ]);
 
   const entries = [
     { oid: blobId(base), offset: 12 },
     { oid: name, offset: 12 + first.length },
   ];
-  return { name: "pack-" + pack.subarray(pack.length - 20).toString("hex"), pack, idx: fx.buildIdx(entries, pack) };
+  return {
+    name: "pack-" + pack.subarray(pack.length - 20).toString("hex"),
+    pack,
+    idx: fx.buildIdx(entries, pack),
+  };
 }
-
 
 const MiB = 1024 * 1024;
 const FILE = 1.5 * MiB;
@@ -97,7 +122,9 @@ function version(n, size = FILE) {
   const hex = fx.bytes(77, size / 2).toString("hex");
   const lines = hex.match(/.{1,63}/g);
   for (let k = 0; k < 6; k++) {
-    for (let v = 1; v <= n; v++) lines[(v * 7919 + k * 104729) % lines.length] = "edit " + v + " " + k + " " + "x".repeat((v * 13 + k) % 40);
+    for (let v = 1; v <= n; v++)
+      lines[(v * 7919 + k * 104729) % lines.length] =
+        "edit " + v + " " + k + " " + "x".repeat((v * 13 + k) % 40);
   }
   return Buffer.from(lines.join("\n") + "\n");
 }
@@ -109,7 +136,6 @@ describe("git store reader scratch", function () {
   let work;
   let repo;
   let blobs; // [{ oid, depth, size }] by version, oldest first
-  let oracle;
 
   beforeAll(function () {
     work = fx.tempDir();
@@ -135,7 +161,14 @@ describe("git store reader scratch", function () {
 
   // Packs the repository as git would, and returns a reader over it which has
   // scratch (the cache), and counts what it is asked to reserve
-  async function setup({ packs, maxBytes = 64 * MiB, maxSize = CAP, scratch = true, scratchConcurrency, store: given } = {}) {
+  async function setup({
+    packs,
+    maxBytes = 64 * MiB,
+    maxSize = CAP,
+    scratch = true,
+    scratchConcurrency,
+    store: given,
+  } = {}) {
     if (dir) fx.remove(dir);
     dir = fx.tempDir();
     store = given || createMemoryStore();
@@ -152,7 +185,14 @@ describe("git store reader scratch", function () {
         return cache.reserve(bytes);
       },
     };
-    return createReader({ store, cache, packs: entries, maxSize, scratchConcurrency, scratch: scratch ? counting : null });
+    return createReader({
+      store,
+      cache,
+      packs: entries,
+      maxSize,
+      scratchConcurrency,
+      scratch: scratch ? counting : null,
+    });
   }
 
   function teardown() {
@@ -166,10 +206,18 @@ describe("git store reader scratch", function () {
 
   function describeBlobs(pack) {
     const entries = fx.listEntries(pack);
-    const oids = fx.text(repo, ["rev-list", "--objects", "master"]).split("\n").filter((l) => /big\.txt/.test(l)).map((l) => l.split(" ")[0]);
+    const oids = fx
+      .text(repo, ["rev-list", "--objects", "master"])
+      .split("\n")
+      .filter((l) => /big\.txt/.test(l))
+      .map((l) => l.split(" ")[0]);
     return oids.map((oid) => {
       const entry = entries.find((e) => e.oid === oid);
-      return { oid, depth: entry.depth, size: Number(fx.text(repo, ["cat-file", "-s", oid])) };
+      return {
+        oid,
+        depth: entry.depth,
+        size: Number(fx.text(repo, ["cat-file", "-s", oid])),
+      };
     });
   }
 
@@ -206,7 +254,8 @@ describe("git store reader scratch", function () {
         const data = await collect(got.data);
         expect(got.type).toBe("blob");
         expect(got.size).toBe(data.length);
-        if (!data.equals(want(oid))) fail("Blob " + oid + " differs from git cat-file");
+        if (!data.equals(want(oid)))
+          fail("Blob " + oid + " differs from git cat-file");
       }
 
       // The ones stored whole and the small ones need no scratch
@@ -239,7 +288,10 @@ describe("git store reader scratch", function () {
       expect(deepest.depth).toBeGreaterThanOrEqual(3);
 
       let peak = 0;
-      const timer = setInterval(() => (peak = Math.max(peak, cache.stats().reservedBytes)), 1);
+      const timer = setInterval(
+        () => (peak = Math.max(peak, cache.stats().reservedBytes)),
+        1
+      );
       const got = await reader.stream(deepest.oid);
       peak = Math.max(peak, cache.stats().reservedBytes);
       await collect(got.data);
@@ -257,7 +309,12 @@ describe("git store reader scratch", function () {
 
       for (const scratch of [true, false]) {
         const counter = createCounter();
-        const reader = await setup({ packs, maxSize: 64 * MiB, scratch, store: counter.store });
+        const reader = await setup({
+          packs,
+          maxSize: 64 * MiB,
+          scratch,
+          store: counter.store,
+        });
         await collect((await reader.stream(delta.oid)).data);
         counts.push(counter.requests());
         expect(reserved.length).toBe(0);
@@ -281,12 +338,21 @@ describe("git store reader scratch", function () {
     let blobsInThin;
 
     beforeAll(function () {
-      const commits = fx.text(repo, ["rev-list", "--reverse", "master"]).split("\n");
+      const commits = fx
+        .text(repo, ["rev-list", "--reverse", "master"])
+        .split("\n");
       early = fx.indexPack(fx.packRevs(repo, [commits[0]]));
-      const thinPack = fx.packRevs(repo, [commits[VERSIONS - 1]], [commits[0]], { thin: true });
+      const thinPack = fx.packRevs(
+        repo,
+        [commits[VERSIONS - 1]],
+        [commits[0]],
+        { thin: true }
+      );
       const fixed = fx.fixThin(thinPack, [early]);
       thin = fx.cutThin(fixed, thinPack.readUInt32BE(8));
-      blobsInThin = thin.entries.filter((e) => e.type === "blob").map((e) => e.oid);
+      blobsInThin = thin.entries
+        .filter((e) => e.type === "blob")
+        .map((e) => e.oid);
     });
 
     afterEach(teardown);
@@ -297,7 +363,8 @@ describe("git store reader scratch", function () {
 
       for (const oid of blobsInThin) {
         const got = await reader.stream(oid);
-        if (!(await collect(got.data)).equals(want(oid))) fail("Blob " + oid + " differs from git cat-file");
+        if (!(await collect(got.data)).equals(want(oid)))
+          fail("Blob " + oid + " differs from git cat-file");
       }
 
       expect(reserved.length).toBeGreaterThan(0);
@@ -309,7 +376,9 @@ describe("git store reader scratch", function () {
       let failures = 0;
 
       for (const oid of blobsInThin) {
-        const err = await failure(reader.stream(oid).then((got) => collect(got.data)));
+        const err = await failure(
+          reader.stream(oid).then((got) => collect(got.data))
+        );
         if (err) failures++;
       }
 
@@ -337,7 +406,9 @@ describe("git store reader scratch", function () {
       pack[at.offset + 24] ^= 0x55;
 
       const reader = await setup({ packs: [{ ...packs[0], pack }] });
-      const err = await failure(reader.stream(deepest.oid).then((got) => collect(got.data)));
+      const err = await failure(
+        reader.stream(deepest.oid).then((got) => collect(got.data))
+      );
 
       expect(err).toEqual(jasmine.any(CorruptError));
       expectNoScratch();
@@ -345,12 +416,16 @@ describe("git store reader scratch", function () {
 
     it("fails with a CorruptError when the base is damaged, once its file is being written", async function () {
       const entries = fx.listEntries(packs[0]);
-      const base = entries.filter((e) => e.type === "blob" && e.depth === 0).sort((a, b) => b.size - a.size)[0];
+      const base = entries
+        .filter((e) => e.type === "blob" && e.depth === 0)
+        .sort((a, b) => b.size - a.size)[0];
       const pack = Buffer.from(packs[0].pack);
       pack[base.offset + 4096] ^= 0x55;
 
       const reader = await setup({ packs: [{ ...packs[0], pack }] });
-      const err = await failure(reader.stream(deepest.oid).then((got) => collect(got.data)));
+      const err = await failure(
+        reader.stream(deepest.oid).then((got) => collect(got.data))
+      );
 
       expect(err).toEqual(jasmine.any(CorruptError));
       expect(reserved.length).toBe(1);
@@ -359,7 +434,9 @@ describe("git store reader scratch", function () {
 
     it("fails with a CorruptError when a delta further down the chain is damaged", async function () {
       const entries = fx.listEntries(packs[0]);
-      const delta = entries.filter((e) => e.type === "blob" && e.depth > 0).sort((a, b) => a.depth - b.depth)[0];
+      const delta = entries
+        .filter((e) => e.type === "blob" && e.depth > 0)
+        .sort((a, b) => a.depth - b.depth)[0];
       const pack = Buffer.from(packs[0].pack);
       pack[delta.offset + 24] ^= 0x55;
 
@@ -368,7 +445,9 @@ describe("git store reader scratch", function () {
       let failed = 0;
 
       for (const { oid } of damaged) {
-        const err = await failure(reader.stream(oid).then((got) => collect(got.data)));
+        const err = await failure(
+          reader.stream(oid).then((got) => collect(got.data))
+        );
         if (err) {
           expect(err).toEqual(jasmine.any(CorruptError));
           failed++;
@@ -383,7 +462,10 @@ describe("git store reader scratch", function () {
       // An index which names the delta by an ID which is not its own
       const at = fx.listEntries(packs[0]).find((e) => e.oid === deepest.oid);
       const wrong = "ab".repeat(20);
-      const idx = fx.buildIdx([{ oid: wrong, offset: at.offset }], packs[0].pack);
+      const idx = fx.buildIdx(
+        [{ oid: wrong, offset: at.offset }],
+        packs[0].pack
+      );
 
       const reader = await setup({ packs: [{ ...packs[0], idx }] });
       const got = await reader.stream(wrong);
@@ -408,7 +490,11 @@ describe("git store reader scratch", function () {
       expect(err).toEqual(jasmine.any(NoRoomError));
 
       await hold.release();
-      expect((await collect((await reader.stream(deepest.oid)).data)).equals(want(deepest.oid))).toBe(true);
+      expect(
+        (await collect((await reader.stream(deepest.oid)).data)).equals(
+          want(deepest.oid)
+        )
+      ).toBe(true);
       expectNoScratch();
     });
 
@@ -433,7 +519,10 @@ describe("git store reader scratch", function () {
     });
 
     it("fails with TooLargeError when the budget could hold one copy and never two", async function () {
-      const reader = await setup({ packs, maxBytes: Math.floor(deepest.size * 1.5) });
+      const reader = await setup({
+        packs,
+        maxBytes: Math.floor(deepest.size * 1.5),
+      });
       const err = await failure(reader.stream(deepest.oid));
       expect(err && err.code).toBe("TOO_LARGE");
       expect(reserved.length).toBe(1);
@@ -456,7 +545,10 @@ describe("git store reader scratch", function () {
     async function peakWith(scratchConcurrency) {
       const reader = await setup({ packs, scratchConcurrency });
       let peak = 0;
-      const timer = setInterval(() => (peak = Math.max(peak, cache.stats().reservedBytes)), 1);
+      const timer = setInterval(
+        () => (peak = Math.max(peak, cache.stats().reservedBytes)),
+        1
+      );
       const results = await Promise.all(
         big.slice(0, 4).map(async (b) => {
           const got = await reader.stream(b.oid);
@@ -464,7 +556,9 @@ describe("git store reader scratch", function () {
         })
       );
       clearInterval(timer);
-      big.slice(0, 4).forEach((b, i) => expect(results[i].equals(want(b.oid))).toBe(true));
+      big
+        .slice(0, 4)
+        .forEach((b, i) => expect(results[i].equals(want(b.oid))).toBe(true));
       expectNoScratch();
       return peak;
     }
@@ -487,14 +581,21 @@ describe("git store reader scratch", function () {
     afterEach(teardown);
 
     async function streamOf(deltaBytes, options) {
-      const reader = await setup({ packs: [craft(base, deltaBytes, name)], maxSize: 1000, ...options });
+      const reader = await setup({
+        packs: [craft(base, deltaBytes, name)],
+        maxSize: 1000,
+        ...options,
+      });
       return failure(reader.stream(name).then((got) => collect(got.data)));
     }
 
     it("is applied, and the wrong ID is found at the end", async function () {
       // A well-formed delta, so the only fault is that the bytes are not `name`
       const good = delta(base.length, 20, copy(5, 10), insert("0123456789"));
-      const reader = await setup({ packs: [craft(base, good, name)], maxSize: 1000 });
+      const reader = await setup({
+        packs: [craft(base, good, name)],
+        maxSize: 1000,
+      });
       const got = await reader.stream(name);
 
       expect(got.size).toBe(20);
@@ -512,7 +613,9 @@ describe("git store reader scratch", function () {
     });
 
     it("is refused when it copies from outside the base", async function () {
-      const err = await streamOf(delta(base.length, 20, copy(base.length - 5, 20)));
+      const err = await streamOf(
+        delta(base.length, 20, copy(base.length - 5, 20))
+      );
       expect(err).toEqual(jasmine.any(CorruptError));
       expect(err.message).toMatch(/outside its base/);
       expectNoScratch();
@@ -532,13 +635,17 @@ describe("git store reader scratch", function () {
     });
 
     it("is refused when it ends in the middle of an instruction", async function () {
-      const err = await streamOf(delta(base.length, 5, insert("abc").subarray(0, 3), Buffer.alloc(0)));
+      const err = await streamOf(
+        delta(base.length, 5, insert("abc").subarray(0, 3), Buffer.alloc(0))
+      );
       expect(err).toEqual(jasmine.any(CorruptError));
       expectNoScratch();
     });
 
     it("is refused when it uses the reserved instruction", async function () {
-      const err = await streamOf(delta(base.length, 3, Buffer.from([0]), insert("abc")));
+      const err = await streamOf(
+        delta(base.length, 3, Buffer.from([0]), insert("abc"))
+      );
       expect(err).toEqual(jasmine.any(CorruptError));
       expect(err.message).toMatch(/reserved/);
       expectNoScratch();
@@ -548,7 +655,10 @@ describe("git store reader scratch", function () {
       // The cap is above the result and below the base: the base cannot be
       // held, so the object is built in scratch although it is small
       const good = delta(base.length, 20, copy(0, 10), copy(10, 10));
-      const reader = await setup({ packs: [craft(base, good, blobId(base.subarray(0, 20)))], maxSize: 1000 });
+      const reader = await setup({
+        packs: [craft(base, good, blobId(base.subarray(0, 20)))],
+        maxSize: 1000,
+      });
       const got = await reader.stream(blobId(base.subarray(0, 20)));
 
       expect(got.size).toBe(20);
@@ -561,8 +671,17 @@ describe("git store reader scratch", function () {
       const big = crypto.randomBytes(3 * MiB + 17);
       const text = "x".repeat(100);
       const ops = [copy(0, 2 * MiB + 5), insert(text), copy(1000, MiB)];
-      const target = Buffer.concat([big.subarray(0, 2 * MiB + 5), Buffer.from(text), big.subarray(1000, 1000 + MiB)]);
-      const reader = await setup({ packs: [craft(big, delta(big.length, target.length, ...ops), blobId(target))], maxSize: 1000 });
+      const target = Buffer.concat([
+        big.subarray(0, 2 * MiB + 5),
+        Buffer.from(text),
+        big.subarray(1000, 1000 + MiB),
+      ]);
+      const reader = await setup({
+        packs: [
+          craft(big, delta(big.length, target.length, ...ops), blobId(target)),
+        ],
+        maxSize: 1000,
+      });
       const got = await reader.stream(blobId(target));
 
       expect((await collect(got.data)).equals(target)).toBe(true);
@@ -577,7 +696,14 @@ describe("git store reader scratch", function () {
       return new Promise((resolve, reject) => {
         execFile(
           process.execPath,
-          ["--expose-gc", path.join(__dirname, "helpers/measureStream.js"), packDir, scratchDir, oid, String(maxSize)],
+          [
+            "--expose-gc",
+            path.join(__dirname, "helpers/measureStream.js"),
+            packDir,
+            scratchDir,
+            oid,
+            String(maxSize),
+          ],
           { maxBuffer: 1 << 20 },
           function (err, stdout, stderr) {
             if (err) return reject(new Error(err.message + stderr));
@@ -587,48 +713,68 @@ describe("git store reader scratch", function () {
       });
     }
 
-    it("streams a delta-stored object many times the in-memory cap in constant memory", async function () {
-      const SIZE = 24 * MiB;
-      const CAP_BYTES = 2 * MiB;
-      const big = path.join(work, "big");
-      fs.mkdirSync(big);
-      fx.git(big, ["init", "-q", "-b", "master"]);
+    it(
+      "streams a delta-stored object many times the in-memory cap in constant memory",
+      async function () {
+        const SIZE = 24 * MiB;
+        const CAP_BYTES = 2 * MiB;
+        const big = path.join(work, "big");
+        fs.mkdirSync(big);
+        fx.git(big, ["init", "-q", "-b", "master"]);
 
-      for (let n = 0; n < 5; n++) {
-        fs.writeFileSync(path.join(big, "big.txt"), version(n, SIZE));
-        fx.git(big, ["add", "-A"]);
-        fx.git(big, ["commit", "-q", "-m", "Version " + n]);
-      }
-      fx.git(big, ["repack", "-adfq", "--window=50", "--depth=10"]);
+        for (let n = 0; n < 5; n++) {
+          fs.writeFileSync(path.join(big, "big.txt"), version(n, SIZE));
+          fx.git(big, ["add", "-A"]);
+          fx.git(big, ["commit", "-q", "-m", "Version " + n]);
+        }
+        fx.git(big, ["repack", "-adfq", "--window=50", "--depth=10"]);
 
-      const [pack] = fx.readPacks(big);
-      const oids = fx.text(big, ["rev-list", "--objects", "master"]).split("\n").filter((l) => /big\.txt/.test(l)).map((l) => l.split(" ")[0]);
-      const entries = fx.listEntries(pack);
-      const deltas = oids.map((oid) => entries.find((e) => e.oid === oid)).filter((e) => e.depth > 0);
-      const deepest = deltas.reduce((a, b) => (b.depth > a.depth ? b : a));
+        const [pack] = fx.readPacks(big);
+        const oids = fx
+          .text(big, ["rev-list", "--objects", "master"])
+          .split("\n")
+          .filter((l) => /big\.txt/.test(l))
+          .map((l) => l.split(" ")[0]);
+        const entries = fx.listEntries(pack);
+        const deltas = oids
+          .map((oid) => entries.find((e) => e.oid === oid))
+          .filter((e) => e.depth > 0);
+        const deepest = deltas.reduce((a, b) => (b.depth > a.depth ? b : a));
 
-      expect(deepest.depth).toBeGreaterThanOrEqual(2);
+        expect(deepest.depth).toBeGreaterThanOrEqual(2);
 
-      const scratchDir = path.join(work, "memory-scratch");
-      const result = await measure(path.join(big, ".git", "objects", "pack"), scratchDir, deepest.oid, CAP_BYTES);
-      const real = Number(fx.text(big, ["cat-file", "-s", deepest.oid]));
+        const scratchDir = path.join(work, "memory-scratch");
+        const result = await measure(
+          path.join(big, ".git", "objects", "pack"),
+          scratchDir,
+          deepest.oid,
+          CAP_BYTES
+        );
+        const real = Number(fx.text(big, ["cat-file", "-s", deepest.oid]));
 
-      expect(result.bytes).toBe(real);
-      expect(result.size).toBe(real);
-      expect(real).toBeGreaterThan(10 * CAP_BYTES);
+        expect(result.bytes).toBe(real);
+        expect(result.size).toBe(real);
+        expect(real).toBeGreaterThan(10 * CAP_BYTES);
 
-      // Resolving it in memory holds the base and the result: twice the object
-      // at the least. Streaming holds a few buffers (it was 5 to 7 MiB here,
-      // most of it the 1 MiB reads of the base and zlib's own output).
-      expect(result.growth).toBeLessThan(real / 2);
-      expect(fs.readdirSync(path.join(scratchDir, "scratch"))).toEqual([]);
+        // Resolving it in memory holds the base and the result: twice the object
+        // at the least. Streaming holds a few buffers (it was 5 to 7 MiB here,
+        // most of it the 1 MiB reads of the base and zlib's own output).
+        expect(result.growth).toBeLessThan(real / 2);
+        expect(fs.readdirSync(path.join(scratchDir, "scratch"))).toEqual([]);
 
-      // The control: with a cap above the object it is resolved in memory, and
-      // the measure sees that
-      const inMemory = await measure(path.join(big, ".git", "objects", "pack"), scratchDir, deepest.oid, 64 * MiB);
-      expect(inMemory.bytes).toBe(real);
-      expect(inMemory.growth).toBeGreaterThan(real);
-    }, 120 * 1000);
+        // The control: with a cap above the object it is resolved in memory, and
+        // the measure sees that
+        const inMemory = await measure(
+          path.join(big, ".git", "objects", "pack"),
+          scratchDir,
+          deepest.oid,
+          64 * MiB
+        );
+        expect(inMemory.bytes).toBe(real);
+        expect(inMemory.growth).toBeGreaterThan(real);
+      },
+      120 * 1000
+    );
   });
 
   describe("a consumer which stops early", function () {
@@ -696,5 +842,12 @@ describe("git store reader scratch", function () {
 // An object store which counts the requests it is asked for
 function createCounter() {
   const store = createMemoryStore();
-  return { store, requests: () => store.stats.heads + store.stats.reads + store.stats.gets + store.stats.lists };
+  return {
+    store,
+    requests: () =>
+      store.stats.heads +
+      store.stats.reads +
+      store.stats.gets +
+      store.stats.lists,
+  };
 }

@@ -33,7 +33,10 @@ describe("layout-inputs sort mapping", function () {
   });
 
   it("falls back to newest-first date sorting for an invalid submitted value", function () {
-    const locals = save({ sort_by: "not-a-sort" }, { "locals.sort_by": "not-a-sort" });
+    const locals = save(
+      { sort_by: "not-a-sort" },
+      { "locals.sort_by": "not-a-sort" }
+    );
 
     expect(locals.sort_by).toBe("date");
     expect(locals.sort_order).toBe("asc");
@@ -86,6 +89,10 @@ describe("layout-inputs sort mapping", function () {
 
     expect(locals.sort_by).toBe("date");
     expect(locals.sort_order).toBe("desc");
-    expect(locals.sort).toEqual({ by: "date", order: "desc", direction: "desc" });
+    expect(locals.sort).toEqual({
+      by: "date",
+      order: "desc",
+      direction: "desc",
+    });
   });
 });

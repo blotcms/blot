@@ -36,7 +36,10 @@ describe("git client push policy", function () {
   it("rejects deleting master", async function () {
     var local = this.local;
 
-    await local.writeAndPush("/stays.txt", "Still here after the refused deletion");
+    await local.writeAndPush(
+      "/stays.txt",
+      "Still here after the refused deletion"
+    );
 
     var refused = await local.tryPush(["origin", ":master"]);
 

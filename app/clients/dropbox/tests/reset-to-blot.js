@@ -16,7 +16,7 @@ describe("dropbox resetToBlot", function () {
     [resetPath, createClientPath, databasePath, downloadPath].forEach(
       (path) => (originals[path] = require.cache[path])
     );
-      });
+  });
 
   afterEach(async function () {
     delete require.cache[resetPath];
@@ -37,36 +37,40 @@ describe("dropbox resetToBlot", function () {
     revisionCalls = [];
     require.cache[createClientPath] = {
       exports: function (_blogID, callback) {
-        callback(null, {
-          filesGetMetadata: async () => ({
-            result: { path_display: "/Blog Folder" },
-          }),
-          ...(revisions && {
-            filesListRevisions: async ({ path, mode, limit }) => {
-              revisionCalls.push({ path, mode, limit });
-              const result = revisions[path];
-              if (!result || result instanceof Error)
-                throw result || new Error("path/not_found");
-              return { result };
+        callback(
+          null,
+          {
+            filesGetMetadata: async () => ({
+              result: { path_display: "/Blog Folder" },
+            }),
+            ...(revisions && {
+              filesListRevisions: async ({ path, mode, limit }) => {
+                revisionCalls.push({ path, mode, limit });
+                const result = revisions[path];
+                if (!result || result instanceof Error)
+                  throw result || new Error("path/not_found");
+                return { result };
+              },
+            }),
+            filesListFolderGetLatestCursor: async () => ({
+              result: { cursor: "new-cursor" },
+            }),
+            filesListFolder: async ({ path }) => {
+              // The walk asks for the blog folder root as "/Blog Folder/"
+              const entries = remote[(path || "/").replace(/(.)\/$/, "$1")];
+              if (!entries) throw new Error("Dropbox unavailable");
+              return { result: { entries, has_more: false, cursor: "c" } };
             },
-          }),
-          filesListFolderGetLatestCursor: async () => ({
-            result: { cursor: "new-cursor" },
-          }),
-          filesListFolder: async ({ path }) => {
-            // The walk asks for the blog folder root as "/Blog Folder/"
-            const entries = remote[(path || "/").replace(/(.)\/$/, "$1")];
-            if (!entries) throw new Error("Dropbox unavailable");
-            return { result: { entries, has_more: false, cursor: "c" } };
+            filesListFolderContinue: async ({ cursor }) => {
+              if (cursor !== "new-cursor" || !delta)
+                throw new Error("Dropbox unavailable");
+              return {
+                result: { entries: delta, has_more: false, cursor: "later" },
+              };
+            },
           },
-          filesListFolderContinue: async ({ cursor }) => {
-            if (cursor !== "new-cursor" || !delta)
-              throw new Error("Dropbox unavailable");
-            return {
-              result: { entries: delta, has_more: false, cursor: "later" },
-            };
-          },
-        }, account);
+          account
+        );
       },
     };
     require.cache[databasePath] = {
@@ -79,7 +83,9 @@ describe("dropbox resetToBlot", function () {
     };
     require.cache[downloadPath] = {
       exports: function (_client, source, id, destination, callback) {
-        storage.write(id, destination, "hello").then(() => callback(null), callback);
+        storage
+          .write(id, destination, "hello")
+          .then(() => callback(null), callback);
       },
     };
     delete require.cache[resetPath];
@@ -97,13 +103,17 @@ describe("dropbox resetToBlot", function () {
 
   it("updates each path as it downloads and saves the cursor at the end", async function () {
     const resetToBlot = load({ "/": [file("a.txt")] });
-    const update = jasmine.createSpy("update").and.returnValue(Promise.resolve());
+    const update = jasmine
+      .createSpy("update")
+      .and.returnValue(Promise.resolve());
 
     const summary = await resetToBlot(blogID, () => {}, update);
 
     expect(summary.downloaded).toEqual(1);
     expect(update).toHaveBeenCalledWith("/a.txt");
-    expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
+    expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(
+      true
+    );
   });
 
   describe("comparing a file with Dropbox's", function () {
@@ -127,7 +137,11 @@ describe("dropbox resetToBlot", function () {
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.downloaded).toEqual(1);
       expect(hashedStats()).toEqual([]);
@@ -139,7 +153,11 @@ describe("dropbox resetToBlot", function () {
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.downloaded).toEqual(0);
       expect(hashedStats().length).toEqual(1);
@@ -151,7 +169,11 @@ describe("dropbox resetToBlot", function () {
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.downloaded).toEqual(1);
       expect(hashedStats().length).toEqual(1);
@@ -162,7 +184,11 @@ describe("dropbox resetToBlot", function () {
         "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
       });
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.downloaded).toEqual(1);
       expect(hashedStats()).toEqual([]);
@@ -171,15 +197,27 @@ describe("dropbox resetToBlot", function () {
 
   it("counts a file it could not download, and carries on with the rest", async function () {
     load({ "/": [file("a.txt"), file("b.txt")] });
-    require.cache[downloadPath].exports = function (_client, source, id, destination, callback) {
+    require.cache[downloadPath].exports = function (
+      _client,
+      source,
+      id,
+      destination,
+      callback
+    ) {
       if (source === "/a.txt") return callback(new Error("download exploded"));
-      storage.write(id, destination, "hello").then(() => callback(null), callback);
+      storage
+        .write(id, destination, "hello")
+        .then(() => callback(null), callback);
     };
     // reset-to-blot promisified the download stub when it loaded
     delete require.cache[resetPath];
     const resetToBlot = require("../sync/reset-to-blot");
 
-    const summary = await resetToBlot(blogID, () => {}, async () => {});
+    const summary = await resetToBlot(
+      blogID,
+      () => {},
+      async () => {}
+    );
 
     expect(summary.downloaded).toEqual(1);
     expect(summary.failed).toEqual(1);
@@ -212,10 +250,16 @@ describe("dropbox resetToBlot", function () {
 
     it("keeps a local copy whose content hash matches (a file Blot uploaded)", async function () {
       await storage.write(blogID, "/big.txt", "real contents");
-      const { hash, size } = await storage.stat(blogID, "/big.txt", { hash: true });
+      const { hash, size } = await storage.stat(blogID, "/big.txt", {
+        hash: true,
+      });
       const resetToBlot = load({ "/": [oversized(hash, size)] });
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.skipped).toEqual(1);
       expect((await storage.read(blogID, "/big.txt")).toString()).toEqual(
@@ -226,12 +270,20 @@ describe("dropbox resetToBlot", function () {
     it("replaces a local copy that differs, or is absent, with an empty placeholder", async function () {
       await storage.write(blogID, "/big.txt", "something else");
       let resetToBlot = load({ "/": [oversized("not-the-local-hash", 14)] });
-      await resetToBlot(blogID, () => {}, async () => {});
+      await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
       expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
 
       await storage.remove(blogID, "/big.txt");
       resetToBlot = load({ "/": [oversized("not-the-local-hash", 14)] });
-      await resetToBlot(blogID, () => {}, async () => {});
+      await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
       expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
     });
   });
@@ -240,7 +292,9 @@ describe("dropbox resetToBlot", function () {
     await storage.write(blogID, "/Sub/a.txt", "x");
     await storage.write(blogID, "/Sub/Inner/b.txt", "x");
     const resetToBlot = load({ "/": [] }, { delta: [] });
-    const update = jasmine.createSpy("update").and.returnValue(Promise.resolve());
+    const update = jasmine
+      .createSpy("update")
+      .and.returnValue(Promise.resolve());
 
     await resetToBlot(blogID, () => {}, update);
 
@@ -252,9 +306,14 @@ describe("dropbox resetToBlot", function () {
 
   it("keeps updates and the old cursor when the walk throws part way", async function () {
     const resetToBlot = load({
-      "/": [file("a.txt"), { ".tag": "folder", name: "sub", path_display: "/sub" }],
+      "/": [
+        file("a.txt"),
+        { ".tag": "folder", name: "sub", path_display: "/sub" },
+      ],
     });
-    const update = jasmine.createSpy("update").and.returnValue(Promise.resolve());
+    const update = jasmine
+      .createSpy("update")
+      .and.returnValue(Promise.resolve());
 
     let error;
     try {
@@ -269,7 +328,11 @@ describe("dropbox resetToBlot", function () {
   });
 
   describe("a folder that changes in Dropbox before the walk lists it", function () {
-    const folder = (name) => ({ ".tag": "folder", name, path_display: "/" + name });
+    const folder = (name) => ({
+      ".tag": "folder",
+      name,
+      path_display: "/" + name,
+    });
 
     // Make filesListFolder answer `path` with a 409 tagged `summary`, as
     // Dropbox does for a folder deleted after its parent was listed
@@ -280,10 +343,13 @@ describe("dropbox resetToBlot", function () {
           const real = client.filesListFolder;
           client.filesListFolder = async (args) => {
             if (args.path === path)
-              throw Object.assign(new Error("Response failed with a 409 code"), {
-                status: 409,
-                error: { error_summary: summary },
-              });
+              throw Object.assign(
+                new Error("Response failed with a 409 code"),
+                {
+                  status: 409,
+                  error: { error_summary: summary },
+                }
+              );
             return real(args);
           };
           callback(err, client, ...rest);
@@ -297,24 +363,37 @@ describe("dropbox resetToBlot", function () {
 
     it("skips the folder, leaves Blot's copy alone and finishes the walk", async function () {
       await storage.write(blogID, "/sub/old.txt", "x");
-      load({ "/": [folder("sub"), file("a.txt")] }, { delta: [deleted("/sub")] });
+      load(
+        { "/": [folder("sub"), file("a.txt")] },
+        { delta: [deleted("/sub")] }
+      );
       const resetToBlot = vanish("/sub", "path/not_found/..");
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.downloaded).toEqual(1);
       expect(summary.removed).toEqual(0);
       expect(summary.skipped).toEqual(1);
       expect(summary.failed).toEqual(0);
       expect(await storage.exists(blogID, "/sub/old.txt")).toEqual(true);
-      expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
+      expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(
+        true
+      );
     });
 
     it("skips a folder Dropbox reports as changed under it", async function () {
       load({ "/": [folder("sub")] }, { delta: [deleted("/sub/old.txt")] });
       const resetToBlot = vanish("/sub", "path/not_found/..");
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.skipped).toEqual(1);
       expect(summary.failed).toEqual(0);
@@ -322,10 +401,17 @@ describe("dropbox resetToBlot", function () {
 
     it("reports a 409 the cursor doesn't explain, and removes nothing", async function () {
       await storage.write(blogID, "/sub/old.txt", "x");
-      load({ "/": [folder("sub"), file("a.txt")] }, { delta: [deleted("/other")] });
+      load(
+        { "/": [folder("sub"), file("a.txt")] },
+        { delta: [deleted("/other")] }
+      );
       const resetToBlot = vanish("/sub", "path/not_found/..");
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.downloaded).toEqual(1);
       expect(summary.skipped).toEqual(0);
@@ -338,16 +424,27 @@ describe("dropbox resetToBlot", function () {
       load({ "/": [folder("sub")] });
       const resetToBlot = vanish("/sub", "path/not_found/..");
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.failed).toEqual(1);
     });
 
     it("skips a folder replaced by a file", async function () {
-      load({ "/": [folder("sub")] }, { delta: [{ ".tag": "file", path_lower: "/sub" }] });
+      load(
+        { "/": [folder("sub")] },
+        { delta: [{ ".tag": "file", path_lower: "/sub" }] }
+      );
       const resetToBlot = vanish("/sub", "path/not_folder/..");
 
-      const summary = await resetToBlot(blogID, () => {}, async () => {});
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.skipped).toEqual(1);
     });
@@ -358,7 +455,11 @@ describe("dropbox resetToBlot", function () {
 
       let error;
       try {
-        await resetToBlot(blogID, () => {}, async () => {});
+        await resetToBlot(
+          blogID,
+          () => {},
+          async () => {}
+        );
       } catch (err) {
         error = err;
       }
@@ -373,7 +474,11 @@ describe("dropbox resetToBlot", function () {
 
       let error;
       try {
-        await resetToBlot(blogID, () => {}, async () => {});
+        await resetToBlot(
+          blogID,
+          () => {},
+          async () => {}
+        );
       } catch (err) {
         error = err;
       }
@@ -403,9 +508,12 @@ describe("dropbox resetToBlot", function () {
           const real = client.filesListFolder;
           client.filesListFolder = async (args) => {
             if (++state.calls <= failures)
-              throw Object.assign(new Error("Response failed with a 500 code"), {
-                status: 500,
-              });
+              throw Object.assign(
+                new Error("Response failed with a 500 code"),
+                {
+                  status: 500,
+                }
+              );
             return real(args);
           };
           callback(err, client, ...rest);
@@ -420,11 +528,17 @@ describe("dropbox resetToBlot", function () {
       load({ "/": [file("a.txt")] });
       const state = failListFolder(1);
 
-      const summary = await state.resetToBlot(blogID, () => {}, async () => {});
+      const summary = await state.resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
       expect(summary.downloaded).toEqual(1);
       expect(state.calls).toEqual(2);
-      expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
+      expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(
+        true
+      );
     });
 
     it("still throws when list_folder keeps returning 500", async function () {
@@ -433,7 +547,11 @@ describe("dropbox resetToBlot", function () {
 
       let error;
       try {
-        await state.resetToBlot(blogID, () => {}, async () => {});
+        await state.resetToBlot(
+          blogID,
+          () => {},
+          async () => {}
+        );
       } catch (err) {
         error = err;
       }
@@ -497,7 +615,10 @@ describe("dropbox resetToBlot", function () {
 
     describe("when Dropbox can't list what changed since the cursor", function () {
       const now = () => new Date().toISOString();
-      const deletedAt = (server_deleted) => ({ is_deleted: true, server_deleted });
+      const deletedAt = (server_deleted) => ({
+        is_deleted: true,
+        server_deleted,
+      });
       const longAgo = "2026-01-01T00:00:00Z";
 
       it("excuses a file removed just before the walk, by its deletion time", async function () {
@@ -726,7 +847,11 @@ describe("dropbox resetToBlot", function () {
 
       let error;
       try {
-        await resetToBlot(blogID, () => {}, () => {});
+        await resetToBlot(
+          blogID,
+          () => {},
+          () => {}
+        );
       } catch (err) {
         error = err;
       }
@@ -745,7 +870,11 @@ describe("dropbox resetToBlot", function () {
 
       let error;
       try {
-        await resetToBlot(blogID, () => {}, () => {});
+        await resetToBlot(
+          blogID,
+          () => {},
+          () => {}
+        );
       } catch (err) {
         error = err;
       }

@@ -45,7 +45,8 @@ describe("icloud upload route", function () {
   const fakeReq = ({ blogID, filePath, body, modifiedTime }) => ({
     header(name) {
       if (name === "blogID") return blogID;
-      if (name === "pathBase64") return Buffer.from(filePath).toString("base64");
+      if (name === "pathBase64")
+        return Buffer.from(filePath).toString("base64");
       if (name === "modifiedTime") return modifiedTime;
       if (name === "x-placeholder") return undefined;
       if (name === "x-original-size") return undefined;

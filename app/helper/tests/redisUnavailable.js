@@ -19,7 +19,9 @@ describe("redisUnavailable", function () {
       expect(isRedisUnavailableError(new ClientOfflineError())).toBe(true);
       expect(isRedisUnavailableError(new ClientClosedError())).toBe(true);
       expect(isRedisUnavailableError(new ConnectionTimeoutError())).toBe(true);
-      expect(isRedisUnavailableError(new SocketClosedUnexpectedlyError())).toBe(true);
+      expect(isRedisUnavailableError(new SocketClosedUnexpectedlyError())).toBe(
+        true
+      );
     });
 
     it("recognises socket errors aimed at the redis server", function () {
@@ -98,8 +100,16 @@ describe("redisUnavailable", function () {
       }
 
       it("recognises connect errors on the configured socket", function () {
-        for (const code of ["ENOENT", "EACCES", "ECONNREFUSED", "ECONNRESET", "EPIPE"]) {
-          expect(isRedisUnavailableError(connectError(code, socket))).toBe(true);
+        for (const code of [
+          "ENOENT",
+          "EACCES",
+          "ECONNREFUSED",
+          "ECONNRESET",
+          "EPIPE",
+        ]) {
+          expect(isRedisUnavailableError(connectError(code, socket))).toBe(
+            true
+          );
         }
       });
 
@@ -112,7 +122,9 @@ describe("redisUnavailable", function () {
       });
 
       it("never mistakes a filesystem error for an outage", function () {
-        const missing = new Error("ENOENT: no such file or directory, open '/x'");
+        const missing = new Error(
+          "ENOENT: no such file or directory, open '/x'"
+        );
         missing.code = "ENOENT";
         missing.errno = -2;
         missing.syscall = "open";
@@ -243,7 +255,9 @@ describe("redisUnavailable", function () {
       // Also follows syntax errors, so only the reply behind it counts
       expect(
         isRedisUnavailableError(
-          new SimpleError("EXECABORT Transaction discarded because of previous errors.")
+          new SimpleError(
+            "EXECABORT Transaction discarded because of previous errors."
+          )
         )
       ).toBe(false);
     });
@@ -384,7 +398,9 @@ describe("redisUnavailable", function () {
       const noReplicas = await rejection(() =>
         client.eval(script, { keys: [key] })
       );
-      expect(noReplicas.message).toMatch(/^ERR Error running script.*-NOREPLICAS/);
+      expect(noReplicas.message).toMatch(
+        /^ERR Error running script.*-NOREPLICAS/
+      );
       expect(isRedisUnavailableError(noReplicas)).toBe(true);
 
       const noReplicasSha = await rejection(() =>
@@ -413,7 +429,9 @@ describe("redisUnavailable", function () {
     it("does not mistake an ordinary command error for an outage", async function () {
       await client.set("redis-unavailable:string", "1");
 
-      const err = await rejection(() => client.lPush("redis-unavailable:string", "x"));
+      const err = await rejection(() =>
+        client.lPush("redis-unavailable:string", "x")
+      );
       expect(err.message).toMatch(/^WRONGTYPE/);
       expect(isRedisUnavailableError(err)).toBe(false);
 
@@ -494,7 +512,9 @@ describe("redisUnavailable", function () {
         next(err);
       });
       app.use(redisUnavailableHandler);
-      app.use((err, req, res, next) => res.status(err.status).send("passed on"));
+      app.use((err, req, res, next) =>
+        res.status(err.status).send("passed on")
+      );
       server = app.listen(0, () => {
         origin = "http://127.0.0.1:" + server.address().port;
         done();

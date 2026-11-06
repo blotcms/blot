@@ -2,7 +2,11 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
-const { parseBackup, BACKUP_KEY, OFFSITE_KEY } = require("../../../app/scheduler/daily/redis-server");
+const {
+  parseBackup,
+  BACKUP_KEY,
+  OFFSITE_KEY,
+} = require("../../../app/scheduler/daily/redis-server");
 
 // Runs bin/backup.sh against a fake root and fake redis6-cli, aws, flock,
 // mountpoint and rsync, and checks it records each upload in Redis for the
@@ -18,7 +22,8 @@ describe("backup.sh", function () {
     fs.writeFileSync(file(name), text);
     if (mode) fs.chmodSync(file(name), mode);
   };
-  const stub = (name, body) => write(`bin/${name}`, `#!/bin/sh\n${body}\n`, 0o755);
+  const stub = (name, body) =>
+    write(`bin/${name}`, `#!/bin/sh\n${body}\n`, 0o755);
   const read = (name) => fs.readFileSync(file(name), "utf8");
 
   beforeEach(function () {
@@ -75,12 +80,16 @@ esac
     const name = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}-hour-${pad(now.getHours())}`;
 
     expect(result.status).toBe(0);
-    expect(read("aws-calls")).toContain(`s3 cp --only-show-errors --no-overwrite ${root}/var/lib/redis6/dump.rdb s3://test-bucket/hourly/${name}.rdb`);
+    expect(read("aws-calls")).toContain(
+      `s3 cp --only-show-errors --no-overwrite ${root}/var/lib/redis6/dump.rdb s3://test-bucket/hourly/${name}.rdb`
+    );
 
     const [command, key, value] = setArgs();
     expect([command, key]).toEqual(["SET", BACKUP_KEY]);
     expect(value).toMatch(
-      new RegExp(`^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ hourly hourly/${name}\\.rdb 1234$`)
+      new RegExp(
+        `^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ hourly hourly/${name}\\.rdb 1234$`
+      )
     );
 
     const backup = parseBackup(value);
@@ -95,7 +104,9 @@ esac
     const result = run("daily");
 
     expect(result.status).toBe(0);
-    expect(setArgs()[2]).toMatch(/ daily daily\/\d{4}-\d\d-\d\d-hour-\d\d\.rdb 1234$/);
+    expect(setArgs()[2]).toMatch(
+      / daily daily\/\d{4}-\d\d-\d\d-hour-\d\d\.rdb 1234$/
+    );
     expect(read("aws-calls")).toContain(`${root}/backups/`);
   });
 
@@ -114,7 +125,9 @@ esac
 
       expect(result.status).toBe(0);
       expect(read("aws-calls")).toMatch(
-        new RegExp(`^s3 cp --only-show-errors --no-overwrite \\S+ s3://test-bucket/${kind}/\\d{4}-\\d\\d-\\d\\d-hour-\\d\\d\\.rdb\\n$`)
+        new RegExp(
+          `^s3 cp --only-show-errors --no-overwrite \\S+ s3://test-bucket/${kind}/\\d{4}-\\d\\d-\\d\\d-hour-\\d\\d\\.rdb\\n$`
+        )
       );
       expect(setArgs()[2]).toContain(` ${kind} ${kind}/`);
     }
@@ -143,12 +156,22 @@ esac
   });
 
   describe("offsite copy", function () {
-    const calls = () => (fs.existsSync(file("aws-calls")) ? read("aws-calls").trimEnd().split("\n") : []);
-    const offsiteCalls = () => calls().filter((call) => call.includes("blot-b2"));
+    const calls = () =>
+      fs.existsSync(file("aws-calls"))
+        ? read("aws-calls").trimEnd().split("\n")
+        : [];
+    const offsiteCalls = () =>
+      calls().filter((call) => call.includes("blot-b2"));
     // Every SET as [key, value]
     const sets = () =>
       fs.existsSync(file("set-calls"))
-        ? read("set-calls").trimEnd().split("\n").map((line) => [line.split(" ")[1], line.split(" ").slice(2).join(" ")])
+        ? read("set-calls")
+            .trimEnd()
+            .split("\n")
+            .map((line) => [
+              line.split(" ")[1],
+              line.split(" ").slice(2).join(" "),
+            ])
         : [];
     const keys = () => sets().map(([key]) => key);
 
@@ -158,7 +181,9 @@ esac
 
     it("uploads a daily through the blot-b2 profile and records it", function () {
       const result = run("daily");
-      const name = /daily\/(\d{4}-\d\d-\d\d-hour-\d\d)\.rdb/.exec(read("aws-calls"))[1];
+      const name = /daily\/(\d{4}-\d\d-\d\d-hour-\d\d)\.rdb/.exec(
+        read("aws-calls")
+      )[1];
 
       expect(result.status).toBe(0);
       expect(offsiteCalls()).toEqual([
@@ -169,7 +194,9 @@ esac
       expect(keys()).toEqual([BACKUP_KEY, OFFSITE_KEY]);
       const value = sets()[1][1];
       expect(value).toMatch(
-        new RegExp(`^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ daily daily/${name}\\.rdb 1234$`)
+        new RegExp(
+          `^\\d{4}-\\d\\d-\\d\\dT\\d\\d:\\d\\d:\\d\\dZ daily daily/${name}\\.rdb 1234$`
+        )
       );
       expect(parseBackup(value).bytes).toBe(1234);
     });
@@ -211,7 +238,11 @@ esac
     it("survives a failing B2 upload: exits 0, still prunes locally, records nothing", function () {
       stub("mountpoint", "exit 0");
       // 12 old local copies and the new one: the 10 newest stay
-      for (let i = 1; i <= 12; i++) write(`backups/2026-01-${String(i).padStart(2, "0")}-hour-03/dump.rdb`, "x");
+      for (let i = 1; i <= 12; i++)
+        write(
+          `backups/2026-01-${String(i).padStart(2, "0")}-hour-03/dump.rdb`,
+          "x"
+        );
       stub(
         "aws",
         `
@@ -237,7 +268,9 @@ esac
       const result = run("daily", { SET_COMMAND: "echo READONLY; exit 1" });
 
       expect(result.status).toBe(0);
-      expect(result.stdout).toContain("could not record the offsite backup in Redis");
+      expect(result.stdout).toContain(
+        "could not record the offsite backup in Redis"
+      );
       expect(result.stdout).toContain("daily backup: done");
     });
   });

@@ -38,7 +38,7 @@ function restoreDisplayMath($, paragraph) {
       const $paragraph = $(paragraph);
       const beforeNodes = children.slice(0, Math.max(0, lines[open].start - 1));
       const afterNodes = children.slice(
-        Math.min(children.length, lines[close].end + 1),
+        Math.min(children.length, lines[close].end + 1)
       );
       const replacements = [];
 
@@ -50,7 +50,7 @@ function restoreDisplayMath($, paragraph) {
         $paragraph
           .clone()
           .empty()
-          .text("$$\n" + source + "\n$$"),
+          .text("$$\n" + source + "\n$$")
       );
 
       if (afterNodes.length) {

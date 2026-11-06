@@ -20,13 +20,22 @@ describe("subscriptionTenure", function () {
     it("returns created timestamp when available", function () {
       var created = Math.floor((now - 86400000) / 1000);
       var user = { subscription: { customer: "cus_123", created: created } };
-      expect(subscriptionTenure.stripeTenureStartMs(user)).toEqual(created * 1000);
+      expect(subscriptionTenure.stripeTenureStartMs(user)).toEqual(
+        created * 1000
+      );
     });
 
     it("falls back to current_period_start when created is missing", function () {
       var periodStart = Math.floor((now - 86400000) / 1000);
-      var user = { subscription: { customer: "cus_123", current_period_start: periodStart } };
-      expect(subscriptionTenure.stripeTenureStartMs(user)).toEqual(periodStart * 1000);
+      var user = {
+        subscription: {
+          customer: "cus_123",
+          current_period_start: periodStart,
+        },
+      };
+      expect(subscriptionTenure.stripeTenureStartMs(user)).toEqual(
+        periodStart * 1000
+      );
     });
 
     it("prefers created over current_period_start", function () {
@@ -36,10 +45,12 @@ describe("subscriptionTenure", function () {
         subscription: {
           customer: "cus_123",
           created: created,
-          current_period_start: periodStart
-        }
+          current_period_start: periodStart,
+        },
       };
-      expect(subscriptionTenure.stripeTenureStartMs(user)).toEqual(created * 1000);
+      expect(subscriptionTenure.stripeTenureStartMs(user)).toEqual(
+        created * 1000
+      );
     });
   });
 
@@ -53,14 +64,20 @@ describe("subscriptionTenure", function () {
     });
 
     it("returns null for paypal without id", function () {
-      var user = { paypal: { start_time: new Date(now - 86400000).toISOString() } };
+      var user = {
+        paypal: { start_time: new Date(now - 86400000).toISOString() },
+      };
       expect(subscriptionTenure.paypalTenureStartMs(user)).toBeNull();
     });
 
     it("returns start_time in milliseconds", function () {
       var startTime = new Date(now - 86400000);
-      var user = { paypal: { id: "I-TEST123", start_time: startTime.toISOString() } };
-      expect(subscriptionTenure.paypalTenureStartMs(user)).toEqual(startTime.getTime());
+      var user = {
+        paypal: { id: "I-TEST123", start_time: startTime.toISOString() },
+      };
+      expect(subscriptionTenure.paypalTenureStartMs(user)).toEqual(
+        startTime.getTime()
+      );
     });
   });
 
@@ -84,7 +101,9 @@ describe("subscriptionTenure", function () {
 
     it("calculates duration from PayPal subscription", function () {
       var startTime = new Date(now - 172800000);
-      var user = { paypal: { id: "I-TEST123", start_time: startTime.toISOString() } };
+      var user = {
+        paypal: { id: "I-TEST123", start_time: startTime.toISOString() },
+      };
       var duration = subscriptionTenure.getSubscriptionDurationMs(user, now);
       expect(duration).toBeGreaterThan(172000000);
       expect(duration).toBeLessThanOrEqual(172800000 + 1000);
@@ -95,7 +114,7 @@ describe("subscriptionTenure", function () {
       var paypalStart = new Date(now - 172800000);
       var user = {
         subscription: { customer: "cus_123", created: stripeCreated },
-        paypal: { id: "I-TEST123", start_time: paypalStart.toISOString() }
+        paypal: { id: "I-TEST123", start_time: paypalStart.toISOString() },
       };
       var duration = subscriptionTenure.getSubscriptionDurationMs(user, now);
       expect(duration).toBeGreaterThan(172000000);
@@ -103,8 +122,12 @@ describe("subscriptionTenure", function () {
 
     it("returns null when start time is in the future", function () {
       var futureCreated = Math.floor((now + 86400000) / 1000);
-      var user = { subscription: { customer: "cus_123", created: futureCreated } };
-      expect(subscriptionTenure.getSubscriptionDurationMs(user, now)).toBeNull();
+      var user = {
+        subscription: { customer: "cus_123", created: futureCreated },
+      };
+      expect(
+        subscriptionTenure.getSubscriptionDurationMs(user, now)
+      ).toBeNull();
     });
 
     it("uses current time when now parameter is not provided", function () {
@@ -118,7 +141,7 @@ describe("subscriptionTenure", function () {
       var validStart = new Date(now - 86400000);
       var user = {
         subscription: { customer: "cus_123", created: "invalid" },
-        paypal: { id: "I-TEST123", start_time: validStart.toISOString() }
+        paypal: { id: "I-TEST123", start_time: validStart.toISOString() },
       };
       var duration = subscriptionTenure.getSubscriptionDurationMs(user, now);
       expect(duration).toBeGreaterThan(86000000);

@@ -8,24 +8,33 @@ describe("entry.set changed", function () {
 
   beforeEach(function () {
     this.buildAndSet = (path, contents) =>
-      require("storage/folder").write(this.blog.id, path, contents).then(() => new Promise((resolve, reject) => {
-        build(this.blog, path, (err, entry) => {
-          if (err) return reject(err);
-          set(this.blog.id, path, entry, (err, result) => {
-            if (err) return reject(err);
-            resolve(result);
-          });
-        });
-      }));
+      require("storage/folder")
+        .write(this.blog.id, path, contents)
+        .then(
+          () =>
+            new Promise((resolve, reject) => {
+              build(this.blog, path, (err, entry) => {
+                if (err) return reject(err);
+                set(this.blog.id, path, entry, (err, result) => {
+                  if (err) return reject(err);
+                  resolve(result);
+                });
+              });
+            })
+        );
   });
 
   it("reports a new entry as changed", async function () {
-    expect(await this.buildAndSet("/a.txt", "Hello")).toEqual({ changed: true });
+    expect(await this.buildAndSet("/a.txt", "Hello")).toEqual({
+      changed: true,
+    });
   });
 
   it("reports the same build again as unchanged", async function () {
     await this.buildAndSet("/a.txt", "Hello");
-    expect(await this.buildAndSet("/a.txt", "Hello")).toEqual({ changed: false });
+    expect(await this.buildAndSet("/a.txt", "Hello")).toEqual({
+      changed: false,
+    });
   });
 
   it("reports new contents as changed", async function () {

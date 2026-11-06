@@ -13,7 +13,10 @@ describe("git client protocol", function () {
 
   beforeAll(async function () {
     await this.local.commitFiles({ "/protocol/one.txt": "One" });
-    await this.local.commitFiles({ "/protocol/two.txt": "Two", "/protocol/nested/three.txt": "Three" });
+    await this.local.commitFiles({
+      "/protocol/two.txt": "Two",
+      "/protocol/nested/three.txt": "Three",
+    });
     await this.local.push();
   });
 
@@ -39,7 +42,13 @@ describe("git client protocol", function () {
   // a remote error (served/reads.js)
   it("refuses a clone with --depth 1, with a remote error", async function () {
     var directory = this.local.directory + "-shallow";
-    var result = await Client.attempt(["clone", "--depth", "1", this.local.url, directory]);
+    var result = await Client.attempt([
+      "clone",
+      "--depth",
+      "1",
+      this.local.url,
+      directory,
+    ]);
 
     expect(result.code).not.toBe(0);
     expect(result.stderr).toMatch(/remote error|shallow/i);
@@ -55,14 +64,17 @@ describe("git client protocol", function () {
   it("fetches only what is new", async function () {
     var clone = await this.local.cloneAgain();
 
-    await this.local.writeAndPush("/protocol/fetched.txt", "Pushed after the clone");
+    await this.local.writeAndPush(
+      "/protocol/fetched.txt",
+      "Pushed after the clone"
+    );
 
     var fetched = await clone.git(["fetch", "origin"]);
 
     expect(fetched.code).toBe(0);
-    expect((await clone.git(["rev-parse", "origin/master"])).stdout.trim()).toBe(
-      await this.local.remoteHead()
-    );
+    expect(
+      (await clone.git(["rev-parse", "origin/master"])).stdout.trim()
+    ).toBe(await this.local.remoteHead());
 
     await clone.git(["merge", "--ff-only", "origin/master"]);
     await Client.compareWithBlog(clone.directory, this.blog.id);
@@ -79,16 +91,23 @@ describe("git client protocol", function () {
 
   [0, 1, 2].forEach(function (version) {
     it("clones and pushes with protocol version " + version, async function () {
-      var clone = await this.local.cloneAgain({ config: { "protocol.version": String(version) } });
+      var clone = await this.local.cloneAgain({
+        config: { "protocol.version": String(version) },
+      });
 
       expect(await clone.head()).toBe(await this.local.remoteHead());
 
-      await clone.writeAndPush("/protocol/version-" + version + ".txt", "Pushed with version " + version);
-
-      expect(await helpers.blogHas(this, "/protocol/version-" + version + ".txt")).toBe(true);
-      expect((await clone.git(["ls-remote", "origin", "refs/heads/master"])).stdout).toContain(
-        await clone.head()
+      await clone.writeAndPush(
+        "/protocol/version-" + version + ".txt",
+        "Pushed with version " + version
       );
+
+      expect(
+        await helpers.blogHas(this, "/protocol/version-" + version + ".txt")
+      ).toBe(true);
+      expect(
+        (await clone.git(["ls-remote", "origin", "refs/heads/master"])).stdout
+      ).toContain(await clone.head());
 
       // The first clone pulls what the other pushed
       await this.local.pull();
@@ -100,7 +119,9 @@ describe("git client protocol", function () {
     var proxy = await Client.startRecordingProxy(this.server.port);
 
     try {
-      var other = await this.local.cloneAgain({ url: proxy.rewrite(this.local.url) });
+      var other = await this.local.cloneAgain({
+        url: proxy.rewrite(this.local.url),
+      });
 
       // Many commits on each side which the other does not have, so that the
       // client lists far more than a kilobyte of commits it has
@@ -111,9 +132,9 @@ describe("git client protocol", function () {
       var fetched = await other.git(["fetch", "origin"]);
 
       expect(fetched.code).toBe(0);
-      expect((await other.git(["rev-parse", "origin/master"])).stdout.trim()).toBe(
-        await this.local.remoteHead()
-      );
+      expect(
+        (await other.git(["rev-parse", "origin/master"])).stdout.trim()
+      ).toBe(await this.local.remoteHead());
 
       // The request was in fact compressed
       var gzipped = proxy.requests.filter(function (request) {
@@ -134,7 +155,9 @@ describe("git client protocol", function () {
     var proxy = await Client.startRecordingProxy(this.server.port);
 
     try {
-      var other = await this.local.cloneAgain({ url: proxy.rewrite(this.local.url) });
+      var other = await this.local.cloneAgain({
+        url: proxy.rewrite(this.local.url),
+      });
 
       // Only for the push: with the setting a clone itself would need a
       // probe request which is not what this spec is about

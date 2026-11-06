@@ -27,15 +27,19 @@ module.exports = function dropView(templateID, viewName, callback) {
       multi
         .exec()
         .then(function () {
-          cacheID.bumpBlogIfInstalled(metadata.owner, templateID, function (cacheErr) {
-            if (cacheErr) return callback(cacheErr);
+          cacheID.bumpBlogIfInstalled(
+            metadata.owner,
+            templateID,
+            function (cacheErr) {
+              if (cacheErr) return callback(cacheErr);
 
-            updateCdnManifest(templateID, function (manifestErr) {
-              if (manifestErr) return callback(manifestErr);
+              updateCdnManifest(templateID, function (manifestErr) {
+                if (manifestErr) return callback(manifestErr);
 
-              callback(null, "Deleted " + templateID);
-            });
-          });
+                callback(null, "Deleted " + templateID);
+              });
+            }
+          );
         })
         .catch(callback);
     });

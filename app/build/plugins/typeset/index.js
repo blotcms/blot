@@ -43,7 +43,7 @@ function prerender(html, callback, options) {
   try {
     // we don't want to process the contents of katex math blocks
     // fenced with dollar signs otherwise we run into a variety of bugs
-    html = typeset(html, { disable: disable, ignore: ['span.math'] });
+    html = typeset(html, { disable: disable, ignore: ["span.math"] });
   } catch (e) {}
 
   return callback(null, html);

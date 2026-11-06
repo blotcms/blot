@@ -15,10 +15,19 @@ describe("storage/backfill", function () {
 
   // A directory of blogs' assets: blog_*/{path}
   async function populate(directory) {
-    await fs.outputFile(join(directory, "blog_a/_thumbnails/x/small.jpg"), "small");
+    await fs.outputFile(
+      join(directory, "blog_a/_thumbnails/x/small.jpg"),
+      "small"
+    );
     await fs.outputFile(join(directory, "blog_a/_avatars/me.png"), "avatar");
-    await fs.outputFile(join(directory, "blog_b/_assets/doc/media/one.png"), "one");
-    await fs.outputFile(join(directory, "blog_b/_assets/doc/media/two.png"), "two");
+    await fs.outputFile(
+      join(directory, "blog_b/_assets/doc/media/one.png"),
+      "one"
+    );
+    await fs.outputFile(
+      join(directory, "blog_b/_assets/doc/media/two.png"),
+      "two"
+    );
     await fs.outputFile(join(directory, "blog_c/_image_cache/c.jpg"), "cached");
     await fs.outputFile(join(directory, "notablog/file.txt"), "ignored");
     await fs.outputFile(join(directory, "stray.txt"), "ignored");
@@ -85,7 +94,10 @@ describe("storage/backfill", function () {
   it("considers only the underscore directories, locally and in the bucket", async function () {
     var directory = this.directory;
 
-    await fs.outputFile(join(directory, "blog_a/folder/local.txt"), "not an asset");
+    await fs.outputFile(
+      join(directory, "blog_a/folder/local.txt"),
+      "not an asset"
+    );
     await fs.outputFile(join(directory, "blog_a/top.txt"), "not an asset");
     await s3.client().send(
       new (require("@aws-sdk/client-s3").PutObjectCommand)({
@@ -123,7 +135,10 @@ describe("storage/backfill", function () {
     var directory = this.directory;
 
     await run.call(this);
-    await fs.outputFile(join(directory, "blog_a/_avatars/me.png"), "a longer avatar");
+    await fs.outputFile(
+      join(directory, "blog_a/_avatars/me.png"),
+      "a longer avatar"
+    );
     await fs.outputFile(join(directory, "blog_c/_image_cache/new.jpg"), "new");
 
     var stats = await run.call(this);
@@ -157,7 +172,9 @@ describe("storage/backfill", function () {
     expect(stats.bySubdirectory["_avatars"].stale).toEqual(1);
     expect(stats.bySubdirectory["_thumbnails"].stale).toEqual(0);
     expect(failed(stats, { verify: true })).toBe(true);
-    expect(summarise(stats, { verify: true })).toContain("Stale in the bucket (changed on disk since): 1");
+    expect(summarise(stats, { verify: true })).toContain(
+      "Stale in the bucket (changed on disk since): 1"
+    );
     expect(stats.uploaded).toEqual(0);
 
     stats = await run.call(this);
@@ -166,7 +183,9 @@ describe("storage/backfill", function () {
     expect(stats.uploaded).toEqual(1);
 
     var body = await s3.get("blog_a/_avatars/me.png");
-    expect(Buffer.from(await body.Body.transformToByteArray()).toString()).toEqual("AVATAR");
+    expect(
+      Buffer.from(await body.Body.transformToByteArray()).toString()
+    ).toEqual("AVATAR");
   });
 
   it("can be limited to one blog or resumed from one", async function () {
@@ -206,7 +225,9 @@ describe("storage/backfill", function () {
     expect(stats.uploaded).toEqual(0);
     expect(stats.missing).toEqual(5);
     expect(await keys()).toEqual({});
-    expect(summarise(stats, { dryRun: true })).toContain("Would upload 5 files");
+    expect(summarise(stats, { dryRun: true })).toContain(
+      "Would upload 5 files"
+    );
   });
 
   it("verifies, failing when files are missing or different, by directory", async function () {
@@ -214,16 +235,34 @@ describe("storage/backfill", function () {
 
     await run.call(this, { blog: "blog_a" });
     await run.call(this, { blog: "blog_b" });
-    await fs.outputFile(join(directory, "blog_b/_assets/doc/media/one.png"), "bigger than before");
+    await fs.outputFile(
+      join(directory, "blog_b/_assets/doc/media/one.png"),
+      "bigger than before"
+    );
 
     var stats = await run.call(this, { verify: true });
 
     expect(stats.uploaded).toEqual(0);
     expect(stats.missing).toEqual(1);
     expect(stats.mismatched).toEqual(1);
-    expect(stats.bySubdirectory["_assets"]).toEqual({ scanned: 2, missing: 0, mismatched: 1, stale: 0 });
-    expect(stats.bySubdirectory["_image_cache"]).toEqual({ scanned: 1, missing: 1, mismatched: 0, stale: 0 });
-    expect(stats.bySubdirectory["_avatars"]).toEqual({ scanned: 1, missing: 0, mismatched: 0, stale: 0 });
+    expect(stats.bySubdirectory["_assets"]).toEqual({
+      scanned: 2,
+      missing: 0,
+      mismatched: 1,
+      stale: 0,
+    });
+    expect(stats.bySubdirectory["_image_cache"]).toEqual({
+      scanned: 1,
+      missing: 1,
+      mismatched: 0,
+      stale: 0,
+    });
+    expect(stats.bySubdirectory["_avatars"]).toEqual({
+      scanned: 1,
+      missing: 0,
+      mismatched: 0,
+      stale: 0,
+    });
     expect(failed(stats, { verify: true })).toBe(true);
     expect(Object.keys(await keys()).length).toEqual(4);
 
@@ -284,12 +323,16 @@ describe("storage/backfill", function () {
     expect(stats.errors).toEqual(3);
     expect(stats.uploaded).toEqual(0);
     expect(failed(stats, {})).toBe(true);
-    expect(await fs.pathExists(join(directory, "blog_a/_avatars/me.png"))).toBe(true);
+    expect(await fs.pathExists(join(directory, "blog_a/_avatars/me.png"))).toBe(
+      true
+    );
   }, 30000);
 
   it("prints progress as it goes", async function () {
     await run.call(this, { progressEvery: 2 });
 
-    expect(lines.filter((line) => /^\[backfill\] blogs=/.test(line)).length).toBeGreaterThan(2);
+    expect(
+      lines.filter((line) => /^\[backfill\] blogs=/.test(line)).length
+    ).toBeGreaterThan(2);
   });
 });

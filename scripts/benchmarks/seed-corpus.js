@@ -18,11 +18,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawnSync } = require("child_process");
 
-const REQUIRED_FILES = [
-  "redis-dump.rdb",
-  "minio.tar.gz",
-  "manifest.json",
-];
+const REQUIRED_FILES = ["redis-dump.rdb", "minio.tar.gz", "manifest.json"];
 
 function arg(name, fallback = null) {
   const i = process.argv.indexOf(name);
@@ -53,7 +49,9 @@ function matchesExpectedSchema(dir, expectedSchemaVersion) {
 
   try {
     const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
-    return String(manifest.corpusSchemaVersion) === String(expectedSchemaVersion);
+    return (
+      String(manifest.corpusSchemaVersion) === String(expectedSchemaVersion)
+    );
   } catch (err) {
     return false;
   }
@@ -138,7 +136,9 @@ function main() {
           continue;
         }
 
-        console.log(`[seed-corpus] recovered corpus artifacts from run ${runId}.`);
+        console.log(
+          `[seed-corpus] recovered corpus artifacts from run ${runId}.`
+        );
         return;
       }
     }

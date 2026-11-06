@@ -59,7 +59,14 @@ function usage(message) {
 
 // The store, refusing every write, so a check cannot change what it checks
 function readOnly(store) {
-  const refuse = (key) => Promise.reject(new Error("check-store.js does not write to the target (asked to write " + key + ")"));
+  const refuse = (key) =>
+    Promise.reject(
+      new Error(
+        "check-store.js does not write to the target (asked to write " +
+          key +
+          ")"
+      )
+    );
   return { ...store, put: refuse, putIfAbsent: refuse, delete: refuse };
 }
 
@@ -68,13 +75,29 @@ function readOnly(store) {
 // finding (or, for an error which says something about the store, a
 // "missing" or "mismatch" one).
 async function checkStore(store, { deep = false, scratchDir }) {
-  const result = { outcome: "ok", seq: 0, refs: 0, packs: 0, files: 0, bytes: 0, deep: false, findings: [] };
-  const failed = (name, err) => result.findings.push({ check: name, kind: check.verdict(err) || "error", detail: check.scrub(err) });
+  const result = {
+    outcome: "ok",
+    seq: 0,
+    refs: 0,
+    packs: 0,
+    files: 0,
+    bytes: 0,
+    deep: false,
+    findings: [],
+  };
+  const failed = (name, err) =>
+    result.findings.push({
+      check: name,
+      kind: check.verdict(err) || "error",
+      detail: check.scrub(err),
+    });
 
   try {
     const { state, findings, ...counts } = await check.cheapCheck(store);
     Object.assign(result, counts);
-    result.findings.push(...findings.map((finding) => ({ check: "cheap", ...finding })));
+    result.findings.push(
+      ...findings.map((finding) => ({ check: "cheap", ...finding }))
+    );
     if (state !== "ok") result.outcome = state;
   } catch (err) {
     failed("cheap", err);
@@ -83,9 +106,14 @@ async function checkStore(store, { deep = false, scratchDir }) {
   if (deep && result.outcome === "ok" && !result.findings.length) {
     result.deep = true;
     try {
-      const { findings, ...counts } = await check.deepCheck({ store, scratchDir });
+      const { findings, ...counts } = await check.deepCheck({
+        store,
+        scratchDir,
+      });
       result.objects = counts.objects;
-      result.findings.push(...findings.map((finding) => ({ check: "deep", ...finding })));
+      result.findings.push(
+        ...findings.map((finding) => ({ check: "deep", ...finding }))
+      );
     } catch (err) {
       failed("deep", err);
     }
@@ -101,21 +129,33 @@ function blogsUnder(root) {
     .readdirSync(root, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && BLOG_ID.test(entry.name))
     .map((entry) => entry.name)
-    .filter((blogID) => fs.statSync(path.join(root, blogID, "git"), { throwIfNoEntry: false })?.isDirectory())
+    .filter((blogID) =>
+      fs
+        .statSync(path.join(root, blogID, "git"), { throwIfNoEntry: false })
+        ?.isDirectory()
+    )
     .sort();
 }
 
 async function main() {
   let options, positional;
   try {
-    ({ options, positional } = parse(process.argv.slice(2), { flags: ["deep", "all-blogs"], values: ["scratch"] }));
+    ({ options, positional } = parse(process.argv.slice(2), {
+      flags: ["deep", "all-blogs"],
+      values: ["scratch"],
+    }));
   } catch (err) {
     usage(err.message);
   }
 
   if (positional.length) usage("Unexpected argument " + positional[0]);
-  if (options["all-blogs"] && (!options.dir || options.bucket)) usage("--all-blogs needs --dir, and no --bucket");
-  if (options.dir && !fs.statSync(options.dir, { throwIfNoEntry: false })?.isDirectory()) usage("No such directory: " + options.dir);
+  if (options["all-blogs"] && (!options.dir || options.bucket))
+    usage("--all-blogs needs --dir, and no --bucket");
+  if (
+    options.dir &&
+    !fs.statSync(options.dir, { throwIfNoEntry: false })?.isDirectory()
+  )
+    usage("No such directory: " + options.dir);
 
   const scratchDir = path.resolve(options.scratch || os.tmpdir());
   const deep = Boolean(options.deep);
@@ -128,7 +168,10 @@ async function main() {
       usage(err.message);
     }
     try {
-      const result = await checkStore(readOnly(target.store), { deep, scratchDir });
+      const result = await checkStore(readOnly(target.store), {
+        deep,
+        scratchDir,
+      });
       console.log(JSON.stringify(result, null, 2));
       return result.findings.length ? 1 : 0;
     } finally {
@@ -145,11 +188,20 @@ async function main() {
     const { store } = objectStore({ dir: path.join(root, blogID, "git") });
     const result = await checkStore(readOnly(store), { deep, scratchDir });
     outcomes[result.outcome]++;
-    if (result.findings.length) withFindings.push({ blog: blogID, findings: result.findings });
+    if (result.findings.length)
+      withFindings.push({ blog: blogID, findings: result.findings });
     console.log(JSON.stringify({ blog: blogID, ...result }));
   }
 
-  console.log(JSON.stringify({ summary: true, blogs: ids.length, deep: deep ? ids.length : 0, outcomes, withFindings }));
+  console.log(
+    JSON.stringify({
+      summary: true,
+      blogs: ids.length,
+      deep: deep ? ids.length : 0,
+      outcomes,
+      withFindings,
+    })
+  );
   return withFindings.length ? 1 : 0;
 }
 

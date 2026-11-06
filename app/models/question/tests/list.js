@@ -67,7 +67,7 @@ describe("questions.list", function () {
 
   it("lets you list the questions with a given tag", async function () {
     const first = await create({ title: "How?", body: "Yes", tags: ["foo"] });
-    const second = await create({ title: "How?", body: "Yes", tags: ["bar"] });
+    await create({ title: "How?", body: "Yes", tags: ["bar"] });
     const third = await create({ title: "How?", body: "Yes", tags: ["foo"] });
 
     const { questions } = await list({ tag: "foo" });
@@ -84,7 +84,7 @@ describe("questions.list", function () {
 
     await create({ title: "How?", body: "Yes", parent: first.id });
 
-    const { questions } = await list({ sort: 'by_created' });
+    const { questions } = await list({ sort: "by_created" });
 
     expect(questions.length).toBe(3);
     expect(questions[0].id).toBe(third.id);
@@ -102,7 +102,7 @@ describe("questions.list", function () {
 
     await create({ title: "How?", body: "Yes", parent: first.id });
 
-    const { questions } = await list({ sort: 'by_number_of_replies' });
+    const { questions } = await list({ sort: "by_number_of_replies" });
 
     expect(questions.length).toBe(3);
     expect(questions[0].id).toBe(second.id);

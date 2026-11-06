@@ -51,7 +51,14 @@ const progress = require("../each/progress");
 // Errors from build() meaning the source can no longer become an entry, the
 // same as rebuildDependents' NO_LONGER_VALID_ERRORS. Here the entry is left
 // alone instead of dropped.
-const SOURCE_GONE = ["WRONGTYPE", "ENOENT", "EMPTY", "ENOTDIR", "EISDIR", "TOO_MANY_FILES"];
+const SOURCE_GONE = [
+  "WRONGTYPE",
+  "ENOENT",
+  "EMPTY",
+  "ENOTDIR",
+  "EISDIR",
+  "TOO_MANY_FILES",
+];
 
 const stats = {
   blogsDone: 0,
@@ -83,7 +90,11 @@ if (unknown.length) {
 // parses as "", and a bare -s as true (which each/blog's slice ignores).
 const badValue = ["s", "e", "c"]
   .filter((key) => key in options && !(parseInt(options[key], 10) > 0))
-  .concat([].concat(options.o === undefined ? [] : options.o).some((id) => !id) ? ["o"] : []);
+  .concat(
+    [].concat(options.o === undefined ? [] : options.o).some((id) => !id)
+      ? ["o"]
+      : []
+  );
 
 if (badValue.length) {
   console.error(`-${badValue.join(", -")} needs a value`);
@@ -118,7 +129,9 @@ async function resolveBlog(identifier) {
     (await getBlogBy({ id: identifier })) ||
     (await getBlogBy({ handle: identifier })) ||
     (await getBlogBy({ domain: identifier })) ||
-    (await getBlogBy({ id: blogIDs.find((id) => id.indexOf(identifier) === 0) }));
+    (await getBlogBy({
+      id: blogIDs.find((id) => id.indexOf(identifier) === 0),
+    }));
 
   if (!found) throw new Error(`No blog: ${identifier}`);
 
@@ -182,7 +195,12 @@ async function rebuildEntries(blog, paths) {
         } catch (err) {
           if (SOURCE_GONE.indexOf(err && err.code) > -1) {
             stats.entriesMissing++;
-            log(blog, "Skipping, source can no longer be built:", path, messageOf(err));
+            log(
+              blog,
+              "Skipping, source can no longer be built:",
+              path,
+              messageOf(err)
+            );
           } else {
             stats.entriesFailed++;
             log(blog, "Error rebuilding", path, messageOf(err));
@@ -220,12 +238,16 @@ async function processBlog(blog) {
   try {
     lock = await establishSyncLock(blog.id);
   } catch (err) {
-    stats.blogsSkipped.push({ id: blog.id, handle: blog.handle, reason: messageOf(err) });
+    stats.blogsSkipped.push({
+      id: blog.id,
+      handle: blog.handle,
+      reason: messageOf(err),
+    });
     log(blog, "Skipped, could not take the sync lock:", messageOf(err));
     return;
   }
 
-  let rebuilt = 0;
+  let rebuilt;
 
   try {
     rebuilt = await rebuildEntries(blog, paths);
@@ -251,22 +273,36 @@ function summarize() {
   const verb = options["dry-run"] ? "Would rebuild" : "Rebuilt";
 
   console.log(`\n${"=".repeat(60)}`);
-  console.log(options["dry-run"] ? "Dry run summary (nothing changed):" : "Rebuild summary:");
-  console.log(`  Blogs ${options["dry-run"] ? "counted" : "done"}: ${stats.blogsDone}`);
-  console.log(`  Blogs skipped (sync lock busy, or an error): ${stats.blogsSkipped.length}`);
+  console.log(
+    options["dry-run"]
+      ? "Dry run summary (nothing changed):"
+      : "Rebuild summary:"
+  );
+  console.log(
+    `  Blogs ${options["dry-run"] ? "counted" : "done"}: ${stats.blogsDone}`
+  );
+  console.log(
+    `  Blogs skipped (sync lock busy, or an error): ${stats.blogsSkipped.length}`
+  );
   console.log(`  Entries: ${verb.toLowerCase()} ${stats.entriesRebuilt}`);
 
   if (!options["dry-run"]) {
-    console.log(`  Entries skipped (source file gone): ${stats.entriesMissing}`);
+    console.log(
+      `  Entries skipped (source file gone): ${stats.entriesMissing}`
+    );
     console.log(`  Entries failed: ${stats.entriesFailed}`);
   } else {
-    console.log("  (counts include entries that would be skipped, e.g. deleted ones)");
+    console.log(
+      "  (counts include entries that would be skipped, e.g. deleted ones)"
+    );
   }
 
   if (stats.blogsSkipped.length) {
     console.log("\nBlogs skipped, run again with --blog <id> for each:");
     stats.blogsSkipped.forEach((blog) =>
-      console.log(`  ${blog.id} (${blog.handle || "no handle"}): ${blog.reason}`)
+      console.log(
+        `  ${blog.id} (${blog.handle || "no handle"}): ${blog.reason}`
+      )
     );
   }
 
@@ -296,8 +332,17 @@ function doThis(user, blog, next) {
     await processBlog(blog);
   })()
     .catch((err) => {
-      console.error(clfdate(), blog.id.slice(0, 12), "Error processing blog:", messageOf(err));
-      stats.blogsSkipped.push({ id: blog.id, handle: blog.handle || "", reason: messageOf(err) });
+      console.error(
+        clfdate(),
+        blog.id.slice(0, 12),
+        "Error processing blog:",
+        messageOf(err)
+      );
+      stats.blogsSkipped.push({
+        id: blog.id,
+        handle: blog.handle || "",
+        reason: messageOf(err),
+      });
     })
     .then(() => {
       stats.lastBlog = { position, id: blog.id };
@@ -323,7 +368,9 @@ async function main() {
     options.o = (await resolveBlog(options.blog)).id;
   }
 
-  console.log(options["dry-run"] ? "Counting entries..." : "Rebuilding entries...");
+  console.log(
+    options["dry-run"] ? "Counting entries..." : "Rebuilding entries..."
+  );
 
   eachBlog(doThis, allDone, options);
 }

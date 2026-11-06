@@ -7,14 +7,20 @@ const SLOW_COMMAND_MS = 2000;
 // file provider (state U) can outlive it. Log whether it is still there.
 const logSurvivor = (command, pid) => {
   setTimeout(() => {
-    execFile("ps", ["-o", "pid=,stat=,etime=", "-p", String(pid)], (err, out) => {
-      const line = (out || "").trim();
-      console.error(
-        clfdate(),
-        `Timed out "${command}" pid=${pid}:`,
-        line ? `still running after kill (pid stat etime: ${line})` : "exited after kill"
-      );
-    });
+    execFile(
+      "ps",
+      ["-o", "pid=,stat=,etime=", "-p", String(pid)],
+      (err, out) => {
+        const line = (out || "").trim();
+        console.error(
+          clfdate(),
+          `Timed out "${command}" pid=${pid}:`,
+          line
+            ? `still running after kill (pid stat etime: ${line})`
+            : "exited after kill"
+        );
+      }
+    );
   }, 1000);
 };
 
@@ -58,9 +64,7 @@ const exec = (command, args = [], options = {}) => {
     timerId = setTimeout(() => {
       child.kill();
       logSurvivor(command, child.pid);
-      settle(() =>
-        reject(new Error(`Command timed out after ${timeout}ms`))
-      );
+      settle(() => reject(new Error(`Command timed out after ${timeout}ms`)));
     }, timeout);
 
     child.on("error", (error) => {
@@ -70,7 +74,10 @@ const exec = (command, args = [], options = {}) => {
     child.on("close", (code) => {
       const elapsed = Date.now() - startedAt;
       if (elapsed > SLOW_COMMAND_MS) {
-        console.log(clfdate(), `Slow command (${elapsed}ms, exit ${code}): ${command}`);
+        console.log(
+          clfdate(),
+          `Slow command (${elapsed}ms, exit ${code}): ${command}`
+        );
       }
       settle(() => {
         if (code === 0) {

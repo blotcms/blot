@@ -43,7 +43,8 @@ function filenameFromSrc(originalSrc) {
 
     // Never let separators, control characters or replacement characters
     // (from a sequence cut off mid-character) into a file name
-    return slug.replace(/[\/\\\u0000-\u001f�]/g, "");
+    // eslint-disable-next-line no-control-regex
+    return slug.replace(/[/\\\u0000-\u001f�]/g, "");
   } catch (e) {
     debug("Failed to extract filename from originalSrc:", e);
     return null;
@@ -65,7 +66,7 @@ module.exports = function (blogID, originalSrc) {
     // Extnames can sometimes be uppercase, we want to ensure that
     // this will work on case-sensitive file systems so we lowercase it...
     var extension = extname(path).toLowerCase();
-    
+
     // Extract original filename from originalSrc if available
     var originalFilename = filenameFromSrc(originalSrc);
 
@@ -73,7 +74,7 @@ module.exports = function (blogID, originalSrc) {
     var uuidPart = uuid();
     var name;
     var relativePath;
-    
+
     if (originalFilename && originalFilename.length > 0) {
       // Format: {uuid}/{slugified-original-filename}.{ext}
       // Limit the original filename part to avoid overly long filenames,
@@ -87,7 +88,7 @@ module.exports = function (blogID, originalSrc) {
       name = uuidPart + extension;
       relativePath = name;
     }
-    
+
     var assetPath = cache_folder_name + "/" + relativePath;
 
     // The image is copied here, resized in place, and then committed.
@@ -122,36 +123,36 @@ module.exports = function (blogID, originalSrc) {
     if (originalFilename && originalFilename.length > 0) {
       finalDir = join(finalDir, uuidPart);
     }
-    
+
     debug("Ensuring directory exists:", finalDir);
     fs.ensureDir(finalDir, function (err) {
       if (err) return callback(err);
-      
+
       debug("Copying", path, "to", finalPath);
       fs.copy(path, finalPath, function (err) {
-      if (err) return callback(err);
-
-      debug("Resizing", finalPath);
-      resize(finalPath, function (err, info) {
         if (err) return callback(err);
 
-        if (!info.width || !info.height)
-          return callback(new Error("No width or height"));
-
-        debug("Minifying", finalPath);
-        // minify(finalPath, function(err){
-
-        if (err) return callback(err);
-
-        info.src = src;
-
-        callbackify(assets.commit)(blogID, assetPath, function (err) {
+        debug("Resizing", finalPath);
+        resize(finalPath, function (err, info) {
           if (err) return callback(err);
 
-          callback(null, info);
+          if (!info.width || !info.height)
+            return callback(new Error("No width or height"));
+
+          debug("Minifying", finalPath);
+          // minify(finalPath, function(err){
+
+          if (err) return callback(err);
+
+          info.src = src;
+
+          callbackify(assets.commit)(blogID, assetPath, function (err) {
+            if (err) return callback(err);
+
+            callback(null, info);
+          });
+          // });
         });
-        // });
-      });
       });
     });
   };

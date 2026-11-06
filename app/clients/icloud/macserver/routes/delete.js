@@ -13,21 +13,24 @@ export default async (req, res) => {
 
   // Validate required headers
   if (!blogID || !path) {
-    console.error(
-      clfdate(),
-      "Missing required headers for delete request",
-      { blogID, path }
-    );
+    console.error(clfdate(), "Missing required headers for delete request", {
+      blogID,
+      path,
+    });
     return res.status(400).send("Missing required headers: blogID or path");
   }
 
-  console.log(clfdate(), `Received delete request for blogID: ${blogID}, path: ${path}`);
+  console.log(
+    clfdate(),
+    `Received delete request for blogID: ${blogID}, path: ${path}`
+  );
 
   const basePath = resolve(join(iCloudDriveDirectory, blogID));
   const filePath = resolve(join(basePath, normalizedPath));
 
   if (filePath !== basePath && !filePath.startsWith(`${basePath}${sep}`)) {
-    console.error(clfdate(), 
+    console.error(
+      clfdate(),
       "Invalid path: attempted to access parent directory",
       basePath,
       filePath

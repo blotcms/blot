@@ -23,7 +23,10 @@ module.exports = {
   retryDelayMultiplier: 2,
   maxRetryDelay: 8000,
   httpMethodsToRetry: ["GET", "HEAD", "OPTIONS", "PUT", "DELETE"],
-  statusCodesToRetry: [[429, 429], [500, 599]],
+  statusCodesToRetry: [
+    [429, 429],
+    [500, 599],
+  ],
   retryBackoff: (err, delay) => {
     const wait = Math.max(delay, retryAfterMs(err));
     return new Promise((resolve) => setTimeout(resolve, wait));

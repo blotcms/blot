@@ -20,7 +20,10 @@ function prepareCgroup(directory) {
 function start(unit) {
   prepareCgroup(jail.PROXY_CGROUP);
   const { file, args } = jail.proxyCommand(unit);
-  const child = spawn(file, args, { stdio: ["ignore", "inherit", "inherit"], env: {} });
+  const child = spawn(file, args, {
+    stdio: ["ignore", "inherit", "inherit"],
+    env: {},
+  });
 
   const stop = () => child.kill("SIGTERM");
   process.on("SIGTERM", stop);

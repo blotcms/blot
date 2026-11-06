@@ -44,13 +44,19 @@ module.exports = function spyGit() {
 
   spy.install = function () {
     var directory = fs.mkdtempSync(path.join(tempDir(), "git-spy-"));
-    var real = childProcess.execFileSync("sh", ["-c", "command -v git"]).toString().trim();
+    var real = childProcess
+      .execFileSync("sh", ["-c", "command -v git"])
+      .toString()
+      .trim();
 
     spy.log = path.join(directory, "log");
 
     fs.writeFileSync(
       path.join(directory, "git"),
-      SCRIPT.split('"$GIT_SPY_LOG"').join(quote(spy.log)).split('"$GIT_SPY_REAL"').join(quote(real)),
+      SCRIPT.split('"$GIT_SPY_LOG"')
+        .join(quote(spy.log))
+        .split('"$GIT_SPY_REAL"')
+        .join(quote(real)),
       { mode: 0o755 }
     );
 
@@ -93,7 +99,13 @@ module.exports = function spyGit() {
         var fields = line.split("\t");
 
         if (fields[0] === "start") {
-          var command = { pid: fields[1], gitDir: fields[2], cwd: fields[3], args: fields[4], ended: false };
+          var command = {
+            pid: fields[1],
+            gitDir: fields[2],
+            cwd: fields[3],
+            args: fields[4],
+            ended: false,
+          };
           started.push(command);
           byPid[command.pid] = command;
         } else if (byPid[fields[1]]) {

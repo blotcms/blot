@@ -40,11 +40,17 @@ function rebuild(blogID) {
 
       Rebuild(
         blogID,
-        { thumbnails: true, imageCache: true, status: folder.status, log: folder.log },
+        {
+          thumbnails: true,
+          imageCache: true,
+          status: folder.status,
+          log: folder.log,
+        },
         function (rebuildErr) {
           // As the dashboard does, the sync itself is not failed
           done(null, function (releaseErr) {
-            if (rebuildErr || releaseErr) return reject(rebuildErr || releaseErr);
+            if (rebuildErr || releaseErr)
+              return reject(rebuildErr || releaseErr);
             resolve();
           });
         }
@@ -59,7 +65,12 @@ async function processBlog(blog) {
   if (!count) return;
 
   affected.push(blog.id);
-  console.log(blog.id, blog.handle, count, "image cache file(s) with escaped names");
+  console.log(
+    blog.id,
+    blog.handle,
+    count,
+    "image cache file(s) with escaped names"
+  );
 
   if (!APPLY) return;
 

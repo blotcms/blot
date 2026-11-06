@@ -1,4 +1,4 @@
-const CONTAINER_NAME = require('config').container;
+const CONTAINER_NAME = require("config").container;
 
 var CLF_MONTH = [
   "Jan",
@@ -54,7 +54,7 @@ module.exports = function clfdate() {
     pad2(secs) +
     " " +
     offset +
-    "]" + 
+    "]" +
     (CONTAINER_NAME ? " [" + CONTAINER_NAME + "]" : "")
   );
 };

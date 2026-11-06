@@ -146,7 +146,7 @@ jobs:
       - name: Find unused dependencies
         if: always()
         # node-addon-api,node-gyp are required to build sharp
-        run: npx depcheck --ignores=node-addon-api,node-gyp,depcheck,nyc,nodemon,blessed-contrib,fontkit,text-to-svg --skip-missing
+        run: npx depcheck --ignores=node-addon-api,node-gyp,depcheck,eslint,prettier,nyc,nodemon,fontkit,text-to-svg --skip-missing
 
       - name: Find unused files
         if: always()
@@ -159,6 +159,16 @@ jobs:
       - name: Check scripts and workflows have no emoji
         if: always()
         run: node scripts/tests/ci/check-no-emoji.js
+
+      # ESLint and Prettier only, at the versions package.json pins, installed
+      # outside the checkout: installing the whole dependency tree would take
+      # minutes. The same script runs the pre-commit hook and the Claude
+      # Code edit hook.
+      - name: ESLint and Prettier
+        if: always()
+        env:
+          LINT_TOOLS_DIR: ${{ runner.temp }}/lint-tools
+        run: scripts/development/lint.sh check
 
       - name: List test suites
         if: always()

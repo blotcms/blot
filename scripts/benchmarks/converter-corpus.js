@@ -50,7 +50,8 @@ const WORDS = (
 function sentence(rand, min = 8, max = 22) {
   const n = min + Math.floor(rand() * (max - min));
   const words = [];
-  for (let i = 0; i < n; i++) words.push(WORDS[Math.floor(rand() * WORDS.length)]);
+  for (let i = 0; i < n; i++)
+    words.push(WORDS[Math.floor(rand() * WORDS.length)]);
   words[0] = words[0][0].toUpperCase() + words[0].slice(1);
   return words.join(" ") + ".";
 }
@@ -63,7 +64,11 @@ function paragraph(rand, sentences = 4) {
     const r = rand();
     if (r < 0.15) s = s.replace(/(\w+) (\w+)/, "*$1 $2*");
     else if (r < 0.25) s = s.replace(/(\w+) (\w+)/, "**$1 $2**");
-    else if (r < 0.4) s = s.replace(/(\w+) (\w+)/, "[$1 $2](https://example.com/" + Math.floor(rand() * 1000) + ")");
+    else if (r < 0.4)
+      s = s.replace(
+        /(\w+) (\w+)/,
+        "[$1 $2](https://example.com/" + Math.floor(rand() * 1000) + ")"
+      );
     else if (r < 0.45) s = s.replace(/(\w+)\./, "`$1`.");
     parts.push(s);
   }
@@ -94,35 +99,81 @@ function typicalPost(rand, { images = [] } = {}) {
   for (let section = 1; section <= 4; section++) {
     out.push("## " + sentence(rand, 2, 5).replace(/\.$/, ""), "");
     out.push(paragraph(rand, 5) + "[^" + section + "]", "");
-    if (images[section - 1]) out.push("![" + sentence(rand, 2, 4) + "](" + images[section - 1] + ")", "");
+    if (images[section - 1])
+      out.push(
+        "![" + sentence(rand, 2, 4) + "](" + images[section - 1] + ")",
+        ""
+      );
     out.push(paragraph(rand, 4), "");
     if (section === 1) {
-      out.push("- " + sentence(rand, 4, 10), "- " + sentence(rand, 4, 10), "    - " + sentence(rand, 4, 10), "- " + sentence(rand, 4, 10), "");
+      out.push(
+        "- " + sentence(rand, 4, 10),
+        "- " + sentence(rand, 4, 10),
+        "    - " + sentence(rand, 4, 10),
+        "- " + sentence(rand, 4, 10),
+        ""
+      );
     }
     if (section === 2) {
-      out.push("> " + paragraph(rand, 2), "", "1. " + sentence(rand, 4, 10), "2. " + sentence(rand, 4, 10), "3. " + sentence(rand, 4, 10), "");
+      out.push(
+        "> " + paragraph(rand, 2),
+        "",
+        "1. " + sentence(rand, 4, 10),
+        "2. " + sentence(rand, 4, 10),
+        "3. " + sentence(rand, 4, 10),
+        ""
+      );
     }
     if (section === 3) {
       out.push("| Name | Count | Notes |", "|------|------:|-------|");
-      for (let i = 0; i < 5; i++) out.push("| " + WORDS[i * 7] + " | " + Math.floor(rand() * 100) + " | " + sentence(rand, 3, 6) + " |");
+      for (let i = 0; i < 5; i++)
+        out.push(
+          "| " +
+            WORDS[i * 7] +
+            " | " +
+            Math.floor(rand() * 100) +
+            " | " +
+            sentence(rand, 3, 6) +
+            " |"
+        );
       out.push("");
     }
     if (section === 4) {
-      out.push("```js", "function greet(name) {", "  return `Hello, ${name}!`;", "}", "```", "");
+      out.push(
+        "```js",
+        "function greet(name) {",
+        "  return `Hello, ${name}!`;",
+        "}",
+        "```",
+        ""
+      );
       out.push('<div class="aside">', "", paragraph(rand, 2), "", "</div>", "");
     }
   }
-  for (let i = 1; i <= 4; i++) out.push("[^" + i + "]: " + sentence(rand, 6, 14), "");
+  for (let i = 1; i <= 4; i++)
+    out.push("[^" + i + "]: " + sentence(rand, 6, 14), "");
   return out.join("\n");
 }
 
 function longEssay(rand) {
-  const out = ["Title: A long essay", "Date: 2026-01-02", "", "# A long essay", ""];
+  const out = [
+    "Title: A long essay",
+    "Date: 2026-01-02",
+    "",
+    "# A long essay",
+    "",
+  ];
   for (let section = 1; section <= 16; section++) {
     out.push("## " + sentence(rand, 2, 5).replace(/\.$/, ""), "");
     for (let p = 0; p < 6; p++) out.push(paragraph(rand, 5), "");
     if (section % 4 === 0) out.push("> " + paragraph(rand, 2), "");
-    if (section % 3 === 0) out.push("- " + sentence(rand), "- " + sentence(rand), "- " + sentence(rand), "");
+    if (section % 3 === 0)
+      out.push(
+        "- " + sentence(rand),
+        "- " + sentence(rand),
+        "- " + sentence(rand),
+        ""
+      );
   }
   return out.join("\n");
 }
@@ -132,7 +183,10 @@ function pandocPath() {
 }
 
 function pandoc(args, cwd) {
-  execFileSync(pandocPath(), args, { cwd, stdio: ["ignore", "ignore", "pipe"] });
+  execFileSync(pandocPath(), args, {
+    cwd,
+    stdio: ["ignore", "ignore", "pipe"],
+  });
 }
 
 // A photo-like image: smooth gradients with noise, so it compresses like a
@@ -146,9 +200,21 @@ async function photo(sharp, width, height, rand, amount = 40) {
       const i = (y * width + x) * channels;
       const noise = amount ? (rand() - 0.5) * amount : 0;
       const band = amount ? 1 : Math.floor(y / 40) % 4;
-      data[i] = Math.max(0, Math.min(255, amount ? (x / width) * 200 + 30 + noise : 60 * band));
-      data[i + 1] = Math.max(0, Math.min(255, amount ? (y / height) * 180 + 40 + noise : 240 - 30 * band));
-      data[i + 2] = Math.max(0, Math.min(255, amount ? 120 + Math.sin(x / 50) * 60 + noise : 250));
+      data[i] = Math.max(
+        0,
+        Math.min(255, amount ? (x / width) * 200 + 30 + noise : 60 * band)
+      );
+      data[i + 1] = Math.max(
+        0,
+        Math.min(
+          255,
+          amount ? (y / height) * 180 + 40 + noise : 240 - 30 * band
+        )
+      );
+      data[i + 2] = Math.max(
+        0,
+        Math.min(255, amount ? 120 + Math.sin(x / 50) * 60 + noise : 250)
+      );
     }
   }
   return sharp(data, { raw: { width, height, channels } });
@@ -186,8 +252,16 @@ async function build(dir, converters) {
     let sharp = null;
     if (needsImages) {
       sharp = require("sharp");
-      await (await photo(sharp, 2400, 1600, rand)).jpeg({ quality: 85 }).toFile(path.join(work, "photo.jpg"));
-      await (await photo(sharp, 1200, 800, rand, 0)).png().toFile(path.join(work, "screenshot.png"));
+      await (
+        await photo(sharp, 2400, 1600, rand)
+      )
+        .jpeg({ quality: 85 })
+        .toFile(path.join(work, "photo.jpg"));
+      await (
+        await photo(sharp, 1200, 800, rand, 0)
+      )
+        .png()
+        .toFile(path.join(work, "screenshot.png"));
     }
 
     if (want("img")) {
@@ -205,22 +279,54 @@ async function build(dir, converters) {
 
       if (want("org")) {
         pandoc(["typical.md", "-t", "org", "-o", "typical.org"], work);
-        write("org", "typical-post.org", fs.readFileSync(path.join(work, "typical.org")));
+        write(
+          "org",
+          "typical-post.org",
+          fs.readFileSync(path.join(work, "typical.org"))
+        );
       }
       if (want("rtf")) {
         pandoc(["typical.md", "-s", "-t", "rtf", "-o", "typical.rtf"], work);
-        write("rtf", "typical-post.rtf", fs.readFileSync(path.join(work, "typical.rtf")));
+        write(
+          "rtf",
+          "typical-post.rtf",
+          fs.readFileSync(path.join(work, "typical.rtf"))
+        );
       }
       if (want("html")) {
-        pandoc(["typical.md", "-s", "-t", "html5", "--metadata", "title=A typical post", "-o", "typical.html"], work);
-        write("html", "typical-post.html", fs.readFileSync(path.join(work, "typical.html")));
+        pandoc(
+          [
+            "typical.md",
+            "-s",
+            "-t",
+            "html5",
+            "--metadata",
+            "title=A typical post",
+            "-o",
+            "typical.html",
+          ],
+          work
+        );
+        write(
+          "html",
+          "typical-post.html",
+          fs.readFileSync(path.join(work, "typical.html"))
+        );
       }
       for (const format of ["docx", "odt"]) {
         if (!want(format)) continue;
         pandoc(["typical.md", "-o", "typical." + format], work);
         pandoc(["typical-images.md", "-o", "typical-images." + format], work);
-        write(format, "typical-post." + format, fs.readFileSync(path.join(work, "typical." + format)));
-        write(format, "typical-post-images." + format, fs.readFileSync(path.join(work, "typical-images." + format)));
+        write(
+          format,
+          "typical-post." + format,
+          fs.readFileSync(path.join(work, "typical." + format))
+        );
+        write(
+          format,
+          "typical-post-images." + format,
+          fs.readFileSync(path.join(work, "typical-images." + format))
+        );
       }
     }
   } finally {

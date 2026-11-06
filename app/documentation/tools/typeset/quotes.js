@@ -6,24 +6,16 @@ module.exports = (text, node, $) => {
   // this only works if replace does not modify the length
   // of the string it is passed. therefore the
   if (
-    $(node)
-      .parent()
-      .is("p, blockquote") &&
-    $(node)
-      .parent()
-      .text() !== text
+    $(node).parent().is("p, blockquote") &&
+    $(node).parent().text() !== text
   ) {
-    const parentText = replace(
-      $(node)
-        .parent()
-        .text()
-    );
+    const parentText = replace($(node).parent().text());
     let start = 0;
 
     $(node)
       .parent()
       .contents()
-      .each(function() {
+      .each(function () {
         if (this === node) return false;
 
         start += $(this).text().length;
@@ -40,7 +32,7 @@ function replace(text) {
   // below works properly
 
   text = text
-    .replace(/(\W|^)"([^\s\!\?:;\.,‽»])/g, "$1\u201c$2") // beginning "
+    .replace(/(\W|^)"([^\s!?:;.,‽»])/g, "$1\u201c$2") // beginning "
     .replace(/(\u201c[^"]*)"([^"]*$|[^\u201c"]*\u201c)/g, "$1\u201d$2") // ending "
     .replace(/([^0-9])"/g, "$1\u201d") // remaining " at end of word
     .replace(/(\W|^)'(\S)/g, "$1\u2018$2") // beginning '

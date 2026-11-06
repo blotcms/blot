@@ -21,7 +21,9 @@ describe("scheduled entries", function () {
     await this.write({
       path: "/scheduled.txt",
       content:
-        "Link: a\nDate: " + new Date(publishAt).toISOString() + "\n\nHello, future!",
+        "Link: a\nDate: " +
+        new Date(publishAt).toISOString() +
+        "\n\nHello, future!",
     });
 
     // Not published while its time is still in the future

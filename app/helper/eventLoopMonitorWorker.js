@@ -44,12 +44,19 @@ function summarise(profile) {
   const label = (node) => {
     const { functionName, url, lineNumber } = node.callFrame;
     const file = url ? url.replace(/^.*\/(app|node_modules)\//, "$1/") : "";
-    return (functionName || "(anonymous)") + (file ? ` ${file}:${lineNumber + 1}` : "");
+    return (
+      (functionName || "(anonymous)") +
+      (file ? ` ${file}:${lineNumber + 1}` : "")
+    );
   };
 
   const stackOf = (id) => {
     const frames = [];
-    for (let at = id; at !== undefined && frames.length < 5; at = parent.get(at)) {
+    for (
+      let at = id;
+      at !== undefined && frames.length < 5;
+      at = parent.get(at)
+    ) {
       const node = nodes.get(at);
       if (!IDLE.has(node.callFrame.functionName)) frames.push(label(node));
     }

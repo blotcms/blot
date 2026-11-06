@@ -29,10 +29,10 @@ var overwrite = [
   "slug",
   "summary",
   "teaser",
-  "teaserBody"
+  "teaserBody",
 ];
 
-function canOverwrite (key) {
+function canOverwrite(key) {
   return overwrite.indexOf(key) > -1;
 }
 
@@ -48,7 +48,7 @@ var modelKeyByLower = Object.keys(Model).reduce((acc, modelKey) => {
 
 // Maps each front matter key which overwrites an entry field to that
 // field's name: { Teaser: "teaser" }. Keys are case-insensitive.
-function overrides (metadata) {
+function overrides(metadata) {
   var result = {};
 
   for (var key in metadata) {
@@ -62,7 +62,7 @@ function overrides (metadata) {
 }
 
 // The markup fields front matter has overwritten, e.g. ["teaser"].
-function overriddenMarkupFields (metadata) {
+function overriddenMarkupFields(metadata) {
   var fields = _.values(overrides(metadata));
 
   return markup.filter(function (field) {
@@ -75,7 +75,7 @@ function overriddenMarkupFields (metadata) {
 // url: 'string', // this is handled by set
 // scheduled: scheduled, // this is handled by set
 
-function Prepare (entry, options = {}) {
+function Prepare(entry, options = {}) {
   ensure(entry, "object")
     .and(entry.path, "string")
     .and(entry.size, "number")
@@ -86,7 +86,7 @@ function Prepare (entry, options = {}) {
 
   const metadataByLowercaseKey = metadataCaseInsensitive(entry.metadata);
 
-  function metadataValue (key) {
+  function metadataValue(key) {
     if (entry.metadata[key] !== undefined) return entry.metadata[key];
     return metadataByLowercaseKey[key.toLowerCase()];
   }
@@ -99,7 +99,7 @@ function Prepare (entry, options = {}) {
     entry.html,
     {
       decodeEntities: false,
-      withDomLvl1: false // this may cause issues?
+      withDomLvl1: false, // this may cause issues?
     },
     false
   );
@@ -127,7 +127,7 @@ function Prepare (entry, options = {}) {
 
   debug(entry.path, "Generating title from", pathWithCaseSensitiveName);
   var parsedTitle = Title($, pathWithCaseSensitiveName, {
-    titlecase: options.titlecase
+    titlecase: options.titlecase,
   });
   entry.title = parsedTitle.title;
   entry.titleTag = parsedTitle.tag;
@@ -177,7 +177,7 @@ function Prepare (entry, options = {}) {
 
   if (metadataTags) {
     if (Array.isArray(metadataTags)) {
-      tags = metadataTags.map(tag => String(tag));
+      tags = metadataTags.map((tag) => String(tag));
     } else if (typeof metadataTags === "string") {
       tags = metadataTags.split(",");
     }
@@ -232,18 +232,18 @@ function Prepare (entry, options = {}) {
   let permalinkCandidates = [
     metadataValue("permalink"),
     metadataValue("link"),
-    metadataValue("url")
+    metadataValue("url"),
   ];
 
   permalinkCandidates = permalinkCandidates
     .filter(
-      candidate =>
+      (candidate) =>
         candidate &&
         type(candidate, "string") &&
         candidate.indexOf("://") === -1
     )
     .map(normalize)
-    .filter(candidate => candidate !== "");
+    .filter((candidate) => candidate !== "");
 
   entry.permalink = permalinkCandidates.shift() || "";
   debug(entry.path, "Generated  permalink");
@@ -265,11 +265,11 @@ function Prepare (entry, options = {}) {
   return entry;
 }
 
-function truthy (str) {
+function truthy(str) {
   return !falsy(str);
 }
 
-function isPage (path) {
+function isPage(path) {
   return (
     pathNormalizer(path).toLowerCase().startsWith("/page/") ||
     pathNormalizer(path).toLowerCase().startsWith("/pages/")

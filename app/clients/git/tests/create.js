@@ -102,7 +102,11 @@ describe("git client create", function () {
     var blog = this.blog;
 
     await folder.write(blog.id, "/.git/HEAD", "ref: refs/heads/master\n");
-    await folder.write(blog.id, "/.git/config", '[remote "origin"]\n\turl = http://git.com/foo.git\n');
+    await folder.write(
+      blog.id,
+      "/.git/config",
+      '[remote "origin"]\n\turl = http://git.com/foo.git\n'
+    );
 
     var err = await promisify(create)(blog).then(
       () => null,
@@ -123,15 +127,28 @@ describe("git client create", function () {
     await folder.write(blog.id, "/Sub Folder/second.txt", "World");
     await folder.write(blog.id, "/third", "!");
 
-    var repoUrl = await promisify(setClientToGit)(this.user, blog, this.server.port);
+    var repoUrl = await promisify(setClientToGit)(
+      this.user,
+      blog,
+      this.server.port
+    );
     await Git(this.tmp).silent(true).clone(repoUrl);
 
     // Blot's copy of the blog folder
-    expect(await folder.names(blog.id, "/")).toEqual(["Sub Folder", "first.txt", "third"]);
+    expect(await folder.names(blog.id, "/")).toEqual([
+      "Sub Folder",
+      "first.txt",
+      "third",
+    ]);
     expect(await folder.names(blog.id, "/Sub Folder")).toEqual(["second.txt"]);
 
     // The clone
-    expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", "Sub Folder", "first.txt", "third"]);
+    expect(fs.readdirSync(clonedDir).sort()).toEqual([
+      ".git",
+      "Sub Folder",
+      "first.txt",
+      "third",
+    ]);
     expect(fs.readdirSync(clonedDir + "/Sub Folder")).toEqual(["second.txt"]);
   });
 
@@ -144,7 +161,11 @@ describe("git client create", function () {
     await folder.write(blog.id, "/post.txt", "Hello");
     await folder.write(blog.id, "/placeholder.pdf", "");
 
-    var repoUrl = await promisify(setClientToGit)(this.user, blog, this.server.port);
+    var repoUrl = await promisify(setClientToGit)(
+      this.user,
+      blog,
+      this.server.port
+    );
     await Git(this.tmp).silent(true).clone(repoUrl);
 
     expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", "post.txt"]);
@@ -160,13 +181,25 @@ describe("git client create", function () {
     await folder.write(blog.id, "/post.txt", "Hello");
     await folder.write(blog.id, "/.verification/agent.jsonl", "notes");
 
-    var repoUrl = await promisify(setClientToGit)(this.user, blog, this.server.port);
+    var repoUrl = await promisify(setClientToGit)(
+      this.user,
+      blog,
+      this.server.port
+    );
     await Git(this.tmp).silent(true).clone(repoUrl);
 
-    expect(await folder.names(blog.id, "/")).toEqual([".gitignore", ".verification", "post.txt"]);
+    expect(await folder.names(blog.id, "/")).toEqual([
+      ".gitignore",
+      ".verification",
+      "post.txt",
+    ]);
     expect(await folder.has(blog.id, "/.verification/agent.jsonl")).toBe(true);
 
-    expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", ".gitignore", "post.txt"]);
+    expect(fs.readdirSync(clonedDir).sort()).toEqual([
+      ".git",
+      ".gitignore",
+      "post.txt",
+    ]);
     expect(fs.existsSync(clonedDir + "/.verification")).toBe(false);
   });
 });

@@ -6,7 +6,7 @@ const asRetriever = require("../../lib/asRetriever");
 module.exports = asRetriever(function (req, res) {
   return function () {
     return function (text, render) {
-      let encoded_text = "";
+      let encoded_text;
 
       text = render(text);
 

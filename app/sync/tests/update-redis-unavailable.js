@@ -83,7 +83,9 @@ describe("update when Redis is unavailable", function () {
     await withSync(blogID, async function (syncFolder) {
       await folder.write(blogID, path, content);
 
-      expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(true);
+      expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(
+        true
+      );
       expect(await getEntry(blogID, path)).toBeFalsy();
 
       // The freeze is over
@@ -109,7 +111,9 @@ describe("update when Redis is unavailable", function () {
         callback(writeFreeze());
       });
 
-      expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(true);
+      expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(
+        true
+      );
       await checkEntry(check, { path: path, deleted: false });
 
       Entry.drop.and.callThrough();
@@ -134,7 +138,9 @@ describe("update when Redis is unavailable", function () {
         return Promise.reject(writeFreeze());
       });
 
-      expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(true);
+      expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(
+        true
+      );
 
       redis.mGet.and.callThrough();
 

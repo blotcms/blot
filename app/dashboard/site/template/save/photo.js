@@ -7,25 +7,34 @@ const forkIfNeeded = require("./fork-if-needed");
 const cleanupFiles = require("./cleanup-files");
 const { createFavicon } = require("./upload-favicon");
 
-const setBlog = (id, updates) => new Promise((resolve, reject) => {
-  Blog.set(id, updates, (error) => error ? reject(error) : resolve());
-});
+const setBlog = (id, updates) =>
+  new Promise((resolve, reject) => {
+    Blog.set(id, updates, (error) => (error ? reject(error) : resolve()));
+  });
 
-const runAvatar = (req, res) => new Promise((resolve, reject) => {
-  saveAvatar(req, res, (error) => error ? reject(error) : resolve());
-});
+const runAvatar = (req, res) =>
+  new Promise((resolve, reject) => {
+    saveAvatar(req, res, (error) => (error ? reject(error) : resolve()));
+  });
 
-const runForkIfNeeded = (req, res) => new Promise((resolve, reject) => {
-  forkIfNeeded(req, res, (error) => error ? reject(error) : resolve());
-});
+const runForkIfNeeded = (req, res) =>
+  new Promise((resolve, reject) => {
+    forkIfNeeded(req, res, (error) => (error ? reject(error) : resolve()));
+  });
 
-const removeTemplateFromFolder = (blogID, templateID) => new Promise((resolve, reject) => {
-  Template.removeFromFolder(blogID, templateID, (error) => error ? reject(error) : resolve());
-});
+const removeTemplateFromFolder = (blogID, templateID) =>
+  new Promise((resolve, reject) => {
+    Template.removeFromFolder(blogID, templateID, (error) =>
+      error ? reject(error) : resolve()
+    );
+  });
 
-const dropTemplate = (blogID, templateSlug) => new Promise((resolve, reject) => {
-  Template.drop(blogID, templateSlug, (error) => error ? reject(error) : resolve());
-});
+const dropTemplate = (blogID, templateSlug) =>
+  new Promise((resolve, reject) => {
+    Template.drop(blogID, templateSlug, (error) =>
+      error ? reject(error) : resolve()
+    );
+  });
 
 async function rollbackFork(req, res) {
   const fork = req.templateFork;
@@ -44,7 +53,10 @@ async function rollbackFork(req, res) {
   // destroy the user's existing template, not just undo this request.
   if (fork.isNewFork) {
     await removeTemplateFromFolder(req.blog.id, fork.template.id);
-    await dropTemplate(req.blog.id, fork.template.id.split(":").slice(1).join(":"));
+    await dropTemplate(
+      req.blog.id,
+      fork.template.id.split(":").slice(1).join(":")
+    );
   }
   req.template = res.locals.template = fork.originalTemplate;
   res.locals.templateForked = false;
@@ -57,10 +69,14 @@ function updateAvatarLocals(req, res, avatar) {
 }
 
 module.exports = async function savePhoto(req, res, next) {
-  const uploaded = req.files && (Array.isArray(req.files.avatar) ? req.files.avatar[0] : req.files.avatar);
+  const uploaded =
+    req.files &&
+    (Array.isArray(req.files.avatar) ? req.files.avatar[0] : req.files.avatar);
   const previousAvatar = req.blog.avatar || "";
   const hasUpload = Boolean(uploaded && uploaded.size);
-  const hasFavicon = Boolean(req.template.locals && req.template.locals.favicon);
+  const hasFavicon = Boolean(
+    req.template.locals && req.template.locals.favicon
+  );
   const canSaveFavicon = Boolean(res.locals.favicon_supported && hasUpload);
   // The first uploaded photo supplies a favicon only when the template has none.
   const wantsFavicon = canSaveFavicon && !hasFavicon;
@@ -73,9 +89,16 @@ module.exports = async function savePhoto(req, res, next) {
 
   try {
     if (hasUpload) await runAvatar(req, res);
-    else if (Object.prototype.hasOwnProperty.call(req.body, "avatar") && req.body.avatar === "") req.updates.avatar = "";
+    else if (
+      Object.prototype.hasOwnProperty.call(req.body, "avatar") &&
+      req.body.avatar === ""
+    )
+      req.updates.avatar = "";
 
-    if (Object.prototype.hasOwnProperty.call(req.updates, "avatar") && req.updates.avatar !== previousAvatar) {
+    if (
+      Object.prototype.hasOwnProperty.call(req.updates, "avatar") &&
+      req.updates.avatar !== previousAvatar
+    ) {
       avatarWriteStarted = true;
       await setBlog(req.blog.id, { avatar: req.updates.avatar });
       updateAvatarLocals(req, res, req.updates.avatar);
@@ -98,8 +121,10 @@ module.exports = async function savePhoto(req, res, next) {
           {},
           { onFileProcessed: () => cleanupFiles({ favicon: uploaded }) }
         );
-        if (req.templateFork) photoPath = `${req.baseUrl}/${faviconTemplateSlug}/photo`;
-      } catch (error) {
+        if (req.templateFork)
+          photoPath = `${req.baseUrl}/${faviconTemplateSlug}/photo`;
+      } catch (caught) {
+        let error = caught;
         try {
           await rollbackFork(req, res);
         } catch (rollbackError) {
@@ -117,7 +142,9 @@ module.exports = async function savePhoto(req, res, next) {
     const message = wantsFavicon
       ? "Saved photo and favicon!"
       : avatarChanged
-        ? (req.updates.avatar ? "Saved photo!" : "Removed photo!")
+        ? req.updates.avatar
+          ? "Saved photo!"
+          : "Removed photo!"
         : "No changes";
     return res.message(photoPath, message);
   } catch (error) {

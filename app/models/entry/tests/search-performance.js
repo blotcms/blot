@@ -25,19 +25,19 @@ describe("entry.search (performance)", function () {
       largeContent += `word${i} `;
     }
     largeContent += " End";
-  
+
     await this.set("/large.txt", largeContent);
-  
+
     const startTime = Date.now();
     const results = await this.search("word50000");
     const duration = Date.now() - startTime;
-  
+
     expect(duration).toBeLessThanOrEqual(4100);
     expect(results.length).toBeLessThan(2);
-  
+
     done();
   });
-  
+
   it("maintains performance with complex multi-term searches", async function (done) {
     await this.setMany(
       Array.from({ length: 100 }, (_, i) => ({
@@ -57,13 +57,13 @@ describe("entry.search (performance)", function () {
     const startTime = Date.now();
     const results = await this.search("complex specific50 unique50");
     const duration = Date.now() - startTime;
-  
+
     expect(duration).toBeLessThanOrEqual(4100);
     expect(results.length).toEqual(1);
-  
+
     done();
   });
-  
+
   it("returns partial results if timeout occurs mid-search", async function (done) {
     await this.setMany(
       Array.from({ length: 500 }, (_, i) => ({
@@ -82,14 +82,14 @@ describe("entry.search (performance)", function () {
     const startTime = Date.now();
     const results = await this.search("entry");
     const duration = Date.now() - startTime;
-  
+
     expect(duration).toBeLessThanOrEqual(4100);
     expect(results.length).toBeLessThanOrEqual(50);
     expect(results.length).toBeGreaterThan(0);
-  
+
     done();
   });
-  
+
   it("performs well with concurrent searches", async function (done) {
     await this.setMany(
       Array.from({ length: 200 }, (_, i) => ({
@@ -105,17 +105,17 @@ describe("entry.search (performance)", function () {
       this.search("searchable"),
       this.search("content"),
       this.search("Post searchable"),
-      this.search("nonexistent")
+      this.search("nonexistent"),
     ];
-  
+
     const results = await Promise.all(searches);
     const duration = Date.now() - startTime;
-  
+
     expect(duration).toBeLessThanOrEqual(4100);
-    results.forEach(result => {
+    results.forEach((result) => {
       expect(result.length).toBeLessThanOrEqual(50);
     });
-  
+
     done();
   });
 });

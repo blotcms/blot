@@ -32,7 +32,11 @@ module.exports = function create(blog, callback) {
   setCreating(blog.id)
     .catch(function (err) {
       // The dashboard shows the create page meanwhile: no reason to stop
-      console.log(clfdate() + " Git: create: could not mark the setup as in progress: " + err.message);
+      console.log(
+        clfdate() +
+          " Git: create: could not mark the setup as in progress: " +
+          err.message
+      );
     })
     .then(function () {
       sync(blog.id, async function (err, folder, done) {
@@ -70,7 +74,11 @@ async function createRepository(blog, folder) {
   // a failure here leaves the store empty for a retry.
   try {
     // Looked up on the module each time, so a spec can make it fail
-    await new Promise((resolve, reject) => database.setApplied(blog.id, made.commit, (err) => (err ? reject(err) : resolve())));
+    await new Promise((resolve, reject) =>
+      database.setApplied(blog.id, made.commit, (err) =>
+        err ? reject(err) : resolve()
+      )
+    );
     await setStatus(blog.owner, "createComplete");
   } catch (err) {
     await made.rollback();
@@ -88,7 +96,11 @@ async function createRepository(blog, folder) {
 // The folder is not looked for on local disk: it may have no copy there
 // (#2258)
 async function prepareMetadata(blog) {
-  await Promise.all([setStatus(blog.owner, "createInProgress"), createToken(blog.owner), assertNoLiveClone(blog.id)]);
+  await Promise.all([
+    setStatus(blog.owner, "createInProgress"),
+    createToken(blog.owner),
+    assertNoLiveClone(blog.id),
+  ]);
 }
 
 // A .git directory in the blog folder is what a live clone left, or one that

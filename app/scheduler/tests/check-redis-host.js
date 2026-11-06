@@ -40,7 +40,13 @@ describe("scheduler check-redis-host", function () {
 
   // INFO as Redis replies: the sections the check reads. `extra` adds or
   // overrides fields, e.g. { rdb_last_bgsave_status: "err" }.
-  function info({ used = 1 * GB, maxmemory = 10 * GB, notCounted = 0, extra = {}, errors = {} } = {}) {
+  function info({
+    used = 1 * GB,
+    maxmemory = 10 * GB,
+    notCounted = 0,
+    extra = {},
+    errors = {},
+  } = {}) {
     const fields = {
       run_id: "a".repeat(40),
       redis_version: "6.2.12",
@@ -67,14 +73,20 @@ describe("scheduler check-redis-host", function () {
       "# Stats",
       `rejected_connections:${fields.rejected_connections}`,
       "# Errorstats",
-      ...Object.keys(errors).map((type) => `errorstat_${type}:count=${errors[type]}`),
+      ...Object.keys(errors).map(
+        (type) => `errorstat_${type}:count=${errors[type]}`
+      ),
       "",
     ].join("\r\n");
   }
 
   // The parts of the Redis client the check uses. `memory` holds the INFO
   // values (see info()), `slowlog` the SLOWLOG GET reply.
-  function fakeRedis({ sample = sampleLine(), memory = {}, slowlog = [] } = {}) {
+  function fakeRedis({
+    sample = sampleLine(),
+    memory = {},
+    slowlog = [],
+  } = {}) {
     const store = new Map();
     if (sample !== null) store.set(SAMPLE_KEY, sample);
     const redis = {
@@ -84,7 +96,8 @@ describe("scheduler check-redis-host", function () {
       commands: [],
       sendCommand: async ([command, ...args]) => {
         redis.commands.push(command);
-        if (command === "GET") return store.has(args[0]) ? store.get(args[0]) : null;
+        if (command === "GET")
+          return store.has(args[0]) ? store.get(args[0]) : null;
         if (command === "SET") return store.set(args[0], args[1]) && "OK";
         if (command === "INFO") {
           expect(args).toEqual([]);
@@ -140,7 +153,8 @@ describe("scheduler check-redis-host", function () {
   }
 
   // A value as config/redis/bin/backup.sh stores it
-  const backupLine = (time, kind = "hourly") => `${stamp(time)} ${kind} ${kind}/2026-10-07-hour-09.rdb 1234`;
+  const backupLine = (time, kind = "hourly") =>
+    `${stamp(time)} ${kind} ${kind}/2026-10-07-hour-09.rdb 1234`;
   const withBackups = (h, { backup, offsite }) => {
     if (backup !== undefined) h.client.store.set(BACKUP_KEY, backup);
     if (offsite !== undefined) h.client.store.set(OFFSITE_KEY, offsite);
@@ -176,9 +190,17 @@ describe("scheduler check-redis-host", function () {
       expect(sample.active).toBe(true);
       expect(sample.ramTotal).toBe(16384000000);
       expect(sample.ramAvailable).toBe(12288000000);
-      expect(sample.diskRoot).toEqual({ used: 256000000, total: 1024000000, available: 716800000 });
+      expect(sample.diskRoot).toEqual({
+        used: 256000000,
+        total: 1024000000,
+        available: 716800000,
+      });
       // The older form has no available figure
-      expect(sample.diskBackups).toEqual({ used: 512000000, total: 2048000000, available: null });
+      expect(sample.diskBackups).toEqual({
+        used: 512000000,
+        total: 2048000000,
+        available: null,
+      });
     });
 
     it("leaves out RAM and disk fields that are missing or malformed", function () {
@@ -205,7 +227,9 @@ describe("scheduler check-redis-host", function () {
     });
 
     it("leaves what Redis does not count against maxmemory out of used", function () {
-      expect(parseMemory(info({ used: 5 * GB, notCounted: 1 * GB, maxmemory: 0 }))).toEqual({
+      expect(
+        parseMemory(info({ used: 5 * GB, notCounted: 1 * GB, maxmemory: 0 }))
+      ).toEqual({
         used: 4 * GB,
         maxmemory: 0,
       });
@@ -226,7 +250,9 @@ describe("scheduler check-redis-host", function () {
       await h.tick();
       expect(h.sent.length).toBe(1);
       expect(titles(h.sent[0])).toEqual(["TCP memory nearing tcp_mem[1]"]);
-      expect(h.sent[0].alerts[0].message).toContain("50% of tcp_mem[1] (250000)");
+      expect(h.sent[0].alerts[0].message).toContain(
+        "50% of tcp_mem[1] (250000)"
+      );
 
       await h.tick();
       expect(h.sent.length).toBe(1);
@@ -246,7 +272,9 @@ describe("scheduler check-redis-host", function () {
       await h.tick();
       expect(h.sent.length).toBe(2);
       expect(h.sent[1].hasAlerts).toBe(false);
-      expect(h.sent[1].summary).toBe("recovered: TCP memory nearing tcp_mem[1]");
+      expect(h.sent[1].summary).toBe(
+        "recovered: TCP memory nearing tcp_mem[1]"
+      );
     });
 
     it("alerts on each rise in the pressure counter", async function () {
@@ -323,17 +351,26 @@ describe("scheduler check-redis-host", function () {
         ["TCP memory nearing tcp_mem[1]"],
         ["TCP memory sample stale"],
       ]);
-      expect(Object.keys(h.state.alerts).sort()).toEqual(["sample-stale", "tcp-mem"]);
+      expect(Object.keys(h.state.alerts).sort()).toEqual([
+        "sample-stale",
+        "tcp-mem",
+      ]);
     });
   });
 
   describe("stale backups", function () {
-    const title = (name) => ({ backup: "Redis backup stale", offsite: "Offsite Redis backup stale" })[name];
+    const title = (name) =>
+      ({ backup: "Redis backup stale", offsite: "Offsite Redis backup stale" })[
+        name
+      ];
 
     it("stays quiet with fresh backups, or with no keys at all", async function () {
       const h = harness();
       await h.tick();
-      withBackups(h, { backup: backupLine(NOW - 2 * HOUR), offsite: backupLine(NOW - 49 * HOUR, "daily") });
+      withBackups(h, {
+        backup: backupLine(NOW - 2 * HOUR),
+        offsite: backupLine(NOW - 49 * HOUR, "daily"),
+      });
       await h.tick();
 
       expect(h.sent).toEqual([]);
@@ -346,7 +383,9 @@ describe("scheduler check-redis-host", function () {
       await h.tick();
 
       expect(h.sent.map(titles)).toEqual([[title("backup")]]);
-      expect(h.sent[0].alerts[0].message).toContain("the last backup was 4 hours ago");
+      expect(h.sent[0].alerts[0].message).toContain(
+        "the last backup was 4 hours ago"
+      );
       expect(h.sent[0].alerts[0].message).toContain("~/backup.log");
 
       h.advance(CONDITION_MIN_INTERVAL);
@@ -355,18 +394,25 @@ describe("scheduler check-redis-host", function () {
       await h.tick();
 
       expect(h.sent.length).toBe(2);
-      expect(h.sent[1].recovered.map((r) => r.title)).toEqual([title("backup")]);
+      expect(h.sent[1].recovered.map((r) => r.title)).toEqual([
+        title("backup"),
+      ]);
       expect(h.state.alerts).toEqual({});
     });
 
     it("alerts the offsite copy past 50 hours, and says S3 may be fine", async function () {
       const h = harness();
-      withBackups(h, { backup: backupLine(NOW - 5 * MINUTE), offsite: backupLine(NOW - 51 * HOUR, "daily") });
+      withBackups(h, {
+        backup: backupLine(NOW - 5 * MINUTE),
+        offsite: backupLine(NOW - 51 * HOUR, "daily"),
+      });
       await h.tick();
 
       expect(h.sent.map(titles)).toEqual([[title("offsite")]]);
       const message = h.sent[0].alerts[0].message;
-      expect(message).toContain("the last offsite backup (to Backblaze B2) was 51 hours ago");
+      expect(message).toContain(
+        "the last offsite backup (to Backblaze B2) was 51 hours ago"
+      );
       expect(message).toContain("blot-b2");
       expect(message).toContain("/etc/blot-redis/offsite-bucket");
       expect(message).toContain("does not mean the S3 backups stopped");
@@ -375,16 +421,24 @@ describe("scheduler check-redis-host", function () {
       h.sample = sampleLine({ time: h.now - MINUTE });
       withBackups(h, { offsite: backupLine(h.now - 2 * HOUR, "daily") });
       await h.tick();
-      expect(h.sent[1].recovered.map((r) => r.title)).toEqual([title("offsite")]);
+      expect(h.sent[1].recovered.map((r) => r.title)).toEqual([
+        title("offsite"),
+      ]);
     });
 
     it("judges the two independently", async function () {
       const h = harness();
-      withBackups(h, { backup: backupLine(NOW - 4 * HOUR), offsite: backupLine(NOW - HOUR, "daily") });
+      withBackups(h, {
+        backup: backupLine(NOW - 4 * HOUR),
+        offsite: backupLine(NOW - HOUR, "daily"),
+      });
       await h.tick();
       expect(Object.keys(h.state.alerts)).toEqual(["backup-stale"]);
 
-      withBackups(h, { backup: backupLine(h.now - MINUTE), offsite: backupLine(h.now - 60 * HOUR, "daily") });
+      withBackups(h, {
+        backup: backupLine(h.now - MINUTE),
+        offsite: backupLine(h.now - 60 * HOUR, "daily"),
+      });
       h.advance(CONDITION_MIN_INTERVAL);
       h.sample = sampleLine({ time: h.now - MINUTE });
       await h.tick();
@@ -405,11 +459,18 @@ describe("scheduler check-redis-host", function () {
     const TITLE = "Offsite copy of the storage bucket stale";
     // A value as config/storage-bucket/bin/offsite-sync.sh stores it
     const copyLine = (time) => `${stamp(time)} 1234567 987654321`;
-    const withCopy = (h, value) => h.client.store.set(STORAGE_OFFSITE_KEY, value);
+    const withCopy = (h, value) =>
+      h.client.store.set(STORAGE_OFFSITE_KEY, value);
 
     it("reads what offsite-sync.sh stores", function () {
-      expect(parseStorageOffsite(copyLine(NOW))).toEqual({ time: NOW, objects: 1234567, bytes: 987654321 });
-      expect(parseStorageOffsite("2026-11-05T02:41:07Z daily daily/x.rdb 12")).toBe(null);
+      expect(parseStorageOffsite(copyLine(NOW))).toEqual({
+        time: NOW,
+        objects: 1234567,
+        bytes: 987654321,
+      });
+      expect(
+        parseStorageOffsite("2026-11-05T02:41:07Z daily daily/x.rdb 12")
+      ).toBe(null);
       expect(parseStorageOffsite("garbage")).toBe(null);
       expect(parseStorageOffsite(null)).toBe(null);
     });
@@ -431,11 +492,15 @@ describe("scheduler check-redis-host", function () {
 
       expect(h.sent.map(titles)).toEqual([[TITLE]]);
       const message = h.sent[0].alerts[0].message;
-      expect(message).toContain("the last offsite copy of the storage bucket (to Backblaze B2) finished 51 hours ago");
+      expect(message).toContain(
+        "the last offsite copy of the storage bucket (to Backblaze B2) finished 51 hours ago"
+      );
       expect(message).toContain("~/storage-offsite.log");
       expect(message).toContain("blot-b2-storage");
       expect(message).toContain("/etc/blot/storage-offsite-bucket");
-      expect(message).toContain("(https://github.com/blotcms/blot/blob/master/config/storage-bucket/README.md)");
+      expect(message).toContain(
+        "(https://github.com/blotcms/blot/blob/master/config/storage-bucket/README.md)"
+      );
 
       h.advance(CONDITION_MIN_INTERVAL);
       h.sample = sampleLine({ time: h.now - MINUTE });
@@ -447,7 +512,10 @@ describe("scheduler check-redis-host", function () {
 
     it("is judged apart from the Redis offsite backup", async function () {
       const h = harness();
-      withBackups(h, { backup: backupLine(NOW - 5 * MINUTE), offsite: backupLine(NOW - 51 * HOUR, "daily") });
+      withBackups(h, {
+        backup: backupLine(NOW - 5 * MINUTE),
+        offsite: backupLine(NOW - 51 * HOUR, "daily"),
+      });
       withCopy(h, copyLine(NOW - HOUR));
       await h.tick();
       expect(Object.keys(h.state.alerts)).toEqual(["offsite-stale"]);
@@ -479,21 +547,31 @@ describe("scheduler check-redis-host", function () {
       h.sample = sampleLine({ time: h.now });
       h.client.memory.used = 8.4 * GB;
       await h.tick();
-      expect(h.sent[1].summary).toBe("recovered: Redis memory nearing maxmemory");
+      expect(h.sent[1].summary).toBe(
+        "recovered: Redis memory nearing maxmemory"
+      );
     });
 
     it("ignores replica output buffers, as Redis does", async function () {
-      const h = harness({ memory: { used: 9 * GB, notCounted: 2 * GB, maxmemory: 10 * GB } });
+      const h = harness({
+        memory: { used: 9 * GB, notCounted: 2 * GB, maxmemory: 10 * GB },
+      });
       await h.tick();
       expect(h.sent).toEqual([]);
     });
 
     it("alerts on an unset maxmemory only on a host marked active", async function () {
-      const before = harness({ sample: sampleLine({ active: 0 }), memory: { maxmemory: 0 } });
+      const before = harness({
+        sample: sampleLine({ active: 0 }),
+        memory: { maxmemory: 0 },
+      });
       await before.tick();
       expect(before.sent).toEqual([]);
 
-      const after = harness({ sample: sampleLine({ active: 1 }), memory: { maxmemory: 0 } });
+      const after = harness({
+        sample: sampleLine({ active: 1 }),
+        memory: { maxmemory: 0 },
+      });
       await after.tick();
       await after.tick();
       expect(after.sent.length).toBe(1);
@@ -503,7 +581,10 @@ describe("scheduler check-redis-host", function () {
 
   describe("host memory", function () {
     // What host-memory.js reads, as a fraction of 16 GB available
-    const reading = (fraction) => async () => ({ total: 16 * GB, available: fraction * 16 * GB });
+    const reading = (fraction) => async () => ({
+      total: 16 * GB,
+      available: fraction * 16 * GB,
+    });
     const low = reading(0.05);
 
     it("says nothing unless the caller passes a reader", async function () {
@@ -536,8 +617,12 @@ describe("scheduler check-redis-host", function () {
       await h.tick({ hostMemory: low });
       expect(h.sent.length).toBe(1);
       expect(titles(h.sent[0])).toEqual(["Host memory low"]);
-      expect(h.sent[0].alerts[0].message).toContain("0.80GB of 16.00GB available (5%)");
-      expect(h.sent[0].readings).toContain("Host memory (where this check ran): 0.80GB available of 16.00GB (5%)");
+      expect(h.sent[0].alerts[0].message).toContain(
+        "0.80GB of 16.00GB available (5%)"
+      );
+      expect(h.sent[0].readings).toContain(
+        "Host memory (where this check ran): 0.80GB available of 16.00GB (5%)"
+      );
 
       await h.tick({ hostMemory: low });
       await h.tick({ hostMemory: low });
@@ -564,7 +649,9 @@ describe("scheduler check-redis-host", function () {
       const h = harness();
       await h.tick({ hostMemory: low });
       await h.tick({ hostMemory: async () => null });
-      await h.tick({ hostMemory: async () => Promise.reject(new Error("EACCES")) });
+      await h.tick({
+        hostMemory: async () => Promise.reject(new Error("EACCES")),
+      });
       expect(h.state.lowMemory).toBe(1);
 
       await h.tick({ hostMemory: low });
@@ -643,7 +730,9 @@ describe("scheduler check-redis-host", function () {
           expect(text.split("\n")[0]).toBe(
             "Redis host: TCP memory nearing tcp_mem[1], Redis memory nearing maxmemory"
           );
-          expect(text).toContain("- **Redis memory nearing maxmemory**: 9.00GB of 10.00GB (90%)");
+          expect(text).toContain(
+            "- **Redis memory nearing maxmemory**: 9.00GB of 10.00GB (90%)"
+          );
           expect(text).toContain("alert at 50% of `tcp_mem[1]`");
           expect(text).not.toContain("Recovered");
           done();
@@ -662,7 +751,9 @@ describe("scheduler check-redis-host", function () {
 
   describe("background save", function () {
     it("alerts at once, explaining why it is urgent, and clears when a save succeeds", async function () {
-      const h = harness({ memory: { extra: { rdb_last_bgsave_status: "err" } } });
+      const h = harness({
+        memory: { extra: { rdb_last_bgsave_status: "err" } },
+      });
 
       await h.tick();
       expect(h.sent.length).toBe(1);
@@ -675,7 +766,9 @@ describe("scheduler check-redis-host", function () {
       expect(message).toContain("/var/lib/redis6");
       expect(message).toContain("/var/log/redis6/redis6.log");
       expect(message).toContain("vm.overcommit_memory");
-      expect(message).toContain("(https://github.com/blotcms/blot/blob/master/config/redis/README.md)");
+      expect(message).toContain(
+        "(https://github.com/blotcms/blot/blob/master/config/redis/README.md)"
+      );
 
       set(h, { rdb_last_bgsave_status: "err" });
       await h.tick();
@@ -684,7 +777,9 @@ describe("scheduler check-redis-host", function () {
       h.advance(CONDITION_MIN_INTERVAL);
       set(h, { rdb_last_bgsave_status: "ok" });
       await h.tick();
-      expect(h.sent[1].summary).toBe("recovered: Redis background save failing");
+      expect(h.sent[1].summary).toBe(
+        "recovered: Redis background save failing"
+      );
     });
   });
 
@@ -692,7 +787,9 @@ describe("scheduler check-redis-host", function () {
     const status = (h, value) => set(h, { rdb_last_bgsave_status: value });
 
     it("holds a clear back until an hour after the last email, then says it was flapping", async function () {
-      const h = harness({ memory: { extra: { rdb_last_bgsave_status: "err" } } });
+      const h = harness({
+        memory: { extra: { rdb_last_bgsave_status: "err" } },
+      });
       await h.tick(); // emailed: failing
 
       status(h, "ok");
@@ -714,7 +811,9 @@ describe("scheduler check-redis-host", function () {
     });
 
     it("sends nothing for a blip that is over before the hour is", async function () {
-      const h = harness({ memory: { extra: { rdb_last_bgsave_status: "err" } } });
+      const h = harness({
+        memory: { extra: { rdb_last_bgsave_status: "err" } },
+      });
       await h.tick();
       status(h, "ok");
       await h.tick();
@@ -749,7 +848,9 @@ describe("scheduler check-redis-host", function () {
       status(h, "err");
       await h.tick();
       expect(h.sent.length).toBe(3);
-      expect(h.sent[2].alerts[0].message).toContain("flapping: it changed state 3 times");
+      expect(h.sent[2].alerts[0].message).toContain(
+        "flapping: it changed state 3 times"
+      );
     });
 
     it("sends an event type at most once per cooldown and batches the rest", async function () {
@@ -773,7 +874,9 @@ describe("scheduler check-redis-host", function () {
       await h.tick();
       expect(h.sent.length).toBe(2);
       expect(h.sent[1].alerts[0].message).toContain("rejected 8 connections");
-      expect(h.sent[1].alerts[0].message).toContain("held back by the limit of one email per 6 hours");
+      expect(h.sent[1].alerts[0].message).toContain(
+        "held back by the limit of one email per 6 hours"
+      );
       expect(h.state.pending).toEqual({});
     });
 
@@ -856,7 +959,9 @@ describe("scheduler check-redis-host", function () {
       // Restarted: the counters start again, and only the restart is reported
       set(h, { uptime_in_seconds: 30 }, { OOM: 2, READONLY: 300 });
       await h.tick();
-      expect(h.sent.map((v) => v.summary)).toEqual(["Redis restarted or switched host"]);
+      expect(h.sent.map((v) => v.summary)).toEqual([
+        "Redis restarted or switched host",
+      ]);
 
       // Counters reset without a restart (CONFIG RESETSTAT): no negative delta
       set(h, { uptime_in_seconds: 330 }, { OOM: 0 });
@@ -883,7 +988,9 @@ describe("scheduler check-redis-host", function () {
 
       expect(h.sent.length).toBe(1);
       const { message } = h.sent[0].alerts[0];
-      expect(message).toContain("Redis restarted or a different host/process is now serving (e.g. after a promotion)");
+      expect(message).toContain(
+        "Redis restarted or a different host/process is now serving (e.g. after a promotion)"
+      );
       expect(message).toContain("uptime went backwards");
       expect(message).toContain("the last tcpmem sample was from ip-10-0-0-1");
     });
@@ -900,14 +1007,27 @@ describe("scheduler check-redis-host", function () {
       expect(h.sent[0].alerts[0].message).toContain("run_id changed");
 
       h.advance(EVENT_COOLDOWN.default);
-      set(h, { uptime_in_seconds: 100900, run_id: "b".repeat(40), redis_version: "6.2.14" });
+      set(h, {
+        uptime_in_seconds: 100900,
+        run_id: "b".repeat(40),
+        redis_version: "6.2.14",
+      });
       await h.tick();
-      expect(h.sent[1].alerts[0].message).toContain("version changed from 6.2.12 to 6.2.14");
+      expect(h.sent[1].alerts[0].message).toContain(
+        "version changed from 6.2.12 to 6.2.14"
+      );
     });
   });
 
   describe("slow commands", function () {
-    const entry = (id, ms, ...args) => [id, Math.floor(NOW / 1000), ms * 1000, args, "127.0.0.1:5000", ""];
+    const entry = (id, ms, ...args) => [
+      id,
+      Math.floor(NOW / 1000),
+      ms * 1000,
+      args,
+      "127.0.0.1:5000",
+      "",
+    ];
 
     it("starts from what is already in the slowlog without reporting it", async function () {
       const h = harness({ slowlog: [entry(7, 900, "KEYS", "*")] });
@@ -921,7 +1041,10 @@ describe("scheduler check-redis-host", function () {
     it("ignores entries under the threshold", async function () {
       const h = harness();
       await h.tick();
-      h.client.slowlog = [entry(1, 49, "SMEMBERS", "big"), entry(0, 12, "GET", "x")];
+      h.client.slowlog = [
+        entry(1, 49, "SMEMBERS", "big"),
+        entry(0, 12, "GET", "x"),
+      ];
       await h.tick();
       expect(h.sent).toEqual([]);
     });
@@ -931,7 +1054,10 @@ describe("scheduler check-redis-host", function () {
       await h.tick();
 
       const entries = [];
-      for (let i = 0; i < 13; i++) entries.push(entry(i, 60 + i * 10, "SMEMBERS", "set:" + i, "x".repeat(200)));
+      for (let i = 0; i < 13; i++)
+        entries.push(
+          entry(i, 60 + i * 10, "SMEMBERS", "set:" + i, "x".repeat(200))
+        );
       h.client.slowlog = entries.reverse(); // newest first, as Redis replies
       set(h, {});
       await h.tick();
@@ -990,11 +1116,14 @@ describe("scheduler check-redis-host", function () {
 
   describe("review fixes", function () {
     it("keeps the state in memory when Redis refuses the write, so the alert is not repeated", async function () {
-      const h = harness({ memory: { extra: { rdb_last_bgsave_status: "err" } } });
+      const h = harness({
+        memory: { extra: { rdb_last_bgsave_status: "err" } },
+      });
       const keep = { state: null };
       const write = h.client.sendCommand;
       h.client.sendCommand = async (args) => {
-        if (args[0] === "SET") throw new Error("MISCONF Errors writing to the AOF file");
+        if (args[0] === "SET")
+          throw new Error("MISCONF Errors writing to the AOF file");
         return write(args);
       };
 
@@ -1017,11 +1146,20 @@ describe("scheduler check-redis-host", function () {
     });
 
     it("prefers what Redis holds when that is newer than the copy kept in memory", async function () {
-      const h = harness({ memory: { extra: { rdb_last_bgsave_status: "err" } } });
+      const h = harness({
+        memory: { extra: { rdb_last_bgsave_status: "err" } },
+      });
       const keep = {
-        state: { updatedAt: 1, alerts: { "bgsave-failed": 1 }, mail: { "bgsave-failed": { at: 1, flaps: 0 } } },
+        state: {
+          updatedAt: 1,
+          alerts: { "bgsave-failed": 1 },
+          mail: { "bgsave-failed": { at: 1, flaps: 0 } },
+        },
       };
-      h.client.store.set(STATE_KEY, JSON.stringify({ updatedAt: 2, alerts: {} }));
+      h.client.store.set(
+        STATE_KEY,
+        JSON.stringify({ updatedAt: 2, alerts: {} })
+      );
 
       await h.tick({ keep });
       expect(h.sent.length).toBe(1);
@@ -1034,14 +1172,20 @@ describe("scheduler check-redis-host", function () {
       await h.tick(); // emailed
       h.sample = sampleLine({ time: h.now, pressures: 4 });
       await h.tick(); // held
-      expect(h.state.pending["tcp-pressure"]).toEqual({ from: 2, to: 4, host: "ip-10-0-0-1" });
+      expect(h.state.pending["tcp-pressure"]).toEqual({
+        from: 2,
+        to: 4,
+        host: "ip-10-0-0-1",
+      });
 
       // By the time it is sent the sample is missing
       h.advance(EVENT_COOLDOWN.default);
       h.sample = null;
       await h.tick();
       expect(h.sent.length).toBe(2);
-      expect(h.sent[1].alerts[0].message).toContain("from 2 to 4 on ip-10-0-0-1");
+      expect(h.sent[1].alerts[0].message).toContain(
+        "from 2 to 4 on ip-10-0-0-1"
+      );
     });
 
     it("describes the other alerts when one cannot be described", async function () {
@@ -1082,7 +1226,9 @@ describe("scheduler check-redis-host", function () {
       set(h, { rejected_connections: 41 }, { OOM: 91, ERR: 5000 });
       await h.tick();
       expect(h.sent.length).toBe(1);
-      expect(h.sent[0].summary).toBe("Redis rejected connections, Redis refused writes (OOM, MISCONF)");
+      expect(h.sent[0].summary).toBe(
+        "Redis rejected connections, Redis refused writes (OOM, MISCONF)"
+      );
     });
   });
 });

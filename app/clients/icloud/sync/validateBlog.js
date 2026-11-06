@@ -73,7 +73,12 @@ const walk = async (blogID, publish, heldLock) => {
 // loop. Every blog is logged so quiet blogs are a baseline. entryCount is
 // there because Fix()'s entry-ghosts check does one sequential Redis round
 // trip per entry.
-const logLag = (blogID, phase, entryCount, { durationMs, maxLagMs, p99LagMs }) => {
+const logLag = (
+  blogID,
+  phase,
+  entryCount,
+  { durationMs, maxLagMs, p99LagMs }
+) => {
   console.log(
     clfdate(),
     "iCloud: validation lag",

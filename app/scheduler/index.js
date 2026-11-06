@@ -1,5 +1,4 @@
 var User = require("models/user");
-var async = require("async");
 var dailyUpdate = require("./daily");
 var email = require("helper/email");
 var clfdate = require("helper/clfdate");
@@ -45,14 +44,21 @@ function sendLowDiskEmail(disks, headline) {
 async function notifyLowDisk(disks) {
   try {
     const lowDisk = disks.some(
-      disk => disk.available_k < MINIMUM_DISK_SPACE_IN_K
+      (disk) => disk.available_k < MINIMUM_DISK_SPACE_IN_K
     );
 
-    if (lowDisk && (await lock.once(LOW_DISK_NOTIFIED_KEY, DISK_NOTIFY_TTL_MS))) {
+    if (
+      lowDisk &&
+      (await lock.once(LOW_DISK_NOTIFIED_KEY, DISK_NOTIFY_TTL_MS))
+    ) {
       sendLowDiskEmail(disks, "Warning: Blot's disk is low on space");
     }
   } catch (err) {
-    console.error(clfdate(), "Error checking whether to send low disk space email", err);
+    console.error(
+      clfdate(),
+      "Error checking whether to send low disk space email",
+      err
+    );
   }
 }
 
@@ -71,11 +77,11 @@ module.exports = function () {
   scheduler.scheduleJob("* * * * *", function () {
     // Detect any zombie processes
     zombies(function (err) {
-      if (err) console.error(clfdate(), "Error checking for zombie processes", err);
+      if (err)
+        console.error(clfdate(), "Error checking for zombie processes", err);
     });
 
     freeDiskSpace(function (err, disks) {
-
       if (err || !disks) {
         console.error(clfdate(), "Error checking disk space", err);
         return;
@@ -85,7 +91,7 @@ module.exports = function () {
         clfdate(),
         "[STATS]",
         "Available disk space",
-        disks.map(disk => disk.label + "=" + disk.available_human).join(", ")
+        disks.map((disk) => disk.label + "=" + disk.available_human).join(", ")
       );
 
       notifyLowDisk(disks);
@@ -116,7 +122,7 @@ module.exports = function () {
       contents
         .trim()
         .split("\n")
-        .forEach(line => {
+        .forEach((line) => {
           stats[line.split(":")[0].trim()] = parseInt(
             line.split(":")[1].trim()
           );
@@ -126,7 +132,7 @@ module.exports = function () {
       let totalCPUs = os.cpus().length;
       let totalmem = stats.MemTotal;
       let freemem = stats.MemAvailable;
-      let pretty = num => (100 * num).toFixed(3) + "%";
+      let pretty = (num) => (100 * num).toFixed(3) + "%";
 
       console.log(
         clfdate(),
@@ -142,19 +148,31 @@ module.exports = function () {
   // Warn users about impending renewals and expiries. The scan looks at every
   // user, and a Redis marker per user and billing period means each warning is
   // sent once however many processes run it.
-  console.log(clfdate(), "Scheduled daily subscription renewal and expiry emails");
+  console.log(
+    clfdate(),
+    "Scheduled daily subscription renewal and expiry emails"
+  );
   lock.cron("subscription-emails", { hour: 14, minute: 0 }, async function () {
     const sent = await User.sendSubscriptionEmails();
-    console.log(clfdate(), "Sent", sent, "subscription renewal and expiry emails");
+    console.log(
+      clfdate(),
+      "Sent",
+      sent,
+      "subscription renewal and expiry emails"
+    );
   });
 
   // Repair users whose welcome email alarm was never set (the sign-up route
   // schedules it after the user is committed, and can fail)
   console.log(clfdate(), "Scheduled daily welcome email alarm reconcile");
-  lock.cron("welcome-email-reconcile", { hour: 15, minute: 0 }, async function () {
-    const scheduled = await User.scheduleWelcomeEmail.reconcile({ days: 7 });
-    console.log(clfdate(), "Re-armed", scheduled, "welcome email alarms");
-  });
+  lock.cron(
+    "welcome-email-reconcile",
+    { hour: 15, minute: 0 },
+    async function () {
+      const scheduled = await User.scheduleWelcomeEmail.reconcile({ days: 7 });
+      console.log(clfdate(), "Re-armed", scheduled, "welcome email alarms");
+    }
+  );
 
   console.log(clfdate(), "Scheduled daily check of storage disk usage");
   // Checks one host's disk: scope "host" once BLOT_HOST_ID is set and there is
@@ -164,7 +182,11 @@ module.exports = function () {
 
     exec("df -h", function (err, stdout) {
       if (err) {
-        console.error(clfdate(), "Scheduler: Error checking available disk space", err);
+        console.error(
+          clfdate(),
+          "Scheduler: Error checking available disk space",
+          err
+        );
         return;
       }
 
@@ -209,13 +231,12 @@ module.exports = function () {
   //   });
   // });
 
-
-
   console.log(clfdate(), "Scheduled daily subscription lifecycle processing");
   lock.cron("subscription-lifecycle", { hour: 9, minute: 0 }, function () {
     console.log(clfdate(), "Processing subscription lifecycle changes");
     subscriptionLifecycleJob(function (err) {
-      if (err) console.log(clfdate(), "Error processing subscription lifecycle", err);
+      if (err)
+        console.log(clfdate(), "Error processing subscription lifecycle", err);
     });
   });
 
@@ -224,7 +245,7 @@ module.exports = function () {
     console.log(clfdate(), "Checking for potential fraudulent users");
 
     let customers;
-    
+
     try {
       customers = await checkCardTesters();
     } catch (err) {
@@ -241,7 +262,10 @@ module.exports = function () {
   // Renews the wildcard certificate in Redis when it has under 30 days left;
   // a failure is logged here and, if it persists, check-ssl-certificates below
   // emails once the certificate is under 21 days.
-  console.log(clfdate(), "Scheduled daily renewal of the wildcard SSL certificate");
+  console.log(
+    clfdate(),
+    "Scheduled daily renewal of the wildcard SSL certificate"
+  );
   lock.cron("renew-wildcard-ssl", { hour: 1, minute: 0 }, async function () {
     try {
       const result = await renewWildcardSSL();
@@ -255,32 +279,42 @@ module.exports = function () {
         );
       }
     } catch (err) {
-      console.error(clfdate(), "Error: Renewing the wildcard SSL certificate", err);
+      console.error(
+        clfdate(),
+        "Error: Renewing the wildcard SSL certificate",
+        err
+      );
     }
   });
 
   console.log(clfdate(), "Scheduled daily check of SSL certificates");
-  lock.cron("check-ssl-certificates", { hour: 13, minute: 0 }, async function () {
-    console.log(clfdate(), "Checking SSL certificates");
+  lock.cron(
+    "check-ssl-certificates",
+    { hour: 13, minute: 0 },
+    async function () {
+      console.log(clfdate(), "Checking SSL certificates");
 
-    try {
-      const { sent } = await checkSSLCertificates({
-        sendEmail: (view) =>
-          new Promise((resolve, reject) =>
-            email.SSL_CERTIFICATE_ISSUES(null, view, (err) =>
-              err ? reject(err) : resolve()
-            )
-          ),
-      });
+      try {
+        const { sent } = await checkSSLCertificates({
+          sendEmail: (view) =>
+            new Promise((resolve, reject) =>
+              email.SSL_CERTIFICATE_ISSUES(null, view, (err) =>
+                err ? reject(err) : resolve()
+              )
+            ),
+        });
 
-      console.log(
-        clfdate(),
-        sent ? "Sent SSL certificate issues email" : "No new SSL certificate issues"
-      );
-    } catch (err) {
-      console.log(clfdate(), "Error: Checking SSL certificates", err);
+        console.log(
+          clfdate(),
+          sent
+            ? "Sent SSL certificate issues email"
+            : "No new SSL certificate issues"
+        );
+      } catch (err) {
+        console.log(clfdate(), "Error: Checking SSL certificates", err);
+      }
     }
-  });
+  );
 
   // Two minutes after each of the Redis host's 5-minute samples. During a
   // Redis outage this only logs: /redis-health reports the outage itself.
@@ -307,7 +341,11 @@ module.exports = function () {
       try {
         await client.set(REDIS_HOST_CHECKED_AT_KEY, String(report.now));
       } catch (err) {
-        console.log(clfdate(), "Error: Saving Redis host check time", err.message);
+        console.log(
+          clfdate(),
+          "Error: Saving Redis host check time",
+          err.message
+        );
       }
       if (sent) console.log(clfdate(), "Sent Redis host alert email");
     } catch (err) {
@@ -333,7 +371,10 @@ module.exports = function () {
           ),
       });
 
-      console.log(clfdate(), "Git: found " + stuck.length + " stuck git processes");
+      console.log(
+        clfdate(),
+        "Git: found " + stuck.length + " stuck git processes"
+      );
       if (sent) console.log(clfdate(), "Sent git sweep alert email");
     } catch (err) {
       console.log(clfdate(), "Error: Checking for stuck git processes", err);
@@ -344,7 +385,10 @@ module.exports = function () {
   // container, so it is pruned once a day by whichever container wins the
   // lock.cron run. Should become scope "host" once BLOT_HOST_ID is set and
   // there is more than one host.
-  console.log(clfdate(), "Scheduled daily prune of old files in the tmp directory");
+  console.log(
+    clfdate(),
+    "Scheduled daily prune of old files in the tmp directory"
+  );
   lock.cron("prune-tmp", { hour: 5, minute: 30 }, async function () {
     try {
       const report = await pruneTmp();
@@ -366,16 +410,23 @@ module.exports = function () {
   // left by blogs off git. Once a day across all containers (lock.cron); it
   // only touches the bucket and scratch space, so any container can run it.
   console.log(clfdate(), "Scheduled daily git store maintenance");
-  lock.cron(gitStoreMaintenance.NAME, { hour: 6, minute: 0 }, async function () {
-    try {
-      await gitStoreMaintenance.job();
-    } catch (err) {
-      console.log(clfdate(), "Error: Git store maintenance", err);
+  lock.cron(
+    gitStoreMaintenance.NAME,
+    { hour: 6, minute: 0 },
+    async function () {
+      try {
+        await gitStoreMaintenance.job();
+      } catch (err) {
+        console.log(clfdate(), "Error: Git store maintenance", err);
+      }
     }
-  });
+  );
 
   // Hourly safety net: re-arms any missing or wrong publication alarm
-  console.log(clfdate(), "Scheduled hourly reconcile of scheduled entry alarms");
+  console.log(
+    clfdate(),
+    "Scheduled hourly reconcile of scheduled entry alarms"
+  );
   lock.cron("scheduled-entries-reconcile", "20 * * * *", async function () {
     try {
       const counts = await require("models/entry/scheduled").reconcile();
@@ -387,7 +438,8 @@ module.exports = function () {
           counts.blogs,
           "blogs, set",
           counts.set,
-          "alarms" + (counts.failed ? ", " + counts.failed + " blogs failed" : "")
+          "alarms" +
+            (counts.failed ? ", " + counts.failed + " blogs failed" : "")
         );
     } catch (err) {
       console.log(clfdate(), "Error: Reconciling scheduled entry alarms", err);

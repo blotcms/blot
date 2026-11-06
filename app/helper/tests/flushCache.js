@@ -210,7 +210,11 @@ describe("flushCache", function () {
     const startProxy = (onPurge) => {
       const app = express();
       const port = BASE_PORT++;
-      const proxy = { url: `http://localhost:${port}`, purges: [], headers: [] };
+      const proxy = {
+        url: `http://localhost:${port}`,
+        purges: [],
+        headers: [],
+      };
 
       app.get("/purge", (req, res) => {
         proxy.purges.push(req.query.host);
@@ -322,7 +326,11 @@ describe("flushCache", function () {
       );
 
       expect(results).toEqual(["failed", "failed", "failed"]);
-      expect(broken.purges.sort()).toEqual(["a.example", "b.example", "c.example"]);
+      expect(broken.purges.sort()).toEqual([
+        "a.example",
+        "b.example",
+        "c.example",
+      ]);
     });
 
     it("sends the purge token when configured", async function () {
@@ -469,7 +477,11 @@ describe("flushCache", function () {
       expect(elapsed).toBeLessThan(500);
 
       // the hung proxy times out eventually
-      expect(await Promise.all(flushes)).toEqual(["failed", "failed", "failed"]);
+      expect(await Promise.all(flushes)).toEqual([
+        "failed",
+        "failed",
+        "failed",
+      ]);
     }, 15000);
 
     it("stops sending recorded hosts to a failing proxy", async function () {

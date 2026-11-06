@@ -196,7 +196,7 @@ describe("tagged block", function () {
         locals: {
           path_prefix: "/blog/",
         },
-      },
+      }
     );
 
     const res = await this.get("/tagged/foo");
@@ -230,7 +230,7 @@ describe("tagged block", function () {
           path_prefix: "/work/",
           tagged_page_size: 1,
         },
-      },
+      }
     );
 
     const res = await this.get("/work/tagged/automotive");
@@ -258,7 +258,7 @@ describe("tagged block", function () {
         locals: {
           path_prefix: "   ",
         },
-      },
+      }
     );
 
     const res = await this.get("/tagged/foo");
@@ -286,7 +286,7 @@ describe("tagged block", function () {
         locals: {
           path_prefix: "blog/",
         },
-      },
+      }
     );
 
     const res = await this.get("/tagged/foo");
@@ -314,7 +314,7 @@ describe("tagged block", function () {
         locals: {
           path_prefix: "/blog/",
         },
-      },
+      }
     );
 
     const res = await this.get("/tagged/foo");
@@ -380,7 +380,7 @@ describe("tagged block", function () {
           path_prefix: "/blog/",
           tagged_page_size: 1,
         },
-      },
+      }
     );
 
     const res = await this.get("/tagged/foo/page/2");
@@ -412,7 +412,7 @@ describe("tagged block", function () {
         locals: {
           tagged_page_size: 1,
         },
-      },
+      }
     );
 
     const res = await this.get("/tagged/foo/page/2?tag=foo&tag=bar");
@@ -445,7 +445,7 @@ describe("tagged block", function () {
           path_prefix: "/blog/",
           tagged_page_size: 1,
         },
-      },
+      }
     );
 
     const res = await this.get("/tagged/foo/page/2?tag=foo&tag=bar");
@@ -513,16 +513,16 @@ describe("tagged cache", function () {
 
   it("reuses cached responses for identical inputs", function (done) {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
-        return {
-          entryIDs: ["1", "2"],
-          pagination: { page: 1, pages: 1 },
-          tag: "foo",
-          tagged: { foo: true },
-          slugs: ["foo"],
-          prettyTags: ["foo"],
-          total: 2,
-        };
-      });
+      return {
+        entryIDs: ["1", "2"],
+        pagination: { page: 1, pages: 1 },
+        tag: "foo",
+        tagged: { foo: true },
+        slugs: ["foo"],
+        prettyTags: ["foo"],
+        total: 2,
+      };
+    });
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([
@@ -544,27 +544,35 @@ describe("tagged cache", function () {
 
   it("refetches when cacheID changes", function (done) {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
-        return {
-          entryIDs: ["1"],
-          pagination: {},
-          tag: "foo",
-          tagged: { foo: true },
-          slugs: ["foo"],
-          prettyTags: ["foo"],
-          total: 1,
-        };
-      });
+      return {
+        entryIDs: ["1"],
+        pagination: {},
+        tag: "foo",
+        tagged: { foo: true },
+        slugs: ["foo"],
+        prettyTags: ["foo"],
+        total: 1,
+      };
+    });
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([{ id: "1", dateStamp: 1, title: "First" }]);
     });
 
-    tagged(makeReq({ blog: { id: "blog-1", cacheID: 100 } }), { locals: {} }, function () {
-      tagged(makeReq({ blog: { id: "blog-1", cacheID: 101 } }), { locals: {} }, function () {
-        expect(taggedSpy).toHaveBeenCalledTimes(2);
-        done();
-      });
-    });
+    tagged(
+      makeReq({ blog: { id: "blog-1", cacheID: 100 } }),
+      { locals: {} },
+      function () {
+        tagged(
+          makeReq({ blog: { id: "blog-1", cacheID: 101 } }),
+          { locals: {} },
+          function () {
+            expect(taggedSpy).toHaveBeenCalledTimes(2);
+            done();
+          }
+        );
+      }
+    );
   });
 
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
@@ -640,7 +648,7 @@ describe("tagged cache", function () {
     }
   });
 
-  it("does not collide an unset path_prefix with the literal string \"undefined\"", function () {
+  it('does not collide an unset path_prefix with the literal string "undefined"', function () {
     const makeKey = (pathPrefix) =>
       cachedTagged._createCacheKey(
         "blog-1",
@@ -672,14 +680,21 @@ describe("tagged cache", function () {
     const { keepFields } = require("models/entries/heavyFields");
     const query = { sortBy: "date", order: "desc", limit: 100, offset: 0 };
     const key = (keep) =>
-      cachedTagged._createCacheKey("blog-1", "v1", "foo", query, keepFields(keep));
+      cachedTagged._createCacheKey(
+        "blog-1",
+        "v1",
+        "foo",
+        query,
+        keepFields(keep)
+      );
 
     expect(key(["html", "body"])).toBe(key(["body", "html"]));
     expect(key(["html"])).not.toBe(key(undefined));
   });
 
   it("keys tagged_page_size separately from page_size when they resolve to different limits", function (done) {
-    const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function (blogID, tags, options) {
+    const taggedSpy = spyOn(Tags, "tagged").and.callFake(
+      async function (blogID, tags, options) {
         return {
           entryIDs: [],
           pagination: { page_size: options.limit },
@@ -689,7 +704,8 @@ describe("tagged cache", function () {
           prettyTags: ["foo"],
           total: 0,
         };
-      });
+      }
+    );
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([]);
@@ -715,16 +731,16 @@ describe("tagged cache", function () {
 
   it("does not cache a hydration miss when IDs came back but Entry.get returned none", function (done) {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
-        return {
-          entryIDs: ["1", "2"],
-          pagination: { page: 1, pages: 1 },
-          tag: "foo",
-          tagged: { foo: true },
-          slugs: ["foo"],
-          prettyTags: ["foo"],
-          total: 2,
-        };
-      });
+      return {
+        entryIDs: ["1", "2"],
+        pagination: { page: 1, pages: 1 },
+        tag: "foo",
+        tagged: { foo: true },
+        slugs: ["foo"],
+        prettyTags: ["foo"],
+        total: 2,
+      };
+    });
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([]);
@@ -741,16 +757,16 @@ describe("tagged cache", function () {
 
   it("still caches a genuinely empty tag (no matching entry IDs)", function (done) {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
-        return {
-          entryIDs: [],
-          pagination: { page: 1, pages: 1 },
-          tag: "foo",
-          tagged: { foo: true },
-          slugs: ["foo"],
-          prettyTags: ["foo"],
-          total: 0,
-        };
-      });
+      return {
+        entryIDs: [],
+        pagination: { page: 1, pages: 1 },
+        tag: "foo",
+        tagged: { foo: true },
+        slugs: ["foo"],
+        prettyTags: ["foo"],
+        total: 0,
+      };
+    });
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([]);
@@ -765,7 +781,8 @@ describe("tagged cache", function () {
   });
 
   it("does not reuse a cached multi-tag payload when the tag order differs", function (done) {
-    const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function (blogID, tags) {
+    const taggedSpy = spyOn(Tags, "tagged").and.callFake(
+      async function (blogID, tags) {
         const list = Array.isArray(tags) ? tags : [tags];
         return {
           entryIDs: ["1"],
@@ -776,22 +793,31 @@ describe("tagged cache", function () {
           prettyTags: list,
           total: 1,
         };
-      });
+      }
+    );
 
     spyOn(Entry, "get").and.callFake(function (blogID, entryIDs, callback) {
       callback([{ id: "1", title: "Shared" }]);
     });
 
-    tagged(makeReq({ query: { tag: ["foo", "bar"] } }), { locals: {} }, function (err, first) {
-      expect(first.tag).toBe("foo + bar");
-      expect(first.prettyTags).toEqual(["foo", "bar"]);
+    tagged(
+      makeReq({ query: { tag: ["foo", "bar"] } }),
+      { locals: {} },
+      function (err, first) {
+        expect(first.tag).toBe("foo + bar");
+        expect(first.prettyTags).toEqual(["foo", "bar"]);
 
-      tagged(makeReq({ query: { tag: ["bar", "foo"] } }), { locals: {} }, function (secondErr, second) {
-        expect(second.tag).toBe("bar + foo");
-        expect(second.prettyTags).toEqual(["bar", "foo"]);
-        expect(taggedSpy).toHaveBeenCalledTimes(2);
-        done();
-      });
-    });
+        tagged(
+          makeReq({ query: { tag: ["bar", "foo"] } }),
+          { locals: {} },
+          function (secondErr, second) {
+            expect(second.tag).toBe("bar + foo");
+            expect(second.prettyTags).toEqual(["bar", "foo"]);
+            expect(taggedSpy).toHaveBeenCalledTimes(2);
+            done();
+          }
+        );
+      }
+    );
   });
 });

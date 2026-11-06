@@ -61,7 +61,11 @@ function parseSuites(text) {
       // A ":<shards>" suffix from the old format is ignored
       const key = line.split(":")[0];
       const [suite, ...excludes] = key.split("|");
-      return { key, suite, excludes: excludes.join(",").split(",").filter(Boolean) };
+      return {
+        key,
+        suite,
+        excludes: excludes.join(",").split(",").filter(Boolean),
+      };
     });
 }
 
@@ -73,7 +77,9 @@ function declaresSpecs(file) {
 }
 
 function weighFiles(suite) {
-  const files = listSpecFiles(suite.suite, suite.excludes).filter(declaresSpecs);
+  const files = listSpecFiles(suite.suite, suite.excludes).filter(
+    declaresSpecs
+  );
   const known = files.filter((f) => timings[f] !== undefined);
   const unknown = files.length - known.length;
   const knownSeconds = known.reduce((sum, f) => sum + timings[f], 0);
@@ -93,7 +99,10 @@ function weighFiles(suite) {
 function laneTime(lane, out, into) {
   const per = new Map();
   for (const [suite, files] of lane.bySuite)
-    per.set(suite, { n: files.length, seconds: files.reduce((sum, f) => sum + f.seconds, 0) });
+    per.set(suite, {
+      n: files.length,
+      seconds: files.reduce((sum, f) => sum + f.seconds, 0),
+    });
   if (out) {
     const e = per.get(out.suite);
     e.n--;
@@ -106,7 +115,8 @@ function laneTime(lane, out, into) {
     e.seconds += into.seconds;
   }
   let total = 0;
-  for (const e of per.values()) if (e.n > 0) total += PROCESS_OVERHEAD + e.seconds;
+  for (const e of per.values())
+    if (e.n > 0) total += PROCESS_OVERHEAD + e.seconds;
   return total;
 }
 
@@ -140,12 +150,19 @@ function balance(lanes) {
       const consider = (other, f, g, newLane, newOther) => {
         const worst = Math.max(newLane, newOther);
         if (worst >= lane.seconds - 1e-9) return;
-        if (!best || worst < best.worst - 1e-9) best = { other, f, g, newLane, newOther, worst };
+        if (!best || worst < best.worst - 1e-9)
+          best = { other, f, g, newLane, newOther, worst };
       };
       for (const other of lanes) {
         if (other === lane) continue;
         for (const f of [...lane.bySuite.values()].flat()) {
-          consider(other, f, null, laneTime(lane, f, null), laneTime(other, null, f));
+          consider(
+            other,
+            f,
+            null,
+            laneTime(lane, f, null),
+            laneTime(other, null, f)
+          );
           for (const g of [...other.bySuite.values()].flat())
             consider(other, f, g, laneTime(lane, f, g), laneTime(other, g, f));
         }
@@ -180,11 +197,20 @@ function plan(suites, runners, lanesPerRunner) {
   // and files are ordered by name too, so every job computes the same plan.
   // Heaviest suite first, then each suite's files longest first, so a suite's
   // files are placed together and fill the lanes it already runs on.
-  const bySeconds = (a, b) => b.seconds - a.seconds || (a.name < b.name ? -1 : 1);
+  const bySeconds = (a, b) =>
+    b.seconds - a.seconds || (a.name < b.name ? -1 : 1);
   const files = suites
     .map((suite) => {
-      const weighed = weighFiles(suite).map((f) => ({ ...f, name: f.file, suite: suite.suite }));
-      return { name: suite.key, files: weighed, seconds: weighed.reduce((t, f) => t + f.seconds, 0) };
+      const weighed = weighFiles(suite).map((f) => ({
+        ...f,
+        name: f.file,
+        suite: suite.suite,
+      }));
+      return {
+        name: suite.key,
+        files: weighed,
+        seconds: weighed.reduce((t, f) => t + f.seconds, 0),
+      };
     })
     .sort(bySeconds)
     .flatMap((suite) => suite.files.sort(bySeconds));
@@ -193,7 +219,9 @@ function plan(suites, runners, lanesPerRunner) {
   const work = files.reduce((sum, f) => sum + f.seconds, 0);
   const share = (work + processes * PROCESS_OVERHEAD) / lanes.length;
   const endOn = (lane, f) =>
-    lane.seconds + f.seconds + (lane.bySuite.has(f.suite) ? 0 : PROCESS_OVERHEAD);
+    lane.seconds +
+    f.seconds +
+    (lane.bySuite.has(f.suite) ? 0 : PROCESS_OVERHEAD);
 
   for (const f of files) {
     let best = null;
@@ -201,7 +229,8 @@ function plan(suites, runners, lanesPerRunner) {
       if (lane.bySuite.has(f.suite) && endOn(lane, f) <= share)
         if (!best || lane.seconds < best.seconds) best = lane;
     if (!best)
-      for (const lane of lanes) if (!best || endOn(lane, f) < endOn(best, f)) best = lane;
+      for (const lane of lanes)
+        if (!best || endOn(lane, f) < endOn(best, f)) best = lane;
     const end = endOn(best, f);
     if (!best.bySuite.has(f.suite)) best.bySuite.set(f.suite, []);
     best.bySuite.get(f.suite).push(f);
@@ -213,7 +242,8 @@ function plan(suites, runners, lanesPerRunner) {
   // Label each suite's processes "i/n" across all lanes, for the logs
   const partCount = {};
   for (const lane of lanes)
-    for (const suite of lane.bySuite.keys()) partCount[suite] = (partCount[suite] || 0) + 1;
+    for (const suite of lane.bySuite.keys())
+      partCount[suite] = (partCount[suite] || 0) + 1;
   const partIndex = {};
   const planned = lanes
     .filter((lane) => lane.bySuite.size)
@@ -252,13 +282,16 @@ if (require.main === module) {
   if (!suites.length) throw new Error("TEST_SUITES is empty");
 
   if (flags.suites) {
-    console.log(JSON.stringify([...new Set(suites.map((s) => s.suite))].sort()));
+    console.log(
+      JSON.stringify([...new Set(suites.map((s) => s.suite))].sort())
+    );
     process.exit(0);
   }
 
   const runners = parseInt(flags.runners, 10);
   const lanes = parseInt(flags.lanes, 10);
-  if (!(runners >= 1) || !(lanes >= 1)) throw new Error("Pass --runners=N --lanes=N");
+  if (!(runners >= 1) || !(lanes >= 1))
+    throw new Error("Pass --runners=N --lanes=N");
   const byRunner = plan(suites, runners, lanes);
 
   if (flags.check) {
@@ -268,13 +301,22 @@ if (require.main === module) {
       for (const lane of runnerLanes) {
         times.push(lane.seconds);
         for (const item of lane.items)
-          for (const file of item.files) seen.set(file, (seen.get(file) || 0) + 1);
+          for (const file of item.files)
+            seen.set(file, (seen.get(file) || 0) + 1);
       }
-    const expected = new Set(suites.flatMap((s) => weighFiles(s).map((f) => f.file)));
+    const expected = new Set(
+      suites.flatMap((s) => weighFiles(s).map((f) => f.file))
+    );
     const problems = [
-      ...[...expected].filter((f) => !seen.has(f)).map((f) => `not planned: ${f}`),
-      ...[...seen].filter(([, n]) => n > 1).map(([f, n]) => `planned ${n} times: ${f}`),
-      ...[...seen.keys()].filter((f) => !expected.has(f)).map((f) => `unexpected: ${f}`),
+      ...[...expected]
+        .filter((f) => !seen.has(f))
+        .map((f) => `not planned: ${f}`),
+      ...[...seen]
+        .filter(([, n]) => n > 1)
+        .map(([f, n]) => `planned ${n} times: ${f}`),
+      ...[...seen.keys()]
+        .filter((f) => !expected.has(f))
+        .map((f) => `unexpected: ${f}`),
     ];
     if (problems.length) {
       console.error(problems.join("\n"));

@@ -1,4 +1,3 @@
-var debug = require("debug")("blot:build");
 var fs = require("fs");
 var bplist = require("bplist-parser");
 var ensure = require("helper/ensure");
@@ -100,9 +99,7 @@ function extractFromBPlist(localPath, callback) {
 }
 
 function read(blog, path, callback) {
-  ensure(blog, "object")
-    .and(path, "string")
-    .and(callback, "function");
+  ensure(blog, "object").and(path, "string").and(callback, "function");
 
   var contents;
 
@@ -128,4 +125,4 @@ function read(blog, path, callback) {
   });
 }
 
-module.exports = { is: is, read: read, id: "webloc"};
+module.exports = { is: is, read: read, id: "webloc" };

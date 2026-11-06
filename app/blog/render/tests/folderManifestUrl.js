@@ -33,7 +33,10 @@ describe("folderManifestUrl.locals", function () {
 
     folderManifestUrl.locals(request(manifest), locals);
 
-    expect(locals).toEqual({ logo: "/img/a.png", site: { logo: "/img/a.png" } });
+    expect(locals).toEqual({
+      logo: "/img/a.png",
+      site: { logo: "/img/a.png" },
+    });
   });
 
   it("leaves a link the manifest doesn't resolve, or resolves to a view", function () {
@@ -50,6 +53,8 @@ describe("folderManifestUrl.locals", function () {
     expect(folderManifestUrl.locals(preview, locals)).toBe(locals);
     expect(folderManifestUrl.locals(request({}), locals)).toBe(locals);
     expect(folderManifestUrl.locals({}, locals)).toBe(locals);
-    expect(folderManifestUrl.locals(request(manifest), undefined)).toBe(undefined);
+    expect(folderManifestUrl.locals(request(manifest), undefined)).toBe(
+      undefined
+    );
   });
 });

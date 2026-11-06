@@ -1,4 +1,3 @@
-
 var Blog = require("models/blog");
 var User = require("models/user");
 var format = require("url").format;
@@ -14,7 +13,7 @@ if (require.main === module) {
   });
 }
 
-function main (handle, callback) {
+function main(handle, callback) {
   User.getById(handle, function (err, userID) {
     if (err) return callback(err);
 
@@ -41,8 +40,8 @@ function main (handle, callback) {
             host: config.host,
             pathname: "/sites/log-in",
             query: {
-              token: token
-            }
+              token: token,
+            },
           });
 
           callback(null, url);

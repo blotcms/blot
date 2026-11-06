@@ -257,7 +257,8 @@ async function copy(fromKey, toKey, options) {
   const input = {
     Bucket: bucket(),
     // URL-encoded, but its slashes are separators
-    CopySource: bucket() + "/" + fromKey.split("/").map(encodeURIComponent).join("/"),
+    CopySource:
+      bucket() + "/" + fromKey.split("/").map(encodeURIComponent).join("/"),
     Key: toKey,
   };
 
@@ -361,7 +362,9 @@ async function open(objectKey, options) {
 
   try {
     data = await client().send(
-      options.head ? new (SDK().HeadObjectCommand)(input) : new (SDK().GetObjectCommand)(input)
+      options.head
+        ? new (SDK().HeadObjectCommand)(input)
+        : new (SDK().GetObjectCommand)(input)
     );
   } catch (err) {
     const status = err && err.$metadata && err.$metadata.httpStatusCode;
@@ -426,7 +429,11 @@ async function* listEntries(prefix, delimiter) {
     );
 
     for (const object of data.Contents || []) {
-      yield { key: object.Key, size: object.Size, modified: object.LastModified };
+      yield {
+        key: object.Key,
+        size: object.Size,
+        modified: object.LastModified,
+      };
     }
 
     for (const common of data.CommonPrefixes || []) {

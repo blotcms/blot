@@ -7,7 +7,11 @@
 // when a box is dragged to an edge.
 const EPSILON = 1e-6;
 
-function invalid(message) { const error = new Error(message); error.status = 400; return error; }
+function invalid(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
 const blank = (v) => v === "" || v == null;
 
 // Dimensions as the browser (and the cropper) sees them, i.e. after any EXIF
@@ -15,7 +19,10 @@ const blank = (v) => v === "" || v == null;
 // turn, so width and height are swapped relative to the stored pixels.
 function orientedDimensions(metadata) {
   const swap = metadata.orientation >= 5 && metadata.orientation <= 8;
-  return { width: swap ? metadata.height : metadata.width, height: swap ? metadata.width : metadata.height };
+  return {
+    width: swap ? metadata.height : metadata.width,
+    height: swap ? metadata.width : metadata.height,
+  };
 }
 
 function parseCrop(value, width, height, label = "image") {
@@ -29,8 +36,14 @@ function parseCrop(value, width, height, label = "image") {
   const h = Number(square ? value.size : value.height);
   if (
     ![x, y, w, h].every(Number.isFinite) ||
-    x < 0 || y < 0 || w <= 0 || h <= 0 ||
-    x > 1 || y > 1 || w > 1 || h > 1 ||
+    x < 0 ||
+    y < 0 ||
+    w <= 0 ||
+    h <= 0 ||
+    x > 1 ||
+    y > 1 ||
+    w > 1 ||
+    h > 1 ||
     (!square && (x + w > 1 + EPSILON || y + h > 1 + EPSILON))
   ) {
     throw invalid(`The selected ${label} crop is invalid`);
@@ -46,8 +59,10 @@ function parseCrop(value, width, height, label = "image") {
   // Clamp float overshoot so the extraction never leaves the image.
   extraction.width = Math.min(extraction.width, width - extraction.left);
   extraction.height = Math.min(extraction.height, height - extraction.top);
-  if (square && extraction.width < side) throw invalid(`The selected ${label} crop is outside the image`);
-  if (extraction.width < 1 || extraction.height < 1) throw invalid(`The selected ${label} crop is outside the image`);
+  if (square && extraction.width < side)
+    throw invalid(`The selected ${label} crop is outside the image`);
+  if (extraction.width < 1 || extraction.height < 1)
+    throw invalid(`The selected ${label} crop is outside the image`);
   return extraction;
 }
 
@@ -55,8 +70,14 @@ function parseCrop(value, width, height, label = "image") {
 // edited again later. null when no (or an incomplete) rectangle was submitted;
 // validate it with parseCrop first.
 function normalizedCrop(value) {
-  if (!value || [value.x, value.y, value.width, value.height].some(blank)) return null;
-  return { x: Number(value.x), y: Number(value.y), width: Number(value.width), height: Number(value.height) };
+  if (!value || [value.x, value.y, value.width, value.height].some(blank))
+    return null;
+  return {
+    x: Number(value.x),
+    y: Number(value.y),
+    width: Number(value.width),
+    height: Number(value.height),
+  };
 }
 
 module.exports = { parseCrop, normalizedCrop, orientedDimensions };

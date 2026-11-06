@@ -62,7 +62,10 @@ function listUnpaidInvoices(req, res, next) {
     });
 
     if (!res.locals.amountDue) {
-      return res.message("/sites", "Thank you, your account is in good standing!");
+      return res.message(
+        "/sites",
+        "Thank you, your account is in good standing!"
+      );
     }
 
     res.locals.amountDue = prettyPrice(res.locals.amountDue);
@@ -75,7 +78,10 @@ function formatStripeError(err, fallbackMessage) {
   if (!err) return err;
 
   var message =
-    (err.raw && err.raw.message) || err.message || fallbackMessage || "Stripe error";
+    (err.raw && err.raw.message) ||
+    err.message ||
+    fallbackMessage ||
+    "Stripe error";
 
   var declineCode =
     (err.raw && err.raw.decline_code) || err.decline_code || err.code;

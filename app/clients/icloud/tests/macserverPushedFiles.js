@@ -11,9 +11,13 @@ const { register } = require("module");
 const { pathToFileURL } = require("url");
 
 const macserverDir = path.join(__dirname, "../macserver");
-const load = (file) => import(pathToFileURL(path.join(macserverDir, file)).href);
+const load = (file) =>
+  import(pathToFileURL(path.join(macserverDir, file)).href);
 
-const iCloudDriveDirectory = path.join(os.tmpdir(), `macserver-pushed-${process.pid}`);
+const iCloudDriveDirectory = path.join(
+  os.tmpdir(),
+  `macserver-pushed-${process.pid}`
+);
 
 const hooks = `
 const ICLOUD_DRIVE_DIRECTORY = ${JSON.stringify(iCloudDriveDirectory)};
@@ -85,28 +89,52 @@ describe("icloud macserver pushed files", function () {
     it("reports a file unchanged only while its size and mtime match the last push", function () {
       const blogID = newBlogID();
 
-      expect(pushedFiles.isUnchanged(blogID, "a.md", stat(10, 1000))).toBe(false);
+      expect(pushedFiles.isUnchanged(blogID, "a.md", stat(10, 1000))).toBe(
+        false
+      );
 
       pushedFiles.recordPushed(blogID, "a.md", stat(10, 1000));
 
-      expect(pushedFiles.isUnchanged(blogID, "a.md", stat(10, 1000))).toBe(true);
-      expect(pushedFiles.isUnchanged(blogID, "a.md", stat(10, 2000))).toBe(false);
-      expect(pushedFiles.isUnchanged(blogID, "a.md", stat(11, 1000))).toBe(false);
-      expect(pushedFiles.isUnchanged(newBlogID(), "a.md", stat(10, 1000))).toBe(false);
+      expect(pushedFiles.isUnchanged(blogID, "a.md", stat(10, 1000))).toBe(
+        true
+      );
+      expect(pushedFiles.isUnchanged(blogID, "a.md", stat(10, 2000))).toBe(
+        false
+      );
+      expect(pushedFiles.isUnchanged(blogID, "a.md", stat(11, 1000))).toBe(
+        false
+      );
+      expect(pushedFiles.isUnchanged(newBlogID(), "a.md", stat(10, 1000))).toBe(
+        false
+      );
     });
 
     it("forgets a removed directory's contents but not a sibling sharing its prefix", function () {
       const blogID = newBlogID();
-      for (const p of ["dir", "dir/a.md", "dir/sub/b.md", "dir2/c.md", "other.md"]) {
+      for (const p of [
+        "dir",
+        "dir/a.md",
+        "dir/sub/b.md",
+        "dir2/c.md",
+        "other.md",
+      ]) {
         pushedFiles.recordPushed(blogID, p, stat(1, 1));
       }
 
       pushedFiles.forgetPath(blogID, "dir");
 
-      expect(pushedFiles.isUnchanged(blogID, "dir/a.md", stat(1, 1))).toBe(false);
-      expect(pushedFiles.isUnchanged(blogID, "dir/sub/b.md", stat(1, 1))).toBe(false);
-      expect(pushedFiles.isUnchanged(blogID, "dir2/c.md", stat(1, 1))).toBe(true);
-      expect(pushedFiles.isUnchanged(blogID, "other.md", stat(1, 1))).toBe(true);
+      expect(pushedFiles.isUnchanged(blogID, "dir/a.md", stat(1, 1))).toBe(
+        false
+      );
+      expect(pushedFiles.isUnchanged(blogID, "dir/sub/b.md", stat(1, 1))).toBe(
+        false
+      );
+      expect(pushedFiles.isUnchanged(blogID, "dir2/c.md", stat(1, 1))).toBe(
+        true
+      );
+      expect(pushedFiles.isUnchanged(blogID, "other.md", stat(1, 1))).toBe(
+        true
+      );
     });
 
     it("forgets a whole blog", function () {
@@ -118,7 +146,9 @@ describe("icloud macserver pushed files", function () {
       pushedFiles.forgetBlog(blogID);
 
       expect(pushedFiles.isUnchanged(blogID, "a.md", stat(1, 1))).toBe(false);
-      expect(pushedFiles.isUnchanged(otherBlogID, "a.md", stat(1, 1))).toBe(true);
+      expect(pushedFiles.isUnchanged(otherBlogID, "a.md", stat(1, 1))).toBe(
+        true
+      );
     });
 
     it("starts tracking a blog once, until it is forgotten", function () {
@@ -209,7 +239,11 @@ describe("icloud macserver pushed files", function () {
 
       await expectAsync(upload(blogID, "post.md")).toBeRejected();
 
-      fetch.and.callFake(async () => ({ ok: true, status: 200, text: async () => "ok" }));
+      fetch.and.callFake(async () => ({
+        ok: true,
+        status: 200,
+        text: async () => "ok",
+      }));
       await upload(blogID, "post.md");
 
       expect(fetch).toHaveBeenCalledTimes(2);

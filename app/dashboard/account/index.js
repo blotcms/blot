@@ -54,12 +54,12 @@ Account.use("/:section", function (req, res, next) {
   var uppercaseName = req.params.section;
 
   if (BREADCRUMBS[req.params.section]) {
-    uppercaseName = BREADCRUMBS[req.params.section]
+    uppercaseName = BREADCRUMBS[req.params.section];
   } else {
     uppercaseName = uppercaseName[0].toUpperCase() + uppercaseName.slice(1);
     uppercaseName = uppercaseName.split("-").join(" ");
   }
-  
+
   res.locals.breadcrumbs.add(uppercaseName, req.params.section);
   next();
 });
@@ -68,7 +68,7 @@ Account.use("/:section/:subsection", function (req, res, next) {
   var uppercaseName = req.params.subsection;
 
   if (BREADCRUMBS[req.params.subsection]) {
-    uppercaseName = BREADCRUMBS[req.params.subsection]
+    uppercaseName = BREADCRUMBS[req.params.subsection];
   } else {
     uppercaseName = uppercaseName[0].toUpperCase() + uppercaseName.slice(1);
     uppercaseName = uppercaseName.split("-").join(" ");

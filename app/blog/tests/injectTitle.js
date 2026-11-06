@@ -80,6 +80,8 @@ describe("injectTitle", function () {
     const $ = cheerio.load(body);
 
     expect($("article h1").length).toBe(0);
-    expect($("article p").first().text()).toContain("Captured without an Obsidian heading.");
+    expect($("article p").first().text()).toContain(
+      "Captured without an Obsidian heading."
+    );
   });
 });

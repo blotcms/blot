@@ -7,23 +7,20 @@ describe("template", function () {
       url: ["/page/:page", "/"],
     });
 
-    const { viewName: viewName1, params: params1 } = await this.getViewByURL(
-      "/page/1"
-    );
+    const { viewName: viewName1, params: params1 } =
+      await this.getViewByURL("/page/1");
 
     expect(viewName1).toEqual("apple.html");
     expect(params1).toEqual({ page: "1" });
 
-    const { viewName: viewName2, params: params2 } = await this.getViewByURL(
-      "/"
-    );
+    const { viewName: viewName2, params: params2 } =
+      await this.getViewByURL("/");
 
     expect(viewName2).toEqual("apple.html");
     expect(params2).toEqual({});
 
-    const { viewName: viewName3, params: params3 } = await this.getViewByURL(
-      "/page/2"
-    );
+    const { viewName: viewName3, params: params3 } =
+      await this.getViewByURL("/page/2");
 
     expect(viewName3).toEqual("apple.html");
     expect(params3).toEqual({ page: "2" });
@@ -37,9 +34,8 @@ describe("template", function () {
 
     await this.setView(view);
 
-    const { viewName, params, query } = await this.getViewByURL(
-      "/apple?foo=bar"
-    );
+    const { viewName, params, query } =
+      await this.getViewByURL("/apple?foo=bar");
 
     expect(viewName).toEqual(view.name);
     expect(params).toEqual({});
@@ -154,7 +150,6 @@ describe("template", function () {
 
     expect(viewName).toEqual(view.name);
   });
-
 
   it("returns an error for a non-existent URL", async function () {
     try {

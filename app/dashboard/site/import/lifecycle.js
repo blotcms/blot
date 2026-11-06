@@ -23,12 +23,20 @@ function create(directory) {
     signal: controller.signal,
     stagingDirectory: join(directory, "staging"),
     ownsLease() {
-      try { return fs.readJsonSync(leaseFile).owner === owner; } catch (_) { return false; }
+      try {
+        return fs.readJsonSync(leaseFile).owner === owner;
+      } catch (_) {
+        return false;
+      }
     },
     bytes: 0,
     assets: new Set(),
     check() {
-      if (fs.existsSync(marker) || fs.existsSync(join(directory, "deleted.txt"))) controller.abort(cancelled());
+      if (
+        fs.existsSync(marker) ||
+        fs.existsSync(join(directory, "deleted.txt"))
+      )
+        controller.abort(cancelled());
       if (!controller.signal.aborted) {
         try {
           const current = fs.readJsonSync(leaseFile);
@@ -77,7 +85,9 @@ function leaseExpiry(directory) {
   try {
     const stat = fs.statSync(leaseFile);
     let expiresAt;
-    try { expiresAt = fs.readJsonSync(leaseFile).expiresAt; } catch (_) {}
+    try {
+      expiresAt = fs.readJsonSync(leaseFile).expiresAt;
+    } catch (_) {}
     // Also recover markers left by the previous non-leased implementation.
     return Number.isFinite(expiresAt) ? expiresAt : stat.mtimeMs + LEASE_MS;
   } catch (error) {
@@ -94,9 +104,11 @@ async function remove(directory) {
     // may still return in a paused process, so removing its cancellation marker
     // would let that process mistake the deleted job for a live one.
     await fs.writeFile(join(directory, "deleted.txt"), "true");
-    await Promise.all(["output", "staging", "result.zip", "result.zip.part"].map(
-      name => fs.remove(join(directory, name))
-    ));
+    await Promise.all(
+      ["output", "staging", "result.zip", "result.zip.part"].map((name) =>
+        fs.remove(join(directory, name))
+      )
+    );
   } else {
     await fs.remove(directory);
   }
@@ -120,4 +132,13 @@ function guard(step) {
   };
 }
 
-module.exports = { create, cancel, remove, leaseExpiry, check, guard, current: () => context.getStore(), cancelled };
+module.exports = {
+  create,
+  cancel,
+  remove,
+  leaseExpiry,
+  check,
+  guard,
+  current: () => context.getStore(),
+  cancelled,
+};

@@ -26,7 +26,8 @@ describe("{{more}} teaser marker", function () {
   it("is stripped from body, teaserBody and summary, and sets more", async function () {
     await this.write({
       path: "/a.txt",
-      content: "Link: a\n\n# Title\n\nBefore the break\n\n{{more}}\n\nAfter the break",
+      content:
+        "Link: a\n\n# Title\n\nBefore the break\n\n{{more}}\n\nAfter the break",
     });
     await this.template({
       "entry.html": `{{#entry}}[{{{body}}}][{{more}}]{{/entry}}`,

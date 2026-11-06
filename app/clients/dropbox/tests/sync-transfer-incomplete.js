@@ -19,9 +19,13 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
 
   beforeEach(function () {
     saved = [];
-    [syncPath, lockPath, createClientPath, databasePath, persistErrorPath].forEach(
-      (path) => (originals[path] = require.cache[path])
-    );
+    [
+      syncPath,
+      lockPath,
+      createClientPath,
+      databasePath,
+      persistErrorPath,
+    ].forEach((path) => (originals[path] = require.cache[path]));
   });
 
   afterEach(function () {

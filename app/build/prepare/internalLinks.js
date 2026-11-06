@@ -1,6 +1,7 @@
 var debug = require("debug")("blot:build:prepare:internalLinks");
 var unwrapFolderLink = require("../../blog/render/replaceFolderLinks/unwrapFolderLink");
-var decodeFolderPath = require("../../blog/render/replaceFolderLinks/shared").decodeFolderPath;
+var decodeFolderPath =
+  require("../../blog/render/replaceFolderLinks/shared").decodeFolderPath;
 
 // The purpose of this module is to take the HTML for
 // a given blog post and work out if any of the links
@@ -17,39 +18,39 @@ var decodeFolderPath = require("../../blog/render/replaceFolderLinks/shared").de
 // list, not a broken link or lost data. See the matching comment in
 // dependencies/index.js for more.
 function internalLinks($, blogID) {
-	var result = [];
+  var result = [];
 
-	$("[href]").each(function () {
-		let value = $(this).attr("href");
-		let normalizedValue = value;
+  $("[href]").each(function () {
+    let value = $(this).attr("href");
+    let normalizedValue = value;
 
-		// app/build/plugins/folderAssets bakes hrefs that resolve to a real
-		// file in the blog's folder into a %%BLOT_CDN%%-prefixed, versioned
-		// URL before this runs. Recover the original absolute path so a
-		// link that happens to collide with another entry's custom
-		// permalink (the known edge case above) is still detected as a
-		// backlink candidate, exactly as it would be if it hadn't been
-		// baked.
-		var unwrapped = unwrapFolderLink(value, blogID);
+    // app/build/plugins/folderAssets bakes hrefs that resolve to a real
+    // file in the blog's folder into a %%BLOT_CDN%%-prefixed, versioned
+    // URL before this runs. Recover the original absolute path so a
+    // link that happens to collide with another entry's custom
+    // permalink (the known edge case above) is still detected as a
+    // backlink candidate, exactly as it would be if it hadn't been
+    // baked.
+    var unwrapped = unwrapFolderLink(value, blogID);
 
-		if (unwrapped !== null) {
-			// The baked path is percent-encoded, so drop the ?query/#hash
-			// before decoding it (a file name can contain an encoded '#').
-			normalizedValue = decodeFolderPath(unwrapped.split(/[?#]/)[0]);
-		} else if (value.indexOf("/") !== 0) {
-			return;
-		} else {
-			normalizedValue = normalizedValue.split("#")[0].split("?")[0];
-		}
+    if (unwrapped !== null) {
+      // The baked path is percent-encoded, so drop the ?query/#hash
+      // before decoding it (a file name can contain an encoded '#').
+      normalizedValue = decodeFolderPath(unwrapped.split(/[?#]/)[0]);
+    } else if (value.indexOf("/") !== 0) {
+      return;
+    } else {
+      normalizedValue = normalizedValue.split("#")[0].split("?")[0];
+    }
 
-		if (!normalizedValue || normalizedValue.indexOf("/") !== 0) return;
-		if (result.indexOf(normalizedValue) > -1) return;
+    if (!normalizedValue || normalizedValue.indexOf("/") !== 0) return;
+    if (result.indexOf(normalizedValue) > -1) return;
 
-		result.push(normalizedValue);
-	});
+    result.push(normalizedValue);
+  });
 
-	debug(result);
-	return result;
+  debug(result);
+  return result;
 }
 
 module.exports = internalLinks;

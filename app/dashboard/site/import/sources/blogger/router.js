@@ -3,9 +3,7 @@ const fs = require("fs-extra");
 const { extname, join } = require("path");
 
 const init = require("dashboard/site/import/init");
-const normalizeIdentifier = require(
-  "dashboard/site/import/helper/normalize_identifier"
-);
+const normalizeIdentifier = require("dashboard/site/import/helper/normalize_identifier");
 const blogger = require("./index");
 
 const Importer = express.Router();
@@ -63,20 +61,25 @@ Importer.route("/blogger")
       : () => fs.remove(upload.path);
     res.message(req.baseUrl, "Began import");
 
-    job.run(async () => {
-      await fs.outputFile(
-        join(job.importDirectory, "identifier.txt"),
-        normalizeIdentifier(upload.originalFilename, {
-          extension: ".atom",
-          fallback: "Blogger export",
-        }),
-        "utf8"
-      );
-      await blogger(upload.path, job.outputDirectory, job.status, { siteHost });
-    }).catch(error => console.error("Failed to clean up import", error))
+    job
+      .run(async () => {
+        await fs.outputFile(
+          join(job.importDirectory, "identifier.txt"),
+          normalizeIdentifier(upload.originalFilename, {
+            extension: ".atom",
+            fallback: "Blogger export",
+          }),
+          "utf8"
+        );
+        await blogger(upload.path, job.outputDirectory, job.status, {
+          siteHost,
+        });
+      })
+      .catch((error) => console.error("Failed to clean up import", error))
       .finally(() => releaseUpload())
-      .catch(error => console.error("Failed to remove Blogger upload", error));
-
+      .catch((error) =>
+        console.error("Failed to remove Blogger upload", error)
+      );
   });
 
 module.exports = Importer;

@@ -8,10 +8,13 @@ const documentation = Express.Router();
 
 const VIEW_DIRECTORY = config.views_directory;
 
-documentation.get(["/how/format/*", "/how/files/markdown", "/how/formatting/math"], function (req, res, next) {
-  res.locals["show-on-this-page"] = true;
-  next();
-});
+documentation.get(
+  ["/how/format/*", "/how/files/markdown", "/how/formatting/math"],
+  function (req, res, next) {
+    res.locals["show-on-this-page"] = true;
+    next();
+  }
+);
 
 const files = [
   "/favicon-180x180.png",

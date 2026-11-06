@@ -103,9 +103,7 @@ describe("proxy git push limits", function () {
     const lines = rendered.match(/\nlocation ~\*? [^\n]*/g);
 
     lines.forEach((line) => {
-      const pattern = line
-        .replace(/^\nlocation ~\*? /, "")
-        .replace(/ \{$/, "");
+      const pattern = line.replace(/^\nlocation ~\*? /, "").replace(/ \{$/, "");
       const url = "/clients/git/end/example.git/git-receive-pack";
 
       expect(new RegExp(pattern, "i").test(url)).toBe(false);

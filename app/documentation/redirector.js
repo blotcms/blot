@@ -67,8 +67,7 @@ const internal = {
   "/templates/developers/reference/date-tokens": "/developers/reference",
   "/templates/developers/rendering-templates":
     "/developers/guides/how-blot-works",
-  "/templates/developers/how-blot-works":
-    "/developers/guides/how-blot-works",
+  "/templates/developers/how-blot-works": "/developers/guides/how-blot-works",
   "/about/notes/programming/development-environment":
     "/developers/guides/set-up-development-environment",
   "/how/templates": "/templates",
@@ -80,17 +79,21 @@ const internal = {
   "/developers/tutorials/mustache": "/developers/guides/mustache",
   "/developers/tutorials/custom-metadata": "/developers/guides/custom-metadata",
   "/developers/tutorials/thumbnails": "/developers/guides/thumbnails",
-  "/developers/tutorials/dashboard-controls": "/developers/guides/dashboard-controls",
-  "/developers/tutorials/seo-social-meta-tags": "/developers/guides/seo-social-meta-tags",
+  "/developers/tutorials/dashboard-controls":
+    "/developers/guides/dashboard-controls",
+  "/developers/tutorials/seo-social-meta-tags":
+    "/developers/guides/seo-social-meta-tags",
   "/developers/tutorials/how-blot-works": "/developers/guides/how-blot-works",
-  "/developers/tutorials/convert-jekyll-template": "/developers/guides/convert-jekyll-template",
+  "/developers/tutorials/convert-jekyll-template":
+    "/developers/guides/convert-jekyll-template",
   "/developers/tutorials/convert-jekyll-template/converting-jekyll-theme":
     "/developers/guides/convert-jekyll-template/converting-jekyll-theme",
   "/developers/tutorials/set-up-development-environment":
     "/developers/guides/set-up-development-environment",
-  "/developers/guides/set-up-development-environment": 
+  "/developers/guides/set-up-development-environment":
     "/developers/guides/run-blot-locally",
-  "/templates/developers/tutorials/custom-metadata": "/developers/guides/custom-metadata",
+  "/templates/developers/tutorials/custom-metadata":
+    "/developers/guides/custom-metadata",
   "/templates/developers": "/developers",
   "/how/guides": "/how/posts",
   "/how/clients": "/how/sync",
@@ -106,14 +109,14 @@ const internal = {
   "/formatting": "/how/posts",
   "/redirects": "/how/configure/redirects",
   "/configuring": "/how/configure",
-  "/tools": "/how/tools"
+  "/tools": "/how/tools",
 };
 
 const external = {
-  "/typeset": "https://typeset.lllllllllllllllll.com/"
+  "/typeset": "https://typeset.lllllllllllllllll.com/",
 };
 
-Object.keys(internal).forEach(from => {
+Object.keys(internal).forEach((from) => {
   redirector.use(from, function (req, res) {
     let to = internal[from];
     let redirect = req.originalUrl.replace(from, to);
@@ -123,7 +126,7 @@ Object.keys(internal).forEach(from => {
   });
 });
 
-Object.keys(external).forEach(from => {
+Object.keys(external).forEach((from) => {
   redirector.use(from, function (req, res) {
     // By default, res.redirect returns a 302 status
     // code (temporary) rather than 301 (permanent)

@@ -55,10 +55,20 @@ function failed(meta) {
 }
 
 function succeeded(meta, output) {
-  const result = { ok: true, status: meta.status, headers: meta.headers || {}, kind: meta.kind, data: output };
+  const result = {
+    ok: true,
+    status: meta.status,
+    headers: meta.headers || {},
+    kind: meta.kind,
+    data: output,
+  };
   if (meta.kind === "text") result.text = output.toString("utf8");
   if (meta.kind === "image") {
-    Object.assign(result, { format: meta.format, width: meta.width, height: meta.height });
+    Object.assign(result, {
+      format: meta.format,
+      width: meta.width,
+      height: meta.height,
+    });
   }
   // A named extraction's data from the jail's parse of a page (kind "html")
   if (meta.kind === "html") result.extracted = meta.extracted || {};
@@ -78,16 +88,20 @@ async function batch(requests, { label } = {}) {
   }
 
   const { meta, outputs } = reply;
-  if (!meta || typeof meta !== "object") return requests.map(() => failed({ error: "fetch: no answer" }));
+  if (!meta || typeof meta !== "object")
+    return requests.map(() => failed({ error: "fetch: no answer" }));
   if (meta.error) return requests.map(() => failed(meta));
   if (!Array.isArray(meta.results) || meta.results.length !== requests.length) {
     return requests.map(() => failed({ error: "fetch: invalid answer" }));
   }
 
   return meta.results.map((result, i) => {
-    if (!result || typeof result !== "object") return failed({ error: "fetch: invalid answer" });
+    if (!result || typeof result !== "object")
+      return failed({ error: "fetch: invalid answer" });
     if (result.deferred) return { deferred: true };
-    return result.error ? failed(result) : succeeded(result, outputs[i] || NONE);
+    return result.error
+      ? failed(result)
+      : succeeded(result, outputs[i] || NONE);
   });
 }
 
@@ -95,16 +109,21 @@ async function batch(requests, { label } = {}) {
 // and many rejects with its reason.
 async function many(requests, { label, signal } = {}) {
   assertReady(label);
-  if (!Array.isArray(requests)) throw new Error("sandbox/fetch: requests must be a list");
+  if (!Array.isArray(requests))
+    throw new Error("sandbox/fetch: requests must be a list");
 
   const results = new Array(requests.length);
   let pending = requests.map((request, i) => i);
 
   while (pending.length) {
-    if (signal && signal.aborted) throw signal.reason || new Error("sandbox/fetch: aborted");
+    if (signal && signal.aborted)
+      throw signal.reason || new Error("sandbox/fetch: aborted");
     const indexes = pending.slice(0, MAX_REQUESTS);
     pending = pending.slice(MAX_REQUESTS);
-    const answers = await batch(indexes.map((i) => requests[i]), { label });
+    const answers = await batch(
+      indexes.map((i) => requests[i]),
+      { label }
+    );
 
     let progress = false;
     answers.forEach((answer, j) => {
@@ -118,7 +137,8 @@ async function many(requests, { label, signal } = {}) {
     // The job never puts off a request with a batch to itself, so this is a
     // broken job, not a reason to ask again
     if (!progress) {
-      for (const i of indexes) results[i] = failed({ error: "fetch: no progress" });
+      for (const i of indexes)
+        results[i] = failed({ error: "fetch: no progress" });
       pending = pending.filter((i) => !indexes.includes(i));
     }
   }

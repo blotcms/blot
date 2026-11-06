@@ -84,14 +84,18 @@ function jobFailed(job, err) {
   if (!err) return;
   if (err.code === "SANDBOX_BUSY" && BUSY_IS_BACKPRESSURE.has(job)) {
     busyCounts.set(job, (busyCounts.get(job) || 0) + 1);
-    console.log(clfdate(), `sandbox: job ${job} busy (${busyCounts.get(job)} since start)`);
+    console.log(
+      clfdate(),
+      `sandbox: job ${job} busy (${busyCounts.get(job)} since start)`
+    );
     return;
   }
   if (err.code === "SANDBOX_TIMEOUT" && TIMEOUT_IS_THE_INPUT.has(job)) {
     console.log(clfdate(), `sandbox: job ${job} timed out`);
     return;
   }
-  const broken = err.code === "SANDBOX_FAILED" && FAILS_ONLY_WHEN_BROKEN.has(job);
+  const broken =
+    err.code === "SANDBOX_FAILED" && FAILS_ONLY_WHEN_BROKEN.has(job);
   if (!REPORTED.has(err.code) && !broken) return;
   report(`job ${job}: ${err.code.slice("SANDBOX_".length).toLowerCase()}`);
 }
@@ -101,14 +105,26 @@ function checkProxy(proxy) {
   return new Promise((resolve) => {
     const { hostname, port } = new URL(proxy);
     const req = http.get(
-      { hostname, port, path: METADATA, headers: { host: "169.254.169.254" }, timeout: PROXY_TIMEOUT_MS },
+      {
+        hostname,
+        port,
+        path: METADATA,
+        headers: { host: "169.254.169.254" },
+        timeout: PROXY_TIMEOUT_MS,
+      },
       (res) => {
         res.resume();
-        resolve(res.statusCode === 500 ? null : `proxy let the metadata address through (${res.statusCode})`);
+        resolve(
+          res.statusCode === 500
+            ? null
+            : `proxy let the metadata address through (${res.statusCode})`
+        );
       }
     );
     req.on("timeout", () => req.destroy(new Error("timeout")));
-    req.on("error", (err) => resolve(`proxy did not answer (${err.code || err.message})`));
+    req.on("error", (err) =>
+      resolve(`proxy did not answer (${err.code || err.message})`)
+    );
   });
 }
 

@@ -221,7 +221,7 @@ describe("sync/fix/menu-ghosts", function () {
         function () {
           callback({ id: nfc, title: "Cafe", url: "/cafe", metadata: {} });
         },
-        id === nfc ? 0 : 5,
+        id === nfc ? 0 : 5
       );
     });
     spyOn(Blog, "get").and.callFake(function (by, callback) {
@@ -252,7 +252,7 @@ describe("sync/fix/menu-ghosts", function () {
         function () {
           callback({ id: nfc, title: "Cafe", url: "/cafe", metadata: {} });
         },
-        id === nfc ? 0 : 5,
+        id === nfc ? 0 : 5
       );
     });
     // the kept item has been removed by the time we write

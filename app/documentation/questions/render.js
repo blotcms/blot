@@ -3,7 +3,7 @@ const hljs = require("highlight.js");
 const cheerio = require("cheerio");
 const { marked } = require("marked");
 
-module.exports = function render (input) {
+module.exports = function render(input) {
   let html = { body: input, summary: "" };
 
   try {
@@ -17,7 +17,7 @@ module.exports = function render (input) {
   return html;
 };
 
-function highlight (html) {
+function highlight(html) {
   const $ = cheerio.load(html);
 
   $("pre code").each(function () {
@@ -40,30 +40,27 @@ function highlight (html) {
   return { body: removeXMLInvalidChars($.html()), summary: $.text() };
 }
 
-function sanitizeHTML (html) {
+function sanitizeHTML(html) {
   const $ = cheerio.load(html);
-  const executableTags = [
-    "script",
-    "iframe",
-    "object",
-    "embed",
-    "applet"
-  ];
+  const executableTags = ["script", "iframe", "object", "embed", "applet"];
 
-  executableTags.forEach(tag => {
+  executableTags.forEach((tag) => {
     $(tag).remove();
   });
 
   $("*").each((_, element) => {
     const attributes = Object.keys(element.attribs || {});
 
-    attributes.forEach(attr => {
+    attributes.forEach((attr) => {
       if (/^on/i.test(attr)) {
         $(element).removeAttr(attr);
         return;
       }
 
-      if ((attr === "href" || attr === "src") && /^javascript:/i.test(element.attribs[attr])) {
+      if (
+        (attr === "href" || attr === "src") &&
+        /^javascript:/i.test(element.attribs[attr])
+      ) {
         $(element).removeAttr(attr);
       }
     });
@@ -74,8 +71,9 @@ function sanitizeHTML (html) {
 
 // Removes everything forbidden by XML 1.0 specifications,
 // plus the unicode replacement character U+FFFD
-function removeXMLInvalidChars (string) {
+function removeXMLInvalidChars(string) {
   var regex =
+    // eslint-disable-next-line no-control-regex
     /((?:[\0-\x08\x0B\f\x0E-\x1F\uFFFD\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]))/g;
   return string.replace(regex, "");
 }

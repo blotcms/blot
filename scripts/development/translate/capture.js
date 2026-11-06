@@ -78,7 +78,11 @@ async function main(targetsPath, verificationDir) {
     {
       capturedAt: new Date().toISOString(),
       targets,
-      captured: captured.map((r) => ({ label: r.label, path: r.path, status: r.status })),
+      captured: captured.map((r) => ({
+        label: r.label,
+        path: r.path,
+        status: r.status,
+      })),
       failed: failed.map((r) => ({ label: r.label, error: r.error })),
     },
     { spaces: 2 }

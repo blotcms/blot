@@ -37,7 +37,8 @@ function createFsStore({ root }) {
 
   function file(key) {
     const target = path.resolve(root, key);
-    if (!target.startsWith(root + path.sep) || key.split("/").includes(TMP)) throw new Error("Invalid key: " + key);
+    if (!target.startsWith(root + path.sep) || key.split("/").includes(TMP))
+      throw new Error("Invalid key: " + key);
     return target;
   }
 
@@ -45,7 +46,8 @@ function createFsStore({ root }) {
     try {
       return await fsp.open(file(key), "r");
     } catch (err) {
-      if (err.code === "ENOENT" || err.code === "ENOTDIR") throw new NotFoundError("No such key: " + key);
+      if (err.code === "ENOENT" || err.code === "ENOTDIR")
+        throw new NotFoundError("No such key: " + key);
       throw err;
     }
   }
@@ -53,7 +55,9 @@ function createFsStore({ root }) {
   async function head(key) {
     try {
       const stat = await fsp.stat(file(key));
-      return stat.isFile() ? { size: stat.size, lastModified: Math.floor(stat.mtimeMs) } : null;
+      return stat.isFile()
+        ? { size: stat.size, lastModified: Math.floor(stat.mtimeMs) }
+        : null;
     } catch (err) {
       if (err.code === "ENOENT" || err.code === "ENOTDIR") return null;
       throw err;
@@ -78,7 +82,7 @@ function createFsStore({ root }) {
   async function etagOf(handle) {
     const hash = crypto.createHash("md5");
     const buffer = Buffer.alloc(CHUNK);
-    for (let at = 0; ; ) {
+    for (let at = 0; ;) {
       const { bytesRead } = await handle.read(buffer, 0, CHUNK, at);
       if (!bytesRead) break;
       hash.update(buffer.subarray(0, bytesRead));
@@ -92,14 +96,17 @@ function createFsStore({ root }) {
     try {
       const { size } = await handle.stat();
       if (ifNoneMatch === undefined) {
-        if (size > maxBytes) throw new TooLargeError(key + " is larger than " + maxBytes);
+        if (size > maxBytes)
+          throw new TooLargeError(key + " is larger than " + maxBytes);
         return await handle.readFile();
       }
 
       // As on S3, the condition is answered before the size is looked at
       const etag = await etagOf(handle);
-      if (ifNoneMatch && ifNoneMatch === etag) return { notModified: true, etag };
-      if (size > maxBytes) throw new TooLargeError(key + " is larger than " + maxBytes);
+      if (ifNoneMatch && ifNoneMatch === etag)
+        return { notModified: true, etag };
+      if (size > maxBytes)
+        throw new TooLargeError(key + " is larger than " + maxBytes);
       return { bytes: await handle.readFile(), etag };
     } finally {
       await handle.close();
@@ -112,7 +119,10 @@ function createFsStore({ root }) {
       try {
         const { size } = await handle.stat();
         let at = offset;
-        const end = Math.min(size, length === Infinity ? size : offset + length);
+        const end = Math.min(
+          size,
+          length === Infinity ? size : offset + length
+        );
         while (at < end) {
           const buffer = Buffer.alloc(Math.min(CHUNK, end - at));
           const { bytesRead } = await handle.read(buffer, 0, buffer.length, at);
@@ -134,11 +144,15 @@ function createFsStore({ root }) {
     const handle = await fsp.open(tmp, "wx");
     let written = 0;
     try {
-      for await (const chunk of Buffer.isBuffer(body) ? [body] : body) written += await writeAll(handle, Buffer.from(chunk));
+      for await (const chunk of Buffer.isBuffer(body) ? [body] : body)
+        written += await writeAll(handle, Buffer.from(chunk));
       await handle.close();
       // Nothing is published that is not all on disk
       const { size } = await fsp.stat(tmp);
-      if (size !== written) throw new Error("Wrote " + size + " of " + written + " bytes to " + tmp);
+      if (size !== written)
+        throw new Error(
+          "Wrote " + size + " of " + written + " bytes to " + tmp
+        );
     } catch (err) {
       await handle.close().catch(() => {});
       await fsp.rm(tmp, { force: true });
@@ -189,7 +203,8 @@ function createFsStore({ root }) {
     for (const entry of names.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       if (relative === "" && entry.name === TMP) continue;
       const key = relative + entry.name;
-      if (entry.isDirectory()) yield* walk(path.join(dir, entry.name), key + "/");
+      if (entry.isDirectory())
+        yield* walk(path.join(dir, entry.name), key + "/");
       else if (entry.isFile()) {
         const stat = await fsp.stat(path.join(dir, entry.name));
         yield { key, size: stat.size, lastModified: Math.floor(stat.mtimeMs) };
@@ -198,10 +213,21 @@ function createFsStore({ root }) {
   }
 
   async function* list(prefix = "") {
-    for await (const item of walk(root, "")) if (item.key.startsWith(prefix)) yield item;
+    for await (const item of walk(root, ""))
+      if (item.key.startsWith(prefix)) yield item;
   }
 
-  return { id, head, read, get, stream, put, putIfAbsent, delete: remove, list };
+  return {
+    id,
+    head,
+    read,
+    get,
+    stream,
+    put,
+    putIfAbsent,
+    delete: remove,
+    list,
+  };
 }
 
 module.exports = createFsStore;

@@ -27,7 +27,10 @@ describe("backlinks", function () {
   });
 
   it("keeps backlinks intact on entries.html, which aliases {{#entries}} to the same objects as {{#posts}}", async function () {
-    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nContent.",
+    });
     await this.write({
       path: "/linker.txt",
       content: "Title: Linker\n\n[see target](/target)",
@@ -43,7 +46,10 @@ describe("backlinks", function () {
   });
 
   it("renders backlinks that only a partial mentions", async function () {
-    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nContent.",
+    });
     await this.write({
       path: "/linker.txt",
       content: "Title: Linker\n\n[see target](/target)",
@@ -58,7 +64,10 @@ describe("backlinks", function () {
   });
 
   it("renders backlinks on a catalog list that only a partial mentions", async function () {
-    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nContent.",
+    });
     await this.write({
       path: "/linker.txt",
       content: "Title: Linker\n\n[see target](/target)",
@@ -73,7 +82,10 @@ describe("backlinks", function () {
   });
 
   it("still includes backlinks in ?json when the view never mentions them", async function () {
-    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nContent.",
+    });
     await this.write({
       path: "/linker.txt",
       content: "Title: Linker\n\n[see target](/target)",
@@ -83,11 +95,16 @@ describe("backlinks", function () {
     expect(await this.text("/target")).toContain("Target");
 
     const json = await (await this.get("/target?json=true")).json();
-    expect(json.entry.backlinks.map((entry) => entry.title)).toEqual(["Linker"]);
+    expect(json.entry.backlinks.map((entry) => entry.title)).toEqual([
+      "Linker",
+    ]);
   });
 
   it("still includes backlinks in ?debug when the view never mentions them", async function () {
-    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nContent.",
+    });
     await this.write({
       path: "/linker.txt",
       content: "Title: Linker\n\n[see target](/target)",
@@ -97,7 +114,9 @@ describe("backlinks", function () {
     expect(await this.text("/target")).toContain("Target");
 
     const debug = await (await this.get("/target?debug=true")).json();
-    expect(debug.entry.backlinks.map((entry) => entry.title)).toEqual(["Linker"]);
+    expect(debug.entry.backlinks.map((entry) => entry.title)).toEqual([
+      "Linker",
+    ]);
   });
 
   describe("lookups", function () {
@@ -113,7 +132,10 @@ describe("backlinks", function () {
     }
 
     async function writeLinkedEntries(test) {
-      await test.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+      await test.write({
+        path: "/target.txt",
+        content: "Title: Target\n\nContent.",
+      });
       await test.write({
         path: "/linker.txt",
         content: "Title: Linker\n\n[see target](/target)",
@@ -170,7 +192,10 @@ describe("backlinks", function () {
   });
 
   it("renders backlinks when another post links via markdown", async function () {
-    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nContent.",
+    });
     await this.write({
       path: "/linker.txt",
       content: "Title: Linker\n\n[see target](/target)",
@@ -227,9 +252,12 @@ describe("backlinks", function () {
     expect(body).not.toContain("Backlinks:");
   });
 
-
   it("does not create a backlink from a resolved link to a plain local file", async function () {
-    await require("storage/folder").write(this.blog.id, "/beach.jpg", "fake image data");
+    await require("storage/folder").write(
+      this.blog.id,
+      "/beach.jpg",
+      "fake image data"
+    );
 
     await this.write({
       path: "/vacation.txt",
@@ -246,7 +274,11 @@ describe("backlinks", function () {
   it("still creates a backlink from an anchor sharing a path with one the autoImage plugin removed", async function () {
     // /photo.jpg is a real file, but also deliberately set as another
     // entry's custom permalink, so the two collide.
-    await require("storage/folder").write(this.blog.id, "/photo.jpg", "fake image data");
+    await require("storage/folder").write(
+      this.blog.id,
+      "/photo.jpg",
+      "fake image data"
+    );
 
     await this.write({
       path: "/other.txt",
@@ -277,8 +309,7 @@ describe("backlinks", function () {
     });
     await this.write({
       path: "/linker.txt",
-      content:
-        'Title: Linker\n\n<p><a href="/a%2520b">Link to target</a></p>',
+      content: 'Title: Linker\n\n<p><a href="/a%2520b">Link to target</a></p>',
     });
     await this.template(backlinksTemplate);
 
@@ -310,7 +341,10 @@ describe("backlinks", function () {
   });
 
   it("renders backlinks when the linking source has umlauts in its filename", async function () {
-    await this.write({ path: "/target.txt", content: "Title: Target\n\nContent." });
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nContent.",
+    });
     await this.write({
       path: "/grüße-linker.txt",
       content:
@@ -427,7 +461,7 @@ describe("backlinks edge cases", function () {
       {
         path: "/md-inline.txt",
         content:
-          "Title: Markdown Inline\n\n[encoded](/r%C3%A9sum%C3%A9) and <a href=\"/résumé\">decoded</a>",
+          'Title: Markdown Inline\n\n[encoded](/r%C3%A9sum%C3%A9) and <a href="/résumé">decoded</a>',
         shouldBacklink: true,
         title: "Markdown Inline",
       },
@@ -457,7 +491,8 @@ describe("backlinks edge cases", function () {
       },
       {
         path: "/external-host.txt",
-        content: "Title: External Host\n\n[miss](https://example.com/r%C3%A9sum%C3%A9)",
+        content:
+          "Title: External Host\n\n[miss](https://example.com/r%C3%A9sum%C3%A9)",
         shouldBacklink: false,
         title: "External Host",
       },

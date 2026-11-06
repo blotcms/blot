@@ -21,7 +21,8 @@ function removeEnabledFromAllTemplates(blogID, callback) {
 function removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback) {
   callbackify(folder.listNames)(blogID, folderName, function (err, listing) {
     if (err) {
-      if (err.code === "ENOENT" || err.code === "ENOTDIR") return callback(null, []);
+      if (err.code === "ENOENT" || err.code === "ENOTDIR")
+        return callback(null, []);
       return callback(err);
     }
 
@@ -68,34 +69,39 @@ function removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback) {
           var updated = JSON.stringify(data, null, 2);
 
           // Through the client, so the provider gets the change too
-          callbackify(blogFolder.write)(blogID, packagePath, updated, function (err) {
-            if (err) {
-              errors.push(err);
-              return next();
-            }
-
-            modifiedSlugs.push(entry);
-
-            // Check if this template is locally-edited and write it back to the folder
-            var templateID = makeID(blogID, entry);
-            getMetadata(templateID, function (err, metadata) {
-              if (err || !metadata || !metadata.localEditing) {
+          callbackify(blogFolder.write)(
+            blogID,
+            packagePath,
+            updated,
+            function (err) {
+              if (err) {
+                errors.push(err);
                 return next();
               }
 
-              writeToFolder(blogID, templateID, function (writeErr) {
-                if (writeErr) {
-                  console.warn(
-                    "Failed to write modified template to folder",
-                    blogID,
-                    templateID,
-                    writeErr
-                  );
+              modifiedSlugs.push(entry);
+
+              // Check if this template is locally-edited and write it back to the folder
+              var templateID = makeID(blogID, entry);
+              getMetadata(templateID, function (err, metadata) {
+                if (err || !metadata || !metadata.localEditing) {
+                  return next();
                 }
-                next();
+
+                writeToFolder(blogID, templateID, function (writeErr) {
+                  if (writeErr) {
+                    console.warn(
+                      "Failed to write modified template to folder",
+                      blogID,
+                      templateID,
+                      writeErr
+                    );
+                  }
+                  next();
+                });
               });
-            });
-          });
+            }
+          );
         });
       },
       function (err) {

@@ -20,7 +20,38 @@ const rand = prng(20261023);
 const pick = (arr) => arr[Math.floor(rand() * arr.length)];
 
 // A few hundred pseudo-English words built from syllables
-const SYL = ["ta","ro","men","di","pla","ke","sun","lo","vi","cra","ber","an","tho","gle","mi","ster","po","han","du","fel","ni","wor","ca","ble","ex","ti","ma","rin","sol","ul"];
+const SYL = [
+  "ta",
+  "ro",
+  "men",
+  "di",
+  "pla",
+  "ke",
+  "sun",
+  "lo",
+  "vi",
+  "cra",
+  "ber",
+  "an",
+  "tho",
+  "gle",
+  "mi",
+  "ster",
+  "po",
+  "han",
+  "du",
+  "fel",
+  "ni",
+  "wor",
+  "ca",
+  "ble",
+  "ex",
+  "ti",
+  "ma",
+  "rin",
+  "sol",
+  "ul",
+];
 const WORDS = [];
 while (WORDS.length < 400) {
   let w = "";
@@ -40,7 +71,8 @@ function sentence() {
     const r = rand();
     if (r < 0.05) w = `<em>${w}</em>`;
     else if (r < 0.08) w = `<strong>${w}</strong>`;
-    else if (r < 0.1) w = `<a href="/${word()}/${word()}-${Math.floor(rand() * 1000)}">${w}</a>`;
+    else if (r < 0.1)
+      w = `<a href="/${word()}/${word()}-${Math.floor(rand() * 1000)}">${w}</a>`;
     parts.push(w);
   }
   const s = parts.join(" ");
@@ -55,13 +87,16 @@ function paragraph() {
 }
 
 function html(target) {
-  let out = `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8"><title>${word()} ${word()}</title>` +
+  let out =
+    `<!DOCTYPE html>\n<html lang="en"><head><meta charset="utf-8"><title>${word()} ${word()}</title>` +
     `<link rel="stylesheet" href="/style.css"></head><body>\n<header><h1>${word()} ${word()}</h1></header>\n<main>\n`;
   while (out.length < target) {
     if (rand() < 0.15) out += `<h2>${word()} ${word()} ${word()}</h2>\n`;
     out += paragraph();
   }
-  return out + "</main>\n<footer><p>" + sentence() + "</p></footer></body></html>\n";
+  return (
+    out + "</main>\n<footer><p>" + sentence() + "</p></footer></body></html>\n"
+  );
 }
 
 const page = Buffer.from(html(60 * 1024));
@@ -71,8 +106,8 @@ for (let i = 0; i < image.length; i++) image[i] = Math.floor(rand() * 256);
 
 console.log(
   `page ${page.length} B (gzip ${(page.length / zlib.gzipSync(page, { level: 5 }).length).toFixed(2)}x), ` +
-  `large ${large.length} B (gzip ${(large.length / zlib.gzipSync(large, { level: 5 }).length).toFixed(2)}x), ` +
-  `image ${image.length} B`
+    `large ${large.length} B (gzip ${(large.length / zlib.gzipSync(large, { level: 5 }).length).toFixed(2)}x), ` +
+    `image ${image.length} B`
 );
 
 const routes = {
@@ -83,7 +118,10 @@ const routes = {
 
 const server = http.createServer((req, res) => {
   const r = routes[req.url.split("?")[0]];
-  if (!r) { res.writeHead(404, { "Content-Type": "text/plain" }); return res.end("not found"); }
+  if (!r) {
+    res.writeHead(404, { "Content-Type": "text/plain" });
+    return res.end("not found");
+  }
   res.writeHead(200, { "Content-Type": r[0], "Content-Length": r[1].length });
   res.end(r[1]);
 });

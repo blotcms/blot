@@ -94,7 +94,10 @@ function forget(blogID) {
 }
 
 function hasStore() {
-  return makeObjectStore !== s3ObjectStore || !!(config.storage && config.storage.bucket);
+  return (
+    makeObjectStore !== s3ObjectStore ||
+    !!(config.storage && config.storage.bucket)
+  );
 }
 
 // A blog's writes to the store (a push, Blot's commit, a compaction, the

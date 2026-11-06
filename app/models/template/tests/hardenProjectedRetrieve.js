@@ -3,12 +3,13 @@ describe("hardenProjectedRetrieve", function () {
 
   it("keeps a heavy field only referenced inside a partial", function () {
     var retrieve = { posts: { fields: { title: true } } };
-    harden(
-      retrieve,
-      "{{> item}}{{#posts}}{{title}}{{> wrapper}}{{/posts}}",
-      { item: "{{{html}}}", wrapper: "{{> item}}" }
-    );
-    expect(retrieve).toEqual({ posts: { fields: { title: true, html: true } } });
+    harden(retrieve, "{{> item}}{{#posts}}{{title}}{{> wrapper}}{{/posts}}", {
+      item: "{{{html}}}",
+      wrapper: "{{> item}}",
+    });
+    expect(retrieve).toEqual({
+      posts: { fields: { title: true, html: true } },
+    });
   });
 
   it("keeps a heavy field referenced through a numeric list index", function () {
@@ -62,7 +63,10 @@ describe("hardenProjectedRetrieve", function () {
       retrieve,
       "{{#posts}}{{title}}{{/posts}}{{{snippet}}}",
       {},
-      { snippet: "{{#posts}}{{{html}}}{{/posts}}", nested: { deep: "{{{body}}}" } }
+      {
+        snippet: "{{#posts}}{{{html}}}{{/posts}}",
+        nested: { deep: "{{{body}}}" },
+      }
     );
     expect(retrieve.posts.fields).toEqual({ title: true });
   });

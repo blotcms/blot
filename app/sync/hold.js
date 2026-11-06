@@ -38,7 +38,11 @@ async function take(blogID, options = {}) {
       // Another process may now own the lock, so the holder can no longer
       // be trusted to be exclusive. Log diagnostics, then crash the
       // process (as proper-lockfile's handler did) so it stops writing.
-      gatherLockDiagnostics({ blogID, lockAcquiredAt: acquiredAt(), syncContext: { syncID } })
+      gatherLockDiagnostics({
+        blogID,
+        lockAcquiredAt: acquiredAt(),
+        syncContext: { syncID },
+      })
         .catch((diagErr) => ({ diagnosticsError: String(diagErr) }))
         .then((diagnostics) => {
           // console.error's default util.inspect depth (2) was silently
@@ -55,9 +59,9 @@ async function take(blogID, options = {}) {
                 error: { message: err.message, code: err.code },
                 lockConfig: {
                   ttl: LOCK_STALE_TIMEOUT_MS,
-                  heartbeat: LOCK_UPDATE_INTERVAL_MS
+                  heartbeat: LOCK_UPDATE_INTERVAL_MS,
                 },
-                diagnostics
+                diagnostics,
               },
               { depth: null, maxArrayLength: null }
             )
@@ -68,7 +72,7 @@ async function take(blogID, options = {}) {
             throw err;
           });
         });
-    }
+    },
   });
 
   // The freeze may have begun between the caller's wait and taking the
@@ -101,7 +105,9 @@ async function hold(blogID, fn) {
     try {
       lock = await take(blogID);
     } catch (err) {
-      const failure = new Error("Failed to acquire folder lock for " + blogID + ": " + err.message);
+      const failure = new Error(
+        "Failed to acquire folder lock for " + blogID + ": " + err.message
+      );
       failure.code = err.code || "ELOCKED";
       throw failure;
     }

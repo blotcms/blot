@@ -33,7 +33,12 @@ const stats = { compactions: 0, skipped: 0 };
 function compactAfter(blogID, current) {
   try {
     const cache = context.cache();
-    const options = compact.planOptions(cache, { maxBytes: Math.min(COMPACT_MAX_BYTES, compact.planOptions(cache).maxBytes) });
+    const options = compact.planOptions(cache, {
+      maxBytes: Math.min(
+        COMPACT_MAX_BYTES,
+        compact.planOptions(cache).maxBytes
+      ),
+    });
 
     if (require("./remove").isRemoved(blogID)) return;
 
@@ -63,14 +68,25 @@ function compactAfter(blogID, current) {
       state.waiters.splice(0).forEach((resolve) => resolve());
     });
   } catch (err) {
-    log({ blog: blogID, op: "compact", outcome: "error", detail: (err && (err.code || err.message)) || "error" });
+    log({
+      blog: blogID,
+      op: "compact",
+      outcome: "error",
+      detail: (err && (err.code || err.message)) || "error",
+    });
   }
 }
 
 async function run(blogID, options) {
   try {
     const measured = await measure(() =>
-      compact({ store: context.storeFor(blogID), cache: context.cache(), lock: context.refLock(blogID), ...options, gate: limiter.gate("background") })
+      compact({
+        store: context.storeFor(blogID),
+        cache: context.cache(),
+        lock: context.refLock(blogID),
+        ...options,
+        gate: limiter.gate("background"),
+      })
     );
     const result = measured.result;
     const stats = result.stats || {};
@@ -88,10 +104,17 @@ async function run(blogID, options) {
       packsIn: stats.packsIn,
       bytesIn: stats.bytesIn,
       bytesOut: stats.bytesOut,
-      detail: result.error ? result.error.code || result.error.name || "error" : undefined,
+      detail: result.error
+        ? result.error.code || result.error.name || "error"
+        : undefined,
     });
   } catch (err) {
-    log({ blog: blogID, op: "compact", outcome: "error", detail: (err && (err.code || err.name)) || "error" });
+    log({
+      blog: blogID,
+      op: "compact",
+      outcome: "error",
+      detail: (err && (err.code || err.name)) || "error",
+    });
   }
 }
 

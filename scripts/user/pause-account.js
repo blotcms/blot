@@ -62,14 +62,22 @@ function clearExistingInvoices(subscriptionId, callback) {
       async.series(
         [
           function (next) {
-            async.each(toVoid, function (invoiceId, done) {
-              stripe.invoices.voidInvoice(invoiceId, done);
-            }, next);
+            async.each(
+              toVoid,
+              function (invoiceId, done) {
+                stripe.invoices.voidInvoice(invoiceId, done);
+              },
+              next
+            );
           },
           function (next) {
-            async.each(toDelete, function (invoiceId, done) {
-              stripe.invoices.del(invoiceId, done);
-            }, next);
+            async.each(
+              toDelete,
+              function (invoiceId, done) {
+                stripe.invoices.del(invoiceId, done);
+              },
+              next
+            );
           },
         ],
         function (err) {
@@ -83,8 +91,14 @@ function clearExistingInvoices(subscriptionId, callback) {
 get(email, function (err, user) {
   if (err) throw err;
 
-  if (!user.subscription || !user.subscription.id || !user.subscription.customer) {
-    console.log(colors.red(user.email + " has no Stripe subscription to pause"));
+  if (
+    !user.subscription ||
+    !user.subscription.id ||
+    !user.subscription.customer
+  ) {
+    console.log(
+      colors.red(user.email + " has no Stripe subscription to pause")
+    );
     return process.exit(1);
   }
 
@@ -148,10 +162,24 @@ get(email, function (err, user) {
             if (err) throw err;
 
             if (cleared.voided.length) {
-              console.log(colors.yellow("Voided " + cleared.voided.length + " open invoice(s): " + cleared.voided.join(", ")));
+              console.log(
+                colors.yellow(
+                  "Voided " +
+                    cleared.voided.length +
+                    " open invoice(s): " +
+                    cleared.voided.join(", ")
+                )
+              );
             }
             if (cleared.deleted.length) {
-              console.log(colors.yellow("Deleted " + cleared.deleted.length + " draft invoice(s): " + cleared.deleted.join(", ")));
+              console.log(
+                colors.yellow(
+                  "Deleted " +
+                    cleared.deleted.length +
+                    " draft invoice(s): " +
+                    cleared.deleted.join(", ")
+                )
+              );
             }
 
             // Disabling always happens, even if collection was already

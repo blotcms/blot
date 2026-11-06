@@ -70,7 +70,11 @@ describe("models/file", function () {
 
       expect((await File.get(this.blog.id, "/a")).type).toEqual("dir");
       expect((await File.get(this.blog.id, "/a/b")).type).toEqual("dir");
-      expect(await collect(File.subtree(this.blog.id, "/"))).toEqual(["/a", "/a/b", "/a/b/c.txt"]);
+      expect(await collect(File.subtree(this.blog.id, "/"))).toEqual([
+        "/a",
+        "/a/b",
+        "/a/b/c.txt",
+      ]);
     });
 
     it("keeps an ancestor's own record when it already has one", async function () {
@@ -81,25 +85,47 @@ describe("models/file", function () {
     });
 
     it("records a directory with no size or hash", async function () {
-      await File.set(this.blog.id, "/d", { type: "dir", size: 9, modified: MODIFIED, sha1: SHA1 });
+      await File.set(this.blog.id, "/d", {
+        type: "dir",
+        size: 9,
+        modified: MODIFIED,
+        sha1: SHA1,
+      });
 
-      expect(await File.get(this.blog.id, "/d")).toEqual({ type: "dir", size: 0, modified: MODIFIED, sha1: "" });
+      expect(await File.get(this.blog.id, "/d")).toEqual({
+        type: "dir",
+        size: 0,
+        modified: MODIFIED,
+        sha1: "",
+      });
     });
 
     it("refuses anything below a file, a file over a directory and a directory over a file", async function () {
       await File.set(this.blog.id, "/f", file(1));
       await File.set(this.blog.id, "/d", { type: "dir", modified: MODIFIED });
 
-      expect((await rejection(File.set(this.blog.id, "/f/g", file(1)))).code).toEqual("ENOTDIR");
-      expect((await rejection(File.set(this.blog.id, "/d", file(1)))).code).toEqual("EISDIR");
-      expect((await rejection(File.set(this.blog.id, "/f", { type: "dir" }))).code).toEqual("EEXIST");
+      expect(
+        (await rejection(File.set(this.blog.id, "/f/g", file(1)))).code
+      ).toEqual("ENOTDIR");
+      expect(
+        (await rejection(File.set(this.blog.id, "/d", file(1)))).code
+      ).toEqual("EISDIR");
+      expect(
+        (await rejection(File.set(this.blog.id, "/f", { type: "dir" }))).code
+      ).toEqual("EEXIST");
       expect(await File.get(this.blog.id, "/f/g")).toBeNull();
     });
 
     it("refuses the folder itself and a bad record", async function () {
-      expect(await rejection(File.set(this.blog.id, "/", file(1)))).toBeDefined();
-      expect(await rejection(File.set(this.blog.id, "/x", { type: "link" }))).toBeDefined();
-      expect(await rejection(File.set(this.blog.id, "/x", file(1, "not hex")))).toBeDefined();
+      expect(
+        await rejection(File.set(this.blog.id, "/", file(1)))
+      ).toBeDefined();
+      expect(
+        await rejection(File.set(this.blog.id, "/x", { type: "link" }))
+      ).toBeDefined();
+      expect(
+        await rejection(File.set(this.blog.id, "/x", file(1, "not hex")))
+      ).toBeDefined();
     });
 
     it("stores names with the separator and other awkward characters", async function () {
@@ -108,15 +134,20 @@ describe("models/file", function () {
       await File.set(this.blog.id, name, file(3));
 
       expect(await File.get(this.blog.id, name)).toEqual(file(3));
-      expect(names(await File.listAll(this.blog.id, "/"))).toEqual([name.slice(1)]);
+      expect(names(await File.listAll(this.blog.id, "/"))).toEqual([
+        name.slice(1),
+      ]);
     });
 
     it("keeps no key per file", async function () {
-      for (var i = 0; i < 20; i++) await File.set(this.blog.id, "/d/" + i, file(1));
+      for (var i = 0; i < 20; i++)
+        await File.set(this.blog.id, "/d/" + i, file(1));
 
       var keys = [];
 
-      for await (var key of client.scanIterator({ MATCH: "blog:" + this.blog.id + ":file*" })) {
+      for await (var key of client.scanIterator({
+        MATCH: "blog:" + this.blog.id + ":file*",
+      })) {
         keys.push(...(Array.isArray(key) ? key : [key]));
       }
 
@@ -146,7 +177,12 @@ describe("models/file", function () {
 
   describe("list", function () {
     it("pages a directory with a cursor and lists all of it sorted", async function () {
-      for (var i = 0; i < 30; i++) await File.set(this.blog.id, "/d/" + String(i).padStart(2, "0"), file(1));
+      for (var i = 0; i < 30; i++)
+        await File.set(
+          this.blog.id,
+          "/d/" + String(i).padStart(2, "0"),
+          file(1)
+        );
 
       var seen = await pages(this.blog.id, "/d", 7);
 
@@ -158,24 +194,51 @@ describe("models/file", function () {
     describe("a large directory", function () {
       // Names which sort differently by code unit and by UTF-8 byte (from
       // U+E000 up, against characters beyond U+FFFF), and some ASCII edges
-      var AWKWARD = ["！ wide", "�", "", "\u{1F600} smile", "\u{10FFFF}", "\u{10000}", "Zed", "a b", "a|b", "[x", "(y", "-", "+"];
+      var AWKWARD = [
+        "！ wide",
+        "�",
+        "",
+        "\u{1F600} smile",
+        "\u{10FFFF}",
+        "\u{10000}",
+        "Zed",
+        "a b",
+        "a|b",
+        "[x",
+        "(y",
+        "-",
+        "+",
+      ];
 
       // A directory of a few thousand files and a hundred subdirectories,
       // each with files of its own, so the path set interleaves them
       beforeEach(async function () {
         var items = [];
 
-        for (var i = 0; i < 3000; i++) items.push(Object.assign({ path: "/big/f" + String(i).padStart(4, "0") }, file(1)));
+        for (var i = 0; i < 3000; i++)
+          items.push(
+            Object.assign(
+              { path: "/big/f" + String(i).padStart(4, "0") },
+              file(1)
+            )
+          );
 
         for (var j = 0; j < 100; j++) {
           for (var k = 0; k < 3; k++) {
-            items.push(Object.assign({ path: "/big/s" + String(j).padStart(3, "0") + "/x" + k }, file(1)));
+            items.push(
+              Object.assign(
+                { path: "/big/s" + String(j).padStart(3, "0") + "/x" + k },
+                file(1)
+              )
+            );
           }
         }
 
-        for (var name of AWKWARD) items.push(Object.assign({ path: "/big/" + name }, file(1)));
+        for (var name of AWKWARD)
+          items.push(Object.assign({ path: "/big/" + name }, file(1)));
 
-        for (var n = 0; n < items.length; n += 500) await File.setMany(this.blog.id, items.slice(n, n + 500));
+        for (var n = 0; n < items.length; n += 500)
+          await File.setMany(this.blog.id, items.slice(n, n + 500));
 
         this.expected = items
           .map(function (item) {
@@ -190,12 +253,16 @@ describe("models/file", function () {
       it("pages in code-unit order, with no duplicate and no gap across cursors", async function () {
         expect(this.expected.length).toEqual(3000 + 100 + AWKWARD.length);
         expect(await pages(this.blog.id, "/big", 97)).toEqual(this.expected);
-        expect(names(await File.listAll(this.blog.id, "/big"))).toEqual(this.expected);
+        expect(names(await File.listAll(this.blog.id, "/big"))).toEqual(
+          this.expected
+        );
 
         var sizes = [];
         var seen = [];
 
-        for await (var page of File.pages(this.blog.id, "/big", { limit: 1000 })) {
+        for await (var page of File.pages(this.blog.id, "/big", {
+          limit: 1000,
+        })) {
           sizes.push(page.length);
           seen.push(...names(page));
         }
@@ -232,7 +299,10 @@ describe("models/file", function () {
         var after = first.next;
 
         do {
-          var page = await File.list(blogID, "/big", { after: after, limit: 100 });
+          var page = await File.list(blogID, "/big", {
+            after: after,
+            limit: 100,
+          });
           seen.push(...names(page.entries));
           after = page.next;
         } while (after !== null);
@@ -248,18 +318,27 @@ describe("models/file", function () {
         // cursor, so neither is seen again
         expect(seen).toEqual(expected);
         expect(names(await File.listAll(blogID, "/big"))).toEqual(
-          expected.filter((name) => name !== "f0050").concat("a-before").sort()
+          expected
+            .filter((name) => name !== "f0050")
+            .concat("a-before")
+            .sort()
         );
       });
 
       it("ends at a cursor after the last entry, and resumes after an entry removed since", async function () {
         var last = this.expected[this.expected.length - 1];
 
-        expect(await File.list(this.blog.id, "/big", { after: last })).toEqual({ entries: [], next: null });
+        expect(await File.list(this.blog.id, "/big", { after: last })).toEqual({
+          entries: [],
+          next: null,
+        });
 
         await File.remove(this.blog.id, "/big/f0100");
 
-        var page = await File.list(this.blog.id, "/big", { after: "f0100", limit: 2 });
+        var page = await File.list(this.blog.id, "/big", {
+          after: "f0100",
+          limit: 2,
+        });
 
         expect(names(page.entries)).toEqual(["f0101", "f0102"]);
         expect(page.next).toEqual("f0102");
@@ -267,11 +346,18 @@ describe("models/file", function () {
     });
 
     it("has no cursor after a last page which is exactly full", async function () {
-      for (var i = 0; i < 4; i++) await File.set(this.blog.id, "/d/" + i, file(1));
+      for (var i = 0; i < 4; i++)
+        await File.set(this.blog.id, "/d/" + i, file(1));
 
-      expect((await File.list(this.blog.id, "/d", { limit: 4 })).next).toBeNull();
-      expect((await File.list(this.blog.id, "/d", { limit: 3 })).next).toEqual("2");
-      expect(await File.list(this.blog.id, "/d", { after: "2", limit: 3 })).toEqual({
+      expect(
+        (await File.list(this.blog.id, "/d", { limit: 4 })).next
+      ).toBeNull();
+      expect((await File.list(this.blog.id, "/d", { limit: 3 })).next).toEqual(
+        "2"
+      );
+      expect(
+        await File.list(this.blog.id, "/d", { after: "2", limit: 3 })
+      ).toEqual({
         entries: [Object.assign({ name: "3" }, file(1))],
         next: null,
       });
@@ -286,12 +372,22 @@ describe("models/file", function () {
       beforeEach(async function () {
         var items = [];
 
-        for (var i = 0; i < 1200; i++) items.push(Object.assign({ path: "/old/" + String(i).padStart(4, "0") }, file(1)));
+        for (var i = 0; i < 1200; i++)
+          items.push(
+            Object.assign(
+              { path: "/old/" + String(i).padStart(4, "0") },
+              file(1)
+            )
+          );
 
-        items.push(Object.assign({ path: "/old/！" }, file(1)), Object.assign({ path: "/old/\u{1F600}" }, file(1)));
+        items.push(
+          Object.assign({ path: "/old/！" }, file(1)),
+          Object.assign({ path: "/old/\u{1F600}" }, file(1))
+        );
         items.push(Object.assign({ path: "/old/sub/a" }, file(1)));
 
-        for (var n = 0; n < items.length; n += 500) await File.setMany(this.blog.id, items.slice(n, n + 500));
+        for (var n = 0; n < items.length; n += 500)
+          await File.setMany(this.blog.id, items.slice(n, n + 500));
 
         this.expected = names(await File.listAll(this.blog.id, "/old"));
 
@@ -304,9 +400,15 @@ describe("models/file", function () {
         expect(this.expected.length).toEqual(1203);
         expect(this.expected.slice(-2)).toEqual(["\u{1F600}", "！"]);
         expect(await pages(this.blog.id, "/old", 101)).toEqual(this.expected);
-        expect(await File.list(this.blog.id, "/old", { after: this.expected[1202] })).toEqual({ entries: [], next: null });
-        expect(names(await File.listAll(this.blog.id, "/old"))).toEqual(this.expected);
-        expect(await client.exists(File.key.names(this.blog.id, "/old"))).toEqual(0);
+        expect(
+          await File.list(this.blog.id, "/old", { after: this.expected[1202] })
+        ).toEqual({ entries: [], next: null });
+        expect(names(await File.listAll(this.blog.id, "/old"))).toEqual(
+          this.expected
+        );
+        expect(
+          await client.exists(File.key.names(this.blog.id, "/old"))
+        ).toEqual(0);
       });
 
       it("gets a complete names set from its first new name, and keeps it through removes", async function () {
@@ -319,7 +421,9 @@ describe("models/file", function () {
           .concat("0600x")
           .sort();
 
-        expect(await client.zCard(File.key.names(this.blog.id, "/old"))).toEqual(expected.length);
+        expect(
+          await client.zCard(File.key.names(this.blog.id, "/old"))
+        ).toEqual(expected.length);
         expect(await pages(this.blog.id, "/old", 101)).toEqual(expected);
       });
 
@@ -327,16 +431,32 @@ describe("models/file", function () {
         await File.set(this.blog.id, "/old/0001", file(2));
         await File.remove(this.blog.id, "/old/0002");
 
-        expect(await client.exists(File.key.names(this.blog.id, "/old"))).toEqual(0);
-        expect(await pages(this.blog.id, "/old", 500)).toEqual(this.expected.filter((name) => name !== "0002"));
+        expect(
+          await client.exists(File.key.names(this.blog.id, "/old"))
+        ).toEqual(0);
+        expect(await pages(this.blog.id, "/old", 500)).toEqual(
+          this.expected.filter((name) => name !== "0002")
+        );
       });
 
       it("is given one by addMissingNames, which only counts without apply", async function () {
-        expect(await File.addMissingNames(this.blog.id)).toEqual({ dirs: 3, missing: 3, names: 1205 });
-        expect(await client.exists(File.key.names(this.blog.id, "/old"))).toEqual(0);
+        expect(await File.addMissingNames(this.blog.id)).toEqual({
+          dirs: 3,
+          missing: 3,
+          names: 1205,
+        });
+        expect(
+          await client.exists(File.key.names(this.blog.id, "/old"))
+        ).toEqual(0);
 
-        expect(await File.addMissingNames(this.blog.id, { apply: true })).toEqual({ dirs: 3, missing: 3, names: 1205 });
-        expect(await File.addMissingNames(this.blog.id)).toEqual({ dirs: 3, missing: 0, names: 0 });
+        expect(
+          await File.addMissingNames(this.blog.id, { apply: true })
+        ).toEqual({ dirs: 3, missing: 3, names: 1205 });
+        expect(await File.addMissingNames(this.blog.id)).toEqual({
+          dirs: 3,
+          missing: 0,
+          names: 0,
+        });
 
         spyOn(client, "hScan").and.callThrough();
 
@@ -347,7 +467,10 @@ describe("models/file", function () {
 
     it("gives each entry's record", async function () {
       await File.set(this.blog.id, "/d/a.txt", file(4));
-      await File.set(this.blog.id, "/d/sub", { type: "dir", modified: MODIFIED });
+      await File.set(this.blog.id, "/d/sub", {
+        type: "dir",
+        modified: MODIFIED,
+      });
 
       expect(await File.listAll(this.blog.id, "/d")).toEqual([
         Object.assign({ name: "a.txt" }, file(4)),
@@ -357,7 +480,10 @@ describe("models/file", function () {
 
     it("is null for a missing directory or a file, and empty for an empty one", async function () {
       await File.set(this.blog.id, "/f", file(1));
-      await File.set(this.blog.id, "/empty", { type: "dir", modified: MODIFIED });
+      await File.set(this.blog.id, "/empty", {
+        type: "dir",
+        modified: MODIFIED,
+      });
 
       expect(await File.list(this.blog.id, "/nope")).toBeNull();
       expect(await File.listAll(this.blog.id, "/f")).toBeNull();
@@ -374,8 +500,12 @@ describe("models/file", function () {
       await File.set(this.blog.id, "/a0", file(1));
       await File.set(this.blog.id, "/ab/3", file(1));
 
-      expect(await collect(File.subtree(this.blog.id, "/a", { pageSize: 2 }))).toEqual(["/a/1", "/a/b", "/a/b/2"]);
-      expect((await collect(File.subtree(this.blog.id, "/"))).length).toEqual(8);
+      expect(
+        await collect(File.subtree(this.blog.id, "/a", { pageSize: 2 }))
+      ).toEqual(["/a/1", "/a/b", "/a/b/2"]);
+      expect((await collect(File.subtree(this.blog.id, "/"))).length).toEqual(
+        8
+      );
       expect(await collect(File.subtree(this.blog.id, "/nope"))).toEqual([]);
     });
   });
@@ -384,23 +514,40 @@ describe("models/file", function () {
     it("finds the stored spelling of each segment", async function () {
       await File.set(this.blog.id, "/Templates/Style.CSS", file(1));
 
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/templates/style.css")).toEqual("/Templates/Style.CSS");
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/templates/style.css")
+      ).toEqual("/Templates/Style.CSS");
       expect(await File.resolveCaseInsensitive(this.blog.id, "/")).toEqual("/");
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/nope")).toBeNull();
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/templates/style.css/x")).toBeNull();
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/nope")
+      ).toBeNull();
+      expect(
+        await File.resolveCaseInsensitive(
+          this.blog.id,
+          "/templates/style.css/x"
+        )
+      ).toBeNull();
     });
 
     it("keeps two names which differ only by case, the exact one first", async function () {
       await File.set(this.blog.id, "/templates/a", file(1));
       await File.set(this.blog.id, "/Templates/b", file(1));
 
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/templates/a")).toEqual("/templates/a");
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/Templates/b")).toEqual("/Templates/b");
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/templates/a")
+      ).toEqual("/templates/a");
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/Templates/b")
+      ).toEqual("/Templates/b");
       // Neither is exact: the first in sorted order
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/b")).toEqual("/Templates/b");
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/b")
+      ).toEqual("/Templates/b");
       // Each segment is resolved on its own, with no going back to try a
       // sibling, as helper/caseSensitivePath does
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/Templates/a")).toBeNull();
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/Templates/a")
+      ).toBeNull();
     });
 
     it("forgets a name once it is removed, keeping its case-only sibling", async function () {
@@ -409,17 +556,23 @@ describe("models/file", function () {
 
       await File.remove(this.blog.id, "/Templates");
 
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/A")).toEqual("/templates/a");
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/A")
+      ).toEqual("/templates/a");
 
       await File.remove(this.blog.id, "/templates");
 
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/A")).toBeNull();
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/TEMPLATES/A")
+      ).toBeNull();
     });
 
     it("folds case beyond ASCII, across Unicode normalisation", async function () {
       await File.set(this.blog.id, "/ÉTÉ/Café.txt", file(1));
 
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/été/CAFÉ.TXT")).toEqual("/ÉTÉ/Café.txt");
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/été/CAFÉ.TXT")
+      ).toEqual("/ÉTÉ/Café.txt");
     });
   });
 
@@ -435,7 +588,8 @@ describe("models/file", function () {
     });
 
     it("removes a directory's whole subtree from every structure", async function () {
-      for (var i = 0; i < 25; i++) await File.set(this.blog.id, "/d/" + (i % 5) + "/f" + i, file(2));
+      for (var i = 0; i < 25; i++)
+        await File.set(this.blog.id, "/d/" + (i % 5) + "/f" + i, file(2));
       await File.set(this.blog.id, "/d0", file(7));
       await File.set(this.blog.id, "/d/Sub/x", file(1));
 
@@ -443,13 +597,17 @@ describe("models/file", function () {
 
       expect(await File.get(this.blog.id, "/d")).toBeNull();
       expect(await File.get(this.blog.id, "/d/0/f0")).toBeNull();
-      expect(await File.resolveCaseInsensitive(this.blog.id, "/D/sub/x")).toBeNull();
+      expect(
+        await File.resolveCaseInsensitive(this.blog.id, "/D/sub/x")
+      ).toBeNull();
       expect(await collect(File.subtree(this.blog.id, "/"))).toEqual(["/d0"]);
       expect(await File.totals(this.blog.id)).toEqual({ bytes: 7, files: 1 });
 
       var keys = [];
 
-      for await (var key of client.scanIterator({ MATCH: "blog:" + this.blog.id + ":file:*:/d/*" })) {
+      for await (var key of client.scanIterator({
+        MATCH: "blog:" + this.blog.id + ":file:*:/d/*",
+      })) {
         keys.push(...(Array.isArray(key) ? key : [key]));
       }
 
@@ -480,15 +638,39 @@ describe("models/file", function () {
       await File.set(this.blog.id, "/stale.txt", file(100));
 
       async function* listing() {
-        yield { path: "/a/b.txt", type: "file", size: 3, modified: MODIFIED, sha1: SHA1 };
+        yield {
+          path: "/a/b.txt",
+          type: "file",
+          size: 3,
+          modified: MODIFIED,
+          sha1: SHA1,
+        };
         yield { path: "/empty", type: "dir", size: 0, modified: MODIFIED };
-        yield { path: "/c.txt", type: "file", size: 4, modified: MODIFIED, sha1: "" };
+        yield {
+          path: "/c.txt",
+          type: "file",
+          size: 4,
+          modified: MODIFIED,
+          sha1: "",
+        };
       }
 
-      expect(await File.rebuild(this.blog.id, listing())).toEqual({ files: 2, dirs: 2, bytes: 7, skipped: [] });
+      expect(await File.rebuild(this.blog.id, listing())).toEqual({
+        files: 2,
+        dirs: 2,
+        bytes: 7,
+        skipped: [],
+      });
       expect(await File.get(this.blog.id, "/stale.txt")).toBeNull();
-      expect(await collect(File.subtree(this.blog.id, "/"))).toEqual(["/a", "/a/b.txt", "/c.txt", "/empty"]);
-      expect(await File.get(this.blog.id, "/c.txt")).toEqual(Object.assign(file(4), { sha1: "" }));
+      expect(await collect(File.subtree(this.blog.id, "/"))).toEqual([
+        "/a",
+        "/a/b.txt",
+        "/c.txt",
+        "/empty",
+      ]);
+      expect(await File.get(this.blog.id, "/c.txt")).toEqual(
+        Object.assign(file(4), { sha1: "" })
+      );
     });
 
     it("skips records which conflict with one before them, and reports them", async function () {
@@ -517,9 +699,20 @@ describe("models/file", function () {
     it("takes more records than one batch", async function () {
       var records = [];
 
-      for (var i = 0; i < 1201; i++) records.push({ path: "/d/" + i, type: "file", size: 1, modified: MODIFIED });
+      for (var i = 0; i < 1201; i++)
+        records.push({
+          path: "/d/" + i,
+          type: "file",
+          size: 1,
+          modified: MODIFIED,
+        });
 
-      expect(await File.rebuild(this.blog.id, records)).toEqual({ files: 1201, dirs: 1, bytes: 1201, skipped: [] });
+      expect(await File.rebuild(this.blog.id, records)).toEqual({
+        files: 1201,
+        dirs: 1,
+        bytes: 1201,
+        skipped: [],
+      });
       expect((await File.listAll(this.blog.id, "/d")).length).toEqual(1201);
     });
   });

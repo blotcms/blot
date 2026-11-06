@@ -6,9 +6,8 @@ const sharp = require("sharp");
 sharp.cache(false);
 
 async function run(args, input) {
-  const { format, width, height, pages, orientation, hasAlpha } = await sharp(
-    input
-  ).metadata();
+  const { format, width, height, pages, orientation, hasAlpha } =
+    await sharp(input).metadata();
 
   return {
     meta: { format, width, height, pages, orientation, hasAlpha },

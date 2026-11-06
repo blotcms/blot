@@ -93,12 +93,24 @@ const zlib = require("zlib");
 const { pipeline } = require("stream/promises");
 const { Readable } = require("stream");
 const { spawn } = require("child_process");
-const { NoRoomError, StaleManifestError, OutcomeUnknownError, CorruptError, TooLargeError } = require("./errors");
+const {
+  NoRoomError,
+  StaleManifestError,
+  OutcomeUnknownError,
+  CorruptError,
+  TooLargeError,
+} = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
 const { mapLimit, createSemaphore, createChildren } = require("./limit");
 const manifest = require("./manifest");
 const createReader = require("./reader");
-const { parseCommit, parseTree, parseTag, isDirectory, isGitlink } = require("./objects");
+const {
+  parseCommit,
+  parseTree,
+  parseTag,
+  isDirectory,
+  isGitlink,
+} = require("./objects");
 const { scanPack } = require("./packscan");
 const { buildRev } = require("./rev");
 const { noteSize } = require("./pack");
@@ -153,9 +165,12 @@ class Refused extends Error {
 function refNameProblem(ref) {
   if (ref.indexOf("refs/") !== 0) return "ref names must start with refs/";
   if (Buffer.byteLength(ref) > 1024) return "ref name is too long";
-  if (/[\x00-\x20\x7f~^:?*[\\]/.test(ref)) return "ref name has a character git does not allow";
+  // eslint-disable-next-line no-control-regex
+  if (/[\x00-\x20\x7f~^:?*[\\]/.test(ref))
+    return "ref name has a character git does not allow";
   if (/\.\.|@\{|\/\/|\/$|\.$|^@$/.test(ref)) return "ref name is not valid";
-  if (/(^|\/)\./.test(ref) || /\.lock(\/|$)/.test(ref)) return "ref name is not valid";
+  if (/(^|\/)\./.test(ref) || /\.lock(\/|$)/.test(ref))
+    return "ref name is not valid";
   return null;
 }
 
@@ -186,7 +201,9 @@ function refusals(commands) {
   const seen = new Set();
 
   for (const command of commands) {
-    const reason = seen.has(command.ref) ? "ref given twice in one push" : refusal(command);
+    const reason = seen.has(command.ref)
+      ? "ref given twice in one push"
+      : refusal(command);
     seen.add(command.ref);
     if (reason) problems[command.ref] = reason;
   }
@@ -221,12 +238,22 @@ function createIncoming(pack) {
 // configuration reaches it
 function gitEnvironment(extra) {
   const env = {};
-  for (const [name, value] of Object.entries(process.env)) if (!name.startsWith("GIT_")) env[name] = value;
-  return { ...env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_CONFIG_SYSTEM: "/dev/null", GIT_TERMINAL_PROMPT: "0", ...extra };
+  for (const [name, value] of Object.entries(process.env))
+    if (!name.startsWith("GIT_")) env[name] = value;
+  return {
+    ...env,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_SYSTEM: "/dev/null",
+    GIT_TERMINAL_PROMPT: "0",
+    ...extra,
+  };
 }
 
 function oneLine(text) {
-  return String(text).replace(/[\r\n\0]+/g, " ").trim().slice(0, 1000);
+  return String(text)
+    .replace(/[\r\n\0]+/g, " ")
+    .trim()
+    .slice(0, 1000);
 }
 
 // A line to show the user from what git wrote to stderr
@@ -244,7 +271,11 @@ function formatSize(bytes) {
 
 // A push over the limit: the size it is refused at, and what to do instead
 function tooLarge(limit) {
-  return new Refused("this push is larger than Blot accepts (" + formatSize(limit) + "); push fewer or smaller files at a time");
+  return new Refused(
+    "this push is larger than Blot accepts (" +
+      formatSize(limit) +
+      "); push fewer or smaller files at a time"
+  );
 }
 
 function createScratch(reservation, children) {
@@ -253,44 +284,60 @@ function createScratch(reservation, children) {
   // its stdin, and `outputFile` a file for its stdout (which then resolves "").
   // It starts once the host's gate lets it (limit.js, createChildren).
   function git(args, { gitDir, env = {}, input, inputFile, outputFile } = {}) {
-    return children.start(() => new Promise((resolve, reject) => {
-      const output = outputFile ? fs.openSync(outputFile, "w") : null;
-      const child = spawn("git", args, {
-        env: gitEnvironment({ ...(gitDir ? { GIT_DIR: gitDir } : {}), ...env }),
-        stdio: ["pipe", output === null ? "pipe" : output, "pipe"],
-      });
-      const stdout = [];
-      const stderr = [];
-      let size = 0;
-      const timer = setTimeout(() => child.kill("SIGKILL"), GIT_TIMEOUT_MS);
+    return children.start(
+      () =>
+        new Promise((resolve, reject) => {
+          const output = outputFile ? fs.openSync(outputFile, "w") : null;
+          const child = spawn("git", args, {
+            env: gitEnvironment({
+              ...(gitDir ? { GIT_DIR: gitDir } : {}),
+              ...env,
+            }),
+            stdio: ["pipe", output === null ? "pipe" : output, "pipe"],
+          });
+          const stdout = [];
+          const stderr = [];
+          let size = 0;
+          const timer = setTimeout(() => child.kill("SIGKILL"), GIT_TIMEOUT_MS);
 
-      children.add(child);
-      if (output !== null) fs.closeSync(output);
-      if (child.stdout) child.stdout.on("data", (chunk) => stdout.push(chunk));
-      child.stderr.on("data", (chunk) => {
-        // Only the end of it is wanted: that is where git says what is wrong
-        stderr.push(chunk);
-        size += chunk.length;
-        while (size > 16 * 1024 && stderr.length > 1) size -= stderr.shift().length;
-      });
-      child.stdin.on("error", () => {});
-      child.on("error", (err) => {
-        clearTimeout(timer);
-        children.delete(child);
-        reject(err);
-      });
-      child.on("close", (code) => {
-        clearTimeout(timer);
-        children.delete(child);
-        if (code === 0) return resolve(Buffer.concat(stdout));
-        const err = new Error("git " + commandOf(args) + " failed: " + oneLine(Buffer.concat(stderr).toString()));
-        err.stderr = Buffer.concat(stderr).toString();
-        reject(err);
-      });
+          children.add(child);
+          if (output !== null) fs.closeSync(output);
+          if (child.stdout)
+            child.stdout.on("data", (chunk) => stdout.push(chunk));
+          child.stderr.on("data", (chunk) => {
+            // Only the end of it is wanted: that is where git says what is wrong
+            stderr.push(chunk);
+            size += chunk.length;
+            while (size > 16 * 1024 && stderr.length > 1)
+              size -= stderr.shift().length;
+          });
+          child.stdin.on("error", () => {});
+          child.on("error", (err) => {
+            clearTimeout(timer);
+            children.delete(child);
+            reject(err);
+          });
+          child.on("close", (code) => {
+            clearTimeout(timer);
+            children.delete(child);
+            if (code === 0) return resolve(Buffer.concat(stdout));
+            const err = new Error(
+              "git " +
+                commandOf(args) +
+                " failed: " +
+                oneLine(Buffer.concat(stderr).toString())
+            );
+            err.stderr = Buffer.concat(stderr).toString();
+            reject(err);
+          });
 
-      if (inputFile) fs.createReadStream(inputFile).on("error", () => child.kill("SIGKILL")).pipe(child.stdin);
-      else child.stdin.end(input || "");
-    }));
+          if (inputFile)
+            fs.createReadStream(inputFile)
+              .on("error", () => child.kill("SIGKILL"))
+              .pipe(child.stdin);
+          else child.stdin.end(input || "");
+        })
+    );
   }
 
   return { dir: reservation.dir, git };
@@ -300,7 +347,10 @@ function createScratch(reservation, children) {
 // a pipeline, so a failure of the file (the disk full, say) rejects at once
 // whatever the generator is waiting for, and nothing is left without a listener.
 async function writeIncoming(incoming, reservation, cache, file, limit) {
-  const step = Math.max(1, Math.min(RESERVE_STEP, Math.floor(cache.maxBytes / 8)));
+  const step = Math.max(
+    1,
+    Math.min(RESERVE_STEP, Math.floor(cache.maxBytes / 8))
+  );
   let bytes = 0;
 
   async function* chunks() {
@@ -310,7 +360,13 @@ async function writeIncoming(incoming, reservation, cache, file, limit) {
 
       bytes += next.value.length;
       if (bytes > limit) throw tooLarge(limit);
-      if (bytes > reservation.bytes) await reservation.extend(Math.max(bytes - reservation.bytes, Math.min(step, limit - reservation.bytes)));
+      if (bytes > reservation.bytes)
+        await reservation.extend(
+          Math.max(
+            bytes - reservation.bytes,
+            Math.min(step, limit - reservation.bytes)
+          )
+        );
       yield next.value;
     }
   }
@@ -331,7 +387,12 @@ function scratchFrom(reservation, cache) {
   // just now: all it holds already (the pack, the other bases) and `bytes` more
   function mustFit(bytes) {
     if (reservation.bytes + bytes > cache.maxBytes) {
-      const err = new TooLargeError("The push needs " + (reservation.bytes + bytes) + " bytes of scratch space and the cache holds " + cache.maxBytes);
+      const err = new TooLargeError(
+        "The push needs " +
+          (reservation.bytes + bytes) +
+          " bytes of scratch space and the cache holds " +
+          cache.maxBytes
+      );
       err.size = bytes;
       throw err;
     }
@@ -378,7 +439,9 @@ function scratchFrom(reservation, cache) {
 // again will not help, unlike a cache which is full just now
 function tooBig(size) {
   return new Refused(
-    "the push builds on a file" + (size ? " of " + formatSize(size) : "") + " which is larger than Blot can currently handle. Please contact support."
+    "the push builds on a file" +
+      (size ? " of " + formatSize(size) : "") +
+      " which is larger than Blot can currently handle. Please contact support."
   );
 }
 
@@ -461,7 +524,10 @@ async function describePack(packFile, idxFile) {
 
 // Lists the objects of the repository in `gitDir` as Map(oid -> { type, size })
 async function listObjects(scratch, gitDir) {
-  const out = await scratch.git(["cat-file", "--batch-all-objects", "--batch-check"], { gitDir });
+  const out = await scratch.git(
+    ["cat-file", "--batch-all-objects", "--batch-check"],
+    { gitDir }
+  );
   const objects = new Map();
   for (const line of out.toString("latin1").split("\n")) {
     if (!line) continue;
@@ -476,12 +542,18 @@ async function loadObjects(scratch, gitDir, oids) {
   const local = new Map();
   if (!oids.length) return local;
 
-  const out = await scratch.git(["cat-file", "--batch"], { gitDir, input: oids.join("\n") + "\n" });
+  const out = await scratch.git(["cat-file", "--batch"], {
+    gitDir,
+    input: oids.join("\n") + "\n",
+  });
   let at = 0;
   while (at < out.length) {
     const eol = out.indexOf(10, at);
     const [oid, type, size] = out.toString("latin1", at, eol).split(" ");
-    local.set(oid, { type, data: out.subarray(eol + 1, eol + 1 + Number(size)) });
+    local.set(oid, {
+      type,
+      data: out.subarray(eol + 1, eol + 1 + Number(size)),
+    });
     at = eol + 1 + Number(size) + 1;
   }
   return local;
@@ -540,7 +612,10 @@ async function findMissing({ repo, fresh, local, listed }) {
   async function entriesOf(oid) {
     if (!trees.has(oid)) {
       const found = await anyObject(oid);
-      trees.set(oid, found && found.type === "tree" ? parseTree(found.data) : null);
+      trees.set(
+        oid,
+        found && found.type === "tree" ? parseTree(found.data) : null
+      );
     }
     return trees.get(oid);
   }
@@ -559,13 +634,24 @@ async function findMissing({ repo, fresh, local, listed }) {
 
     // Merges are compared with their first parent. One too large to read just
     // means the new tree is checked in full, not that the push fails.
-    const parent = commit.parents[0] ? await readParent(commit.parents[0]) : null;
-    level.push({ a: parent && parent.type === "commit" ? parseCommit(parent.data).tree : null, b: commit.tree });
+    const parent = commit.parents[0]
+      ? await readParent(commit.parents[0])
+      : null;
+    level.push({
+      a:
+        parent && parent.type === "commit"
+          ? parseCommit(parent.data).tree
+          : null,
+      b: commit.tree,
+    });
   }
 
   const seen = new Set();
   while (level.length) {
-    level = level.filter((pair) => !seen.has(pair.a + ":" + pair.b) && seen.add(pair.a + ":" + pair.b));
+    level = level.filter(
+      (pair) =>
+        !seen.has(pair.a + ":" + pair.b) && seen.add(pair.a + ":" + pair.b)
+    );
     const next = [];
 
     await mapLimit(level, CONCURRENCY, async ({ a, b }) => {
@@ -573,14 +659,24 @@ async function findMissing({ repo, fresh, local, listed }) {
       if (!newer) return;
       visited.add(b);
 
-      const before = new Map(((a && (await entriesOf(a))) || []).map((entry) => [entry.name, entry]));
+      const before = new Map(
+        ((a && (await entriesOf(a))) || []).map((entry) => [entry.name, entry])
+      );
       for (const entry of newer) {
         const was = before.get(entry.name);
-        if (isGitlink(entry) || (was && was.oid === entry.oid && was.mode === entry.mode)) continue;
+        if (
+          isGitlink(entry) ||
+          (was && was.oid === entry.oid && was.mode === entry.mode)
+        )
+          continue;
 
         need(entry.oid, entryType(entry));
         // A tree which is not in the pack is in the repository, and so closed
-        if (isDirectory(entry) && fresh.has(entry.oid)) next.push({ a: was && isDirectory(was) ? was.oid : null, b: entry.oid });
+        if (isDirectory(entry) && fresh.has(entry.oid))
+          next.push({
+            a: was && isDirectory(was) ? was.oid : null,
+            b: entry.oid,
+          });
       }
     });
 
@@ -597,7 +693,12 @@ async function findMissing({ repo, fresh, local, listed }) {
     }
   }
 
-  const wrong = [...expected].filter(([oid, types]) => listed.has(oid) && (types.size > 1 || !types.has(listed.get(oid).type))).map(([oid]) => oid);
+  const wrong = [...expected]
+    .filter(
+      ([oid, types]) =>
+        listed.has(oid) && (types.size > 1 || !types.has(listed.get(oid).type))
+    )
+    .map(([oid]) => oid);
 
   // Outside the pack: there, and the kind of object it is linked as
   const missing = [];
@@ -605,7 +706,8 @@ async function findMissing({ repo, fresh, local, listed }) {
     const { type, err } = await lookup;
     if (err) throw err;
     if (!type) missing.push(oid);
-    else if (expected.get(oid).size > 1 || !expected.get(oid).has(type)) wrong.push(oid);
+    else if (expected.get(oid).size > 1 || !expected.get(oid).has(type))
+      wrong.push(oid);
   }
   return { missing, wrong };
 }
@@ -619,11 +721,14 @@ async function checkTips({ repo, commands, listed, types }) {
   for (const command of commands) {
     if (command.new === ZERO) continue;
 
-    const type = listed.has(command.new) ? listed.get(command.new).type : await repo.typeOf(command.new);
+    const type = listed.has(command.new)
+      ? listed.get(command.new).type
+      : await repo.typeOf(command.new);
     types.set(command.new, type);
 
     if (!type) problems[command.ref] = "missing necessary objects";
-    else if (command.ref.indexOf("refs/heads/") === 0 && type !== "commit") problems[command.ref] = "branches must point to a commit";
+    else if (command.ref.indexOf("refs/heads/") === 0 && type !== "commit")
+      problems[command.ref] = "branches must point to a commit";
   }
 
   return problems;
@@ -662,7 +767,8 @@ async function peelTags({ repo, local, types }) {
 }
 
 // The refusal of a master whose tree has anything but regular files in it
-const IRREGULAR = "Git blogs support regular files only (no symbolic links or submodules)";
+const IRREGULAR =
+  "Git blogs support regular files only (no symbolic links or submodules)";
 
 // With `regularFilesOnly`, a push may not leave master with anything but
 // regular files and directories in its tree (no symbolic links, no
@@ -671,13 +777,20 @@ const IRREGULAR = "Git blogs support regular files only (no symbolic links or su
 // is compared with the old master too, whatever its history. Resolves with the
 // problem for master, or null.
 async function irregularFiles({ repo, local, base, commands }) {
-  const master = commands.find((command) => command.ref === MASTER && command.new !== ZERO && command.new !== command.old);
+  const master = commands.find(
+    (command) =>
+      command.ref === MASTER &&
+      command.new !== ZERO &&
+      command.new !== command.old
+  );
   if (!master) return null;
 
   const read = async (oid) => local.get(oid) || (await repo.read(oid));
   const treeOf = async (oid) => {
     const found = oid && (await read(oid));
-    return found && found.type === "commit" ? parseCommit(found.data).tree : null;
+    return found && found.type === "commit"
+      ? parseCommit(found.data).tree
+      : null;
   };
   const entriesOf = async (oid) => {
     const found = oid && (await read(oid));
@@ -693,12 +806,19 @@ async function irregularFiles({ repo, local, base, commands }) {
     for (const { a, b } of level) {
       if (!b || a === b) continue;
 
-      const before = new Map((await entriesOf(a)).map((entry) => [entry.name, entry]));
+      const before = new Map(
+        (await entriesOf(a)).map((entry) => [entry.name, entry])
+      );
       for (const entry of await entriesOf(b)) {
         const was = before.get(entry.name);
         if (was && was.oid === entry.oid && was.mode === entry.mode) continue;
-        if (isDirectory(entry)) next.push({ a: was && isDirectory(was) ? was.oid : null, b: entry.oid });
-        else if (entry.mode !== "100644" && entry.mode !== "100755") return { [MASTER]: IRREGULAR };
+        if (isDirectory(entry))
+          next.push({
+            a: was && isDirectory(was) ? was.oid : null,
+            b: entry.oid,
+          });
+        else if (entry.mode !== "100644" && entry.mode !== "100755")
+          return { [MASTER]: IRREGULAR };
       }
     }
 
@@ -746,11 +866,25 @@ function createUploads(store, cache) {
     ];
     if (rev) puts.push(store.put(revKey(piece.name), piece.rev));
     const kept = piece.buffer
-      ? keepPack({ cache, store, name: piece.name, size: piece.size, buffer: piece.buffer })
-      : keepPack({ cache, store, name: piece.name, size: piece.size, file: piece.packFile });
+      ? keepPack({
+          cache,
+          store,
+          name: piece.name,
+          size: piece.size,
+          buffer: piece.buffer,
+        })
+      : keepPack({
+          cache,
+          store,
+          name: piece.name,
+          size: piece.size,
+          file: piece.packFile,
+        });
 
     const upload = (async () => {
-      const failed = (await Promise.allSettled(puts)).find((put) => put.status === "rejected");
+      const failed = (await Promise.allSettled(puts)).find(
+        (put) => put.status === "rejected"
+      );
       await kept;
       if (failed) throw failed.reason;
       // This process uploaded it, so it knows its size
@@ -761,13 +895,18 @@ function createUploads(store, cache) {
   }
 
   async function done() {
-    const failed = (await Promise.allSettled(running)).find((upload) => upload.status === "rejected");
+    const failed = (await Promise.allSettled(running)).find(
+      (upload) => upload.status === "rejected"
+    );
     if (failed) throw failed.reason;
   }
 
   async function abort() {
     stopped = true;
-    for (const stream of streams) stream.destroy(new Error("The push was refused before its upload finished"));
+    for (const stream of streams)
+      stream.destroy(
+        new Error("The push was refused before its upload finished")
+      );
     await Promise.allSettled(running);
   }
 
@@ -775,26 +914,59 @@ function createUploads(store, cache) {
 }
 
 // The manifest entry for an uploaded pack
-const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, objects });
+const entryOf = ({ name, size, idxSize, objects }) => ({
+  name,
+  size,
+  idxSize,
+  objects,
+});
 
-function answer(commands, { outcome, status = "ok", problems = {}, messages = [], extra = {} }) {
+function answer(
+  commands,
+  { outcome, status = "ok", problems = {}, messages = [], extra = {} }
+) {
   const stopped = outcome !== "ok";
   const results = commands.map((command) => {
-    if (status !== "ok") return { ref: command.ref, error: outcome === "unknown" ? "outcome unknown" : "unpacker error" };
-    if (problems[command.ref]) return { ref: command.ref, error: problems[command.ref] };
-    if (stopped) return { ref: command.ref, error: "not updated because the rest of the push was refused" };
+    if (status !== "ok")
+      return {
+        ref: command.ref,
+        error: outcome === "unknown" ? "outcome unknown" : "unpacker error",
+      };
+    if (problems[command.ref])
+      return { ref: command.ref, error: problems[command.ref] };
+    if (stopped)
+      return {
+        ref: command.ref,
+        error: "not updated because the rest of the push was refused",
+      };
     return { ref: command.ref };
   });
 
   if (stopped && !messages.length) {
-    messages = status !== "ok" ? ["Push failed: " + status] : Object.keys(problems).map((ref) => ref + ": " + problems[ref]);
+    messages =
+      status !== "ok"
+        ? ["Push failed: " + status]
+        : Object.keys(problems).map((ref) => ref + ": " + problems[ref]);
   }
-  if (stopped && outcome !== "unknown") messages = [...messages, "Nothing was pushed."];
+  if (stopped && outcome !== "unknown")
+    messages = [...messages, "Nothing was pushed."];
 
   return { outcome, status, results, messages, ...extra };
 }
 
-async function receive({ store, cache, lock, commands, pack = null, limit = DEFAULT_LIMIT, sizeHint = 0, smallBase = SMALL_BASE, progress = null, gate = null, regularFilesOnly = false }) {
+async function receive({
+  store,
+  cache,
+  lock,
+  commands,
+  pack = null,
+  limit = DEFAULT_LIMIT,
+  sizeHint = 0,
+  smallBase = SMALL_BASE,
+  progress = null,
+  gate = null,
+  regularFilesOnly = false,
+}) {
   // A host's callback must never be able to fail a push
   const say = (message) => {
     try {
@@ -823,27 +995,59 @@ async function receive({ store, cache, lock, commands, pack = null, limit = DEFA
     const reading = manifest.read(store);
     reading.catch(() => {});
 
-    const { base, added, repo, local } = await prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, regularFilesOnly, hold: (r) => (reservation = r), say });
+    const { base, added, repo, local } = await prepare({
+      store,
+      cache,
+      commands,
+      incoming,
+      limit,
+      sizeHint,
+      reading,
+      children,
+      stats,
+      smallBase,
+      regularFilesOnly,
+      hold: (r) => (reservation = r),
+      say,
+    });
     const next = await swap({ store, cache, lock, commands, added, base });
     await remember({ store, cache, repo, added, local });
 
     stats.packs = added.packs.map((piece) => piece.name);
     say("Push saved.");
-    return answer(commands, { outcome: "ok", extra: { seq: next.seq, manifest: next, stats } });
+    return answer(commands, {
+      outcome: "ok",
+      extra: { seq: next.seq, manifest: next, stats },
+    });
   } catch (err) {
     await incoming.drain();
     return failure(commands, err, stats);
   } finally {
     for (const child of children) child.kill("SIGKILL");
-    if (reservation) await reservation.release().catch((err) => console.error("Git store: could not remove scratch space", err));
+    if (reservation)
+      await reservation
+        .release()
+        .catch((err) =>
+          console.error("Git store: could not remove scratch space", err)
+        );
   }
 }
 
 function failure(commands, err, stats) {
-  if (err instanceof Refused) return answer(commands, { outcome: "refused", status: err.message, problems: err.problems, extra: { stats } });
+  if (err instanceof Refused)
+    return answer(commands, {
+      outcome: "refused",
+      status: err.message,
+      problems: err.problems,
+      extra: { stats },
+    });
 
   if (err instanceof StaleManifestError) {
-    return answer(commands, { outcome: "refused", problems: staleRefs(null, commands).problems, extra: { stats } });
+    return answer(commands, {
+      outcome: "refused",
+      problems: staleRefs(null, commands).problems,
+      extra: { stats },
+    });
   }
 
   if (err instanceof OutcomeUnknownError) {
@@ -862,9 +1066,13 @@ function failure(commands, err, stats) {
     err && typeof err.pushStatus === "string"
       ? err.pushStatus
       : err instanceof NoRoomError
-      ? "Blot has no room to receive this push right now; please try again in a moment"
-      : "Blot hit an error receiving the push; please try again in a moment";
-  return answer(commands, { outcome: "failed", status, extra: { stats, error: err } });
+        ? "Blot has no room to receive this push right now; please try again in a moment"
+        : "Blot hit an error receiving the push; please try again in a moment";
+  return answer(commands, {
+    outcome: "failed",
+    status,
+    extra: { stats, error: err },
+  });
 }
 
 // Git's refusal when one ref's name is a directory in another's: with
@@ -881,13 +1089,28 @@ function nameConflicts(refs, commands) {
     for (let i = 2; i < parts.length; i++) {
       const parent = parts.slice(0, i).join("/");
       if (names.has(parent)) {
-        problems[ref] = "cannot lock ref '" + ref + "': '" + parent + "' exists; cannot create '" + ref + "'";
+        problems[ref] =
+          "cannot lock ref '" +
+          ref +
+          "': '" +
+          parent +
+          "' exists; cannot create '" +
+          ref +
+          "'";
         break;
       }
     }
 
     const child = [...names].find((name) => name.startsWith(ref + "/"));
-    if (child && !problems[ref]) problems[ref] = "cannot lock ref '" + ref + "': '" + child + "' exists; cannot create '" + ref + "'";
+    if (child && !problems[ref])
+      problems[ref] =
+        "cannot lock ref '" +
+        ref +
+        "': '" +
+        child +
+        "' exists; cannot create '" +
+        ref +
+        "'";
   }
 
   return Object.keys(problems).length ? new Refused("ok", problems) : null;
@@ -908,9 +1131,14 @@ const MOVED = "the ref moved while you were pushing; pull and try again";
 // A Refused for the commands whose old value is not what the manifest
 // `current` holds, or null. Without a manifest, every command is stale.
 function staleRefs(current, commands) {
-  const stale = commands.filter((command) => !current || (current.refs[command.ref] || ZERO) !== command.old);
+  const stale = commands.filter(
+    (command) => !current || (current.refs[command.ref] || ZERO) !== command.old
+  );
   if (!stale.length) return null;
-  return new Refused("ok", Object.fromEntries(stale.map((command) => [command.ref, MOVED])));
+  return new Refused(
+    "ok",
+    Object.fromEntries(stale.map((command) => [command.ref, MOVED]))
+  );
 }
 
 // Everything up to the swap: the pack in scratch, completed and checked, its
@@ -921,10 +1149,30 @@ function staleRefs(current, commands) {
 // that follow, and the swap waits for them all: so what is acknowledged is
 // unchanged, and a check that fails aborts what is still uploading and waits
 // for every upload to end before it is reported.
-async function prepare({ store, cache, commands, incoming, limit, sizeHint, reading, children, stats, smallBase, regularFilesOnly, hold, say }) {
+async function prepare({
+  store,
+  cache,
+  commands,
+  incoming,
+  limit,
+  sizeHint,
+  reading,
+  children,
+  stats,
+  smallBase,
+  regularFilesOnly,
+  hold,
+  say,
+}) {
   const added = { packs: [], pieces: [] };
   const needsPack = commands.some((command) => command.new !== ZERO);
-  const reservation = await cache.reserve(Math.min(limit, Math.max(sizeHint, FIRST_RESERVE), Math.floor(cache.maxBytes / 2)));
+  const reservation = await cache.reserve(
+    Math.min(
+      limit,
+      Math.max(sizeHint, FIRST_RESERVE),
+      Math.floor(cache.maxBytes / 2)
+    )
+  );
   hold(reservation);
 
   const scratch = createScratch(reservation, children);
@@ -939,20 +1187,34 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
   // lookup also fetches the indexes the bases are then found with. Nothing is
   // decided on it: a push which turns out to be out of date only wasted reads.
   const opened = reading.then((base) => {
-    const repo = createReader({ store, cache, manifest: base, scratch: scratchFrom(reservation, cache) });
+    const repo = createReader({
+      store,
+      cache,
+      manifest: base,
+      scratch: scratchFrom(reservation, cache),
+    });
     const prefetch = Promise.all(
       commands
         .filter((command) => command.old !== ZERO && command.new !== ZERO)
         .flatMap((command) => [
           repo.typeOf(command.old),
-          repo.read(command.old).then((found) => found && found.type === "commit" && repo.read(parseCommit(found.data).tree)),
+          repo
+            .read(command.old)
+            .then(
+              (found) =>
+                found &&
+                found.type === "commit" &&
+                repo.read(parseCommit(found.data).tree)
+            ),
         ])
     ).catch(() => {});
     return { repo, prefetch };
   });
   opened.catch(() => {});
 
-  stats.bytes = needsPack ? await writeIncoming(incoming, reservation, cache, incomingFile, limit) : 0;
+  stats.bytes = needsPack
+    ? await writeIncoming(incoming, reservation, cache, incomingFile, limit)
+    : 0;
   await incoming.drain();
 
   // What needs only the pack is done before the manifest is waited for (it
@@ -967,7 +1229,8 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
     try {
       scanned = await scanPack(incomingFile);
     } catch (err) {
-      if (err instanceof CorruptError) throw new Refused("the pack is not valid: " + err.message);
+      if (err instanceof CorruptError)
+        throw new Refused("the pack is not valid: " + err.message);
       throw err;
     }
     if (scanned.count > 0) {
@@ -977,21 +1240,37 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
   }
 
   const base = await reading;
-  const behind = staleRefs(base, commands) || nameConflicts(applied(base, commands), commands);
+  const behind =
+    staleRefs(base, commands) ||
+    nameConflicts(applied(base, commands), commands);
   if (behind) throw behind;
 
   const { repo, prefetch } = await opened;
   const uploads = createUploads(store, cache);
 
-  let fresh = new Map();
+  let fresh;
   let local = new Map();
   let listed = new Map();
 
   try {
     if (scanned && scanned.count > 0) {
-      const wanted = [...scanned.bases].filter((oid) => !scanned.whole.has(oid));
-      if (wanted.length) say(wanted.length >= 100 ? "Fetching " + wanted.length + " files the push builds on..." : "Fetching files the push builds on...");
-      const bases = await fetchBases(repo, wanted, basesDir, reservation, cache, smallBase);
+      const wanted = [...scanned.bases].filter(
+        (oid) => !scanned.whole.has(oid)
+      );
+      if (wanted.length)
+        say(
+          wanted.length >= 100
+            ? "Fetching " + wanted.length + " files the push builds on..."
+            : "Fetching files the push builds on..."
+        );
+      const bases = await fetchBases(
+        repo,
+        wanted,
+        basesDir,
+        reservation,
+        cache,
+        smallBase
+      );
       stats.basesFetched = bases.fetched.size;
 
       // The pack index-pack writes holds the pack, its bases and an index
@@ -1000,11 +1279,20 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
         // A .gitattributes or .gitmodules blob a changed tree names but the
         // push does not carry is in the store already (checked when it was
         // pushed), not in scratch: fsck is told not to look for it
-        await scratch.git([...indexArgs(), "index-pack", "--stdin", "--fix-thin", "--fsck-objects=gitattributesMissing=ignore,gitmodulesMissing=ignore"], {
-          gitDir,
-          inputFile: incomingFile,
-          env: { GIT_ALTERNATE_OBJECT_DIRECTORIES: basesDir },
-        });
+        await scratch.git(
+          [
+            ...indexArgs(),
+            "index-pack",
+            "--stdin",
+            "--fix-thin",
+            "--fsck-objects=gitattributesMissing=ignore,gitmodulesMissing=ignore",
+          ],
+          {
+            gitDir,
+            inputFile: incomingFile,
+            env: { GIT_ALTERNATE_OBJECT_DIRECTORIES: basesDir },
+          }
+        );
       } catch (err) {
         if (err.stderr === undefined) throw err;
         throw new Refused(describeGitError(err.stderr));
@@ -1017,8 +1305,13 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
       // bases and so changes the name), and its bytes are not checked
       // until here, so nothing goes up before this.
       const packDir = path.join(gitDir, "objects", "pack");
-      const packFile = (await fsp.readdir(packDir)).find((file) => file.endsWith(".pack"));
-      const pushed = await describePack(path.join(packDir, packFile), path.join(packDir, packFile.replace(/\.pack$/, ".idx")));
+      const packFile = (await fsp.readdir(packDir)).find((file) =>
+        file.endsWith(".pack")
+      );
+      const pushed = await describePack(
+        path.join(packDir, packFile),
+        path.join(packDir, packFile.replace(/\.pack$/, ".idx"))
+      );
       added.packs.push(pushed);
       uploads.start(pushed, { rev: true });
 
@@ -1027,10 +1320,18 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
       stats.objects = fresh.size;
 
       const checked = [...fresh].filter(([, { type }]) => type !== "blob");
-      if (checked.reduce((sum, [, { size }]) => sum + size, 0) > MAX_CHECKED_BYTES) {
-        throw new Refused("the push has too many commits and directories for Blot to check");
+      if (
+        checked.reduce((sum, [, { size }]) => sum + size, 0) > MAX_CHECKED_BYTES
+      ) {
+        throw new Refused(
+          "the push has too many commits and directories for Blot to check"
+        );
       }
-      local = await loadObjects(scratch, gitDir, checked.map(([oid]) => oid));
+      local = await loadObjects(
+        scratch,
+        gitDir,
+        checked.map(([oid]) => oid)
+      );
 
       const commits = [...fresh].filter(([, { type }]) => type === "commit");
       if (commits.length) {
@@ -1041,12 +1342,34 @@ async function prepare({ store, cache, commands, incoming, limit, sizeHint, read
 
       say("Checking the new commits...");
       await prefetch;
-      const { missing, wrong } = await findMissing({ repo, fresh, local, listed });
+      const { missing, wrong } = await findMissing({
+        repo,
+        fresh,
+        local,
+        listed,
+      });
       if (wrong.length) {
-        throw new Refused("ok", Object.fromEntries(commands.filter((c) => c.new !== ZERO).map((c) => [c.ref, "the push links to an object of the wrong type"])));
+        throw new Refused(
+          "ok",
+          Object.fromEntries(
+            commands
+              .filter((c) => c.new !== ZERO)
+              .map((c) => [
+                c.ref,
+                "the push links to an object of the wrong type",
+              ])
+          )
+        );
       }
       if (missing.length) {
-        throw new Refused("ok", Object.fromEntries(commands.filter((c) => c.new !== ZERO).map((c) => [c.ref, "missing necessary objects"])));
+        throw new Refused(
+          "ok",
+          Object.fromEntries(
+            commands
+              .filter((c) => c.new !== ZERO)
+              .map((c) => [c.ref, "missing necessary objects"])
+          )
+        );
       }
     }
 
@@ -1083,7 +1406,14 @@ const REMEMBER_BYTES = 4 * MiB;
 // cache of objects holds only what the repository has, so a push's bases can
 // come from it (see reader.js).
 async function remember({ store, cache, repo, added, local }) {
-  const indexes = added.packs.map((piece) => rememberWhole({ cache, namespace: store.id, key: idxKey(piece.name), idx: piece.idx }));
+  const indexes = added.packs.map((piece) =>
+    rememberWhole({
+      cache,
+      namespace: store.id,
+      key: idxKey(piece.name),
+      idx: piece.idx,
+    })
+  );
   let budget = REMEMBER_BYTES;
   const objects = [];
   for (const [oid, { type, data }] of local) {
@@ -1100,8 +1430,18 @@ async function remember({ store, cache, repo, added, local }) {
 // scratch, and it is ready to upload at once. It holds no more than the
 // compressed copy of commits the check holds in memory anyway.
 async function historyPiece(local, commits) {
-  const pack = await assemblePack(commits.map(([oid]) => wholeEntry("commit", local.get(oid).data)));
-  return { name: pack.name, size: pack.size, objects: pack.objects, idx: pack.idx, idxSize: pack.idx.length, rev: pack.rev, buffer: pack.body() };
+  const pack = await assemblePack(
+    commits.map(([oid]) => wholeEntry("commit", local.get(oid).data))
+  );
+  return {
+    name: pack.name,
+    size: pack.size,
+    objects: pack.objects,
+    idx: pack.idx,
+    idxSize: pack.idx.length,
+    rev: pack.rev,
+    buffer: pack.body(),
+  };
 }
 
 // The packs to list again (with this push's seq) because the push makes
@@ -1118,7 +1458,9 @@ async function reachedAgain({ store, cache, current, commands, added }) {
   if (added.packs.length) return [];
 
   const live = new Set(Object.values(current.refs));
-  const tips = commands.filter((command) => command.new !== ZERO && !live.has(command.new)).map((command) => command.new);
+  const tips = commands
+    .filter((command) => command.new !== ZERO && !live.has(command.new))
+    .map((command) => command.new);
   if (!tips.length) return [];
 
   const peel = (oid) => (current.peeled && current.peeled[oid]) || oid;
@@ -1160,12 +1502,20 @@ async function swap({ store, cache, lock, commands, added, base }) {
     // check found in the repository, and its purge may delete the packs just
     // uploaded. The push is refused, as if its ref had moved, and the client
     // pushes again against the rewritten repository.
-    if (manifest.epochOf(current) !== manifest.epochOf(base)) throw staleRefs(null, commands);
+    if (manifest.epochOf(current) !== manifest.epochOf(base))
+      throw staleRefs(null, commands);
     const refs = applied(current, commands);
-    const behind = staleRefs(current, commands) || nameConflicts(refs, commands);
+    const behind =
+      staleRefs(current, commands) || nameConflicts(refs, commands);
     if (behind) throw behind;
 
-    const again = await reachedAgain({ store, cache, current, commands, added });
+    const again = await reachedAgain({
+      store,
+      cache,
+      current,
+      commands,
+      added,
+    });
     const next = manifest.advance(current, {
       refs,
       head: current.head || (refs[MASTER] ? MASTER : null),
@@ -1178,7 +1528,8 @@ async function swap({ store, cache, lock, commands, added, base }) {
       await manifest.swap({ store, lock, base: current, next, uploaded });
       return next;
     } catch (err) {
-      if (!(err instanceof StaleManifestError) || attempt >= ATTEMPTS) throw err;
+      if (!(err instanceof StaleManifestError) || attempt >= ATTEMPTS)
+        throw err;
     }
   }
 }

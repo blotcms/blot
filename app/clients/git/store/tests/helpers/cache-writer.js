@@ -14,9 +14,13 @@ const [dir, maxBytes, prefix, count, length] = process.argv.slice(2);
 function entryBytes() {
   let total = 0;
   const root = path.join(dir, "entries");
-  for (const entry of fs.readdirSync(root, { withFileTypes: true, recursive: true })) {
+  for (const entry of fs.readdirSync(root, {
+    withFileTypes: true,
+    recursive: true,
+  })) {
     try {
-      if (entry.isFile()) total += fs.statSync(path.join(entry.parentPath, entry.name)).size;
+      if (entry.isFile())
+        total += fs.statSync(path.join(entry.parentPath, entry.name)).size;
     } catch (err) {
       // evicted while we were counting
     }
@@ -25,13 +29,22 @@ function entryBytes() {
 }
 
 (async () => {
-  const cache = createCache({ dir, maxBytes: Number(maxBytes), bucketMs: 1, touchEveryMs: 0, walkGapMs: 0, refreshMs: 0, publishDelayMs: 0 });
+  const cache = createCache({
+    dir,
+    maxBytes: Number(maxBytes),
+    bucketMs: 1,
+    touchEveryMs: 0,
+    walkGapMs: 0,
+    refreshMs: 0,
+    publishDelayMs: 0,
+  });
   await cache.ready();
 
   let stored = 0;
   let maxSeen = 0;
   for (let i = 0; i < Number(count); i++) {
-    if (await cache.put(prefix + i, Buffer.alloc(Number(length), i % 256))) stored++;
+    if (await cache.put(prefix + i, Buffer.alloc(Number(length), i % 256)))
+      stored++;
     if (i % 3 === 0) await cache.get(prefix + Math.floor(i / 2));
     maxSeen = Math.max(maxSeen, entryBytes());
   }

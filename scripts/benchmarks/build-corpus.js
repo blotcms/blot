@@ -199,7 +199,15 @@ function main() {
     "server",
     "/data",
   ]);
-  run("docker", ["build", "--target", "dev", ...versions.buildArgs(), "-t", image, ROOT_DIR]);
+  run("docker", [
+    "build",
+    "--target",
+    "dev",
+    ...versions.buildArgs(),
+    "-t",
+    image,
+    ROOT_DIR,
+  ]);
 
   const benchmarkArgs = [
     "--corpus-mode",
@@ -282,13 +290,11 @@ function main() {
     )}"`,
   ]);
 
-  const artifacts = ["redis-dump.rdb", "minio.tar.gz"].map(
-    (name) => {
-      const p = path.join(args.outDir, name);
-      const size = fs.existsSync(p) ? fs.statSync(p).size : 0;
-      return { name, size };
-    }
-  );
+  const artifacts = ["redis-dump.rdb", "minio.tar.gz"].map((name) => {
+    const p = path.join(args.outDir, name);
+    const size = fs.existsSync(p) ? fs.statSync(p).size : 0;
+    return { name, size };
+  });
 
   const totalBytes = artifacts.reduce((sum, a) => sum + a.size, 0);
 

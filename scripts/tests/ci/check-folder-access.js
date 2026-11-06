@@ -25,7 +25,12 @@ const { join, basename } = require("path");
 
 const root = join(__dirname, "..", "..", "..");
 
-const FORBIDDEN = [/helper\/localPath/, /blog_folder_dir/, /data\/blogs/, /\.blogDirectory\b/];
+const FORBIDDEN = [
+  /helper\/localPath/,
+  /blog_folder_dir/,
+  /data\/blogs/,
+  /\.blogDirectory\b/,
+];
 
 // In specs, any blogDirectory at all: a spec can take it off this without the
 // dot (const { blogDirectory } = this) and then join paths onto it
@@ -45,11 +50,21 @@ const ALLOWED_PREFIXES = [
 ];
 
 function allowed(file) {
-  return ALLOWED_PREFIXES.some((prefix) => file === prefix || file.startsWith(prefix));
+  return ALLOWED_PREFIXES.some(
+    (prefix) => file === prefix || file.startsWith(prefix)
+  );
 }
 
 // Mutating methods of storage/folder. Only these places may call them.
-const MUTATORS = ["write", "writeFrom", "remove", "removeAll", "rmdir", "move", "mkdir"];
+const MUTATORS = [
+  "write",
+  "writeFrom",
+  "remove",
+  "removeAll",
+  "rmdir",
+  "move",
+  "mkdir",
+];
 
 const MUTATION_ALLOWED_PREFIXES = [
   "app/storage/", // the backend itself
@@ -97,9 +112,16 @@ function findMutations(source) {
   const direct = new Set();
   const lines = source.split("\n");
 
-  const bindRe = new RegExp(String.raw`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*` + REQUIRE);
-  const destructureRe = new RegExp(String.raw`(?:const|let|var)\s*\{([^}]*)\}\s*=\s*` + REQUIRE, "g");
-  const assignRe = new RegExp(String.raw`^\s*([A-Za-z_$][\w$]*)\s*=\s*` + REQUIRE);
+  const bindRe = new RegExp(
+    String.raw`(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*` + REQUIRE
+  );
+  const destructureRe = new RegExp(
+    String.raw`(?:const|let|var)\s*\{([^}]*)\}\s*=\s*` + REQUIRE,
+    "g"
+  );
+  const assignRe = new RegExp(
+    String.raw`^\s*([A-Za-z_$][\w$]*)\s*=\s*` + REQUIRE
+  );
 
   for (const line of lines) {
     let m = bindRe.exec(line) || assignRe.exec(line);
@@ -117,11 +139,17 @@ function findMutations(source) {
 
   const methodList = MUTATORS.join("|");
   const viaName = names.size
-    ? new RegExp(String.raw`(?<![\w$.])(?:${[...names].map(escapeRe).join("|")})\s*\.\s*(?:${methodList})\b`)
+    ? new RegExp(
+        String.raw`(?<![\w$.])(?:${[...names].map(escapeRe).join("|")})\s*\.\s*(?:${methodList})\b`
+      )
     : null;
-  const viaRequire = new RegExp(REQUIRE + String.raw`\s*\.\s*(?:${methodList})\b`);
+  const viaRequire = new RegExp(
+    REQUIRE + String.raw`\s*\.\s*(?:${methodList})\b`
+  );
   const viaDirect = direct.size
-    ? new RegExp(String.raw`(?<![\w$.])(?:${[...direct].map(escapeRe).join("|")})\s*\(`)
+    ? new RegExp(
+        String.raw`(?<![\w$.])(?:${[...direct].map(escapeRe).join("|")})\s*\(`
+      )
     : null;
 
   lines.forEach((line, i) => {
@@ -129,7 +157,10 @@ function findMutations(source) {
     if (
       (viaName && viaName.test(line)) ||
       viaRequire.test(line) ||
-      (viaDirect && viaDirect.test(line) && !bindRe.test(line) && !/\bfunction\b/.test(line))
+      (viaDirect &&
+        viaDirect.test(line) &&
+        !bindRe.test(line) &&
+        !/\bfunction\b/.test(line))
     ) {
       found.push(i);
     }
@@ -138,11 +169,15 @@ function findMutations(source) {
   return found;
 }
 
-const files = execFileSync("git", ["ls-files", "app", "scripts", "config", "proxy/e2e"], {
-  cwd: root,
-  encoding: "utf8",
-  maxBuffer: 64 * 1024 * 1024,
-})
+const files = execFileSync(
+  "git",
+  ["ls-files", "app", "scripts", "config", "proxy/e2e"],
+  {
+    cwd: root,
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  }
+)
   .split("\n")
   .filter((file) => file.endsWith(".js"));
 
@@ -172,7 +207,9 @@ for (const file of files) {
     throw err;
   }
 
-  const patterns = isTest(file) ? FORBIDDEN.concat(FORBIDDEN_IN_TESTS) : FORBIDDEN;
+  const patterns = isTest(file)
+    ? FORBIDDEN.concat(FORBIDDEN_IN_TESTS)
+    : FORBIDDEN;
 
   lines.forEach((line, i) => {
     if (patterns.some((pattern) => pattern.test(line))) {
@@ -189,7 +226,7 @@ if (mutations.length) {
   for (const mutation of mutations) console.error("  " + mutation);
   console.error(
     "\nUse write, writeFrom or remove from app/clients/folder.js " +
-      "(require(\"clients/folder\")), which uses the blog's client. Only extend " +
+      '(require("clients/folder")), which uses the blog\'s client. Only extend ' +
       "MUTATION_ALLOWED_PREFIXES for code which is itself a sync client or " +
       "works on whole folders."
   );

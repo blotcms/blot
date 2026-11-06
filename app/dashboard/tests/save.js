@@ -28,29 +28,21 @@ describe("dashboard site settings save", function () {
   // form omitted the `redirect` field and save/finish.js fell back to a
   // router-relative req.path of "/".
   ["settings", "settings/images", "settings/links"].forEach((page) => {
-    it(
-      `keeps the redirect on /${page} pointed back at itself`,
-      async function () {
-        const $ = await this.parse(`/sites/${this.blog.handle}/${page}`);
-        const redirect = $('input[name="redirect"]').attr("value");
-        expect(redirect).toBe(`/sites/${this.blog.handle}/${page}`);
-      },
-      30000
-    );
+    it(`keeps the redirect on /${page} pointed back at itself`, async function () {
+      const $ = await this.parse(`/sites/${this.blog.handle}/${page}`);
+      const redirect = $('input[name="redirect"]').attr("value");
+      expect(redirect).toBe(`/sites/${this.blog.handle}/${page}`);
+    }, 30000);
   });
 
-  it(
-    "does not redirect to the homepage when the form omits a redirect field",
-    async function () {
-      const res = await this.submit(`/sites/${this.blog.handle}/settings`, {
-        "plugins.typeset.options.punctuation": "on",
-      });
+  it("does not redirect to the homepage when the form omits a redirect field", async function () {
+    const res = await this.submit(`/sites/${this.blog.handle}/settings`, {
+      "plugins.typeset.options.punctuation": "on",
+    });
 
-      const path = new URL(res.url).pathname;
+    const path = new URL(res.url).pathname;
 
-      expect(path).not.toBe("/");
-      expect(path.startsWith(`/sites/${this.blog.handle}`)).toBe(true);
-    },
-    30000
-  );
+    expect(path).not.toBe("/");
+    expect(path.startsWith(`/sites/${this.blog.handle}`)).toBe(true);
+  }, 30000);
 });

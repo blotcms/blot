@@ -1,9 +1,14 @@
 describe("dropbox init", function () {
-  const { INSUFFICIENT_SPACE_ERROR_CODE, transferIncomplete } = require("../util/constants");
+  const {
+    INSUFFICIENT_SPACE_ERROR_CODE,
+    transferIncomplete,
+  } = require("../util/constants");
 
   describe("transferIncomplete", function () {
     it("is true when transfer_pending is true", function () {
-      expect(transferIncomplete({ error_code: 0, transfer_pending: true })).toEqual(true);
+      expect(
+        transferIncomplete({ error_code: 0, transfer_pending: true })
+      ).toEqual(true);
     });
 
     it("is true for the insufficient-space error code, even without transfer_pending", function () {
@@ -120,13 +125,10 @@ describe("dropbox init", function () {
         }
       );
 
-      it(
-        "validateAllBlogs skips it (" + description + ")",
-        async function () {
-          const init = load(account);
-          await init.validateAllBlogs();
-        }
-      );
+      it("validateAllBlogs skips it (" + description + ")", async function () {
+        const init = load(account);
+        await init.validateAllBlogs();
+      });
     });
   });
 
@@ -183,7 +185,9 @@ describe("dropbox init", function () {
 
     it("returns the TRANSFER_INCOMPLETE sentinel (not a rejection) when resetToBlot refuses", async function () {
       const init = load(function () {
-        const error = new Error("Dropbox hasn't finished receiving this blog's initial transfer yet");
+        const error = new Error(
+          "Dropbox hasn't finished receiving this blog's initial transfer yet"
+        );
         error.code = "DROPBOX_TRANSFER_INCOMPLETE";
         return Promise.reject(error);
       });
@@ -257,7 +261,11 @@ describe("dropbox init", function () {
             callback(null, [blogID]);
           },
           get: function (query, callback) {
-            callback(null, { id: blogID, handle: "refused-blog", client: "dropbox" });
+            callback(null, {
+              id: blogID,
+              handle: "refused-blog",
+              client: "dropbox",
+            });
           },
         },
       };
@@ -459,7 +467,8 @@ describe("dropbox init", function () {
           const multi = {
             del: () => (ops.push(() => reported.clear()), multi),
             sAdd: (key, ids) => (
-              ops.push(() => ids.forEach((id) => reported.add(id))), multi
+              ops.push(() => ids.forEach((id) => reported.add(id))),
+              multi
             ),
             exec: async () => ops.forEach((op) => op()),
           };
@@ -621,7 +630,9 @@ describe("dropbox init", function () {
 
         expect(walked.length).toEqual(2);
         expect(sentEmails.length).toEqual(1);
-        expect(sentEmails[0].blogs.map((blog) => blog.id)).toEqual([ids.changes]);
+        expect(sentEmails[0].blogs.map((blog) => blog.id)).toEqual([
+          ids.changes,
+        ]);
       });
 
       it("still reports a blog when its health can't be read", async function () {
@@ -726,7 +737,9 @@ describe("dropbox init", function () {
       // repairs are events and are reported every time.
       await init.validateAllBlogs();
       expect(sentEmails.length).toEqual(2);
-      expect(sentEmails[1].blogs.map((blog) => blog.id)).toEqual([ids.repaired]);
+      expect(sentEmails[1].blogs.map((blog) => blog.id)).toEqual([
+        ids.repaired,
+      ]);
 
       // Clear them, then bring them back.
       delete behaviors[ids.walkError].walkError;

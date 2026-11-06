@@ -10,7 +10,7 @@ const toolsDirectory = rootDirectory + "/views/how/tools";
 const outputDirectory = config.views_directory + "/how/tools";
 const html = require("./html");
 // Returns mustache code that will be replaced with a CDN URL
-const cdn = () => (text, render) => '{{#cdn}}' + render(text) + '{{/cdn}}';
+const cdn = () => (text, render) => "{{#cdn}}" + render(text) + "{{/cdn}}";
 
 const renderTemplate = async (name, data, destination) => {
   const template = await fs.readFile(toolsDirectory + "/" + name, "utf8");
@@ -23,7 +23,7 @@ const fetch = require("node-fetch");
 const fetchIcon = async (link, name, icon) => {
   const existingIcon = fs
     .readdirSync(toolsDirectory + "/icons")
-    .find(f => f.startsWith(name + "."));
+    .find((f) => f.startsWith(name + "."));
 
   if (existingIcon) {
     return "/icons/" + existingIcon;
@@ -89,7 +89,11 @@ const fetchIcon = async (link, name, icon) => {
     }
 
     const iconBuffer = await iconResponse.buffer();
-    console.log(clfdate(), "Documentation build: Read tool icon response", icon);
+    console.log(
+      clfdate(),
+      "Documentation build: Read tool icon response",
+      icon
+    );
     const iconExtension = icon.split(".").pop().split("?")[0];
     const iconPath = toolsDirectory + "/icons/" + name + "." + iconExtension;
 
@@ -102,7 +106,7 @@ const fetchIcon = async (link, name, icon) => {
   }
 };
 
-const load = async relativePath => {
+const load = async (relativePath) => {
   try {
     return await fs.readFile(toolsDirectory + "/" + relativePath, "utf8");
   } catch (e) {}
@@ -110,11 +114,9 @@ const load = async relativePath => {
 };
 
 const main = async () => {
-
   const categories = (await fs.readdir(toolsDirectory)).filter(
-    f => f.indexOf(".") === -1 && f !== "icons" && f !== "README"
+    (f) => f.indexOf(".") === -1 && f !== "icons" && f !== "README"
   );
-
 
   const result = { categories: [], tools: [] };
 
@@ -129,13 +131,15 @@ const main = async () => {
     const tools = (
       await Promise.all(
         (await fs.readdir(toolsDirectory + "/" + category))
-          .filter(f => f.indexOf(".") !== 0 && f !== "index.html")
-          .map(async tool => await loadTool(category, tool))
+          .filter((f) => f.indexOf(".") !== 0 && f !== "index.html")
+          .map(async (tool) => await loadTool(category, tool))
       )
     ).sort((a, b) => b.updated - a.updated);
 
-     // tools sorted by either popular then updated date
-     const top_tools = tools.slice().sort((a, b) => {
+    // tools sorted by either popular then updated date
+    const top_tools = tools
+      .slice()
+      .sort((a, b) => {
         if (a.popular && b.popular) {
           return b.updated - a.updated;
         } else if (a.popular) {
@@ -145,9 +149,16 @@ const main = async () => {
         } else {
           return b.updated - a.updated;
         }
-    }).slice(0, 6);
+      })
+      .slice(0, 6);
 
-    result.categories.push({ title, description, slug: 'all-' + category, tools, top_tools });
+    result.categories.push({
+      title,
+      description,
+      slug: "all-" + category,
+      tools,
+      top_tools,
+    });
     result.tools = result.tools.concat(tools);
   }
 
@@ -156,19 +167,19 @@ const main = async () => {
 
   result.tools.sort((a, b) => b.updated - a.updated);
 
-  await renderTemplate("index.html", {...result, cdn});
+  await renderTemplate("index.html", { ...result, cdn });
 
   for (const category of result.categories) {
     await renderTemplate(
       "index.html",
       {
-        categories: result.categories.map(c => {
+        categories: result.categories.map((c) => {
           return { ...c, selected: c.slug === category.slug ? "selected" : "" };
         }),
         description: category.description,
         tools: category.tools,
         cdn,
-        category
+        category,
       },
       category.slug + "/index.html"
     );
@@ -180,21 +191,22 @@ const main = async () => {
       {
         ...tool,
         cdn,
-        category: result.categories.find(c => c.slug === 'all-' + tool.category),
+        category: result.categories.find(
+          (c) => c.slug === "all-" + tool.category
+        ),
         related: result.categories
-          .find(c => c.slug === 'all-' + tool.category)
-          .tools.filter(t => t.slug !== tool.slug)
-          .slice(0, 3)
+          .find((c) => c.slug === "all-" + tool.category)
+          .tools.filter((t) => t.slug !== tool.slug)
+          .slice(0, 3),
       },
       tool.slug + "/index.html"
     );
   }
 
   return result;
-
 };
 
-const parseYAML = html => {
+const parseYAML = (html) => {
   if (html.indexOf("---") === -1) return {};
   const parsed = yaml.parse(html.split("---")[1] || "");
   // lowercase all keys from parsed
@@ -223,7 +235,7 @@ const loadTool = async (category, tool) => {
     $("h1").text() ||
     (slug[0].toUpperCase() + slug.slice(1)).replace(/-/g, " ");
 
-    const subtitle = $("h2:first-of-type").text() || "";
+  const subtitle = $("h2:first-of-type").text() || "";
 
   $("h1").remove();
 
@@ -234,7 +246,7 @@ const loadTool = async (category, tool) => {
     html: $.html(),
     updated,
     slug,
-    ...metadata
+    ...metadata,
   };
 
   if (result.link) {
@@ -250,15 +262,14 @@ const loadTool = async (category, tool) => {
     }
   }
 
-
   // transform specific properties
   if (result.platforms)
-    result.platforms = result.platforms.split(",").map(p => {
+    result.platforms = result.platforms.split(",").map((p) => {
       return { name: p.trim() };
     });
 
   if (result.files) {
-    result.files = result.files.split(",").map(f => {
+    result.files = result.files.split(",").map((f) => {
       return { name: f, slug: f.trim().toLowerCase().replace(/\s/g, "-") };
     });
   }
@@ -271,7 +282,7 @@ if (require.main === module) {
     .then(() => {
       process.exit(0);
     })
-    .catch(err => {
+    .catch((err) => {
       console.error(err);
       process.exit(1);
     });

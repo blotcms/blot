@@ -40,7 +40,9 @@ const isInsufficientSpaceError = (err) => {
   if (!err) return false;
   if (err.code === "DROPBOX_INSUFFICIENT_SPACE") return true;
   const summary = err.error && err.error.error_summary;
-  return typeof summary === "string" && summary.indexOf("insufficient_space") !== -1;
+  return (
+    typeof summary === "string" && summary.indexOf("insufficient_space") !== -1
+  );
 };
 
 // True whenever it is NOT safe to trust Dropbox as the source of truth for

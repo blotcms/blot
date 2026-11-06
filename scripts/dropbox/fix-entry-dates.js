@@ -33,7 +33,7 @@ const processBlog = async (blog) => {
       console.log("Skipping missing entry", id);
       continue;
     }
-    
+
     if (entry.deleted) {
       console.log("Skipping deleted", id);
       continue;

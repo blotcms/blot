@@ -36,7 +36,6 @@ describe("build/converters/enabled", function () {
     expect(ids).not.toContain("img");
   });
 
-
   it("normalizes non-boolean preferences before filtering", function () {
     var enabled = enabledConverters({
       id: "blog",

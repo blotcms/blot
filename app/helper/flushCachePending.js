@@ -30,10 +30,15 @@ module.exports = (client) => ({
 
   // Entries recorded at or before maxScore, oldest first, at most count
   async list(target, maxScore = "+inf", count = -1) {
-    const members = await client.zRangeWithScores(key(target), "-inf", maxScore, {
-      BY: "SCORE",
-      LIMIT: { offset: 0, count },
-    });
+    const members = await client.zRangeWithScores(
+      key(target),
+      "-inf",
+      maxScore,
+      {
+        BY: "SCORE",
+        LIMIT: { offset: 0, count },
+      }
+    );
     // Scores are recorded to the thousandth, but RESP3 decodes them slightly
     // off, and a removal must send back exactly what was recorded
     return members.map(({ value, score }) => ({

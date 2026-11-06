@@ -18,17 +18,16 @@ describe("Blot configuration", function () {
   // spec to build templates in this process would wait it out.
   var START_MESSAGE = "Built templates after listen";
   var server;
-  var stderr = "";
   var stdout = "";
 
   beforeAll(function (done) {
     server = require("child_process").fork(__dirname + "/../../../app", {
-      silent: true
+      silent: true,
     });
 
     // App should not emit anything on standard error
     server.stderr.on("data", function (data) {
-      stderr += data.toString("utf8") + "\n";
+      // Output is not collected, but the stream is still drained
     });
 
     // Wait for the app to be listening and to have built its templates

@@ -17,8 +17,10 @@ describe("iCloud write and remove while the folder is missing", function () {
     saved = names.map((p) => require.cache[p]);
     require(names[0]);
     require(names[1]);
-    require.cache[names[0]].exports = async (...a) => calls.push(["upload", ...a]);
-    require.cache[names[1]].exports = async (...a) => calls.push(["delete", ...a]);
+    require.cache[names[0]].exports = async (...a) =>
+      calls.push(["upload", ...a]);
+    require.cache[names[1]].exports = async (...a) =>
+      calls.push(["delete", ...a]);
     delete require.cache[names[2]];
     delete require.cache[names[3]];
     write = require("../write");

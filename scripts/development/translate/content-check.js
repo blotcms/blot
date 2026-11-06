@@ -52,7 +52,9 @@ function looksLikeMissingDates(stamps) {
   const newest = Math.max(...stamps);
   const oldest = Math.min(...stamps);
 
-  return newest - oldest < CLUSTER_WINDOW && Date.now() - newest < RECENT_WINDOW;
+  return (
+    newest - oldest < CLUSTER_WINDOW && Date.now() - newest < RECENT_WINDOW
+  );
 }
 
 async function dateRange(blogID) {

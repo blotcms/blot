@@ -210,7 +210,6 @@ describe("dropbox delta relative path normalization", function () {
 
 describe("dropbox delta case-only renames", function () {
   var Delta = require("../delta");
-  var Path = require("path");
   var folder = require("storage/folder");
 
   var blogID = "blog_deltacaseonly" + Date.now();
@@ -238,7 +237,11 @@ describe("dropbox delta case-only renames", function () {
     };
 
     return new Promise(function (resolve, reject) {
-      Delta(client, "folder-id", blogID)(null, function (err, res) {
+      Delta(
+        client,
+        "folder-id",
+        blogID
+      )(null, function (err, res) {
         if (err) return reject(err);
         resolve(res.entries);
       });
@@ -300,7 +303,9 @@ describe("dropbox delta case-only renames", function () {
 
     expect(
       entries.some(function (entry) {
-        return entry[".tag"] === "deleted" && entry.relative_path === "sub/Photo.txt";
+        return (
+          entry[".tag"] === "deleted" && entry.relative_path === "sub/Photo.txt"
+        );
       })
     ).toEqual(true);
   });
@@ -325,7 +330,11 @@ function setupDelta(done) {
 
   var context = this;
   var account = this.account;
-  var delta = new Delta(account.access_token, account.folder_id, context.blog.id);
+  var delta = new Delta(
+    account.access_token,
+    account.folder_id,
+    context.blog.id
+  );
 
   context.delta = function (callback) {
     delta(context.account.cursor, function (err, res) {
@@ -364,10 +373,7 @@ function addFile() {
 
           if (
             res.entries.some(function (entry) {
-              return (
-                entry.relative_path === path &&
-                entry[".tag"] === "file"
-              );
+              return entry.relative_path === path && entry[".tag"] === "file";
             })
           )
             return callback(null, path);
@@ -396,8 +402,7 @@ function removeFile() {
             if (
               res.entries.some(function (entry) {
                 return (
-                  entry.relative_path === path &&
-                  entry[".tag"] === "deleted"
+                  entry.relative_path === path && entry[".tag"] === "deleted"
                 );
               })
             )

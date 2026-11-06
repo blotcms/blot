@@ -51,20 +51,28 @@ describe("linkScreenshot plugin", function () {
   it("hands a plain https URL to the screenshot service", function (done) {
     const href = "https://example.com/";
 
-    render(doc(href), function () {
-      expect(calls).toEqual([href]);
-      done();
-    }, opts);
+    render(
+      doc(href),
+      function () {
+        expect(calls).toEqual([href]);
+        done();
+      },
+      opts
+    );
   });
 
   it("marks the screenshot untrusted so it must run in the sandbox", function (done) {
     const href = "https://example.com/";
 
-    render(doc(href), function () {
-      expect(optionsSeen.length).toBe(1);
-      expect(optionsSeen[0].untrusted).toBe(true);
-      done();
-    }, opts);
+    render(
+      doc(href),
+      function () {
+        expect(optionsSeen.length).toBe(1);
+        expect(optionsSeen[0].untrusted).toBe(true);
+        done();
+      },
+      opts
+    );
   });
 
   // A URL this plugin must refuse to hand to the screenshot service.
@@ -81,13 +89,17 @@ describe("linkScreenshot plugin", function () {
     it("refuses " + href, function (done) {
       const $ = doc(href);
 
-      render($, function () {
-        expect(calls).toEqual([]);
-        // The link is left untouched - no screenshot wrapper was added.
-        expect($.html()).not.toContain("bookmark-container");
-        expect($.html()).not.toContain("bookmark-screenshot");
-        done();
-      }, opts);
+      render(
+        $,
+        function () {
+          expect(calls).toEqual([]);
+          // The link is left untouched - no screenshot wrapper was added.
+          expect($.html()).not.toContain("bookmark-container");
+          expect($.html()).not.toContain("bookmark-screenshot");
+          done();
+        },
+        opts
+      );
     });
   });
 
@@ -99,29 +111,41 @@ describe("linkScreenshot plugin", function () {
   it("passes the metadata address through - it's the sandbox's job to block it", function (done) {
     const href = "http://169.254.169.254/latest/meta-data/";
 
-    render(doc(href), function () {
-      expect(calls).toEqual([href]);
-      done();
-    }, opts);
+    render(
+      doc(href),
+      function () {
+        expect(calls).toEqual([href]);
+        done();
+      },
+      opts
+    );
   });
 
   it("does nothing when there is no href", function (done) {
     const $ = cheerio.load(`<p><a class="bookmark">Example</a></p>`);
 
-    render($, function () {
-      expect(calls).toEqual([]);
-      expect($.html()).not.toContain("bookmark-container");
-      done();
-    }, opts);
+    render(
+      $,
+      function () {
+        expect(calls).toEqual([]);
+        expect($.html()).not.toContain("bookmark-container");
+        done();
+      },
+      opts
+    );
   });
 
   it("does nothing for a non-webloc path", function (done) {
     const $ = doc("https://example.com/");
 
-    render($, function () {
-      expect(calls).toEqual([]);
-      expect($.html()).not.toContain("bookmark-container");
-      done();
-    }, { blogID: "blog_test", path: "/note.txt" });
+    render(
+      $,
+      function () {
+        expect(calls).toEqual([]);
+        expect($.html()).not.toContain("bookmark-container");
+        done();
+      },
+      { blogID: "blog_test", path: "/note.txt" }
+    );
   });
 });

@@ -216,8 +216,7 @@ describe("git client aborted requests", function () {
         method: "POST",
         hostname: "127.0.0.1",
         port: ctx.server.port,
-        path:
-          "/clients/git/end/" + ctx.blog.handle + ".git/git-" + service,
+        path: "/clients/git/end/" + ctx.blog.handle + ".git/git-" + service,
         headers: {
           Authorization: "Basic " + Buffer.from(auth).toString("base64"),
           "Content-Type": "application/x-git-" + service + "-request",
@@ -245,7 +244,6 @@ describe("git client aborted requests", function () {
 
   var ZERO = new Array(41).join("0");
   var SHA = new Array(41).join("a");
-
 
   // An aborted request must not leave the store holding a place in a lane of
   // the git limiter (a git command still waiting on a client that has gone)
@@ -341,11 +339,7 @@ describe("git client aborted requests", function () {
   it("survives an aborted fetch request", async function () {
     var ctx = this;
 
-    await sendAbortedPost(
-      ctx,
-      "upload-pack",
-      pktLine("want " + SHA + "\n")
-    );
+    await sendAbortedPost(ctx, "upload-pack", pktLine("want " + SHA + "\n"));
     await expectServerStillWorks(ctx);
   });
 

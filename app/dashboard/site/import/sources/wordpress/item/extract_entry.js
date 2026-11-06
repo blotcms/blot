@@ -18,9 +18,10 @@ module.exports = function (item) {
 
     entry.title = item.title[0].trim();
 
-    entry.dateStamp = entry.created = entry.updated = moment(
-      item.pubdate[0]
-    ).valueOf();
+    entry.dateStamp =
+      entry.created =
+      entry.updated =
+        moment(item.pubdate[0]).valueOf();
 
     if (item.category) {
       entry.tags = item.category.map(function (category) {

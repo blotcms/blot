@@ -81,9 +81,6 @@ function deleteKeys(blog, callback) {
   (async function () {
     try {
       var multi = client.multi();
-      var ownedTemplates =
-        (await client.sMembers("template:owned_by:" + blog.id)) || [];
-
       var patterns = ["template:" + blog.id + ":*", "blog:" + blog.id + ":*"];
 
       var remove = [
@@ -124,7 +121,6 @@ function deleteKeys(blog, callback) {
         } while (cursor !== START_CURSOR);
       }
 
-
       // A sync (or a script under sync/hold) may still hold the folder
       // lock. Deleting it under them makes their release find it gone, and
       // a holder whose lock is lost crashes the process. The holder
@@ -149,11 +145,10 @@ function disconnectClient(blog, callback) {
 
   if (!blog.client || !clients[blog.client]) return callback(null);
 
-  clients[blog.client].disconnect(blog.id, function(err){
-
+  clients[blog.client].disconnect(blog.id, function (err) {
     // we still want to continue even if there is an error
     if (err) {
-      console.error('Error disconnecting client:', err);
+      console.error("Error disconnecting client:", err);
     }
 
     callback(null);

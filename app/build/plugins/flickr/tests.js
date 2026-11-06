@@ -13,9 +13,9 @@ describe("flickr plugin", function () {
       .get("/services/oembed/")
       .query(true)
       .reply(function (uri) {
-        const requestUrl = new URL(`https://www.flickr.com${uri}`).searchParams.get(
-          "url"
-        );
+        const requestUrl = new URL(
+          `https://www.flickr.com${uri}`
+        ).searchParams.get("url");
 
         const anchorHref =
           requestUrl && requestUrl.startsWith("https://www.flickr.com/")
@@ -58,9 +58,9 @@ describe("flickr plugin", function () {
       <a href="https://flic.kr/p/2quEvYr">https://flic.kr/p/2quEvYr</a>
       <a href="https://www.flickr.com/photos/jemostrom/54145631949/">https://www.flickr.com/photos/jemostrom/54145631949/</a>
     `;
-  
+
     const $ = cheerio.load(html);
-  
+
     replaceURLsWithEmbeds($, function () {
       expect($("a[data-flickr-embed='true']").length).toBe(2);
       expect($("img").length).toBe(2);
@@ -74,9 +74,9 @@ describe("flickr plugin", function () {
       <a href="https://flic.kr/p/2quEvYr">https://flic.kr/p/2quEvYr</a>
       <a href="https://example.com">https://example.com</a>
     `;
-  
+
     const $ = cheerio.load(html);
-  
+
     replaceURLsWithEmbeds($, function () {
       expect($("a[href='https://example.com']").length).toBe(1);
       expect($("a[data-flickr-embed='true']").length).toBe(1);
@@ -93,7 +93,6 @@ describe("flickr plugin", function () {
     const $ = cheerio.load(html);
 
     replaceURLsWithEmbeds($, function () {
-
       expect(
         $("a[href='https://www.flickr.com/photos/jemostrom/54145631949/']")
           .length
@@ -119,9 +118,9 @@ describe("flickr plugin", function () {
 
   it("skips links where href does not match text", function (done) {
     const html = '<a href="https://flic.kr/p/2quEvYr">Some other text</a>';
-  
+
     const $ = cheerio.load(html);
-  
+
     replaceURLsWithEmbeds($, function () {
       expect($("a[href='https://flic.kr/p/2quEvYr']").length).toBe(1);
       expect($("a[data-flickr-embed='true']").length).toBe(0);

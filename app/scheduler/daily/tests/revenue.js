@@ -9,28 +9,39 @@ describe("scheduler/daily/revenue sites per customer", function () {
   let originalPlans;
 
   function stripeUser(quantity, overrides = {}) {
-    return Object.assign({
-      blogs: [],
-      paypal: {},
-      subscription: {
-        status: "active",
-        customer: "cus_test",
-        plan: { amount: 500, interval: "month" },
-        quantity
-      }
-    }, overrides);
+    return Object.assign(
+      {
+        blogs: [],
+        paypal: {},
+        subscription: {
+          status: "active",
+          customer: "cus_test",
+          plan: { amount: 500, interval: "month" },
+          quantity,
+        },
+      },
+      overrides
+    );
   }
 
-  const collect = () => new Promise((resolve, reject) =>
-    revenue((err, result) => err ? reject(err) : resolve(result))
-  );
+  const collect = () =>
+    new Promise((resolve, reject) =>
+      revenue((err, result) => (err ? reject(err) : resolve(result)))
+    );
 
   beforeEach(function () {
     users = [];
     originalPlans = config.paypal.plans;
     config.paypal.plans = { monthly_5: "P-TEST-MONTHLY-5" };
-    spyOn(User, "getAllIds").and.callFake(callback => callback(null, users.map((_, i) => i)));
-    spyOn(User, "getById").and.callFake((id, callback) => callback(null, users[id]));
+    spyOn(User, "getAllIds").and.callFake((callback) =>
+      callback(
+        null,
+        users.map((_, i) => i)
+      )
+    );
+    spyOn(User, "getById").and.callFake((id, callback) =>
+      callback(null, users[id])
+    );
   });
 
   afterEach(function () {
@@ -48,12 +59,12 @@ describe("scheduler/daily/revenue sites per customer", function () {
           status: "ACTIVE",
           plan_id: "P-TEST-MONTHLY-5",
           quantity: "2",
-          billing_info: { next_billing_time: "2099-01-01T00:00:00Z" }
-        }
+          billing_info: { next_billing_time: "2099-01-01T00:00:00Z" },
+        },
       },
       stripeUser(100, { isDisabled: true }),
       stripeUser(100, { subscription: {} }),
-      null
+      null,
     ];
 
     const result = await collect();
@@ -65,7 +76,10 @@ describe("scheduler/daily/revenue sites per customer", function () {
   it("calculates before formatting site totals and renders the stat in the email", async function () {
     users = [stripeUser(1000), stripeUser(1001)];
     const result = await collect();
-    const template = fs.readFileSync(__dirname + "/../../../helper/email/admin/DAILY_UPDATE.txt", "utf8");
+    const template = fs.readFileSync(
+      __dirname + "/../../../helper/email/admin/DAILY_UPDATE.txt",
+      "utf8"
+    );
 
     expect(Mustache.render(template, result)).toContain(
       "Sites: 2,001 sites, 2 customers, 1000.50 sites per customer"

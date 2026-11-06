@@ -9,7 +9,11 @@
   }
 
   function activate(event) {
-    if (event.type === "keydown" && event.key !== "Enter" && event.key !== " ") {
+    if (
+      event.type === "keydown" &&
+      event.key !== "Enter" &&
+      event.key !== " "
+    ) {
       return;
     }
     if (event.type === "keydown") event.preventDefault();
@@ -18,14 +22,16 @@
   }
 
   function initialize() {
-    document.querySelectorAll(".callout[data-callout-fold]").forEach(function (callout) {
-      var title = callout.firstElementChild;
-      if (!title || !title.classList.contains("callout-title")) return;
-      setExpanded(callout, callout.getAttribute("data-callout-fold") === "+");
-      callout.classList.add("callout-fold-ready");
-      title.addEventListener("click", activate);
-      title.addEventListener("keydown", activate);
-    });
+    document
+      .querySelectorAll(".callout[data-callout-fold]")
+      .forEach(function (callout) {
+        var title = callout.firstElementChild;
+        if (!title || !title.classList.contains("callout-title")) return;
+        setExpanded(callout, callout.getAttribute("data-callout-fold") === "+");
+        callout.classList.add("callout-fold-ready");
+        title.addEventListener("click", activate);
+        title.addEventListener("keydown", activate);
+      });
   }
 
   if (document.readyState === "loading") {

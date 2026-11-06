@@ -11,7 +11,9 @@ describe("render cache metrics", function () {
       maxSize: 10 * 1024 * 1024,
       ttl: 5,
     });
-    expect(cacheMetrics.scaled({ max: 200, maxSize: 1024 * 1024 }, 0.01)).toEqual({
+    expect(
+      cacheMetrics.scaled({ max: 200, maxSize: 1024 * 1024 }, 0.01)
+    ).toEqual({
       max: 10,
       maxSize: 256 * 1024,
     });

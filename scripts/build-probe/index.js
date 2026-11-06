@@ -23,6 +23,7 @@ const { UNIT } = require("../deploy/constants");
 const DEFAULTS = { memory: "2g", oldSpace: UNIT.nodeBMaxOldSpaceSize, cpus: 1 };
 
 // --out is the launcher's: results always come back to data/build-probe.
+
 const { out, ...probeOptions } = PROBE_OPTIONS;
 
 function usage() {
@@ -43,17 +44,23 @@ ${formatOptions(WRAPPER_OPTIONS)}`);
 
 async function main() {
   const argv = process.argv.slice(2);
-  if (!argv.length || argv.includes("--help") || argv.includes("-h")) return usage();
+  if (!argv.length || argv.includes("--help") || argv.includes("-h"))
+    return usage();
 
-  const { options, rest: probeArgs } = parseArgs(argv, WRAPPER_OPTIONS, { strict: false });
+  const { options, rest: probeArgs } = parseArgs(argv, WRAPPER_OPTIONS, {
+    strict: false,
+  });
   // Catch a typo here rather than in a container on production.
   const probe = parseArgs(probeArgs, probeOptions);
   const { mode } = checkOptions(probe.options);
-  if (!probe.rest.length) throw new Error("Pass at least one post URL or <blog>:<path>");
+  if (!probe.rest.length)
+    throw new Error("Pass at least one post URL or <blog>:<path>");
 
   // See checkOptions in probe.js: a heap snapshot outlasts the sync lock.
   if (mode === "sync" && options["heap-snapshot"]) {
-    throw new Error("--heap-snapshot can't be used with --mode sync: the snapshot would outlast the sync lock");
+    throw new Error(
+      "--heap-snapshot can't be used with --mode sync: the snapshot would outlast the sync lock"
+    );
   }
 
   if (mode === "sync") {
@@ -83,7 +90,9 @@ async function main() {
     egressProxy: true,
     nodeFlags: [
       "--expose-gc",
-      ...(mode === "build" ? ["--heapsnapshot-signal=SIGUSR2", `--diagnostic-dir=${OUT}`] : []),
+      ...(mode === "build"
+        ? ["--heapsnapshot-signal=SIGUSR2", `--diagnostic-dir=${OUT}`]
+        : []),
     ],
     ...fromWrapperOptions(options, DEFAULTS),
   });

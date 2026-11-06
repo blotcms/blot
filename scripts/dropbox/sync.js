@@ -26,13 +26,11 @@ function runFullSync(blog) {
 }
 
 let processedCount = 0;
-let totalCount = 0;
 
 const processBlog = async (blog) => {
   if (!blog || blog.isDisabled) return;
   if (blog.client !== "dropbox") return;
 
-  totalCount++;
   processedCount++;
 
   console.log(

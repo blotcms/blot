@@ -83,7 +83,9 @@ describe("clients/util syncReport", function () {
     expect(first.hasErrors).toEqual(false);
     expect(second.hasRepairs).toEqual(false);
     expect(second.hasErrors).toEqual(true);
-    expect(second.errors).toEqual([{ phase: "catch-up sync", message: "nope" }]);
+    expect(second.errors).toEqual([
+      { phase: "catch-up sync", message: "nope" },
+    ]);
   });
 
   it("truncates long error messages", function () {
@@ -114,10 +116,13 @@ describe("clients/util syncReport", function () {
 
   it("adds a Dropbox error's error_summary to its message", function () {
     const report = syncReport.create();
-    const dropbox = Object.assign(new Error("Response failed with a 409 code"), {
-      status: 409,
-      error: { error_summary: "path/not_found/.." },
-    });
+    const dropbox = Object.assign(
+      new Error("Response failed with a 409 code"),
+      {
+        status: 409,
+        error: { error_summary: "path/not_found/.." },
+      }
+    );
 
     syncReport.recordError(report, blog, "walk", dropbox);
 
@@ -131,7 +136,6 @@ describe("clients/util syncReport", function () {
     expect(syncReport.summarize({})).toEqual("");
     expect(syncReport.summarize(undefined)).toEqual("");
   });
-
 
   it("records a walk with skipped files as a walk error plus its changes", function () {
     const report = syncReport.create();
@@ -177,7 +181,9 @@ describe("clients/util syncReport", function () {
       const sent = [];
 
       syncReport.recordChanges(report, blog, {});
-      expect(await syncReport.send(report, () => sent.push(1), "Test:")).toEqual(0);
+      expect(
+        await syncReport.send(report, () => sent.push(1), "Test:")
+      ).toEqual(0);
 
       expect(sent.length).toEqual(0);
     });
@@ -207,10 +213,12 @@ describe("clients/util syncReport", function () {
       const report = syncReport.create();
       const sent = [];
 
-      spyOn(email, "DROPBOX_SYNC_ISSUE").and.callFake(function (uid, locals, cb) {
-        sent.push(locals);
-        cb();
-      });
+      spyOn(email, "DROPBOX_SYNC_ISSUE").and.callFake(
+        function (uid, locals, cb) {
+          sent.push(locals);
+          cb();
+        }
+      );
       syncReport.recordError(report, blog, "walk", new Error("boom"));
       await syncReport.send(report, "DROPBOX_SYNC_ISSUE", "Test:");
 
@@ -222,7 +230,11 @@ describe("clients/util syncReport", function () {
 
       spyOn(console, "error");
       syncReport.recordError(report, blog, "walk", new Error("boom"));
-      await syncReport.send(report, (uid, locals, cb) => cb(new Error("mailgun")), "Test:");
+      await syncReport.send(
+        report,
+        (uid, locals, cb) => cb(new Error("mailgun")),
+        "Test:"
+      );
 
       expect(console.error).toHaveBeenCalled();
     });
@@ -247,7 +259,9 @@ describe("clients/util syncReport", function () {
         loaded: true,
         exports: {
           heldSince: () =>
-            value instanceof Error ? Promise.reject(value) : Promise.resolve(value),
+            value instanceof Error
+              ? Promise.reject(value)
+              : Promise.resolve(value),
         },
       };
     }
@@ -267,7 +281,9 @@ describe("clients/util syncReport", function () {
 
     it("stays silent for a recently taken lock", async function () {
       const report = syncReport.create();
-      stubHeldSince(Date.now() - syncReport.STUCK_LOCK_THRESHOLD_MS + 5 * MINUTE);
+      stubHeldSince(
+        Date.now() - syncReport.STUCK_LOCK_THRESHOLD_MS + 5 * MINUTE
+      );
 
       expect(await syncReport.recordStuckLock(report, blog)).toEqual(false);
       expect(syncReport.hasIssues(report)).toEqual(false);
@@ -297,7 +313,9 @@ describe("clients/util syncReport", function () {
         health.CODES.QUOTA_EXCEEDED,
       ]) {
         const getHealth = async () => health.error([{ code }]);
-        expect(await syncReport.hasUserSideIssue(blog.id, getHealth)).toEqual(true);
+        expect(await syncReport.hasUserSideIssue(blog.id, getHealth)).toEqual(
+          true
+        );
       }
     });
 
@@ -308,9 +326,9 @@ describe("clients/util syncReport", function () {
         health.error([{ code: health.CODES.TRANSFER_INCOMPLETE }]),
         health.error([{ code: health.CODES.SYNC_ERROR }]),
       ]) {
-        expect(await syncReport.hasUserSideIssue(blog.id, async () => result)).toEqual(
-          false
-        );
+        expect(
+          await syncReport.hasUserSideIssue(blog.id, async () => result)
+        ).toEqual(false);
       }
     });
 
@@ -333,7 +351,12 @@ describe("clients/util syncReport", function () {
         [other.id]: health.ok(),
       };
 
-      syncReport.recordError(report, blog, "walk", new Error("folder not found"));
+      syncReport.recordError(
+        report,
+        blog,
+        "walk",
+        new Error("folder not found")
+      );
       syncReport.recordChanges(report, blog, { removed: 4 });
       syncReport.recordError(report, other, "walk", new Error("boom"));
 
@@ -357,7 +380,8 @@ describe("clients/util syncReport", function () {
 
       syncReport.recordError(report, blog, "walk", new Error("revoked"));
       await syncReport.send(report, () => sent.push(1), "Test:", {
-        getHealth: async () => health.error([{ code: health.CODES.REAUTH_REQUIRED }]),
+        getHealth: async () =>
+          health.error([{ code: health.CODES.REAUTH_REQUIRED }]),
       });
 
       expect(sent.length).toEqual(0);
@@ -526,9 +550,14 @@ describe("clients/util syncReport", function () {
       const report = syncReport.create();
       const sent = [];
       syncReport.recordError(report, blog, "fix", new Error("different phase"));
-      await syncReport.send(report, (u, locals, cb) => (sent.push(locals), cb()), "Test:", {
-        client: "test",
-      });
+      await syncReport.send(
+        report,
+        (u, locals, cb) => (sent.push(locals), cb()),
+        "Test:",
+        {
+          client: "test",
+        }
+      );
 
       expect(sent.length).toEqual(1);
       // the walk error is remembered too: the blog wasn't checked
@@ -562,9 +591,14 @@ describe("clients/util syncReport", function () {
       const report = syncReport.create();
       spyOn(console, "error");
       syncReport.recordError(report, blog, "walk", new Error("boom"));
-      await syncReport.send(report, (u, l, cb) => cb(new Error("mailgun")), "Test:", {
-        client: "test",
-      });
+      await syncReport.send(
+        report,
+        (u, l, cb) => cb(new Error("mailgun")),
+        "Test:",
+        {
+          client: "test",
+        }
+      );
 
       expect(Array.from(stored)).toEqual([]);
       expect((await sweep()).length).toEqual(1);

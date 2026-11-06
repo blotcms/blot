@@ -130,7 +130,14 @@ function createLane(name, max) {
 
       if (!lane.warned && lane.waiting.length >= WARN_QUEUE) {
         lane.warned = true;
-        console.log(clfdate(), "Git: " + lane.waiting.length + " " + name + " commands waiting for room");
+        console.log(
+          clfdate(),
+          "Git: " +
+            lane.waiting.length +
+            " " +
+            name +
+            " commands waiting for room"
+        );
       }
     });
   };
@@ -179,7 +186,8 @@ function createLimiter(options) {
 
   // Resolves with a function which gives the place back
   async function acquire(lane) {
-    if (LANES.indexOf(lane) === -1) throw new Error("No git lane called " + lane);
+    if (LANES.indexOf(lane) === -1)
+      throw new Error("No git lane called " + lane);
 
     return lanes[lane].acquire();
   }
@@ -220,7 +228,13 @@ function createLimiter(options) {
     const out = {};
     Object.keys(lanes).forEach(function (name) {
       const lane = lanes[name];
-      out[name] = { max: lane.max, running: lane.running, waiting: lane.waiting.length, started: lane.started, peak: lane.peak };
+      out[name] = {
+        max: lane.max,
+        running: lane.running,
+        waiting: lane.waiting.length,
+        started: lane.started,
+        peak: lane.peak,
+      };
     });
     return out;
   }
@@ -232,7 +246,10 @@ function createLimiter(options) {
   }
 
   function currentCaps() {
-    return { interactive: lanes.interactive.max, background: lanes.background.max };
+    return {
+      interactive: lanes.interactive.max,
+      background: lanes.background.max,
+    };
   }
 
   return { run, acquire, outside, gate, stats, reset, args, subcommand };

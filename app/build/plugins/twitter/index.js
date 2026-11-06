@@ -1,15 +1,13 @@
-
 const each = require("../eachEl");
 const Url = require("url");
 const fetch = require("node-fetch");
 
 function render($, callback) {
-
   each(
     $,
     "a",
     function (el, next) {
-      var href, host, text, id;
+      var href, host, text;
 
       try {
         href = $(el).attr("href");
@@ -30,19 +28,16 @@ function render($, callback) {
 
       var params = {
         url: href,
-        format: "json"
+        format: "json",
       };
 
       var oembedUrl =
         "https://publish.twitter.com/oembed?" +
         new URLSearchParams(params).toString();
 
-
       fetch(oembedUrl)
         .then((res) => res.json())
         .then((data) => {
-
-
           if (!data || !data.html) return next();
 
           var html = data.html;

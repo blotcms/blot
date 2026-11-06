@@ -1,4 +1,5 @@
-const fetchPath = require.resolve("../../util/rateLimitedFetchWithRetriesAndTimeout");
+const fetchPath =
+  require.resolve("../../util/rateLimitedFetchWithRetriesAndTimeout");
 const remoteReaddirPath = require.resolve("../util/remoteReaddir");
 
 describe("icloud remoteReaddir", function () {
@@ -48,7 +49,9 @@ describe("icloud remoteReaddir", function () {
 
   it("does not retry a permanent 4xx such as a directory that no longer exists", async function () {
     const remoteReaddir = load(async () => {
-      throw new Error("Request failed after 1 retries: HTTP error: 404 - Not Found http://x/readdir");
+      throw new Error(
+        "Request failed after 1 retries: HTTP error: 404 - Not Found http://x/readdir"
+      );
     });
     let error;
     try {

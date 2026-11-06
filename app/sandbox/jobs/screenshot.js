@@ -150,7 +150,10 @@ async function capture(browser, puppeteer, { url, width, height, mobile }) {
       return request.continue();
     });
 
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: PAGE_TIMEOUT });
+    await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: PAGE_TIMEOUT,
+    });
 
     // A string, not an arrow function: puppeteer serializes functions with
     // toString(), and under nyc (CI coverage) that source carries counters which
@@ -192,7 +195,12 @@ async function capture(browser, puppeteer, { url, width, height, mobile }) {
 // was asked for. A screenshot that doesn't decode is a failed page.
 async function reencode(png, maxWidth, maxHeight) {
   return sharp(png, { failOn: "error" })
-    .resize({ width: maxWidth, height: maxHeight, fit: "inside", withoutEnlargement: true })
+    .resize({
+      width: maxWidth,
+      height: maxHeight,
+      fit: "inside",
+      withoutEnlargement: true,
+    })
     .png()
     .toBuffer();
 }
@@ -214,7 +222,8 @@ function pagesOf(args) {
   if (!args || typeof args !== "object") return null;
   if (args.pages === undefined) return [args];
   const { pages } = args;
-  if (!Array.isArray(pages) || pages.length < 1 || pages.length > MAX_PAGES) return null;
+  if (!Array.isArray(pages) || pages.length < 1 || pages.length > MAX_PAGES)
+    return null;
   if (!pages.every((page) => page && typeof page === "object")) return null;
   return pages;
 }
@@ -222,12 +231,17 @@ function pagesOf(args) {
 async function run(args) {
   const pages = pagesOf(args);
   if (!pages) {
-    return { meta: { error: "not a batch of 1 to 8 pages", retryable: false }, outputs: [] };
+    return {
+      meta: { error: "not a batch of 1 to 8 pages", retryable: false },
+      outputs: [],
+    };
   }
 
   const single = args.pages === undefined;
   const results = pages.map((page) =>
-    isAllowed(page.url) ? null : { error: "URL is not allowed", retryable: false }
+    isAllowed(page.url)
+      ? null
+      : { error: "URL is not allowed", retryable: false }
   );
   const outputs = pages.map(() => Buffer.alloc(0));
 
@@ -275,7 +289,10 @@ async function run(args) {
 
       let shot;
       try {
-        shot = await within(capture(browser, puppeteer, pages[i]), PAGE_WORST_CASE);
+        shot = await within(
+          capture(browser, puppeteer, pages[i]),
+          PAGE_WORST_CASE
+        );
       } catch (error) {
         if (error instanceof StalledError) stalled = true;
         results[i] = pageFailure(error, puppeteer);
@@ -288,7 +305,10 @@ async function run(args) {
       try {
         png = await reencode(shot.png, shot.maxWidth, shot.maxHeight);
       } catch (error) {
-        results[i] = { error: "the screenshot was not a valid image", retryable: false };
+        results[i] = {
+          error: "the screenshot was not a valid image",
+          retryable: false,
+        };
         continue;
       }
 

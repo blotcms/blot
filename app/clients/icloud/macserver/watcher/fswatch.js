@@ -2,10 +2,7 @@ import fs from "node:fs";
 import { join } from "path";
 import clfdate from "../util/clfdate.js";
 import { iCloudDriveDirectory } from "../config.js";
-import {
-  extractBlogID,
-  extractPathInBlogDirectory,
-} from "./pathUtils.js";
+import { extractBlogID, extractPathInBlogDirectory } from "./pathUtils.js";
 
 let fsWatcher = null;
 
@@ -33,15 +30,13 @@ const startFsWatch = (reconcileFsWatchEvent) => {
         return;
       }
 
-      reconcileFsWatchEvent(blogID, pathInBlogDirectory).catch(
-        (error) => {
-          console.error(
-            clfdate(),
-            `fs.watch reconciliation error for ${blogID}/${pathInBlogDirectory}:`,
-            error
-          );
-        }
-      );
+      reconcileFsWatchEvent(blogID, pathInBlogDirectory).catch((error) => {
+        console.error(
+          clfdate(),
+          `fs.watch reconciliation error for ${blogID}/${pathInBlogDirectory}:`,
+          error
+        );
+      });
     }
   );
 

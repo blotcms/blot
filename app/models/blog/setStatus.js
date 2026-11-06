@@ -25,7 +25,10 @@ module.exports = function (blogID, status, callback) {
   multi.lPush(key.status(blogID), statusString);
   multi.lTrim(key.status(blogID), 0, STATUS_LOG_MAX_LENGTH);
 
-  multi.exec().then(function () {
-    callback();
-  }).catch(callback);
+  multi
+    .exec()
+    .then(function () {
+      callback();
+    })
+    .catch(callback);
 };

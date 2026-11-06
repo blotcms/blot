@@ -82,7 +82,9 @@ cdn.use("/folder/v-:version", async (req, res, next) => {
   if (
     !match ||
     pathname.indexOf("\0") !== -1 ||
-    pathname.split("/").some((segment) => segment === ".." || segment.charAt(0) === ".")
+    pathname
+      .split("/")
+      .some((segment) => segment === ".." || segment.charAt(0) === ".")
   ) {
     return res.sendStatus(404);
   }
@@ -104,10 +106,13 @@ cdn.use("/folder/v-:version", async (req, res, next) => {
       return res.redirect(301, req.originalUrl.replace(/^[^?]*/, "$&/"));
     }
 
-    if (req.method !== "GET" && req.method !== "HEAD") return methodNotAllowed(res);
+    if (req.method !== "GET" && req.method !== "HEAD")
+      return methodNotAllowed(res);
 
     // A trailing slash serves the directory's index.html
-    await folder.serve(req, res, match[1], relPath, { maxAge: pending ? "1h" : "1y" });
+    await folder.serve(req, res, match[1], relPath, {
+      maxAge: pending ? "1h" : "1y",
+    });
   } catch (err) {
     // The client went away after we started sending
     if (res.headersSent) return;
@@ -128,12 +133,16 @@ function pendingNotFound(res) {
 cdn.get("/template/:d1/:d2/:rest/:name", async (req, res, next) => {
   const { d1, d2, rest, name } = req.params;
 
-  if (!/^[a-f0-9]{2}$/.test(d1) || !/^[a-f0-9]{2}$/.test(d2) || !/^[a-f0-9]{28}$/.test(rest)) {
+  if (
+    !/^[a-f0-9]{2}$/.test(d1) ||
+    !/^[a-f0-9]{2}$/.test(d2) ||
+    !/^[a-f0-9]{28}$/.test(rest)
+  ) {
     return res.sendStatus(404);
   }
 
   // The name only picks the Content-Type, but a view basename never holds these
-  if (/[\/\\\0]/.test(name) || name.startsWith("..")) return res.sendStatus(404);
+  if (/[/\\\0]/.test(name) || name.startsWith("..")) return res.sendStatus(404);
 
   // We never publish source maps; devtools request them and would otherwise
   // get the asset itself with a 200 that Bunny caches for a year
@@ -224,5 +233,5 @@ function httpError(status, message) {
  * Get content type from view name
  */
 function getContentType(viewName) {
-  return mime.lookup(viewName) || 'text/plain';
+  return mime.lookup(viewName) || "text/plain";
 }

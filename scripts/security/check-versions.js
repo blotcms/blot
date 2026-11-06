@@ -34,12 +34,18 @@ const SKIP = [
 ];
 
 function readVersions() {
-  return parse(fs.readFileSync(path.join(ROOT, "config", "versions.env"), "utf8"));
+  return parse(
+    fs.readFileSync(path.join(ROOT, "config", "versions.env"), "utf8")
+  );
 }
 
 function git(...args) {
   try {
-    return execFileSync("git", args, { cwd: ROOT, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+    return execFileSync("git", args, {
+      cwd: ROOT,
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+    });
   } catch (e) {
     if (e.status === 1) return ""; // git grep: no match
     throw e;
@@ -56,7 +62,8 @@ function literals(v) {
   ];
   // Every other value that is long enough to be a ref, digest or commit
   for (const [key, value] of Object.entries(v)) {
-    if (key !== "NODE_VERSION" && /^(.*[:@].*|[0-9a-f]{40,})$/.test(value)) out.push(value);
+    if (key !== "NODE_VERSION" && /^(.*[:@].*|[0-9a-f]{40,})$/.test(value))
+      out.push(value);
   }
   return out;
 }
@@ -65,39 +72,80 @@ function problems() {
   const out = [];
   const v = readVersions();
 
-  if (!v.NODE_VERSION || !v.NODE_BASE) return ["config/versions.env needs NODE_VERSION and NODE_BASE"];
+  if (!v.NODE_VERSION || !v.NODE_BASE)
+    return ["config/versions.env needs NODE_VERSION and NODE_BASE"];
   const base = "node:" + v.NODE_VERSION + "-alpine@sha256:";
-  if (!v.NODE_BASE.startsWith(base) || !/^[0-9a-f]{64}$/.test(v.NODE_BASE.slice(base.length)))
-    out.push("NODE_BASE must be " + base + "<64 hex digits>, got " + v.NODE_BASE);
+  if (
+    !v.NODE_BASE.startsWith(base) ||
+    !/^[0-9a-f]{64}$/.test(v.NODE_BASE.slice(base.length))
+  )
+    out.push(
+      "NODE_BASE must be " + base + "<64 hex digits>, got " + v.NODE_BASE
+    );
 
   // Dockerfiles take every key as a build arg, with no default
-  const files = git("ls-files", "--", "Dockerfile", "**/Dockerfile", "**/Dockerfile.*").split("\n").filter(Boolean);
+  const files = git(
+    "ls-files",
+    "--",
+    "Dockerfile",
+    "**/Dockerfile",
+    "**/Dockerfile.*"
+  )
+    .split("\n")
+    .filter(Boolean);
   for (const file of files) {
-    for (const line of fs.readFileSync(path.join(ROOT, file), "utf8").split("\n")) {
+    for (const line of fs
+      .readFileSync(path.join(ROOT, file), "utf8")
+      .split("\n")) {
       const m = line.match(/^\s*ARG\s+([A-Z][A-Z0-9_]*)=/);
-      if (m && m[1] in v) out.push(file + ": ARG " + m[1] + " has a default; it comes from config/versions.env");
+      if (m && m[1] in v)
+        out.push(
+          file +
+            ": ARG " +
+            m[1] +
+            " has a default; it comes from config/versions.env"
+        );
     }
   }
 
   // No other tracked file repeats a value
   const exclude = SKIP.map((p) => ":(exclude,glob)" + p);
   for (const text of literals(v)) {
-    const hits = git("grep", "-nF", "-e", text, "--", ".", ...exclude).split("\n").filter(Boolean);
-    for (const hit of hits) out.push("repeats " + text + ", read config/versions.env instead: " + hit.slice(0, 120));
+    const hits = git("grep", "-nF", "-e", text, "--", ".", ...exclude)
+      .split("\n")
+      .filter(Boolean);
+    for (const hit of hits)
+      out.push(
+        "repeats " +
+          text +
+          ", read config/versions.env instead: " +
+          hit.slice(0, 120)
+      );
   }
 
   // The composite action declares an output per key (steps.versions.outputs.KEY)
-  const action = fs.readFileSync(path.join(ROOT, ".github/actions/versions/action.yml"), "utf8");
+  const action = fs.readFileSync(
+    path.join(ROOT, ".github/actions/versions/action.yml"),
+    "utf8"
+  );
   for (const key of Object.keys(v)) {
     if (!new RegExp("^  " + key + ":$", "m").test(action))
       out.push(".github/actions/versions/action.yml: no output for " + key);
   }
 
   // The host template can't read the file, so it must match
-  const env = fs.readFileSync(path.join(ROOT, "config", "environment.sh"), "utf8");
+  const env = fs.readFileSync(
+    path.join(ROOT, "config", "environment.sh"),
+    "utf8"
+  );
   const host = env.match(/^export BLOT_NODE_VERSION=(\S+)/m);
   if (!host || host[1] !== v.NODE_VERSION)
-    out.push("config/environment.sh: BLOT_NODE_VERSION is " + (host ? host[1] : "missing") + ", NODE_VERSION is " + v.NODE_VERSION);
+    out.push(
+      "config/environment.sh: BLOT_NODE_VERSION is " +
+        (host ? host[1] : "missing") +
+        ", NODE_VERSION is " +
+        v.NODE_VERSION
+    );
 
   return out;
 }
@@ -110,5 +158,9 @@ if (require.main === module) {
     console.error(found.join("\n"));
     process.exit(1);
   }
-  console.log("config/versions.env is the only place its " + Object.keys(readVersions()).length + " versions are set");
+  console.log(
+    "config/versions.env is the only place its " +
+      Object.keys(readVersions()).length +
+      " versions are set"
+  );
 }

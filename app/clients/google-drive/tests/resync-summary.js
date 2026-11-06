@@ -73,18 +73,19 @@ function harness(files) {
   };
 
   const module = { exports: {} };
-  vm.runInNewContext(
-    fs.readFileSync(require.resolve("../sync/sync"), "utf8"),
-    {
-      module,
-      exports: module.exports,
-      console: { log() {}, error() {} },
-      require: (name) => (name in stubs ? stubs[name] : require(name)),
-    }
-  );
+  vm.runInNewContext(fs.readFileSync(require.resolve("../sync/sync"), "utf8"), {
+    module,
+    exports: module.exports,
+    console: { log() {}, error() {} },
+    require: (name) => (name in stubs ? stubs[name] : require(name)),
+  });
 
   state.run = () =>
-    module.exports("blog", () => {}, async (path) => state.updates.push(path));
+    module.exports(
+      "blog",
+      () => {},
+      async (path) => state.updates.push(path)
+    );
 
   return state;
 }
@@ -124,7 +125,10 @@ describe("google-drive sync() resync summary", function () {
   });
 
   it("counts a file it could not download, and carries on with the walk", async function () {
-    const h = harness([file({ id: "1" }), file({ id: "2", name: "other.txt" })]);
+    const h = harness([
+      file({ id: "1" }),
+      file({ id: "2", name: "other.txt" }),
+    ]);
     h.downloadError = new Error("download exploded");
 
     const summary = await h.run();
@@ -139,7 +143,12 @@ describe("google-drive sync() resync summary", function () {
     const h = harness([file({ modifiedTime: ago(60 * 60 * 1000) })]);
     h.downloadResult = {
       updated: false,
-      verifiedContent: { checksum: "md5", sha1: "sha1", size: 1, modified: 1000 },
+      verifiedContent: {
+        checksum: "md5",
+        sha1: "sha1",
+        size: 1,
+        modified: 1000,
+      },
     };
 
     const summary = await h.run();

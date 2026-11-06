@@ -75,7 +75,9 @@ describe("questions.create", function () {
   it("will throw an error if you trigger an issue with redis exists", async function () {
     const client = require("models/client");
 
-    spyOn(client, "exists").and.returnValue(Promise.reject(new Error("REDIS EXISTS ISSUE")));
+    spyOn(client, "exists").and.returnValue(
+      Promise.reject(new Error("REDIS EXISTS ISSUE"))
+    );
 
     try {
       await create({ title: "How?", id: "1" });
@@ -88,7 +90,9 @@ describe("questions.create", function () {
   it("will throw an error if you trigger an issue with redis incr", async function () {
     const client = require("models/client");
 
-    spyOn(client, "incr").and.returnValue(Promise.reject(new Error("REDIS INCR ISSUE")));
+    spyOn(client, "incr").and.returnValue(
+      Promise.reject(new Error("REDIS INCR ISSUE"))
+    );
 
     try {
       await create({ title: "How?", body: "Yes" });

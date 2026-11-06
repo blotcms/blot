@@ -62,7 +62,9 @@ describe("helper/lock cron", function () {
     const name = newName();
     const fireDate = new Date("2030-02-03T04:05:00.000Z");
     await lock.cron._fire(name, fireDate, () => {});
-    const ttlMs = await client.pTTL("cron:" + name + ":" + fireDate.toISOString());
+    const ttlMs = await client.pTTL(
+      "cron:" + name + ":" + fireDate.toISOString()
+    );
     expect(ttlMs).toBeGreaterThan(60 * 60 * 1000);
     expect(ttlMs).toBeLessThanOrEqual(24 * 60 * 60 * 1000);
   });

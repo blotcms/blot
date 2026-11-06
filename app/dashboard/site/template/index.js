@@ -6,7 +6,8 @@ const Blog = require("models/blog");
 const archiver = require("archiver");
 const duplicateTemplate = require("./save/duplicate-template");
 const persistTemplateUpdate = require("./save/persist-template-update");
-const removeTemplateAssetsIfUnreferenced = require("./save/upload-image").removeTemplateAssetsIfUnreferenced;
+const removeTemplateAssetsIfUnreferenced =
+  require("./save/upload-image").removeTemplateAssetsIfUnreferenced;
 const loadFavicon = require("./load/favicon");
 const syntaxHighlighterPreview = require("./syntax-highlighter-preview");
 const clfdate = require("helper/clfdate");
@@ -16,7 +17,9 @@ const photoMaskOptions = require("./load/photo-mask-options");
 const { isAjaxRequest } = require("./save/ajax-response");
 
 function loadFaviconForProfileImage(req, res, next) {
-  return req.params.key === "profile_image" ? loadFavicon(req, res, next) : next();
+  return req.params.key === "profile_image"
+    ? loadFavicon(req, res, next)
+    : next();
 }
 
 // Validation errors (status 4xx) already say what is wrong with the upload;
@@ -26,12 +29,26 @@ function handleImageUploadError(error, req, res, next) {
 
   const expected = error && error.status >= 400 && error.status < 500;
   if (!expected) {
-    console.log(clfdate(), "profileImage", "Upload failed", req.blog && req.blog.id, req.params.templateSlug, error && (error.stack || error.message || error));
+    console.log(
+      clfdate(),
+      "profileImage",
+      "Upload failed",
+      req.blog && req.blog.id,
+      req.params.templateSlug,
+      error && (error.stack || error.message || error)
+    );
   }
 
-  const message = expected ? error.message : "We couldn't save your photo. Please try again.";
-  if (isAjaxRequest(req)) return res.status(expected ? error.status : 500).json({ error: message });
-  return res.message((req.body && req.body.redirect) || `${res.locals.base}/images/${req.params.key}`, new Error(message));
+  const message = expected
+    ? error.message
+    : "We couldn't save your photo. Please try again.";
+  if (isAjaxRequest(req))
+    return res.status(expected ? error.status : 500).json({ error: message });
+  return res.message(
+    (req.body && req.body.redirect) ||
+      `${res.locals.base}/images/${req.params.key}`,
+    new Error(message)
+  );
 }
 
 // /template/default and /template/default/... redirect to the installed template's slug
@@ -72,7 +89,10 @@ TemplateEditor.param("templateSlug", function (req, res, next, slug) {
   Template.getMetadata(
     Template.makeID(req.blog.id, makeSlug(slug)),
     function (err, own) {
-      if ((own && own.localEditing) || (req.template && req.template.localEditing)) {
+      if (
+        (own && own.localEditing) ||
+        (req.template && req.template.localEditing)
+      ) {
         return holdFolderLock(req, res, next);
       }
       next();
@@ -154,23 +174,20 @@ TemplateEditor.route("/:templateSlug/install")
       log("Installed template", templateID);
       log("Removing enabled from local templates");
 
-      Template.removeEnabledFromAllTemplates(
-        req.blog.id,
-        function (removeErr) {
-          log("Removed enabled from local templates");
+      Template.removeEnabledFromAllTemplates(req.blog.id, function (removeErr) {
+        log("Removed enabled from local templates");
 
-          if (removeErr) {
-            console.warn(
-              "Failed to remove enabled from local templates after install",
-              req.blog.id,
-              removeErr
-            );
-          }
-          res.redirect(
-            "/sites/" + req.blog.handle + "/template/" + req.params.templateSlug
+        if (removeErr) {
+          console.warn(
+            "Failed to remove enabled from local templates after install",
+            req.blog.id,
+            removeErr
           );
         }
-      );
+        res.redirect(
+          "/sites/" + req.blog.handle + "/template/" + req.params.templateSlug
+        );
+      });
     });
   });
 
@@ -229,7 +246,9 @@ TemplateEditor.route("/:templateSlug")
 
 TemplateEditor.route("/:templateSlug/uploads/:key")
   .get(require("./load/url-inputs"), function (req, res, next) {
-    res.locals.upload = res.locals.uploads.find((i) => i.key === req.params.key);
+    res.locals.upload = res.locals.uploads.find(
+      (i) => i.key === req.params.key
+    );
     if (!res.locals.upload) return next();
     res.locals.title = `${res.locals.upload.label} - ${req.template.displayName}`;
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
@@ -238,24 +257,38 @@ TemplateEditor.route("/:templateSlug/uploads/:key")
   .post(require("./save/fork-if-needed"), require("./save/upload-local"));
 
 TemplateEditor.route("/:templateSlug/images/:key")
-  .get(require("./load/image-inputs"), loadFaviconForProfileImage, function (req, res, next) {
-    res.locals.image = res.locals.images.find((item) => item.key === req.params.key);
-    if (!res.locals.image) return next();
-    res.locals.image.isProfileImage = res.locals.image.key === "profile_image";
-    if (res.locals.image.isProfileImage) {
-      res.locals.image.maskOptions = photoMaskOptions(
-        res.locals.image.value && res.locals.image.value.mask
+  .get(
+    require("./load/image-inputs"),
+    loadFaviconForProfileImage,
+    function (req, res, next) {
+      res.locals.image = res.locals.images.find(
+        (item) => item.key === req.params.key
       );
-      res.locals.fileDrop = {
-        id: "profile-image-upload", name: "image", accept: "image/*", inputAttribute: "data-crop-input",
-        ariaLabel: "Choose a photo", noun: "photo", selectedLabel: "Selected photo",
-        title: res.locals.image.value ? "Upload a different photo" : "Upload a photo",
-      };
+      if (!res.locals.image) return next();
+      res.locals.image.isProfileImage =
+        res.locals.image.key === "profile_image";
+      if (res.locals.image.isProfileImage) {
+        res.locals.image.maskOptions = photoMaskOptions(
+          res.locals.image.value && res.locals.image.value.mask
+        );
+        res.locals.fileDrop = {
+          id: "profile-image-upload",
+          name: "image",
+          accept: "image/*",
+          inputAttribute: "data-crop-input",
+          ariaLabel: "Choose a photo",
+          noun: "photo",
+          selectedLabel: "Selected photo",
+          title: res.locals.image.value
+            ? "Upload a different photo"
+            : "Upload a photo",
+        };
+      }
+      res.locals.title = `${res.locals.image.label} - ${req.template.displayName}`;
+      res.locals.selected = { ...res.locals.selected, settings: "selected" };
+      res.render("dashboard/template/controls/image-form");
     }
-    res.locals.title = `${res.locals.image.label} - ${req.template.displayName}`;
-    res.locals.selected = { ...res.locals.selected, settings: "selected" };
-    res.render("dashboard/template/controls/image-form");
-  })
+  )
   .post(
     require("./load/image-inputs"),
     loadFaviconForProfileImage,
@@ -270,9 +303,16 @@ TemplateEditor.route("/:templateSlug/favicon")
     res.locals.title = `Favicon - ${req.template.displayName}`;
     res.locals.siteTitle = req.blog.title;
     res.locals.fileDrop = {
-      id: "favicon-upload", name: "favicon", accept: "image/*,.svg", inputAttribute: "data-favicon-input",
-      ariaLabel: "Choose a favicon", noun: "favicon", selectedLabel: "Selected favicon",
-      title: res.locals.favicon ? "Upload a different favicon" : "Upload a favicon",
+      id: "favicon-upload",
+      name: "favicon",
+      accept: "image/*,.svg",
+      inputAttribute: "data-favicon-input",
+      ariaLabel: "Choose a favicon",
+      noun: "favicon",
+      selectedLabel: "Selected favicon",
+      title: res.locals.favicon
+        ? "Upload a different favicon"
+        : "Upload a favicon",
     };
     res.locals.selected = { ...res.locals.selected, settings: "selected" };
     res.render("dashboard/template/controls/favicon-form");
@@ -444,10 +484,7 @@ TemplateEditor.route("/:templateSlug/photo")
     res.locals.photoPath = `${req.baseUrl}/${req.params.templateSlug}/photo`;
     res.render("dashboard/template/photo");
   })
-  .post(
-    require("./load/favicon"),
-    require("./save/photo")
-  );
+  .post(require("./load/favicon"), require("./save/photo"));
 
 TemplateEditor.route("/:templateSlug/delete")
   .get(function (req, res, next) {
@@ -462,7 +499,10 @@ TemplateEditor.route("/:templateSlug/delete")
       .map((value) => ({
         ...value,
         thumbnails: Object.fromEntries(
-          Object.entries(value.thumbnails || {}).map(([name, thumbnail]) => [name, { ...thumbnail }])
+          Object.entries(value.thumbnails || {}).map(([name, thumbnail]) => [
+            name,
+            { ...thumbnail },
+          ])
         ),
       }));
 
@@ -502,7 +542,10 @@ TemplateEditor.route("/:templateSlug/reset")
       .map((value) => ({
         ...value,
         thumbnails: Object.fromEntries(
-          Object.entries(value.thumbnails || {}).map(([name, thumbnail]) => [name, { ...thumbnail }])
+          Object.entries(value.thumbnails || {}).map(([name, thumbnail]) => [
+            name,
+            { ...thumbnail },
+          ])
         ),
       }));
 

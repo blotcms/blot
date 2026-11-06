@@ -265,7 +265,8 @@ if (process.env.BLOT_TEST_TIMINGS) {
     depth++;
     try {
       const suite = describe.apply(this, arguments);
-      if (depth === 1 && loadingFile && suite) fileOfSuite[suite.id] = loadingFile;
+      if (depth === 1 && loadingFile && suite)
+        fileOfSuite[suite.id] = loadingFile;
       return suite;
     } finally {
       depth--;
@@ -291,7 +292,10 @@ if (process.env.BLOT_TEST_TIMINGS) {
         fileSeconds[file] += (Date.now() - suiteStart[result.id]) / 1000;
     },
     jasmineDone: function () {
-      fs.writeFileSync(process.env.BLOT_TEST_TIMINGS, JSON.stringify(fileSeconds));
+      fs.writeFileSync(
+        process.env.BLOT_TEST_TIMINGS,
+        JSON.stringify(fileSeconds)
+      );
     },
   });
 }

@@ -75,7 +75,8 @@ async function tagMembers(blogID, slug) {
 // slug -> sorted member ids, for every tag the blog has.
 async function allTags(blogID) {
   const out = {};
-  for (const slug of await tagSlugs(blogID)) out[slug] = await tagMembers(blogID, slug);
+  for (const slug of await tagSlugs(blogID))
+    out[slug] = await tagMembers(blogID, slug);
   return out;
 }
 
@@ -86,7 +87,9 @@ async function snapshotEntries(blogID, ids) {
   const keep = (members) => members.filter((id) => ids.includes(id));
   const lists = await allLists(blogID);
   const tags = await allTags(blogID);
-  const out = { raw: await client.mGet(ids.map((id) => Entry.key.entry(blogID, id))) };
+  const out = {
+    raw: await client.mGet(ids.map((id) => Entry.key.entry(blogID, id))),
+  };
   for (const list of LISTS) out["list:" + list] = keep(lists[list]);
   for (const slug in tags) out["tag:" + slug] = keep(tags[slug]);
   return out;
@@ -120,11 +123,23 @@ describe("sync/fix regression (outcome-based)", function () {
   it("leaves a clean blog with entries, tags, drafts, pages and a menu unchanged", async function () {
     const blog = this.blog;
 
-    await blog.write({ path: "/post-one.txt", content: "Tags: sun, sea\n\n# Post one" });
-    await blog.write({ path: "/post-two.txt", content: "Tags: sea, sand\n\n# Post two" });
-    await blog.write({ path: "/draft.txt", content: "Draft: yes\n\n# A draft" });
+    await blog.write({
+      path: "/post-one.txt",
+      content: "Tags: sun, sea\n\n# Post one",
+    });
+    await blog.write({
+      path: "/post-two.txt",
+      content: "Tags: sea, sand\n\n# Post two",
+    });
+    await blog.write({
+      path: "/draft.txt",
+      content: "Draft: yes\n\n# A draft",
+    });
     await blog.write({ path: "/about.txt", content: "Page: yes\n\n# About" });
-    await blog.write({ path: "/future.txt", content: "Date: 1/1/2099\n\n# Future post" });
+    await blog.write({
+      path: "/future.txt",
+      content: "Date: 1/1/2099\n\n# Future post",
+    });
 
     await blog.rebuild();
 
@@ -158,7 +173,10 @@ describe("sync/fix regression (outcome-based)", function () {
   describe("entry-ghosts", function () {
     it("drops an entry whose file was deleted from disk", async function () {
       const blog = this.blog;
-      await blog.write({ path: "/ghost.txt", content: "Tags: orphaned\n\n# Ghost" });
+      await blog.write({
+        path: "/ghost.txt",
+        content: "Tags: orphaned\n\n# Ghost",
+      });
       await blog.rebuild();
 
       await blog.remove("/ghost.txt");
@@ -237,9 +255,7 @@ describe("sync/fix regression (outcome-based)", function () {
       const report = await fixAsync(blog);
 
       expect(report["entry-ghosts"]).toEqual(
-        jasmine.arrayContaining([
-          ["MISSING", jasmine.any(Object)],
-        ])
+        jasmine.arrayContaining([["MISSING", jasmine.any(Object)]])
       );
 
       const entry = await getEntry(blog.id, "/Album");
@@ -263,9 +279,7 @@ describe("sync/fix regression (outcome-based)", function () {
       const report = await fixAsync(blog);
 
       expect(report["entry-ghosts"]).toEqual(
-        jasmine.arrayContaining([
-          ["MISSING", jasmine.any(Object)],
-        ])
+        jasmine.arrayContaining([["MISSING", jasmine.any(Object)]])
       );
 
       const entry = await getEntry(blog.id, "/Trip");
@@ -284,7 +298,9 @@ describe("sync/fix regression (outcome-based)", function () {
       await blog.rebuild();
 
       const before = await getBlog(blog.id);
-      expect((await listIds(blog.id, "entries")).indexOf("/vanish.txt")).not.toBe(-1);
+      expect(
+        (await listIds(blog.id, "entries")).indexOf("/vanish.txt")
+      ).not.toBe(-1);
 
       // Raw corruption: the entry key itself disappears (eg. a botched
       // manual Redis operation) while the entry stays listed everywhere.
@@ -359,9 +375,13 @@ describe("sync/fix regression (outcome-based)", function () {
 
       expect(await listIds(blog.id, "entries")).toContain("/stale.txt");
 
-      const corrupted = await corruptEntryRaw(blog.id, "/stale.txt", (entry) => {
-        entry.id = "/stale-real.txt";
-      });
+      const corrupted = await corruptEntryRaw(
+        blog.id,
+        "/stale.txt",
+        (entry) => {
+          entry.id = "/stale-real.txt";
+        }
+      );
 
       const report = await fixAsync(blog);
 
@@ -394,7 +414,10 @@ describe("sync/fix regression (outcome-based)", function () {
 
     it("fixes a stale id that appears in several lists at once (a page is in both 'all' and 'pages')", async function () {
       const blog = this.blog;
-      await blog.write({ path: "/stale-page.txt", content: "Page: yes\n\n# Stale page" });
+      await blog.write({
+        path: "/stale-page.txt",
+        content: "Page: yes\n\n# Stale page",
+      });
       await blog.rebuild();
 
       await corruptEntryRaw(blog.id, "/stale-page.txt", (entry) => {
@@ -425,17 +448,24 @@ describe("sync/fix regression (outcome-based)", function () {
   describe("tag-ghosts", function () {
     it("removes a tag member whose entry key is missing entirely (and list-ghosts's pruneMissing does not race it out from under it)", async function () {
       const blog = this.blog;
-      await blog.write({ path: "/tagged-ghost.txt", content: "Tags: sunshine\n\n# Tagged" });
+      await blog.write({
+        path: "/tagged-ghost.txt",
+        content: "Tags: sunshine\n\n# Tagged",
+      });
       await blog.rebuild();
 
-      expect(await tagMembers(blog.id, "sunshine")).toContain("/tagged-ghost.txt");
+      expect(await tagMembers(blog.id, "sunshine")).toContain(
+        "/tagged-ghost.txt"
+      );
 
       await client.del(Entry.key.entry(blog.id, "/tagged-ghost.txt"));
 
       const report = await fixAsync(blog);
 
       expect(report["tag-ghosts"]).toEqual([["MISSING", "/tagged-ghost.txt"]]);
-      expect(await tagMembers(blog.id, "sunshine")).not.toContain("/tagged-ghost.txt");
+      expect(await tagMembers(blog.id, "sunshine")).not.toContain(
+        "/tagged-ghost.txt"
+      );
 
       const secondReport = await fixAsync(blog);
       expect(secondReport).toEqual({});
@@ -443,7 +473,10 @@ describe("sync/fix regression (outcome-based)", function () {
 
     it("re-keys a tag member stored under a stale id", async function () {
       const blog = this.blog;
-      await blog.write({ path: "/chair.txt", content: "Tags: chairs\n\n# Chair" });
+      await blog.write({
+        path: "/chair.txt",
+        content: "Tags: chairs\n\n# Chair",
+      });
       await blog.rebuild();
 
       await corruptEntryRaw(blog.id, "/chair.txt", (entry) => {
@@ -452,7 +485,9 @@ describe("sync/fix regression (outcome-based)", function () {
 
       const report = await fixAsync(blog);
 
-      expect(report["tag-ghosts"]).toEqual([["MISMATCH", "/chair.txt", "/chair-real.txt"]]);
+      expect(report["tag-ghosts"]).toEqual([
+        ["MISMATCH", "/chair.txt", "/chair-real.txt"],
+      ]);
 
       const members = await tagMembers(blog.id, "chairs");
       expect(members).toContain("/chair-real.txt");
@@ -482,9 +517,13 @@ describe("sync/fix regression (outcome-based)", function () {
       });
       await blog.rebuild();
 
-      const corrupted = await corruptEntryRaw(blog.id, "/multi-tag.txt", (entry) => {
-        entry.id = "/multi-tag-real.txt";
-      });
+      const corrupted = await corruptEntryRaw(
+        blog.id,
+        "/multi-tag.txt",
+        (entry) => {
+          entry.id = "/multi-tag-real.txt";
+        }
+      );
 
       await fixAsync(blog);
 
@@ -509,10 +548,15 @@ describe("sync/fix regression (outcome-based)", function () {
   describe("menu-ghosts", function () {
     it("removes a menu item whose entry was marked deleted outside the normal drop path", async function () {
       const blog = this.blog;
-      await blog.write({ path: "/menu-page.txt", content: "Page: yes\n\n# Menu page" });
+      await blog.write({
+        path: "/menu-page.txt",
+        content: "Page: yes\n\n# Menu page",
+      });
       await blog.rebuild();
 
-      expect((await getBlog(blog.id)).menu.map((i) => i.id)).toContain("/menu-page.txt");
+      expect((await getBlog(blog.id)).menu.map((i) => i.id)).toContain(
+        "/menu-page.txt"
+      );
 
       // Raw corruption again: mark deleted without going through Entry.set,
       // which would otherwise clean the menu up itself via _assign.js's
@@ -534,12 +578,17 @@ describe("sync/fix regression (outcome-based)", function () {
 
     it("removes a duplicate menu item pointing at the same entry", async function () {
       const blog = this.blog;
-      await blog.write({ path: "/dup.txt", content: "Page: yes\n\n# Duplicated" });
+      await blog.write({
+        path: "/dup.txt",
+        content: "Page: yes\n\n# Duplicated",
+      });
       await blog.rebuild();
 
       const blogBefore = await getBlog(blog.id);
       const original = blogBefore.menu.find((i) => i.id === "/dup.txt");
-      const duplicate = Object.assign({}, original, { label: "Duplicate link" });
+      const duplicate = Object.assign({}, original, {
+        label: "Duplicate link",
+      });
 
       await promisify(Blog.set)(blog.id, {
         menu: blogBefore.menu.concat([duplicate]),
@@ -548,7 +597,10 @@ describe("sync/fix regression (outcome-based)", function () {
       const report = await fixAsync(blog);
 
       expect(report["menu-ghosts"]).toEqual([
-        ["Delete duplicate", jasmine.objectContaining({ label: "Duplicate link" })],
+        [
+          "Delete duplicate",
+          jasmine.objectContaining({ label: "Duplicate link" }),
+        ],
       ]);
 
       const menu = (await getBlog(blog.id)).menu;
@@ -558,7 +610,10 @@ describe("sync/fix regression (outcome-based)", function () {
 
     it("updates a stale label, url and metadata to match the current entry", async function () {
       const blog = this.blog;
-      await blog.write({ path: "/renamed-page.txt", content: "Page: yes\n\n# New Title" });
+      await blog.write({
+        path: "/renamed-page.txt",
+        content: "Page: yes\n\n# New Title",
+      });
       await blog.rebuild();
 
       const blogBefore = await getBlog(blog.id);
@@ -577,7 +632,10 @@ describe("sync/fix regression (outcome-based)", function () {
 
       expect(report["menu-ghosts"]).toEqual(
         jasmine.arrayContaining([
-          ["Changed label of", jasmine.objectContaining({ label: "New Title" })],
+          [
+            "Changed label of",
+            jasmine.objectContaining({ label: "New Title" }),
+          ],
           ["Changed URL of", jasmine.any(Object)],
           ["Changed metadata of", jasmine.any(Object)],
         ])
@@ -643,7 +701,12 @@ describe("sync/fix regression (outcome-based)", function () {
       const blogBefore = await getBlog(blog.id);
       await promisify(Blog.set)(blog.id, {
         menu: blogBefore.menu.concat([
-          { id: built.id, url: built.url, label: built.title, metadata: built.metadata },
+          {
+            id: built.id,
+            url: built.url,
+            label: built.title,
+            metadata: built.metadata,
+          },
         ]),
       });
 
@@ -659,8 +722,12 @@ describe("sync/fix regression (outcome-based)", function () {
 
       const entry = await getEntry(blog.id, "/combo-ghost.txt");
       expect(entry.deleted).toBe(true);
-      expect(await tagMembers(blog.id, "combo")).not.toContain("/combo-ghost.txt");
-      expect(await listIds(blog.id, "entries")).not.toContain("/combo-ghost.txt");
+      expect(await tagMembers(blog.id, "combo")).not.toContain(
+        "/combo-ghost.txt"
+      );
+      expect(await listIds(blog.id, "entries")).not.toContain(
+        "/combo-ghost.txt"
+      );
       expect((await getBlog(blog.id)).menu.map((i) => i.id)).not.toContain(
         "/combo-ghost.txt"
       );
@@ -783,12 +850,8 @@ describe("sync/fix regression (outcome-based)", function () {
       const listMismatches = report["list-ghosts"].filter(
         (row) => row[0] === "entries" || row[0] === "all"
       );
-      expect(
-        listMismatches.some((row) => row[2] === "/bulk-3.txt")
-      ).toBe(true);
-      expect(
-        listMismatches.some((row) => row[2] === "/bulk-4.txt")
-      ).toBe(true);
+      expect(listMismatches.some((row) => row[2] === "/bulk-3.txt")).toBe(true);
+      expect(listMismatches.some((row) => row[2] === "/bulk-4.txt")).toBe(true);
 
       expect(await getEntry(blog.id, "/bulk-1.txt")).toEqual(
         jasmine.objectContaining({ deleted: true })
@@ -800,7 +863,9 @@ describe("sync/fix regression (outcome-based)", function () {
       expect(await getEntry(blog.id, "/bulk-4-real.txt")).toBeTruthy();
 
       // Every untouched entry, and its list and tag memberships, is unaffected.
-      expect(await snapshotEntries(blog.id, untouchedIDs)).toEqual(untouchedBefore);
+      expect(await snapshotEntries(blog.id, untouchedIDs)).toEqual(
+        untouchedBefore
+      );
 
       const secondReport = await fixAsync(blog);
       expect(secondReport).toEqual({});

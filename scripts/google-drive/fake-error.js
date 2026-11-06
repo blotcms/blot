@@ -18,10 +18,7 @@
 // the same file via docker-compose.yml), so webhooks and polling hit it too.
 
 const fs = require("fs");
-const {
-  MODES,
-  flagPath,
-} = require("../development/fake-google-drive-errors");
+const { MODES, flagPath } = require("../development/fake-google-drive-errors");
 
 const [command, ...args] = process.argv.slice(2);
 const positional = args.filter((arg) => !arg.startsWith("--"));
@@ -110,14 +107,18 @@ async function main() {
   } else if (command === "on") {
     requireMode(positional[0]);
     fs.writeFileSync(flagPath, positional[0]);
-    console.log("Fake Google Drive folder-lookup error: ON (" + positional[0] + ")");
+    console.log(
+      "Fake Google Drive folder-lookup error: ON (" + positional[0] + ")"
+    );
   } else if (command === "off") {
     fs.rmSync(flagPath, { force: true });
     console.log("Fake Google Drive folder-lookup error: OFF");
   } else if (command === "status") {
     console.log(
       "Fake Google Drive folder-lookup error:",
-      fs.existsSync(flagPath) ? "ON (" + fs.readFileSync(flagPath, "utf8") + ")" : "OFF"
+      fs.existsSync(flagPath)
+        ? "ON (" + fs.readFileSync(flagPath, "utf8") + ")"
+        : "OFF"
     );
   } else {
     usage();

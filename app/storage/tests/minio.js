@@ -7,7 +7,10 @@
 const crypto = require("crypto");
 const config = require("config");
 const s3 = require("storage/s3");
-const { CreateBucketCommand, DeleteBucketCommand } = require("@aws-sdk/client-s3");
+const {
+  CreateBucketCommand,
+  DeleteBucketCommand,
+} = require("@aws-sdk/client-s3");
 
 // Call inside a describe(). Gives the specs in it a bucket of their own,
 // configured as config.storage for their duration, and undoes that after.

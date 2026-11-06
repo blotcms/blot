@@ -20,10 +20,14 @@ describe("dropbox resetFromBlot", function () {
   beforeEach(async function () {
     saved = [];
     uploadCalls = [];
-    [resetPath, createClientPath, databasePath, uploadPath, persistErrorPath].forEach(
-      (path) => (originals[path] = require.cache[path])
-    );
-      });
+    [
+      resetPath,
+      createClientPath,
+      databasePath,
+      uploadPath,
+      persistErrorPath,
+    ].forEach((path) => (originals[path] = require.cache[path]));
+  });
 
   afterEach(async function () {
     delete require.cache[resetPath];
@@ -127,9 +131,7 @@ describe("dropbox resetFromBlot", function () {
     expect(error).toBeDefined();
     expect(error.code).toEqual("DROPBOX_INSUFFICIENT_SPACE");
     expect(uploadCalls.length).toEqual(0);
-    expect(
-      saved.some((values) => values.error_code === 507)
-    ).toEqual(true);
+    expect(saved.some((values) => values.error_code === 507)).toEqual(true);
     expect(saved.some((values) => "cursor" in values)).toEqual(false);
   });
 
@@ -157,9 +159,7 @@ describe("dropbox resetFromBlot", function () {
     expect(error).toBeDefined();
     expect(error.code).toEqual("DROPBOX_INSUFFICIENT_SPACE");
     expect(uploadCalls.length).toEqual(1);
-    expect(
-      saved.some((values) => values.error_code === 507)
-    ).toEqual(true);
+    expect(saved.some((values) => values.error_code === 507)).toEqual(true);
     // The cursor/error_code:0 "success" write must never happen.
     expect(saved.some((values) => "cursor" in values)).toEqual(false);
   });
@@ -246,9 +246,9 @@ describe("dropbox resetFromBlot", function () {
     ).toEqual(2);
     expect(uploadCalls.some((d) => d.includes("(conflict)"))).toEqual(true);
     expect(updated).toContain("/");
-    expect(
-      saved.some((values) => values.cursor === "new-cursor")
-    ).toEqual(true);
+    expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(
+      true
+    );
   });
 
   it("leaves ignored paths such as case-distinct refs inside .git untouched when resolving case conflicts", async function () {
@@ -268,7 +268,9 @@ describe("dropbox resetFromBlot", function () {
     await resetFromBlot(blogID, () => {}, { aborted: false });
 
     expect(
-      (await storage.listNames(blogID, "/.git/refs/heads")).map((e) => e.name).sort()
+      (await storage.listNames(blogID, "/.git/refs/heads"))
+        .map((e) => e.name)
+        .sort()
     ).toEqual(["Feature", "feature"]);
     expect(uploadCalls.length).toEqual(1);
   });
@@ -288,15 +290,21 @@ describe("dropbox resetFromBlot", function () {
 
     await resetFromBlot(blogID, () => {}, { aborted: false });
 
-    const top = (await storage.listNames(blogID, "/")).map((e) => e.name).sort();
+    const top = (await storage.listNames(blogID, "/"))
+      .map((e) => e.name)
+      .sort();
     expect(top.length).toEqual(2);
     expect(top.some((name) => name.includes("(conflict)"))).toEqual(true);
     const contents = [];
     for (const name of top) {
       expect(
-        (await storage.listNames(blogID, "/" + name + "/.git")).map((e) => e.name)
+        (await storage.listNames(blogID, "/" + name + "/.git")).map(
+          (e) => e.name
+        )
       ).toEqual(["HEAD"]);
-      contents.push((await storage.read(blogID, "/" + name + "/.git/HEAD")).toString());
+      contents.push(
+        (await storage.read(blogID, "/" + name + "/.git/HEAD")).toString()
+      );
     }
     expect(contents.sort()).toEqual(["one", "two"]);
   });
@@ -333,7 +341,9 @@ describe("dropbox resetFromBlot", function () {
 
     expect(uploadCalls).toEqual(["/a.txt"]);
     expect(messages.some((m) => /Skipped 2 empty files/.test(m))).toEqual(true);
-    expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(true);
+    expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(
+      true
+    );
   });
 
   it("does not count bytes already sitting in the target Dropbox folder against the quota check", async function () {
@@ -368,12 +378,10 @@ describe("dropbox resetFromBlot", function () {
     await resetFromBlot(blogID, () => {}, { aborted: false });
 
     expect(uploadCalls.length).toEqual(1);
-    expect(
-      saved.some((values) => values.error_code === 507)
-    ).toEqual(false);
-    expect(
-      saved.some((values) => values.cursor === "new-cursor")
-    ).toEqual(true);
+    expect(saved.some((values) => values.error_code === 507)).toEqual(false);
+    expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(
+      true
+    );
   });
 
   it("falls back to the shared team pool when the per-user limit is alert_only (not a hard cap)", async function () {

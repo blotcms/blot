@@ -19,7 +19,7 @@ function render($, callback) {
     $,
     "a",
     function (el, next) {
-      var href, host, text, id;
+      var href, host, text;
 
       try {
         href = $(el).attr("href");
@@ -51,7 +51,7 @@ function render($, callback) {
         .then((res) => res.json())
         .then((data) => {
           if (!data || typeof data.html !== "string") return next();
-          
+
           var html = data.html;
 
           $(el).replaceWith(html);

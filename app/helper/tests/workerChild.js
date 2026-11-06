@@ -34,7 +34,10 @@ describe("workerChild", function () {
           script: "/app/index.js",
           socket: "/run/blot/a-worker.sock",
           fork: fakeFork,
-          env: { CONTAINER_NAME: "blot-container-a", BLOT_WORKER_SOCKET: "/run/blot/a-worker.sock" },
+          env: {
+            CONTAINER_NAME: "blot-container-a",
+            BLOT_WORKER_SOCKET: "/run/blot/a-worker.sock",
+          },
           minBackoffMs: 20,
           maxBackoffMs: 80,
           stableMs: 1000,
@@ -149,7 +152,9 @@ describe("workerChild", function () {
 
     forks[0].emit("exit", null, "SIGKILL");
     expect(onExit).toHaveBeenCalledTimes(1);
-    expect(onExit).toHaveBeenCalledWith("Exited pid=1000 code=null signal=SIGKILL");
+    expect(onExit).toHaveBeenCalledWith(
+      "Exited pid=1000 code=null signal=SIGKILL"
+    );
 
     await wait(40);
     await supervisor.stop();

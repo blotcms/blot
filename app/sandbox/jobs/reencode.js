@@ -47,9 +47,10 @@ const MAX_DIMENSION = 3000;
 
 function pixelLimit(info) {
   const progressive = MAX_PROGRESSIVE_PIXELS[info.format];
-  return info.isProgressive && progressive ? progressive(info) : MAX_PIXELS[info.format];
+  return info.isProgressive && progressive
+    ? progressive(info)
+    : MAX_PIXELS[info.format];
 }
-
 
 // Decodes the body, which must be an image in one of ENCODERS' formats, and
 // encodes it again: what comes out was written by libvips, not the server.
@@ -73,11 +74,15 @@ async function reencode(body) {
 
   // Applying the EXIF orientation keeps a photo the right way up once the
   // re-encode has dropped its EXIF. An animation has none, and keeps its size.
-  let image = sharp(body, { animated: pages > 1, limitInputPixels: limit }).keepIccProfile();
+  let image = sharp(body, {
+    animated: pages > 1,
+    limitInputPixels: limit,
+  }).keepIccProfile();
   if (pages === 1) {
-    image = image
-      .rotate()
-      .resize(MAX_DIMENSION, MAX_DIMENSION, { fit: "inside", withoutEnlargement: true });
+    image = image.rotate().resize(MAX_DIMENSION, MAX_DIMENSION, {
+      fit: "inside",
+      withoutEnlargement: true,
+    });
   }
 
   let output;
@@ -86,7 +91,8 @@ async function reencode(body) {
   } catch (e) {
     throw new FetchError("image could not be decoded");
   }
-  if (output.data.length > MAX_OUTPUT_BYTES) throw new FetchError("image is too large");
+  if (output.data.length > MAX_OUTPUT_BYTES)
+    throw new FetchError("image is too large");
 
   return {
     data: output.data,

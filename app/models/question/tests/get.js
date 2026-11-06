@@ -18,7 +18,7 @@ describe("questions.get", function () {
     const { id } = await create({ title: "How?", body: "Yes" });
     const question = await get(id);
 
-    expect(question.time).toEqual('a few seconds ago');
+    expect(question.time).toEqual("a few seconds ago");
   });
 
   it("gets a question with replies", async function () {
@@ -54,7 +54,9 @@ describe("questions.get", function () {
     const question = await get(id);
 
     const expectedCreationTime = moment(oldTimestamp).fromNow();
-    const expectedLastReplyTime = moment(parseInt(reply.created_at, 10)).fromNow();
+    const expectedLastReplyTime = moment(
+      parseInt(reply.created_at, 10)
+    ).fromNow();
 
     expect(question.time).toEqual(expectedCreationTime);
     expect(question.created_time).toEqual(expectedCreationTime);

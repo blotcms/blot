@@ -135,15 +135,19 @@ describe("readOnly", function () {
       expect(logged).toContain("[READ ONLY] resuming: test");
     });
 
-    it("resolves once the freeze's TTL runs out", async function () {
-      spyOn(console, "log");
+    it(
+      "resolves once the freeze's TTL runs out",
+      async function () {
+        spyOn(console, "log");
 
-      await readOnly.enable({ reason: "short", ttl: 1 });
+        await readOnly.enable({ reason: "short", ttl: 1 });
 
-      await readOnly.whenWritable("test");
+        await readOnly.whenWritable("test");
 
-      expect(await readOnly.status()).toBe(null);
-    }, 20 * 1000);
+        expect(await readOnly.status()).toBe(null);
+      },
+      20 * 1000
+    );
   });
 
   describe("middleware", function () {
@@ -185,7 +189,14 @@ describe("readOnly", function () {
 
     describe("rejectWrites", function () {
       it("passes every request when writes are allowed", async function () {
-        for (const method of ["GET", "HEAD", "OPTIONS", "POST", "PUT", "DELETE"]) {
+        for (const method of [
+          "GET",
+          "HEAD",
+          "OPTIONS",
+          "POST",
+          "PUT",
+          "DELETE",
+        ]) {
           const res = await fetch(origin + "/page", { method });
 
           expect(res.status).toBe(200, method);

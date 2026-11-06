@@ -3,7 +3,6 @@ const client = require("models/client");
 const PREFIX = require("./prefix");
 
 function folder(folderId, blogID) {
-
   if (!(this instanceof folder)) {
     return new folder(folderId, blogID);
   }
@@ -30,15 +29,24 @@ function folder(folderId, blogID) {
   // Fetch a directory in one Redis request, rather than one request per file.
   this.getVerifiedContents = async (ids) => {
     if (!ids.length) return [];
-    return (await client.hmGet(this.contentKey, ids)).map(value => {
+    return (await client.hmGet(this.contentKey, ids)).map((value) => {
       try {
         const record = value && JSON.parse(value);
-        if (!record || ![record.path, record.checksum]
-          .every(field => typeof field === "string" && field.length)) return null;
-        const described = Number.isFinite(record.size) && Number.isFinite(record.modified);
-        const legacy = typeof record.fingerprint === "string" && record.fingerprint.length;
+        if (
+          !record ||
+          ![record.path, record.checksum].every(
+            (field) => typeof field === "string" && field.length
+          )
+        )
+          return null;
+        const described =
+          Number.isFinite(record.size) && Number.isFinite(record.modified);
+        const legacy =
+          typeof record.fingerprint === "string" && record.fingerprint.length;
         return described || legacy ? record : null;
-      } catch (_) { return null; }
+      } catch (_) {
+        return null;
+      }
     });
   };
 
@@ -50,13 +58,18 @@ function folder(folderId, blogID) {
     try {
       const record = value && JSON.parse(value);
       return record && typeof record.modifiedTime === "string" ? record : null;
-    } catch (_) { return null; }
+    } catch (_) {
+      return null;
+    }
   };
 
-  this.getApplied = async (id) => parseApplied(await client.hGet(this.appliedKey, id));
+  this.getApplied = async (id) =>
+    parseApplied(await client.hGet(this.appliedKey, id));
   this.getAllApplied = async () => {
     const all = (await client.hGetAll(this.appliedKey)) || {};
-    return new Map(Object.entries(all).map(([id, value]) => [id, parseApplied(value)]));
+    return new Map(
+      Object.entries(all).map(([id, value]) => [id, parseApplied(value)])
+    );
   };
   // { modifiedTime, size, modified, sha1 }: the state is that of the file
   // Blot wrote (util/localState.js), and may be missing if it couldn't be
@@ -79,7 +92,7 @@ function folder(folderId, blogID) {
       do {
         const page = await client.hScan(key, cursor, { COUNT: 256 });
         cursor = page.cursor;
-        const ids = page.entries.map(entry => entry.field);
+        const ids = page.entries.map((entry) => entry.field);
         if (!ids.length) continue;
         const paths = await client.hmGet(this.key, ids);
         const removed = ids.filter((id, i) => !paths[i]);
@@ -189,7 +202,10 @@ function folder(folderId, blogID) {
     let cursor = START_CURSOR;
 
     do {
-      const { cursor: nextCursor, entries } = await client.hScan(this.key, cursor);
+      const { cursor: nextCursor, entries } = await client.hScan(
+        this.key,
+        cursor
+      );
       cursor = nextCursor;
 
       for (const entry of entries) {
@@ -236,7 +252,10 @@ function folder(folderId, blogID) {
     let cursor = START_CURSOR;
 
     do {
-      const { cursor: nextCursor, entries } = await client.hScan(this.key, cursor);
+      const { cursor: nextCursor, entries } = await client.hScan(
+        this.key,
+        cursor
+      );
       cursor = nextCursor;
 
       for (const entry of entries) {
@@ -292,7 +311,8 @@ function folder(folderId, blogID) {
 
     do {
       // Scan the folder key
-      const { cursor: nextCursor, entries: scannedEntries } = await client.hScan(this.key, cursor);
+      const { cursor: nextCursor, entries: scannedEntries } =
+        await client.hScan(this.key, cursor);
       cursor = nextCursor;
 
       for (const entry of scannedEntries) {
@@ -324,7 +344,10 @@ function folder(folderId, blogID) {
     let results = [];
 
     do {
-      const { cursor: nextCursor, entries } = await client.hScan(this.key, cursor);
+      const { cursor: nextCursor, entries } = await client.hScan(
+        this.key,
+        cursor
+      );
       cursor = nextCursor;
 
       for (const entry of entries) {

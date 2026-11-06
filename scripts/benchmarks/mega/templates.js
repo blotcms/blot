@@ -13,11 +13,15 @@ function inline(seed, chars, line) {
 }
 
 function catalogViews(shape) {
-  const style = inline("style", shape.inlineStyleChars, (n, w) =>
-    `.c${n} { margin: ${n % 7}px; content: "${w}"; }`
+  const style = inline(
+    "style",
+    shape.inlineStyleChars,
+    (n, w) => `.c${n} { margin: ${n % 7}px; content: "${w}"; }`
   );
-  const script = inline("script", shape.inlineScriptChars, (n, w) =>
-    `window.s${n} = function () { return "${w}"; };`
+  const script = inline(
+    "script",
+    shape.inlineScriptChars,
+    (n, w) => `window.s${n} = function () { return "${w}"; };`
   );
 
   return {

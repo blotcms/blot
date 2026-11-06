@@ -1,6 +1,6 @@
 const makeSlug = require("helper/makeSlug");
 
-module.exports = $ => {
+module.exports = ($) => {
   $("h2:not(h1 + h2),h3").each((i, el) => {
     const text = $(el).text();
     const id = $(el).attr("id") || makeSlug(text);

@@ -42,12 +42,12 @@ describe("user getAllIds", function () {
   it("handles adding and removing users", async function () {
     var newUid = "user_getall_new";
     await client.sAdd(key.uids, newUid);
-    
+
     var ids = await getAll();
     expect(ids).toContain(newUid);
-    
+
     await client.sRem(key.uids, newUid);
-    
+
     ids = await getAll();
     expect(ids).not.toContain(newUid);
   });

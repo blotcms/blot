@@ -27,7 +27,9 @@ const initHomeFolderCarousel = (carousel) => {
   const pendingMoves = [];
   let timer = null;
   let paused = false;
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reducedMotion = window.matchMedia(
+    "(prefers-reduced-motion: reduce)"
+  ).matches;
 
   const setActiveCard = () => {
     Array.from(track.children).forEach((card, index) => {
@@ -39,17 +41,20 @@ const initHomeFolderCarousel = (carousel) => {
     const activeCard = track.children[position];
 
     const viewportStyles = window.getComputedStyle(viewport);
-    const trackOffset = track.offsetLeft + parseFloat(viewportStyles.paddingLeft || "0");
-    const activeCardCenter = trackOffset + activeCard.offsetLeft + activeCard.offsetWidth / 2;
+    const trackOffset =
+      track.offsetLeft + parseFloat(viewportStyles.paddingLeft || "0");
+    const activeCardCenter =
+      trackOffset + activeCard.offsetLeft + activeCard.offsetWidth / 2;
     const viewportCenter = viewport.clientWidth / 2;
 
     return `translate3d(${viewportCenter - activeCardCenter}px, 0, 0)`;
   };
 
   const setPosition = (animate, transform) => {
-    track.style.transition = animate && !reducedMotion
-      ? "transform 650ms cubic-bezier(0.22, 1, 0.36, 1)"
-      : "none";
+    track.style.transition =
+      animate && !reducedMotion
+        ? "transform 650ms cubic-bezier(0.22, 1, 0.36, 1)"
+        : "none";
     track.style.transform = transform || getPositionTransform();
   };
 
@@ -99,7 +104,8 @@ const initHomeFolderCarousel = (carousel) => {
   };
 
   const goTo = (nextPosition) => {
-    if (moving || nextPosition < 0 || nextPosition >= track.children.length) return;
+    if (moving || nextPosition < 0 || nextPosition >= track.children.length)
+      return;
 
     moving = true;
     const transform = getTransitionTarget(nextPosition);
@@ -198,4 +204,6 @@ const initHomeFolderCarousel = (carousel) => {
   carousel.classList.remove("is-initializing");
 };
 
-document.querySelectorAll("[data-home-folder-carousel]").forEach(initHomeFolderCarousel);
+document
+  .querySelectorAll("[data-home-folder-carousel]")
+  .forEach(initHomeFolderCarousel);

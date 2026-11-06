@@ -41,7 +41,7 @@ module.exports = function extend(blog) {
 
   blog.feedURL = "/feed.rss";
   blog.url = protocol + "://" + blog.handle + "." + config.host;
-  
+
   blog.previewURL = `https://preview-of-${blog.handle}.${config.host}`;
   blog.pretty.url = blog.handle + "." + config.host;
   blog.pretty.label = blog.title || blog.pretty.url;

@@ -9,7 +9,7 @@ export default async (...args) => {
     });
     throw new Error("Invalid number of arguments: expected 0");
   }
-  
+
   console.log(clfdate(), `Notifying server that the client has started`);
 
   try {

@@ -6,7 +6,7 @@ let converters = [
   require("./html"),
   require("./img"),
   require("./webloc"),
-  require("./gdoc")
+  require("./gdoc"),
 ];
 
 if (config.pandoc.bin) {

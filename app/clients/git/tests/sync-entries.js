@@ -31,7 +31,10 @@ describe("git client sync: entries", function () {
     expect(entry.deleted).toBe(false);
     expect(entry.html).toContain("The body of the added post");
 
-    var unicodeEntry = await helpers.entry(this.blog.id, unicodePath.normalize());
+    var unicodeEntry = await helpers.entry(
+      this.blog.id,
+      unicodePath.normalize()
+    );
 
     expect(unicodeEntry).toBeDefined();
     expect(unicodeEntry.deleted).toBe(false);
@@ -41,13 +44,19 @@ describe("git client sync: entries", function () {
   it("rebuilds the entry for an updated file", async function () {
     var path = "/entries/updated.txt";
 
-    await this.local.writeAndPush(path, "# Updated\n\nThe first version of the body");
+    await this.local.writeAndPush(
+      path,
+      "# Updated\n\nThe first version of the body"
+    );
 
     var first = await helpers.entry(this.blog.id, path);
 
     expect(first.html).toContain("The first version of the body");
 
-    await this.local.writeAndPush(path, "# Updated\n\nThe second version of the body");
+    await this.local.writeAndPush(
+      path,
+      "# Updated\n\nThe second version of the body"
+    );
 
     var second = await helpers.entry(this.blog.id, path);
 
@@ -111,13 +120,18 @@ describe("git client sync: entries", function () {
 
     expect(nfc).not.toBe(nfd);
 
-    await this.local.writeAndPush(nfd, "# Café\n\nThe first version of the body");
+    await this.local.writeAndPush(
+      nfd,
+      "# Café\n\nThe first version of the body"
+    );
 
     var names = await folder.names(this.blog.id, "/entries");
 
     expect(names).toContain("nfd-caf\u00e9.txt");
     expect(names).not.toContain("nfd-cafe\u0301.txt");
-    expect((await helpers.blogFile(this, nfc)).toString()).toContain("The first version of the body");
+    expect((await helpers.blogFile(this, nfc)).toString()).toContain(
+      "The first version of the body"
+    );
 
     var first = await helpers.entry(this.blog.id, nfc);
 
@@ -126,10 +140,17 @@ describe("git client sync: entries", function () {
     expect(first.deleted).toBe(false);
     expect(first.html).toContain("The first version of the body");
 
-    await this.local.writeAndPush(nfd, "# Café\n\nThe second version of the body");
+    await this.local.writeAndPush(
+      nfd,
+      "# Café\n\nThe second version of the body"
+    );
 
-    expect((await helpers.blogFile(this, nfc)).toString()).toContain("The second version of the body");
-    expect((await helpers.entry(this.blog.id, nfc)).html).toContain("The second version of the body");
+    expect((await helpers.blogFile(this, nfc)).toString()).toContain(
+      "The second version of the body"
+    );
+    expect((await helpers.entry(this.blog.id, nfc)).html).toContain(
+      "The second version of the body"
+    );
 
     await this.local.remove(nfd);
     await this.local.commit("Delete the post named in NFD");
@@ -137,7 +158,9 @@ describe("git client sync: entries", function () {
 
     expect(await helpers.blogHas(this, nfc)).toBe(false);
     // /entries goes too when this was the only file left in it
-    expect(await folder.has(this.blog.id, "/entries/nfd-caf\u00e9.txt")).toBe(false);
+    expect(await folder.has(this.blog.id, "/entries/nfd-caf\u00e9.txt")).toBe(
+      false
+    );
     expect((await helpers.entry(this.blog.id, nfc)).deleted).toBe(true);
   });
 });

@@ -40,11 +40,15 @@ describe("git client: the last applied commit", function () {
     // and before the entry was saved
     await setApplied(this.blog.id, before);
     await drop(this.blog.id, "/interrupted.txt");
-    expect((await helpers.entry(this.blog.id, "/interrupted.txt")).deleted).toBe(true);
+    expect(
+      (await helpers.entry(this.blog.id, "/interrupted.txt")).deleted
+    ).toBe(true);
 
     await sync(this.blog.id, this.blog.handle);
 
-    expect((await helpers.entry(this.blog.id, "/interrupted.txt")).deleted).toBe(false);
+    expect(
+      (await helpers.entry(this.blog.id, "/interrupted.txt")).deleted
+    ).toBe(false);
     expect(await getApplied(this.blog.id)).toBe(await this.local.remoteHead());
   });
 
@@ -54,7 +58,9 @@ describe("git client: the last applied commit", function () {
 
     await this.local.writeAndPush("/after.txt", "After");
 
-    expect((await helpers.entry(this.blog.id, "/after.txt")).deleted).toBe(false);
+    expect((await helpers.entry(this.blog.id, "/after.txt")).deleted).toBe(
+      false
+    );
     expect(await getApplied(this.blog.id)).toBe(await this.local.remoteHead());
   });
 
@@ -63,7 +69,9 @@ describe("git client: the last applied commit", function () {
 
     await this.local.writeAndPush("/after.txt", "After");
 
-    expect((await helpers.entry(this.blog.id, "/after.txt")).deleted).toBe(false);
+    expect((await helpers.entry(this.blog.id, "/after.txt")).deleted).toBe(
+      false
+    );
     expect(await getApplied(this.blog.id)).toBe(await this.local.remoteHead());
   });
 

@@ -34,15 +34,15 @@ function measure(name, operation, iterations = 10) {
 
 const legacy = measure("cloneDeep + freeze + stringify", () => {
   const payload = deepFreeze(
-    cloneDeep(fixture, { preserveEntryInstances: true }),
+    cloneDeep(fixture, { preserveEntryInstances: true })
   );
   return { payload, size: JSON.stringify(payload).length };
 });
 const prepared = measure("single-walk prepareCacheValue", () =>
-  prepareCacheValue(fixture, { preserveEntryInstances: true }),
+  prepareCacheValue(fixture, { preserveEntryInstances: true })
 );
 const hit = measure("cache-hit cloneDeep", () =>
-  cloneDeep(prepared.result.payload, { preserveEntryInstances: true }),
+  cloneDeep(prepared.result.payload, { preserveEntryInstances: true })
 );
 const native = measure("structuredClone", () => structuredClone(fixture));
 
@@ -50,7 +50,7 @@ console.table(
   [legacy, prepared, hit, native].map(({ name, milliseconds }) => ({
     operation: name,
     milliseconds,
-  })),
+  }))
 );
 console.log({
   preparedPreservesPrototype:

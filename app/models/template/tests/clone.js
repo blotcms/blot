@@ -10,10 +10,15 @@ describe("template", function () {
   it("keeps the favicon local when cloning within the same blog", async function () {
     const favicon = {
       prefix: "favicon-11111111-1111-1111-1111-111111111111",
-      ico: "https://cdn.example/" + this.blog.id + "/_template_assets/favicon.ico",
+      ico:
+        "https://cdn.example/" + this.blog.id + "/_template_assets/favicon.ico",
     };
-    const source = await create(this.blog.id, "faviconsource", { locals: { favicon } });
-    const copy = await create(this.blog.id, "faviconcopy", { cloneFrom: source.id });
+    const source = await create(this.blog.id, "faviconsource", {
+      locals: { favicon },
+    });
+    const copy = await create(this.blog.id, "faviconcopy", {
+      cloneFrom: source.id,
+    });
     const meta = await getMetadataAsync(copy.id);
     expect(meta.locals.favicon).toEqual(favicon);
   });
@@ -24,7 +29,7 @@ describe("template", function () {
     const sourceTemplate = await create(this.blog.id, sourceTemplateName, {});
 
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: sourceTemplate.id});
+    await this.blog.update({ template: sourceTemplate.id });
 
     // Add a view to be retrieved
     const viewName = "style.css";
@@ -60,7 +65,7 @@ describe("template", function () {
     expect(clonedTemplate.id).toContain(clonedTemplateName);
 
     // Install the cloned template so the CDN manifest is generated
-    await this.blog.update({template: clonedTemplate.id});
+    await this.blog.update({ template: clonedTemplate.id });
 
     // Get cloned template metadata with CDN manifest
     const clonedMetadata = await getMetadataAsync(clonedTemplate.id);
@@ -95,7 +100,7 @@ describe("template", function () {
     });
 
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: sourceTemplate.id});
+    await this.blog.update({ template: sourceTemplate.id });
 
     const sourceMetadataBefore = await getMetadataAsync(sourceTemplate.id);
     const sourceHashBefore = sourceMetadataBefore.cdn[viewName];
@@ -107,12 +112,11 @@ describe("template", function () {
     });
 
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: clonedTemplate.id});
+    await this.blog.update({ template: clonedTemplate.id });
 
     // Get cloned template hash
     const clonedMetadata = await getMetadataAsync(clonedTemplate.id);
     const clonedHash = clonedMetadata.cdn[viewName];
-    
 
     // Modify source template content
     const updatedContent = "body { color: blue; }";
@@ -121,8 +125,8 @@ describe("template", function () {
       content: updatedContent,
     });
 
-        // Install the template so the CDN manifest is generated
-    await this.blog.update({template: sourceTemplate.id});
+    // Install the template so the CDN manifest is generated
+    await this.blog.update({ template: sourceTemplate.id });
     const sourceMetadataAfter = await getMetadataAsync(sourceTemplate.id);
     const sourceHashAfter = sourceMetadataAfter.cdn[viewName];
 
@@ -130,7 +134,7 @@ describe("template", function () {
     expect(sourceHashAfter).not.toBe(sourceHashBefore);
 
     // Verify cloned template hash remains unchanged (independent)
-    await this.blog.update({template: clonedTemplate.id});
+    await this.blog.update({ template: clonedTemplate.id });
     const clonedMetadataAfter = await getMetadataAsync(clonedTemplate.id);
     const clonedHashAfter = clonedMetadataAfter.cdn[viewName];
     expect(clonedHashAfter).toBe(clonedHash);
@@ -140,7 +144,7 @@ describe("template", function () {
     const sourceTemplate = await create(this.blog.id, "templatename", {});
 
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: sourceTemplate.id});
+    await this.blog.update({ template: sourceTemplate.id });
 
     // Add multiple views to be retrieved
     await setView(sourceTemplate.id, {
@@ -174,7 +178,7 @@ describe("template", function () {
     });
 
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: clonedTemplate.id});
+    await this.blog.update({ template: clonedTemplate.id });
 
     // Get cloned template hashes
     const clonedMetadata = await getMetadataAsync(clonedTemplate.id);
@@ -200,7 +204,7 @@ describe("template", function () {
     const sourceTemplate = await create(this.blog.id, "templatename", {});
 
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: sourceTemplate.id});
+    await this.blog.update({ template: sourceTemplate.id });
 
     const viewName = "style.css";
     const viewContent = "body{color:red}";
@@ -220,7 +224,7 @@ describe("template", function () {
     });
 
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: clonedTemplate.id});
+    await this.blog.update({ template: clonedTemplate.id });
 
     const clonedMetadata = await getMetadataAsync(clonedTemplate.id);
     const clonedKey = key.renderedOutput(clonedMetadata.cdn[viewName]);
@@ -236,10 +240,8 @@ describe("template", function () {
     const sourceTemplate = await create(this.blog.id, "templatename", {
       locals: { color: "red", size: "large" },
     });
-            // Install the template so the CDN manifest is generated
-    await this.blog.update({template: sourceTemplate.id});
-
-
+    // Install the template so the CDN manifest is generated
+    await this.blog.update({ template: sourceTemplate.id });
 
     await setView(sourceTemplate.id, {
       name: "style.css",
@@ -257,9 +259,8 @@ describe("template", function () {
       cloneFrom: sourceTemplate.id,
     });
 
-                // Install the template so the CDN manifest is generated
-    await this.blog.update({template: clonedTemplate.id});
-
+    // Install the template so the CDN manifest is generated
+    await this.blog.update({ template: clonedTemplate.id });
 
     const clonedMetadata = await getMetadataAsync(clonedTemplate.id);
 
@@ -300,14 +301,13 @@ describe("template", function () {
 
     // Verify manifest is empty (not copied from source)
     expect(clonedMetadata.cdn).toEqual({});
-  })
+  });
 
   it("allows independent modification of cloned template CDN assets", async function () {
     const sourceTemplate = await create(this.blog.id, "templatename", {});
 
-                    // Install the template so the CDN manifest is generated
-    await this.blog.update({template: sourceTemplate.id});
-
+    // Install the template so the CDN manifest is generated
+    await this.blog.update({ template: sourceTemplate.id });
 
     const viewName = "style.css";
     await setView(sourceTemplate.id, {
@@ -327,9 +327,8 @@ describe("template", function () {
       cloneFrom: sourceTemplate.id,
     });
 
-                        // Install the template so the CDN manifest is generated
-    await this.blog.update({template: clonedTemplate.id});
-
+    // Install the template so the CDN manifest is generated
+    await this.blog.update({ template: clonedTemplate.id });
 
     const clonedMetadataBefore = await getMetadataAsync(clonedTemplate.id);
     const clonedHashBefore = clonedMetadataBefore.cdn[viewName];
@@ -346,9 +345,8 @@ describe("template", function () {
     // Verify cloned template's hash changed
     expect(clonedHashAfter).not.toBe(clonedHashBefore);
 
-
-                        // Install the template so the CDN manifest is generated
-    await this.blog.update({template: sourceTemplate.id});
+    // Install the template so the CDN manifest is generated
+    await this.blog.update({ template: sourceTemplate.id });
 
     // Verify source template's hash remains unchanged
     const sourceMetadataAfter = await getMetadataAsync(sourceTemplate.id);
@@ -359,7 +357,7 @@ describe("template", function () {
   it("generates correct CDN URLs for cloned template using new hashes", async function () {
     const sourceTemplate = await create(this.blog.id, "templatename", {});
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: sourceTemplate.id});
+    await this.blog.update({ template: sourceTemplate.id });
 
     const viewName = "style.css";
     await setView(sourceTemplate.id, {
@@ -371,7 +369,7 @@ describe("template", function () {
       content: "{{#cdn}}/style.css{{/cdn}}",
     });
 
-        // Generate URLs for both
+    // Generate URLs for both
     const generateCdnUrl = require("../util/generateCdnUrl");
 
     const sourceMetadata = await getMetadataAsync(sourceTemplate.id);
@@ -384,7 +382,7 @@ describe("template", function () {
     });
 
     // Install the template so the CDN manifest is generated
-    await this.blog.update({template: clonedTemplate.id});
+    await this.blog.update({ template: clonedTemplate.id });
 
     const clonedMetadata = await getMetadataAsync(clonedTemplate.id);
     const clonedHash = clonedMetadata.cdn[viewName];
@@ -418,7 +416,9 @@ describe("template clone across blogs", function () {
       prefix: "favicon-22222222-2222-2222-2222-222222222222",
       ico: "https://cdn.example/" + source.id + "/_template_assets/favicon.ico",
     };
-    const sourceTemplate = await create(source.id, "shared", { locals: { favicon, color: "red" } });
+    const sourceTemplate = await create(source.id, "shared", {
+      locals: { favicon, color: "red" },
+    });
 
     const toID = recipient.id + ":shared";
     await clone(sourceTemplate.id, toID, {
@@ -437,9 +437,17 @@ describe("template clone across blogs", function () {
   it("clears uploaded image locals while preserving their declarations", async function () {
     const [source, recipient] = this.blogs;
     const image = {
-      url: "https://cdn.example/" + source.id + "/_template_assets/image-id-original.webp",
+      url:
+        "https://cdn.example/" +
+        source.id +
+        "/_template_assets/image-id-original.webp",
       thumbnails: {
-        small: { url: "https://cdn.example/" + source.id + "/_template_assets/image-id-small.webp" },
+        small: {
+          url:
+            "https://cdn.example/" +
+            source.id +
+            "/_template_assets/image-id-small.webp",
+        },
       },
     };
     const sourceTemplate = await create(source.id, "images", {

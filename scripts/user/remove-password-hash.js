@@ -1,5 +1,4 @@
 var User = require("models/user");
-var get = require("../get/blog");
 var identifier = process.argv[2];
 
 if (!identifier) throw "Please pass the user's email as an argument.";

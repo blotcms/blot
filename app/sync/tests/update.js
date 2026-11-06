@@ -156,7 +156,8 @@ describe("update", function () {
       spyOn(Entry, "set").and.callFake(function (blogID, entryPath, entry, cb) {
         // Change the source (and its size) after the first build read it. The
         // write is finished before the entry is saved.
-        if (++calls === 1) changed = folder.write(blogID, path, "second version");
+        if (++calls === 1)
+          changed = folder.write(blogID, path, "second version");
         changed.then(function () {
           original.call(Entry, blogID, entryPath, entry, cb);
         }, cb);

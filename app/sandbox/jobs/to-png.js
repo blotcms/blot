@@ -6,7 +6,9 @@ const sharp = require("sharp");
 sharp.cache(false);
 
 async function run(args, input) {
-  const { data, info } = await sharp(input).png().toBuffer({ resolveWithObject: true });
+  const { data, info } = await sharp(input)
+    .png()
+    .toBuffer({ resolveWithObject: true });
   return { meta: { width: info.width, height: info.height }, outputs: [data] };
 }
 

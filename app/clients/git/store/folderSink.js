@@ -39,7 +39,8 @@ function createFolderSink({ root }) {
 
   function partsOf(file) {
     const parts = safeParts(file);
-    if (!parts) throw new Error("Not a safe path to write: " + JSON.stringify(file));
+    if (!parts)
+      throw new Error("Not a safe path to write: " + JSON.stringify(file));
     return parts;
   }
 
@@ -69,10 +70,16 @@ function createFolderSink({ root }) {
     const parts = partsOf(file);
     const directory = await ensureDirectory(parts.slice(0, -1));
     const target = path.join(directory, parts[parts.length - 1]);
-    const temporary = path.join(directory, ".write-" + crypto.randomBytes(8).toString("hex"));
+    const temporary = path.join(
+      directory,
+      ".write-" + crypto.randomBytes(8).toString("hex")
+    );
 
     try {
-      await pipeline(stream, fs.createWriteStream(temporary, { flags: "wx", mode }));
+      await pipeline(
+        stream,
+        fs.createWriteStream(temporary, { flags: "wx", mode })
+      );
 
       // A directory has to go; a file or a link is replaced by the rename
       const stat = await lstat(target);
@@ -112,7 +119,12 @@ function createFolderSink({ root }) {
         await fs.promises.rmdir(path.join(root, ...parts.slice(0, i)));
       } catch (err) {
         // Not empty, so it and the directories above it stay
-        if (err.code === "ENOTEMPTY" || err.code === "EEXIST" || err.code === "ENOENT") return;
+        if (
+          err.code === "ENOTEMPTY" ||
+          err.code === "EEXIST" ||
+          err.code === "ENOENT"
+        )
+          return;
         throw err;
       }
     }

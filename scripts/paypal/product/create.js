@@ -1,8 +1,7 @@
 var request = require("request");
-var config = require("config");
 
 function main(callback) {
-  require("../generate-access-token")(function(err, token) {
+  require("../generate-access-token")(function (err, token) {
     request.post(
       {
         uri: "https://api.sandbox.paypal.com/v1/catalogs/products",
@@ -12,7 +11,7 @@ function main(callback) {
           Authorization: "Bearer " + token,
 
           // Optional and if passed, helps identify idempotent requests
-          "PayPal-Request-Id": "BLOT-PRODUCT-" + Date.now()
+          "PayPal-Request-Id": "BLOT-PRODUCT-" + Date.now(),
         },
         body: JSON.stringify({
           name: "Blot",
@@ -20,10 +19,10 @@ function main(callback) {
           type: "SERVICE",
           category: "SOFTWARE",
           image_url: "https://example.com/streaming.jpg",
-          home_url: "https://blot.im"
-        })
+          home_url: "https://blot.im",
+        }),
       },
-      function(err, res, data) {
+      function (err, res, data) {
         if (err) return callback(err);
         console.log(data);
       }
@@ -34,7 +33,7 @@ function main(callback) {
 module.exports = main;
 
 if (require.main === module)
-  main(function(err, token) {
+  main(function (err, token) {
     if (err) throw err;
     console.log(token);
   });

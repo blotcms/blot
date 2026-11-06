@@ -43,7 +43,9 @@ describe("transformer/download/tidy", function () {
     });
 
     it("tolerates a missing or junk Age", function () {
-      expect(tidy.expire("max-age=3600", undefined)).toEqual(jasmine.any(Number));
+      expect(tidy.expire("max-age=3600", undefined)).toEqual(
+        jasmine.any(Number)
+      );
       expect(tidy.expire("max-age=3600", "not-a-number")).toEqual(
         jasmine.any(Number)
       );

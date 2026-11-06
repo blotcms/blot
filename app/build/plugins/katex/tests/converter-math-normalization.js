@@ -5,9 +5,7 @@ const orgConvert = require("../../../converters/org/convert");
 const rtfConvert = require("../../../converters/rtf/convert");
 const htmlConverter = require("../../../converters/html");
 const gdocConverter = require("../../../converters/gdoc");
-const markdownWithoutPandoc = require(
-  "../../../converters/markdown-without-pandoc"
-);
+const markdownWithoutPandoc = require("../../../converters/markdown-without-pandoc");
 const cheerio = require("cheerio");
 const { render } = require("../index");
 

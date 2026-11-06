@@ -24,6 +24,4 @@ describe("template engine", function () {
       "<p><a href='/first'>first</a></p>"
     );
   });
-
-
 });

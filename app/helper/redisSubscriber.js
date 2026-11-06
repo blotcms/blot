@@ -128,7 +128,8 @@ module.exports = function redisSubscriber({
   logger = console,
 }) {
   const state = getShared();
-  const messageHandler = typeof onMessage === "function" ? onMessage : function () {};
+  const messageHandler =
+    typeof onMessage === "function" ? onMessage : function () {};
   let cleanedUp = false;
   let cleanupPromise;
 

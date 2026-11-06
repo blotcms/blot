@@ -1,7 +1,7 @@
 const Express = require("express");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const Email = require("helper/email");
-const cookieParser = require('cookie-parser');
+const cookieParser = require("cookie-parser");
 
 const lookup = (tag) =>
   map[tag] || (tag[0].toUpperCase() + tag.slice(1)).replace(/-/g, " ");
@@ -192,33 +192,31 @@ Questions.get(
   }
 );
 
-Questions.route(["/tags", "/tags/page-:page"]).get(async function (
-  req,
-  res,
-  next
-) {
-  try {
-    const page = req.params.page ? parseInt(req.params.page) : 1;
+Questions.route(["/tags", "/tags/page-:page"]).get(
+  async function (req, res, next) {
+    try {
+      const page = req.params.page ? parseInt(req.params.page) : 1;
 
-    if (page && !Number.isInteger(page)) {
-      return next();
+      if (page && !Number.isInteger(page)) {
+        return next();
+      }
+
+      const result = await tags({ page });
+
+      res.locals.title = page > 1 ? `Page ${page} - Tags` : "Tags";
+      res.locals.tags = result.tags;
+      res.locals.paginator = Paginator(
+        page,
+        result.stats.page_size,
+        result.stats.total,
+        "/questions/tags"
+      );
+      res.render("questions/tags");
+    } catch (err) {
+      next(err);
     }
-
-    const result = await tags({ page });
-
-    res.locals.title = page > 1 ? `Page ${page} - Tags` : "Tags";
-    res.locals.tags = result.tags;
-    res.locals.paginator = Paginator(
-      page,
-      result.stats.page_size,
-      result.stats.total,
-      "/questions/tags"
-    );
-    res.render("questions/tags");
-  } catch (err) {
-    next(err);
   }
-});
+);
 
 // Handle topic viewing and creation
 Questions.route("/ask")
@@ -261,7 +259,8 @@ Questions.route("/ask")
           res.send("OK");
         } else {
           const { id } = await create({ author, title, body, tags });
-          const questionURL = config.protocol + config.host + "/questions/" + id;
+          const questionURL =
+            config.protocol + config.host + "/questions/" + id;
           Email.QUESTION_PUBLISHED(author, { title, body, questionURL });
           flush();
           res.redirect("/questions/" + id);
@@ -284,8 +283,13 @@ Questions.route("/:id/new").post(async (req, res, next) => {
       await create({ author, body, parent: req.params.id });
       const question = await get(req.params.id);
       if (question) {
-        const questionURL = config.protocol + config.host + "/questions/" + req.params.id;
-        Email.QUESTION_REPLY_PUBLISHED(null, { title: question.title, body, questionURL });
+        const questionURL =
+          config.protocol + config.host + "/questions/" + req.params.id;
+        Email.QUESTION_REPLY_PUBLISHED(null, {
+          title: question.title,
+          body,
+          questionURL,
+        });
       }
       flush();
       res.redirect("/questions/" + req.params.id);
@@ -347,7 +351,8 @@ Questions.route("/:id").get(async (req, res, next) => {
     topic.body = render(topic.body).body;
     topic.reply_count = topic.replies.length;
 
-    res.locals.breadcrumbs[res.locals.breadcrumbs.length - 1].label = topic.title;
+    res.locals.breadcrumbs[res.locals.breadcrumbs.length - 1].label =
+      topic.title;
     topic.tags = topic.tags.map((tag) => {
       return { tag, slug: tag };
     });

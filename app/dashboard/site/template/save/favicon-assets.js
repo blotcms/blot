@@ -27,11 +27,21 @@ function cropFor(metadata, crop) {
   if (parsed) return parsed;
 
   const side = Math.min(width, height);
-  return { left: Math.floor((width - side) / 2), top: Math.floor((height - side) / 2), width: side, height: side };
+  return {
+    left: Math.floor((width - side) / 2),
+    top: Math.floor((height - side) / 2),
+    width: side,
+    height: side,
+  };
 }
 
 // The image is decoded and the set made in the sandbox (app/sandbox/jobs/favicon.js)
-async function generate(sourcePath, outputDirectory, crop, { shape: requestedShape } = {}) {
+async function generate(
+  sourcePath,
+  outputDirectory,
+  crop,
+  { shape: requestedShape } = {}
+) {
   const shape = normalizeShape(requestedShape);
   let metadata;
   try {
@@ -43,21 +53,35 @@ async function generate(sourcePath, outputDirectory, crop, { shape: requestedSha
   const extraction = cropFor(metadata, crop);
   const { outputs } = await sandbox.run(
     "favicon",
-    { extract: extraction, shape, ico: ICO_SIZES, png: Object.values(PNG_SIZES) },
+    {
+      extract: extraction,
+      shape,
+      ico: ICO_SIZES,
+      png: Object.values(PNG_SIZES),
+    },
     { path: sourcePath }
   );
 
   const id = uuid();
   const prefix = `favicon-${id}`;
   const files = [[`${prefix}.ico`, outputs[0]]].concat(
-    Object.values(PNG_SIZES).map((size, i) => [`${prefix}-${size}.png`, outputs[i + 1]])
+    Object.values(PNG_SIZES).map((size, i) => [
+      `${prefix}-${size}.png`,
+      outputs[i + 1],
+    ])
   );
   const workDirectory = await fs.mkdtemp(join(os.tmpdir(), "blot-favicon-"));
 
   try {
-    await Promise.all(files.map(([name, data]) => fs.writeFile(join(workDirectory, name), data)));
+    await Promise.all(
+      files.map(([name, data]) => fs.writeFile(join(workDirectory, name), data))
+    );
     await fs.ensureDir(outputDirectory);
-    await Promise.all(files.map(([name]) => fs.move(join(workDirectory, name), join(outputDirectory, name))));
+    await Promise.all(
+      files.map(([name]) =>
+        fs.move(join(workDirectory, name), join(outputDirectory, name))
+      )
+    );
     return { id, prefix, crop: extraction };
   } finally {
     await fs.remove(workDirectory);

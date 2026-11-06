@@ -10,9 +10,7 @@ describe("folder (pagination and sorting)", function () {
     await this.blog.rebuild();
 
     const directory = await this.parse(`/sites/${this.blog.handle}`);
-    expect(directory.text()).toContain(
-      `Exceeds ${MARKDOWN.label} post limit`
-    );
+    expect(directory.text()).toContain(`Exceeds ${MARKDOWN.label} post limit`);
 
     const file = await this.parse(
       directory("a:contains('oversized.md')").attr("href")
@@ -21,7 +19,9 @@ describe("folder (pagination and sorting)", function () {
       `exceeds the ${MARKDOWN.label} post size limit`
     );
     expect(file.text()).toContain("remains available as a file");
-    expect(file.text()).toContain("cannot become a post or page until it is reduced");
+    expect(file.text()).toContain(
+      "cannot become a post or page until it is reduced"
+    );
   });
 
   describe("pagination", function () {
@@ -46,8 +46,9 @@ describe("folder (pagination and sorting)", function () {
 
       expect(rowNames($)).toEqual(["p01.txt", "p02.txt"]);
       expect($(".directory-pagination").length).toEqual(1);
-      expect($(".directory-pagination__status").text().replace(/\s+/g, " ").trim())
-        .toContain("page 1 of 3");
+      expect(
+        $(".directory-pagination__status").text().replace(/\s+/g, " ").trim()
+      ).toContain("page 1 of 3");
 
       // No "Previous" link on the first page, but a "Next" link.
       expect($("a.directory-pagination__link[rel='prev']").length).toEqual(0);
@@ -80,8 +81,9 @@ describe("folder (pagination and sorting)", function () {
       );
 
       expect(rowNames($)).toEqual(["p05.txt"]);
-      expect($(".directory-pagination__status").text().replace(/\s+/g, " "))
-        .toContain("page 3 of 3");
+      expect(
+        $(".directory-pagination__status").text().replace(/\s+/g, " ")
+      ).toContain("page 3 of 3");
     });
 
     it("does not paginate a folder that fits on one page", async function () {
@@ -131,11 +133,9 @@ describe("folder (pagination and sorting)", function () {
 
     it("caps the page size at the default", async function () {
       const getContents = require("dashboard/site/folder/folder");
-      const { pagination } = await getContents(
-        this.blog,
-        "/",
-        { pageSize: 10 * getContents.DEFAULT_PAGE_SIZE }
-      );
+      const { pagination } = await getContents(this.blog, "/", {
+        pageSize: 10 * getContents.DEFAULT_PAGE_SIZE,
+      });
       expect(pagination.pageSize).toEqual(getContents.DEFAULT_PAGE_SIZE);
     });
 

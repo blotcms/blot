@@ -33,14 +33,11 @@ describe("Template.getFullView cache", function () {
       "{{title}}",
     ];
 
-    spyOn(fullViewCache, "_build").and.callFake(function (
-      blogID,
-      templateID,
-      viewName,
-      callback
-    ) {
-      callback(null, response);
-    });
+    spyOn(fullViewCache, "_build").and.callFake(
+      function (blogID, templateID, viewName, callback) {
+        callback(null, response);
+      }
+    );
 
     const options = {
       blog: { id: "blog-1", cacheID: 111 },
@@ -60,20 +57,17 @@ describe("Template.getFullView cache", function () {
   });
 
   it("returns isolated copies so caller mutations do not taint cache", async function () {
-    spyOn(fullViewCache, "_build").and.callFake(function (
-      blogID,
-      templateID,
-      viewName,
-      callback
-    ) {
-      callback(null, [
-        { title: "Original" },
-        { head: "" },
-        [{ id: "asset-1" }],
-        "text/html",
-        "{{title}}",
-      ]);
-    });
+    spyOn(fullViewCache, "_build").and.callFake(
+      function (blogID, templateID, viewName, callback) {
+        callback(null, [
+          { title: "Original" },
+          { head: "" },
+          [{ id: "asset-1" }],
+          "text/html",
+          "{{title}}",
+        ]);
+      }
+    );
 
     const options = {
       blog: { id: "blog-1", cacheID: 111 },
@@ -92,20 +86,17 @@ describe("Template.getFullView cache", function () {
   });
 
   it("misses the cache when blog/template/view inputs differ", async function () {
-    spyOn(fullViewCache, "_build").and.callFake(function (
-      blogID,
-      templateID,
-      viewName,
-      callback
-    ) {
-      callback(null, [
-        { blogID: blogID, templateID: templateID, viewName: viewName },
-        {},
-        [],
-        "text/html",
-        "",
-      ]);
-    });
+    spyOn(fullViewCache, "_build").and.callFake(
+      function (blogID, templateID, viewName, callback) {
+        callback(null, [
+          { blogID: blogID, templateID: templateID, viewName: viewName },
+          {},
+          [],
+          "text/html",
+          "",
+        ]);
+      }
+    );
 
     await getCachedFullView({
       blog: { id: "blog-1", cacheID: 111 },
@@ -122,14 +113,11 @@ describe("Template.getFullView cache", function () {
   });
 
   it("misses when the template's cacheID changes", async function () {
-    spyOn(fullViewCache, "_build").and.callFake(function (
-      blogID,
-      templateID,
-      viewName,
-      callback
-    ) {
-      callback(null, [{}, {}, [], "text/html", "{{title}}"]);
-    });
+    spyOn(fullViewCache, "_build").and.callFake(
+      function (blogID, templateID, viewName, callback) {
+        callback(null, [{}, {}, [], "text/html", "{{title}}"]);
+      }
+    );
 
     const blog = { id: "blog-1", cacheID: 111 };
 
@@ -182,14 +170,11 @@ describe("Template.getFullView cache", function () {
   });
 
   it("recomputes when blog.cacheID changes", async function () {
-    spyOn(fullViewCache, "_build").and.callFake(function (
-      blogID,
-      templateID,
-      viewName,
-      callback
-    ) {
-      callback(null, [{ cacheID: Date.now() }, {}, [], "text/html", ""]);
-    });
+    spyOn(fullViewCache, "_build").and.callFake(
+      function (blogID, templateID, viewName, callback) {
+        callback(null, [{ cacheID: Date.now() }, {}, [], "text/html", ""]);
+      }
+    );
 
     await getCachedFullView({
       blog: { id: "blog-1", cacheID: 111 },
@@ -219,6 +204,9 @@ describe("Template.getFullView cache", function () {
 
     expect(fullViewCache._build).toHaveBeenCalledTimes(1);
     expect(client.hGet).toHaveBeenCalledWith("blog:blog-1:info", "cacheID");
-    expect(client.hGet).toHaveBeenCalledWith("template:blog-1:t:info", "cacheID");
+    expect(client.hGet).toHaveBeenCalledWith(
+      "template:blog-1:t:info",
+      "cacheID"
+    );
   });
 });

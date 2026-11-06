@@ -51,7 +51,9 @@ async function setup(blogHandle) {
     console.log("Local editing enabled, template written to folder");
 
     // Determine template folder path
-    const templateBase = fs.existsSync(await storage.path(blog.id, "/Templates"))
+    const templateBase = fs.existsSync(
+      await storage.path(blog.id, "/Templates")
+    )
       ? "Templates"
       : "templates";
     const templateDir = await storage.path(
@@ -127,4 +129,3 @@ if (require.main === module) {
 }
 
 module.exports = setup;
-

@@ -17,6 +17,6 @@ module.exports = function (req, res, next) {
     res.locals.cookie_redirect = redirect;
     res.render("dashboard/log-in");
   } else {
-    next()
+    next();
   }
 };

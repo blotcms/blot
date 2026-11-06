@@ -35,15 +35,16 @@ fs.access(
   iCloudDriveDirectory,
   fs.constants.R_OK | fs.constants.W_OK | fs.constants.X_OK
 )
-  .then(() => console.log(clfdate(), `Directory ${iCloudDriveDirectory} is accessible`))
+  .then(() =>
+    console.log(clfdate(), `Directory ${iCloudDriveDirectory} is accessible`)
+  )
   .catch((err) => {
-    console.error(clfdate(), `Directory ${iCloudDriveDirectory} is not accessible:`, err);
+    console.error(
+      clfdate(),
+      `Directory ${iCloudDriveDirectory} is not accessible:`,
+      err
+    );
     process.exit(1);
   });
 
-export {
-  remoteServer,
-  iCloudDriveDirectory,
-  Authorization,
-  maxFileSize,
-};
+export { remoteServer, iCloudDriveDirectory, Authorization, maxFileSize };

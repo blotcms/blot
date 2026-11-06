@@ -4,7 +4,10 @@ const clfdate = require("helper/clfdate");
 const prefix = () => `${clfdate()} Google Drive client:`;
 
 const config = require("config");
-const WEBHOOK_HOST = config.environment === "development" ? config.webhooks.relay_host : config.host;
+const WEBHOOK_HOST =
+  config.environment === "development"
+    ? config.webhooks.relay_host
+    : config.host;
 const CHANNEL_EXPIRATION_TIME = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
 
 module.exports = async function watchChanges(serviceAccountId, drive) {
@@ -14,10 +17,14 @@ module.exports = async function watchChanges(serviceAccountId, drive) {
 
   const now = Date.now();
 
-  console.log(prefix(), `Service account client_id=${serviceAccountId} Ensuring service account is watching for changes`);
+  console.log(
+    prefix(),
+    `Service account client_id=${serviceAccountId} Ensuring service account is watching for changes`
+  );
 
   // Step 1: Check for existing valid channels
-  const existingChannels = await database.channel.listByServiceAccount(serviceAccountId);
+  const existingChannels =
+    await database.channel.listByServiceAccount(serviceAccountId);
   if (existingChannels && existingChannels.length > 0) {
     for (const channelId of existingChannels) {
       const channelData = await database.channel.get(channelId);
@@ -39,7 +46,10 @@ module.exports = async function watchChanges(serviceAccountId, drive) {
     }
   }
 
-  console.log(prefix(), `Service account client_id=${serviceAccountId} Setting up new changes.watch channel`);
+  console.log(
+    prefix(),
+    `Service account client_id=${serviceAccountId} Setting up new changes.watch channel`
+  );
 
   // Step 2: Set up a new channel
   const channelId = guid();
@@ -48,13 +58,15 @@ module.exports = async function watchChanges(serviceAccountId, drive) {
   let startPageToken;
   try {
     startPageToken = (
-      await drive.changes.getStartPageToken({ 
+      await drive.changes.getStartPageToken({
         supportsAllDrives: true,
         includeItemsFromAllDrives: true,
-     })
+      })
     ).data.startPageToken;
   } catch (err) {
-    throw new Error(`Failed to fetch startPageToken: ${err.message}`);
+    throw new Error(`Failed to fetch startPageToken: ${err.message}`, {
+      cause: err,
+    });
   }
 
   const watchRequest = {
@@ -72,11 +84,17 @@ module.exports = async function watchChanges(serviceAccountId, drive) {
       includeItemsFromAllDrives: true,
       requestBody: watchRequest,
     });
-    if (!response.data.id || !response.data.resourceId || !response.data.expiration) {
+    if (
+      !response.data.id ||
+      !response.data.resourceId ||
+      !response.data.expiration
+    ) {
       throw new Error("Invalid response from changes.watch API");
     }
   } catch (err) {
-    throw new Error(`Failed to set up changes.watch channel: ${err.message}`);
+    throw new Error(`Failed to set up changes.watch channel: ${err.message}`, {
+      cause: err,
+    });
   }
 
   console.log(

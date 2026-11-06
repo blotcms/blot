@@ -10,7 +10,6 @@ describe("dropbox client", function () {
     var blog = this.blog;
     var blogFolder = require("storage/folder");
     var afterSync = this.afterSync;
-    var otherContents;
     var folder = this.folder;
 
     client

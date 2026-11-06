@@ -76,7 +76,7 @@ module.exports = function setup(options) {
             }
           });
         });
-      };      
+      };
 
       this.getViewByURL = (url) => {
         return new Promise((resolve, reject) => {

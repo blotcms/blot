@@ -16,12 +16,16 @@ describe("preview reload route", function () {
   it("only opens an SSE subscription on the preview subdomain", function () {
     const stream = jasmine.createSpy("stream");
     require.cache[ssePath] = {
-      exports: function () { return stream; },
+      exports: function () {
+        return stream;
+      },
     };
     delete require.cache[routePath];
     const routes = {};
     require("../routes/preview-reload")({
-      get: function (path, handler) { routes[path] = handler; },
+      get: function (path, handler) {
+        routes[path] = handler;
+      },
     });
     const next = jasmine.createSpy("next");
     const response = {};

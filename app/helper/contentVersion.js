@@ -63,7 +63,7 @@ async function version(stat, read, hash) {
     // worth failing the whole build/render over.
     return statToken(stat);
   }
-};
+}
 
 // Cheap size+mtime token, for callers that can't afford to read the file
 // (the large-file redirect in blog/routes/assets.js runs during a request).

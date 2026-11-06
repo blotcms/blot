@@ -68,7 +68,9 @@ function attempt(args, options) {
       function (err, stdout, stderr) {
         if (err && typeof err.code !== "number") {
           var reason = err.killed
-            ? "did not finish within " + (options.timeout || COMMAND_TIMEOUT) + "ms"
+            ? "did not finish within " +
+              (options.timeout || COMMAND_TIMEOUT) +
+              "ms"
             : err.message;
           return reject(
             new Error("git " + args.join(" ") + " " + reason + "\n" + stderr)
@@ -90,7 +92,12 @@ function run(args, options) {
     if (result.code === 0) return result;
 
     var err = new Error(
-      "git " + args.join(" ") + " exited with code " + result.code + "\n" + result.stderr
+      "git " +
+        args.join(" ") +
+        " exited with code " +
+        result.code +
+        "\n" +
+        result.stderr
     );
     err.stdout = result.stdout;
     err.stderr = result.stderr;
@@ -205,7 +212,10 @@ Client.clone = async function (options) {
 
   await fs.ensureDir(path.dirname(options.directory));
   await run(
-    config.concat(["clone"], options.args || [], [options.url, options.directory])
+    config.concat(["clone"], options.args || [], [
+      options.url,
+      options.directory,
+    ])
   );
 
   return client;
@@ -217,7 +227,10 @@ Client.forContext = function (ctx, overrides) {
   return Client.clone(
     Object.assign(
       {
-        directory: path.join(ctx.tmp, "clone-" + crypto.randomBytes(4).toString("hex")),
+        directory: path.join(
+          ctx.tmp,
+          "clone-" + crypto.randomBytes(4).toString("hex")
+        ),
         url: ctx.repoUrl,
         port: ctx.server.port,
         blogID: ctx.blog.id,
@@ -265,7 +278,10 @@ Client.prototype.git = function (args, options) {
 // Runs a git command in the clone, resolves with { stdout, stderr, code }
 // even if git fails. For commands which a spec expects to be refused.
 Client.prototype.try = function (args, options) {
-  return attempt(this._args(args), Object.assign({ cwd: this.directory }, options));
+  return attempt(
+    this._args(args),
+    Object.assign({ cwd: this.directory }, options)
+  );
 };
 
 Client.prototype.path = function (file) {
@@ -355,13 +371,20 @@ Client.prototype.waitForSync = async function (options) {
   var timeout = (options && options.timeout) || SYNC_TIMEOUT;
   var deadline = Date.now() + timeout;
   var url =
-    "http://127.0.0.1:" + this.port + "/clients/git/syncs-finished/" + this.blogID;
+    "http://127.0.0.1:" +
+    this.port +
+    "/clients/git/syncs-finished/" +
+    this.blogID;
   var finished = 0;
 
   while (finished < 2) {
     if (Date.now() > deadline) {
       throw new Error(
-        "Blot did not finish syncing blog " + this.blogID + " within " + timeout + "ms"
+        "Blot did not finish syncing blog " +
+          this.blogID +
+          " within " +
+          timeout +
+          "ms"
       );
     }
 
@@ -414,7 +437,8 @@ async function compareWithBlog(expected, blogID) {
   });
 
   Object.keys(right).forEach(function (file) {
-    if (!(file in left)) message.push("  " + file + " (only in the blog folder)");
+    if (!(file in left))
+      message.push("  " + file + " (only in the blog folder)");
   });
 
   if (message.length) {
@@ -441,14 +465,24 @@ function startRecordingProxy(targetPort) {
   var sockets = new Set();
 
   var server = http.createServer(function (req, res) {
-    requests.push({ method: req.method, url: req.url, headers: Object.assign({}, req.headers) });
+    requests.push({
+      method: req.method,
+      url: req.url,
+      headers: Object.assign({}, req.headers),
+    });
 
     var headers = Object.assign({}, req.headers);
     headers.host = "127.0.0.1:" + targetPort;
     delete headers.connection;
 
     var upstream = http.request(
-      { host: "127.0.0.1", port: targetPort, method: req.method, path: req.url, headers: headers },
+      {
+        host: "127.0.0.1",
+        port: targetPort,
+        method: req.method,
+        path: req.url,
+        headers: headers,
+      },
       function (response) {
         res.writeHead(response.statusCode, response.headers);
         response.pipe(res);

@@ -26,7 +26,8 @@ function create(blogID, path, done) {
   // The thumbnail job checks the image can be a thumbnail before it makes any
   debug(blogID, "Transforming", path);
   transform(path, fullPathToOutputDirectory, function (err, thumbnails) {
-    if (err && err.invalid) debug(blogID, "Invalid thumbnail candidate", path, err);
+    if (err && err.invalid)
+      debug(blogID, "Invalid thumbnail candidate", path, err);
     if (err) return done(err);
 
     for (var i in thumbnails) {

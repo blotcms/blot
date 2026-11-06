@@ -12,7 +12,8 @@ const {
 const { sortEntryIDs, isNewestFirst } = require("blog/sortOptions");
 
 function buildPagination(current, pageSize, totalEntries) {
-  const total = pageSize > 0 ? Math.max(1, Math.ceil(totalEntries / pageSize)) : 0;
+  const total =
+    pageSize > 0 ? Math.max(1, Math.ceil(totalEntries / pageSize)) : 0;
   const previous = current > 1 ? current - 1 : null;
   const next = total > 0 && current < total ? current + 1 : null;
   return {
@@ -166,7 +167,11 @@ async function getTagged(blogID, slugs, options) {
     const tagOptions = canPageInRedis
       ? { limit: pg.limit, offset: pg.offset, rev: newestFirst }
       : undefined;
-    const { entryIDs, prettyTag, total } = await getTag(blogID, slug, tagOptions);
+    const { entryIDs, prettyTag, total } = await getTag(
+      blogID,
+      slug,
+      tagOptions
+    );
     const filteredEntryIDs = applyPathPrefixFiltering(entryIDs, pathPrefix);
     const filteredTotal = filteredEntryIDs.length;
 
@@ -182,7 +187,9 @@ async function getTagged(blogID, slugs, options) {
 
     const finalTotal = pathPrefix
       ? filteredTotal
-      : (total !== undefined ? total : filteredTotal);
+      : total !== undefined
+        ? total
+        : filteredTotal;
 
     return buildSingleTagResult({
       entryIDs: finalEntryIDs,
@@ -194,11 +201,16 @@ async function getTagged(blogID, slugs, options) {
   }
 
   // Multiple tags: fetch without pagination options, then intersect and slice locally
-  const results = await Promise.all(normalized.map((slug) => getTag(blogID, slug)));
+  const results = await Promise.all(
+    normalized.map((slug) => getTag(blogID, slug))
+  );
   const lists = results.map((result) => result.entryIDs || []);
   const intersectedEntryIDs = intersectMany(lists);
   const prettyTags = results.map((result) => result.prettyTag);
-  const filteredEntryIDs = applyPathPrefixFiltering(intersectedEntryIDs, pathPrefix);
+  const filteredEntryIDs = applyPathPrefixFiltering(
+    intersectedEntryIDs,
+    pathPrefix
+  );
   const orderedEntryIDs = sortEntryIDs(filteredEntryIDs, sortOptions);
   const finalEntryIDs = pg.hasPagination
     ? orderedEntryIDs.slice(pg.offset, pg.offset + pg.limit)

@@ -7,7 +7,7 @@ module.exports = function setup(options) {
   var createClient = require("clients/dropbox/util/createClient");
 
   // Increase individual spec timeout to 60 seconds
-  global.test.timeout(60 * 1000); 
+  global.test.timeout(60 * 1000);
 
   global.test.blog();
 

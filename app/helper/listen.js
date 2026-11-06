@@ -16,7 +16,7 @@ const fs = require("fs");
 module.exports = function listen(
   handler,
   { port, socket, configure },
-  onListening,
+  onListening
 ) {
   const tcp = port != null && port !== "" ? http.createServer(handler) : null;
   const unix = socket ? http.createServer(handler) : null;

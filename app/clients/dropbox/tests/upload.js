@@ -48,7 +48,9 @@ describe("dropbox upload", function () {
     };
 
     await new Promise((resolve, reject) =>
-      upload(fakeClient, source, "/post.txt", (e) => (e ? reject(e) : resolve()))
+      upload(fakeClient, source, "/post.txt", (e) =>
+        e ? reject(e) : resolve()
+      )
     );
     expect(calls).toEqual(["filesUpload"]);
   });
@@ -125,7 +127,9 @@ describe("dropbox upload", function () {
       const calls = [];
       let appends = 0;
       const fakeClient = {
-        filesUploadSessionStart: async () => ({ result: { session_id: "abc" } }),
+        filesUploadSessionStart: async () => ({
+          result: { session_id: "abc" },
+        }),
         filesUploadSessionAppendV2: async (args) => {
           appends++;
           calls.push({ name: "append", offset: args.cursor.offset });
@@ -176,7 +180,9 @@ describe("dropbox upload", function () {
       const appendOffsets = [];
       const finishes = [];
       const fakeClient = {
-        filesUploadSessionStart: async () => ({ result: { session_id: "abc" } }),
+        filesUploadSessionStart: async () => ({
+          result: { session_id: "abc" },
+        }),
         filesUploadSessionAppendV2: async (args) => {
           appendOffsets.push(args.cursor.offset);
           if (appendOffsets.length === 1) {
@@ -198,7 +204,9 @@ describe("dropbox upload", function () {
       };
 
       await new Promise((resolve, reject) =>
-        upload(fakeClient, source, "/big.txt", (e) => (e ? reject(e) : resolve()))
+        upload(fakeClient, source, "/big.txt", (e) =>
+          e ? reject(e) : resolve()
+        )
       );
 
       // hell|o wo|rld, but Dropbox only holds "he": resume from offset 2.
@@ -208,7 +216,9 @@ describe("dropbox upload", function () {
 
     it("rethrows other 409 errors", async function () {
       const fakeClient = {
-        filesUploadSessionStart: async () => ({ result: { session_id: "abc" } }),
+        filesUploadSessionStart: async () => ({
+          result: { session_id: "abc" },
+        }),
         filesUploadSessionAppendV2: async () => {
           const err = new Error("not_found");
           err.status = 409;
@@ -239,7 +249,10 @@ describe("dropbox upload", function () {
           return { result: { session_id: "abc" } };
         },
         filesUploadSessionAppendV2: async () => calls.push("append"),
-        filesUploadSessionFinish: async () => (calls.push("finish"), { result: {} }),
+        filesUploadSessionFinish: async () => (
+          calls.push("finish"),
+          { result: {} }
+        ),
       };
 
       const error = await new Promise((resolve) =>

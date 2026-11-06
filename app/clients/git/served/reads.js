@@ -29,7 +29,10 @@ const querystring = require("querystring");
 const receivePack = require("../receivePack");
 const limiter = require("../limiter");
 const { measure } = require("./counting");
-const { advertise, CONTENT_TYPE: ADVERTISEMENT } = require("../store/advertise");
+const {
+  advertise,
+  CONTENT_TYPE: ADVERTISEMENT,
+} = require("../store/advertise");
 const { serve, parseRequest, CONTENT_TYPE: RESULT } = require("../store/clone");
 const manifest = require("../store/manifest");
 const pktline = require("../store/pktline");
@@ -64,9 +67,11 @@ function meter(res, started, skip) {
   const end = res.end;
 
   function note(chunk) {
-    if (chunk === undefined || chunk === null || typeof chunk === "function") return;
+    if (chunk === undefined || chunk === null || typeof chunk === "function")
+      return;
     sent.bytes += Buffer.byteLength(chunk);
-    if (sent.firstByteMs === null && sent.writes++ >= skip) sent.firstByteMs = Date.now() - started;
+    if (sent.firstByteMs === null && sent.writes++ >= skip)
+      sent.firstByteMs = Date.now() - started;
   }
 
   res.write = function (chunk) {
@@ -123,7 +128,11 @@ async function collect(req) {
 }
 
 function statusOf(err) {
-  return err && err.code === "BUSY" ? 503 : err && err.code === "PROTOCOL" ? 400 : 500;
+  return err && err.code === "BUSY"
+    ? 503
+    : err && err.code === "PROTOCOL"
+      ? 400
+      : 500;
 }
 
 // ---- The store ------------------------------------------------------------
@@ -133,13 +142,29 @@ function statusOf(err) {
 // them. Receive-pack advertises no HEAD and no peeled tags.
 function receiveAdvertisement(current) {
   const capabilities = receivePack.CAPABILITIES.join(" ");
-  const names = Object.keys(current.refs).sort((a, b) => Buffer.compare(Buffer.from(a), Buffer.from(b)));
-  const parts = [receivePack.pktLine("# service=git-receive-pack\n"), Buffer.from("0000")];
+  const names = Object.keys(current.refs).sort((a, b) =>
+    Buffer.compare(Buffer.from(a), Buffer.from(b))
+  );
+  const parts = [
+    receivePack.pktLine("# service=git-receive-pack\n"),
+    Buffer.from("0000"),
+  ];
 
-  if (!names.length) parts.push(receivePack.pktLine(ZERO + " capabilities^{}\0" + capabilities + "\n"));
+  if (!names.length)
+    parts.push(
+      receivePack.pktLine(ZERO + " capabilities^{}\0" + capabilities + "\n")
+    );
 
   names.forEach(function (name, index) {
-    parts.push(receivePack.pktLine(current.refs[name] + " " + name + (index === 0 ? "\0" + capabilities : "") + "\n"));
+    parts.push(
+      receivePack.pktLine(
+        current.refs[name] +
+          " " +
+          name +
+          (index === 0 ? "\0" + capabilities : "") +
+          "\n"
+      )
+    );
   });
 
   parts.push(Buffer.from("0000"));
@@ -153,7 +178,11 @@ function receiveAdvertisement(current) {
 // store's clone limiter (the interactive lane unless given). Resolves, once
 // the response has finished, with the fields for its log line: op, outcome,
 // ms, firstByteMs, requests, bytesDown, bytesSent, detail. Never rejects.
-async function read(req, res, { kind, store, cache, limiter: clones = interactive }) {
+async function read(
+  req,
+  res,
+  { kind, store, cache, limiter: clones = interactive }
+) {
   const started = Date.now();
   const sent = meter(res, started, 0);
   let op = kind === "post" ? "clone" : kind;
@@ -169,7 +198,9 @@ async function read(req, res, { kind, store, cache, limiter: clones = interactiv
       // Served, never built on, so an unchanged hint is enough for a few
       // seconds (manifest.read's `serving`). The receive-pack advertisement
       // begins a push, so it asks as a writer does.
-      const current = await manifest.read(store, { serving: kind !== "receive-advertise" });
+      const current = await manifest.read(store, {
+        serving: kind !== "receive-advertise",
+      });
 
       // Nothing there: a clone of nothing would look like an empty repository
       if (manifest.isEmpty(current)) {
@@ -185,7 +216,10 @@ async function read(req, res, { kind, store, cache, limiter: clones = interactiv
       }
 
       if (kind === "receive-advertise") {
-        res.setHeader("content-type", "application/x-git-receive-pack-advertisement");
+        res.setHeader(
+          "content-type",
+          "application/x-git-receive-pack-advertisement"
+        );
         receivePack.noCache(res);
         res.end(receiveAdvertisement(current));
         return "ok";
@@ -221,11 +255,24 @@ async function read(req, res, { kind, store, cache, limiter: clones = interactiv
       res.setHeader("content-type", RESULT);
       receivePack.noCache(res);
 
-      const result = await serve({ store, cache, manifest: current, body, out: res, limiter: clones });
+      const result = await serve({
+        store,
+        cache,
+        manifest: current,
+        body,
+        out: res,
+        limiter: clones,
+      });
 
       if (result.refused) reason = refusalReason(body);
 
-      return result.refused ? "refused" : result.negotiated ? "negotiated" : result.empty ? "empty" : "ok";
+      return result.refused
+        ? "refused"
+        : result.negotiated
+          ? "negotiated"
+          : result.empty
+            ? "empty"
+            : "ok";
     });
 
     outcome = measured.result;
@@ -234,7 +281,13 @@ async function read(req, res, { kind, store, cache, limiter: clones = interactiv
     detail = (err && (err.code || err.name)) || "error";
 
     if (!res.headersSent) {
-      reply(res, statusOf(err), err && err.code === "BUSY" ? "busy, try again" : "the store could not serve this");
+      reply(
+        res,
+        statusOf(err),
+        err && err.code === "BUSY"
+          ? "busy, try again"
+          : "the store could not serve this"
+      );
     } else if (!res.writableEnded) {
       res.destroy();
     }
@@ -289,19 +342,23 @@ async function handle(req, res, blog, options) {
   const query = url.indexOf("?");
   const pathname = query === -1 ? url : url.slice(0, query);
   const repository = "/" + req.gitHandle + ".git";
-  let kind = null;
+  let kind;
 
   res.setHeader("connection", "close");
 
   if (!req.gitHandle) return reply(res, 404, "not found");
 
   // A blog off the git client has no repository
-  if (blog.client !== undefined && blog.client !== "git") return reply(res, 404, "repository not found");
+  if (blog.client !== undefined && blog.client !== "git")
+    return reply(res, 404, "repository not found");
 
   if (req.method === "GET" && pathname === repository + "/info/refs") {
-    let service = querystring.parse(query === -1 ? "" : url.slice(query + 1)).service;
+    let service = querystring.parse(
+      query === -1 ? "" : url.slice(query + 1)
+    ).service;
 
-    if (!service || typeof service !== "string") return reply(res, 400, "service parameter required");
+    if (!service || typeof service !== "string")
+      return reply(res, 400, "service parameter required");
 
     service = service.replace(/^git-/, "");
 
@@ -312,9 +369,16 @@ async function handle(req, res, blog, options) {
     kind = "head";
   } else if (req.method === "POST" && url === repository + "/git-upload-pack") {
     kind = "post";
-  } else if (req.method === "POST" && url === repository + "/git-receive-pack") {
+  } else if (
+    req.method === "POST" &&
+    url === repository + "/git-receive-pack"
+  ) {
     return options.receive(req, res, blog);
-  } else if (req.method === "POST" && url.indexOf(repository + "/git-") === 0 && url.length > repository.length + 5) {
+  } else if (
+    req.method === "POST" &&
+    url.indexOf(repository + "/git-") === 0 &&
+    url.length > repository.length + 5
+  ) {
     return reply(res, 405, "service not available");
   } else if (req.method !== "GET" && req.method !== "POST") {
     return reply(res, 405, "method not supported");
@@ -333,7 +397,12 @@ async function handle(req, res, blog, options) {
     store = context.storeFor(blog.id);
     cache = context.cache();
   } catch (err) {
-    log({ blog: blog.id, op: kind === "post" ? "clone" : kind, outcome: "error", detail: (err && (err.code || err.name)) || "error" });
+    log({
+      blog: blog.id,
+      op: kind === "post" ? "clone" : kind,
+      outcome: "error",
+      detail: (err && (err.code || err.name)) || "error",
+    });
     return reply(res, 500, "the store could not serve this");
   }
 
@@ -342,4 +411,14 @@ async function handle(req, res, blog, options) {
   log(Object.assign({ blog: blog.id }, fields));
 }
 
-module.exports = { handle, read, receiveAdvertisement, meter, whenDone, outcomeOf, reply, refusalReason, NO_COPY };
+module.exports = {
+  handle,
+  read,
+  receiveAdvertisement,
+  meter,
+  whenDone,
+  outcomeOf,
+  reply,
+  refusalReason,
+  NO_COPY,
+};

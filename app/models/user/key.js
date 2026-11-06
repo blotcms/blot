@@ -23,5 +23,5 @@ module.exports = {
 
   paypalCancelEmail: function (uid, subscriptionId) {
     return "user:" + uid + ":paypal_cancel_email:" + subscriptionId;
-  }
+  },
 };

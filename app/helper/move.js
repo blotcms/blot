@@ -28,7 +28,7 @@ const suffixer = (path) => {
   const dir = dirname(path);
   const extension = extname(path);
 
-  let suffix = "";
+  let suffix;
   let numberAtEnd;
   let nameWithoutNumber;
 

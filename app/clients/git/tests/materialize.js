@@ -19,7 +19,13 @@ describe("git client: materialize", function () {
   var importRepo = require("clients/git/store/import");
   var storage = require("storage/folder");
   var folder = require("./setup/folder");
-  var { createCache, createMemoryStore, createFsStore, createReader, manifest } = require("clients/git/store");
+  var {
+    createCache,
+    createMemoryStore,
+    createFsStore,
+    createReader,
+    manifest,
+  } = require("clients/git/store");
 
   var EMPTY_TREE = materialize.EMPTY_TREE;
   var IDENTITY = {
@@ -54,7 +60,13 @@ describe("git client: materialize", function () {
         args,
         {
           cwd: spec.directory,
-          env: Object.assign({}, process.env, { GIT_DIR: spec.directory }, IDENTITY, env),
+          env: Object.assign(
+            {},
+            process.env,
+            { GIT_DIR: spec.directory },
+            IDENTITY,
+            env
+          ),
           maxBuffer: 64 * 1024 * 1024,
         },
         function (err, stdout, stderr) {
@@ -74,12 +86,15 @@ describe("git client: materialize", function () {
   }
 
   function commitTree(spec, tree) {
-    return run(spec, ["commit-tree", tree, "-m", "commit"].concat(spec.head ? ["-p", spec.head] : [])).then(
-      function (commit) {
-        spec.head = commit;
-        return commit;
-      }
-    );
+    return run(
+      spec,
+      ["commit-tree", tree, "-m", "commit"].concat(
+        spec.head ? ["-p", spec.head] : []
+      )
+    ).then(function (commit) {
+      spec.head = commit;
+      return commit;
+    });
   }
 
   // Makes a commit on top of the last one made, from changes to its files:
@@ -96,12 +111,20 @@ describe("git client: materialize", function () {
       var change = changes[name];
 
       if (change === null) {
-        await run(spec, ["update-index", "--force-remove", "-z", "--stdin"], name + "\0", env);
+        await run(
+          spec,
+          ["update-index", "--force-remove", "-z", "--stdin"],
+          name + "\0",
+          env
+        );
         continue;
       }
 
-      var mode = (change.mode) || "100644";
-      var oid = await write(spec, change.contents === undefined ? change : change.contents);
+      var mode = change.mode || "100644";
+      var oid = await write(
+        spec,
+        change.contents === undefined ? change : change.contents
+      );
 
       await run(
         spec,
@@ -125,7 +148,9 @@ describe("git client: materialize", function () {
         var isTree = typeof entry === "object" && !Buffer.isBuffer(entry);
         var oid = isTree ? await build(entry) : await write(spec, entry);
 
-        records.push(Buffer.from((isTree ? "040000 tree " : "100644 blob ") + oid + "\t"));
+        records.push(
+          Buffer.from((isTree ? "040000 tree " : "100644 blob ") + oid + "\t")
+        );
         records.push(Buffer.from(name, "latin1"));
         records.push(Buffer.from([0]));
       }
@@ -139,13 +164,24 @@ describe("git client: materialize", function () {
   // The repository's history in a store of its own: master at the last
   // commit made, which every commit made is an ancestor of
   async function load(spec, store) {
-    if (spec.head) await run(spec, ["update-ref", "refs/heads/master", spec.head]);
+    if (spec.head)
+      await run(spec, ["update-ref", "refs/heads/master", spec.head]);
 
     store = store || createMemoryStore();
 
-    var cache = createCache({ dir: spec.tmp + "/cache-" + crypto.randomBytes(4).toString("hex"), maxBytes: 256 * 1024 * 1024 });
+    var cache = createCache({
+      dir: spec.tmp + "/cache-" + crypto.randomBytes(4).toString("hex"),
+      maxBytes: 256 * 1024 * 1024,
+    });
 
-    if (spec.head) await importRepo({ store: store, cache: cache, lock: (fn) => fn(), gitDir: spec.directory, scratchDir: spec.tmp + "/scratch" });
+    if (spec.head)
+      await importRepo({
+        store: store,
+        cache: cache,
+        lock: (fn) => fn(),
+        gitDir: spec.directory,
+        scratchDir: spec.tmp + "/scratch",
+      });
 
     return { store: store, cache: cache };
   }
@@ -154,7 +190,12 @@ describe("git client: materialize", function () {
   async function apply(spec, from, to) {
     var { store, cache } = await load(spec);
     var current = await manifest.read(store);
-    var reader = createReader({ store: store, cache: cache, manifest: current, scratch: cache });
+    var reader = createReader({
+      store: store,
+      cache: cache,
+      manifest: current,
+      scratch: cache,
+    });
 
     return materialize({
       blogID: spec.blog.id,
@@ -247,9 +288,12 @@ describe("git client: materialize", function () {
   async function listBlog(spec) {
     var found = {};
 
-    for await (var entry of storage.walk(spec.blog.id, "/", { directories: true })) {
+    for await (var entry of storage.walk(spec.blog.id, "/", {
+      directories: true,
+    })) {
       var name = entry.slice(1).replace(/\/$/, "");
-      if (await folder.isDirectory(spec.blog.id, entry)) found[name + "/"] = true;
+      if (await folder.isDirectory(spec.blog.id, entry))
+        found[name + "/"] = true;
       else found[name] = await storage.read(spec.blog.id, entry);
     }
 
@@ -268,7 +312,10 @@ describe("git client: materialize", function () {
 
       if (stat.isDirectory()) {
         found[prefix + name + "/"] = true;
-        Object.assign(found, await list(path.join(directory, name), prefix + name + "/"));
+        Object.assign(
+          found,
+          await list(path.join(directory, name), prefix + name + "/")
+        );
       } else {
         found[prefix + name] = await fs.readFile(path.join(directory, name));
       }
@@ -306,7 +353,10 @@ describe("git client: materialize", function () {
   });
 
   it("touches only the paths that changed", async function () {
-    var first = await commit(this, { "same.txt": "Same", "changed.txt": "Before" });
+    var first = await commit(this, {
+      "same.txt": "Same",
+      "changed.txt": "Before",
+    });
 
     await apply(this, EMPTY_TREE, first);
 
@@ -315,9 +365,15 @@ describe("git client: materialize", function () {
     await folder.write(this.blog.id, "/same.txt", "Drifted");
     await folder.write(this.blog.id, "/untracked.txt", "Not in the repository");
 
-    var second = await commit(this, { "changed.txt": "After", "added.txt": "Added" });
+    var second = await commit(this, {
+      "changed.txt": "After",
+      "added.txt": "Added",
+    });
 
-    expect((await apply(this, first, second)).sort()).toEqual(["added.txt", "changed.txt"]);
+    expect((await apply(this, first, second)).sort()).toEqual([
+      "added.txt",
+      "changed.txt",
+    ]);
     expect(await listBlog(this)).toEqual({
       "same.txt": Buffer.from("Drifted"),
       "untracked.txt": Buffer.from("Not in the repository"),
@@ -338,7 +394,9 @@ describe("git client: materialize", function () {
 
     var second = await commit(this, { "top/only/deep/file.txt": null });
 
-    expect(await apply(this, first, second)).toEqual(["top/only/deep/file.txt"]);
+    expect(await apply(this, first, second)).toEqual([
+      "top/only/deep/file.txt",
+    ]);
     expect(await listBlog(this)).toEqual({
       "top/": true,
       "top/sibling.txt": Buffer.from("Stays"),
@@ -362,13 +420,22 @@ describe("git client: materialize", function () {
   });
 
   it("applies a rename", async function () {
-    var first = await commit(this, { "old/name.txt": "Contents", "other.txt": "Other" });
+    var first = await commit(this, {
+      "old/name.txt": "Contents",
+      "other.txt": "Other",
+    });
 
     await apply(this, EMPTY_TREE, first);
 
-    var second = await commit(this, { "old/name.txt": null, "new/name.txt": "Contents" });
+    var second = await commit(this, {
+      "old/name.txt": null,
+      "new/name.txt": "Contents",
+    });
 
-    expect((await apply(this, first, second)).sort()).toEqual(["new/name.txt", "old/name.txt"]);
+    expect((await apply(this, first, second)).sort()).toEqual([
+      "new/name.txt",
+      "old/name.txt",
+    ]);
     expect(await listBlog(this)).toEqual({
       "new/": true,
       "new/name.txt": Buffer.from("Contents"),
@@ -381,7 +448,10 @@ describe("git client: materialize", function () {
 
     await apply(this, EMPTY_TREE, first);
 
-    var second = await commit(this, { swap: null, "swap/inner.txt": "In a directory" });
+    var second = await commit(this, {
+      swap: null,
+      "swap/inner.txt": "In a directory",
+    });
 
     await apply(this, first, second);
 
@@ -392,7 +462,10 @@ describe("git client: materialize", function () {
   });
 
   it("replaces a directory with a file of the same name", async function () {
-    var first = await commit(this, { "swap/one.txt": "One", "swap/two/three.txt": "Three" });
+    var first = await commit(this, {
+      "swap/one.txt": "One",
+      "swap/two/three.txt": "Three",
+    });
 
     await apply(this, EMPTY_TREE, first);
 
@@ -408,7 +481,10 @@ describe("git client: materialize", function () {
   });
 
   it("handles a rename which only changes the case of the name", async function () {
-    var first = await commit(this, { "Readme.txt": "Contents", "Dir/File.txt": "Nested" });
+    var first = await commit(this, {
+      "Readme.txt": "Contents",
+      "Dir/File.txt": "Nested",
+    });
 
     await apply(this, EMPTY_TREE, first);
 
@@ -423,7 +499,10 @@ describe("git client: materialize", function () {
 
     // On any filesystem the old names have to be gone before the new ones
     // are written
-    expect(await folder.names(this.blog.id, "/")).toEqual(["dir", "readme.txt"]);
+    expect(await folder.names(this.blog.id, "/")).toEqual([
+      "dir",
+      "readme.txt",
+    ]);
     expect(await folder.names(this.blog.id, "/dir")).toEqual(["file.txt"]);
   });
 
@@ -431,19 +510,26 @@ describe("git client: materialize", function () {
     var names = {
       "日本語/こんにちは 世界.txt": "Japanese",
       "café/crème  brûlée.txt": "Accents and two spaces",
-      "emoji 🎉/it's \"quoted\" $(echo).txt": "Emoji and quotes",
+      'emoji 🎉/it\'s "quoted" $(echo).txt': "Emoji and quotes",
       "tab\tand\nnewline.txt": "Control characters",
     };
     var first = await commit(this, names);
 
-    expect((await apply(this, EMPTY_TREE, first)).sort()).toEqual(Object.keys(names).sort());
+    expect((await apply(this, EMPTY_TREE, first)).sort()).toEqual(
+      Object.keys(names).sort()
+    );
 
     for (var name of Object.keys(names))
-      expect(await folder.read(this.blog.id, "/" + name)).toEqual(Buffer.from(names[name]));
+      expect(await folder.read(this.blog.id, "/" + name)).toEqual(
+        Buffer.from(names[name])
+      );
   });
 
   it("skips a name which is not valid UTF-8", async function () {
-    var first = await commitExactly(this, { "b\xff.txt": "Not text", "fine.txt": "Fine" });
+    var first = await commitExactly(this, {
+      "b\xff.txt": "Not text",
+      "fine.txt": "Fine",
+    });
 
     expect(await apply(this, EMPTY_TREE, first)).toEqual(["fine.txt"]);
     expect(await listBlog(this)).toEqual({ "fine.txt": Buffer.from("Fine") });
@@ -458,7 +544,10 @@ describe("git client: materialize", function () {
       "plain.txt": "Plain",
     });
 
-    expect(await apply(this, EMPTY_TREE, first)).toEqual(["plain.txt", "run.sh"]);
+    expect(await apply(this, EMPTY_TREE, first)).toEqual([
+      "plain.txt",
+      "run.sh",
+    ]);
     expect(await listBlog(this)).toEqual({
       "plain.txt": Buffer.from("Plain"),
       "run.sh": Buffer.from("#!/bin/sh\n"),
@@ -487,19 +576,35 @@ describe("git client: materialize", function () {
     it("is written, changed and removed under its NFC name", async function () {
       expect(nfd).not.toBe(nfc);
 
-      var first = await commit(this, { [nfd + "/" + nfd + ".txt"]: "First", "kept.txt": "Kept" });
+      var first = await commit(this, {
+        [nfd + "/" + nfd + ".txt"]: "First",
+        "kept.txt": "Kept",
+      });
 
       // In git's order, by the committed bytes
-      expect(await apply(this, EMPTY_TREE, first)).toEqual([nfc + "/" + nfc + ".txt", "kept.txt"]);
+      expect(await apply(this, EMPTY_TREE, first)).toEqual([
+        nfc + "/" + nfc + ".txt",
+        "kept.txt",
+      ]);
 
       // Names as they are on disk: only the NFC spelling is there
-      expect(await folder.names(this.blog.id, "/")).toEqual(["kept.txt", nfc].sort());
-      expect(await folder.names(this.blog.id, "/" + nfc)).toEqual([nfc + ".txt"]);
-      expect((await folder.read(this.blog.id, "/" + nfc + "/" + nfc + ".txt")).toString()).toBe("First");
+      expect(await folder.names(this.blog.id, "/")).toEqual(
+        ["kept.txt", nfc].sort()
+      );
+      expect(await folder.names(this.blog.id, "/" + nfc)).toEqual([
+        nfc + ".txt",
+      ]);
+      expect(
+        (
+          await folder.read(this.blog.id, "/" + nfc + "/" + nfc + ".txt")
+        ).toString()
+      ).toBe("First");
 
       var second = await commit(this, { [nfd + "/" + nfd + ".txt"]: "Second" });
 
-      expect(await apply(this, first, second)).toEqual([nfc + "/" + nfc + ".txt"]);
+      expect(await apply(this, first, second)).toEqual([
+        nfc + "/" + nfc + ".txt",
+      ]);
       expect(await listBlog(this)).toEqual({
         "kept.txt": Buffer.from("Kept"),
         [nfc + "/"]: true,
@@ -508,7 +613,9 @@ describe("git client: materialize", function () {
 
       var third = await commit(this, { [nfd + "/" + nfd + ".txt"]: null });
 
-      expect(await apply(this, second, third)).toEqual([nfc + "/" + nfc + ".txt"]);
+      expect(await apply(this, second, third)).toEqual([
+        nfc + "/" + nfc + ".txt",
+      ]);
       expect(await listBlog(this)).toEqual({ "kept.txt": Buffer.from("Kept") });
     });
 
@@ -518,11 +625,16 @@ describe("git client: materialize", function () {
       await apply(this, EMPTY_TREE, first);
 
       // The removal of the NFD name comes first, then the write of the NFC one
-      var second = await commit(this, { [nfd + ".txt"]: null, [nfc + ".txt"]: "Contents" });
+      var second = await commit(this, {
+        [nfd + ".txt"]: null,
+        [nfc + ".txt"]: "Contents",
+      });
 
       await apply(this, first, second);
 
-      expect(await listBlog(this)).toEqual({ [nfc + ".txt"]: Buffer.from("Contents") });
+      expect(await listBlog(this)).toEqual({
+        [nfc + ".txt"]: Buffer.from("Contents"),
+      });
 
       var third = await commit(this, { [nfc + ".txt"]: null });
 
@@ -533,7 +645,11 @@ describe("git client: materialize", function () {
   });
 
   it("writes the same blob to several paths", async function () {
-    var first = await commit(this, { "one.txt": "Same", "two/copy.txt": "Same", "three.txt": "Same" });
+    var first = await commit(this, {
+      "one.txt": "Same",
+      "two/copy.txt": "Same",
+      "three.txt": "Same",
+    });
 
     await apply(this, EMPTY_TREE, first);
 
@@ -545,33 +661,52 @@ describe("git client: materialize", function () {
     });
   });
 
-  it("writes a large file byte for byte, without holding it in memory", async function () {
-    // Random data with NULs and newlines where a parser of cat-file's output
-    // could be confused, and far more than a chunk. It ends in a newline too.
-    var blob = Buffer.alloc(96 * 1024 * 1024);
-    var block = crypto.randomBytes(1024 * 1024);
+  it(
+    "writes a large file byte for byte, without holding it in memory",
+    async function () {
+      // Random data with NULs and newlines where a parser of cat-file's output
+      // could be confused, and far more than a chunk. It ends in a newline too.
+      var blob = Buffer.alloc(96 * 1024 * 1024);
+      var block = crypto.randomBytes(1024 * 1024);
 
-    block[0] = 0;
-    block[1] = 10;
-    block[block.length - 1] = 10;
+      block[0] = 0;
+      block[1] = 10;
+      block[block.length - 1] = 10;
 
-    for (var offset = 0; offset < blob.length; offset += block.length) block.copy(blob, offset);
+      for (var offset = 0; offset < blob.length; offset += block.length)
+        block.copy(blob, offset);
 
-    var first = await commit(this, { "big.bin": blob, "after.txt": "After the large file" });
-    var growth = await memoryGrowth(this, EMPTY_TREE, first);
+      var first = await commit(this, {
+        "big.bin": blob,
+        "after.txt": "After the large file",
+      });
+      var growth = await memoryGrowth(this, EMPTY_TREE, first);
 
-    // Buffering the file would add at least its size
-    expect(growth).toBeLessThan(blob.length / 2);
-    expect(Buffer.compare(await folder.read(this.blog.id, "/big.bin"), blob)).toBe(0);
-    expect((await folder.read(this.blog.id, "/after.txt")).toString()).toBe("After the large file");
-  }, 120 * 1000);
+      // Buffering the file would add at least its size
+      expect(growth).toBeLessThan(blob.length / 2);
+      expect(
+        Buffer.compare(await folder.read(this.blog.id, "/big.bin"), blob)
+      ).toBe(0);
+      expect((await folder.read(this.blog.id, "/after.txt")).toString()).toBe(
+        "After the large file"
+      );
+    },
+    120 * 1000
+  );
 
   describe("paths which are not safe", function () {
     it("never writes to or removes the folder's .git directory", async function () {
-      await folder.write(this.blog.id, "/.git/config", "The live clone's config");
+      await folder.write(
+        this.blog.id,
+        "/.git/config",
+        "The live clone's config"
+      );
 
       var first = await commitExactly(this, {
-        ".git": { config: "Overwritten", hooks: { "post-checkout": "#!/bin/sh\n" } },
+        ".git": {
+          config: "Overwritten",
+          hooks: { "post-checkout": "#!/bin/sh\n" },
+        },
         ".GIT": { config: "Overwritten" },
         "fine.txt": "Fine",
       });
@@ -591,7 +726,10 @@ describe("git client: materialize", function () {
     it("never writes outside the folder", async function () {
       var first = await commitExactly(this, {
         "..": { outside: { "pwned.txt": "Escaped" } },
-        nested: { "..": { "pwned.txt": "Escaped" }, ".": { "pwned.txt": "Escaped" } },
+        nested: {
+          "..": { "pwned.txt": "Escaped" },
+          ".": { "pwned.txt": "Escaped" },
+        },
         "fine.txt": "Fine",
       });
 
@@ -613,7 +751,9 @@ describe("git client: materialize", function () {
   it("fails if the store does not have a commit", async function () {
     await commit(this, { "a.txt": "A" });
 
-    var err = await failure(apply(this, EMPTY_TREE, "0123456789012345678901234567890123456789"));
+    var err = await failure(
+      apply(this, EMPTY_TREE, "0123456789012345678901234567890123456789")
+    );
 
     expect(err).toEqual(jasmine.any(Error));
     expect(err.code).toBe("NOT_FOUND");

@@ -67,7 +67,9 @@ get(url, async function (err, user, blog, entry) {
     "Other formats like 'Jan 31 2024' also work."
   );
 
-  const input = await promptForDate("Enter a new date (e.g. 2024-01-31 15:04): ");
+  const input = await promptForDate(
+    "Enter a new date (e.g. 2024-01-31 15:04): "
+  );
 
   if (!input) {
     console.error("No date provided. Aborting.");

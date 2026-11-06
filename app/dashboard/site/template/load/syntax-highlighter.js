@@ -12,8 +12,17 @@ module.exports = function (req, res, next) {
         ({ id }) => id === req.template.locals.syntax_highlighter.id
       ) || {}),
       ...req.template.locals.syntax_highlighter,
-      background: Themes.find(({ id }) => id === req.template.locals.syntax_highlighter.id)?.background,
-      colors: Themes.find(({ id }) => id === req.template.locals.syntax_highlighter.id)?.colors.slice(1).map(color => { return { color } }) || []
+      background: Themes.find(
+        ({ id }) => id === req.template.locals.syntax_highlighter.id
+      )?.background,
+      colors:
+        Themes.find(
+          ({ id }) => id === req.template.locals.syntax_highlighter.id
+        )
+          ?.colors.slice(1)
+          .map((color) => {
+            return { color };
+          }) || [],
     },
     font: req.template.locals.syntax_highlighter_font
       ? {
@@ -24,11 +33,11 @@ module.exports = function (req, res, next) {
           label: "Font",
           // The font picker sits below the Code theme control, so a separate
           // visible Font label is redundant here.
-          singleFontInput: true
+          singleFontInput: true,
         }
       : null,
     label: "Code",
-    options: Themes.map(option => {
+    options: Themes.map((option) => {
       return {
         selected:
           req.template.locals.syntax_highlighter.id &&
@@ -37,16 +46,16 @@ module.exports = function (req, res, next) {
             : "",
         background: option.background,
         color: option.colors[0],
-        colors: option.colors.slice(1).map(i => {
+        colors: option.colors.slice(1).map((i) => {
           return { color: i };
         }),
-        tags: option.tags.map(tag => {
+        tags: option.tags.map((tag) => {
           return { tag };
         }),
         name: option.name,
-        id: option.id
+        id: option.id,
       };
-    })
+    }),
   };
   next();
 };

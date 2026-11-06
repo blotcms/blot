@@ -71,7 +71,10 @@ function scaled(shape) {
   out.entries = Math.max(10, Math.round(shape.entries * SCALE));
   out.pages = Math.round((shape.pages || 0) * SCALE);
   out.html = Object.fromEntries(
-    Object.entries(shape.html).map(([k, v]) => [k, Math.max(100, Math.round(v * SCALE))])
+    Object.entries(shape.html).map(([k, v]) => [
+      k,
+      Math.max(100, Math.round(v * SCALE)),
+    ])
   );
   if (shape.tags) out.tags = Math.max(5, Math.round(shape.tags * SCALE));
   return out;
@@ -92,12 +95,21 @@ async function main() {
   const timings = {};
 
   // Fixed URL lists: the pages that pull the most per render
-  const catalogEntry = sites.catalog.entries[Math.floor(sites.catalog.entries.length / 2)];
-  const heavyEntry = sites.heavy.entries.slice().sort((a, b) => a.size - b.size)[
+  const catalogEntry =
+    sites.catalog.entries[Math.floor(sites.catalog.entries.length / 2)];
+  const heavyEntry = sites.heavy.entries
+    .slice()
+    .sort((a, b) => a.size - b.size)[
     Math.floor(sites.heavy.entries.length / 2)
   ];
   const urls = {
-    catalog: ["/", "/archives", "/sitemap.xml", catalogEntry.url, "/tagged/topic-1"],
+    catalog: [
+      "/",
+      "/archives",
+      "/sitemap.xml",
+      catalogEntry.url,
+      "/tagged/topic-1",
+    ],
     heavy: ["/", "/archives", "/sitemap.xml", heavyEntry.url],
   };
 
@@ -151,7 +163,10 @@ async function main() {
   // 5. Contention: the small sites' latency while the mega sites render,
   // first alone, then while the mega sites are browsed and resynced
   const victims = sites.small.flatMap((site) =>
-    ["/", site.entries[0].url, site.entries[1].url].map((url) => [site.blog.handle, url])
+    ["/", site.entries[0].url, site.entries[1].url].map((url) => [
+      site.blog.handle,
+      url,
+    ])
   );
   for (const [handle, url] of victims) await request(handle, url);
 
@@ -175,7 +190,8 @@ async function main() {
   // stays after a collection (mostly what the caches keep)
   metrics.heap_peak_mb = (heapPeak - baseHeap) / 1048576;
   gc();
-  metrics.heap_retained_mb = (process.memoryUsage().heapUsed - baseHeap) / 1048576;
+  metrics.heap_retained_mb =
+    (process.memoryUsage().heapUsed - baseHeap) / 1048576;
 
   const caches = cacheCounters();
   if (caches) {
@@ -248,7 +264,9 @@ async function seed() {
   async function site(shape, seedName) {
     const created = await blog();
     const entries = content.entries(shape, seedName);
-    await mapLimit(entries, 8, (entry) => setEntry(created.id, entry.path, entry));
+    await mapLimit(entries, 8, (entry) =>
+      setEntry(created.id, entry.path, entry)
+    );
     const stored = await mapLimit(entries, 8, (entry) =>
       promisify((cb) => Entry.get(created.id, entry.path, (e) => cb(null, e)))()
     );
@@ -268,7 +286,11 @@ async function seed() {
     await setView(catalogID, view);
   }
   await setBlog(catalog.blog.id, { template: catalogID });
-  catalog.previews = await previews(catalog.blog, catalogID, profile.catalog.previewTemplates);
+  catalog.previews = await previews(
+    catalog.blog,
+    catalogID,
+    profile.catalog.previewTemplates
+  );
 
   // The heavy site, on a fork of the stock Hypertext template
   const heavyShape = scaled(profile.heavy);
@@ -278,7 +300,11 @@ async function seed() {
     locals: { page_size: heavyShape.pageSize, sort_by: heavyShape.sortBy },
   });
   await setBlog(heavy.blog.id, { template: heavyID });
-  heavy.previews = await previews(heavy.blog, heavyID, profile.heavy.previewTemplates);
+  heavy.previews = await previews(
+    heavy.blog,
+    heavyID,
+    profile.heavy.previewTemplates
+  );
 
   // Everyone else, on the default template
   const small = [];
@@ -298,7 +324,9 @@ async function ownTemplate(blog, name, metadata) {
 async function previews(blog, templateID, count) {
   const slugs = [templateID.split(":").pop()];
   for (let i = 1; i < count; i++) {
-    const id = await ownTemplate(blog, `variant${i}`, { cloneFrom: templateID });
+    const id = await ownTemplate(blog, `variant${i}`, {
+      cloneFrom: templateID,
+    });
     slugs.push(id.split(":").pop());
   }
   return slugs;
@@ -474,7 +502,9 @@ function gc() {
 
 function round(value) {
   if (typeof value === "number") return Math.round(value * 10) / 10;
-  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, round(v)]));
+  return Object.fromEntries(
+    Object.entries(value).map(([k, v]) => [k, round(v)])
+  );
 }
 
 function parseArgs(argv) {

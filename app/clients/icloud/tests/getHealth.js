@@ -47,9 +47,7 @@ describe("icloud getHealth", function () {
 
     expect(result.state).toBe(health.STATES.ERROR);
     expect(result.issues[0].code).toBe(health.CODES.SOURCE_MISSING);
-    expect(result.issues[0].message).toBe(
-      health.ISSUES.SOURCE_MISSING.message
-    );
+    expect(result.issues[0].message).toBe(health.ISSUES.SOURCE_MISSING.message);
     expect(typeof result.issues[0].since).toBe("number");
   });
 

@@ -4,7 +4,7 @@ var client = require("models/client");
 var validate = require("./validate");
 var generateId = require("./generateId");
 
-module.exports = function create (
+module.exports = function create(
   email,
   passwordHash,
   subscription,
@@ -32,7 +32,7 @@ module.exports = function create (
         subscription: subscription,
         paypal: paypal,
         paymentMethods: [],
-        passwordHash: passwordHash
+        passwordHash: passwordHash,
       };
 
       user = await new Promise(function (resolve, reject) {

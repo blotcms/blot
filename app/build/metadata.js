@@ -4,7 +4,7 @@ const YAML = require("yaml");
 
 const alphaNumericRegEx = /^([a-zA-Z0-9\-_ ]+)$/;
 
-function Metadata (html) {
+function Metadata(html) {
   ensure(html, "string");
 
   // We try and normalize all the different ways to end a line
@@ -40,7 +40,7 @@ function Metadata (html) {
       }
 
       // Preserve original metadata keys as parsed.
-      Object.keys(mixedCaseMetadata).forEach(mixedCaseKey => {
+      Object.keys(mixedCaseMetadata).forEach((mixedCaseKey) => {
         let value = mixedCaseMetadata[mixedCaseKey];
 
         // map 'null' values to empty strings
@@ -129,10 +129,6 @@ function Metadata (html) {
 
     // Extract metadata from within comments
 
-    if (key.slice(0, 4) === "<!--") {
-      key = key.slice(4).trim();
-    }
-
     if (value.slice(-3) === "-->") {
       value = value.slice(0, -3).trim();
     }
@@ -172,7 +168,7 @@ function Metadata (html) {
 
   return {
     html: html,
-    metadata: metadata
+    metadata: metadata,
   };
 }
 

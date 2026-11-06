@@ -2,7 +2,6 @@ describe("cdn", function () {
   var cdn = require("blog/render/retrieve/cdn");
   var mustache = require("mustache");
   var config = require("config");
-  var generateCdnUrl = require("models/template/util/generateCdnUrl");
 
   global.test.blog();
 
@@ -32,7 +31,11 @@ describe("cdn", function () {
       expect(result).toContain(config.cdn.origin);
       expect(result).toContain("/template/");
       // New format: /template/{hash[0:2]}/{hash[2:4]}/{hash[4:]}/{viewName}
-      expect(result).toMatch(new RegExp(`/template/${hash.substring(0, 2)}/${hash.substring(2, 4)}/${hash.substring(4)}/style\\.css`));
+      expect(result).toMatch(
+        new RegExp(
+          `/template/${hash.substring(0, 2)}/${hash.substring(2, 4)}/${hash.substring(4)}/style\\.css`
+        )
+      );
       done();
     });
   });
@@ -48,7 +51,11 @@ describe("cdn", function () {
       expect(result).toContain(config.cdn.origin);
       expect(result).toContain("/template/");
       // New format: /template/{hash[0:2]}/{hash[2:4]}/{hash[4:]}/{viewName}
-      expect(result).toMatch(new RegExp(`/template/${hash.substring(0, 2)}/${hash.substring(2, 4)}/${hash.substring(4)}/style\\.css`));
+      expect(result).toMatch(
+        new RegExp(
+          `/template/${hash.substring(0, 2)}/${hash.substring(2, 4)}/${hash.substring(4)}/style\\.css`
+        )
+      );
       done();
     });
   });
@@ -75,7 +82,7 @@ describe("cdn", function () {
 
     cdn(this.request, {}, function (err, lambda) {
       result = mustache.render(template, { cdn: lambda });
-      expect(result).toBe('/style.css')
+      expect(result).toBe("/style.css");
       done();
     });
   });
@@ -140,7 +147,11 @@ describe("cdn", function () {
       expect(result).toContain(config.cdn.origin);
       expect(result).toContain("/template/");
       // New format: /template/{hash[0:2]}/{hash[2:4]}/{hash[4:]}/{viewName}
-      expect(result).toMatch(new RegExp(`/template/${hash.substring(0, 2)}/${hash.substring(2, 4)}/${hash.substring(4)}/style\\.css`));
+      expect(result).toMatch(
+        new RegExp(
+          `/template/${hash.substring(0, 2)}/${hash.substring(2, 4)}/${hash.substring(4)}/style\\.css`
+        )
+      );
       done();
     });
   });
@@ -161,9 +172,9 @@ describe("cdn", function () {
       var blogID = this.blog.id;
 
       cdn(this.request, {}, function (err, lambda) {
-        expect(mustache.render("{{#cdn}}/images/a.png{{/cdn}}", { cdn: lambda })).toBe(
-          "%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png"
-        );
+        expect(
+          mustache.render("{{#cdn}}/images/a.png{{/cdn}}", { cdn: lambda })
+        ).toBe("%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png");
         done();
       });
     });
@@ -173,35 +184,39 @@ describe("cdn", function () {
 
       cdn(this.request, {}, function (err, lambda) {
         expect(
-          mustache.render("{{#cdn}}/images/a.png?v=2#top{{/cdn}}", { cdn: lambda })
-        ).toBe("%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png?v=2#top");
+          mustache.render("{{#cdn}}/images/a.png?v=2#top{{/cdn}}", {
+            cdn: lambda,
+          })
+        ).toBe(
+          "%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png?v=2#top"
+        );
         done();
       });
     });
 
     it("returns an unversioned URL for a reserved global path", function (done) {
       cdn(this.request, {}, function (err, lambda) {
-        expect(mustache.render("{{#cdn}}/icons/search.svg{{/cdn}}", { cdn: lambda })).toBe(
-          "%%BLOT_CDN%%/icons/search.svg"
-        );
+        expect(
+          mustache.render("{{#cdn}}/icons/search.svg{{/cdn}}", { cdn: lambda })
+        ).toBe("%%BLOT_CDN%%/icons/search.svg");
         done();
       });
     });
 
     it("still returns view URLs", function (done) {
       cdn(this.request, {}, function (err, lambda) {
-        expect(mustache.render("{{#cdn}}/style.css{{/cdn}}", { cdn: lambda })).toContain(
-          "/template/"
-        );
+        expect(
+          mustache.render("{{#cdn}}/style.css{{/cdn}}", { cdn: lambda })
+        ).toContain("/template/");
         done();
       });
     });
 
     it("leaves a folder file that isn't in the manifest as written", function (done) {
       cdn(this.request, {}, function (err, lambda) {
-        expect(mustache.render("{{#cdn}}/images/b.png{{/cdn}}", { cdn: lambda })).toBe(
-          "/images/b.png"
-        );
+        expect(
+          mustache.render("{{#cdn}}/images/b.png{{/cdn}}", { cdn: lambda })
+        ).toBe("/images/b.png");
         done();
       });
     });
@@ -210,9 +225,9 @@ describe("cdn", function () {
       this.request.blog.url = "https://example.blot.im";
 
       cdn(this.request, {}, function (err, lambda) {
-        expect(mustache.render("{{#cdn}}/images/b.png?v=1{{/cdn}}", { cdn: lambda })).toBe(
-          "/images/b.png?v=1"
-        );
+        expect(
+          mustache.render("{{#cdn}}/images/b.png?v=1{{/cdn}}", { cdn: lambda })
+        ).toBe("/images/b.png?v=1");
         done();
       });
     });
@@ -221,8 +236,12 @@ describe("cdn", function () {
       this.request.blog.url = "https://example.blot.im";
 
       cdn(this.request, {}, function (err, lambda) {
-        expect(mustache.render("{{#cdn}}missing.css{{/cdn}}", { cdn: lambda })).toBe("missing.css");
-        expect(mustache.render("{{#cdn}}//other.com/a.png{{/cdn}}", { cdn: lambda })).toBe("//other.com/a.png");
+        expect(
+          mustache.render("{{#cdn}}missing.css{{/cdn}}", { cdn: lambda })
+        ).toBe("missing.css");
+        expect(
+          mustache.render("{{#cdn}}//other.com/a.png{{/cdn}}", { cdn: lambda })
+        ).toBe("//other.com/a.png");
         done();
       });
     });
@@ -231,12 +250,11 @@ describe("cdn", function () {
       this.request.preview = true;
 
       cdn(this.request, {}, function (err, lambda) {
-        expect(mustache.render("{{#cdn}}/images/a.png{{/cdn}}", { cdn: lambda })).toBe(
-          "/images/a.png"
-        );
+        expect(
+          mustache.render("{{#cdn}}/images/a.png{{/cdn}}", { cdn: lambda })
+        ).toBe("/images/a.png");
         done();
       });
     });
   });
 });
-

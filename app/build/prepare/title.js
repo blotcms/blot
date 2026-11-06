@@ -2,7 +2,7 @@ var firstSentence = require("helper/firstSentence");
 var titlify = require("./titlify");
 var titlecase = require("helper/titlecase");
 
-function tidy (str) {
+function tidy(str) {
   return str.split("  ").join(" ").trim();
 }
 
@@ -12,14 +12,14 @@ var order = ["h4", "h3", "h2", "h1"];
 // Don't look down more than three nodes
 var MAX_DEPTH = 3;
 
-function extractTitle ($, path, options = {}) {
+function extractTitle($, path, options = {}) {
   var titleNode;
   var tag = "";
-  var title = "";
+  var title;
 
   $.root().children().each(find);
 
-  function find (i, node) {
+  function find(i, node) {
     // We only look for a title in the first three top level nodes
     if (i >= MAX_DEPTH) return false;
 
@@ -66,12 +66,12 @@ function extractTitle ($, path, options = {}) {
   return {
     title,
     tag,
-    body
+    body,
   };
 }
 
 // An earlier h1 tag beats a later h1 tag
-function best (firstNode, secondNode) {
+function best(firstNode, secondNode) {
   if (!firstNode || !firstNode.name) return secondNode;
 
   if (!secondNode || !secondNode.name) return firstNode;

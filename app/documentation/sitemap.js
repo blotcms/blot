@@ -24,10 +24,10 @@ module.exports = function (req, res) {
     "/questions",
     "/contact",
     "/privacy",
-    "/terms"
-  ].map(i => {
+    "/terms",
+  ].map((i) => {
     return {
-      url: config.protocol + config.host + i
+      url: config.protocol + config.host + i,
     };
   });
   res.setHeader("Content-Type", "text/xml");

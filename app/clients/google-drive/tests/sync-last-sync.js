@@ -33,13 +33,18 @@ function load({ account, storeError }) {
     },
   };
 
-  vm.runInNewContext(fs.readFileSync(require.resolve("../sync/index"), "utf8"), {
-    module,
-    exports: module.exports,
-    console: { log() {}, error() {} },
-    require: (name) =>
-      Object.prototype.hasOwnProperty.call(stubs, name) ? stubs[name] : require(name),
-  });
+  vm.runInNewContext(
+    fs.readFileSync(require.resolve("../sync/index"), "utf8"),
+    {
+      module,
+      exports: module.exports,
+      console: { log() {}, error() {} },
+      require: (name) =>
+        Object.prototype.hasOwnProperty.call(stubs, name)
+          ? stubs[name]
+          : require(name),
+    }
+  );
 
   return { sync: module.exports, events, stored };
 }

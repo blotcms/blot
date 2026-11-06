@@ -1,4 +1,4 @@
-const cdn = require("../../cdn");
+require("../../cdn");
 
 describe("asset middleware", function () {
   const config = require("config");
@@ -100,7 +100,8 @@ describe("asset middleware", function () {
     for (const path of paths) {
       let res = await this.get(path, { redirect: "manual" });
       // Images are redirected to the CDN, which serves the same bucket key
-      if (res.status === 302) res = await this.fetch(res.headers.get("location"));
+      if (res.status === 302)
+        res = await this.fetch(res.headers.get("location"));
       expect(res.status).toEqual(200);
       const body = await res.text();
       expect(body).toEqual(contents[path]);
@@ -179,7 +180,9 @@ describe("asset middleware", function () {
 
     it("redirects generated assets to their bucket path on the CDN", async function () {
       await assets.write(this.blog.id, "/_image_cache/x y.jpg", "jpg-bytes");
-      const res = await this.get("/_image_cache/x%20y.jpg?v=1", { redirect: "manual" });
+      const res = await this.get("/_image_cache/x%20y.jpg?v=1", {
+        redirect: "manual",
+      });
 
       expect(res.status).toEqual(302);
       expect(res.headers.get("cache-control")).toEqual("no-cache");

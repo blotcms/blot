@@ -18,7 +18,7 @@ describe("questions.search", function () {
     const results = await search({ query: "how" });
 
     // each result should have only the properties 'title' and 'id'
-    results.forEach(result => {
+    results.forEach((result) => {
       expect(Object.keys(result).sort()).toEqual(["id", "score", "title"]);
     });
 
@@ -38,8 +38,8 @@ describe("questions.search", function () {
   });
 
   it("scores the title higher than the body", async function () {
-    const one = await create({ title: "How", body: "Cow" });
-    const two = await create({ title: "Now", body: "Cow" });
+    await create({ title: "How", body: "Cow" });
+    await create({ title: "Now", body: "Cow" });
     const three = await create({ title: "Cow", body: "Yes" });
 
     const results = await search({ query: "cow" });
@@ -52,7 +52,7 @@ describe("questions.search", function () {
 
   it("checks replies", async function () {
     const one = await create({ title: "One", body: "Hello" });
-    const reply = await create({ body: "Test", parent: one.id });
+    await create({ body: "Test", parent: one.id });
 
     const results = await search({ query: "test" });
 
@@ -66,7 +66,7 @@ describe("questions.search", function () {
 
     const results = await search({ query: "how" });
 
-    const ids = results.map(result => result.id);
+    const ids = results.map((result) => result.id);
     expect(ids).toContain(valid.id);
     expect(ids).not.toContain(emptyBody.id);
   });

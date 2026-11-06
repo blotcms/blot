@@ -58,13 +58,11 @@ describe("dependencies", function () {
 
   // Lots of items
   should_get_dependencies({
-    html:
-      '<script type="text/javascript" src="javascript.js"></script><img src="../image.jpg"><link rel="stylesheet" type="text/css" href="/theme.css">',
+    html: '<script type="text/javascript" src="javascript.js"></script><img src="../image.jpg"><link rel="stylesheet" type="text/css" href="/theme.css">',
     path: "/sub/folder/post.txt",
     metadata: {},
     result: {
-      html:
-        '<script type="text/javascript" src="/sub/folder/javascript.js"></script><img src="/sub/image.jpg"><link rel="stylesheet" type="text/css" href="/theme.css">',
+      html: '<script type="text/javascript" src="/sub/folder/javascript.js"></script><img src="/sub/image.jpg"><link rel="stylesheet" type="text/css" href="/theme.css">',
       metadata: {},
       dependencies: [
         "/sub/folder/javascript.js",
@@ -165,13 +163,11 @@ describe("dependencies", function () {
   // Filesystem path segments must be URL-encoded in rewritten attributes,
   // without changing the decoded paths used for dependency bookkeeping.
   should_get_dependencies({
-    html:
-      '<a href="report.pdf">Report</a><img src="cover image.png"><link rel="stylesheet" href="print.css">',
+    html: '<a href="report.pdf">Report</a><img src="cover image.png"><link rel="stylesheet" href="print.css">',
     path: "/folder#1/post.txt",
     metadata: {},
     result: {
-      html:
-        '<a href="/folder%231/report.pdf">Report</a><img src="/folder%231/cover%20image.png"><link rel="stylesheet" href="/folder%231/print.css">',
+      html: '<a href="/folder%231/report.pdf">Report</a><img src="/folder%231/cover%20image.png"><link rel="stylesheet" href="/folder%231/print.css">',
       metadata: {},
       dependencies: [
         "/folder#1/report.pdf",
@@ -188,8 +184,7 @@ describe("dependencies", function () {
     path: "/folder?draft/post.txt",
     metadata: {},
     result: {
-      html:
-        '<a href="/folder%3Fdraft/report.pdf?download=1#page=3">Report</a>',
+      html: '<a href="/folder%3Fdraft/report.pdf?download=1#page=3">Report</a>',
       metadata: {},
       dependencies: ["/folder?draft/report.pdf"],
     },
@@ -199,13 +194,11 @@ describe("dependencies", function () {
   // converter, Pandoc, or a hand-written link) must round-trip
   // unchanged rather than being encoded a second time.
   should_get_dependencies({
-    html:
-      '<a href="caf%C3%A9.pdf">Report</a><img src="my%20photo.png">',
+    html: '<a href="caf%C3%A9.pdf">Report</a><img src="my%20photo.png">',
     path: "/notes/post.txt",
     metadata: {},
     result: {
-      html:
-        '<a href="/notes/caf%C3%A9.pdf">Report</a><img src="/notes/my%20photo.png">',
+      html: '<a href="/notes/caf%C3%A9.pdf">Report</a><img src="/notes/my%20photo.png">',
       metadata: {},
       dependencies: ["/notes/caf%C3%A9.pdf", "/notes/my%20photo.png"],
     },
@@ -247,8 +240,7 @@ describe("dependencies", function () {
     path: "/assets/post.txt",
     metadata: {},
     result: {
-      html:
-        '<img src="/assets/photo.jpg?v=2"><img src="/assets/icons.svg#home">',
+      html: '<img src="/assets/photo.jpg?v=2"><img src="/assets/icons.svg#home">',
       metadata: {},
       dependencies: ["/assets/photo.jpg", "/assets/icons.svg"],
     },
@@ -623,7 +615,6 @@ describe("dependencies", function () {
       dependencies: ["/foo/image.jpg"],
     },
   });
-
 
   // Should resolve thumbnail metadata with mixed-case key
   should_get_dependencies({

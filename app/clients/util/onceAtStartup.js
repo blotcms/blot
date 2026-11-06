@@ -69,7 +69,13 @@ async function runOnceAtStartup(name, fn, options = {}) {
     try {
       await held.release();
     } catch (err) {
-      console.error(clfdate(), "[STARTUP]", name, "release failed:", err.message);
+      console.error(
+        clfdate(),
+        "[STARTUP]",
+        name,
+        "release failed:",
+        err.message
+      );
     }
   }
 }

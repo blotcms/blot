@@ -74,7 +74,6 @@ async function build(callback) {
     (avatar) => !sites.find((site) => avatar.startsWith(site.host))
   );
 
-
   // remove the avatars without a corresponding site
   for (let avatar of missingAvatars) {
     console.log("Removing avatar without corresponding site", avatar);
@@ -87,13 +86,15 @@ async function build(callback) {
 
       if (!isOnline) return null;
 
-      let tenure = null;
+      let tenure;
       if (site.tenureStartYear != null) {
         const startMs = Date.UTC(site.tenureStartYear, 0, 1);
         tenure = Date.now() - startMs;
       } else {
         tenure = await fetchSubscriptionDuration(site.host);
       }
+
+      // tenureStartYear is dropped from the result
 
       const { tenureStartYear, ...rest } = site;
       return {
@@ -148,8 +149,9 @@ async function generateImages(sites) {
   await fs.ensureDir(outputDirectory);
 
   const existingImages = new Set(
-    (await fs.readdir(outputDirectory).catch(() => []))
-      .filter((file) => file.endsWith(".jpg"))
+    (await fs.readdir(outputDirectory).catch(() => [])).filter((file) =>
+      file.endsWith(".jpg")
+    )
   );
   const generatedImages = new Set();
 
@@ -169,21 +171,21 @@ async function generateImages(sites) {
       })
       .toFile(path);
 
-    site.image = '/images/featured/' + filename;
+    site.image = "/images/featured/" + filename;
     generatedImages.add(filename);
     delete site.avatar;
   }
 
-  const obsolete = [...existingImages].filter((file) => !generatedImages.has(file));
+  const obsolete = [...existingImages].filter(
+    (file) => !generatedImages.has(file)
+  );
   for (const file of obsolete) {
     await fs.remove(join(outputDirectory, file));
   }
 
   await fs.outputFile(
     __dirname + "/sites.filtered.txt",
-    (
-      await fs.readFile(__dirname + "/sites.txt", "utf-8")
-    )
+    (await fs.readFile(__dirname + "/sites.txt", "utf-8"))
       .split("\n")
       .filter((i) => i)
       .filter((line) => sites.find((site) => line.includes(site.host)))
@@ -193,9 +195,7 @@ async function generateImages(sites) {
 
   await fs.outputFile(
     __dirname + "/sites.missing.txt",
-    (
-      await fs.readFile(__dirname + "/sites.txt", "utf-8")
-    )
+    (await fs.readFile(__dirname + "/sites.txt", "utf-8"))
       .split("\n")
       .filter((i) => i)
       .filter((line) => !sites.find((site) => line.includes(site.host)))

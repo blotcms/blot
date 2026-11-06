@@ -7,28 +7,30 @@ describe("transformer", function () {
     var firstTransform = jasmine.createSpy().and.callFake(test.transform);
     var secondTransform = jasmine.createSpy().and.callFake(test.transform);
 
-    test.transformer.lookup(test.path, firstTransform, function (
-      err,
-      firstResult
-    ) {
-      if (err) return done.fail(err);
-
-      test.transformer.flush(function (err) {
+    test.transformer.lookup(
+      test.path,
+      firstTransform,
+      function (err, firstResult) {
         if (err) return done.fail(err);
 
-        test.transformer.lookup(test.path, secondTransform, function (
-          err,
-          secondResult
-        ) {
+        test.transformer.flush(function (err) {
           if (err) return done.fail(err);
 
-          expect(firstTransform).toHaveBeenCalled();
-          expect(secondTransform).toHaveBeenCalled();
-          expect(firstResult).toEqual(secondResult);
+          test.transformer.lookup(
+            test.path,
+            secondTransform,
+            function (err, secondResult) {
+              if (err) return done.fail(err);
 
-          done();
+              expect(firstTransform).toHaveBeenCalled();
+              expect(secondTransform).toHaveBeenCalled();
+              expect(firstResult).toEqual(secondResult);
+
+              done();
+            }
+          );
         });
-      });
-    });
+      }
+    );
   });
 });

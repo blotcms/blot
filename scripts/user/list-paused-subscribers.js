@@ -13,7 +13,8 @@ var found = [];
 
 each(
   function (user, next) {
-    if (!user.subscription || !user.subscription.pause_collection) return next();
+    if (!user.subscription || !user.subscription.pause_collection)
+      return next();
 
     async.map(
       user.blogs || [],
@@ -31,7 +32,9 @@ each(
           uid: user.uid,
           status: user.subscription.status,
           resumesAt: user.subscription.pause_collection.resumes_at
-            ? new Date(user.subscription.pause_collection.resumes_at * 1000).toISOString()
+            ? new Date(
+                user.subscription.pause_collection.resumes_at * 1000
+              ).toISOString()
             : "never",
           isDisabled: user.isDisabled,
           blogs: blogs.join(", ") || "none",

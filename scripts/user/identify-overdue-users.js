@@ -33,8 +33,9 @@ each(
     }
 
     if (
-      user.isDisabled ||  (user.subscription && user.subscription.status === "unpaid")) {
-
+      user.isDisabled ||
+      (user.subscription && user.subscription.status === "unpaid")
+    ) {
       (async function () {
         let user_total = 0;
 

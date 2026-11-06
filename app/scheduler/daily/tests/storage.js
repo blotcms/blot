@@ -18,17 +18,24 @@ describe("daily update storage", function () {
     return {
       store,
       sendCommand: async ([command, key, value]) =>
-        command === "GET" ? (store.has(key) ? store.get(key) : null) : store.set(key, value) && "OK",
+        command === "GET"
+          ? store.has(key)
+            ? store.get(key)
+            : null
+          : store.set(key, value) && "OK",
     };
   }
 
-  const run = (deps) => new Promise((resolve) => storage((err, result) => resolve(result), deps));
+  const run = (deps) =>
+    new Promise((resolve) => storage((err, result) => resolve(result), deps));
 
   describe("line", function () {
     it("gives the size, objects and age of the last copy", function () {
       const text = storage.line(copyLine(), { now: NOW });
 
-      expect(text).toBe("Storage: 1.8 TB in 1,234,567 objects, offsite copied 9h ago");
+      expect(text).toBe(
+        "Storage: 1.8 TB in 1,234,567 objects, offsite copied 9h ago"
+      );
       expect(text).not.toContain("**");
     });
 
@@ -39,22 +46,35 @@ describe("daily update storage", function () {
       expect(storage.line(value, { history: [point(7, 88)], now: NOW })).toBe(
         "Storage: 100 GB in 1,234,567 objects (+12 GB this week), offsite copied 0m ago"
       );
-      expect(storage.line(value, { history: [point(7, 104)], now: NOW })).toContain("(-4 GB this week)");
-      expect(storage.line(value, { history: [point(7, 100)], now: NOW })).toContain("(no change this week)");
+      expect(
+        storage.line(value, { history: [point(7, 104)], now: NOW })
+      ).toContain("(-4 GB this week)");
+      expect(
+        storage.line(value, { history: [point(7, 100)], now: NOW })
+      ).toContain("(no change this week)");
     });
 
     it("says how long the growth covers when under a week", function () {
       const value = copyLine({ bytes: 100 * GB, age: 0 });
 
-      expect(storage.line(value, { history: [point(2, 94)], now: NOW })).toContain("(+6 GB in 2d)");
+      expect(
+        storage.line(value, { history: [point(2, 94)], now: NOW })
+      ).toContain("(+6 GB in 2d)");
     });
 
     it("leaves the growth out with under a day of history, or only older readings", function () {
       const value = copyLine({ bytes: 100 * GB, age: 0 });
 
       expect(storage.line(value, { history: [], now: NOW })).not.toContain("(");
-      expect(storage.line(value, { history: [{ time: NOW - 5 * HOUR, used: 90 * GB }], now: NOW })).not.toContain("(");
-      expect(storage.line(value, { history: [point(20, 50)], now: NOW })).not.toContain("(");
+      expect(
+        storage.line(value, {
+          history: [{ time: NOW - 5 * HOUR, used: 90 * GB }],
+          now: NOW,
+        })
+      ).not.toContain("(");
+      expect(
+        storage.line(value, { history: [point(20, 50)], now: NOW })
+      ).not.toContain("(");
     });
 
     it("flags the copy after two days", function () {
@@ -67,7 +87,9 @@ describe("daily update storage", function () {
     });
 
     it("flags a value that cannot be read", function () {
-      expect(storage.line("garbage", { now: NOW })).toBe("Storage: **offsite copy record unreadable**");
+      expect(storage.line("garbage", { now: NOW })).toBe(
+        "Storage: **offsite copy record unreadable**"
+      );
     });
 
     it("is nothing where no copy was ever recorded", function () {
@@ -78,12 +100,19 @@ describe("daily update storage", function () {
 
   describe("main", function () {
     it("stores each copy and uses the history the next day", async function () {
-      const client = fakeRedis({ [STORAGE_OFFSITE_KEY]: copyLine({ age: 9 * HOUR + DAY, bytes: 90 * GB }) });
+      const client = fakeRedis({
+        [STORAGE_OFFSITE_KEY]: copyLine({
+          age: 9 * HOUR + DAY,
+          bytes: 90 * GB,
+        }),
+      });
 
       expect((await run({ client, now: NOW - DAY })).storage).toBe(
         "Storage: 90 GB in 1,234,567 objects, offsite copied 9h ago"
       );
-      expect(JSON.parse(client.store.get(storage.HISTORY_KEY))).toEqual([{ time: NOW - 9 * HOUR - DAY, used: 90 * GB }]);
+      expect(JSON.parse(client.store.get(storage.HISTORY_KEY))).toEqual([
+        { time: NOW - 9 * HOUR - DAY, used: 90 * GB },
+      ]);
 
       client.store.set(STORAGE_OFFSITE_KEY, copyLine({ bytes: 93 * GB }));
       expect((await run({ client, now: NOW })).storage).toBe(
@@ -110,19 +139,27 @@ describe("daily update storage", function () {
         },
       };
 
-      expect((await run({ client, now: NOW })).storage).toBe("Storage: unavailable (connection refused)");
+      expect((await run({ client, now: NOW })).storage).toBe(
+        "Storage: unavailable (connection refused)"
+      );
     });
   });
 
   it("renders in the daily email after the server line", function () {
     const fs = require("fs");
     const Mustache = require("mustache");
-    const template = fs.readFileSync(__dirname + "/../../../helper/email/admin/DAILY_UPDATE.txt", "utf8");
+    const template = fs.readFileSync(
+      __dirname + "/../../../helper/email/admin/DAILY_UPDATE.txt",
+      "utf8"
+    );
     const view = { redis: "Redis: x", server: "Server: y" };
 
-    expect(Mustache.render(template, { ...view, storage: "Storage: 2 TB in 5 objects" })).toContain(
-      "Server: y\n\nStorage: 2 TB in 5 objects\n\nSync:"
-    );
+    expect(
+      Mustache.render(template, {
+        ...view,
+        storage: "Storage: 2 TB in 5 objects",
+      })
+    ).toContain("Server: y\n\nStorage: 2 TB in 5 objects\n\nSync:");
     expect(Mustache.render(template, view)).toContain("Server: y\n\nSync:");
   });
 });

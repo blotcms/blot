@@ -133,7 +133,7 @@ function redisUnavailableHandler(err, req, res, next) {
 
   console.error(
     clfdate(),
-    req.headers && req.headers["x-request-id"] || "-",
+    (req.headers && req.headers["x-request-id"]) || "-",
     "Redis unavailable:",
     err.message
   );
@@ -144,7 +144,8 @@ function redisUnavailableHandler(err, req, res, next) {
   res.status(503);
   res.set({ "Retry-After": "60", "Cache-Control": "no-store" });
   res.sendFile(PAGE, function (sendErr) {
-    if (sendErr && !res.headersSent) res.type("text").send("Service unavailable");
+    if (sendErr && !res.headersSent)
+      res.type("text").send("Service unavailable");
   });
 }
 

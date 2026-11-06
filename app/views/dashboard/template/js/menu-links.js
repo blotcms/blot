@@ -1,7 +1,7 @@
 // Assumes SortableJS is available globally as `Sortable`.
 // Replaces jQuery selectors/events with vanilla DOM APIs.
 
-const Sortable = require('../../../js/sortable.js');
+const Sortable = require("../../../js/sortable.js");
 
 (function () {
   const sortableEl = document.querySelector(".sortable");
@@ -58,7 +58,8 @@ const Sortable = require('../../../js/sortable.js');
 
       // Match original behavior: if it has class "page", toggle .details
       if (removeLink.classList.contains("page")) {
-        const details = removeLink.parentElement?.parentElement?.querySelector(".details");
+        const details =
+          removeLink.parentElement?.parentElement?.querySelector(".details");
         if (details) {
           // jQuery toggle() equivalent
           const isHidden =
@@ -101,18 +102,14 @@ const Sortable = require('../../../js/sortable.js');
       });
 
       // Replace {index} in input names
-      newlink
-        .querySelectorAll('input[name*="{index}"]')
-        .forEach((input) => {
-          input.name = input.name.split("{index}").join(String(index));
-        });
+      newlink.querySelectorAll('input[name*="{index}"]').forEach((input) => {
+        input.name = input.name.split("{index}").join(String(index));
+      });
 
       // Replace {id} in input values (only when value contains {id})
-      newlink
-        .querySelectorAll('input[value*="{id}"]')
-        .forEach((input) => {
-          input.value = input.value.split("{id}").join(String(linkID));
-        });
+      newlink.querySelectorAll('input[value*="{id}"]').forEach((input) => {
+        input.value = input.value.split("{id}").join(String(linkID));
+      });
 
       menuEl.appendChild(newlink);
 

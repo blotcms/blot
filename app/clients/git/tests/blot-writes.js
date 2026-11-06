@@ -35,7 +35,9 @@ describe("git client: Blot's own writes", function () {
 
     await write(this.blog.id, path, "Hello, world!");
 
-    expect(await helpers.blogFile(this, path)).toEqual(Buffer.from("Hello, world!"));
+    expect(await helpers.blogFile(this, path)).toEqual(
+      Buffer.from("Hello, world!")
+    );
 
     await this.local.pull();
 
@@ -98,8 +100,12 @@ describe("git client: Blot's own writes", function () {
     await local.pull(["--rebase", "origin", "master"]);
     await local.push();
 
-    expect(await helpers.blogFile(this, "/user-file.txt")).toEqual(Buffer.from("From the user"));
-    expect(await helpers.blogFile(this, "/blot-file.txt")).toEqual(Buffer.from("From Blot"));
+    expect(await helpers.blogFile(this, "/user-file.txt")).toEqual(
+      Buffer.from("From the user")
+    );
+    expect(await helpers.blogFile(this, "/blot-file.txt")).toEqual(
+      Buffer.from("From Blot")
+    );
   });
 
   it("refuses the push of a second clone until it has pulled the first one's push", async function () {
@@ -120,8 +126,12 @@ describe("git client: Blot's own writes", function () {
 
     await first.pull();
 
-    expect(await helpers.blogFile(this, "/from-first.txt")).toEqual(Buffer.from("From the first clone"));
-    expect(await helpers.blogFile(this, "/from-second.txt")).toEqual(Buffer.from("From the second clone"));
+    expect(await helpers.blogFile(this, "/from-first.txt")).toEqual(
+      Buffer.from("From the first clone")
+    );
+    expect(await helpers.blogFile(this, "/from-second.txt")).toEqual(
+      Buffer.from("From the second clone")
+    );
     expect(await first.head()).toBe(await second.head());
   });
 
@@ -159,11 +169,17 @@ describe("git client: Blot's own writes", function () {
     });
 
     it("removes a file from the blog folder even if the repository doesn't have it", async function () {
-      await require("./setup/folder").write(this.blog.id, "/only-in-the-folder.txt", "Only here");
+      await require("./setup/folder").write(
+        this.blog.id,
+        "/only-in-the-folder.txt",
+        "Only here"
+      );
 
       await remove(this.blog.id, "/only-in-the-folder.txt");
 
-      expect(await helpers.blogHas(this, "/only-in-the-folder.txt")).toBe(false);
+      expect(await helpers.blogHas(this, "/only-in-the-folder.txt")).toBe(
+        false
+      );
     });
   });
 
@@ -172,9 +188,13 @@ describe("git client: Blot's own writes", function () {
       await write(this.blog.id, "/Folder/Post.txt", "Hello");
       await this.local.pull();
 
-      var log = (await this.local.git(["log", "-1", "--format=%an <%ae>|%cn <%ce>|%s"])).stdout.trim();
+      var log = (
+        await this.local.git(["log", "-1", "--format=%an <%ae>|%cn <%ce>|%s"])
+      ).stdout.trim();
 
-      expect(log).toBe("Your Name <you@example.com>|Your Name <you@example.com>|Updated Folder/Post.txt");
+      expect(log).toBe(
+        "Your Name <you@example.com>|Your Name <you@example.com>|Updated Folder/Post.txt"
+      );
 
       await remove(this.blog.id, "/Folder/Post.txt");
       await this.local.pull();
@@ -185,13 +205,18 @@ describe("git client: Blot's own writes", function () {
     });
 
     it("is a commit for each write", async function () {
-      var before = Number((await this.local.git(["rev-list", "--count", "HEAD"])).stdout);
+      var before = Number(
+        (await this.local.git(["rev-list", "--count", "HEAD"])).stdout
+      );
 
-      for (var i = 0; i < 5; i++) await write(this.blog.id, "/file-" + i + ".txt", "File " + i);
+      for (var i = 0; i < 5; i++)
+        await write(this.blog.id, "/file-" + i + ".txt", "File " + i);
 
       await this.local.pull();
 
-      expect(Number((await this.local.git(["rev-list", "--count", "HEAD"])).stdout)).toBe(before + 5);
+      expect(
+        Number((await this.local.git(["rev-list", "--count", "HEAD"])).stdout)
+      ).toBe(before + 5);
     });
 
     it("keeps a file the user made executable executable", async function () {
@@ -204,7 +229,9 @@ describe("git client: Blot's own writes", function () {
       await write(this.blog.id, "/other.sh", "#!/bin/sh\n");
       await this.local.pull();
 
-      var listing = (await this.local.git(["ls-tree", "HEAD", "run.sh", "other.sh"])).stdout;
+      var listing = (
+        await this.local.git(["ls-tree", "HEAD", "run.sh", "other.sh"])
+      ).stdout;
 
       expect(listing).toMatch(/^100755 blob [0-9a-f]+\trun\.sh$/m);
       expect(listing).toMatch(/^100644 blob [0-9a-f]+\tother\.sh$/m);
@@ -220,19 +247,26 @@ describe("git client: Blot's own writes", function () {
         "/-leading-dash.txt",
       ];
 
-      for (var path of paths) await write(this.blog.id, path, "Contents of " + path);
+      for (var path of paths)
+        await write(this.blog.id, path, "Contents of " + path);
 
       await this.local.pull();
 
-      for (var path of paths) {
-        expect((await this.local.read(path)).toString()).toBe("Contents of " + path);
-        expect(await helpers.blogFile(this, path)).toEqual(Buffer.from("Contents of " + path));
+      for (const path of paths) {
+        expect((await this.local.read(path)).toString()).toBe(
+          "Contents of " + path
+        );
+        expect(await helpers.blogFile(this, path)).toEqual(
+          Buffer.from("Contents of " + path)
+        );
       }
 
       await remove(this.blog.id, paths[1]);
       await this.local.pull();
 
-      expect(Object.keys(await this.local.tree()).length).toBe(paths.length - 1);
+      expect(Object.keys(await this.local.tree()).length).toBe(
+        paths.length - 1
+      );
       expect(await helpers.blogHas(this, paths[1])).toBe(false);
     });
 
@@ -242,7 +276,9 @@ describe("git client: Blot's own writes", function () {
       await this.local.pull();
 
       expect((await this.local.read("/café.txt")).toString()).toBe("Café");
-      expect(await helpers.blogFile(this, "/café.txt")).toEqual(Buffer.from("Café"));
+      expect(await helpers.blogFile(this, "/café.txt")).toEqual(
+        Buffer.from("Café")
+      );
     });
 
     it("removes every file in a folder when the folder is removed", async function () {
@@ -262,10 +298,13 @@ describe("git client: Blot's own writes", function () {
         var error = null;
 
         try {
-          await require("util").promisify(require("clients/git/repo").commit)(this.blog.id, {
-            path: path,
-            contents: "x",
-          });
+          await require("util").promisify(require("clients/git/repo").commit)(
+            this.blog.id,
+            {
+              path: path,
+              contents: "x",
+            }
+          );
         } catch (err) {
           error = err;
         }
@@ -305,7 +344,9 @@ describe("git client: Blot's own writes", function () {
 
       await this.local.pull();
 
-      expect((await this.local.read("/waiting.txt")).toString()).toBe("Waiting");
+      expect((await this.local.read("/waiting.txt")).toString()).toBe(
+        "Waiting"
+      );
     });
 
     it("loses neither a write nor a push when they happen together", async function () {
@@ -329,9 +370,16 @@ describe("git client: Blot's own writes", function () {
       await local.waitForSync();
       await local.pull();
 
-      expect(Object.keys(await local.tree()).sort()).toEqual(["from-blot.txt", "from-the-user.txt"]);
-      expect(await helpers.blogFile(this, "/from-the-user.txt")).toEqual(Buffer.from("From the user"));
-      expect(await helpers.blogFile(this, "/from-blot.txt")).toEqual(Buffer.from("From Blot"));
+      expect(Object.keys(await local.tree()).sort()).toEqual([
+        "from-blot.txt",
+        "from-the-user.txt",
+      ]);
+      expect(await helpers.blogFile(this, "/from-the-user.txt")).toEqual(
+        Buffer.from("From the user")
+      );
+      expect(await helpers.blogFile(this, "/from-blot.txt")).toEqual(
+        Buffer.from("From Blot")
+      );
     });
 
     it("commits writes made at the same time, one after another, losing none", async function () {

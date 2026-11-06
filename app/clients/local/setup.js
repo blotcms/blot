@@ -19,7 +19,15 @@ async function reconcileSource(blogID, dir) {
 
   if (!(await fs.pathExists(dir))) {
     const copied = await seed(blogID, dir);
-    console.log(prefix(), "Copied", copied, "files of the folder of", blogID, "to its new source directory", dir);
+    console.log(
+      prefix(),
+      "Copied",
+      copied,
+      "files of the folder of",
+      blogID,
+      "to its new source directory",
+      dir
+    );
     return dir;
   }
 
@@ -49,7 +57,15 @@ async function reconcileSource(blogID, dir) {
   }
 
   if (changed.length) {
-    console.log(prefix(), "Reconciled", blogID, "with", dir + ":", changed.length, "changes");
+    console.log(
+      prefix(),
+      "Reconciled",
+      blogID,
+      "with",
+      dir + ":",
+      changed.length,
+      "changes"
+    );
   }
 
   if (failure) throw failure;

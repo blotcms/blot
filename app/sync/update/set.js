@@ -16,7 +16,8 @@ var path = require("path");
 var IgnoredFiles = require("models/ignoredFiles");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
-var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
+var isRedisUnavailableError =
+  require("helper/redisUnavailable").isRedisUnavailableError;
 
 var basename = (path.posix || path).basename;
 var noop = () => {};
@@ -31,7 +32,7 @@ function isPublic(path) {
     // whose name begins with an underscore
     normalizedPath.includes("/_") ||
     // convention to ingore dotfiles or folders
-    normalizedPath.includes("/.") || 
+    normalizedPath.includes("/.") ||
     // textbundle asset files
     normalizedPath.includes(".textbundle/assets/")
   );

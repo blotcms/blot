@@ -61,10 +61,22 @@ function output(dir) {
 // Also totals GC pauses; onGC(ms, kind) sees each one, e.g. to log long ones.
 function startSampler(
   out,
-  { file = "samples.ndjson", intervalMs = 100, printEveryMs = 1000, extra, print, onGC } = {}
+  {
+    file = "samples.ndjson",
+    intervalMs = 100,
+    printEveryMs = 1000,
+    extra,
+    print,
+    onGC,
+  } = {}
 ) {
   const gc = { count: 0, totalMs: 0, maxMs: 0 };
-  const peaks = { heapUsedMB: 0, rssMB: 0, externalMB: 0, eventLoopDelayMaxMs: 0 };
+  const peaks = {
+    heapUsedMB: 0,
+    rssMB: 0,
+    externalMB: 0,
+    eventLoopDelayMaxMs: 0,
+  };
 
   const loop = monitorEventLoopDelay({ resolution: 10 });
   loop.enable();
@@ -102,7 +114,10 @@ function startSampler(
     peaks.heapUsedMB = Math.max(peaks.heapUsedMB, sample.heapUsedMB);
     peaks.rssMB = Math.max(peaks.rssMB, sample.rssMB);
     peaks.externalMB = Math.max(peaks.externalMB, sample.externalMB);
-    peaks.eventLoopDelayMaxMs = Math.max(peaks.eventLoopDelayMaxMs, sample.eventLoopDelayMaxMs);
+    peaks.eventLoopDelayMaxMs = Math.max(
+      peaks.eventLoopDelayMaxMs,
+      sample.eventLoopDelayMaxMs
+    );
     out.append(file, sample);
 
     if (sample.t - lastPrint >= printEveryMs) {
@@ -135,7 +150,11 @@ function startSampler(
       return {
         elapsedMs: now(),
         peaks,
-        gc: { count: gc.count, totalMs: Math.round(gc.totalMs), maxMs: Math.round(gc.maxMs) },
+        gc: {
+          count: gc.count,
+          totalMs: Math.round(gc.totalMs),
+          maxMs: Math.round(gc.maxMs),
+        },
         heapSpaces: heapSpaces(),
       };
     },
@@ -168,7 +187,10 @@ function heapSpaces() {
 // start() appends a { event: "start", label } record to `file` straight
 // away, before any work runs, so a crash mid-phase still shows which one
 // was active. end() appends its { event: "end", ... } result and returns it.
-function measurePhases(out, { file = "phases.ndjson", intervalMs = 25, onSample } = {}) {
+function measurePhases(
+  out,
+  { file = "phases.ndjson", intervalMs = 25, onSample } = {}
+) {
   const loopDelay = monitorEventLoopDelay({ resolution: 10 });
   loopDelay.enable();
   const results = [];
@@ -235,7 +257,9 @@ function measurePhases(out, { file = "phases.ndjson", intervalMs = 25, onSample 
       heapBeforeMB: mb(phase.before.heapUsed),
       heapPeakMB: mb(heapPeak),
       heapGrowthMB: mb(heapPeak - phase.before.heapUsed),
-      heapRetainedMB: global.gc ? mb(after.heapUsed - phase.before.heapUsed) : null,
+      heapRetainedMB: global.gc
+        ? mb(after.heapUsed - phase.before.heapUsed)
+        : null,
       rssPeakMB: mb(phase.peak.rss),
       externalPeakMB: mb(phase.peak.external),
       arrayBuffersPeakMB: mb(phase.peak.arrayBuffers),
@@ -284,7 +308,10 @@ function trackRedis({ scope, onCommand } = {}) {
     diagnosticsChannel.tracingChannel(channel).subscribe({
       start(context) {
         if (getName(context) === null) return;
-        pending.set(context, { started: performance.now(), scope: scope ? scope() : undefined });
+        pending.set(context, {
+          started: performance.now(),
+          scope: scope ? scope() : undefined,
+        });
       },
       asyncEnd(context) {
         const command = pending.get(context);
@@ -328,7 +355,9 @@ function trackRedis({ scope, onCommand } = {}) {
       return {
         ...(totals.commands
           ? {}
-          : { note: "no commands seen: this release's node-redis may not publish them" }),
+          : {
+              note: "no commands seen: this release's node-redis may not publish them",
+            }),
         commands: totals.commands,
         replyMB: mb(totals.replyBytes),
         byCommand: Object.fromEntries(
@@ -358,7 +387,8 @@ function approxSize(value) {
   }
   if (typeof value === "object") {
     let n = 0;
-    for (const key of Object.keys(value)) n += key.length + approxSize(value[key]);
+    for (const key of Object.keys(value))
+      n += key.length + approxSize(value[key]);
     return n;
   }
   return 8;

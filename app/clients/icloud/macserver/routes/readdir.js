@@ -2,7 +2,7 @@ import fs from "fs-extra";
 import { join, resolve, sep } from "path";
 import { iCloudDriveDirectory } from "../config.js";
 import { ls } from "../brctl/index.js";
-import shouldIgnoreFile from '../../../util/shouldIgnoreFile.js';
+import shouldIgnoreFile from "../../../util/shouldIgnoreFile.js";
 import clfdate from "../util/clfdate.js";
 
 export default async (req, res) => {
@@ -18,13 +18,17 @@ export default async (req, res) => {
     return res.status(400).send("Missing blogID or path header");
   }
 
-  console.log(clfdate(), `Received readdir request for blogID: ${blogID}, path: ${path}`);
+  console.log(
+    clfdate(),
+    `Received readdir request for blogID: ${blogID}, path: ${path}`
+  );
 
   const basePath = resolve(join(iCloudDriveDirectory, blogID));
   const dirPath = resolve(join(basePath, path));
 
   if (dirPath !== basePath && !dirPath.startsWith(`${basePath}${sep}`)) {
-    console.error(clfdate(), 
+    console.error(
+      clfdate(),
       "Invalid path: attempted to access parent directory",
       basePath,
       dirPath
@@ -79,20 +83,19 @@ export default async (req, res) => {
     }
   }
 
-  let files = [];
+  let files;
 
   try {
     // now that we are sure the directory is in sync, we can read it
     files = await fs.readdir(dirPath, { withFileTypes: true });
   } catch (error) {
-    
     if (error.code === "ENOENT") {
       return res.status(404).send("Folder does not exist");
     }
 
     return res.status(500).send("Failed to read directory contents");
   }
-  
+
   try {
     // Ignore system files and directories we don't want to sync
     const filteredFiles = files.filter((file) => !shouldIgnoreFile(file.name));
@@ -118,7 +121,7 @@ export default async (req, res) => {
           modifiedTime,
         });
       } catch (error) {
-        // Don't let this error block the response, a file 
+        // Don't let this error block the response, a file
         // might have been deleted or moved since the
         // directory was listed
 
@@ -132,7 +135,10 @@ export default async (req, res) => {
       }
     }
 
-    console.log(clfdate(), `Readdir complete for blogID: ${blogID}, path: ${path}`);
+    console.log(
+      clfdate(),
+      `Readdir complete for blogID: ${blogID}, path: ${path}`
+    );
     console.log(clfdate(), result);
     res.json(result);
   } catch (error) {

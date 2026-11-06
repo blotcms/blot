@@ -73,12 +73,19 @@ async function flush() {
 
   try {
     const multi = client.multi();
-    multi.rPush(redisKey(container), encodeEntry(Date.now(), { p50Ms, p95Ms, p99Ms }));
+    multi.rPush(
+      redisKey(container),
+      encodeEntry(Date.now(), { p50Ms, p95Ms, p99Ms })
+    );
     multi.lTrim(redisKey(container), -LIST_MAX_LENGTH, -1);
     multi.expire(redisKey(container), LIST_TTL_SECONDS);
     await multi.exec();
   } catch (err) {
-    console.error(clfdate(), "[render-time] Failed to flush percentiles to Redis", err);
+    console.error(
+      clfdate(),
+      "[render-time] Failed to flush percentiles to Redis",
+      err
+    );
   }
 }
 

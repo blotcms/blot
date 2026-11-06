@@ -285,9 +285,9 @@ async function hasUserSideIssue(blogID, getHealth) {
 
     return Boolean(
       result &&
-        (result.issues || []).some(function (issue) {
-          return USER_SIDE_CODES.includes(issue.code);
-        })
+      (result.issues || []).some(function (issue) {
+        return USER_SIDE_CODES.includes(issue.code);
+      })
     );
   } catch (err) {
     console.error(clfdate(), "Failed to read health for", blogID, err);
@@ -366,10 +366,12 @@ function suppress(report, previous) {
 
 function issues(report) {
   return Array.from(report.blogs.values()).filter(function (record) {
-    return record.hasChanges ||
+    return (
+      record.hasChanges ||
       record.hasRepairs ||
       record.hasErrors ||
-      record.hasStuckLock;
+      record.hasStuckLock
+    );
   });
 }
 
@@ -412,7 +414,12 @@ async function send(report, sendEmail, logPrefix, options) {
       previous = await loadReported(clientName);
       suppress(report, previous);
     } catch (err) {
-      console.error(clfdate(), logPrefix, "Failed to read reported issues", err);
+      console.error(
+        clfdate(),
+        logPrefix,
+        "Failed to read reported issues",
+        err
+      );
       previous = null;
     }
   }
@@ -428,7 +435,12 @@ async function send(report, sendEmail, logPrefix, options) {
     sent = await new Promise(function (resolve) {
       sendEmail(null, view(report), function (err) {
         if (err) {
-          console.error(clfdate(), logPrefix, "Failed to send issue email", err);
+          console.error(
+            clfdate(),
+            logPrefix,
+            "Failed to send issue email",
+            err
+          );
         } else {
           console.log(clfdate(), logPrefix, "Sent sync issue report email");
         }
@@ -453,7 +465,12 @@ async function send(report, sendEmail, logPrefix, options) {
     try {
       await saveReported(clientName, remembered);
     } catch (err) {
-      console.error(clfdate(), logPrefix, "Failed to save reported issues", err);
+      console.error(
+        clfdate(),
+        logPrefix,
+        "Failed to save reported issues",
+        err
+      );
     }
   }
 

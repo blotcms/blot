@@ -16,8 +16,12 @@ describe("iCloud client access to the blog folder", function () {
     const blogID = this.blog.id;
 
     // write and remove tell the macserver afterwards, which is not tested here
-    const mocked = ["../sync/util/remoteUpload", "../sync/util/remoteDelete", "../write", "../remove"]
-      .map((name) => require.resolve(name));
+    const mocked = [
+      "../sync/util/remoteUpload",
+      "../sync/util/remoteDelete",
+      "../write",
+      "../remove",
+    ].map((name) => require.resolve(name));
     const saved = mocked.map((p) => require.cache[p]);
 
     require(mocked[0]);
@@ -29,7 +33,9 @@ describe("iCloud client access to the blog folder", function () {
 
     try {
       await promisify(require(mocked[2]))(blogID, "/posts/a.txt", "hello");
-      expect((await folder.read(blogID, "/posts/a.txt")).toString()).toBe("hello");
+      expect((await folder.read(blogID, "/posts/a.txt")).toString()).toBe(
+        "hello"
+      );
 
       await promisify(require(mocked[3]))(blogID, "/posts");
       expect(await folder.exists(blogID, "/posts")).toBe(false);
@@ -73,9 +79,15 @@ describe("iCloud client access to the blog folder", function () {
       await folder.write(this.blog.id, "/post.txt", "lower");
 
       const updated = [];
-      await resolveCaseConflicts(this.blog.id, () => {}, async (p) => updated.push(p));
+      await resolveCaseConflicts(
+        this.blog.id,
+        () => {},
+        async (p) => updated.push(p)
+      );
 
-      const names = (await folder.listNames(this.blog.id, "/")).map((e) => e.name);
+      const names = (await folder.listNames(this.blog.id, "/")).map(
+        (e) => e.name
+      );
 
       expect(names.length).toBe(2);
       expect(names.some((name) => name.includes("(conflict)"))).toBe(true);
@@ -92,13 +104,20 @@ describe("iCloud client access to the blog folder", function () {
       };
       let error;
       try {
-        await resolveCaseConflicts(this.blog.id, publish, async () => {}, signal);
+        await resolveCaseConflicts(
+          this.blog.id,
+          publish,
+          async () => {},
+          signal
+        );
       } catch (e) {
         error = e;
       }
 
       expect(error && error.name).toBe("AbortError");
-      const names = (await folder.listNames(this.blog.id, "/")).map((e) => e.name);
+      const names = (await folder.listNames(this.blog.id, "/")).map(
+        (e) => e.name
+      );
       expect(names.some((name) => name.includes("(conflict)"))).toBe(true);
       expect(names.length).toBe(2);
     });
@@ -108,17 +127,29 @@ describe("iCloud client access to the blog folder", function () {
       await folder.write(this.blog.id, "/photos/b.jpg", "b");
       await folder.write(this.blog.id, "/photos/sub/c.jpg", "c");
 
-      await resolveCaseConflicts(this.blog.id, () => {}, async () => {});
+      await resolveCaseConflicts(
+        this.blog.id,
+        () => {},
+        async () => {}
+      );
 
-      const dirs = (await folder.listNames(this.blog.id, "/")).map((e) => e.name);
+      const dirs = (await folder.listNames(this.blog.id, "/")).map(
+        (e) => e.name
+      );
 
       expect(dirs.length).toBe(1);
 
       const kept = "/" + dirs[0];
 
-      expect((await folder.read(this.blog.id, kept + "/a.jpg")).toString()).toBe("a");
-      expect((await folder.read(this.blog.id, kept + "/b.jpg")).toString()).toBe("b");
-      expect((await folder.read(this.blog.id, kept + "/sub/c.jpg")).toString()).toBe("c");
+      expect(
+        (await folder.read(this.blog.id, kept + "/a.jpg")).toString()
+      ).toBe("a");
+      expect(
+        (await folder.read(this.blog.id, kept + "/b.jpg")).toString()
+      ).toBe("b");
+      expect(
+        (await folder.read(this.blog.id, kept + "/sub/c.jpg")).toString()
+      ).toBe("c");
     });
   });
 });

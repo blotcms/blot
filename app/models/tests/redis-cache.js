@@ -22,7 +22,7 @@ describe("models/redis-cache", function () {
       "blog:blog_123:tags:all": "tags",
       "blog:blog_123:status": "list",
       "blog:blog_123:info:extra": "list",
-      "blogs": "other",
+      blogs: "other",
       "total:blogs": "other",
     };
     Object.keys(cases).forEach(function (key) {
@@ -37,7 +37,9 @@ describe("models/redis-cache", function () {
       cache: true,
       className: "info",
     });
-    expect(Cache.classifyKeys(["blog:x:info", "domain:a.com"]).cache).toBe(true);
+    expect(Cache.classifyKeys(["blog:x:info", "domain:a.com"]).cache).toBe(
+      true
+    );
     [
       "template:SITE:blog:url_patterns",
       "template:owned_by:SITE",
@@ -60,13 +62,19 @@ describe("models/redis-cache", function () {
   });
 
   it("opts in to tracking", function () {
-    expect(new Cache({ ttl: 0, maxEntries: 10, evictPolicy: "LRU" }).trackingOn())
-      .toEqual(["CLIENT", "TRACKING", "ON", "OPTIN"]);
+    expect(
+      new Cache({ ttl: 0, maxEntries: 10, evictPolicy: "LRU" }).trackingOn()
+    ).toEqual(["CLIENT", "TRACKING", "ON", "OPTIN"]);
   });
 
   describe("per-class caps", function () {
     function cache(classCaps) {
-      return new Cache({ ttl: 0, maxEntries: 100, evictPolicy: "LRU", classCaps });
+      return new Cache({
+        ttl: 0,
+        maxEntries: 100,
+        evictPolicy: "LRU",
+        classCaps,
+      });
     }
 
     function store(c, key) {
@@ -170,8 +178,18 @@ describe("models/redis-cache", function () {
         await client.get(id + ":entry:/a");
       }
       const { classStats } = createRedisClient.getClientSideCacheStats(client);
-      expect(classStats.info).toEqual({ hits: 1, misses: 1, bypass: 0, evictions: 0 });
-      expect(classStats.entry).toEqual({ hits: 0, misses: 0, bypass: 2, evictions: 0 });
+      expect(classStats.info).toEqual({
+        hits: 1,
+        misses: 1,
+        bypass: 0,
+        evictions: 0,
+      });
+      expect(classStats.entry).toEqual({
+        hits: 0,
+        misses: 0,
+        bypass: 2,
+        evictions: 0,
+      });
 
       // The server only tracks the key if CACHING YES reached it right
       // before the read, so a write must invalidate the cached value.

@@ -15,7 +15,6 @@ describe("encode_xml", function () {
 
   it("replaces relative links with absolute URLs", function (done) {
     var result;
-    var locals = {};
     var html = '<a href="/foo"></a>';
     var template = "{{#encode_xml}}" + html + "{{/encode_xml}}";
 
@@ -28,7 +27,6 @@ describe("encode_xml", function () {
 
   it("removes invalid characters", function (done) {
     var result;
-    var locals = {};
     var html = "& foo &#xFF08;&#x4FBF;&#x5229;";
     var template = "{{#encode_xml}}" + html + "{{/encode_xml}}";
 
@@ -41,7 +39,6 @@ describe("encode_xml", function () {
 
   it("removes script tags", function (done) {
     var result;
-    var locals = {};
     var html = "<script>alert('foo');</script><p>Hey</p>";
     var template = "{{#encode_xml}}" + html + "{{/encode_xml}}";
 

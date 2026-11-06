@@ -37,7 +37,10 @@ const MODULES = [
 ].map((name) => ({
   name,
   // smallCaps: the same module with a constant built once (see ./smallCaps)
-  fn: name === "smallCaps" ? require("./smallCaps") : require(TYPESET_DIR + "/src/" + name),
+  fn:
+    name === "smallCaps"
+      ? require("./smallCaps")
+      : require(TYPESET_DIR + "/src/" + name),
 }));
 
 // typeset/src/eachTextNode.js's default

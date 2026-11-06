@@ -5,7 +5,8 @@ const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const source = require("./source");
 
 async function toBuffer(contents) {
-  if (typeof contents === "string" || Buffer.isBuffer(contents)) return contents;
+  if (typeof contents === "string" || Buffer.isBuffer(contents))
+    return contents;
   const chunks = [];
   for await (const chunk of contents) chunks.push(Buffer.from(chunk));
   return Buffer.concat(chunks);

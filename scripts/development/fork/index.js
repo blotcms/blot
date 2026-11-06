@@ -46,31 +46,37 @@ function create(base, settings, callback) {
   User.getByEmail(EMAIL, function (err, user) {
     if (err || !user) {
       return callback(
-        new Error(EMAIL + " not found — start the local server first (npm start)")
+        new Error(
+          EMAIL + " not found — start the local server first (npm start)"
+        )
       );
     }
 
-    freeHandle(base.toLowerCase().replace(/[^a-z0-9]/g, ""), 0, function (err, handle) {
-      if (err) return callback(err);
-
-      Blog.create(user.uid, { handle: handle }, function (err, blog) {
+    freeHandle(
+      base.toLowerCase().replace(/[^a-z0-9]/g, ""),
+      0,
+      function (err, handle) {
         if (err) return callback(err);
 
-        // Production settings first, then the same overrides
-        // app/configure-local-blogs.js gives local blogs
-        var changes = Object.assign({}, settings, {
-          forceSSL: false,
-          client: "local",
-        });
-
-        Blog.set(blog.id, changes, function (err) {
+        Blog.create(user.uid, { handle: handle }, function (err, blog) {
           if (err) return callback(err);
-          console.log("blogID=" + blog.id);
-          console.log("handle=" + blog.handle);
-          callback();
+
+          // Production settings first, then the same overrides
+          // app/configure-local-blogs.js gives local blogs
+          var changes = Object.assign({}, settings, {
+            forceSSL: false,
+            client: "local",
+          });
+
+          Blog.set(blog.id, changes, function (err) {
+            if (err) return callback(err);
+            console.log("blogID=" + blog.id);
+            console.log("handle=" + blog.handle);
+            callback();
+          });
         });
-      });
-    });
+      }
+    );
   });
 }
 
@@ -141,7 +147,7 @@ if (command === "create" && process.argv[3]) {
     }
     create(process.argv[3], settings, done);
   });
-}
-else if (command === "finish" && process.argv[3])
+} else if (command === "finish" && process.argv[3])
   finish(process.argv[3], process.argv[4], done);
-else done(new Error("Usage: fork create <handle> | fork finish <blogID> [slug]"));
+else
+  done(new Error("Usage: fork create <handle> | fork finish <blogID> [slug]"));

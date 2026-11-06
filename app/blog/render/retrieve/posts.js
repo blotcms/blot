@@ -22,7 +22,10 @@ async function posts(req, res) {
   const log = typeof req?.log === "function" ? req.log.bind(req) : () => {};
 
   const sortOptions = getTemplateSortOptions(req?.template?.locals);
-  const keep = projectEntryFields.heavyFieldsToKeep(req && req.retrieve, ALIASES);
+  const keep = projectEntryFields.heavyFieldsToKeep(
+    req && req.retrieve,
+    ALIASES
+  );
   const cached = { keep, cacheID: req?.blog?.cacheID, log };
 
   const options = {

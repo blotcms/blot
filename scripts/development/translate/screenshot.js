@@ -71,7 +71,10 @@ async function captureOnce(target) {
 
   try {
     await page.setUserAgent(USER_AGENT);
-    await page.setViewport({ ...viewport, deviceScaleFactor: DEVICE_SCALE_FACTOR });
+    await page.setViewport({
+      ...viewport,
+      deviceScaleFactor: DEVICE_SCALE_FACTOR,
+    });
 
     const response = await page.goto(target.url, {
       waitUntil: "networkidle0",
@@ -82,7 +85,11 @@ async function captureOnce(target) {
     await new Promise((resolve) => setTimeout(resolve, SETTLE_AFTER_LOAD));
 
     await fs.ensureDir(dirname(target.path));
-    await page.screenshot({ path: target.path, type: "png", fullPage: !!target.fullPage });
+    await page.screenshot({
+      path: target.path,
+      type: "png",
+      fullPage: !!target.fullPage,
+    });
 
     return {
       ok: true,
@@ -108,7 +115,11 @@ async function capture(target) {
     }
   }
 
-  return { ok: false, error: lastError ? lastError.message : "unknown", path: target.path };
+  return {
+    ok: false,
+    error: lastError ? lastError.message : "unknown",
+    path: target.path,
+  };
 }
 
 // Capture every target with one browser. Never throws: a source site that blocks

@@ -45,7 +45,11 @@ function createCursor(input) {
       while (buffer.length - at < n && !ended) {
         const next = await iterator.next();
         if (next.done) ended = true;
-        else buffer = buffer.length - at ? Buffer.concat([buffer.subarray(at), next.value]) : next.value;
+        else
+          buffer =
+            buffer.length - at
+              ? Buffer.concat([buffer.subarray(at), next.value])
+              : next.value;
         if (!next.done) at = 0;
       }
     },
@@ -55,7 +59,8 @@ function createCursor(input) {
       at += n;
       return bytes;
     },
-    close: () => (iterator.return ? iterator.return().catch(() => {}) : Promise.resolve()),
+    close: () =>
+      iterator.return ? iterator.return().catch(() => {}) : Promise.resolve(),
   };
 }
 
@@ -65,7 +70,8 @@ function readSize(cursor) {
   let shift = 0;
   let byte;
   do {
-    if (!cursor.available() || shift > 49) throw new CorruptError("Delta header is truncated");
+    if (!cursor.available() || shift > 49)
+      throw new CorruptError("Delta header is truncated");
     byte = cursor.byte();
     result += (byte & 0x7f) * 2 ** shift;
     shift += 7;
@@ -74,7 +80,7 @@ function readSize(cursor) {
 }
 
 async function writeAll(handle, buffer, length) {
-  for (let done = 0; done < length; ) {
+  for (let done = 0; done < length;) {
     const { bytesWritten } = await handle.write(buffer, done, length - done);
     done += bytesWritten;
   }
@@ -106,7 +112,8 @@ async function applyDeltaToFile({ source, sourceSize, delta, target, room }) {
 
   try {
     await cursor.fill(HEADER);
-    if (readSize(cursor) !== sourceSize) throw new CorruptError("Delta does not match its base");
+    if (readSize(cursor) !== sourceSize)
+      throw new CorruptError("Delta does not match its base");
     const size = readSize(cursor);
 
     await room(size);
@@ -132,26 +139,34 @@ async function applyDeltaToFile({ source, sourceSize, delta, target, room }) {
         let length = 0;
         let needed = 0;
         for (let k = 0; k < 7; k++) if (op & (1 << k)) needed++;
-        if (cursor.available() < needed) throw new CorruptError("Delta copies outside its base");
+        if (cursor.available() < needed)
+          throw new CorruptError("Delta copies outside its base");
 
-        for (let k = 0; k < 4; k++) if (op & (1 << k)) offset += cursor.byte() * 2 ** (8 * k);
-        for (let k = 0; k < 3; k++) if (op & (0x10 << k)) length += cursor.byte() * 2 ** (8 * k);
+        for (let k = 0; k < 4; k++)
+          if (op & (1 << k)) offset += cursor.byte() * 2 ** (8 * k);
+        for (let k = 0; k < 3; k++)
+          if (op & (0x10 << k)) length += cursor.byte() * 2 ** (8 * k);
         if (length === 0) length = 0x10000;
 
-        if (offset + length > sourceSize || written + length > size) throw new CorruptError("Delta copies outside its base");
+        if (offset + length > sourceSize || written + length > size)
+          throw new CorruptError("Delta copies outside its base");
 
-        for (let from = offset, left = length; left > 0; ) {
+        for (let from = offset, left = length; left > 0;) {
           if (filled === block.length) await flush();
           const want = Math.min(left, block.length - filled);
           const { bytesRead } = await input.read(block, filled, want, from);
-          if (!bytesRead) throw new CorruptError("The file a delta is applied to is shorter than it was written");
+          if (!bytesRead)
+            throw new CorruptError(
+              "The file a delta is applied to is shorter than it was written"
+            );
           filled += bytesRead;
           from += bytesRead;
           left -= bytesRead;
         }
         written += length;
       } else if (op > 0) {
-        if (cursor.available() < op || written + op > size) throw new CorruptError("Delta inserts past its end");
+        if (cursor.available() < op || written + op > size)
+          throw new CorruptError("Delta inserts past its end");
         if (filled + op > block.length) await flush();
         cursor.take(op).copy(block, filled);
         filled += op;
@@ -161,7 +176,8 @@ async function applyDeltaToFile({ source, sourceSize, delta, target, room }) {
       }
     }
 
-    if (written !== size) throw new CorruptError("Delta produced the wrong size");
+    if (written !== size)
+      throw new CorruptError("Delta produced the wrong size");
     await flush();
     return size;
   } finally {

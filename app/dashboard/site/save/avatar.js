@@ -32,12 +32,11 @@ module.exports = function (req, res, next) {
   // avatar has been stored, so it opts into copying rather than moving it.
   var move = !req.preserveAvatarUpload;
 
-  assets.writeFrom(req.blog.id, relPath, avatar.path, { move: move }).then(
-    function () {
+  assets
+    .writeFrom(req.blog.id, relPath, avatar.path, { move: move })
+    .then(function () {
       req.updates.avatar = url;
       req.savedAvatarRelPath = relPath;
       next();
-    },
-    next
-  );
+    }, next);
 };

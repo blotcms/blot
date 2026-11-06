@@ -32,13 +32,19 @@ const CONVERTER_FIXTURES = [
   fixture("docx/tests/empty.docx", "/benchmark-fixtures/empty.docx"),
   // RTF
   fixture("rtf/tests/examples/hello.rtf", "/benchmark-fixtures/hello.rtf"),
-  fixture("rtf/tests/examples/metadata.rtf", "/benchmark-fixtures/metadata.rtf"),
+  fixture(
+    "rtf/tests/examples/metadata.rtf",
+    "/benchmark-fixtures/metadata.rtf"
+  ),
   // ODT
   fixture("odt/tests/paragraph.odt", "/benchmark-fixtures/paragraph.odt"),
   fixture("odt/tests/empty.odt", "/benchmark-fixtures/empty.odt"),
   // Org
   fixture("org/tests/examples/hello.org", "/benchmark-fixtures/hello.org"),
-  fixture("org/tests/examples/metadata.org", "/benchmark-fixtures/metadata.org"),
+  fixture(
+    "org/tests/examples/metadata.org",
+    "/benchmark-fixtures/metadata.org"
+  ),
   fixture("org/tests/examples/code.org", "/benchmark-fixtures/code.org"),
   // Images
   fixture("img/tests/bunny.png", "/benchmark-fixtures/bunny.png"),
@@ -51,7 +57,9 @@ const CONVERTER_FIXTURES = [
 ];
 
 function getFixtures() {
-  return CONVERTER_FIXTURES.filter(({ sourcePath }) => fs.existsSync(sourcePath));
+  return CONVERTER_FIXTURES.filter(({ sourcePath }) =>
+    fs.existsSync(sourcePath)
+  );
 }
 
 module.exports = {

@@ -22,7 +22,11 @@ function isMediaName(name) {
   return (
     typeof name === "string" &&
     name.length <= 1024 &&
-    name.split("/").every((part) => part && part !== "." && part !== ".." && !part.includes("\0"))
+    name
+      .split("/")
+      .every(
+        (part) => part && part !== "." && part !== ".." && !part.includes("\0")
+      )
   );
 }
 
@@ -35,10 +39,18 @@ async function pandoc(args, input, files = {}) {
     const data = await fs.readFile(files[key]);
     // pandoc picks a bibliography's format by its extension
     const extension = extname(files[key]);
-    args[key] = { length: data.length, extension: /^\.[A-Za-z0-9]{1,16}$/.test(extension) ? extension : ".txt" };
+    args[key] = {
+      length: data.length,
+      extension: /^\.[A-Za-z0-9]{1,16}$/.test(extension) ? extension : ".txt",
+    };
     parts.push(data);
   }
-  if (parts.length) input = Buffer.concat([Buffer.isBuffer(input) ? input : await fs.readFile(input.path)].concat(parts));
+  if (parts.length)
+    input = Buffer.concat(
+      [Buffer.isBuffer(input) ? input : await fs.readFile(input.path)].concat(
+        parts
+      )
+    );
 
   let reply;
   try {
@@ -48,17 +60,28 @@ async function pandoc(args, input, files = {}) {
     // (proxy/unit/sandbox/broker.js), which is the document's doing, as the
     // job's own timeout is in-process
     if (err.code !== "SANDBOX_TIMEOUT") throw err;
-    throw new Error("Pandoc exited with code null (SIGKILL) (timed out): " + err.message);
+    throw new Error(
+      "Pandoc exited with code null (SIGKILL) (timed out): " + err.message,
+      { cause: err }
+    );
   }
   const { meta, outputs } = reply;
 
-  if (!meta || typeof meta !== "object") throw new Error("pandoc: invalid reply");
+  if (!meta || typeof meta !== "object")
+    throw new Error("pandoc: invalid reply");
 
   if (meta.error) {
     const { code, signal, timedOut, ms, stderr } = meta.error;
     const err = new Error(
-      "Pandoc exited with code " + code + (signal ? " (" + signal + ")" : "") +
-        " in " + ms + "ms" + (timedOut ? " (timed out)" : "") + ": " + stderr
+      "Pandoc exited with code " +
+        code +
+        (signal ? " (" + signal + ")" : "") +
+        " in " +
+        ms +
+        "ms" +
+        (timedOut ? " (timed out)" : "") +
+        ": " +
+        stderr
     );
     // A kill the job didn't send is the jail's memory limit, not the document.
     // The job survives it, so the broker can't report it: this does.

@@ -18,7 +18,6 @@
 // (plus the optional local npm/gh calls). See
 // the operator's local check-security-advisories skill.
 
-const fs = require("fs");
 const path = require("path");
 const { execFile } = require("child_process");
 
@@ -26,8 +25,17 @@ const ROOT = path.resolve(__dirname, "..", "..");
 const FETCH_TIMEOUT_MS = 15000;
 const EOL_WARN_DAYS = 60;
 const WATCHED_PACKAGES = [
-  "kernel", "docker", "containerd", "runc", "openssh", "openssl",
-  "glibc", "sudo", "redis6", "systemd", "curl",
+  "kernel",
+  "docker",
+  "containerd",
+  "runc",
+  "openssh",
+  "openssl",
+  "glibc",
+  "sudo",
+  "redis6",
+  "systemd",
+  "curl",
 ];
 
 const args = process.argv.slice(2);
@@ -38,14 +46,6 @@ const AS_JSON = flag("--json");
 
 const findings = { action: [], watch: [], ok: [], unavailable: [] };
 const add = (level, msg) => findings[level].push(msg);
-
-function read(rel) {
-  try {
-    return fs.readFileSync(path.join(ROOT, rel), "utf8");
-  } catch (e) {
-    return null;
-  }
-}
 
 async function get(url, headers) {
   const res = await fetch(url, {
@@ -61,7 +61,10 @@ async function source(name, fn) {
   try {
     await fn();
   } catch (e) {
-    add("unavailable", name + ": source unavailable (" + (e.message || e) + ")");
+    add(
+      "unavailable",
+      name + ": source unavailable (" + (e.message || e) + ")"
+    );
   }
 }
 
@@ -71,7 +74,8 @@ function parseVer(v) {
 }
 
 function cmp(a, b) {
-  const x = parseVer(a), y = parseVer(b);
+  const x = parseVer(a),
+    y = parseVer(b);
   if (!x || !y) return NaN;
   for (let i = 0; i < 4; i++) {
     const d = (x[i] || 0) - (y[i] || 0);
@@ -85,11 +89,13 @@ const daysUntil = (d) => Math.ceil((new Date(d) - today) / 86400000);
 
 // EOL value from endoflife.date is false, true, or a date string.
 function eolStatus(label, eol) {
-  if (eol === false || eol == null) return add("ok", label + ": no EOL date set");
+  if (eol === false || eol == null)
+    return add("ok", label + ": no EOL date set");
   if (eol === true) return add("action", label + ": end-of-life");
   const d = daysUntil(eol);
   if (d < 0) add("action", label + ": EOL passed on " + eol);
-  else if (d <= EOL_WARN_DAYS) add("watch", label + ": EOL in " + d + " days (" + eol + ")");
+  else if (d <= EOL_WARN_DAYS)
+    add("watch", label + ": EOL in " + d + " days (" + eol + ")");
   else add("ok", label + ": EOL " + eol + " (" + d + " days)");
 }
 
@@ -111,22 +117,36 @@ function readPins() {
 
   // A NODE_BASE that doesn't match NODE_VERSION, a default back in a
   // Dockerfile or a repeated version means one of them is behind.
-  for (const problem of require("./check-versions").problems()) add("action", "Versions: " + problem);
+  for (const problem of require("./check-versions").problems())
+    add("action", "Versions: " + problem);
 }
 
 // ---- checks ---------------------------------------------------------------
 
 async function checkNode() {
-  if (!pins.node) return add("watch", "Node: could not find NODE_VERSION in config/versions.env");
+  if (!pins.node)
+    return add(
+      "watch",
+      "Node: could not find NODE_VERSION in config/versions.env"
+    );
   const floating = !/^\d+\.\d+\.\d+$/.test(pins.node);
   const major = pins.node.split(".")[0];
   if (floating) {
-    add("watch", "Node: config/versions.env uses floating tag node:" + pins.node + "-alpine (not pinned; rebuild picks up latest)");
+    add(
+      "watch",
+      "Node: config/versions.env uses floating tag node:" +
+        pins.node +
+        "-alpine (not pinned; rebuild picks up latest)"
+    );
   }
 
   await source("Node releases (nodejs.org/dist/index.json)", async () => {
-    const releases = await (await get("https://nodejs.org/dist/index.json")).json();
-    const line = releases.filter((r) => r.version.startsWith("v" + major + "."));
+    const releases = await (
+      await get("https://nodejs.org/dist/index.json")
+    ).json();
+    const line = releases.filter((r) =>
+      r.version.startsWith("v" + major + ".")
+    );
     if (!line.length) throw new Error("no releases for major " + major);
     const latest = line[0].version.slice(1);
     if (floating) {
@@ -135,26 +155,51 @@ async function checkNode() {
       const newer = line.filter((r) => cmp(r.version.slice(1), pins.node) > 0);
       const sec = newer.filter((r) => r.security);
       if (sec.length) {
-        add("action", "Node: pinned " + pins.node + " but security release(s) available: " +
-          sec.map((r) => r.version.slice(1)).join(", ") + " (latest " + latest + ")");
+        add(
+          "action",
+          "Node: pinned " +
+            pins.node +
+            " but security release(s) available: " +
+            sec.map((r) => r.version.slice(1)).join(", ") +
+            " (latest " +
+            latest +
+            ")"
+        );
       } else if (newer.length) {
-        add("watch", "Node: pinned " + pins.node + ", newer non-security release " + latest);
+        add(
+          "watch",
+          "Node: pinned " + pins.node + ", newer non-security release " + latest
+        );
       } else {
-        add("ok", "Node " + pins.node + " is the latest " + major + ".x release");
+        add(
+          "ok",
+          "Node " + pins.node + " is the latest " + major + ".x release"
+        );
       }
     }
     // Other maintained majors with a security release in the last N days,
     // for context only (we do not run them).
-    const recentSec = releases.filter((r) => r.security &&
-      (today - new Date(r.date)) / 86400000 <= Math.max(DAYS, 7));
+    const recentSec = releases.filter(
+      (r) =>
+        r.security && (today - new Date(r.date)) / 86400000 <= Math.max(DAYS, 7)
+    );
     if (recentSec.length) {
-      add("watch", "Node: security releases in the last " + Math.max(DAYS, 7) + " days: " +
-        recentSec.map((r) => r.version + " (" + r.date + ")").join(", "));
+      add(
+        "watch",
+        "Node: security releases in the last " +
+          Math.max(DAYS, 7) +
+          " days: " +
+          recentSec.map((r) => r.version + " (" + r.date + ")").join(", ")
+      );
     }
   });
 
   await source("Node schedule (nodejs/Release schedule.json)", async () => {
-    const sched = await (await get("https://raw.githubusercontent.com/nodejs/Release/main/schedule.json")).json();
+    const sched = await (
+      await get(
+        "https://raw.githubusercontent.com/nodejs/Release/main/schedule.json"
+      )
+    ).json();
     const s = sched["v" + major];
     if (!s) throw new Error("no schedule entry for v" + major);
     eolStatus("Node " + major + " (schedule.json)", s.end);
@@ -170,7 +215,10 @@ async function checkNode() {
 async function checkAlpine() {
   await source("endoflife.date alpine-linux", async () => {
     await eolApi("alpine-linux");
-    add("ok", "Alpine app-image base comes from the node:*-alpine image (tracks the Node pin)");
+    add(
+      "ok",
+      "Alpine app-image base comes from the node:*-alpine image (tracks the Node pin)"
+    );
   });
 }
 
@@ -189,10 +237,17 @@ async function checkRedis() {
   // the upstream EOL date is context only and ALAS is the real signal.
   await source("endoflife.date redis", async () => {
     const rows = await eolApi("redis");
-    const r = rows.find((x) => String(x.cycle) === "6.2" || String(x.cycle) === "6");
+    const r = rows.find(
+      (x) => String(x.cycle) === "6.2" || String(x.cycle) === "6"
+    );
     if (r) {
       const d = r.eol && r.eol !== true ? daysUntil(r.eol) : null;
-      const msg = "Redis " + r.cycle + " upstream EOL: " + r.eol + " (host uses AL2023 redis6 package; covered by ALAS)";
+      const msg =
+        "Redis " +
+        r.cycle +
+        " upstream EOL: " +
+        r.eol +
+        " (host uses AL2023 redis6 package; covered by ALAS)";
       add(r.eol === true || (d !== null && d < 0) ? "watch" : "ok", msg);
     }
   });
@@ -202,10 +257,19 @@ async function checkNginxAndOpenresty() {
   if (pins.nginx) {
     await source("endoflife.date nginx", async () => {
       const rows = await eolApi("nginx");
-      add("ok", "nginx latest per endoflife.date: " + rows[0].latest + " (pinned " + pins.nginx + ")");
+      add(
+        "ok",
+        "nginx latest per endoflife.date: " +
+          rows[0].latest +
+          " (pinned " +
+          pins.nginx +
+          ")"
+      );
     });
     await source("nginx security advisories (nginx.org)", async () => {
-      const html = await (await get("https://nginx.org/en/security_advisories.html")).text();
+      const html = await (
+        await get("https://nginx.org/en/security_advisories.html")
+      ).text();
       const items = html.match(/<li><p>[\s\S]*?<\/p><\/li>/g) || [];
       if (!items.length) throw new Error("could not parse advisories page");
       const hits = [];
@@ -214,7 +278,10 @@ async function checkNginxAndOpenresty() {
         const sev = (li.match(/Severity:\s*(\w+)/) || [])[1] || "?";
         const cve = (li.match(/CVE-\d+-\d+/) || [])[0] || "";
         const vuln = (li.match(/Vulnerable:\s*([^<]+)/) || [])[1] || "";
-        const ranges = vuln.split(",").map((s) => s.trim()).filter(Boolean);
+        const ranges = vuln
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
         const affected = ranges.some((r) => {
           const [lo, hi] = r.split("-");
           if (!hi) return cmp(pins.nginx, lo) === 0;
@@ -224,10 +291,20 @@ async function checkNginxAndOpenresty() {
       }
       if (hits.length) {
         const high = hits.some((h) => /high|critical/i.test(h.sev));
-        add(high ? "action" : "watch",
-          "nginx " + pins.nginx + " is within the Vulnerable range of " + hits.length + " advisories (" +
-          hits.slice(0, 6).map((h) => h.cve + " " + h.sev).join(", ") +
-          (hits.length > 6 ? ", ..." : "") + "); check whether the OpenResty bundle ships a patched nginx and whether the module is in use");
+        add(
+          high ? "action" : "watch",
+          "nginx " +
+            pins.nginx +
+            " is within the Vulnerable range of " +
+            hits.length +
+            " advisories (" +
+            hits
+              .slice(0, 6)
+              .map((h) => h.cve + " " + h.sev)
+              .join(", ") +
+            (hits.length > 6 ? ", ..." : "") +
+            "); check whether the OpenResty bundle ships a patched nginx and whether the module is in use"
+        );
       } else {
         add("ok", "nginx " + pins.nginx + " is in no listed Vulnerable range");
       }
@@ -236,13 +313,26 @@ async function checkNginxAndOpenresty() {
 
   if (pins.openresty) {
     await source("OpenResty tags (GitHub)", async () => {
-      const tags = await (await get("https://api.github.com/repos/openresty/openresty/tags?per_page=30",
-        { accept: "application/vnd.github+json" })).json();
-      const vers = tags.map((t) => t.name.replace(/^v/, "")).filter((v) => /^\d+\.\d+\.\d+\.\d+$/.test(v))
+      const tags = await (
+        await get(
+          "https://api.github.com/repos/openresty/openresty/tags?per_page=30",
+          { accept: "application/vnd.github+json" }
+        )
+      ).json();
+      const vers = tags
+        .map((t) => t.name.replace(/^v/, ""))
+        .filter((v) => /^\d+\.\d+\.\d+\.\d+$/.test(v))
         .sort((a, b) => cmp(b, a));
       if (!vers.length) throw new Error("no tags");
       if (cmp(vers[0], pins.openresty) > 0) {
-        add("watch", "OpenResty: pinned " + pins.openresty + ", newest tag " + vers[0] + " (read release notes for security fixes)");
+        add(
+          "watch",
+          "OpenResty: pinned " +
+            pins.openresty +
+            ", newest tag " +
+            vers[0] +
+            " (read release notes for security fixes)"
+        );
       } else {
         add("ok", "OpenResty " + pins.openresty + " is the newest tag");
       }
@@ -254,10 +344,14 @@ function pandocNote() {
   // endoflife.date has no pandoc product; compare against GitHub.
   if (!pins.pandoc) return;
   return source("Pandoc latest release (GitHub)", async () => {
-    const rel = await (await get("https://api.github.com/repos/jgm/pandoc/releases/latest",
-      { accept: "application/vnd.github+json" })).json();
+    const rel = await (
+      await get("https://api.github.com/repos/jgm/pandoc/releases/latest", {
+        accept: "application/vnd.github+json",
+      })
+    ).json();
     const latest = rel.tag_name;
-    if (cmp(latest, pins.pandoc) > 0) add("watch", "Pandoc: pinned " + pins.pandoc + ", latest " + latest);
+    if (cmp(latest, pins.pandoc) > 0)
+      add("watch", "Pandoc: pinned " + pins.pandoc + ", latest " + latest);
     else add("ok", "Pandoc " + pins.pandoc + " is the latest release");
   });
 }
@@ -272,43 +366,90 @@ function parseRss(xml) {
       pkg: m ? m[3].trim() : "",
       date: new Date((it.match(/<pubDate>([^<]*)<\/pubDate>/) || [])[1] || 0),
       link: (it.match(/<link>([^<]*)<\/link>/) || [])[1] || "",
-      cves: ((it.match(/<description>([\s\S]*?)<\/description>/) || [])[1] || "").trim().split(/\s*,\s*/).filter(Boolean),
+      cves: (
+        (it.match(/<description>([\s\S]*?)<\/description>/) || [])[1] || ""
+      )
+        .trim()
+        .split(/\s*,\s*/)
+        .filter(Boolean),
     };
   });
 }
 
 async function checkAlas() {
   for (const [name, url, where] of [
-    ["AL2023", "https://alas.aws.amazon.com/AL2023/alas.rss", "production host"],
+    [
+      "AL2023",
+      "https://alas.aws.amazon.com/AL2023/alas.rss",
+      "production host",
+    ],
   ]) {
     await source("Amazon Linux " + name + " bulletins", async () => {
       const items = parseRss(await (await get(url)).text());
       if (!items.length) throw new Error("could not parse feed");
       const cutoff = Date.now() - DAYS * 86400000;
       const recent = items.filter((i) => i.date.getTime() >= cutoff);
-      let hot = 0, other = 0;
+      let hot = 0,
+        other = 0;
       for (const i of recent) {
-        const watched = WATCHED_PACKAGES.some((w) =>
-          i.pkg === w || i.pkg.split(/[\s,]+/).includes(w) || (w === "kernel" && /^kernel/.test(i.pkg)));
+        const watched = WATCHED_PACKAGES.some(
+          (w) =>
+            i.pkg === w ||
+            i.pkg.split(/[\s,]+/).includes(w) ||
+            (w === "kernel" && /^kernel/.test(i.pkg))
+        );
         const sevHigh = i.severity === "critical" || i.severity === "important";
-        const line = name + " " + i.id + " (" + i.severity + "): " + i.pkg + " [" + i.cves.length + " CVEs] " + i.link;
-        if (watched && sevHigh) { add("action", line + " -> " + where); hot++; }
-        else if (watched) { add("watch", line); other++; }
-        else if (sevHigh) other++; // unrelated package (php, dotnet, ...): counted only
+        const line =
+          name +
+          " " +
+          i.id +
+          " (" +
+          i.severity +
+          "): " +
+          i.pkg +
+          " [" +
+          i.cves.length +
+          " CVEs] " +
+          i.link;
+        if (watched && sevHigh) {
+          add("action", line + " -> " + where);
+          hot++;
+        } else if (watched) {
+          add("watch", line);
+          other++;
+        } else if (sevHigh) other++; // unrelated package (php, dotnet, ...): counted only
       }
-      add("ok", name + " ALAS feed: " + recent.length + " bulletins in last " + DAYS + "d, " +
-        hot + " critical/important for watched packages, " + other + " other critical/important (unwatched packages)");
+      add(
+        "ok",
+        name +
+          " ALAS feed: " +
+          recent.length +
+          " bulletins in last " +
+          DAYS +
+          "d, " +
+          hot +
+          " critical/important for watched packages, " +
+          other +
+          " other critical/important (unwatched packages)"
+      );
     });
   }
 }
 
 function run(cmd, cmdArgs, opts) {
   return new Promise((resolve, reject) => {
-    execFile(cmd, cmdArgs, Object.assign({ cwd: ROOT, maxBuffer: 64 * 1024 * 1024, timeout: 120000 }, opts),
+    execFile(
+      cmd,
+      cmdArgs,
+      Object.assign(
+        { cwd: ROOT, maxBuffer: 64 * 1024 * 1024, timeout: 120000 },
+        opts
+      ),
       (err, stdout, stderr) => {
         if (stdout) return resolve(stdout); // npm audit exits non-zero when it finds issues
         reject(err || new Error(stderr || "no output"));
-      });
+      }
+    );
   });
 }
 
@@ -316,19 +457,43 @@ async function checkNpm() {
   await source("npm audit", async () => {
     const out = JSON.parse(await run("npm", ["audit", "--omit=dev", "--json"]));
     const v = (out.metadata && out.metadata.vulnerabilities) || {};
-    const msg = "npm audit (prod deps): critical " + (v.critical || 0) + ", high " + (v.high || 0) +
-      ", moderate " + (v.moderate || 0) + ", low " + (v.low || 0);
+    const msg =
+      "npm audit (prod deps): critical " +
+      (v.critical || 0) +
+      ", high " +
+      (v.high || 0) +
+      ", moderate " +
+      (v.moderate || 0) +
+      ", low " +
+      (v.low || 0);
     add(v.critical ? "action" : v.high ? "watch" : "ok", msg);
   });
 }
 
 async function checkDependabot() {
   await source("Dependabot alerts (gh)", async () => {
-    const out = JSON.parse(await run("gh", ["api", "repos/{owner}/{repo}/dependabot/alerts?state=open&per_page=100"]));
-    const count = (s) => out.filter((a) => a.security_advisory && a.security_advisory.severity === s).length;
-    const crit = count("critical"), high = count("high");
-    add(crit ? "action" : high ? "watch" : "ok",
-      "Dependabot open alerts: critical " + crit + ", high " + high + " (of " + out.length + " open)");
+    const out = JSON.parse(
+      await run("gh", [
+        "api",
+        "repos/{owner}/{repo}/dependabot/alerts?state=open&per_page=100",
+      ])
+    );
+    const count = (s) =>
+      out.filter(
+        (a) => a.security_advisory && a.security_advisory.severity === s
+      ).length;
+    const crit = count("critical"),
+      high = count("high");
+    add(
+      crit ? "action" : high ? "watch" : "ok",
+      "Dependabot open alerts: critical " +
+        crit +
+        ", high " +
+        high +
+        " (of " +
+        out.length +
+        " open)"
+    );
   });
 }
 
@@ -337,8 +502,13 @@ async function checkDependabot() {
 (async () => {
   readPins();
   await Promise.all([
-    checkNode(), checkAlpine(), checkAmazonLinux(), checkRedis(),
-    checkNginxAndOpenresty(), pandocNote(), checkAlas(),
+    checkNode(),
+    checkAlpine(),
+    checkAmazonLinux(),
+    checkRedis(),
+    checkNginxAndOpenresty(),
+    pandocNote(),
+    checkAlas(),
     flag("--npm") ? checkNpm() : null,
     flag("--dependabot") ? checkDependabot() : null,
   ]);
@@ -360,8 +530,15 @@ async function checkDependabot() {
       console.log("\n" + title + (list.length ? "" : " (none)"));
       list.forEach((l) => console.log("  - " + l));
     };
-    console.log("Security advisory check " + result.date + " (ALAS window " + DAYS + "d)");
-    console.log("Pins: " + Object.entries(pins).map(([k, v]) => k + "=" + v).join(", "));
+    console.log(
+      "Security advisory check " + result.date + " (ALAS window " + DAYS + "d)"
+    );
+    console.log(
+      "Pins: " +
+        Object.entries(pins)
+          .map(([k, v]) => k + "=" + v)
+          .join(", ")
+    );
     section("ACTION NEEDED", findings.action);
     section("WATCH", findings.watch);
     section("SOURCES UNAVAILABLE", findings.unavailable);

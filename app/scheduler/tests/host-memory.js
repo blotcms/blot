@@ -13,7 +13,10 @@ describe("scheduler host-memory", function () {
   ].join("\n");
 
   it("reads MemTotal and MemAvailable, not MemFree, in bytes", function () {
-    expect(read.parse(MEMINFO)).toEqual({ total: 16384000 * 1024, available: 8192000 * 1024 });
+    expect(read.parse(MEMINFO)).toEqual({
+      total: 16384000 * 1024,
+      available: 8192000 * 1024,
+    });
   });
 
   it("is null without either field", function () {
@@ -42,6 +45,8 @@ describe("scheduler host-memory", function () {
     if (!actual) return;
 
     // Both read MemAvailable, so only what changes in between separates them
-    expect(Math.abs(os.freemem() - actual.available)).toBeLessThan(0.1 * actual.total);
+    expect(Math.abs(os.freemem() - actual.available)).toBeLessThan(
+      0.1 * actual.total
+    );
   });
 });

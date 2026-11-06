@@ -29,7 +29,8 @@ export default async (path) => {
   // file we get the -11 error code. So we attempt to download the file if it is zero bytes
   const isDownloaded = stat.blocks === expectedBlocks && stat.size !== 0;
 
-  console.log(clfdate(), 
+  console.log(
+    clfdate(),
     `Initial blocks: ${stat.blocks} / ${expectedBlocks} ${
       stat.size === 0 ? " (zero byte file: downloading anyway)" : ""
     }`
@@ -70,7 +71,7 @@ export default async (path) => {
     if (stat.blocks === expectedBlocks) {
       console.log(clfdate(), `Finish brctl download: ${path}`);
       return stat;
-    } 
+    }
   }
 
   throw new Error(`Timeout downloading file: ${path}`);

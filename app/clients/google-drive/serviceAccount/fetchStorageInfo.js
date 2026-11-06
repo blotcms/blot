@@ -6,7 +6,6 @@ const prefix = () => `${clfdate()} Google Drive client:`;
 // Refresh a single service account's statistics and store the service account email
 // so we can share it with users who are connecting their folder with Google Drive
 module.exports = async (serviceAccountId, drive) => {
-
   if (!serviceAccountId || !drive) {
     throw new Error("Both serviceAccountId and drive are required.");
   }
@@ -23,7 +22,11 @@ module.exports = async (serviceAccountId, drive) => {
 
     const { storageQuota, user } = res.data;
 
-    if (!storageQuota || storageQuota.usage == null || storageQuota.limit == null) {
+    if (
+      !storageQuota ||
+      storageQuota.usage == null ||
+      storageQuota.limit == null
+    ) {
       throw new Error("Invalid storageQuota response from Google API.");
     }
 

@@ -388,7 +388,8 @@ describe("tags work on sites", function () {
     const resPage2 = await this.get(`/tagged/special/page/2`);
     expect(resPage2.status).toBe(200);
     const bodyPage2 = await resPage2.text();
-    const [pageSizeSnakePart2, currentPart2, entriesPart2] = bodyPage2.split(";");
+    const [pageSizeSnakePart2, currentPart2, entriesPart2] =
+      bodyPage2.split(";");
 
     expect(pageSizeSnakePart2).toBe("page_size=2");
     expect(currentPart2).toBe("current=2");
@@ -449,7 +450,8 @@ describe("tags work on sites", function () {
     const resPage2 = await this.get(`/tagged/alt/page/2`);
     expect(resPage2.status).toBe(200);
     const bodyPage2 = await resPage2.text();
-    const [pageSizeSnakePart2, currentPart2, entriesPart2] = bodyPage2.split(";");
+    const [pageSizeSnakePart2, currentPart2, entriesPart2] =
+      bodyPage2.split(";");
     expect(pageSizeSnakePart2).toBe("page_size=3");
     expect(currentPart2).toBe("current=2");
     const entriesPage2 = entriesPart2
@@ -470,11 +472,10 @@ describe("tags work on sites", function () {
       "tagged.html": "slug={{slug}};tag={{{tag}}}",
     });
 
-    const res = await this.getWithRawPath('/tagged/design%2Fui');
+    const res = await this.getWithRawPath("/tagged/design%2Fui");
     expect(res.status).toBe(200);
-    expect((await res.text()).trim()).toBe('slug=design%2Fui;tag=Design/UI');
+    expect((await res.text()).trim()).toBe("slug=design%2Fui;tag=Design/UI");
   });
-
 
   it("reports total count when pagination options are provided", async function () {
     await this.publish({

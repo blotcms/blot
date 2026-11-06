@@ -27,14 +27,11 @@ const refresh = exclusive(
 // others wait on the lease and take over if the holder dies or stops.
 const startActivityPolling = () => {
   const leases = getServiceAccounts().map(({ client_id: serviceAccountId }) =>
-    lock.lease(
-      "google-drive-activity:" + serviceAccountId,
-      async (signal) => {
-        const driveactivity = await createDriveActivityClient(serviceAccountId);
-        console.log(prefix(), "Set up polling for drive activity");
-        await pollDriveActivity(serviceAccountId, driveactivity, signal);
-      }
-    )
+    lock.lease("google-drive-activity:" + serviceAccountId, async (signal) => {
+      const driveactivity = await createDriveActivityClient(serviceAccountId);
+      console.log(prefix(), "Set up polling for drive activity");
+      await pollDriveActivity(serviceAccountId, driveactivity, signal);
+    })
   );
 
   drain.onStart(() => Promise.all(leases.map((lease) => lease.stop())));
@@ -63,10 +60,11 @@ module.exports = async () => {
 
   // Re-watch for new folders for sites in the middle of the setup process.
   // Once per deploy across all processes.
-  onceAtStartup("google-drive-restart-setup", () => restartSetupProcesses())
-    .catch((err) =>
-      console.error(prefix(), "Restarting setup processes failed", err)
-    );
+  onceAtStartup("google-drive-restart-setup", () =>
+    restartSetupProcesses()
+  ).catch((err) =>
+    console.error(prefix(), "Restarting setup processes failed", err)
+  );
 
   hotDocPoller.start();
   scheduleValidation();

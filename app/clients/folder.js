@@ -21,9 +21,7 @@ const { promisify } = require("util");
 
 // Required lazily: clients load models/blog, which loads clients, and tests
 // swap these modules out.
-const getBlog = promisify((id, cb) =>
-  require("models/blog").get({ id }, cb)
-);
+const getBlog = promisify((id, cb) => require("models/blog").get({ id }, cb));
 
 async function resolve(blog) {
   if (blog && typeof blog === "object") {

@@ -1,17 +1,13 @@
 var promisify = require("util").promisify;
 var User = require("../index");
 var Blog = require("models/blog");
-var client = require("models/client");
-var key = require("../key");
-var blogKey = require("models/blog/key");
+require("models/client");
 
 var getUser = promisify(User.getById);
 var setUser = promisify(User.set);
 var disable = promisify(User.disable);
 var enable = promisify(User.enable);
 var getBlog = promisify(Blog.get);
-var createBlog = promisify(Blog.create);
-var removeBlog = promisify(Blog.remove);
 
 describe("user disable", function () {
   global.test.user();
@@ -98,7 +94,9 @@ describe("user disable/enable with blogs", function () {
   global.test.blogs(2);
 
   it("disable propagates isDisabled to all blogs", async function () {
-    var blogIds = this.blogs.map(function (blog) { return blog.id; });
+    var blogIds = this.blogs.map(function (blog) {
+      return blog.id;
+    });
     var user = await getUser(this.user.uid);
     user.blogs = blogIds;
     await setUser(user.uid, { blogs: blogIds });
@@ -116,7 +114,9 @@ describe("user disable/enable with blogs", function () {
   });
 
   it("enable propagates isDisabled=false to all blogs", async function () {
-    var blogIds = this.blogs.map(function (blog) { return blog.id; });
+    var blogIds = this.blogs.map(function (blog) {
+      return blog.id;
+    });
     var user = await getUser(this.user.uid);
     user.blogs = blogIds;
     await setUser(user.uid, { blogs: blogIds });

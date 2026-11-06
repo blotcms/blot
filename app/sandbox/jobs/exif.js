@@ -42,7 +42,8 @@ function exiftool(input) {
     child.stdin.on("error", () => {});
     child.stdout.on("data", (chunk) => {
       size += chunk.length;
-      if (size > MAX_STDOUT) return fail(new Error("exiftool output too large"));
+      if (size > MAX_STDOUT)
+        return fail(new Error("exiftool output too large"));
       chunks.push(chunk);
     });
     child.on("close", (code) => {
@@ -74,7 +75,8 @@ async function run(args, input) {
     if (!Object.prototype.hasOwnProperty.call(raw, field)) continue;
     const value = raw[field];
     if (typeof value === "string") meta[field] = value.slice(0, MAX_VALUE);
-    else if (typeof value === "number" || typeof value === "boolean") meta[field] = value;
+    else if (typeof value === "number" || typeof value === "boolean")
+      meta[field] = value;
   }
   return { meta, outputs: [] };
 }

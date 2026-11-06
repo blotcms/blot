@@ -132,12 +132,12 @@ describe("template engine", function () {
     await this.template({
       "header.html": "{{> entries.html}}",
     });
-    
+
     const res = await this.fetch(`/`);
     const text = await res.text();
 
     expect(res.status).toBe(400);
-    expect(text).toContain('Error with your template')
+    expect(text).toContain("Error with your template");
   });
 
   it("does not render the contents of an thumbnail block for posts without thumbnails", async function () {

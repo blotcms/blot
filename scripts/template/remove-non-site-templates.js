@@ -61,7 +61,8 @@ function processTemplate(user, blog, template, next) {
     // Extract template name from metadata slug or template ID
     // The template ID format is owner:slug, so we extract the slug part
     // Prefer template.slug if available, otherwise extract from template.id
-    const templateName = template.slug || template.id.split(":").slice(1).join(":");
+    const templateName =
+      template.slug || template.id.split(":").slice(1).join(":");
 
     Template.drop(template.owner, templateName, function (err) {
       if (err) {

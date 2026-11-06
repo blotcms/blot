@@ -56,11 +56,12 @@ describe("blog benchmarks", function () {
       global.__BLOT_BENCHMARK_CONFIG || {}
     );
 
-    const blogs = Array.isArray(this.blogs) && this.blogs.length
-      ? this.blogs
-      : this.blog
-      ? [this.blog]
-      : [];
+    const blogs =
+      Array.isArray(this.blogs) && this.blogs.length
+        ? this.blogs
+        : this.blog
+          ? [this.blog]
+          : [];
 
     const isCorpusRender = benchmarkConfig.corpusMode === "render";
     const isCorpusBuild = benchmarkConfig.corpusMode === "build";
@@ -123,18 +124,22 @@ describe("blog benchmarks", function () {
 
       buildPhaseMonitor.start();
 
-      await runWithConcurrency(writeTasks, benchmarkConfig.writeConcurrency, async (task) => {
-        if (task.mediaPath != null) {
-          // Copy a file of the shared media pool (lib/generate-media.js) into
-          // the blog's folder. A folder lives in the storage bucket, so each
-          // post that references a pool file stores its own copy of the bytes.
-          await folder.writeFrom(task.blog.id, task.path, task.mediaPath);
-        } else if (task.sourcePath != null) {
-          await folder.writeFrom(task.blog.id, task.path, task.sourcePath);
-        } else {
-          await task.blog.write({ path: task.path, content: task.content });
+      await runWithConcurrency(
+        writeTasks,
+        benchmarkConfig.writeConcurrency,
+        async (task) => {
+          if (task.mediaPath != null) {
+            // Copy a file of the shared media pool (lib/generate-media.js) into
+            // the blog's folder. A folder lives in the storage bucket, so each
+            // post that references a pool file stores its own copy of the bytes.
+            await folder.writeFrom(task.blog.id, task.path, task.mediaPath);
+          } else if (task.sourcePath != null) {
+            await folder.writeFrom(task.blog.id, task.path, task.sourcePath);
+          } else {
+            await task.blog.write({ path: task.path, content: task.content });
+          }
         }
-      });
+      );
 
       await Promise.all(
         blogs.map(async (blog, index) => {
@@ -396,13 +401,21 @@ describe("blog benchmarks", function () {
     const num = (n, width = 10) => String(n).padStart(width);
 
     console.log("");
-    console.log(label("Requests per page") + num(benchmarkConfig.requestsPerPage, 8));
+    console.log(
+      label("Requests per page") + num(benchmarkConfig.requestsPerPage, 8)
+    );
     console.log(label("Total CPU") + num(totalCpuPercent.toFixed(2), 8) + " %");
-    console.log(label("Total Memory") + num(Math.round(totalMemoryMb), 8) + " mb");
+    console.log(
+      label("Total Memory") + num(Math.round(totalMemoryMb), 8) + " mb"
+    );
     console.log(label("Total Disk I/O") + num(totalDiskIoOps, 8) + " ops");
-    console.log(label("Total requests") + num(result.render.sitemap_pages_total, 8));
+    console.log(
+      label("Total requests") + num(result.render.sitemap_pages_total, 8)
+    );
     console.log("");
-    console.log(label("Total time") + num(totalSeconds.toFixed(1), 8) + " seconds");
+    console.log(
+      label("Total time") + num(totalSeconds.toFixed(1), 8) + " seconds"
+    );
     console.log(
       label("Mean build time") +
         num(result.build.timing_ms.mean.toFixed(0), 8) +
@@ -437,7 +450,8 @@ describe("blog benchmarks", function () {
               ? "n/a"
               : burst.inflation_ratio.toFixed(2),
             8
-          ) + "x"
+          ) +
+          "x"
       );
       console.log(
         label(`${burstLabel} p95`) +

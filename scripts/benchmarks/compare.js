@@ -30,8 +30,7 @@ function runInvoke(cwd, outputRelative) {
 
 function main() {
   const args = process.argv.slice(2);
-  const branch =
-    args.length > 0 && !args[0].startsWith("-") ? args[0] : null;
+  const branch = args.length > 0 && !args[0].startsWith("-") ? args[0] : null;
 
   if (!branch) {
     // No branch: delegate to invoke.sh with any passed args
@@ -48,8 +47,16 @@ function main() {
   const repoRoot = git(["rev-parse", "--show-toplevel"], process.cwd());
   const worktreeName = "compare-worktree-" + branch.replace(/\//g, "-");
   const worktreePath = path.join(repoRoot, ".benchmarks", worktreeName);
-  const currentOutput = path.join(repoRoot, ".benchmarks", "compare-current.json");
-  const branchOutput = path.join(worktreePath, ".benchmarks", "compare-branch.json");
+  const currentOutput = path.join(
+    repoRoot,
+    ".benchmarks",
+    "compare-current.json"
+  );
+  const branchOutput = path.join(
+    worktreePath,
+    ".benchmarks",
+    "compare-branch.json"
+  );
 
   console.log("[compare] Running benchmark on current branch...");
   runInvoke(repoRoot, ".benchmarks/compare-current.json");

@@ -60,13 +60,17 @@ describe("user checkAccessToken integration", function () {
   it("validates and consumes a token", async function () {
     var uid = "user_check_token";
     var token = await generate({ uid: uid });
-    
+
     var result = await check(token);
     expect(result).toEqual(uid);
-    
+
     var error = await check(token).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("Invalid access token");

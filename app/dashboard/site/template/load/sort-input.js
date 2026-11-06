@@ -9,17 +9,17 @@ const SORT_OPTIONS = require("../sort-options");
 // same way the now-removed raw sort_by / sort_order selects did.
 const narrow = (options, allowed, pick) => {
   if (!Array.isArray(allowed) || !allowed.length) return options;
-  const filtered = options.filter(option => allowed.includes(pick(option)));
+  const filtered = options.filter((option) => allowed.includes(pick(option)));
   return filtered.length ? filtered : options;
 };
 
-const availableOptions = locals => {
-  let options = narrow(SORT_OPTIONS, locals?.sort_by_options, o => o.sort_by);
-  options = narrow(options, locals?.sort_order_options, o => o.sort_order);
+const availableOptions = (locals) => {
+  let options = narrow(SORT_OPTIONS, locals?.sort_by_options, (o) => o.sort_by);
+  options = narrow(options, locals?.sort_order_options, (o) => o.sort_order);
   return options;
 };
 
-const buildSortControl = locals => {
+const buildSortControl = (locals) => {
   const options = availableOptions(locals);
   const { sortBy, order } = getTemplateSortOptions(locals);
   const selected = SORT_OPTIONS.resolve({ sort_by: sortBy, sort_order: order });
@@ -34,11 +34,11 @@ const buildSortControl = locals => {
     showLabel: true,
     value: selectedValue,
     isSelect: true,
-    options: options.map(option => ({
+    options: options.map((option) => ({
       label: option.label,
       value: option.value,
-      selected: option.value === selectedValue ? "selected" : ""
-    }))
+      selected: option.value === selectedValue ? "selected" : "",
+    })),
   };
 };
 

@@ -7,15 +7,15 @@ function main(callback) {
       uri: "https://api.sandbox.paypal.com/v1/oauth2/token",
       headers: {
         Accept: "application/json",
-        "Accept-Language": "en_US"
+        "Accept-Language": "en_US",
       },
       auth: {
         user: config.paypal.client_id,
-        pass: config.paypal.secret
+        pass: config.paypal.secret,
       },
-      body: "grant_type=client_credentials"
+      body: "grant_type=client_credentials",
     },
-    function(err, res, data) {
+    function (err, res, data) {
       if (err) return callback(err);
       try {
         data = JSON.parse(data).access_token;
@@ -30,7 +30,7 @@ function main(callback) {
 module.exports = main;
 
 if (require.main === module)
-  main(function(err, token) {
+  main(function (err, token) {
     if (err) throw err;
     console.log(token);
   });

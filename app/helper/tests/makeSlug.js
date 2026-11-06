@@ -62,7 +62,10 @@ describe("makeSlug", function () {
     is("'xsb' command line error.", "xsb-command-line-error");
     is("Foo & bar", "foo-bar");
     is("Foo's bar", "foos-bar");
-    is("Foo's Shouldn't Couldn't Wouldn't Don't", "foos-shouldnt-couldnt-wouldnt-dont");
+    is(
+      "Foo's Shouldn't Couldn't Wouldn't Don't",
+      "foos-shouldnt-couldnt-wouldnt-dont"
+    );
     is("''s bar", "s-bar");
     is("'so' bar", "so-bar");
     is("Foo &amp; bar", "foo-and-bar");

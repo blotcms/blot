@@ -157,6 +157,7 @@ module.exports = function (options = {}) {
     // will first GET the form to get the CSRF token then POST the form
     // with the provided data
     this.submit = (path, data) => {
+      // eslint-disable-next-line no-async-promise-executor -- the body is one try/catch
       return new Promise(async (resolve, reject) => {
         try {
           // first fetch the page to get the csrf token

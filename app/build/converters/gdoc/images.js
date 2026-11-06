@@ -30,7 +30,9 @@ async function processImages(blogID, docPath, $) {
   const assetPrefix = `/_assets/${docHash}/`;
   const alreadyAssetImages = nonDataImages.filter((elem) => {
     const src = $(elem).attr("src");
-    return src && src.startsWith(assetPrefix) && src.length > assetPrefix.length;
+    return (
+      src && src.startsWith(assetPrefix) && src.length > assetPrefix.length
+    );
   });
   const needsProcessingImages = nonDataImages.filter(
     (elem) => !alreadyAssetImages.includes(elem)
@@ -79,8 +81,7 @@ async function processImages(blogID, docPath, $) {
       await assets.write(blogID, assetDir + "/" + filename, buffer);
 
       $(elem).attr("src", "/_assets/" + docHash + "/" + filename);
-    } catch {
-    }
+    } catch {}
   }
 
   // Handle images which reference external resources (remote URLs, relative paths)
@@ -89,14 +90,14 @@ async function processImages(blogID, docPath, $) {
     const filenameBase = hash(src);
 
     try {
-
-      const cachedFilename = await findCachedAsset(blogID, assetDir, filenameBase);
+      const cachedFilename = await findCachedAsset(
+        blogID,
+        assetDir,
+        filenameBase
+      );
 
       if (cachedFilename) {
-        $(elem).attr(
-          "src",
-          "/_assets/" + docHash + "/" + cachedFilename
-        );
+        $(elem).attr("src", "/_assets/" + docHash + "/" + cachedFilename);
         continue;
       }
 
@@ -127,13 +128,14 @@ async function processImages(blogID, docPath, $) {
 
       $(elem).attr("src", output);
     } catch {
-      const fallbackFilename = await findCachedAsset(blogID, assetDir, filenameBase);
+      const fallbackFilename = await findCachedAsset(
+        blogID,
+        assetDir,
+        filenameBase
+      );
 
       if (fallbackFilename) {
-        $(elem).attr(
-          "src",
-          "/_assets/" + docHash + "/" + fallbackFilename
-        );
+        $(elem).attr("src", "/_assets/" + docHash + "/" + fallbackFilename);
       }
     }
   }

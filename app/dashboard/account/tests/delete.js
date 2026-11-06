@@ -43,20 +43,18 @@ describe("Dashboard account deletion refunds", function () {
 
     const stripeClient = {
       invoices: {
-        list: jasmine
-          .createSpy("list")
-          .and.returnValue(
-            Promise.resolve({
-              data: [
-                {
-                  id: "in_123",
-                  paid: true,
-                  charge: "ch_123",
-                  created,
-                },
-              ],
-            })
-          ),
+        list: jasmine.createSpy("list").and.returnValue(
+          Promise.resolve({
+            data: [
+              {
+                id: "in_123",
+                paid: true,
+                charge: "ch_123",
+                created,
+              },
+            ],
+          })
+        ),
       },
       refunds: {
         create: jasmine
@@ -111,7 +109,12 @@ describe("Dashboard account deletion refunds", function () {
         list: jasmine.createSpy("list").and.returnValue(
           Promise.resolve({
             data: [
-              { id: "in_old", paid: true, charge: "ch_old", created: oldCreated },
+              {
+                id: "in_old",
+                paid: true,
+                charge: "ch_old",
+                created: oldCreated,
+              },
               {
                 id: "in_recent",
                 paid: true,
@@ -190,7 +193,9 @@ describe("Dashboard account deletion refunds", function () {
   });
 
   it("issues a PayPal refund within the first 30 days", async function () {
-    const startTime = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString();
+    const startTime = new Date(
+      Date.now() - 5 * 24 * 60 * 60 * 1000
+    ).toISOString();
     const expectedAuth = `Basic ${Buffer.from("client:secret").toString("base64")}`;
 
     const transactionsData = {
@@ -211,20 +216,22 @@ describe("Dashboard account deletion refunds", function () {
       amount: { value: "12.00", currency_code: "USD" },
     };
 
-    const fetchSpy = jasmine.createSpy("fetch").and.callFake((url, options = {}) => {
-      if (url.includes("/transactions")) {
-        expect(options.headers.Authorization).toBe(expectedAuth);
-        return Promise.resolve(mockResponse(200, transactionsData));
-      }
+    const fetchSpy = jasmine
+      .createSpy("fetch")
+      .and.callFake((url, options = {}) => {
+        if (url.includes("/transactions")) {
+          expect(options.headers.Authorization).toBe(expectedAuth);
+          return Promise.resolve(mockResponse(200, transactionsData));
+        }
 
-      if (url.includes("/refund")) {
-        expect(options.method).toBe("POST");
-        expect(options.headers.Authorization).toBe(expectedAuth);
-        return Promise.resolve(mockResponse(201, refundData));
-      }
+        if (url.includes("/refund")) {
+          expect(options.method).toBe("POST");
+          expect(options.headers.Authorization).toBe(expectedAuth);
+          return Promise.resolve(mockResponse(201, refundData));
+        }
 
-      return Promise.reject(new Error(`Unexpected URL ${url}`));
-    });
+        return Promise.reject(new Error(`Unexpected URL ${url}`));
+      });
 
     global.fetch = fetchSpy;
 
@@ -251,7 +258,9 @@ describe("Dashboard account deletion refunds", function () {
   });
 
   it("skips PayPal refunds outside the first month", async function () {
-    const startTime = new Date(Date.now() - 45 * 24 * 60 * 60 * 1000).toISOString();
+    const startTime = new Date(
+      Date.now() - 45 * 24 * 60 * 60 * 1000
+    ).toISOString();
 
     const fetchSpy = jasmine.createSpy("fetch");
     global.fetch = fetchSpy;
@@ -280,16 +289,14 @@ describe("Dashboard account deletion refunds", function () {
       invoices: {
         list: jasmine.createSpy("list").and.returnValue(
           Promise.resolve({
-            data: [
-              { id: "in_987", paid: true, charge: "ch_987", created },
-            ],
+            data: [{ id: "in_987", paid: true, charge: "ch_987", created }],
           })
         ),
       },
       refunds: {
-        create: jasmine.createSpy("create").and.returnValue(
-          Promise.reject(stripeError)
-        ),
+        create: jasmine
+          .createSpy("create")
+          .and.returnValue(Promise.reject(stripeError)),
       },
       customers: { del: jasmine.createSpy("del") },
     };
@@ -326,16 +333,14 @@ describe("Dashboard account deletion refunds", function () {
       invoices: {
         list: jasmine.createSpy("list").and.returnValue(
           Promise.resolve({
-            data: [
-              { id: "in_777", paid: true, charge: "ch_777", created },
-            ],
+            data: [{ id: "in_777", paid: true, charge: "ch_777", created }],
           })
         ),
       },
       refunds: {
-        create: jasmine.createSpy("create").and.returnValue(
-          Promise.reject(new Error("Stripe outage"))
-        ),
+        create: jasmine
+          .createSpy("create")
+          .and.returnValue(Promise.reject(new Error("Stripe outage"))),
       },
       customers: { del: jasmine.createSpy("del") },
     };
@@ -363,7 +368,9 @@ describe("Dashboard account deletion refunds", function () {
   });
 
   it("continues when PayPal reports a refund has already happened", async function () {
-    const startTime = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+    const startTime = new Date(
+      Date.now() - 2 * 24 * 60 * 60 * 1000
+    ).toISOString();
     const expectedAuth = `Basic ${Buffer.from("client:secret").toString("base64")}`;
 
     const transactionsData = {
@@ -388,19 +395,21 @@ describe("Dashboard account deletion refunds", function () {
       message: "Refund has already been completed for this capture.",
     };
 
-    const fetchSpy = jasmine.createSpy("fetch").and.callFake((url, options = {}) => {
-      if (url.includes("/transactions")) {
-        expect(options.headers.Authorization).toBe(expectedAuth);
-        return Promise.resolve(mockResponse(200, transactionsData));
-      }
+    const fetchSpy = jasmine
+      .createSpy("fetch")
+      .and.callFake((url, options = {}) => {
+        if (url.includes("/transactions")) {
+          expect(options.headers.Authorization).toBe(expectedAuth);
+          return Promise.resolve(mockResponse(200, transactionsData));
+        }
 
-      if (url.includes("/refund")) {
-        expect(options.method).toBe("POST");
-        return Promise.resolve(mockResponse(422, refundError));
-      }
+        if (url.includes("/refund")) {
+          expect(options.method).toBe("POST");
+          return Promise.resolve(mockResponse(422, refundError));
+        }
 
-      return Promise.reject(new Error(`Unexpected URL ${url}`));
-    });
+        return Promise.reject(new Error(`Unexpected URL ${url}`));
+      });
 
     global.fetch = fetchSpy;
 
@@ -426,8 +435,9 @@ describe("Dashboard account deletion refunds", function () {
   });
 
   it("continues when PayPal refunds fail unexpectedly", async function () {
-    const startTime = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
-    const expectedAuth = `Basic ${Buffer.from("client:secret").toString("base64")}`;
+    const startTime = new Date(
+      Date.now() - 3 * 24 * 60 * 60 * 1000
+    ).toISOString();
 
     const transactionsData = {
       transactions: [
@@ -444,17 +454,19 @@ describe("Dashboard account deletion refunds", function () {
 
     const refundError = { name: "INTERNAL_SERVER_ERROR", message: "boom" };
 
-    const fetchSpy = jasmine.createSpy("fetch").and.callFake((url, options = {}) => {
-      if (url.includes("/transactions")) {
-        return Promise.resolve(mockResponse(200, transactionsData));
-      }
+    const fetchSpy = jasmine
+      .createSpy("fetch")
+      .and.callFake((url, options = {}) => {
+        if (url.includes("/transactions")) {
+          return Promise.resolve(mockResponse(200, transactionsData));
+        }
 
-      if (url.includes("/refund")) {
-        return Promise.resolve(mockResponse(500, refundError));
-      }
+        if (url.includes("/refund")) {
+          return Promise.resolve(mockResponse(500, refundError));
+        }
 
-      return Promise.reject(new Error(`Unexpected URL ${url}`));
-    });
+        return Promise.reject(new Error(`Unexpected URL ${url}`));
+      });
 
     global.fetch = fetchSpy;
 
@@ -478,7 +490,6 @@ describe("Dashboard account deletion refunds", function () {
     );
   });
 
-
   it("continues deleting account when Stripe customer is already missing", async function () {
     const stripeError = new Error("No such customer");
     stripeError.type = "StripeInvalidRequestError";
@@ -489,7 +500,9 @@ describe("Dashboard account deletion refunds", function () {
       invoices: { list: jasmine.createSpy("list") },
       refunds: { create: jasmine.createSpy("create") },
       customers: {
-        del: jasmine.createSpy("del").and.returnValue(Promise.reject(stripeError)),
+        del: jasmine
+          .createSpy("del")
+          .and.returnValue(Promise.reject(stripeError)),
       },
     };
 
@@ -531,7 +544,9 @@ describe("Dashboard account deletion refunds", function () {
       invoices: { list: jasmine.createSpy("list") },
       refunds: { create: jasmine.createSpy("create") },
       customers: {
-        del: jasmine.createSpy("del").and.returnValue(Promise.reject(stripeError)),
+        del: jasmine
+          .createSpy("del")
+          .and.returnValue(Promise.reject(stripeError)),
       },
     };
 
@@ -550,9 +565,9 @@ describe("Dashboard account deletion refunds", function () {
     spyOn(console, "warn");
     spyOn(console, "error");
 
-    await expectAsync(runMiddleware(Delete.exports.subscription, req)).toBeRejectedWith(
-      stripeError
-    );
+    await expectAsync(
+      runMiddleware(Delete.exports.subscription, req)
+    ).toBeRejectedWith(stripeError);
 
     expect(stripeClient.customers.del).toHaveBeenCalledWith("cus_broken");
     expect(console.warn).not.toHaveBeenCalled();

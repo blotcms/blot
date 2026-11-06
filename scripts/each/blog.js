@@ -29,7 +29,7 @@ module.exports = function (doThis, allDone, options) {
 
     if (options.e) {
       var end = parseInt(options.e);
-      var start = 0;
+      var start;
 
       if (options.s) {
         start = parseInt(options.s);

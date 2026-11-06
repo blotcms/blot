@@ -3,7 +3,7 @@ const { promisify } = require("util");
 const freeDiskSpace = require("../scheduler/free-disk-space");
 const {
   getPendingSyncs,
-  getPendingUpdates
+  getPendingUpdates,
 } = require("./lock-diagnostics-state");
 
 const folderLock = require("./lock");
@@ -11,13 +11,13 @@ const { getRunningChecks } = require("./fix");
 const freeDiskSpaceAsync = promisify(freeDiskSpace);
 const DEFAULT_TIMEOUT_MS = 2000;
 
-const serializeError = error => {
+const serializeError = (error) => {
   if (!error) return null;
 
   return {
     message: error.message,
     code: error.code,
-    stack: error.stack
+    stack: error.stack,
   };
 };
 
@@ -35,9 +35,9 @@ const runWithTimeout = (fn, timeoutMs) => {
         return { error: serializeError(error) };
       }
     })(),
-    new Promise(resolve => {
+    new Promise((resolve) => {
       setTimeout(() => resolve({ timedOut: true }), timeoutMs);
-    })
+    }),
   ]);
 };
 
@@ -61,7 +61,7 @@ const gatherLockDiagnostics = async ({
   blogID,
   lockAcquiredAt,
   syncContext,
-  timeoutMs = DEFAULT_TIMEOUT_MS
+  timeoutMs = DEFAULT_TIMEOUT_MS,
 } = {}) => {
   const startedAt = Date.now();
   const deadline = startedAt + timeoutMs;
@@ -77,10 +77,10 @@ const gatherLockDiagnostics = async ({
     // An array because more than one blog's Fix() can run at once (the
     // Dropbox/iCloud validators and dashboard fixes all call it
     // independently) - this compromise may not even involve the blog above.
-    runningFixChecks: getRunningChecks().map(runningCheck => ({
+    runningFixChecks: getRunningChecks().map((runningCheck) => ({
       blogID: runningCheck.blogID,
       check: runningCheck.check,
-      runningForMs: now - runningCheck.startedAt
+      runningForMs: now - runningCheck.startedAt,
     })),
     lockDurationMs:
       typeof lockAcquiredAt === "number" ? now - lockAcquiredAt : null,
@@ -90,7 +90,7 @@ const gatherLockDiagnostics = async ({
       } catch (error) {
         return null;
       }
-    })()
+    })(),
   };
 
   if (syncContext) {
@@ -107,7 +107,7 @@ const gatherLockDiagnostics = async ({
         pid: process.pid,
         nodeVersion: process.version,
         memoryUsage: process.memoryUsage(),
-        cpuUsage: process.cpuUsage ? process.cpuUsage() : null
+        cpuUsage: process.cpuUsage ? process.cpuUsage() : null,
       }),
       timeLeft()
     )
@@ -119,7 +119,7 @@ const gatherLockDiagnostics = async ({
     await runWithTimeout(
       () => ({
         loadavg: os.loadavg(),
-        cpuCount: os.cpus().length
+        cpuCount: os.cpus().length,
       }),
       timeLeft()
     )

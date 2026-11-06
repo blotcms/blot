@@ -118,9 +118,19 @@ describe("proxy git streaming", function () {
       return new Promise((resolve, reject) => {
         const req = http.request(
           origin + url,
-          { method, agent: false, headers: Object.assign({ "Accept-Encoding": "gzip" }, headers) },
+          {
+            method,
+            agent: false,
+            headers: Object.assign({ "Accept-Encoding": "gzip" }, headers),
+          },
           (res) => {
-            const times = { status: res.statusCode, headers: res.headers, first: null, ended: null, body: "" };
+            const times = {
+              status: res.statusCode,
+              headers: res.headers,
+              first: null,
+              ended: null,
+              body: "",
+            };
 
             res.on("data", (chunk) => {
               if (times.first === null) times.first = Date.now();
@@ -139,30 +149,35 @@ describe("proxy git streaming", function () {
       });
     }
 
-    [["/clients/git/end/example.git", "the route for pushes and clones"]].forEach(([repository, name]) => {
+    [
+      ["/clients/git/end/example.git", "the route for pushes and clones"],
+    ].forEach(([repository, name]) => {
       [
         ["POST", "/git-receive-pack", "application/x-git-receive-pack-request"],
         ["POST", "/git-upload-pack", "application/x-git-upload-pack-request"],
         ["GET", "/info/refs?service=git-upload-pack", null],
       ].forEach(([method, suffix, type]) => {
-        it("streams on " + name + ": " + method + " " + suffix, async function () {
-          const times = await request(
-            this.origin,
-            method,
-            repository + suffix,
-            method === "POST" ? "0000" : undefined,
-            type ? { "Content-Type": type } : {}
-          );
+        it(
+          "streams on " + name + ": " + method + " " + suffix,
+          async function () {
+            const times = await request(
+              this.origin,
+              method,
+              repository + suffix,
+              method === "POST" ? "0000" : undefined,
+              type ? { "Content-Type": type } : {}
+            );
 
-          expect(times.status).toBe(200);
-          expect(times.headers["content-encoding"]).toBeUndefined();
-          expect(times.body).toBe("0008NAK\n0013remote: done\n");
+            expect(times.status).toBe(200);
+            expect(times.headers["content-encoding"]).toBeUndefined();
+            expect(times.body).toBe("0008NAK\n0013remote: done\n");
 
-          // The first bytes were here well before the response was over
-          expect(ended).not.toBe(null);
-          expect(times.first).toBeLessThan(ended - DELAY / 2);
-          expect(times.ended).toBeGreaterThanOrEqual(ended);
-        });
+            // The first bytes were here well before the response was over
+            expect(ended).not.toBe(null);
+            expect(times.first).toBeLessThan(ended - DELAY / 2);
+            expect(times.ended).toBeGreaterThanOrEqual(ended);
+          }
+        );
       });
     });
   });

@@ -47,7 +47,9 @@ async function main() {
   if (command === "on") {
     const ttlOption = option(args, "--ttl");
     const ttl =
-      ttlOption === undefined ? readOnly.DEFAULT_TTL_SECONDS : Number(ttlOption);
+      ttlOption === undefined
+        ? readOnly.DEFAULT_TTL_SECONDS
+        : Number(ttlOption);
     const reason = option(args, "--reason") || "";
     await readOnly.enable({ ttl, reason });
   } else if (command === "off") {

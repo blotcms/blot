@@ -35,25 +35,40 @@ const READ_ATTEMPTS = 3;
 const MISSING = new Set(["NoSuchKey", "NotFound", "NoSuchBucket"]);
 
 function isMissing(err) {
-  return MISSING.has(err.name) || (err.$metadata && err.$metadata.httpStatusCode === 404);
+  return (
+    MISSING.has(err.name) ||
+    (err.$metadata && err.$metadata.httpStatusCode === 404)
+  );
 }
 
 function isPastEnd(err) {
-  return err.name === "InvalidRange" || (err.$metadata && err.$metadata.httpStatusCode === 416);
+  return (
+    err.name === "InvalidRange" ||
+    (err.$metadata && err.$metadata.httpStatusCode === 416)
+  );
 }
 
 function isNotModified(err) {
-  return err.name === "NotModified" || (err.$metadata && err.$metadata.httpStatusCode === 304);
+  return (
+    err.name === "NotModified" ||
+    (err.$metadata && err.$metadata.httpStatusCode === 304)
+  );
 }
 
 function isPreconditionFailed(err) {
-  return err.name === "PreconditionFailed" || (err.$metadata && err.$metadata.httpStatusCode === 412);
+  return (
+    err.name === "PreconditionFailed" ||
+    (err.$metadata && err.$metadata.httpStatusCode === 412)
+  );
 }
 
 // S3 answers 409 ConditionalRequestConflict when writers to a key are racing
 // and it can't yet say which wins; the request is simply sent again
 function isConflict(err) {
-  return err.name === "ConditionalRequestConflict" || (err.$metadata && err.$metadata.httpStatusCode === 409);
+  return (
+    err.name === "ConditionalRequestConflict" ||
+    (err.$metadata && err.$metadata.httpStatusCode === 409)
+  );
 }
 
 const CONFLICT_ATTEMPTS = 4;
@@ -67,16 +82,23 @@ function createS3Store({
   partConcurrency = PART_CONCURRENCY,
   conflictDelay = CONFLICT_DELAY,
 }) {
-  if (!client || !bucket) throw new Error("createS3Store needs a client and a bucket");
-  if (partSize < 5 * 1024 * 1024) throw new Error("S3 parts must be at least 5 MiB");
+  if (!client || !bucket)
+    throw new Error("createS3Store needs a client and a bucket");
+  if (partSize < 5 * 1024 * 1024)
+    throw new Error("S3 parts must be at least 5 MiB");
 
   const id = "s3:" + bucket + "/" + prefix;
   const full = (key) => prefix + key;
 
   async function head(key) {
     try {
-      const out = await client.send(new HeadObjectCommand({ Bucket: bucket, Key: full(key) }));
-      return { size: out.ContentLength, lastModified: out.LastModified ? out.LastModified.getTime() : null };
+      const out = await client.send(
+        new HeadObjectCommand({ Bucket: bucket, Key: full(key) })
+      );
+      return {
+        size: out.ContentLength,
+        lastModified: out.LastModified ? out.LastModified.getTime() : null,
+      };
     } catch (err) {
       if (isMissing(err)) return null;
       throw err;
@@ -131,7 +153,8 @@ function createS3Store({
     try {
       out = await open(key, 0, Infinity, ifNoneMatch);
     } catch (err) {
-      if (conditional && ifNoneMatch && isNotModified(err)) return { notModified: true, etag: ifNoneMatch };
+      if (conditional && ifNoneMatch && isNotModified(err))
+        return { notModified: true, etag: ifNoneMatch };
       throw err;
     }
     if (out.ContentLength > maxBytes) {
@@ -223,7 +246,8 @@ function createS3Store({
     }
 
     try {
-      for (const body of ahead) uploads.push(uploadPart(++number, body, await acquire()));
+      for (const body of ahead)
+        uploads.push(uploadPart(++number, body, await acquire()));
 
       while (!failure) {
         const release = await acquire();
@@ -249,17 +273,26 @@ function createS3Store({
     } catch (err) {
       await Promise.all(uploads);
       await client
-        .send(new AbortMultipartUploadCommand({ Bucket: bucket, Key: full(key), UploadId: uploadId }))
+        .send(
+          new AbortMultipartUploadCommand({
+            Bucket: bucket,
+            Key: full(key),
+            UploadId: uploadId,
+          })
+        )
         .catch(() => {});
       throw err;
     }
   }
 
   async function put(key, body) {
-    if (Buffer.isBuffer(body) && body.length <= partSize) return putWhole(key, body);
+    if (Buffer.isBuffer(body) && body.length <= partSize)
+      return putWhole(key, body);
 
     // Iterating a Buffer would give its bytes, not a chunk
-    const iterator = parts(Buffer.isBuffer(body) ? [body] : body)[Symbol.asyncIterator]();
+    const iterator = parts(Buffer.isBuffer(body) ? [body] : body)[
+      Symbol.asyncIterator
+    ]();
 
     // The iterator is closed however this ends, so a source which is a
     // generator runs its finally and a file stream closes its descriptor
@@ -294,13 +327,17 @@ function createS3Store({
       } catch (err) {
         if (isPreconditionFailed(err)) return false;
         if (!isConflict(err) || attempt === CONFLICT_ATTEMPTS) throw err;
-        await new Promise((resolve) => setTimeout(resolve, conflictDelay * attempt));
+        await new Promise((resolve) =>
+          setTimeout(resolve, conflictDelay * attempt)
+        );
       }
     }
   }
 
   async function remove(key) {
-    await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: full(key) }));
+    await client.send(
+      new DeleteObjectCommand({ Bucket: bucket, Key: full(key) })
+    );
   }
 
   async function* list(listPrefix = "") {
@@ -314,13 +351,27 @@ function createS3Store({
         })
       );
       for (const item of out.Contents || []) {
-        yield { key: item.Key.slice(prefix.length), size: item.Size, lastModified: item.LastModified ? item.LastModified.getTime() : null };
+        yield {
+          key: item.Key.slice(prefix.length),
+          size: item.Size,
+          lastModified: item.LastModified ? item.LastModified.getTime() : null,
+        };
       }
       token = out.IsTruncated ? out.NextContinuationToken : undefined;
     } while (token);
   }
 
-  return { id, head, read, get, stream, put, putIfAbsent, delete: remove, list };
+  return {
+    id,
+    head,
+    read,
+    get,
+    stream,
+    put,
+    putIfAbsent,
+    delete: remove,
+    list,
+  };
 }
 
 module.exports = createS3Store;

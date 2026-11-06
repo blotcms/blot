@@ -14,9 +14,9 @@ function read(blog, path) {
 describe("odt converter", function () {
   global.test.blog();
 
-  const tests = fs.readdirSync(__dirname).filter(i => i.slice(-4) === ".odt");
+  const tests = fs.readdirSync(__dirname).filter((i) => i.slice(-4) === ".odt");
 
-  tests.forEach(name => {
+  tests.forEach((name) => {
     it("converts odt with " + name, async function () {
       const test = this;
       const path = "/" + name;
@@ -38,10 +38,7 @@ describe("odt converter", function () {
     const name = "paragraph$(touch odt-shell-substitution).odt";
     const path = "/" + name;
     const marker = process.cwd() + "/odt-shell-substitution";
-    const expected = fs.readFileSync(
-      __dirname + "/paragraph.odt.html",
-      "utf8"
-    );
+    const expected = fs.readFileSync(__dirname + "/paragraph.odt.html", "utf8");
 
     fs.removeSync(marker);
     await folder.writeFrom(test.blog.id, path, __dirname + "/paragraph.odt");

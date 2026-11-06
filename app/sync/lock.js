@@ -100,11 +100,20 @@ async function runProbe() {
         const i = pair.indexOf("=");
         if (i > 0) fields[pair.slice(0, i)] = pair.slice(i + 1);
       });
-    ["age", "idle", "flags", "qbuf", "qbuf-free", "omem", "oll", "obl", "tot-mem", "cmd"].forEach(
-      (k) => {
-        if (k in fields) result[k] = fields[k];
-      }
-    );
+    [
+      "age",
+      "idle",
+      "flags",
+      "qbuf",
+      "qbuf-free",
+      "omem",
+      "oll",
+      "obl",
+      "tot-mem",
+      "cmd",
+    ].forEach((k) => {
+      if (k in fields) result[k] = fields[k];
+    });
     if (!Object.keys(fields).length) result.clientList = "not found";
   } catch (e) {
     result.clientList = `error: ${e.message}`;

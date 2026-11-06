@@ -108,15 +108,22 @@ export default async (blogID, path) => {
     preStat = await fs.stat(filePath);
   } catch (e) {
     if (isMissingCode(e)) throw new FileMissingError(path);
-    console.error(clfdate(), `Failed to stat file before upload: ${filePath}`, e);
-    throw new Error(`Stat failed: ${e.message}`);
+    console.error(
+      clfdate(),
+      `Failed to stat file before upload: ${filePath}`,
+      e
+    );
+    throw new Error(`Stat failed: ${e.message}`, { cause: e });
   }
 
   // Checked before the download: an evicted file is reported as changed each
   // time iCloud evicts or re-materialises it, and downloading it to find out
   // nothing changed is what can time out.
   if (isUnchanged(blogID, path, preStat)) {
-    console.log(clfdate(), `Skipping upload: unchanged since last push: ${filePath}`);
+    console.log(
+      clfdate(),
+      `Skipping upload: unchanged since last push: ${filePath}`
+    );
     return;
   }
 
@@ -133,7 +140,7 @@ export default async (blogID, path) => {
       mtime: modifiedTime,
     });
   }
-  
+
   // Download and check file
   let stat;
   try {
@@ -148,7 +155,7 @@ export default async (blogID, path) => {
       `Failed to download file before upload: ${filePath}`,
       e
     );
-    throw new Error(`Download failed: ${e.message}`);
+    throw new Error(`Download failed: ${e.message}`, { cause: e });
   }
 
   if (stat.size > maxFileSize) {
@@ -179,11 +186,18 @@ export default async (blogID, path) => {
     fileBuffer = await fs.readFile(filePath);
   } catch (error) {
     if (isMissingCode(error)) throw new FileMissingError(path);
-    console.error(clfdate(), `Failed to read file for upload: ${filePath}`, error);
-    throw new Error(`Failed to read file: ${error.message}`);
+    console.error(
+      clfdate(),
+      `Failed to read file for upload: ${filePath}`,
+      error
+    );
+    throw new Error(`Failed to read file: ${error.message}`, { cause: error });
   }
 
-  console.log(clfdate(), `Issuing HTTP /upload request to remote server: ${path}`);
+  console.log(
+    clfdate(),
+    `Issuing HTTP /upload request to remote server: ${path}`
+  );
 
   let response;
   try {

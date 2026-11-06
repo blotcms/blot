@@ -63,16 +63,23 @@ function inflateStream(input, size, what) {
     });
 
     function check() {
-      if (total > size) throw new CorruptError(what + " is larger than its header says");
+      if (total > size)
+        throw new CorruptError(what + " is larger than its header says");
       if (failure) {
         if (!/^Z_/.test(failure.code || "")) throw failure;
-        throw new CorruptError(what + " is not valid compressed data (" + failure.message + ")");
+        throw new CorruptError(
+          what + " is not valid compressed data (" + failure.message + ")"
+        );
       }
     }
 
     try {
       let wanted;
-      for (let ended = false; !ended; wanted = total === size ? TAIL : undefined) {
+      for (
+        let ended = false;
+        !ended;
+        wanted = total === size ? TAIL : undefined
+      ) {
         const next = await iterator.next(wanted);
         if (next.done) throw new CorruptError(what + " is cut short");
 
@@ -92,10 +99,14 @@ function inflateStream(input, size, what) {
       if (iterator.return) iterator.return().catch(() => {});
     }
 
-    if (total !== size) throw new CorruptError(what + " is smaller than its header says");
+    if (total !== size)
+      throw new CorruptError(what + " is smaller than its header says");
   }
 
-  return { output: output(), consumed: () => (inflate ? inflate.bytesWritten : 0) };
+  return {
+    output: output(),
+    consumed: () => (inflate ? inflate.bytesWritten : 0),
+  };
 }
 
 module.exports = inflateStream;

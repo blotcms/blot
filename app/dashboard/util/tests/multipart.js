@@ -14,27 +14,35 @@ describe("multipart upload ownership", function () {
     app.use((req, res, next) => multipart(options)(req, res, next));
     app.use((req, res) => handle(req, res));
     app.use((err, req, res, next) => res.status(err.status || 400).end());
-    server = await new Promise(resolve => {
+    server = await new Promise((resolve) => {
       const listening = app.listen(0, "127.0.0.1", () => resolve(listening));
     });
     base = `http://127.0.0.1:${server.address().port}`;
   });
   afterEach(async function () {
-    await new Promise(resolve => server.close(resolve));
+    await new Promise((resolve) => server.close(resolve));
     await fs.remove(directory);
   });
   function send(fields = ["upload"]) {
     const boundary = "blot-test-boundary";
-    const body = fields.map(name =>
-      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="test.txt"\r\nContent-Type: text/plain\r\n\r\nretained test contents\r\n`
-    ).join("") + `--${boundary}--\r\n`;
-    return fetch(base, { method: "POST", redirect: "manual",
-      headers: { "content-type": `multipart/form-data; boundary=${boundary}` }, body });
+    const body =
+      fields
+        .map(
+          (name) =>
+            `--${boundary}\r\nContent-Disposition: form-data; name="${name}"; filename="test.txt"\r\nContent-Type: text/plain\r\n\r\nretained test contents\r\n`
+        )
+        .join("") + `--${boundary}--\r\n`;
+    return fetch(base, {
+      method: "POST",
+      redirect: "manual",
+      headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
   }
   async function expectEmpty() {
     for (let attempt = 0; attempt < 100; attempt++) {
       if (!(await fs.readdir(directory)).length) return;
-      await new Promise(resolve => setTimeout(resolve, 5));
+      await new Promise((resolve) => setTimeout(resolve, 5));
     }
     expect(await fs.readdir(directory)).toEqual([]);
   }
@@ -51,7 +59,10 @@ describe("multipart upload ownership", function () {
   it("preserves other fields when normalizing an avatar and cleans all files", async function () {
     let fields;
     handle = (req, res) => {
-      fields = { avatar: !!req.files.avatar.path, other: req.files.other.length };
+      fields = {
+        avatar: !!req.files.avatar.path,
+        other: req.files.other.length,
+      };
       res.end();
     };
     await send(["avatar", "other"]);
@@ -66,7 +77,9 @@ describe("multipart upload ownership", function () {
       res.end();
     };
     await send();
-    expect(await fs.readFile(upload.path, "utf8")).toBe("retained test contents");
+    expect(await fs.readFile(upload.path, "utf8")).toBe(
+      "retained test contents"
+    );
     await release();
     await release(); // finalizers may safely run more than once
     await expectEmpty();

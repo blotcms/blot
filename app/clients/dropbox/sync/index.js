@@ -20,7 +20,8 @@ var storage = require("storage/folder");
 var { callbackify } = require("util");
 var async = require("async");
 var Sync = require("sync");
-var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
+var isRedisUnavailableError =
+  require("helper/redisUnavailable").isRedisUnavailableError;
 
 var MAX_CHECKS_WITHOUT_RESULTS = 5;
 
@@ -44,15 +45,11 @@ module.exports = function main(blog, options, callback) {
     if (err) return callback(err);
 
     if (stampLastSync) {
-      Database.set(
-        blog.id,
-        { last_sync: Date.now() },
-        function (lastSyncErr) {
-          if (lastSyncErr) {
-            folder.log("Error setting pre-sync timestamp", lastSyncErr);
-          }
+      Database.set(blog.id, { last_sync: Date.now() }, function (lastSyncErr) {
+        if (lastSyncErr) {
+          folder.log("Error setting pre-sync timestamp", lastSyncErr);
         }
-      );
+      });
     }
 
     folder.log("Creating Dropbox client");
@@ -136,25 +133,23 @@ module.exports = function main(blog, options, callback) {
               // has case-preserved, for things like extracting tags from tag folders.
               // Use resolved_relative_path if available (set by determinePathOnDisk),
               // otherwise fall back to relative_path
-              const pathToUpdate = item.resolved_relative_path || item.relative_path;
+              const pathToUpdate =
+                item.resolved_relative_path || item.relative_path;
               folder.log(pathToUpdate, "Updating path");
-              folder.update(
-                pathToUpdate,
-                function (err) {
-                  // Redis cannot take writes (a host cutover, an outage), so
-                  // this change and those after it are not in the database.
-                  // Stop here. The cursor below is not saved, so the next
-                  // sync (a webhook, or the hourly catch-up) fetches the same
-                  // changes again and applies them: the files already on
-                  // disk hash-match and are not downloaded again.
-                  if (err && isRedisUnavailableError(err)) return next(err);
+              folder.update(pathToUpdate, function (err) {
+                // Redis cannot take writes (a host cutover, an outage), so
+                // this change and those after it are not in the database.
+                // Stop here. The cursor below is not saved, so the next
+                // sync (a webhook, or the hourly catch-up) fetches the same
+                // changes again and applies them: the files already on
+                // disk hash-match and are not downloaded again.
+                if (err && isRedisUnavailableError(err)) return next(err);
 
-                  // We don't want any other error here to block other
-                  // changes from being applied.
-                  if (err) console.log("Dropbox client:", err);
-                  next();
-                }
-              );
+                // We don't want any other error here to block other
+                // changes from being applied.
+                if (err) console.log("Dropbox client:", err);
+                next();
+              });
             },
             function (updateError) {
               if (updateError) {
@@ -254,7 +249,6 @@ function Apply(client, blogID, log, status) {
 
     function remove(item, callback) {
       determinePathOnDisk(blogID, item, function (err) {
-
         if (err) {
           log(item.relative_path, "Error determining path on disk for removal");
           return callback();
@@ -262,36 +256,46 @@ function Apply(client, blogID, log, status) {
 
         log(item.resolved_relative_path, "Removing from folder");
         status("Removing " + item.resolved_relative_path);
-        callbackify(storage.remove)(blogID, item.resolved_relative_path, function (err) {
-          if (err) {
-            log(item.resolved_relative_path, "Error removing from folder", err);
-            status("Error removing " + item.resolved_relative_path);
-          } else {
-            log(item.resolved_relative_path, "Removed from folder successfully");
+        callbackify(storage.remove)(
+          blogID,
+          item.resolved_relative_path,
+          function (err) {
+            if (err) {
+              log(
+                item.resolved_relative_path,
+                "Error removing from folder",
+                err
+              );
+              status("Error removing " + item.resolved_relative_path);
+            } else {
+              log(
+                item.resolved_relative_path,
+                "Removed from folder successfully"
+              );
+            }
+
+            // This error happens if you try to remove a non-existent file
+            // inside a non-existent folder whose name happens to be the same
+            // as an existent file. For example, create a file 'hello.txt' then
+            // try to remove hello.txt/bar.txt, you will get this error.
+            // Since we don't care, we suppress it.
+            if (err && err.code === "ENOTDIR") return callback();
+
+            // We should probably handle this somehow. Without this
+            // we end up being unable to sync blogs with a single
+            // file that has a long name
+            if (err && err.code === "ENAMETOOLONG") return callback();
+
+            // Swallow errors generally so we can proceed to next file
+            // we might want to mark an error somehow
+            callback();
           }
-
-          // This error happens if you try to remove a non-existent file
-          // inside a non-existent folder whose name happens to be the same
-          // as an existent file. For example, create a file 'hello.txt' then
-          // try to remove hello.txt/bar.txt, you will get this error.
-          // Since we don't care, we suppress it.
-          if (err && err.code === "ENOTDIR") return callback();
-
-          // We should probably handle this somehow. Without this
-          // we end up being unable to sync blogs with a single
-          // file that has a long name
-          if (err && err.code === "ENAMETOOLONG") return callback();
-
-          // Swallow errors generally so we can proceed to next file
-          // we might want to mark an error somehow
-          callback();
-        });
+        );
       });
     }
 
     function mkdir(item, callback) {
       determinePathOnDisk(blogID, item, function (err) {
-
         if (err) {
           log(item.relative_path, "Error determining path on disk for mkdir");
           return callback();
@@ -299,27 +303,38 @@ function Apply(client, blogID, log, status) {
 
         log(item.resolved_relative_path, "Making directory in folder");
         status("Creating directory " + item.resolved_relative_path);
-        callbackify(storage.mkdir)(blogID, item.resolved_relative_path, function (err) {
-          // we have run into an EEXIST error here when a file exists
-          // where a new folder needs to be. I decided against
-          // just removing the file and replacing it with a folder
-          // since this would reflect something badly out of sync with
-          // dropbox (they would send the deletion before the creation?)
-          // How could a file named for a folder have gotten here? could
-          // blot have done it or is it just the user?
+        callbackify(storage.mkdir)(
+          blogID,
+          item.resolved_relative_path,
+          function (err) {
+            // we have run into an EEXIST error here when a file exists
+            // where a new folder needs to be. I decided against
+            // just removing the file and replacing it with a folder
+            // since this would reflect something badly out of sync with
+            // dropbox (they would send the deletion before the creation?)
+            // How could a file named for a folder have gotten here? could
+            // blot have done it or is it just the user?
 
-          if (err) {
-            log(item.resolved_relative_path, "Error making directory in folder", err);
-            status("Error making directory " + item.resolved_relative_path);
-          } else {
-            log(item.resolved_relative_path, "Made directory in folder successfully");
+            if (err) {
+              log(
+                item.resolved_relative_path,
+                "Error making directory in folder",
+                err
+              );
+              status("Error making directory " + item.resolved_relative_path);
+            } else {
+              log(
+                item.resolved_relative_path,
+                "Made directory in folder successfully"
+              );
+            }
+
+            // Swallow errors generally so we can proceed to next file
+            // we might want to mark an error somehow
+            callback();
           }
-
-          // Swallow errors generally so we can proceed to next file
-          // we might want to mark an error somehow
-          callback();
-        });
-      }); 
+        );
+      });
     }
 
     // Item.path_display is the full path to the item
@@ -327,15 +342,17 @@ function Apply(client, blogID, log, status) {
     // relative path to an item, since the root of the
     // Dropbox folder might not be the root of the blog.
     function download(item, callback) {
-
       determinePathOnDisk(blogID, item, function (err) {
-
         if (err) {
-          log(item.relative_path, "Error determining path on disk for download");
+          log(
+            item.relative_path,
+            "Error determining path on disk for download"
+          );
           return callback();
         }
 
-        var pathForUnsupportedCheck = item.path_display || item.resolved_relative_path || "";
+        var pathForUnsupportedCheck =
+          item.path_display || item.resolved_relative_path || "";
 
         if (hasUnsupportedExtension(pathForUnsupportedCheck)) {
           var unsupportedMessage =
@@ -354,7 +371,9 @@ function Apply(client, blogID, log, status) {
                   "Error creating placeholder for unsupported file",
                   err
                 );
-                status("Error creating placeholder " + item.resolved_relative_path);
+                status(
+                  "Error creating placeholder " + item.resolved_relative_path
+                );
               }
 
               callback();
@@ -379,8 +398,15 @@ function Apply(client, blogID, log, status) {
             item.resolved_relative_path,
             item.size,
             function (err, localHash) {
-              if (item.content_hash && localHash && localHash === item.content_hash) {
-                log(item.resolved_relative_path, "Oversized file already matches local copy");
+              if (
+                item.content_hash &&
+                localHash &&
+                localHash === item.content_hash
+              ) {
+                log(
+                  item.resolved_relative_path,
+                  "Oversized file already matches local copy"
+                );
                 return callback();
               }
 
@@ -395,7 +421,10 @@ function Apply(client, blogID, log, status) {
                       "Error creating placeholder for oversized file",
                       err
                     );
-                    status("Error creating placeholder " + item.resolved_relative_path);
+                    status(
+                      "Error creating placeholder " +
+                        item.resolved_relative_path
+                    );
                   }
 
                   callback();
@@ -407,81 +436,97 @@ function Apply(client, blogID, log, status) {
 
         status("Downloading " + item.resolved_relative_path);
 
-        
         log(item.resolved_relative_path, "Hashing any existing file contents");
 
-        callbackify(contentHash)(blogID, item.resolved_relative_path, item.size, function (
-          err,
-          content_hash
-        ) {
-          if (item.content_hash && content_hash && item.content_hash === content_hash) {
-            log(item.resolved_relative_path, "Hash matches, don't download");
-            return callback();
-          }
-
-          log(
-            item.resolved_relative_path,
-            "Hash does not match, downloading from Dropbox"
-          );
-          Download(
-            client,
-            item.path_display,
-            blogID,
-            item.resolved_relative_path,
-            function (err) {
-              if (err) {
-                log(item.resolved_relative_path, "Error downloading from dropbox", err);
-                status("Error downloading " + item.resolved_relative_path);
-              } else {
-                log(item.resolved_relative_path, "Downloaded to folder successfully");
-              }
-
-              // Seen in production: a Dropbox account stuck generating
-              // ever-longer "(Conflict met exemplaar van ...)" copies of the
-              // same file until the name exceeded the filesystem's max name
-              // length. We can't write a placeholder here the way we do for
-              // unsupported/oversized files above, because
-              // item.resolved_relative_path is itself the too-long path – any write to it fails the same
-              // way the download did. This only changes the log/status line;
-              // the file is still never written, so its hash still never
-              // matches and every subsequent webhook/hourly walk still calls
-              // download() again. download() now checks the path length
-              // before contacting Dropbox (see util/download.js), so at
-              // least this no longer burns 6 retries or fetches the file
-              // over the network first.
-              if (err && err.code === "ENAMETOOLONG") {
-                log(
-                  item.resolved_relative_path,
-                  "Skipping download because destination path exceeds filesystem name limit"
-                );
-                status("Skipping " + item.resolved_relative_path + " (name too long)");
-                return callback();
-              }
-
-              // Swallow the error that occur when the user has forbidden content
-              // in their folder. We should surface this eventually. You can test
-              // this error using the file in tests/files/will_flag_restricted_content.png
-              // Warning: this looks like a more generic error!
-              if (
-                err &&
-                err.statusCode === 409 &&
-                err.statusMessage === "Conflict"
-              ) {
-                return callback();
-              }
-
-              // Revoked access will fail every remaining file and must not
-              // advance the cursor past changes we never downloaded.
-              if (err && classify(err, SOURCES.APPLY).persist) {
-                return callback(err);
-              }
-
-              // Swallow errors generally so we can proceed to next file
-              // we might want to mark an error somehow
-              callback();
+        callbackify(contentHash)(
+          blogID,
+          item.resolved_relative_path,
+          item.size,
+          function (err, content_hash) {
+            if (
+              item.content_hash &&
+              content_hash &&
+              item.content_hash === content_hash
+            ) {
+              log(item.resolved_relative_path, "Hash matches, don't download");
+              return callback();
             }
-          );
-        });
+
+            log(
+              item.resolved_relative_path,
+              "Hash does not match, downloading from Dropbox"
+            );
+            Download(
+              client,
+              item.path_display,
+              blogID,
+              item.resolved_relative_path,
+              function (err) {
+                if (err) {
+                  log(
+                    item.resolved_relative_path,
+                    "Error downloading from dropbox",
+                    err
+                  );
+                  status("Error downloading " + item.resolved_relative_path);
+                } else {
+                  log(
+                    item.resolved_relative_path,
+                    "Downloaded to folder successfully"
+                  );
+                }
+
+                // Seen in production: a Dropbox account stuck generating
+                // ever-longer "(Conflict met exemplaar van ...)" copies of the
+                // same file until the name exceeded the filesystem's max name
+                // length. We can't write a placeholder here the way we do for
+                // unsupported/oversized files above, because
+                // item.resolved_relative_path is itself the too-long path – any write to it fails the same
+                // way the download did. This only changes the log/status line;
+                // the file is still never written, so its hash still never
+                // matches and every subsequent webhook/hourly walk still calls
+                // download() again. download() now checks the path length
+                // before contacting Dropbox (see util/download.js), so at
+                // least this no longer burns 6 retries or fetches the file
+                // over the network first.
+                if (err && err.code === "ENAMETOOLONG") {
+                  log(
+                    item.resolved_relative_path,
+                    "Skipping download because destination path exceeds filesystem name limit"
+                  );
+                  status(
+                    "Skipping " +
+                      item.resolved_relative_path +
+                      " (name too long)"
+                  );
+                  return callback();
+                }
+
+                // Swallow the error that occur when the user has forbidden content
+                // in their folder. We should surface this eventually. You can test
+                // this error using the file in tests/files/will_flag_restricted_content.png
+                // Warning: this looks like a more generic error!
+                if (
+                  err &&
+                  err.statusCode === 409 &&
+                  err.statusMessage === "Conflict"
+                ) {
+                  return callback();
+                }
+
+                // Revoked access will fail every remaining file and must not
+                // advance the cursor past changes we never downloaded.
+                if (err && classify(err, SOURCES.APPLY).persist) {
+                  return callback(err);
+                }
+
+                // Swallow errors generally so we can proceed to next file
+                // we might want to mark an error somehow
+                callback();
+              }
+            );
+          }
+        );
       });
     }
 
@@ -529,37 +574,40 @@ function determinePathOnDisk(blogID, item, callback) {
   const parentDir = Path.dirname(item.relative_path);
   const filename = Path.basename(item.relative_path);
 
-  callbackify(storage.resolveCaseInsensitive)(blogID, parentDir, function (err, resolvedParent) {
-
-    // We don't want to fail the download just because
-    // we couldn't resolve the case sensitive path – just log it and proceed.
-    if (err) {
-      console.log('[determinePathOnDisk] ERROR from caseSensitivePath', {
-        relative_path: item.relative_path,
-        parentDir,
-        error: err.message || err,
-        stack: err.stack
-      });
-      item.resolved_relative_path = item.relative_path;
-      return callback(null); // resolvedParent will be undefined, fallback logic will handle it
-    }
-
-    // Use resolved parent directory if available and not root
-    // parentDir === '.' means the file is at the root level
-    // resolveCaseInsensitive returns a path with a leading slash, which we remove
-    let resolvedRelativePath = item.relative_path;
-
-    if (parentDir !== '.' && resolvedParent) {
-      const resolvedRelativeParent = resolvedParent.replace(/^\/+/, '');
-
-      // The blog's root resolves to an empty string: fall back to item.relative_path
-      if (resolvedRelativeParent) {
-        resolvedRelativePath = join(resolvedRelativeParent, filename);
+  callbackify(storage.resolveCaseInsensitive)(
+    blogID,
+    parentDir,
+    function (err, resolvedParent) {
+      // We don't want to fail the download just because
+      // we couldn't resolve the case sensitive path – just log it and proceed.
+      if (err) {
+        console.log("[determinePathOnDisk] ERROR from caseSensitivePath", {
+          relative_path: item.relative_path,
+          parentDir,
+          error: err.message || err,
+          stack: err.stack,
+        });
+        item.resolved_relative_path = item.relative_path;
+        return callback(null); // resolvedParent will be undefined, fallback logic will handle it
       }
+
+      // Use resolved parent directory if available and not root
+      // parentDir === '.' means the file is at the root level
+      // resolveCaseInsensitive returns a path with a leading slash, which we remove
+      let resolvedRelativePath = item.relative_path;
+
+      if (parentDir !== "." && resolvedParent) {
+        const resolvedRelativeParent = resolvedParent.replace(/^\/+/, "");
+
+        // The blog's root resolves to an empty string: fall back to item.relative_path
+        if (resolvedRelativeParent) {
+          resolvedRelativePath = join(resolvedRelativeParent, filename);
+        }
+      }
+
+      item.resolved_relative_path = resolvedRelativePath;
+
+      callback(null);
     }
-
-    item.resolved_relative_path = resolvedRelativePath;
-
-    callback(null);
-  });
+  );
 }

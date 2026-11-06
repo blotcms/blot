@@ -50,7 +50,13 @@ const fullViewCache = createRenderCache("fullView", {
   },
 });
 
-function createCacheKey(blogID, blogCacheID, templateID, templateCacheID, viewName) {
+function createCacheKey(
+  blogID,
+  blogCacheID,
+  templateID,
+  templateCacheID,
+  viewName
+) {
   return JSON.stringify({
     blogID: String(blogID),
     cacheID: String(blogCacheID),
@@ -92,9 +98,15 @@ function getFullView(blogID, templateID, viewName, options, callback) {
       templateCacheID,
       viewName
     );
-    const prepared = await fetchCached(fullViewCache, "view", options.log, cacheKey, {
-      context: { blogID, templateID, viewName },
-    });
+    const prepared = await fetchCached(
+      fullViewCache,
+      "view",
+      options.log,
+      cacheKey,
+      {
+        context: { blogID, templateID, viewName },
+      }
+    );
     return timeClone(fullViewCache, () => cloneDeep(prepared.payload));
   })().then(
     (response) => callback(null, response),

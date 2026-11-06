@@ -4,21 +4,21 @@ const { extname } = require("path");
 const normalize = (str) => str.replace(/\W/g, "").toLowerCase().trim();
 
 const WEIGHTS = {
-  "Thin": 100,
+  Thin: 100,
   "Extra Light": 200,
   "Ultra Light": 200,
-  "Light": 300,
-  "Normal": 400,
-  "Regular": 400,
-  "Book": 400,
-  "Medium": 500,
+  Light: 300,
+  Normal: 400,
+  Regular: 400,
+  Book: 400,
+  Medium: 500,
   "Semi Bold": 600,
   "Demi Bold": 600,
-  "Bold": 700,
+  Bold: 700,
   "Extra Bold": 800,
   "Ultra Bold": 800,
-  "Black": 900,
-  "Heavy": 900,
+  Black: 900,
+  Heavy: 900,
 };
 
 fs.readdirSync(__dirname + "/data")

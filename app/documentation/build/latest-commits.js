@@ -12,7 +12,8 @@ const output = path.join(__dirname, "../latest-commits.json");
 const latest = {};
 
 for (const slug of fs.readdirSync(sourceDirectory)) {
-  if (!fs.existsSync(path.join(sourceDirectory, slug, "package.json"))) continue;
+  if (!fs.existsSync(path.join(sourceDirectory, slug, "package.json")))
+    continue;
 
   const seconds = execFileSync(
     "git",
@@ -24,4 +25,6 @@ for (const slug of fs.readdirSync(sourceDirectory)) {
 }
 
 fs.writeFileSync(output, JSON.stringify(latest, null, 2) + "\n");
-console.log(`Wrote ${Object.keys(latest).length} template timestamps to ${output}`);
+console.log(
+  `Wrote ${Object.keys(latest).length} template timestamps to ${output}`
+);

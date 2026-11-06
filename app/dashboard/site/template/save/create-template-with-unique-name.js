@@ -42,7 +42,7 @@ const withSuffix = (base, counter, formatAttempt) => {
 const defaultFormatAttempt = (base, counter) =>
   counter > 1 ? `${base} ${counter}` : base;
 
-async function createTemplateWithUniqueName ({
+async function createTemplateWithUniqueName({
   owner,
   name,
   startCounter = 1,

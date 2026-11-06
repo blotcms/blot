@@ -12,14 +12,14 @@ var fs = require("fs-extra");
 var folder = require("storage/folder");
 var config = require("config");
 var assets = require("storage/assets");
-var join = require("path").join;
 var resolve = require("path").resolve;
 var callbackify = require("util").callbackify;
 var resolveCaseInsensitive = callbackify(folder.resolveCaseInsensitive);
 var async = require("async");
 var he = require("he");
 var unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
-var decodeFolderPath = require("blog/render/replaceFolderLinks/shared").decodeFolderPath;
+var decodeFolderPath =
+  require("blog/render/replaceFolderLinks/shared").decodeFolderPath;
 
 // Maps https://cdn.blot.im/blog_xyz/_image_cache/abc.jpg to
 // /_image_cache/abc.jpg to enable us to look up the file quickly
@@ -54,7 +54,9 @@ function resolveFolderCDNPath(src, blogID) {
   // unwrapFolderLink keeps any ?query/#hash, which aren't part of the
   // file's path on disk, and leaves the path percent-encoded.
   var cutIndex = unwrapped.search(/[?#]/);
-  return decodeFolderPath(cutIndex === -1 ? unwrapped : unwrapped.slice(0, cutIndex));
+  return decodeFolderPath(
+    cutIndex === -1 ? unwrapped : unwrapped.slice(0, cutIndex)
+  );
 }
 
 // Decodes percent-escapes, or returns the string as it is if malformed
@@ -133,7 +135,11 @@ function Transformer(blogID, name) {
         var ownPath = ownHost.resolve(url, ownHostnames);
 
         if (ownPath) {
-          debug(src, "matches this blog's own domain, trying local path first:", ownPath);
+          debug(
+            src,
+            "matches this blog's own domain, trying local path first:",
+            ownPath
+          );
           return lookup(ownPath, transform, function (err, result, hash) {
             if (!err) return callback(null, result, hash);
             debug(

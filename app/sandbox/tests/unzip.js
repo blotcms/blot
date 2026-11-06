@@ -88,8 +88,14 @@ describe("sandbox unzip job", function () {
         [
           { name: "theme/", mode: 0o040755 },
           { name: "theme/index.html", data: "<h1>{{title}}</h1>" },
-          { name: "theme/css/style.css", data: "body { color: red }".repeat(50) },
-          { name: "theme/package.json", data: JSON.stringify({ name: "Theme" }) },
+          {
+            name: "theme/css/style.css",
+            data: "body { color: red }".repeat(50),
+          },
+          {
+            name: "theme/package.json",
+            data: JSON.stringify({ name: "Theme" }),
+          },
         ],
         { deflate: true }
       )
@@ -124,7 +130,10 @@ describe("sandbox unzip job", function () {
   ]) {
     it("refuses the path " + JSON.stringify(name), async function () {
       const { meta, outputs } = await unzip(
-        zip([{ name: "fine.html", data: "ok" }, { name, data: "x" }])
+        zip([
+          { name: "fine.html", data: "ok" },
+          { name, data: "x" },
+        ])
       );
       expect(meta.error.reason).toEqual("path");
       expect(meta.files).toEqual([]);
@@ -147,7 +156,8 @@ describe("sandbox unzip job", function () {
 
   it("refuses more records than allowed, directories included", async function () {
     const files = [];
-    for (let i = 0; i < 21; i++) files.push({ name: "d" + i + "/", mode: 0o040755 });
+    for (let i = 0; i < 21; i++)
+      files.push({ name: "d" + i + "/", mode: 0o040755 });
     expect((await unzip(zip(files))).meta.error.reason).toEqual("count");
     expect((await unzip(zip(files.slice(0, 20)))).meta.error).toBe(null);
   });
@@ -177,7 +187,9 @@ describe("sandbox unzip job", function () {
 
   it("does not apply the ratio to a small archive", async function () {
     const { meta } = await unzip(
-      zip([{ name: "zeros", data: Buffer.alloc(RATIO_FLOOR / 2) }], { deflate: true })
+      zip([{ name: "zeros", data: Buffer.alloc(RATIO_FLOOR / 2) }], {
+        deflate: true,
+      })
     );
     expect(meta.error).toBe(null);
   });
@@ -200,9 +212,12 @@ describe("sandbox unzip job", function () {
   });
 
   it("reports an entry it cannot read", async function () {
-    const archive = zip([{ name: "a.html", data: "<p>hello</p>".repeat(200) }], {
-      deflate: true,
-    });
+    const archive = zip(
+      [{ name: "a.html", data: "<p>hello</p>".repeat(200) }],
+      {
+        deflate: true,
+      }
+    );
     for (let i = 36; i < 60; i++) archive[i] ^= 0xff;
     const { meta } = await unzip(archive);
     expect(meta.error.reason).toEqual("read");
@@ -227,6 +242,8 @@ describe("sandbox unzip job", function () {
     ]) {
       expect(await message(unzip(zip([]), limits))).toEqual("invalid limits");
     }
-    expect(await message(sandbox.run("unzip", null, zip([])))).toEqual("invalid arguments");
+    expect(await message(sandbox.run("unzip", null, zip([])))).toEqual(
+      "invalid arguments"
+    );
   });
 });

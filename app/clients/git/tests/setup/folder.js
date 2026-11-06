@@ -48,7 +48,9 @@ exports.isDirectory = async function (blogID, path) {
 };
 
 exports.names = async function (blogID, path) {
-  return (await storage.listNames(blogID, path)).map((entry) => entry.name).sort();
+  return (await storage.listNames(blogID, path))
+    .map((entry) => entry.name)
+    .sort();
 };
 
 exports.tree = async function (blogID) {
@@ -68,7 +70,8 @@ exports.directories = async function (blogID) {
   for await (var path of storage.walk(blogID, "/", { directories: true })) {
     if (insideGit(path)) continue;
     var found = await stat(blogID, path);
-    if (found && found.isDirectory) result.push(path.slice(1).replace(/\/$/, ""));
+    if (found && found.isDirectory)
+      result.push(path.slice(1).replace(/\/$/, ""));
   }
 
   return result.sort();

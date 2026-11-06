@@ -45,8 +45,12 @@ describe("user hashPassword", function () {
   it("rejects a password over the bcrypt byte limit", async function () {
     var { MAX_PASSWORD_LENGTH } = require("../auth-limits");
     var error = await hash("a".repeat(MAX_PASSWORD_LENGTH + 1)).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("Password is too long");
@@ -74,7 +78,7 @@ describe("user checkPassword", function () {
       lastSession: "",
       passwordHash: passwordHash,
       subscription: {},
-      paypal: {}
+      paypal: {},
     };
     await client.set(key.user(uid), JSON.stringify(user));
   });
@@ -100,8 +104,12 @@ describe("user checkPassword", function () {
 
   it("returns error for non-existent user", async function () {
     var error = await check("user_nonexistent", password).then(
-      function () { return null; },
-      function (err) { return err; }
+      function () {
+        return null;
+      },
+      function (err) {
+        return err;
+      }
     );
     expect(error).not.toBeNull();
     expect(error.message).toEqual("No user");
@@ -111,7 +119,7 @@ describe("user checkPassword", function () {
     var resultLower = await check(uid, password.toLowerCase());
     var resultUpper = await check(uid, password.toUpperCase());
     var resultCorrect = await check(uid, password);
-    
+
     expect(resultCorrect).toBe(true);
     if (password !== password.toLowerCase()) {
       expect(resultLower).toBe(false);

@@ -45,7 +45,9 @@ describe("sync/hold", function () {
     });
 
     expect(result).toEqual("done");
-    expect(syncError && syncError.message).toEqual("Failed to acquire folder lock");
+    expect(syncError && syncError.message).toEqual(
+      "Failed to acquire folder lock"
+    );
     expect((await lock.inspect(blogID)).held).toBe(false);
 
     // And a sync can take it again afterwards

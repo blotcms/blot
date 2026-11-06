@@ -1,53 +1,53 @@
 var titleFromSlug = require("helper/titleFromSlug");
 
 var TITLES = {
-  "how": "Documentation",
-  "terms": "Terms of use",
-  "privacy": "Privacy policy",
-  "posts": "Files and posts",
-  "sync": "Sync",
-  "org": "Org Mode",
-  "configure": "Set up site",
+  how: "Documentation",
+  terms: "Terms of use",
+  privacy: "Privacy policy",
+  posts: "Files and posts",
+  sync: "Sync",
+  org: "Org Mode",
+  configure: "Set up site",
   "google-drive": "Google Drive",
   "sub-folders": "Sub-folders",
   "google-docs": "Google Docs",
-  "icloud": "iCloud",
-  "cv": "CV",
-  "examples": "Example sites",
-  "markdown": "Markdown",
+  icloud: "iCloud",
+  cv: "CV",
+  examples: "Example sites",
+  markdown: "Markdown",
   "word-documents": "Word Documents",
-  "html": "HTML",
+  html: "HTML",
   "how-blot-works": "How Blot works",
-  "mustache": "Template language",
-  "ask": "Ask a question",
-  "urls": "URL format",
+  mustache: "Template language",
+  ask: "Ask a question",
+  urls: "URL format",
   "hard-stop-start-ec2-instance": "How to stop and start an EC2 instance",
-  "who": "Who uses Blot?",
-  "tools": "Tools",
-  "developers": "Developers",
+  who: "Who uses Blot?",
+  tools: "Tools",
+  developers: "Developers",
   "working-with-ai": "Working with AI",
-  "troubleshooting": "Troubleshooting",
+  troubleshooting: "Troubleshooting",
   "json-feed": "JSON feed",
   "posts-tagged": "A page with posts with a particular tag",
-  "ifttt": "IFTTT",
-  "soundcloud": "SoundCloud",
-  "youtube": "YouTube",
-  "wordpress": "WordPress",
-  "squarespace": "Squarespace",
-  "blogger": "Blogger",
-  "arena": "Are.na",
+  ifttt: "IFTTT",
+  soundcloud: "SoundCloud",
+  youtube: "YouTube",
+  wordpress: "WordPress",
+  squarespace: "Squarespace",
+  blogger: "Blogger",
+  arena: "Are.na",
 };
 
 module.exports = function (req, res, next) {
   res.locals.breadcrumbs = require("url")
     .parse(req.url)
     .pathname.split("/")
-    .filter(slug => slug !== "")
+    .filter((slug) => slug !== "")
     .map(function (slug, i, arr) {
       return {
         label: TITLES[slug] || titleFromSlug(slug),
         url: "/" + arr.slice(0, i + 1).join("/"),
-        last: i === arr.length - 1
+        last: i === arr.length - 1,
       };
     });
 

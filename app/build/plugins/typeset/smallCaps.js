@@ -24,9 +24,9 @@ function isAcronym(word) {
     word.length &&
     word.trim().length > 1 &&
     !onlyNumbers.test(
-      word.replace(/[\.,-\/#!–$%°\^&\*;?:+′|@\[\]{}=\-_`~()]/g, "")
+      word.replace(/[.,-/#!–$%°^&*;?:+′|@[\]{}=\-_`~()]/g, "")
     ) &&
-    word.replace(/[\.,-\/#!$%\^&\*;–?:+|@\[\]{}=\-_`~(′°)]/g, "") === word &&
+    word.replace(/[.,-/#!$%^&*;–?:+|@[\]{}=\-_`~(′°)]/g, "") === word &&
     word.toUpperCase() === word
   );
 }

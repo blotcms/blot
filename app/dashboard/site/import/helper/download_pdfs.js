@@ -8,8 +8,10 @@ var boundedDownload = require("./download");
 var lifecycle = require("../lifecycle");
 
 function download(url, prefetched, callback) {
-  boundedDownload(url, { kind: "file", check: "pdf", prefetched })
-    .then(({ data }) => callback(null, data), callback);
+  boundedDownload(url, { kind: "file", check: "pdf", prefetched }).then(
+    ({ data }) => callback(null, data),
+    callback
+  );
 }
 
 module.exports = function download_pdfs(post, callback) {
@@ -62,7 +64,11 @@ function downloadAll(post, scanned, prefetched, callback) {
       download(href, prefetched, function (err, data) {
         if (err) {
           console.log("PDF error:", href, err.name, err.statusCode);
-          return next(lifecycle.current() && lifecycle.current().signal.aborted ? err : null);
+          return next(
+            lifecycle.current() && lifecycle.current().signal.aborted
+              ? err
+              : null
+          );
         }
 
         assetDirectory(post, function (err, directory) {

@@ -58,14 +58,18 @@ describe("entries", function () {
       const key = entryKey(blogID, path);
 
       await new Promise((resolve, reject) => {
-        Entry.set(blogID, path, buildEntry(path), (err) => (err ? reject(err) : resolve()));
+        Entry.set(blogID, path, buildEntry(path), (err) =>
+          err ? reject(err) : resolve()
+        );
       });
 
       const ttl = await redis.ttl(key);
       expect(ttl).toBe(-1);
 
       await new Promise((resolve, reject) => {
-        Entry.set(blogID, path, { deleted: true }, (err) => (err ? reject(err) : resolve()));
+        Entry.set(blogID, path, { deleted: true }, (err) =>
+          err ? reject(err) : resolve()
+        );
       });
 
       const ttlAfterDelete = await redis.ttl(key);
@@ -73,7 +77,9 @@ describe("entries", function () {
       expect(ttlAfterDelete).toBeLessThanOrEqual(24 * 60 * 60);
 
       await new Promise((resolve, reject) => {
-        Entry.set(blogID, path, { deleted: false }, (err) => (err ? reject(err) : resolve()));
+        Entry.set(blogID, path, { deleted: false }, (err) =>
+          err ? reject(err) : resolve()
+        );
       });
 
       const ttlAfterRestore = await redis.ttl(key);
@@ -120,7 +126,15 @@ describe("entries", function () {
     it("keeps list and lex memberships in sync across state transitions", async function () {
       const blogID = this.blog.id;
       const path = "/stateful-entry.txt";
-      const listNames = ["all", "created", "entries", "drafts", "scheduled", "pages", "deleted"];
+      const listNames = [
+        "all",
+        "created",
+        "entries",
+        "drafts",
+        "scheduled",
+        "pages",
+        "deleted",
+      ];
       const keyFor = (name) => `blog:${blogID}:${name}`;
       const lexKey = `blog:${blogID}:entries:lex`;
 
@@ -137,7 +151,9 @@ describe("entries", function () {
 
       async function setEntry(updates) {
         await new Promise((resolve, reject) => {
-          Entry.set(blogID, path, updates, (err) => (err ? reject(err) : resolve()));
+          Entry.set(blogID, path, updates, (err) =>
+            err ? reject(err) : resolve()
+          );
         });
       }
 
@@ -227,7 +243,9 @@ describe("entries", function () {
 
     function setEntry(blogID, path, updates) {
       return new Promise((resolve, reject) => {
-        Entry.set(blogID, path, updates, (err) => (err ? reject(err) : resolve()));
+        Entry.set(blogID, path, updates, (err) =>
+          err ? reject(err) : resolve()
+        );
       });
     }
 
@@ -265,7 +283,10 @@ describe("entries", function () {
 
       expect(await sweep(blogID)).toEqual(["/expired.txt"]);
 
-      expect((await members(blogID, "all")).sort()).toEqual(["/live.txt", "/recent.txt"]);
+      expect((await members(blogID, "all")).sort()).toEqual([
+        "/live.txt",
+        "/recent.txt",
+      ]);
       expect(await members(blogID, "deleted")).toEqual(["/recent.txt"]);
       expect(await sweep(blogID)).toEqual([]);
     });
@@ -337,7 +358,9 @@ describe("entries", function () {
       const listKey = `blog:${blogID}:entries`;
 
       await new Promise((resolve, reject) => {
-        Entry.set(blogID, path, buildEntry(path), (err) => (err ? reject(err) : resolve()));
+        Entry.set(blogID, path, buildEntry(path), (err) =>
+          err ? reject(err) : resolve()
+        );
       });
 
       await redis.zAdd(
@@ -519,7 +542,7 @@ describe("entries", function () {
             // get the first page of entries, 2 per page, sorted alphabetically
             Entries.getPage(
               blogID,
-          { pageNumber: 1, pageSize, sortBy: "id", order: "asc" },
+              { pageNumber: 1, pageSize, sortBy: "id", order: "asc" },
               function (error, entries, pagination) {
                 expect(error).toBeNull();
                 expect(entries.map((entry) => entry.id)).toEqual([
@@ -578,7 +601,10 @@ describe("entries", function () {
           { pageNumber: 2, pageSize: 2, sortBy: "id", order: "asc" },
           function (error, entries) {
             expect(error).toBeNull();
-            expect(entries.map((entry) => entry.id)).toEqual(["/c.txt", "/d.txt"]);
+            expect(entries.map((entry) => entry.id)).toEqual([
+              "/c.txt",
+              "/d.txt",
+            ]);
             expect(zRangeSpy).toHaveBeenCalledWith(lexKey, 2, 3);
 
             Entries.getPage(
@@ -586,9 +612,16 @@ describe("entries", function () {
               { pageNumber: 2, pageSize: 2, sortBy: "id", order: "desc" },
               function (error, entries) {
                 expect(error).toBeNull();
-                expect(entries.map((entry) => entry.id)).toEqual(["/d.txt", "/c.txt"]);
-                expect(zRangeSpy).toHaveBeenCalledWith(lexKey, 2, 3, { REV: true });
-                expect(zRangeSpy).not.toHaveBeenCalledWith(lexKey, 0, -1, { REV: true });
+                expect(entries.map((entry) => entry.id)).toEqual([
+                  "/d.txt",
+                  "/c.txt",
+                ]);
+                expect(zRangeSpy).toHaveBeenCalledWith(lexKey, 2, 3, {
+                  REV: true,
+                });
+                expect(zRangeSpy).not.toHaveBeenCalledWith(lexKey, 0, -1, {
+                  REV: true,
+                });
                 done();
               }
             );
@@ -678,10 +711,6 @@ describe("entries", function () {
     });
   });
 
-
-
-
-
   describe("path index maintenance", function () {
     it("updates lex index for changed entries", async function () {
       const blogID = this.blog.id;
@@ -744,10 +773,19 @@ describe("entries", function () {
 
       Entries.getPage(
         blogID,
-        { pageNumber: 1, pageSize: 2, sortBy: "id", order: "asc", pathPrefix: "/Blog/" },
+        {
+          pageNumber: 1,
+          pageSize: 2,
+          sortBy: "id",
+          order: "asc",
+          pathPrefix: "/Blog/",
+        },
         function (error, entries, pagination) {
           expect(error).toBeNull();
-          expect(entries.map((entry) => entry.id)).toEqual(["/Blog/a.txt", "/Blog/b.txt"]);
+          expect(entries.map((entry) => entry.id)).toEqual([
+            "/Blog/a.txt",
+            "/Blog/b.txt",
+          ]);
           expect(pagination).toEqual({
             current: 1,
             next: 2,
@@ -768,16 +806,23 @@ describe("entries", function () {
 
       Entries.getPage(
         blogID,
-        { pageNumber: 1, pageSize: 2, sortBy: "id", order: "asc", pathPrefix: "Blog/" },
+        {
+          pageNumber: 1,
+          pageSize: 2,
+          sortBy: "id",
+          order: "asc",
+          pathPrefix: "Blog/",
+        },
         function (error, entries) {
           expect(error).toBeNull();
-          expect(entries.map((entry) => entry.id)).toEqual(["/Blog/a.txt", "/Blog/b.txt"]);
+          expect(entries.map((entry) => entry.id)).toEqual([
+            "/Blog/a.txt",
+            "/Blog/b.txt",
+          ]);
           done();
         }
       );
     });
-
-
 
     it("applies Redis-compatible tie ordering for equal date scores under pathPrefix", async function (done) {
       const blogID = this.blog.id;
@@ -808,27 +853,43 @@ describe("entries", function () {
         { score: tieScore, value: tieIDs[2] },
       ]);
 
-      const expectedAsc = await redis.zRange(taggedSetKey, 0, -1, { REV: true });
+      const expectedAsc = await redis.zRange(taggedSetKey, 0, -1, {
+        REV: true,
+      });
       const expectedDesc = await redis.zRange(taggedSetKey, 0, -1);
+
+      Entries.getPage(
+        blogID,
+        {
+          pageNumber: 1,
+          pageSize: 10,
+          sortBy: "date",
+          order: "asc",
+          pathPrefix: "/Blog/",
+        },
+        function (error, ascEntries) {
+          expect(error).toBeNull();
+          expect(ascEntries.map((entry) => entry.id)).toEqual(expectedAsc);
 
           Entries.getPage(
             blogID,
-            { pageNumber: 1, pageSize: 10, sortBy: "date", order: "asc", pathPrefix: "/Blog/" },
-            function (error, ascEntries) {
+            {
+              pageNumber: 1,
+              pageSize: 10,
+              sortBy: "date",
+              order: "desc",
+              pathPrefix: "/Blog/",
+            },
+            function (error, descEntries) {
               expect(error).toBeNull();
-              expect(ascEntries.map((entry) => entry.id)).toEqual(expectedAsc);
-
-              Entries.getPage(
-                blogID,
-                { pageNumber: 1, pageSize: 10, sortBy: "date", order: "desc", pathPrefix: "/Blog/" },
-                function (error, descEntries) {
-                  expect(error).toBeNull();
-                  expect(descEntries.map((entry) => entry.id)).toEqual(expectedDesc);
-                  done();
-                }
+              expect(descEntries.map((entry) => entry.id)).toEqual(
+                expectedDesc
               );
+              done();
             }
           );
+        }
+      );
     });
     it("ignores empty or whitespace pathPrefix values", async function (done) {
       const blogID = this.blog.id;
@@ -836,7 +897,13 @@ describe("entries", function () {
 
       Entries.getPage(
         blogID,
-        { pageNumber: 1, pageSize: 4, sortBy: "id", order: "asc", pathPrefix: "   " },
+        {
+          pageNumber: 1,
+          pageSize: 4,
+          sortBy: "id",
+          order: "asc",
+          pathPrefix: "   ",
+        },
         function (error, entries) {
           expect(error).toBeNull();
           expect(entries.map((entry) => entry.id)).toEqual([
@@ -1026,8 +1093,8 @@ describe("entries", function () {
     it("should update entries with new dateStamps", async function (done) {
       const blog = { id: this.blog.id, permalink: true };
       const entries = [
-        { path: "entry1", metadata: {}, id: "id1", metadata: {} },
-        { path: "entry2", metadata: {}, id: "id2", metadata: {} },
+        { path: "entry1", id: "id1", metadata: {} },
+        { path: "entry2", id: "id2", metadata: {} },
       ];
 
       // Mock Blog.get

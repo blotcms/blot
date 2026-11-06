@@ -17,7 +17,12 @@ describe("clients/util countChanges", function () {
   it("ignores changes Dropbox reported during the walk", function () {
     expect(countChanges({ removed: 3, changedDuringWalk: 3 })).toEqual(0);
     expect(
-      countChanges({ downloaded: 2, modifiedDuringWalk: 1, removed: 2, changedDuringWalk: 1 })
+      countChanges({
+        downloaded: 2,
+        modifiedDuringWalk: 1,
+        removed: 2,
+        changedDuringWalk: 1,
+      })
     ).toEqual(2);
   });
 

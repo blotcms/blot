@@ -29,7 +29,11 @@ function plan(ranges, { maxGap = MAX_GAP, maxRead = MAX_READ } = {}) {
     const last = reads[reads.length - 1];
     const end = range.offset + range.length;
 
-    if (last && range.offset - last.end <= maxGap && Math.max(end, last.end) - last.offset <= maxRead) {
+    if (
+      last &&
+      range.offset - last.end <= maxGap &&
+      Math.max(end, last.end) - last.offset <= maxRead
+    ) {
       last.end = Math.max(end, last.end);
       last.members.push(range);
     } else {

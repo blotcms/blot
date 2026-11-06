@@ -51,7 +51,10 @@ const CACHE_SHARE = 16;
 // and one whose indexes do not degrades to the reads by range of before for
 // what does not fit, never to fetching whole indexes again and again.
 function chooseWhole(packs, cache) {
-  const budget = Math.min(WHOLE_BUDGET, cache ? Math.floor(cache.maxBytes / CACHE_SHARE) : WHOLE_BUDGET);
+  const budget = Math.min(
+    WHOLE_BUDGET,
+    cache ? Math.floor(cache.maxBytes / CACHE_SHARE) : WHOLE_BUDGET
+  );
   const chosen = new Set();
   let total = 0;
   for (let i = packs.length - 1; i >= 0; i--) {
@@ -70,11 +73,18 @@ const wholeKey = (namespace, key) => namespace + "/" + key + "/whole";
 // bytes (the manifest's) whose own checksum is right. `checksum` false skips
 // the hash, for an index this process wrote or already checked.
 function checkWhole(buffer, size, name, { checksum = true } = {}) {
-  if (buffer.length !== size) throw new CorruptError(name + " is " + buffer.length + " bytes; the manifest says " + size);
+  if (buffer.length !== size)
+    throw new CorruptError(
+      name + " is " + buffer.length + " bytes; the manifest says " + size
+    );
   parseFanout(buffer, size, name);
   if (checksum) {
-    const own = crypto.createHash("sha1").update(buffer.subarray(0, size - 20)).digest();
-    if (!own.equals(buffer.subarray(size - 20))) throw new CorruptError(name + " does not match its checksum");
+    const own = crypto
+      .createHash("sha1")
+      .update(buffer.subarray(0, size - 20))
+      .digest();
+    if (!own.equals(buffer.subarray(size - 20)))
+      throw new CorruptError(name + " does not match its checksum");
   }
 }
 
@@ -93,8 +103,12 @@ async function loadWhole({ store, key, size, cache, namespace }) {
   try {
     fresh = await store.get(key, { maxBytes: size });
   } catch (err) {
-    if (err instanceof NotFoundError) throw new NotFoundError(key + " is not in the store");
-    if (err instanceof TooLargeError) throw new CorruptError(key + " is larger than the " + size + " bytes the manifest says");
+    if (err instanceof NotFoundError)
+      throw new NotFoundError(key + " is not in the store");
+    if (err instanceof TooLargeError)
+      throw new CorruptError(
+        key + " is larger than the " + size + " bytes the manifest says"
+      );
     throw err;
   }
   checkWhole(fresh, size, key);
@@ -106,7 +120,12 @@ async function loadWhole({ store, key, size, cache, namespace }) {
 // the cache as a whole index, so the next reader of the pack makes no request
 // for it. Indexes too big to be read whole are not.
 async function rememberWhole({ cache, namespace, key, idx }) {
-  if (!cache || idx.length > MAX_WHOLE || idx.length > Math.floor(cache.maxBytes / CACHE_SHARE)) return false;
+  if (
+    !cache ||
+    idx.length > MAX_WHOLE ||
+    idx.length > Math.floor(cache.maxBytes / CACHE_SHARE)
+  )
+    return false;
   return cache.put(wholeKey(namespace, key), idx).catch(() => false);
 }
 
@@ -126,7 +145,11 @@ function layout(count) {
 }
 
 function parseFanout(buffer, indexSize, name) {
-  if (buffer.length < FANOUT_END || !buffer.subarray(0, 4).equals(MAGIC) || buffer.readUInt32BE(4) !== 2) {
+  if (
+    buffer.length < FANOUT_END ||
+    !buffer.subarray(0, 4).equals(MAGIC) ||
+    buffer.readUInt32BE(4) !== 2
+  ) {
     throw new CorruptError(name + " is not a version 2 pack index");
   }
 
@@ -134,17 +157,20 @@ function parseFanout(buffer, indexSize, name) {
   let previous = 0;
   for (let i = 0; i < 256; i++) {
     fanout[i] = buffer.readUInt32BE(8 + i * 4);
-    if (fanout[i] < previous) throw new CorruptError(name + " has a fanout which goes backwards");
+    if (fanout[i] < previous)
+      throw new CorruptError(name + " has a fanout which goes backwards");
     previous = fanout[i];
   }
 
   const count = fanout[255];
-  if (indexSize < layout(count).large + TRAILER) throw new CorruptError(name + " is shorter than its fanout says");
+  if (indexSize < layout(count).large + TRAILER)
+    throw new CorruptError(name + " is shorter than its fanout says");
   return fanout;
 }
 
 function toOffset(value) {
-  if (!Number.isSafeInteger(value)) throw new CorruptError("Pack offset is out of range");
+  if (!Number.isSafeInteger(value))
+    throw new CorruptError("Pack offset is out of range");
   return value;
 }
 
@@ -187,7 +213,10 @@ function openIndex({ store, key, size, cache, namespace, whole = false }) {
         .head(key)
         .then((found) => {
           if (!found) throw new NotFoundError(key + " is not in the store");
-          if (found.size !== size) throw new CorruptError(key + " is " + found.size + " bytes; the manifest says " + size);
+          if (found.size !== size)
+            throw new CorruptError(
+              key + " is " + found.size + " bytes; the manifest says " + size
+            );
         })
         .catch((err) => {
           sized = null;
@@ -199,7 +228,10 @@ function openIndex({ store, key, size, cache, namespace, whole = false }) {
 
   async function fanout() {
     const buffer = await cached("fanout", FANOUT_END, async () => {
-      const [fresh] = await Promise.all([store.read(key, 0, FANOUT_END), checkSize()]);
+      const [fresh] = await Promise.all([
+        store.read(key, 0, FANOUT_END),
+        checkSize(),
+      ]);
       return fresh;
     });
     return parseFanout(buffer, size, key);
@@ -225,7 +257,8 @@ function openIndex({ store, key, size, cache, namespace, whole = false }) {
 
     const slot = raw & 0x7fffffff;
     const at = layout(count).large + slot * 8;
-    if (at + 8 > size - TRAILER) throw new CorruptError(key + " has an offset outside its table");
+    if (at + 8 > size - TRAILER)
+      throw new CorruptError(key + " has an offset outside its table");
     const bytes = await store.read(key, at, 8);
     if (bytes.length !== 8) throw new CorruptError(key + " is truncated");
     return toOffset(Number(bytes.readBigUInt64BE(0)));
@@ -237,7 +270,10 @@ function openIndex({ store, key, size, cache, namespace, whole = false }) {
     let high = n;
     while (low < high) {
       const mid = (low + high) >>> 1;
-      const order = Buffer.compare(bucket.subarray(mid * 20, mid * 20 + 20), id);
+      const order = Buffer.compare(
+        bucket.subarray(mid * 20, mid * 20 + 20),
+        id
+      );
       if (order === 0) return mid;
       if (order < 0) low = mid + 1;
       else high = mid;
@@ -293,7 +329,8 @@ function openIndex({ store, key, size, cache, namespace, whole = false }) {
         const raw = buffer.readUInt32BE(where.offsets + mid * 4);
         if (!(raw & 0x80000000)) return raw;
         const slot = where.large + (raw & 0x7fffffff) * 8;
-        if (slot + 8 > size - TRAILER) throw new CorruptError(key + " has an offset outside its table");
+        if (slot + 8 > size - TRAILER)
+          throw new CorruptError(key + " has an offset outside its table");
         return toOffset(Number(buffer.readBigUInt64BE(slot)));
       }
       if (order < 0) low = mid + 1;
@@ -313,21 +350,39 @@ function openIndex({ store, key, size, cache, namespace, whole = false }) {
     const to = table[first];
 
     if (from === to) return null;
-    if ((to - from) * 24 > MAX_BUCKET_BYTES) return searchBySmallReads(count, from, to, id);
+    if ((to - from) * 24 > MAX_BUCKET_BYTES)
+      return searchBySmallReads(count, from, to, id);
 
     const n = to - from;
-    const bucket = await cached("bucket/" + first, n * 24, () => readBucket(count, from, to));
+    const bucket = await cached("bucket/" + first, n * 24, () =>
+      readBucket(count, from, to)
+    );
     const found = search(bucket, n, id);
     if (found < 0) return null;
-    return resolveOffset(count, from + found, bucket.readUInt32BE(n * 20 + found * 4));
+    return resolveOffset(
+      count,
+      from + found,
+      bucket.readUInt32BE(n * 20 + found * 4)
+    );
   }
 
   return {
     lookup,
     load,
     whole,
-    objectCount: async () => (whole ? (await load()).readUInt32BE(FANOUT_END - 4) : (await fanout())[255]),
+    objectCount: async () =>
+      whole
+        ? (await load()).readUInt32BE(FANOUT_END - 4)
+        : (await fanout())[255],
   };
 }
 
-module.exports = { openIndex, chooseWhole, loadWhole, rememberWhole, wholeKey, MAX_WHOLE, WHOLE_BUDGET };
+module.exports = {
+  openIndex,
+  chooseWhole,
+  loadWhole,
+  rememberWhole,
+  wholeKey,
+  MAX_WHOLE,
+  WHOLE_BUDGET,
+};

@@ -60,8 +60,18 @@ const { compact } = trend;
 
 // Everything the line needs, from Redis. client.sendCommand keeps these off
 // the client-side cache: the host writes them from another client.
-async function collect({ client = require("models/client"), now = Date.now() } = {}) {
-  const [info, sampleValue, backupValue, offsiteValue, memoryHistory, diskHistory] = await Promise.all([
+async function collect({
+  client = require("models/client"),
+  now = Date.now(),
+} = {}) {
+  const [
+    info,
+    sampleValue,
+    backupValue,
+    offsiteValue,
+    memoryHistory,
+    diskHistory,
+  ] = await Promise.all([
     client.sendCommand(["INFO"]),
     client.sendCommand(["GET", SAMPLE_KEY]),
     client.sendCommand(["GET", BACKUP_KEY]),
@@ -77,7 +87,10 @@ async function collect({ client = require("models/client"), now = Date.now() } =
     save: parseSave(fields),
     sample: parseSample(sampleValue),
     backup: parseBackup(backupValue),
-    offsite: offsiteValue === null || offsiteValue === undefined ? undefined : parseBackup(offsiteValue),
+    offsite:
+      offsiteValue === null || offsiteValue === undefined
+        ? undefined
+        : parseBackup(offsiteValue),
     memoryHistory: trend.parse(memoryHistory),
     diskHistory: trend.parse(diskHistory),
   };
@@ -88,7 +101,10 @@ function parseSave(fields) {
   if (!fields.rdb_last_bgsave_status) return null;
 
   const saved = Number(fields.rdb_last_save_time);
-  return { status: fields.rdb_last_bgsave_status, time: saved > 0 ? saved * 1000 : null };
+  return {
+    status: fields.rdb_last_bgsave_status,
+    time: saved > 0 ? saved * 1000 : null,
+  };
 }
 
 function memoryPart({ now, memory, memoryHistory }) {
@@ -114,8 +130,10 @@ function memoryPart({ now, memory, memoryHistory }) {
 // df's Available column when the host sent it (it excludes blocks reserved for
 // root), else total - used. Fullness is used / (used + available), as df's own
 // Use% is.
-const free = ({ used, total, available }) => (available === null ? total - used : available);
-const capacity = ({ used, total, available }) => (available === null ? total : used + available);
+const free = ({ used, total, available }) =>
+  available === null ? total - used : available;
+const capacity = ({ used, total, available }) =>
+  available === null ? total : used + available;
 const fullness = ({ used, total, available }) =>
   available === null ? used / total : 1 - available / (used + available);
 
@@ -154,7 +172,8 @@ function diskPart({ now, sample, diskHistory }) {
 // app host too), not of the machine running this email.
 function ramPart({ now, sample }) {
   if (!sample || now - sample.time > SAMPLE_STALE_MS) return null;
-  if (!sample.ramTotal || sample.ramAvailable === null) return "RAM not reported";
+  if (!sample.ramTotal || sample.ramAvailable === null)
+    return "RAM not reported";
 
   const fraction = sample.ramAvailable / sample.ramTotal;
   const text = `RAM ${percent(fraction)} available (${size(sample.ramAvailable)})`;
@@ -192,17 +211,30 @@ const join = (parts) => parts.filter(Boolean).join(", ");
 // Turns collect()'s data into the two lines of the email.
 function lines(data) {
   return {
-    redis: "Redis: " + join([memoryPart(data), savePart(data), backupPart(data), offsitePart(data)]),
+    redis:
+      "Redis: " +
+      join([
+        memoryPart(data),
+        savePart(data),
+        backupPart(data),
+        offsitePart(data),
+      ]),
     server: "Server: " + join([diskPart(data), ramPart(data)]),
   };
 }
 
 // Tomorrow's trends start from today's readings. The disk's only count when
 // the host's sample is fresh.
-async function saveHistory({ now, memory, memoryHistory, sample, diskHistory }, deps) {
+async function saveHistory(
+  { now, memory, memoryHistory, sample, diskHistory },
+  deps
+) {
   const client = deps.client || require("models/client");
 
-  await trend.save(client, MEMORY_HISTORY_KEY, memoryHistory, { time: now, used: memory.used });
+  await trend.save(client, MEMORY_HISTORY_KEY, memoryHistory, {
+    time: now,
+    used: memory.used,
+  });
 
   if (sample && sample.diskRoot && now - sample.time <= SAMPLE_STALE_MS) {
     await trend.save(client, DISK_HISTORY_KEY, diskHistory, {
@@ -223,8 +255,13 @@ async function main(callback, deps = {}) {
   } catch (err) {
     // Redis down or an unexpected reply: say so and let the email go out. The
     // server's sample is read from Redis, so it is unavailable too.
-    const reason = String((err && err.message) || err).replace(/[*`<>[\]]/g, "").slice(0, 80);
-    result = { redis: `Redis: unavailable (${reason})`, server: "Server: unavailable (its sample is read from Redis)" };
+    const reason = String((err && err.message) || err)
+      .replace(/[*`<>[\]]/g, "")
+      .slice(0, 80);
+    result = {
+      redis: `Redis: unavailable (${reason})`,
+      server: "Server: unavailable (its sample is read from Redis)",
+    };
   }
 
   callback(null, result);

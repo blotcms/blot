@@ -40,7 +40,9 @@ describe("template loader", function () {
     expect(req.template).toBeDefined();
     expect(res.locals.template).toBe(req.template);
     expect(req.template.slug).toEqual(expectedSlug);
-    expect(req.template.id).toEqual(Template.makeID(this.blog.id, expectedSlug));
+    expect(req.template.id).toEqual(
+      Template.makeID(this.blog.id, expectedSlug)
+    );
     expect(req.template.locals).toEqual({});
     expect(req.template.partials).toEqual({});
     expect(req.template.previewPath).toEqual("");
@@ -55,20 +57,22 @@ describe("template loader", function () {
     const folderName = "jolly-5";
     const packageName = "Jolly-5";
 
-    spyOn(Template, "getMetadata").and.callFake(function (id, callback) {
-      callback(
-        null,
-        id === Template.makeID(this.blog.id, folderName)
-          ? {
-              owner: this.blog.id,
-              id: Template.makeID(this.blog.id, folderName),
-              slug: folderName,
-              name: packageName,
-              localEditing: true,
-            }
-          : null
-      );
-    }.bind(this));
+    spyOn(Template, "getMetadata").and.callFake(
+      function (id, callback) {
+        callback(
+          null,
+          id === Template.makeID(this.blog.id, folderName)
+            ? {
+                owner: this.blog.id,
+                id: Template.makeID(this.blog.id, folderName),
+                slug: folderName,
+                name: packageName,
+                localEditing: true,
+              }
+            : null
+        );
+      }.bind(this)
+    );
 
     const req = {
       blog: this.blog,

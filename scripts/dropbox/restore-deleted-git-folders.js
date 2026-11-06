@@ -94,8 +94,7 @@ const listAllEntries = async (client, params) => {
 };
 
 const listDeletedGitFiles = async (client, gitPath) => {
-
-  console.log('Listing deleted git files');
+  console.log("Listing deleted git files");
 
   const entries = await listAllEntries(client, {
     path: gitPath,
@@ -118,7 +117,9 @@ const getLatestRevision = async (client, filePath) => {
 
   if (!result.entries || !result.entries.length) return null;
 
-  return result.entries.find((revision) => revision.is_current) || result.entries[0];
+  return (
+    result.entries.find((revision) => revision.is_current) || result.entries[0]
+  );
 };
 
 const restoreFile = (client, filePath, rev) => {
@@ -128,29 +129,35 @@ const restoreFile = (client, filePath, rev) => {
 // Add retry wrapper for restoreFile
 const restoreFileWithRetry = async (client, filePath, rev, maxRetries = 3) => {
   let lastError;
-  
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       return await restoreFile(client, filePath, rev);
     } catch (err) {
       lastError = err;
-      
+
       // Only retry on timeout errors
-      if (err.code === 'ETIMEDOUT' || err.errno === 'ETIMEDOUT' || err.type === 'system') {
+      if (
+        err.code === "ETIMEDOUT" ||
+        err.errno === "ETIMEDOUT" ||
+        err.type === "system"
+      ) {
         if (attempt < maxRetries - 1) {
           // Exponential backoff: 1s, 2s, 4s
           const delay = Math.pow(2, attempt) * 1000;
-          console.log(`Retry attempt ${attempt + 1}/${maxRetries} for ${filePath} after ${delay}ms`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          console.log(
+            `Retry attempt ${attempt + 1}/${maxRetries} for ${filePath} after ${delay}ms`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
       }
-      
+
       // For non-timeout errors or final attempt, throw immediately
       throw err;
     }
   }
-  
+
   throw lastError;
 };
 
@@ -209,7 +216,11 @@ const processBlog = async (blog) => {
   }
 
   for (const template of templates) {
-    const templatePath = posixJoin(account.folder || "/", template.folder, template.name);
+    const templatePath = posixJoin(
+      account.folder || "/",
+      template.folder,
+      template.name
+    );
 
     console.log(
       "Checking template",

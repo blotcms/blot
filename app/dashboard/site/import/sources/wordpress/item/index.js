@@ -32,7 +32,7 @@ module.exports = function (item, output_directory, write, callback) {
     ].map(lifecycle.guard),
     function (err, result) {
       if (err) {
-        err.message = `Failed to import ${item.title && item.title[0] || "WordPress item"}: ${err.message}`;
+        err.message = `Failed to import ${(item.title && item.title[0]) || "WordPress item"}: ${err.message}`;
       }
       callback(err);
     }

@@ -36,7 +36,6 @@ describe("Blog.remove", function () {
     });
   });
 
-
   it("removes the blog's folder and nothing beside it", function (done) {
     var test = this;
     var folder = require("storage/folder");
@@ -55,14 +54,16 @@ describe("Blog.remove", function () {
             return [];
           }),
           folder.exists(otherID, "/b.txt"),
-        ]).then(function (found) {
-          return folder.removeAll(otherID).then(function () {
-            expect(found[0]).toBe(false);
-            expect(found[1]).toEqual([]);
-            expect(found[2]).toBe(true);
-            done();
-          });
-        }).catch(done.fail);
+        ])
+          .then(function (found) {
+            return folder.removeAll(otherID).then(function () {
+              expect(found[0]).toBe(false);
+              expect(found[1]).toEqual([]);
+              expect(found[2]).toBe(true);
+              done();
+            });
+          })
+          .catch(done.fail);
       });
     }, done.fail);
   });
@@ -70,9 +71,11 @@ describe("Blog.remove", function () {
   it("removes a blog which has no folder", function (done) {
     var test = this;
 
-    require("storage/folder").removeAll(test.blog.id).then(function () {
-      remove(test.blog.id, done);
-    }, done.fail);
+    require("storage/folder")
+      .removeAll(test.blog.id)
+      .then(function () {
+        remove(test.blog.id, done);
+      }, done.fail);
   });
 
   it("removes a blog from list of all blogs", function (done) {

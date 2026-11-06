@@ -17,7 +17,9 @@ function initializePhotoCrop(form) {
   const organicInput = form.querySelector("[data-organic-mask-input]");
   const organicIcon = form.querySelector("[data-organic-mask-icon]");
   const organicIconTemplates = new Map(
-    [...form.querySelectorAll("[data-organic-mask-icon-template]")].map((template) => [template.dataset.organicMaskIconTemplate, template])
+    [...form.querySelectorAll("[data-organic-mask-icon-template]")].map(
+      (template) => [template.dataset.organicMaskIconTemplate, template]
+    )
   );
   const zoomOut = form.querySelector("[data-photo-zoom-out]");
   const zoomIn = form.querySelector("[data-photo-zoom-in]");
@@ -27,7 +29,16 @@ function initializePhotoCrop(form) {
     width: form.querySelector("[data-crop-width]"),
     height: form.querySelector("[data-crop-height]"),
   };
-  if (!input || !cropper || !stage || !image || !outsideImage || !cropMask || !zoomInput) return;
+  if (
+    !input ||
+    !cropper ||
+    !stage ||
+    !image ||
+    !outsideImage ||
+    !cropMask ||
+    !zoomInput
+  )
+    return;
   form.dataset.photoCropReady = "1";
 
   const MIN_ZOOM = 1;
@@ -41,7 +52,10 @@ function initializePhotoCrop(form) {
   let animationFrame;
   let previousSize;
 
-  const stageSize = () => ({ width: stage.clientWidth, height: stage.clientHeight });
+  const stageSize = () => ({
+    width: stage.clientWidth,
+    height: stage.clientHeight,
+  });
   const bounds = () => {
     const { width, height } = stageSize();
     return {
@@ -73,11 +87,20 @@ function initializePhotoCrop(form) {
       fields.x.value = cropX;
       fields.y.value = cropY;
       fields.width.value = Math.min(fraction(width / renderedWidth), 1 - cropX);
-      fields.height.value = Math.min(fraction(height / renderedHeight), 1 - cropY);
+      fields.height.value = Math.min(
+        fraction(height / renderedHeight),
+        1 - cropY
+      );
     }
     zoomInput.value = String(Math.round(state.zoom * 100));
-    zoomInput.style.setProperty("--zoom-progress", `${((state.zoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM)) * 100}%`);
-    zoomInput.setAttribute("aria-valuetext", `${Math.round(state.zoom * 100)}%`);
+    zoomInput.style.setProperty(
+      "--zoom-progress",
+      `${((state.zoom - MIN_ZOOM) / (MAX_ZOOM - MIN_ZOOM)) * 100}%`
+    );
+    zoomInput.setAttribute(
+      "aria-valuetext",
+      `${Math.round(state.zoom * 100)}%`
+    );
     if (zoomOut) zoomOut.disabled = state.zoom <= MIN_ZOOM;
     if (zoomIn) zoomIn.disabled = state.zoom >= MAX_ZOOM;
   };
@@ -93,10 +116,13 @@ function initializePhotoCrop(form) {
   const animateToBounds = () => {
     stopPhysics();
     const { minX, minY } = bounds();
-    const outside = state.x < minX || state.x > 0 || state.y < minY || state.y > 0;
+    const outside =
+      state.x < minX || state.x > 0 || state.y < minY || state.y > 0;
     if (!outside) return;
 
-    const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reducedMotion =
+      window.matchMedia &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (reducedMotion) {
       applyBounds();
       write();
@@ -119,7 +145,13 @@ function initializePhotoCrop(form) {
       write();
 
       steps += 1;
-      if (steps < 120 && (Math.abs(vx) > 0.12 || Math.abs(vy) > 0.12 || Math.abs(targetX - state.x) > 0.12 || Math.abs(targetY - state.y) > 0.12)) {
+      if (
+        steps < 120 &&
+        (Math.abs(vx) > 0.12 ||
+          Math.abs(vy) > 0.12 ||
+          Math.abs(targetX - state.x) > 0.12 ||
+          Math.abs(targetY - state.y) > 0.12)
+      ) {
         animationFrame = requestAnimationFrame(tick);
       } else {
         applyBounds();
@@ -185,7 +217,11 @@ function initializePhotoCrop(form) {
       if (!a || !b) return;
       const center = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
       const distance = Math.max(1, Math.hypot(a.x - b.x, a.y - b.y));
-      state.zoom = limit(gesture.zoom * distance / gesture.distance, MIN_ZOOM, MAX_ZOOM);
+      state.zoom = limit(
+        (gesture.zoom * distance) / gesture.distance,
+        MIN_ZOOM,
+        MAX_ZOOM
+      );
       state.x = center.x - gesture.imagePoint.x * state.zoom;
       state.y = center.y - gesture.imagePoint.y * state.zoom;
       applyBounds();
@@ -193,9 +229,8 @@ function initializePhotoCrop(form) {
       return;
     }
 
-    if (!gesture || gesture.type !== "pan" || gesture.id !== event.pointerId) startPan(event.pointerId, position);
-    const dx = position.x - gesture.pointer.x;
-    const dy = position.y - gesture.pointer.y;
+    if (!gesture || gesture.type !== "pan" || gesture.id !== event.pointerId)
+      startPan(event.pointerId, position);
     const { minX, minY } = bounds();
     const resist = (value, min, max) => {
       if (value < min) return min - Math.min(18, (min - value) * 0.2);
@@ -209,7 +244,8 @@ function initializePhotoCrop(form) {
   const endPointer = (event) => {
     if (!pointers.has(event.pointerId)) return;
     pointers.delete(event.pointerId);
-    if (stage.hasPointerCapture(event.pointerId)) stage.releasePointerCapture(event.pointerId);
+    if (stage.hasPointerCapture(event.pointerId))
+      stage.releasePointerCapture(event.pointerId);
 
     if (pointers.size >= 2) {
       startPinch();
@@ -250,7 +286,12 @@ function initializePhotoCrop(form) {
       }
     }
   };
-  if (organicRefresh && organicInput && organicIcon && organicIconTemplates.size > 1) {
+  if (
+    organicRefresh &&
+    organicInput &&
+    organicIcon &&
+    organicIconTemplates.size > 1
+  ) {
     organicRefresh.addEventListener("click", () => {
       const shapes = [...organicIconTemplates.keys()];
       const currentIndex = shapes.indexOf(organicInput.value);
@@ -258,7 +299,10 @@ function initializePhotoCrop(form) {
       const nextIcon = organicIconTemplates.get(nextShape);
       organicInput.value = nextShape;
       organicInput.checked = true;
-      organicInput.setAttribute("aria-label", `Organic mask: ${nextIcon.dataset.organicMaskLabel}`);
+      organicInput.setAttribute(
+        "aria-label",
+        `Organic mask: ${nextIcon.dataset.organicMaskLabel}`
+      );
       organicInput.title = `Organic mask: ${nextIcon.dataset.organicMaskLabel}`;
       organicIcon.replaceChildren(nextIcon.content.cloneNode(true));
       updateShape();
@@ -275,7 +319,9 @@ function initializePhotoCrop(form) {
   // The saved photo and its crop come from the server-rendered form
   const sourceURL = form.dataset.sourceUrl || "";
   const initialCrop = (() => {
-    const values = [fields.x, fields.y, fields.width, fields.height].map((field) => (field.value === "" ? NaN : Number(field.value)));
+    const values = [fields.x, fields.y, fields.width, fields.height].map(
+      (field) => (field.value === "" ? NaN : Number(field.value))
+    );
     return values.every(Number.isFinite) && values[2] > 0 && values[3] > 0
       ? { x: values[0], y: values[1], width: values[2], height: values[3] }
       : null;
@@ -303,7 +349,10 @@ function initializePhotoCrop(form) {
           setPreviewAvailable(false);
           return;
         }
-        const fit = Math.max(width / image.naturalWidth, height / image.naturalHeight);
+        const fit = Math.max(
+          width / image.naturalWidth,
+          height / image.naturalHeight
+        );
         state = {
           baseWidth: image.naturalWidth * fit,
           baseHeight: image.naturalHeight * fit,
@@ -312,7 +361,14 @@ function initializePhotoCrop(form) {
           y: 0,
         };
         if (saved) {
-          state.zoom = limit(Math.min(width / (state.baseWidth * saved.width), height / (state.baseHeight * saved.height)), MIN_ZOOM, MAX_ZOOM);
+          state.zoom = limit(
+            Math.min(
+              width / (state.baseWidth * saved.width),
+              height / (state.baseHeight * saved.height)
+            ),
+            MIN_ZOOM,
+            MAX_ZOOM
+          );
           state.x = -saved.x * state.baseWidth * state.zoom;
           state.y = -saved.y * state.baseHeight * state.zoom;
         } else {
@@ -344,7 +400,11 @@ function initializePhotoCrop(form) {
   const loadFile = (file) => {
     if (objectURL) URL.revokeObjectURL(objectURL);
     objectURL = null;
-    fields.x.value = fields.y.value = fields.width.value = fields.height.value = "";
+    fields.x.value =
+      fields.y.value =
+      fields.width.value =
+      fields.height.value =
+        "";
 
     if (file) {
       objectURL = URL.createObjectURL(file);
@@ -363,9 +423,12 @@ function initializePhotoCrop(form) {
     }
   };
 
-  input.addEventListener("change", () => loadFile(input.files && input.files[0]));
+  input.addEventListener("change", () =>
+    loadFile(input.files && input.files[0])
+  );
   const syncUploadArea = () => {
-    if (uploadArea) uploadArea.hidden = Boolean(input.files && input.files.length);
+    if (uploadArea)
+      uploadArea.hidden = Boolean(input.files && input.files.length);
   };
   input.addEventListener("change", syncUploadArea);
   if (cancelButton) {
@@ -392,16 +455,25 @@ function initializePhotoCrop(form) {
   stage.addEventListener("pointerup", endPointer);
   stage.addEventListener("pointercancel", endPointer);
   stage.addEventListener("lostpointercapture", endPointer);
-  stage.addEventListener("wheel", (event) => {
-    if (!state) return;
-    event.preventDefault();
-    setZoom(state.zoom * Math.exp(-event.deltaY * 0.0015), point(event));
-  }, { passive: false });
+  stage.addEventListener(
+    "wheel",
+    (event) => {
+      if (!state) return;
+      event.preventDefault();
+      setZoom(state.zoom * Math.exp(-event.deltaY * 0.0015), point(event));
+    },
+    { passive: false }
+  );
   stage.addEventListener("keydown", (event) => {
     if (!state) return;
-    const { width, height } = stageSize();
-    const amount = Math.max(2, Math.round(width * (event.shiftKey ? 0.1 : 0.02)));
-    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+    const { width } = stageSize();
+    const amount = Math.max(
+      2,
+      Math.round(width * (event.shiftKey ? 0.1 : 0.02))
+    );
+    if (
+      ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+    ) {
       event.preventDefault();
       if (event.key === "ArrowLeft") state.x -= amount;
       if (event.key === "ArrowRight") state.x += amount;
@@ -421,9 +493,15 @@ function initializePhotoCrop(form) {
     }
   });
 
-  zoomInput.addEventListener("input", () => setZoom(Number(zoomInput.value) / 100));
-  if (zoomOut) zoomOut.addEventListener("click", () => setZoom(state && state.zoom - 0.25));
-  if (zoomIn) zoomIn.addEventListener("click", () => setZoom(state && state.zoom + 0.25));
+  zoomInput.addEventListener("input", () =>
+    setZoom(Number(zoomInput.value) / 100)
+  );
+  if (zoomOut)
+    zoomOut.addEventListener("click", () =>
+      setZoom(state && state.zoom - 0.25)
+    );
+  if (zoomIn)
+    zoomIn.addEventListener("click", () => setZoom(state && state.zoom + 0.25));
   shapeInputs.forEach((input) => input.addEventListener("change", updateShape));
   updateShape();
 
@@ -431,13 +509,23 @@ function initializePhotoCrop(form) {
     new ResizeObserver(() => {
       const nextSize = stageSize();
       if (!nextSize.width || !nextSize.height) return;
-      if (!state || !previousSize || !previousSize.width || !previousSize.height) {
+      if (
+        !state ||
+        !previousSize ||
+        !previousSize.width ||
+        !previousSize.height
+      ) {
         previousSize = nextSize;
         return;
       }
-      const centerX = (previousSize.width / 2 - state.x) / (state.baseWidth * state.zoom);
-      const centerY = (previousSize.height / 2 - state.y) / (state.baseHeight * state.zoom);
-      const fit = Math.max(nextSize.width / image.naturalWidth, nextSize.height / image.naturalHeight);
+      const centerX =
+        (previousSize.width / 2 - state.x) / (state.baseWidth * state.zoom);
+      const centerY =
+        (previousSize.height / 2 - state.y) / (state.baseHeight * state.zoom);
+      const fit = Math.max(
+        nextSize.width / image.naturalWidth,
+        nextSize.height / image.naturalHeight
+      );
       state.baseWidth = image.naturalWidth * fit;
       state.baseHeight = image.naturalHeight * fit;
       state.x = nextSize.width / 2 - centerX * state.baseWidth * state.zoom;
@@ -449,10 +537,14 @@ function initializePhotoCrop(form) {
     previousSize = stageSize();
   }
 
-  window.addEventListener("pagehide", () => {
-    stopPhysics();
-    if (objectURL) URL.revokeObjectURL(objectURL);
-  }, { once: true });
+  window.addEventListener(
+    "pagehide",
+    () => {
+      stopPhysics();
+      if (objectURL) URL.revokeObjectURL(objectURL);
+    },
+    { once: true }
+  );
 }
 
 module.exports = initializePhotoCrop;

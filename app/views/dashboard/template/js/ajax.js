@@ -37,7 +37,7 @@ const handleAjaxSaveResponse = (response) => {
     response && response.headers && response.headers.get("X-Template-Forked");
 
   if (forked === "1") {
-    window.location = window.location;
+    window.location.assign(window.location.href);
     return response;
   }
 

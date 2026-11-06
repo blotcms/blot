@@ -47,11 +47,7 @@ async function sweep(blogID) {
     // over a day to come back within milliseconds, and the entry's next
     // save re-adds it to "all".
     if (batch.length) {
-      await redis
-        .multi()
-        .zRem(allKey, batch)
-        .zRem(deletedKey, batch)
-        .exec();
+      await redis.multi().zRem(allKey, batch).zRem(deletedKey, batch).exec();
     }
 
     removed = removed.concat(batch);

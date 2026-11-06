@@ -9,7 +9,8 @@ var Blog = require("models/blog");
 var build = require("build");
 var Entry = require("models/entry");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
-var isRedisUnavailableError = require("helper/redisUnavailable").isRedisUnavailableError;
+var isRedisUnavailableError =
+  require("helper/redisUnavailable").isRedisUnavailableError;
 
 // Keep the first error, except that a Redis outage always wins: it is the
 // only kind that update() passes on, so a per-file error seen earlier in the
@@ -144,15 +145,18 @@ module.exports = function (blog, log, status) {
                     // the aggregate only if it is really this folder's,
                     // never a colliding sibling's.
                     if (multiInfo && rebuildTarget === multiInfo.folderPath) {
-                      return update(rebuildTarget, function (folderErr, result) {
-                        // A Redis outage comes back as folderErr
-                        done(
-                          firstError(
-                            dropError,
-                            folderErr || (result && result.error)
-                          )
-                        );
-                      });
+                      return update(
+                        rebuildTarget,
+                        function (folderErr, result) {
+                          // A Redis outage comes back as folderErr
+                          done(
+                            firstError(
+                              dropError,
+                              folderErr || (result && result.error)
+                            )
+                          );
+                        }
+                      );
                     }
 
                     return done(dropError);

@@ -22,7 +22,17 @@ const categories = [
   {
     name: "Writing",
     slug: "writing",
-    templates: ["blog", "journal", "magazine", "text", "zine", "notebook", "fieldnotes", "index", "links"],
+    templates: [
+      "blog",
+      "journal",
+      "magazine",
+      "text",
+      "zine",
+      "notebook",
+      "fieldnotes",
+      "index",
+      "links",
+    ],
   },
   {
     name: "Art",
@@ -32,7 +42,16 @@ const categories = [
   {
     name: "Research",
     slug: "research",
-    templates: ["documentation", "fieldnotes", "hypertext", "index", "links", "notebook", "keynote", "cv"],
+    templates: [
+      "documentation",
+      "fieldnotes",
+      "hypertext",
+      "index",
+      "links",
+      "notebook",
+      "keynote",
+      "cv",
+    ],
   },
   {
     name: "Photography",
@@ -42,7 +61,16 @@ const categories = [
   {
     name: "Design",
     slug: "design",
-    templates: ["portfolio", "profile", "studio", "wireframe", "keynote", "organization", "event", "cv"],
+    templates: [
+      "portfolio",
+      "profile",
+      "studio",
+      "wireframe",
+      "keynote",
+      "organization",
+      "event",
+      "cv",
+    ],
   },
 ];
 
@@ -142,14 +170,20 @@ const formatTreeForPreview = (nodes = [], indent = "") =>
     .join("\n");
 
 const loadManifest = () => {
-  const manifestPath = path.join(config.views_directory, "folders", "manifest.json");
+  const manifestPath = path.join(
+    config.views_directory,
+    "folders",
+    "manifest.json"
+  );
   if (!fs.existsSync(manifestPath)) return {};
   return fs.readJsonSync(manifestPath);
 };
 
 const folderPreviewForTemplate = (template, manifest = loadManifest()) => {
   const treeEntry = manifest[template.demo_folder] || {};
-  const previewTree = sanitizePreviewTree(treeEntry.displayTree || treeEntry.fullTree || []);
+  const previewTree = sanitizePreviewTree(
+    treeEntry.displayTree || treeEntry.fullTree || []
+  );
 
   return previewTree.length
     ? formatTreeForPreview(previewTree)
@@ -166,13 +200,18 @@ const folderHTMLForTemplate = (template, manifest) =>
 const loadPartials = async () => {
   const partials = {};
 
-  const localPartials = (await fs.readdir(viewsDirectory)).filter((file) => file.endsWith(".html"));
+  const localPartials = (await fs.readdir(viewsDirectory)).filter((file) =>
+    file.endsWith(".html")
+  );
   for (const file of localPartials) {
     const key = file.replace(/\.html$/, "");
     partials[key] = await fs.readFile(path.join(viewsDirectory, file), "utf8");
   }
 
-  const breadcrumbs = path.join(__dirname, "../../views/partials/breadcrumbs.html");
+  const breadcrumbs = path.join(
+    __dirname,
+    "../../views/partials/breadcrumbs.html"
+  );
   if (await fs.pathExists(breadcrumbs)) {
     partials.breadcrumbs = await fs.readFile(breadcrumbs, "utf8");
   }
@@ -203,8 +242,18 @@ const getLatestCommitTimestamp = (slug) => {
     try {
       const output = execFileSync(
         "git",
-        ["log", "-1", "--format=%ct", "--", path.join(templatesSourceDirectory, slug)],
-        { cwd: REPO_ROOT, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }
+        [
+          "log",
+          "-1",
+          "--format=%ct",
+          "--",
+          path.join(templatesSourceDirectory, slug),
+        ],
+        {
+          cwd: REPO_ROOT,
+          encoding: "utf8",
+          stdio: ["ignore", "pipe", "ignore"],
+        }
       ).trim();
       latestCommits[slug] = output ? parseInt(output, 10) * 1000 : 0;
     } catch (e) {
@@ -234,12 +283,18 @@ const formatUpdatedLabel = (msAgo) => {
 };
 
 const loadTemplates = async () => {
-  const items = (await fs.readdir(templatesSourceDirectory)).filter((i) => !i.startsWith(".") && !i.endsWith(".md"));
+  const items = (await fs.readdir(templatesSourceDirectory)).filter(
+    (i) => !i.startsWith(".") && !i.endsWith(".md")
+  );
 
   const templates = [];
 
   for (const slug of items) {
-    const packagePath = path.join(templatesSourceDirectory, slug, "package.json");
+    const packagePath = path.join(
+      templatesSourceDirectory,
+      slug,
+      "package.json"
+    );
     if (!(await fs.pathExists(packagePath))) continue;
 
     const pkg = await fs.readJson(packagePath);
@@ -270,7 +325,10 @@ const loadTemplates = async () => {
 };
 
 const renderView = async (viewName, data, destination, partials) => {
-  const template = await fs.readFile(path.join(viewsDirectory, viewName), "utf8");
+  const template = await fs.readFile(
+    path.join(viewsDirectory, viewName),
+    "utf8"
+  );
   const rendered = mustache.render(template, data, partials);
   const transformed = await html(rendered, { path: destination });
   await fs.outputFile(path.join(outputDirectory, destination), transformed);
@@ -292,7 +350,9 @@ const listRelativeFiles = async (root) => {
 };
 
 const pruneEmptyDirectories = async (root) => {
-  const entries = await fs.readdir(root, { withFileTypes: true }).catch(() => []);
+  const entries = await fs
+    .readdir(root, { withFileTypes: true })
+    .catch(() => []);
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const abs = path.join(root, entry.name);
@@ -318,7 +378,9 @@ module.exports = async () => {
   // reachable and the next cache save keeps it.
   const bakedOutputs = [
     "index.html",
-    ...categories.map((category) => path.join(`for-${category.slug}`, "index.html")),
+    ...categories.map((category) =>
+      path.join(`for-${category.slug}`, "index.html")
+    ),
     ...templates.map((template) => path.join(template.slug, "index.html")),
   ];
   const sourceFiles = await listRelativeFiles(viewsDirectory);
@@ -353,8 +415,13 @@ module.exports = async () => {
       "index.html",
       {
         category: category.slug,
-        categories: categories.map((c) => ({ ...c, selected: c.slug === category.slug ? "selected" : "" })),
-        allTemplates: templates.filter((t) => category.templates.includes(t.slug)),
+        categories: categories.map((c) => ({
+          ...c,
+          selected: c.slug === category.slug ? "selected" : "",
+        })),
+        allTemplates: templates.filter((t) =>
+          category.templates.includes(t.slug)
+        ),
         sidebar: sidebarForCategory(category.slug),
         cdn,
       },
@@ -366,7 +433,11 @@ module.exports = async () => {
   for (const template of templates) {
     const zip_name = `${template.demo_folder}.zip`;
     const zip = `/folders/${zip_name}`;
-    const readmePath = path.join(templatesSourceDirectory, template.slug, "README");
+    const readmePath = path.join(
+      templatesSourceDirectory,
+      template.slug,
+      "README"
+    );
 
     // Because build runs on CI on Github actions, config.host is not available so we delegate to the template to replace it with the host
     // at render time.
@@ -386,9 +457,16 @@ module.exports = async () => {
     }
 
     templateData.folder_preview = folderPreviewForTemplate(template, manifest);
-    templateData.relatedExampleCategories = relatedExampleCategoriesForTemplate(template.slug);
+    templateData.relatedExampleCategories = relatedExampleCategoriesForTemplate(
+      template.slug
+    );
 
-    await renderView("template.html", { template: templateData, cdn }, `${template.slug}/index.html`, partials);
+    await renderView(
+      "template.html",
+      { template: templateData, cdn },
+      `${template.slug}/index.html`,
+      partials
+    );
   }
 };
 

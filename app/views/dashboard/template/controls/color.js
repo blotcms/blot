@@ -1,6 +1,6 @@
-const Pickr = require('./pickr/es5.min.js');
+const Pickr = require("./pickr/es5.min.js");
 
-const ajax = require('../js/ajax.js');
+const ajax = require("../js/ajax.js");
 const withAjax = ajax.withAjax;
 const handleAjaxSaveResponse = ajax.handleAjaxSaveResponse;
 

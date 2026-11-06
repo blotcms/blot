@@ -30,7 +30,11 @@ describe("write", function () {
     var blogID = this.blog.id;
 
     var err = await new Promise(function (resolve) {
-      repo.commit(blogID, { path: "/x/.Git/config", contents: "content" }, resolve);
+      repo.commit(
+        blogID,
+        { path: "/x/.Git/config", contents: "content" },
+        resolve
+      );
     });
 
     expect(err).toEqual(jasmine.any(Error));

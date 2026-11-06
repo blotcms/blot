@@ -70,12 +70,8 @@ describe("amountInWords", function () {
   it("converts compound thousands", function () {
     expect(amountInWords(1001)).toBe("one thousand one");
     expect(amountInWords(1100)).toBe("one thousand one hundred");
-    expect(amountInWords(1234)).toBe(
-      "one thousand two hundred thirty-four"
-    );
-    expect(amountInWords(9999)).toBe(
-      "nine thousand nine hundred ninety-nine"
-    );
+    expect(amountInWords(1234)).toBe("one thousand two hundred thirty-four");
+    expect(amountInWords(9999)).toBe("nine thousand nine hundred ninety-nine");
   });
 
   it("converts millions", function () {

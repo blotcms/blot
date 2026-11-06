@@ -107,7 +107,11 @@ async function collectTargets(templateID, views, extraFolderTargets) {
   const current = new Set();
 
   const addValid = (set, target) => {
-    if (typeof target === "string" && target.trim() && isValidTarget(target.trim())) {
+    if (
+      typeof target === "string" &&
+      target.trim() &&
+      isValidTarget(target.trim())
+    ) {
       set.add(target.trim());
     }
   };
@@ -175,7 +179,10 @@ function extraFolderTargets(metadata, views, hosts) {
 
     mapFolderLocals(view.locals, hosts, add);
 
-    if (typeof view.content === "string" && view.content.indexOf("{{#asset}}") > -1) {
+    if (
+      typeof view.content === "string" &&
+      view.content.indexOf("{{#asset}}") > -1
+    ) {
       for (const match of view.content.matchAll(ASSET_SECTION)) {
         const value = match[1].trim();
         const target = folderTarget(
@@ -242,10 +249,7 @@ async function resolveFolderTargets(blogID, targets) {
 
   for (const target of targets) {
     try {
-      const { requested, entry } = await resolveFolderCandidate(
-        blogID,
-        target
-      );
+      const { requested, entry } = await resolveFolderCandidate(blogID, target);
 
       dependencies.add(normalizeDependency(requested));
 
@@ -270,24 +274,28 @@ async function updateDependencyIndex(templateID, blogID, previous, current) {
 
   const multi = client.multi();
 
-  next.forEach((file) => multi.sAdd(key.templateDependents(blogID, file), templateID));
-  removed.forEach((file) => multi.sRem(key.templateDependents(blogID, file), templateID));
+  next.forEach((file) =>
+    multi.sAdd(key.templateDependents(blogID, file), templateID)
+  );
+  removed.forEach((file) =>
+    multi.sRem(key.templateDependents(blogID, file), templateID)
+  );
 
   await multi.exec();
 
   if (JSON.stringify(next) !== JSON.stringify(previous || [])) {
-    await hsetAsync(key.metadata(templateID), "fileDependencies", JSON.stringify(next));
+    await hsetAsync(
+      key.metadata(templateID),
+      "fileDependencies",
+      JSON.stringify(next)
+    );
   }
 }
 
 /**
  * Process a single CDN target and build its manifest entry
  */
-async function processTarget(
-  templateID,
-  target
-) {
-
+async function processTarget(templateID, target) {
   // require here becuse of dependency loop
   const renderView = require("blog/render/view");
 
@@ -302,23 +310,25 @@ async function processTarget(
     const isNonFatalError =
       err.code === "ENOENT" ||
       (err.message && err.message.includes("No view:"));
-    
+
     if (isNonFatalError) {
       return null;
     }
-    
+
     throw err;
   }
 
   // Render the view to get output
   const renderedOutput = await renderView(templateID, target);
-  
+
   if (renderedOutput === undefined || renderedOutput === null) {
     return null; // Missing view or render error - skip in manifest
   }
 
   const renderedOutputString =
-    typeof renderedOutput === "string" ? renderedOutput : String(renderedOutput);
+    typeof renderedOutput === "string"
+      ? renderedOutput
+      : String(renderedOutput);
 
   // Validate rendered output size
   if (renderedOutputString.length > MAX_RENDERED_OUTPUT_SIZE) {
@@ -363,8 +373,8 @@ return redis.call("DEL", KEYS[2])`;
  * Clean up old rendered output and purge CDN URL
  */
 async function cleanupOldHash(templateID, target, oldHash) {
-  if (!oldHash || typeof oldHash !== 'string') return;
-  
+  if (!oldHash || typeof oldHash !== "string") return;
+
   try {
     // A quick revert can make the old hash current again. Redis is the only
     // copy, so deleting it then would 404 the live file.
@@ -374,7 +384,7 @@ async function cleanupOldHash(templateID, target, oldHash) {
     });
 
     if (!deleted) return;
-    
+
     // Background purge CDN URL from Bunny in background (not important)
     // if it fails, worst case we pay to store a stale file. the url used
     // on the site changes over to the new version so no worries.
@@ -505,12 +515,9 @@ module.exports = function updateCdnManifest(templateID, callback) {
       for (const target of sortedTargets) {
         try {
           let manifestChanged = false;
-          const output = await processTarget(
-            templateID,
-            target
-          );
+          const output = await processTarget(templateID, target);
           const result = output && output.hash;
-          if (result && typeof result === 'string') {
+          if (result && typeof result === "string") {
             const previousHash = inProgressManifest[target];
             inProgressManifest[target] = result;
 
@@ -521,7 +528,11 @@ module.exports = function updateCdnManifest(templateID, callback) {
               await client
                 .multi()
                 .set(key.renderedOutput(result), output.content)
-                .hSet(key.metadata(templateID), "cdn", JSON.stringify(inProgressManifest))
+                .hSet(
+                  key.metadata(templateID),
+                  "cdn",
+                  JSON.stringify(inProgressManifest)
+                )
                 .exec();
             } catch (err) {
               if (previousHash === undefined) delete inProgressManifest[target];
@@ -533,12 +544,14 @@ module.exports = function updateCdnManifest(templateID, callback) {
 
             // Clean up old hash if it changed
             const oldHash = oldManifest[target];
-            if (oldHash && oldHash !== result && typeof oldHash === 'string') {
+            if (oldHash && oldHash !== result && typeof oldHash === "string") {
               // Cleaned up once the new manifest is saved, see below
               staleHashes.push([target, oldHash]);
             }
           } else {
-            if (Object.prototype.hasOwnProperty.call(inProgressManifest, target)) {
+            if (
+              Object.prototype.hasOwnProperty.call(inProgressManifest, target)
+            ) {
               delete inProgressManifest[target];
               manifestChanged = true;
             }
@@ -566,16 +579,20 @@ module.exports = function updateCdnManifest(templateID, callback) {
       }
 
       // Save manifest to Redis
-      await hsetAsync(key.metadata(templateID), "cdn", JSON.stringify(manifest));
+      await hsetAsync(
+        key.metadata(templateID),
+        "cdn",
+        JSON.stringify(manifest)
+      );
 
       // Run cleanup in background - don't await. It re-reads the saved
       // manifest so it must start after the save above.
       for (const [target, oldHash] of staleHashes) {
-        cleanupOldHash(templateID, target, oldHash).catch(err => {
+        cleanupOldHash(templateID, target, oldHash).catch((err) => {
           // Error already logged in cleanupOldHash, but catch to prevent unhandled rejection
         });
       }
-      
+
       callback(null, manifest);
     } catch (err) {
       callback(err);

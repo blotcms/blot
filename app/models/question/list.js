@@ -15,10 +15,10 @@ module.exports = async ({
   const key = tag
     ? keys.by_tag(tag)
     : sort === "by_created"
-    ? keys.by_created
-    : sort === "by_number_of_replies"
-    ? keys.by_number_of_replies
-    : keys.by_last_reply;
+      ? keys.by_created
+      : sort === "by_number_of_replies"
+        ? keys.by_number_of_replies
+        : keys.by_last_reply;
 
   const [total, question_ids] = await Promise.all([
     client.zCard(key),

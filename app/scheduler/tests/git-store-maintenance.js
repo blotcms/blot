@@ -42,7 +42,9 @@ describe("scheduler git-store-maintenance", function () {
     spyOn(gitStoreMaintenance, "job").and.returnValue(Promise.resolve());
 
     // Four processes fire the same run; a fire date of its own for this spec
-    const fireDate = new Date(Date.UTC(2000, 0, 1) + Math.floor(Math.random() * 1e12));
+    const fireDate = new Date(
+      Date.UTC(2000, 0, 1) + Math.floor(Math.random() * 1e12)
+    );
     const fire = () => lock.cron._fire(gitStoreMaintenance.NAME, fireDate, fn);
     const ran = await Promise.all([fire(), fire(), fire(), fire()]);
 
@@ -69,9 +71,24 @@ describe("scheduler git-store-maintenance", function () {
       blogs: 3,
       deepChecked: 1,
       findings: [
-        { blog: "blog_a", check: "cheap", kind: "missing", detail: "packs/pack-x.pack" },
-        { blog: "blog_a", check: "cheap", kind: "mismatch", detail: "refs differ" },
-        { blog: "blog_b", check: "deep", kind: "mismatch", detail: "fsck failed" },
+        {
+          blog: "blog_a",
+          check: "cheap",
+          kind: "missing",
+          detail: "packs/pack-x.pack",
+        },
+        {
+          blog: "blog_a",
+          check: "cheap",
+          kind: "mismatch",
+          detail: "refs differ",
+        },
+        {
+          blog: "blog_b",
+          check: "deep",
+          kind: "mismatch",
+          detail: "fsck failed",
+        },
       ],
     });
 
@@ -88,8 +105,18 @@ describe("scheduler git-store-maintenance", function () {
       deepChecked: 2,
       deepBlogs: ["blog_a", "blog_b"],
       findings: [
-        { blog: "blog_a", check: "sweep", kind: "error", detail: "listing failed" },
-        { blog: "blog_gone", check: "orphan", kind: "orphan", detail: "deleted 3 objects left behind" },
+        {
+          blog: "blog_a",
+          check: "sweep",
+          kind: "error",
+          detail: "listing failed",
+        },
+        {
+          blog: "blog_gone",
+          check: "orphan",
+          kind: "orphan",
+          detail: "deleted 3 objects left behind",
+        },
         { blog: "-", check: "scratch", kind: "error", detail: "EACCES" },
       ],
     });

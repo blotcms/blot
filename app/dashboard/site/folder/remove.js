@@ -134,7 +134,10 @@ module.exports = async (req, res) => {
       });
     }
 
-    if (err && (err.code === "EACCES" || err.code === "EPERM" || err.code === "ELOOP")) {
+    if (
+      err &&
+      (err.code === "EACCES" || err.code === "EPERM" || err.code === "ELOOP")
+    ) {
       return res.status(403).json({
         ok: false,
         removed: normalizedPath,

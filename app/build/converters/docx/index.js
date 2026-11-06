@@ -1,7 +1,9 @@
 var fs = require("fs-extra");
 var callbackify = require("util").callbackify;
 var ensure = require("helper/ensure");
-var withLocalHeld = callbackify(require("build/converters/folderStat").withLocalHeld);
+var withLocalHeld = callbackify(
+  require("build/converters/folderStat").withLocalHeld
+);
 var extname = require("path").extname;
 var cheerio = require("cheerio");
 var Metadata = require("build/metadata");
@@ -10,14 +12,12 @@ var assets = require("storage/assets");
 var pandoc = require("build/converters/pandoc");
 var hash = require("helper/hash");
 
-function is (path) {
+function is(path) {
   return [".docx"].indexOf(extname(path).toLowerCase()) > -1;
 }
 
-function read (blog, path, callback) {
-  ensure(blog, "object")
-    .and(path, "string")
-    .and(callback, "function");
+function read(blog, path, callback) {
+  ensure(blog, "object").and(path, "string").and(callback, "function");
 
   // pandoc keeps the document's own folder names (media/ for docx, Pictures/
   // for odt), so give each document its own directory and commit all of it
@@ -39,10 +39,7 @@ function read (blog, path, callback) {
 
       var html = result.html;
       // remove everything between '<!--[if lt IE 9]>' and '<![endif]-->' including those comments
-      html = html.replace(
-        /<!--\[if lt IE 9\]>[\s\S]*<!\[endif\]-->/g,
-        ""
-      );
+      html = html.replace(/<!--\[if lt IE 9\]>[\s\S]*<!\[endif\]-->/g, "");
 
       var $ = cheerio.load(html, { decodeEntities: false }, false);
 
@@ -159,7 +156,10 @@ function read (blog, path, callback) {
 
         // pandoc's path to a file it extracted becomes the file's asset URL
         if (src.indexOf(result.dir + "/") === 0)
-          $(this).attr("src", "/_assets/" + hash(path) + src.slice(result.dir.length));
+          $(this).attr(
+            "src",
+            "/_assets/" + hash(path) + src.slice(result.dir.length)
+          );
 
         // remove the alt attribute if it equals 'Image'
         if ($(this).attr("alt") === "Image") $(this).removeAttr("alt");
@@ -172,8 +172,7 @@ function read (blog, path, callback) {
 
       var metadataString = "<!--";
 
-      for (var i in metadata)
-        metadataString += "\n" + i + ": " + metadata[i];
+      for (var i in metadata) metadataString += "\n" + i + ": " + metadata[i];
 
       if (metadataString !== "<!--") {
         metadataString += "\n-->\n";
@@ -191,9 +190,12 @@ function read (blog, path, callback) {
   );
 }
 
-async function writeMedia (blogID, assetDir, media) {
+async function writeMedia(blogID, assetDir, media) {
   for (var i = 0; i < media.length; i++) {
-    await fs.outputFile(assets.path(blogID, assetDir, media[i].name), media[i].data);
+    await fs.outputFile(
+      assets.path(blogID, assetDir, media[i].name),
+      media[i].data
+    );
   }
   await assets.commit(blogID, assetDir);
 }

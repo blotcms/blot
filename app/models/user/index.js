@@ -21,5 +21,5 @@ module.exports = {
   enable: require("./enable"),
   subscriptionTenure: require("./subscriptionTenure"),
   syncPaymentMethods: require("./syncPaymentMethods"),
-  validate: require("./validate")
+  validate: require("./validate"),
 };

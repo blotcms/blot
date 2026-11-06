@@ -30,7 +30,8 @@ const MAX_HEADER = 32;
 // Parses the entry header at the start of `buffer`, an entry at `offset`
 function parseHeader(buffer, offset) {
   let i = 0;
-  const truncated = () => new CorruptError("Pack entry at " + offset + " has a truncated header");
+  const truncated = () =>
+    new CorruptError("Pack entry at " + offset + " has a truncated header");
   const next = () => {
     if (i >= buffer.length) throw truncated();
     return buffer[i++];
@@ -41,7 +42,10 @@ function parseHeader(buffer, offset) {
   let size = byte & 15;
   let shift = 4;
   while (byte & 0x80) {
-    if (shift > 53) throw new CorruptError("Pack entry at " + offset + " has an impossible size");
+    if (shift > 53)
+      throw new CorruptError(
+        "Pack entry at " + offset + " has an impossible size"
+      );
     byte = next();
     size += (byte & 0x7f) * 2 ** shift;
     shift += 7;
@@ -57,7 +61,9 @@ function parseHeader(buffer, offset) {
       distance = (distance + 1) * 128 + (byte & 0x7f);
     }
     if (distance <= 0 || offset - distance < HEADER) {
-      throw new CorruptError("Pack entry at " + offset + " has a base outside the pack");
+      throw new CorruptError(
+        "Pack entry at " + offset + " has a base outside the pack"
+      );
     }
     header.baseOffset = offset - distance;
   } else if (code === REF_DELTA) {
@@ -113,7 +119,11 @@ function openPack({ store, key, size, name, recent = null, cache = null }) {
     // A read which came back short is not kept: it is an error, and trying
     // again should ask the store again
     const whole = Math.min(FIRST_READ, size - offset);
-    return recent.get(key + ":" + offset, () => readRange(offset, FIRST_READ), (bytes) => bytes.length === whole);
+    return recent.get(
+      key + ":" + offset,
+      () => readRange(offset, FIRST_READ),
+      (bytes) => bytes.length === whole
+    );
   }
 
   // The pack in the store must be the length the manifest says. Checked once
@@ -128,7 +138,10 @@ function openPack({ store, key, size, name, recent = null, cache = null }) {
           if (local) return;
           const found = await store.head(key);
           if (!found) throw new NotFoundError(name + " is not in the store");
-          if (found.size !== size) throw new CorruptError(name + " is " + found.size + " bytes; the manifest says " + size);
+          if (found.size !== size)
+            throw new CorruptError(
+              name + " is " + found.size + " bytes; the manifest says " + size
+            );
           noteSize(store, key, size);
         })
         .catch((err) => {
@@ -143,7 +156,9 @@ function openPack({ store, key, size, name, recent = null, cache = null }) {
   // there to tell the end of the last entry's stream from the end of the data
   async function readRange(offset, length) {
     const clipped = Math.min(length, size - offset);
-    return source ? source.read(offset, clipped) : store.read(key, offset, clipped);
+    return source
+      ? source.read(offset, clipped)
+      : store.read(key, offset, clipped);
   }
 
   // The compressed bytes from `start`, `first` already read, in growing reads.
@@ -171,16 +186,26 @@ function openPack({ store, key, size, name, recent = null, cache = null }) {
 
     const [first] = await Promise.all([firstRead(offset), checkSize()]);
     const entry = parseHeader(first.subarray(0, MAX_HEADER), offset);
-    if (entry.size > maxSize) throw new TooLargeError("Pack entry at " + offset + " is larger than " + maxSize + " bytes");
+    if (entry.size > maxSize)
+      throw new TooLargeError(
+        "Pack entry at " + offset + " is larger than " + maxSize + " bytes"
+      );
 
     const dataStart = offset + entry.length;
-    const stream = inflateStream(compressed(dataStart, first.subarray(entry.length)), entry.size, name + " entry at " + offset);
+    const stream = inflateStream(
+      compressed(dataStart, first.subarray(entry.length)),
+      entry.size,
+      name + " entry at " + offset
+    );
 
     entry.offset = offset;
     entry.output = stream.output;
     entry.end = () => {
       const entryEnd = dataStart + stream.consumed();
-      if (entryEnd > end) throw new CorruptError("Pack entry at " + offset + " runs into the pack's checksum");
+      if (entryEnd > end)
+        throw new CorruptError(
+          "Pack entry at " + offset + " runs into the pack's checksum"
+        );
       return entryEnd;
     };
     return entry;

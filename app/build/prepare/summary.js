@@ -42,7 +42,7 @@ function summary($, title) {
 
   title = normalize(title);
   summary = normalize($(":root").text());
-  
+
   if (summary.length > MAX_LENGTH) {
     summary = summary.slice(0, MAX_LENGTH);
     summary = summary.trim();

@@ -55,8 +55,7 @@ function chunk(number) {
 
 // translate a number from 1-999 into English
 function inEnglish(number) {
-  var thousands,
-    hundreds,
+  var hundreds,
     tens,
     ones,
     words = [];

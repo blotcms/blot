@@ -10,28 +10,42 @@ describe("upload template image", function () {
   const uploadImage = require("../save/upload-image");
 
   const ASSETS = "_template_assets";
-  const update = (blog, slug, locals) => new Promise((resolve, reject) =>
-    Template.update(blog.id, slug, { locals }, (error) => error ? reject(error) : resolve())
-  );
-  const list = (blog) => new Promise((resolve, reject) =>
-    Template.getTemplateList(blog.id, (error, templates) => error ? reject(error) : resolve(templates))
-  );
+  const update = (blog, slug, locals) =>
+    new Promise((resolve, reject) =>
+      Template.update(blog.id, slug, { locals }, (error) =>
+        error ? reject(error) : resolve()
+      )
+    );
+  const list = (blog) =>
+    new Promise((resolve, reject) =>
+      Template.getTemplateList(blog.id, (error, templates) =>
+        error ? reject(error) : resolve(templates)
+      )
+    );
 
   beforeEach(function (done) {
     const test = this;
-    Template.create(test.blog.id, "Image Test", {
-      locals: { hero_image: {}, footer_image: {} },
-    }, function (error, template) {
-      if (error) return done.fail(error);
-      test.template = template;
-      done();
-    });
+    Template.create(
+      test.blog.id,
+      "Image Test",
+      {
+        locals: { hero_image: {}, footer_image: {} },
+      },
+      function (error, template) {
+        if (error) return done.fail(error);
+        test.template = template;
+        done();
+      }
+    );
   });
 
   async function makeFile(directory, name, width = 240, height = 120) {
     const path = join(directory, name);
-    await sharp({ create: { width, height, channels: 4, background: "#13579b" } })
-      .png().toFile(path);
+    await sharp({
+      create: { width, height, channels: 4, background: "#13579b" },
+    })
+      .png()
+      .toFile(path);
     return { path, size: (await fs.stat(path)).size };
   }
 
@@ -52,8 +66,13 @@ describe("upload template image", function () {
           .filter((local) => local.endsWith("_image"))
           .map((local) => ({ key: local })),
       },
-      json(value) { result.body = value; },
-      message(redirect, message) { result.redirect = redirect; result.message = message; },
+      json(value) {
+        result.body = value;
+      },
+      message(redirect, message) {
+        result.redirect = redirect;
+        result.message = message;
+      },
     };
     const next = jasmine.createSpy("next");
     await uploadImage(req, res, next);
@@ -62,7 +81,9 @@ describe("upload template image", function () {
   }
 
   it("uploads derivatives and persists their dimensions", async function () {
-    const image = (await run(this, "hero_image", {}, await makeFile(this.tmp, "hero.png"))).image;
+    const image = (
+      await run(this, "hero_image", {}, await makeFile(this.tmp, "hero.png"))
+    ).image;
 
     expect(image.width).toBe(240);
     expect(image.height).toBe(120);
@@ -70,17 +91,29 @@ describe("upload template image", function () {
     expect(image.thumbnails.square.width).toBe(160);
     expect(image.thumbnails.square.height).toBe(160);
 
-    const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
+    const saved = (await list(this.blog)).find(
+      (template) => template.id === this.template.id
+    );
     expect(saved.locals.hero_image).toEqual(image);
   });
 
   it("retains files referenced by a sibling local until its final reference is removed", async function () {
-    const original = (await run(this, "hero_image", {}, await makeFile(this.tmp, "shared.png"))).image;
+    const original = (
+      await run(this, "hero_image", {}, await makeFile(this.tmp, "shared.png"))
+    ).image;
     this.template.locals.footer_image = original;
     await update(this.blog, this.template.slug, this.template.locals);
-    const oldPath = ASSETS + "/" + decodeURIComponent(new URL(original.url).pathname.split("/").pop());
+    const oldPath =
+      ASSETS +
+      "/" +
+      decodeURIComponent(new URL(original.url).pathname.split("/").pop());
 
-    await run(this, "hero_image", {}, await makeFile(this.tmp, "replacement.png"));
+    await run(
+      this,
+      "hero_image",
+      {},
+      await makeFile(this.tmp, "replacement.png")
+    );
     expect(await storage.exists(this.blog.id, oldPath)).toBe(true);
 
     await run(this, "footer_image", { remove: "1" });
@@ -88,43 +121,66 @@ describe("upload template image", function () {
   });
 
   it("retains old files when template references cannot be listed", async function () {
-    const original = (await run(this, "hero_image", {}, await makeFile(this.tmp, "lookup.png"))).image;
-    const oldPath = ASSETS + "/" + decodeURIComponent(new URL(original.url).pathname.split("/").pop());
+    const original = (
+      await run(this, "hero_image", {}, await makeFile(this.tmp, "lookup.png"))
+    ).image;
+    const oldPath =
+      ASSETS +
+      "/" +
+      decodeURIComponent(new URL(original.url).pathname.split("/").pop());
     let sibling;
-    await new Promise((resolve, reject) => Template.create(
-      this.blog.id,
-      "Sibling image reference",
-      { locals: { shared_image: original } },
-      (error, template) => {
-        if (error) return reject(error);
-        sibling = template;
-        resolve();
-      }
-    ));
+    await new Promise((resolve, reject) =>
+      Template.create(
+        this.blog.id,
+        "Sibling image reference",
+        { locals: { shared_image: original } },
+        (error, template) => {
+          if (error) return reject(error);
+          sibling = template;
+          resolve();
+        }
+      )
+    );
     const getMetadata = Template.getMetadata;
     spyOn(Template, "getMetadata").and.callFake((id, callback) => {
       if (id === sibling.id) return callback(new Error("metadata read failed"));
       return getMetadata(id, callback);
     });
 
-    await uploadImage.removeAssetsIfUnreferenced({ blog: this.blog, template: this.template }, original);
+    await uploadImage.removeAssetsIfUnreferenced(
+      { blog: this.blog, template: this.template },
+      original
+    );
 
     expect(await storage.exists(this.blog.id, oldPath)).toBe(true);
   });
 
   it("removes generated assets after their local template is dropped", async function () {
-    const original = (await run(this, "hero_image", {}, await makeFile(this.tmp, "delete-template.png"))).image;
-    const oldPath = ASSETS + "/" + decodeURIComponent(new URL(original.url).pathname.split("/").pop());
+    const original = (
+      await run(
+        this,
+        "hero_image",
+        {},
+        await makeFile(this.tmp, "delete-template.png")
+      )
+    ).image;
+    const oldPath =
+      ASSETS +
+      "/" +
+      decodeURIComponent(new URL(original.url).pathname.split("/").pop());
     const imageLocals = Object.values(this.template.locals)
       .filter((value) => value && value.url)
       .map((value) => ({ ...value, thumbnails: { ...value.thumbnails } }));
 
-    await new Promise((resolve, reject) => Template.drop(
-      this.blog.id,
-      this.template.slug,
-      (error) => error ? reject(error) : resolve()
-    ));
-    await uploadImage.removeTemplateAssetsIfUnreferenced({ blog: this.blog }, imageLocals);
+    await new Promise((resolve, reject) =>
+      Template.drop(this.blog.id, this.template.slug, (error) =>
+        error ? reject(error) : resolve()
+      )
+    );
+    await uploadImage.removeTemplateAssetsIfUnreferenced(
+      { blog: this.blog },
+      imageLocals
+    );
 
     expect(await storage.exists(this.blog.id, oldPath)).toBe(false);
   });
@@ -136,7 +192,9 @@ describe("upload template image", function () {
     spyOn(Template, "update").and.callFake((id, slug, updates, callback) => {
       calls += 1;
       if (calls === 1) {
-        return realUpdate(id, slug, updates, (error) => callback(error || new Error("manifest unavailable")));
+        return realUpdate(id, slug, updates, (error) =>
+          callback(error || new Error("manifest unavailable"))
+        );
       }
       return realUpdate(id, slug, updates, callback);
     });
@@ -153,9 +211,13 @@ describe("upload template image", function () {
 
     await uploadImage(req, res, next);
 
-    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ message: "manifest unavailable" }));
+    expect(next).toHaveBeenCalledWith(
+      jasmine.objectContaining({ message: "manifest unavailable" })
+    );
     expect(calls).toBe(2);
-    const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
+    const saved = (await list(this.blog)).find(
+      (template) => template.id === this.template.id
+    );
     expect(saved.locals.hero_image).toEqual({});
     const assets = await storage.list(this.blog.id, ASSETS);
     expect(assets.filter((name) => name.startsWith("image-")).length).toBe(0);
@@ -168,7 +230,9 @@ describe("upload template image", function () {
     spyOn(Template, "update").and.callFake((id, slug, updates, callback) => {
       calls += 1;
       if (calls === 1) {
-        return realUpdate(id, slug, updates, (error) => callback(error || new Error("manifest unavailable")));
+        return realUpdate(id, slug, updates, (error) =>
+          callback(error || new Error("manifest unavailable"))
+        );
       }
       callback(new Error("rollback unavailable"));
     });
@@ -185,10 +249,16 @@ describe("upload template image", function () {
 
     await uploadImage(req, res, next);
 
-    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ message: "manifest unavailable" }));
+    expect(next).toHaveBeenCalledWith(
+      jasmine.objectContaining({ message: "manifest unavailable" })
+    );
     expect(calls).toBe(2);
-    const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
-    expect(saved.locals.hero_image.url).toMatch(/image-[a-f0-9-]+-original\.webp$/);
+    const saved = (await list(this.blog)).find(
+      (template) => template.id === this.template.id
+    );
+    expect(saved.locals.hero_image.url).toMatch(
+      /image-[a-f0-9-]+-original\.webp$/
+    );
     const assets = await storage.list(this.blog.id, ASSETS);
     expect(assets.filter((name) => name.startsWith("image-")).length).toBe(5);
   });
@@ -198,7 +268,9 @@ describe("upload template image", function () {
     let calls = 0;
     spyOn(uploadImage.operations, "sync").and.callFake(() => {
       calls += 1;
-      return calls === 1 ? Promise.reject(new Error("folder sync failed")) : Promise.resolve();
+      return calls === 1
+        ? Promise.reject(new Error("folder sync failed"))
+        : Promise.resolve();
     });
     const req = {
       blog: this.blog,
@@ -213,29 +285,55 @@ describe("upload template image", function () {
 
     await uploadImage(req, res, next);
 
-    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ message: "folder sync failed" }));
+    expect(next).toHaveBeenCalledWith(
+      jasmine.objectContaining({ message: "folder sync failed" })
+    );
     expect(calls).toBe(2);
-    const saved = (await list(this.blog)).find((template) => template.id === this.template.id);
+    const saved = (await list(this.blog)).find(
+      (template) => template.id === this.template.id
+    );
     expect(saved.locals.hero_image).toEqual({});
     const assets = await storage.list(this.blog.id, ASSETS);
     expect(assets.filter((name) => name.startsWith("image-")).length).toBe(0);
   });
 
   it("keeps the existing value when no file is submitted and rejects undeclared keys", async function () {
-    const original = (await run(this, "hero_image", {}, await makeFile(this.tmp, "unchanged.png"))).image;
+    const original = (
+      await run(
+        this,
+        "hero_image",
+        {},
+        await makeFile(this.tmp, "unchanged.png")
+      )
+    ).image;
     expect((await run(this, "hero_image", {})).image).toEqual(original);
 
-    const req = { files: {}, params: { key: "unknown_image" }, body: {}, blog: this.blog };
+    const req = {
+      files: {},
+      params: { key: "unknown_image" },
+      body: {},
+      blog: this.blog,
+    };
     const res = { locals: { images: [] } };
     const next = jasmine.createSpy("next");
     await uploadImage(req, res, next);
-    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ status: 404 }));
+    expect(next).toHaveBeenCalledWith(
+      jasmine.objectContaining({ status: 404 })
+    );
   });
 
   describe("profile photo shapes", function () {
-    const assetName = (image) => ASSETS + "/" + decodeURIComponent(new URL(image.url).pathname.split("/").pop());
+    const assetName = (image) =>
+      ASSETS +
+      "/" +
+      decodeURIComponent(new URL(image.url).pathname.split("/").pop());
     const cornerAlpha = async (blog, image) => {
-      const { data } = await sharp(await storage.read(blog.id, assetName(image))).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+      const { data } = await sharp(
+        await storage.read(blog.id, assetName(image))
+      )
+        .ensureAlpha()
+        .raw()
+        .toBuffer({ resolveWithObject: true });
       return data[3];
     };
 
@@ -245,7 +343,12 @@ describe("upload template image", function () {
     });
 
     it("cuts every thumbnail to the shape and leaves the original whole", async function () {
-      const { image } = await run(this, "profile_image", { photo_shape: "circle" }, await makeFile(this.tmp, "me.png", 200, 200));
+      const { image } = await run(
+        this,
+        "profile_image",
+        { photo_shape: "circle" },
+        await makeFile(this.tmp, "me.png", 200, 200)
+      );
 
       expect(image.mask).toBe("circle");
       for (const name of ["small", "medium", "large", "square"]) {
@@ -255,8 +358,18 @@ describe("upload template image", function () {
     });
 
     it("keeps the whole photo, shrunk to 2000px, and the crop that was chosen", async function () {
-      const crop = { crop_x: "0.25", crop_y: "0", crop_width: "0.5", crop_height: "1" };
-      const { image } = await run(this, "profile_image", { photo_shape: "square", ...crop }, await makeFile(this.tmp, "wide.png", 2400, 1200));
+      const crop = {
+        crop_x: "0.25",
+        crop_y: "0",
+        crop_width: "0.5",
+        crop_height: "1",
+      };
+      const { image } = await run(
+        this,
+        "profile_image",
+        { photo_shape: "square", ...crop },
+        await makeFile(this.tmp, "wide.png", 2400, 1200)
+      );
 
       expect([image.width, image.height]).toEqual([2000, 1000]);
       expect(image.crop).toEqual({ x: 0.25, y: 0, width: 0.5, height: 1 });
@@ -264,37 +377,91 @@ describe("upload template image", function () {
     });
 
     it("re-renders the thumbnails when the shape changes without a new upload", async function () {
-      const { image } = await run(this, "profile_image", { photo_shape: "square" }, await makeFile(this.tmp, "me.png", 200, 200));
+      const { image } = await run(
+        this,
+        "profile_image",
+        { photo_shape: "square" },
+        await makeFile(this.tmp, "me.png", 200, 200)
+      );
       expect(await cornerAlpha(this.blog, image.thumbnails.small)).toBe(255);
 
-      const changed = (await run(this, "profile_image", { update_mask: "1", photo_shape: "blob" })).image;
+      const changed = (
+        await run(this, "profile_image", {
+          update_mask: "1",
+          photo_shape: "blob",
+        })
+      ).image;
 
       expect(changed.mask).toBe("blob");
       expect(changed.url).toBe(image.url);
       for (const name of ["small", "medium", "large", "square"]) {
-        expect(changed.thumbnails[name].url).not.toBe(image.thumbnails[name].url);
+        expect(changed.thumbnails[name].url).not.toBe(
+          image.thumbnails[name].url
+        );
         expect(await cornerAlpha(this.blog, changed.thumbnails[name])).toBe(0);
-        expect(await storage.exists(this.blog.id, assetName(image.thumbnails[name]))).toBe(false);
+        expect(
+          await storage.exists(this.blog.id, assetName(image.thumbnails[name]))
+        ).toBe(false);
       }
       expect(await storage.exists(this.blog.id, assetName(changed))).toBe(true);
     });
 
     it("re-crops from the stored photo and keeps the saved crop when none is sent", async function () {
-      const { image } = await run(this, "profile_image", { photo_shape: "square", crop_x: "0", crop_y: "0", crop_width: "0.5", crop_height: "1" }, await makeFile(this.tmp, "wide.png", 400, 200));
+      const { image } = await run(
+        this,
+        "profile_image",
+        {
+          photo_shape: "square",
+          crop_x: "0",
+          crop_y: "0",
+          crop_width: "0.5",
+          crop_height: "1",
+        },
+        await makeFile(this.tmp, "wide.png", 400, 200)
+      );
 
-      const recropped = (await run(this, "profile_image", { update_mask: "1", photo_shape: "square", crop_x: "0.5", crop_y: "0", crop_width: "0.5", crop_height: "1" })).image;
+      const recropped = (
+        await run(this, "profile_image", {
+          update_mask: "1",
+          photo_shape: "square",
+          crop_x: "0.5",
+          crop_y: "0",
+          crop_width: "0.5",
+          crop_height: "1",
+        })
+      ).image;
       expect(recropped.url).toBe(image.url);
       expect(recropped.crop).toEqual({ x: 0.5, y: 0, width: 0.5, height: 1 });
-      expect(recropped.thumbnails.large.url).not.toBe(image.thumbnails.large.url);
+      expect(recropped.thumbnails.large.url).not.toBe(
+        image.thumbnails.large.url
+      );
 
-      const shapeOnly = (await run(this, "profile_image", { update_mask: "1", photo_shape: "circle" })).image;
+      const shapeOnly = (
+        await run(this, "profile_image", {
+          update_mask: "1",
+          photo_shape: "circle",
+        })
+      ).image;
       expect(shapeOnly.crop).toEqual(recropped.crop);
     });
 
     it("leaves everything alone when neither the shape nor the crop changed", async function () {
-      const body = { photo_shape: "circle", crop_x: "0", crop_y: "0", crop_width: "1", crop_height: "1" };
-      const { image } = await run(this, "profile_image", body, await makeFile(this.tmp, "me.png", 200, 200));
-      expect((await run(this, "profile_image", { update_mask: "1", ...body })).image).toEqual(image);
+      const body = {
+        photo_shape: "circle",
+        crop_x: "0",
+        crop_y: "0",
+        crop_width: "1",
+        crop_height: "1",
+      };
+      const { image } = await run(
+        this,
+        "profile_image",
+        body,
+        await makeFile(this.tmp, "me.png", 200, 200)
+      );
+      expect(
+        (await run(this, "profile_image", { update_mask: "1", ...body })).image
+      ).toEqual(image);
     });
   });
 });

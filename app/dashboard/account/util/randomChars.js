@@ -1,7 +1,6 @@
-
 var chars = "abcdefghijklmnopqrstuvwxyz".split("");
 
-function randomChars (len) {
+function randomChars(len) {
   var res = "";
 
   while (res.length < len)

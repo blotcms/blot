@@ -68,7 +68,11 @@ describe("sandbox image jobs", function () {
     });
 
     it("encodes in the format of the extension", async function () {
-      const { meta, outputs } = await sandbox.run("thumbnail", valid, await image(400, 200));
+      const { meta, outputs } = await sandbox.run(
+        "thumbnail",
+        valid,
+        await image(400, 200)
+      );
       expect(meta.thumbnails[0].format).toEqual("jpeg");
       expect((await sharp(outputs[0]).metadata()).format).toEqual("jpeg");
     });
@@ -89,53 +93,99 @@ describe("sandbox image jobs", function () {
       })
         .png()
         .toBuffer();
-      const { meta } = await sandbox.run("thumbnail", { ...valid, extension: ".xyz" }, input);
+      const { meta } = await sandbox.run(
+        "thumbnail",
+        { ...valid, extension: ".xyz" },
+        input
+      );
       expect(meta.thumbnails[0].format).toEqual("png");
     });
 
     it("handles animated images", async function () {
       const { meta } = await sandbox.run(
         "thumbnail",
-        { extension: ".gif", animated: true, sizes: [{ size: 50, crop: true }] },
-        require("fs").readFileSync(__dirname + "/../../build/plugins/image/tests-image.gif")
+        {
+          extension: ".gif",
+          animated: true,
+          sizes: [{ size: 50, crop: true }],
+        },
+        require("fs").readFileSync(
+          __dirname + "/../../build/plugins/image/tests-image.gif"
+        )
       );
       expect(meta.thumbnails[0].format).toEqual("gif");
       expect(meta.thumbnails[0].width).toBeLessThanOrEqual(50);
     });
 
     describe("with accept", function () {
-      const accept = { formats: ["png", "jpeg", "gif"], minWidth: 64, minHeight: 64 };
+      const accept = {
+        formats: ["png", "jpeg", "gif"],
+        minWidth: 64,
+        minHeight: 64,
+      };
 
       it("makes the thumbnails of an image it accepts", async function () {
-        const { meta, outputs } = await sandbox.run("thumbnail", { ...valid, accept }, await image(400, 200));
+        const { meta, outputs } = await sandbox.run(
+          "thumbnail",
+          { ...valid, accept },
+          await image(400, 200)
+        );
         expect(meta.source).toEqual({ format: "png", width: 400, height: 200 });
         expect(meta.thumbnails.length).toEqual(1);
         expect(outputs.length).toEqual(1);
       });
 
       it("makes none for an image that is too small", async function () {
-        for (const [width, height] of [[63, 200], [200, 63]]) {
-          const { meta, outputs } = await sandbox.run("thumbnail", { ...valid, accept }, await image(width, height));
-          expect(meta).toEqual({ source: { format: "png", width, height }, thumbnails: null });
+        for (const [width, height] of [
+          [63, 200],
+          [200, 63],
+        ]) {
+          const { meta, outputs } = await sandbox.run(
+            "thumbnail",
+            { ...valid, accept },
+            await image(width, height)
+          );
+          expect(meta).toEqual({
+            source: { format: "png", width, height },
+            thumbnails: null,
+          });
           expect(outputs).toEqual([]);
         }
       });
 
       it("makes none for a format it doesn't list", async function () {
-        const { meta, outputs } = await sandbox.run("thumbnail", { ...valid, accept }, await image(400, 200, "webp"));
-        expect(meta).toEqual({ source: { format: "webp", width: 400, height: 200 }, thumbnails: null });
+        const { meta, outputs } = await sandbox.run(
+          "thumbnail",
+          { ...valid, accept },
+          await image(400, 200, "webp")
+        );
+        expect(meta).toEqual({
+          source: { format: "webp", width: 400, height: 200 },
+          thumbnails: null,
+        });
         expect(outputs).toEqual([]);
       });
 
       it("measures the first frame of an animated image", async function () {
-        const gif = require("fs").readFileSync(__dirname + "/../../build/plugins/image/tests-image.gif");
+        const gif = require("fs").readFileSync(
+          __dirname + "/../../build/plugins/image/tests-image.gif"
+        );
         const { meta } = await sandbox.run(
           "thumbnail",
-          { extension: ".gif", animated: true, sizes: [{ size: 50, crop: true }], accept },
+          {
+            extension: ".gif",
+            animated: true,
+            sizes: [{ size: 50, crop: true }],
+            accept,
+          },
           gif
         );
         const first = await sharp(gif).metadata();
-        expect(meta.source).toEqual({ format: "gif", width: first.width, height: first.height });
+        expect(meta.source).toEqual({
+          format: "gif",
+          width: first.width,
+          height: first.height,
+        });
       });
     });
 
@@ -162,21 +212,30 @@ describe("sandbox image jobs", function () {
         { ...valid, sizes: [{ size: 160, crop: "true" }] },
         { ...valid, accept: "png" },
         { ...valid, accept: { formats: [], minWidth: 1, minHeight: 1 } },
-        { ...valid, accept: { formats: ["../png"], minWidth: 1, minHeight: 1 } },
+        {
+          ...valid,
+          accept: { formats: ["../png"], minWidth: 1, minHeight: 1 },
+        },
         { ...valid, accept: { formats: [1], minWidth: 1, minHeight: 1 } },
         { ...valid, accept: { formats: ["png"], minWidth: -1, minHeight: 1 } },
         { ...valid, accept: { formats: ["png"], minWidth: 1, minHeight: 1.5 } },
         { ...valid, accept: { formats: ["png"], minWidth: 1 } },
       ];
       for (const args of bad) {
-        expect(await rejection(sandbox.run("thumbnail", args, input))).not.toBeNull();
+        expect(
+          await rejection(sandbox.run("thumbnail", args, input))
+        ).not.toBeNull();
       }
     });
   });
 
   describe("resize", function () {
     it("fits the image inside max and keeps its format", async function () {
-      const { meta, outputs } = await sandbox.run("resize", { max: 100 }, await image(400, 200, "jpeg"));
+      const { meta, outputs } = await sandbox.run(
+        "resize",
+        { max: 100 },
+        await image(400, 200, "jpeg")
+      );
       expect(meta.width).toEqual(100);
       expect(meta.height).toEqual(50);
       expect(meta.format).toEqual("jpeg");
@@ -185,58 +244,117 @@ describe("sandbox image jobs", function () {
     });
 
     it("does not enlarge", async function () {
-      const { meta } = await sandbox.run("resize", { max: 3000 }, await image(40, 20));
+      const { meta } = await sandbox.run(
+        "resize",
+        { max: 3000 },
+        await image(40, 20)
+      );
       expect(meta.width).toEqual(40);
       expect(meta.height).toEqual(20);
     });
 
     it("rejects a max it does not expect", async function () {
       const input = await image(10, 10);
-      for (const max of [undefined, null, 0, -1, 1.5, "3000", 16385, NaN, Infinity]) {
-        expect(await rejection(sandbox.run("resize", { max }, input))).not.toBeNull();
+      for (const max of [
+        undefined,
+        null,
+        0,
+        -1,
+        1.5,
+        "3000",
+        16385,
+        NaN,
+        Infinity,
+      ]) {
+        expect(
+          await rejection(sandbox.run("resize", { max }, input))
+        ).not.toBeNull();
       }
-      expect(await rejection(sandbox.run("resize", undefined, input))).not.toBeNull();
+      expect(
+        await rejection(sandbox.run("resize", undefined, input))
+      ).not.toBeNull();
     });
   });
 
   describe("to-png", function () {
     it("converts to png", async function () {
-      const { meta, outputs } = await sandbox.run("to-png", {}, await image(30, 20, "webp"));
+      const { meta, outputs } = await sandbox.run(
+        "to-png",
+        {},
+        await image(30, 20, "webp")
+      );
       expect(meta).toEqual({ width: 30, height: 20 });
       expect((await sharp(outputs[0]).metadata()).format).toEqual("png");
     });
 
     it("rejects bytes that are not an image", async function () {
-      expect(await rejection(sandbox.run("to-png", {}, Buffer.from("nope")))).not.toBeNull();
+      expect(
+        await rejection(sandbox.run("to-png", {}, Buffer.from("nope")))
+      ).not.toBeNull();
     });
   });
 
   describe("template-image", function () {
-    const sizes = [{ size: 160, crop: false }, { size: 40, crop: true }];
+    const sizes = [
+      { size: 160, crop: false },
+      { size: 40, crop: true },
+    ];
 
     it("checks an image and reports its oriented size", async function () {
-      const { meta, outputs } = await sandbox.run("template-image", { op: "check" }, await image(30, 20, "jpeg"));
-      expect(meta).toEqual(jasmine.objectContaining({ format: "jpeg", width: 30, height: 20 }));
+      const { meta, outputs } = await sandbox.run(
+        "template-image",
+        { op: "check" },
+        await image(30, 20, "jpeg")
+      );
+      expect(meta).toEqual(
+        jasmine.objectContaining({ format: "jpeg", width: 30, height: 20 })
+      );
       expect(outputs).toEqual([]);
     });
 
     it("rejects bytes that are not an image", async function () {
-      expect(await rejection(sandbox.run("template-image", { op: "check" }, Buffer.from("nope")))).not.toBeNull();
+      expect(
+        await rejection(
+          sandbox.run("template-image", { op: "check" }, Buffer.from("nope"))
+        )
+      ).not.toBeNull();
     });
 
     it("makes the original and one webp thumbnail per size, cut to the shape", async function () {
       const crop = { x: "0", y: "0", width: "0.5", height: "1" };
-      const args = { op: "generate", crop, shape: "circle", editable: false, sizes };
-      const { meta, outputs } = await sandbox.run("template-image", args, await image(200, 100));
-      expect(meta).toEqual([{ width: 100, height: 100 }, { width: 100, height: 100 }, { width: 40, height: 40 }]);
-      for (const output of outputs) expect((await sharp(output).metadata()).format).toEqual("webp");
+      const args = {
+        op: "generate",
+        crop,
+        shape: "circle",
+        editable: false,
+        sizes,
+      };
+      const { meta, outputs } = await sandbox.run(
+        "template-image",
+        args,
+        await image(200, 100)
+      );
+      expect(meta).toEqual([
+        { width: 100, height: 100 },
+        { width: 100, height: 100 },
+        { width: 40, height: 40 },
+      ]);
+      for (const output of outputs)
+        expect((await sharp(output).metadata()).format).toEqual("webp");
       expect((await sharp(outputs[2]).metadata()).hasAlpha).toBe(true);
     });
 
     it("regenerates thumbnails from a stored original", async function () {
       const args = { op: "regenerate", crop: null, shape: "square", sizes };
-      const { meta, outputs } = await sandbox.run("template-image", args, await image(200, 100, "webp"));
-      expect(meta).toEqual([{ width: 160, height: 80 }, { width: 40, height: 40 }]);
+      const { meta, outputs } = await sandbox.run(
+        "template-image",
+        args,
+        await image(200, 100, "webp")
+      );
+      expect(meta).toEqual([
+        { width: 160, height: 80 },
+        { width: 40, height: 40 },
+      ]);
       expect(outputs.length).toEqual(2);
     });
 
@@ -248,20 +366,36 @@ describe("sandbox image jobs", function () {
         { op: "generate", shape: "square", editable: false, sizes: [] },
         { op: "generate", shape: "square", editable: "yes", sizes },
         { op: "generate", shape: "hexagon-ish", editable: false, sizes },
-        { op: "generate", shape: "square", editable: false, sizes: [{ size: 1e6, crop: false }] },
+        {
+          op: "generate",
+          shape: "square",
+          editable: false,
+          sizes: [{ size: 1e6, crop: false }],
+        },
         { op: "regenerate", crop: { x: {} }, shape: "square", sizes },
       ];
       for (const args of bad) {
-        expect(await rejection(sandbox.run("template-image", args, input))).not.toBeNull();
+        expect(
+          await rejection(sandbox.run("template-image", args, input))
+        ).not.toBeNull();
       }
     });
   });
 
   describe("favicon", function () {
-    const valid = { extract: { left: 0, top: 0, width: 20, height: 20 }, shape: "circle", ico: [16, 32], png: [16, 180] };
+    const valid = {
+      extract: { left: 0, top: 0, width: 20, height: 20 },
+      shape: "circle",
+      ico: [16, 32],
+      png: [16, 180],
+    };
 
     it("makes an ico and one png per size", async function () {
-      const { outputs } = await sandbox.run("favicon", valid, await image(30, 20, "jpeg"));
+      const { outputs } = await sandbox.run(
+        "favicon",
+        valid,
+        await image(30, 20, "jpeg")
+      );
       expect(outputs.length).toEqual(3);
       expect(outputs[0].subarray(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]));
       expect((await sharp(outputs[1]).metadata()).width).toEqual(16);
@@ -280,7 +414,9 @@ describe("sandbox image jobs", function () {
         { ...valid, shape: "nope" },
       ];
       for (const args of bad) {
-        expect(await rejection(sandbox.run("favicon", args, input))).not.toBeNull();
+        expect(
+          await rejection(sandbox.run("favicon", args, input))
+        ).not.toBeNull();
       }
     });
   });
@@ -300,7 +436,9 @@ describe("sandbox image jobs", function () {
         { fields: new Array(65).fill("Make") },
       ];
       for (const args of bad) {
-        expect(await rejection(sandbox.run("exif", args, input))).not.toBeNull();
+        expect(
+          await rejection(sandbox.run("exif", args, input))
+        ).not.toBeNull();
       }
     });
   });

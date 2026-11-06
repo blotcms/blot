@@ -238,12 +238,14 @@ if (require.main === module) {
     options.filter = (path) => path.includes(positional);
   }
 
-  main(options).catch((err) => {
-    console.error(err);
-    process.exit(1);
-  }).then(() => {
-    process.exit(0);
-  });
+  main(options)
+    .catch((err) => {
+      console.error(err);
+      process.exit(1);
+    })
+    .then(() => {
+      process.exit(0);
+    });
 }
 
 module.exports = main;

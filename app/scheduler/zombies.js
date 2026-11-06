@@ -17,7 +17,11 @@ async function notifyZombies() {
       email.ZOMBIE_PROCESS();
     }
   } catch (err) {
-    console.error(clfdate(), "Zombies: error sending zombie process email", err);
+    console.error(
+      clfdate(),
+      "Zombies: error sending zombie process email",
+      err
+    );
   }
 }
 

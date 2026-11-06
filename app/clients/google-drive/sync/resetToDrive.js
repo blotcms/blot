@@ -27,8 +27,10 @@ const isRemoteModifiedTimeCurrent = async (
 ) => {
   const applied = priorModifiedTimeById.get(id);
   return applied && (await localState.unchanged(blogID, path, applied, entry))
-    ? truncateToSecond(applied.modifiedTime) === truncateToSecond(remoteModifiedTime)
-    : truncateToSecond(entry.modifiedTime) === truncateToSecond(remoteModifiedTime);
+    ? truncateToSecond(applied.modifiedTime) ===
+        truncateToSecond(remoteModifiedTime)
+    : truncateToSecond(entry.modifiedTime) ===
+        truncateToSecond(remoteModifiedTime);
 };
 
 module.exports = async (blogID, publish, options = {}) => {
@@ -127,7 +129,8 @@ module.exports = async (blogID, publish, options = {}) => {
         // genuinely empty files do not carry over to Drive.
         if (size === 0) {
           console.log(
-            clfdate() + " Google Drive: Skipping empty file (possible placeholder)",
+            clfdate() +
+              " Google Drive: Skipping empty file (possible placeholder)",
             blogID,
             path
           );
@@ -214,7 +217,13 @@ const mkdir = async (drive, parentId, name) => {
   return res.data.id;
 };
 
-const countTransferItems = async (drive, blogID, dir, dirId, priorModifiedTimeById) => {
+const countTransferItems = async (
+  drive,
+  blogID,
+  dir,
+  dirId,
+  priorModifiedTimeById
+) => {
   let count = 0;
 
   const [remoteContents, localContents] = await Promise.all([

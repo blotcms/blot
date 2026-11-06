@@ -35,9 +35,9 @@ describe("folder posts in the dashboard", function () {
     expect($postFilesRow.find(".folder-post-file-list").text()).toContain(
       "two.md"
     );
-    expect(
-      $file(".folder-post-file.current .file-name").text()
-    ).toContain("one.md");
+    expect($file(".folder-post-file.current .file-name").text()).toContain(
+      "one.md"
+    );
   });
 
   it("builds folder posts whose names contain brackets", async function () {
@@ -65,9 +65,7 @@ describe("folder posts in the dashboard", function () {
     const $folder = await this.parse(href);
     expect($folder(".folder-box.directory").length).toBe(0);
     expect($folder(".folder-post-box").length).toBe(1);
-    expect($folder(".publishing-steps").text()).toContain(
-      "Folder is a post"
-    );
+    expect($folder(".publishing-steps").text()).toContain("Folder is a post");
 
     const fileLink = $folder(".folder-post-source-list a")
       .filter(function () {
@@ -117,7 +115,10 @@ describe("folder posts in the dashboard", function () {
 
   it("shows the aggregated post view when opening a + folder", async function () {
     await this.blog.write({ path: "/story+/01 intro.md", content: "# Intro" });
-    await this.blog.write({ path: "/story+/02 middle.md", content: "The middle." });
+    await this.blog.write({
+      path: "/story+/02 middle.md",
+      content: "The middle.",
+    });
     await this.blog.write({ path: "/story+/03 end.md", content: "The end." });
     await this.blog.rebuild();
 
@@ -128,9 +129,7 @@ describe("folder posts in the dashboard", function () {
     // Aggregated view, not the interactive directory listing.
     expect($folder(".folder-box.directory").length).toBe(0);
     expect($folder(".entry-info").length).toBe(1);
-    expect($folder(".publishing-steps").text()).toContain(
-      "Folder is a post"
-    );
+    expect($folder(".publishing-steps").text()).toContain("Folder is a post");
 
     // Source files link to their own dashboard pages, in order.
     const names = $folder(".folder-post-source-list .file-name")
@@ -140,7 +139,9 @@ describe("folder posts in the dashboard", function () {
       .get();
     expect(names).toEqual(["01 intro.md", "02 middle.md", "03 end.md"]);
 
-    const firstHref = $folder(".folder-post-source-list a").first().attr("href");
+    const firstHref = $folder(".folder-post-source-list a")
+      .first()
+      .attr("href");
     expect(firstHref).toContain("/folder/story%2B/01%20intro.md");
   });
 
@@ -158,7 +159,9 @@ describe("folder posts in the dashboard", function () {
 
     // Ten visible, the rest behind a disclosure.
     expect(
-      $folder(".folder-post-sources > .folder-post-source-list .folder-post-source").length
+      $folder(
+        ".folder-post-sources > .folder-post-source-list .folder-post-source"
+      ).length
     ).toBe(10);
     expect($folder(".folder-post-more").length).toBe(1);
     expect($folder(".folder-post-more > summary").text()).toContain("13 files");

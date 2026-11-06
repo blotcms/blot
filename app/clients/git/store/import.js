@@ -86,7 +86,12 @@
 const fs = require("fs");
 const fsp = require("fs/promises");
 const path = require("path");
-const { StaleManifestError, OutcomeUnknownError, CorruptError, NoRoomError } = require("./errors");
+const {
+  StaleManifestError,
+  OutcomeUnknownError,
+  CorruptError,
+  NoRoomError,
+} = require("./errors");
 const { packKey, idxKey, revKey } = require("./layout");
 const { keepPack } = require("./packcache");
 const { rememberWhole } = require("./idx");
@@ -107,6 +112,7 @@ const SLACK = 4 * MiB;
 const IDX_PER_OBJECT = 28;
 
 // The refs a repository in the store has: the same as manifest.js accepts
+// eslint-disable-next-line no-control-regex
 const REF = /^refs\/(heads|tags)\/[^\s\x00-\x1f\x7f~^:?*[\\]+$/;
 const OID = /^[0-9a-f]{40}$/;
 
@@ -118,7 +124,16 @@ function coded(message, code, extra) {
 function counting(store) {
   const requests = { total: 0 };
   const wrapped = { id: store.id };
-  for (const name of ["head", "read", "get", "stream", "put", "putIfAbsent", "delete", "list"]) {
+  for (const name of [
+    "head",
+    "read",
+    "get",
+    "stream",
+    "put",
+    "putIfAbsent",
+    "delete",
+    "list",
+  ]) {
     wrapped[name] = (...args) => {
       const key = name === "putIfAbsent" ? "putIfAbsents" : name + "s";
       requests[key] = (requests[key] || 0) + 1;
@@ -135,13 +150,20 @@ function counting(store) {
 // another user be read (it only applies when given on the command line).
 // --no-replace-objects: what is read is what is stored, not a replacement.
 function sourceGit(children, gitDir, args, input) {
-  return runGit(children, ["--no-replace-objects", "-c", "safe.directory=*", ...args], { gitDir, input });
+  return runGit(
+    children,
+    ["--no-replace-objects", "-c", "safe.directory=*", ...args],
+    { gitDir, input }
+  );
 }
 
 // { refs: { name: oid }, kinds: { name: "commit" | "tag" | ... }, skipped, head }
 // for the repository at gitDir
 async function readRefs(children, gitDir) {
-  const listing = await sourceGit(children, gitDir, ["for-each-ref", "--format=%(refname) %(objectname) %(objecttype)"]);
+  const listing = await sourceGit(children, gitDir, [
+    "for-each-ref",
+    "--format=%(refname) %(objectname) %(objecttype)",
+  ]);
   const refs = {};
   const kinds = {};
   const skipped = [];
@@ -149,15 +171,23 @@ async function readRefs(children, gitDir) {
   for (const line of listing.split("\n")) {
     if (!line) continue;
     const [ref, oid, type] = line.split(" ");
-    if (!OID.test(oid)) throw coded("The repository does not use SHA-1 object IDs: " + ref + " is " + oid, "EFORMAT");
+    if (!OID.test(oid))
+      throw coded(
+        "The repository does not use SHA-1 object IDs: " + ref + " is " + oid,
+        "EFORMAT"
+      );
 
     // git's output is decoded as UTF-8, which turns bytes that are not into
     // U+FFFD, so two different names could arrive as one. A name with U+FFFD
     // in it is skipped, whether it was decoded that way or really has one.
-    if (ref.includes("\uFFFD")) skipped.push({ ref, why: "a name that is not valid UTF-8" });
-    else if (!/^refs\/(heads|tags)\//.test(ref)) skipped.push({ ref, why: "only branches and tags are imported" });
-    else if (!REF.test(ref) || ref.includes("..")) skipped.push({ ref, why: "the store does not accept this ref name" });
-    else if (ref.startsWith("refs/heads/") && type !== "commit") skipped.push({ ref, why: "a branch which does not point at a commit" });
+    if (ref.includes("\uFFFD"))
+      skipped.push({ ref, why: "a name that is not valid UTF-8" });
+    else if (!/^refs\/(heads|tags)\//.test(ref))
+      skipped.push({ ref, why: "only branches and tags are imported" });
+    else if (!REF.test(ref) || ref.includes(".."))
+      skipped.push({ ref, why: "the store does not accept this ref name" });
+    else if (ref.startsWith("refs/heads/") && type !== "commit")
+      skipped.push({ ref, why: "a branch which does not point at a commit" });
     else {
       refs[ref] = oid;
       kinds[ref] = type;
@@ -168,7 +198,9 @@ async function readRefs(children, gitDir) {
   // makes it (receive.js): master if there is one, else nothing.
   let head = null;
   try {
-    const named = (await sourceGit(children, gitDir, ["symbolic-ref", "-q", "HEAD"])).trim();
+    const named = (
+      await sourceGit(children, gitDir, ["symbolic-ref", "-q", "HEAD"])
+    ).trim();
     if (named in refs && named.startsWith("refs/heads/")) head = named;
   } catch (err) {}
   if (!head && refs["refs/heads/master"]) head = "refs/heads/master";
@@ -186,11 +218,19 @@ async function peelTags(children, repo, refs, kinds) {
   const peeledType = {};
   if (tagRefs.length) {
     const tags = [...new Set(tagRefs.map((ref) => refs[ref]))];
-    const out = await runGit(children, ["cat-file", "--batch-check=%(objectname) %(objecttype)"], { gitDir: repo, input: tags.map((oid) => oid + "^{}").join("\n") + "\n" });
+    const out = await runGit(
+      children,
+      ["cat-file", "--batch-check=%(objectname) %(objecttype)"],
+      { gitDir: repo, input: tags.map((oid) => oid + "^{}").join("\n") + "\n" }
+    );
     const lines = out.split("\n");
     tags.forEach((tag, i) => {
       const [target, type] = (lines[i] || "").split(" ");
-      if (!OID.test(target) || type === "missing") throw coded("The tag " + tag + " does not lead to an object the repository has", "ECORRUPT");
+      if (!OID.test(target) || type === "missing")
+        throw coded(
+          "The tag " + tag + " does not lead to an object the repository has",
+          "ECORRUPT"
+        );
       peeled[tag] = target;
       peeledType[tag] = type;
     });
@@ -202,13 +242,18 @@ async function peelTags(children, repo, refs, kinds) {
 // what git counts: used to reserve scratch before the pack exists
 async function estimate(children, gitDir, tips, maxBytes, alternates) {
   const counts = {};
-  for (const line of (await sourceGit(children, gitDir, ["count-objects", "-v"])).split("\n")) {
+  for (const line of (
+    await sourceGit(children, gitDir, ["count-objects", "-v"])
+  ).split("\n")) {
     const [key, value] = line.split(": ");
     if (value !== undefined) counts[key] = Number(value);
   }
 
   const objects = (counts.count || 0) + (counts["in-pack"] || 0);
-  const guess = ((counts.size || 0) + (counts["size-pack"] || 0)) * 1024 + objects * IDX_PER_OBJECT + SLACK;
+  const guess =
+    ((counts.size || 0) + (counts["size-pack"] || 0)) * 1024 +
+    objects * IDX_PER_OBJECT +
+    SLACK;
   // count-objects does not count what is borrowed through alternates
   if (guess <= maxBytes && !alternates) return guess;
 
@@ -216,7 +261,12 @@ async function estimate(children, gitDir, tips, maxBytes, alternates) {
   // times what they hold. Before giving up, ask git what the reachable ones
   // really take (git 2.31 or later).
   try {
-    const out = await sourceGit(children, gitDir, ["rev-list", "--objects", "--disk-usage", "--stdin"], tips.join("\n") + "\n");
+    const out = await sourceGit(
+      children,
+      gitDir,
+      ["rev-list", "--objects", "--disk-usage", "--stdin"],
+      tips.join("\n") + "\n"
+    );
     return Number(out.trim()) + objects * IDX_PER_OBJECT + SLACK;
   } catch (err) {
     // No better figure. With alternates the guess is not a bound, but the
@@ -228,7 +278,10 @@ async function estimate(children, gitDir, tips, maxBytes, alternates) {
 // ---- Packing and proving --------------------------------------------------
 
 function configArgs(packConfig) {
-  return Object.entries(packConfig).flatMap(([key, value]) => ["-c", key + "=" + value]);
+  return Object.entries(packConfig).flatMap(([key, value]) => [
+    "-c",
+    key + "=" + value,
+  ]);
 }
 
 function has(ids, oid) {
@@ -265,30 +318,84 @@ async function describePack(base, hash, label) {
   }
 
   const listed = idsOf(idx, label);
-  if (head.readUInt32BE(8) !== listed.count) throw new CorruptError("The " + label + " pack's header does not count what its index lists");
-  if (!idx.subarray(idx.length - 40, idx.length - 20).equals(trailer)) throw new CorruptError("The " + label + " pack's index is not of the pack");
+  if (head.readUInt32BE(8) !== listed.count)
+    throw new CorruptError(
+      "The " + label + " pack's header does not count what its index lists"
+    );
+  if (!idx.subarray(idx.length - 40, idx.length - 20).equals(trailer))
+    throw new CorruptError("The " + label + " pack's index is not of the pack");
 
   const scanned = await scanPack(packFile);
-  if (scanned.count !== listed.count) throw new CorruptError("The " + label + " pack holds a different number of entries than its index lists");
-  for (const oid of scanned.bases) assertContains(listed.ids, Buffer.from(oid, "hex"), "the " + label + " pack's own delta bases (it is not self-contained)");
+  if (scanned.count !== listed.count)
+    throw new CorruptError(
+      "The " +
+        label +
+        " pack holds a different number of entries than its index lists"
+    );
+  for (const oid of scanned.bases)
+    assertContains(
+      listed.ids,
+      Buffer.from(oid, "hex"),
+      "the " + label + " pack's own delta bases (it is not self-contained)"
+    );
 
-  return { name: "pack-" + trailer.toString("hex"), size, idxSize: idx.length, objects: listed.count, packFile, idx, rev: buildRev(idx), ids: listed.ids };
+  return {
+    name: "pack-" + trailer.toString("hex"),
+    size,
+    idxSize: idx.length,
+    objects: listed.count,
+    packFile,
+    idx,
+    rev: buildRev(idx),
+    ids: listed.ids,
+  };
 }
 
 // The pack of everything reachable from `tips`
 async function packEverything({ children, repo, dir, tips, config }) {
-  const args = [...configArgs(config), "pack-objects", "--revs", "--delta-base-offset", "-q", path.join(dir, "all")];
-  const hash = (await runGit(children, args, { gitDir: repo, input: tips.join("\n") + "\n" })).trim();
-  if (!hash) throw new CorruptError("git wrote no pack for the repository's refs");
+  const args = [
+    ...configArgs(config),
+    "pack-objects",
+    "--revs",
+    "--delta-base-offset",
+    "-q",
+    path.join(dir, "all"),
+  ];
+  const hash = (
+    await runGit(children, args, {
+      gitDir: repo,
+      input: tips.join("\n") + "\n",
+    })
+  ).trim();
+  if (!hash)
+    throw new CorruptError("git wrote no pack for the repository's refs");
   return hash;
 }
 
 // The pack of every commit reachable from `tips` (commits), and how many there
 // are. A commit's pack holds only commits, which is what history.js reads.
 async function packCommits({ children, repo, dir, tips, config }) {
-  const commits = (await runGit(children, ["rev-list", "--stdin"], { gitDir: repo, input: tips.join("\n") + "\n" })).split("\n").filter(Boolean);
-  const args = [...configArgs(config), "pack-objects", "--delta-base-offset", "-q", path.join(dir, "history")];
-  const hash = (await runGit(children, args, { gitDir: repo, input: commits.join("\n") + "\n" })).trim();
+  const commits = (
+    await runGit(children, ["rev-list", "--stdin"], {
+      gitDir: repo,
+      input: tips.join("\n") + "\n",
+    })
+  )
+    .split("\n")
+    .filter(Boolean);
+  const args = [
+    ...configArgs(config),
+    "pack-objects",
+    "--delta-base-offset",
+    "-q",
+    path.join(dir, "history"),
+  ];
+  const hash = (
+    await runGit(children, args, {
+      gitDir: repo,
+      input: commits.join("\n") + "\n",
+    })
+  ).trim();
   return { hash, commits };
 }
 
@@ -302,7 +409,10 @@ async function scratchRepo(children, dir, objects) {
   const repo = path.join(dir, "repo.git");
   await runGit(children, ["init", "-q", "--bare", repo], { gitDir: repo });
   await fsp.mkdir(path.join(repo, "objects", "info"), { recursive: true });
-  await fsp.writeFile(path.join(repo, "objects", "info", "alternates"), objects + "\n");
+  await fsp.writeFile(
+    path.join(repo, "objects", "info", "alternates"),
+    objects + "\n"
+  );
   return repo;
 }
 
@@ -312,7 +422,13 @@ async function objectsDir(children, gitDir) {
   let common;
   try {
     // --path-format needs git 2.31
-    common = (await sourceGit(children, gitDir, ["rev-parse", "--path-format=absolute", "--git-common-dir"])).trim();
+    common = (
+      await sourceGit(children, gitDir, [
+        "rev-parse",
+        "--path-format=absolute",
+        "--git-common-dir",
+      ])
+    ).trim();
   } catch (err) {
     common = path.resolve(gitDir);
   }
@@ -320,17 +436,26 @@ async function objectsDir(children, gitDir) {
 }
 
 function fileExists(file) {
-  return fsp.stat(file).then(() => true, () => false);
+  return fsp.stat(file).then(
+    () => true,
+    () => false
+  );
 }
 
 // The bytes of everything under `dir` (git's temporary pack, the packs, the
 // scratch repository)
 async function sizeOf(dir) {
   let total = 0;
-  for (const entry of await fsp.readdir(dir, { withFileTypes: true }).catch(() => [])) {
+  for (const entry of await fsp
+    .readdir(dir, { withFileTypes: true })
+    .catch(() => [])) {
     const file = path.join(dir, entry.name);
     if (entry.isDirectory()) total += await sizeOf(file);
-    else total += await fsp.stat(file).then((stat) => stat.size, () => 0);
+    else
+      total += await fsp.stat(file).then(
+        (stat) => stat.size,
+        () => 0
+      );
   }
   return total;
 }
@@ -349,7 +474,8 @@ function watchGrowth(reservation, children) {
     busy = true;
     try {
       const used = await sizeOf(reservation.dir);
-      if (used > reservation.bytes) await reservation.extend(used - reservation.bytes + SLACK);
+      if (used > reservation.bytes)
+        await reservation.extend(used - reservation.bytes + SLACK);
     } catch (err) {
       failure = err;
       for (const child of children) child.kill("SIGKILL");
@@ -387,12 +513,23 @@ async function proveClosed({ children, dir, main, tips }) {
   const base = path.basename(main.packFile, ".pack");
   for (const ext of [".pack", ".idx"]) {
     const from = path.join(path.dirname(main.packFile), base + ext);
-    await fsp.link(from, path.join(packDir, base + ext)).catch(() => fsp.copyFile(from, path.join(packDir, base + ext)));
+    await fsp
+      .link(from, path.join(packDir, base + ext))
+      .catch(() => fsp.copyFile(from, path.join(packDir, base + ext)));
   }
   try {
-    await runGit(children, ["rev-list", "--objects", "--missing=error", "--count", "--stdin"], { gitDir: repo, input: tips.join("\n") + "\n" });
+    await runGit(
+      children,
+      ["rev-list", "--objects", "--missing=error", "--count", "--stdin"],
+      { gitDir: repo, input: tips.join("\n") + "\n" }
+    );
   } catch (err) {
-    throw coded("The pack is not closed: objects the refs lead to are missing from it (" + err.message.slice(-300) + "). A shallow or grafted source, or one with missing objects, cannot be imported.", "ENOTCLOSED");
+    throw coded(
+      "The pack is not closed: objects the refs lead to are missing from it (" +
+        err.message.slice(-300) +
+        "). A shallow or grafted source, or one with missing objects, cannot be imported.",
+      "ENOTCLOSED"
+    );
   }
   await fsp.rm(repo, { recursive: true, force: true });
 }
@@ -406,41 +543,101 @@ async function proveClosed({ children, dir, main, tips }) {
 async function upload(store, pack, { rev, cache = null }) {
   const stream = fs.createReadStream(pack.packFile);
   stream.on("error", () => {}); // the upload sees it too
-  const puts = [store.put(packKey(pack.name), stream).finally(() => stream.destroy()), store.put(idxKey(pack.name), pack.idx)];
+  const puts = [
+    store.put(packKey(pack.name), stream).finally(() => stream.destroy()),
+    store.put(idxKey(pack.name), pack.idx),
+  ];
   if (rev) puts.push(store.put(revKey(pack.name), pack.rev));
-  const kept = keepPack({ cache, store, name: pack.name, size: pack.size, file: pack.packFile });
-  const failed = (await Promise.allSettled(puts)).find((put) => put.status === "rejected");
+  const kept = keepPack({
+    cache,
+    store,
+    name: pack.name,
+    size: pack.size,
+    file: pack.packFile,
+  });
+  const failed = (await Promise.allSettled(puts)).find(
+    (put) => put.status === "rejected"
+  );
   await kept;
   if (failed) throw failed.reason;
-  if (rev) await rememberWhole({ cache, namespace: store.id, key: idxKey(pack.name), idx: pack.idx });
+  if (rev)
+    await rememberWhole({
+      cache,
+      namespace: store.id,
+      key: idxKey(pack.name),
+      idx: pack.idx,
+    });
 }
 
-const entryOf = ({ name, size, idxSize, objects }) => ({ name, size, idxSize, objects });
+const entryOf = ({ name, size, idxSize, objects }) => ({
+  name,
+  size,
+  idxSize,
+  objects,
+});
 
 // ---- Import ---------------------------------------------------------------
 
-async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = null, pack = {}, estimateBytes = null, clock = Date.now, gate = null }) {
-  if (typeof lock !== "function") throw new Error("importRepo needs the host's lock function");
+async function importRepo({
+  store: objects,
+  cache,
+  lock,
+  gitDir,
+  scratchDir = null,
+  pack = {},
+  estimateBytes = null,
+  clock = Date.now,
+  gate = null,
+}) {
+  if (typeof lock !== "function")
+    throw new Error("importRepo needs the host's lock function");
   if (!gitDir) throw new Error("importRepo needs gitDir");
-  if (!scratchDir && !(cache && typeof cache.reserve === "function")) throw new Error("importRepo needs a cache to reserve scratch space from, or a scratchDir");
+  if (!scratchDir && !(cache && typeof cache.reserve === "function"))
+    throw new Error(
+      "importRepo needs a cache to reserve scratch space from, or a scratchDir"
+    );
   await fsp.stat(gitDir);
 
   const started = Date.now();
   const { store, requests } = counting(objects);
-  const stats = { ms: 0, gitMs: 0, proveMs: 0, uploadMs: 0, swapMs: 0, bytesUp: 0, requests };
+  const stats = {
+    ms: 0,
+    gitMs: 0,
+    proveMs: 0,
+    uploadMs: 0,
+    swapMs: 0,
+    bytesUp: 0,
+    requests,
+  };
   const finish = () => {
     stats.ms = Date.now() - started;
     return stats;
   };
 
   // A shallow source has commits whose parents it does not have
-  if ((await sourceGit(createChildren(gate), gitDir, ["rev-parse", "--is-shallow-repository"])).trim() === "true") {
-    throw coded("The repository is shallow, so its history is incomplete. Only a complete repository can be imported.", "ESHALLOW");
+  if (
+    (
+      await sourceGit(createChildren(gate), gitDir, [
+        "rev-parse",
+        "--is-shallow-repository",
+      ])
+    ).trim() === "true"
+  ) {
+    throw coded(
+      "The repository is shallow, so its history is incomplete. Only a complete repository can be imported.",
+      "ESHALLOW"
+    );
   }
 
   const base = await manifest.read(store, { clock });
   if (!manifest.isEmpty(base)) {
-    throw coded("The store repository already has a manifest (seq " + base.seq + "). An import only goes into an empty repository.", "ENOTEMPTY", { seq: base.seq });
+    throw coded(
+      "The store repository already has a manifest (seq " +
+        base.seq +
+        "). An import only goes into an empty repository.",
+      "ENOTEMPTY",
+      { seq: base.seq }
+    );
   }
 
   const config = { ...PACK_CONFIG, "pack.packSizeLimit": "0", ...pack };
@@ -466,12 +663,19 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
       await fsp.mkdir(scratchDir, { recursive: true });
       dir = await fsp.mkdtemp(path.join(scratchDir, "import-"));
     } else {
-      const alternates = await fileExists(path.join(objectDir, "info", "alternates"));
-      const need = estimateBytes !== null ? estimateBytes : await estimate(children, gitDir, tips, cache.maxBytes, alternates);
+      const alternates = await fileExists(
+        path.join(objectDir, "info", "alternates")
+      );
+      const need =
+        estimateBytes !== null
+          ? estimateBytes
+          : await estimate(children, gitDir, tips, cache.maxBytes, alternates);
       try {
         reservation = await cache.reserve(need);
       } catch (err) {
-        if (err instanceof NoRoomError) err.message += " (a repository bigger than the cache can be imported with scratchDir, a directory on a larger disk)";
+        if (err instanceof NoRoomError)
+          err.message +=
+            " (a repository bigger than the cache can be imported with scratchDir, a directory on a larger disk)";
         throw err;
       }
       dir = reservation.dir;
@@ -479,7 +683,17 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
 
     const repo = await scratchRepo(children, dir, objectDir);
     const { peeled, peeledType } = await peelTags(children, repo, refs, kinds);
-    const commitTips = [...new Set(Object.keys(refs).flatMap((ref) => (kinds[ref] === "commit" ? [refs[ref]] : peeledType[refs[ref]] === "commit" ? [peeled[refs[ref]]] : [])))];
+    const commitTips = [
+      ...new Set(
+        Object.keys(refs).flatMap((ref) =>
+          kinds[ref] === "commit"
+            ? [refs[ref]]
+            : peeledType[refs[ref]] === "commit"
+              ? [peeled[refs[ref]]]
+              : []
+        )
+      ),
+    ];
 
     // The main pack and the history pack are independent; one git each. If
     // the output outgrows the reservation it is extended, or git is stopped.
@@ -489,7 +703,9 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     try {
       [hash, history] = await Promise.all([
         packEverything({ children, repo, dir, tips, config }),
-        commitTips.length ? packCommits({ children, repo, dir, tips: commitTips, config }) : null,
+        commitTips.length
+          ? packCommits({ children, repo, dir, tips: commitTips, config })
+          : null,
       ]);
     } catch (err) {
       throw (watching && watching.fail()) || err;
@@ -503,20 +719,39 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     mark = Date.now();
     const main = await describePack(path.join(dir, "all"), hash, "imported");
     for (const ref of Object.keys(refs)) {
-      if (!has(main.ids, refs[ref])) throw new CorruptError("The imported pack lacks " + refs[ref] + ", the tip of " + ref);
+      if (!has(main.ids, refs[ref]))
+        throw new CorruptError(
+          "The imported pack lacks " + refs[ref] + ", the tip of " + ref
+        );
     }
     for (const target of Object.values(peeled)) {
-      if (!has(main.ids, target)) throw new CorruptError("The imported pack lacks " + target + ", the target of a tag");
+      if (!has(main.ids, target))
+        throw new CorruptError(
+          "The imported pack lacks " + target + ", the target of a tag"
+        );
     }
     await proveClosed({ children, dir, main, tips });
 
     let commits = null;
     if (history) {
-      commits = await describePack(path.join(dir, "history"), history.hash, "history");
-      if (commits.objects !== history.commits.length) throw new CorruptError("The history pack holds " + commits.objects + " objects for " + history.commits.length + " commits");
+      commits = await describePack(
+        path.join(dir, "history"),
+        history.hash,
+        "history"
+      );
+      if (commits.objects !== history.commits.length)
+        throw new CorruptError(
+          "The history pack holds " +
+            commits.objects +
+            " objects for " +
+            history.commits.length +
+            " commits"
+        );
       for (const oid of history.commits) {
-        if (!has(commits.ids, oid)) throw new CorruptError("The history pack lacks the commit " + oid);
-        if (!has(main.ids, oid)) throw new CorruptError("The imported pack lacks the commit " + oid);
+        if (!has(commits.ids, oid))
+          throw new CorruptError("The history pack lacks the commit " + oid);
+        if (!has(main.ids, oid))
+          throw new CorruptError("The imported pack lacks the commit " + oid);
       }
     }
     stats.proveMs = Date.now() - mark;
@@ -524,8 +759,13 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     mark = Date.now();
     // Both groups settle before either failure is thrown, so no upload is
     // still reading scratch when scratch is deleted
-    const uploads = await Promise.allSettled([upload(store, main, { rev: true, cache }), commits ? upload(store, commits, { rev: false, cache }) : null]);
-    const failedUpload = uploads.find((settled) => settled.status === "rejected");
+    const uploads = await Promise.allSettled([
+      upload(store, main, { rev: true, cache }),
+      commits ? upload(store, commits, { rev: false, cache }) : null,
+    ]);
+    const failedUpload = uploads.find(
+      (settled) => settled.status === "rejected"
+    );
     if (failedUpload) throw failedUpload.reason;
     stats.uploadMs = Date.now() - mark;
 
@@ -538,15 +778,32 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
         peeled,
       });
     let next = build(base);
-    stats.bytesUp = main.size + main.idxSize + main.rev.length + (commits ? commits.size + commits.idxSize : 0) + manifest.serialize(next).length;
+    stats.bytesUp =
+      main.size +
+      main.idxSize +
+      main.rev.length +
+      (commits ? commits.size + commits.idxSize : 0) +
+      manifest.serialize(next).length;
 
     const result = {
       outcome: "imported",
       seq: next.seq,
       head,
       refs,
-      pack: { name: main.name, size: main.size, idxSize: main.idxSize, objects: main.objects },
-      history: commits ? { name: commits.name, size: commits.size, idxSize: commits.idxSize, commits: commits.objects } : null,
+      pack: {
+        name: main.name,
+        size: main.size,
+        idxSize: main.idxSize,
+        objects: main.objects,
+      },
+      history: commits
+        ? {
+            name: commits.name,
+            size: commits.size,
+            idxSize: commits.idxSize,
+            commits: commits.objects,
+          }
+        : null,
       skipped,
     };
 
@@ -561,18 +818,39 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
         // that, once. A newer empty one is a removal's tombstone, whose
         // removal may have deleted this import's uploads (which `uploaded`
         // would skip checking), so that is refused like any other change.
-        if (!(err instanceof StaleManifestError) || manifest.isFresh(base, clock)) throw err;
+        if (
+          !(err instanceof StaleManifestError) ||
+          manifest.isFresh(base, clock)
+        )
+          throw err;
         const fresh = await manifest.read(store, { clock });
-        if (!manifest.isEmpty(fresh) || fresh.seq !== base.seq || manifest.epochOf(fresh) !== manifest.epochOf(base)) throw err;
+        if (
+          !manifest.isEmpty(fresh) ||
+          fresh.seq !== base.seq ||
+          manifest.epochOf(fresh) !== manifest.epochOf(base)
+        )
+          throw err;
         next = build(fresh);
         result.seq = next.seq;
-        await manifest.swap({ store, lock, base: fresh, next, uploaded, clock });
+        await manifest.swap({
+          store,
+          lock,
+          base: fresh,
+          next,
+          uploaded,
+          clock,
+        });
       }
     } catch (err) {
       stats.swapMs = Date.now() - mark;
-      if (err instanceof OutcomeUnknownError) return { ...result, outcome: "unknown", error: err, stats: finish() };
+      if (err instanceof OutcomeUnknownError)
+        return { ...result, outcome: "unknown", error: err, stats: finish() };
       if (err instanceof StaleManifestError) {
-        throw coded("Another writer created the repository's first manifest while it was being imported. Nothing was imported or retried.", "EMOVED", { cause: err });
+        throw coded(
+          "Another writer created the repository's first manifest while it was being imported. Nothing was imported or retried.",
+          "EMOVED",
+          { cause: err }
+        );
       }
       throw err;
     }
@@ -581,8 +859,18 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
     return { ...result, stats: finish() };
   } finally {
     for (const child of children) child.kill("SIGKILL");
-    if (reservation) await reservation.release().catch((err) => console.error("Git store: could not remove scratch space", err));
-    else if (dir) await fsp.rm(dir, { recursive: true, force: true }).catch((err) => console.error("Git store: could not remove scratch space", err));
+    if (reservation)
+      await reservation
+        .release()
+        .catch((err) =>
+          console.error("Git store: could not remove scratch space", err)
+        );
+    else if (dir)
+      await fsp
+        .rm(dir, { recursive: true, force: true })
+        .catch((err) =>
+          console.error("Git store: could not remove scratch space", err)
+        );
   }
 }
 
@@ -601,9 +889,16 @@ async function importRepo({ store: objects, cache, lock, gitDir, scratchDir = nu
 // on its own (index-pack and fsck, every ref and HEAD of the manifest made in
 // it, and the peeled tags), which is the daily deep check of a repository
 // whose only copy is the store.
-async function verifyImport({ store, cache, gitDir, scratchDir = null, gate = null }) {
+async function verifyImport({
+  store,
+  cache,
+  gitDir,
+  scratchDir = null,
+  gate = null,
+}) {
   const current = await manifest.read(store);
-  if (manifest.isEmpty(current)) throw new CorruptError("The store repository is empty");
+  if (manifest.isEmpty(current))
+    throw new CorruptError("The store repository is empty");
 
   const children = createChildren(gate);
   let reservation = null;
@@ -614,7 +909,11 @@ async function verifyImport({ store, cache, gitDir, scratchDir = null, gate = nu
       await fsp.mkdir(scratchDir, { recursive: true });
       dir = await fsp.mkdtemp(path.join(scratchDir, "verify-"));
     } else {
-      reservation = await cache.reserve(current.packs.reduce((sum, pack) => sum + pack.size + pack.idxSize, 0) * 2 + SLACK);
+      reservation = await cache.reserve(
+        current.packs.reduce((sum, pack) => sum + pack.size + pack.idxSize, 0) *
+          2 +
+          SLACK
+      );
       dir = reservation.dir;
     }
 
@@ -625,34 +924,76 @@ async function verifyImport({ store, cache, gitDir, scratchDir = null, gate = nu
     const out = fs.createWriteStream(packFile);
     const sent = await clone({ store, manifest: current, out });
 
-    const inRepo = (args, input) => runGit(children, args, { gitDir: repo, input });
-    await inRepo([...indexArgs(), "index-pack", "--strict", "--fsck-objects", packFile]);
-    for (const [ref, oid] of Object.entries(current.refs)) await inRepo(["update-ref", ref, oid]);
+    const inRepo = (args, input) =>
+      runGit(children, args, { gitDir: repo, input });
+    await inRepo([
+      ...indexArgs(),
+      "index-pack",
+      "--strict",
+      "--fsck-objects",
+      packFile,
+    ]);
+    for (const [ref, oid] of Object.entries(current.refs))
+      await inRepo(["update-ref", ref, oid]);
     if (current.head) await inRepo(["symbolic-ref", "HEAD", current.head]);
     await inRepo([...indexArgs(), "fsck", "--strict", "--no-dangling"]);
 
     const mine = Object.fromEntries(
-      (await inRepo(["for-each-ref", "--format=%(refname) %(objectname)", "refs/heads", "refs/tags"]))
+      (
+        await inRepo([
+          "for-each-ref",
+          "--format=%(refname) %(objectname)",
+          "refs/heads",
+          "refs/tags",
+        ])
+      )
         .split("\n")
         .filter(Boolean)
         .map((line) => line.split(" "))
     );
     // The refs the import takes (one it skipped is not expected); with no
     // source, the manifest's own
-    const source = gitDir ? await readRefs(children, gitDir) : { refs: current.refs, head: current.head };
+    const source = gitDir
+      ? await readRefs(children, gitDir)
+      : { refs: current.refs, head: current.head };
     const differences = [];
-    for (const ref of new Set([...Object.keys(source.refs), ...Object.keys(mine)])) {
-      if (mine[ref] !== source.refs[ref]) differences.push(ref + ": store " + mine[ref] + ", source " + source.refs[ref]);
+    for (const ref of new Set([
+      ...Object.keys(source.refs),
+      ...Object.keys(mine),
+    ])) {
+      if (mine[ref] !== source.refs[ref])
+        differences.push(
+          ref + ": store " + mine[ref] + ", source " + source.refs[ref]
+        );
     }
-    if (differences.length) throw new CorruptError("The store's refs differ from the source's: " + differences.join("; "));
-    if (source.head !== current.head) throw new CorruptError("The store's HEAD is " + current.head + "; the source's is " + source.head);
+    if (differences.length)
+      throw new CorruptError(
+        "The store's refs differ from the source's: " + differences.join("; ")
+      );
+    if (source.head !== current.head)
+      throw new CorruptError(
+        "The store's HEAD is " +
+          current.head +
+          "; the source's is " +
+          source.head
+      );
 
     const peeled = Object.entries(current.peeled || {});
     if (peeled.length) {
       const asked = peeled.map(([tag]) => tag + "^{}").join("\n") + "\n";
-      const lines = (await inRepo(["cat-file", "--batch-check=%(objectname)"], asked)).split("\n");
+      const lines = (
+        await inRepo(["cat-file", "--batch-check=%(objectname)"], asked)
+      ).split("\n");
       peeled.forEach(([tag, target], i) => {
-        if (lines[i] !== target) throw new CorruptError("The manifest says tag " + tag + " peels to " + target + "; git says " + lines[i]);
+        if (lines[i] !== target)
+          throw new CorruptError(
+            "The manifest says tag " +
+              tag +
+              " peels to " +
+              target +
+              "; git says " +
+              lines[i]
+          );
       });
     }
 
@@ -660,11 +1001,24 @@ async function verifyImport({ store, cache, gitDir, scratchDir = null, gate = nu
   } finally {
     for (const child of children) child.kill("SIGKILL");
     if (reservation) await reservation.release().catch(() => {});
-    else if (dir) await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
+    else if (dir)
+      await fsp.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
 module.exports = importRepo;
 module.exports.verifyImport = verifyImport;
 // For rewrite.js, which packs and proves what the refs reach in the same way
-module.exports.internals = { counting, peelTags, describePack, packEverything, packCommits, proveClosed, watchGrowth, upload, has, entryOf, SLACK };
+module.exports.internals = {
+  counting,
+  peelTags,
+  describePack,
+  packEverything,
+  packCommits,
+  proveClosed,
+  watchGrowth,
+  upload,
+  has,
+  entryOf,
+  SLACK,
+};

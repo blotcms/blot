@@ -26,7 +26,7 @@ const render = async function (filePath, options, callback) {
   //   .. your locals
   //   cache: false
   // }
-  const { ext, name, root, path } = this;
+  const { ext, root } = this;
 
   // options.cache seems to default to false
   // unless environment variable NODE_ENV=production
@@ -47,8 +47,8 @@ const render = async function (filePath, options, callback) {
 
     const transformers = [
       ...(options.settings.transformers || []),
-      ...(options.transformers || [])
-    ].filter(i => typeof i === "function");
+      ...(options.transformers || []),
+    ].filter((i) => typeof i === "function");
 
     if (transformers.length) {
       const $ = cheerio.load(result, { decodeEntities: false }, false);

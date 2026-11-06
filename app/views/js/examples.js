@@ -4,10 +4,7 @@ const MAX_SHUFFLE_ATTEMPTS = 40;
 const shuffleArray = (array) => {
   for (let index = array.length - 1; index > 0; index--) {
     const randomIndex = Math.floor(Math.random() * (index + 1));
-    [array[index], array[randomIndex]] = [
-      array[randomIndex],
-      array[index],
-    ];
+    [array[index], array[randomIndex]] = [array[randomIndex], array[index]];
   }
 
   return array;
@@ -83,9 +80,7 @@ const createFreshOrder = ({
 }) => {
   const visibleCount = Math.min(totalSites, sitesArray.length);
   const topCount = Math.min(topOfListLength, visibleCount);
-  const previousTopHrefs = new Set(
-    (recentOrders[0] || []).slice(0, topCount)
-  );
+  const previousTopHrefs = new Set((recentOrders[0] || []).slice(0, topCount));
 
   let bestOrder = [];
   let bestScore = Infinity;
@@ -145,11 +140,7 @@ const renderFeatured = ({
     recentOrders,
   });
 
-  saveRecentOrders(
-    storageKey,
-    result.map(getSiteHref),
-    recentOrders
-  );
+  saveRecentOrders(storageKey, result.map(getSiteHref), recentOrders);
 
   const anchor = anchorSelector ? featured.querySelector(anchorSelector) : null;
 
@@ -178,7 +169,10 @@ const renderFeatured = ({
 
       const elapsed = (performance.now() - fadeStart) / 1000;
       const remaining = Math.max(0.06, buttonDelay - elapsed);
-      window.setTimeout(() => anchor.classList.add("home-fade-in"), remaining * 1000);
+      window.setTimeout(
+        () => anchor.classList.add("home-fade-in"),
+        remaining * 1000
+      );
     };
 
     const waitForImage = (site, plannedDelay) => {

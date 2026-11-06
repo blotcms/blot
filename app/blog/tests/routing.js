@@ -21,7 +21,7 @@ describe("routing", function () {
     // Test with params
     const res = await this.get(`/eg/page/1`);
     const body = await res.text();
-    
+
     expect(body).toContain("Success 1");
 
     // Test without params
@@ -49,7 +49,10 @@ describe("routing", function () {
       path: "/foo.txt",
       content: "Link: /about.txt\n\nENTRY",
     });
-    await this.template({ "about.txt": "VIEW", "entry.html": "{{{entry.html}}}" });
+    await this.template({
+      "about.txt": "VIEW",
+      "entry.html": "{{{entry.html}}}",
+    });
     await this.write({ path: "/about.txt", content: "FILE" });
 
     // Check that the entry is served first
@@ -60,7 +63,7 @@ describe("routing", function () {
 
     // remove the entry
     await this.remove("/foo.txt");
-    
+
     // Check that the template view is served next
     const res = await this.get("/about.txt");
     const body = await res.text();

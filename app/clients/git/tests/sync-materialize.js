@@ -5,7 +5,6 @@ describe("git client sync: materializing the blog folder", function () {
   require("./setup")({ clone: false, client: true });
 
   var util = require("util");
-  var fs = require("fs-extra");
   var database = require("clients/git/database");
   var write = util.promisify(require("clients/git/write"));
   var remove = util.promisify(require("clients/git/remove"));
@@ -61,17 +60,30 @@ describe("git client sync: materializing the blog folder", function () {
 
   describe("drift in the blog folder", function () {
     it("is left as it is by a sync, and not committed by Blot's writes", async function () {
-      await this.local.commitFiles({ "/drifted.txt": "Pushed", "/other.txt": "Other" });
+      await this.local.commitFiles({
+        "/drifted.txt": "Pushed",
+        "/other.txt": "Other",
+      });
       await this.local.push();
 
       await folder.write(this.blog.id, "/drifted.txt", "Changed in the folder");
-      await folder.write(this.blog.id, "/untracked.txt", "Not in the repository");
+      await folder.write(
+        this.blog.id,
+        "/untracked.txt",
+        "Not in the repository"
+      );
 
       await this.local.writeAndPush("/later.txt", "Later");
 
-      expect(await helpers.blogFile(this, "/drifted.txt")).toEqual(Buffer.from("Changed in the folder"));
-      expect(await helpers.blogFile(this, "/untracked.txt")).toEqual(Buffer.from("Not in the repository"));
-      expect(await helpers.blogFile(this, "/later.txt")).toEqual(Buffer.from("Later"));
+      expect(await helpers.blogFile(this, "/drifted.txt")).toEqual(
+        Buffer.from("Changed in the folder")
+      );
+      expect(await helpers.blogFile(this, "/untracked.txt")).toEqual(
+        Buffer.from("Not in the repository")
+      );
+      expect(await helpers.blogFile(this, "/later.txt")).toEqual(
+        Buffer.from("Later")
+      );
 
       await write(this.blog.id, "/by-blot.txt", "By Blot");
       await this.local.pull();
@@ -90,7 +102,9 @@ describe("git client sync: materializing the blog folder", function () {
 
       await this.local.writeAndPush("/drifted.txt", "Pushed again");
 
-      expect(await helpers.blogFile(this, "/drifted.txt")).toEqual(Buffer.from("Pushed again"));
+      expect(await helpers.blogFile(this, "/drifted.txt")).toEqual(
+        Buffer.from("Pushed again")
+      );
     });
   });
 
@@ -106,16 +120,29 @@ describe("git client sync: materializing the blog folder", function () {
       await this.local.push(["--force", "origin", "rewritten:master"]);
 
       // As after a force push and a rewrite of the store
-      await setApplied(this.blog.id, "0123456789012345678901234567890123456789");
+      await setApplied(
+        this.blog.id,
+        "0123456789012345678901234567890123456789"
+      );
 
       await this.local.commitFiles({ "/kept/three.txt": "Three" });
       await this.local.push(["origin", "rewritten:master"]);
 
-      expect(await helpers.blogFile(this, "/kept/one.txt")).toEqual(Buffer.from("One"));
-      expect(await helpers.blogFile(this, "/kept/two.txt")).toEqual(Buffer.from("Two"));
-      expect(await helpers.blogFile(this, "/kept/three.txt")).toEqual(Buffer.from("Three"));
-      expect((await helpers.entry(this.blog.id, "/kept/one.txt")).deleted).toBe(false);
-      expect(await getApplied(this.blog.id)).toBe(await this.local.remoteHead());
+      expect(await helpers.blogFile(this, "/kept/one.txt")).toEqual(
+        Buffer.from("One")
+      );
+      expect(await helpers.blogFile(this, "/kept/two.txt")).toEqual(
+        Buffer.from("Two")
+      );
+      expect(await helpers.blogFile(this, "/kept/three.txt")).toEqual(
+        Buffer.from("Three")
+      );
+      expect((await helpers.entry(this.blog.id, "/kept/one.txt")).deleted).toBe(
+        false
+      );
+      expect(await getApplied(this.blog.id)).toBe(
+        await this.local.remoteHead()
+      );
     });
   });
 });

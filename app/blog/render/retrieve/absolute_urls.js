@@ -53,7 +53,7 @@ module.exports = asRetriever(function (req, res) {
 
       let $ = cheerio.load(text, null, false);
 
-      text = absolute_urls(base, $);
+      absolute_urls(base, $);
       text = $.html();
 
       return text;

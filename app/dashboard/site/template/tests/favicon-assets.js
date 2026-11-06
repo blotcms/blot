@@ -17,24 +17,47 @@ describe("favicon assets", function () {
   });
 
   it("rejects crops outside the uploaded image", function () {
-    expect(() => cropFor({ width: 100, height: 50 }, { x: 0.8, y: 0, size: 1 })).toThrowError(/outside/);
+    expect(() =>
+      cropFor({ width: 100, height: 50 }, { x: 0.8, y: 0, size: 1 })
+    ).toThrowError(/outside/);
   });
 
   it("creates a multi-size ico and PNG derivatives from the selected crop", async function () {
     const source = join(this.tmp, "source.png");
     const destination = join(this.tmp, "output");
-    await sharp({ create: { width: 400, height: 200, channels: 4, background: "#ff0000" } })
-      .composite([{ input: { create: { width: 200, height: 200, channels: 4, background: "#0000ff" } }, left: 200, top: 0 }])
+    await sharp({
+      create: { width: 400, height: 200, channels: 4, background: "#ff0000" },
+    })
+      .composite([
+        {
+          input: {
+            create: {
+              width: 200,
+              height: 200,
+              channels: 4,
+              background: "#0000ff",
+            },
+          },
+          left: 200,
+          top: 0,
+        },
+      ])
       .png()
       .toFile(source);
 
-    const favicon = await generate(source, destination, { x: 0.5, y: 0, size: 1 });
+    const favicon = await generate(source, destination, {
+      x: 0.5,
+      y: 0,
+      size: 1,
+    });
     const icon = await fs.readFile(join(destination, `${favicon.prefix}.ico`));
     expect(icon.slice(0, 4)).toEqual(Buffer.from([0, 0, 1, 0]));
     expect(icon.readUInt16LE(4)).toEqual(3);
 
     for (const size of [16, 32, 180]) {
-      const metadata = await sharp(join(destination, `${favicon.prefix}-${size}.png`)).metadata();
+      const metadata = await sharp(
+        join(destination, `${favicon.prefix}-${size}.png`)
+      ).metadata();
       expect(metadata.width).toEqual(size);
       expect(metadata.height).toEqual(size);
     }
@@ -43,12 +66,18 @@ describe("favicon assets", function () {
   it("produces a well-formed ico from a 3-channel (JPEG) source", async function () {
     const source = join(this.tmp, "source.jpg");
     const destination = join(this.tmp, "output-jpg");
-    await sharp({ create: { width: 120, height: 120, channels: 3, background: "#3366cc" } })
+    await sharp({
+      create: { width: 120, height: 120, channels: 3, background: "#3366cc" },
+    })
       .jpeg()
       .toFile(source);
     expect((await sharp(source).metadata()).channels).toEqual(3);
 
-    const favicon = await generate(source, destination, { x: 0, y: 0, size: 1 });
+    const favicon = await generate(source, destination, {
+      x: 0,
+      y: 0,
+      size: 1,
+    });
 
     // to-ico@1.1.5 embeds each size as a 32-bit BITMAPINFOHEADER DIB (40-byte
     // header + width*height*4, no AND mask). If the source is not 4-channel it

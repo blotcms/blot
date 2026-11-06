@@ -1,7 +1,11 @@
 describe("git store: pushes", function () {
   // A blog on the git client with a clone, a memory store per blog, and the
   // store's log lines kept
-  require("clients/git/tests/setup")({ clone: false, client: true, lines: true });
+  require("clients/git/tests/setup")({
+    clone: false,
+    client: true,
+    lines: true,
+  });
 
   var Client = require("clients/git/tests/setup/client");
   var config = require("config");
@@ -27,14 +31,20 @@ describe("git store: pushes", function () {
       });
     }
 
-    throw new Error("No log line matched " + pattern + "\n" + ctx.storeLines().join("\n"));
+    throw new Error(
+      "No log line matched " + pattern + "\n" + ctx.storeLines().join("\n")
+    );
   }
 
   function request(ctx, method, suffix, options) {
     options = options || {};
 
     var parsed = new URL(ctx.repoUrl);
-    var auth = Buffer.from(decodeURIComponent(parsed.username) + ":" + decodeURIComponent(parsed.password)).toString("base64");
+    var auth = Buffer.from(
+      decodeURIComponent(parsed.username) +
+        ":" +
+        decodeURIComponent(parsed.password)
+    ).toString("base64");
 
     return new Promise(function (resolve, reject) {
       var req = http.request(
@@ -43,7 +53,10 @@ describe("git store: pushes", function () {
           hostname: "127.0.0.1",
           port: ctx.server.port,
           path: "/clients/git/end/" + ctx.blog.handle + ".git" + suffix,
-          headers: Object.assign({ Authorization: "Basic " + auth }, options.headers),
+          headers: Object.assign(
+            { Authorization: "Basic " + auth },
+            options.headers
+          ),
         },
         function (res) {
           var chunks = [];
@@ -51,7 +64,10 @@ describe("git store: pushes", function () {
             chunks.push(chunk);
           });
           res.on("end", function () {
-            resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString("latin1") });
+            resolve({
+              status: res.statusCode,
+              body: Buffer.concat(chunks).toString("latin1"),
+            });
           });
         }
       );
@@ -70,7 +86,12 @@ describe("git store: pushes", function () {
     await this.local.git(["tag", "-a", "v1", "-m", "A tag"]);
     // --progress: git sends "quiet" when its stderr is not a terminal, as
     // here, and a quiet client is sent no progress; a user at a terminal is
-    var pushed = await this.local.push(["--progress", "origin", "master", "--tags"]);
+    var pushed = await this.local.push([
+      "--progress",
+      "origin",
+      "master",
+      "--tags",
+    ]);
 
     expect(pushed.stderr).toContain("Saving to Blot...");
 
@@ -84,12 +105,18 @@ describe("git store: pushes", function () {
 
     // What is served now is the push
     expect(await this.local.remoteHead("master")).toBe(head);
-    var clone = await Client.clone({ url: this.repoUrl, directory: path.join(this.tmp, "after-push") });
+    var clone = await Client.clone({
+      url: this.repoUrl,
+      directory: path.join(this.tmp, "after-push"),
+    });
     expect(await clone.head()).toBe(head);
     expect((await clone.try(["fsck", "--strict"])).code).toBe(0);
 
-    expect((await lineMatching(this, / op=push outcome=ok /))[0]).toMatch(new RegExp("blog=" + this.blog.id + " op=push outcome=ok ms=\\d+ bytesUp=\\d+ "));
-
+    expect((await lineMatching(this, / op=push outcome=ok /))[0]).toMatch(
+      new RegExp(
+        "blog=" + this.blog.id + " op=push outcome=ok ms=\\d+ bytesUp=\\d+ "
+      )
+    );
   });
 
   it("refuses a symbolic link on master with Blot's message, and moves nothing", async function () {
@@ -103,7 +130,9 @@ describe("git store: pushes", function () {
     var pushed = await this.local.tryPush();
 
     expect(pushed.code).not.toBe(0);
-    expect(pushed.stderr).toContain("Git blogs support regular files only (no symbolic links or submodules)");
+    expect(pushed.stderr).toContain(
+      "Git blogs support regular files only (no symbolic links or submodules)"
+    );
     expect((await manifest.read(store(this))).seq).toBe(before.seq);
 
     // The follow-up was never armed, or was taken back
@@ -141,17 +170,27 @@ describe("git store: pushes", function () {
     var limit = Math.floor(config.git_store.cache_bytes * PUSH_CACHE_SHARE);
     var before = await manifest.read(store(this));
 
-    await this.local.commitFiles({ "/big.bin": crypto.randomBytes(limit + 1024 * 1024) });
+    await this.local.commitFiles({
+      "/big.bin": crypto.randomBytes(limit + 1024 * 1024),
+    });
     var pushed = await this.local.tryPush();
 
     expect(pushed.code).not.toBe(0);
-    expect(pushed.stderr).toContain("this push is larger than Blot accepts (" + limit / (1024 * 1024) + " MiB)");
+    expect(pushed.stderr).toContain(
+      "this push is larger than Blot accepts (" +
+        limit / (1024 * 1024) +
+        " MiB)"
+    );
     expect((await manifest.read(store(this))).seq).toBe(before.seq);
     expect(context.cache().stats().reservedBytes).toBe(0);
   });
 
   it("takes a push whose changed tree names a .gitattributes the push does not carry", async function () {
-    await this.local.commitFiles({ "/.gitattributes": "*.md text\n", "/.gitmodules": "", "/a.txt": "A" });
+    await this.local.commitFiles({
+      "/.gitattributes": "*.md text\n",
+      "/.gitmodules": "",
+      "/a.txt": "A",
+    });
     await this.local.push();
 
     // The root tree changes, so it is in the pack; the .gitattributes and
@@ -160,7 +199,9 @@ describe("git store: pushes", function () {
     var pushed = await this.local.tryPush();
 
     expect(pushed.code).toBe(0);
-    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(await this.local.head());
+    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(
+      await this.local.head()
+    );
 
     // The push's sync must not outlive the spec, whose teardown removes the
     // blog under it
@@ -178,7 +219,9 @@ describe("git store: pushes", function () {
       var pushed = await this.local.tryPush();
 
       expect(pushed.code).not.toBe(0);
-      expect(pushed.stderr).toContain("another change to this repository is being applied; please try again in a few seconds");
+      expect(pushed.stderr).toContain(
+        "another change to this repository is being applied; please try again in a few seconds"
+      );
       expect((await manifest.read(store(this))).seq).toBe(before.seq);
     } finally {
       await release();
@@ -196,11 +239,16 @@ describe("git store: pushes", function () {
     var pushesBefore = this.storeLines("push").length;
     var zlib = require("zlib");
     var old = (await manifest.read(store(this))).refs["refs/heads/master"];
-    var line = old + " " + "1".repeat(40) + " refs/heads/master\0report-status\n";
+    var line =
+      old + " " + "1".repeat(40) + " refs/heads/master\0report-status\n";
     var pkt = (line.length + 4).toString(16).padStart(4, "0") + line + "0000";
 
     var parsed = new URL(ctx.repoUrl);
-    var auth = Buffer.from(decodeURIComponent(parsed.username) + ":" + decodeURIComponent(parsed.password)).toString("base64");
+    var auth = Buffer.from(
+      decodeURIComponent(parsed.username) +
+        ":" +
+        decodeURIComponent(parsed.password)
+    ).toString("base64");
 
     // The commands and the start of a pack, gzipped and flushed so the server
     // can read them, then the connection is dropped with the body unfinished
@@ -222,7 +270,13 @@ describe("git store: pushes", function () {
       gzip.on("data", function (chunk) {
         req.write(chunk);
       });
-      gzip.write(Buffer.concat([Buffer.from(pkt), Buffer.from("PACK"), Buffer.from([0, 0, 0, 2, 0, 0, 0, 5])]));
+      gzip.write(
+        Buffer.concat([
+          Buffer.from(pkt),
+          Buffer.from("PACK"),
+          Buffer.from([0, 0, 0, 2, 0, 0, 0, 5]),
+        ])
+      );
       gzip.flush(zlib.constants.Z_SYNC_FLUSH, function () {
         setTimeout(function () {
           req.destroy();
@@ -232,7 +286,11 @@ describe("git store: pushes", function () {
     });
 
     // The receive ends (and logs) rather than waiting on the decoder for ever
-    for (var i = 0; i < 100 && this.storeLines("push").length <= pushesBefore; i++) {
+    for (
+      var i = 0;
+      i < 100 && this.storeLines("push").length <= pushesBefore;
+      i++
+    ) {
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
 
@@ -268,11 +326,15 @@ describe("git store: pushes", function () {
     await other.commitFiles({ "/c.txt": "C" });
     var stale = await other.tryPush();
     expect(stale.code).not.toBe(0);
-    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(await this.local.head());
+    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(
+      await this.local.head()
+    );
 
     await other.git(["pull", "--no-rebase", "--no-edit", "origin", "master"]);
     await other.push();
-    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(await other.head());
+    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(
+      await other.head()
+    );
   });
 
   it("accepts a force push to master", async function () {
@@ -283,7 +345,9 @@ describe("git store: pushes", function () {
     await this.local.commitFiles({ "/new.txt": "New history" });
     await this.local.push(["--force", "origin", "rewritten:master"]);
 
-    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(await this.local.head());
+    expect((await manifest.read(store(this))).refs["refs/heads/master"]).toBe(
+      await this.local.head()
+    );
   });
 
   it("creates and deletes tags", async function () {
@@ -291,13 +355,21 @@ describe("git store: pushes", function () {
 
     await this.local.git(["tag", "light"]);
     await this.local.push(["origin", "light"]);
-    expect((await manifest.read(store(this))).refs["refs/tags/light"]).toBe(await this.local.head());
+    expect((await manifest.read(store(this))).refs["refs/tags/light"]).toBe(
+      await this.local.head()
+    );
 
     await this.local.push(["origin", ":refs/tags/light"]);
-    expect((await manifest.read(store(this))).refs["refs/tags/light"]).toBeUndefined();
+    expect(
+      (await manifest.read(store(this))).refs["refs/tags/light"]
+    ).toBeUndefined();
   });
 
-  ["refs/notes/commits", "refs/remotes/origin/master", "refs/heads/master.lock"].forEach(function (ref) {
+  [
+    "refs/notes/commits",
+    "refs/remotes/origin/master",
+    "refs/heads/master.lock",
+  ].forEach(function (ref) {
     it("refuses the ref " + ref, async function () {
       await this.local.writeAndPush("/a.txt", "A");
 

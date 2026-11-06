@@ -11,7 +11,7 @@ describe("entry.search", function () {
     
     Hello, world!`;
 
-    const check = results => {
+    const check = (results) => {
       expect(results.length).toEqual(1);
       expect(results[0].id).toEqual(path);
     };
@@ -48,11 +48,16 @@ describe("entry.search", function () {
 
     await folder.write(this.blog.id, "/Café pic.jpg", "image");
     await folder.write(this.blog.id, "/l'été.jpg", "image");
-    const entry = await this.set(path, "![](Café%20pic.jpg) ![](l'%C3%A9t%C3%A9.jpg)");
+    const entry = await this.set(
+      path,
+      "![](Café%20pic.jpg) ![](l'%C3%A9t%C3%A9.jpg)"
+    );
 
     expect(entry.html).toContain("Caf%C3%A9%20pic.jpg");
     expect(entry.html).toContain("l%27%C3%A9t%C3%A9.jpg");
-    expect((await this.search("café pic.jpg")).map((r) => r.id)).toEqual([path]);
+    expect((await this.search("café pic.jpg")).map((r) => r.id)).toEqual([
+      path,
+    ]);
     expect((await this.search("été")).map((r) => r.id)).toEqual([path]);
     expect(await this.search("folder")).toEqual([]);
 
@@ -72,7 +77,7 @@ describe("entry.search", function () {
     
     Hello, me!`;
 
-    const check = results => {
+    const check = (results) => {
       // sort results by id
       results.sort((a, b) => a.id.localeCompare(b.id));
 
@@ -100,7 +105,7 @@ describe("entry.search", function () {
     
     你好，世界！`;
 
-    const check = results => {
+    const check = (results) => {
       expect(results.length).toEqual(1);
       expect(results[0].id).toEqual(path);
     };
@@ -152,7 +157,7 @@ describe("entry.search", function () {
     
     Hello, world!`;
 
-    const check = results => {
+    const check = (results) => {
       expect(results.length).toEqual(0);
     };
 
@@ -163,7 +168,6 @@ describe("entry.search", function () {
 
     done();
   });
-
 
   it("ignores entries with mixed-case Search metadata set to no", async function (done) {
     const path = "/post-mixed-search.txt";
@@ -185,7 +189,7 @@ describe("entry.search", function () {
     
     Hello, world!`;
 
-    const check = results => {
+    const check = (results) => {
       expect(results.length).toEqual(1);
       expect(results[0].id).toEqual(path);
     };
@@ -206,7 +210,7 @@ describe("entry.search", function () {
     
     Hello, world!`;
 
-    const check = results => {
+    const check = (results) => {
       expect(results.length).toEqual(1);
       expect(results[0].id).toEqual(path);
     };

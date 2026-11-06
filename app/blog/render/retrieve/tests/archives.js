@@ -205,7 +205,9 @@ describe("archives cache", function () {
     const { archives } = loadArchives();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {
-      callback([{ id: "1", title: "Original", dateStamp: Date.parse("2020-01-02") }]);
+      callback([
+        { id: "1", title: "Original", dateStamp: Date.parse("2020-01-02") },
+      ]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
@@ -221,7 +223,7 @@ describe("archives cache", function () {
   });
 
   it("shares one getAll fetch with all_entries for the same request", function (done) {
-    const { archives, getAllCached } = loadArchives();
+    const { archives } = loadArchives();
     const allEntries = require("../all_entries");
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options, callback) {

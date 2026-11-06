@@ -15,8 +15,16 @@ describe("dropbox setup revokePreviousToken", function () {
 
     require.cache[databasePath] = {
       exports: {
-        listBlogs: (_id, cb) => cb(null, others.map((o) => ({ id: o.id }))),
-        get: (id, cb) => cb(null, others.find((o) => o.id === id)),
+        listBlogs: (_id, cb) =>
+          cb(
+            null,
+            others.map((o) => ({ id: o.id }))
+          ),
+        get: (id, cb) =>
+          cb(
+            null,
+            others.find((o) => o.id === id)
+          ),
       },
     };
 

@@ -13,17 +13,25 @@ export default async (...args) => {
   }
 
   if (!status || typeof status !== "object") {
-    console.error(clfdate(), "Invalid status payload for status client request", {
-      blogID,
-      status,
-    });
+    console.error(
+      clfdate(),
+      "Invalid status payload for status client request",
+      {
+        blogID,
+        status,
+      }
+    );
     throw new Error("Invalid status");
   }
 
   if (args.length !== 2) {
-    console.error(clfdate(), "Invalid argument count for status client request", {
-      argsLength: args.length,
-    });
+    console.error(
+      clfdate(),
+      "Invalid argument count for status client request",
+      {
+        argsLength: args.length,
+      }
+    );
     throw new Error("Invalid number of arguments: expected 2");
   }
 
@@ -40,11 +48,10 @@ export default async (...args) => {
       body: JSON.stringify(status),
     });
   } catch (error) {
-    console.error(
-      clfdate(),
-      `Failed to send status for blogID ${blogID}`,
-      { status, error }
-    );
+    console.error(clfdate(), `Failed to send status for blogID ${blogID}`, {
+      status,
+      error,
+    });
     throw error;
   }
 

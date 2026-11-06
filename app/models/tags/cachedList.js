@@ -35,10 +35,14 @@ const allTagsCache = createRenderCache("allTags", {
     const tags = await new Promise((resolve, reject) => {
       // Required here: models/tags requires this module (and specs spy on
       // list)
-      require("models/tags").list(blogID, { path_prefix: pathPrefix }, (err, tags) => {
-        if (err) reject(err);
-        else resolve(tags);
-      });
+      require("models/tags").list(
+        blogID,
+        { path_prefix: pathPrefix },
+        (err, tags) => {
+          if (err) reject(err);
+          else resolve(tags);
+        }
+      );
     });
     return prepareCacheValue(compactTags(tags));
   },
@@ -63,9 +67,15 @@ async function getCachedList(blogID, options = {}) {
       : await client.hGet(blogKey.info(blogID), "cacheID");
   const key = createCacheKey(blogID, cacheID, options.pathPrefix);
 
-  const prepared = await fetchCached(allTagsCache, "allTags", options.log, key, {
-    context: { blogID, pathPrefix: options.pathPrefix },
-  });
+  const prepared = await fetchCached(
+    allTagsCache,
+    "allTags",
+    options.log,
+    key,
+    {
+      context: { blogID, pathPrefix: options.pathPrefix },
+    }
+  );
 
   return expandTags(cloneDeep(prepared.payload));
 }

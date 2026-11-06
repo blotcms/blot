@@ -80,19 +80,19 @@ news.get("/cancel", function (req, res) {
   res.render("news/cancel");
 });
 
-function confirmationKey (guid) {
+function confirmationKey(guid) {
   return "newsletter:confirm:" + guid;
 }
 
-function cancellationKey (guid) {
+function cancellationKey(guid) {
   return "newsletter:cancel:" + guid;
 }
 
-function confirmationLink (guid) {
+function confirmationLink(guid) {
   return "https://" + config.host + "/news/confirm/" + guid;
 }
 
-function cancellationLink (guid) {
+function cancellationLink(guid) {
   return "https://" + config.host + "/news/cancel/" + guid;
 }
 
@@ -172,7 +172,7 @@ news.get("/confirm/:guid", async function (req, res, next) {
     var added = await client.sAdd(listKey, email);
     var locals = {
       email: email,
-      cancel: "https://" + config.host + "/news/cancel"
+      cancel: "https://" + config.host + "/news/cancel",
     };
 
     res.locals.title = "Confirmed";
@@ -228,7 +228,7 @@ news.post("/sign-up", parse, async function (req, res, next) {
   }
 });
 
-function loadToDo (req, res, next) {
+function loadToDo(req, res, next) {
   fs.readFile(join(root, "TODO"), "utf-8", function (err, todo) {
     if (err) {
       console.log(err);

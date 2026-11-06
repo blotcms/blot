@@ -11,7 +11,10 @@ function pick(contents, name) {
 
   for (var i = 0; i < contents.length; i++) {
     if (contents[i] === name) return name;
-    if (similar === undefined && contents[i].normalize().toLowerCase() === folded)
+    if (
+      similar === undefined &&
+      contents[i].normalize().toLowerCase() === folded
+    )
       similar = contents[i];
   }
 

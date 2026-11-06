@@ -36,7 +36,10 @@ function toMilliseconds(value) {
 }
 
 function cacheControl(options) {
-  var maxAge = Math.min(Math.max(0, toMilliseconds(options.maxAge || 0)), MAX_MAXAGE);
+  var maxAge = Math.min(
+    Math.max(0, toMilliseconds(options.maxAge || 0)),
+    MAX_MAXAGE
+  );
   var value = "public, max-age=" + Math.floor(maxAge / 1000);
 
   if (options.immutable) value += ", immutable";
@@ -80,7 +83,8 @@ async function sendObject(req, res, objectKey, options, hooks) {
   res.setHeader("Accept-Ranges", "bytes");
 
   if (object.etag) res.setHeader("ETag", object.etag);
-  if (object.modified) res.setHeader("Last-Modified", object.modified.toUTCString());
+  if (object.modified)
+    res.setHeader("Last-Modified", object.modified.toUTCString());
 
   if (!hasHeader(options.headers, "cache-control")) {
     res.setHeader("Cache-Control", cacheControl(options));

@@ -4,8 +4,6 @@ var newCustomerID = process.argv[3];
 var config = require("config");
 var stripe = require("stripe")(config.stripe.secret);
 
-var get = require("../get/blog");
-
 var User = require("models/user");
 
 User.getByEmail(from, function (err, user) {

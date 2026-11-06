@@ -98,7 +98,7 @@ describe("resolveFolderLinks", function () {
     it("wraps url() in a CSS view, quoted or not", function () {
       expect(
         css(
-          'a{background:url(/a.png)} b{background:url("/b.png")} c{background:url(\'/c.png\')} d{background:url( /d.png )}'
+          "a{background:url(/a.png)} b{background:url(\"/b.png\")} c{background:url('/c.png')} d{background:url( /d.png )}"
         )
       ).toBe(
         `a{background:url(${wrap("/a.png")})} b{background:url("${wrap("/b.png")}")} c{background:url('${wrap("/c.png")}')} d{background:url( ${wrap("/d.png")} )}`
@@ -137,7 +137,8 @@ describe("resolveFolderLinks", function () {
     });
 
     it("leaves url() with mustache tags in the value alone", function () {
-      const input = "a{background:url({{image}})} b{background:url(/img/{{n}}.png)}";
+      const input =
+        "a{background:url({{image}})} b{background:url(/img/{{n}}.png)}";
       expect(css(input)).toBe(input);
     });
 
@@ -178,9 +179,9 @@ describe("resolveFolderLinks", function () {
     });
 
     it("wraps a {{blogURL}} or {{siteURL}} prefix like {{blog.url}}", function () {
-      expect(html('<link rel="preload" href="{{{blogURL}}}/_Fonts/a.woff2">')).toBe(
-        `<link rel="preload" href="${wrap("/_Fonts/a.woff2")}">`
-      );
+      expect(
+        html('<link rel="preload" href="{{{blogURL}}}/_Fonts/a.woff2">')
+      ).toBe(`<link rel="preload" href="${wrap("/_Fonts/a.woff2")}">`);
       expect(html('<img src="{{siteURL}}/a.png">')).toBe(
         `<img src="${wrap("/a.png")}">`
       );
@@ -196,7 +197,8 @@ describe("resolveFolderLinks", function () {
     });
 
     it("skips values already wrapped in {{#cdn}}", function () {
-      const input = '<img src="{{#cdn}}/a.png{{/cdn}}"><img src="{{{cdn}}}/a.png">';
+      const input =
+        '<img src="{{#cdn}}/a.png{{/cdn}}"><img src="{{{cdn}}}/a.png">';
       expect(html(input)).toBe(input);
     });
 
@@ -212,7 +214,9 @@ describe("resolveFolderLinks", function () {
     });
 
     it("wraps links inside sections", function () {
-      expect(html('{{#x}}<img src="/a.png">{{/x}}{{^x}}<img src="/b.png">{{/x}}')).toBe(
+      expect(
+        html('{{#x}}<img src="/a.png">{{/x}}{{^x}}<img src="/b.png">{{/x}}')
+      ).toBe(
         `{{#x}}<img src="${wrap("/a.png")}">{{/x}}{{^x}}<img src="${wrap("/b.png")}">{{/x}}`
       );
     });
@@ -324,7 +328,9 @@ describe("resolveFolderLinks", function () {
     });
 
     it("resolves .. in a style attribute but not in an HTML link", function () {
-      expect(html('<p style="background:url(../a.png)"><img src="../a.png">')).toBe(
+      expect(
+        html('<p style="background:url(../a.png)"><img src="../a.png">')
+      ).toBe(
         `<p style="background:url(${wrap("/a.png")})"><img src="../a.png">`
       );
     });
@@ -341,14 +347,18 @@ describe("resolveFolderLinks", function () {
     // resolves against the root (as the request-time pass did) while a miss
     // still renders exactly as written
     it("keeps relative HTML links relative, dropping a leading ./", function () {
-      expect(html('<img src="img/a.png"><img src="./b.png"><img src="../c.png">')).toBe(
+      expect(
+        html('<img src="img/a.png"><img src="./b.png"><img src="../c.png">')
+      ).toBe(
         `<img src="${wrap("img/a.png")}"><img src="${wrap("b.png")}"><img src="../c.png">`
       );
     });
 
     it("keeps relative CSS links relative, dropping a leading ./ and resolving ..", function () {
       expect(
-        css("a{background:url(img/a.png)} b{background:url(../img/b.png)} c{background:url(./c.png?v=1)}")
+        css(
+          "a{background:url(img/a.png)} b{background:url(../img/b.png)} c{background:url(./c.png?v=1)}"
+        )
       ).toBe(
         `a{background:url(${wrap("img/a.png")})} b{background:url(${wrap("/img/b.png")})} c{background:url(${wrap("c.png?v=1")})}`
       );
@@ -369,8 +379,10 @@ describe("resolveFolderLinks", function () {
     });
 
     it("copies everything outside the rewritten spans byte for byte", function () {
-      const before = '\n\t<!doctype html>\r\n  <p  class = "x" >{{{body}}}  </p>\n  <img  src = "';
-      const after = '"  alt=\'{{alt}}\' />\n<br/>{{! c }}{{#a}}\t{{.}}{{/a}}  \n';
+      const before =
+        '\n\t<!doctype html>\r\n  <p  class = "x" >{{{body}}}  </p>\n  <img  src = "';
+      const after =
+        "\"  alt='{{alt}}' />\n<br/>{{! c }}{{#a}}\t{{.}}{{/a}}  \n";
       const input = before + "/a.png" + after;
 
       expect(html(input)).toBe(before + wrap("/a.png") + after);
@@ -378,7 +390,9 @@ describe("resolveFolderLinks", function () {
 
     it("is not confused by a literal > or quote inside a mustache tag in an attribute", function () {
       const input = '<a title="{{ a > b }}" href="/a.png">x</a>';
-      expect(html(input)).toBe(`<a title="{{ a > b }}" href="${wrap("/a.png")}">x</a>`);
+      expect(html(input)).toBe(
+        `<a title="{{ a > b }}" href="${wrap("/a.png")}">x</a>`
+      );
     });
 
     it("never throws on malformed input", function () {
@@ -418,12 +432,15 @@ describe("resolveFolderLinks", function () {
 
       views.forEach((view) => {
         const resolved = html(view);
-        const data = { title: "Hello", posts: [{ url: "/one" }, { url: "/two" }] };
+        const data = {
+          title: "Hello",
+          posts: [{ url: "/one" }, { url: "/two" }],
+        };
 
         expect(resolved).not.toBe(view);
-        expect(Mustache.render(resolved, Object.assign({ cdn: identity }, data))).toBe(
-          Mustache.render(view, data)
-        );
+        expect(
+          Mustache.render(resolved, Object.assign({ cdn: identity }, data))
+        ).toBe(Mustache.render(view, data));
       });
     });
   });
@@ -485,11 +502,16 @@ describe("resolveFolderLinks", function () {
     it("returns the same content and no targets when nothing qualifies", function () {
       const input = '{{=<% %>=}}<img src="/a.png">';
 
-      expect(wrapFolderLinks(input, { viewName: "index.html", hosts })).toEqual({
-        content: input,
+      expect(wrapFolderLinks(input, { viewName: "index.html", hosts })).toEqual(
+        {
+          content: input,
+          targets: [],
+        }
+      );
+      expect(wrapFolderLinks(undefined, {})).toEqual({
+        content: undefined,
         targets: [],
       });
-      expect(wrapFolderLinks(undefined, {})).toEqual({ content: undefined, targets: [] });
     });
 
     it("finds the same targets as the template parser", function () {
@@ -499,10 +521,11 @@ describe("resolveFolderLinks", function () {
         { viewName: "index.html", hosts }
       );
 
-      expect(result.targets).toEqual(parseTemplate(result.content).retrieve.cdn);
+      expect(result.targets).toEqual(
+        parseTemplate(result.content).retrieve.cdn
+      );
     });
   });
-
 
   describe("mapFolderLocals", function () {
     const mapFolderLocals = resolveFolderLinks.mapFolderLocals;
@@ -512,7 +535,11 @@ describe("resolveFolderLinks", function () {
       const locals = { logo: "/img/a.png", title: "hello.world", n: 1 };
       const result = mapFolderLocals(locals, hosts, swap);
 
-      expect(result).toEqual({ logo: "CDN:img/a.png", title: "hello.world", n: 1 });
+      expect(result).toEqual({
+        logo: "CDN:img/a.png",
+        title: "hello.world",
+        n: 1,
+      });
       expect(result).not.toBe(locals);
       expect(locals.logo).toBe("/img/a.png");
     });

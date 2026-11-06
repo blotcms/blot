@@ -26,7 +26,12 @@ function load({ blogIDs, sync = jasmine.createSpy("sync"), run, lookupError }) {
       require: function (name) {
         if (name === "config") return {};
         if (name === "helper/clfdate") return () => "[date]";
-        if (name === "express") return { Router: function () { return router; } };
+        if (name === "express")
+          return {
+            Router: function () {
+              return router;
+            },
+          };
         if (name === "clients/google-drive/sync") return sync;
         if (name === "clients/util/followUpSync") {
           return function (followUpName, fn) {

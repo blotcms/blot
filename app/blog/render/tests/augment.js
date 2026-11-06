@@ -1,176 +1,201 @@
 describe("augment", function () {
+  require("../../tests/util/setup")();
 
-    require('../../tests/util/setup')();
+  it("adds formatDate function to entries", async function () {
+    await this.write({ path: "/first.txt", content: "Foo" });
+    await this.template(
+      {
+        "entry.html": "{{#entry}}{{#formatDate}}YYYY{{/formatDate}}{{/entry}}",
+      },
+      { locals: { name: "David" } }
+    );
 
-    it("adds formatDate function to entries", async function () {
-        
-        await this.write({path: "/first.txt", content: "Foo"});
-        await this.template({
-            'entry.html': '{{#entry}}{{#formatDate}}YYYY{{/formatDate}}{{/entry}}'
-        }, { locals: { name: 'David' } });
+    const res = await this.get("/first");
+    const body = await res.text();
 
-        const res = await this.get('/first');
-        const body = await res.text();
+    expect(res.status).toEqual(200);
+    expect(body.trim()).toEqual(new Date().getFullYear().toString());
+  });
 
-        expect(res.status).toEqual(200);
-        expect(body.trim()).toEqual(new Date().getFullYear().toString());
+  it("does not cache formatted dates as Mustache templates", async function () {
+    const Mustache = require("mustache");
+
+    await this.write({ path: "/a.txt", content: "Date: 2025-01-03\n\nA" });
+    await this.write({ path: "/b.txt", content: "Date: 2025-02-04\n\nB" });
+    await this.template({
+      "entries.html":
+        "{{#all_entries}}{{#formatDate}}MMMM D, YYYY{{/formatDate}};{{/all_entries}}",
     });
 
-    it("does not cache formatted dates as Mustache templates", async function () {
-        const Mustache = require('mustache');
+    const body = await this.text("/");
 
-        await this.write({path: "/a.txt", content: "Date: 2025-01-03\n\nA"});
-        await this.write({path: "/b.txt", content: "Date: 2025-02-04\n\nB"});
-        await this.template({
-            'entries.html': '{{#all_entries}}{{#formatDate}}MMMM D, YYYY{{/formatDate}};{{/all_entries}}'
-        });
+    expect(body).toContain("January 3, 2025;");
+    expect(body).toContain("February 4, 2025;");
+    expect(Mustache.templateCache.has("January 3, 2025")).toBe(false);
+    expect(Mustache.templateCache.has("February 4, 2025")).toBe(false);
+  });
 
-        const body = await this.text('/');
+  it("adds ratio property to thumbnails", async function () {
+    const image = await require("sharp")({
+      create: {
+        width: 100,
+        height: 200,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 },
+      },
+    })
+      .png()
+      .toBuffer();
 
-        expect(body).toContain('January 3, 2025;');
-        expect(body).toContain('February 4, 2025;');
-        expect(Mustache.templateCache.has('January 3, 2025')).toBe(false);
-        expect(Mustache.templateCache.has('February 4, 2025')).toBe(false);
+    await this.write({ path: "/_thumbnail.jpg", content: image });
+    await this.write({ path: "/first.txt", content: "![](_thumbnail.jpg)" });
+    await this.template({ "entry.html": "{{entry.thumbnail.large.ratio}}" });
+
+    const res = await this.get("/first");
+    const body = await res.text();
+
+    expect(res.status).toEqual(200);
+    // this is used to apply a padding-bottom to the thumbnail container to maintain aspect ratio
+    expect(body.trim()).toEqual("200%");
+  });
+
+  it("renders entry backlinks", async function () {
+    await this.write({ path: "/first.txt", content: "Foo" });
+    await this.write({
+      path: "/second.txt",
+      content: "Title: Second\n\n[[first]]",
     });
-    
-    it("adds ratio property to thumbnails", async function () {
-    
-        const image = await require('sharp')({
-            create: {
-                width: 100,
-                height: 200,
-                channels: 4,
-                background: { r: 255, g: 255, b: 255, alpha: 1 }
-            }
-        }).png().toBuffer();
-
-        await this.write({path: "/_thumbnail.jpg", content: image});
-        await this.write({path: "/first.txt", content: "![](_thumbnail.jpg)"});
-        await this.template({'entry.html': '{{entry.thumbnail.large.ratio}}'});
-
-        const res = await this.get('/first');
-        const body = await res.text();
-
-        expect(res.status).toEqual(200);
-        // this is used to apply a padding-bottom to the thumbnail container to maintain aspect ratio
-        expect(body.trim()).toEqual('200%');
-    });
-
-    it("renders entry backlinks", async function () {
-        
-        await this.write({path: "/first.txt", content: "Foo"});
-        await this.write({path: "/second.txt", content: "Title: Second\n\n[[first]]"});
-        await this.template({
-            'entry.html': '{{#entry}}{{#backlinks}}{{title}}{{/backlinks}}{{/entry}}'
-        });
-
-        const res = await this.get('/first');
-        const body = await res.text();
-
-        expect(res.status).toEqual(200);
-        expect(body.trim()).toEqual('Second');
+    await this.template({
+      "entry.html": "{{#entry}}{{#backlinks}}{{title}}{{/backlinks}}{{/entry}}",
     });
 
+    const res = await this.get("/first");
+    const body = await res.text();
 
-    it("renders each backlink on a catalog list, with a shared target", async function () {
-        await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
-        await this.write({path: "/a.txt", content: "Title: A\n\n[[target]]"});
-        await this.write({path: "/b.txt", content: "Title: B\n\n[[target]]"});
-        await this.write({path: "/c.txt", content: "Title: C\n\n[[target]] [[a]]"});
-        await this.template({
-            'entries.html': '{{#all_entries}}{{title}}=[{{#backlinks}}{{title}},{{/backlinks}}];{{/all_entries}}'
-        });
+    expect(res.status).toEqual(200);
+    expect(body.trim()).toEqual("Second");
+  });
 
-        const body = await this.text('/');
-
-        const targetLinks = body.match(/Target=\[([ABC,]*)\];/)[1].split(',').filter(Boolean);
-        expect(targetLinks.sort()).toEqual(['A', 'B', 'C']);
-        expect(body).toContain('A=[C,];');
-        expect(body).toContain('B=[];');
+  it("renders each backlink on a catalog list, with a shared target", async function () {
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nTarget body",
+    });
+    await this.write({ path: "/a.txt", content: "Title: A\n\n[[target]]" });
+    await this.write({ path: "/b.txt", content: "Title: B\n\n[[target]]" });
+    await this.write({
+      path: "/c.txt",
+      content: "Title: C\n\n[[target]] [[a]]",
+    });
+    await this.template({
+      "entries.html":
+        "{{#all_entries}}{{title}}=[{{#backlinks}}{{title}},{{/backlinks}}];{{/all_entries}}",
     });
 
-    it("keeps the html of a backlinked entry when the template reads it", async function () {
-        await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
-        await this.write({path: "/a.txt", content: "Title: A\n\nLinked from A: [[target]]"});
-        await this.template({
-            'entries.html': '{{#all_entries}}{{#backlinks}}{{{html}}}{{/backlinks}}{{/all_entries}}'
-        });
+    const body = await this.text("/");
 
-        const body = await this.text('/');
+    const targetLinks = body
+      .match(/Target=\[([ABC,]*)\];/)[1]
+      .split(",")
+      .filter(Boolean);
+    expect(targetLinks.sort()).toEqual(["A", "B", "C"]);
+    expect(body).toContain("A=[C,];");
+    expect(body).toContain("B=[];");
+  });
 
-        expect(body).toContain('Linked from A');
+  it("keeps the html of a backlinked entry when the template reads it", async function () {
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nTarget body",
+    });
+    await this.write({
+      path: "/a.txt",
+      content: "Title: A\n\nLinked from A: [[target]]",
+    });
+    await this.template({
+      "entries.html":
+        "{{#all_entries}}{{#backlinks}}{{{html}}}{{/backlinks}}{{/all_entries}}",
     });
 
-    it("drops the html of a backlinked entry when the template never reads it", async function () {
-        await this.write({path: "/target.txt", content: "Title: Target\n\nTarget body"});
-        await this.write({path: "/a.txt", content: "Title: A\n\nLinked from A: [[target]]"});
-        await this.template({
-            'entries.html': '{{#all_entries}}{{title}}:{{#backlinks}}{{title}} {{{url}}}{{/backlinks}};{{/all_entries}}'
-        });
+    const body = await this.text("/");
 
-        const locals = await (await this.get('/?json=1')).json();
-        const target = locals.all_entries.find((entry) => entry.title === 'Target');
+    expect(body).toContain("Linked from A");
+  });
 
-        expect(target.backlinks.length).toEqual(1);
-        expect(target.backlinks[0].title).toEqual('A');
-        expect(target.backlinks[0].url).toEqual('/a');
-        expect(target.backlinks[0].html).toBeUndefined();
-        expect(target.backlinks[0].body).toBeUndefined();
-
-        const body = await this.text('/');
-        expect(body).toContain('Target:A /a;');
+  it("drops the html of a backlinked entry when the template never reads it", async function () {
+    await this.write({
+      path: "/target.txt",
+      content: "Title: Target\n\nTarget body",
+    });
+    await this.write({
+      path: "/a.txt",
+      content: "Title: A\n\nLinked from A: [[target]]",
+    });
+    await this.template({
+      "entries.html":
+        "{{#all_entries}}{{title}}:{{#backlinks}}{{title}} {{{url}}}{{/backlinks}};{{/all_entries}}",
     });
 
-    it("creates lowercase metadata aliases for rendering", async function () {
+    const locals = await (await this.get("/?json=1")).json();
+    const target = locals.all_entries.find((entry) => entry.title === "Target");
 
-        await this.write({
-            path: "/mixed-case-metadata.txt",
-            content: "Apple: Honeycrisp\n\nBody"
-        });
+    expect(target.backlinks.length).toEqual(1);
+    expect(target.backlinks[0].title).toEqual("A");
+    expect(target.backlinks[0].url).toEqual("/a");
+    expect(target.backlinks[0].html).toBeUndefined();
+    expect(target.backlinks[0].body).toBeUndefined();
 
-        await this.template({
-            'entry.html': '{{entry.metadata.apple}}'
-        });
+    const body = await this.text("/");
+    expect(body).toContain("Target:A /a;");
+  });
 
-        const res = await this.get('/mixed-case-metadata');
-        const body = await res.text();
-
-        expect(res.status).toEqual(200);
-        expect(body.trim()).toEqual('Honeycrisp');
+  it("creates lowercase metadata aliases for rendering", async function () {
+    await this.write({
+      path: "/mixed-case-metadata.txt",
+      content: "Apple: Honeycrisp\n\nBody",
     });
 
-    it("preserves explicit lowercase metadata values", async function () {
-
-        await this.write({
-            path: "/metadata-precedence.txt",
-            content: "Apple: Honeycrisp\napple: Gala\n\nBody"
-        });
-
-        await this.template({
-            'entry.html': '{{entry.metadata.apple}}'
-        });
-
-        const res = await this.get('/metadata-precedence');
-        const body = await res.text();
-
-        expect(res.status).toEqual(200);
-        expect(body.trim()).toEqual('Gala');
+    await this.template({
+      "entry.html": "{{entry.metadata.apple}}",
     });
-    it("encodes tag slugs when augmenting entry tags", async function () {
 
-        await this.write({
-            path: "/slash-tag.txt",
-            content: "Title: Slash Tag\nTags: Design/UI\n\nBody"
-        });
+    const res = await this.get("/mixed-case-metadata");
+    const body = await res.text();
 
-        await this.template({
-            'entry.html': '{{#entry.tags}}{{slug}}{{/entry.tags}}'
-        });
+    expect(res.status).toEqual(200);
+    expect(body.trim()).toEqual("Honeycrisp");
+  });
 
-        const res = await this.get('/slash-tag');
-        const body = await res.text();
-
-        expect(res.status).toEqual(200);
-        expect(body.trim()).toEqual('design%2Fui');
+  it("preserves explicit lowercase metadata values", async function () {
+    await this.write({
+      path: "/metadata-precedence.txt",
+      content: "Apple: Honeycrisp\napple: Gala\n\nBody",
     });
+
+    await this.template({
+      "entry.html": "{{entry.metadata.apple}}",
+    });
+
+    const res = await this.get("/metadata-precedence");
+    const body = await res.text();
+
+    expect(res.status).toEqual(200);
+    expect(body.trim()).toEqual("Gala");
+  });
+  it("encodes tag slugs when augmenting entry tags", async function () {
+    await this.write({
+      path: "/slash-tag.txt",
+      content: "Title: Slash Tag\nTags: Design/UI\n\nBody",
+    });
+
+    await this.template({
+      "entry.html": "{{#entry.tags}}{{slug}}{{/entry.tags}}",
+    });
+
+    const res = await this.get("/slash-tag");
+    const body = await res.text();
+
+    expect(res.status).toEqual(200);
+    expect(body.trim()).toEqual("design%2Fui");
+  });
 });

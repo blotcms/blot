@@ -24,7 +24,10 @@ module.exports = async (id, updates) => {
   if (updates.tags) {
     for (const tag of updates.tags) {
       multi.sAdd(keys.all_tags, tag);
-      multi.zAdd(keys.by_tag(tag), { score: parseInt(created_at, 10), value: id });
+      multi.zAdd(keys.by_tag(tag), {
+        score: parseInt(created_at, 10),
+        value: id,
+      });
     }
 
     for (const tag of existing.tags) {

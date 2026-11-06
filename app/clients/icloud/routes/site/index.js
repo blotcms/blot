@@ -6,7 +6,7 @@ const notificationCap = require("../../util/notificationCap");
 const maxFileSize = config.icloud.maxFileSize; // Maximum file size for iCloud uploads in bytes
 const limit = `${maxFileSize / 1000000}mb`; // limit must be in the format '5mb'
 
-const { resyncRecentlySynced } = require("../../init");
+require("../../init");
 const site = new express.Router();
 
 site.use(require("./middleware/authorize"));

@@ -18,7 +18,9 @@ async function main([packDir, scratchDir, oid, maxSize]) {
   const store = createMemoryStore();
   const packs = [];
 
-  for (const file of fs.readdirSync(packDir).filter((f) => f.endsWith(".pack"))) {
+  for (const file of fs
+    .readdirSync(packDir)
+    .filter((f) => f.endsWith(".pack"))) {
     const name = file.slice(0, -".pack".length);
     const pack = fs.readFileSync(path.join(packDir, file));
     const idx = fs.readFileSync(path.join(packDir, name + ".idx"));
@@ -28,8 +30,16 @@ async function main([packDir, scratchDir, oid, maxSize]) {
     packs.push({ name, size: pack.length, idxSize: idx.length });
   }
 
-  const cache = createCache({ dir: scratchDir, maxBytes: 4 * 1024 * 1024 * 1024 });
-  const reader = createReader({ store, packs, scratch: cache, maxSize: Number(maxSize) });
+  const cache = createCache({
+    dir: scratchDir,
+    maxBytes: 4 * 1024 * 1024 * 1024,
+  });
+  const reader = createReader({
+    store,
+    packs,
+    scratch: cache,
+    maxSize: Number(maxSize),
+  });
   const held = () => {
     const usage = process.memoryUsage();
     return usage.heapUsed + usage.arrayBuffers;

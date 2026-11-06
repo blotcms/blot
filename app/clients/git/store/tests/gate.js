@@ -53,7 +53,9 @@ describe("git store gate", function () {
     fs.writeFileSync(path.join(bin, "git"), SCRIPT, { mode: 0o755 });
 
     saved = { PATH: process.env.PATH };
-    process.env.STORE_SPY_REAL = execFileSync("sh", ["-c", "command -v git"]).toString().trim();
+    process.env.STORE_SPY_REAL = execFileSync("sh", ["-c", "command -v git"])
+      .toString()
+      .trim();
     process.env.STORE_SPY_LOG = log;
     process.env.PATH = bin + path.delimiter + process.env.PATH;
   });
@@ -85,7 +87,11 @@ describe("git store gate", function () {
   }
 
   function lines() {
-    return fs.readFileSync(log, "utf8").split("\n").filter(Boolean).map((line) => line.split(" ")[0]);
+    return fs
+      .readFileSync(log, "utf8")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => line.split(" ")[0]);
   }
 
   // Ignoring the spec's own git (the client's push and the fixture), every
@@ -120,31 +126,54 @@ describe("git store gate", function () {
     fx.buildFixture(work, { commits: 3, large: false });
 
     const store = createMemoryStore();
-    const cache = createCache({ dir: path.join(dir, "cache"), maxBytes: 64 * MiB });
+    const cache = createCache({
+      dir: path.join(dir, "cache"),
+      maxBytes: 64 * MiB,
+    });
     const pushes = serialGate();
-    const server = await createReceiveServer({ store, cache, lock: createLock(), gate: pushes });
+    const server = await createReceiveServer({
+      store,
+      cache,
+      lock: createLock(),
+      gate: pushes,
+    });
 
     try {
       for (let i = 0; i < 3; i++) {
-        fs.writeFileSync(path.join(work, "posts", "gated-" + i + ".md"), "Gated push " + i + "\n");
+        fs.writeFileSync(
+          path.join(work, "posts", "gated-" + i + ".md"),
+          "Gated push " + i + "\n"
+        );
         fx.git(work, ["add", "-A"]);
         fx.git(work, ["commit", "-q", "-m", "Gated push " + i]);
 
         // The client's own git runs outside the gate: only lines between a
         // gate and its close are the store's
         const result = await push(work, ["-q", server.url, "master"]);
-        if (result.code !== 0) throw new Error("git push failed: " + result.stderr);
+        if (result.code !== 0)
+          throw new Error("git push failed: " + result.stderr);
       }
     } finally {
       await server.close();
     }
 
-    expect(server.results.map((result) => result.outcome)).toEqual(["ok", "ok", "ok"]);
+    expect(server.results.map((result) => result.outcome)).toEqual([
+      "ok",
+      "ok",
+      "ok",
+    ]);
     expect(pushes.calls).toBeGreaterThanOrEqual(3 * 2);
 
     fs.writeFileSync(log, "");
     const background = serialGate();
-    const result = await compact({ store, cache, lock: createLock(), gate: background, keepRecent: 0, minPieces: 2 });
+    const result = await compact({
+      store,
+      cache,
+      lock: createLock(),
+      gate: background,
+      keepRecent: 0,
+      minPieces: 2,
+    });
 
     expect(result.outcome).toBe("compacted");
     expect(background.calls).toBeGreaterThanOrEqual(2);
@@ -152,17 +181,25 @@ describe("git store gate", function () {
 
     // And the result is a repository git agrees with
     const current = await manifest.read(store);
-    expect(current.refs["refs/heads/master"]).toBe(fx.text(work, ["rev-parse", "HEAD"]));
+    expect(current.refs["refs/heads/master"]).toBe(
+      fx.text(work, ["rev-parse", "HEAD"])
+    );
   });
 
   it("starts nothing until the gate lets it, and passes on what the gate does", async function () {
-    const children = createChildren((start) => Promise.reject(new Error("no room")));
+    const children = createChildren((start) =>
+      Promise.reject(new Error("no room"))
+    );
     const { git } = require("../compact");
 
-    const failed = await git.runGit(children, ["init", "-q", "--bare", path.join(dir, "never.git")], { gitDir: path.join(dir, "never.git") }).then(
-      () => null,
-      (err) => err.message
-    );
+    const failed = await git
+      .runGit(children, ["init", "-q", "--bare", path.join(dir, "never.git")], {
+        gitDir: path.join(dir, "never.git"),
+      })
+      .then(
+        () => null,
+        (err) => err.message
+      );
 
     expect(failed).toBe("no room");
 
@@ -178,6 +215,8 @@ describe("git store gate", function () {
     await git.runGit(children, ["init", "-q", "--bare", gitDir], { gitDir });
 
     expect(lines()).toEqual(["start", "end"]);
-    expect(() => createChildren("not a function")).toThrowError(/gate must be a function/);
+    expect(() => createChildren("not a function")).toThrowError(
+      /gate must be a function/
+    );
   });
 });

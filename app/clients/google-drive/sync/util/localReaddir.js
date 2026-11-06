@@ -15,7 +15,9 @@ const localreaddir = async (blogID, dir) => {
     isDirectory,
     size,
     modified,
-    modifiedTime: isDirectory ? undefined : new Date(Math.round(modified)).toISOString(),
+    modifiedTime: isDirectory
+      ? undefined
+      : new Date(Math.round(modified)).toISOString(),
   }));
 };
 

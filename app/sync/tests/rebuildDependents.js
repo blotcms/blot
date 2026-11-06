@@ -28,7 +28,9 @@ describe("rebuildDependents", function () {
     });
 
     spyOn(client, "sMembers").and.callFake(function (key) {
-      return Promise.resolve(key.indexOf("template_dependents") > -1 ? [] : paths);
+      return Promise.resolve(
+        key.indexOf("template_dependents") > -1 ? [] : paths
+      );
     });
 
     spyOn(Entry, "get").and.callFake(function (_, __, callback) {

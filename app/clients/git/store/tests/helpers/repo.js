@@ -44,14 +44,19 @@ function makeRepo() {
       input,
       maxBuffer: 1 << 30,
     });
-    if (result.status !== 0) throw new Error("git " + args.join(" ") + " failed: " + result.stderr.toString());
+    if (result.status !== 0)
+      throw new Error(
+        "git " + args.join(" ") + " failed: " + result.stderr.toString()
+      );
     return result.stdout;
   }
 
   const text = (args, input, env) => git(args, input, env).toString().trim();
 
   function commitTree(tree) {
-    const commit = text(["commit-tree", tree, "-m", "commit"].concat(head ? ["-p", head] : []));
+    const commit = text(
+      ["commit-tree", tree, "-m", "commit"].concat(head ? ["-p", head] : [])
+    );
     head = commit;
     return commit;
   }
@@ -70,7 +75,11 @@ function makeRepo() {
       const change = changes[name];
 
       if (change === null) {
-        git(["update-index", "--force-remove", "-z", "--stdin"], name + "\0", env);
+        git(
+          ["update-index", "--force-remove", "-z", "--stdin"],
+          name + "\0",
+          env
+        );
         continue;
       }
 
@@ -78,7 +87,11 @@ function makeRepo() {
       const contents = change.contents === undefined ? change : change.contents;
       const oid = text(["hash-object", "-w", "--stdin"], contents);
 
-      git(["update-index", "--add", "--replace", "-z", "--index-info"], mode + " " + oid + "\t" + name + "\0", env);
+      git(
+        ["update-index", "--add", "--replace", "-z", "--index-info"],
+        mode + " " + oid + "\t" + name + "\0",
+        env
+      );
     }
 
     return commitTree(text(["write-tree"], "", env));
@@ -94,12 +107,26 @@ function makeRepo() {
 
       for (const name of Object.keys(entries)) {
         const entry = entries[name];
-        const isTree = typeof entry === "object" && !Buffer.isBuffer(entry) && entry.contents === undefined && !entry.oid;
-        const mode = isTree ? "040000" : (entry.mode || "100644").padStart(6, "0");
+        const isTree =
+          typeof entry === "object" &&
+          !Buffer.isBuffer(entry) &&
+          entry.contents === undefined &&
+          !entry.oid;
+        const mode = isTree
+          ? "040000"
+          : (entry.mode || "100644").padStart(6, "0");
         const oid = isTree
           ? build(entry)
-          : entry.oid || text(["hash-object", "-w", "--stdin"], entry.contents === undefined ? entry : entry.contents);
-        const type = isTree ? " tree " : mode === "160000" ? " commit " : " blob ";
+          : entry.oid ||
+            text(
+              ["hash-object", "-w", "--stdin"],
+              entry.contents === undefined ? entry : entry.contents
+            );
+        const type = isTree
+          ? " tree "
+          : mode === "160000"
+            ? " commit "
+            : " blob ";
 
         records.push(Buffer.from(mode + type + oid + "\t"));
         records.push(Buffer.from(name, "latin1"));
@@ -117,14 +144,26 @@ function makeRepo() {
 
   // Packs everything into one pack (or with `refDeltas`, with deltas which name
   // their base by ID), uploads it, and returns a reader over it
-  async function readerOf({ refDeltas = false, cache = null, maxSize, scratch = null, store = createMemoryStore() } = {}) {
+  async function readerOf({
+    refDeltas = false,
+    cache = null,
+    maxSize,
+    scratch = null,
+    store = createMemoryStore(),
+  } = {}) {
     text(["update-ref", "refs/heads/master", head]);
     fx.repackAll(dir, { refDeltas });
 
     const entries = [];
-    for (const pack of readPacks()) entries.push(await fx.upload(store, pack, 0));
+    for (const pack of readPacks())
+      entries.push(await fx.upload(store, pack, 0));
 
-    return { store, reader: createReader({ store, cache, packs: entries, maxSize, scratch }), entries, packs: readPacks() };
+    return {
+      store,
+      reader: createReader({ store, cache, packs: entries, maxSize, scratch }),
+      entries,
+      packs: readPacks(),
+    };
   }
 
   function readPacks() {
@@ -145,7 +184,16 @@ function makeRepo() {
   // What `git diff-tree -r` says changed, as the same objects treediff yields
   // (without `valid`), in path order. Either side may be null.
   function diffTree(a, b) {
-    const out = git(["diff-tree", "-r", "-z", "--raw", "--no-renames", "--no-abbrev", a || EMPTY_TREE, b || EMPTY_TREE]);
+    const out = git([
+      "diff-tree",
+      "-r",
+      "-z",
+      "--raw",
+      "--no-renames",
+      "--no-abbrev",
+      a || EMPTY_TREE,
+      b || EMPTY_TREE,
+    ]);
     const fields = [];
     let start = 0;
 
@@ -174,7 +222,10 @@ function makeRepo() {
   // with mode "755" or "644" (a link is { link: target })
   function checkout(commitId) {
     const work = fs.mkdtempSync(path.join(root, "checkout-"));
-    const env = { GIT_INDEX_FILE: path.join(work, ".index"), GIT_WORK_TREE: work };
+    const env = {
+      GIT_INDEX_FILE: path.join(work, ".index"),
+      GIT_WORK_TREE: work,
+    };
 
     git(["read-tree", commitId], "", env);
     git(["checkout-index", "-a", "-f"], "", env);
@@ -187,7 +238,18 @@ function makeRepo() {
     fx.remove(root);
   }
 
-  return { dir, root, git: text, commit, commitExactly, treeOf, reader: readerOf, diffTree, checkout, remove };
+  return {
+    dir,
+    root,
+    git: text,
+    commit,
+    commitExactly,
+    treeOf,
+    reader: readerOf,
+    diffTree,
+    checkout,
+    remove,
+  };
 }
 
 function byPath(x, y) {
@@ -210,7 +272,10 @@ function listFiles(directory, prefix = "") {
     } else if (stat.isSymbolicLink()) {
       found[prefix + name] = { link: fs.readlinkSync(file) };
     } else {
-      found[prefix + name] = { contents: fs.readFileSync(file), mode: stat.mode & 0o111 ? "755" : "644" };
+      found[prefix + name] = {
+        contents: fs.readFileSync(file),
+        mode: stat.mode & 0o111 ? "755" : "644",
+      };
     }
   }
 

@@ -6,14 +6,14 @@ const getAllBlogIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
 const getEntriesPage = promisify(Entries.getPage);
 
-function shuffle (items) {
+function shuffle(items) {
   for (let i = items.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
     [items[i], items[j]] = [items[j], items[i]];
   }
 }
 
-async function main (callback) {
+async function main(callback) {
   try {
     const blogIDs = await getAllBlogIDs();
     const blogs_with_new_posts = [];
@@ -27,7 +27,7 @@ async function main (callback) {
         // Limiting to the newest 10 entries per blog is fine for this report.
         const entries = await getEntriesPage(blogID, {
           pageNumber: 1,
-          pageSize: 10
+          pageSize: 10,
         });
 
         if (!entries || !entries.length) continue;
@@ -42,7 +42,7 @@ async function main (callback) {
           .map(function (entry) {
             return {
               title: entry.title,
-              link: extendedBlog.url + entry.url
+              link: extendedBlog.url + entry.url,
             };
           });
 
@@ -51,7 +51,7 @@ async function main (callback) {
         blogs_with_new_posts.push({
           label: extendedBlog.pretty.label,
           url: extendedBlog.url,
-          new_posts
+          new_posts,
         });
       } catch (err) {
         continue;

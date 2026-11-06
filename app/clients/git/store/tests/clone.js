@@ -7,7 +7,12 @@ const { PassThrough, Writable } = require("stream");
 const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
 const faults = require("./helpers/faults");
-const { startServer, runGit, manifestOf, collect } = require("./helpers/upload-server");
+const {
+  startServer,
+  runGit,
+  manifestOf,
+  collect,
+} = require("./helpers/upload-server");
 const createMemoryStore = require("../objectStore/memory");
 const { clone, serve, createLimiter, plan } = require("../clone");
 const { parseHeader } = require("../pack");
@@ -17,7 +22,11 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function objectIds(dir) {
   return fx
-    .text(dir, ["cat-file", "--batch-all-objects", "--batch-check=%(objectname)"])
+    .text(dir, [
+      "cat-file",
+      "--batch-all-objects",
+      "--batch-check=%(objectname)",
+    ])
     .split("\n")
     .filter(Boolean)
     .sort();
@@ -47,8 +56,14 @@ describe("git store clone", function () {
   async function repository(packs, { wrap = (store) => store } = {}) {
     const memory = createMemoryStore();
     const entries = [];
-    for (const pack of packs) entries.push(await fx.upload(memory, pack, pack.pack.readUInt32BE(8)));
-    return { memory, store: wrap(memory), manifest: manifestOf(entries, fixture.head, tags()), entries };
+    for (const pack of packs)
+      entries.push(await fx.upload(memory, pack, pack.pack.readUInt32BE(8)));
+    return {
+      memory,
+      store: wrap(memory),
+      manifest: manifestOf(entries, fixture.head, tags()),
+      entries,
+    };
   }
 
   // The packs are listed oldest first: one pack with everything
@@ -63,7 +78,13 @@ describe("git store clone", function () {
   // them moves what follows (the 3 MB blob is only in the first pack).
   function overlapping() {
     const first = fx.indexPack(fx.packRevs(fixture.dir, [fixture.commits[19]]));
-    const second = fx.indexPack(fx.packRevs(fixture.dir, [fixture.head, fixture.tag], [fixture.commits[11]]));
+    const second = fx.indexPack(
+      fx.packRevs(
+        fixture.dir,
+        [fixture.head, fixture.tag],
+        [fixture.commits[11]]
+      )
+    );
     return [first, second];
   }
 
@@ -72,8 +93,21 @@ describe("git store clone", function () {
   // objects an older pack already holds
   function pushed() {
     const first = fx.indexPack(fx.packRevs(fixture.dir, [fixture.commits[9]]));
-    const second = fx.fixThin(fx.packRevs(fixture.dir, [fixture.commits[19]], [fixture.commits[9]], { thin: true }), [first]);
-    const third = fx.fixThin(fx.packRevs(fixture.dir, [fixture.head, fixture.tag], [fixture.commits[19]], { thin: true }), [first, second]);
+    const second = fx.fixThin(
+      fx.packRevs(fixture.dir, [fixture.commits[19]], [fixture.commits[9]], {
+        thin: true,
+      }),
+      [first]
+    );
+    const third = fx.fixThin(
+      fx.packRevs(
+        fixture.dir,
+        [fixture.head, fixture.tag],
+        [fixture.commits[19]],
+        { thin: true }
+      ),
+      [first, second]
+    );
     return [first, second, third];
   }
 
@@ -86,15 +120,26 @@ describe("git store clone", function () {
   function forcedChanges() {
     fx.repackAll(fixture.dir);
     const [first] = fx.readPacks(fixture.dir);
-    const entries = fx.listEntries(first).map((entry) => ({ ...entry, base: baseOffsetOf(first.pack, entry.offset) }));
+    const entries = fx.listEntries(first).map((entry) => ({
+      ...entry,
+      base: baseOffsetOf(first.pack, entry.offset),
+    }));
 
     const deltas = entries.filter((e) => e.base !== null);
     const base = entries.find((e) => e.offset === deltas[0].base);
-    const between = entries.find((e) => e.base === null && e !== base && deltas.some((d) => d.base < e.offset && e.offset < d.offset));
-    if (!base || !between) throw new Error("The fixture has no delta to rewrite");
+    const between = entries.find(
+      (e) =>
+        e.base === null &&
+        e !== base &&
+        deltas.some((d) => d.base < e.offset && e.offset < d.offset)
+    );
+    if (!base || !between)
+      throw new Error("The fixture has no delta to rewrite");
 
     const input = [base.oid, between.oid].join("\n") + "\n";
-    const second = fx.indexPack(fx.git(fixture.dir, ["pack-objects", "--stdout", "-q"], input));
+    const second = fx.indexPack(
+      fx.git(fixture.dir, ["pack-objects", "--stdout", "-q"], input)
+    );
     return [first, second];
   }
 
@@ -120,7 +165,12 @@ describe("git store clone", function () {
     let result;
     let error;
     try {
-      result = await clone({ store: repo.store, manifest: repo.manifest, out, ...options });
+      result = await clone({
+        store: repo.store,
+        manifest: repo.manifest,
+        out,
+        ...options,
+      });
     } catch (err) {
       error = err;
       // a failure before anything was written leaves the stream to the host
@@ -144,11 +194,21 @@ describe("git store clone", function () {
   }
 
   async function cloneWithGit(repo, options = {}) {
-    const server = await startServer({ store: repo.store, manifest: () => repo.manifest, ...options });
+    const server = await startServer({
+      store: repo.store,
+      manifest: () => repo.manifest,
+      ...options,
+    });
     const dir = workDir + "/clone-" + ++counter;
 
     try {
-      const cloned = await runGit(["-c", "transfer.fsckObjects=true", "clone", server.url, dir]);
+      const cloned = await runGit([
+        "-c",
+        "transfer.fsckObjects=true",
+        "clone",
+        server.url,
+        dir,
+      ]);
       return { server, dir, cloned };
     } finally {
       await server.close();
@@ -162,7 +222,11 @@ describe("git store clone", function () {
     expect(cloned.stderr).not.toMatch(/error|fatal/i);
     expect(cloned.code).toBe(0);
     expect((await runGit(["fsck", "--strict"], { cwd: dir })).code).toBe(0);
-    expect((await runGit(["rev-parse", "HEAD", "v1"], { cwd: dir })).stdout.trim().split("\n")).toEqual([fixture.head, fixture.tag]);
+    expect(
+      (await runGit(["rev-parse", "HEAD", "v1"], { cwd: dir })).stdout
+        .trim()
+        .split("\n")
+    ).toEqual([fixture.head, fixture.tag]);
     expect(objectIds(dir)).toEqual(origin);
     return server.results[0];
   }
@@ -187,13 +251,23 @@ describe("git store clone", function () {
     it("writes a pack git indexes, with the header's count and a SHA-1 trailer", async function () {
       const { pack, result } = await direct(repo);
       expectCompletePack(pack, result);
-      expect(crypto.createHash("sha1").update(pack.subarray(0, pack.length - 20)).digest().equals(pack.subarray(pack.length - 20))).toBe(true);
+      expect(
+        crypto
+          .createHash("sha1")
+          .update(pack.subarray(0, pack.length - 20))
+          .digest()
+          .equals(pack.subarray(pack.length - 20))
+      ).toBe(true);
     });
 
     it("copies the entries as they are stored, byte for byte", async function () {
       const { pack } = await direct(repo);
       const stored = fx.readPacks(fixture.dir)[0].pack;
-      expect(pack.subarray(12, pack.length - 20).equals(stored.subarray(12, stored.length - 20))).toBe(true);
+      expect(
+        pack
+          .subarray(12, pack.length - 20)
+          .equals(stored.subarray(12, stored.length - 20))
+      ).toBe(true);
     });
 
     it("reads each chunk once, and neither the index nor the object's size", async function () {
@@ -202,10 +276,15 @@ describe("git store clone", function () {
       const pack = fx.readPacks(fixture.dir)[0];
       const entry = await fx.upload(memory, pack, pack.pack.readUInt32BE(8));
 
-      const { result } = await direct({ store: memory, manifest: manifestOf([entry], fixture.head, tags()) }, { chunkSize });
+      const { result } = await direct(
+        { store: memory, manifest: manifestOf([entry], fixture.head, tags()) },
+        { chunkSize }
+      );
       expect(result.objects).toBe(origin.length);
       expect(memory.stats.reads).toBe(Math.ceil(entry.size / chunkSize));
-      expect(memory.stats.heads + memory.stats.gets + memory.stats.lists).toBe(0);
+      expect(memory.stats.heads + memory.stats.gets + memory.stats.lists).toBe(
+        0
+      );
     });
 
     it("never writes a piece bigger than a chunk, though one object is 3 MB", async function () {
@@ -216,7 +295,12 @@ describe("git store clone", function () {
           callback();
         },
       });
-      const result = await clone({ store: repo.store, manifest: repo.manifest, out, chunkSize: 64 * 1024 });
+      const result = await clone({
+        store: repo.store,
+        manifest: repo.manifest,
+        out,
+        chunkSize: 64 * 1024,
+      });
 
       expect(result.objects).toBe(origin.length);
       expect(Math.max(...sizes)).toBeLessThanOrEqual(64 * 1024);
@@ -268,7 +352,10 @@ describe("git store clone", function () {
 
     it("finds duplicates in a pack whose index keeps its offsets in the table of 8-byte offsets", async function () {
       const [first, second] = overlapping();
-      const wide = { ...first, idx: fx.buildIdx(fx.listEntries(first), first.pack, { largeFrom: 0 }) };
+      const wide = {
+        ...first,
+        idx: fx.buildIdx(fx.listEntries(first), first.pack, { largeFrom: 0 }),
+      };
       const repo = await repository([wide, second]);
       const { pack, result } = await direct(repo, { chunkSize: 64 * 1024 });
 
@@ -293,15 +380,22 @@ describe("git store clone", function () {
     });
 
     it("keeps the newest copy of an object, and skips the others", async function () {
-      const run = { signal: new AbortController().signal, chunkSize: 1024 * 1024 };
+      const run = {
+        signal: new AbortController().signal,
+        chunkSize: 1024 * 1024,
+      };
 
       const two = await repository(overlapping());
-      const skips = (await plan({ ...run, store: two.store }, two.manifest.packs)).skips;
+      const skips = (
+        await plan({ ...run, store: two.store }, two.manifest.packs)
+      ).skips;
       expect(skips[0].count).toBeGreaterThan(50);
       expect(skips[1].count).toBe(0);
 
       const three = await repository(pushed());
-      const more = (await plan({ ...run, store: three.store }, three.manifest.packs)).skips;
+      const more = (
+        await plan({ ...run, store: three.store }, three.manifest.packs)
+      ).skips;
       expect(more[2].count).toBe(0);
       expect(more[0].count + more[1].count).toBeGreaterThan(0);
     });
@@ -314,8 +408,13 @@ describe("git store clone", function () {
 
       await direct(repo, { chunkSize });
 
-      const chunks = repo.entries.reduce((n, e) => n + Math.ceil(e.size / chunkSize), 0);
-      expect(repo.memory.stats.reads - before).toBeLessThanOrEqual(chunks + 2 * packs.length);
+      const chunks = repo.entries.reduce(
+        (n, e) => n + Math.ceil(e.size / chunkSize),
+        0
+      );
+      expect(repo.memory.stats.reads - before).toBeLessThanOrEqual(
+        chunks + 2 * packs.length
+      );
       expect(repo.memory.stats.heads).toBe(0);
     });
 
@@ -327,10 +426,21 @@ describe("git store clone", function () {
       const entries = [];
       for (let i = 0; i < 40; i++) {
         const name = "pack-" + String(i).padStart(40, "0");
-        entries.push(await fx.upload(memory, { ...first, name }, first.pack.readUInt32BE(8)));
+        entries.push(
+          await fx.upload(
+            memory,
+            { ...first, name },
+            first.pack.readUInt32BE(8)
+          )
+        );
       }
 
-      const run = { store: memory, signal: new AbortController().signal, chunkSize: 1024 * 1024, mergeBudget: 1 };
+      const run = {
+        store: memory,
+        signal: new AbortController().signal,
+        chunkSize: 1024 * 1024,
+        mergeBudget: 1,
+      };
       const thePlan = await plan(run, entries);
       const each = first.pack.readUInt32BE(8);
       expect(thePlan.total).toBe(each);
@@ -341,13 +451,18 @@ describe("git store clone", function () {
 
   describe("an empty repository", function () {
     it("is cloned by git as an empty repository", async function () {
-      const repo = { store: createMemoryStore(), manifest: manifestOf([], null) };
+      const repo = {
+        store: createMemoryStore(),
+        manifest: manifestOf([], null),
+      };
       const { server, dir, cloned } = await cloneWithGit(repo);
 
       expect(cloned.code).toBe(0);
       expect(cloned.stderr).toMatch(/empty repository/);
       expect(server.results).toEqual([]);
-      expect((await runGit(["rev-parse", "--verify", "HEAD"], { cwd: dir })).code).not.toBe(0);
+      expect(
+        (await runGit(["rev-parse", "--verify", "HEAD"], { cwd: dir })).code
+      ).not.toBe(0);
     });
   });
 
@@ -365,37 +480,58 @@ describe("git store clone", function () {
     function expectNotAPack(bytes) {
       // either nothing was sent, or what was sent lacks a checksum which fits
       if (!bytes.length) return;
-      const checksum = crypto.createHash("sha1").update(bytes.subarray(0, bytes.length - 20)).digest();
+      const checksum = crypto
+        .createHash("sha1")
+        .update(bytes.subarray(0, bytes.length - 20))
+        .digest();
       expect(checksum.equals(bytes.subarray(bytes.length - 20))).toBe(false);
     }
 
     it("fails when a read comes back short in the middle of a copy", async function () {
-      const { error, pack } = await faulty(onePack(), { key: /\.pack$/, skip: 3, truncate: 1000 });
+      const { error, pack } = await faulty(onePack(), {
+        key: /\.pack$/,
+        skip: 3,
+        truncate: 1000,
+      });
       expect(error && error.code).toBe("CORRUPT");
       expect(pack.length).toBeGreaterThan(0);
       expectNotAPack(pack);
     });
 
     it("fails when a read comes back short in the middle of a walk", async function () {
-      const { error, pack } = await faulty(overlapping(), { key: /\.pack$/, skip: 4, truncate: 1000 });
+      const { error, pack } = await faulty(overlapping(), {
+        key: /\.pack$/,
+        skip: 4,
+        truncate: 1000,
+      });
       expect(error && error.code).toBe("CORRUPT");
       expectNotAPack(pack);
     });
 
     it("fails when a read errors in the middle", async function () {
-      const { error, pack } = await faulty(overlapping(), { key: /\.pack$/, skip: 2, before: new Error("ECONNRESET") });
+      const { error, pack } = await faulty(overlapping(), {
+        key: /\.pack$/,
+        skip: 2,
+        before: new Error("ECONNRESET"),
+      });
       expect(error && error.message).toBe("ECONNRESET");
       expectNotAPack(pack);
     });
 
     it("fails before writing anything when an index cannot be read", async function () {
-      const { error, pack } = await faulty(overlapping(), { key: /\.idx$/, before: new Error("ECONNRESET") });
+      const { error, pack } = await faulty(overlapping(), {
+        key: /\.idx$/,
+        before: new Error("ECONNRESET"),
+      });
       expect(error && error.message).toBe("ECONNRESET");
       expect(pack.length).toBe(0);
     });
 
     it("fails before writing anything when an index is short", async function () {
-      const { error, pack } = await faulty(overlapping(), { key: /\.idx$/, truncate: 500 });
+      const { error, pack } = await faulty(overlapping(), {
+        key: /\.idx$/,
+        truncate: 500,
+      });
       expect(error && error.code).toBe("CORRUPT");
       expect(pack.length).toBe(0);
     });
@@ -421,7 +557,9 @@ describe("git store clone", function () {
     it("fails the git client, which keeps nothing, when a read is cut short mid-clone", async function () {
       const repo = await repository(onePack(), { wrap: faults });
       repo.store.inject("read", { key: /\.pack$/, skip: 40, truncate: 1000 });
-      const { server, dir, cloned } = await cloneWithGit(repo, { chunkSize: 16 * 1024 });
+      const { server, dir, cloned } = await cloneWithGit(repo, {
+        chunkSize: 16 * 1024,
+      });
 
       expect(server.errors.length).toBe(1);
       expect(cloned.code).not.toBe(0);
@@ -431,7 +569,10 @@ describe("git store clone", function () {
 
     it("answers 500 when it fails before it has written anything", async function () {
       const repo = await repository(overlapping(), { wrap: faults });
-      repo.store.inject("read", { key: /\.idx$/, before: new Error("ECONNRESET") });
+      repo.store.inject("read", {
+        key: /\.idx$/,
+        before: new Error("ECONNRESET"),
+      });
       const { server, cloned } = await cloneWithGit(repo);
 
       expect(cloned.code).not.toBe(0);
@@ -467,7 +608,12 @@ describe("git store clone", function () {
       const before = repo.store.calls.length;
       let error;
       try {
-        await clone({ store: repo.store, manifest: repo.manifest, out: dropping(100 * 1024), chunkSize });
+        await clone({
+          store: repo.store,
+          manifest: repo.manifest,
+          out: dropping(100 * 1024),
+          chunkSize,
+        });
       } catch (err) {
         error = err;
       }
@@ -485,7 +631,12 @@ describe("git store clone", function () {
       const before = repo.store.calls.length;
       let error;
       try {
-        await clone({ store: repo.store, manifest: repo.manifest, out: dropping(100 * 1024), chunkSize });
+        await clone({
+          store: repo.store,
+          manifest: repo.manifest,
+          out: dropping(100 * 1024),
+          chunkSize,
+        });
       } catch (err) {
         error = err;
       }
@@ -512,12 +663,19 @@ describe("git store clone", function () {
         },
       });
 
-      const running = clone({ store: repo.store, manifest: repo.manifest, out, chunkSize });
+      const running = clone({
+        store: repo.store,
+        manifest: repo.manifest,
+        out,
+        chunkSize,
+      });
       await sleep(300);
 
       const pack = repo.entries[0];
       expect(repo.memory.stats.reads).toBeLessThan(12);
-      expect(repo.memory.stats.reads).toBeLessThan(Math.ceil(pack.size / chunkSize) / 4);
+      expect(repo.memory.stats.reads).toBeLessThan(
+        Math.ceil(pack.size / chunkSize) / 4
+      );
 
       release();
       const result = await running;
@@ -527,20 +685,36 @@ describe("git store clone", function () {
   });
 
   describe("a plan which takes a while", function () {
-    const pkt = (text) => (text.length + 4).toString(16).padStart(4, "0") + text;
-    const request = (caps) => Buffer.from(pkt("want " + fixture.head + " " + caps + "\n") + "0000" + pkt("done\n"));
+    const pkt = (text) =>
+      (text.length + 4).toString(16).padStart(4, "0") + text;
+    const request = (caps) =>
+      Buffer.from(
+        pkt("want " + fixture.head + " " + caps + "\n") + "0000" + pkt("done\n")
+      );
 
     // Index reads are held for 600 ms, and a client is told after 100
     async function held(options = {}) {
       const repo = await repository(overlapping(), { wrap: faults });
-      repo.store.inject("read", { key: /\.idx$/, delay: 600, times: 100, ...options });
+      repo.store.inject("read", {
+        key: /\.idx$/,
+        delay: 600,
+        times: 100,
+        ...options,
+      });
       return repo;
     }
 
     async function asked(repo, caps, extra = {}) {
       const out = new PassThrough();
       const written = collect(out);
-      const result = await serve({ store: repo.store, manifest: repo.manifest, body: request(caps), out, keepaliveAfter: 100, ...extra });
+      const result = await serve({
+        store: repo.store,
+        manifest: repo.manifest,
+        body: request(caps),
+        out,
+        keepaliveAfter: 100,
+        ...extra,
+      });
       return { result, bytes: await written };
     }
 
@@ -554,7 +728,10 @@ describe("git store clone", function () {
     });
 
     it("sends no progress line to a client which asked for none, but still keepalives", async function () {
-      const { bytes } = await asked(await held(), "side-band-64k ofs-delta no-progress");
+      const { bytes } = await asked(
+        await held(),
+        "side-band-64k ofs-delta no-progress"
+      );
       const text = bytes.toString("latin1");
 
       expect(text).not.toContain("Preparing");
@@ -563,14 +740,18 @@ describe("git store clone", function () {
 
     it("sends nothing extra when the plan is quick", async function () {
       const repo = await repository(overlapping());
-      const { bytes } = await asked(repo, "side-band-64k ofs-delta", { keepaliveAfter: 60000 });
+      const { bytes } = await asked(repo, "side-band-64k ofs-delta", {
+        keepaliveAfter: 60000,
+      });
       expect(bytes.toString("latin1")).not.toContain("Preparing");
       expect(bytes.subarray(0, 8).toString()).toBe("0008NAK\n");
     });
 
     it("is cloned by git, which accepts the keepalives, and fscks", async function () {
       const repo = await held();
-      const { server, dir, cloned } = await cloneWithGit(repo, { keepaliveAfter: 100 });
+      const { server, dir, cloned } = await cloneWithGit(repo, {
+        keepaliveAfter: 100,
+      });
 
       expect(server.errors).toEqual([]);
       expect(cloned.code).toBe(0);
@@ -580,7 +761,9 @@ describe("git store clone", function () {
 
     it("fails the git client, which keeps nothing, when the plan then fails", async function () {
       const repo = await held({ before: new Error("ECONNRESET") });
-      const { server, dir, cloned } = await cloneWithGit(repo, { keepaliveAfter: 100 });
+      const { server, dir, cloned } = await cloneWithGit(repo, {
+        keepaliveAfter: 100,
+      });
 
       expect(server.errors.length).toBe(1);
       expect(cloned.code).not.toBe(0);
@@ -593,7 +776,12 @@ describe("git store clone", function () {
       const repo = await repository(overlapping(), { wrap: faults });
       const out = new PassThrough();
 
-      const waiting = clone({ store: repo.store, manifest: repo.manifest, out, limiter }).catch((err) => err);
+      const waiting = clone({
+        store: repo.store,
+        manifest: repo.manifest,
+        out,
+        limiter,
+      }).catch((err) => err);
       await sleep(10);
       out.destroy();
       await sleep(10);
@@ -658,7 +846,11 @@ describe("git store clone", function () {
     it("gives the place back after a failure", async function () {
       const limiter = createLimiter({ max: 1, maxWaiting: 0 });
       const repo = await repository(onePack(), { wrap: faults });
-      repo.store.inject("read", { key: /\.pack$/, skip: 1, before: new Error("ECONNRESET") });
+      repo.store.inject("read", {
+        key: /\.pack$/,
+        skip: 1,
+        before: new Error("ECONNRESET"),
+      });
 
       const failed = await direct(repo, { limiter, chunkSize: 16 * 1024 });
       expect(failed.error.message).toBe("ECONNRESET");
@@ -680,7 +872,10 @@ describe("git store clone", function () {
 
   describe("what a client may ask for", function () {
     const caps = "side-band-64k ofs-delta agent=test";
-    const want = (oid, capabilities) => Buffer.from(pkt("want " + oid + (capabilities ? " " + capabilities : "") + "\n"));
+    const want = (oid, capabilities) =>
+      Buffer.from(
+        pkt("want " + oid + (capabilities ? " " + capabilities : "") + "\n")
+      );
 
     function pkt(text) {
       return (text.length + 4).toString(16).padStart(4, "0") + text;
@@ -689,7 +884,12 @@ describe("git store clone", function () {
     async function ask(repo, body) {
       const out = new PassThrough();
       const written = collect(out);
-      const result = await serve({ store: repo.store, manifest: repo.manifest, body, out });
+      const result = await serve({
+        store: repo.store,
+        manifest: repo.manifest,
+        body,
+        out,
+      });
       return { result, bytes: await written };
     }
 
@@ -710,18 +910,28 @@ describe("git store clone", function () {
       ["shallow lines", [pkt("shallow " + "a".repeat(40) + "\n")], /Shallow/],
       ["a filter", [pkt("filter blob:none\n")], /filters/],
     ]) {
-      it("refuses " + name + " with an error packet, and sends no pack", async function () {
-        const body = Buffer.concat([want(fixture.head, caps), ...lines.map((l) => Buffer.from(l)), Buffer.from("0000" + pkt("done\n"))]);
-        const { result, bytes } = await ask(repo, body);
+      it(
+        "refuses " + name + " with an error packet, and sends no pack",
+        async function () {
+          const body = Buffer.concat([
+            want(fixture.head, caps),
+            ...lines.map((l) => Buffer.from(l)),
+            Buffer.from("0000" + pkt("done\n")),
+          ]);
+          const { result, bytes } = await ask(repo, body);
 
-        expect(result.refused).toMatch(message);
-        expect(bytes.toString()).toMatch(/^[0-9a-f]{4}ERR /);
-        expect(bytes.includes("PACK")).toBe(false);
-      });
+          expect(result.refused).toMatch(message);
+          expect(bytes.toString()).toMatch(/^[0-9a-f]{4}ERR /);
+          expect(bytes.includes("PACK")).toBe(false);
+        }
+      );
     }
 
     it("refuses an object which is not a ref's tip", async function () {
-      const body = Buffer.concat([want("a".repeat(40), caps), Buffer.from("0000" + pkt("done\n"))]);
+      const body = Buffer.concat([
+        want("a".repeat(40), caps),
+        Buffer.from("0000" + pkt("done\n")),
+      ]);
       const { result, bytes } = await ask(repo, body);
 
       expect(result.refused).toMatch(/not our ref/);
@@ -729,17 +939,29 @@ describe("git store clone", function () {
     });
 
     it("refuses a client without ofs-delta, whose packs it could not make", async function () {
-      const body = Buffer.concat([want(fixture.head, "side-band-64k"), Buffer.from("0000" + pkt("done\n"))]);
+      const body = Buffer.concat([
+        want(fixture.head, "side-band-64k"),
+        Buffer.from("0000" + pkt("done\n")),
+      ]);
       const { result } = await ask(repo, body);
       expect(result.refused).toMatch(/ofs-delta/);
     });
 
     it("rejects what is not git with a ProtocolError, before writing", async function () {
-      for (const body of [Buffer.from("hello"), Buffer.from("0005"), Buffer.concat([Buffer.from(pkt("nonsense\n"))])]) {
+      for (const body of [
+        Buffer.from("hello"),
+        Buffer.from("0005"),
+        Buffer.concat([Buffer.from(pkt("nonsense\n"))]),
+      ]) {
         const out = new PassThrough();
         let error;
         try {
-          await serve({ store: repo.store, manifest: repo.manifest, body, out });
+          await serve({
+            store: repo.store,
+            manifest: repo.manifest,
+            body,
+            out,
+          });
         } catch (err) {
           error = err;
         }
@@ -749,21 +971,32 @@ describe("git store clone", function () {
     });
 
     it("sends only NAK to a request which has not said done", async function () {
-      const { bytes } = await ask(repo, Buffer.concat([want(fixture.head, caps), Buffer.from("0000")]));
+      const { bytes } = await ask(
+        repo,
+        Buffer.concat([want(fixture.head, caps), Buffer.from("0000")])
+      );
       expect(bytes.toString()).toBe("0008NAK\n");
     });
 
     it("sends a pack without a side-band to a client which asked for none", async function () {
-      const body = Buffer.concat([want(fixture.head, "ofs-delta"), Buffer.from("0000" + pkt("done\n"))]);
+      const body = Buffer.concat([
+        want(fixture.head, "ofs-delta"),
+        Buffer.from("0000" + pkt("done\n")),
+      ]);
       const { bytes } = await ask(repo, body);
 
       expect(bytes.subarray(0, 8).toString()).toBe("0008NAK\n");
       expect(bytes.subarray(8, 12).toString()).toBe("PACK");
-      expectCompletePack(bytes.subarray(8), { objects: bytes.readUInt32BE(16) });
+      expectCompletePack(bytes.subarray(8), {
+        objects: bytes.readUInt32BE(16),
+      });
     });
 
     it("sends a pack in side-band 1 packets, then a flush", async function () {
-      const body = Buffer.concat([want(fixture.head, caps), Buffer.from("0000" + pkt("done\n"))]);
+      const body = Buffer.concat([
+        want(fixture.head, caps),
+        Buffer.from("0000" + pkt("done\n")),
+      ]);
       const { bytes } = await ask(repo, body);
 
       expect(bytes.subarray(0, 8).toString()).toBe("0008NAK\n");
@@ -777,15 +1010,28 @@ describe("git store clone", function () {
         at += length;
       }
       expect(at + 4).toBe(bytes.length);
-      expect(Math.max(...parts.map((p) => p.length))).toBeLessThanOrEqual(65515);
-      expectCompletePack(Buffer.concat(parts), { objects: Buffer.concat(parts).readUInt32BE(8) });
+      expect(Math.max(...parts.map((p) => p.length))).toBeLessThanOrEqual(
+        65515
+      );
+      expectCompletePack(Buffer.concat(parts), {
+        objects: Buffer.concat(parts).readUInt32BE(8),
+      });
     });
 
     it("is asked by git for protocol 2 and answers in protocol 0", async function () {
-      const server = await startServer({ store: repo.store, manifest: () => repo.manifest });
+      const server = await startServer({
+        store: repo.store,
+        manifest: () => repo.manifest,
+      });
       try {
         const dir = workDir + "/v2-" + ++counter;
-        const cloned = await runGit(["-c", "protocol.version=2", "clone", server.url, dir]);
+        const cloned = await runGit([
+          "-c",
+          "protocol.version=2",
+          "clone",
+          server.url,
+          dir,
+        ]);
         expect(cloned.code).toBe(0);
         expect(server.requests[0]).toContain("version=2");
       } finally {

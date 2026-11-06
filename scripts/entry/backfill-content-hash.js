@@ -62,7 +62,13 @@ function eachEntry(blogID, fn) {
 }
 
 async function backfill(blog) {
-  const counts = { entries: 0, missing: 0, stored: 0, unreadable: 0, changed: 0 };
+  const counts = {
+    entries: 0,
+    missing: 0,
+    stored: 0,
+    unreadable: 0,
+    changed: 0,
+  };
 
   await eachEntry(blog.id, async (entry) => {
     counts.entries++;
@@ -89,7 +95,12 @@ async function backfill(blog) {
     const stored = JSON.parse(json || "null");
 
     // A build landed since we read the entry; it already did the work.
-    if (!stored || stored.deleted || stored.contentHash || stored.updated !== entry.updated) {
+    if (
+      !stored ||
+      stored.deleted ||
+      stored.contentHash ||
+      stored.updated !== entry.updated
+    ) {
       counts.changed++;
       return;
     }
@@ -132,17 +143,23 @@ function blogIDs() {
 
   return new Promise((resolve, reject) =>
     getBlog(identifier, (err, user, blog) =>
-      err || !blog ? reject(err || new Error("No blog: " + identifier)) : resolve([blog.id])
+      err || !blog
+        ? reject(err || new Error("No blog: " + identifier))
+        : resolve([blog.id])
     )
   );
 }
 
 async function main() {
-  console.log(apply ? "Writing contentHash" : "Dry run (pass --apply to write)");
+  console.log(
+    apply ? "Writing contentHash" : "Dry run (pass --apply to write)"
+  );
 
   for (const blogID of await blogIDs()) {
     const blog = await new Promise((resolve, reject) =>
-      Blog.get({ id: blogID }, (err, blog) => (err ? reject(err) : resolve(blog)))
+      Blog.get({ id: blogID }, (err, blog) =>
+        err ? reject(err) : resolve(blog)
+      )
     );
 
     if (!blog) continue;

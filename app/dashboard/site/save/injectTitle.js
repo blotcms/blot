@@ -1,5 +1,6 @@
 module.exports = function (req, res, next) {
-  const updates = req.updates && req.updates.plugins && req.updates.plugins.injectTitle;
+  const updates =
+    req.updates && req.updates.plugins && req.updates.plugins.injectTitle;
   if (!updates) return next();
 
   const options = updates.options || (updates.options = {});

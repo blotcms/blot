@@ -16,9 +16,11 @@ describe("callouts plugin integration", function () {
   function buildFixture(context, enabled, done) {
     context.blog.plugins.callouts = { enabled, options: {} };
     const contents = fs.readFileSync(fixture, "utf8");
-    test.folder.writeFiles(context.blog.id, { "/callouts.md": contents }).then(function () {
-      build(context.blog, "/callouts.md", done);
-    }, done.fail);
+    test.folder
+      .writeFiles(context.blog.id, { "/callouts.md": contents })
+      .then(function () {
+        build(context.blog, "/callouts.md", done);
+      }, done.fail);
   }
 
   it("converts callouts through the Markdown build path when enabled", function (done) {
@@ -26,22 +28,50 @@ describe("callouts plugin integration", function () {
       if (err) return done.fail(err);
       const html = entry.html;
 
-      expect(html).toContain('<div class="callout" data-callout="note" data-callout-original="note">');
-      expect(html).toContain('<span class="callout-title-inner">Custom <strong>Warning</strong></span>');
-      expect(html).toContain('<span class="callout-title-inner">Task List</span>');
-      expect(html).toContain('class="callout is-expanded" data-callout="info" data-callout-original="info" data-callout-fold="+"');
-      expect(html).toContain('class="callout is-collapsed" data-callout="danger" data-callout-original="danger" data-callout-fold="-"');
-      expect(html).toContain('class="callout-title" role="button" tabindex="0" aria-expanded="true"');
-      expect(html).toContain('class="callout-title" role="button" tabindex="0" aria-expanded="false"');
-      expect(html).toContain('data-callout="question" data-callout-original="faq"');
-      expect(html).toContain('data-callout="danger" data-callout-original="error"');
-      expect(html).toContain('data-callout="abstract" data-callout-original="summary"');
-      expect(html).toContain('data-callout="note" data-callout-original="custom_type"');
+      expect(html).toContain(
+        '<div class="callout" data-callout="note" data-callout-original="note">'
+      );
+      expect(html).toContain(
+        '<span class="callout-title-inner">Custom <strong>Warning</strong></span>'
+      );
+      expect(html).toContain(
+        '<span class="callout-title-inner">Task List</span>'
+      );
+      expect(html).toContain(
+        'class="callout is-expanded" data-callout="info" data-callout-original="info" data-callout-fold="+"'
+      );
+      expect(html).toContain(
+        'class="callout is-collapsed" data-callout="danger" data-callout-original="danger" data-callout-fold="-"'
+      );
+      expect(html).toContain(
+        'class="callout-title" role="button" tabindex="0" aria-expanded="true"'
+      );
+      expect(html).toContain(
+        'class="callout-title" role="button" tabindex="0" aria-expanded="false"'
+      );
+      expect(html).toContain(
+        'data-callout="question" data-callout-original="faq"'
+      );
+      expect(html).toContain(
+        'data-callout="danger" data-callout-original="error"'
+      );
+      expect(html).toContain(
+        'data-callout="abstract" data-callout-original="summary"'
+      );
+      expect(html).toContain(
+        'data-callout="note" data-callout-original="custom_type"'
+      );
       expect(html).toContain('data-callout="tip" data-callout-original="tip"');
-      expect(html).toContain('<span class="callout-title-inner">Custom Type</span>');
+      expect(html).toContain(
+        '<span class="callout-title-inner">Custom Type</span>'
+      );
       expect(html).toMatch(/<div class="callout-content">\s*<\/div>/);
-      expect(html).toContain('<blockquote>\n<p>This is a normal quote with [!note] later.</p>\n</blockquote>');
-      expect(html).toContain('<code>&gt; [!note]\n&gt; Code should not change.</code>');
+      expect(html).toContain(
+        "<blockquote>\n<p>This is a normal quote with [!note] later.</p>\n</blockquote>"
+      );
+      expect(html).toContain(
+        "<code>&gt; [!note]\n&gt; Code should not change.</code>"
+      );
       expect(html).not.toContain("<details");
       expect(html).not.toContain("<summary");
       done();

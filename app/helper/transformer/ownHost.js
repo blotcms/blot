@@ -7,9 +7,7 @@ var config = require("config");
 // site never serves it - the global asset always shadows it - so we must
 // not "helpfully" resolve these locally, or we'd serve different bytes
 // than the URL actually returns.
-var {
-  GLOBAL_STATIC_SUBDIRECTORIES,
-} = require("../../blog/lib/staticPaths");
+var { GLOBAL_STATIC_SUBDIRECTORIES } = require("../../blog/lib/staticPaths");
 var RESERVED_PREFIXES = GLOBAL_STATIC_SUBDIRECTORIES.map(function (dir) {
   return dir.endsWith("/") ? dir : dir + "/";
 });
@@ -29,8 +27,7 @@ function hostnames(source) {
 
   var hosts = [];
 
-  if (source.domain)
-    hosts.push(stripWWW(String(source.domain).toLowerCase()));
+  if (source.domain) hosts.push(stripWWW(String(source.domain).toLowerCase()));
 
   if (source.handle)
     hosts.push(String(source.handle).toLowerCase() + "." + config.host);
@@ -74,9 +71,11 @@ function resolve(src, ownHostnames) {
 
   var pathname = (parsed.pathname || "/").toLowerCase();
 
-  if (RESERVED_PREFIXES.some(function (prefix) {
-    return pathname.indexOf(prefix) === 0;
-  }))
+  if (
+    RESERVED_PREFIXES.some(function (prefix) {
+      return pathname.indexOf(prefix) === 0;
+    })
+  )
     return null;
 
   return parsed.pathname || "/";
@@ -84,5 +83,5 @@ function resolve(src, ownHostnames) {
 
 module.exports = {
   hostnames: hostnames,
-  resolve: resolve
+  resolve: resolve,
 };

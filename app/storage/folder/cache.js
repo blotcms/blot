@@ -92,7 +92,10 @@ function changed(message) {
 }
 
 function idOf(path, version) {
-  return crypto.createHash("sha1").update(path + "\0" + version).digest("hex");
+  return crypto
+    .createHash("sha1")
+    .update(path + "\0" + version)
+    .digest("hex");
 }
 
 // options:
@@ -105,10 +108,14 @@ function createCache(options) {
   var dir = options.dir;
   var maxBytes = options.maxBytes;
   var graceMs = options.graceMs === undefined ? GRACE_MS : options.graceMs;
-  var checkIntervalMs = options.checkIntervalMs === undefined ? CHECK_INTERVAL_MS : options.checkIntervalMs;
+  var checkIntervalMs =
+    options.checkIntervalMs === undefined
+      ? CHECK_INTERVAL_MS
+      : options.checkIntervalMs;
   var minFreePercent = options.minFreePercent || 0;
 
-  if (!dir || !(maxBytes >= 0)) throw new Error("storage/folder cache needs a dir and a maxBytes");
+  if (!dir || !(maxBytes >= 0))
+    throw new Error("storage/folder cache needs a dir and a maxBytes");
 
   var blogsDir = join(dir, "blogs");
   var tmpDir = join(dir, "tmp");
@@ -121,7 +128,14 @@ function createCache(options) {
   var downloads = new Map();
   // name -> the promise of an eviction deleting it
   var removing = new Map();
-  var counters = { hits: 0, misses: 0, evictions: 0, fetchedBytes: 0, changed: 0, filled: 0 };
+  var counters = {
+    hits: 0,
+    misses: 0,
+    evictions: 0,
+    fetchedBytes: 0,
+    changed: 0,
+    filled: 0,
+  };
   var timer = null;
   var checking = null;
   // Heartbeats of the entries use() is holding
@@ -143,7 +157,10 @@ function createCache(options) {
   function locate(spec) {
     var id = idOf(spec.path, spec.version);
 
-    return { name: spec.blogID + "/" + id, file: join(blogsDir, spec.blogID, id, basename(spec.path)) };
+    return {
+      name: spec.blogID + "/" + id,
+      file: join(blogsDir, spec.blogID, id, basename(spec.path)),
+    };
   }
 
   // Marks an entry used now, on disk too so other processes and the next
@@ -174,7 +191,12 @@ function createCache(options) {
       try {
         var stat = await fs.stat(file);
         if (stat.size !== spec.size) return null;
-        entry = entries.get(name) || { file: file, size: stat.size, used: stat.mtimeMs, pins: 0 };
+        entry = entries.get(name) || {
+          file: file,
+          size: stat.size,
+          used: stat.mtimeMs,
+          pins: 0,
+        };
         if (!entries.has(name)) add(name, entry);
       } catch (err) {
         if (err.code === "ENOENT" || err.code === "ENOTDIR") return null;
@@ -211,7 +233,10 @@ function createCache(options) {
   // entry another process used within the grace period is kept.
   async function evict(needed, bytes) {
     var now = Date.now();
-    var short = bytes === undefined ? entryBytes + writingBytes + needed - maxBytes : bytes;
+    var short =
+      bytes === undefined
+        ? entryBytes + writingBytes + needed - maxBytes
+        : bytes;
     var doomed = [];
 
     for (var [name, entry] of entries) {
@@ -251,7 +276,11 @@ function createCache(options) {
       counters.evictions++;
     } catch (err) {
       // Gone already: another process evicted it
-      if (err.code !== "ENOENT") console.error("storage/folder cache: could not evict " + entry.file, err);
+      if (err.code !== "ENOENT")
+        console.error(
+          "storage/folder cache: could not evict " + entry.file,
+          err
+        );
     }
   }
 
@@ -284,9 +313,17 @@ function createCache(options) {
 
       if (fetched) counters.fetchedBytes += bytes;
 
-      if (bytes !== spec.size || (spec.sha1 && hash.digest("hex") !== spec.sha1)) {
+      if (
+        bytes !== spec.size ||
+        (spec.sha1 && hash.digest("hex") !== spec.sha1)
+      ) {
         if (fetched) counters.changed++;
-        throw changed("storage/folder cache: " + spec.path + (fetched ? " in S3" : "") + " is not the version the index has");
+        throw changed(
+          "storage/folder cache: " +
+            spec.path +
+            (fetched ? " in S3" : "") +
+            " is not the version the index has"
+        );
       }
 
       // An empty entry directory may be removed by another process's scan
@@ -364,7 +401,8 @@ function createCache(options) {
     var entry = entries.get(name);
 
     if (entry) entry.used = now;
-    else add(name, (entry = { file: file, size: spec.size, used: now, pins: 0 }));
+    else
+      add(name, (entry = { file: file, size: spec.size, used: now, pins: 0 }));
 
     return entry;
   }
@@ -385,16 +423,19 @@ function createCache(options) {
   function hold(name, file) {
     if (!(graceMs > 0)) return null;
 
-    var beat = setInterval(function () {
-      var entry = entries.get(name);
-      var now = new Date();
+    var beat = setInterval(
+      function () {
+        var entry = entries.get(name);
+        var now = new Date();
 
-      if (entry && entry.file === file) entry.used = now.getTime();
+        if (entry && entry.file === file) entry.used = now.getTime();
 
-      // Gone (removeBlog, or evicted by a process which saw no recent use):
-      // there is nothing to keep
-      fs.utimes(file, now, now).catch(noop);
-    }, Math.max(1, Math.floor(graceMs / 3)));
+        // Gone (removeBlog, or evicted by a process which saw no recent use):
+        // there is nothing to keep
+        fs.utimes(file, now, now).catch(noop);
+      },
+      Math.max(1, Math.floor(graceMs / 3))
+    );
 
     beat.unref();
     heartbeats.add(beat);
@@ -446,7 +487,8 @@ function createCache(options) {
 
     for (var temporary of await readdir(tmpDir)) {
       var stat = await fs.stat(join(tmpDir, temporary)).catch(noop);
-      if (stat && started - stat.mtimeMs > ABANDONED_MS) await fs.remove(join(tmpDir, temporary)).catch(noop);
+      if (stat && started - stat.mtimeMs > ABANDONED_MS)
+        await fs.remove(join(tmpDir, temporary)).catch(noop);
     }
 
     for (var blogID of await readdir(blogsDir)) {
@@ -457,14 +499,18 @@ function createCache(options) {
         var info = file && (await fs.stat(file).catch(noop));
 
         if (info && info.isFile()) {
-          found.push({ name: blogID + "/" + id, entry: { file: file, size: info.size, used: info.mtimeMs, pins: 0 } });
+          found.push({
+            name: blogID + "/" + id,
+            entry: { file: file, size: info.size, used: info.mtimeMs, pins: 0 },
+          });
           continue;
         }
 
         // Not an entry: something half made or foreign. Left alone while it
         // may be another process's rename in progress.
         var dirStat = await fs.stat(entryDir).catch(noop);
-        if (dirStat && started - dirStat.mtimeMs > ABANDONED_MS) await fs.remove(entryDir).catch(noop);
+        if (dirStat && started - dirStat.mtimeMs > ABANDONED_MS)
+          await fs.remove(entryDir).catch(noop);
       }
     }
 
@@ -482,7 +528,8 @@ function createCache(options) {
     // Entries added here while the scan ran may have been missed by it
     var seen = new Set(found.map((item) => item.name));
     for (var [name, entry] of previous) {
-      if (!seen.has(name) && (entry.pins || entry.used >= started)) found.push({ name: name, entry: entry });
+      if (!seen.has(name) && (entry.pins || entry.used >= started))
+        found.push({ name: name, entry: entry });
     }
 
     found.sort(function (a, b) {
@@ -512,7 +559,9 @@ function createCache(options) {
     var disk = await fsPromises.statfs(dir);
     var wanted = (disk.blocks * minFreePercent) / 100;
 
-    return disk.bavail < wanted ? Math.ceil((wanted - disk.bavail) * disk.bsize) : 0;
+    return disk.bavail < wanted
+      ? Math.ceil((wanted - disk.bavail) * disk.bsize)
+      : 0;
   }
 
   // Rescans the directory, brings the cache back under its budget, and
@@ -556,7 +605,10 @@ function createCache(options) {
   }
 
   function stats() {
-    return Object.assign({ maxBytes: maxBytes, entries: entries.size, bytes: entryBytes }, counters);
+    return Object.assign(
+      { maxBytes: maxBytes, entries: entries.size, bytes: entryBytes },
+      counters
+    );
   }
 
   return {

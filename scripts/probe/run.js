@@ -58,15 +58,23 @@ const OUT = "/out";
 
 // Shipped with every probe script, mounted at the same place relative to
 // the app root as in this repository, so the script can require them.
-const SHARED_FILES = [path.join(__dirname, "args.js"), path.join(__dirname, "instrument.js")];
+const SHARED_FILES = [
+  path.join(__dirname, "args.js"),
+  path.join(__dirname, "instrument.js"),
+];
 
 // Options every probe wrapper takes; see fromWrapperOptions.
 const WRAPPER_OPTIONS = {
-  release: { value: "SHA", help: "image tag to run (default: blot-blue's current image)" },
+  release: {
+    value: "SHA",
+    help: "image tag to run (default: blot-blue's current image)",
+  },
   memory: { value: "SIZE", help: "container memory limit, e.g. 3g or 2500m" },
   "max-old-space": { value: "MB", help: "V8 heap limit" },
   cpus: { value: "N", help: "container CPU limit (default 1)" },
-  "heap-snapshot": { help: "write a heap snapshot when the heap nears its limit" },
+  "heap-snapshot": {
+    help: "write a heap snapshot when the heap nears its limit",
+  },
   "cpu-prof": { help: "write a CPU profile (on a clean exit)" },
   "heap-prof": { help: "write a sampling heap profile (on a clean exit)" },
   overlay: {
@@ -98,8 +106,11 @@ function shellQuote(value) {
 
 function parseMemoryMB(value) {
   const match = /^(\d+(?:\.\d+)?)([mg])$/i.exec(value || "");
-  if (!match) throw new Error(`Invalid --memory ${value} (use e.g. 3g or 2500m)`);
-  return Math.round(parseFloat(match[1]) * (match[2].toLowerCase() === "g" ? 1024 : 1));
+  if (!match)
+    throw new Error(`Invalid --memory ${value} (use e.g. 3g or 2500m)`);
+  return Math.round(
+    parseFloat(match[1]) * (match[2].toLowerCase() === "g" ? 1024 : 1)
+  );
 }
 
 // runProbe options:
@@ -152,14 +163,19 @@ async function runProbe({
   env = {},
   overlay = [],
 }) {
-  if (!/^[a-z][a-z-]*$/.test(tool)) throw new Error(`Invalid tool name ${tool}`);
+  if (!/^[a-z][a-z-]*$/.test(tool))
+    throw new Error(`Invalid tool name ${tool}`);
   const memoryMB = parseMemoryMB(memory);
   if (!(oldSpace >= 256 && oldSpace < memoryMB)) {
-    throw new Error(`Invalid heap limit ${oldSpace}MB: it must be below the ${memory} memory limit`);
+    throw new Error(
+      `Invalid heap limit ${oldSpace}MB: it must be below the ${memory} memory limit`
+    );
   }
   if (!(cpus > 0 && cpus <= 4)) throw new Error(`Invalid --cpus ${cpus}`);
   if (probeArgs.some((arg) => /^--out(=|$)/.test(arg))) {
-    throw new Error(`--out isn't supported: results always come back to data/${tool}`);
+    throw new Error(
+      `--out isn't supported: results always come back to data/${tool}`
+    );
   }
 
   // The image lookup and host checks below are several ssh round trips.
@@ -170,14 +186,18 @@ async function runProbe({
   // The probe shares the host with the live containers: refuse to start one
   // that could push the host into swapping or the kernel OOM killer, or fill
   // the disk with a heap snapshot (about as large as the heap) and profiles.
-  const availableMB = Number(await sshCommand("free -m | awk '/^Mem:/ {print \\$7}'"));
+  const availableMB = Number(
+    await sshCommand("free -m | awk '/^Mem:/ {print \\$7}'")
+  );
   if (!(availableMB > memoryMB + 512)) {
     throw new Error(
       `Only ${availableMB}MB available on the host; not starting a ${memory} probe. Try a smaller --memory.`
     );
   }
   const [fsType, freeKB] = (
-    await sshCommand(`df -PTk ${path.posix.dirname(REMOTE_ROOT)} | awk 'NR==2 {print \\$2, \\$5}'`)
+    await sshCommand(
+      `df -PTk ${path.posix.dirname(REMOTE_ROOT)} | awk 'NR==2 {print \\$2, \\$5}'`
+    )
   ).split(" ");
   const freeMB = Math.floor(Number(freeKB) / 1024);
   const neededMB = 2 * oldSpace + 1024;
@@ -187,7 +207,10 @@ async function runProbe({
     );
   }
 
-  const runId = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
+  const runId = new Date()
+    .toISOString()
+    .replace(/[-:]/g, "")
+    .replace(/\..*/, "");
   const name = `blot-${tool}-${runId.toLowerCase()}`;
   const remoteDir = `${REMOTE_ROOT}/${tool}/${runId}`;
   const localDir = path.join(process.cwd(), "data", tool, runId);
@@ -196,15 +219,20 @@ async function runProbe({
   // sits in the repository, so `require("models/...")` (NODE_PATH) and
   // relative requires of the shared files both resolve inside the image.
   for (const local of overlay) {
-    if (!fs.existsSync(local)) throw new Error(`--overlay ${local} doesn't exist`);
+    if (!fs.existsSync(local))
+      throw new Error(`--overlay ${local} doesn't exist`);
   }
   const files = [script, ...SHARED_FILES, ...overlay].map((local, i) => {
     const relative = path.relative(REPO_ROOT, path.resolve(local));
-    if (relative.startsWith("..")) throw new Error(`${local} is outside the repository`);
+    if (relative.startsWith(".."))
+      throw new Error(`${local} is outside the repository`);
     return {
       local,
       remote: `${remoteDir}/${i}-${path.basename(local)}`,
-      container: path.posix.join(APP_ROOT_IN_CONTAINER, relative.split(path.sep).join("/")),
+      container: path.posix.join(
+        APP_ROOT_IN_CONTAINER,
+        relative.split(path.sep).join("/")
+      ),
     };
   });
 
@@ -215,7 +243,9 @@ async function runProbe({
     `--report-directory=${OUT}`,
     "--report-exclude-env",
     "--report-exclude-network",
-    ...(heapSnapshot ? ["--heapsnapshot-near-heap-limit=1", `--diagnostic-dir=${OUT}`] : []),
+    ...(heapSnapshot
+      ? ["--heapsnapshot-near-heap-limit=1", `--diagnostic-dir=${OUT}`]
+      : []),
     ...(cpuProf ? ["--cpu-prof", `--cpu-prof-dir=${OUT}`] : []),
     ...(heapProf ? ["--heap-prof", `--heap-prof-dir=${OUT}`] : []),
     ...nodeFlags,
@@ -228,7 +258,9 @@ async function runProbe({
     // config.container is the part after "blot-<x>-", so log lines are
     // tagged [<tool>].
     CONTAINER_NAME: `blot-probe-${tool}`,
-    ...(/^[0-9a-f]{7,40}$/.test(releaseId) ? { BLOT_RELEASE_ID: releaseId } : {}),
+    ...(/^[0-9a-f]{7,40}$/.test(releaseId)
+      ? { BLOT_RELEASE_ID: releaseId }
+      : {}),
     // Empty, so the env file can't override the flags given to node below.
     NODE_OPTIONS: "",
     // Where the app's tmp directory is (config.tmp_directory); mounted below.
@@ -243,7 +275,9 @@ async function runProbe({
     "--restart no",
     ...(egressProxy ? ["--network host"] : []),
     `--env-file ${ENV_FILE_ON_SERVER}`,
-    ...Object.entries(environment).map(([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`),
+    ...Object.entries(environment).map(
+      ([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`
+    ),
     `-v ${DATA_DIRECTORY_ON_SERVER}:${DATA_DIRECTORY_ON_CONTAINER}${writableData ? "" : ":ro"}`,
     // Scratch space for helper/tempDir, writable even when data is read-only.
     // --mount, unlike -v, fails if the source is missing rather than quietly
@@ -254,7 +288,9 @@ async function runProbe({
     // Read-only still lets it connect to the socket.
     `--mount ${shellQuote(`type=bind,source=${SOCKET_DIRECTORY},target=${SOCKET_DIRECTORY},readonly`)}`,
     `-v ${remoteDir}/out:${OUT}`,
-    ...files.map((file) => `-v ${shellQuote(`${file.remote}:${file.container}:ro`)}`),
+    ...files.map(
+      (file) => `-v ${shellQuote(`${file.remote}:${file.container}:ro`)}`
+    ),
     ...mounts.map((mount) => `-v ${shellQuote(mount)}`),
     // --memory-swap equal to --memory: no swap, so the probe can't push the
     // host into swapping; it is OOM-killed at the limit instead.
@@ -279,12 +315,19 @@ async function runProbe({
     `Container ${name}: memory ${memory}, cpus ${cpus}, heap limit ${oldSpace}MB,` +
       ` data ${writableData ? "READ-WRITE" : "read-only"}${egressProxy ? ", host network and the proxy jail" : ""}`
   );
-  console.log(`Host: ${availableMB}MB memory available, ${freeMB}MB free for ${REMOTE_ROOT} (${fsType})`);
+  console.log(
+    `Host: ${availableMB}MB memory available, ${freeMB}MB free for ${REMOTE_ROOT} (${fsType})`
+  );
   if (fsType === "tmpfs") {
-    console.log(`Note: ${REMOTE_ROOT} is on tmpfs, so the probe's output is held in the host's memory.`);
+    console.log(
+      `Note: ${REMOTE_ROOT} is on tmpfs, so the probe's output is held in the host's memory.`
+    );
   }
-  console.log(`Will run on production:\n\n  ${remoteCommand.split(" && ").join(" &&\n  ")}\n`);
-  if (!yes && !(await askForConfirmation("Start the probe? (y/n) "))) return { exitCode: null, localDir: null };
+  console.log(
+    `Will run on production:\n\n  ${remoteCommand.split(" && ").join(" &&\n  ")}\n`
+  );
+  if (!yes && !(await askForConfirmation("Start the probe? (y/n) ")))
+    return { exitCode: null, localDir: null };
 
   // Ctrl-C stops the container, then still fetches its output and cleans
   // up. A second one is ignored, a third abandons the cleanup.
@@ -293,7 +336,9 @@ async function runProbe({
   const stop = () => {
     if (!stopping) {
       console.log(`\nStopping ${name}...`);
-      stopping = sshCommand(`docker kill ${name} > /dev/null 2>&1 || true`).catch(() => {});
+      stopping = sshCommand(
+        `docker kill ${name} > /dev/null 2>&1 || true`
+      ).catch(() => {});
     }
     return stopping;
   };
@@ -301,7 +346,9 @@ async function runProbe({
     interrupts++;
     if (interrupts === 1) return stop();
     if (interrupts === 2) {
-      return console.log("\nStill cleaning up; press Ctrl-C again to abandon it.");
+      return console.log(
+        "\nStill cleaning up; press Ctrl-C again to abandon it."
+      );
     }
     console.log(
       `\nAbandoned. Remove the container with: ssh blot docker rm -f ${name}` +
@@ -326,9 +373,13 @@ async function runProbe({
     }
 
     if (!stopping) {
-      console.log(`Starting ${name}; the app takes a minute or so to load before the probe prints anything...`);
+      console.log(
+        `Starting ${name}; the app takes a minute or so to load before the probe prints anything...`
+      );
       await new Promise((resolve) => {
-        const child = spawn("ssh", ["blot", remoteCommand], { stdio: ["ignore", "inherit", "inherit"] });
+        const child = spawn("ssh", ["blot", remoteCommand], {
+          stdio: ["ignore", "inherit", "inherit"],
+        });
         child.on("exit", resolve);
         child.on("error", resolve);
       });
@@ -350,9 +401,13 @@ async function runProbe({
       if (state) {
         const [code, oomKilled] = state.split(" ");
         exitCode = Number(code);
-        console.log(`\n${name} exited with ${exitCode}, OOMKilled=${oomKilled}`);
+        console.log(
+          `\n${name} exited with ${exitCode}, OOMKilled=${oomKilled}`
+        );
         if (exitCode !== 0) {
-          console.log("(134 = V8 out of memory, 137 = killed - out of container memory, or Ctrl-C)");
+          console.log(
+            "(134 = V8 out of memory, 137 = killed - out of container memory, or Ctrl-C)"
+          );
         }
       }
     }
@@ -369,7 +424,8 @@ async function runProbe({
 async function chooseImage(release) {
   if (release) {
     // Images are tagged with the full commit SHA, so expand a short one.
-    if (!/^[0-9a-f]{7,40}$/.test(release)) throw new Error(`Invalid --release ${release}`);
+    if (!/^[0-9a-f]{7,40}$/.test(release))
+      throw new Error(`Invalid --release ${release}`);
     let sha;
     try {
       ({ stdout: sha } = await execFileAsync(
@@ -378,16 +434,21 @@ async function chooseImage(release) {
         { cwd: REPO_ROOT }
       ));
     } catch (err) {
-      throw new Error(`--release ${release} isn't a commit in this checkout (try git fetch)`);
+      throw new Error(
+        `--release ${release} isn't a commit in this checkout (try git fetch)`,
+        { cause: err }
+      );
     }
     sha = sha.trim();
-    if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`Couldn't resolve --release ${release}: ${sha}`);
+    if (!/^[0-9a-f]{40}$/.test(sha))
+      throw new Error(`Couldn't resolve --release ${release}: ${sha}`);
     return `${UNIT_IMAGE}:${sha}`;
   }
   const image = await sshCommand(
     `docker inspect ${UNIT_CONTAINER} --format '{{.Config.Image}}'`
   );
-  if (!/^[\w./:@-]+$/.test(image)) throw new Error(`Unexpected image for ${UNIT_CONTAINER}: ${image}`);
+  if (!/^[\w./:@-]+$/.test(image))
+    throw new Error(`Unexpected image for ${UNIT_CONTAINER}: ${image}`);
   return image;
 }
 
@@ -409,12 +470,16 @@ async function cleanUp({ name, remoteDir, localDir }) {
   try {
     await sshCommand(`docker rm -f ${name} > /dev/null 2>&1 || true`);
   } catch (err) {
-    console.error(`Couldn't remove the container: run ssh blot docker rm -f ${name}`);
+    console.error(
+      `Couldn't remove the container: run ssh blot docker rm -f ${name}`
+    );
   }
 
   let fetched = false;
   try {
-    const exists = await sshCommand(`test -d ${remoteDir} && echo yes || echo no`);
+    const exists = await sshCommand(
+      `test -d ${remoteDir} && echo yes || echo no`
+    );
     if (exists === "no") return;
     fs.mkdirSync(path.dirname(localDir), { recursive: true });
     await execFileAsync("scp", ["-q", "-r", `blot:${remoteDir}/out`, localDir]);

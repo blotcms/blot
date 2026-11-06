@@ -17,7 +17,10 @@ export default async (req, res) => {
   // ensure the blogID doesn't container any characters other than
   // letters, numbers and underscores
   if (!/^[a-zA-Z0-9_]+$/.test(blogID)) {
-    console.error(clfdate(), `Invalid blogID for disconnect request: ${blogID}`);
+    console.error(
+      clfdate(),
+      `Invalid blogID for disconnect request: ${blogID}`
+    );
     return res.status(400).send("Invalid blogID");
   }
 

@@ -147,7 +147,8 @@ describe("icloud init validateAllBlogs", function () {
         const multi = {
           del: () => (ops.push(() => reported.clear()), multi),
           sAdd: (key, ids) => (
-            ops.push(() => ids.forEach((id) => reported.add(id))), multi
+            ops.push(() => ids.forEach((id) => reported.add(id))),
+            multi
           ),
           exec: async () => ops.forEach((op) => op()),
         };
@@ -162,18 +163,21 @@ describe("icloud init validateAllBlogs", function () {
     });
     // In-memory stand-in for helper/lock: held keys reject with ELOCKED
     const held = new Set();
-    stub("lockHelper", Object.assign(
-      async (key) => {
-        if (held.has(key)) {
-          const err = new Error("Lock is held: " + key);
-          err.code = "ELOCKED";
-          throw err;
-        }
-        held.add(key);
-        return { release: async () => held.delete(key) };
-      },
-      { cron: () => ({ cancel() {} }), once: async () => true }
-    ));
+    stub(
+      "lockHelper",
+      Object.assign(
+        async (key) => {
+          if (held.has(key)) {
+            const err = new Error("Lock is held: " + key);
+            err.code = "ELOCKED";
+            throw err;
+          }
+          held.add(key);
+          return { release: async () => held.delete(key) };
+        },
+        { cron: () => ({ cancel() {} }), once: async () => true }
+      )
+    );
     // All load the stubs above at require time
     delete require.cache[paths.scheduleExclusive];
     delete require.cache[paths.validateBlog];
@@ -199,7 +203,9 @@ describe("icloud init validateAllBlogs", function () {
 
   it("sends one email with the changes a walk found", async function () {
     const { init, sentEmails } = setup({
-      [id("changes")]: { summary: { downloaded: 2, removed: 1, createdDirs: 1 } },
+      [id("changes")]: {
+        summary: { downloaded: 2, removed: 1, createdDirs: 1 },
+      },
     });
 
     await init.validateAllBlogs();
@@ -250,9 +256,18 @@ describe("icloud init validateAllBlogs", function () {
 
   it("skips a blog whose setup is incomplete or has a stored error", async function () {
     const { init, sentEmails, calls } = setup({
-      [id("setup")]: { account: { setupComplete: false }, summary: { downloaded: 1 } },
-      [id("error")]: { account: { error: "Blog directory deleted" }, summary: { downloaded: 1 } },
-      [id("transfer")]: { account: { transferringToiCloud: true }, summary: { downloaded: 1 } },
+      [id("setup")]: {
+        account: { setupComplete: false },
+        summary: { downloaded: 1 },
+      },
+      [id("error")]: {
+        account: { error: "Blog directory deleted" },
+        summary: { downloaded: 1 },
+      },
+      [id("transfer")]: {
+        account: { transferringToiCloud: true },
+        summary: { downloaded: 1 },
+      },
     });
 
     await init.validateAllBlogs();
@@ -318,7 +333,9 @@ describe("icloud init validateAllBlogs", function () {
 
     expect(calls.fixed).toEqual([]);
     const record = byID(sentEmails[0])[id("threw")];
-    expect(record.errors).toEqual([{ phase: "walk", message: "walk exploded" }]);
+    expect(record.errors).toEqual([
+      { phase: "walk", message: "walk exploded" },
+    ]);
   });
 
   it("reports a walk that swallowed failures, however clean its counts look, and doesn't run Fix", async function () {
@@ -341,7 +358,9 @@ describe("icloud init validateAllBlogs", function () {
     expect(records[id("down")].hasChanges).toEqual(false);
     expect(records[id("down")].errors.length).toEqual(1);
     expect(records[id("down")].errors[0].phase).toEqual("walk");
-    expect(records[id("down")].errors[0].message).toContain("macserver unreachable");
+    expect(records[id("down")].errors[0].message).toContain(
+      "macserver unreachable"
+    );
     // What the walk did before it failed is still reported
     expect(records[id("partial")].changeCount).toEqual(2);
     expect(records[id("partial")].errors[0].message).toContain(
@@ -453,7 +472,10 @@ describe("icloud init validateAllBlogs", function () {
     it("skips and never reports a blog whose folder was deleted or storage is full, even with a stuck lock", async function () {
       const { init, sentEmails, calls } = setup({
         [id("deleted")]: {
-          account: { error: "Blog directory deleted", errorCode: "SOURCE_MISSING" },
+          account: {
+            error: "Blog directory deleted",
+            errorCode: "SOURCE_MISSING",
+          },
           heldSince: Date.now() - 3 * HOUR,
         },
         [id("full")]: {
@@ -507,7 +529,9 @@ describe("icloud init validateAllBlogs", function () {
 
       expect(calls.walked).toEqual([id("unknown")]);
       expect(sentEmails.length).toEqual(1);
-      expect(byID(sentEmails[0])[id("unknown")].errors[0].phase).toEqual("walk");
+      expect(byID(sentEmails[0])[id("unknown")].errors[0].phase).toEqual(
+        "walk"
+      );
     });
   });
 

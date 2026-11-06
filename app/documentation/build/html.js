@@ -14,7 +14,7 @@ module.exports = async (contents) => {
   if (contents.includes("{{> body}}")) {
     const lines = contents.split("\n");
     const result = lines
-      .map(i => {
+      .map((i) => {
         if (!i.includes("{{> body}}")) return i;
         if (i.trim().startsWith("{{> body}}")) return i.trim();
       })
@@ -40,10 +40,10 @@ module.exports = async (contents) => {
   // this prevents issues with code snippets
   if (result.includes("{{> body}}")) {
     const lines = result.split("\n");
-    const index = lines.findIndex(line => line.includes("{{> body}}"));
+    const index = lines.findIndex((line) => line.includes("{{> body}}"));
     lines[index] = lines[index].trim();
     result = lines.join("\n");
   }
-  
+
   return result;
 };

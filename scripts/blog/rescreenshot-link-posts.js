@@ -3,7 +3,11 @@ var sync = require("../../app/sync");
 var Entries = require("models/entries");
 
 const processBlog = async (blog) => {
-  if (!blog.plugins || !blog.plugins.linkScreenshot || !blog.plugins.linkScreenshot.enabled) {
+  if (
+    !blog.plugins ||
+    !blog.plugins.linkScreenshot ||
+    !blog.plugins.linkScreenshot.enabled
+  ) {
     console.log("No linkScreenshot plugin enabled for", blog.handle);
     return;
   }
@@ -33,10 +37,11 @@ const processBlog = async (blog) => {
             nextEntry();
           });
         },
-        () => done(null, (err) => {
-          if (err) return reject(err);
-          resolve();
-        })
+        () =>
+          done(null, (err) => {
+            if (err) return reject(err);
+            resolve();
+          })
       );
     });
   });

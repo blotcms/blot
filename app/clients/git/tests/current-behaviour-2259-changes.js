@@ -20,7 +20,9 @@ describe("current behaviour that #2259 changes", function () {
       await this.local.push();
 
       // The clone has the line endings the user committed
-      expect(await this.local.read("/lines.txt")).toEqual(Buffer.from("one\ntwo\nthree\n"));
+      expect(await this.local.read("/lines.txt")).toEqual(
+        Buffer.from("one\ntwo\nthree\n")
+      );
 
       // and so does the blog folder
       expect(await helpers.blogFile(this, "/lines.txt")).toEqual(
@@ -36,8 +38,12 @@ describe("current behaviour that #2259 changes", function () {
       });
       await this.local.push();
 
-      expect(await this.local.read("/ident.txt")).toEqual(Buffer.from("$Id$\n"));
-      expect(await helpers.blogFile(this, "/ident.txt")).toEqual(Buffer.from("$Id$\n"));
+      expect(await this.local.read("/ident.txt")).toEqual(
+        Buffer.from("$Id$\n")
+      );
+      expect(await helpers.blogFile(this, "/ident.txt")).toEqual(
+        Buffer.from("$Id$\n")
+      );
     });
   });
 
@@ -54,9 +60,12 @@ describe("current behaviour that #2259 changes", function () {
       await this.local.git(["fetch", "origin"]);
 
       expect(
-        (await this.local.git(["cat-file", "blob", "origin/master:lines.txt"])).stdout
+        (await this.local.git(["cat-file", "blob", "origin/master:lines.txt"]))
+          .stdout
       ).toBe("one\r\ntwo\r\n");
-      expect(await helpers.blogFile(this, "/lines.txt")).toEqual(Buffer.from("one\r\ntwo\r\n"));
+      expect(await helpers.blogFile(this, "/lines.txt")).toEqual(
+        Buffer.from("one\r\ntwo\r\n")
+      );
     });
   });
 
@@ -65,24 +74,29 @@ describe("current behaviour that #2259 changes", function () {
     // is rejected as a whole, whatever the order of its refs. Master is not
     // updated either, and no sync starts.
     ["master sneaky", "sneaky master"].forEach(function (order) {
-      it("rejects a branch pushed together with master (" + order + ")", async function () {
-        var local = this.local;
-        var before = await local.remoteHead();
+      it(
+        "rejects a branch pushed together with master (" + order + ")",
+        async function () {
+          var local = this.local;
+          var before = await local.remoteHead();
 
-        await local.commitFiles({ "/with-a-branch.txt": "Pushed with a branch" });
-        await local.git(["branch", "sneaky"]);
+          await local.commitFiles({
+            "/with-a-branch.txt": "Pushed with a branch",
+          });
+          await local.git(["branch", "sneaky"]);
 
-        var pushed = await local.tryPush(["origin"].concat(order.split(" ")));
+          var pushed = await local.tryPush(["origin"].concat(order.split(" ")));
 
-        expect(pushed.code).not.toBe(0);
-        expect(pushed.stderr).toContain("only the master branch is allowed");
+          expect(pushed.code).not.toBe(0);
+          expect(pushed.stderr).toContain("only the master branch is allowed");
 
-        await local.waitForSync();
+          await local.waitForSync();
 
-        expect(await local.remoteHead("sneaky")).toBeNull();
-        expect(await local.remoteHead()).toBe(before);
-        expect(await helpers.blogHas(this, "/with-a-branch.txt")).toBe(false);
-      });
+          expect(await local.remoteHead("sneaky")).toBeNull();
+          expect(await local.remoteHead()).toBe(before);
+          expect(await helpers.blogHas(this, "/with-a-branch.txt")).toBe(false);
+        }
+      );
     });
   });
 
@@ -101,7 +115,9 @@ describe("current behaviour that #2259 changes", function () {
 
       // The client is told why
       expect(pushed.code).not.toBe(0);
-      expect(pushed.stderr).toContain("remote: refs/heads/master: Git blogs support regular files only");
+      expect(pushed.stderr).toContain(
+        "remote: refs/heads/master: Git blogs support regular files only"
+      );
       expect(await local.remoteHead()).toBe(before);
 
       await local.waitForSync();
@@ -125,7 +141,10 @@ describe("current behaviour that #2259 changes", function () {
       var local = this.local;
       var before = await local.remoteHead();
 
-      await local.write("/alongside.txt", "In the same commit as the submodule");
+      await local.write(
+        "/alongside.txt",
+        "In the same commit as the submodule"
+      );
       await local.git(["add", "--all"]);
       await local.git([
         "update-index",
@@ -138,7 +157,9 @@ describe("current behaviour that #2259 changes", function () {
       var pushed = await local.tryPush();
 
       expect(pushed.code).not.toBe(0);
-      expect(pushed.stderr).toContain("remote: refs/heads/master: Git blogs support regular files only");
+      expect(pushed.stderr).toContain(
+        "remote: refs/heads/master: Git blogs support regular files only"
+      );
       expect(await local.remoteHead()).toBe(before);
 
       await local.waitForSync();
@@ -147,7 +168,12 @@ describe("current behaviour that #2259 changes", function () {
       expect(await helpers.blogHas(this, "/vendor")).toBe(false);
 
       await local.git(["rm", "--cached", "--quiet", "vendor/submodule"]);
-      await local.git(["commit", "--quiet", "--message", "Remove the submodule"]);
+      await local.git([
+        "commit",
+        "--quiet",
+        "--message",
+        "Remove the submodule",
+      ]);
       await local.push();
 
       expect(await helpers.blogFile(this, "/alongside.txt")).toEqual(

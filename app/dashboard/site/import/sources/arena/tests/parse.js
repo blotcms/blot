@@ -56,25 +56,46 @@ describe("Are.na text block importer", function () {
       outputDirectory,
       status: function () {},
       posts: [
-        block({ id: 1, title: "", generated_title: "Generated", visibility: "private" }),
-        block({ id: 2, title: "", generated_title: "", created_at: "2020-04-06T00:00:00Z" }),
+        block({
+          id: 1,
+          title: "",
+          generated_title: "Generated",
+          visibility: "private",
+        }),
+        block({
+          id: 2,
+          title: "",
+          generated_title: "",
+          created_at: "2020-04-06T00:00:00Z",
+        }),
       ],
     });
 
-    expect(fs.existsSync(path.join(outputDirectory, "Drafts", "Generated.txt"))).toBe(true);
-    expect(fs.existsSync(path.join(outputDirectory, "2020", "04-06-Untitled.txt"))).toBe(true);
+    expect(
+      fs.existsSync(path.join(outputDirectory, "Drafts", "Generated.txt"))
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(outputDirectory, "2020", "04-06-Untitled.txt"))
+    ).toBe(true);
   });
 
   it("uses stable suffixes for duplicate titles", async function () {
     await parse({
       outputDirectory,
       status: function () {},
-      posts: [block({ content: "first" }), block({ id: 456, content: "second" })],
+      posts: [
+        block({ content: "first" }),
+        block({ id: 456, content: "second" }),
+      ],
     });
 
     const directory = path.join(outputDirectory, "2020");
-    expect(fs.readFileSync(path.join(directory, "04-05-A-text-block.txt"), "utf8")).toContain("first");
-    expect(fs.readFileSync(path.join(directory, "04-05-A-text-block-2.txt"), "utf8")).toContain("second");
+    expect(
+      fs.readFileSync(path.join(directory, "04-05-A-text-block.txt"), "utf8")
+    ).toContain("first");
+    expect(
+      fs.readFileSync(path.join(directory, "04-05-A-text-block-2.txt"), "utf8")
+    ).toContain("second");
   });
 
   it("reports unsupported and malformed blocks, then imports later blocks", async function () {
@@ -90,8 +111,21 @@ describe("Are.na text block importer", function () {
       ],
     });
 
-    expect(statuses.some((message) => message.includes("Cannot process Are.na block Unsupported"))).toBe(true);
-    expect(statuses.some((message) => message.includes("Failed to process Are.na block Malformed"))).toBe(true);
-    expect(fs.readFileSync(path.join(outputDirectory, "2020", "04-05-Still-imported.txt"), "utf8")).toContain("Success");
+    expect(
+      statuses.some((message) =>
+        message.includes("Cannot process Are.na block Unsupported")
+      )
+    ).toBe(true);
+    expect(
+      statuses.some((message) =>
+        message.includes("Failed to process Are.na block Malformed")
+      )
+    ).toBe(true);
+    expect(
+      fs.readFileSync(
+        path.join(outputDirectory, "2020", "04-05-Still-imported.txt"),
+        "utf8"
+      )
+    ).toContain("Success");
   });
 });

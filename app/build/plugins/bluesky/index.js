@@ -26,12 +26,11 @@ const Url = require("url");
 const fetch = require("node-fetch");
 
 function render($, callback) {
-
   each(
     $,
     "a",
     function (el, next) {
-      var href, host, text, id;
+      var href, host, text;
 
       try {
         href = $(el).attr("href");

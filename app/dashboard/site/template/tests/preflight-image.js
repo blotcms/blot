@@ -11,8 +11,13 @@ describe("template image upload preflight", function () {
     const result = {};
     result.res = {
       locals: { images, base: "/template/example" },
-      json(value) { result.json = value; },
-      message(redirect, message) { result.redirect = redirect; result.message = message; },
+      json(value) {
+        result.json = value;
+      },
+      message(redirect, message) {
+        result.redirect = redirect;
+        result.message = message;
+      },
     };
     return result;
   }
@@ -48,12 +53,16 @@ describe("template image upload preflight", function () {
 
     await preflight(req, result.res, next);
 
-    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ status: 404 }));
+    expect(next).toHaveBeenCalledWith(
+      jasmine.objectContaining({ status: 404 })
+    );
   });
 
   it("allows uploads and explicit removals to reach the fork middleware", async function () {
     const uploadPath = join(this.tmp, "valid-image.png");
-    await sharp({ create: { width: 80, height: 60, channels: 3, background: "#123456" } })
+    await sharp({
+      create: { width: 80, height: 60, channels: 3, background: "#123456" },
+    })
       .png()
       .toFile(uploadPath);
     const upload = { path: uploadPath, size: (await fs.stat(uploadPath)).size };
@@ -78,18 +87,47 @@ describe("template image upload preflight", function () {
   });
 
   it("lets a profile photo edit through only with a valid shape and crop", async function () {
-    const old = { url: "https://cdn.example/image.webp", width: 2000, height: 1000, mask: "square" };
+    const old = {
+      url: "https://cdn.example/image.webp",
+      width: 2000,
+      height: 1000,
+      mask: "square",
+    };
     const attempt = async (body) => {
-      const req = { template: { locals: { profile_image: old } }, params: { key: "profile_image" }, files: {}, body: { update_mask: "1", ...body }, query: { ajax: "1" } };
+      const req = {
+        template: { locals: { profile_image: old } },
+        params: { key: "profile_image" },
+        files: {},
+        body: { update_mask: "1", ...body },
+        query: { ajax: "1" },
+      };
       const next = jasmine.createSpy("next");
       await preflight(req, response([{ key: "profile_image" }]).res, next);
       return next;
     };
 
-    expect(await attempt({ photo_shape: "blob", crop_x: "0.25", crop_y: "0", crop_width: "0.5", crop_height: "1" })).toHaveBeenCalledWith();
+    expect(
+      await attempt({
+        photo_shape: "blob",
+        crop_x: "0.25",
+        crop_y: "0",
+        crop_width: "0.5",
+        crop_height: "1",
+      })
+    ).toHaveBeenCalledWith();
     expect(await attempt({ photo_shape: "blob" })).toHaveBeenCalledWith();
-    expect(await attempt({ photo_shape: "star" })).toHaveBeenCalledWith(jasmine.objectContaining({ status: 400 }));
-    expect(await attempt({ photo_shape: "blob", crop_x: "0.9", crop_y: "0", crop_width: "0.5", crop_height: "1" })).toHaveBeenCalledWith(jasmine.objectContaining({ status: 400 }));
+    expect(await attempt({ photo_shape: "star" })).toHaveBeenCalledWith(
+      jasmine.objectContaining({ status: 400 })
+    );
+    expect(
+      await attempt({
+        photo_shape: "blob",
+        crop_x: "0.9",
+        crop_y: "0",
+        crop_width: "0.5",
+        crop_height: "1",
+      })
+    ).toHaveBeenCalledWith(jasmine.objectContaining({ status: 400 }));
   });
 
   it("rejects corrupt image data before the fork middleware and removes the upload", async function () {
@@ -108,7 +146,9 @@ describe("template image upload preflight", function () {
 
     await preflight(req, result.res, next);
 
-    expect(next).toHaveBeenCalledWith(jasmine.objectContaining({ status: 400 }));
+    expect(next).toHaveBeenCalledWith(
+      jasmine.objectContaining({ status: 400 })
+    );
     expect(await fs.pathExists(path)).toBe(false);
   });
 });

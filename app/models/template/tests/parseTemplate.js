@@ -119,7 +119,10 @@ describe("parseTemplate", function () {
     var result = parseTemplate(template);
     expect(result).toEqual({
       partials: {},
-      retrieve: { allEntries: { fields: { siteTitle: true } }, siteTitle: true },
+      retrieve: {
+        allEntries: { fields: { siteTitle: true } },
+        siteTitle: true,
+      },
     });
   });
 
@@ -128,7 +131,10 @@ describe("parseTemplate", function () {
     var result = parseTemplate(template);
     expect(result).toEqual({
       partials: {},
-      retrieve: { allEntries: { fields: { publishedAt: true } }, publishedAt: true },
+      retrieve: {
+        allEntries: { fields: { publishedAt: true } },
+        publishedAt: true,
+      },
     });
   });
 
@@ -137,7 +143,10 @@ describe("parseTemplate", function () {
     var result = parseTemplate(template);
     expect(result).toEqual({
       partials: {},
-      retrieve: { allEntries: { fields: { thumbnail: true } }, siteTitle: true },
+      retrieve: {
+        allEntries: { fields: { thumbnail: true } },
+        siteTitle: true,
+      },
     });
   });
 

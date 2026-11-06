@@ -1,7 +1,7 @@
 const client = require("models/client");
 const { normalizeErrorFields } = require("./error");
 
-const PREFIX = 'blot:clients:icloud-drive:'
+const PREFIX = "blot:clients:icloud-drive:";
 
 module.exports = {
   _key(blogID) {

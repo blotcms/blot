@@ -32,10 +32,17 @@ describe("git store reader", function () {
   });
 
   // Puts packs in a store, and returns a reader over them (oldest first)
-  async function readerFor(packs, { store = createMemoryStore(), cache = null, maxSize } = {}) {
+  async function readerFor(
+    packs,
+    { store = createMemoryStore(), cache = null, maxSize } = {}
+  ) {
     const entries = [];
-    for (const pack of packs) entries.push(await fx.upload(store, pack, pack.objects || 0));
-    return { store, reader: createReader({ store, cache, packs: entries, maxSize }) };
+    for (const pack of packs)
+      entries.push(await fx.upload(store, pack, pack.objects || 0));
+    return {
+      store,
+      reader: createReader({ store, cache, packs: entries, maxSize }),
+    };
   }
 
   async function expectAllObjects(reader, expected = oracle) {
@@ -43,7 +50,8 @@ describe("git store reader", function () {
       const got = await reader.read(oid);
       expect(got.type).toBe(want.type);
       expect(got.size).toBe(want.data.length);
-      if (!got.data.equals(want.data)) fail("Object " + oid + " differs from git cat-file");
+      if (!got.data.equals(want.data))
+        fail("Object " + oid + " differs from git cat-file");
     }
   }
 
@@ -74,12 +82,16 @@ describe("git store reader", function () {
 
     it("tells the type of every object, through delta chains, from entry headers only", async function () {
       const { reader } = await readerFor(packs);
-      for (const [oid, want] of oracle) expect(await reader.typeOf(oid)).toBe(want.type);
+      for (const [oid, want] of oracle)
+        expect(await reader.typeOf(oid)).toBe(want.type);
       expect(await reader.typeOf("1".repeat(40))).toBeNull();
     });
 
     it("reads every object with a cache, cold then warm", async function () {
-      const cache = createCache({ dir: workDir + "/cache-a", maxBytes: 50 * 1024 * 1024 });
+      const cache = createCache({
+        dir: workDir + "/cache-a",
+        maxBytes: 50 * 1024 * 1024,
+      });
       const { reader } = await readerFor(packs, { cache });
       await expectAllObjects(reader);
       await expectAllObjects(reader);
@@ -102,10 +114,16 @@ describe("git store reader", function () {
     });
 
     it("reads an object in few round trips, and the next near it in fewer", async function () {
-      const cache = createCache({ dir: workDir + "/cache-c", maxBytes: 50 * 1024 * 1024 });
+      const cache = createCache({
+        dir: workDir + "/cache-c",
+        maxBytes: 50 * 1024 * 1024,
+      });
       const { store, reader } = await readerFor(packs, { cache });
-      const commit = fx.listEntries(packs[0]).find((e) => e.type === "commit" && e.depth === 0);
-      const requests = () => store.stats.reads + store.stats.gets + store.stats.heads;
+      const commit = fx
+        .listEntries(packs[0])
+        .find((e) => e.type === "commit" && e.depth === 0);
+      const requests = () =>
+        store.stats.reads + store.stats.gets + store.stats.heads;
       const before = requests();
 
       // The index whole (one GET), the pack's HEAD and the entry: 3, where
@@ -121,15 +139,30 @@ describe("git store reader", function () {
       // And so is the index, for a reader opened later (the cache needs
       // zlib.crc32, Node 22, to keep anything)
       if (!require("zlib").crc32) return;
-      const next = createReader({ store, cache, packs: reader.packs.map((name) => ({ name, size: packs[0].pack.length, idxSize: packs[0].idx.length, objects: 0 })) });
-      const tree = fx.listEntries(packs[0]).find((e) => e.type === "tree" && e.depth === 0);
+      const next = createReader({
+        store,
+        cache,
+        packs: reader.packs.map((name) => ({
+          name,
+          size: packs[0].pack.length,
+          idxSize: packs[0].idx.length,
+          objects: 0,
+        })),
+      });
+      const tree = fx
+        .listEntries(packs[0])
+        .find((e) => e.type === "tree" && e.depth === 0);
       const third = requests();
       await next.read(tree.oid);
-      expect(store.stats.gets + store.stats.heads + store.stats.reads - third).toBe(1);
+      expect(
+        store.stats.gets + store.stats.heads + store.stats.reads - third
+      ).toBe(1);
     });
 
     it("streams an object stored whole in small chunks", async function () {
-      const large = [...oracle].find(([, o]) => o.type === "blob" && o.data.length === 3 * 1024 * 1024);
+      const large = [...oracle].find(
+        ([, o]) => o.type === "blob" && o.data.length === 3 * 1024 * 1024
+      );
       const { store, reader } = await readerFor(packs);
 
       const got = await reader.stream(large[0]);
@@ -149,17 +182,23 @@ describe("git store reader", function () {
     });
 
     it("refuses an object bigger than the limit it was given", async function () {
-      const large = [...oracle].find(([, o]) => o.data.length === 3 * 1024 * 1024);
+      const large = [...oracle].find(
+        ([, o]) => o.data.length === 3 * 1024 * 1024
+      );
       const { reader } = await readerFor(packs);
 
       let error;
-      await reader.read(large[0], { maxSize: 1024 * 1024 }).catch((err) => (error = err));
+      await reader
+        .read(large[0], { maxSize: 1024 * 1024 })
+        .catch((err) => (error = err));
       expect(error instanceof TooLargeError).toBe(true);
     });
 
     it("limits a delta chain's result too", async function () {
       const { reader } = await readerFor(packs, { maxSize: 200 });
-      const deltified = fx.listEntries(packs[0]).find((e) => e.depth > 0 && e.size > 200);
+      const deltified = fx
+        .listEntries(packs[0])
+        .find((e) => e.depth > 0 && e.size > 200);
 
       let error;
       await reader.read(deltified.oid).catch((err) => (error = err));
@@ -186,7 +225,11 @@ describe("git store reader", function () {
     let everything;
 
     beforeAll(function () {
-      const [c10, c20, c30] = [fixture.commits[9], fixture.commits[19], fixture.commits[29]];
+      const [c10, c20, c30] = [
+        fixture.commits[9],
+        fixture.commits[19],
+        fixture.commits[29],
+      ];
 
       early = fx.indexPack(fx.packRevs(fixture.dir, [c10]));
 
@@ -223,7 +266,12 @@ describe("git store reader", function () {
     });
 
     it("reads objects held by several packs, taking the newest copy", async function () {
-      const { store, reader } = await readerFor([early, fixed, late, everything]);
+      const { store, reader } = await readerFor([
+        early,
+        fixed,
+        late,
+        everything,
+      ]);
       await expectAllObjects(reader);
 
       const at = await reader.locate(fixture.commits[2]);
@@ -257,7 +305,9 @@ describe("git store reader", function () {
     }
 
     function wholeBlob(minSize) {
-      return fx.listEntries(packs[0]).find((e) => e.type === "blob" && e.depth === 0 && e.size > minSize);
+      return fx
+        .listEntries(packs[0])
+        .find((e) => e.type === "blob" && e.depth === 0 && e.size > minSize);
     }
 
     it("rejects a flipped byte in an entry", async function () {
@@ -275,16 +325,26 @@ describe("git store reader", function () {
       pack[target.offset + 12] ^= 0x55;
 
       const { reader } = await readerFor([{ ...packs[0], pack }]);
-      await expectCorrupt(reader.stream(target.oid).then((got) => collect(got.data)));
+      await expectCorrupt(
+        reader.stream(target.oid).then((got) => collect(got.data))
+      );
     });
 
     it("rejects a pack cut short", async function () {
-      const target = fx.listEntries(packs[0]).find((e) => e.type === "blob" && e.size > 100000);
+      const target = fx
+        .listEntries(packs[0])
+        .find((e) => e.type === "blob" && e.size > 100000);
       const store = createMemoryStore();
       const entry = await fx.upload(store, packs[0], 0);
       const cut = packs[0].pack.subarray(0, target.offset + 200);
-      await store.put("packs/" + packs[0].name + ".pack", Buffer.concat([cut, Buffer.alloc(20)]));
-      const reader = createReader({ store, packs: [{ ...entry, size: cut.length + 20 }] });
+      await store.put(
+        "packs/" + packs[0].name + ".pack",
+        Buffer.concat([cut, Buffer.alloc(20)])
+      );
+      const reader = createReader({
+        store,
+        packs: [{ ...entry, size: cut.length + 20 }],
+      });
 
       await expectCorrupt(reader.read(target.oid));
     });
@@ -293,7 +353,9 @@ describe("git store reader", function () {
       const entries = fx.listEntries(packs[0]).filter((e) => e.depth === 0);
       const [a, b] = [entries[3], entries[4]];
       const swapped = fx.buildIdx(
-        fx.listEntries(packs[0]).map((e) => (e.oid === a.oid ? { ...e, offset: b.offset } : e)),
+        fx
+          .listEntries(packs[0])
+          .map((e) => (e.oid === a.oid ? { ...e, offset: b.offset } : e)),
         packs[0].pack
       );
 
@@ -309,12 +371,18 @@ describe("git store reader", function () {
     });
 
     it("rejects an index shorter than its fanout says", async function () {
-      const { reader } = await readerFor([{ ...packs[0], idx: packs[0].idx.subarray(0, 2000) }]);
+      const { reader } = await readerFor([
+        { ...packs[0], idx: packs[0].idx.subarray(0, 2000) },
+      ]);
       await expectCorrupt(reader.read(fixture.head));
     });
 
     it("rejects an offset outside the pack", async function () {
-      const entries = fx.listEntries(packs[0]).map((e, i) => (i === 5 ? { ...e, offset: packs[0].pack.length + 100 } : e));
+      const entries = fx
+        .listEntries(packs[0])
+        .map((e, i) =>
+          i === 5 ? { ...e, offset: packs[0].pack.length + 100 } : e
+        );
       const idx = fx.buildIdx(entries, packs[0].pack);
       const { reader } = await readerFor([{ ...packs[0], idx }]);
       await expectCorrupt(reader.read(entries[5].oid));
@@ -342,18 +410,27 @@ describe("git store reader", function () {
 
   describe("which indexes are read whole", function () {
     const MiB = 1024 * 1024;
-    const pack = (n, idxSize) => ({ name: "pack-" + String(n).padStart(40, "0"), idxSize });
+    const pack = (n, idxSize) => ({
+      name: "pack-" + String(n).padStart(40, "0"),
+      idxSize,
+    });
     const names = (set) => [...set].map((name) => Number(name.slice(5)));
 
     it("reads every index whole when they fit, and none over the size of one", function () {
       const packs = [pack(1, 3 * MiB), pack(2, 5 * MiB), pack(3, 1024)];
-      expect(names(chooseWhole(packs, { maxBytes: 1024 * MiB })).sort()).toEqual([1, 3]);
+      expect(
+        names(chooseWhole(packs, { maxBytes: 1024 * MiB })).sort()
+      ).toEqual([1, 3]);
       expect(names(chooseWhole(packs, null)).sort()).toEqual([1, 3]);
     });
 
     it("takes the newest first, within 16 MiB, or a sixteenth of a smaller cache", function () {
       const packs = Array.from({ length: 10 }, (_, i) => pack(i + 1, 3 * MiB));
-      expect(names(chooseWhole(packs, { maxBytes: 1024 * MiB })).sort((a, b) => a - b)).toEqual([6, 7, 8, 9, 10]);
+      expect(
+        names(chooseWhole(packs, { maxBytes: 1024 * MiB })).sort(
+          (a, b) => a - b
+        )
+      ).toEqual([6, 7, 8, 9, 10]);
       expect(names(chooseWhole(packs, { maxBytes: 64 * MiB }))).toEqual([10]);
       expect(names(chooseWhole(packs, { maxBytes: 32 * MiB }))).toEqual([]);
     });
@@ -362,7 +439,10 @@ describe("git store reader", function () {
       fx.repackAll(fixture.dir);
       const packs = fx.readPacks(fixture.dir);
       // A sixteenth of this cache is smaller than the index
-      const cache = createCache({ dir: workDir + "/cache-range", maxBytes: 8 * packs[0].idx.length });
+      const cache = createCache({
+        dir: workDir + "/cache-range",
+        maxBytes: 8 * packs[0].idx.length,
+      });
       const { store, reader } = await readerFor(packs, { cache });
       await expectAllObjects(reader);
       expect(store.stats.gets).toBe(0);

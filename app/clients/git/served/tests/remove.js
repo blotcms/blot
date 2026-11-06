@@ -1,7 +1,11 @@
 describe("git store: removing a blog's repository", function () {
   // A blog on the git client with a clone, a memory store per blog, and the
   // store's log lines kept
-  require("clients/git/tests/setup")({ clone: false, client: true, lines: true });
+  require("clients/git/tests/setup")({
+    clone: false,
+    client: true,
+    lines: true,
+  });
 
   var removal = require("clients/git/served/remove");
   var disconnect = require("clients/git/disconnect");
@@ -91,7 +95,9 @@ describe("git store: removing a blog's repository", function () {
     await disconnected(this.blog.id);
 
     // Reconnected, and set up again
-    await require("util").promisify(require("models/blog").set)(this.blog.id, { client: "git" });
+    await require("util").promisify(require("models/blog").set)(this.blog.id, {
+      client: "git",
+    });
     await store.put(PACK, Buffer.from("x"));
 
     await sleep(1000);
@@ -123,6 +129,10 @@ describe("git store: removing a blog's repository", function () {
     }
 
     expect(await packsLeft(store)).toEqual([PACK]);
-    expect(this.storeLines("remove").filter((line) => / outcome=spared .*pass=2/.test(line)).length).toBe(1);
+    expect(
+      this.storeLines("remove").filter((line) =>
+        / outcome=spared .*pass=2/.test(line)
+      ).length
+    ).toBe(1);
   });
 });

@@ -23,34 +23,41 @@ describe("sse", function () {
   });
 
   ["aborted", "close"].forEach(function (signal) {
-    it("cleans up once on request " + signal + " and response close", function () {
-      const cleanup = jasmine.createSpy("cleanup");
-      let onMessage;
-      mockSubscriber(function (options) {
-        onMessage = options.onMessage;
-        return { cleanup, setupPromise: Promise.resolve() };
-      });
+    it(
+      "cleans up once on request " + signal + " and response close",
+      function () {
+        const cleanup = jasmine.createSpy("cleanup");
+        let onMessage;
+        mockSubscriber(function (options) {
+          onMessage = options.onMessage;
+          return { cleanup, setupPromise: Promise.resolve() };
+        });
 
-      const req = new EventEmitter();
-      req.socket = { setTimeout: jasmine.createSpy("setTimeout") };
-      const res = new EventEmitter();
-      res.writeHead = jasmine.createSpy("writeHead");
-      res.write = jasmine.createSpy("write");
-      res.flushHeaders = jasmine.createSpy("flushHeaders");
-      res.end = jasmine.createSpy("end");
-      require("helper/sse")({ channel: function () { return "test"; } })(req, res);
-      res.write.calls.reset();
+        const req = new EventEmitter();
+        req.socket = { setTimeout: jasmine.createSpy("setTimeout") };
+        const res = new EventEmitter();
+        res.writeHead = jasmine.createSpy("writeHead");
+        res.write = jasmine.createSpy("write");
+        res.flushHeaders = jasmine.createSpy("flushHeaders");
+        res.end = jasmine.createSpy("end");
+        require("helper/sse")({
+          channel: function () {
+            return "test";
+          },
+        })(req, res);
+        res.write.calls.reset();
 
-      req.emit(signal);
-      req.emit("close");
-      res.emit("close");
-      onMessage("late");
-      jasmine.clock().tick(20000);
+        req.emit(signal);
+        req.emit("close");
+        res.emit("close");
+        onMessage("late");
+        jasmine.clock().tick(20000);
 
-      expect(cleanup).toHaveBeenCalledTimes(1);
-      expect(res.write).not.toHaveBeenCalled();
-      expect(res.end).not.toHaveBeenCalled();
-    });
+        expect(cleanup).toHaveBeenCalledTimes(1);
+        expect(res.write).not.toHaveBeenCalled();
+        expect(res.end).not.toHaveBeenCalled();
+      }
+    );
   });
 
   it("ends the response when Redis setup fails", async function () {
@@ -70,7 +77,11 @@ describe("sse", function () {
     res.write = jasmine.createSpy("write");
     res.flushHeaders = jasmine.createSpy("flushHeaders");
     res.end = jasmine.createSpy("end");
-    require("helper/sse")({ channel: function () { return "test"; } })(req, res);
+    require("helper/sse")({
+      channel: function () {
+        return "test";
+      },
+    })(req, res);
 
     rejectSetup(new Error("connect failed"));
     await Promise.resolve();

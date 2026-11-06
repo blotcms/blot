@@ -36,7 +36,6 @@ const stopProgress = () => {
   if (progressInterval) clearInterval(progressInterval);
 };
 
-
 const processBlog = async (blog) => {
   if (!blog || blog.isDisabled) return;
   if (blog.client !== "dropbox") return;
@@ -44,7 +43,10 @@ const processBlog = async (blog) => {
   totalDropboxBlogs++;
 
   const publish = (...args) => {
-    console.log(`Dropbox resync ${blog.title || "Untitled"} ${blog.id}:`, ...args);
+    console.log(
+      `Dropbox resync ${blog.title || "Untitled"} ${blog.id}:`,
+      ...args
+    );
   };
 
   console.log(

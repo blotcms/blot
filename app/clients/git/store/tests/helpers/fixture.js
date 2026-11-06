@@ -25,9 +25,16 @@ const ENV = {
 
 // Runs git in `cwd`; returns stdout as a Buffer. Throws with git's stderr.
 function git(cwd, args, input) {
-  const result = spawnSync("git", args, { cwd, env: ENV, input, maxBuffer: 1 << 30 });
+  const result = spawnSync("git", args, {
+    cwd,
+    env: ENV,
+    input,
+    maxBuffer: 1 << 30,
+  });
   if (result.status !== 0) {
-    throw new Error("git " + args.join(" ") + " failed: " + result.stderr.toString());
+    throw new Error(
+      "git " + args.join(" ") + " failed: " + result.stderr.toString()
+    );
   }
   return result.stdout;
 }
@@ -59,7 +66,14 @@ function lines(version) {
   const out = [];
   for (let i = 0; i < 400; i++) {
     const n = next() % 1000;
-    out.push("line " + i + " " + (i % 40 === version % 40 ? "edited " + version : "same") + " " + n);
+    out.push(
+      "line " +
+        i +
+        " " +
+        (i % 40 === version % 40 ? "edited " + version : "same") +
+        " " +
+        n
+    );
   }
   return out.join("\n") + "\n";
 }
@@ -77,10 +91,14 @@ function buildFixture(dir, { commits = 30, large = true } = {}) {
     fs.mkdirSync(path.join(dir, "docs"), { recursive: true });
     fs.mkdirSync(path.join(dir, "posts"), { recursive: true });
     fs.writeFileSync(path.join(dir, "docs", "big.txt"), lines(i));
-    fs.writeFileSync(path.join(dir, "posts", "post-" + i + ".txt"), "Post number " + i + "\n" + lines(i % 3).slice(0, 4000));
+    fs.writeFileSync(
+      path.join(dir, "posts", "post-" + i + ".txt"),
+      "Post number " + i + "\n" + lines(i % 3).slice(0, 4000)
+    );
     binary[(i * 997) % binary.length] ^= 0xff;
     fs.writeFileSync(path.join(dir, "data.bin"), binary);
-    if (large && i === 10) fs.writeFileSync(path.join(dir, "large.bin"), bytes(2, 3 * 1024 * 1024));
+    if (large && i === 10)
+      fs.writeFileSync(path.join(dir, "large.bin"), bytes(2, 3 * 1024 * 1024));
     if (i === 15) fs.writeFileSync(path.join(dir, "empty.txt"), "");
 
     git(dir, ["add", "-A"]);
@@ -127,8 +145,16 @@ function readPacks(dir) {
 // Returns the pack's bytes; a complete one is indexed by indexPack, a thin one
 // by fixThin.
 function packRevs(dir, include, exclude = [], { thin = false } = {}) {
-  const input = [...include, ...exclude.map((id) => "^" + id)].join("\n") + "\n";
-  const args = ["pack-objects", "--revs", "--stdout", "-q", "--window=100", "--depth=50"];
+  const input =
+    [...include, ...exclude.map((id) => "^" + id)].join("\n") + "\n";
+  const args = [
+    "pack-objects",
+    "--revs",
+    "--stdout",
+    "-q",
+    "--window=100",
+    "--depth=50",
+  ];
   if (thin) args.push("--thin");
   return git(dir, args, input);
 }
@@ -144,7 +170,11 @@ function indexPack(pack) {
     const file = path.join(dir, "in.pack");
     fs.writeFileSync(file, pack);
     git(dir, ["index-pack", file]);
-    return { name: packName(pack), pack, idx: fs.readFileSync(path.join(dir, "in.idx")) };
+    return {
+      name: packName(pack),
+      pack,
+      idx: fs.readFileSync(path.join(dir, "in.idx")),
+    };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -186,7 +216,13 @@ function listEntries({ pack, idx }) {
       .split("\n")
       .map((line) => line.trim().split(/\s+/))
       .filter((f) => /^[0-9a-f]{40}$/.test(f[0]) && f.length >= 5)
-      .map((f) => ({ oid: f[0], type: f[1], size: +f[2], offset: +f[4], depth: f[5] ? +f[5] : 0 }))
+      .map((f) => ({
+        oid: f[0],
+        type: f[1],
+        size: +f[2],
+        offset: +f[4],
+        depth: f[5] ? +f[5] : 0,
+      }))
       .sort((a, b) => a.offset - b.offset);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -199,12 +235,21 @@ function listEntries({ pack, idx }) {
 // fixed against. It needs an index git would not write, hence buildIdx.
 function cutThin(fixed, count) {
   const entries = listEntries(fixed);
-  const cut = count < entries.length ? entries[count].offset : fixed.pack.length - 20;
+  const cut =
+    count < entries.length ? entries[count].offset : fixed.pack.length - 20;
   const body = Buffer.from(fixed.pack.subarray(0, cut));
   body.writeUInt32BE(count, 8);
-  const pack = Buffer.concat([body, crypto.createHash("sha1").update(body).digest()]);
+  const pack = Buffer.concat([
+    body,
+    crypto.createHash("sha1").update(body).digest(),
+  ]);
   const kept = entries.slice(0, count);
-  return { name: packName(pack), pack, idx: buildIdx(kept, pack), entries: kept };
+  return {
+    name: packName(pack),
+    pack,
+    idx: buildIdx(kept, pack),
+    entries: kept,
+  };
 }
 
 // A version 2 index for a pack, from [{ oid, offset }]. Offsets at or over
@@ -235,7 +280,15 @@ function buildIdx(entries, pack, { largeFrom = 2 ** 31 } = {}) {
   });
 
   const header = Buffer.from([0xff, 0x74, 0x4f, 0x63, 0, 0, 0, 2]);
-  const body = Buffer.concat([header, fanout, ids, crcs, offsets, ...large, pack.subarray(pack.length - 20)]);
+  const body = Buffer.concat([
+    header,
+    fanout,
+    ids,
+    crcs,
+    offsets,
+    ...large,
+    pack.subarray(pack.length - 20),
+  ]);
   return Buffer.concat([body, crypto.createHash("sha1").update(body).digest()]);
 }
 
@@ -243,7 +296,11 @@ function buildIdx(entries, pack, { largeFrom = 2 ** 31 } = {}) {
 function catAll(dir, oids) {
   const list =
     oids ||
-    text(dir, ["cat-file", "--batch-all-objects", "--batch-check=%(objectname)"])
+    text(dir, [
+      "cat-file",
+      "--batch-all-objects",
+      "--batch-check=%(objectname)",
+    ])
       .split("\n")
       .filter(Boolean);
   const out = git(dir, ["cat-file", "--batch"], list.join("\n") + "\n");

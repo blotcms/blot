@@ -182,7 +182,11 @@ describe("sync/fix", function () {
 
     fix(
       { id: "blog-id" },
-      { status: function (message) { statuses.push(message); } },
+      {
+        status: function (message) {
+          statuses.push(message);
+        },
+      },
       function (err) {
         expect(err).toBeNull();
         expect(statuses).toEqual([

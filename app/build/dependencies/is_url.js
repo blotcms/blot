@@ -35,7 +35,12 @@ function is_url(string) {
   }
 
   // Accept protocols which do not require a host (e.g. mailto, tel, sms, data)
-  var noHostProtocols = { "mailto:": true, "tel:": true, "sms:": true, "data:": true };
+  var noHostProtocols = {
+    "mailto:": true,
+    "tel:": true,
+    "sms:": true,
+    "data:": true,
+  };
 
   if (url.host || noHostProtocols[url.protocol]) {
     debug(string, "is a valid URL!");

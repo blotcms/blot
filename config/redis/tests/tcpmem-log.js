@@ -34,7 +34,10 @@ describe("tcpmem-log.sh", function () {
       ].join("\n")
     );
 
-    write("proc/meminfo", "MemTotal:       16000000 kB\nMemFree: 100 kB\nMemAvailable:   12000000 kB\n");
+    write(
+      "proc/meminfo",
+      "MemTotal:       16000000 kB\nMemFree: 100 kB\nMemAvailable:   12000000 kB\n"
+    );
 
     // df -P -k: the root disk is 1,024,000,000 bytes (256,000,000 used, 716,800,000
     // available: some blocks are reserved); a separate /backups is twice that
@@ -51,7 +54,9 @@ esac
     );
     // /backups is a mount if the test creates a "backups-mounted" file
     write("bin/mountpoint", `#!/bin/sh\n[ -e "${root}/backups-mounted" ]\n`);
-    ["df", "mountpoint"].forEach((name) => fs.chmodSync(path.join(root, "bin", name), 0o755));
+    ["df", "mountpoint"].forEach((name) =>
+      fs.chmodSync(path.join(root, "bin", name), 0o755)
+    );
 
     // Records its arguments, one per line
     write(
@@ -89,10 +94,14 @@ esac
   it("stores the sample in Redis for the app to read", function () {
     run();
     const [command, key, value] = cliArgs();
-    const logged = fs.readFileSync(path.join(root, "tcpmem.log"), "utf8").trim();
+    const logged = fs
+      .readFileSync(path.join(root, "tcpmem.log"), "utf8")
+      .trim();
 
     expect([command, key]).toEqual(["SET", "blot:redis-host:tcpmem"]);
-    expect(value.startsWith(`${logged} host=${os.hostname()} active=0 `)).toBe(true);
+    expect(value.startsWith(`${logged} host=${os.hostname()} active=0 `)).toBe(
+      true
+    );
 
     const sample = parseSample(value);
     expect(sample.mem).toBe(1234);
@@ -110,12 +119,18 @@ esac
     expect(value).toMatch(
       / active=0 ram_total=16384000000 ram_avail=12288000000 disk_root=256000000\/1024000000\/716800000$/
     );
-    expect(fs.readFileSync(path.join(root, "tcpmem.log"), "utf8")).not.toContain("ram_total");
+    expect(
+      fs.readFileSync(path.join(root, "tcpmem.log"), "utf8")
+    ).not.toContain("ram_total");
 
     const sample = parseSample(value);
     expect(sample.ramTotal).toBe(16384000000);
     expect(sample.ramAvailable).toBe(12288000000);
-    expect(sample.diskRoot).toEqual({ used: 256000000, total: 1024000000, available: 716800000 });
+    expect(sample.diskRoot).toEqual({
+      used: 256000000,
+      total: 1024000000,
+      available: 716800000,
+    });
     expect(sample.diskBackups).toBe(null);
   });
 
@@ -124,7 +139,9 @@ esac
     run();
     const value = cliArgs()[2];
 
-    expect(value).toMatch(/ disk_root=256000000\/1024000000\/716800000 disk_backups=512000000\/2048000000\/1433600000$/);
+    expect(value).toMatch(
+      / disk_root=256000000\/1024000000\/716800000 disk_backups=512000000\/2048000000\/1433600000$/
+    );
     expect(parseSample(value).diskBackups).toEqual({
       used: 512000000,
       total: 2048000000,
@@ -150,8 +167,13 @@ esac
   });
 
   it("still logs when Redis refuses the write", function () {
-    write("bin/redis6-cli", '#!/bin/sh\necho "READONLY You can\'t write against a read only replica."\nexit 1\n');
+    write(
+      "bin/redis6-cli",
+      '#!/bin/sh\necho "READONLY You can\'t write against a read only replica."\nexit 1\n'
+    );
     expect(run().toString()).toBe("");
-    expect(fs.readFileSync(path.join(root, "tcpmem.log"), "utf8")).toContain("mem=1234");
+    expect(fs.readFileSync(path.join(root, "tcpmem.log"), "utf8")).toContain(
+      "mem=1234"
+    );
   });
 });

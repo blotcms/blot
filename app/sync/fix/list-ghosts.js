@@ -33,7 +33,9 @@ function deleteEntryKey(blogID, id) {
 }
 
 function getEntry(blogID, id) {
-  return promisify((next) => Entry.get(blogID, id, (entry) => next(null, entry)))();
+  return promisify((next) =>
+    Entry.get(blogID, id, (entry) => next(null, entry))
+  )();
 }
 
 function setEntry(blogID, id, entry) {

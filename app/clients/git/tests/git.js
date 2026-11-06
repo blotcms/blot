@@ -25,7 +25,14 @@ describe("git client's git wrapper", function () {
     var git = Git(this.tmp);
 
     await git.raw(["init", "-q"]);
-    await git.raw([...identity, "commit", "-q", "--allow-empty", "-m", "first"]);
+    await git.raw([
+      ...identity,
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "first",
+    ]);
 
     var head = await git.raw(["rev-parse", "HEAD"]);
 
@@ -64,7 +71,14 @@ describe("git client's git wrapper", function () {
     var git = Git(this.tmp);
 
     await git.raw(["init", "-q"]);
-    await git.raw([...identity, "commit", "-q", "--allow-empty", "-m", "first"]);
+    await git.raw([
+      ...identity,
+      "commit",
+      "-q",
+      "--allow-empty",
+      "-m",
+      "first",
+    ]);
 
     // Exits 1, with its message on stdout
     var output = await git.raw([...identity, "commit", "-m", "second"]);
@@ -174,7 +188,12 @@ describe("git client's git wrapper", function () {
     var git = Git(this.tmp);
 
     await git.raw(["init", "-q"]);
-    await git.raw(["config", "--local", "test.key", "$(echo hi); `echo hi` & 'a b'"]);
+    await git.raw([
+      "config",
+      "--local",
+      "test.key",
+      "$(echo hi); `echo hi` & 'a b'",
+    ]);
 
     expect(await git.raw(["config", "--local", "test.key"])).toBe(
       "$(echo hi); `echo hi` & 'a b'\n"

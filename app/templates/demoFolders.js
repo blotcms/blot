@@ -55,4 +55,10 @@ function forTemplates(templates) {
   return [...new Set(templates.map(forTemplate))].sort();
 }
 
-module.exports = { list, parse, forTemplate, forTemplates, DEFAULT_DEMO_FOLDER };
+module.exports = {
+  list,
+  parse,
+  forTemplate,
+  forTemplates,
+  DEFAULT_DEMO_FOLDER,
+};

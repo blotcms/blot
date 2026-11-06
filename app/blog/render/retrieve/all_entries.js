@@ -41,7 +41,12 @@ const allEntriesCache = createRenderCache("allEntries", {
     projectEntryFields(allEntriesList, req.retrieve, ALIASES);
 
     // Backlinked entries are trimmed like the list's own.
-    const backlinksFailed = await augmentEntries(req, res, allEntriesList, ALIASES);
+    const backlinksFailed = await augmentEntries(
+      req,
+      res,
+      allEntriesList,
+      ALIASES
+    );
     await yieldToEventLoop();
     const prepared = prepareCacheValue(allEntriesList, {
       preserveEntryInstances: true,

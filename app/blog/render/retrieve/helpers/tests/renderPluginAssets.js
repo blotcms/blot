@@ -11,22 +11,26 @@ describe("renderPluginAssets", function () {
   ].join("");
 
   it("leaves strings without tags unchanged", function () {
-    expect(renderPluginAssets(".katex{}", { blog: { plugins: {} } }, {})).toEqual(
-      ".katex{}"
-    );
+    expect(
+      renderPluginAssets(".katex{}", { blog: { plugins: {} } }, {})
+    ).toEqual(".katex{}");
   });
 
   it("renders analytics tags against the blog's plugin options", function () {
-    const result = renderPluginAssets(googleAnalytics, {
-      blog: {
-        plugins: {
-          analytics: {
-            enabled: true,
-            options: { provider: { Google: true }, trackingID: "UA-1" },
+    const result = renderPluginAssets(
+      googleAnalytics,
+      {
+        blog: {
+          plugins: {
+            analytics: {
+              enabled: true,
+              options: { provider: { Google: true }, trackingID: "UA-1" },
+            },
           },
         },
       },
-    }, {});
+      {}
+    );
 
     expect(result).toContain("var GAID = 'UA-1';");
     expect(result).not.toContain("plausible.io");
@@ -34,17 +38,21 @@ describe("renderPluginAssets", function () {
   });
 
   it("prefers plugins already on res.locals over req.blog.plugins", function () {
-    const result = renderPluginAssets("{{plugins.analytics.options.trackingID}}", {
-      blog: {
-        plugins: {
-          analytics: { options: { trackingID: "from-blog" } },
+    const result = renderPluginAssets(
+      "{{plugins.analytics.options.trackingID}}",
+      {
+        blog: {
+          plugins: {
+            analytics: { options: { trackingID: "from-blog" } },
+          },
         },
       },
-    }, {
-      locals: {
-        plugins: { analytics: { options: { trackingID: "from-locals" } } },
-      },
-    });
+      {
+        locals: {
+          plugins: { analytics: { options: { trackingID: "from-locals" } } },
+        },
+      }
+    );
 
     expect(result).toEqual("from-locals");
   });

@@ -6,11 +6,7 @@ const SKIP_TAGS = ["script", "style", "code", "pre"];
 function mathSpan(source, display) {
   const mode = display ? "display" : "inline";
   return (
-    '<span class="math ' +
-    mode +
-    '">' +
-    escapeHtml(source.trim()) +
-    "</span>"
+    '<span class="math ' + mode + '">' + escapeHtml(source.trim()) + "</span>"
   );
 }
 
@@ -98,7 +94,9 @@ function findClosingDelimiter(text, start, delimiter) {
 function isDisplayMath(source, before, after, delimiter) {
   if (delimiter !== "$$") return false;
 
-  return /^\s*\n/.test(source) || (/^\s*$/.test(before) && /^\s*$/.test(after || ""));
+  return (
+    /^\s*\n/.test(source) || (/^\s*$/.test(before) && /^\s*$/.test(after || ""))
+  );
 }
 
 function pushTextToken(tokens, value) {
@@ -183,7 +181,9 @@ function normalizeMathInText(text) {
 function canFlattenLinebreakParagraph(node) {
   if (!node || !node.children) return false;
 
-  return node.children.every((child) => child.type === "text" || child.name === "br");
+  return node.children.every(
+    (child) => child.type === "text" || child.name === "br"
+  );
 }
 
 // Find display math without first flattening the paragraph. Flattening is
@@ -253,7 +253,8 @@ function replaceDisplayRange($, range) {
   affected.slice(1).forEach((entry) => {
     const from = Math.max(range.start, entry.start) - entry.start;
     const to = Math.min(range.end, entry.end) - entry.start;
-    entry.node.data = entry.node.data.slice(0, from) + entry.node.data.slice(to);
+    entry.node.data =
+      entry.node.data.slice(0, from) + entry.node.data.slice(to);
   });
 }
 

@@ -1,11 +1,8 @@
-const request = require("request");
-const fs = require("fs-extra");
 // Inside the proxy containers (the blot-proxy-auto-ssl volume, which blot-blue
 // and blot-green share), not on the host
 const CERT_DIR = "/etc/resty-auto-ssl/letsencrypt/certs";
 const get = require("../get/blog");
 const client = require("models/client");
-const exec = require("child_process").exec;
 var getConfirmation = require("../util/getConfirmation");
 
 // This deletes the Redis certificate keys, then prints the commands to run on
@@ -50,8 +47,12 @@ get(process.argv[2], function (err, user, blog) {
 
     console.log("removed redis keys", certKeys);
     console.log("");
-    console.log("Now, on the proxy host, remove the certificate files from the");
-    console.log("proxy containers' shared volume (once, from either) and restart");
+    console.log(
+      "Now, on the proxy host, remove the certificate files from the"
+    );
+    console.log(
+      "proxy containers' shared volume (once, from either) and restart"
+    );
     console.log("BOTH proxies, one at a time: the second only once the first");
     console.log("answers its health check again (a reload keeps auto-ssl's");
     console.log("cached certificate).");
@@ -61,7 +62,9 @@ get(process.argv[2], function (err, user, blog) {
     console.log("  for u in blue green; do");
     console.log("    docker restart --time 30 blot-$u");
     console.log("    until docker exec blot-$u curl -fsS -o /dev/null \\");
-    console.log("      --unix-socket /run/openresty/health.sock http://localhost/health; do sleep 1; done");
+    console.log(
+      "      --unix-socket /run/openresty/health.sock http://localhost/health; do sleep 1; done"
+    );
     console.log("  done");
   });
 });

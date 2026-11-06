@@ -1,7 +1,7 @@
-var cheerio = require("cheerio");
 var render_folder = require("./render_folder");
 var render_text_editor = require("./render_text_editor");
 var render_code_editor = require("./render_code_editor");
+var extension = require("./determine_icon");
 
 function middleware(req, res, next) {
   var send = res.send;
@@ -46,9 +46,9 @@ function html_parser($) {
     if ($(el).hasClass("text")) renderer = render_text_editor;
     if ($(el).hasClass("code")) renderer = render_code_editor;
     if ($(el).hasClass("folder")) renderer = render_folder;
-    
+
     if (!renderer) return;
-    
+
     var html = renderer(source.html(), classes, title);
 
     $(el).replaceWith(html);

@@ -10,6 +10,7 @@ const asRetriever = require("../../lib/asRetriever");
 // plus the unicode replacement character U+FFFD
 function removeXMLInvalidChars(string) {
   const regex =
+    // eslint-disable-next-line no-control-regex
     /((?:[\0-\x08\x0B\f\x0E-\x1F\uFFFD\uFFFE\uFFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?:[^\uD800-\uDBFF]|^)[\uDC00-\uDFFF]))/g;
   return string.replace(regex, "");
 }

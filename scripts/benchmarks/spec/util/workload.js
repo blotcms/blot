@@ -90,9 +90,7 @@ function allocateByWeight(total, weights, min = 0) {
     Math.max(min, Math.round((w / sum) * total))
   );
 
-  const order = counts
-    .map((_, i) => i)
-    .sort((a, b) => weights[b] - weights[a]);
+  const order = counts.map((_, i) => i).sort((a, b) => weights[b] - weights[a]);
 
   let diff = total - counts.reduce((a, b) => a + b, 0);
   let guard = 0;
@@ -244,8 +242,7 @@ function buildWorkload(config, blogs, rng, mediaFiles = []) {
     // still exercises the image pipeline without generating unique media
     // bytes per post. Picked pseudo-randomly per post from the
     // same seeded rng, so it's reproducible.
-    const wantsMedia =
-      !isHub && mediaFiles.length > 0 && rng() < mediaFraction;
+    const wantsMedia = !isHub && mediaFiles.length > 0 && rng() < mediaFraction;
     const mediaPath = wantsMedia
       ? mediaFiles[Math.floor(rng() * mediaFiles.length)]
       : null;

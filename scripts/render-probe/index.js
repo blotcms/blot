@@ -51,13 +51,18 @@ ${formatOptions(WRAPPER_OPTIONS)}`);
 function probeArgsFrom(rest, local) {
   const args = rest.slice();
   if (local.urls) {
-    const list = fs.readFileSync(local.urls, "utf8").split("\n").map((s) => s.trim());
+    const list = fs
+      .readFileSync(local.urls, "utf8")
+      .split("\n")
+      .map((s) => s.trim());
     args.push(...list.filter(Boolean));
   }
   if (local.replay) {
     const file = path.basename(local.replay);
     if (!file || file === "." || file === "..") {
-      throw new Error("--replay needs a file name from " + ACCESS_LOG_DIRECTORY);
+      throw new Error(
+        "--replay needs a file name from " + ACCESS_LOG_DIRECTORY
+      );
     }
     args.push("--replay", "/logs/" + file);
   }
@@ -66,9 +71,14 @@ function probeArgsFrom(rest, local) {
 
 async function main() {
   const argv = process.argv.slice(2);
-  if (!argv.length || argv.includes("--help") || argv.includes("-h")) return usage();
+  if (!argv.length || argv.includes("--help") || argv.includes("-h"))
+    return usage();
 
-  const { options, rest } = parseArgs(argv, { ...WRAPPER_OPTIONS, ...LOCAL_OPTIONS }, { strict: false });
+  const { options, rest } = parseArgs(
+    argv,
+    { ...WRAPPER_OPTIONS, ...LOCAL_OPTIONS },
+    { strict: false }
+  );
   const probeArgs = probeArgsFrom(rest, options);
   // Catch a typo here rather than in a container on production.
   parseArgs(probeArgs, PROBE_OPTIONS);

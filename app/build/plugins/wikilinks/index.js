@@ -12,14 +12,12 @@ const debug = require("debug")("blot:entry:build:plugins:wikilinks");
 
 const basename = (path.posix || path).basename;
 
-
 // Helper function to check if a path is a markdown/text file
 function isMarkdownFile(path) {
   if (!path) return false;
   const ext = extname(path).toLowerCase();
   return [".txt", ".text", ".md", ".markdown"].indexOf(ext) > -1;
 }
-
 
 function render($, callback, { blogID, path }) {
   const cleanupWikilinkMarker = ($node, { removeClass = false } = {}) => {
@@ -95,7 +93,6 @@ function render($, callback, { blogID, path }) {
         return next();
       }
 
-
       const attribute = isLink ? "href" : "src";
       const rawTarget = isLink ? $node.attr(attribute) : mediaSource;
 
@@ -156,14 +153,14 @@ function render($, callback, { blogID, path }) {
           }
 
           if (filenameToken) {
-            syntheticDependencies.push(`/__wikilink_filename__/${filenameToken}`);
+            syntheticDependencies.push(
+              `/__wikilink_filename__/${filenameToken}`
+            );
           }
 
-          pathsToWatch
-            .concat(syntheticDependencies)
-            .forEach((path) => {
-              if (path && !dependencies.includes(path)) dependencies.push(path);
-            });
+          pathsToWatch.concat(syntheticDependencies).forEach((path) => {
+            if (path && !dependencies.includes(path)) dependencies.push(path);
+          });
 
           // For unresolved links, still rewrite display text to basename for absolute paths
           const isUnresolvedAbsolutePath = strippedHref.startsWith("/");
@@ -211,11 +208,11 @@ function render($, callback, { blogID, path }) {
               const html = entry && entry.html ? entry.html : "";
               const embedded = $("<div class='embedded-markdown'></div>");
               embedded.html(html);
-              
+
               // if embedded has an h1 with a class of injected-title, remove it
               // this is a hack to remove the injected title from the embedded markdown
               const injectedTitle = embedded.find("h1.injected-title");
-              
+
               if (injectedTitle && injectedTitle.length) {
                 injectedTitle.remove();
               }

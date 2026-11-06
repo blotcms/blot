@@ -13,12 +13,12 @@ var breakPoints = [
   "<<more>>",
   "<!-- more -->",
   "<!- more ->",
-  "<!— more —>"
+  "<!— more —>",
 ];
 var charMap = {
   "<": "&lt;",
   ">": "&gt;",
-  "-": "&#x2014;"
+  "-": "&#x2014;",
 };
 
 for (var x in breakPoints) {
@@ -32,7 +32,7 @@ for (var x in breakPoints) {
   }
 }
 
-function removeNextSiblings (node, $) {
+function removeNextSiblings(node, $) {
   if (!node) return;
 
   // Remove this node's siblings...
@@ -47,13 +47,13 @@ function removeNextSiblings (node, $) {
   $(node).nextAll().remove();
 }
 
-function makeTeaser (html) {
+function makeTeaser(html) {
   debug("loading HTML");
 
   var $ = cheerio.load(
     html,
     {
-      decodeEntities: false
+      decodeEntities: false,
     },
     false
   );
@@ -84,7 +84,7 @@ function makeTeaser (html) {
   // whatever is inside code, head, pre, script and style. ignored says
   // whether nodes (siblings, so they share their ancestors) are inside one.
   // Stops once a breakpoint is found: nothing after it can change the teaser.
-  function look (nodes, ignored) {
+  function look(nodes, ignored) {
     if (ignored) return;
 
     // A copy: finding the breakpoint removes the nodes after it
@@ -166,7 +166,7 @@ function makeTeaser (html) {
   return teaserHTML;
 }
 
-function isBreakPoint (node) {
+function isBreakPoint(node) {
   var content;
 
   if (node.children && node.children[0] && node.children[0].data) {
@@ -189,7 +189,7 @@ function isBreakPoint (node) {
   if (node.type === "text" && breakPoints.indexOf(content) > -1) return true;
 }
 
-function containsBreakPoint (node) {
+function containsBreakPoint(node) {
   if (node.data === undefined || node.type !== "text") return false;
 
   var content = node.data.trim().toLowerCase();
@@ -200,7 +200,7 @@ function containsBreakPoint (node) {
     if (content.indexOf(breakPoints[i]) > -1) return true;
 }
 
-function stripOtherText (node) {
+function stripOtherText(node) {
   var content = node.data.trim().toLowerCase(),
     data = node.data,
     dataWithoutBreakPoint,
@@ -229,34 +229,39 @@ var markerPatterns = breakPoints.map(function (marker) {
 var invisibleToMarker = ["code", "head", "pre", "script", "style"];
 
 // The content of these elements never holds a breakpoint
-function isInvisibleToMarker (node) {
+function isInvisibleToMarker(node) {
   return (
     (node.type === "tag" || node.type === "script" || node.type === "style") &&
     invisibleToMarker.indexOf(node.name) > -1
   );
 }
 
-function stripBreakPoint (html) {
+function stripBreakPoint(html) {
   // Cheap precheck: every marker contains "more"
   if (!html || !/more/i.test(html)) return html;
 
   var $ = cheerio.load(html, { decodeEntities: false }, false);
   var found = false;
 
-  function earliestMarker (text) {
+  function earliestMarker(text) {
     var best = null;
 
     // Search the original string: lowercasing can change its length
     markerPatterns.forEach(function (pattern) {
       var m = pattern.exec(text);
-      if (m && (!best || m.index < best.index || (m.index === best.index && m[0].length > best.length)))
+      if (
+        m &&
+        (!best ||
+          m.index < best.index ||
+          (m.index === best.index && m[0].length > best.length))
+      )
         best = { index: m.index, length: m[0].length };
     });
 
     return best;
   }
 
-  function walk (nodes) {
+  function walk(nodes) {
     nodes.each(function (i, node) {
       if (found) return false;
 
@@ -283,7 +288,10 @@ function stripBreakPoint (html) {
           parent.children.length === 1
         )
           $(parent).remove();
-      } else if (node.type === "tag" && invisibleToMarker.indexOf(node.name) === -1) {
+      } else if (
+        node.type === "tag" &&
+        invisibleToMarker.indexOf(node.name) === -1
+      ) {
         walk($(node).contents());
       }
     });

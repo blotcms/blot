@@ -24,7 +24,8 @@ const { mb } = instrument;
 const OPTIONS = {
   mode: {
     value: "build|sync",
-    help: "build (default): only build each post, saving nothing to its entry;" +
+    help:
+      "build (default): only build each post, saving nothing to its entry;" +
       " sync: re-save it for real (see README.md for the side effects)",
   },
   repeat: { value: "N", help: "process the targets N times (default 1)" },
@@ -54,20 +55,26 @@ function parseTarget(target) {
 // Validates parsed OPTIONS, for the wrapper (locally) and the probe alike.
 function checkOptions(args) {
   const mode = args.mode || "build";
-  if (!["build", "sync"].includes(mode)) throw new Error("--mode must be build or sync");
+  if (!["build", "sync"].includes(mode))
+    throw new Error("--mode must be build or sync");
 
   const repeat = args.repeat === undefined ? 1 : Number(args.repeat);
   if (!(Number.isInteger(repeat) && repeat >= 1)) {
     throw new Error("--repeat must be a positive integer");
   }
 
-  const settle = args.settle === undefined ? DEFAULT_SETTLE_SECONDS : Number(args.settle);
+  const settle =
+    args.settle === undefined ? DEFAULT_SETTLE_SECONDS : Number(args.settle);
   if (!(args.settle !== "" && Number.isFinite(settle) && settle >= 0)) {
     throw new Error("--settle must be a number of seconds");
   }
 
-  const snapshotAt = args["snapshot-at"] === undefined ? 0 : Number(args["snapshot-at"]);
-  if (args["snapshot-at"] !== undefined && !(Number.isInteger(snapshotAt) && snapshotAt > 0)) {
+  const snapshotAt =
+    args["snapshot-at"] === undefined ? 0 : Number(args["snapshot-at"]);
+  if (
+    args["snapshot-at"] !== undefined &&
+    !(Number.isInteger(snapshotAt) && snapshotAt > 0)
+  ) {
     throw new Error("--snapshot-at must be a positive whole number of MB");
   }
 
@@ -76,7 +83,9 @@ function checkOptions(args) {
   // loop for longer than that on a big heap, so the lock would expire and a
   // real sync could take it while this one carries on writing.
   if (mode === "sync" && snapshotAt) {
-    throw new Error("--snapshot-at can't be used with --mode sync: the snapshot would outlast the sync lock");
+    throw new Error(
+      "--snapshot-at can't be used with --mode sync: the snapshot would outlast the sync lock"
+    );
   }
 
   return { mode, repeat, settle, snapshotAt };
@@ -100,7 +109,14 @@ const activeSteps = new Map();
 
 function stepStats(label) {
   if (!steps.has(label)) {
-    steps.set(label, { calls: 0, ms: 0, heapPeak: 0, maxConcurrent: 0, items: 0, itemBytes: 0 });
+    steps.set(label, {
+      calls: 0,
+      ms: 0,
+      heapPeak: 0,
+      maxConcurrent: 0,
+      items: 0,
+      itemBytes: 0,
+    });
   }
   return steps.get(label);
 }
@@ -119,7 +135,8 @@ function stepped(label, fn, callbackIndex, measure) {
   return function (...args) {
     const index = callbackIndex === undefined ? args.length - 1 : callbackIndex;
     const callback = args[index];
-    if (typeof callback !== "function" || !phases.current()) return fn.apply(this, args);
+    if (typeof callback !== "function" || !phases.current())
+      return fn.apply(this, args);
 
     const stats = stepStats(label);
     stats.calls++;
@@ -170,27 +187,52 @@ function wrapModule(moduleName, key, label, callbackIndex, measure) {
 function countEntries(value) {
   if (!value) return 0;
   if (Array.isArray(value)) return value.length;
-  return Object.values(value).reduce((n, list) => n + (Array.isArray(list) ? list.length : 0), 0);
+  return Object.values(value).reduce(
+    (n, list) => n + (Array.isArray(list) ? list.length : 0),
+    0
+  );
 }
 
 function instrumentBuild() {
   // Lookups the wikilinks plugin tries in turn for each [[link]]. byTitle
   // reads the blog's entry and page lists in full.
-  for (const lookup of ["byPath", "byFilename", "byURL", "byTitle", "byHeadingAnchor"]) {
-    wrapModule(`build/plugins/wikilinks/${lookup}`, null, `wikilinks.${lookup}`);
+  for (const lookup of [
+    "byPath",
+    "byFilename",
+    "byURL",
+    "byTitle",
+    "byHeadingAnchor",
+  ]) {
+    wrapModule(
+      `build/plugins/wikilinks/${lookup}`,
+      null,
+      `wikilinks.${lookup}`
+    );
   }
 
   // Loaded lazily by the lookups above (circular with build), so wrapping
   // the property they read at call time is enough. entries.get calls back
   // (err, { entries: [...], pages: [...] }); Entry.get calls back (entry).
-  wrapModule("models/entries", "get", "models/entries.get", undefined, ([, response]) => ({
-    items: countEntries(response),
-    bytes: instrument.approxSize(response),
-  }));
-  wrapModule("models/entry", "get", "models/entry.get", undefined, ([entry]) => ({
-    items: countEntries(entry && [].concat(entry)),
-    bytes: instrument.approxSize(entry),
-  }));
+  wrapModule(
+    "models/entries",
+    "get",
+    "models/entries.get",
+    undefined,
+    ([, response]) => ({
+      items: countEntries(response),
+      bytes: instrument.approxSize(response),
+    })
+  );
+  wrapModule(
+    "models/entry",
+    "get",
+    "models/entry.get",
+    undefined,
+    ([entry]) => ({
+      items: countEntries(entry && [].concat(entry)),
+      bytes: instrument.approxSize(entry),
+    })
+  );
 
   // The plugins list holds these same objects and reads render/prerender
   // at call time.
@@ -208,7 +250,11 @@ function instrumentBuild() {
       plugin.render = stepped(`plugin.${name}.render`, plugin.render, 1);
     }
     if (typeof plugin.prerender === "function") {
-      plugin.prerender = stepped(`plugin.${name}.prerender`, plugin.prerender, 1);
+      plugin.prerender = stepped(
+        `plugin.${name}.prerender`,
+        plugin.prerender,
+        1
+      );
     }
   }
 }
@@ -224,7 +270,9 @@ function stepSummary() {
           ms: Math.round(s.ms),
           heapPeakMB: mb(s.heapPeak),
           maxConcurrent: s.maxConcurrent,
-          ...(s.items || s.itemBytes ? { items: s.items, itemMB: mb(s.itemBytes) } : {}),
+          ...(s.items || s.itemBytes
+            ? { items: s.items, itemMB: mb(s.itemBytes) }
+            : {}),
         },
       ])
   );
@@ -232,7 +280,11 @@ function stepSummary() {
 
 function onSample(usage, label) {
   noteHeap(usage.heapUsed);
-  if (!options.snapshotAt || snapshotTaken || usage.heapUsed <= options.snapshotAt * 1024 * 1024) {
+  if (
+    !options.snapshotAt ||
+    snapshotTaken ||
+    usage.heapUsed <= options.snapshotAt * 1024 * 1024
+  ) {
     return;
   }
   // Checked between event loop turns, so it can't fire inside one long
@@ -243,7 +295,9 @@ function onSample(usage, label) {
     `[probe] heapUsed ${mb(usage.heapUsed)}MB > ${options.snapshotAt}MB during ` +
       `${label || "between phases"}, writing snapshot...`
   );
-  const file = v8.writeHeapSnapshot(path.join(out.dir, `threshold-${Date.now()}.heapsnapshot`));
+  const file = v8.writeHeapSnapshot(
+    path.join(out.dir, `threshold-${Date.now()}.heapsnapshot`)
+  );
   console.log(`[probe] wrote ${file}`);
 }
 
@@ -261,7 +315,10 @@ function redisDelta() {
   for (const [name, c] of Object.entries(redis.totals.byCommand)) {
     const b = before[name] || { count: 0, replyBytes: 0, ms: 0 };
     if (c.count === b.count) continue;
-    byCommand[name] = { count: c.count - b.count, replyMB: mb(c.replyBytes - b.replyBytes) };
+    byCommand[name] = {
+      count: c.count - b.count,
+      replyMB: mb(c.replyBytes - b.replyBytes),
+    };
   }
   return {
     commands: redis.totals.commands - redisAtStart.commands,
@@ -271,16 +328,23 @@ function redisDelta() {
 }
 
 function endPhase(extra) {
-  const result = phases.end({ steps: stepSummary(), redis: redisDelta(), ...extra });
+  const result = phases.end({
+    steps: stepSummary(),
+    redis: redisDelta(),
+    ...extra,
+  });
   const top = Object.entries(result.steps || {}).slice(0, 6);
   for (const [label, s] of top) {
     console.log(
       `[probe]   ${label}: calls ${s.calls} (max ${s.maxConcurrent} at once) ${s.ms}ms ` +
-        `heapPeak ${s.heapPeakMB}MB` + (s.items !== undefined ? ` loaded ${s.items} (${s.itemMB}MB)` : "")
+        `heapPeak ${s.heapPeakMB}MB` +
+        (s.items !== undefined ? ` loaded ${s.items} (${s.itemMB}MB)` : "")
     );
   }
   if (result.redis) {
-    console.log(`[probe]   redis: ${result.redis.commands} commands, ${result.redis.replyMB}MB replies`);
+    console.log(
+      `[probe]   redis: ${result.redis.commands} commands, ${result.redis.replyMB}MB replies`
+    );
   }
   console.log(
     `[probe] ${result.label}: ${result.ms}ms heap ${result.heapBeforeMB}→peak ${result.heapPeakMB}MB ` +
@@ -309,11 +373,13 @@ async function main() {
   const parsed = parseArgs(process.argv.slice(2), OPTIONS);
   options = checkOptions(parsed.options);
   const targets = parsed.rest;
-  if (!targets.length) throw new Error("Pass at least one post URL or <blog>:<path>");
+  if (!targets.length)
+    throw new Error("Pass at least one post URL or <blog>:<path>");
 
   out = instrument.output(parsed.options.out || "/out");
   phases = instrument.measurePhases(out, { onSample });
-  if (!global.gc) console.log("[probe] run with --expose-gc for retained-memory figures");
+  if (!global.gc)
+    console.log("[probe] run with --expose-gc for retained-memory figures");
 
   redis = instrument.trackRedis();
   instrumentBuild();
@@ -365,7 +431,9 @@ async function main() {
   // --heap-prof and --cpu-prof write their profiles on exit, so leave via
   // process.exit rather than a crash; open connections would otherwise keep
   // the process alive.
-  process.exit(summary.error || phases.results.some((result) => result.error) ? 1 : 0);
+  process.exit(
+    summary.error || phases.results.some((result) => result.error) ? 1 : 0
+  );
 }
 
 function buildOnly(blog, entryPath, tag) {
@@ -376,8 +444,12 @@ function buildOnly(blog, entryPath, tag) {
       // charged to the phase's measured heap peak.
       const result = endPhase({ error: errorMessage(err) });
       if (entry) {
-        result.htmlKB = entry.html ? instrument.round(entry.html.length / 1024) : undefined;
-        result.entryJSONKB = instrument.round(JSON.stringify(entry).length / 1024);
+        result.htmlKB = entry.html
+          ? instrument.round(entry.html.length / 1024)
+          : undefined;
+        result.entryJSONKB = instrument.round(
+          JSON.stringify(entry).length / 1024
+        );
         console.log(
           `[probe] ${result.label}: html ${result.htmlKB ?? "n/a"}KB entry ${result.entryJSONKB}KB`
         );
@@ -401,7 +473,9 @@ function syncAndUpdate(blog, paths, tag) {
       for (const entryPath of paths) {
         startPhase(`${tag} update ${entryPath}`);
         const updateErr = await new Promise((next) =>
-          folder.update(entryPath, (err, status) => next(err || (status && status.error)))
+          folder.update(entryPath, (err, status) =>
+            next(err || (status && status.error))
+          )
         );
         endPhase({ error: errorMessage(updateErr) });
       }
@@ -435,7 +509,10 @@ async function drainPurges() {
     await Promise.race([
       flushProxies([]),
       new Promise((resolve, reject) => {
-        timer = setTimeout(() => reject(new Error("timed out")), DRAIN_TIMEOUT_MS);
+        timer = setTimeout(
+          () => reject(new Error("timed out")),
+          DRAIN_TIMEOUT_MS
+        );
       }),
     ]);
   } catch (err) {
@@ -472,7 +549,10 @@ async function resolveTarget(target) {
   const entry =
     (await new Promise((done) =>
       Entry.getByUrl(blog.id, normalizeEntryUrlPath(url.pathname), done)
-    )) || (await new Promise((done) => Entry.get(blog.id, decodeURIComponent(url.pathname), done)));
+    )) ||
+    (await new Promise((done) =>
+      Entry.get(blog.id, decodeURIComponent(url.pathname), done)
+    ));
 
   if (!entry) throw new Error("No entry at " + target);
 
@@ -489,10 +569,14 @@ async function getBlog(identifier) {
   // the label immediately before .<config.host>, so www.<handle>.blot.im
   // resolves to <handle> rather than www.<handle>.
   const suffix = "." + config.host;
-  const handle = lower.endsWith(suffix) ? lower.slice(0, -suffix.length).split(".").pop() : lower;
+  const handle = lower.endsWith(suffix)
+    ? lower.slice(0, -suffix.length).split(".").pop()
+    : lower;
 
   for (const by of [{ id: identifier }, { handle }, { domain: lower }]) {
-    const blog = await new Promise((done) => Blog.get(by, (err, blog) => done(err ? null : blog)));
+    const blog = await new Promise((done) =>
+      Blog.get(by, (err, blog) => done(err ? null : blog))
+    );
     if (blog && blog.id) return blog;
   }
 

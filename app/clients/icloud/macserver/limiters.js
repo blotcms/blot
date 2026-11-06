@@ -17,7 +17,10 @@ const stoppedLimiters = new Map();
  */
 const getLimiterForBlogID = (blogID) => {
   if (stoppedLimiters.has(blogID)) {
-    console.log(clfdate(), `Using stopped limiter for disconnected blogID: ${blogID}`);
+    console.log(
+      clfdate(),
+      `Using stopped limiter for disconnected blogID: ${blogID}`
+    );
     return stoppedLimiters.get(blogID);
   }
 
@@ -46,8 +49,7 @@ const removeLimiterForBlogID = (blogID) => {
   console.log(clfdate(), `Removing limiter for blogID: ${blogID}`);
   if (stoppedLimiters.has(blogID)) return;
 
-  const limiter =
-    limiters.get(blogID) || new Bottleneck({ maxConcurrent: 1 });
+  const limiter = limiters.get(blogID) || new Bottleneck({ maxConcurrent: 1 });
   limiters.delete(blogID);
   stoppedLimiters.set(blogID, limiter);
 
@@ -57,7 +59,11 @@ const removeLimiterForBlogID = (blogID) => {
   );
 
   limiter.stop({ dropWaitingJobs: true }).catch((error) => {
-    console.error(clfdate(), `Failed to stop limiter for blogID: ${blogID}`, error);
+    console.error(
+      clfdate(),
+      `Failed to stop limiter for blogID: ${blogID}`,
+      error
+    );
   });
 };
 

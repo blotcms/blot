@@ -65,7 +65,9 @@ describe("folder links in templates", function () {
     await this.write({ path: "/a.png", content: "one" });
     await this.template({ "entries.html": '<img src="/a.png">' });
 
-    expect(await this.text("/")).toContain(folderUrl(this.blog, "one", "/a.png"));
+    expect(await this.text("/")).toContain(
+      folderUrl(this.blog, "one", "/a.png")
+    );
 
     await this.write({ path: "/a.png", content: "two" });
 
@@ -103,7 +105,8 @@ describe("folder links in templates", function () {
 
   it("drops the host from a {{blog.url}} link when the file is missing", async function () {
     await this.template({
-      "entries.html": '<meta property="og:image" content="{{{blog.url}}}/share.png">',
+      "entries.html":
+        '<meta property="og:image" content="{{{blog.url}}}/share.png">',
     });
 
     expect(await this.text("/")).toBe(
@@ -136,7 +139,11 @@ describe("folder links in templates", function () {
     await this.template({ "entries.html": '<img src="/a.png">' });
 
     const preview = await this.fetch(
-      config.protocol + "preview-of-my-local-on-" + this.blog.handle + "." + config.host
+      config.protocol +
+        "preview-of-my-local-on-" +
+        this.blog.handle +
+        "." +
+        config.host
     );
 
     expect(await preview.text()).toBe('<img src="/a.png">');
@@ -144,7 +151,8 @@ describe("folder links in templates", function () {
 
   describe("CSS", function () {
     const views = {
-      "entries.html": '<link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">',
+      "entries.html":
+        '<link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">',
       "style.css": "a{background:url(img/a.png)}",
     };
 
@@ -155,7 +163,9 @@ describe("folder links in templates", function () {
 
     it("resolves a relative url() against the root, against the root, like any other link", async function () {
       await this.write({ path: "/img/a.png", content: "root" });
-      await this.template(views, { views: { "style.css": { url: "/css/style.css" } } });
+      await this.template(views, {
+        views: { "style.css": { url: "/css/style.css" } },
+      });
 
       expect(await css(this)).toContain(
         folderUrl(this.blog, "root", "/img/a.png")
@@ -165,7 +175,10 @@ describe("folder links in templates", function () {
     it("resolves a url() that climbs with .. against the blog root", async function () {
       await this.write({ path: "/Type/a.woff2", content: "font" });
       await this.template(
-        { ...views, "style.css": "@font-face{src:url(../Type/a.woff2) format('woff2')}" },
+        {
+          ...views,
+          "style.css": "@font-face{src:url(../Type/a.woff2) format('woff2')}",
+        },
         { views: { "style.css": { url: "/style.css" } } }
       );
 
@@ -225,7 +238,9 @@ describe("folder links in templates", function () {
 
     const body = await this.text("/");
 
-    expect(body).toBe(`<img src="${folderUrl(this.blog, "one", "/my%20pic.jpg")}">`);
+    expect(body).toBe(
+      `<img src="${folderUrl(this.blog, "one", "/my%20pic.jpg")}">`
+    );
     expect(await this.text(body.split('"')[1])).toBe("one");
   });
 
@@ -342,7 +357,8 @@ describe("folder links in templates", function () {
 
     it("regenerates the manifest once, when the sync finishes", async function () {
       await this.template({
-        "entries.html": '<img src="/a.png"><img src="/b.png"><img src="/c.png">',
+        "entries.html":
+          '<img src="/a.png"><img src="/b.png"><img src="/c.png">',
       });
 
       const pending = () =>

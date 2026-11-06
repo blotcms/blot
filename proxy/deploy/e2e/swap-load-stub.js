@@ -19,7 +19,9 @@ const http = require("http");
 const crypto = require("crypto");
 const lib = require("./swap-load-lib");
 
-const PORTS = (process.env.STUB_PORTS || "8088,8089,8090,8091").split(",").map((p) => parseInt(p, 10));
+const PORTS = (process.env.STUB_PORTS || "8088,8089,8090,8091")
+  .split(",")
+  .map((p) => parseInt(p, 10));
 const BIND = process.env.STUB_BIND || "127.0.0.1";
 
 const gens = new Map();
@@ -30,7 +32,9 @@ function sendBody(req, res, host, path) {
   const gen = genOf(host);
   const body = lib.bodyFor(host, path, gen);
   res.writeHead(200, {
-    "Content-Type": lib.isLarge(path) ? "application/octet-stream" : "text/html; charset=utf-8",
+    "Content-Type": lib.isLarge(path)
+      ? "application/octet-stream"
+      : "text/html; charset=utf-8",
     "Content-Length": body.length,
     "X-Gen": String(gen),
     "X-Sum": lib.sha256(body),
@@ -62,13 +66,19 @@ function handler(req, res) {
       len += d.length;
     });
     req.on("end", () => {
-      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+      });
       res.end(JSON.stringify({ host, path, len, sha256: hash.digest("hex") }));
     });
     return;
   }
   if (/^\/sites\/[^/]+\/status$/.test(path)) {
-    res.writeHead(200, { "Content-Type": "text/event-stream", "Cache-Control": "no-cache" });
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+    });
     let sent = 0;
     const timer = setInterval(() => {
       if (sent < lib.SSE_EVENTS) {
@@ -83,10 +93,20 @@ function handler(req, res) {
   }
   if (path === "/random") {
     res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify({ host, path, random: `${process.pid}-${++randoms}-${Math.random()}` }));
+    return res.end(
+      JSON.stringify({
+        host,
+        path,
+        random: `${process.pid}-${++randoms}-${Math.random()}`,
+      })
+    );
   }
   const slow = /^\/slow\/(\d+)/.exec(path);
-  if (slow) return setTimeout(() => sendBody(req, res, host, path), Math.min(parseInt(slow[1], 10), 10000));
+  if (slow)
+    return setTimeout(
+      () => sendBody(req, res, host, path),
+      Math.min(parseInt(slow[1], 10), 10000)
+    );
   sendBody(req, res, host, path);
 }
 
@@ -96,5 +116,7 @@ for (const port of PORTS) {
   const server = http.createServer(handler);
   server.keepAliveTimeout = 65000;
   server.headersTimeout = 66000;
-  server.listen(port, BIND, () => console.log(`swap-load stub listening on ${BIND}:${port}`));
+  server.listen(port, BIND, () =>
+    console.log(`swap-load stub listening on ${BIND}:${port}`)
+  );
 }

@@ -9,10 +9,12 @@ var Sync = require("sync");
 // is keyed by blog ID, so the sync does not use it.
 module.exports = function sync(blogID, gitHandle, callback) {
   // if the blog ID is not a string, return the callback with an error
-  if (typeof blogID !== "string") return callback(new Error("Blog ID must be a string"));
+  if (typeof blogID !== "string")
+    return callback(new Error("Blog ID must be a string"));
 
   // if the git handle is not a non-empty string, return the callback with an error
-  if (typeof gitHandle !== "string" || !gitHandle) return callback(new Error("Git handle must be a non-empty string"));
+  if (typeof gitHandle !== "string" || !gitHandle)
+    return callback(new Error("Git handle must be a non-empty string"));
 
   // Attempt to acquire a lock on the blog's folder
   // to apply updates to it...

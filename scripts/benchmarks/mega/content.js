@@ -36,7 +36,9 @@ function sample(random, spread) {
     const [u0, v0] = points[i - 1];
     if (u > u1) continue;
     const t = (u - u0) / (u1 - u0 || 1);
-    return Math.round(Math.exp(Math.log(v0) + t * (Math.log(v1) - Math.log(v0))));
+    return Math.round(
+      Math.exp(Math.log(v0) + t * (Math.log(v1) - Math.log(v0)))
+    );
   }
 
   return spread.max;
@@ -106,7 +108,8 @@ function drawTags(random, pool, count) {
   while (chosen.size < count) {
     let u = random();
     let i = 0;
-    while (i < pool.weights.length - 1 && u > pool.weights[i]) u -= pool.weights[i++];
+    while (i < pool.weights.length - 1 && u > pool.weights[i])
+      u -= pool.weights[i++];
     chosen.add(pool.names[i]);
   }
   return [...chosen];
@@ -131,9 +134,12 @@ function entries(shape, seed) {
     const titleTag = `<h1 id="${slug}">${title}</h1>`;
     const body = cut(random, block, sample(random, shape.html));
     const teaserBody = body.slice(0, sample(random, shape.teaser));
-    const dateStamp = EPOCH - span + Math.floor((span * (i + random())) / total);
+    const dateStamp =
+      EPOCH - span + Math.floor((span * (i + random())) / total);
     const tags =
-      pool && !isPage ? drawTags(random, pool, sample(random, shape.tagsPerEntry)) : [];
+      pool && !isPage
+        ? drawTags(random, pool, sample(random, shape.tagsPerEntry))
+        : [];
 
     result.push({
       id: path,
@@ -165,9 +171,21 @@ function entries(shape, seed) {
         random() < 0.5
           ? {}
           : {
-              small: { url: `/_image_cache/${slug}-s.jpg`, width: 160, height: 120 },
-              medium: { url: `/_image_cache/${slug}-m.jpg`, width: 640, height: 480 },
-              large: { url: `/_image_cache/${slug}-l.jpg`, width: 1600, height: 1200 },
+              small: {
+                url: `/_image_cache/${slug}-s.jpg`,
+                width: 160,
+                height: 120,
+              },
+              medium: {
+                url: `/_image_cache/${slug}-m.jpg`,
+                width: 640,
+                height: 480,
+              },
+              large: {
+                url: `/_image_cache/${slug}-l.jpg`,
+                width: 1600,
+                height: 1200,
+              },
             },
       dateStamp,
       created: dateStamp,

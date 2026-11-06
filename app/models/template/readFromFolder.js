@@ -20,7 +20,7 @@ const improveJSONErrorMessage = require("./util/improveJSONErrorMessage");
 const improveMustacheErrorMessage = require("./util/improveMustacheErrorMessage");
 
 // dir is the template's directory in the blog's folder, e.g. "/Templates/blog"
-module.exports = function readFromFolder (blogID, dir, callback) {
+module.exports = function readFromFolder(blogID, dir, callback) {
   // check the directory exists
   callbackify(folder.listNames)(blogID, dir, function (err, entries) {
     if (err) return callback(err);
@@ -47,7 +47,7 @@ module.exports = function readFromFolder (blogID, dir, callback) {
       });
     });
 
-    function readTemplate () {
+    function readTemplate() {
       loadPackage(blogID, id, dir, function (err, views, enabled) {
         const errors = {};
 
@@ -64,57 +64,70 @@ module.exports = function readFromFolder (blogID, dir, callback) {
             contents,
             function (name, next) {
               // Skip ignored files or Package.json or dotfiles
-              if (name === PACKAGE || shouldIgnoreFile(name) || name.startsWith('.')) return next();
+              if (
+                name === PACKAGE ||
+                shouldIgnoreFile(name) ||
+                name.startsWith(".")
+              )
+                return next();
 
-              callbackify(folder.stat)(blogID, dir + "/" + name, function (err, stat) {
-                // Skip folders, or files which are too large
-                if (err || !stat || stat.size > MAX_SIZE || stat.isDirectory)
-                  return next();
+              callbackify(folder.stat)(
+                blogID,
+                dir + "/" + name,
+                function (err, stat) {
+                  // Skip folders, or files which are too large
+                  if (err || !stat || stat.size > MAX_SIZE || stat.isDirectory)
+                    return next();
 
-                callbackify(folder.read)(blogID, dir + "/" + name, function (err, buffer) {
-                  if (err) return next();
+                  callbackify(folder.read)(
+                    blogID,
+                    dir + "/" + name,
+                    function (err, buffer) {
+                      if (err) return next();
 
-                  var content = buffer.toString("utf-8");
+                      var content = buffer.toString("utf-8");
 
-                  // We look up this view file to merge any existing properties
-                  // Should this really be handled by setView? It looks like
-                  // setView already calls getView...
-                  getView(id, name, function (err, view) {
-                    // getView returns an error if the view does not exist
-                    // We want to be able to create new views using local editing
-                    // we so ignore this error, and create the view object as needed
-                    view = view || {};
-                    view.name = view.name || name;
+                      // We look up this view file to merge any existing properties
+                      // Should this really be handled by setView? It looks like
+                      // setView already calls getView...
+                      getView(id, name, function (err, view) {
+                        // getView returns an error if the view does not exist
+                        // We want to be able to create new views using local editing
+                        // we so ignore this error, and create the view object as needed
+                        view = view || {};
+                        view.name = view.name || name;
 
-                    // Views might not exist if there's an error
-                    // with the template's package.json file
-                    if (views && views[name])
-                      for (var i in views[name]) view[i] = views[name][i];
+                        // Views might not exist if there's an error
+                        // with the template's package.json file
+                        if (views && views[name])
+                          for (var i in views[name]) view[i] = views[name][i];
 
-                    view.content = content;
-                    if (
-                      Array.isArray(view.urlPatterns) &&
-                      view.urlPatterns.length
-                    ) {
-                      view.url = view.urlPatterns;
+                        view.content = content;
+                        if (
+                          Array.isArray(view.urlPatterns) &&
+                          view.urlPatterns.length
+                        ) {
+                          view.url = view.urlPatterns;
+                        }
+                        view.url = view.url || "/" + view.name;
+
+                        setView(id, view, function (err) {
+                          // we expose this error to the developer on
+                          // the preview subdomain
+                          if (err) {
+                            errors[view.name] = improveMustacheErrorMessage(
+                              err,
+                              content
+                            );
+                          }
+
+                          next();
+                        });
+                      });
                     }
-                    view.url = view.url || "/" + view.name;
-
-                    setView(id, view, function (err) {
-                      // we expose this error to the developer on
-                      // the preview subdomain
-                      if (err) {
-                        errors[view.name] = improveMustacheErrorMessage(
-                          err,
-                          content
-                        );
-                      }
-
-                      next();
-                    });
-                  });
-                });
-              });
+                  );
+                }
+              );
             },
             function (err) {
               if (err) return callback(err);
@@ -145,7 +158,7 @@ module.exports = function readFromFolder (blogID, dir, callback) {
   });
 };
 
-function loadPackage (blogID, id, dir, callback) {
+function loadPackage(blogID, id, dir, callback) {
   callbackify(folder.read)(blogID, dir + "/" + PACKAGE, function (err, buffer) {
     // Package.json is optional
     if (err && err.code === "ENOENT") {
@@ -171,30 +184,24 @@ function loadPackage (blogID, id, dir, callback) {
   });
 }
 
-function removeDeletedViews (templateID, contents, callback) {
+function removeDeletedViews(templateID, contents, callback) {
   const viewsToRemove = [];
 
   // The rejection handler sits beside the success handler rather than in a
   // trailing .catch, so a throw further down the callback chain can't call
   // the callback a second time
-  client
-    .sMembers(key.allViews(templateID))
-    .then(function (viewNames) {
-      for (const viewName of viewNames) {
-        let found = contents.find(fileName => fileName.startsWith(viewName));
-        if (!found) viewsToRemove.push(viewName);
-      }
+  client.sMembers(key.allViews(templateID)).then(function (viewNames) {
+    for (const viewName of viewNames) {
+      let found = contents.find((fileName) => fileName.startsWith(viewName));
+      if (!found) viewsToRemove.push(viewName);
+    }
 
-      async.eachSeries(
-        viewsToRemove,
-        function (viewName, next) {
-          dropView(templateID, viewName, next);
-        },
-        callback
-      );
-    }, callback);
-}
-
-function badPermission (blogID, templateID) {
-  return new Error("No permission for " + blogID + " to write " + templateID);
+    async.eachSeries(
+      viewsToRemove,
+      function (viewName, next) {
+        dropView(templateID, viewName, next);
+      },
+      callback
+    );
+  }, callback);
 }

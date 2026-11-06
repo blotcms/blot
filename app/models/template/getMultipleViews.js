@@ -2,15 +2,13 @@ var getView = require("./getView");
 
 module.exports = function getMultipleViews(templateName, viewNames, callback) {
   var totalViews = viewNames.length,
-    views = {},
-    error;
+    views = {};
 
   if (!totalViews) onFinish();
 
   for (var i in viewNames) getView(templateName, viewNames[i], onGet);
 
   function onGet(err, view) {
-    error = err;
     // TO DO collect missing
     // partials or views and expose
     // them to the callback. Right now

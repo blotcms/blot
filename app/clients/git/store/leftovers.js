@@ -28,7 +28,11 @@ const PREFIXES = ["import-", "verify-", "rewrite-", "setup-"];
 // leftover waits at most this long (and a day for the next run) before it goes.
 const MIN_AGE_MS = 12 * 60 * 60 * 1000;
 
-const NAME = new RegExp("^(" + PREFIXES.map((p) => p.replace("-", "\\-")).join("|") + ")[A-Za-z0-9]{6}$");
+const NAME = new RegExp(
+  "^(" +
+    PREFIXES.map((p) => p.replace("-", "\\-")).join("|") +
+    ")[A-Za-z0-9]{6}$"
+);
 
 // The newest mtime of dir and its immediate contents, and the bytes in all of
 // it. Null if dir is gone. Entries which vanish while it looks are skipped.
@@ -71,9 +75,15 @@ async function inspect(dir) {
 // directories kept for being too recent, the bytes removed, and the removals
 // which failed. It rejects only if dir cannot be listed for a reason other
 // than not existing.
-async function sweepScratch({ dir, minAge = MIN_AGE_MS, now = Date.now(), prefixes = PREFIXES } = {}) {
+async function sweepScratch({
+  dir,
+  minAge = MIN_AGE_MS,
+  now = Date.now(),
+  prefixes = PREFIXES,
+} = {}) {
   const result = { removed: 0, spared: 0, bytes: 0, errors: 0 };
-  const matches = (name) => NAME.test(name) && prefixes.some((p) => name.startsWith(p));
+  const matches = (name) =>
+    NAME.test(name) && prefixes.some((p) => name.startsWith(p));
 
   let entries;
   try {

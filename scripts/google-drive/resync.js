@@ -60,7 +60,12 @@ const processBlog = async (blog) => {
       } else {
         successfulResyncs++;
         if (summary.downloaded || summary.removed || summary.createdDirs) {
-          changed.push({ blogID: blog.id, handle: blog.handle, summary, paths });
+          changed.push({
+            blogID: blog.id,
+            handle: blog.handle,
+            summary,
+            paths,
+          });
         }
         console.log(
           `[ok] Completed Google Drive resync for ${blog.id} (${blog.handle || "no handle"})`
@@ -123,14 +128,18 @@ const summarize = () => {
       if (summary.modifiedDuringWalk) {
         counts.push(`${summary.modifiedDuringWalk} edited during the resync`);
       }
-      console.log(`  Blog ${blogID} (${handle || "no handle"}): ${counts.join(", ")}`);
+      console.log(
+        `  Blog ${blogID} (${handle || "no handle"}): ${counts.join(", ")}`
+      );
       paths.slice(0, 5).forEach((path) => console.log(`    ${path}`));
       if (paths.length > 5) console.log(`    ... and ${paths.length - 5} more`);
     });
   }
 
   if (failedResyncs > 0) {
-    console.log("\n[WARN] Some Google Drive resyncs failed. Review errors above.");
+    console.log(
+      "\n[WARN] Some Google Drive resyncs failed. Review errors above."
+    );
   } else if (totalGoogleDriveBlogs > 0) {
     console.log("\n[ok] All Google Drive blogs resynced successfully!");
   } else {

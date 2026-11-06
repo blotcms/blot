@@ -46,7 +46,7 @@ describe("entry.getByUrl", function () {
 
     withMocks(
       {
-        get: key => {
+        get: (key) => {
           calls.push(key);
           return Promise.resolve("/entry.txt");
         },
@@ -56,8 +56,8 @@ describe("entry.getByUrl", function () {
         expect(entryID).toEqual("/entry.txt");
         callback({ id: entryID, title: "ok" });
       },
-      getByUrl => {
-        getByUrl("blog-id", "/gr%C3%BC%C3%9Fe", entry => {
+      (getByUrl) => {
+        getByUrl("blog-id", "/gr%C3%BC%C3%9Fe", (entry) => {
           expect(calls.length).toEqual(1);
           expect(calls[0]).toContain("/grüße");
           expect(entry.title).toEqual("ok");
@@ -72,15 +72,15 @@ describe("entry.getByUrl", function () {
 
     withMocks(
       {
-        get: key => {
+        get: (key) => {
           calls.push(key);
           return Promise.resolve("/entry.txt");
         },
       },
       (_blogID, _entryID, callback) => callback({ id: "/entry.txt" }),
-      getByUrl => {
+      (getByUrl) => {
         expect(function () {
-          getByUrl("blog-id", "/bad%2", entry => {
+          getByUrl("blog-id", "/bad%2", (entry) => {
             expect(calls.length).toEqual(1);
             expect(calls[0]).toContain("/bad%2");
             expect(entry.id).toEqual("/entry.txt");
@@ -91,11 +91,12 @@ describe("entry.getByUrl", function () {
     );
   });
 
-
   it("handles redis rejection without throwing asynchronously", function (done) {
     const rejection = new Error("redis get failed");
     const uncaughtHandler = jasmine.createSpy("uncaughtHandler");
-    const unhandledRejectionHandler = jasmine.createSpy("unhandledRejectionHandler");
+    const unhandledRejectionHandler = jasmine.createSpy(
+      "unhandledRejectionHandler"
+    );
     const originalConsoleError = console.error;
     const consoleErrorSpy = jasmine.createSpy("console.error");
 
@@ -110,7 +111,7 @@ describe("entry.getByUrl", function () {
       () => {
         throw new Error("get should not be called when redis.get rejects");
       },
-      getByUrl => {
+      (getByUrl) => {
         expect(function () {
           getByUrl("blog-id", "/entry", function (entry, error) {
             expect(entry).toBeUndefined();
@@ -137,14 +138,14 @@ describe("entry.getByUrl", function () {
 
     withMocks(
       {
-        get: key => {
+        get: (key) => {
           calls.push(key);
           return Promise.resolve("/entry.txt");
         },
       },
       (_blogID, _entryID, callback) => callback({ id: "/entry.txt" }),
-      getByUrl => {
-        getByUrl("blog-id", "/already-decoded", entry => {
+      (getByUrl) => {
+        getByUrl("blog-id", "/already-decoded", (entry) => {
           expect(calls.length).toEqual(1);
           expect(calls[0]).toContain("/already-decoded");
           expect(entry.id).toEqual("/entry.txt");

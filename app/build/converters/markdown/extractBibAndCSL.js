@@ -1,5 +1,4 @@
 const async = require("async");
-const extractMetadata = require("build/metadata");
 const folder = require("storage/folder");
 const resolve = require("path").resolve;
 const dirname = require("path").dirname;
@@ -11,7 +10,6 @@ function getIgnoreCase(obj, key) {
 }
 
 module.exports = function (blog, path, metadata, callback) {
-
   let paths = {
     bib: getIgnoreCase(metadata, "bibliography"),
     csl: getIgnoreCase(metadata, "csl"),

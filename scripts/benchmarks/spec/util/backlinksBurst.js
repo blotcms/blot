@@ -15,7 +15,12 @@ const { timedRequest } = require("./burstRequest");
  * sites than the requested concurrency, like the archives/sitemap bursts)
  * to see whether that per-render fan-out serializes under concurrent load.
  */
-async function runBacklinksBurst({ blogs, hubPathBySite, concurrency, getForBlog }) {
+async function runBacklinksBurst({
+  blogs,
+  hubPathBySite,
+  concurrency,
+  getForBlog,
+}) {
   const targets = [];
   for (let i = 0; i < concurrency && blogs.length; i++) {
     const blogIndex = i % blogs.length;

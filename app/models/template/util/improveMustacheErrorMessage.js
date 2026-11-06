@@ -1,6 +1,6 @@
 // Maps 'Unclosed section "entriess" at 1446' to
 // 'Unclosed section "entriess" at position 4 on line 12'
-module.exports = function improveMustacheErrorMessage (err, contents) {
+module.exports = function improveMustacheErrorMessage(err, contents) {
   try {
     const regex = /at (\d+)$/gm;
     const found = [...err.message.matchAll(regex)][0];

@@ -96,7 +96,6 @@ function showBlog(blog, user, callback) {
 }
 
 function showUser(user, callback) {
-
   console.log();
   console.log(colors.dim("Found " + user.uid));
   console.log("Email: " + user.email);
@@ -108,7 +107,8 @@ function showUser(user, callback) {
   }
 
   if (user.subscription && user.subscription.plan) {
-    subscriptionMessage = subscriptionMessage +
+    subscriptionMessage =
+      subscriptionMessage +
       user.subscription.quantity +
       " x " +
       prettyPrice(user.subscription.plan.amount) +

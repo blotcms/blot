@@ -11,7 +11,9 @@ describe("Blog.set rebuilds entries linking to a new handle or domain", function
 
   var getBlog = (blogID) =>
     new Promise((resolve, reject) =>
-      Blog.get({ id: blogID }, (err, blog) => (err ? reject(err) : resolve(blog)))
+      Blog.get({ id: blogID }, (err, blog) =>
+        err ? reject(err) : resolve(blog)
+      )
     );
 
   var setBlog = (blogID, updates) =>

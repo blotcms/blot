@@ -17,12 +17,16 @@ var MAX_MONTH_SECONDS = 32 * SECONDS_IN_DAY;
 // the marker outlives the period it guards by a wide margin
 var SENT_MARKER_TTL_MS = 40 * MS_IN_DAY;
 
-function roughlyOneMonth (seconds) {
+function roughlyOneMonth(seconds) {
   return seconds >= MIN_MONTH_SECONDS && seconds <= MAX_MONTH_SECONDS;
 }
 
-function isFirstMonthlyRenewal (subscription) {
-  if (!subscription || !subscription.plan || subscription.plan.interval !== "month")
+function isFirstMonthlyRenewal(subscription) {
+  if (
+    !subscription ||
+    !subscription.plan ||
+    subscription.plan.interval !== "month"
+  )
     return false;
 
   var created = subscription.created;
@@ -40,14 +44,14 @@ function isFirstMonthlyRenewal (subscription) {
   );
 }
 
-function sentKey (uid, periodEnd) {
+function sentKey(uid, periodEnd) {
   return "subscription-email:" + uid + ":" + periodEnd;
 }
 
 // Short claim held while a send is in progress (longer than any send)
 var SENDING_CLAIM_TTL_MS = 10 * 60 * 1000;
 
-function sendingKey (uid, periodEnd) {
+function sendingKey(uid, periodEnd) {
   return "subscription-email:sending:" + uid + ":" + periodEnd;
 }
 
@@ -55,7 +59,7 @@ function sendingKey (uid, periodEnd) {
 // { name, periodEnd } where name is the helper/email method to call, or null.
 // A user is due from the warning date (the period end minus DAYS_WARNING)
 // until the period ends.
-function decide (user, now) {
+function decide(user, now) {
   if (now === undefined) now = Date.now();
 
   // This user does not have a subscription through Stripe
@@ -92,7 +96,7 @@ function decide (user, now) {
   return null;
 }
 
-function getUser (uid) {
+function getUser(uid) {
   return new Promise(function (resolve, reject) {
     getById(uid, function (err, user) {
       if (err) return reject(err);
@@ -101,7 +105,7 @@ function getUser (uid) {
   });
 }
 
-function sendEmail (name, uid) {
+function sendEmail(name, uid) {
   return new Promise(function (resolve, reject) {
     email[name](uid, {}, function (err) {
       if (err) return reject(err);
@@ -117,7 +121,7 @@ function sendEmail (name, uid) {
 // fails the claim is removed so the next scan tries again. A crash between
 // the send and the durable marker can resend after the claim expires, which
 // is accepted: a duplicate warning beats a lost one.
-async function sendForUser (uid, now) {
+async function sendForUser(uid, now) {
   var user = await getUser(uid);
   var decision = decide(user, now);
 
@@ -151,7 +155,7 @@ async function sendForUser (uid, now) {
 // subscription changes made after sign-up, and is safe in any number of
 // processes. An error for one user doesn't stop the rest. Resolves to the
 // number of emails sent.
-async function scan (now) {
+async function scan(now) {
   var uids = await new Promise(function (resolve, reject) {
     getAllIds(function (err, uids) {
       if (err) return reject(err);
@@ -178,5 +182,5 @@ module.exports = {
   sentKey: sentKey,
   sendingKey: sendingKey,
   SENDING_CLAIM_TTL_MS: SENDING_CLAIM_TTL_MS,
-  SENT_MARKER_TTL_MS: SENT_MARKER_TTL_MS
+  SENT_MARKER_TTL_MS: SENT_MARKER_TTL_MS,
 };

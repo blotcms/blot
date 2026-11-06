@@ -94,7 +94,9 @@ describe("google drive hotDocPoller", function () {
     await poller.alarms.poll();
 
     expect(poller.triggerDownloadAndSync).toHaveBeenCalledTimes(1);
-    expect(poller.triggerDownloadAndSync.calls.argsFor(0)[0].blogID).toEqual(blogID);
+    expect(poller.triggerDownloadAndSync.calls.argsFor(0)[0].blogID).toEqual(
+      blogID
+    );
     expect(await field("lastKnownRevision")).toEqual("rev-2");
     expect(await poller.alarms.when(id)).toBeGreaterThan(Date.now());
   });
@@ -105,7 +107,12 @@ describe("google drive hotDocPoller", function () {
     const cooldownKey = "blot:google-drive:hotdocs:cooldown:" + blogID;
     try {
       await poller.enqueue({ blogID, serviceAccountId, fileId, folderId });
-      await poller.enqueue({ blogID, serviceAccountId, fileId: otherFileId, folderId });
+      await poller.enqueue({
+        blogID,
+        serviceAccountId,
+        fileId: otherFileId,
+        folderId,
+      });
       revision = "rev-2";
 
       poller.triggerDownloadAndSync.and.callThrough();
@@ -141,7 +148,11 @@ describe("google drive hotDocPoller", function () {
   it("re-arms at the first tier when the doc was enqueued again during the poll", async function () {
     await poller.enqueue({ blogID, serviceAccountId, fileId, folderId });
     // Old enough for the 10s tier
-    await client.hSet(ITEM_PREFIX + id, "lastSeen", String(Date.now() - 90 * 1000));
+    await client.hSet(
+      ITEM_PREFIX + id,
+      "lastSeen",
+      String(Date.now() - 90 * 1000)
+    );
     poller.fetchRateLimited.and.callFake(async (sa, docs, each) => {
       await client.hSet(ITEM_PREFIX + id, "lastSeen", String(Date.now()));
       return poller.fetchLatestRevisionState(docs, each);
@@ -158,7 +169,11 @@ describe("google drive hotDocPoller", function () {
     await poller.enqueue({ blogID, serviceAccountId, fileId, folderId });
 
     // 90 seconds since the doc was last seen: the 10s tier
-    await client.hSet(ITEM_PREFIX + id, "lastSeen", String(Date.now() - 90 * 1000));
+    await client.hSet(
+      ITEM_PREFIX + id,
+      "lastSeen",
+      String(Date.now() - 90 * 1000)
+    );
     await makeDue();
     await poller.alarms.poll();
     const due = await poller.alarms.when(id);
@@ -166,7 +181,11 @@ describe("google drive hotDocPoller", function () {
     expect(due).toBeLessThanOrEqual(Date.now() + 10000 + 2000);
 
     // Past the last tier: evicted, nothing left to poll
-    await client.hSet(ITEM_PREFIX + id, "lastSeen", String(Date.now() - 11 * 60 * 1000));
+    await client.hSet(
+      ITEM_PREFIX + id,
+      "lastSeen",
+      String(Date.now() - 11 * 60 * 1000)
+    );
     await makeDue();
     await poller.alarms.poll();
     expect(await poller.alarms.when(id)).toBeNull();
@@ -183,7 +202,9 @@ describe("google drive hotDocPoller", function () {
     expect(await poller.evictIfUnchanged(stale, "age")).toBe(false);
     expect(await field("lastSeen")).toEqual(refreshed);
 
-    expect(await poller.evictIfUnchanged(await poller.loadItem(id), "age")).toBe(true);
+    expect(
+      await poller.evictIfUnchanged(await poller.loadItem(id), "age")
+    ).toBe(true);
     expect(await client.exists(ITEM_PREFIX + id)).toEqual(0);
   });
 
@@ -217,7 +238,8 @@ describe("google drive hotDocPoller", function () {
     try {
       // Docs enqueued in the same millisecond tie on first seen, so which two
       // went isn't fixed; the cap is what matters.
-      const setKey = "blot:google-drive:hotdocs:by-service-account:" + serviceAccountId;
+      const setKey =
+        "blot:google-drive:hotdocs:by-service-account:" + serviceAccountId;
       expect(await client.zCard(setKey)).toEqual(150);
       let remaining = 0;
       for (const each of ids) {

@@ -66,7 +66,9 @@ function route53Dns(deps = {}) {
                 Name: name,
                 Type: "TXT",
                 TTL: TXT_TTL,
-                ResourceRecords: values.map((value) => ({ Value: `"${value}"` })),
+                ResourceRecords: values.map((value) => ({
+                  Value: `"${value}"`,
+                })),
               },
             },
           ],
@@ -78,11 +80,15 @@ function route53Dns(deps = {}) {
     const deadline = Date.now() + IN_SYNC_TIMEOUT_MS;
 
     for (;;) {
-      const { ChangeInfo } = await client.send(new sdk.GetChangeCommand({ Id: id }));
+      const { ChangeInfo } = await client.send(
+        new sdk.GetChangeCommand({ Id: id })
+      );
 
       if (ChangeInfo.Status === "INSYNC") return;
       if (Date.now() > deadline) {
-        throw new Error("Route 53 change " + id + " was not INSYNC after 5 minutes");
+        throw new Error(
+          "Route 53 change " + id + " was not INSYNC after 5 minutes"
+        );
       }
 
       await wait(IN_SYNC_POLL_MS);
@@ -105,7 +111,9 @@ function route53Dns(deps = {}) {
 // Days until the leaf certificate in a PEM expires, or null if unreadable
 function daysLeft(pem, now) {
   try {
-    return Math.floor((Date.parse(new crypto.X509Certificate(pem).validTo) - now) / DAY);
+    return Math.floor(
+      (Date.parse(new crypto.X509Certificate(pem).validTo) - now) / DAY
+    );
   } catch (e) {
     return null;
   }
@@ -157,7 +165,9 @@ async function issue({ acme, acmeClient, dns, host }) {
 
     const challenge = authorization.challenges.find((c) => c.type === "dns-01");
     if (!challenge) {
-      throw new Error("No dns-01 challenge offered for " + authorization.identifier.value);
+      throw new Error(
+        "No dns-01 challenge offered for " + authorization.identifier.value
+      );
     }
 
     pending.push({
@@ -199,7 +209,10 @@ async function issue({ acme, acmeClient, dns, host }) {
       try {
         await dns.remove(recordName, values);
       } catch (err) {
-        console.error("Wildcard SSL: could not remove " + recordName + " TXT record", err);
+        console.error(
+          "Wildcard SSL: could not remove " + recordName + " TXT record",
+          err
+        );
       }
     }
   }
@@ -219,7 +232,11 @@ async function renew(deps = {}) {
     force = false,
   } = deps;
 
-  const current = usableDaysLeft(await client.get(PEM_KEY), await client.get(KEY_KEY), now);
+  const current = usableDaysLeft(
+    await client.get(PEM_KEY),
+    await client.get(KEY_KEY),
+    now
+  );
 
   if (!force && current !== null && current > RENEW_DAYS) {
     return { renewed: false, daysLeft: current };
@@ -228,13 +245,21 @@ async function renew(deps = {}) {
   const zoneId = config.wildcardSSL.hostedZoneId;
 
   if (!host) throw new Error("BLOT_HOST is not set");
-  if (!deps.dns && !zoneId) throw new Error("BLOT_WILDCARD_SSL_HOSTED_ZONE_ID is not set");
+  if (!deps.dns && !zoneId)
+    throw new Error("BLOT_WILDCARD_SSL_HOSTED_ZONE_ID is not set");
 
   const dns = deps.dns || route53Dns({ zoneId });
 
   console.log(
-    "Wildcard SSL: renewing certificate for " + host + " and *." + host + " (" +
-      (current === null ? "no usable certificate and key in Redis" : current + " days left") + ")"
+    "Wildcard SSL: renewing certificate for " +
+      host +
+      " and *." +
+      host +
+      " (" +
+      (current === null
+        ? "no usable certificate and key in Redis"
+        : current + " days left") +
+      ")"
   );
 
   const acme = deps.acme || require("acme-client");
@@ -245,7 +270,9 @@ async function renew(deps = {}) {
       accountKey: await accountKey({ client, acme }),
     });
 
-  const contact = config.admin.email ? ["mailto:" + config.admin.email] : undefined;
+  const contact = config.admin.email
+    ? ["mailto:" + config.admin.email]
+    : undefined;
   await acmeClient.createAccount({ termsOfServiceAgreed: true, contact });
 
   const { key, pem } = await issue({ acme, acmeClient, dns, host });
@@ -255,10 +282,15 @@ async function renew(deps = {}) {
   try {
     x509 = new crypto.X509Certificate(pem);
   } catch (e) {
-    throw new Error("Let's Encrypt returned a certificate which could not be parsed");
+    throw new Error(
+      "Let's Encrypt returned a certificate which could not be parsed",
+      { cause: e }
+    );
   }
   if (!x509.checkHost(host) || !x509.checkHost("example." + host)) {
-    throw new Error("The issued certificate does not cover " + host + " and *." + host);
+    throw new Error(
+      "The issued certificate does not cover " + host + " and *." + host
+    );
   }
 
   await client
@@ -269,7 +301,9 @@ async function renew(deps = {}) {
     .exec();
 
   const issued = daysLeft(pem, now);
-  console.log("Wildcard SSL: stored new certificate in Redis, " + issued + " days left");
+  console.log(
+    "Wildcard SSL: stored new certificate in Redis, " + issued + " days left"
+  );
 
   return { renewed: true, daysLeft: issued };
 }

@@ -53,7 +53,8 @@ function usage(message) {
 
 function count(arg, value) {
   const n = Number(value);
-  if (!Number.isInteger(n) || n < 1) usage(arg + " takes a whole number, 1 or more");
+  if (!Number.isInteger(n) || n < 1)
+    usage(arg + " takes a whole number, 1 or more");
   return n;
 }
 
@@ -65,27 +66,51 @@ function parse(argv) {
 
     if (arg === "--deep") options.deep = true;
     else if (arg === "--all") options.all = true;
-    else if (["--blog", "--blogs", "--recheck", "--scratch", "--deep-sample", "--concurrency"].includes(arg)) {
+    else if (
+      [
+        "--blog",
+        "--blogs",
+        "--recheck",
+        "--scratch",
+        "--deep-sample",
+        "--concurrency",
+      ].includes(arg)
+    ) {
       const value = argv[++i];
       if (!value) usage(arg + " needs a value");
       if (arg === "--blog") options.blog = value;
-      else if (arg === "--blogs") options.blogs = [...new Set(value.split(",").map((id) => id.trim()).filter(Boolean))];
-      else if (arg === "--scratch") options.scratchDir = require("path").resolve(value);
+      else if (arg === "--blogs")
+        options.blogs = [
+          ...new Set(
+            value
+              .split(",")
+              .map((id) => id.trim())
+              .filter(Boolean)
+          ),
+        ];
+      else if (arg === "--scratch")
+        options.scratchDir = require("path").resolve(value);
       else if (arg === "--deep-sample") options.deepSample = count(arg, value);
       else if (arg === "--concurrency") options.concurrency = count(arg, value);
       else {
         options.recheckDelayMs = Number(value) * 1000;
-        if (!(options.recheckDelayMs >= 0)) usage("--recheck takes a number of seconds");
+        if (!(options.recheckDelayMs >= 0))
+          usage("--recheck takes a number of seconds");
       }
     } else usage("Unknown argument " + arg);
   }
 
-  const chosen = [options.blog, options.blogs, options.all].filter(Boolean).length;
+  const chosen = [options.blog, options.blogs, options.all].filter(
+    Boolean
+  ).length;
   if (chosen === 0) usage("--blog, --blogs or --all is required");
   if (chosen > 1) usage("Use only one of --blog, --blogs and --all");
-  if (options.blogs && !options.blogs.length) usage("--blogs needs at least one blog ID");
-  if (options.deep && options.deepSample) usage("Use only one of --deep and --deep-sample");
-  if (options.blog && (options.deepSample || options.concurrency > 1)) usage("--deep-sample and --concurrency are for several blogs");
+  if (options.blogs && !options.blogs.length)
+    usage("--blogs needs at least one blog ID");
+  if (options.deep && options.deepSample)
+    usage("Use only one of --deep and --deep-sample");
+  if (options.blog && (options.deepSample || options.concurrency > 1))
+    usage("--deep-sample and --concurrency are for several blogs");
 
   return options;
 }
@@ -93,9 +118,12 @@ function parse(argv) {
 // Runs fn over items, `limit` at a time
 async function each(items, limit, fn) {
   const queue = items.slice();
-  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
-    while (queue.length) await fn(queue.shift());
-  });
+  const workers = Array.from(
+    { length: Math.min(limit, queue.length) },
+    async () => {
+      while (queue.length) await fn(queue.shift());
+    }
+  );
   await Promise.all(workers);
 }
 
@@ -126,6 +154,7 @@ async function main() {
   console.log = console.error;
 
   const maintenance = require("clients/git/served/maintenance");
+
   const { blog, blogs, all, deepSample, concurrency, ...rest } = options;
   let code;
 
@@ -136,7 +165,11 @@ async function main() {
     code = result.skipped || result.findings.length ? 1 : 0;
   } else {
     const ids = blogs || (await maintenance.gitBlogs());
-    const deepIds = options.deep ? new Set(ids) : deepSample ? pick(ids, deepSample) : new Set();
+    const deepIds = options.deep
+      ? new Set(ids)
+      : deepSample
+        ? pick(ids, deepSample)
+        : new Set();
     const outcomes = { ok: 0, findings: 0, skipped: 0 };
     const withFindings = [];
 
@@ -144,9 +177,23 @@ async function main() {
       let result;
 
       try {
-        result = await maintenance.verify(id, { ...rest, deep: deepIds.has(id) });
+        result = await maintenance.verify(id, {
+          ...rest,
+          deep: deepIds.has(id),
+        });
       } catch (err) {
-        result = { blog: id, deep: false, findings: [{ blog: id, check: "verify", kind: "error", detail: String((err && err.message) || err) }] };
+        result = {
+          blog: id,
+          deep: false,
+          findings: [
+            {
+              blog: id,
+              check: "verify",
+              kind: "error",
+              detail: String((err && err.message) || err),
+            },
+          ],
+        };
       }
 
       if (result.skipped) outcomes.skipped++;
@@ -159,15 +206,33 @@ async function main() {
     };
 
     // Cheap checks together, then each deep one (a whole clone) alone
-    await each(ids.filter((id) => !deepIds.has(id)), concurrency, check);
-    await each(ids.filter((id) => deepIds.has(id)), 1, check);
+    await each(
+      ids.filter((id) => !deepIds.has(id)),
+      concurrency,
+      check
+    );
+    await each(
+      ids.filter((id) => deepIds.has(id)),
+      1,
+      check
+    );
 
-    print(JSON.stringify({ summary: true, blogs: ids.length, deep: deepIds.size, outcomes, withFindings }));
+    print(
+      JSON.stringify({
+        summary: true,
+        blogs: ids.length,
+        deep: deepIds.size,
+        outcomes,
+        withFindings,
+      })
+    );
     code = withFindings.length ? 1 : 0;
   }
 
   const path = require("path");
-  await require("fs-extra").remove(path.join(config.git_store.cache_directory, config.container)).catch(() => {});
+  await require("fs-extra")
+    .remove(path.join(config.git_store.cache_directory, config.container))
+    .catch(() => {});
 
   return code;
 }

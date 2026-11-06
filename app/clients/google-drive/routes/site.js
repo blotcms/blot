@@ -1,4 +1,3 @@
-const config = require("config");
 const clfdate = require("helper/clfdate");
 const express = require("express");
 const site = new express.Router();

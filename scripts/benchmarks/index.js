@@ -101,7 +101,10 @@ jasmine.addReporter({
       );
     }
 
-    if (benchmarkConfig.corpusMode === "build" && result.overallStatus === "passed") {
+    if (
+      benchmarkConfig.corpusMode === "build" &&
+      result.overallStatus === "passed"
+    ) {
       const workload = global.__BLOT_CORPUS_WORKLOAD;
       const corpusBlogs = global.__BLOT_CORPUS_BLOGS || [];
 

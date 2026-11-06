@@ -20,27 +20,31 @@ xdescribe("scheduled posts", function () {
       const path = "/entry.txt";
       const id = guid();
       sync(this.blog.id, (err, folder, finish) => {
-        if (err) return callback(err);
+        if (err) return done.fail(err);
         const contents = `Date: ${moment()
           .utc()
           .add(1, "minutes")
           .format("YYYY-MM-DD HH:mm")}\n\n${id}`;
         setTimeout(() => {
-          request(this.origin, { strictSSL: false }, (err, res, body) => {
-            expect(body).toContain(id);
-            done();
-          });
+          fetch(this.origin)
+            .then((res) => res.text())
+            .then((body) => {
+              expect(body).toContain(id);
+              done();
+            }, done.fail);
         }, MINUTE);
         storageFolder.write(this.blog.id, path, contents).then(() => {
-          folder.update(path, err => {
-            if (err) return callback(err);
+          folder.update(path, (err) => {
+            if (err) return done.fail(err);
             finish(null, () => {
-              request(this.origin, { strictSSL: false }, (err, res, body) => {
-                expect(body).not.toContain(id);
-              });
+              fetch(this.origin)
+                .then((res) => res.text())
+                .then((body) => {
+                  expect(body).not.toContain(id);
+                }, done.fail);
             });
           });
-        }, callback);
+        }, done.fail);
       });
     },
     MINUTE * 2
@@ -51,16 +55,16 @@ xdescribe("scheduled posts", function () {
 
     const view = {
       name: "entries.html",
-      content: `<html><head></head><body>{{#entries}}{{{html}}}{{/entries}}</body></html>`
+      content: `<html><head></head><body>{{#entries}}{{{html}}}{{/entries}}</body></html>`,
     };
 
-    Template.create(this.blog.id, templateName, {}, err => {
+    Template.create(this.blog.id, templateName, {}, (err) => {
       if (err) return done(err);
       Template.getTemplateList(this.blog.id, (err, templates) => {
         let templateId = templates.filter(
           ({ name }) => name === templateName
         )[0].id;
-        Template.setView(templateId, view, err => {
+        Template.setView(templateId, view, (err) => {
           if (err) return done(err);
           Blog.set(
             this.blog.id,
@@ -77,7 +81,7 @@ xdescribe("scheduled posts", function () {
     this.server = Express()
       .use((req, res, next) => {
         const _get = req.get;
-        req.get = arg => {
+        req.get = (arg) => {
           if (arg === "host") {
             return `${this.blog.handle}.${config.host}`;
           } else return _get(arg);

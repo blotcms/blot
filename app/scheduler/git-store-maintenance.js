@@ -15,7 +15,8 @@ const NAME = "git-store-maintenance";
 
 // options: sendEmail(view), and what maintenance.daily takes
 async function run(options = {}) {
-  if (!(config.storage && config.storage.bucket)) return { skipped: true, sent: false };
+  if (!(config.storage && config.storage.bucket))
+    return { skipped: true, sent: false };
 
   const maintenance = require("clients/git/served/maintenance");
 
@@ -52,7 +53,8 @@ async function run(options = {}) {
   return { skipped: false, sent: true, report };
 }
 
-const plural = (n, word) => n + " " + word + (n === 1 ? "" : /(s|sh|ch)$/.test(word) ? "es" : "s");
+const plural = (n, word) =>
+  n + " " + word + (n === 1 ? "" : /(s|sh|ch)$/.test(word) ? "es" : "s");
 
 // The alert email's view: the store's own findings, by kind, blog IDs only:
 // the checks of each copy (the deep sample among them), the sweep's errors
@@ -60,7 +62,9 @@ const plural = (n, word) => n + " " + word + (n === 1 ? "" : /(s|sh|ch)$/.test(w
 function view(report) {
   const { findings } = report;
   const count = (kind) => findings.filter((f) => f.kind === kind).length;
-  const sweepErrors = findings.filter((f) => f.check === "sweep" && f.kind === "error").length;
+  const sweepErrors = findings.filter(
+    (f) => f.check === "sweep" && f.kind === "error"
+  ).length;
   const otherErrors = count("error") - sweepErrors;
   const blogs = new Set(findings.map((f) => f.blog)).size;
   const summary = [
@@ -78,7 +82,12 @@ function view(report) {
     checked: report.blogs,
     deepChecked: report.deepChecked,
     deepBlogs: (report.deepBlogs || []).join(", ") || "none",
-    findings: findings.map((f) => ({ blog: f.blog, kind: f.kind, check: f.check, detail: f.detail })),
+    findings: findings.map((f) => ({
+      blog: f.blog,
+      kind: f.kind,
+      check: f.check,
+      detail: f.detail,
+    })),
     hasMissing: count("missing") > 0,
     hasMismatch: count("mismatch") > 0,
     hasSweepErrors: sweepErrors > 0,
@@ -92,10 +101,19 @@ async function job() {
   const email = require("helper/email");
 
   const { sent, skipped } = await module.exports.run({
-    sendEmail: (locals) => new Promise((resolve, reject) => email.GIT_STORE_ALERT(null, locals, (err) => (err ? reject(err) : resolve()))),
+    sendEmail: (locals) =>
+      new Promise((resolve, reject) =>
+        email.GIT_STORE_ALERT(null, locals, (err) =>
+          err ? reject(err) : resolve()
+        )
+      ),
   });
 
-  if (skipped) console.log(clfdate(), "Git store: no storage bucket, nothing to look after");
+  if (skipped)
+    console.log(
+      clfdate(),
+      "Git store: no storage bucket, nothing to look after"
+    );
   if (sent) console.log(clfdate(), "Sent git store alert email");
 }
 

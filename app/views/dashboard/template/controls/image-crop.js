@@ -21,7 +21,10 @@ function initializeCrop(form) {
   let objectURL;
 
   const limit = (value, min, max) => Math.min(max, Math.max(min, value));
-  const dimensions = () => ({ width: image.clientWidth, height: image.clientHeight });
+  const dimensions = () => ({
+    width: image.clientWidth,
+    height: image.clientHeight,
+  });
   const write = (persist = true) => {
     const { width, height } = dimensions();
     selection.style.left = `${current.left}px`;
@@ -42,7 +45,7 @@ function initializeCrop(form) {
 
     selection.setAttribute(
       "aria-description",
-      `Crop is ${Math.round(current.width / width * 100)}% wide and ${Math.round(current.height / height * 100)}% high.`
+      `Crop is ${Math.round((current.width / width) * 100)}% wide and ${Math.round((current.height / height) * 100)}% high.`
     );
   };
 
@@ -87,13 +90,30 @@ function initializeCrop(form) {
           cropper.hidden = true;
           return;
         }
-        const crop = restoreCrop && [fields.x.value, fields.y.value, fields.width.value, fields.height.value]
-          .map(Number);
-        const hasRestoredCrop = crop && crop.every(Number.isFinite) &&
-          crop[0] >= 0 && crop[1] >= 0 && crop[2] > 0 && crop[3] > 0 &&
-          crop[0] + crop[2] <= 1 && crop[1] + crop[3] <= 1;
+        const crop =
+          restoreCrop &&
+          [
+            fields.x.value,
+            fields.y.value,
+            fields.width.value,
+            fields.height.value,
+          ].map(Number);
+        const hasRestoredCrop =
+          crop &&
+          crop.every(Number.isFinite) &&
+          crop[0] >= 0 &&
+          crop[1] >= 0 &&
+          crop[2] > 0 &&
+          crop[3] > 0 &&
+          crop[0] + crop[2] <= 1 &&
+          crop[1] + crop[3] <= 1;
         current = hasRestoredCrop
-          ? { left: crop[0] * width, top: crop[1] * height, width: crop[2] * width, height: crop[3] * height }
+          ? {
+              left: crop[0] * width,
+              top: crop[1] * height,
+              width: crop[2] * width,
+              height: crop[3] * height,
+            }
           : { left: 0, top: 0, width, height };
         write(false);
       });
@@ -104,7 +124,9 @@ function initializeCrop(form) {
     image.src = selectedURL;
   };
 
-  input.addEventListener("change", () => loadFile(input.files && input.files[0]));
+  input.addEventListener("change", () =>
+    loadFile(input.files && input.files[0])
+  );
   if (input.files && input.files[0]) loadFile(input.files[0], true);
 
   const beginDrag = (event) => {
@@ -155,9 +177,10 @@ function initializeCrop(form) {
       const pointer = now;
       const widthFromX = Math.abs(pointer.x - anchorX);
       const widthFromY = Math.abs(pointer.y - anchorY) * aspectRatio;
-      const desiredWidth = Math.abs(widthFromX - crop.width) >= Math.abs(widthFromY - crop.width)
-        ? widthFromX
-        : widthFromY;
+      const desiredWidth =
+        Math.abs(widthFromX - crop.width) >= Math.abs(widthFromY - crop.width)
+          ? widthFromX
+          : widthFromY;
       current.width = limit(desiredWidth, minWidthByRatio, maxWidthByRatio);
       current.height = current.width / aspectRatio;
       current.left = west ? anchorX - current.width : anchorX;
@@ -198,16 +221,28 @@ function initializeCrop(form) {
   imageWrap.addEventListener("pointercancel", endDrag);
 
   selection.addEventListener("keydown", (event) => {
-    if (!current || !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;
+    if (
+      !current ||
+      !["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)
+    )
+      return;
     event.preventDefault();
     const { width, height } = dimensions();
     const delta = event.key === "ArrowLeft" || event.key === "ArrowUp" ? -4 : 4;
 
     if (event.shiftKey) {
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        current.width = limit(current.width + delta, Math.min(24, width), width - current.left);
+        current.width = limit(
+          current.width + delta,
+          Math.min(24, width),
+          width - current.left
+        );
       } else {
-        current.height = limit(current.height + delta, Math.min(24, height), height - current.top);
+        current.height = limit(
+          current.height + delta,
+          Math.min(24, height),
+          height - current.top
+        );
       }
     } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
       current.left = limit(current.left + delta, 0, width - current.width);
@@ -218,9 +253,13 @@ function initializeCrop(form) {
     write();
   });
 
-  window.addEventListener("pagehide", () => {
-    if (objectURL) URL.revokeObjectURL(objectURL);
-  }, { once: true });
+  window.addEventListener(
+    "pagehide",
+    () => {
+      if (objectURL) URL.revokeObjectURL(objectURL);
+    },
+    { once: true }
+  );
 }
 
 module.exports = initializeCrop;

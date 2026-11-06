@@ -140,7 +140,10 @@ async function resetToBlotWithClient(
   if (account.folder_id) {
     const { result } = await tagSource(
       SOURCES.DELTA,
-      retryRequest(() => client.filesGetMetadata({ path: account.folder_id }), "filesGetMetadata")
+      retryRequest(
+        () => client.filesGetMetadata({ path: account.folder_id }),
+        "filesGetMetadata"
+      )
     );
     const { path_display } = result;
     if (path_display) {
@@ -667,7 +670,9 @@ const localReaddir = async (blogID, dir, remoteContentsPromise) => {
 
   return mapLimit(contents, HASH_CONCURRENCY, async ({ name, isDirectory }) => {
     const path_display = join(dir, name);
-    const remoteItem = (remoteContents || []).find((item) => item.name === name);
+    const remoteItem = (remoteContents || []).find(
+      (item) => item.name === name
+    );
 
     return {
       name,

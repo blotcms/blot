@@ -1,5 +1,3 @@
-const config = require("config");
-
 module.exports = function (req, res, next) {
   res.clearCookie("signed_into_blot", { domain: "", path: "/" });
   res.clearCookie("connect.sid", { domain: "", path: "/" });

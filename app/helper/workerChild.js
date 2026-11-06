@@ -105,14 +105,17 @@ module.exports = function workerChild({
     log("Started", "pid=" + forked.pid);
 
     forked.on("exit", function (code, signal) {
-      restart("Exited pid=" + forked.pid + " code=" + code + " signal=" + signal);
+      restart(
+        "Exited pid=" + forked.pid + " code=" + code + " signal=" + signal
+      );
     });
 
     // An unhandled "error" would crash this process. A failed spawn (no pid)
     // emits it and may never emit "exit"; other errors, such as a failed
     // kill, leave the child running.
     forked.on("error", function (err) {
-      if (forked.pid === undefined) return restart("Could not spawn: " + err.message);
+      if (forked.pid === undefined)
+        return restart("Could not spawn: " + err.message);
       log("Error", "pid=" + forked.pid, err.message);
     });
   }

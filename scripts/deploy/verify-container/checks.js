@@ -60,7 +60,9 @@ function request({ url, host, headers = {}, timeout = 8000, options = {} }) {
         res.on("end", () => resolve({ status: res.statusCode, body }));
       }
     );
-    req.on("timeout", () => req.destroy(new Error(`timed out after ${timeout}ms`)));
+    req.on("timeout", () =>
+      req.destroy(new Error(`timed out after ${timeout}ms`))
+    );
     req.on("error", reject);
   });
 }
@@ -69,12 +71,14 @@ async function redisRoundTrip({ redis, skipRedisWrite }) {
   await redis.ping();
   // PING succeeds against a read-only replica; a write doesn't. A host cycle
   // starts units on a replica on purpose (config/host/cycle.sh app).
-  if (skipRedisWrite) return "ping succeeded, write skipped (--skip-redis-write)";
+  if (skipRedisWrite)
+    return "ping succeeded, write skipped (--skip-redis-write)";
   const key = `deploy-verify:${process.pid}:${Date.now()}`;
   await redis.set(key, "ok", { EX: 30 });
   const value = await redis.get(key);
   await redis.del(key);
-  if (value !== "ok") throw new Error(`wrote "ok", read back ${JSON.stringify(value)}`);
+  if (value !== "ok")
+    throw new Error(`wrote "ok", read back ${JSON.stringify(value)}`);
   return "ping, write and read succeeded";
 }
 
@@ -110,7 +114,10 @@ async function storageBucket({ config }) {
 
   const missing = await s3.head("deploy-verify/does-not-exist");
 
-  if (missing) throw new Error("deploy-verify/does-not-exist exists in the storage bucket");
+  if (missing)
+    throw new Error(
+      "deploy-verify/does-not-exist exists in the storage bucket"
+    );
 
   return `storage bucket ${config.storage.bucket} is reachable`;
 }
@@ -131,7 +138,9 @@ async function binary(command, args) {
     const { stdout } = await execFileAsync(command, args, { timeout: 10000 });
     return stdout.split("\n")[0].trim();
   } catch (err) {
-    throw new Error(`${command} is not runnable: ${err.message}`);
+    throw new Error(`${command} is not runnable: ${err.message}`, {
+      cause: err,
+    });
   }
 }
 
@@ -145,9 +154,10 @@ const git = () => binary("git", ["--version"]);
 async function sharpWorks() {
   const sharp = require("sharp");
   const fixture = path.join(__dirname, "fixtures", "car.heic");
-  const { width, height } = await sharp(fixture).jpeg().toBuffer().then((buffer) =>
-    sharp(buffer).metadata()
-  );
+  const { width, height } = await sharp(fixture)
+    .jpeg()
+    .toBuffer()
+    .then((buffer) => sharp(buffer).metadata());
   if (!width || !height) throw new Error("decoded HEIC has no dimensions");
   return `sharp decoded a HEIC to a ${width}x${height} JPEG`;
 }
@@ -158,14 +168,17 @@ async function sharpWorks() {
 // is 4032x3024 whether or not the 270 degree rotation is applied, so the check
 // does not depend on which way round the jail reports it.
 async function sandboxWorks() {
-  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+  if (!process.env.BLOT_SANDBOX_SOCKET)
+    return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
   const sandbox = require("../../../app/sandbox");
   const fixture = path.join(__dirname, "fixtures", "car.heic");
   const { meta } = await sandbox.run("metadata", {}, { path: fixture });
   const sides = [meta.width, meta.height].sort((a, b) => a - b);
   if (sides.join("x") !== "3024x4032") {
-    throw new Error(`the jail read a ${meta.width}x${meta.height} ${meta.format}, expected 4032x3024`);
+    throw new Error(
+      `the jail read a ${meta.width}x${meta.height} ${meta.format}, expected 4032x3024`
+    );
   }
   return `the jail read a ${meta.width}x${meta.height} ${meta.format}`;
 }
@@ -174,7 +187,8 @@ async function sandboxWorks() {
 // the egress filter is really there. The metadata address must be refused: a
 // jail that reaches it, or times out on it, is not a jail to go live with.
 async function sandboxBrowserWorks() {
-  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+  if (!process.env.BLOT_SANDBOX_SOCKET)
+    return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
   const sandbox = require("../../../app/sandbox");
   const empty = Buffer.alloc(0);
@@ -186,7 +200,11 @@ async function sandboxBrowserWorks() {
     empty
   );
   const results = (blank.meta && blank.meta.results) || [];
-  if (results.length !== 2 || results.some((r) => r.error) || blank.outputs.some((o) => !o.length)) {
+  if (
+    results.length !== 2 ||
+    results.some((r) => r.error) ||
+    blank.outputs.some((o) => !o.length)
+  ) {
     throw new Error(`no screenshots: ${JSON.stringify(blank.meta)}`);
   }
 
@@ -195,8 +213,14 @@ async function sandboxBrowserWorks() {
     { url: "http://169.254.169.254/latest/meta-data/" },
     empty
   );
-  if (!/ERR_(CONNECTION_REFUSED|ADDRESS_UNREACHABLE|NETWORK_ACCESS_DENIED)/.test(metadata.meta.error || "")) {
-    throw new Error(`the metadata address was not refused: ${metadata.meta.error || "it answered"}`);
+  if (
+    !/ERR_(CONNECTION_REFUSED|ADDRESS_UNREACHABLE|NETWORK_ACCESS_DENIED)/.test(
+      metadata.meta.error || ""
+    )
+  ) {
+    throw new Error(
+      `the metadata address was not refused: ${metadata.meta.error || "it answered"}`
+    );
   }
   return `Chromium started and ${metadata.meta.error}`;
 }
@@ -206,7 +230,8 @@ async function sandboxBrowserWorks() {
 // pinned as an address. A jail that reaches it, or times out on it, is not one
 // to go live with.
 async function sandboxFetchWorks() {
-  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+  if (!process.env.BLOT_SANDBOX_SOCKET)
+    return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
   const sandbox = require("../../../app/sandbox");
   const { meta } = await sandbox.run(
@@ -214,8 +239,14 @@ async function sandboxFetchWorks() {
     { url: "http://169.254.169.254/latest/meta-data/" },
     Buffer.alloc(0)
   );
-  if (!/^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|EACCES|EPERM)$/.test(meta.code || "")) {
-    throw new Error(`the metadata address was not refused: ${meta.error || "it answered"}`);
+  if (
+    !/^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|EACCES|EPERM)$/.test(
+      meta.code || ""
+    )
+  ) {
+    throw new Error(
+      `the metadata address was not refused: ${meta.error || "it answered"}`
+    );
   }
 
   const REFUSED = /^(ECONNREFUSED|EHOSTUNREACH|ENETUNREACH|EACCES|EPERM)$/;
@@ -232,10 +263,13 @@ async function sandboxFetchWorks() {
   const results = (batch.meta && batch.meta.results) || [];
   for (const result of results) {
     if (!REFUSED.test(result.code || "")) {
-      throw new Error(`the metadata address was not refused by the fetch job: ${result.error || "it answered"}`);
+      throw new Error(
+        `the metadata address was not refused by the fetch job: ${result.error || "it answered"}`
+      );
     }
   }
-  if (results.length !== 2) throw new Error("the fetch job did not answer both requests");
+  if (results.length !== 2)
+    throw new Error("the fetch job did not answer both requests");
   return `the fetch jails started and ${meta.code}`;
 }
 
@@ -244,26 +278,52 @@ async function sandboxFetchWorks() {
 // missing or mismatched package would leave out) and does the importer's three
 // operations on a small post.
 async function sandboxParseHtmlWorks() {
-  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+  if (!process.env.BLOT_SANDBOX_SOCKET)
+    return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
   const sandbox = require("../../../app/sandbox");
-  const html = Buffer.from('<p>Hello <strong>world</strong><img src="https://example.com/a.png"></p>');
+  const html = Buffer.from(
+    '<p>Hello <strong>world</strong><img src="https://example.com/a.png"></p>'
+  );
 
-  const scanned = await sandbox.run("parse-html", { op: "scan", kind: "images" }, html);
-  if (scanned.meta.error || scanned.meta.urls.join() !== "https://example.com/a.png") {
-    throw new Error(`parse-html did not find the image: ${scanned.meta.error || JSON.stringify(scanned.meta)}`);
+  const scanned = await sandbox.run(
+    "parse-html",
+    { op: "scan", kind: "images" },
+    html
+  );
+  if (
+    scanned.meta.error ||
+    scanned.meta.urls.join() !== "https://example.com/a.png"
+  ) {
+    throw new Error(
+      `parse-html did not find the image: ${scanned.meta.error || JSON.stringify(scanned.meta)}`
+    );
   }
   const rewritten = await sandbox.run(
     "parse-html",
-    { op: "rewrite", kind: "images", replacements: [["https://example.com/a.png", "_a.png"]] },
+    {
+      op: "rewrite",
+      kind: "images",
+      replacements: [["https://example.com/a.png", "_a.png"]],
+    },
     html
   );
-  if (rewritten.meta.error || !rewritten.outputs[0].toString().includes('src="_a.png"')) {
-    throw new Error(`parse-html did not rewrite the image: ${rewritten.meta.error || "no change"}`);
+  if (
+    rewritten.meta.error ||
+    !rewritten.outputs[0].toString().includes('src="_a.png"')
+  ) {
+    throw new Error(
+      `parse-html did not rewrite the image: ${rewritten.meta.error || "no change"}`
+    );
   }
   const markdown = await sandbox.run("parse-html", { op: "markdown" }, html);
-  if (markdown.meta.error || !markdown.outputs[0].toString().startsWith("Hello **world**")) {
-    throw new Error(`parse-html did not convert to Markdown: ${markdown.meta.error || markdown.outputs[0]}`);
+  if (
+    markdown.meta.error ||
+    !markdown.outputs[0].toString().startsWith("Hello **world**")
+  ) {
+    throw new Error(
+      `parse-html did not convert to Markdown: ${markdown.meta.error || markdown.outputs[0]}`
+    );
   }
   return "the jail scanned, rewrote and converted a post";
 }
@@ -272,7 +332,8 @@ async function sandboxParseHtmlWorks() {
 // metadata address must not get through: tinyproxy answers 500 when the filter
 // refuses it, which also proves the proxy answers at all.
 async function sandboxProxyWorks({ config }) {
-  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+  if (!process.env.BLOT_SANDBOX_SOCKET)
+    return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
   const { hostname, port } = new URL(config.egress.proxy);
   const metadata = "http://169.254.169.254/latest/meta-data/";
@@ -281,7 +342,10 @@ async function sandboxProxyWorks({ config }) {
     host: "169.254.169.254",
     options: { hostname, port, path: metadata },
   });
-  if (res.status !== 500) throw new Error(`the metadata address answered ${res.status} through the proxy`);
+  if (res.status !== 500)
+    throw new Error(
+      `the metadata address answered ${res.status} through the proxy`
+    );
   return `the metadata address was refused through ${config.egress.proxy}`;
 }
 
@@ -292,11 +356,22 @@ async function sandboxProxyWorks({ config }) {
 // connection or a timeout means the rule is not loaded.
 async function hostFirewall() {
   if (!process.env.BLOT_UNIT) return "skipped, BLOT_UNIT is not set";
-  if (process.getuid() !== 1000) return `skipped, uid ${process.getuid()} is not the units' uid`;
+  if (process.getuid() !== 1000)
+    return `skipped, uid ${process.getuid()} is not the units' uid`;
 
-  const refused = ["ECONNREFUSED", "EHOSTUNREACH", "ENETUNREACH", "EACCES", "EPERM"];
+  const refused = [
+    "ECONNREFUSED",
+    "EHOSTUNREACH",
+    "ENETUNREACH",
+    "EACCES",
+    "EPERM",
+  ];
   const code = await new Promise((resolve) => {
-    const socket = net.connect({ host: "169.254.169.254", port: 80, timeout: 3000 });
+    const socket = net.connect({
+      host: "169.254.169.254",
+      port: 80,
+      timeout: 3000,
+    });
     const done = (result) => {
       socket.destroy();
       resolve(result);
@@ -306,7 +381,9 @@ async function hostFirewall() {
     socket.on("error", (err) => done(err.code || err.message));
   });
   if (!refused.includes(code)) {
-    throw new Error(`the metadata service was not refused (${code}): is blot-app-firewall.service loaded?`);
+    throw new Error(
+      `the metadata service was not refused (${code}): is blot-app-firewall.service loaded?`
+    );
   }
   return `the metadata service was refused (${code})`;
 }
@@ -314,14 +391,20 @@ async function hostFirewall() {
 // With the sandbox on, Node runs under one seccomp filter more than this process,
 // which docker exec started outside the supervisor (proxy/unit/supervisor.sh).
 async function nodeFilter() {
-  if (!process.env.BLOT_SANDBOX_SOCKET) return "skipped, BLOT_SANDBOX_SOCKET is not set";
+  if (!process.env.BLOT_SANDBOX_SOCKET)
+    return "skipped, BLOT_SANDBOX_SOCKET is not set";
 
-  const filters = (status) => Number(/^Seccomp_filters:\s*(\d+)/m.exec(status)[1]);
+  const filters = (status) =>
+    Number(/^Seccomp_filters:\s*(\d+)/m.exec(status)[1]);
   const own = filters(await fs.readFile("/proc/self/status", "utf8"));
 
   let checked = 0;
-  for (const pid of (await fs.readdir("/proc")).filter((name) => /^\d+$/.test(name))) {
-    const command = await fs.readFile(`/proc/${pid}/cmdline`, "utf8").catch(() => "");
+  for (const pid of (await fs.readdir("/proc")).filter((name) =>
+    /^\d+$/.test(name)
+  )) {
+    const command = await fs
+      .readFile(`/proc/${pid}/cmdline`, "utf8")
+      .catch(() => "");
     if (command !== "node\0app/index.js\0") continue;
     const status = await fs.readFile(`/proc/${pid}/status`, "utf8");
     if (filters(status) <= own || !/^NoNewPrivs:\s*1/m.test(status)) {
@@ -354,8 +437,14 @@ async function canaryBlog({ config }) {
   const { base, options } = local(config);
   const res = await request({ url: `${base}/`, host, options });
   if (res.status !== 200) throw new Error(`${host} returned ${res.status}`);
-  if (!/<html/i.test(res.body) || !/<\/html>/i.test(res.body) || res.body.length < 500) {
-    throw new Error(`${host} returned a ${res.body.length} byte body that isn't a complete HTML page`);
+  if (
+    !/<html/i.test(res.body) ||
+    !/<\/html>/i.test(res.body) ||
+    res.body.length < 500
+  ) {
+    throw new Error(
+      `${host} returned a ${res.body.length} byte body that isn't a complete HTML page`
+    );
   }
   return `${host} rendered (${res.body.length} bytes)`;
 }
@@ -368,7 +457,8 @@ async function loginPage({ config }) {
     headers: { "X-Forwarded-Proto": "https" },
     options,
   });
-  if (res.status !== 200) throw new Error(`/sites/log-in returned ${res.status}`);
+  if (res.status !== 200)
+    throw new Error(`/sites/log-in returned ${res.status}`);
   return "dashboard log-in page rendered";
 }
 

@@ -12,7 +12,8 @@ const MAX = 16384;
 
 async function run(args, input) {
   const max = args && args.max;
-  if (!Number.isInteger(max) || max < 1 || max > MAX) throw new Error("invalid max");
+  if (!Number.isInteger(max) || max < 1 || max > MAX)
+    throw new Error("invalid max");
 
   const { data, info } = await encode(
     sharp(input)

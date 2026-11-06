@@ -68,7 +68,7 @@ describe("date metadata", function () {
           'parses "' + metadata + '" using date format ' + format,
           function () {
             expect(fromMetadata(metadata, format)).toEqual(testCase.expected);
-          },
+          }
         );
       });
 
@@ -90,7 +90,7 @@ describe("date metadata", function () {
               created: Date.parse(result),
               adjusted: false,
             });
-          },
+          }
         );
       });
     });

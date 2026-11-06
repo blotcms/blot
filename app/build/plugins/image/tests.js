@@ -12,7 +12,10 @@ describe("image", function () {
 
   afterEach(async function () {
     if (!this.result) return;
-    await verifyCachedImagesExist(this.blog, extractCachedImagePaths(this.blog, this.result));
+    await verifyCachedImagesExist(
+      this.blog,
+      extractCachedImagePaths(this.blog, this.result)
+    );
   });
 
   it("returns a different cached image when source image is modified", function (done) {
@@ -25,18 +28,20 @@ describe("image", function () {
       render(test.blog, html, function (err, firstResult) {
         expect(err).toBe(null);
 
-        folder.writeFrom(test.blog.id, image, __dirname + modifiedImage).then(() => {
-          render(test.blog, html, function (err, secondResult) {
-            expect(err).toBe(null);
+        folder
+          .writeFrom(test.blog.id, image, __dirname + modifiedImage)
+          .then(() => {
+            render(test.blog, html, function (err, secondResult) {
+              expect(err).toBe(null);
 
-            expect(firstResult).toContain("/_image_cache/");
-            expect(secondResult).toContain("/_image_cache/");
-            expect(firstResult).not.toEqual(secondResult);
+              expect(firstResult).toContain("/_image_cache/");
+              expect(secondResult).toContain("/_image_cache/");
+              expect(firstResult).not.toEqual(secondResult);
 
-            test.result = secondResult;
-            done();
-          });
-        }, done.fail);
+              test.result = secondResult;
+              done();
+            });
+          }, done.fail);
       });
     }, done.fail);
   });
@@ -50,16 +55,21 @@ describe("image", function () {
       render(test.blog, html, function (err, result) {
         if (err) return done.fail(err);
 
-        assets.ensureLocal(test.blog.id, extractCachedImagePaths(test.blog, result)[0]).then(function (path) {
-          sharp(path).metadata(function (err, metadata) {
-            if (err) return done.fail(err);
+        assets
+          .ensureLocal(
+            test.blog.id,
+            extractCachedImagePaths(test.blog, result)[0]
+          )
+          .then(function (path) {
+            sharp(path).metadata(function (err, metadata) {
+              if (err) return done.fail(err);
 
-            expect(metadata.icc).toBeDefined();
-            expect(metadata.icc).toContain('P3'); // Ensure it is preserved
+              expect(metadata.icc).toBeDefined();
+              expect(metadata.icc).toContain("P3"); // Ensure it is preserved
 
-            done();
-          });
-        }, done.fail);
+              done();
+            });
+          }, done.fail);
       });
     }, done.fail);
   });
@@ -79,21 +89,23 @@ describe("image", function () {
         // does not resize or modify
         expect(result).toContain('width="450" height="338"');
 
-        assets.read(test.blog.id, extractCachedImagePaths(test.blog, result)[0]).then(function (cached) {
-          var cachedContentHash = crypto
-            .createHash("sha1")
-            .update(cached)
-            .digest("hex");
+        assets
+          .read(test.blog.id, extractCachedImagePaths(test.blog, result)[0])
+          .then(function (cached) {
+            var cachedContentHash = crypto
+              .createHash("sha1")
+              .update(cached)
+              .digest("hex");
 
-          var originalContentHash = crypto
-            .createHash("sha1")
-            .update(fs.readFileSync(__dirname + image))
-            .digest("hex");
+            var originalContentHash = crypto
+              .createHash("sha1")
+              .update(fs.readFileSync(__dirname + image))
+              .digest("hex");
 
-          expect(originalContentHash).toEqual(cachedContentHash);
-          test.result = result;
-          done();
-        }, done.fail);
+            expect(originalContentHash).toEqual(cachedContentHash);
+            test.result = result;
+            done();
+          }, done.fail);
       });
     }, done.fail);
   });
@@ -122,31 +134,40 @@ describe("image", function () {
     var html = '<img src="' + large + '">';
 
     folder.writeFrom(test.blog.id, large, __dirname + large).then(() => {
-      require("sharp")(__dirname + large).metadata(function (err, originalInfo) {
-        if (err) return done.fail(err);
-
-        render(test.blog, html, function (err, result) {
+      require("sharp")(__dirname + large).metadata(
+        function (err, originalInfo) {
           if (err) return done.fail(err);
 
-          assets.ensureLocal(test.blog.id, extractCachedImagePaths(test.blog, result)[0]).then(function (image) {
-            require("sharp")(image).metadata(function (err, cachedInfo) {
-              if (err) return done.fail(err);
+          render(test.blog, html, function (err, result) {
+            if (err) return done.fail(err);
 
-              // Ensure cached image is smaller than 3000 x 3000 pixels
-              expect(cachedInfo.width <= 3000).toBe(true);
-              expect(cachedInfo.height <= 3000).toBe(true);
+            assets
+              .ensureLocal(
+                test.blog.id,
+                extractCachedImagePaths(test.blog, result)[0]
+              )
+              .then(function (image) {
+                require("sharp")(image).metadata(function (err, cachedInfo) {
+                  if (err) return done.fail(err);
 
-              // Ensure cached image is same aspect ratio as original
-              expect(Math.floor(cachedInfo.height / cachedInfo.width)).toEqual(
-                Math.floor(originalInfo.height / originalInfo.width)
-              );
+                  // Ensure cached image is smaller than 3000 x 3000 pixels
+                  expect(cachedInfo.width <= 3000).toBe(true);
+                  expect(cachedInfo.height <= 3000).toBe(true);
 
-              test.result = result;
-              done();
-            });
-          }, done.fail);
-        });
-      });
+                  // Ensure cached image is same aspect ratio as original
+                  expect(
+                    Math.floor(cachedInfo.height / cachedInfo.width)
+                  ).toEqual(
+                    Math.floor(originalInfo.height / originalInfo.width)
+                  );
+
+                  test.result = result;
+                  done();
+                });
+              }, done.fail);
+          });
+        }
+      );
     }, done.fail);
   });
 
@@ -209,18 +230,25 @@ describe("image", function () {
     var test = this;
     var path = "/tests-image.png";
     var src =
-      "https://" + test.blog.handle + "." + config.host + "/NESTED" + path.toUpperCase();
+      "https://" +
+      test.blog.handle +
+      "." +
+      config.host +
+      "/NESTED" +
+      path.toUpperCase();
     var html = '<img src="' + src + '">';
 
-    folder.writeFrom(test.blog.id, "/nested" + path, __dirname + path).then(() => {
-      render(test.blog, html, function (err, result) {
-        expect(err).toBe(null);
-        expect(result).toContain(".png");
-        expect(result).toContain("/_image_cache/");
-        test.result = result;
-        done();
-      });
-    }, done.fail);
+    folder
+      .writeFrom(test.blog.id, "/nested" + path, __dirname + path)
+      .then(() => {
+        render(test.blog, html, function (err, result) {
+          expect(err).toBe(null);
+          expect(result).toContain(".png");
+          expect(result).toContain("/_image_cache/");
+          test.result = result;
+          done();
+        });
+      }, done.fail);
   });
 
   it("caches an image case-insensitively", function (done) {
@@ -228,14 +256,16 @@ describe("image", function () {
     var path = "/tests-image.png";
     var html = '<img src="/nested/' + path.toUpperCase() + '">';
 
-    folder.writeFrom(test.blog.id, "/nested" + path, __dirname + path).then(() => {
-      render(test.blog, html, function (err, result) {
-        expect(result).toContain(".png");
-        expect(result).toContain("/_image_cache/");
-        test.result = result;
-        done();
-      });
-    }, done.fail);
+    folder
+      .writeFrom(test.blog.id, "/nested" + path, __dirname + path)
+      .then(() => {
+        render(test.blog, html, function (err, result) {
+          expect(result).toContain(".png");
+          expect(result).toContain("/_image_cache/");
+          test.result = result;
+          done();
+        });
+      }, done.fail);
   });
 
   it("names cached images after the decoded filename and escapes their URLs", function (done) {
@@ -243,17 +273,21 @@ describe("image", function () {
     var name = "/\u8bf4\u660e.png";
     var html = '<img src="/%E8%AF%B4%E6%98%8E.png">';
 
-    folder.writeFrom(test.blog.id, name, __dirname + "/tests-image.png").then(() => {
-      render(test.blog, html, function (err, result) {
-        if (err) return done.fail(err);
+    folder
+      .writeFrom(test.blog.id, name, __dirname + "/tests-image.png")
+      .then(() => {
+        render(test.blog, html, function (err, result) {
+          if (err) return done.fail(err);
 
-        var src = cheerio.load(result, null, false)("img").attr("src");
+          var src = cheerio.load(result, null, false)("img").attr("src");
 
-        expect(src).toMatch(/\/_image_cache\/[0-9a-f-]+\/%E8%AF%B4%E6%98%8E\.png$/);
-        test.result = result;
-        done();
-      });
-    }, done.fail);
+          expect(src).toMatch(
+            /\/_image_cache\/[0-9a-f-]+\/%E8%AF%B4%E6%98%8E\.png$/
+          );
+          test.result = result;
+          done();
+        });
+      }, done.fail);
   });
 
   it("makes thumbnails from cached images with long escaped URLs", function (done) {
@@ -262,27 +296,37 @@ describe("image", function () {
     var name = new Array(31).join("说") + ".png";
     var html = '<img src="/' + encodeURIComponent(name) + '">';
 
-    folder.writeFrom(test.blog.id, "/" + name, __dirname + "/tests-image.png").then(() => {
-      render(test.blog, html, function (err, result) {
-        if (err) return done.fail(err);
-
-        thumbnail(test.blog, "/post.txt", {}, result, function (err, thumbnails) {
+    folder
+      .writeFrom(test.blog.id, "/" + name, __dirname + "/tests-image.png")
+      .then(() => {
+        render(test.blog, html, function (err, result) {
           if (err) return done.fail(err);
 
-          expect(thumbnails).toEqual(jasmine.any(Object));
-          expect(thumbnails.small).toEqual(jasmine.any(Object));
-          test.result = result;
-          done();
+          thumbnail(
+            test.blog,
+            "/post.txt",
+            {},
+            result,
+            function (err, thumbnails) {
+              if (err) return done.fail(err);
+
+              expect(thumbnails).toEqual(jasmine.any(Object));
+              expect(thumbnails.small).toEqual(jasmine.any(Object));
+              test.result = result;
+              done();
+            }
+          );
         });
-      });
-    }, done.fail);
+      }, done.fail);
   });
 
   describe("filenameFromSrc", function () {
     var filenameFromSrc = require("./optimize").filenameFromSrc;
 
     it("decodes percent-encoded names", function () {
-      expect(filenameFromSrc("/%E8%AF%B4%E6%98%8E.png")).toEqual("\u8bf4\u660e");
+      expect(filenameFromSrc("/%E8%AF%B4%E6%98%8E.png")).toEqual(
+        "\u8bf4\u660e"
+      );
       expect(filenameFromSrc("/a%20b.jpg")).toEqual("a-b");
     });
 
@@ -296,7 +340,9 @@ describe("image", function () {
       var truncateSlug = require("./optimize").truncateSlug;
 
       expect(truncateSlug(new Array(61).join("a")).length).toEqual(50);
-      expect(encodeURIComponent(truncateSlug(new Array(31).join("说"))).length).not.toBeGreaterThan(150);
+      expect(
+        encodeURIComponent(truncateSlug(new Array(31).join("说"))).length
+      ).not.toBeGreaterThan(150);
       expect(truncateSlug(new Array(31).join("😀"))).not.toContain("�");
     });
 
@@ -308,7 +354,7 @@ describe("image", function () {
 
   // The cached images' paths in the blog's asset directory, e.g.
   // "_image_cache/{uuid}/name.jpg"
-  function extractCachedImagePaths (blog, html) {
+  function extractCachedImagePaths(blog, html) {
     var paths = [];
     var $ = cheerio.load(html, null, false);
 
@@ -328,7 +374,7 @@ describe("image", function () {
     return paths;
   }
 
-  async function verifyCachedImagesExist (blog, imagePaths) {
+  async function verifyCachedImagesExist(blog, imagePaths) {
     for (var path of imagePaths) {
       // Is the cached image in the bucket?
       expect(await assets.exists(blog.id, path)).toEqual(true);
@@ -336,11 +382,11 @@ describe("image", function () {
   }
 
   // Wrapper around dumb API for this plugin
-  function render (blog, html, callback) {
+  function render(blog, html, callback) {
     var options = {
       blogID: blog.id,
       domain: blog.domain,
-      baseURL: "https://" + blog.handle + "." + config.host
+      baseURL: "https://" + blog.handle + "." + config.host,
     };
     var $ = cheerio.load(html, null, false);
 

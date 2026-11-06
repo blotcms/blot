@@ -18,7 +18,7 @@ const escapeHTML = (value) =>
 // separate, deliberate step on the template's settings page. Nothing about
 // the upload can decide it, including package.json's 'enabled'.
 
-module.exports = async function uploadTemplate (req, res) {
+module.exports = async function uploadTemplate(req, res) {
   try {
     const { entries, fallbackName } = await collectUploadEntries(req);
 

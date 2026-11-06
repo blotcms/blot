@@ -103,10 +103,7 @@ module.exports = function ($) {
       }
     } else if (tag === "hr") {
       // If we have a current group, close it (no <br> before <hr>)
-      const flushedFirst = flushCurrentGroup();
-      if (flushedFirst) {
-        prevNode = flushedFirst;
-      }
+      flushCurrentGroup();
       emptyCount = 0; // Reset empty count after <hr>
       prevNode = node; // Update prevNode to <hr>
     }

@@ -81,7 +81,10 @@ module.exports = function drop(owner, templateName, callback) {
 
         if (purgeUrls.length) {
           purgeCdnUrls(purgeUrls).catch(function (purgeErr) {
-            console.error("Error purging CDN URLs while dropping template:", purgeErr);
+            console.error(
+              "Error purging CDN URLs while dropping template:",
+              purgeErr
+            );
           });
         }
 

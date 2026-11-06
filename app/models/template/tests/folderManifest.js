@@ -61,7 +61,10 @@ describe("updateCdnManifest folder files", function () {
 
     it("keeps the query string out of the lookup", async function () {
       await this.write({ path: "/a.png", content: "one" });
-      await this.setView({ name: "index.html", content: '<img src="/a.png?v=2#x">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="/a.png?v=2#x">',
+      });
 
       expect((await this.manifest())["a.png?v=2#x"]).toEqual({
         path: "/a.png",
@@ -71,7 +74,10 @@ describe("updateCdnManifest folder files", function () {
 
     it("decodes percent-encoded paths", async function () {
       await this.write({ path: "/my photo.png", content: "one" });
-      await this.setView({ name: "index.html", content: '<img src="/my%20photo.png">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="/my%20photo.png">',
+      });
 
       expect((await this.manifest())["my%20photo.png"]).toEqual({
         path: "/my photo.png",
@@ -81,7 +87,10 @@ describe("updateCdnManifest folder files", function () {
 
     it("finds a file whatever the case of the link", async function () {
       await this.write({ path: "/Images/Photo.PNG", content: "one" });
-      await this.setView({ name: "index.html", content: '<img src="/images/photo.png">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="/images/photo.png">',
+      });
 
       const entry = (await this.manifest())["images/photo.png"];
 
@@ -90,7 +99,10 @@ describe("updateCdnManifest folder files", function () {
     });
 
     it("resolves reserved global paths without a version", async function () {
-      await this.setView({ name: "index.html", content: '<img src="/icons/search.svg">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="/icons/search.svg">',
+      });
 
       expect((await this.manifest())["icons/search.svg"]).toEqual({
         path: "/icons/search.svg",
@@ -123,14 +135,20 @@ describe("updateCdnManifest folder files", function () {
     });
 
     it("leaves out a missing file, but depends on it", async function () {
-      await this.setView({ name: "index.html", content: '<img src="/missing.png">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="/missing.png">',
+      });
 
       expect((await this.manifest())["missing.png"]).toBeUndefined();
       expect(await this.dependents("/missing.png")).toEqual([this.template.id]);
     });
 
     it("picks up a file created later", async function () {
-      await this.setView({ name: "index.html", content: '<img src="/late.png">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="/late.png">',
+      });
       await this.write({ path: "/late.png", content: "one" });
       await updateCdnManifest(this.template.id);
 
@@ -167,13 +185,21 @@ describe("updateCdnManifest folder files", function () {
     it("drops the old file when a link is replaced", async function () {
       await this.write({ path: "/a.png", content: "one" });
       await this.write({ path: "/b.png", content: "two" });
-      await this.setView({ name: "index.html", content: '<img src="{{#cdn}}/a.png{{/cdn}}">' });
-      await this.setView({ name: "index.html", content: '<img src="{{#cdn}}/b.png{{/cdn}}">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="{{#cdn}}/a.png{{/cdn}}">',
+      });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="{{#cdn}}/b.png{{/cdn}}">',
+      });
 
       const manifest = await this.manifest();
 
       expect(manifest["a.png"]).toBeUndefined();
-      expect(manifest["b.png"]).toEqual(jasmine.objectContaining({ path: "/b.png" }));
+      expect(manifest["b.png"]).toEqual(
+        jasmine.objectContaining({ path: "/b.png" })
+      );
       expect(await this.dependents("/a.png")).toEqual([]);
     });
 
@@ -183,7 +209,10 @@ describe("updateCdnManifest folder files", function () {
         name: "index.html",
         content: '<link href="{{#cdn}}/style.css{{/cdn}}">',
       });
-      await this.setView({ name: "style.css", content: "a{background:url(/a.png)}" });
+      await this.setView({
+        name: "style.css",
+        content: "a{background:url(/a.png)}",
+      });
 
       const before = (await this.manifest())["style.css"];
 
@@ -220,7 +249,9 @@ describe("updateCdnManifest folder files", function () {
 
     it("resolves a template local which links to a folder file", async function () {
       await this.write({ path: "/img/logo.png", content: "one" });
-      await setMetadata(this.template.id, { locals: { logo: "/img/logo.png" } });
+      await setMetadata(this.template.id, {
+        locals: { logo: "/img/logo.png" },
+      });
       await updateCdnManifest(this.template.id);
 
       expect((await this.manifest())["img/logo.png"]).toEqual({
@@ -234,7 +265,9 @@ describe("updateCdnManifest folder files", function () {
       await this.write({ path: "/img/b.png", content: "two" });
       await setMetadata(this.template.id, {
         locals: {
-          site: { images: [`https://${this.blog.handle}.${config.host}/img/a.png`] },
+          site: {
+            images: [`https://${this.blog.handle}.${config.host}/img/a.png`],
+          },
         },
       });
       await this.setView({
@@ -295,7 +328,9 @@ describe("updateCdnManifest folder files", function () {
         locals: { hero: "/img/later.png" },
       });
 
-      expect(await this.dependents("/img/later.png")).toEqual([this.template.id]);
+      expect(await this.dependents("/img/later.png")).toEqual([
+        this.template.id,
+      ]);
     });
   });
 
@@ -329,7 +364,11 @@ describe("updateCdnManifest folder files", function () {
       await this.setView({ name: "index.html", content: '<img src="/a.png">' });
 
       const getFullView = promisify(Template.getFullView);
-      const response = await getFullView("blog_somebodyelse", this.template.id, "index.html");
+      const response = await getFullView(
+        "blog_somebodyelse",
+        this.template.id,
+        "index.html"
+      );
 
       expect(response[4]).toBe('<img src="/a.png">');
     });
@@ -338,7 +377,8 @@ describe("updateCdnManifest folder files", function () {
       await this.setView({ name: "style.css", content: "a{color:red}" });
       await this.setView({
         name: "index.html",
-        content: '<link href="{{#cdn}}style.css{{/cdn}}"><link href="/style.css">',
+        content:
+          '<link href="{{#cdn}}style.css{{/cdn}}"><link href="/style.css">',
       });
 
       expect((await this.manifest())["style.css"]).toEqual(jasmine.any(String));
@@ -372,7 +412,9 @@ describe("updateCdnManifest folder files", function () {
 
       await blogSet(this.blog.id, { domain });
 
-      expect((await blogGet({ id: this.blog.id })).cacheID).toBeGreaterThan(before);
+      expect((await blogGet({ id: this.blog.id })).cacheID).toBeGreaterThan(
+        before
+      );
 
       // Blog.set regenerates the manifest in the background
       const end = Date.now() + 10000;
@@ -388,10 +430,17 @@ describe("updateCdnManifest folder files", function () {
 
   describe("dependency index", function () {
     it("is keyed by the lowercased path", async function () {
-      await this.setView({ name: "index.html", content: '<img src="/Images/A.PNG">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="/Images/A.PNG">',
+      });
 
-      expect(await this.dependents("/images/a.png")).toEqual([this.template.id]);
-      expect(await this.dependents("/IMAGES/a.PNG")).toEqual([this.template.id]);
+      expect(await this.dependents("/images/a.png")).toEqual([
+        this.template.id,
+      ]);
+      expect(await this.dependents("/IMAGES/a.PNG")).toEqual([
+        this.template.id,
+      ]);
       expect(
         await client.sMembers(
           "blog:" + this.blog.id + ":template_dependents:/images/a.png"
@@ -420,7 +469,9 @@ describe("updateCdnManifest folder files", function () {
 
       expect(await this.dependents("/a.png")).toEqual([]);
       expect(await this.dependents("/b.png")).toEqual([this.template.id]);
-      expect((await getMetadata(this.template.id)).fileDependencies).toEqual(["/b.png"]);
+      expect((await getMetadata(this.template.id)).fileDependencies).toEqual([
+        "/b.png",
+      ]);
     });
 
     it("forgets files when the view that linked to them is dropped", async function () {
@@ -449,7 +500,10 @@ describe("updateCdnManifest folder files", function () {
     it("is no longer pending regeneration once the template is dropped", async function () {
       const pending = key.templateManifestsPending(this.blog.id);
 
-      await this.setView({ name: "index.html", content: '<img src="{{#cdn}}/a.png{{/cdn}}">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="{{#cdn}}/a.png{{/cdn}}">',
+      });
       await client.sAdd(pending, this.template.id);
       await this.uninstall();
       await dropTemplate(this.blog.id, this.template.name);
@@ -490,7 +544,10 @@ describe("updateCdnManifest folder files", function () {
     });
 
     it("regenerates each pending template once, when asked", async function () {
-      await this.setView({ name: "index.html", content: '<img src="/a.png"><img src="/b.png">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="/a.png"><img src="/b.png">',
+      });
       await this.write({ path: "/a.png", content: "one" });
       await this.write({ path: "/b.png", content: "two" });
 
@@ -512,7 +569,10 @@ describe("updateCdnManifest folder files", function () {
     });
 
     it("matches the path whatever its case", async function () {
-      await this.setView({ name: "index.html", content: '<img src="/Photos/A.png">' });
+      await this.setView({
+        name: "index.html",
+        content: '<img src="/Photos/A.png">',
+      });
       await rebuildDependents(this.blog.id, "/photos/a.PNG");
 
       expect(await pending(this.blog.id)).toEqual([this.template.id]);

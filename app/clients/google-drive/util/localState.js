@@ -30,7 +30,8 @@ const localFingerprint = require("./localFingerprint");
 // null for a directory or anything without them
 const stamp = (entry) => {
   if (!entry || entry.isDirectory) return null;
-  if (!Number.isFinite(entry.size) || !Number.isFinite(entry.modified)) return null;
+  if (!Number.isFinite(entry.size) || !Number.isFinite(entry.modified))
+    return null;
   return { size: entry.size, modified: Math.round(entry.modified) };
 };
 
@@ -60,7 +61,12 @@ const unchanged = async (blogID, path, record, entry) => {
       if (record.size !== current.size) return null;
 
       if (record.modified === current.modified) {
-        return { size: current.size, modified: current.modified, sha1: record.sha1 || null, stale: false };
+        return {
+          size: current.size,
+          modified: current.modified,
+          sha1: record.sha1 || null,
+          stale: false,
+        };
       }
 
       if (!record.sha1) return null;
@@ -81,7 +87,12 @@ const unchanged = async (blogID, path, record, entry) => {
       return { ...current, sha1: null, stale: true };
     }
   } catch (err) {
-    console.error("Google Drive: could not check", path, "against its record:", err.message);
+    console.error(
+      "Google Drive: could not check",
+      path,
+      "against its record:",
+      err.message
+    );
   }
 
   return null;

@@ -75,12 +75,18 @@ describe("deploy verify-container", function () {
     const readOnly = {
       ping: async () => "PONG",
       set: async () => {
-        throw new Error("READONLY You can't write against a read only replica.");
+        throw new Error(
+          "READONLY You can't write against a read only replica."
+        );
       },
     };
 
-    expect((await rejection(check.run({ redis: readOnly }))).message).toContain("READONLY");
-    expect(await check.run({ redis: readOnly, skipRedisWrite: true })).toContain("write skipped");
+    expect((await rejection(check.run({ redis: readOnly }))).message).toContain(
+      "READONLY"
+    );
+    expect(
+      await check.run({ redis: readOnly, skipRedisWrite: true })
+    ).toContain("write skipped");
   });
 
   it("skips the sandbox check unless the host turned the sandbox on", async function () {
@@ -130,8 +136,12 @@ describe("deploy verify-container", function () {
     process.env.BLOT_RELEASE_ID = "abc";
 
     try {
-      expect(await rejection(releaseCheck.run({ expectedRelease: "def" }))).not.toBe(null);
-      expect(await rejection(releaseCheck.run({ expectedRelease: "abc" }))).toBe(null);
+      expect(
+        await rejection(releaseCheck.run({ expectedRelease: "def" }))
+      ).not.toBe(null);
+      expect(
+        await rejection(releaseCheck.run({ expectedRelease: "abc" }))
+      ).toBe(null);
     } finally {
       if (original === undefined) delete process.env.BLOT_RELEASE_ID;
       else process.env.BLOT_RELEASE_ID = original;
@@ -146,9 +156,15 @@ describe("deploy verify-container", function () {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "verify-"));
 
     try {
-      expect(await rejection(dataCheck.run({ config: { data_directory: dir } }))).toBe(null);
       expect(
-        await rejection(dataCheck.run({ config: { data_directory: path.join(dir, "missing") } }))
+        await rejection(dataCheck.run({ config: { data_directory: dir } }))
+      ).toBe(null);
+      expect(
+        await rejection(
+          dataCheck.run({
+            config: { data_directory: path.join(dir, "missing") },
+          })
+        )
       ).not.toBe(null);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
@@ -198,7 +214,9 @@ describe("deploy verify-container", function () {
     const find = (name) => checks.find((c) => c.name === name);
 
     it("renders the canary blog by its preview host", async function () {
-      expect(await rejection(find("canary blog render").run({ config }))).toBe(null);
+      expect(await rejection(find("canary blog render").run({ config }))).toBe(
+        null
+      );
       expect(seenHosts).toEqual(["preview-of-wireframe-on-david.blot.test"]);
     });
 
@@ -214,12 +232,16 @@ describe("deploy verify-container", function () {
     });
 
     it("renders the dashboard log-in page", async function () {
-      expect(await rejection(find("dashboard log-in render").run({ config }))).toBe(null);
+      expect(
+        await rejection(find("dashboard log-in render").run({ config }))
+      ).toBe(null);
     });
 
     it("fails when the container isn't listening", async function () {
       config.port = 1;
-      expect(await rejection(find("dashboard log-in render").run({ config }))).not.toBe(null);
+      expect(
+        await rejection(find("dashboard log-in render").run({ config }))
+      ).not.toBe(null);
     });
   });
 });

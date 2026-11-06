@@ -20,16 +20,19 @@ async function retry(fn, ...args) {
     } catch (e) {
       if (i === 2) throw e;
       const delay = Math.min(1000 * Math.pow(2, i), 10000);
-      console.log("Attempt", i ,"failed, retrying in", delay, "ms", e);
+      console.log("Attempt", i, "failed, retrying in", delay, "ms", e);
       await new Promise((r) => setTimeout(r, delay));
     }
   }
 }
 
-
-module.exports = async (blogID, publish, update, { skipDeletions = false, abortOnError = false, skipEmptyFiles = false } = {}) => {
+module.exports = async (
+  blogID,
+  publish,
+  update,
+  { skipDeletions = false, abortOnError = false, skipEmptyFiles = false } = {}
+) => {
   publish = publish || function () {};
-  update = update || function () {};
 
   const checkWeCanContinue = CheckWeCanContinue(blogID);
 

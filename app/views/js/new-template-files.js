@@ -29,7 +29,9 @@ function init(root) {
 
   var empty = root.querySelector("[data-template-upload-empty]");
   var selected = root.querySelector("[data-template-upload-selected]");
-  var selectedLabel = root.querySelector("[data-template-upload-selected-label]");
+  var selectedLabel = root.querySelector(
+    "[data-template-upload-selected-label]"
+  );
   var fileList = root.querySelector("[data-template-upload-files]");
   var clear = root.querySelector("[data-template-upload-clear]");
 
@@ -351,9 +353,7 @@ function init(root) {
           if (problem.path) setFileState(problem.path, "Problem", "problem");
         });
 
-        setLabel(
-          paths.length === 1 ? "1 file" : paths.length + " files"
-        );
+        setLabel(paths.length === 1 ? "1 file" : paths.length + " files");
 
         showError(err.message, err.problems);
       });

@@ -42,7 +42,9 @@ module.exports = function (req, res, next) {
     // preference so the stored EXIF matches their setting.
     if (
       changes &&
-      (changes.indexOf("plugins") > -1 || changes.indexOf("imageExif") > -1 || changes.indexOf("converters") > -1)
+      (changes.indexOf("plugins") > -1 ||
+        changes.indexOf("imageExif") > -1 ||
+        changes.indexOf("converters") > -1)
     ) {
       // we need to fetch the latest version of the blog to rebuild
       const options = {
@@ -55,7 +57,6 @@ module.exports = function (req, res, next) {
     // Add success message if we're going to the settings page
     // and successful changes were made
     if (changes && changes.length && _.isEmpty(errors)) {
-
       return res.message(
         redirect,
         dictionary[changes[0]] || "Saved changes to your " + changes[0]

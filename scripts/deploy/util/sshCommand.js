@@ -25,9 +25,12 @@ module.exports = async function sshCommand(command) {
   } catch (error) {
     if (error.name === "AbortError") {
       throw new Error(
-        `SSH command timed out after ${timeoutMs / 1000} seconds: ${command}`
+        `SSH command timed out after ${timeoutMs / 1000} seconds: ${command}`,
+        { cause: error }
       );
     }
-    throw new Error(`SSH command failed: ${command}\n${error.message}`);
+    throw new Error(`SSH command failed: ${command}\n${error.message}`, {
+      cause: error,
+    });
   }
 };

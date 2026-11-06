@@ -28,7 +28,7 @@ if (require.main === module) {
       var url = format({
         protocol: "https",
         host: config.host,
-        pathname: `/sign-up/paid/${token}`
+        pathname: `/sign-up/paid/${token}`,
       });
 
       console.log(

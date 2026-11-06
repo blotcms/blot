@@ -56,7 +56,9 @@ describe("Drive client access to the blog folder", function () {
       await folder.write(this.blog.id, "/Photo.txt", "1");
       await folder.write(this.blog.id, "/photo.txt", "2");
 
-      const names = (await localReaddir(this.blog.id, "/")).map((item) => item.name).sort();
+      const names = (await localReaddir(this.blog.id, "/"))
+        .map((item) => item.name)
+        .sort();
 
       expect(names).toEqual(["Photo.txt", "photo.txt"]);
     });

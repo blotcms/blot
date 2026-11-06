@@ -83,7 +83,8 @@ module.exports = function setup(options) {
       options.objectStore
         ? options.objectStore.bind(ctx)
         : function (blogID) {
-            return (ctx.stores[blogID] = ctx.stores[blogID] || createMemoryStore());
+            return (ctx.stores[blogID] =
+              ctx.stores[blogID] || createMemoryStore());
           }
     );
 
@@ -133,12 +134,17 @@ module.exports = function setup(options) {
     before(function (done) {
       var context = this;
 
-      setClientToGit(this.user, this.blog, this.server.port, function (err, repoUrl) {
-        if (err) return done(err);
+      setClientToGit(
+        this.user,
+        this.blog,
+        this.server.port,
+        function (err, repoUrl) {
+          if (err) return done(err);
 
-        context.repoUrl = repoUrl;
-        done();
-      });
+          context.repoUrl = repoUrl;
+          done();
+        }
+      );
     });
 
   // { client: true } makes a clone with a real git client (./client.js)

@@ -12,7 +12,7 @@ const limiter = new Bottleneck({
 const fetchWithRetriesAndTimeout = async (url, options = {}) => {
   // Destructure and set defaults for timeout and retries
   const { timeout = 10000, retries = 3, ...fetchOptions } = options;
-    
+
   for (let attempt = 1; attempt <= retries; attempt++) {
     // Timeout logic
     const controller = new AbortController();
@@ -25,7 +25,9 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
       clearTimeout(timer); // Clear the timeout if fetch is successful
 
       if (!response.ok) {
-        const httpError = new Error(`HTTP error: ${response.status} - ${response.statusText}`);
+        const httpError = new Error(
+          `HTTP error: ${response.status} - ${response.statusText}`
+        );
         httpError.status = response.status;
         throw httpError;
       }
@@ -36,17 +38,26 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
 
       // Handle timeout or other fetch errors
       if (error.name === "AbortError") {
-        console.error(clfdate(), `Request timed out (attempt ${attempt} of ${retries}): ${url}`);
+        console.error(
+          clfdate(),
+          `Request timed out (attempt ${attempt} of ${retries}): ${url}`
+        );
       } else {
-        console.error(clfdate(), `Request failed: ${url} ${error.message} (attempt ${attempt}/${retries})`);
-        
+        console.error(
+          clfdate(),
+          `Request failed: ${url} ${error.message} (attempt ${attempt}/${retries})`
+        );
+
         if (options && options.headers && options.headers.blogID) {
           console.error(clfdate(), `- blog id: ${options.headers.blogID}`);
         }
 
         if (options && options.headers && options.headers.pathBase64) {
-          console.error(clfdate(), `- path: ${Buffer.from(options.headers.pathBase64, 'base64').toString('utf8')}`);
-        } 
+          console.error(
+            clfdate(),
+            `- path: ${Buffer.from(options.headers.pathBase64, "base64").toString("utf8")}`
+          );
+        }
 
         if (options && options.body) {
           console.error(clfdate(), `- body size: ${options.body.length} bytes`);
@@ -58,12 +69,13 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
         } else {
           console.error(clfdate(), `- abort signal was not triggered`);
         }
-        
       }
 
       // If all retries fail, throw the error
       if (attempt === retries) {
-        const finalError = new Error(`Request failed after ${retries} retries: ${error.message} ${url}`);
+        const finalError = new Error(
+          `Request failed after ${retries} retries: ${error.message} ${url}`
+        );
         // lets callers tell an HTTP rejection (e.g. 400) from a network failure
         finalError.status = error.status;
         throw finalError;
@@ -73,6 +85,8 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
 };
 
 // Wrap the fetchWithRetriesAndTimeout function with the rate limiter
-const rateLimitedFetchWithRetriesAndTimeout = limiter.wrap(fetchWithRetriesAndTimeout);
+const rateLimitedFetchWithRetriesAndTimeout = limiter.wrap(
+  fetchWithRetriesAndTimeout
+);
 
 export default rateLimitedFetchWithRetriesAndTimeout;

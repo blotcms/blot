@@ -13,7 +13,7 @@ var withFolderLock = require("./withFolderLock");
 var PACKAGE = "package.json";
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
-function writeToFolderUnlocked (blogID, templateID, callback) {
+function writeToFolderUnlocked(blogID, templateID, callback) {
   isOwner(blogID, templateID, function (err, owner) {
     if (err) return callback(err);
 
@@ -54,12 +54,12 @@ function writeToFolderUnlocked (blogID, templateID, callback) {
   });
 }
 
-function writePackage (blogID, dir, metadata, views, compare, callback) {
+function writePackage(blogID, dir, metadata, views, compare, callback) {
   var Package = generatePackage(blogID, metadata, views);
   writeFile(blogID, joinpath(dir, PACKAGE), Package, compare, callback);
 }
 
-function write (blogID, dir, view, compare, callback) {
+function write(blogID, dir, view, compare, callback) {
   callback = callOnce(callback);
 
   var path = joinpath(dir, view.name);
@@ -128,13 +128,7 @@ function writeTemplateContents(
         if (err) return callback(err);
 
         if (written) {
-          removeOrphanedFiles(
-            blogID,
-            dir,
-            existingFiles,
-            written,
-            callback
-          );
+          removeOrphanedFiles(blogID, dir, existingFiles, written, callback);
         } else {
           callback();
         }
@@ -146,7 +140,8 @@ function writeTemplateContents(
 function listLocalFiles(blogID, dir, callback) {
   callbackify(folder.listNames)(blogID, dir, function (err, entries) {
     if (err) {
-      if (err.code === "ENOENT" || err.code === "ENOTDIR") return callback(null, []);
+      if (err.code === "ENOENT" || err.code === "ENOTDIR")
+        return callback(null, []);
       return callback(err);
     }
 
@@ -193,11 +188,11 @@ function normalizePath(path) {
   return typeof path === "string" ? path.split(sep).join("/") : path;
 }
 
-function badPermission (blogID, templateID) {
+function badPermission(blogID, templateID) {
   return new Error("No permission for " + blogID + " to write " + templateID);
 }
 
-function noTemplate (blogID, templateID) {
+function noTemplate(blogID, templateID) {
   return new Error("No template for " + blogID + " and " + templateID);
 }
 

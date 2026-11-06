@@ -28,7 +28,11 @@ function mad(values) {
 }
 
 function percentChange(current, baseline) {
-  if (!Number.isFinite(current) || !Number.isFinite(baseline) || baseline === 0) {
+  if (
+    !Number.isFinite(current) ||
+    !Number.isFinite(baseline) ||
+    baseline === 0
+  ) {
     return null;
   }
   return ((current - baseline) / baseline) * 100;
@@ -56,7 +60,10 @@ function classify(current, baseline, options = {}) {
     !madValue || Math.abs(current - baseline) > sigma * madValue;
 
   if (exceedsBand && exceedsNoise) {
-    return { status: delta > 0 ? "regression" : "improved", deltaPercent: delta };
+    return {
+      status: delta > 0 ? "regression" : "improved",
+      deltaPercent: delta,
+    };
   }
 
   return { status: "ok", deltaPercent: delta };

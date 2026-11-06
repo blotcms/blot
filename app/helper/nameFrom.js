@@ -22,7 +22,7 @@ function nameFrom(src) {
     // For some reason, encoded utf-8 chars break
     // when linked to on cloudfront or s3, unsure why.
     // try uploading 'inpüt.jpg' to see what happens.
-    name = name.replace(/[^\w\-\s\.]+/g, "");
+    name = name.replace(/[^\w\-\s.]+/g, "");
 
     name = makeSlug(name) + ext;
     name = name.slice(-35);

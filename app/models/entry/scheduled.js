@@ -102,7 +102,13 @@ var alarms = alarm(
       throw err;
     }
 
-    console.log(clfdate(), "Blog:", blogID + ":", "Published entry as scheduled!", path);
+    console.log(
+      clfdate(),
+      "Blog:",
+      blogID + ":",
+      "Published entry as scheduled!",
+      path
+    );
   },
   { pollMs: 5000 }
 );

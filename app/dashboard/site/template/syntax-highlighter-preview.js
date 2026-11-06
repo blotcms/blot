@@ -26,7 +26,7 @@ class ThemeRegistry {
   register({ id, name, styles }) {
     const key = slug(id);
     if (!key || !styles) throw new TypeError("A theme needs an id and CSS.");
-    if (this.#themes.has(key)) throw new Error("Theme \"" + key + "\" already exists.");
+    if (this.#themes.has(key)) throw new Error("Theme "" + key + "" already exists.");
 
     this.#themes.set(key, Object.freeze({ id: key, name, styles }));
     return this;

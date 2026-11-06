@@ -55,15 +55,18 @@ describe("authentication form limits", function () {
     try {
       const response = await new Promise(function (resolve, reject) {
         const body = "field=" + "a".repeat(4096);
-        const request = http.request({
-          method: "POST",
-          port: server.address().port,
-          path: "/",
-          headers: {
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Content-Length": Buffer.byteLength(body),
+        const request = http.request(
+          {
+            method: "POST",
+            port: server.address().port,
+            path: "/",
+            headers: {
+              "Content-Type": "application/x-www-form-urlencoded",
+              "Content-Length": Buffer.byteLength(body),
+            },
           },
-        }, resolve);
+          resolve
+        );
         request.on("error", reject);
         request.end(body);
       });

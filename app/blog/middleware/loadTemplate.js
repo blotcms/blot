@@ -1,4 +1,4 @@
-const Template = require("models/template");
+require("models/template");
 const Mustache = require("mustache");
 const fs = require("fs-extra");
 const { getMetadata } = require("../lib/models");
@@ -26,7 +26,11 @@ module.exports = async function loadTemplate(req, res, next) {
   }
 
   // If we're in preview mode and there are errors then let's show them
-  if (req.preview && metadata.errors && Object.keys(metadata.errors).length > 0) {
+  if (
+    req.preview &&
+    metadata.errors &&
+    Object.keys(metadata.errors).length > 0
+  ) {
     const template = await fs.readFile(
       __dirname + "/../views/template-error.html",
       "utf-8"

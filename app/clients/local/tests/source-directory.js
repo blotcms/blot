@@ -78,23 +78,33 @@ describe("local client source directory", function () {
       it("copies a file added in the source to the folder", async function () {
         const id = this.blog.id;
         await fs.outputFile(join(dir, "posts", "new.txt"), "new");
-        expect(await until(async () => (await text(id, "/posts/new.txt")) === "new")).toBe(true);
+        expect(
+          await until(async () => (await text(id, "/posts/new.txt")) === "new")
+        ).toBe(true);
       });
 
       it("copies a change to a file in the source", async function () {
         const id = this.blog.id;
         await fs.outputFile(join(dir, "a.txt"), "one");
-        expect(await until(async () => (await text(id, "/a.txt")) === "one")).toBe(true);
+        expect(
+          await until(async () => (await text(id, "/a.txt")) === "one")
+        ).toBe(true);
         await fs.outputFile(join(dir, "a.txt"), "two!");
-        expect(await until(async () => (await text(id, "/a.txt")) === "two!")).toBe(true);
+        expect(
+          await until(async () => (await text(id, "/a.txt")) === "two!")
+        ).toBe(true);
       });
 
       it("removes from the folder what is removed from the source", async function () {
         const id = this.blog.id;
         await fs.outputFile(join(dir, "gone.txt"), "x");
-        expect(await until(async () => (await text(id, "/gone.txt")) === "x")).toBe(true);
+        expect(
+          await until(async () => (await text(id, "/gone.txt")) === "x")
+        ).toBe(true);
         await fs.remove(join(dir, "gone.txt"));
-        expect(await until(async () => !(await folder.exists(id, "/gone.txt")))).toBe(true);
+        expect(
+          await until(async () => !(await folder.exists(id, "/gone.txt")))
+        ).toBe(true);
       });
     });
 
@@ -121,7 +131,9 @@ describe("local client source directory", function () {
         expect(await folder.exists(id, "/extra.txt")).toBe(false);
         expect(await folder.exists(id, "/extra-dir")).toBe(false);
         // The source is never changed by a reconcile
-        expect(await fs.readFile(join(dir, "differs.txt"), "utf8")).toBe("source version");
+        expect(await fs.readFile(join(dir, "differs.txt"), "utf8")).toBe(
+          "source version"
+        );
         expect(await fs.pathExists(join(dir, "extra.txt"))).toBe(false);
       });
 
@@ -195,7 +207,9 @@ describe("local client source directory", function () {
 
         await reconcileSource(id, dir);
 
-        expect(await fs.readFile(join(dir, "old", "post.txt"), "utf8")).toBe("existing");
+        expect(await fs.readFile(join(dir, "old", "post.txt"), "utf8")).toBe(
+          "existing"
+        );
         expect(await text(id, "/old/post.txt")).toBe("existing");
       });
     });

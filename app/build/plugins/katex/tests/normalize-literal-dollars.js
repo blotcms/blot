@@ -40,7 +40,11 @@ describe("literal dollar math normalization", function () {
   });
 
   it("leaves literal $$ untouched during the KaTeX render phase", function (done) {
-    const $ = cheerio.load("<p>Inline $$a+b$$ math</p>", { decodeEntities: false }, false);
+    const $ = cheerio.load(
+      "<p>Inline $$a+b$$ math</p>",
+      { decodeEntities: false },
+      false
+    );
 
     render($, function (err) {
       if (err) return done.fail(err);
@@ -103,7 +107,9 @@ describe("literal dollar math normalization", function () {
   });
 
   it("leaves escaped dollars literal", function () {
-    expect(normalizeMathInText("Escaped \\$x\\$ math")).toBe("Escaped \\$x\\$ math");
+    expect(normalizeMathInText("Escaped \\$x\\$ math")).toBe(
+      "Escaped \\$x\\$ math"
+    );
   });
 
   it("tokenizes escaped dollars as text", function () {
@@ -128,9 +134,7 @@ describe("literal dollar math normalization", function () {
     expect(tokenizeDollarMath("$x$$$y$$")).toEqual([
       { type: "text", value: "$x$$$y$$" },
     ]);
-    expect(normalizeMathInText("$$a+b$$$$c+d$$")).toBe(
-      "$$a+b$$$$c+d$$"
-    );
+    expect(normalizeMathInText("$$a+b$$$$c+d$$")).toBe("$$a+b$$$$c+d$$");
   });
 
   it("does not pair inline delimiters across lines", function () {
@@ -171,23 +175,20 @@ describe("literal dollar math normalization", function () {
     });
   });
 
-  it(
-    "normalizes a bounded three-line display and preserves surrounding content",
-    function (done) {
-      const input = "<p>before<br>$$<br>x+y<br>$$<br>after</p>";
-      normalizeAndRender(input, function (err, html) {
-        if (err) return done.fail(err);
-        const $ = cheerio.load(html, { decodeEntities: false }, false);
-        // Display tokens mixed with other paragraph content render inline.
-        expect($(".katex").length).toBe(1);
-        expect($(".katex-display").length).toBe(0);
-        expect($("br").length).toBe(4);
-        expect($("p").text()).toContain("before");
-        expect($("p").text()).toContain("after");
-        done();
-      });
-    }
-  );
+  it("normalizes a bounded three-line display and preserves surrounding content", function (done) {
+    const input = "<p>before<br>$$<br>x+y<br>$$<br>after</p>";
+    normalizeAndRender(input, function (err, html) {
+      if (err) return done.fail(err);
+      const $ = cheerio.load(html, { decodeEntities: false }, false);
+      // Display tokens mixed with other paragraph content render inline.
+      expect($(".katex").length).toBe(1);
+      expect($(".katex-display").length).toBe(0);
+      expect($("br").length).toBe(4);
+      expect($("p").text()).toContain("before");
+      expect($("p").text()).toContain("after");
+      done();
+    });
+  });
 
   it("preserves unrelated line breaks around display math", function (done) {
     const input = "<p>one<br>two<br>$$<br>z<br>$$<br>three<br>four</p>";

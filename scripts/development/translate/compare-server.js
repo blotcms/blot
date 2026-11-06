@@ -43,7 +43,9 @@ async function readManifest(dir) {
 // the targets were resolved in.
 function buildPairs(manifest) {
   const captured = new Set((manifest.captured || []).map((c) => c.label));
-  const failures = new Map((manifest.failed || []).map((f) => [f.label, f.error]));
+  const failures = new Map(
+    (manifest.failed || []).map((f) => [f.label, f.error])
+  );
 
   return (manifest.targets || []).map((target) => ({
     label: target.label,
@@ -51,15 +53,22 @@ function buildPairs(manifest) {
     sourceURL: target.source || null,
     localURL: target.local,
     entryPath: target.entryPath || null,
-    input: captured.has(`input-${target.label}`) ? `input-${target.label}.png` : null,
-    output: captured.has(`output-${target.label}`) ? `output-${target.label}.png` : null,
+    input: captured.has(`input-${target.label}`)
+      ? `input-${target.label}.png`
+      : null,
+    output: captured.has(`output-${target.label}`)
+      ? `output-${target.label}.png`
+      : null,
     inputError: failures.get(`input-${target.label}`) || null,
     outputError: failures.get(`output-${target.label}`) || null,
   }));
 }
 
 function page(pairs, manifest) {
-  const data = JSON.stringify({ pairs, capturedAt: manifest.capturedAt || null });
+  const data = JSON.stringify({
+    pairs,
+    capturedAt: manifest.capturedAt || null,
+  });
 
   return `<!doctype html>
 <html lang="en">
@@ -273,7 +282,12 @@ function start(verificationDir, port = DEFAULT_PORT) {
     try {
       if (req.method === "GET" && url.pathname === "/") {
         const manifest = await readManifest(verificationDir);
-        return send(res, 200, MIME[".html"], page(buildPairs(manifest), manifest));
+        return send(
+          res,
+          200,
+          MIME[".html"],
+          page(buildPairs(manifest), manifest)
+        );
       }
 
       if (req.method === "GET" && url.pathname === "/manifest.json") {
@@ -283,14 +297,17 @@ function start(verificationDir, port = DEFAULT_PORT) {
 
       if (req.method === "GET" && url.pathname.startsWith("/shot/")) {
         // basename() alone defeats traversal: no path separators survive it.
-        const name = basename(decodeURIComponent(url.pathname.slice("/shot/".length)));
+        const name = basename(
+          decodeURIComponent(url.pathname.slice("/shot/".length))
+        );
         const type = MIME[extname(name).toLowerCase()];
 
         if (!type) return send(res, 404, "text/plain", "Not found");
 
         const file = join(verificationDir, name);
 
-        if (!(await fs.pathExists(file))) return send(res, 404, "text/plain", "Not found");
+        if (!(await fs.pathExists(file)))
+          return send(res, 404, "text/plain", "Not found");
 
         return send(res, 200, type, await fs.readFile(file));
       }

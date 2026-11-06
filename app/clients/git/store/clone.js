@@ -47,7 +47,13 @@ const { packSource } = require("./packcache");
 const inflateStream = require("./inflate");
 const pktline = require("./pktline");
 const { negotiate, choosePacks } = require("./fetch");
-const { CorruptError, ProtocolError, UnsupportedError, BusyError, ClientGoneError } = require("./errors");
+const {
+  CorruptError,
+  ProtocolError,
+  UnsupportedError,
+  BusyError,
+  ClientGoneError,
+} = require("./errors");
 
 const FANOUT = 8 + 256 * 4;
 const PACK_HEADER = 12;
@@ -76,7 +82,12 @@ const MAX_REQUEST = 1024 * 1024;
 // After this long planning, a side-band client is told the clone is under way
 const KEEPALIVE_AFTER = 5000;
 const KEEPALIVE = Buffer.from("0005\x01", "latin1");
-const PROGRESS = pktline.packet(Buffer.concat([Buffer.from([2]), Buffer.from("Preparing your repository...\n")]));
+const PROGRESS = pktline.packet(
+  Buffer.concat([
+    Buffer.from([2]),
+    Buffer.from("Preparing your repository...\n"),
+  ])
+);
 
 const SIDEBAND_MAX = { "side-band-64k": 65515, "side-band": 995 };
 
@@ -101,14 +112,29 @@ function chunks(run, key, from, to, source = run.store) {
     const offset = next;
     const length = Math.min(run.chunkSize, to - offset);
     next += length;
-    const promise = (source === run.store ? run.store.read(key, offset, length) : source.read(offset, length)).then((buffer) => {
-      if (buffer.length !== length) throw new CorruptError(key + " is shorter than the manifest says (read " + buffer.length + " of " + length + " at " + offset + ")");
+    const promise = (
+      source === run.store
+        ? run.store.read(key, offset, length)
+        : source.read(offset, length)
+    ).then((buffer) => {
+      if (buffer.length !== length)
+        throw new CorruptError(
+          key +
+            " is shorter than the manifest says (read " +
+            buffer.length +
+            " of " +
+            length +
+            " at " +
+            offset +
+            ")"
+        );
       return buffer;
     });
     promise.catch(() => {});
     inflight.push(promise);
   };
-  while (inflight.length < COPY_AHEAD && next < to && !run.signal.aborted) start();
+  while (inflight.length < COPY_AHEAD && next < to && !run.signal.aborted)
+    start();
 
   return (async function* () {
     try {
@@ -131,10 +157,14 @@ function chunks(run, key, from, to, source = run.store) {
 async function resolveOffset(run, pack, raw, whole = null) {
   if (!(raw & 0x80000000)) return raw;
   const at = FANOUT + pack.objects * 28 + (raw & 0x7fffffff) * 8;
-  const bytes = whole ? whole.subarray(at, Math.min(at + 8, whole.length - 40)) : await run.store.read(idxKey(pack.name), at, 8);
-  if (bytes.length !== 8) throw new CorruptError(idxKey(pack.name) + " is truncated");
+  const bytes = whole
+    ? whole.subarray(at, Math.min(at + 8, whole.length - 40))
+    : await run.store.read(idxKey(pack.name), at, 8);
+  if (bytes.length !== 8)
+    throw new CorruptError(idxKey(pack.name) + " is truncated");
   const offset = Number(bytes.readBigUInt64BE(0));
-  if (!Number.isSafeInteger(offset)) throw new CorruptError(idxKey(pack.name) + " has an offset out of range");
+  if (!Number.isSafeInteger(offset))
+    throw new CorruptError(idxKey(pack.name) + " has an offset out of range");
   return offset;
 }
 
@@ -149,8 +179,24 @@ async function planSkips(run, packs) {
   const skips = packs.map(() => []);
   if (packs.length < 2) return skips.map(finishSkips);
 
-  const slice = Math.max(MIN_SLICE, Math.min(MAX_SLICE, Math.floor((run.mergeBudget || MERGE_BUDGET) / (packs.length * 24))));
-  const cursors = packs.map((pack, index) => ({ pack, index, next: 0, ids: null, offsets: null, at: 0, count: 0, done: false, whole: null }));
+  const slice = Math.max(
+    MIN_SLICE,
+    Math.min(
+      MAX_SLICE,
+      Math.floor((run.mergeBudget || MERGE_BUDGET) / (packs.length * 24))
+    )
+  );
+  const cursors = packs.map((pack, index) => ({
+    pack,
+    index,
+    next: 0,
+    ids: null,
+    offsets: null,
+    at: 0,
+    count: 0,
+    done: false,
+    whole: null,
+  }));
 
   // The indexes small enough to be read whole (idx.js) are, all at once: from
   // the cache, or with one GET each, which then goes in the cache for the
@@ -164,9 +210,20 @@ async function planSkips(run, packs) {
     async (cursor) => {
       stopped(run);
       const key = idxKey(cursor.pack.name);
-      cursor.whole = await loadWhole({ store: run.store, key, size: cursor.pack.idxSize, cache: run.cache, namespace: run.store.id });
+      cursor.whole = await loadWhole({
+        store: run.store,
+        key,
+        size: cursor.pack.idxSize,
+        cache: run.cache,
+        namespace: run.store.id,
+      });
       if (cursor.whole.readUInt32BE(FANOUT - 4) !== cursor.pack.objects) {
-        throw new CorruptError(key + " does not hold the " + cursor.pack.objects + " objects the manifest says");
+        throw new CorruptError(
+          key +
+            " does not hold the " +
+            cursor.pack.objects +
+            " objects the manifest says"
+        );
       }
     }
   );
@@ -181,7 +238,10 @@ async function planSkips(run, packs) {
     if (cursor.whole) {
       // All of it at once: it is in memory already
       cursor.ids = cursor.whole.subarray(FANOUT, FANOUT + pack.objects * 20);
-      cursor.offsets = cursor.whole.subarray(FANOUT + pack.objects * 24, FANOUT + pack.objects * 28);
+      cursor.offsets = cursor.whole.subarray(
+        FANOUT + pack.objects * 24,
+        FANOUT + pack.objects * 28
+      );
       cursor.at = 0;
       cursor.count = pack.objects;
       cursor.next = pack.objects;
@@ -191,16 +251,29 @@ async function planSkips(run, packs) {
     const key = idxKey(pack.name);
     const ranges = [
       { offset: FANOUT + cursor.next * 20, length: count * 20 },
-      { offset: FANOUT + pack.objects * 24 + cursor.next * 4, length: count * 4 },
+      {
+        offset: FANOUT + pack.objects * 24 + cursor.next * 4,
+        length: count * 4,
+      },
     ];
     // The first time, the fanout too (it sits right before the IDs, so it is
     // part of the same read): its last entry is the index's own object count
     if (cursor.next === 0) ranges.push({ offset: 0, length: FANOUT });
 
     const [ids, offsets, fanout] = await readRanges(run.store, key, ranges);
-    if (ids.length !== count * 20 || offsets.length !== count * 4) throw new CorruptError(key + " is truncated");
-    if (fanout && (fanout.length !== FANOUT || fanout.readUInt32BE(FANOUT - 4) !== pack.objects)) {
-      throw new CorruptError(key + " does not hold the " + pack.objects + " objects the manifest says");
+    if (ids.length !== count * 20 || offsets.length !== count * 4)
+      throw new CorruptError(key + " is truncated");
+    if (
+      fanout &&
+      (fanout.length !== FANOUT ||
+        fanout.readUInt32BE(FANOUT - 4) !== pack.objects)
+    ) {
+      throw new CorruptError(
+        key +
+          " does not hold the " +
+          pack.objects +
+          " objects the manifest says"
+      );
     }
 
     cursor.ids = ids;
@@ -215,7 +288,8 @@ async function planSkips(run, packs) {
   // A binary heap of the cursors, smallest current ID first and, among equal
   // IDs, the newest pack first
   const heap = cursors.filter((cursor) => !cursor.done);
-  const idOf = (cursor) => cursor.ids.subarray(cursor.at * 20, cursor.at * 20 + 20);
+  const idOf = (cursor) =>
+    cursor.ids.subarray(cursor.at * 20, cursor.at * 20 + 20);
   const less = (a, b) => {
     const order = Buffer.compare(idOf(a), idOf(b));
     return order < 0 || (order === 0 && a.index > b.index);
@@ -225,8 +299,10 @@ async function planSkips(run, packs) {
       let smallest = i;
       const left = 2 * i + 1;
       const right = left + 1;
-      if (left < heap.length && less(heap[left], heap[smallest])) smallest = left;
-      if (right < heap.length && less(heap[right], heap[smallest])) smallest = right;
+      if (left < heap.length && less(heap[left], heap[smallest]))
+        smallest = left;
+      if (right < heap.length && less(heap[right], heap[smallest]))
+        smallest = right;
       if (smallest === i) return;
       [heap[i], heap[smallest]] = [heap[smallest], heap[i]];
       i = smallest;
@@ -240,7 +316,12 @@ async function planSkips(run, packs) {
     const id = idOf(cursor);
 
     if (last && last.equals(id)) {
-      const offset = await resolveOffset(run, cursor.pack, cursor.offsets.readUInt32BE(cursor.at * 4), cursor.whole);
+      const offset = await resolveOffset(
+        run,
+        cursor.pack,
+        cursor.offsets.readUInt32BE(cursor.at * 4),
+        cursor.whole
+      );
       skips[cursor.index].push({ offset, oid: Buffer.from(id) });
     } else {
       last = Buffer.from(id);
@@ -260,7 +341,11 @@ async function planSkips(run, packs) {
 
 function finishSkips(list) {
   list.sort((a, b) => a.offset - b.offset);
-  return { offsets: Float64Array.from(list, (skip) => skip.offset), oids: Buffer.concat(list.map((skip) => skip.oid)), count: list.length };
+  return {
+    offsets: Float64Array.from(list, (skip) => skip.offset),
+    oids: Buffer.concat(list.map((skip) => skip.oid)),
+    count: list.length,
+  };
 }
 
 // The index of the first skip at or after `offset`
@@ -281,7 +366,8 @@ async function plan(run, packs) {
   const skips = await planSkips(run, packs);
   const skipped = skips.reduce((n, skip) => n + skip.count, 0);
   const total = packs.reduce((n, pack) => n + pack.objects, 0) - skipped;
-  if (total > 0xffffffff) throw new UnsupportedError("A pack holds at most 4 billion objects");
+  if (total > 0xffffffff)
+    throw new UnsupportedError("A pack holds at most 4 billion objects");
   return { packs, skips, skipped, total };
 }
 
@@ -376,6 +462,7 @@ async function* endOf(queue, size, what, forward) {
   })();
 
   const stream = inflateStream(input, size, what);
+  // eslint-disable-next-line no-unused-vars
   for await (const ignored of stream.output) {
     while (outbox.length) yield outbox.shift();
   }
@@ -384,7 +471,8 @@ async function* endOf(queue, size, what, forward) {
   if (pending) {
     const mine = used - passed;
     if (forward && mine > 0) outbox.push(pending.subarray(0, mine));
-    if (mine < pending.length) queue.unshift(pending.subarray(Math.max(mine, 0)));
+    if (mine < pending.length)
+      queue.unshift(pending.subarray(Math.max(mine, 0)));
   }
   while (outbox.length) yield outbox.shift();
 
@@ -426,26 +514,41 @@ async function* sendPack(run, pack, skip, source, stats) {
   const what = pack.name;
 
   try {
-    if (!(await queue.fill(PACK_HEADER))) throw new CorruptError(what + " is shorter than its header");
+    if (!(await queue.fill(PACK_HEADER)))
+      throw new CorruptError(what + " is shorter than its header");
     const header = queue.peek(PACK_HEADER);
-    if (header.toString("latin1", 0, 4) !== "PACK" || header.readUInt32BE(4) !== 2 || header.readUInt32BE(8) !== pack.objects) {
-      throw new CorruptError(what + " is not a version 2 pack of the " + pack.objects + " objects the manifest says");
+    if (
+      header.toString("latin1", 0, 4) !== "PACK" ||
+      header.readUInt32BE(4) !== 2 ||
+      header.readUInt32BE(8) !== pack.objects
+    ) {
+      throw new CorruptError(
+        what +
+          " is not a version 2 pack of the " +
+          pack.objects +
+          " objects the manifest says"
+      );
     }
     queue.drop(PACK_HEADER);
 
     // Up to the first skipped entry, everything is copied as it comes
     const first = skip.count ? skip.offsets[0] : end;
-    if (skip.count && (first < PACK_HEADER || first >= end)) throw new CorruptError(what + " has no entry at offset " + first);
+    if (skip.count && (first < PACK_HEADER || first >= end))
+      throw new CorruptError(what + " has no entry at offset " + first);
     let at = PACK_HEADER;
     while (at < first) {
-      if (!(await queue.fill(1))) throw new CorruptError(what + " is cut short");
+      if (!(await queue.fill(1)))
+        throw new CorruptError(what + " is cut short");
       const piece = queue.shift(first - at);
       at += piece.length;
       yield piece;
     }
     if (!skip.count) {
       await queue.fill(TRAILER + 1);
-      if (queue.queued !== TRAILER) throw new CorruptError(what + " is not the " + pack.size + " bytes the manifest says");
+      if (queue.queued !== TRAILER)
+        throw new CorruptError(
+          what + " is not the " + pack.size + " bytes the manifest says"
+        );
       return;
     }
 
@@ -464,7 +567,10 @@ async function* sendPack(run, pack, skip, source, stats) {
     while (at < end) {
       await queue.fill(MAX_ENTRY_HEADER);
       if (!queue.queued) throw new CorruptError(what + " is cut short");
-      const entry = parseHeader(queue.peek(Math.min(queue.queued, MAX_ENTRY_HEADER)), at);
+      const entry = parseHeader(
+        queue.peek(Math.min(queue.queued, MAX_ENTRY_HEADER)),
+        at
+      );
       const skipping = next < skip.count && skip.offsets[next] === at;
       const original = Buffer.from(queue.peek(entry.length));
       queue.drop(entry.length);
@@ -477,13 +583,20 @@ async function* sendPack(run, pack, skip, source, stats) {
           const base = lowerBound(skip.offsets, entry.baseOffset);
           if (skip.offsets[base] === entry.baseOffset) {
             // the base is a copy which isn't being sent: name it by ID instead
-            replacement = Buffer.concat([encodeHeader(REF_DELTA, entry.size), skip.oids.subarray(base * 20, base * 20 + 20)]);
+            replacement = Buffer.concat([
+              encodeHeader(REF_DELTA, entry.size),
+              skip.oids.subarray(base * 20, base * 20 + 20),
+            ]);
             stats.toRef++;
           } else {
             const before = lowerBound(changeAt, entry.baseOffset);
-            const netAtBase = before < changeAt.length ? netBefore[before] : net;
+            const netAtBase =
+              before < changeAt.length ? netBefore[before] : net;
             if (net !== netAtBase) {
-              replacement = Buffer.concat([encodeHeader(OFS_DELTA, entry.size), encodeDistance(at - entry.baseOffset - (net - netAtBase))]);
+              replacement = Buffer.concat([
+                encodeHeader(OFS_DELTA, entry.size),
+                encodeDistance(at - entry.baseOffset - (net - netAtBase)),
+              ]);
               stats.rewritten++;
             }
           }
@@ -493,7 +606,12 @@ async function* sendPack(run, pack, skip, source, stats) {
         yield replacement;
       }
 
-      const used = yield* endOf(queue, entry.size, what + " entry at " + at, !skipping);
+      const used = yield* endOf(
+        queue,
+        entry.size,
+        what + " entry at " + at,
+        !skipping
+      );
       const length = entry.length + used;
 
       const change = skipping ? length : entry.length - sent;
@@ -509,10 +627,15 @@ async function* sendPack(run, pack, skip, source, stats) {
       at += length;
     }
 
-    if (at !== end) throw new CorruptError(what + " has an entry running into its checksum");
+    if (at !== end)
+      throw new CorruptError(what + " has an entry running into its checksum");
     await queue.fill(TRAILER + 1);
-    if (queue.queued !== TRAILER) throw new CorruptError(what + " is not the " + pack.size + " bytes the manifest says");
-    if (next !== skip.count) throw new CorruptError(what + " has no entry where its index says");
+    if (queue.queued !== TRAILER)
+      throw new CorruptError(
+        what + " is not the " + pack.size + " bytes the manifest says"
+      );
+    if (next !== skip.count)
+      throw new CorruptError(what + " has no entry where its index says");
   } finally {
     await queue.close();
   }
@@ -534,7 +657,14 @@ async function* packStream(run, thePlan, stats) {
       const pack = thePlan.packs[p];
       // The trailer is read too: an entry's zlib stream can only be seen to end
       // by what follows it, and for the last entry that is the trailer
-      const source = run.cache ? packSource({ cache: run.cache, store: run.store, name: pack.name, size: pack.size }) : run.store;
+      const source = run.cache
+        ? packSource({
+            cache: run.cache,
+            store: run.store,
+            name: pack.name,
+            size: pack.size,
+          })
+        : run.store;
       sources.set(p, chunks(run, packKey(pack.name), 0, pack.size, source));
     }
     return sources.get(p);
@@ -544,7 +674,11 @@ async function* packStream(run, thePlan, stats) {
     yield header;
     for (let p = 0; p < thePlan.packs.length; p++) {
       const source = open(p);
-      for (let q = p + 1; q <= p + PREFETCH_PACKS && q < thePlan.packs.length; q++) {
+      for (
+        let q = p + 1;
+        q <= p + PREFETCH_PACKS && q < thePlan.packs.length;
+        q++
+      ) {
         if (thePlan.packs[q].size <= SMALL_PACK) open(q);
       }
       yield* sendPack(run, thePlan.packs[p], thePlan.skips[p], source, stats);
@@ -605,7 +739,8 @@ function frameSideband(buffer, max) {
 // Writes to `out`; resolves once it can take more. `gone` rejects when `out`
 // closes.
 async function write(out, buffer, gone) {
-  if (out.destroyed || out.writableEnded) throw new ClientGoneError("The client went away");
+  if (out.destroyed || out.writableEnded)
+    throw new ClientGoneError("The client went away");
   if (out.write(buffer)) return;
   await Promise.race([once(out, "drain"), gone]);
 }
@@ -627,7 +762,8 @@ function createLimiter({ max, maxWaiting = 0 }) {
       if (active < max) {
         active++;
       } else {
-        if (waiting.length >= maxWaiting) throw new BusyError("Too many clones are running");
+        if (waiting.length >= maxWaiting)
+          throw new BusyError("Too many clones are running");
         await new Promise((resolve) => waiting.push(resolve));
       }
 
@@ -658,9 +794,28 @@ function createLimiter({ max, maxWaiting = 0 }) {
 // an error status; otherwise `out` has been ended (after an error packet, when
 // there is a sideband to carry it) or destroyed. A client which went away is a
 // ClientGoneError: reading stopped as soon as it was known.
-async function clone({ store, cache = null, manifest, packs = manifest.packs, out, prelude, sideband = null, limiter = null, chunkSize = CHUNK_SIZE, mergeBudget, keepaliveAfter = KEEPALIVE_AFTER, progress = true }) {
+async function clone({
+  store,
+  cache = null,
+  manifest,
+  packs = manifest.packs,
+  out,
+  prelude,
+  sideband = null,
+  limiter = null,
+  chunkSize = CHUNK_SIZE,
+  mergeBudget,
+  keepaliveAfter = KEEPALIVE_AFTER,
+  progress = true,
+}) {
   const controller = new AbortController();
-  const run = { store, cache, signal: controller.signal, chunkSize, mergeBudget };
+  const run = {
+    store,
+    cache,
+    signal: controller.signal,
+    chunkSize,
+    mergeBudget,
+  };
   const stats = { objects: 0, bytes: 0, skipped: 0, rewritten: 0, toRef: 0 };
   const release = limiter ? await limiter.acquire() : () => {};
   let started = false;
@@ -725,14 +880,29 @@ async function clone({ store, cache = null, manifest, packs = manifest.packs, ou
 
     out.end();
     await finished(out);
-    return { objects: thePlan.total, bytes: stats.bytes, skipped: stats.skipped, rewritten: stats.rewritten, toRef: stats.toRef };
+    return {
+      objects: thePlan.total,
+      bytes: stats.bytes,
+      skipped: stats.skipped,
+      rewritten: stats.rewritten,
+      toRef: stats.toRef,
+    };
   } catch (caught) {
     // Whatever it looks like, a failure after the client left is that
-    const err = controller.signal.aborted ? new ClientGoneError("The client went away") : caught;
+    const err = controller.signal.aborted
+      ? new ClientGoneError("The client went away")
+      : caught;
     if (started && !out.destroyed) {
       if (sideband && !(err instanceof ClientGoneError)) {
         // git prints this and fails; it has not been sent a trailer
-        out.end(pktline.packet(Buffer.concat([Buffer.from([3]), Buffer.from("The server failed while sending the repository.\n")])));
+        out.end(
+          pktline.packet(
+            Buffer.concat([
+              Buffer.from([3]),
+              Buffer.from("The server failed while sending the repository.\n"),
+            ])
+          )
+        );
       } else {
         out.destroy();
       }
@@ -749,7 +919,8 @@ async function clone({ store, cache = null, manifest, packs = manifest.packs, ou
 // Throws UnsupportedError for what this store does not do, ProtocolError for
 // what is not git.
 function parseRequest(body) {
-  if (body.length > MAX_REQUEST) throw new ProtocolError("The request is too large");
+  if (body.length > MAX_REQUEST)
+    throw new ProtocolError("The request is too large");
 
   const request = { wants: [], haves: [], capabilities: [], done: false };
 
@@ -758,12 +929,16 @@ function parseRequest(body) {
 
     const line = packet.data.toString("latin1");
     if (/^(shallow|deepen[-a-z]*|filter)( |$)/.test(line)) {
-      throw new UnsupportedError("Shallow clones and filters are not supported");
+      throw new UnsupportedError(
+        "Shallow clones and filters are not supported"
+      );
     } else if (line.startsWith("want ")) {
       const oid = line.slice(5, 45);
-      if (!/^[0-9a-f]{40}$/.test(oid) || (line.length > 45 && line[45] !== " ")) throw new ProtocolError("Bad want line");
+      if (!/^[0-9a-f]{40}$/.test(oid) || (line.length > 45 && line[45] !== " "))
+        throw new ProtocolError("Bad want line");
       request.wants.push(oid);
-      if (!request.capabilities.length) request.capabilities = line.slice(46).split(" ").filter(Boolean);
+      if (!request.capabilities.length)
+        request.capabilities = line.slice(46).split(" ").filter(Boolean);
     } else if (line.startsWith("have ")) {
       const oid = line.slice(5);
       if (!/^[0-9a-f]{40}$/.test(oid)) throw new ProtocolError("Bad have line");
@@ -783,7 +958,8 @@ function parseRequest(body) {
 // may have come between)
 function tips(manifest) {
   const found = new Set(Object.values(manifest.refs));
-  for (const snapshot of manifest.snapshots) for (const oid of Object.values(snapshot.refs)) found.add(oid);
+  for (const snapshot of manifest.snapshots)
+    for (const oid of Object.values(snapshot.refs)) found.add(oid);
   return found;
 }
 
@@ -796,7 +972,9 @@ function tips(manifest) {
 // follows NAK, as in git.
 function acknowledgement({ commons, ready, done, early, detailed }) {
   const last = commons[commons.length - 1];
-  const lines = detailed ? commons.map((oid) => "ACK " + oid + " common\n") : [];
+  const lines = detailed
+    ? commons.map((oid) => "ACK " + oid + " common\n")
+    : [];
 
   if (done) {
     lines.push(detailed && commons.length ? "ACK " + last + "\n" : "NAK\n");
@@ -828,7 +1006,19 @@ function acknowledgement({ commons, ready, done, early, detailed }) {
 // so the host can answer 400. A BusyError is too (503), and so is a failure
 // to read the history to negotiate. `cache` (cache.js) is optional and only
 // saves requests.
-async function serve({ store, cache, manifest, body, out, limiter, chunkSize, mergeBudget, keepaliveAfter, walkLimit, historyLimit }) {
+async function serve({
+  store,
+  cache,
+  manifest,
+  body,
+  out,
+  limiter,
+  chunkSize,
+  mergeBudget,
+  keepaliveAfter,
+  walkLimit,
+  historyLimit,
+}) {
   const request = parseRequestOrRefuse(body);
   const refusal = request.refusal || check(manifest, request);
 
@@ -844,25 +1034,57 @@ async function serve({ store, cache, manifest, body, out, limiter, chunkSize, me
   const capabilities = request.capabilities;
   const detailed = capabilities.includes("multi_ack_detailed");
   const negotiation = request.haves.length
-    ? await negotiate({ store, cache, manifest, haves: request.haves, limiter, maxWalk: walkLimit, maxHistory: historyLimit })
+    ? await negotiate({
+        store,
+        cache,
+        manifest,
+        haves: request.haves,
+        limiter,
+        maxWalk: walkLimit,
+        maxHistory: historyLimit,
+      })
     : { floor: 0, commons: [], ready: false, walked: 0 };
-  const facts = { commons: negotiation.commons.length, ready: negotiation.ready, walked: negotiation.walked };
+  const facts = {
+    commons: negotiation.commons.length,
+    ready: negotiation.ready,
+    walked: negotiation.walked,
+  };
 
-  const early = !request.done && detailed && negotiation.ready && negotiation.commons.length > 0 && capabilities.includes("no-done");
+  const early =
+    !request.done &&
+    detailed &&
+    negotiation.ready &&
+    negotiation.commons.length > 0 &&
+    capabilities.includes("no-done");
   if (!request.done && !early) {
     out.end(acknowledgement({ ...negotiation, detailed }));
     return { negotiated: true, floor: negotiation.floor, ...facts };
   }
 
-  const { packs, floor } = await choosePacks({ store, cache, manifest, wants: request.wants, negotiation });
-  const sideband = capabilities.includes("side-band-64k") ? "side-band-64k" : capabilities.includes("side-band") ? "side-band" : null;
+  const { packs, floor } = await choosePacks({
+    store,
+    cache,
+    manifest,
+    wants: request.wants,
+    negotiation,
+  });
+  const sideband = capabilities.includes("side-band-64k")
+    ? "side-band-64k"
+    : capabilities.includes("side-band")
+      ? "side-band"
+      : null;
   const sent = await clone({
     store,
     cache,
     manifest,
     packs,
     out,
-    prelude: acknowledgement({ ...negotiation, done: request.done, early, detailed }),
+    prelude: acknowledgement({
+      ...negotiation,
+      done: request.done,
+      early,
+      detailed,
+    }),
     sideband,
     limiter,
     chunkSize,
@@ -883,12 +1105,26 @@ function parseRequestOrRefuse(body) {
 }
 
 function check(manifest, request) {
-  if (request.wants.length && !request.capabilities.includes("ofs-delta")) return "This server needs a client which supports ofs-delta";
-  if (request.capabilities.some((c) => c.startsWith("object-format=") && c !== "object-format=sha1")) return "Only sha1 repositories are supported";
+  if (request.wants.length && !request.capabilities.includes("ofs-delta"))
+    return "This server needs a client which supports ofs-delta";
+  if (
+    request.capabilities.some(
+      (c) => c.startsWith("object-format=") && c !== "object-format=sha1"
+    )
+  )
+    return "Only sha1 repositories are supported";
 
   const allowed = tips(manifest);
-  for (const oid of request.wants) if (!allowed.has(oid)) return "upload-pack: not our ref " + oid;
+  for (const oid of request.wants)
+    if (!allowed.has(oid)) return "upload-pack: not our ref " + oid;
   return null;
 }
 
-module.exports = { clone, serve, parseRequest, createLimiter, plan, CONTENT_TYPE };
+module.exports = {
+  clone,
+  serve,
+  parseRequest,
+  createLimiter,
+  plan,
+  CONTENT_TYPE,
+};

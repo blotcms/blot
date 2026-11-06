@@ -111,7 +111,11 @@ const check = async () => {
     }
   } catch (error) {
     // Redis failure: skip notifying this tick, the next one retries
-    console.error(clfdate(), "Could not update Mac server notifications", error);
+    console.error(
+      clfdate(),
+      "Could not update Mac server notifications",
+      error
+    );
   }
 };
 

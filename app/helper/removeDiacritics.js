@@ -18,7 +18,7 @@ module.exports = function removeDiacritics(str) {
     { from: "å", to: "aa" },
     { from: "þ", to: "th" },
     { from: "ü", to: "ue" },
-    { from: "ß", to: "ss" }
+    { from: "ß", to: "ss" },
   ];
 
   for (const item of swaps) {

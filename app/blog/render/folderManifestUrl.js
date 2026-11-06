@@ -31,7 +31,8 @@ module.exports = function folderManifestUrl(req, target) {
   const suffix = target.slice(pathPartOf(target).length);
 
   // Reserved global paths such as /fonts have no version
-  if (!entry.version) return BLOT_CDN_TOKEN + encodeFolderPath(entry.path) + suffix;
+  if (!entry.version)
+    return BLOT_CDN_TOKEN + encodeFolderPath(entry.path) + suffix;
 
   return folderUrl(req.blog.id, entry.path, entry.version, suffix);
 };
@@ -46,7 +47,11 @@ module.exports.locals = function folderManifestLocals(req, locals) {
 
   const manifest = req.template.cdn;
 
-  if (!manifest || typeof manifest !== "object" || !Object.keys(manifest).length)
+  if (
+    !manifest ||
+    typeof manifest !== "object" ||
+    !Object.keys(manifest).length
+  )
     return locals;
 
   return mapFolderLocals(locals, blogHosts(req.blog), (target) =>

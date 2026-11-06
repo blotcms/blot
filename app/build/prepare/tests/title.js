@@ -13,7 +13,7 @@ describe("title parser", function () {
     expect(this.title("<h1>Hello</h1><p>Foo</p>")).toEqual({
       title: "Hello",
       tag: "<h1>Hello</h1>",
-      body: "<p>Foo</p>"
+      body: "<p>Foo</p>",
     });
   });
 
@@ -21,7 +21,7 @@ describe("title parser", function () {
     expect(this.title("<h1>A<span>C<i>D</i></span></h1>")).toEqual({
       title: "ACD",
       tag: "<h1>A<span>C<i>D</i></span></h1>",
-      body: ""
+      body: "",
     });
   });
 
@@ -29,7 +29,7 @@ describe("title parser", function () {
     expect(this.title('<h1 id="foo" data-bar="baz">Bar</h1>')).toEqual({
       title: "Bar",
       tag: '<h1 id="foo" data-bar="baz">Bar</h1>',
-      body: ""
+      body: "",
     });
   });
 
@@ -39,7 +39,7 @@ describe("title parser", function () {
     ).toEqual({
       title: "Bat",
       tag: "<h1>Bat</h1>",
-      body: "<p>Bar</p><h2>Foo</h2><p>count</p>"
+      body: "<p>Bar</p><h2>Foo</h2><p>count</p>",
     });
   });
 
@@ -49,7 +49,7 @@ describe("title parser", function () {
     ).toEqual({
       title: "Hey",
       tag: "<h1>Hey</h1>",
-      body: "<div><section></section><p>World</p></div>"
+      body: "<div><section></section><p>World</p></div>",
     });
   });
 
@@ -57,7 +57,7 @@ describe("title parser", function () {
     expect(this.title("<h2>Hey</h2><p>World</p>")).toEqual({
       title: "Hey",
       tag: "",
-      body: "<h2>Hey</h2><p>World</p>"
+      body: "<h2>Hey</h2><p>World</p>",
     });
   });
 
@@ -65,7 +65,7 @@ describe("title parser", function () {
     expect(this.title('<a href="/"></a>', "/Another.txt")).toEqual({
       title: "Another",
       tag: "",
-      body: '<a href="/"></a>'
+      body: '<a href="/"></a>',
     });
   });
 
@@ -73,7 +73,7 @@ describe("title parser", function () {
     expect(this.title("", "/Hello.txt")).toEqual({
       title: "Hello",
       tag: "",
-      body: ""
+      body: "",
     });
   });
 
@@ -81,7 +81,7 @@ describe("title parser", function () {
     expect(this.title("   ", "/Hello.txt")).toEqual({
       title: "Hello",
       tag: "",
-      body: "   "
+      body: "   ",
     });
   });
 
@@ -89,7 +89,7 @@ describe("title parser", function () {
     expect(this.title("...", "/Hello.txt")).toEqual({
       title: "Hello",
       tag: "",
-      body: "..."
+      body: "...",
     });
   });
 
@@ -97,7 +97,7 @@ describe("title parser", function () {
     expect(this.title("", "/[foo]Hello[bar].txt")).toEqual({
       title: "Hello",
       tag: "",
-      body: ""
+      body: "",
     });
   });
 
@@ -105,7 +105,7 @@ describe("title parser", function () {
     expect(this.title("", "/2018-12-10 Hey.txt")).toEqual({
       title: "Hey",
       tag: "",
-      body: ""
+      body: "",
     });
   });
 });

@@ -33,7 +33,11 @@ describe("Drive readdir", function () {
 
     const items = await driveReaddir(drive, "folder");
 
-    expect(items.map((item) => item.name)).toEqual(["_images", "AC_DC.jpg", "_"]);
+    expect(items.map((item) => item.name)).toEqual([
+      "_images",
+      "AC_DC.jpg",
+      "_",
+    ]);
   });
 
   it("gives colliding names the same suffixes whatever order Drive lists them in", async function () {
@@ -50,7 +54,9 @@ describe("Drive readdir", function () {
     };
 
     const forwards = await localNames(listed.map((item) => ({ ...item })));
-    const backwards = await localNames(listed.map((item) => ({ ...item })).reverse());
+    const backwards = await localNames(
+      listed.map((item) => ({ ...item })).reverse()
+    );
 
     expect(forwards).toEqual({
       a: "photo.jpg",

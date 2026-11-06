@@ -77,7 +77,9 @@ describe("git store local directory object store", function () {
       if (args[1] !== "wx") return handle;
       return new Proxy(handle, {
         get(target, key) {
-          if (key === "write") return (buffer, offset, length) => target.write(buffer, offset, Math.min(length, 3));
+          if (key === "write")
+            return (buffer, offset, length) =>
+              target.write(buffer, offset, Math.min(length, 3));
           const value = target[key];
           return typeof value === "function" ? value.bind(target) : value;
         },
@@ -87,7 +89,9 @@ describe("git store local directory object store", function () {
     const store = createFsStore({ root: dir });
     await store.put("whole", Buffer.from("0123456789abcdef"));
     expect((await store.get("whole")).toString()).toBe("0123456789abcdef");
-    expect(await store.putIfAbsent("created", Buffer.from("ghijklmnop"))).toBe(true);
+    expect(await store.putIfAbsent("created", Buffer.from("ghijklmnop"))).toBe(
+      true
+    );
     expect((await store.get("created")).toString()).toBe("ghijklmnop");
   });
 
@@ -108,7 +112,9 @@ describe("git store local directory object store", function () {
 
     const store = createFsStore({ root: dir });
     await expectAsync(store.put("never", Buffer.from("abc"))).toBeRejected();
-    await expectAsync(store.putIfAbsent("never-either", Buffer.from("abc"))).toBeRejected();
+    await expectAsync(
+      store.putIfAbsent("never-either", Buffer.from("abc"))
+    ).toBeRejected();
     expect(await store.head("never")).toBeNull();
     expect(await store.head("never-either")).toBeNull();
     expect(fs.readdirSync(dir + "/.tmp")).toEqual([]);

@@ -145,7 +145,9 @@ describe("all_entries", function () {
     await this.write({ path: "/a.txt", content: "Title: A\n\nA body" });
 
     await this.template(
-      { "list.html": `{{#all_entries}}{{title}}{{/all_entries}}{{{query.snippet}}}` },
+      {
+        "list.html": `{{#all_entries}}{{title}}{{/all_entries}}{{{query.snippet}}}`,
+      },
       { views: { "list.html": { url: "/list" } } }
     );
 
@@ -437,9 +439,15 @@ describe("all_entries shared augmentation", function () {
     const allEntries = loadAllEntries();
     stubCatalog();
 
-    const apex = await allEntries(makeReq("https://example.com"), { locals: {} });
-    const www = await allEntries(makeReq("http://www.example.com"), { locals: {} });
-    const apexAgain = await allEntries(makeReq("https://example.com"), { locals: {} });
+    const apex = await allEntries(makeReq("https://example.com"), {
+      locals: {},
+    });
+    const www = await allEntries(makeReq("http://www.example.com"), {
+      locals: {},
+    });
+    const apexAgain = await allEntries(makeReq("https://example.com"), {
+      locals: {},
+    });
 
     expect(www[0]).not.toBe(apex[0]);
     expect(www[0].tags).toBe(apex[0].tags);
@@ -516,9 +524,13 @@ describe("all_entries shared augmentation", function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/b"]);
 
-    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
-      callback(new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" }));
-    });
+    spyOn(EntryModel, "getByUrl").and.callFake(
+      function (blogID, url, callback) {
+        callback(
+          new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" })
+        );
+      }
+    );
 
     const without = makeReq();
     without.usesBacklinks = false;
@@ -537,9 +549,13 @@ describe("all_entries shared augmentation", function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/b"]);
 
-    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
-      callback(new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" }));
-    });
+    spyOn(EntryModel, "getByUrl").and.callFake(
+      function (blogID, url, callback) {
+        callback(
+          new Entry({ id: "/b.txt", path: "/b.txt", url: "/b", title: "B" })
+        );
+      }
+    );
 
     const first = await allEntries(makeReq(), { locals: {} });
     await allEntries(makeReq(), { locals: {} });
@@ -552,9 +568,11 @@ describe("all_entries shared augmentation", function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/b"]);
 
-    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
-      callback(undefined, new Error("mGet failed"));
-    });
+    spyOn(EntryModel, "getByUrl").and.callFake(
+      function (blogID, url, callback) {
+        callback(undefined, new Error("mGet failed"));
+      }
+    );
 
     const first = await allEntries(makeReq(), { locals: {} });
     await allEntries(makeReq(), { locals: {} });
@@ -567,9 +585,11 @@ describe("all_entries shared augmentation", function () {
     const allEntries = loadAllEntries();
     stubCatalog(["/deleted"]);
 
-    spyOn(EntryModel, "getByUrl").and.callFake(function (blogID, url, callback) {
-      callback();
-    });
+    spyOn(EntryModel, "getByUrl").and.callFake(
+      function (blogID, url, callback) {
+        callback();
+      }
+    );
 
     await allEntries(makeReq(), { locals: {} });
     await allEntries(makeReq(), { locals: {} });

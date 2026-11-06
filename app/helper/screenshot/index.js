@@ -215,7 +215,9 @@ function withTimeout(promise, ms, description) {
   const timeout = new Promise((_, reject) => {
     timer = setTimeout(
       () =>
-        reject(new TimeoutError(`Timeout calling ${description} after ${ms}ms`)),
+        reject(
+          new TimeoutError(`Timeout calling ${description} after ${ms}ms`)
+        ),
       ms
     );
   });
@@ -243,6 +245,7 @@ async function closePageWithTimeout(page) {
     // recovering from.
     try {
       await withTimeout(
+        // eslint-disable-next-line no-undef -- runs in the page
         page.evaluate(() => window.stop()).then(() => page.close()),
         closePageTimeout,
         "forced page cleanup"
@@ -349,7 +352,10 @@ async function takeScreenshot(site, path, options = {}) {
       });
     } catch (error) {
       if (!(error instanceof puppeteer.TimeoutError)) throw error;
-      console.log(prefix(), "Page never finished, screenshotting what rendered");
+      console.log(
+        prefix(),
+        "Page never finished, screenshotting what rendered"
+      );
     }
 
     console.log(prefix(), "Taking screenshot of", site, "to", path);
@@ -397,7 +403,12 @@ const BATCH_ARGS_BYTES = 48 * 1024;
 // The job as a whole failed rather than a page: it ran out of time or memory,
 // or its reply was too big. In a batch the cause is one of its pages, or all
 // of them together, so each page is tried again on its own.
-const JOB_LIMIT_CODES = ["SANDBOX_TIMEOUT", "SANDBOX_KILLED", "SANDBOX_OUTPUT_TOO_LARGE", "SANDBOX_INPUT_TOO_LARGE"];
+const JOB_LIMIT_CODES = [
+  "SANDBOX_TIMEOUT",
+  "SANDBOX_KILLED",
+  "SANDBOX_OUTPUT_TOO_LARGE",
+  "SANDBOX_INPUT_TOO_LARGE",
+];
 
 // A batch the broker answered busy is sent again this often, this far apart
 const BUSY_TRIES = 6;
@@ -445,7 +456,9 @@ function sendBatch() {
 
   batchRunning = true;
   runBatch(items)
-    .catch((error) => console.error(prefix(), "Screenshot batch failed:", error))
+    .catch((error) =>
+      console.error(prefix(), "Screenshot batch failed:", error)
+    )
     .finally(() => {
       batchRunning = false;
       // What came in while it ran goes out now, with no window
@@ -468,7 +481,9 @@ async function runBatch(items) {
     if (error.code === "SANDBOX_BUSY") {
       // The browser is taken and the queue was full or waited out: backpressure,
       // not the pages' doing. Back they go, a few times, before they fail.
-      const fresh = items.filter((item) => (item.busy = (item.busy || 0) + 1) <= BUSY_TRIES);
+      const fresh = items.filter(
+        (item) => (item.busy = (item.busy || 0) + 1) <= BUSY_TRIES
+      );
       for (const item of items) if (!fresh.includes(item)) item.reject(error);
       if (fresh.length) {
         const timer = setTimeout(() => {
@@ -520,7 +535,8 @@ async function runBatch(items) {
       if (entry.error) {
         // Not reached, for want of time or room: next in line for the next
         // batch, not a failed attempt
-        if (entry.deferred === true && items.length > 1) return again.push(item);
+        if (entry.deferred === true && items.length > 1)
+          return again.push(item);
         const error = new Error(entry.error);
         error.retryable = entry.retryable === true;
         return item.reject(error);

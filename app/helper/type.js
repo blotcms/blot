@@ -1,8 +1,8 @@
 var TYPES = {
-    "undefined": "undefined",
-    "number": "number",
-    "boolean": "boolean",
-    "string": "string",
+    undefined: "undefined",
+    number: "number",
+    boolean: "boolean",
+    string: "string",
     "[object AsyncFunction]": "function",
     "[object Function]": "function",
     "[object RegExp]": "regexp",

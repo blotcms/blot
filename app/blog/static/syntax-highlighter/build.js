@@ -28,7 +28,7 @@ fs.outputJsonSync(
 
       // https://css-tricks.com/snippets/css/make-pre-text-wrap/
       const input =
-        contents.replace(/\/\*\!/g, "/*") +
+        contents.replace(/\/\*!/g, "/*") +
         `
 pre code.hljs {
   display: block;
@@ -57,7 +57,6 @@ code.hljs, .hljs {padding: 0;margin:0}
       try {
         background = [...input.matchAll(bgregex)][0][1];
         if (background.endsWith(";")) background = background.slice(0, -1);
-        background = background;
       } catch (e) {}
 
       if (!background) console.log("missing background:", path);

@@ -20,8 +20,14 @@ const { negotiate } = require("../fetch");
 const { advertise } = require("../advertise");
 
 const MiB = 1024 * 1024;
-const CAPS = "multi_ack_detailed no-done side-band-64k ofs-delta agent=git/test";
-const IDENTITY = ["-c", "user.name=Client", "-c", "user.email=client@example.com"];
+const CAPS =
+  "multi_ack_detailed no-done side-band-64k ofs-delta agent=git/test";
+const IDENTITY = [
+  "-c",
+  "user.name=Client",
+  "-c",
+  "user.email=client@example.com",
+];
 
 function createLock() {
   let tail = Promise.resolve();
@@ -32,12 +38,18 @@ function createLock() {
   };
 }
 
-const pkt = (text) => Buffer.concat([Buffer.from((text.length + 4).toString(16).padStart(4, "0")), Buffer.from(text)]);
+const pkt = (text) =>
+  Buffer.concat([
+    Buffer.from((text.length + 4).toString(16).padStart(4, "0")),
+    Buffer.from(text),
+  ]);
 
 // A request body: the wants (the first with the capabilities), the haves, and
 // done or a flush
 function request({ wants, haves = [], caps = CAPS, done = false }) {
-  const parts = wants.map((oid, i) => pkt("want " + oid + (i === 0 ? " " + caps : "") + "\n"));
+  const parts = wants.map((oid, i) =>
+    pkt("want " + oid + (i === 0 ? " " + caps : "") + "\n")
+  );
   parts.push(Buffer.from("0000"));
   for (const oid of haves) parts.push(pkt("have " + oid + "\n"));
   parts.push(done ? pkt("done\n") : Buffer.from("0000"));
@@ -51,7 +63,9 @@ function answerOf(bytes) {
   while (at + 4 <= bytes.length) {
     const length = parseInt(bytes.toString("latin1", at, at + 4), 16);
     if (length < 5 || bytes[at + 4] < 32) break;
-    lines.push(bytes.toString("latin1", at + 4, at + length).replace(/\n$/, ""));
+    lines.push(
+      bytes.toString("latin1", at + 4, at + length).replace(/\n$/, "")
+    );
     at += length;
   }
   return { lines, pack: bytes.includes("PACK") };
@@ -71,7 +85,12 @@ describe("git store fetch", function () {
 
   // With `shared`, the pushes and the fetches go through two cache instances
   // on one directory, as two processes on a host do
-  async function setup({ commits = 5, cacheDir = "cache", shared = false, ...options } = {}) {
+  async function setup({
+    commits = 5,
+    cacheDir = "cache",
+    shared = false,
+    ...options
+  } = {}) {
     dir = fx.tempDir();
     work = path.join(dir, "work");
     counter = 0;
@@ -79,9 +98,16 @@ describe("git store fetch", function () {
 
     store = createMemoryStore();
     cache = createCache({ dir: path.join(dir, cacheDir), maxBytes: 64 * MiB });
-    const serving = shared ? createCache({ dir: path.join(dir, cacheDir), maxBytes: 64 * MiB }) : cache;
+    const serving = shared
+      ? createCache({ dir: path.join(dir, cacheDir), maxBytes: 64 * MiB })
+      : cache;
     received = await createReceiveServer({ store, cache, lock: createLock() });
-    server = await startServer({ store, cache: serving, manifest: () => latest, ...options });
+    server = await startServer({
+      store,
+      cache: serving,
+      manifest: () => latest,
+      ...options,
+    });
   }
 
   async function teardown() {
@@ -106,7 +132,10 @@ describe("git store fetch", function () {
 
   function addCommit({ branchFrom } = {}) {
     if (branchFrom) fx.git(work, ["checkout", "-q", "-B", "side", branchFrom]);
-    fs.writeFileSync(path.join(work, "posts", "new-" + ++counter + ".txt"), "A new post " + counter + "\n");
+    fs.writeFileSync(
+      path.join(work, "posts", "new-" + ++counter + ".txt"),
+      "A new post " + counter + "\n"
+    );
     fx.git(work, ["add", "-A"]);
     fx.git(work, ["commit", "-q", "-m", "Add " + counter]);
     return fx.text(work, ["rev-parse", "HEAD"]);
@@ -126,7 +155,12 @@ describe("git store fetch", function () {
     fx.git(client, ["fsck", "--strict", "--no-dangling"]);
 
     const found = {};
-    const listed = fx.text(client, ["for-each-ref", "--format=%(objectname) %(refname)", "refs/remotes/origin", "refs/tags"]);
+    const listed = fx.text(client, [
+      "for-each-ref",
+      "--format=%(objectname) %(refname)",
+      "refs/remotes/origin",
+      "refs/tags",
+    ]);
     for (const line of listed.split("\n").filter(Boolean)) {
       const [oid, ref] = line.split(" ");
       if (ref !== "refs/remotes/origin/HEAD") found[ref] = oid;
@@ -134,7 +168,8 @@ describe("git store fetch", function () {
 
     const expected = {};
     for (const [ref, oid] of Object.entries(latest.refs)) {
-      if (ref.startsWith("refs/heads/")) expected["refs/remotes/origin/" + ref.slice(11)] = oid;
+      if (ref.startsWith("refs/heads/"))
+        expected["refs/remotes/origin/" + ref.slice(11)] = oid;
       else if (tags) expected[ref] = oid;
     }
     expect(found).toEqual(expected);
@@ -146,7 +181,8 @@ describe("git store fetch", function () {
   // the client is by walking back from the commit. Resolves [{ dir, first }].
   async function clientsInMiddleOfPush(...names) {
     const clients = [];
-    for (const name of names) clients.push({ dir: await clone(name, "--no-tags") });
+    for (const name of names)
+      clients.push({ dir: await clone(name, "--no-tags") });
 
     const pushed = [];
     for (let i = 0; i < 20; i++) pushed.push(addCommit());
@@ -172,8 +208,12 @@ describe("git store fetch", function () {
   }
 
   const lastResult = () => server.results[server.results.length - 1];
-  const posts = () => server.requests.filter((r) => r.startsWith("POST")).length;
-  const used = (before) => Object.fromEntries(Object.keys(before).map((key) => [key, store.stats[key] - before[key]]));
+  const posts = () =>
+    server.requests.filter((r) => r.startsWith("POST")).length;
+  const used = (before) =>
+    Object.fromEntries(
+      Object.keys(before).map((key) => [key, store.stats[key] - before[key]])
+    );
   const reading = (u) => u.heads + u.reads + u.gets;
 
   describe("with the cache another process pushed through", function () {
@@ -194,12 +234,16 @@ describe("git store fetch", function () {
       const before = { ...store.stats };
       ok(await gitIn(client, "fetch", "origin"));
       expect(lastResult().packs).toBe(1);
-      expect(used(before)).toEqual(jasmine.objectContaining({ heads: 0, reads: 0, gets: 0 }));
+      expect(used(before)).toEqual(
+        jasmine.objectContaining({ heads: 0, reads: 0, gets: 0 })
+      );
       expectMirror(client);
 
       const cloning = { ...store.stats };
       const second = await clone("second");
-      expect(used(cloning)).toEqual(jasmine.objectContaining({ heads: 0, reads: 0, gets: 0 }));
+      expect(used(cloning)).toEqual(
+        jasmine.objectContaining({ heads: 0, reads: 0, gets: 0 })
+      );
       expectMirror(second);
     });
   });
@@ -246,7 +290,9 @@ describe("git store fetch", function () {
 
       ok(await gitIn(client, ...IDENTITY, "pull", "--no-rebase", "--no-edit"));
       expect(lastResult().packs).toBe(3);
-      expect(fx.text(client, ["rev-parse", "HEAD"])).toBe(latest.refs["refs/heads/master"]);
+      expect(fx.text(client, ["rev-parse", "HEAD"])).toBe(
+        latest.refs["refs/heads/master"]
+      );
       expectMirror(client);
     });
 
@@ -290,7 +336,10 @@ describe("git store fetch", function () {
       fx.git(client, ["config", "user.name", "Client"]);
       fx.git(client, ["config", "user.email", "client@example.com"]);
       for (let i = 0; i < 3; i++) {
-        fs.writeFileSync(path.join(client, "local-" + i + ".txt"), "local " + i + "\n");
+        fs.writeFileSync(
+          path.join(client, "local-" + i + ".txt"),
+          "local " + i + "\n"
+        );
         fx.git(client, ["add", "-A"]);
         fx.git(client, ["commit", "-q", "-m", "Local " + i]);
       }
@@ -311,18 +360,30 @@ describe("git store fetch", function () {
       fs.mkdirSync(stranger);
       fx.git(stranger, ["init", "-q", "-b", "main"]);
       for (let i = 0; i < 3; i++) {
-        fs.writeFileSync(path.join(stranger, "file-" + i), "unrelated " + i + "\n");
+        fs.writeFileSync(
+          path.join(stranger, "file-" + i),
+          "unrelated " + i + "\n"
+        );
         fx.git(stranger, ["add", "-A"]);
         fx.git(stranger, ["commit", "-q", "-m", "Unrelated " + i]);
       }
 
-      ok(await gitIn(stranger, "fetch", server.url, "refs/heads/master:refs/remotes/origin/master"));
+      ok(
+        await gitIn(
+          stranger,
+          "fetch",
+          server.url,
+          "refs/heads/master:refs/remotes/origin/master"
+        )
+      );
       expect(lastResult().floor).toBe(0);
       expect(lastResult().packs).toBe(latest.packs.length);
       expect(lastResult().commons).toBe(0);
 
       fx.git(stranger, ["fsck", "--strict", "--no-dangling"]);
-      expect(fx.text(stranger, ["rev-parse", "refs/remotes/origin/master"])).toBe(latest.refs["refs/heads/master"]);
+      expect(
+        fx.text(stranger, ["rev-parse", "refs/remotes/origin/master"])
+      ).toBe(latest.refs["refs/heads/master"]);
     });
 
     it("follows an annotated tag pushed after the clone, and a lightweight one", async function () {
@@ -338,7 +399,11 @@ describe("git store fetch", function () {
 
       // Nothing asks for tags: git sees the "^{}" line and fetches them itself
       ok(await gitIn(client, "fetch", "origin"));
-      expect(fx.text(client, ["tag"]).split("\n")).toEqual(["light", "v1", "v2"]);
+      expect(fx.text(client, ["tag"]).split("\n")).toEqual([
+        "light",
+        "v1",
+        "v2",
+      ]);
       expectMirror(client);
     });
 
@@ -370,7 +435,6 @@ describe("git store fetch", function () {
       expect(fx.text(client, ["tag"]).split("\n")).toEqual(["v0", "v1", "v2"]);
       expectMirror(client);
     });
-
   });
 
   describe("history that is restored", function () {
@@ -398,7 +462,9 @@ describe("git store fetch", function () {
       // The pack is listed once, as the last, with the seq of the push that made it reachable
       expect(latest.packs.length).toBe(packs);
       expect(latest.packs[latest.packs.length - 1].seq).toBe(latest.seq);
-      expect(new Set(latest.packs.map((pack) => pack.name)).size).toBe(latest.packs.length);
+      expect(new Set(latest.packs.map((pack) => pack.name)).size).toBe(
+        latest.packs.length
+      );
 
       ok(await gitIn(client, "fetch", "origin"));
       expect(lastResult().floor).toBe(latest.seq - 1);
@@ -420,7 +486,14 @@ describe("git store fetch", function () {
       await pushWork("-f", "master");
       const client = await clientFromWork("client");
 
-      const tag = (oid, ref) => receive({ store, cache, lock: createLock(), commands: [{ old: "0".repeat(40), new: oid, ref }], pack: null });
+      const tag = (oid, ref) =>
+        receive({
+          store,
+          cache,
+          lock: createLock(),
+          commands: [{ old: "0".repeat(40), new: oid, ref }],
+          pack: null,
+        });
 
       // A commit that master reaches needs nothing moved
       const before = (await refresh()).packs;
@@ -430,7 +503,9 @@ describe("git store fetch", function () {
       // One that no ref reaches may be in any pack
       expect((await tag(b, "refs/tags/at-b")).outcome).toBe("ok");
       await refresh();
-      expect(latest.packs.map((pack) => pack.name)).toEqual(before.map((pack) => pack.name));
+      expect(latest.packs.map((pack) => pack.name)).toEqual(
+        before.map((pack) => pack.name)
+      );
       expect(latest.packs.every((pack) => pack.seq === latest.seq)).toBe(true);
 
       ok(await gitIn(client, "fetch", "--tags", "origin"));
@@ -456,14 +531,27 @@ describe("git store fetch", function () {
 
       // The client reads refs with B on master, and by its request master is A again
       let calls = 0;
-      const racing = await startServer({ store, cache, manifest: () => (calls++ === 0 ? advertised : latest) });
+      const racing = await startServer({
+        store,
+        cache,
+        manifest: () => (calls++ === 0 ? advertised : latest),
+      });
       try {
-        ok(await gitIn(client, "fetch", racing.url, "+refs/heads/*:refs/remotes/origin/*"));
+        ok(
+          await gitIn(
+            client,
+            "fetch",
+            racing.url,
+            "+refs/heads/*:refs/remotes/origin/*"
+          )
+        );
         const result = racing.results[racing.results.length - 1];
         expect(result.floor).toBe(0);
         expect(result.packs).toBe(latest.packs.length);
         fx.git(client, ["fsck", "--strict", "--no-dangling"]);
-        expect(fx.text(client, ["rev-parse", "refs/remotes/origin/master"])).toBe(b);
+        expect(
+          fx.text(client, ["rev-parse", "refs/remotes/origin/master"])
+        ).toBe(b);
       } finally {
         await racing.close();
       }
@@ -488,11 +576,20 @@ describe("git store fetch", function () {
       fx.git(stranger, ["add", "-A"]);
       fx.git(stranger, ["commit", "-q", "-m", "Unrelated"]);
 
-      ok(await gitIn(stranger, "fetch", server.url, "refs/heads/master:refs/remotes/origin/master"));
+      ok(
+        await gitIn(
+          stranger,
+          "fetch",
+          server.url,
+          "refs/heads/master:refs/remotes/origin/master"
+        )
+      );
       expect(lastResult().floor).toBe(0);
       expect(lastResult().packs).toBe(latest.packs.length);
       fx.git(stranger, ["fsck", "--strict", "--no-dangling"]);
-      expect(fx.text(stranger, ["rev-parse", "refs/remotes/origin/master"])).toBe(latest.refs["refs/heads/master"]);
+      expect(
+        fx.text(stranger, ["rev-parse", "refs/remotes/origin/master"])
+      ).toBe(latest.refs["refs/heads/master"]);
     });
 
     it("never acknowledges nothing", async function () {
@@ -503,7 +600,17 @@ describe("git store fetch", function () {
       for (const caps of [CAPS, "multi_ack_detailed side-band-64k ofs-delta"]) {
         const out = new PassThrough();
         const written = collect(out);
-        await serve({ store, cache, manifest: latest, body: request({ wants: [latest.refs["refs/heads/master"]], haves: ["e".repeat(40)], caps }), out });
+        await serve({
+          store,
+          cache,
+          manifest: latest,
+          body: request({
+            wants: [latest.refs["refs/heads/master"]],
+            haves: ["e".repeat(40)],
+            caps,
+          }),
+          out,
+        });
         expect((await written).toString("latin1")).not.toContain("undefined");
       }
     });
@@ -526,7 +633,18 @@ describe("git store fetch", function () {
     // have it: a clone is sent every object, whatever refs it asked for.)
     async function clientWithoutIt(name) {
       const target = path.join(dir, name);
-      ok(await runGit(["clone", "-q", "--no-tags", "--single-branch", "--branch", "master", "file://" + work, target]));
+      ok(
+        await runGit([
+          "clone",
+          "-q",
+          "--no-tags",
+          "--single-branch",
+          "--branch",
+          "master",
+          "file://" + work,
+          target,
+        ])
+      );
       fx.git(target, ["remote", "set-url", "origin", server.url]);
       expect(fx.text(target, ["rev-list", "--all", "--count"])).toBe("8");
       return target;
@@ -560,7 +678,9 @@ describe("git store fetch", function () {
       expect(reading(used(before))).toBeLessThanOrEqual(cloneRequests);
       expect(latest.historyPieces.length).toBe(5);
       fx.git(client, ["fsck", "--strict", "--no-dangling"]);
-      expect(fx.text(client, ["rev-parse", "refs/remotes/origin/master"])).toBe(latest.refs["refs/heads/master"]);
+      expect(fx.text(client, ["rev-parse", "refs/remotes/origin/master"])).toBe(
+        latest.refs["refs/heads/master"]
+      );
       fx.git(client, ["cat-file", "-e", latest.refs["refs/tags/old-work"]]);
     });
 
@@ -569,13 +689,29 @@ describe("git store fetch", function () {
       addCommit();
       await pushWork("master");
 
-      const small = await startServer({ store, cache, manifest: () => latest, historyLimit: 100 });
+      const small = await startServer({
+        store,
+        cache,
+        manifest: () => latest,
+        historyLimit: 100,
+      });
       try {
-        ok(await gitIn(client, "fetch", small.url, "+refs/heads/*:refs/remotes/origin/*"));
+        ok(
+          await gitIn(
+            client,
+            "fetch",
+            small.url,
+            "+refs/heads/*:refs/remotes/origin/*"
+          )
+        );
         expect(small.results[small.results.length - 1].floor).toBe(0);
-        expect(small.results[small.results.length - 1].packs).toBe(latest.packs.length);
+        expect(small.results[small.results.length - 1].packs).toBe(
+          latest.packs.length
+        );
         fx.git(client, ["fsck", "--strict", "--no-dangling"]);
-        expect(fx.text(client, ["rev-parse", "refs/remotes/origin/master"])).toBe(latest.refs["refs/heads/master"]);
+        expect(
+          fx.text(client, ["rev-parse", "refs/remotes/origin/master"])
+        ).toBe(latest.refs["refs/heads/master"]);
       } finally {
         await small.close();
       }
@@ -638,7 +774,8 @@ describe("git store fetch", function () {
 
       // Each push kept its history piece in the cache: cold is a cache which
       // has lost them
-      for (const piece of latest.historyPieces) await cache.delete(cacheKeyOf(store, piece.name));
+      for (const piece of latest.historyPieces)
+        await cache.delete(cacheKeyOf(store, piece.name));
 
       const counts = [];
       for (const client of clients) {
@@ -667,7 +804,13 @@ describe("git store fetch", function () {
 
       const haves = [client.first];
       const wide = await negotiate({ store, cache, manifest: latest, haves });
-      const narrow = await negotiate({ store, cache, manifest: latest, haves, maxWalk: 1 });
+      const narrow = await negotiate({
+        store,
+        cache,
+        manifest: latest,
+        haves,
+        maxWalk: 1,
+      });
 
       expect(wide.floor).toBeGreaterThan(0);
       expect(wide.walked).toBeGreaterThan(1);
@@ -695,16 +838,29 @@ describe("git store fetch", function () {
     async function ask(options) {
       const out = new PassThrough();
       const written = collect(out);
-      const result = await serve({ store, cache, manifest: latest, body: request({ wants: [commits[3]], ...options }), out });
+      const result = await serve({
+        store,
+        cache,
+        manifest: latest,
+        body: request({ wants: [commits[3]], ...options }),
+        out,
+      });
       return { result, ...answerOf(await written) };
     }
 
     const unknown = "e".repeat(40);
 
     it("is ready at once when a have is the tip of a snapshot, and sends the pack with no-done", async function () {
-      const { result, lines, pack } = await ask({ haves: [unknown, commits[2]] });
+      const { result, lines, pack } = await ask({
+        haves: [unknown, commits[2]],
+      });
 
-      expect(lines).toEqual(["ACK " + commits[2] + " common", "ACK " + commits[2] + " ready", "NAK", "ACK " + commits[2]]);
+      expect(lines).toEqual([
+        "ACK " + commits[2] + " common",
+        "ACK " + commits[2] + " ready",
+        "NAK",
+        "ACK " + commits[2],
+      ]);
       expect(pack).toBe(true);
       expect(result.floor).toBe(3);
       expect(result.packs).toBe(1);
@@ -713,13 +869,20 @@ describe("git store fetch", function () {
     it("answers a round without a pack when the client does not use no-done, and the done that follows sends it", async function () {
       const caps = "multi_ack_detailed side-band-64k ofs-delta";
       const round = await ask({ haves: [commits[2]], caps });
-      expect(round.lines).toEqual(["ACK " + commits[2] + " common", "ACK " + commits[2] + " ready", "NAK"]);
+      expect(round.lines).toEqual([
+        "ACK " + commits[2] + " common",
+        "ACK " + commits[2] + " ready",
+        "NAK",
+      ]);
       expect(round.pack).toBe(false);
       expect(round.result.negotiated).toBe(true);
 
       // The next request carries the haves the client was told are common
       const last = await ask({ haves: [commits[2]], caps, done: true });
-      expect(last.lines).toEqual(["ACK " + commits[2] + " common", "ACK " + commits[2]]);
+      expect(last.lines).toEqual([
+        "ACK " + commits[2] + " common",
+        "ACK " + commits[2],
+      ]);
       expect(last.pack).toBe(true);
       expect(last.result.packs).toBe(1);
     });
@@ -738,10 +901,17 @@ describe("git store fetch", function () {
 
     it("acknowledges commits it has that are not tips, and is ready when they prove a snapshot", async function () {
       const first = commits[0];
-      const { lines, result } = await ask({ haves: [unknown, first], caps: "multi_ack_detailed side-band-64k ofs-delta" });
+      const { lines, result } = await ask({
+        haves: [unknown, first],
+        caps: "multi_ack_detailed side-band-64k ofs-delta",
+      });
 
       // The first push's tip is a tip of the first snapshot; the client has all of it
-      expect(lines).toEqual(["ACK " + first + " common", "ACK " + first + " ready", "NAK"]);
+      expect(lines).toEqual([
+        "ACK " + first + " common",
+        "ACK " + first + " ready",
+        "NAK",
+      ]);
       expect(result.floor).toBe(1);
     });
 
@@ -759,7 +929,16 @@ describe("git store fetch", function () {
     it("refuses a want which is not a tip of any ref, even with haves", async function () {
       const out = new PassThrough();
       const written = collect(out);
-      const result = await serve({ store, cache, manifest: latest, body: request({ wants: [commits[0].replace(/./, "0")], haves: [commits[2]] }), out });
+      const result = await serve({
+        store,
+        cache,
+        manifest: latest,
+        body: request({
+          wants: [commits[0].replace(/./, "0")],
+          haves: [commits[2]],
+        }),
+        out,
+      });
       expect(result.refused).toMatch(/not our ref/);
       expect((await written).toString()).toMatch(/ERR /);
     });
@@ -767,14 +946,22 @@ describe("git store fetch", function () {
     it("sends a pack of no objects to a client that has every snapshot", async function () {
       const out = new PassThrough();
       const written = collect(out);
-      const result = await serve({ store, cache, manifest: latest, body: request({ wants: [commits[3]], haves: [commits[3]], done: true }), out });
+      const result = await serve({
+        store,
+        cache,
+        manifest: latest,
+        body: request({ wants: [commits[3]], haves: [commits[3]], done: true }),
+        out,
+      });
       const bytes = await written;
 
       expect(result.packs).toBe(0);
       expect(result.objects).toBe(0);
       // A header saying version 2 and no objects, and the 20 byte checksum
       expect(result.bytes).toBe(32);
-      expect(bytes.toString("latin1")).toContain("\x01PACK\x00\x00\x00\x02\x00\x00\x00\x00");
+      expect(bytes.toString("latin1")).toContain(
+        "\x01PACK\x00\x00\x00\x02\x00\x00\x00\x00"
+      );
     });
 
     it("lets a client which has nothing send a want and done as a clone does", async function () {
@@ -793,7 +980,13 @@ describe("git store fetch", function () {
 
       const out = new PassThrough();
       const written = collect(out);
-      const sent = await serve({ store, cache, manifest: latest, body: request({ wants: [commits[3], tag], haves: [commits[2]] }), out });
+      const sent = await serve({
+        store,
+        cache,
+        manifest: latest,
+        body: request({ wants: [commits[3], tag], haves: [commits[2]] }),
+        out,
+      });
       await written;
       expect(sent.floor).toBe(0);
       expect(sent.packs).toBe(latest.packs.length);

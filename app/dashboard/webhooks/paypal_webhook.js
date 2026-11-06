@@ -16,7 +16,7 @@ const SUBSCRIPTION_EVENTS = [
   "BILLING.SUBSCRIPTION.ACTIVATED",
   "BILLING.SUBSCRIPTION.RE-ACTIVATED",
   "BILLING.SUBSCRIPTION.UPDATED",
-  "BILLING.SUBSCRIPTION.CREATED"
+  "BILLING.SUBSCRIPTION.CREATED",
 ];
 
 const CANCEL_EMAIL_TTL_SECONDS = 90 * 24 * 60 * 60;
@@ -27,8 +27,12 @@ async function fetchJSON(url, options) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 15000);
   try {
-    const response = await fetch(url, { ...options, signal: controller.signal });
-    if (!response.ok) throw new Error(`PayPal returned HTTP ${response.status}`);
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    if (!response.ok)
+      throw new Error(`PayPal returned HTTP ${response.status}`);
     return await response.json();
   } finally {
     clearTimeout(timer);
@@ -39,7 +43,7 @@ async function fetchJSON(url, options) {
 // Returns true when verification succeeds - or when no webhook id is configured,
 // in which case verification is skipped and the previous behaviour preserved,
 // so this is safe to deploy before BLOT_PAYPAL_WEBHOOK_ID is set.
-const verifyPayPalWebhook = async req => {
+const verifyPayPalWebhook = async (req) => {
   const webhookId = config.paypal.webhook_id;
 
   if (!webhookId) {
@@ -56,9 +60,9 @@ const verifyPayPalWebhook = async req => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Basic ${Buffer.from(
+        Authorization: `Basic ${Buffer.from(
           `${config.paypal.client_id}:${config.paypal.secret}`
-        ).toString("base64")}`
+        ).toString("base64")}`,
       },
       body: JSON.stringify({
         auth_algo: req.headers["paypal-auth-algo"],
@@ -67,8 +71,8 @@ const verifyPayPalWebhook = async req => {
         transmission_sig: req.headers["paypal-transmission-sig"],
         transmission_time: req.headers["paypal-transmission-time"],
         webhook_id: webhookId,
-        webhook_event: req.body
-      })
+        webhook_event: req.body,
+      }),
     }
   );
 
@@ -91,8 +95,7 @@ paypal.post("/", parser.json(), async (req, res) => {
   const eventType = req.body && req.body.event_type;
   // resource.id used to be read unconditionally, which threw - and crashed the
   // process via an unhandled rejection - on any request without a resource.
-  const subscriptionID =
-    req.body && req.body.resource && req.body.resource.id;
+  const subscriptionID = req.body && req.body.resource && req.body.resource.id;
 
   // if the webhook is for a subscription-related event, update the subscription
   if (SUBSCRIPTION_EVENTS.includes(eventType)) {
@@ -117,7 +120,7 @@ paypal.post("/", parser.json(), async (req, res) => {
   res.status(200).send("OK");
 });
 
-const updateSubscription = async subscriptionID => {
+const updateSubscription = async (subscriptionID) => {
   const user = await new Promise((resolve, reject) => {
     User.getByPayPalSubscriptionId(subscriptionID, (err, user) => {
       if (err) return reject(err);
@@ -125,7 +128,9 @@ const updateSubscription = async subscriptionID => {
     });
   });
   if (!user) {
-    throw new Error("No user associated with subscription ID " + subscriptionID);
+    throw new Error(
+      "No user associated with subscription ID " + subscriptionID
+    );
   }
 
   const paypal = await fetchJSON(
@@ -134,14 +139,18 @@ const updateSubscription = async subscriptionID => {
       headers: {
         "Content-Type": "application/json",
         "Accept-Language": "en_US",
-        "Authorization": `Basic ${Buffer.from(
+        Authorization: `Basic ${Buffer.from(
           `${config.paypal.client_id}:${config.paypal.secret}`
-        ).toString("base64")}`
-      }
+        ).toString("base64")}`,
+      },
     }
   );
 
-  if (!paypal || paypal.id !== subscriptionID || typeof paypal.status !== "string") {
+  if (
+    !paypal ||
+    paypal.id !== subscriptionID ||
+    typeof paypal.status !== "string"
+  ) {
     throw new Error("Invalid PayPal subscription response");
   }
 
@@ -151,7 +160,8 @@ const updateSubscription = async subscriptionID => {
 
   return new Promise((resolve, reject) => {
     const updates = { paypal };
-    const shouldDisable = subscriptionLifecycle.shouldDisableFromPaypalSubscription(paypal);
+    const shouldDisable =
+      subscriptionLifecycle.shouldDisableFromPaypalSubscription(paypal);
     // Preserve deliberate per-blog availability when the account is unchanged.
     // The model saves the account flag last to keep failures retryable.
     const shouldEnable = paypal.status === "ACTIVE" && user.isDisabled;
@@ -161,7 +171,7 @@ const updateSubscription = async subscriptionID => {
     // 503 and PayPal retries; emailing before the save would resend.
     // A cancellation that closes nothing gets the cancellation email instead,
     // claimed in Redis so a retry or a concurrent caller sends it only once.
-    const done = async err => {
+    const done = async (err) => {
       if (err) return reject(err);
 
       try {
@@ -176,20 +186,21 @@ const updateSubscription = async subscriptionID => {
           // hands that retry to exactly one caller, and never touches a
           // live claim.
           const failedKey = claimKey + ":failed";
-          const retry = !becameCancelled && Boolean(await client.getDel(failedKey));
+          const retry =
+            !becameCancelled && Boolean(await client.getDel(failedKey));
 
           if (
             (becameCancelled || retry) &&
             (await client.set(claimKey, "1", {
               NX: true,
-              EX: CANCEL_EMAIL_TTL_SECONDS
+              EX: CANCEL_EMAIL_TTL_SECONDS,
             }))
           ) {
             const send = subscriptionLifecycle.isFirstPeriod({ paypal })
               ? email.CANCELLED_FIRST_PERIOD
               : email.CANCELLED;
 
-            send(user.uid, {}, sendErr => {
+            send(user.uid, {}, (sendErr) => {
               if (!sendErr) return;
               console.log(prefix(), "cancellation email failed", sendErr);
               client
@@ -209,7 +220,8 @@ const updateSubscription = async subscriptionID => {
       resolve(paypal);
     };
 
-    if (shouldDisable && !user.isDisabled) return User.disable(user, updates, done);
+    if (shouldDisable && !user.isDisabled)
+      return User.disable(user, updates, done);
     if (shouldEnable) return User.enable(user, updates, done);
     User.set(user.uid, updates, done);
   });

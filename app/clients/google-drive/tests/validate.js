@@ -5,7 +5,10 @@ const { classify } = require("../database/error");
 
 const MINUTE = 60 * 1000;
 
-const cachePaths = [require.resolve("sync/lock"), require.resolve("models/client")];
+const cachePaths = [
+  require.resolve("sync/lock"),
+  require.resolve("models/client"),
+];
 const originals = {};
 
 function stubModule(path, exports) {
@@ -22,7 +25,10 @@ function stubRedis(heldSince, reported) {
       const ops = [];
       const multi = {
         del: () => (ops.push(() => reported.clear()), multi),
-        sAdd: (key, ids) => (ops.push(() => ids.forEach((id) => reported.add(id))), multi),
+        sAdd: (key, ids) => (
+          ops.push(() => ids.forEach((id) => reported.add(id))),
+          multi
+        ),
         exec: async () => ops.forEach((op) => op()),
       };
       return multi;
@@ -121,7 +127,9 @@ function load({
       if (onWalk[blogID]) onWalk[blogID]();
       const walk = walks[blogID];
       if (walk instanceof Error) throw walk;
-      return walk === undefined ? { downloaded: 0, removed: 0, createdDirs: 0 } : walk;
+      return walk === undefined
+        ? { downloaded: 0, removed: 0, createdDirs: 0 }
+        : walk;
     },
   };
 
@@ -134,7 +142,9 @@ function load({
     console: { log() {}, error() {} },
     Date,
     require: (name) =>
-      Object.prototype.hasOwnProperty.call(stubs, name) ? stubs[name] : require(name),
+      Object.prototype.hasOwnProperty.call(stubs, name)
+        ? stubs[name]
+        : require(name),
   });
 
   return { validate: module.exports, calls };
@@ -185,7 +195,9 @@ describe("Google Drive hourly sync validation", function () {
     const { validate, calls } = load({
       accounts: { a: driveAccount(), b: driveAccount() },
       blogs: blogsFor("a", "b"),
-      walks: { a: { downloaded: 2, removed: 1, createdDirs: 1, modifiedDuringWalk: 0 } },
+      walks: {
+        a: { downloaded: 2, removed: 1, createdDirs: 1, modifiedDuringWalk: 0 },
+      },
     });
 
     await validate.runValidation();
@@ -210,7 +222,9 @@ describe("Google Drive hourly sync validation", function () {
       accounts: { a: driveAccount() },
       blogs,
       // The walk added a menu page, which a stale blog.menu would drop
-      onWalk: { a: () => (blogs.a = Object.assign({}, blogs.a, { menu: ["new"] })) },
+      onWalk: {
+        a: () => (blogs.a = Object.assign({}, blogs.a, { menu: ["new"] })),
+      },
     });
 
     await validate.runValidation();
@@ -238,7 +252,9 @@ describe("Google Drive hourly sync validation", function () {
     const { validate, calls } = load({
       accounts: { a: driveAccount() },
       blogs: blogsFor("a"),
-      walks: { a: { downloaded: 1, removed: 0, createdDirs: 0, modifiedDuringWalk: 1 } },
+      walks: {
+        a: { downloaded: 1, removed: 0, createdDirs: 0, modifiedDuringWalk: 1 },
+      },
     });
 
     await validate.runValidation();
@@ -383,7 +399,11 @@ describe("Google Drive hourly sync validation", function () {
     const [record] = calls.emails[0].blogs;
     expect(record.hasRepairs).toBe(true);
     expect(record.checks).toEqual([
-      jasmine.objectContaining({ name: "entry-ghosts", count: 2, sample: ['"x"', '"y"'] }),
+      jasmine.objectContaining({
+        name: "entry-ghosts",
+        count: 2,
+        sample: ['"x"', '"y"'],
+      }),
     ]);
   });
 
@@ -401,9 +421,20 @@ describe("Google Drive hourly sync validation", function () {
         folderLost: driveAccount({ errorCode: health.CODES.SOURCE_MISSING }),
         missingBlog: driveAccount(),
       },
-      blogs: Object.assign(blogsFor("recent", "stale", "neverSynced", "settingUp", "noFolder", "noServiceAccount", "folderLost"), {
-        switchedClient: { id: "switchedClient", client: "dropbox" },
-      }),
+      blogs: Object.assign(
+        blogsFor(
+          "recent",
+          "stale",
+          "neverSynced",
+          "settingUp",
+          "noFolder",
+          "noServiceAccount",
+          "folderLost"
+        ),
+        {
+          switchedClient: { id: "switchedClient", client: "dropbox" },
+        }
+      ),
     });
 
     await validate.runValidation();
@@ -457,7 +488,13 @@ describe("Google Drive hourly sync validation", function () {
       accounts: { a: driveAccount() },
       blogs: blogsFor("a"),
       walks: {
-        a: { downloaded: 2, removed: 0, createdDirs: 0, failed: 1, firstError: "/a.jpg: boom" },
+        a: {
+          downloaded: 2,
+          removed: 0,
+          createdDirs: 0,
+          failed: 1,
+          firstError: "/a.jpg: boom",
+        },
       },
     });
 
@@ -498,11 +535,16 @@ describe("Google Drive hourly sync validation", function () {
       const { validate, calls } = load({
         accounts: { a: driveAccount(), b: driveAccount() },
         blogs: blogsFor("a", "b"),
-        walks: { a: new Error("folder gone"), b: { downloaded: 1, removed: 0, createdDirs: 0 } },
+        walks: {
+          a: new Error("folder gone"),
+          b: { downloaded: 1, removed: 0, createdDirs: 0 },
+        },
         // healthy when the sweep starts, SOURCE_MISSING by the time it sends
         healths: {
           a: (reads) =>
-            reads === 1 ? health.ok() : health.error([{ code: health.CODES.SOURCE_MISSING }]),
+            reads === 1
+              ? health.ok()
+              : health.error([{ code: health.CODES.SOURCE_MISSING }]),
         },
       });
 
@@ -549,7 +591,10 @@ describe("Google Drive hourly sync validation", function () {
     it("does not report one while the blog is still being set up", async function () {
       const { validate, calls } = load({
         accounts: {
-          a: driveAccount({ preparing: true, lastSync: Date.now() - 5 * 60 * MINUTE }),
+          a: driveAccount({
+            preparing: true,
+            lastSync: Date.now() - 5 * 60 * MINUTE,
+          }),
         },
         blogs: blogsFor("a"),
         heldSince: { a: Date.now() - 5 * 60 * MINUTE },
@@ -577,14 +622,27 @@ describe("Google Drive hourly sync validation", function () {
 
   it("emails an ongoing problem once, and again after it clears and returns", async function () {
     const reported = new Set();
-    const accounts = { a: driveAccount(), b: driveAccount(), c: driveAccount() };
+    const accounts = {
+      a: driveAccount(),
+      b: driveAccount(),
+      c: driveAccount(),
+    };
     const blogs = blogsFor("a", "b", "c");
-    const walks = { a: new Error("boom"), c: { downloaded: 1, removed: 0, createdDirs: 0 } };
+    const walks = {
+      a: new Error("boom"),
+      c: { downloaded: 1, removed: 0, createdDirs: 0 },
+    };
     const heldSince = { b: Date.now() - 3 * 60 * MINUTE };
     const emails = [];
 
     async function sweep() {
-      const { validate, calls } = load({ accounts, blogs, walks, heldSince, reported });
+      const { validate, calls } = load({
+        accounts,
+        blogs,
+        walks,
+        heldSince,
+        reported,
+      });
       await validate.runValidation();
       emails.push(...calls.emails);
     }

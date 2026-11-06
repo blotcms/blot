@@ -66,7 +66,10 @@ describe("unwrapFolderLink", function () {
     expect(unwrapFolderLink("/a.jpg", blogID)).toBeNull();
     expect(unwrapFolderLink(baked)).toBeNull();
     expect(
-      unwrapFolderLink(`${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}x/a.jpg`, blogID)
+      unwrapFolderLink(
+        `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}x/a.jpg`,
+        blogID
+      )
     ).toBeNull();
   });
 });

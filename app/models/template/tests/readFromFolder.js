@@ -24,14 +24,17 @@ describe("template", function () {
   });
 
   it("reads template properties from package.json", function (done) {
-    this.put("/package.json", JSON.stringify({ locals: { foo: "bar" } })).then(() => {
-      readFromFolder(this.blog.id, this.dir, function (err, template) {
-        if (err) return done.fail(err);
+    this.put("/package.json", JSON.stringify({ locals: { foo: "bar" } })).then(
+      () => {
+        readFromFolder(this.blog.id, this.dir, function (err, template) {
+          if (err) return done.fail(err);
 
-        expect(template.locals.foo).toEqual("bar");
-        done();
-      });
-    }, done.fail);
+          expect(template.locals.foo).toEqual("bar");
+          done();
+        });
+      },
+      done.fail
+    );
   });
 
   it("marks a template read from a folder without package.json as locally edited", function (done) {
@@ -40,16 +43,20 @@ describe("template", function () {
     var test = this;
 
     this.put("/entries.html", "{{title}}").then(function () {
-      setMetadata(makeID(test.blog.id, test.blog.handle), { localEditing: false }, function (err) {
-        if (err) return done.fail(err);
-
-        readFromFolder(test.blog.id, test.dir, function (err, template) {
+      setMetadata(
+        makeID(test.blog.id, test.blog.handle),
+        { localEditing: false },
+        function (err) {
           if (err) return done.fail(err);
 
-          expect(template.localEditing).toEqual(true);
-          done();
-        });
-      });
+          readFromFolder(test.blog.id, test.dir, function (err, template) {
+            if (err) return done.fail(err);
+
+            expect(template.localEditing).toEqual(true);
+            done();
+          });
+        }
+      );
     }, done.fail);
   });
 
@@ -77,7 +84,9 @@ describe("template", function () {
     await this.put("/entries.html", "{{title}}!");
     await read(this.blog.id, this.dir);
 
-    expect((await getBlog({ id: this.blog.id })).cacheID).not.toEqual(blogCacheID);
+    expect((await getBlog({ id: this.blog.id })).cacheID).not.toEqual(
+      blogCacheID
+    );
   });
 
   it("explains what is wrong with an invalid package.json", function (done) {
@@ -98,30 +107,33 @@ describe("template", function () {
 
   it("ignores view files which are too large", function (done) {
     // 3mb of random data should exceed the limit of 2.5mb
-    this.put(
-      "/style.css",
-      require("crypto").randomBytes(3 * 1000 * 1000)
-    ).then(() => {
-      readFromFolder(this.blog.id, this.dir, function (err, template) {
-        if (err) return done.fail(err);
-
-        getViewByURL(template.id, "/style.css", function (err, name) {
+    this.put("/style.css", require("crypto").randomBytes(3 * 1000 * 1000)).then(
+      () => {
+        readFromFolder(this.blog.id, this.dir, function (err, template) {
           if (err) return done.fail(err);
 
-          expect(name).toEqual(null);
-          done();
+          getViewByURL(template.id, "/style.css", function (err, name) {
+            if (err) return done.fail(err);
+
+            expect(name).toEqual(null);
+            done();
+          });
         });
-      });
-    }, done.fail);
+      },
+      done.fail
+    );
   });
 
   it("reads a view's properties from package.json", function (done) {
     Promise.all([
       this.put("/style.css", "body {color:pink}"),
-      this.put("/package.json", JSON.stringify({
-        locals: { foo: "bar" },
-        views: { "style.css": { url: "/test", locals: { baz: "bat" } } }
-      })),
+      this.put(
+        "/package.json",
+        JSON.stringify({
+          locals: { foo: "bar" },
+          views: { "style.css": { url: "/test", locals: { baz: "bat" } } },
+        })
+      ),
     ]).then(() => {
       readFromFolder(this.blog.id, this.dir, function (err, template) {
         if (err) return done.fail(err);
@@ -164,20 +176,24 @@ describe("template", function () {
       readFromFolder(blogID, templateFolder, function (err, template) {
         if (err) return done.fail(err);
 
-        setView(template.id, { name: "style.css", url: "/foo" }, function (err) {
-          if (err) return done.fail(err);
-
-          readFromFolder(blogID, templateFolder, function (err, template) {
+        setView(
+          template.id,
+          { name: "style.css", url: "/foo" },
+          function (err) {
             if (err) return done.fail(err);
 
-            getViewByURL(template.id, "/foo", function (err, name) {
+            readFromFolder(blogID, templateFolder, function (err, template) {
               if (err) return done.fail(err);
 
-              expect(name).toEqual("style.css");
-              done();
+              getViewByURL(template.id, "/foo", function (err, name) {
+                if (err) return done.fail(err);
+
+                expect(name).toEqual("style.css");
+                done();
+              });
             });
-          });
-        });
+          }
+        );
       });
     }, done.fail);
   });
@@ -231,7 +247,7 @@ describe("template", function () {
   describe("when Redis fails", function () {
     var originals = {};
 
-    function readFromFolderWith (stubs) {
+    function readFromFolderWith(stubs) {
       Object.keys(stubs).forEach(function (name) {
         var path = require.resolve("../" + name);
         originals[path] = require.cache[path];
@@ -239,7 +255,7 @@ describe("template", function () {
           id: path,
           filename: path,
           loaded: true,
-          exports: stubs[name]
+          exports: stubs[name],
         };
       });
 
@@ -257,12 +273,12 @@ describe("template", function () {
       originals = {};
     });
 
-    function redisError () {
+    function redisError() {
       return new Error("NOREPLICAS Not enough good replicas to write.");
     }
 
     // Fails the spec if the callback fires more than once
-    function once (done, check) {
+    function once(done, check) {
       var calls = 0;
       return function () {
         if (++calls > 1) return done.fail(new Error("Callback invoked twice"));
@@ -274,25 +290,24 @@ describe("template", function () {
     it("passes an error creating a new template to the callback", function (done) {
       var dir = this.dir + "/new-template";
       var error = redisError();
-      var create = jasmine.createSpy("create").and.callFake(function (
-        owner,
-        name,
-        metadata,
-        callback
-      ) {
-        callback(error);
-      });
+      var create = jasmine
+        .createSpy("create")
+        .and.callFake(function (owner, name, metadata, callback) {
+          callback(error);
+        });
 
-      folder.write(this.blog.id, dir + "/entries.html", "{{#entries}}{{/entries}}").then(() => {
-        readFromFolderWith({ create: create })(
-          this.blog.id,
-          dir,
-          once(done, function (err) {
-            expect(create).toHaveBeenCalled();
-            expect(err).toBe(error);
-          })
-        );
-      }, done.fail);
+      folder
+        .write(this.blog.id, dir + "/entries.html", "{{#entries}}{{/entries}}")
+        .then(() => {
+          readFromFolderWith({ create: create })(
+            this.blog.id,
+            dir,
+            once(done, function (err) {
+              expect(create).toHaveBeenCalled();
+              expect(err).toBe(error);
+            })
+          );
+        }, done.fail);
     });
 
     it("passes an error reading the template's metadata to the callback", function (done) {

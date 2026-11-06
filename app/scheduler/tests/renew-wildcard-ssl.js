@@ -72,8 +72,16 @@ describe("scheduler renew-wildcard-ssl", function () {
 
     const challenge = (value) => ({ type: "dns-01", url: "chal-" + value });
     const authorizations = [
-      { status: "pending", identifier: { value: HOST }, challenges: [challenge("a")] },
-      { status: "pending", identifier: { value: HOST }, challenges: [challenge("b")] },
+      {
+        status: "pending",
+        identifier: { value: HOST },
+        challenges: [challenge("a")],
+      },
+      {
+        status: "pending",
+        identifier: { value: HOST },
+        challenges: [challenge("b")],
+      },
     ];
 
     const dns = {
@@ -96,7 +104,8 @@ describe("scheduler renew-wildcard-ssl", function () {
         events.push(["completeChallenge", c.url]);
         fail("completeChallenge");
       },
-      waitForValidStatus: async (c) => events.push(["waitForValidStatus", c.url]),
+      waitForValidStatus: async (c) =>
+        events.push(["waitForValidStatus", c.url]),
       finalizeOrder: async (order, csr) => {
         events.push(["finalizeOrder", csr]);
         fail("finalizeOrder");
@@ -139,7 +148,13 @@ describe("scheduler renew-wildcard-ssl", function () {
       const client = fakeRedis({ [PEM_KEY]: PEM, [KEY_KEY]: CERT_KEY });
       const { events, dns, acme } = fakes();
 
-      const result = await renew({ client, dns, acme, host: HOST, now: EXPIRES - 31 * DAY });
+      const result = await renew({
+        client,
+        dns,
+        acme,
+        host: HOST,
+        now: EXPIRES - 31 * DAY,
+      });
 
       expect(result).toEqual({ renewed: false, daysLeft: 31 });
       expect(events).toEqual([]);
@@ -172,7 +187,13 @@ describe("scheduler renew-wildcard-ssl", function () {
       const client = fakeRedis({ [PEM_KEY]: PEM, [KEY_KEY]: CERT_KEY });
       const { dns, acme } = fakes();
 
-      const result = await renew({ client, dns, acme, host: HOST, now: EXPIRES - 30 * DAY });
+      const result = await renew({
+        client,
+        dns,
+        acme,
+        host: HOST,
+        now: EXPIRES - 30 * DAY,
+      });
 
       expect(result.renewed).toBe(true);
     });
@@ -236,7 +257,10 @@ describe("scheduler renew-wildcard-ssl", function () {
         set[1],
         set[2],
       ]);
-      expect(events.find((e) => e[0] === "createOrder")[1]).toEqual(["*.blot.test", "blot.test"]);
+      expect(events.find((e) => e[0] === "createOrder")[1]).toEqual([
+        "*.blot.test",
+        "blot.test",
+      ]);
     });
 
     it("requests the certificate with an ECDSA key", async function () {
@@ -268,35 +292,56 @@ describe("scheduler renew-wildcard-ssl", function () {
 
       expect(client.store.get(KEY_KEY)).toEqual(KEY + "\n");
       expect(client.store.get(PEM_KEY)).toEqual(PEM);
-      expect(client.store.get(UPDATED_KEY)).toEqual(String(Math.floor(NOW / 1000)));
+      expect(client.store.get(UPDATED_KEY)).toEqual(
+        String(Math.floor(NOW / 1000))
+      );
       expect(result).toEqual({ renewed: true, daysLeft: 10 });
     });
 
     it("reuses the stored ACME account key, and stores a new one the first time", async function () {
       const first = fakeRedis();
       const a = fakes();
-      await renew({ client: first, dns: a.dns, acme: a.acme, host: HOST, now: NOW });
+      await renew({
+        client: first,
+        dns: a.dns,
+        acme: a.acme,
+        host: HOST,
+        now: NOW,
+      });
       expect(first.store.get(renew.ACCOUNT_KEY)).toEqual("ACCOUNT-KEY");
 
       const second = fakeRedis({ [renew.ACCOUNT_KEY]: "STORED-KEY" });
       const b = fakes();
-      await renew({ client: second, dns: b.dns, acme: b.acme, host: HOST, now: NOW });
-      expect(b.events.find((e) => e[0] === "Client")[1].accountKey).toEqual("STORED-KEY");
+      await renew({
+        client: second,
+        dns: b.dns,
+        acme: b.acme,
+        host: HOST,
+        now: NOW,
+      });
+      expect(b.events.find((e) => e[0] === "Client")[1].accountKey).toEqual(
+        "STORED-KEY"
+      );
     });
 
     for (const step of ["dns.set", "completeChallenge", "finalizeOrder"]) {
-      it("removes the TXT record and leaves Redis alone when " + step + " fails", async function () {
-        const client = fakeRedis({ [PEM_KEY]: "old" });
-        const { events, dns, acme } = fakes({ failAt: step });
+      it(
+        "removes the TXT record and leaves Redis alone when " + step + " fails",
+        async function () {
+          const client = fakeRedis({ [PEM_KEY]: "old" });
+          const { events, dns, acme } = fakes({ failAt: step });
 
-        const message = await rejection(renew({ client, dns, acme, host: HOST, now: NOW }));
+          const message = await rejection(
+            renew({ client, dns, acme, host: HOST, now: NOW })
+          );
 
-        expect(message).toEqual("boom at " + step);
+          expect(message).toEqual("boom at " + step);
 
-        expect(names(events)).toContain("dns.remove");
-        expect(client.store.get(PEM_KEY)).toEqual("old");
-        expect(client.store.has(KEY_KEY)).toBe(false);
-      });
+          expect(names(events)).toContain("dns.remove");
+          expect(client.store.get(PEM_KEY)).toEqual("old");
+          expect(client.store.has(KEY_KEY)).toBe(false);
+        }
+      );
     }
 
     it("does not store a certificate which does not cover the host", async function () {
@@ -317,7 +362,10 @@ describe("scheduler renew-wildcard-ssl", function () {
       const original = acme.Client;
       acme.Client = function (options) {
         const client = original(options);
-        client.getAuthorizations = async () => [{ status: "valid" }, { status: "valid" }];
+        client.getAuthorizations = async () => [
+          { status: "valid" },
+          { status: "valid" },
+        ];
         return client;
       };
 
@@ -345,11 +393,17 @@ describe("scheduler renew-wildcard-ssl", function () {
           if (command instanceof ChangeResourceRecordSetsCommand) {
             return { ChangeInfo: { Id: "/change/C1", Status: "PENDING" } };
           }
-          return { ChangeInfo: { Id: command.input.Id, Status: statuses.shift() } };
+          return {
+            ChangeInfo: { Id: command.input.Id, Status: statuses.shift() },
+          };
         },
       };
 
-      return { sent, sdk: { ChangeResourceRecordSetsCommand, GetChangeCommand }, client };
+      return {
+        sent,
+        sdk: { ChangeResourceRecordSetsCommand, GetChangeCommand },
+        client,
+      };
     }
 
     it("upserts one TXT record set with every value and waits for INSYNC", async function () {

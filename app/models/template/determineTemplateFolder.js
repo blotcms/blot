@@ -18,9 +18,12 @@ function determineTemplateFolder(blogID, callback) {
       return name && name[0] !== ".";
     });
 
-    if (visible.length && visible.every(function (name) {
-      return name === name.toLowerCase();
-    })) {
+    if (
+      visible.length &&
+      visible.every(function (name) {
+        return name === name.toLowerCase();
+      })
+    ) {
       return callback(null, "templates");
     }
 

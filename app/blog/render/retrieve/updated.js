@@ -23,7 +23,7 @@ module.exports = asRetriever(function (req, res) {
 
     // Interpolation: {{date}}
     renderDate.toString = function () {
-      let text = "";
+      let text;
       try {
         text = d.format(res.locals.date_display || "MMMM D, Y");
       } catch (e) {

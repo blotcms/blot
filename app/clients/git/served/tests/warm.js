@@ -1,10 +1,15 @@
 describe("git store: warming the cache on start", function () {
   // A blog on the git client with a clone, a memory store per blog, and the
   // store's log lines kept
-  require("clients/git/tests/setup")({ clone: false, client: true, lines: true });
+  require("clients/git/tests/setup")({
+    clone: false,
+    client: true,
+    lines: true,
+  });
 
   var fs = require("fs");
-  var path = require("path");  var config = require("config");
+  var path = require("path");
+  var config = require("config");
   var warm = require("clients/git/served/warm");
   var context = require("clients/git/served/context");
 
@@ -106,7 +111,13 @@ describe("git store: warming the cache on start", function () {
     }
 
     function pack(n, size, seq) {
-      return { name: "pack-" + String(n).repeat(40), size: size, idxSize: 1, objects: 1, seq: seq };
+      return {
+        name: "pack-" + String(n).repeat(40),
+        size: size,
+        idxSize: 1,
+        objects: 1,
+        seq: seq,
+      };
     }
 
     var options = { pause: 0, busyWait: 0, force: true };
@@ -224,7 +235,11 @@ describe("git store: warming the cache on start", function () {
         seen = Math.max(seen, lane.running + lane.waiting);
       }, 10);
 
-      var result = await warm.runPacks({ ...options, ids: ["slow"], load: async () => slow });
+      var result = await warm.runPacks({
+        ...options,
+        ids: ["slow"],
+        load: async () => slow,
+      });
       clearInterval(poll);
 
       expect(result.packs).toBe(2);
@@ -236,7 +251,10 @@ describe("git store: warming the cache on start", function () {
       var cache = context.cache();
       await cache.clear();
       var log = [];
-      var repos = { a: repo("a", 2000, [pack(1, 1000, 2), pack(2, 1000, 1)], log), b: repo("b", 1000, [pack(3, 1000, 1)], log) };
+      var repos = {
+        a: repo("a", 2000, [pack(1, 1000, 2), pack(2, 1000, 1)], log),
+        b: repo("b", 1000, [pack(3, 1000, 1)], log),
+      };
       var base = cache.stats().entryBytes;
       // Room for one pack and a bit
       var limit = base + 1500;
@@ -253,7 +271,9 @@ describe("git store: warming the cache on start", function () {
       expect(result.packs).toBe(1);
       expect(result.stopped).toBe("threshold");
       expect(log).toEqual(["a:packs/" + pack(1, 1, 1).name + ".pack"]);
-      expect(this.storeLines("warm-packs").pop()).toContain("stopped=threshold");
+      expect(this.storeLines("warm-packs").pop()).toContain(
+        "stopped=threshold"
+      );
     });
 
     it("skips the packs the cache already holds at the right size", async function () {
@@ -273,7 +293,11 @@ describe("git store: warming the cache on start", function () {
       expect(second.packs).toBe(0);
       expect(second.cached).toBe(2);
       expect(log).toEqual([]);
-      expect(await cache.size(packcache.cacheKeyOf(repos.a.store, pack(1, 1, 1).name))).toBe(100);
+      expect(
+        await cache.size(
+          packcache.cacheKeyOf(repos.a.store, pack(1, 1, 1).name)
+        )
+      ).toBe(100);
     });
 
     it("stops when the cache declines a pack", async function () {
@@ -281,7 +305,14 @@ describe("git store: warming the cache on start", function () {
       await cache.clear();
       var log = [];
       // A cache which is nearly full (or short of disk) declines every put
-      var repos = { a: repo("a", 1, [pack(1, 100, 2), pack(2, 100, 1), pack(3, 100, 0)], log) };
+      var repos = {
+        a: repo(
+          "a",
+          1,
+          [pack(1, 100, 2), pack(2, 100, 1), pack(3, 100, 0)],
+          log
+        ),
+      };
       var extra = 0;
       var put = cache.putStream;
       cache.putStream = async function (key, source) {
@@ -330,7 +361,10 @@ describe("git store: warming the cache on start", function () {
         };
       });
 
-      var clone = await Client.clone({ url: this.repoUrl, directory: path.join(this.tmp, "warmed-clone") });
+      var clone = await Client.clone({
+        url: this.repoUrl,
+        directory: path.join(this.tmp, "warmed-clone"),
+      });
       expect(await clone.head()).toBe(await this.local.head());
       expect(reads).toEqual([]);
     });
@@ -338,14 +372,26 @@ describe("git store: warming the cache on start", function () {
     it("does not run twice within 12 hours, and not while another process warms", async function () {
       await context.cache().clear();
       var clock = Date.now();
-      var first = await warm.runPacks({ ids: [this.blog.id], pause: 0, now: () => clock });
+      var first = await warm.runPacks({
+        ids: [this.blog.id],
+        pause: 0,
+        now: () => clock,
+      });
       expect(first.outcome).toBe("warmed");
 
-      var soon = await warm.runPacks({ ids: [this.blog.id], pause: 0, now: () => clock + 11 * 60 * 60 * 1000 });
+      var soon = await warm.runPacks({
+        ids: [this.blog.id],
+        pause: 0,
+        now: () => clock + 11 * 60 * 60 * 1000,
+      });
       expect(soon.reason).toBe("warm");
       expect(this.storeLines("warm-packs").pop()).toContain("reason=warm");
 
-      var later = await warm.runPacks({ ids: [this.blog.id], pause: 0, now: () => clock + 13 * 60 * 60 * 1000 });
+      var later = await warm.runPacks({
+        ids: [this.blog.id],
+        pause: 0,
+        now: () => clock + 13 * 60 * 60 * 1000,
+      });
       expect(later.outcome).toBe("warmed");
 
       var held = await context.cache().lock("warm", { staleMs: 60000 });

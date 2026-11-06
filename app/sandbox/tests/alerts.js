@@ -31,7 +31,10 @@ describe("sandbox alerts", function () {
 
     expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
     const { lines } = email.SANDBOX_ALERT.calls.argsFor(0)[1];
-    expect(lines.split("\n").sort()).toEqual(["1 × job screenshot: timeout", "2 × job thumbnail: killed"]);
+    expect(lines.split("\n").sort()).toEqual([
+      "1 × job screenshot: timeout",
+      "2 × job thumbnail: killed",
+    ]);
   });
 
   it("logs a busy fetch-image job, which is backpressure, but emails busy from the others", async function () {
@@ -42,12 +45,16 @@ describe("sandbox alerts", function () {
 
     expect(email.SANDBOX_ALERT).not.toHaveBeenCalled();
     expect(console.log).toHaveBeenCalledTimes(2);
-    expect(console.log.calls.argsFor(1)[1]).toBe("sandbox: job fetch-image busy (2 since start)");
+    expect(console.log.calls.argsFor(1)[1]).toBe(
+      "sandbox: job fetch-image busy (2 since start)"
+    );
 
     alerts.jobFailed("thumbnail", error("SANDBOX_BUSY"));
     await tick();
     expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
-    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe("1 × job thumbnail: busy");
+    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe(
+      "1 × job thumbnail: busy"
+    );
   });
 
   it("logs a pandoc worker killed for taking too long, which is the document's doing, but emails it killed", async function () {
@@ -55,12 +62,16 @@ describe("sandbox alerts", function () {
     alerts.jobFailed("pandoc", error("SANDBOX_TIMEOUT"));
     await tick();
     expect(email.SANDBOX_ALERT).not.toHaveBeenCalled();
-    expect(console.log.calls.argsFor(0)[1]).toBe("sandbox: job pandoc timed out");
+    expect(console.log.calls.argsFor(0)[1]).toBe(
+      "sandbox: job pandoc timed out"
+    );
 
     alerts.jobFailed("pandoc", error("SANDBOX_KILLED"));
     await tick();
     expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
-    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe("1 × job pandoc: killed");
+    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe(
+      "1 × job pandoc: killed"
+    );
   });
 
   it("emails a failed fetch-image job, which answers bad input with meta.error", async function () {
@@ -68,7 +79,9 @@ describe("sandbox alerts", function () {
     await tick();
 
     expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
-    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe("1 × job fetch-image: failed");
+    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe(
+      "1 × job fetch-image: failed"
+    );
   });
 
   it("logs a busy screenshot batch, which the client sends again", async function () {
@@ -77,7 +90,9 @@ describe("sandbox alerts", function () {
     await tick();
 
     expect(email.SANDBOX_ALERT).not.toHaveBeenCalled();
-    expect(console.log.calls.argsFor(0)[1]).toBe("sandbox: job screenshot busy (1 since start)");
+    expect(console.log.calls.argsFor(0)[1]).toBe(
+      "sandbox: job screenshot busy (1 since start)"
+    );
   });
 
   it("logs a busy fetch job like fetch-image's, and emails the real failures", async function () {
@@ -86,7 +101,9 @@ describe("sandbox alerts", function () {
     await tick();
 
     expect(email.SANDBOX_ALERT).not.toHaveBeenCalled();
-    expect(console.log.calls.argsFor(0)[1]).toBe("sandbox: job fetch busy (1 since start)");
+    expect(console.log.calls.argsFor(0)[1]).toBe(
+      "sandbox: job fetch busy (1 since start)"
+    );
 
     alerts.jobFailed("fetch", error("SANDBOX_FAILED"));
     alerts.jobFailed("fetch", error("SANDBOX_KILLED"));
@@ -95,7 +112,9 @@ describe("sandbox alerts", function () {
     await tick();
 
     expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
-    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines.split("\n").sort()).toEqual([
+    expect(
+      email.SANDBOX_ALERT.calls.argsFor(0)[1].lines.split("\n").sort()
+    ).toEqual([
       "1 × job fetch: failed",
       "1 × job fetch: killed",
       "1 × job fetch: timeout",
@@ -112,7 +131,9 @@ describe("sandbox alerts", function () {
           res.statusCode = status;
           res.end();
         });
-        server.listen(0, "127.0.0.1", () => resolve(`http://127.0.0.1:${server.address().port}`));
+        server.listen(0, "127.0.0.1", () =>
+          resolve(`http://127.0.0.1:${server.address().port}`)
+        );
       });
     }
 
@@ -127,7 +148,9 @@ describe("sandbox alerts", function () {
     });
 
     it("reports a proxy that lets the metadata address through", async function () {
-      expect(await alerts.checkProxy(await proxy(200))).toContain("let the metadata address through");
+      expect(await alerts.checkProxy(await proxy(200))).toContain(
+        "let the metadata address through"
+      );
     });
 
     it("reports a proxy that does not answer", async function () {

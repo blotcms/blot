@@ -16,9 +16,7 @@ describe("Stripe subscription webhooks", function () {
   global.test.blog();
 
   beforeEach(async function () {
-    const uniqueSuffix = `${Date.now()}_${Math.random()
-      .toString(36)
-      .slice(2)}`;
+    const uniqueSuffix = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
     this.customerId = `cus_${uniqueSuffix}`;
     this.subscriptionId = `sub_${uniqueSuffix}`;
 
@@ -99,7 +97,9 @@ describe("Stripe subscription webhooks", function () {
     });
 
     expect(response.status).toBe(200);
-    expect(this.stripeClient.customers.retrieveSubscription).toHaveBeenCalledWith(
+    expect(
+      this.stripeClient.customers.retrieveSubscription
+    ).toHaveBeenCalledWith(
       this.customerId,
       this.subscriptionId,
       jasmine.any(Function)
@@ -194,7 +194,9 @@ describe("Stripe subscription webhooks", function () {
     });
 
     expect(response.status).toBe(200);
-    expect(this.stripeClient.customers.retrieveSubscription).toHaveBeenCalledWith(
+    expect(
+      this.stripeClient.customers.retrieveSubscription
+    ).toHaveBeenCalledWith(
       this.customerId,
       this.subscriptionId,
       jasmine.any(Function)
@@ -209,7 +211,6 @@ describe("Stripe subscription webhooks", function () {
     const blog = await getBlog({ id: this.blog.id });
     expect(blog.isDisabled).toBe(true);
   });
-
 
   it("disables active subscriptions once cancel_at_period_end has elapsed", async function () {
     await setUser(this.user.uid, {
@@ -313,8 +314,8 @@ describe("Stripe subscription webhooks", function () {
   });
 
   it("returns 503 when subscription retrieval fails", async function () {
-    this.stripeClient.customers.retrieveSubscription.and.callFake((_, __, callback) =>
-      callback(new Error("nope"))
+    this.stripeClient.customers.retrieveSubscription.and.callFake(
+      (_, __, callback) => callback(new Error("nope"))
     );
 
     const event = {
@@ -367,7 +368,9 @@ describe("Stripe subscription webhooks", function () {
     });
 
     expect(response.status).toBe(400);
-    expect(this.stripeClient.customers.retrieveSubscription).not.toHaveBeenCalled();
+    expect(
+      this.stripeClient.customers.retrieveSubscription
+    ).not.toHaveBeenCalled();
 
     await delay(100);
 

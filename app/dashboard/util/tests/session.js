@@ -22,7 +22,10 @@ describe("dashboard session store", function () {
   it("keeps a session saved with an old expiry for the full maxAge", async function () {
     const sid = "sessionspec" + Date.now();
     const sess = {
-      cookie: { expires: new Date(Date.now() + 60 * 60 * 1000), originalMaxAge: MAX_AGE_MS },
+      cookie: {
+        expires: new Date(Date.now() + 60 * 60 * 1000),
+        originalMaxAge: MAX_AGE_MS,
+      },
       uid: "user_spec",
     };
     try {
@@ -73,11 +76,17 @@ describe("dashboard session store", function () {
     const lateClient = createRedisClient();
     await lateClient.connect();
     lateClient.clientSideCache.invalidate = function () {};
-    const lateStore = new RedisStore({ client: lateClient, disableTouch: true, ttl: () => MAX_AGE_MS / 1000 });
+    const lateStore = new RedisStore({
+      client: lateClient,
+      disableTouch: true,
+      ttl: () => MAX_AGE_MS / 1000,
+    });
     const sid = "sessionspec-late" + Date.now();
     const call = (method, ...args) =>
       new Promise((resolve, reject) =>
-        lateStore[method](sid, ...args, (err, data) => (err ? reject(err) : resolve(data)))
+        lateStore[method](sid, ...args, (err, data) =>
+          err ? reject(err) : resolve(data)
+        )
       );
     const cookie = { expires: new Date(Date.now() + MAX_AGE_MS) };
     try {

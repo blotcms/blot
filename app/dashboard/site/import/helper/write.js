@@ -11,7 +11,9 @@ function createWriter() {
     var hasAssets = Boolean(
       post.asset_directory && fs.existsSync(post.asset_directory)
     );
-    var finalPath = hasAssets ? path.join(basePath, "post.txt") : basePath + ".txt";
+    var finalPath = hasAssets
+      ? path.join(basePath, "post.txt")
+      : basePath + ".txt";
 
     post.path = basePath;
     post.content = post.content.trim();
@@ -23,7 +25,8 @@ function createWriter() {
         if (err) return callback(err);
 
         var atime = Date.now();
-        var mtime = post.updated || post.created || post.dateStamp || Date.now();
+        var mtime =
+          post.updated || post.created || post.dateStamp || Date.now();
         fs.utimes(finalPath, atime, mtime, function (err) {
           if (err) return callback(err);
           callback(null);
@@ -78,15 +81,19 @@ function moveAssets(source, destination, callback) {
       if (!remaining) return fs.remove(source, finish);
 
       names.forEach(function (name) {
-        fs.move(path.join(source, name), path.join(destination, name), function (moveErr) {
-          if (moveErr && !moveError) moveError = moveErr;
+        fs.move(
+          path.join(source, name),
+          path.join(destination, name),
+          function (moveErr) {
+            if (moveErr && !moveError) moveError = moveErr;
 
-          remaining -= 1;
+            remaining -= 1;
 
-          if (remaining) return;
-          if (moveError) return finish(moveError);
-          fs.remove(source, finish);
-        });
+            if (remaining) return;
+            if (moveError) return finish(moveError);
+            fs.remove(source, finish);
+          }
+        );
       });
     });
   });

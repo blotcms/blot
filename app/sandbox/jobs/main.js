@@ -39,7 +39,8 @@ function readStdin() {
 
 async function main() {
   const name = process.argv[2];
-  if (!JOB.test(name || "") || !JOBS.includes(name)) throw new Error("unknown job");
+  if (!JOB.test(name || "") || !JOBS.includes(name))
+    throw new Error("unknown job");
 
   // Here, not in the jobs: this is process-wide, and in-process that would be
   // every other use of sharp in the app. One thread per jail keeps a jail's CPU
@@ -56,7 +57,10 @@ async function main() {
 
   // Written one by one, not joined: the outputs of a batch of fetches can be
   // tens of MiB, and a copy of them would double what the jail holds
-  const header = JSON.stringify({ meta, lengths: outputs.map((o) => o.length) });
+  const header = JSON.stringify({
+    meta,
+    lengths: outputs.map((o) => o.length),
+  });
   for (const chunk of [Buffer.from(header + "\n")].concat(outputs)) {
     await new Promise((resolve, reject) =>
       process.stdout.write(chunk, (err) => (err ? reject(err) : resolve()))

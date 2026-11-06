@@ -31,7 +31,10 @@ function nodeImage() {
 }
 
 function buildArgs() {
-  return Object.entries(get()).flatMap(([k, v]) => ["--build-arg", k + "=" + v]);
+  return Object.entries(get()).flatMap(([k, v]) => [
+    "--build-arg",
+    k + "=" + v,
+  ]);
 }
 
 module.exports = { FILE, parse, get, nodeImage, buildArgs };

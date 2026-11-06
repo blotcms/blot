@@ -84,28 +84,41 @@ const newDir = (label) => {
 
 // Runs the runner's git. Never prompts, never reads a config file, never
 // outlives GIT_TIMEOUT_MS (a hang is a failure, not a stuck job).
-function git(args, { cwd = workRoot, env = {}, input, timeout = GIT_TIMEOUT_MS } = {}) {
+function git(
+  args,
+  { cwd = workRoot, env = {}, input, timeout = GIT_TIMEOUT_MS } = {}
+) {
   return new Promise((resolve) => {
     // The remote's host is a name (blot.im when the unit image is under test)
     // that must not resolve to the real thing: send it to the local proxy.
-    const child = spawn(GIT_BIN, ["-c", "http.sslVerify=false", "-c", `http.curloptResolve=${HOST}:443:127.0.0.1`, ...args], {
-      cwd,
-      // Own process group, so a timeout can kill git-remote-https and friends
-      // too (they inherit the pipes, which would keep `close` from firing).
-      detached: true,
-      env: {
-        PATH: process.env.PATH,
-        HOME: workRoot,
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_TERMINAL_PROMPT: "0",
-        GIT_AUTHOR_NAME: "E2E",
-        GIT_AUTHOR_EMAIL: "e2e@example.com",
-        GIT_COMMITTER_NAME: "E2E",
-        GIT_COMMITTER_EMAIL: "e2e@example.com",
-        ...env,
-      },
-    });
+    const child = spawn(
+      GIT_BIN,
+      [
+        "-c",
+        "http.sslVerify=false",
+        "-c",
+        `http.curloptResolve=${HOST}:443:127.0.0.1`,
+        ...args,
+      ],
+      {
+        cwd,
+        // Own process group, so a timeout can kill git-remote-https and friends
+        // too (they inherit the pipes, which would keep `close` from firing).
+        detached: true,
+        env: {
+          PATH: process.env.PATH,
+          HOME: workRoot,
+          GIT_CONFIG_GLOBAL: "/dev/null",
+          GIT_CONFIG_NOSYSTEM: "1",
+          GIT_TERMINAL_PROMPT: "0",
+          GIT_AUTHOR_NAME: "E2E",
+          GIT_AUTHOR_EMAIL: "e2e@example.com",
+          GIT_COMMITTER_NAME: "E2E",
+          GIT_COMMITTER_EMAIL: "e2e@example.com",
+          ...env,
+        },
+      }
+    );
     let stdout = "";
     let stderr = "";
     let timedOut = false;
@@ -144,21 +157,32 @@ const tail = (s, n = 400) => {
   return s.length > n ? "..." + s.slice(-n) : s;
 };
 const why = (r) =>
-  (r.timedOut ? "TIMED OUT; " : "") + "exit " + r.code + ": " + tail(r.stderr || r.stdout);
+  (r.timedOut ? "TIMED OUT; " : "") +
+  "exit " +
+  r.code +
+  ": " +
+  tail(r.stderr || r.stdout);
 
 // GIT_TRACE_CURL prints each request's headers to stderr; this is how a check
 // proves a request really went out chunked or gzipped.
 const sentHeaders = (stderr) =>
   String(stderr)
     .split("\n")
-    .filter((l) => /Send header: (POST|transfer-encoding|content-encoding|content-length|expect)/i.test(l))
+    .filter((l) =>
+      /Send header: (POST|transfer-encoding|content-encoding|content-length|expect)/i.test(
+        l
+      )
+    )
     .map((l) => l.replace(/^.*Send header: /, ""))
     .slice(0, 12)
     .join(" | ");
 const TRACE = { GIT_TRACE_CURL: "1", GIT_TRACE_CURL_NO_DATA: "1" };
 
 // A raw request to the proxy, with a Host header, like run.js does.
-function raw(pathAndQuery, { method = "GET", host = HOST, headers = {}, body } = {}) {
+function raw(
+  pathAndQuery,
+  { method = "GET", host = HOST, headers = {}, body } = {}
+) {
   const url = new URL(pathAndQuery, PROXY_ORIGIN);
   return new Promise((resolve, reject) => {
     const req = https.request(
@@ -174,7 +198,11 @@ function raw(pathAndQuery, { method = "GET", host = HOST, headers = {}, body } =
         const chunks = [];
         res.on("data", (c) => chunks.push(c));
         res.on("end", () =>
-          resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) })
+          resolve({
+            status: res.statusCode,
+            headers: res.headers,
+            body: Buffer.concat(chunks),
+          })
         );
       }
     );
@@ -271,7 +299,11 @@ async function main() {
     return;
   }
 
-  console.log("  git under test:", (await git(["--version"])).stdout.trim(), "(" + GIT_BIN + ")");
+  console.log(
+    "  git under test:",
+    (await git(["--version"])).stdout.trim(),
+    "(" + GIT_BIN + ")"
+  );
 
   // 1. Clone and ls-remote.
   const a = newDir("clone-a");
@@ -282,10 +314,13 @@ async function main() {
   const seeded = path.join(a, "seeded.txt");
   check(
     "clone has the file the repository was created with",
-    fs.existsSync(seeded) && /Seeded git post/.test(fs.readFileSync(seeded, "utf8")),
+    fs.existsSync(seeded) &&
+      /Seeded git post/.test(fs.readFileSync(seeded, "utf8")),
     "files: " + fs.readdirSync(a).join(",")
   );
-  const branch = (await git(["rev-parse", "--abbrev-ref", "HEAD"], { cwd: a })).stdout.trim();
+  const branch = (
+    await git(["rev-parse", "--abbrev-ref", "HEAD"], { cwd: a })
+  ).stdout.trim();
   check("clone is on master", branch === "master", "branch " + branch);
 
   const ls = await git(["ls-remote", remoteURL()]);
@@ -307,58 +342,102 @@ async function main() {
   const noAuth = await raw(infoRefs());
   check(
     "info/refs without credentials is 401 with a Basic challenge",
-    noAuth.status === 401 && /basic/i.test(noAuth.headers["www-authenticate"] || ""),
-    "status " + noAuth.status + " www-authenticate " + noAuth.headers["www-authenticate"]
+    noAuth.status === 401 &&
+      /basic/i.test(noAuth.headers["www-authenticate"] || ""),
+    "status " +
+      noAuth.status +
+      " www-authenticate " +
+      noAuth.headers["www-authenticate"]
   );
   const wrongTok = await raw(infoRefs(), {
     headers: { Authorization: basic("not-the-token") },
   });
-  check("info/refs with a wrong token is 401", wrongTok.status === 401, "got " + wrongTok.status);
+  check(
+    "info/refs with a wrong token is 401",
+    wrongTok.status === 401,
+    "got " + wrongTok.status
+  );
   const wrongPush = await raw(infoRefs(HANDLE, "git-receive-pack"), {
     headers: { Authorization: basic("not-the-token") },
   });
-  check("receive-pack advertisement with a wrong token is 401", wrongPush.status === 401, "got " + wrongPush.status);
-  const noAuthPost = await raw("/clients/git/end/" + HANDLE + ".git/git-receive-pack", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-git-receive-pack-request",
-      "Content-Length": "8",
-    },
-    body: "0000PACK",
-  });
-  check("POST git-receive-pack without credentials is 401", noAuthPost.status === 401, "got " + noAuthPost.status);
+  check(
+    "receive-pack advertisement with a wrong token is 401",
+    wrongPush.status === 401,
+    "got " + wrongPush.status
+  );
+  const noAuthPost = await raw(
+    "/clients/git/end/" + HANDLE + ".git/git-receive-pack",
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-git-receive-pack-request",
+        "Content-Length": "8",
+      },
+      body: "0000PACK",
+    }
+  );
+  check(
+    "POST git-receive-pack without credentials is 401",
+    noAuthPost.status === 401,
+    "got " + noAuthPost.status
+  );
 
   const t0 = Date.now();
-  const badClone = await git(["ls-remote", remoteURL(HANDLE, "not-the-token")], { timeout: 30000 });
+  const badClone = await git(
+    ["ls-remote", remoteURL(HANDLE, "not-the-token")],
+    { timeout: 30000 }
+  );
   check(
     "git with a wrong token fails with an authentication error",
-    badClone.code !== 0 && !badClone.timedOut && /401|authentication failed/i.test(badClone.stderr),
+    badClone.code !== 0 &&
+      !badClone.timedOut &&
+      /401|authentication failed/i.test(badClone.stderr),
     why(badClone)
   );
-  check("a rejected git request does not hang", Date.now() - t0 < 20000, Date.now() - t0 + "ms");
-  const badPush = await git(["push", remoteURL(HANDLE, "not-the-token"), "HEAD:master"], {
-    cwd: a,
-    timeout: 30000,
-  });
+  check(
+    "a rejected git request does not hang",
+    Date.now() - t0 < 20000,
+    Date.now() - t0 + "ms"
+  );
+  const badPush = await git(
+    ["push", remoteURL(HANDLE, "not-the-token"), "HEAD:master"],
+    {
+      cwd: a,
+      timeout: 30000,
+    }
+  );
   check(
     "git push with a wrong token fails",
-    badPush.code !== 0 && !badPush.timedOut && /401|authentication failed/i.test(badPush.stderr),
+    badPush.code !== 0 &&
+      !badPush.timedOut &&
+      /401|authentication failed/i.test(badPush.stderr),
     why(badPush)
   );
 
   // 3. Push a new post and see it on the blog.
   const primed = await primeIndex();
-  check("blog index is cached before the push (so a missing purge would show)", primed === "HIT", "Blot-Cache " + primed);
+  check(
+    "blog index is cached before the push (so a missing purge would show)",
+    primed === "HIT",
+    "Blot-Cache " + primed
+  );
 
   const title1 = "First pushed post " + crypto.randomBytes(3).toString("hex");
   write(a, "pushed.txt", post(title1, "Pushed with a real git client."));
   await commitAll(a, "add post");
   const push1 = await git(["push", "origin", "HEAD:master"], { cwd: a });
   check("push a new post", push1.code === 0, why(push1));
-  check("server master is the pushed commit", (await remoteMaster()) === (await revParse(a)));
+  check(
+    "server master is the pushed commit",
+    (await remoteMaster()) === (await revParse(a))
+  );
 
   const seen1 = await waitForIndex((t) => t.includes(title1));
-  check("pushed post appears on the blog (cache purged)", seen1.ok, seen1.detail);
+  check(
+    "pushed post appears on the blog (cache purged)",
+    seen1.ok,
+    seen1.detail
+  );
   for (let i = 0; i < 2 && seen1.ok; i++) {
     const again = await raw("/", { host: BLOG_HOST });
     check(
@@ -375,8 +454,14 @@ async function main() {
   await commitAll(a, "edit post");
   const push2 = await git(["push", "origin", "HEAD:master"], { cwd: a });
   check("push an edit", push2.code === 0, why(push2));
-  const seen2 = await waitForIndex((t) => t.includes(title2) && !t.includes(title1));
-  check("edited post replaces the old title on the blog", seen2.ok, seen2.detail);
+  const seen2 = await waitForIndex(
+    (t) => t.includes(title2) && !t.includes(title1)
+  );
+  check(
+    "edited post replaces the old title on the blog",
+    seen2.ok,
+    seen2.detail
+  );
 
   // 5. Delete it.
   await primeIndex();
@@ -384,7 +469,9 @@ async function main() {
   await commitAll(a, "delete post");
   const push3 = await git(["push", "origin", "HEAD:master"], { cwd: a });
   check("push a deletion", push3.code === 0, why(push3));
-  const seen3 = await waitForIndex((t) => !t.includes(title2) && !t.includes(title1));
+  const seen3 = await waitForIndex(
+    (t) => !t.includes(title2) && !t.includes(title1)
+  );
   check("deleted post disappears from the blog", seen3.ok, seen3.detail);
 
   // 6. Chunked pushes. With http.postBuffer below the pack size git streams
@@ -393,11 +480,26 @@ async function main() {
   const small = crypto.randomBytes(300 * 1024);
   write(a, "files/chunked-small.bin", small);
   await commitAll(a, "add 300k binary");
-  const pushSmall = await git(["-c", "http.postBuffer=65536", "-c", "http.version=HTTP/1.1", "push", "origin", "HEAD:master"], {
-    cwd: a,
-    env: TRACE,
-  });
-  check("push of a body above http.postBuffer succeeds", pushSmall.code === 0, why(pushSmall));
+  const pushSmall = await git(
+    [
+      "-c",
+      "http.postBuffer=65536",
+      "-c",
+      "http.version=HTTP/1.1",
+      "push",
+      "origin",
+      "HEAD:master",
+    ],
+    {
+      cwd: a,
+      env: TRACE,
+    }
+  );
+  check(
+    "push of a body above http.postBuffer succeeds",
+    pushSmall.code === 0,
+    why(pushSmall)
+  );
   check(
     "that push was sent with chunked transfer encoding",
     /Send header: Transfer-Encoding: chunked/i.test(pushSmall.stderr),
@@ -407,10 +509,21 @@ async function main() {
   const big = crypto.randomBytes(4 * 1024 * 1024 + 123);
   write(a, "files/big.bin", big);
   await commitAll(a, "add 4M binary");
-  const pushBig = await git(["-c", "http.postBuffer=65536", "-c", "http.version=HTTP/1.1", "push", "origin", "HEAD:master"], {
-    cwd: a,
-    env: TRACE,
-  });
+  const pushBig = await git(
+    [
+      "-c",
+      "http.postBuffer=65536",
+      "-c",
+      "http.version=HTTP/1.1",
+      "push",
+      "origin",
+      "HEAD:master",
+    ],
+    {
+      cwd: a,
+      env: TRACE,
+    }
+  );
   check("push of a multi-MB binary succeeds", pushBig.code === 0, why(pushBig));
   check(
     "multi-MB push was chunked",
@@ -422,21 +535,39 @@ async function main() {
   // encoding: the same kind of push over h2 streams DATA frames instead.
   write(a, "files/h2.bin", crypto.randomBytes(1024 * 1024));
   await commitAll(a, "add 1M binary");
-  const pushH2 = await git(["-c", "http.postBuffer=65536", "push", "origin", "HEAD:master"], {
-    cwd: a,
-    env: TRACE,
-  });
-  check("streamed push of a body above http.postBuffer succeeds (default HTTP version)", pushH2.code === 0, why(pushH2));
-  check("default push used " + (/POST \S+ HTTP\/2/.test(pushH2.stderr) ? "HTTP/2" : "HTTP/1.1"), true);
+  const pushH2 = await git(
+    ["-c", "http.postBuffer=65536", "push", "origin", "HEAD:master"],
+    {
+      cwd: a,
+      env: TRACE,
+    }
+  );
+  check(
+    "streamed push of a body above http.postBuffer succeeds (default HTTP version)",
+    pushH2.code === 0,
+    why(pushH2)
+  );
+  check(
+    "default push used " +
+      (/POST \S+ HTTP\/2/.test(pushH2.stderr) ? "HTTP/2" : "HTTP/1.1"),
+    true
+  );
 
   const wantHash = sha256(big);
   let lastGot = "";
   const blob = await until(async () => {
     const res = await raw("/files/big.bin", { host: BLOG_HOST });
     lastGot = "status " + res.status + ", " + res.body.length + " bytes";
-    return { ok: res.status === 200 && sha256(res.body) === wantHash, detail: lastGot };
+    return {
+      ok: res.status === 200 && sha256(res.body) === wantHash,
+      detail: lastGot,
+    };
   });
-  check("multi-MB binary is served by the blog byte for byte", blob.ok, blob.detail + ", want " + big.length + " bytes");
+  check(
+    "multi-MB binary is served by the blog byte for byte",
+    blob.ok,
+    blob.detail + ", want " + big.length + " bytes"
+  );
 
   const smallHash = sha256(small);
   const smallRes = await raw("/files/chunked-small.bin", { host: BLOG_HOST });
@@ -455,23 +586,39 @@ async function main() {
   for (let i = 0; i < 400; i++) {
     stream.push(
       "commit refs/heads/local-noise\n" +
-        "committer E2E <e2e@example.com> " + (4102444800 + i) + " +0000\n" +
+        "committer E2E <e2e@example.com> " +
+        (4102444800 + i) +
+        " +0000\n" +
         "data 6\nnoise\n" +
         "\n"
     );
   }
-  const noise = await git(["fast-import", "--quiet"], { cwd: b, input: stream.join("") });
-  check("local history for the have list created", noise.code === 0, why(noise));
+  const noise = await git(["fast-import", "--quiet"], {
+    cwd: b,
+    input: stream.join(""),
+  });
+  check(
+    "local history for the have list created",
+    noise.code === 0,
+    why(noise)
+  );
 
   const fetchB = await git(["fetch", "origin"], { cwd: b, env: TRACE });
-  check("incremental fetch from the second clone succeeds", fetchB.code === 0, why(fetchB));
+  check(
+    "incremental fetch from the second clone succeeds",
+    fetchB.code === 0,
+    why(fetchB)
+  );
   check(
     "fetch with a long have list sent a gzipped POST body",
     /Send header: Content-Encoding: gzip/i.test(fetchB.stderr),
     "headers sent: " + sentHeaders(fetchB.stderr)
   );
   const wantTip = await revParse(a);
-  check("fetch brought origin/master to the pushed commit", (await revParse(b, "origin/master")) === wantTip);
+  check(
+    "fetch brought origin/master to the pushed commit",
+    (await revParse(b, "origin/master")) === wantTip
+  );
   const merge = await git(["merge", "--ff-only", "origin/master"], { cwd: b });
   check("second clone fast-forwards", merge.code === 0, why(merge));
   const bigB = path.join(b, "files/big.bin");
@@ -483,7 +630,11 @@ async function main() {
   check("fetched repository passes fsck", fsck.code === 0, why(fsck));
 
   const fetchAgain = await git(["fetch", "origin"], { cwd: b });
-  check("fetch with nothing new succeeds", fetchAgain.code === 0, why(fetchAgain));
+  check(
+    "fetch with nothing new succeeds",
+    fetchAgain.code === 0,
+    why(fetchAgain)
+  );
 
   // The git store serves no shallow clones (app/clients/git/served/reads.js)
   const shallow = newDir("shallow");
@@ -493,8 +644,18 @@ async function main() {
   let protoPushes = 0;
   for (const version of ["0", "2"]) {
     const dir = newDir("proto" + version);
-    const clone = await git(["-c", "protocol.version=" + version, "clone", remoteURL(), dir]);
-    check("clone with protocol.version=" + version + " succeeds", clone.code === 0, why(clone));
+    const clone = await git([
+      "-c",
+      "protocol.version=" + version,
+      "clone",
+      remoteURL(),
+      dir,
+    ]);
+    check(
+      "clone with protocol.version=" + version + " succeeds",
+      clone.code === 0,
+      why(clone)
+    );
     if (clone.code !== 0) continue;
     check(
       "protocol.version=" + version + " clone is at the server tip",
@@ -502,10 +663,17 @@ async function main() {
     );
     write(dir, "proto/v" + version + ".bin", crypto.randomBytes(2048));
     await commitAll(dir, "push over protocol " + version);
-    const push = await git(["-c", "protocol.version=" + version, "push", "origin", "HEAD:master"], {
-      cwd: dir,
-    });
-    check("push with protocol.version=" + version + " succeeds", push.code === 0, why(push));
+    const push = await git(
+      ["-c", "protocol.version=" + version, "push", "origin", "HEAD:master"],
+      {
+        cwd: dir,
+      }
+    );
+    check(
+      "push with protocol.version=" + version + " succeeds",
+      push.code === 0,
+      why(push)
+    );
     check(
       "server master is the protocol " + version + " push",
       (await remoteMaster()) === (await revParse(dir))
@@ -514,21 +682,40 @@ async function main() {
   }
 
   // Bring clone A level with the protocol pushes (they came from other clones).
-  const pullA = await git(["pull", "--ff-only", "origin", "master"], { cwd: a });
-  check("first clone pulls the protocol pushes", pullA.code === 0 || protoPushes === 0, why(pullA));
+  const pullA = await git(["pull", "--ff-only", "origin", "master"], {
+    cwd: a,
+  });
+  check(
+    "first clone pulls the protocol pushes",
+    pullA.code === 0 || protoPushes === 0,
+    why(pullA)
+  );
 
   // 8. Only master may be pushed.
   const before = await git(["ls-remote", remoteURL()]);
-  const other = await git(["push", "origin", "HEAD:refs/heads/not-master"], { cwd: a, timeout: 60000 });
-  check("push to a branch other than master is rejected", other.code !== 0 && !other.timedOut, why(other));
+  const other = await git(["push", "origin", "HEAD:refs/heads/not-master"], {
+    cwd: a,
+    timeout: 60000,
+  });
+  check(
+    "push to a branch other than master is rejected",
+    other.code !== 0 && !other.timedOut,
+    why(other)
+  );
   const after = await git(["ls-remote", remoteURL()]);
   check(
     "the rejected push created no branch",
-    after.code === 0 && !/not-master/.test(after.stdout) && after.stdout === before.stdout,
+    after.code === 0 &&
+      !/not-master/.test(after.stdout) &&
+      after.stdout === before.stdout,
     tail(after.stdout)
   );
   const stillWorks = await git(["fetch", "origin"], { cwd: a });
-  check("the repository still serves after a rejected push", stillWorks.code === 0, why(stillWorks));
+  check(
+    "the repository still serves after a rejected push",
+    stillWorks.code === 0,
+    why(stillWorks)
+  );
 
   // 9. A handle change: the old remote URL gets a 308 to the new one and still
   //    works for ls-remote, clone and push. Last, since it renames the repo.
@@ -537,10 +724,24 @@ async function main() {
 
 function runContainerScript(args) {
   return new Promise((resolve) => {
-    const compose = path.resolve(process.env.E2E_COMPOSE_FILE || path.join(__dirname, "docker-compose.yml"));
+    const compose = path.resolve(
+      process.env.E2E_COMPOSE_FILE || path.join(__dirname, "docker-compose.yml")
+    );
     const child = spawn(
       "docker",
-      ["compose", "-f", compose, "exec", "-T", "-u", "1000", "app", "node", "/tmp/seed-git.js", ...args],
+      [
+        "compose",
+        "-f",
+        compose,
+        "exec",
+        "-T",
+        "-u",
+        "1000",
+        "app",
+        "node",
+        "/tmp/seed-git.js",
+        ...args,
+      ],
       { env: process.env }
     );
     let out = "";
@@ -558,7 +759,11 @@ async function renameStep(a, infoRefs) {
   }
   const newHandle = HANDLE + "renamed";
   const renamed = await runContainerScript(["rename", BLOG_ID, newHandle]);
-  check("handle changed in the app", renamed.code === 0 && /SEED_GIT_RENAMED/.test(renamed.out), tail(renamed.out));
+  check(
+    "handle changed in the app",
+    renamed.code === 0 && /SEED_GIT_RENAMED/.test(renamed.out),
+    tail(renamed.out)
+  );
   if (renamed.code !== 0) return;
 
   const oldPath = infoRefs(HANDLE);
@@ -573,8 +778,16 @@ async function renameStep(a, infoRefs) {
 
   const lsOld = await git(["ls-remote", remoteURL(HANDLE)]);
   const lsNew = await git(["ls-remote", remoteURL(newHandle)]);
-  check("ls-remote on the old URL follows the redirect", lsOld.code === 0 && lsOld.stdout.length > 0, why(lsOld));
-  check("old and new URL list the same refs", lsOld.stdout === lsNew.stdout, tail(lsOld.stdout) + " vs " + tail(lsNew.stdout));
+  check(
+    "ls-remote on the old URL follows the redirect",
+    lsOld.code === 0 && lsOld.stdout.length > 0,
+    why(lsOld)
+  );
+  check(
+    "old and new URL list the same refs",
+    lsOld.stdout === lsNew.stdout,
+    tail(lsOld.stdout) + " vs " + tail(lsNew.stdout)
+  );
 
   const oldClone = newDir("old-url-clone");
   const cloneOld = await git(["clone", remoteURL(HANDLE), oldClone]);
@@ -583,7 +796,9 @@ async function renameStep(a, infoRefs) {
   if (cloneOld.code === 0) {
     write(oldClone, "proto/after-rename.bin", crypto.randomBytes(2048));
     await commitAll(oldClone, "push to the old URL");
-    const push = await git(["push", "origin", "HEAD:master"], { cwd: oldClone });
+    const push = await git(["push", "origin", "HEAD:master"], {
+      cwd: oldClone,
+    });
     check("push to the old URL works", push.code === 0, why(push));
     check(
       "the new URL sees that push",
@@ -595,7 +810,10 @@ async function renameStep(a, infoRefs) {
 main()
   .catch((err) => {
     failures++;
-    console.log("  FAIL - git checks crashed ->", err && err.stack ? err.stack : err);
+    console.log(
+      "  FAIL - git checks crashed ->",
+      err && err.stack ? err.stack : err
+    );
   })
   .finally(() => {
     try {

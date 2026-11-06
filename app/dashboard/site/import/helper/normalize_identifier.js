@@ -2,6 +2,7 @@ const path = require("path");
 
 const MAX_CHARACTERS = 120;
 const MAX_BYTES = 240;
+// eslint-disable-next-line no-control-regex
 const UNSAFE_CHARACTERS = /[\u0000-\u001f\u007f-\u009f<>:"'`&|?*]/g;
 const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i;
 
@@ -14,10 +15,7 @@ function truncate(value) {
   for (const character of value) {
     const characterBytes = Buffer.byteLength(character, "utf8");
 
-    if (
-      characters + 1 > MAX_CHARACTERS ||
-      bytes + characterBytes > MAX_BYTES
-    ) {
+    if (characters + 1 > MAX_CHARACTERS || bytes + characterBytes > MAX_BYTES) {
       break;
     }
 
@@ -36,7 +34,10 @@ function clean(value, extensions) {
   for (const extension of extensions) {
     const suffix = String(extension || "").replace(/^\.?/, ".");
 
-    if (suffix !== "." && identifier.toLowerCase().endsWith(suffix.toLowerCase())) {
+    if (
+      suffix !== "." &&
+      identifier.toLowerCase().endsWith(suffix.toLowerCase())
+    ) {
       identifier = identifier.slice(0, -suffix.length);
       break;
     }
@@ -46,7 +47,7 @@ function clean(value, extensions) {
     identifier
       .normalize("NFC")
       .replace(UNSAFE_CHARACTERS, "")
-      .replace(/[\/\\]/g, "")
+      .replace(/[/\\]/g, "")
       .replace(/\s+/g, " ")
       .replace(/^[. ]+|[. ]+$/g, "")
   );
@@ -55,9 +56,9 @@ function clean(value, extensions) {
 function isValid(identifier) {
   return Boolean(
     identifier &&
-      identifier !== "." &&
-      identifier !== ".." &&
-      !WINDOWS_RESERVED_NAME.test(identifier)
+    identifier !== "." &&
+    identifier !== ".." &&
+    !WINDOWS_RESERVED_NAME.test(identifier)
   );
 }
 

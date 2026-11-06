@@ -45,7 +45,9 @@ function mergeCookies(jar, setCookie) {
   }
 }
 function cookieHeader(jar) {
-  return Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
+  return Object.entries(jar)
+    .map(([k, v]) => `${k}=${v}`)
+    .join("; ");
 }
 
 function once(path, { method = "GET", jar, body, headers = {} } = {}) {
@@ -96,7 +98,7 @@ function once(path, { method = "GET", jar, body, headers = {} } = {}) {
 async function request(path, opts = {}, max = 5) {
   let res = await once(path, opts);
   let hops = 0;
-  let nextOpts = opts;
+  let nextOpts;
   while (
     res.status >= 300 &&
     res.status < 400 &&
@@ -133,7 +135,10 @@ async function waitForUpstream(timeoutMs = 60000) {
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  console.log("  FAIL - upstream never became ready through the proxy ->", last);
+  console.log(
+    "  FAIL - upstream never became ready through the proxy ->",
+    last
+  );
   return false;
 }
 
@@ -142,30 +147,51 @@ async function waitForUpstream(timeoutMs = 60000) {
 
   // 1. The proxy answers its own health check.
   const health = await request("/health");
-  check("proxy /health returns 200", health.status === 200, "got " + health.status);
+  check(
+    "proxy /health returns 200",
+    health.status === 200,
+    "got " + health.status
+  );
 
   // 2. The marketing site is reachable through the proxy.
   const home = await request("/");
-  check("GET / routes to the app (2xx)", home.status >= 200 && home.status < 300, "got " + home.status);
+  check(
+    "GET / routes to the app (2xx)",
+    home.status >= 200 && home.status < 300,
+    "got " + home.status
+  );
   check("GET / returns a non-empty body", home.body.length > 0);
 
   // 3. The sign-in page renders (dashboard lives under /sites). Do this with
   //    the cookie jar so we pick up the __Host-csrf cookie + token.
   const jar = {};
   const loginPage = await request("/sites/log-in", { jar });
-  check("GET /sites/log-in returns 200", loginPage.status === 200, "got " + loginPage.status);
+  check(
+    "GET /sites/log-in returns 200",
+    loginPage.status === 200,
+    "got " + loginPage.status
+  );
   check(
     "sign-in page has email + password fields",
-    /name=["']?email/.test(loginPage.body) && /name=["']?password/.test(loginPage.body)
+    /name=["']?email/.test(loginPage.body) &&
+      /name=["']?password/.test(loginPage.body)
   );
-  const csrf = (loginPage.body.match(/name=["']?_csrf["']?\s+value=["']([^"']+)["']/) || [])[1];
-  check("sign-in page carries a CSRF token", !!csrf, csrf ? "" : "no _csrf field found");
+  const csrf = (loginPage.body.match(
+    /name=["']?_csrf["']?\s+value=["']([^"']+)["']/
+  ) || [])[1];
+  check(
+    "sign-in page carries a CSRF token",
+    !!csrf,
+    csrf ? "" : "no _csrf field found"
+  );
 
   // 4. The dashboard requires auth.
   const anonSites = await once("/sites");
   check(
     "GET /sites while logged out redirects to log-in",
-    anonSites.status >= 300 && anonSites.status < 400 && /log-in/.test(anonSites.headers.location || ""),
+    anonSites.status >= 300 &&
+      anonSites.status < 400 &&
+      /log-in/.test(anonSites.headers.location || ""),
     `status ${anonSites.status} location ${anonSites.headers.location}`
   );
 
@@ -176,7 +202,11 @@ async function waitForUpstream(timeoutMs = 60000) {
     jar,
     body: { email: EMAIL, password: PASSWORD, _csrf: csrf },
   });
-  check("POST sign-in sets a session cookie", Object.keys(jar).length > 0, JSON.stringify(jar));
+  check(
+    "POST sign-in sets a session cookie",
+    Object.keys(jar).length > 0,
+    JSON.stringify(jar)
+  );
   check(
     "after sign-in the dashboard is reachable (200)",
     signIn.status === 200,
@@ -223,7 +253,11 @@ async function waitForUpstream(timeoutMs = 60000) {
     jar,
     body: { title: newTitle, _csrf: csrf },
   });
-  check("POST the blog title saves", saved.status === 200, "got " + saved.status);
+  check(
+    "POST the blog title saves",
+    saved.status === 200,
+    "got " + saved.status
+  );
   const form = await request(`/sites/${handle}/title`, { jar });
   check("the dashboard shows the saved title", form.body.includes(newTitle));
 
@@ -234,19 +268,25 @@ async function waitForUpstream(timeoutMs = 60000) {
     jar,
     body: { _csrf: csrf },
   });
-  check("POST log-out succeeds", signOut.status >= 200 && signOut.status < 400, "got " + signOut.status);
+  check(
+    "POST log-out succeeds",
+    signOut.status >= 200 && signOut.status < 400,
+    "got " + signOut.status
+  );
   const afterLogout = await once("/sites", { jar });
   check(
     "GET /sites after log-out redirects to log-in",
-    afterLogout.status >= 300 && afterLogout.status < 400 && /log-in/.test(afterLogout.headers.location || ""),
+    afterLogout.status >= 300 &&
+      afterLogout.status < 400 &&
+      /log-in/.test(afterLogout.headers.location || ""),
     `status ${afterLogout.status} location ${afterLogout.headers.location}`
   );
 
   // 8. The proxy's hardening rules apply end to end (blog traffic path).
   // nginx `return 444` closes the connection with no HTTP response, so Node
   // sees ECONNRESET rather than a status code (see proxy/e2e/checks.sh).
-  let gitBlocked = false;
-  let gitDetail = "";
+  let gitBlocked;
+  let gitDetail;
   try {
     const git = await once("/.git/config", { headers: { Host: BLOG_HOST } });
     gitBlocked = git.status === 444 || git.status === 403 || git.status === 404;

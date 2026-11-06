@@ -5,6 +5,7 @@ const folder = require("storage/folder");
 async function countLocalFiles(blogID, path) {
   let total = 0;
 
+  // eslint-disable-next-line no-unused-vars
   for await (const _ of folder.walk(blogID, path)) {
     total += 1;
   }

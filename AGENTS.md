@@ -1,3 +1,9 @@
+# Lint and format
+
+- ESLint (`scripts/development/lint/eslint.config.js`, correctness rules only) and Prettier (the `prettier` key of `package.json`, JavaScript only) run in CI and must pass. Run them with `scripts/development/lint.sh`, which installs the pinned versions once outside the checkout, so it works without `node_modules`.
+- After editing JavaScript, run `scripts/development/lint.sh fix <files>` on the files you changed, and `scripts/development/lint.sh check` before you push. Fix what ESLint reports. Don't silence a rule with `eslint-disable` unless the code is right and the rule is wrong there, and give the reason in the comment (`-- reason`).
+- The pre-commit hook in `scripts/development/lint/hooks` checks staged files once enabled with `git config core.hooksPath scripts/development/lint/hooks`. `lint.sh claude-hook` is a Claude Code PostToolUse hook that formats and lints each file an edit touches.
+
 # Pull request descriptions
 
 When opening a pull request in this repo:

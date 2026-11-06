@@ -43,7 +43,8 @@ describe("redisSubscriber with Redis", function () {
   });
 
   it("serves many streams from one connection and releases each channel", async function () {
-    const prefix = "test:redisSubscriber:" + process.pid + ":" + Date.now() + ":";
+    const prefix =
+      "test:redisSubscriber:" + process.pid + ":" + Date.now() + ":";
     const channels = [prefix + "a", prefix + "b", prefix + "c"];
     const received = [];
 

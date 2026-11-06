@@ -216,7 +216,7 @@ function initializeSourceSidebarMenu() {
           disabled: disabled || !baseUrl,
         };
       },
-      "delete": function (dataset) {
+      delete: function (dataset) {
         var baseUrl = cleanBase(dataset);
         var disabled = dataset.disableDelete === "true";
         return {

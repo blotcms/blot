@@ -24,8 +24,8 @@ async function copyDirectory(blogID, source, dest) {
   const copied = [];
 
   async function visit(local, path) {
-    const entries = (await fs.readdir(local, { withFileTypes: true })).sort((a, b) =>
-      a.name < b.name ? -1 : a.name > b.name ? 1 : 0
+    const entries = (await fs.readdir(local, { withFileTypes: true })).sort(
+      (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
     );
 
     if (!entries.length && path !== "/") await folder.mkdir(blogID, path);
@@ -57,7 +57,9 @@ async function tree(blogID, options) {
 
   for await (const path of folder.walk(blogID, "/", { directories })) {
     const stat = await folder.stat(blogID, path);
-    found[path] = stat.isDirectory ? null : (await folder.read(blogID, path)).toString();
+    found[path] = stat.isDirectory
+      ? null
+      : (await folder.read(blogID, path)).toString();
   }
 
   return found;

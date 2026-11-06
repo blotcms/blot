@@ -28,8 +28,11 @@ describe("Google Drive sync against storage/folder", function () {
       exports: module.exports,
       console: { log() {}, error() {} },
       require: (name) => {
-        if (name === "../serviceAccount/createDriveClient") return async () => drive;
-        return require(name.startsWith(".") ? resolve(dirname(file), name) : name);
+        if (name === "../serviceAccount/createDriveClient")
+          return async () => drive;
+        return require(
+          name.startsWith(".") ? resolve(dirname(file), name) : name
+        );
       },
     });
 
@@ -54,11 +57,18 @@ describe("Google Drive sync against storage/folder", function () {
     state.drive = {
       files: {
         list: async ({ q }) => ({
-          data: { files: q.indexOf("'" + folderId + "'") === 0 ? Object.keys(state.files).map(item) : [] },
+          data: {
+            files:
+              q.indexOf("'" + folderId + "'") === 0
+                ? Object.keys(state.files).map(item)
+                : [],
+          },
         }),
         get: async ({ fileId, alt }) => {
-          if (fileId === folderId) return { data: { id: folderId, name: "Blog", trashed: false } };
-          if (alt !== "media") throw new Error("Unexpected request for " + fileId);
+          if (fileId === folderId)
+            return { data: { id: folderId, name: "Blog", trashed: false } };
+          if (alt !== "media")
+            throw new Error("Unexpected request for " + fileId);
           const name = fileId.slice("id-".length);
           state.downloads.push(name);
           return { data: Readable.from([Buffer.from(state.files[name])]) };
@@ -84,7 +94,12 @@ describe("Google Drive sync against storage/folder", function () {
       });
 
       const sync = loadSync(drive.drive);
-      run = () => sync(this.blog.id, () => {}, async (path) => updates.push(path));
+      run = () =>
+        sync(
+          this.blog.id,
+          () => {},
+          async (path) => updates.push(path)
+        );
     });
 
     afterEach(async function () {
@@ -93,7 +108,8 @@ describe("Google Drive sync against storage/folder", function () {
       if (keys.length) await client.del(keys);
     });
 
-    const records = (blogID, ids) => database.folder(folderId, blogID).getVerifiedContents(ids);
+    const records = (blogID, ids) =>
+      database.folder(folderId, blogID).getVerifiedContents(ids);
 
     it("downloads new files once, then neither downloads nor reads them", async function () {
       drive.files["a.txt"] = "alpha";
@@ -101,7 +117,9 @@ describe("Google Drive sync against storage/folder", function () {
 
       expect(await run()).toBeTruthy();
       expect(drive.downloads.sort()).toEqual(["a.txt", "b.txt"]);
-      expect((await folder.read(this.blog.id, "/a.txt")).toString()).toBe("alpha");
+      expect((await folder.read(this.blog.id, "/a.txt")).toString()).toBe(
+        "alpha"
+      );
 
       const [a] = await records(this.blog.id, ["id-a.txt"]);
       const stat = await folder.stat(this.blog.id, "/a.txt");
@@ -136,7 +154,9 @@ describe("Google Drive sync against storage/folder", function () {
 
       expect(await run()).toBeTruthy();
       expect(drive.downloads).toEqual(["a.txt"]);
-      expect((await folder.read(this.blog.id, "/a.txt")).toString()).toBe("alpha");
+      expect((await folder.read(this.blog.id, "/a.txt")).toString()).toBe(
+        "alpha"
+      );
       expect(updates).toContain("/a.txt");
     });
 
@@ -153,7 +173,9 @@ describe("Google Drive sync against storage/folder", function () {
       expect(await run()).toBeTruthy();
       expect(drive.downloads).toEqual([]);
       expect(updates).toEqual([]);
-      expect((await records(this.blog.id, ["id-a.txt"]))[0].modified).toBe(Math.round(stat.modified));
+      expect((await records(this.blog.id, ["id-a.txt"]))[0].modified).toBe(
+        Math.round(stat.modified)
+      );
     });
 
     it("removes a file removed from Drive", async function () {
@@ -176,11 +198,13 @@ describe("Google Drive sync against storage/folder", function () {
       // The record as it was before this client kept each file's state: the
       // file's fingerprint on disk, which S3 has no way to match
       const fingerprint = "5:1000000000";
-      await database.folder(folderId, this.blog.id).setVerifiedContent("id-a.txt", {
-        path: "/a.txt",
-        checksum: md5("alpha"),
-        fingerprint,
-      });
+      await database
+        .folder(folderId, this.blog.id)
+        .setVerifiedContent("id-a.txt", {
+          path: "/a.txt",
+          checksum: md5("alpha"),
+          fingerprint,
+        });
       drive.downloads = [];
 
       expect(await run()).toBeTruthy();
@@ -202,7 +226,10 @@ describe("Google Drive sync against storage/folder", function () {
       await folder.write(this.blog.id, "/dir/a.txt", "alpha");
       spyOn(folder, "ensureLocal").and.callThrough();
 
-      const entries = await require("../sync/util/localReaddir")(this.blog.id, "/dir");
+      const entries = await require("../sync/util/localReaddir")(
+        this.blog.id,
+        "/dir"
+      );
 
       expect(entries.map((entry) => entry.name)).toEqual(["a.txt"]);
       expect(folder.ensureLocal).not.toHaveBeenCalled();

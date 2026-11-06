@@ -24,9 +24,9 @@ const BURST_ROUTES = [
 ];
 
 function avgBurstInflation(r) {
-  const values = BURST_ROUTES.map((key) => num(r?.render?.[key]?.inflation_ratio)).filter(
-    (n) => n !== null
-  );
+  const values = BURST_ROUTES.map((key) =>
+    num(r?.render?.[key]?.inflation_ratio)
+  ).filter((n) => n !== null);
   if (!values.length) return null;
   return values.reduce((sum, n) => sum + n, 0) / values.length;
 }
@@ -155,4 +155,10 @@ function formatValue(value, unit) {
   return String(value);
 }
 
-module.exports = { METRICS, METRIC_BY_KEY, getMetrics, extractMetrics, formatValue };
+module.exports = {
+  METRICS,
+  METRIC_BY_KEY,
+  getMetrics,
+  extractMetrics,
+  formatValue,
+};

@@ -46,10 +46,10 @@ const ONE_HOUR_IN_MS = 60 * 60 * 1000;
 const isEligible = (account) =>
   Boolean(
     account &&
-      account.folderId &&
-      account.serviceAccountId &&
-      !account.preparing &&
-      !classify(account)
+    account.folderId &&
+    account.serviceAccountId &&
+    !account.preparing &&
+    !classify(account)
   );
 
 // Returned by walkWithLock instead of a summary when the blog stopped being
@@ -73,7 +73,12 @@ const hasRecentSync = (account) => {
 // included because Fix()'s entry-ghosts check does one sequential Redis round
 // trip per entry - a large count is the leading suspect for starving another
 // blog's lock heartbeat on the shared connection.
-const logLag = (blogID, phase, entryCount, { durationMs, maxLagMs, p99LagMs }) => {
+const logLag = (
+  blogID,
+  phase,
+  entryCount,
+  { durationMs, maxLagMs, p99LagMs }
+) => {
   console.log(
     clfdate(),
     "Google Drive: validation lag",
@@ -93,7 +98,12 @@ const fixBlog = (blog) =>
   new Promise((resolve) => {
     Fix(blog, (error, report) => {
       if (error) {
-        console.error(clfdate(), "Google Drive: Fix error for blog", blog.id, error);
+        console.error(
+          clfdate(),
+          "Google Drive: Fix error for blog",
+          blog.id,
+          error
+        );
       }
       resolve({ error, report });
     });
@@ -119,7 +129,12 @@ const walkWithLock = async (blogID, publish, options) => {
     // done rejects with the error it is given, once the lock is released
     await done(error).catch((err) => {
       if (err !== error)
-        console.error(clfdate(), "Google Drive: Error releasing lock", blogID, err);
+        console.error(
+          clfdate(),
+          "Google Drive: Error releasing lock",
+          blogID,
+          err
+        );
     });
   }
 };
@@ -210,7 +225,9 @@ const validateAllBlogs = async () => {
       // failure was the user trashing or unsharing the folder, sync.js has
       // stored that on the account and send() drops the blog by its health.
       if (!summary) {
-        throw new Error((walkError && walkError.message) || "walk failed (see logs)");
+        throw new Error(
+          (walkError && walkError.message) || "walk failed (see logs)"
+        );
       }
 
       // A walk that skipped files reports a walk error (and the changes it

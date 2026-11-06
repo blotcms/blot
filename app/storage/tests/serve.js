@@ -34,7 +34,9 @@ describe("storage/assets serve", function () {
           .serve(req, res, test.blog.id, req.path, {
             maxAge: "1y",
             immutable: req.query.immutable === "1",
-            headers: req.query.type ? { "Content-Type": req.query.type } : undefined,
+            headers: req.query.type
+              ? { "Content-Type": req.query.type }
+              : undefined,
             dotfiles: req.query.dotfiles,
           })
           .catch(function (err) {
@@ -61,7 +63,9 @@ describe("storage/assets serve", function () {
       expect(res.status).toEqual(200);
       expect(await res.text()).toEqual("png-bytes");
       expect(res.headers.get("content-length")).toEqual("9");
-      expect(res.headers.get("cache-control")).toEqual("public, max-age=31536000, immutable");
+      expect(res.headers.get("cache-control")).toEqual(
+        "public, max-age=31536000, immutable"
+      );
       expect(res.headers.get("etag")).toBeTruthy();
       expect(res.headers.get("last-modified")).toBeTruthy();
       expect(res.headers.get("accept-ranges")).toEqual("bytes");
@@ -72,7 +76,9 @@ describe("storage/assets serve", function () {
 
       var res = await fetch(origin + "/_avatars/a.png");
 
-      expect(res.headers.get("cache-control")).toEqual("public, max-age=31536000");
+      expect(res.headers.get("cache-control")).toEqual(
+        "public, max-age=31536000"
+      );
     });
 
     it("uses the content type the caller gives, else the object's", async function () {
@@ -89,7 +95,9 @@ describe("storage/assets serve", function () {
     it("serves a range", async function () {
       await putS3(this.blog.id, "_assets/a.txt", "0123456789");
 
-      var res = await fetch(origin + "/_assets/a.txt", { headers: { Range: "bytes=2-4" } });
+      var res = await fetch(origin + "/_assets/a.txt", {
+        headers: { Range: "bytes=2-4" },
+      });
 
       expect(res.status).toEqual(206);
       expect(await res.text()).toEqual("234");
@@ -97,11 +105,12 @@ describe("storage/assets serve", function () {
       expect(res.headers.get("content-length")).toEqual("3");
     });
 
-
     it("sends the whole object for a multi-range request, which S3 can't serve", async function () {
       await putS3(this.blog.id, "_assets/a.txt", "0123456789");
 
-      var res = await fetch(origin + "/_assets/a.txt", { headers: { Range: "bytes=0-1,4-5" } });
+      var res = await fetch(origin + "/_assets/a.txt", {
+        headers: { Range: "bytes=0-1,4-5" },
+      });
 
       expect(res.status).toEqual(200);
       expect(await res.text()).toEqual("0123456789");
@@ -109,7 +118,9 @@ describe("storage/assets serve", function () {
     it("rejects a range which can't be satisfied", async function () {
       await putS3(this.blog.id, "_assets/a.txt", "0123456789");
 
-      var res = await fetch(origin + "/_assets/a.txt", { headers: { Range: "bytes=50-60" } });
+      var res = await fetch(origin + "/_assets/a.txt", {
+        headers: { Range: "bytes=50-60" },
+      });
 
       expect(res.status).toEqual(416);
       expect(res.headers.get("content-range")).toEqual("bytes */10");
@@ -121,9 +132,15 @@ describe("storage/assets serve", function () {
       var first = await fetch(origin + "/_assets/a.txt");
       var etag = first.headers.get("etag");
       var modified = first.headers.get("last-modified");
-      var byEtag = await fetch(origin + "/_assets/a.txt", { headers: { "If-None-Match": etag } });
-      var bySince = await fetch(origin + "/_assets/a.txt", { headers: { "If-Modified-Since": modified } });
-      var changed = await fetch(origin + "/_assets/a.txt", { headers: { "If-None-Match": '"other"' } });
+      var byEtag = await fetch(origin + "/_assets/a.txt", {
+        headers: { "If-None-Match": etag },
+      });
+      var bySince = await fetch(origin + "/_assets/a.txt", {
+        headers: { "If-Modified-Since": modified },
+      });
+      var changed = await fetch(origin + "/_assets/a.txt", {
+        headers: { "If-None-Match": '"other"' },
+      });
 
       expect(byEtag.status).toEqual(304);
       expect(byEtag.headers.get("etag")).toEqual(etag);
@@ -146,8 +163,13 @@ describe("storage/assets serve", function () {
     it("responds 404 for what isn't there", async function () {
       await putS3(this.blog.id, "_assets/doc/a.txt", "a");
 
-      expect((await fetch(origin + "/_assets/missing.txt")).status).toEqual(404);
-      expect((await fetch(origin + "/_assets/missing.txt", { method: "HEAD" })).status).toEqual(404);
+      expect((await fetch(origin + "/_assets/missing.txt")).status).toEqual(
+        404
+      );
+      expect(
+        (await fetch(origin + "/_assets/missing.txt", { method: "HEAD" }))
+          .status
+      ).toEqual(404);
       expect((await fetch(origin + "/_assets/doc")).status).toEqual(404);
     });
 
@@ -160,7 +182,9 @@ describe("storage/assets serve", function () {
 
         expect(res.status).toEqual(404);
         expect(await res.text()).not.toContain("folder content");
-        expect((await fetch(origin + path, { method: "HEAD" })).status).toEqual(404);
+        expect((await fetch(origin + path, { method: "HEAD" })).status).toEqual(
+          404
+        );
       }
     });
 
@@ -168,10 +192,10 @@ describe("storage/assets serve", function () {
       await putS3(this.blog.id, "_assets/.hidden", "secret");
 
       expect((await fetch(origin + "/_assets/.hidden")).status).toEqual(200);
-      expect((await fetch(origin + "/_assets/.hidden?dotfiles=ignore")).status).toEqual(404);
+      expect(
+        (await fetch(origin + "/_assets/.hidden?dotfiles=ignore")).status
+      ).toEqual(404);
     });
-
-
 
     it("refuses a relPath which escapes the blog's directory", async function () {
       var test = this;

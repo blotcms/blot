@@ -9,7 +9,7 @@ module.exports = function (router) {
   if (!router || !router.use) {
     throw new Error("router must be an express router");
   }
-  
+
   beforeAll(function (done) {
     this.origin = `http://localhost:${port}`;
 
@@ -19,13 +19,15 @@ module.exports = function (router) {
 
     app.use((req, res, next) => {
       req.headers["host"] = req.headers["x-forwarded-host"];
-      req.headers["X-Forwarded-Proto"] = req.headers["X-Forwarded-Proto"] || "https";
-      req.headers["x-forwarded-proto"] = req.headers["x-forwarded-proto"] || "https";
+      req.headers["X-Forwarded-Proto"] =
+        req.headers["X-Forwarded-Proto"] || "https";
+      req.headers["x-forwarded-proto"] =
+        req.headers["x-forwarded-proto"] || "https";
       next();
     });
 
     app.use(trace.init);
-    app.use(require('request-logger'));
+    app.use(require("request-logger"));
     app.set("trust proxy", true);
     app.disable("x-powered-by");
     app.set("etag", false);
@@ -36,14 +38,14 @@ module.exports = function (router) {
       done();
     });
 
-    server.on('error', (err) => {
+    server.on("error", (err) => {
       console.error("Error starting test server:", err);
       done.fail(err);
     });
   });
 
   // Add this beforeEach hook to define the fetch function
-  beforeEach(function() {
+  beforeEach(function () {
     this.fetch = (input, options = {}) => {
       const url = new URL(input, this.origin);
       const originalProtocol = url.protocol.replace(/:$/, "");
@@ -74,7 +76,8 @@ module.exports = function (router) {
       return fetch(modifiedURL, requestOptions);
     };
 
-    this.checkBrokenLinks = (url = this.origin, options = {}) => checkBrokenLinks(this.fetch, url, options);
+    this.checkBrokenLinks = (url = this.origin, options = {}) =>
+      checkBrokenLinks(this.fetch, url, options);
   });
 
   afterAll(function () {

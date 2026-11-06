@@ -1,7 +1,7 @@
 const moment = require("moment");
 const config = require("config");
 const Blog = require("models/blog");
-const Template = require("models/template");
+require("models/template");
 const getBlogHealth = require("./get-blog-health");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 

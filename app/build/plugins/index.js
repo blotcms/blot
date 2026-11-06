@@ -9,7 +9,6 @@ var deCamelize = require("helper/deCamelize");
 var time = require("helper/time");
 var async = require("async");
 var _ = require("lodash");
-const bluesky = require("./bluesky");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const { GLOBAL_STATIC_SUBDIRECTORIES } = require("blog/lib/staticPaths");
 
@@ -19,13 +18,11 @@ const { GLOBAL_STATIC_SUBDIRECTORIES } = require("blog/lib/staticPaths");
 // CDN, which serves the same paths, through the token the render middleware
 // swaps for the real origin.
 const GLOBAL_STATIC_URL = new RegExp(
-  "url\\((\\s*['\"]?)(" +
-    GLOBAL_STATIC_SUBDIRECTORIES.join("|") +
-    ")/",
+  "url\\((\\s*['\"]?)(" + GLOBAL_STATIC_SUBDIRECTORIES.join("|") + ")/",
   "g"
 );
 
-function cdnGlobalStaticUrls (css) {
+function cdnGlobalStaticUrls(css) {
   return css.replace(GLOBAL_STATIC_URL, "url($1" + BLOT_CDN_TOKEN + "$2/");
 }
 
@@ -63,7 +60,7 @@ var loaded = loadPlugins({
   // Must run last: it bakes any remaining folder-relative href/src/poster/
   // srcset into a versioned CDN URL, so it needs to run after every plugin
   // that could itself introduce a new folder-relative link (e.g. autoImage).
-  folderAssets: require("./folderAssets")
+  folderAssets: require("./folderAssets"),
 });
 
 var list = loaded.list;
@@ -72,7 +69,7 @@ var prerenderers = loaded.prerenderers;
 
 // Takes a string and based on the user's
 // plugins converts it into an HTML string
-function convert (blog, path, contents, callback) {
+function convert(blog, path, contents, callback) {
   ensure(contents, "string")
     .and(path, "string")
     .and(blog, "object")
@@ -91,7 +88,7 @@ function convert (blog, path, contents, callback) {
     handle: blog.handle,
     blogID: blog.id,
     path: path,
-    baseURL: "https://" + blog.handle + "." + config.host
+    baseURL: "https://" + blog.handle + "." + config.host,
   };
 
   async.eachSeries(
@@ -173,7 +170,9 @@ function convert (blog, path, contents, callback) {
             function (err, result) {
               time.end(id);
 
-              const res = Array.isArray(result) ? { newDependencies: result } : result || {};
+              const res = Array.isArray(result)
+                ? { newDependencies: result }
+                : result || {};
 
               if (res.newDependencies) {
                 dependencies = dependencies.concat(res.newDependencies);
@@ -198,7 +197,7 @@ function convert (blog, path, contents, callback) {
 // Load plugin templates,
 // this is currently async but uses
 // a callback for when I need it
-function load (file, blogPlugins, callback) {
+function load(file, blogPlugins, callback) {
   var response = "";
 
   for (var i in blogPlugins) {
@@ -216,7 +215,7 @@ function load (file, blogPlugins, callback) {
   return callback(null, response);
 }
 
-function Enabled (blogPlugins) {
+function Enabled(blogPlugins) {
   var enabled = {};
 
   for (var i in blogPlugins) if (blogPlugins[i].enabled) enabled[i] = true;
@@ -224,11 +223,11 @@ function Enabled (blogPlugins) {
   return enabled;
 }
 
-function isHTML (path) {
+function isHTML(path) {
   return path.slice(-5) === ".html" || path.slice(-4) === ".htm";
 }
 
-function read (name, file) {
+function read(name, file) {
   var path = __dirname + "/" + name + "/" + file;
 
   var contents = "";
@@ -242,7 +241,7 @@ function read (name, file) {
   return contents;
 }
 
-function loadPlugins (plugins) {
+function loadPlugins(plugins) {
   var _list = {};
   var _plugins = [];
   var _prerenderers = [];
@@ -302,18 +301,18 @@ function loadPlugins (plugins) {
     // default plugins for each user
     defaultPlugins[name] = {
       enabled: plugin.isDefault,
-      options: _.cloneDeep(plugin.options || {})
+      options: _.cloneDeep(plugin.options || {}),
     };
   });
 
   return {
     plugins: _plugins,
     prerenderers: _prerenderers,
-    list: _list
+    list: _list,
   };
 }
 
-function Timeout (name, cb) {
+function Timeout(name, cb) {
   return setTimeout(function () {
     console.warn(name + " timed out. Moving to next plugin.");
     cb();
@@ -324,5 +323,5 @@ module.exports = {
   convert: convert,
   load: load,
   list: list,
-  defaultList: defaultPlugins
+  defaultList: defaultPlugins,
 };

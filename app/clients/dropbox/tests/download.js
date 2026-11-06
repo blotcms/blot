@@ -38,9 +38,7 @@ describe("dropbox download", function () {
         expect(contents.toString()).toBe("hello world");
 
         const stat = await folder.stat(blogID, destination);
-        expect(stat.modified).toBeGreaterThanOrEqual(
-          beforeDownload - 1000
-        );
+        expect(stat.modified).toBeGreaterThanOrEqual(beforeDownload - 1000);
 
         done();
       } catch (assertionError) {

@@ -22,7 +22,7 @@ describe("dropbox client", function () {
     try {
       res = await this.client.filesDownload({ path: this.folder + this.path });
     } catch (err) {
-      throw new Error(err);
+      throw new Error(err, { cause: err });
     }
 
     // Check file exists in blog directory in Dropbox

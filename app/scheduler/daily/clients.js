@@ -24,8 +24,10 @@ function buildRows(siteClients) {
     return {
       client,
       sites,
-      percentage: (siteClients.length ? (sites / siteClients.length) * 100 : 0)
-        .toFixed(1) + "%"
+      percentage:
+        (siteClients.length ? (sites / siteClients.length) * 100 : 0).toFixed(
+          1
+        ) + "%",
     };
   });
 
@@ -79,7 +81,7 @@ async function main(callback) {
       .join(", ");
 
     callback(null, {
-      sync_summary: syncSummary || "no sites"
+      sync_summary: syncSummary || "no sites",
     });
   } catch (err) {
     callback(err);

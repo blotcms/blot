@@ -12,7 +12,10 @@ const inFlightByDirPath = new Map();
 async function recursiveList(dirPath, depth = 0) {
   try {
     if (depth > MAX_DEPTH) {
-      console.warn(clfdate(), `Maximum depth ${MAX_DEPTH} reached at ${dirPath}`);
+      console.warn(
+        clfdate(),
+        `Maximum depth ${MAX_DEPTH} reached at ${dirPath}`
+      );
       return;
     }
 

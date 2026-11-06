@@ -22,7 +22,7 @@ describe("dropbox client", function () {
       });
     } catch (err) {
       if (err && err.status === 409) return;
-      throw new Error(err);
+      throw new Error(err, { cause: err });
     }
 
     // Verify file no longer exists on Dropbox

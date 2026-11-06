@@ -70,7 +70,7 @@ var MOMENT_TOKENS = [
   "Z",
   "ZZ",
   "X",
-  "x"
+  "x",
 ];
 var normalize = require("helper/urlNormalizer");
 var allow = [
@@ -84,14 +84,14 @@ var allow = [
   "dateStamp",
   "created",
   "updated",
-  "metadata"
+  "metadata",
 ];
 
 module.exports = function (timeZone, format, entry) {
   // Add the permalink automatically if the metadata
   // declared a page with no permalink set. We can't
   // do this earlier, since we don't know the slug then
-  var permalink = "";
+  var permalink;
   var view = {};
 
   format = format || DEFAULT;

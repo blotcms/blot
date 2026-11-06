@@ -17,7 +17,8 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
   });
 
   afterEach(function () {
-    if (originals[databasePath]) require.cache[databasePath] = originals[databasePath];
+    if (originals[databasePath])
+      require.cache[databasePath] = originals[databasePath];
     else delete require.cache[databasePath];
     delete require.cache[createFolderPath];
     if (originals[createFolderPath])

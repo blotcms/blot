@@ -31,7 +31,8 @@ function parseSiteHost(input) {
     url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
   } catch (err) {
     throw new Error(
-      "Please enter a valid site URL, like https://example.blogspot.com"
+      "Please enter a valid site URL, like https://example.blogspot.com",
+      { cause: err }
     );
   }
 
@@ -268,14 +269,22 @@ module.exports = async function parse(xml, siteHost) {
     const kind = entryKind(atomEntry);
 
     // An export also contains comments and Blogger's internal configuration.
-    if ((kind !== "post" && kind !== "page") || isDraft(atomEntry) || isTrashed(atomEntry))
+    if (
+      (kind !== "post" && kind !== "page") ||
+      isDraft(atomEntry) ||
+      isTrashed(atomEntry)
+    )
       continue;
 
     const permalink = entryPermalink(atomEntry);
     const rawTitle = value(atomEntry.title && atomEntry.title[0]).trim();
     const slug = permalinkSlug(permalink);
-    const published = Date.parse(value(atomEntry.published && atomEntry.published[0]));
-    const updated = Date.parse(value(atomEntry.updated && atomEntry.updated[0]));
+    const published = Date.parse(
+      value(atomEntry.published && atomEntry.published[0])
+    );
+    const updated = Date.parse(
+      value(atomEntry.updated && atomEntry.updated[0])
+    );
 
     entries.push({
       id: value(atomEntry.id && atomEntry.id[0]),

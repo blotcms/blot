@@ -29,7 +29,11 @@ describe("scripts/storage/rebuild-file-index", function () {
 
     expect(result.files).toEqual(2);
     expect(await folder.exists(this.blog.id, "/a.txt")).toBe(true);
-    expect((await folder.read(this.blog.id, "/posts/b.md")).toString()).toEqual("# B");
-    expect((await folder.stat(this.blog.id, "/posts/b.md", { sha1: true })).sha1).toEqual(before.sha1);
+    expect((await folder.read(this.blog.id, "/posts/b.md")).toString()).toEqual(
+      "# B"
+    );
+    expect(
+      (await folder.stat(this.blog.id, "/posts/b.md", { sha1: true })).sha1
+    ).toEqual(before.sha1);
   });
 });
