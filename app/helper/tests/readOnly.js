@@ -161,7 +161,7 @@ describe("readOnly", function () {
       return req.get("x-denied") === "yes";
     }
 
-    beforeEach(function (done) {
+    beforeEach(async function () {
       seen = [];
 
       const app = Express();
@@ -177,14 +177,15 @@ describe("readOnly", function () {
         res.send("handled");
       });
 
-      server = app.listen(0, function () {
-        origin = "http://127.0.0.1:" + server.address().port;
-        done();
-      });
+      server = app.listen(0);
+      await new Promise((resolve) => server.once("listening", resolve));
+      origin = "http://127.0.0.1:" + server.address().port;
     });
 
-    afterEach(function (done) {
-      server.close(done);
+    afterEach(async function () {
+      await new Promise((resolve, reject) =>
+        server.close((err) => (err ? reject(err) : resolve()))
+      );
     });
 
     describe("rejectWrites", function () {

@@ -3,17 +3,14 @@ describe("Blog.remove", function () {
   var remove = require("../remove");
   var getAllIDs = require("../getAllIDs");
   var redisSearch = require("helper/redisSearch");
+  var { promisify } = require("util");
 
   // Create a test user and blog before each spec
   global.test.user();
 
-  beforeEach(function (done) {
-    var test = this;
-    create(test.user.uid, { handle: "exampleblog" }, function (err, blog) {
-      if (err || !blog) return done.fail(err || new Error("No blog"));
-      test.blog = blog;
-      done();
-    });
+  beforeEach(async function () {
+    this.blog = await create(this.user.uid, { handle: "exampleblog" });
+    if (!this.blog) throw new Error("No blog");
   });
 
   it("removes a blog", function (done) {
@@ -22,73 +19,49 @@ describe("Blog.remove", function () {
     remove(test.blog.id, done);
   });
 
-  it("removes a blog", function (done) {
-    var test = this;
+  it("removes a blog", async function () {
+    await remove(this.blog.id);
 
-    remove(test.blog.id, function (err) {
-      if (err) return done.fail(err);
-      redisSearch(test.blog.id, function (err, results) {
-        if (err) return done.fail(err);
+    const results = await promisify(redisSearch)(this.blog.id);
 
-        expect(results).toEqual([]);
-        done();
-      });
-    });
+    expect(results).toEqual([]);
   });
 
-  it("removes the blog's folder and nothing beside it", function (done) {
-    var test = this;
+  it("removes the blog's folder and nothing beside it", async function () {
     var folder = require("storage/folder");
-    var otherID = test.blog.id + "0";
+    var otherID = this.blog.id + "0";
 
-    Promise.all([
-      folder.write(test.blog.id, "/posts/a.txt", "Hello"),
+    await Promise.all([
+      folder.write(this.blog.id, "/posts/a.txt", "Hello"),
       folder.write(otherID, "/b.txt", "Other"),
-    ]).then(function () {
-      remove(test.blog.id, function (err) {
-        if (err) return done.fail(err);
+    ]);
 
-        Promise.all([
-          folder.exists(test.blog.id, "/posts/a.txt"),
-          folder.listNames(test.blog.id, "/").catch(function () {
-            return [];
-          }),
-          folder.exists(otherID, "/b.txt"),
-        ])
-          .then(function (found) {
-            return folder.removeAll(otherID).then(function () {
-              expect(found[0]).toBe(false);
-              expect(found[1]).toEqual([]);
-              expect(found[2]).toBe(true);
-              done();
-            });
-          })
-          .catch(done.fail);
-      });
-    }, done.fail);
+    await remove(this.blog.id);
+
+    const found = await Promise.all([
+      folder.exists(this.blog.id, "/posts/a.txt"),
+      folder.listNames(this.blog.id, "/").catch(function () {
+        return [];
+      }),
+      folder.exists(otherID, "/b.txt"),
+    ]);
+
+    await folder.removeAll(otherID);
+
+    expect(found[0]).toBe(false);
+    expect(found[1]).toEqual([]);
+    expect(found[2]).toBe(true);
   });
 
-  it("removes a blog which has no folder", function (done) {
-    var test = this;
-
-    require("storage/folder")
-      .removeAll(test.blog.id)
-      .then(function () {
-        remove(test.blog.id, done);
-      }, done.fail);
+  it("removes a blog which has no folder", async function () {
+    await require("storage/folder").removeAll(this.blog.id);
+    await remove(this.blog.id);
   });
 
-  it("removes a blog from list of all blogs", function (done) {
-    var test = this;
+  it("removes a blog from list of all blogs", async function () {
+    const blog = await remove(this.blog.id);
 
-    remove(test.blog.id, function (err, blog) {
-      if (err) return done.fail(err);
-
-      getAllIDs(function (err, ids) {
-        expect(ids).not.toContain(blog.id);
-        done();
-      });
-    });
+    expect(await getAllIDs()).not.toContain(blog.id);
   });
 
   it("leaves the folder lock to a sync which still holds it", async function () {
@@ -97,12 +70,7 @@ describe("Blog.remove", function () {
     var lost = jasmine.createSpy("onCompromised");
     var held = await folderLock.lock(blogID, { onCompromised: lost });
 
-    await new Promise(function (resolve, reject) {
-      remove(blogID, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await remove(blogID);
 
     expect((await folderLock.inspect(blogID)).held).toBe(true);
 

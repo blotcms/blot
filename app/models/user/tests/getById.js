@@ -1,8 +1,6 @@
 var client = require("models/client");
 var key = require("../key");
 var getById = require("../getById");
-var promisify = require("util").promisify;
-var get = promisify(getById);
 
 describe("user getById", function () {
   var uid = "user_getbyid_test";
@@ -27,13 +25,13 @@ describe("user getById", function () {
   });
 
   it("returns null for non-existent user", async function () {
-    var result = await get("user_nonexistent");
+    var result = await getById("user_nonexistent");
     expect(result).toBeNull();
   });
 
   it("retrieves a user by uid", async function () {
     await client.set(key.user(uid), JSON.stringify(validUser));
-    var result = await get(uid);
+    var result = await getById(uid);
     expect(result.uid).toEqual(uid);
     expect(result.email).toEqual("getbyid@example.com");
   });
@@ -44,14 +42,14 @@ describe("user getById", function () {
       welcomeEmailSent: false,
     });
     await client.set(key.user(uid), JSON.stringify(userWithValues));
-    var result = await get(uid);
+    var result = await getById(uid);
     expect(result.created).toBe(1234567890);
     expect(result.welcomeEmailSent).toBe(false);
   });
 
   it("returns error for invalid JSON", async function () {
     await client.set(key.user(uid), "not valid json");
-    var error = await get(uid).then(
+    var error = await getById(uid).then(
       function () {
         return null;
       },
@@ -65,7 +63,7 @@ describe("user getById", function () {
 
   it("returns error for JSON that is not an object", async function () {
     await client.set(key.user(uid), JSON.stringify("string value"));
-    var error = await get(uid).then(
+    var error = await getById(uid).then(
       function () {
         return null;
       },
