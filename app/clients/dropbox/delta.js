@@ -279,9 +279,8 @@ async function injectCaseOnlyDeletes(entries, blogID, client) {
 // property relative_path to each change. This property refers to
 // the path the change relative to the folder for this blog.
 module.exports = function delta(client, folderID, blogID) {
-  function get(cursor, callback) {
+  async function get(cursor) {
     var requests = [];
-    var result = {};
 
     if (cursor) {
       // We pass in a tag which tells Dropbox what we know
@@ -312,9 +311,10 @@ module.exports = function delta(client, folderID, blogID) {
       requests.push(client.filesGetMetadata({ path: folderID }));
     }
 
-    Promise.all(requests)
-      .then(async function (results) {
-        result = results[0].result;
+    try {
+      try {
+        const results = await Promise.all(requests);
+        const result = results[0].result;
 
         if (results[1]) {
           result.path_display = results[1].result.path_display;
@@ -372,44 +372,38 @@ module.exports = function delta(client, folderID, blogID) {
           return !isDotfileOrDotfolder(entry.relative_path);
         });
 
-        callback(null, result);
-      })
+        return result;
+      } catch (err) {
+        // Handle 429 Errors from Dropbox which ask us
+        // to wait a certain number of seconds before retrying
+        await waitForErrorTimeout(err);
+      }
+    } catch (err) {
+      var message, error;
 
-      // Handle 429 Errors from Dropbox which ask us
-      // to wait a certain number of seconds before retrying
-      .catch(waitForErrorTimeout)
+      // Professional programmers wrote this SDK
+      // Anyway, reset typically means the folder
+      // has moved and we need to reset the cursor
+      // and sync from scratch.
+      if (err.error && err.error.error && err.error.error[".tag"] === "reset") {
+        cursor = "";
+        return get(cursor);
+      }
 
-      .catch(function (err) {
-        var message, error;
+      // Determine the error message to pass back
+      // to sync. We might show this to the user.
+      if (err.status === 409) {
+        message = "Your folder no longer exists";
+      } else {
+        message = "Failed to fetch changes from Dropbox";
+      }
 
-        // Professional programmers wrote this SDK
-        // Anyway, reset typically means the folder
-        // has moved and we need to reset the cursor
-        // and sync from scratch.
-        if (
-          err.error &&
-          err.error.error &&
-          err.error.error[".tag"] === "reset"
-        ) {
-          cursor = "";
-          return get(cursor, callback);
-        }
+      error = new Error(message);
+      error.status = err.status || 400;
 
-        // Determine the error message to pass back
-        // to sync. We might show this to the user.
-        if (err.status === 409) {
-          message = "Your folder no longer exists";
-        } else {
-          message = "Failed to fetch changes from Dropbox";
-        }
-
-        error = new Error(message);
-        error.status = err.status || 400;
-
-        callback(error, null);
-      });
+      throw error;
+    }
   }
 
-  // Removed the timeout since it
   return retry(get);
 };

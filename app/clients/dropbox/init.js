@@ -8,7 +8,7 @@ const email = require("helper/email");
 const syncReport = require("clients/util/syncReport");
 const resetToBlot = require("./sync/reset-to-blot");
 const { transferIncomplete } = require("./util/constants");
-const { get: getAccount } = require("./database");
+const { get: getDropboxAccount } = require("./database");
 const getHealth = require("./getHealth");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
@@ -17,7 +17,6 @@ const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
 const getAllIDs = promisify(Blog.getAllIDs);
 const getBlog = promisify(Blog.get);
-const getDropboxAccount = promisify(getAccount);
 // getAllTotal, not getTotal - Fix()'s entry-ghosts (Entries.each) scans the
 // "all" list (drafts/pages/scheduled/deleted included), not just published
 // "entries", so getTotal would under-count the workload this field tracks.

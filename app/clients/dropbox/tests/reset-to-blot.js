@@ -75,17 +75,14 @@ describe("dropbox resetToBlot", function () {
     };
     require.cache[databasePath] = {
       exports: {
-        set: function (_blogID, values, callback) {
+        set: async function (_blogID, values) {
           saved.push(values);
-          callback(null);
         },
       },
     };
     require.cache[downloadPath] = {
-      exports: function (_client, source, id, destination, callback) {
-        storage
-          .write(id, destination, "hello")
-          .then(() => callback(null), callback);
+      exports: function (_client, source, id, destination) {
+        return storage.write(id, destination, "hello");
       },
     };
     delete require.cache[resetPath];
@@ -828,9 +825,8 @@ describe("dropbox resetToBlot", function () {
       };
       require.cache[databasePath] = {
         exports: {
-          set: function (_blogID, values, callback) {
+          set: async function (_blogID, values) {
             saved.push(values);
-            callback(null);
           },
         },
       };

@@ -2,7 +2,6 @@ const folder = require("storage/folder");
 const { v4: uuid } = require("uuid");
 const clfdate = require("helper/clfdate");
 const retry = require("./retry");
-const callOnce = require("helper/callOnce");
 
 const TIMEOUT = 30 * 1000; // 30 seconds
 const {
@@ -11,7 +10,7 @@ const {
   exceedsFilesystemPathLimits,
 } = require("./constants");
 
-async function download(client, source, blogID, destination, callback) {
+async function download(client, source, blogID, destination) {
   const id = uuid();
   const prefix = () =>
     clfdate() + " clients:dropbox:download:" + id.slice(0, 6);
@@ -30,23 +29,19 @@ async function download(client, source, blogID, destination, callback) {
     );
     const err = new Error("Destination path exceeds filesystem limit");
     err.code = "ENAMETOOLONG";
-    return callback(err);
+    throw err;
   }
 
-  const timeout = setTimeout(function () {
-    timedOut = true;
-    console.log(prefix(), "reached timeout for download");
-    cleanup(new Error("Timeout reached for download"));
-  }, TIMEOUT);
-
-  // Otherwise the timeout triggers a double callback
-  const cleanup = callOnce(function (err) {
-    clearTimeout(timeout);
-    console.log(prefix(), "calling back with err = ", err);
-    callback(err);
+  let timeout;
+  const timeoutReached = new Promise(function (resolve, reject) {
+    timeout = setTimeout(function () {
+      timedOut = true;
+      console.log(prefix(), "reached timeout for download");
+      reject(new Error("Timeout reached for download"));
+    }, TIMEOUT);
   });
 
-  try {
+  const transfer = (async function () {
     const { result: metadata } = await client.filesGetMetadata({
       path: source,
     });
@@ -61,8 +56,7 @@ async function download(client, source, blogID, destination, callback) {
         metadataPath
       );
       await folder.write(blogID, destination, "");
-      if (timedOut) return;
-      return cleanup();
+      return;
     }
 
     if (metadata.size > MAX_FILE_SIZE) {
@@ -74,20 +68,29 @@ async function download(client, source, blogID, destination, callback) {
         MAX_FILE_SIZE
       );
       await folder.write(blogID, destination, "");
-      if (timedOut) return;
-      return cleanup();
+      return;
     }
 
     const { result } = await client.filesDownload({ path: source });
     if (timedOut) return;
     await folder.write(blogID, destination, result.fileBinary);
-    if (timedOut) return;
-  } catch (err) {
-    return cleanup(err);
-  }
+  })();
 
-  if (timedOut) return;
-  cleanup();
+  // After a timeout the transfer is abandoned, and whatever it ends with
+  // is not reported
+  transfer.catch(function () {});
+
+  let failure;
+
+  try {
+    await Promise.race([transfer, timeoutReached]);
+  } catch (err) {
+    failure = err;
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+    console.log(prefix(), "calling back with err = ", failure);
+  }
 }
 
 module.exports = retry(download);

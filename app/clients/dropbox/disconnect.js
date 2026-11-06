@@ -1,4 +1,4 @@
-var createClient = require("./util/createClient");
+var loadClient = require("./util/loadClient");
 var database = require("./database");
 var Blog = require("models/blog");
 var debug = require("debug")("blot:clients:dropbox");
@@ -14,58 +14,60 @@ module.exports = function disconnect(blogID, callback) {
   Sync(blogID, function (err, folder, done) {
     if (err) return callback(err);
 
-    debug("getting account info");
-    createClient(blogID, async function (err, client, account) {
-      // Invalid credentials might cause an error here
-      // we still want to be able to disconnect
-      if (err) debug("error createClient", err);
-
-      folder.status("Disconnecting from Dropbox");
-
-      debug("resetting client setting");
-      Blog.set(blogID, { client: "" }, function (err) {
-        if (err) return done(err, callback);
-
-        debug("dropping blog from database");
-
-        folder.status("Removing Dropbox credentials");
-        database.drop(blogID, function (err) {
-          if (err) return done(err, callback);
-
-          if (!account) {
-            debug("the user chose Dropbox but did not connect their account");
-            return done(null, callback);
-          }
-
-          if (!client) {
-            debug("the user does not have a valid dropbox account");
-            return done(null, callback);
-          }
-
-          debug("listing blogs with this account", account.account_id);
-          database.listBlogs(account.account_id, function (err, blogs) {
-            if (err) return done(err, callback);
-
-            // check if this is the last blog using this oauth token
-            // then revoke it as needed.
-            if (blogs.length) {
-              return done(null, callback);
-            }
-
-            client
-              .authTokenRevoke()
-              .then(function () {
-                debug("token revoked successfully");
-                done(null, callback);
-              })
-              .catch(function (err) {
-                // you get an error revoking a revoked token
-                debug("token failed to revoke", err);
-                done(null, callback);
-              });
-          });
-        });
-      });
-    });
+    // The sync engine's done is never awaited or returned: it releases the
+    // lock and calls back, and a rejection from the callback must stay
+    // unhandled (the process dies and the lock is released).
+    remove(blogID, folder).then(
+      function () {
+        done(null, callback);
+      },
+      function (err) {
+        done(err, callback);
+      }
+    );
   });
 };
+
+async function remove(blogID, folder) {
+  debug("getting account info");
+  const { error, client, account } = await loadClient(blogID);
+
+  // Invalid credentials might cause an error here
+  // we still want to be able to disconnect
+  if (error) debug("error createClient", error);
+
+  folder.status("Disconnecting from Dropbox");
+
+  debug("resetting client setting");
+  await Blog.set(blogID, { client: "" });
+
+  debug("dropping blog from database");
+
+  folder.status("Removing Dropbox credentials");
+  await database.drop(blogID);
+
+  if (!account) {
+    debug("the user chose Dropbox but did not connect their account");
+    return;
+  }
+
+  if (!client) {
+    debug("the user does not have a valid dropbox account");
+    return;
+  }
+
+  debug("listing blogs with this account", account.account_id);
+  const blogs = await database.listBlogs(account.account_id);
+
+  // check if this is the last blog using this oauth token
+  // then revoke it as needed.
+  if (blogs.length) return;
+
+  try {
+    await client.authTokenRevoke();
+    debug("token revoked successfully");
+  } catch (err) {
+    // you get an error revoking a revoked token
+    debug("token failed to revoke", err);
+  }
+}
