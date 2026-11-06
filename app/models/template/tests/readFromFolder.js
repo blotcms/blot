@@ -5,7 +5,9 @@ describe("template", function () {
   var create = require("../index").create;
   var readFromFolder = require("../index").readFromFolder;
   var setView = require("../index").setView;
-  var getViewByURL = require("../index").getViewByURL;
+  var getViewByURL = require("helper/withCallback")(
+    require("../index").getViewByURL
+  );
 
   require("./setup")({ createTemplate: true });
 
