@@ -237,235 +237,213 @@ module.exports = async (
   { id, md5Checksum, mimeType },
   { serviceAccountId, folderId, skipHotEnqueue } = {}
 ) => {
-  // eslint-disable-next-line no-async-promise-executor -- settle() guards every exit
-  return new Promise(async function (resolve, reject) {
-    const tempPath = join(tempDir, guid());
-    let settled = false;
-    const settle = (action) => {
-      if (settled) return;
-      settled = true;
-      action();
-    };
+  const tempPath = join(tempDir, guid());
 
-    const handleExportSizeLimit = async (err) => {
-      if (!isExportSizeLimitError(err)) {
-        return false;
-      }
-
-      debug("EXPORT size limit exceeded for file", path);
-
-      if (mimeType === "application/vnd.google-apps.document") {
-        try {
-          const fileMetadata = await drive.files.get({
-            fileId: id,
-            fields: "exportLinks,id,mimeType,modifiedTime",
-            supportsAllDrives: true,
-          });
-          const exportLinks = fileMetadata?.data?.exportLinks;
-          const zipExportUrl = exportLinks?.["application/zip"];
-
-          if (!zipExportUrl) {
-            debug(
-              "ZIP export fallback unavailable: no application/zip exportLink",
-              { fileId: id }
-            );
-          } else {
-            try {
-              const zipStream = await fetchZipExportStreamFromExportLink(
-                drive,
-                zipExportUrl
-              );
-
-              await downloadGoogleDocAsZip({
-                drive,
-                id,
-                path,
-                blogID,
-                zipStream,
-              });
-
-              debug("ZIP export fallback download SUCCEEDED");
-              return "downloadedZipFallback";
-            } catch (zipDownloadError) {
-              debug("ZIP export fallback download failed", {
-                fileId: id,
-                error: zipDownloadError?.message || zipDownloadError,
-              });
-            }
-          }
-        } catch (metadataError) {
-          debug("Failed to fetch exportLinks for ZIP export fallback", {
-            fileId: id,
-            error: metadataError?.message || metadataError,
-          });
-        }
-      }
-
-      await ensurePlaceholder(blogID, path);
-      debug("   created empty file at:", colors.green(path));
-      return "placeholder";
-    };
-    try {
-      if (
-        !skipHotEnqueue &&
-        id &&
-        mimeType === "application/vnd.google-apps.document"
-      ) {
-        let accountServiceAccountId = serviceAccountId;
-        let accountFolderId = folderId;
-
-        if (!accountServiceAccountId || !accountFolderId) {
-          const account = await database.blog.get(blogID);
-          accountServiceAccountId =
-            accountServiceAccountId || account?.serviceAccountId;
-          accountFolderId = accountFolderId || account?.folderId;
-        }
-
-        if (accountServiceAccountId && accountFolderId) {
-          hotDocPoller
-            .enqueue({
-              blogID,
-              serviceAccountId: accountServiceAccountId,
-              fileId: id,
-              folderId: accountFolderId,
-            })
-            .catch((err) => {
-              debug("hotDocPoller enqueue failed", err?.message || err);
-            });
-        }
-      }
-
-      if (mimeType === "application/vnd.google-apps.folder") {
-        await folder.mkdir(blogID, path);
-        debug("MKDIR folder");
-        debug("   to:", colors.green(path));
-        return resolve({ updated: false });
-      }
-
-      // create an empty placeholder file for Google App files
-      // which are not Documents, e.g. Google Sheets, Slides, etc.
-      // this is to avoid downloading them, which would fail
-      // because they are not downloadable in the same way as regular files
-      if (
-        mimeType.startsWith("application/vnd.google-apps.") &&
-        mimeType !== "application/vnd.google-apps.document"
-      ) {
-        await ensurePlaceholder(blogID, path);
-        debug(
-          "SKIP download of file because it is a Google App file type",
-          mimeType
-        );
-        debug("   created empty file at:", colors.green(path));
-        return resolve({ updated: false });
-      }
-
-      const verifiedContent = await verifyOnBlot(blogID, path, md5Checksum);
-
-      if (verifiedContent) {
-        debug("DOWNLOAD file skipped because md5Checksum matches");
-        debug("      path:", path);
-        debug("   locally:", verifiedContent.checksum);
-        debug("    remote:", md5Checksum);
-        return resolve({ updated: false, verifiedContent });
-      }
-
-      debug("DOWNLOAD file");
-      debug("   to:", colors.green(path));
-
-      if (mimeType === "application/vnd.google-apps.document") {
-        try {
-          debug("getting Google Doc as zip from Drive");
-          await downloadGoogleDocAsZip({
-            drive,
-            id,
-            path,
-            blogID,
-          });
-          debug("DOWNLOAD file SUCCEEDED");
-          return resolve({ updated: true });
-        } catch (err) {
-          const handled = await handleExportSizeLimit(err);
-          if (handled === "downloadedZipFallback") {
-            return settle(() => resolve({ updated: true }));
-          }
-          if (handled === "placeholder") {
-            return settle(() =>
-              resolve({
-                updated: false,
-                skippedReason: "exportSizeLimitExceeded",
-              })
-            );
-          }
-          return settle(() => reject(err));
-        }
-      }
-
-      debug("getting file from Drive");
-      let data;
-
-      // e.g. google docs, sheets, slides
-      if (mimeType === "application/vnd.google-apps.document") {
-        const res = await drive.files.export(
-          {
-            fileId: id,
-            mimeType: "text/html",
-            supportsAllDrives: true,
-          },
-          {
-            responseType: "stream",
-          }
-        );
-
-        data = res.data;
-      } else {
-        const res = await drive.files.get(
-          { fileId: id, alt: "media", supportsAllDrives: true },
-          { responseType: "stream" }
-        );
-        data = res.data;
-      }
-
-      debug("got file from Drive");
-
-      // Source end can precede the final disk write. Pipeline waits for the
-      // destination and destroys both streams on error before we publish.
-      await streamToFile(data, tempPath);
-      const hashes = md5Checksum
-        ? await verifyContent(tempPath, md5Checksum)
-        : null;
-      if (md5Checksum && !hashes) {
-        throw new Error(
-          "Downloaded content does not match the listed Drive checksum"
-        );
-      }
-      await folder.writeFrom(blogID, path, tempPath, { move: true });
-      // Publication has succeeded. A concurrent local write (or stat failure)
-      // must not suppress the caller's rebuild; simply decline to cache it.
-      const verified = await verifyPublished(blogID, path, hashes).catch(
-        () => null
-      );
-      settle(() => resolve({ updated: true, verifiedContent: verified }));
-    } catch (e) {
-      debug("download error", e);
-      await fs.remove(tempPath).catch(() => {});
-      let handled;
-      try {
-        handled = await handleExportSizeLimit(e);
-      } catch (fallbackError) {
-        return settle(() => reject(fallbackError));
-      }
-      if (handled === "downloadedZipFallback") {
-        return settle(() => resolve({ updated: true }));
-      }
-      if (handled === "placeholder") {
-        return settle(() =>
-          resolve({
-            updated: false,
-            skippedReason: "exportSizeLimitExceeded",
-          })
-        );
-      }
-      settle(() => reject(e));
+  const handleExportSizeLimit = async (err) => {
+    if (!isExportSizeLimitError(err)) {
+      return false;
     }
-  });
+
+    debug("EXPORT size limit exceeded for file", path);
+
+    if (mimeType === "application/vnd.google-apps.document") {
+      try {
+        const fileMetadata = await drive.files.get({
+          fileId: id,
+          fields: "exportLinks,id,mimeType,modifiedTime",
+          supportsAllDrives: true,
+        });
+        const exportLinks = fileMetadata?.data?.exportLinks;
+        const zipExportUrl = exportLinks?.["application/zip"];
+
+        if (!zipExportUrl) {
+          debug(
+            "ZIP export fallback unavailable: no application/zip exportLink",
+            { fileId: id }
+          );
+        } else {
+          try {
+            const zipStream = await fetchZipExportStreamFromExportLink(
+              drive,
+              zipExportUrl
+            );
+
+            await downloadGoogleDocAsZip({
+              drive,
+              id,
+              path,
+              blogID,
+              zipStream,
+            });
+
+            debug("ZIP export fallback download SUCCEEDED");
+            return "downloadedZipFallback";
+          } catch (zipDownloadError) {
+            debug("ZIP export fallback download failed", {
+              fileId: id,
+              error: zipDownloadError?.message || zipDownloadError,
+            });
+          }
+        }
+      } catch (metadataError) {
+        debug("Failed to fetch exportLinks for ZIP export fallback", {
+          fileId: id,
+          error: metadataError?.message || metadataError,
+        });
+      }
+    }
+
+    await ensurePlaceholder(blogID, path);
+    debug("   created empty file at:", colors.green(path));
+    return "placeholder";
+  };
+  try {
+    if (
+      !skipHotEnqueue &&
+      id &&
+      mimeType === "application/vnd.google-apps.document"
+    ) {
+      let accountServiceAccountId = serviceAccountId;
+      let accountFolderId = folderId;
+
+      if (!accountServiceAccountId || !accountFolderId) {
+        const account = await database.blog.get(blogID);
+        accountServiceAccountId =
+          accountServiceAccountId || account?.serviceAccountId;
+        accountFolderId = accountFolderId || account?.folderId;
+      }
+
+      if (accountServiceAccountId && accountFolderId) {
+        hotDocPoller
+          .enqueue({
+            blogID,
+            serviceAccountId: accountServiceAccountId,
+            fileId: id,
+            folderId: accountFolderId,
+          })
+          .catch((err) => {
+            debug("hotDocPoller enqueue failed", err?.message || err);
+          });
+      }
+    }
+
+    if (mimeType === "application/vnd.google-apps.folder") {
+      await folder.mkdir(blogID, path);
+      debug("MKDIR folder");
+      debug("   to:", colors.green(path));
+      return { updated: false };
+    }
+
+    // create an empty placeholder file for Google App files
+    // which are not Documents, e.g. Google Sheets, Slides, etc.
+    // this is to avoid downloading them, which would fail
+    // because they are not downloadable in the same way as regular files
+    if (
+      mimeType.startsWith("application/vnd.google-apps.") &&
+      mimeType !== "application/vnd.google-apps.document"
+    ) {
+      await ensurePlaceholder(blogID, path);
+      debug(
+        "SKIP download of file because it is a Google App file type",
+        mimeType
+      );
+      debug("   created empty file at:", colors.green(path));
+      return { updated: false };
+    }
+
+    const verifiedContent = await verifyOnBlot(blogID, path, md5Checksum);
+
+    if (verifiedContent) {
+      debug("DOWNLOAD file skipped because md5Checksum matches");
+      debug("      path:", path);
+      debug("   locally:", verifiedContent.checksum);
+      debug("    remote:", md5Checksum);
+      return { updated: false, verifiedContent };
+    }
+
+    debug("DOWNLOAD file");
+    debug("   to:", colors.green(path));
+
+    if (mimeType === "application/vnd.google-apps.document") {
+      try {
+        debug("getting Google Doc as zip from Drive");
+        await downloadGoogleDocAsZip({
+          drive,
+          id,
+          path,
+          blogID,
+        });
+        debug("DOWNLOAD file SUCCEEDED");
+        return { updated: true };
+      } catch (err) {
+        const handled = await handleExportSizeLimit(err);
+        if (handled === "downloadedZipFallback") {
+          return { updated: true };
+        }
+        if (handled === "placeholder") {
+          return { updated: false, skippedReason: "exportSizeLimitExceeded" };
+        }
+        // Not thrown: the outer catch below must not see an error that was
+        // already handled here
+        return Promise.reject(err);
+      }
+    }
+
+    debug("getting file from Drive");
+    let data;
+
+    // e.g. google docs, sheets, slides
+    if (mimeType === "application/vnd.google-apps.document") {
+      const res = await drive.files.export(
+        {
+          fileId: id,
+          mimeType: "text/html",
+          supportsAllDrives: true,
+        },
+        {
+          responseType: "stream",
+        }
+      );
+
+      data = res.data;
+    } else {
+      const res = await drive.files.get(
+        { fileId: id, alt: "media", supportsAllDrives: true },
+        { responseType: "stream" }
+      );
+      data = res.data;
+    }
+
+    debug("got file from Drive");
+
+    // Source end can precede the final disk write. Pipeline waits for the
+    // destination and destroys both streams on error before we publish.
+    await streamToFile(data, tempPath);
+    const hashes = md5Checksum
+      ? await verifyContent(tempPath, md5Checksum)
+      : null;
+    if (md5Checksum && !hashes) {
+      throw new Error(
+        "Downloaded content does not match the listed Drive checksum"
+      );
+    }
+    await folder.writeFrom(blogID, path, tempPath, { move: true });
+    // Publication has succeeded. A concurrent local write (or stat failure)
+    // must not suppress the caller's rebuild; simply decline to cache it.
+    const verified = await verifyPublished(blogID, path, hashes).catch(
+      () => null
+    );
+    return { updated: true, verifiedContent: verified };
+  } catch (e) {
+    debug("download error", e);
+    await fs.remove(tempPath).catch(() => {});
+    const handled = await handleExportSizeLimit(e);
+    if (handled === "downloadedZipFallback") {
+      return { updated: true };
+    }
+    if (handled === "placeholder") {
+      return { updated: false, skippedReason: "exportSizeLimitExceeded" };
+    }
+    throw e;
+  }
 };
