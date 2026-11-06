@@ -1,9 +1,14 @@
 var fourOhFour = require("models/404");
 var List = fourOhFour.list;
 
-module.exports = function (req, res, next) {
-  List(req.blog.id, function (err, list, ignored) {
-    if (err) return next(err);
+module.exports = async function (req, res, next) {
+  try {
+    var [list, ignored] = await new Promise((resolve, reject) => {
+      List(req.blog.id, (err, list, ignored) => {
+        if (err) return reject(err);
+        resolve([list, ignored]);
+      });
+    });
 
     var has_ignored;
 
@@ -28,5 +33,7 @@ module.exports = function (req, res, next) {
     res.locals.ignored = ignored;
 
     next();
-  });
+  } catch (err) {
+    next(err);
+  }
 };

@@ -1,5 +1,4 @@
 const Template = require("models/template");
-const withCallback = require("helper/withCallback");
 
 const hasFaviconLocal = (value) => {
   if (!value || typeof value !== "object") return false;
@@ -18,16 +17,16 @@ const templateSupportsFavicon = (template, views) => {
   );
 };
 
-module.exports = function loadFavicon(req, res, next) {
-  res.locals.favicon = req.template.locals.favicon || null;
+module.exports = async function loadFavicon(req, res, next) {
+  try {
+    res.locals.favicon = req.template.locals.favicon || null;
 
-  if (hasFaviconLocal(req.template.locals)) {
-    res.locals.favicon_supported = true;
-    return next();
-  }
+    if (hasFaviconLocal(req.template.locals)) {
+      res.locals.favicon_supported = true;
+      return next();
+    }
 
-  withCallback(Template.getAllViews)(req.template.id, function (err, result) {
-    if (err) return next(err);
+    const result = await Template.getAllViews(req.template.id);
 
     res.locals.favicon_supported = templateSupportsFavicon(
       req.template,
@@ -35,7 +34,9 @@ module.exports = function loadFavicon(req, res, next) {
     );
 
     next();
-  });
+  } catch (err) {
+    next(err);
+  }
 };
 
 module.exports.hasFaviconLocal = hasFaviconLocal;

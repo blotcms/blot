@@ -2,14 +2,12 @@ var config = require("config");
 var Template = require("models/template");
 var makeSlug = require("helper/makeSlug");
 
-const getMetadata = (templateID) => {
-  return new Promise((resolve, reject) => {
-    Template.getMetadata(templateID, (err, template) => {
-      if (err || !template) return resolve(null);
-      resolve(template);
-    });
-  });
-};
+// A failed read is the same as no template
+const getMetadata = (templateID) =>
+  Template.getMetadata(templateID).then(
+    (template) => template || null,
+    () => null
+  );
 
 // /template and /template-folder mount the same router (see
 // app/dashboard/site/index.js) — a template the blog has moved into its

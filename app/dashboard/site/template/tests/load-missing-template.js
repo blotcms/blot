@@ -13,8 +13,8 @@ describe("template loader", function () {
     const slugParam = "Missing Template";
     const expectedSlug = makeSlug(slugParam);
 
-    spyOn(Template, "getMetadata").and.callFake(function (_id, callback) {
-      callback(null, null);
+    spyOn(Template, "getMetadata").and.callFake(async function () {
+      return null;
     });
 
     const req = {
@@ -58,19 +58,16 @@ describe("template loader", function () {
     const packageName = "Jolly-5";
 
     spyOn(Template, "getMetadata").and.callFake(
-      function (id, callback) {
-        callback(
-          null,
-          id === Template.makeID(this.blog.id, folderName)
-            ? {
-                owner: this.blog.id,
-                id: Template.makeID(this.blog.id, folderName),
-                slug: folderName,
-                name: packageName,
-                localEditing: true,
-              }
-            : null
-        );
+      async function (id) {
+        return id === Template.makeID(this.blog.id, folderName)
+          ? {
+              owner: this.blog.id,
+              id: Template.makeID(this.blog.id, folderName),
+              slug: folderName,
+              name: packageName,
+              localEditing: true,
+            }
+          : null;
       }.bind(this)
     );
 

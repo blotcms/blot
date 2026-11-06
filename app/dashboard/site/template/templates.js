@@ -3,7 +3,7 @@ var previewHost = "https://preview-of";
 var config = require("config");
 var Template = require("models/template");
 
-module.exports = function (req, res, next) {
+module.exports = async function (req, res, next) {
   var blog = req.blog,
     blogID = blog.id,
     currentTemplate = blog.template;
@@ -14,7 +14,8 @@ module.exports = function (req, res, next) {
   // needing a different param name or resolution rule for either.
   var onFolderMount = /\/template-folder$/.test(req.baseUrl);
 
-  Template.getTemplateList(blogID, function (err, templates) {
+  try {
+    let templates = await Template.getTemplateList(blogID);
     var yourTemplates = [];
     var blotTemplates = [];
 
@@ -151,5 +152,7 @@ module.exports = function (req, res, next) {
     )[0];
 
     next();
-  });
+  } catch (err) {
+    next(err);
+  }
 };

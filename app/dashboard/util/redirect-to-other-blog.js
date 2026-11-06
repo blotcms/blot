@@ -1,11 +1,16 @@
 const loadBlogs = require("./load-blogs");
 const Similarity = require("helper/similarity");
 
-module.exports = function (err, req, res, next) {
+module.exports = async function (err, req, res, next) {
   if (err.message !== "No blog") return next(err);
-  loadBlogs(req, res, function (err) {
-    if (err) return next(err);
-    if (!req.handle || !req.blogs.length) return next(err);
+  try {
+    await new Promise((resolve, reject) => {
+      loadBlogs(req, res, function (err) {
+        if (err) return reject(err);
+        resolve();
+      });
+    });
+    if (!req.handle || !req.blogs.length) return next();
     let handle = req.handle;
     let handleToRedirect;
     let pathWithoutHandle = req.path.slice(("/sites/" + handle).length);
@@ -20,5 +25,7 @@ module.exports = function (err, req, res, next) {
     });
 
     res.redirect(`/sites/${handleToRedirect}${pathWithoutHandle}`);
-  });
+  } catch (error) {
+    next(error);
+  }
 };
