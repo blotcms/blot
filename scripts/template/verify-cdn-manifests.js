@@ -1,10 +1,8 @@
 const { promisify } = require("util");
 const eachTemplate = require("../each/template");
-const flushCache = promisify(require("models/blog/set"));
+const flushCache = require("models/blog/set");
 
-const updateCdnManifest = promisify(
-  require("models/template/util/updateCdnManifest")
-);
+const updateCdnManifest = require("models/template/util/updateCdnManifest");
 const config = require("config");
 
 let processedCount = 0;
@@ -85,7 +83,7 @@ function describeChanges(oldManifest, newManifest) {
   return messages;
 }
 
-async function processTemplate(user, blog, template, next) {
+async function processTemplate(user, blog, template) {
   processedCount += 1;
 
   // Construct previewURL for the template
@@ -102,7 +100,8 @@ async function processTemplate(user, blog, template, next) {
   const existingString = stringifyManifest(existingManifest);
 
   try {
-    const updatedManifest = (await updateCdnManifest(template.id)) || {};
+    const updatedManifest =
+      (await promisify(updateCdnManifest)(template.id)) || {};
     const updatedString = stringifyManifest(updatedManifest);
 
     if (existingString !== updatedString) {
@@ -132,28 +131,52 @@ async function processTemplate(user, blog, template, next) {
       err
     );
   }
-
-  next();
 }
 
-function main() {
-  console.log("Starting CDN manifest verification for templates...");
-
-  eachTemplate(processTemplate, function (err) {
-    if (err) {
-      console.error("Completed with errors:", err);
-    }
-
-    console.log("\nSummary:");
-    console.log(`Templates processed: ${processedCount}`);
-    console.log(`Templates with changes: ${changedCount}`);
-
-    process.exit(0);
+// Runs doThis(user, blog, template) for each template, one at a time, and
+// resolves once every template has been done. A rejection stops the run.
+function eachTemplateAsync(doThis) {
+  return new Promise(function (resolve, reject) {
+    eachTemplate(
+      function (user, blog, template, next) {
+        doThis(user, blog, template).then(
+          function () {
+            next();
+          },
+          function (err) {
+            next(err);
+          }
+        );
+      },
+      function (err) {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
   });
 }
 
+async function main() {
+  console.log("Starting CDN manifest verification for templates...");
+
+  try {
+    await eachTemplateAsync(processTemplate);
+  } catch (err) {
+    console.error("Completed with errors:", err);
+  }
+
+  console.log("\nSummary:");
+  console.log(`Templates processed: ${processedCount}`);
+  console.log(`Templates with changes: ${changedCount}`);
+
+  process.exit(0);
+}
+
 if (require.main === module) {
-  main();
+  main().catch(function (err) {
+    console.error(err);
+    process.exit(1);
+  });
 }
 
 module.exports = main;

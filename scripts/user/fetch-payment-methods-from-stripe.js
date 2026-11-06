@@ -3,8 +3,45 @@ var syncPaymentMethods = require("models/user/syncPaymentMethods");
 var getConfirmation = require("../util/getConfirmation");
 var each = require("../each/user");
 var colors = require("colors/safe");
+var withCallback = require("helper/withCallback");
 
-function main(user, callback) {
+// scripts/each/user is callback-based and stops at the first error. Runs fn
+// for each user in turn, and passes a rejection from fn on as the error.
+function forEachUser(fn) {
+  return new Promise(function (resolve, reject) {
+    each(
+      function (user, next) {
+        Promise.resolve()
+          .then(function () {
+            return fn(user);
+          })
+          .then(
+            function () {
+              next();
+            },
+            function (err) {
+              next(err);
+            }
+          );
+      },
+      function (err) {
+        if (err) return reject(err);
+        resolve();
+      }
+    );
+  });
+}
+
+function syncUserPaymentMethods(user) {
+  return new Promise(function (resolve, reject) {
+    syncPaymentMethods(user, function (err, paymentMethods) {
+      if (err) return reject(err);
+      resolve(paymentMethods);
+    });
+  });
+}
+
+async function main(user) {
   if (!user.subscription || !user.subscription.customer) {
     console.log(
       colors.dim(
@@ -15,17 +52,21 @@ function main(user, callback) {
       )
     );
 
-    return callback();
+    return;
   }
 
-  syncPaymentMethods(user, function (err, paymentMethods) {
+  var paymentMethods;
+
+  try {
+    paymentMethods = await syncUserPaymentMethods(user);
+  } catch (err) {
     // Same anomaly fetch-subscription-from-stripe.js guards against: the
     // Blot account still points at a Stripe customer that no longer
     // exists. Log and move on rather than aborting the whole backfill -
-    // async.eachSeries in scripts/each/user stops at the first error, so
-    // one deleted customer would otherwise silently strand every account
-    // after it until someone re-ran the script by hand.
-    if (err && err.code === "resource_missing") {
+    // scripts/each/user stops at the first error, so one deleted customer
+    // would otherwise silently strand every account after it until someone
+    // re-ran the script by hand.
+    if (err.code === "resource_missing") {
       console.log(
         colors.red(
           "User:",
@@ -34,57 +75,58 @@ function main(user, callback) {
           "has a Stripe customer id that no longer exists on Stripe"
         )
       );
-      return callback();
-    }
-
-    if (err) {
-      console.log(
-        colors.red(
-          "User:",
-          user.uid,
-          user.email,
-          "failed to sync:",
-          err.message
-        )
-      );
-      return callback(err);
+      return;
     }
 
     console.log(
-      "User:",
-      user.uid,
-      user.email,
-      user.subscription.customer,
-      "found",
-      paymentMethods.length,
-      "payment method" + (paymentMethods.length === 1 ? "" : "s")
+      colors.red("User:", user.uid, user.email, "failed to sync:", err.message)
     );
+    throw err;
+  }
 
-    callback(null, paymentMethods);
-  });
+  console.log(
+    "User:",
+    user.uid,
+    user.email,
+    user.subscription.customer,
+    "found",
+    paymentMethods.length,
+    "payment method" + (paymentMethods.length === 1 ? "" : "s")
+  );
+
+  return paymentMethods;
 }
 
-function done(err) {
-  if (err) throw err;
+async function run() {
+  if (process.argv[2]) {
+    var user = await User.getByEmail(process.argv[2]);
+    if (!user) throw new Error("No user");
+
+    await main(user);
+  } else {
+    var ok = await getConfirmation(
+      "Fetch payment methods from Stripe for all users? (y/N)"
+    );
+
+    if (!ok) return process.exit();
+
+    await forEachUser(main);
+  }
+
   console.log("Done!");
   process.exit();
 }
 
 if (require.main === module) {
-  if (process.argv[2]) {
-    User.getByEmail(process.argv[2], function (err, user) {
-      if (err || !user) throw err || new Error("No user");
-      main(user, done);
-    });
-  } else {
-    getConfirmation(
-      "Fetch payment methods from Stripe for all users? (y/N)",
-      function (err, ok) {
-        if (!ok) return process.exit();
-        each(main, done);
-      }
-    );
-  }
+  run().then(
+    function () {
+      process.exit(0);
+    },
+    function (err) {
+      console.error(err);
+      process.exit(1);
+    }
+  );
 }
 
-module.exports = main;
+module.exports = withCallback(main);

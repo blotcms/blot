@@ -1,33 +1,39 @@
 var eachTemplate = require("./template");
 var Template = require("models/template");
-var async = require("async");
+var ensure = require("helper/ensure");
+var { promisify } = require("util");
 var progress = require("./progress");
-var withCallback = require("helper/withCallback");
 
-module.exports = function (doThis, callback) {
-  eachTemplate(function (user, blog, template, nextTemplate) {
-    withCallback(Template.getAllViews)(template.id, function (err, result) {
-      if (err) throw err;
+// The promise core. doThis is (user, blog, template, view) and may return a promise.
+function eachView(doThis) {
+  return eachTemplate.promise(async function (user, blog, template) {
+    var { views } = await Template.getAllViews(template.id);
 
-      var views = result.views;
+    var names = Object.keys(views || {});
+    var bar = progress.push("View", names.length);
 
-      var bar = progress.push("View", Object.keys(views || {}).length);
-
-      async.eachOfSeries(
-        views,
-        function (view, name, done) {
-          var nextView = function (err) {
-            bar.tick();
-            done(err);
-          };
-
-          doThis(user, blog, template, view, nextView);
-        },
-        function (err) {
-          bar.pop();
-          nextTemplate(err);
+    try {
+      for (const name of names) {
+        try {
+          await doThis(user, blog, template, views[name]);
+        } finally {
+          bar.tick();
         }
-      );
-    });
-  }, callback);
+      }
+    } finally {
+      bar.pop();
+    }
+  });
+}
+
+// Callback API, for the scripts that still pass doThis(user, blog, template, view, next).
+module.exports = function (doThis, callback) {
+  ensure(doThis, "function");
+
+  eachView(promisify(doThis)).then(
+    () => callback(null),
+    (err) => callback(err)
+  );
 };
+
+module.exports.promise = eachView;

@@ -11,7 +11,6 @@ var archiver = require("archiver");
 // Blog.get rather than scripts/get/blog, which mints a dashboard login token
 var Blog = require("models/blog");
 var Template = require("models/template");
-var withCallback = require("helper/withCallback");
 var shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
 var LOCAL_EDITING_EXIT_CODE = 3;
@@ -21,51 +20,68 @@ function fail(message, code) {
   process.exit(code || 1);
 }
 
-if (!process.argv[2])
-  fail("Pass a blog identifier (blog ID) as the first argument");
+async function main() {
+  if (!process.argv[2])
+    fail("Pass a blog identifier (blog ID) as the first argument");
 
-Blog.get({ id: process.argv[2] }, function (err, blog) {
-  if (err || !blog) fail(err ? err.message : "No blog " + process.argv[2]);
+  var blog;
+
+  try {
+    blog = await Blog.get({ id: process.argv[2] });
+  } catch (err) {
+    fail(err.message);
+  }
+
+  if (!blog) fail("No blog " + process.argv[2]);
 
   if (!blog.template) fail("Blog " + blog.id + " has no template");
 
-  withCallback(Template.getAllViews)(blog.template, function (err, result) {
-    if (err) fail(err.message);
+  var views, metadata;
 
-    var views = result && result.views;
-    var metadata = result && result.metadata;
-    if (!views || !metadata) fail("No template found for " + blog.template);
+  try {
+    const result = await Template.getAllViews(blog.template);
+    views = result && result.views;
+    metadata = result && result.metadata;
+  } catch (err) {
+    fail(err.message);
+  }
 
-    if (metadata.localEditing) {
-      console.error(blog.template + " has localEditing enabled");
-      process.exit(LOCAL_EDITING_EXIT_CODE);
-    }
+  if (!views || !metadata) fail("No template found for " + blog.template);
 
-    var slug = metadata.slug;
-    var archive = archiver("zip");
+  if (metadata.localEditing) {
+    console.error(blog.template + " has localEditing enabled");
+    process.exit(LOCAL_EDITING_EXIT_CODE);
+  }
 
-    archive.on("error", function (err) {
-      fail(err.message);
-    });
+  var slug = metadata.slug;
+  var archive = archiver("zip");
 
-    // Exit only once stdout has flushed, or a slow consumer gets a truncated zip
-    process.stdout.on("finish", function () {
-      process.exit();
-    });
-
-    archive.pipe(process.stdout);
-
-    archive.append(Template.package.generate(blog.id, metadata, views), {
-      name: slug + "/package.json",
-    });
-
-    Object.keys(views).forEach(function (name) {
-      var view = views[name];
-      if (!view || !view.name || !view.content) return;
-      if (shouldIgnoreFile(view.name)) return;
-      archive.append(view.content, { name: slug + "/" + view.name });
-    });
-
-    archive.finalize();
+  archive.on("error", function (err) {
+    fail(err.message);
   });
+
+  // Exit only once stdout has flushed, or a slow consumer gets a truncated zip
+  process.stdout.on("finish", function () {
+    process.exit();
+  });
+
+  archive.pipe(process.stdout);
+
+  archive.append(Template.package.generate(blog.id, metadata, views), {
+    name: slug + "/package.json",
+  });
+
+  Object.keys(views).forEach(function (name) {
+    var view = views[name];
+    if (!view || !view.name || !view.content) return;
+    if (shouldIgnoreFile(view.name)) return;
+    archive.append(view.content, { name: slug + "/" + view.name });
+  });
+
+  archive.finalize();
+}
+
+main().catch(function (err) {
+  console.error(err);
+  process.exit(1);
 });

@@ -23,47 +23,67 @@ var prettyPrice = require("helper/prettyPrice");
 
 if (!identifier) throw "Please pass an identifier for a user, blog or entry.";
 
-function callback(err) {
-  if (err) throw err;
-  console.log("Done!");
-  process.exit();
+// Lookup errors have always counted as "no match" here, so they are ignored
+async function ignoreErrors(lookup) {
+  try {
+    return await lookup();
+  } catch (err) {
+    return undefined;
+  }
 }
 
-// Parse a URL to an entry
-getEntry(identifier, function (err, user, blog, entry) {
-  if (entry) {
-    return showEntry(entry, blog, user, callback);
+// Resolves { user, blog, entry }, all undefined when nothing matched
+function lookupEntry(identifier) {
+  return new Promise((resolve) =>
+    getEntry(identifier, (err, user, blog, entry) =>
+      resolve({ user, blog, entry })
+    )
+  );
+}
+
+// Resolves { user, blog }, both undefined when nothing matched
+function lookupBlog(identifier) {
+  return new Promise((resolve) =>
+    getBlog(identifier, (err, user, blog) => resolve({ user, blog }))
+  );
+}
+
+async function main() {
+  // Parse a URL to an entry
+  const byEntry = await lookupEntry(identifier);
+  if (byEntry.entry) {
+    return showEntry(byEntry.entry, byEntry.blog, byEntry.user);
   }
 
   // Parse a URL to a blog
-  getBlog(identifier, function (err, user, blog) {
-    if (blog) {
-      return showBlog(blog, user, callback);
-    }
+  const byBlog = await lookupBlog(identifier);
+  if (byBlog.blog) {
+    return showBlog(byBlog.blog, byBlog.user);
+  }
 
-    User.getById(identifier, function (err, user) {
-      if (user) {
-        return showUser(user, callback);
-      }
+  const userByID = await ignoreErrors(() => User.getById(identifier));
+  if (userByID) return showUser(userByID);
 
-      User.getByEmail(identifier, function (err, user) {
-        if (user) {
-          return showUser(user, callback);
-        }
+  const userByEmail = await ignoreErrors(() => User.getByEmail(identifier));
+  if (userByEmail) return showUser(userByEmail);
 
-        callback(
-          new Error(
-            'Could not find a matching entry, blog or user for "' +
-              identifier +
-              '"'
-          )
-        );
-      });
-    });
-  });
-});
+  throw new Error(
+    'Could not find a matching entry, blog or user for "' + identifier + '"'
+  );
+}
 
-function showEntry(entry, blog, user, callback) {
+main().then(
+  () => {
+    console.log("Done!");
+    process.exit();
+  },
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  }
+);
+
+function showEntry(entry, blog, user) {
   var origin =
     "http" +
     (config.environment === "development" ? "" : "s") +
@@ -78,10 +98,10 @@ function showEntry(entry, blog, user, callback) {
   console.log("- Source:", colors.yellow(origin + entry.path));
   console.log("- Full:", origin + entry.url + "?json=true");
 
-  showBlog(blog, user, callback);
+  return showBlog(blog, user);
 }
 
-function showBlog(blog, user, callback) {
+function showBlog(blog, user) {
   var origin =
     "http" +
     (config.environment === "development" ? "" : "s") +
@@ -92,10 +112,10 @@ function showBlog(blog, user, callback) {
   console.log();
   console.log(colors.dim("Found " + blog.id + " client=" + blog.client));
   console.log("Site:", colors.green(origin));
-  showUser(user, callback);
+  return showUser(user);
 }
 
-function showUser(user, callback) {
+async function showUser(user) {
   console.log();
   console.log(colors.dim("Found " + user.uid));
   console.log("Email: " + user.email);
@@ -132,9 +152,10 @@ function showUser(user, callback) {
 
   console.log("Subscription: " + subscriptionMessage);
   console.log("Blogs: " + user.blogs);
-  access(user.uid, function (err, url) {
-    console.log("Dashboard:", colors.yellow(url));
-    console.log();
-    callback();
-  });
+  // An error from access was never checked here, so the url is just undefined
+  const url = await new Promise((resolve) =>
+    access(user.uid, (err, url) => resolve(url))
+  );
+  console.log("Dashboard:", colors.yellow(url));
+  console.log();
 }

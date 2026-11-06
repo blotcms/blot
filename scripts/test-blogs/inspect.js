@@ -175,14 +175,10 @@ async function inspectEntry(blog, entry, s3) {
   }
 }
 
-function getBlog() {
-  return new Promise(function (resolve, reject) {
-    Blog.get({ handle }, function (err, blog) {
-      if (err) return reject(err);
-      if (!blog) return reject(new Error("No blog with handle " + handle));
-      resolve(blog);
-    });
-  });
+async function getBlog() {
+  const blog = await Blog.get({ handle });
+  if (!blog) throw new Error("No blog with handle " + handle);
+  return blog;
 }
 
 function getEntry(blogID, path) {

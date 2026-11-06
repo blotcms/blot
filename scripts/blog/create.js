@@ -3,66 +3,60 @@ var Blog = require("models/blog");
 var User = require("models/user");
 var validate = require("models/blog/validate/handle");
 var access = require("./access");
+var { promisify } = require("util");
 
 if (require.main === module) {
-  main(process.argv[2], process.argv[3], function (err) {
-    if (err) {
+  main(process.argv[2], process.argv[3]).then(
+    () => process.exit(),
+    (err) => {
       console.error("Error:", err.message);
-      return process.exit(1);
+      process.exit(1);
     }
-
-    process.exit();
-  });
+  );
 }
 
-function main(email, handle, callback) {
+async function main(email, handle) {
   if (!email) {
-    return callback(
-      new Error("Pass email of user to add new blog to as first argument")
-    );
+    throw new Error("Pass email of user to add new blog to as first argument");
   }
 
   if (!handle) {
-    return callback(new Error("Pass handle for new blog as second argument"));
+    throw new Error("Pass handle for new blog as second argument");
   }
 
-  validate("", handle, function (err, handle) {
-    if (err) return callback(err);
+  handle = await promisify(validate)("", handle);
 
-    User.getByEmail(email, function (err, user) {
-      if (err || !user) {
-        return callback(
-          new Error("No user with email " + email + " found in database")
-        );
-      }
+  let user;
+  try {
+    user = await User.getByEmail(email);
+  } catch (err) {
+    user = null;
+  }
 
-      var message =
-        "Email: " +
-        user.email +
-        "\nUser ID: " +
-        user.uid +
-        "\nHandle: " +
-        handle +
-        "\n\nCreate blog " +
-        handle +
-        "? (y/N)";
+  if (!user) {
+    throw new Error("No user with email " + email + " found in database");
+  }
 
-      getConfirmation(message, function (err, ok) {
-        if (!ok) return callback(new Error("User was not created"));
-        Blog.create(user.uid, { handle: handle }, function (err) {
-          if (err) return callback(err);
+  var message =
+    "Email: " +
+    user.email +
+    "\nUser ID: " +
+    user.uid +
+    "\nHandle: " +
+    handle +
+    "\n\nCreate blog " +
+    handle +
+    "? (y/N)";
 
-          access(handle, function (err, url) {
-            if (err) return callback(err);
+  const ok = await getConfirmation(message);
+  if (!ok) throw new Error("User was not created");
 
-            console.log("Added new blog", handle, "to", email, ":");
-            console.log(url);
-            callback(null);
-          });
-        });
-      });
-    });
-  });
+  await Blog.create(user.uid, { handle: handle });
+
+  const url = await promisify(access)(handle);
+
+  console.log("Added new blog", handle, "to", email, ":");
+  console.log(url);
 }
 
 module.exports = main;

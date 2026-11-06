@@ -14,7 +14,13 @@ var getConfirmation = require("../util/getConfirmation");
 if (!(process.getuid && process.getuid() === 0))
   throw new Error("This script must be run as root");
 
-get(process.argv[2], function (err, user, blog) {
+async function main() {
+  const blog = await new Promise((resolve, reject) => {
+    get(process.argv[2], (err, user, blog) =>
+      err ? reject(err) : resolve(blog)
+    );
+  });
+
   const domain = blog.domain;
 
   if (!domain) throw new Error("blog does not have a domain");
@@ -40,31 +46,33 @@ get(process.argv[2], function (err, user, blog) {
   console.log("Keys to drop:", certKeys);
   console.log("Directories to remove:", certDirs);
 
-  getConfirmation("Proceed? (y/n)", async function (err, ok) {
-    if (!ok) throw "Not ok!";
+  const ok = await getConfirmation("Proceed? (y/n)");
+  if (!ok) throw "Not ok!";
 
-    await client.del(certKeys);
+  await client.del(certKeys);
 
-    console.log("removed redis keys", certKeys);
-    console.log("");
-    console.log(
-      "Now, on the proxy host, remove the certificate files from the"
-    );
-    console.log(
-      "proxy containers' shared volume (once, from either) and restart"
-    );
-    console.log("BOTH proxies, one at a time: the second only once the first");
-    console.log("answers its health check again (a reload keeps auto-ssl's");
-    console.log("cached certificate).");
-    certDirs.forEach((dir) => {
-      console.log("  docker exec blot-blue rm -rf", dir);
-    });
-    console.log("  for u in blue green; do");
-    console.log("    docker restart --time 30 blot-$u");
-    console.log("    until docker exec blot-$u curl -fsS -o /dev/null \\");
-    console.log(
-      "      --unix-socket /run/openresty/health.sock http://localhost/health; do sleep 1; done"
-    );
-    console.log("  done");
+  console.log("removed redis keys", certKeys);
+  console.log("");
+  console.log("Now, on the proxy host, remove the certificate files from the");
+  console.log(
+    "proxy containers' shared volume (once, from either) and restart"
+  );
+  console.log("BOTH proxies, one at a time: the second only once the first");
+  console.log("answers its health check again (a reload keeps auto-ssl's");
+  console.log("cached certificate).");
+  certDirs.forEach((dir) => {
+    console.log("  docker exec blot-blue rm -rf", dir);
   });
+  console.log("  for u in blue green; do");
+  console.log("    docker restart --time 30 blot-$u");
+  console.log("    until docker exec blot-$u curl -fsS -o /dev/null \\");
+  console.log(
+    "      --unix-socket /run/openresty/health.sock http://localhost/health; do sleep 1; done"
+  );
+  console.log("  done");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });

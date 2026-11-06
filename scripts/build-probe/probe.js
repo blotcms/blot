@@ -574,9 +574,12 @@ async function getBlog(identifier) {
     : lower;
 
   for (const by of [{ id: identifier }, { handle }, { domain: lower }]) {
-    const blog = await new Promise((done) =>
-      Blog.get(by, (err, blog) => done(err ? null : blog))
-    );
+    let blog;
+    try {
+      blog = await Blog.get(by);
+    } catch (err) {
+      blog = null;
+    }
     if (blog && blog.id) return blog;
   }
 

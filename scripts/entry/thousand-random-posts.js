@@ -12,26 +12,27 @@ const onComplete = (err) => {
   process.exit();
 };
 
-each((user, blog, entry, next) => {
+async function copyRandomEntry(user, blog, entry) {
   if (total > 1000) return onComplete();
 
-  if (entry.deleted) return next();
+  if (entry.deleted) return;
 
   // 1 in 100 files
-  if (Math.floor(Math.random() * 100) > 1) return next();
+  if (Math.floor(Math.random() * 100) > 1) return;
   const to = join(TMP, entry.id);
   console.log(blog.id, entry.id);
-  folder.ensureLocal(blog.id, entry.id).then(function (from) {
-    fs.copy(from, to, copied);
-  }, copied);
 
-  function copied(err) {
-    if (err) {
-      console.log(entry);
-      console.log(err);
-    } else {
-      total++;
-    }
-    next();
+  try {
+    const from = await folder.ensureLocal(blog.id, entry.id);
+    await fs.copy(from, to);
+    total++;
+  } catch (err) {
+    console.log(entry);
+    console.log(err);
   }
-}, onComplete);
+}
+
+each.promise(copyRandomEntry).then(
+  () => onComplete(),
+  (err) => onComplete(err)
+);

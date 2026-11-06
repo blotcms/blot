@@ -11,9 +11,6 @@
 
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
 const flushCache = require("models/blog/flushCache");
-const { promisify } = require("util");
-
-const flushCacheAsync = promisify(flushCache);
 
 let totalBlogs = 0;
 let flushedBlogs = 0;
@@ -24,7 +21,7 @@ const processBlog = async (blog) => {
   totalBlogs++;
 
   try {
-    await flushCacheAsync(blog.id);
+    await flushCache(blog.id);
     flushedBlogs++;
 
     if (totalBlogs % 100 === 0) {

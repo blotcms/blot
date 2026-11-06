@@ -1,14 +1,21 @@
 var User = require("models/user");
 var identifier = process.argv[2];
+var { promisify } = require("util");
 
 if (!identifier) throw "Please pass the user's email as an argument.";
 
-User.getByEmail(identifier, function (err, user) {
-  if (err || !user) throw err || new Error("No user");
+async function main() {
+  var user = await User.getByEmail(identifier);
 
-  User.set(user.uid, { passwordHash: "" }, function (err) {
-    if (err) throw err;
+  if (!user) throw new Error("No user");
 
-    process.exit();
-  });
-});
+  await promisify(User.set)(user.uid, { passwordHash: "" });
+}
+
+main().then(
+  () => process.exit(0),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  }
+);

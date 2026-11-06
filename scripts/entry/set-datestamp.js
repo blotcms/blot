@@ -1,4 +1,5 @@
 const readline = require("readline");
+const { promisify } = require("util");
 const moment = require("moment");
 
 const get = require("../get/entry");
@@ -28,11 +29,18 @@ function promptForDate(message) {
   });
 }
 
-get(url, async function (err, user, blog, entry) {
-  if (err) {
-    console.error("Error retrieving entry:", err.message);
+async function main() {
+  const found = await new Promise((resolve) =>
+    get(url, (err, user, blog, entry) => resolve({ err, blog, entry }))
+  );
+
+  if (found.err) {
+    console.error("Error retrieving entry:", found.err.message);
     process.exit(1);
   }
+
+  const blog = found.blog;
+  const entry = found.entry;
 
   if (!entry) {
     console.error("No entry found at the provided URL.");
@@ -102,13 +110,23 @@ get(url, async function (err, user, blog, entry) {
     process.exit(0);
   }
 
-  Entry.set(blog.id, entry.path, { dateStamp: newDateStamp }, function (err) {
-    if (err) {
-      console.error("Failed to update entry:", err.message);
-      process.exit(1);
-    }
+  try {
+    await promisify(Entry.set)(blog.id, entry.path, {
+      dateStamp: newDateStamp,
+    });
+  } catch (err) {
+    console.error("Failed to update entry:", err.message);
+    process.exit(1);
+  }
 
-    console.log("Updated entry:", entry.path);
-    process.exit(0);
-  });
-});
+  console.log("Updated entry:", entry.path);
+  process.exit(0);
+}
+
+main().then(
+  () => process.exit(0),
+  (err) => {
+    console.error(err);
+    process.exit(1);
+  }
+);

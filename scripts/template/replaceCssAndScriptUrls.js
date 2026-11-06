@@ -504,7 +504,7 @@ async function processView(user, blog, template, view) {
 /**
  * Log the migration report
  */
-function logReport(callback) {
+function logReport() {
   // Log report
   console.log("\n=== Migration Report ===\n");
 
@@ -556,150 +556,136 @@ function logReport(callback) {
   }
 
   console.log("\n=== End Report ===\n");
-
-  callback(null);
 }
-
 /**
  * Process all views for a specific blog
  * This short-circuits the iteration when a specific blog is passed
  */
-function processBlogViews(user, blog, callback) {
-  const async = require("async");
+async function processBlogViews(user, blog) {
   const getTemplateListAsync = promisify(Template.getTemplateList);
 
-  getTemplateListAsync(blog.id)
-    .then(function (templates) {
-      // Process each template
-      async.eachSeries(
-        templates,
-        function (template, nextTemplate) {
-          // Skip SITE templates (default templates) - already migrated
-          if (template.id.startsWith("SITE:") || template.owner === "SITE") {
-            return nextTemplate();
-          }
+  const templates = await getTemplateListAsync(blog.id);
 
-          // Only process templates owned by the blog
-          if (template.owner !== blog.id) return nextTemplate();
+  // Process each template
+  for (const template of templates) {
+    // Skip SITE templates (default templates) - already migrated
+    if (template.id.startsWith("SITE:") || template.owner === "SITE") continue;
 
-          // Get all views for this template
-          Template.getAllViews(template.id)
-            .then(function ({ views }) {
-              // Process each view
-              async.eachOfSeries(
-                views,
-                function (view, name, nextView) {
-                  processView(user, blog, template, view)
-                    .then(function () {
-                      nextView();
-                    })
-                    .catch(function (error) {
-                      // Log error but continue processing
-                      console.error(
-                        `Error processing view ${view?.name} in template ${template?.id}:`,
-                        error
-                      );
-                      report.fetchErrors.push({
-                        blogID: blog?.id,
-                        templateID: template?.id,
-                        viewName: view?.name,
-                        error: error.message,
-                      });
-                      nextView();
-                    });
-                },
-                nextTemplate
-              );
-            })
-            .catch(function (error) {
-              console.error(
-                `Error getting views for template ${template.id}:`,
-                error
-              );
-              nextTemplate();
-            });
-        },
-        callback
-      );
-    })
-    .catch(callback);
+    // Only process templates owned by the blog
+    if (template.owner !== blog.id) continue;
+
+    // Get all views for this template
+    let views;
+
+    try {
+      ({ views } = await Template.getAllViews(template.id));
+    } catch (error) {
+      console.error(`Error getting views for template ${template.id}:`, error);
+      continue;
+    }
+
+    // Process each view
+    for (const name of Object.keys(views || {})) {
+      await processViewLoggingErrors(user, blog, template, views[name]);
+    }
+  }
+}
+
+// Log an error from one view and carry on with the rest
+async function processViewLoggingErrors(user, blog, template, view) {
+  try {
+    await processView(user, blog, template, view);
+  } catch (error) {
+    console.error(
+      `Error processing view ${view?.name} in template ${template?.id}:`,
+      error
+    );
+    report.fetchErrors.push({
+      blogID: blog?.id,
+      templateID: template?.id,
+      viewName: view?.name,
+      error: error.message,
+    });
+  }
 }
 
 /**
  * Main function
  */
-function main(specificBlog, callback) {
+async function main(specificBlog) {
   if (specificBlog) {
     // Short-circuit: process only the specific blog
     const User = require("models/user");
-    const getByIdAsync = promisify(User.getById);
 
-    getByIdAsync(specificBlog.owner, function (err, user) {
-      if (err || !user) {
-        return callback(err || new Error("No user found for blog owner"));
-      }
+    const user = await User.getById(specificBlog.owner);
 
-      processBlogViews(user, specificBlog, function (err) {
-        if (err) {
-          console.error("Error during processing:", err);
-          return callback(err);
-        }
+    if (!user) throw new Error("No user found for blog owner");
 
-        logReport(callback);
-      });
-    });
+    try {
+      await processBlogViews(user, specificBlog);
+    } catch (err) {
+      console.error("Error during processing:", err);
+      throw err;
+    }
   } else {
     // Process all blogs using eachView
-    eachView(
-      async function (user, blog, template, view, next) {
-        try {
-          await processView(user, blog, template, view);
-          next();
-        } catch (error) {
-          // Log error but continue processing
-          console.error(
-            `Error processing view ${view?.name} in template ${template?.id}:`,
-            error
+    await new Promise(function (resolve, reject) {
+      eachView(
+        function (user, blog, template, view, next) {
+          processViewLoggingErrors(user, blog, template, view).then(
+            function () {
+              next();
+            },
+            function (err) {
+              next(err);
+            }
           );
-          report.fetchErrors.push({
-            blogID: blog?.id,
-            templateID: template?.id,
-            viewName: view?.name,
-            error: error.message,
-          });
-          next();
+        },
+        function (err) {
+          if (err) return reject(err);
+          resolve();
         }
-      },
-      function (err) {
-        if (err) {
-          console.error("Error during iteration:", err);
-          return callback(err);
-        }
-
-        logReport(callback);
-      }
-    );
+      );
+    }).catch(function (err) {
+      console.error("Error during iteration:", err);
+      throw err;
+    });
   }
+
+  logReport();
+}
+
+// Resolves to the blog for an identifier, or to undefined when the lookup
+// fails: the default "null" then processes every blog
+function getBlogIfAny(identifier) {
+  var get = require("../get/blog");
+
+  return new Promise(function (resolve) {
+    get(identifier, function (err, user, blog) {
+      resolve(blog);
+    });
+  });
 }
 
 // If run directly, execute main
 if (require.main === module) {
-  var get = require("../get/blog");
-
-  get(process.argv[2] || "null", function (err, user, blog) {
+  getBlogIfAny(process.argv[2] || "null").then(function (blog) {
     if (blog) {
       console.log("processing specific blog", blog.id);
     } else {
       console.log("processing all blogs");
     }
-    main(blog, function (err) {
-      if (err) {
+
+    return main(blog).then(
+      function () {
+        console.log("processed all blogs!");
+        process.exit(0);
+      },
+      function (err) {
         console.error(err);
         process.exit(1);
       }
-      console.log("processed all blogs!");
-      process.exit(0);
-    });
+    );
   });
 }
 

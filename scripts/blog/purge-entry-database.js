@@ -59,39 +59,44 @@ async function main(blog) {
     return;
   }
 
-  await new Promise((resolve, reject) => {
-    const multi = client.multi();
-    multi.del(keys);
-    multi
-      .exec()
-      .then((results) => {
-        const deleted = Array.isArray(results)
-          ? results.reduce(
-              (sum, value) => sum + (typeof value === "number" ? value : 0),
-              0
-            )
-          : 0;
-        console.log(
-          colors.green(
-            `Deleted ${keys.length} keys for blog ${blog.id}. Redis removed ${deleted} keys.`
-          )
-        );
-        resolve();
-      })
-      .catch(reject);
+  const multi = client.multi();
+  multi.del(keys);
+  const results = await multi.exec();
+
+  const deleted = Array.isArray(results)
+    ? results.reduce(
+        (sum, value) => sum + (typeof value === "number" ? value : 0),
+        0
+      )
+    : 0;
+  console.log(
+    colors.green(
+      `Deleted ${keys.length} keys for blog ${blog.id}. Redis removed ${deleted} keys.`
+    )
+  );
+}
+
+async function cli() {
+  const blog = await new Promise((resolve, reject) => {
+    getBlog(process.argv[2], (err, user, blog) =>
+      err ? reject(err) : resolve(blog)
+    );
   });
+
+  try {
+    await main(blog);
+  } catch (error) {
+    console.error(colors.red("Error:", error.message));
+    return process.exit(1);
+  }
+
+  process.exit();
 }
 
 if (require.main === module) {
-  getBlog(process.argv[2], function (err, user, blog) {
-    if (err) throw err;
-
-    main(blog)
-      .then(() => process.exit())
-      .catch((error) => {
-        console.error(colors.red("Error:", error.message));
-        process.exit(1);
-      });
+  cli().catch((err) => {
+    console.error(err);
+    process.exit(1);
   });
 }
 
