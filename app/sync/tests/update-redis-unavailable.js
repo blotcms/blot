@@ -74,8 +74,8 @@ describe("update when Redis is unavailable", function () {
     var check = this.checkEntry;
     var blogID = this.blog.id;
 
-    spyOn(Entry, "set").and.callFake(function (blogID, path, entry, callback) {
-      callback(writeFreeze());
+    spyOn(Entry, "set").and.callFake(async function () {
+      throw writeFreeze();
     });
 
     await withSync(blogID, async function (syncFolder) {
@@ -105,8 +105,8 @@ describe("update when Redis is unavailable", function () {
       expect(await update(syncFolder, path)).toBeFalsy();
 
       await folder.remove(blogID, path);
-      spyOn(Entry, "drop").and.callFake(function (blogID, path, callback) {
-        callback(writeFreeze());
+      spyOn(Entry, "drop").and.callFake(async function () {
+        throw writeFreeze();
       });
 
       expect(isRedisUnavailableError(await update(syncFolder, path))).toBe(
@@ -157,9 +157,9 @@ describe("update when Redis is unavailable", function () {
 
     spyOn(console, "error");
 
-    spyOn(Entry, "set").and.callFake(function (blogID, path, entry, callback) {
-      if (path === badPath) return callback(new Error("this file is broken"));
-      realSet.apply(Entry, arguments);
+    spyOn(Entry, "set").and.callFake(async function (blogID, path, entry) {
+      if (path === badPath) throw new Error("this file is broken");
+      return realSet.apply(Entry, arguments);
     });
 
     await withSync(blogID, async function (syncFolder) {

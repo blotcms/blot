@@ -121,11 +121,9 @@ describe("dropbox sync when Redis is unavailable", function () {
     const blog = this.blog;
     const checkEntry = global.test.CheckEntry(blog.id);
 
-    spyOn(Entry, "set").and.callFake(
-      function (blogID, entryPath, entry, callback) {
-        callback(freeze());
-      }
-    );
+    spyOn(Entry, "set").and.callFake(async function () {
+      throw freeze();
+    });
 
     sync(blog, function (err) {
       expect(isRedisUnavailableError(err)).toBe(true);
@@ -186,11 +184,9 @@ describe("dropbox sync when Redis is unavailable", function () {
     const blog = this.blog;
 
     spyOn(console, "error");
-    spyOn(Entry, "set").and.callFake(
-      function (blogID, entryPath, entry, callback) {
-        callback(new Error("this file is broken"));
-      }
-    );
+    spyOn(Entry, "set").and.callFake(async function () {
+      throw new Error("this file is broken");
+    });
 
     sync(blog, function (err) {
       if (err) return done.fail(err);
