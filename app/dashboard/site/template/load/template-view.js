@@ -1,28 +1,35 @@
 var Template = require("models/template");
 var extname = require("path").extname;
 
-module.exports = function (req, res, next) {
-  if (req.params.viewSlug === "package.json") {
-    const { views, template } = res.locals.getAllViews;
+module.exports = async function (req, res, next) {
+  try {
+    if (req.params.viewSlug === "package.json") {
+      const { views, template } = res.locals.getAllViews;
 
-    req.view = res.locals.view = {
-      content: Template.package.generate(req.blog.id, template, views),
-      name: "package.json",
-      isPackageJSON: true,
-      editorMode: editorMode("package.json"),
-    };
+      req.view = res.locals.view = {
+        content: Template.package.generate(req.blog.id, template, views),
+        name: "package.json",
+        isPackageJSON: true,
+        editorMode: editorMode("package.json"),
+      };
 
-    return next();
-  }
+      return next();
+    }
 
-  Template.getView(req.template.id, req.params.viewSlug, function (err, view) {
-    if (err || !view) return next(new Error("No view"));
+    // A failed read is the same as a missing view
+    const view = await Template.getView(
+      req.template.id,
+      req.params.viewSlug
+    ).catch(() => null);
+    if (!view) return next(new Error("No view"));
 
     view.editorMode = editorMode(view.name);
     view.isPackageJSON = false;
     req.view = res.locals.view = view;
     next();
-  });
+  } catch (err) {
+    next(err);
+  }
 };
 
 // Determine the mode for the

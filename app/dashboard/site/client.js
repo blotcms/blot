@@ -52,7 +52,7 @@ client_routes
     });
   })
 
-  .post(function (req, res, next) {
+  .post(async function (req, res, next) {
     const redirect = req.baseUrl + "/" + req.body.client;
 
     if (!req.body.client) {
@@ -61,14 +61,19 @@ client_routes
 
     if (req.body.client === req.blog.client) return res.redirect(redirect);
 
-    clients[req.blog.client].disconnect(req.blog.id, function (err) {
-      if (err) return next(err);
-      Blog.set(req.blog.id, { client: req.body.client }, function (err) {
-        if (err) return next(err);
-
-        res.redirect(redirect);
+    try {
+      await new Promise((resolve, reject) => {
+        clients[req.blog.client].disconnect(req.blog.id, function (err) {
+          if (err) return reject(err);
+          resolve();
+        });
       });
-    });
+      await Blog.set(req.blog.id, { client: req.body.client });
+
+      res.redirect(redirect);
+    } catch (err) {
+      next(err);
+    }
   });
 
 // Used to change tense of activity on dashboard

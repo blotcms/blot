@@ -4,12 +4,15 @@ const Template = require("models/template");
 
 share
   .route("/:shareID")
-  .all(function (req, res, next) {
-    Template.getByShareID(req.params.shareID, function (err, template) {
-      if (err || !template) return next(err || new Error("No template"));
+  .all(async function (req, res, next) {
+    try {
+      const template = await Template.getByShareID(req.params.shareID);
+      if (!template) return next(new Error("No template"));
       req.template = res.locals.template = template;
       next();
-    });
+    } catch (err) {
+      next(err);
+    }
   })
 
   .get(function (req, res) {
