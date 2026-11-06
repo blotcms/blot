@@ -56,8 +56,8 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
       callback(null, [{ slug: "chairs" }]);
     });
-    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
-      callback(null, ["/chair"]);
+    spyOn(Tags, "get").and.callFake(async function () {
+      return { entryIDs: ["/chair"], prettyTag: "x", total: 0 };
     });
     stubMGet("blog-id", { "/chair": { id: "/chair" } });
     spyOn(client, "multi");
@@ -74,8 +74,8 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
       callback(null, [{ slug: "ghost-tag" }]);
     });
-    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
-      callback(null, []);
+    spyOn(Tags, "get").and.callFake(async function () {
+      return { entryIDs: [], prettyTag: "x", total: 0 };
     });
     spyOn(client, "mGet");
 
@@ -101,8 +101,8 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
       callback(null, [{ slug: "chairs" }]);
     });
-    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
-      callback(null, ["/missing-entry"]);
+    spyOn(Tags, "get").and.callFake(async function () {
+      return { entryIDs: ["/missing-entry"], prettyTag: "x", total: 0 };
     });
     stubMGet("blog-id", {});
     spyOn(Entry, "get").and.callFake(function () {
@@ -129,8 +129,8 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
       callback(null, [{ slug: "first" }, { slug: "second" }]);
     });
-    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
-      callback(null, ["/restored"]);
+    spyOn(Tags, "get").and.callFake(async function () {
+      return { entryIDs: ["/restored"], prettyTag: "x", total: 0 };
     });
     stubMGet("blog-id", stored);
 
@@ -161,8 +161,8 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
       callback(null, [{ slug: "chairs" }]);
     });
-    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
-      callback(null, ["/old-path"]);
+    spyOn(Tags, "get").and.callFake(async function () {
+      return { entryIDs: ["/old-path"], prettyTag: "x", total: 0 };
     });
     // The batched read sees the mismatch (stored id != requested id)
     // first; the check then re-fetches the full entry via Entry.get only
@@ -209,8 +209,8 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "list").and.callFake(function (_blogID, callback) {
       callback(null, [{ slug: "ghost-tag" }]);
     });
-    spyOn(Tags, "get").and.callFake(function (_blogID, _slug, callback) {
-      callback(null, []);
+    spyOn(Tags, "get").and.callFake(async function () {
+      return { entryIDs: [], prettyTag: "x", total: 0 };
     });
     spyOn(client, "mGet");
 
@@ -242,9 +242,9 @@ describe("sync/fix/tag-ghosts", function () {
         { slug: "sale" },
       ]);
     });
-    spyOn(Tags, "get").and.callFake(function (_blogID, slug, callback) {
+    spyOn(Tags, "get").and.callFake(async function () {
       // The same entry, "/chair", is a member of all three tags.
-      callback(null, ["/chair"]);
+      return { entryIDs: ["/chair"], prettyTag: "x", total: 0 };
     });
     stubMGet("blog-id", { "/chair": { id: "/chair" } });
     spyOn(client, "multi");

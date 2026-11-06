@@ -2,46 +2,57 @@ describe("tags.get", function () {
   const set = require("../set");
   const get = require("../get");
 
-  function saveEntries(blogID, entries, callback) {
-    let index = 0;
-
-    function next(err) {
-      if (err) return callback(err);
-      if (index >= entries.length) return callback();
-
-      const entry = entries[index++];
-      set(blogID, entry, next);
-    }
-
-    next();
+  function setAsync(blogID, entry) {
+    return new Promise(function (resolve, reject) {
+      set(blogID, entry, function (err) {
+        err ? reject(err) : resolve();
+      });
+    });
   }
 
   // Create a test user and blog before each spec
   global.test.blog();
 
-  it("can be invoked without error", function (done) {
+  it("can be invoked without error", async function () {
     const blogID = this.blog.id;
-    const entry = {
-      id: "entry1",
+    const entry = { id: "entry1", blogID, path: "/entry1", tags: ["tag1"] };
+
+    await setAsync(blogID, entry);
+
+    const { entryIDs, prettyTag, total } = await get(blogID, "tag1");
+
+    expect(entryIDs).toEqual([entry.id]);
+    expect(prettyTag).toEqual("tag1");
+    expect(total).toEqual(1);
+  });
+
+  it("falls back to the tag as entered, then the decoded tag", async function () {
+    const blogID = this.blog.id;
+
+    await setAsync(blogID, {
+      id: "decoded",
       blogID,
-      path: "/entry1",
-      tags: ["tag1"],
-    };
+      path: "/decoded",
+      tags: ["Hello World"],
+    });
 
-    set(blogID, entry, function (err) {
-      if (err) return done.fail(err);
+    const result = await get(blogID, "Hello%20World");
 
-      get(blogID, "tag1", function (err, entryIDs, tag) {
-        expect(err).toBeNull();
-        expect(entryIDs).toEqual([entry.id]);
-        expect(tag).toEqual("tag1");
+    expect(result.entryIDs).toEqual(["decoded"]);
+    expect(result.prettyTag).toEqual("Hello World");
+  });
 
-        done();
-      });
+  it("resolves to empty results for an unknown tag", async function () {
+    const result = await get(this.blog.id, "nothing-here");
+
+    expect(result).toEqual({
+      entryIDs: [],
+      prettyTag: "nothing-here",
+      total: 0,
     });
   });
 
-  it("returns entries sorted by dateStamp when limited", function (done) {
+  it("returns entries sorted by dateStamp when limited", async function () {
     const blogID = this.blog.id;
     const entries = [
       {
@@ -67,21 +78,18 @@ describe("tags.get", function () {
       },
     ];
 
-    saveEntries(blogID, entries, function (err) {
-      if (err) return done.fail(err);
+    for (const entry of entries) await setAsync(blogID, entry);
 
-      get(blogID, "Tag One", { limit: 2 }, function (err, entryIDs, tag) {
-        if (err) return done.fail(err);
-
-        expect(entryIDs).toEqual(["entry-b", "entry-c"]);
-        expect(tag).toEqual("Tag One");
-
-        done();
-      });
+    const { entryIDs, prettyTag, total } = await get(blogID, "Tag One", {
+      limit: 2,
     });
+
+    expect(entryIDs).toEqual(["entry-b", "entry-c"]);
+    expect(prettyTag).toEqual("Tag One");
+    expect(total).toEqual(3);
   });
 
-  it("returns oldest-first when rev is false", function (done) {
+  it("returns oldest-first when rev is false", async function () {
     const blogID = this.blog.id;
     const entries = [
       { id: "old", blogID, path: "/old", tags: ["Tag Rev"], dateStamp: 1000 },
@@ -89,23 +97,14 @@ describe("tags.get", function () {
       { id: "new", blogID, path: "/new", tags: ["Tag Rev"], dateStamp: 3000 },
     ];
 
-    saveEntries(blogID, entries, function (err) {
-      if (err) return done.fail(err);
+    for (const entry of entries) await setAsync(blogID, entry);
 
-      get(
-        blogID,
-        "Tag Rev",
-        { rev: false, limit: 2 },
-        function (err, entryIDs) {
-          if (err) return done.fail(err);
-          expect(entryIDs).toEqual(["old", "mid"]);
-          done();
-        }
-      );
-    });
+    const { entryIDs } = await get(blogID, "Tag Rev", { rev: false, limit: 2 });
+
+    expect(entryIDs).toEqual(["old", "mid"]);
   });
 
-  it("supports offsets for pagination", function (done) {
+  it("supports offsets for pagination", async function () {
     const blogID = this.blog.id;
     const entries = [
       {
@@ -131,22 +130,14 @@ describe("tags.get", function () {
       },
     ];
 
-    saveEntries(blogID, entries, function (err) {
-      if (err) return done.fail(err);
+    for (const entry of entries) await setAsync(blogID, entry);
 
-      get(
-        blogID,
-        "Tag Two",
-        { offset: 1, limit: 1 },
-        function (err, entryIDs, tag) {
-          if (err) return done.fail(err);
-
-          expect(entryIDs).toEqual(["entry-f"]);
-          expect(tag).toEqual("Tag Two");
-
-          done();
-        }
-      );
+    const { entryIDs, prettyTag } = await get(blogID, "Tag Two", {
+      offset: 1,
+      limit: 1,
     });
+
+    expect(entryIDs).toEqual(["entry-f"]);
+    expect(prettyTag).toEqual("Tag Two");
   });
 });

@@ -51,7 +51,7 @@ Defined in `key.js`.
 
 ## Public API
 
-`list` and `popular` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `get` still calls back with several results, so it is callback-only.
+`list` and `popular` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `get` returns a promise only: it resolves to an object, which the callback bridge can't carry.
 
 ### `set(blogID, entry, callback)`
 
@@ -74,16 +74,16 @@ Reconciles the tag index for a single entry against its current state in Redis.
 - Entries that are deleted, drafted, scheduled, or located under a path component beginning with `_` have their tags suppressed: the effective tag list is treated as empty, which removes the entry from all tag index structures.
 - Calls back with `(err)`. On Redis error, throws rather than passing to callback.
 
-### `get(blogID, tag, [options], callback)`
+### `get(blogID, tag, [options])`
 
 Retrieves the entry IDs associated with a tag, tolerating URL-encoded or non-normalised input.
 
 - Attempts lookup in sequence: normalised form of `tag`, raw `tag`, URI-decoded `tag`. Returns the first non-empty result.
-- Delegates each attempt to `_get` (the internal function).
+- Delegates each attempt to `_get` (the internal function), which has the same async signature.
 - `options.limit` (number): maximum number of entry IDs to return. Omitting this returns all IDs.
 - `options.offset` (number): zero-based index to start from. Defaults to `0`.
 - `options.rev` (boolean): read direction over the `dateStamp`-scored set. Defaults to `true` (newest first); pass `false` for oldest first. Pagination stays in Redis (`ZRANGE start stop`) either way.
-- Calls back with `(err, entryIDs, prettyTag, total)`:
+- Resolves to `{ entryIDs, prettyTag, total }`, and rejects on a Redis error or invalid arguments:
   - `entryIDs`: array of entry ID strings, ordered by `dateStamp` (descending unless `rev: false`).
   - `prettyTag`: the original display-form tag name as stored, or the queried tag string if no display name is recorded.
   - `total`: total number of entries associated with the tag regardless of `limit`/`offset`.

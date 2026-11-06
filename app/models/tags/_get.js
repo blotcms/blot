@@ -4,15 +4,11 @@ const type = require("helper/type");
 const key = require("./key");
 
 // This is a private method which assumes the tag has been normalized.
-module.exports = function get(blogID, tag, options, callback) {
-  if (typeof options === "function") {
-    callback = options;
-    options = {};
-  }
-
+// Resolves to { entryIDs, prettyTag, total }.
+module.exports = async function get(blogID, tag, options = {}) {
   options = options || {};
 
-  ensure(blogID, "string").and(tag, "string").and(callback, "function");
+  ensure(blogID, "string").and(tag, "string");
   if (!type(options, "object"))
     throw new TypeError("Options must be an object");
   if (options.limit !== undefined) ensure(options.limit, "number");
@@ -33,20 +29,18 @@ module.exports = function get(blogID, tag, options, callback) {
   const tagKey = key.name(blogID, tag);
   const sortedTagKey = key.sortedTag(blogID, tag);
 
-  (async function () {
-    const pretty = (await client.get(tagKey)) || tag;
+  const pretty = (await client.get(tagKey)) || tag;
 
-    var start = offset;
-    var stop = limit === undefined ? -1 : offset + limit - 1;
+  var start = offset;
+  var stop = limit === undefined ? -1 : offset + limit - 1;
 
-    const [totalResult, entryIDsResult] = await Promise.all([
-      client.zCard(sortedTagKey),
-      client.zRange(sortedTagKey, start, stop, { REV: rev }),
-    ]);
+  const [totalResult, entryIDsResult] = await Promise.all([
+    client.zCard(sortedTagKey),
+    client.zRange(sortedTagKey, start, stop, { REV: rev }),
+  ]);
 
-    const total = totalResult || 0;
-    const entryIDs = entryIDsResult || [];
+  const total = totalResult || 0;
+  const entryIDs = entryIDsResult || [];
 
-    return callback(null, entryIDs, pretty, total);
-  })().catch(callback);
+  return { entryIDs, prettyTag: pretty, total };
 };

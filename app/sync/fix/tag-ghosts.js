@@ -1,6 +1,7 @@
 var Tags = require("models/tags");
 var Entry = require("models/entry");
 var async = require("async");
+var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var entryKey = require("models/entry/key").entry;
 
@@ -95,8 +96,10 @@ module.exports = function main(blog, callback) {
     async.eachSeries(
       tags,
       function (tag, next) {
-        Tags.get(blog.id, tag.slug, function (err, entryIDs) {
+        withCallback(Tags.get)(blog.id, tag.slug, function (err, result) {
           if (err) return next(err);
+
+          const entryIDs = result.entryIDs;
 
           const tagKey = Tags.key.sortedTag(blog.id, tag.slug);
 
