@@ -105,7 +105,6 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
-    "blessed": "0.1.81",
     "depcheck": "1.4.7",
     "dir-compare": "4.0.0",
     "eslint": "10.13.0",
@@ -117,5 +116,9 @@
     "nyc": "17.1.0",
     "prettier": "3.9.10",
     "seedrandom": "2.4.4"
+  },
+  "prettier": {
+    "trailingComma": "es5",
+    "embeddedLanguageFormatting": "off"
   }
 }

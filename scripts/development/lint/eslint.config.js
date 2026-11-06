@@ -1,5 +1,7 @@
 // ESLint (flat config). Correctness rules only: formatting is Prettier's job
-// (.prettierrc.json). Run both with scripts/development/lint.sh.
+// (the "prettier" key of package.json). Run both with
+// scripts/development/lint.sh, which passes this file with --config and gives
+// Prettier the ignores below too.
 const js = require("@eslint/js");
 const globals = require("globals");
 

@@ -8,15 +8,15 @@
 #                            the whole repository
 #   lint.sh fix [files...]   Format with Prettier, then ESLint --fix. Every
 #                            JavaScript file when no files are given
-#   lint.sh staged           The pre-commit hook (.githooks/pre-commit): checks
+#   lint.sh staged           The pre-commit hook (lint/hooks/pre-commit): checks
 #                            the staged JavaScript files
-#   lint.sh claude-hook      Claude Code's PostToolUse hook
-#                            (.claude/settings.json): formats and lints the
-#                            file an edit touched, reads the hook JSON on stdin
+#   lint.sh claude-hook      A Claude Code PostToolUse hook for Edit|Write:
+#                            formats and lints the file an edit touched, reads
+#                            the hook JSON on stdin
 #   lint.sh eslint|prettier [args...]
 #
 # Install the git hook in a checkout with:
-#   git config core.hooksPath .githooks
+#   git config core.hooksPath scripts/development/lint/hooks
 set -euo pipefail
 
 root=$(git rev-parse --show-toplevel)
@@ -45,10 +45,31 @@ fi
 # eslint.config.js requires @eslint/js and globals
 export NODE_PATH="$dir/node_modules"
 
-eslint() { node "$dir/node_modules/eslint/bin/eslint.js" "$@"; }
-prettier() { node "$dir/node_modules/prettier/bin/prettier.cjs" "$@"; }
+# The config lives in scripts/development/lint rather than the top level, and
+# Prettier's options are the "prettier" key of package.json. Prettier skips
+# what .gitignore does plus the ignores of the ESLint config, passed to it as
+# negated patterns, so the two tools share one list.
+config="$root/scripts/development/lint/eslint.config.js"
+ignores=()
+while IFS= read -r pattern; do ignores+=("!$pattern"); done < <(node -p 'require(process.argv[1])[0].ignores.join("\n")' "$config")
+
+eslint() { node "$dir/node_modules/eslint/bin/eslint.js" --config "$config" "$@"; }
+prettier() { node "$dir/node_modules/prettier/bin/prettier.cjs" "$@" "${ignores[@]}"; }
 
 js_files() { grep -E '\.(c|m)?js$' || true; }
+
+# Drops the files the ESLint config ignores: Prettier fails on an explicitly
+# named file that one of its negated patterns matches
+not_ignored() {
+  node -e '
+    const { ESLint } = require(process.env.NODE_PATH + "/eslint");
+    const eslint = new ESLint({ overrideConfigFile: process.argv[1] });
+    (async () => {
+      for (const file of process.argv.slice(2))
+        if (!(await eslint.isPathIgnored(file))) console.log(file);
+    })();
+  ' "$config" "$@"
+}
 
 case "${1:-}" in
   check)
@@ -64,14 +85,21 @@ case "${1:-}" in
       prettier --write --log-level=warn "**/*.{js,mjs,cjs}"
       eslint --fix .
     else
-      prettier --write --log-level=warn --ignore-unknown "$@"
-      eslint --fix --no-warn-ignored "$@"
+      files=()
+      while IFS= read -r file; do files+=("$file"); done < <(not_ignored "$@")
+      [ ${#files[@]} -eq 0 ] && exit 0
+      prettier --write --log-level=warn --ignore-unknown "${files[@]}"
+      eslint --fix --no-warn-ignored "${files[@]}"
     fi
     ;;
 
   staged)
     files=()
     while IFS= read -r file; do files+=("$file"); done < <(git diff --cached --name-only --diff-filter=ACMR | js_files)
+    [ ${#files[@]} -eq 0 ] && exit 0
+    staged=("${files[@]}")
+    files=()
+    while IFS= read -r file; do files+=("$file"); done < <(not_ignored "${staged[@]}")
     [ ${#files[@]} -eq 0 ] && exit 0
     status=0
     eslint --no-warn-ignored "${files[@]}" || status=1
@@ -92,6 +120,7 @@ case "${1:-}" in
     esac
     echo "$file" | js_files | grep -q . || exit 0
     [ -f "$file" ] || exit 0
+    [ -n "$(not_ignored "$file")" ] || exit 0
     prettier --write --log-level=warn "$file" >&2 || true
     # Exit status 2 shows Claude what ESLint reported
     if ! output=$(eslint --fix --no-color --no-warn-ignored "$file" 2>&1); then
