@@ -82,7 +82,7 @@ dashboard.post("/create", function (req, res, next) {
     console.log(clfdate() + " Git: User cancelled creation of repo");
 
     if (!req.blog.client) {
-      return res.redirect(res.locals.dashboardBase + "/settings/folder");
+      return res.redirect(res.locals.dashboardBase + "/sync");
     }
 
     return disconnect(req.blog.id, next);

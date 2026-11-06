@@ -4,7 +4,7 @@
   <div class="btn-row">
     {{#action}}
     {{#actionUrl}}<a class="btn btn-primary btn-sm" href="{{{actionUrl}}}">{{action}}</a>{{/actionUrl}}
-    {{^actionUrl}}<a class="btn btn-primary btn-sm" href="{{{dashboardBase}}}/settings/folder/{{blog.client}}/setup">{{action}}</a>{{/actionUrl}}
+    {{^actionUrl}}<a class="btn btn-primary btn-sm" href="{{{dashboardBase}}}/sync/{{blog.client}}/setup">{{action}}</a>{{/actionUrl}}
     {{/action}}
     <a class="btn btn-sm" href="{{{dashboardBase}}}/activity">View activity</a>
   </div>

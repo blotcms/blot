@@ -119,7 +119,7 @@ dashboard
 
       if (req.body.cancel) {
         if (!req.blog.client) {
-          return res.redirect(res.locals.dashboardBase + "/settings/folder");
+          return res.redirect(res.locals.dashboardBase + "/sync");
         }
 
         if (

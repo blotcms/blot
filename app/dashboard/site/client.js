@@ -19,12 +19,12 @@ const RESYNC_REFUSALS = [
   "ICLOUD_SETUP_INCOMPLETE",
 ];
 
-// So the breadcrumbs look like: Settings > Folder
+// The sync pages, at /sites/<handle>/sync. Breadcrumbs: Sites > Site > Sync
 client_routes.use(function (req, res, next) {
   res.locals.base = req.baseUrl;
   res.locals.selected = { ...res.locals.selected, folder: "is-active" };
   res.locals.isFolderSettingsView = true;
-  res.locals.breadcrumbs.add("Folder", "folder");
+  res.locals.breadcrumbs.add("Sync", "sync");
   next();
 });
 
@@ -236,7 +236,7 @@ if (config.environment === "development") {
 
       res.redirect(
         res.locals.dashboardBase +
-          "/settings/folder" +
+          "/sync" +
           (req.blog.client ? "/" + req.blog.client : "")
       );
     } catch (error) {
@@ -270,13 +270,11 @@ client_routes
 
 client_routes.use("/:client", function (req, res, next) {
   if (clients[req.params.client] === undefined) {
-    return res.redirect(res.locals.dashboardBase + "/settings/folder");
+    return res.redirect(res.locals.dashboardBase + "/sync");
   }
 
   if (req.blog.client && req.params.client !== req.blog.client) {
-    return res.redirect(
-      res.locals.dashboardBase + "/settings/folder/" + req.blog.client
-    );
+    return res.redirect(res.locals.dashboardBase + "/sync/" + req.blog.client);
   }
 
   if (!req.blog.client) {
@@ -293,7 +291,7 @@ client_routes.use("/:client", function (req, res, next) {
     ]);
 
     if (!allowedUnpersistedPaths.has(relativePath)) {
-      return res.redirect(res.locals.dashboardBase + "/settings/folder");
+      return res.redirect(res.locals.dashboardBase + "/sync");
     }
   }
 
@@ -312,7 +310,7 @@ for (let client_name in clients) {
 }
 
 client_routes.use("/:client", (req, res) => {
-  res.redirect(`${res.locals.dashboardBase}/settings/folder`);
+  res.redirect(`${res.locals.dashboardBase}/sync`);
 });
 
 module.exports = client_routes;

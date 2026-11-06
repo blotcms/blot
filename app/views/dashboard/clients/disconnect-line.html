@@ -23,7 +23,7 @@
       <a href="{{{actionUrl}}}">{{action}}</a>
       {{/actionUrl}}
       {{^actionUrl}}
-      <a href="{{{dashboardBase}}}/settings/folder/{{blog.client}}/setup">{{action}}</a>
+      <a href="{{{dashboardBase}}}/sync/{{blog.client}}/setup">{{action}}</a>
       {{/actionUrl}}
       {{/action}}
       <a href="{{{dashboardBase}}}/activity">View activity</a>
@@ -32,12 +32,12 @@
 </div>
 {{/blog.healthIssue}}
 
-<a class="line" href="{{{dashboardBase}}}/settings/folder/reset">
+<a class="line" href="{{{dashboardBase}}}/sync/reset">
     <span class="label">Reset</span>
     <span class="link">Resync folder</span>
 </a>
 
-<a class="line" href="{{{dashboardBase}}}/settings/folder/{{blog.client}}/disconnect">
+<a class="line" href="{{{dashboardBase}}}/sync/{{blog.client}}/disconnect">
   <span class="label">Disconnect</span>
   <span class="link">Disconnect {{client.display_name}}</span>
 </a>
@@ -49,8 +49,8 @@
 {{#isDevelopment}}
 <div class="dev-note">
   <div class="dev-note__title">Development server only:</div>
-  <a href="{{{dashboardBase}}}/settings/folder/open">Open local {{client.display_name}}</a>
+  <a href="{{{dashboardBase}}}/sync/open">Open local {{client.display_name}}</a>
   &nbsp;&middot;&nbsp;
-  <a href="{{{dashboardBase}}}/settings/folder/open?local=true">Open data directory</a>
+  <a href="{{{dashboardBase}}}/sync/open?local=true">Open data directory</a>
 </div>
 {{/isDevelopment}}

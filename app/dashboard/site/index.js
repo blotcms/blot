@@ -55,7 +55,8 @@ function getSidebarSelection(path) {
     path === "/drafts" ||
     path === "/scheduled" ||
     path.startsWith("/folder/") ||
-    path.startsWith("/settings/folder")
+    path === "/sync" ||
+    path.startsWith("/sync/")
   )
     return "folder";
   if (path.startsWith("/settings/title")) return "title";
@@ -183,7 +184,7 @@ site.use((req, res, next) => {
       sync.progress === undefined ? "" : `--progress: ${sync.progress}%`,
     url:
       sync.state === "off"
-        ? `${res.locals.base}/settings/folder`
+        ? `${res.locals.base}/sync`
         : `${res.locals.base}/activity`,
   };
 
@@ -381,7 +382,13 @@ site.use("/settings", (req, res, next) => {
   next();
 });
 
-site.use("/settings/folder", require("./client"));
+// The sync pages (the folder's client and its options) were under
+// /settings/folder; old links and bookmarks keep working
+site.use("/settings/folder", (req, res) => {
+  const suffix = req.url === "/" ? "" : req.url;
+  res.redirect(308, `${res.locals.base}/sync${suffix}`);
+});
+site.use("/sync", require("./client"));
 
 // Keep old dashboard bookmarks working while the folder settings move under
 // the Settings section. These paths are dashboard routes; provider callbacks
@@ -395,7 +402,7 @@ site.use("/client", (req, res, next) => {
     return clientSettings(req, res, next);
   }
   const suffix = req.url === "/" ? "" : req.url;
-  res.redirect(308, `${res.locals.base}/settings/folder${suffix}`);
+  res.redirect(308, `${res.locals.base}/sync${suffix}`);
 });
 
 // The title and domain pages also moved under Settings

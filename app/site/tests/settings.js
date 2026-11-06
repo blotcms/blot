@@ -36,7 +36,7 @@ describe("Blot dashboard settings", function () {
 
     // go to the client settings page (the overview only links to it once a
     // client is connected)
-    await page.goto("/sites/" + handle + "/settings/folder");
+    await page.goto("/sites/" + handle + "/sync");
 
     // click on the button for the local folder client
     await page.click("button[name=client][value=local]");
