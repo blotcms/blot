@@ -29,11 +29,7 @@ async function watch(blogID, dir) {
   }
 
   async function processBatch(paths) {
-    const blog = await new Promise((resolve, reject) => {
-      Blog.get({ id: blogID }, (err, blog) =>
-        err ? reject(err) : resolve(blog)
-      );
-    });
+    const blog = await Blog.get({ id: blogID });
 
     if (!blog || blog.client !== "local") return close();
 

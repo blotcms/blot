@@ -8,10 +8,7 @@
 // not a blog folder, so plain fs is fine for it.
 
 const { join, resolve, posix } = require("path");
-const { promisify } = require("util");
 const config = require("config");
-
-const getBlog = promisify((id, cb) => require("models/blog").get({ id }, cb));
 
 function base() {
   return process.env.BLOT_LOCAL_SOURCE_DIRECTORY
@@ -21,7 +18,7 @@ function base() {
 
 // The directory for a blog, from its handle (or its ID, for a blog with none)
 async function directory(blogID) {
-  const blog = await getBlog(blogID);
+  const blog = await require("models/blog").get({ id: blogID });
   if (!blog) throw new Error("No blog with ID " + blogID);
 
   const name = String(blog.handle || blog.id);

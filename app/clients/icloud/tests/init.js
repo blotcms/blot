@@ -62,23 +62,23 @@ describe("icloud init validateAllBlogs", function () {
     const blogLoads = {};
 
     stub("blog", {
-      get: ({ id }, callback) => {
+      get: async ({ id }) => {
         blogLoads[id] = (blogLoads[id] || 0) + 1;
         // Deleted while the sweep was walking it
         if (blogLoads[id] > 1 && behaviors[id].deletedAfterWalk) {
-          return callback(null, null);
+          return null;
         }
-        callback(null, {
+        return {
           id,
           handle: id + "-handle",
           client: "icloud",
           isDisabled: Boolean(behaviors[id].blogDisabled),
           load: blogLoads[id],
-        });
+        };
       },
     });
     stub("entries", {
-      getAllTotal: (_id, callback) => callback(null, 42),
+      getAllTotal: async () => 42,
     });
     stub("database", {
       iterate: async (callback) => {

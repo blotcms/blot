@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const Blog = require("models/blog");
 const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
@@ -9,11 +8,6 @@ const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 const database = require("../database");
 const { shouldSkipBackgroundSync } = require("../error");
 const syncFromiCloud = require("./fromiCloud");
-
-const getBlog = promisify(Blog.get);
-// getAllTotal, not getTotal: Fix()'s entry-ghosts check scans every entry
-// (drafts, pages, scheduled, deleted included), not just published ones.
-const getEntryTotal = promisify(Entries.getAllTotal);
 
 const LOCK_BUSY_MESSAGE = "Failed to acquire folder lock";
 // Thrown by sync() when the blog is disabled or gone.
@@ -126,7 +120,9 @@ const fixBlog = (blog) =>
 module.exports = async function validateBlog(blog, report, options) {
   const { publish, lock } = options;
   const blogID = blog.id;
-  const entryCount = await getEntryTotal(blogID).catch(() => null);
+  // getAllTotal, not getTotal: Fix()'s entry-ghosts check scans every entry
+  // (drafts, pages, scheduled, deleted included), not just published ones.
+  const entryCount = await Entries.getAllTotal(blogID).catch(() => null);
   let phase = "walk";
 
   try {
@@ -168,7 +164,7 @@ module.exports = async function validateBlog(blog, report, options) {
     // blog.menu), and the walk may have just added a menu page. The snapshot
     // loaded before the walk would have that write drop it.
     phase = "fix";
-    const current = await getBlog({ id: blogID });
+    const current = await Blog.get({ id: blogID });
     // Deleted meanwhile, so there is nothing left to repair.
     if (!current) return true;
 

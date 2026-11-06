@@ -56,7 +56,7 @@ describe("local client init", function () {
     const cleanup = jasmine
       .createSpy("cleanup")
       .and.returnValue(Promise.resolve());
-    const setup = jasmine.createSpy("setup");
+    const setup = jasmine.createSpy("setup").and.returnValue(Promise.resolve());
     let captured;
 
     require.cache[subscriberPath] = {
@@ -68,10 +68,10 @@ describe("local client init", function () {
     require.cache[setupPath] = { exports: setup };
     require.cache[blogPath] = {
       exports: {
-        getAllIDs: function (callback) {
-          callback(null, []);
+        getAllIDs: async function () {
+          return [];
         },
-        get: function () {},
+        get: async function () {},
       },
     };
     delete require.cache[initPath];
@@ -80,7 +80,7 @@ describe("local client init", function () {
 
     expect(captured.channel).toBe("clients:local:new-folder");
     captured.onMessage(JSON.stringify({ blogID: "blog_1" }), captured.channel);
-    expect(setup).toHaveBeenCalledWith("blog_1", jasmine.any(Function));
+    expect(setup).toHaveBeenCalledWith("blog_1");
 
     const shutdown = process.listeners("SIGTERM").find(function (listener) {
       return addedListeners.SIGTERM.indexOf(listener) === -1;

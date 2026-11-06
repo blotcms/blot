@@ -1,7 +1,6 @@
 // This is invoked by the master process so if you make any
 // changes to it you need to make sure the master process
 // is restarted, not just the worker processes.
-const async = require("async");
 const debug = require("debug")("blot:clients:local:setup");
 const setup = require("./setup");
 const redisSubscriber = require("helper/redisSubscriber");
@@ -22,8 +21,8 @@ module.exports = async () => {
       debug("recieved", message, "on", channel);
       if (channel !== CHANNEL) return;
       let { blogID } = JSON.parse(message);
-      setup(blogID, function (err) {
-        if (err) console.error(err);
+      setup(blogID).catch(function (err) {
+        console.error(err);
       });
     },
     onError: function (err) {
@@ -46,28 +45,30 @@ module.exports = async () => {
 
   await subscription.setupPromise;
 
-  initialSetupTimer = setTimeout(function () {
-    Blog.getAllIDs(function (err, blogIDs) {
-      if (err) console.error(err);
-      async.eachSeries(
-        blogIDs,
-        function (blogID, next) {
-          console.log(prefix(), "Blog:", blogID, "Setting up");
-          Blog.get({ id: blogID }, function (err, blog) {
-            if (err) return next(err);
-            if (!blog || blog.client !== "local") return next();
+  initialSetupTimer = setTimeout(async function () {
+    let blogIDs;
 
-            console.log(prefix(), "Synchronizing", blogID);
-            setup(blogID, function (err) {
-              if (err) return next(err);
-              next();
-            });
-          });
-        },
-        function (err) {
-          console.log(prefix(), "Checked all blogs");
-        }
-      );
-    });
+    try {
+      blogIDs = await Blog.getAllIDs();
+    } catch (err) {
+      console.error(err);
+      return;
+    }
+
+    // One blog at a time. A failure stops the loop.
+    try {
+      for (const blogID of blogIDs) {
+        console.log(prefix(), "Blog:", blogID, "Setting up");
+        const blog = await Blog.get({ id: blogID });
+        if (!blog || blog.client !== "local") continue;
+
+        console.log(prefix(), "Synchronizing", blogID);
+        await setup(blogID);
+      }
+    } catch (err) {
+      console.error(prefix(), "Unable to check all blogs", err);
+    }
+
+    console.log(prefix(), "Checked all blogs");
   }, 5 * 1000); // 5s
 };

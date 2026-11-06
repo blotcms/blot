@@ -93,9 +93,9 @@ describe("icloud routes stamp lastSync", function () {
     });
     stub("email", { ICLOUD_RESYNC_ISSUE: (_, locals, callback) => callback() });
     stub("blog", {
-      get: ({ id }, callback) => callback(null, { id, client: "icloud" }),
+      get: async ({ id }) => ({ id, client: "icloud" }),
     });
-    stub("entries", { getAllTotal: (_id, callback) => callback(null, 0) });
+    stub("entries", { getAllTotal: async () => 0 });
     stub("fix", (blog, callback) => callback(null, {}));
     stub("getHealth", async () => ({ issues: [] }));
     // Reload each route, and the walk and Fix() it runs, bound to the stubs

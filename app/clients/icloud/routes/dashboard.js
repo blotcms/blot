@@ -90,13 +90,9 @@ dashboard
         return disconnect(req.blog.id, next);
       }
 
-      const setClientError = await new Promise((resolve) => {
-        Blog.set(req.blog.id, { client: "icloud" }, function (err) {
-          resolve(err);
-        });
-      });
-
-      if (setClientError) {
+      try {
+        await Blog.set(req.blog.id, { client: "icloud" });
+      } catch (setClientError) {
         return next(setClientError);
       }
 
