@@ -3,8 +3,6 @@ const redisSubscriber = require("helper/redisSubscriber");
 
 const promisify = require("util").promisify;
 const database = require("clients/dropbox/database");
-const get = promisify(database.get);
-const set = promisify(database.set);
 
 const getAccount = require("./getAccount");
 const createFolder = require("./createFolder");
@@ -78,9 +76,9 @@ function setup(account, session, callback) {
       if (handleAbort()) return;
       session.save();
 
-      const previous = await get(account.blog.id);
+      const previous = await database.get(account.blog.id);
 
-      await set(account.blog.id, {
+      await database.set(account.blog.id, {
         account_id: account.account_id,
         email: account.email,
         access_token: account.access_token,

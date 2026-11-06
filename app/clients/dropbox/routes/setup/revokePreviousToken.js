@@ -1,11 +1,7 @@
 const config = require("config");
 const fetch = require("node-fetch");
 const { Dropbox } = require("dropbox");
-const promisify = require("util").promisify;
 const database = require("clients/dropbox/database");
-
-const listBlogs = promisify(database.listBlogs);
-const get = promisify(database.get);
 
 // When a blog that already has a Dropbox account authorizes again (e.g.
 // switching between app folder and full Dropbox permission), Dropbox issues
@@ -24,9 +20,9 @@ async function revokePreviousToken(previous, current) {
 
     if (sameToken(previous, current)) return false;
 
-    for (const blog of await listBlogs(previous.account_id)) {
+    for (const blog of await database.listBlogs(previous.account_id)) {
       if (blog.id === current.blogID) continue;
-      const other = await get(blog.id);
+      const other = await database.get(blog.id);
       if (other && sameToken(previous, other)) return false;
     }
 

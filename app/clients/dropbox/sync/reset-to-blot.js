@@ -1,8 +1,7 @@
 const storage = require("storage/folder");
-const { promisify } = require("util");
 const { join } = require("path");
 const clfdate = require("helper/clfdate");
-const download = promisify(require("../util/download"));
+const download = require("../util/download");
 const {
   MAX_FILE_SIZE,
   hasUnsupportedExtension,
@@ -18,8 +17,8 @@ const {
   createProgress,
 } = require("clients/util/resyncProgress");
 
-const set = promisify(require("../database").set);
-const persistError = promisify(require("../util/persistError"));
+const set = (...args) => require("../database").set(...args);
+const persistError = require("../util/persistError");
 const {
   SOURCES,
   classify,
@@ -28,9 +27,12 @@ const {
 } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
 const retryRequest = require("../util/retryRequest");
-const createClient = promisify((blogID, cb) =>
-  require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
-);
+const loadClient = require("../util/loadClient");
+const createClient = async (blogID) => {
+  const { error, client, account } = await loadClient(blogID);
+  if (error) throw error;
+  return [client, account];
+};
 
 // Caps how many files in one directory are hashed/stat'd at once. Without
 // this, a directory with thousands of files fires that many concurrent
@@ -57,9 +59,6 @@ async function mapLimit(items, limit, iterator) {
   await Promise.all(workers);
   return results;
 }
-
-// const upload = promisify(require("clients/dropbox/util/upload"));
-// const get = promisify(require("../database").get);
 
 // update(path) is called as each file or directory changes on disk, so the
 // database follows the folder even if the walk fails part way through. It is

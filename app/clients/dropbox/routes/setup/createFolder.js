@@ -1,13 +1,8 @@
 const titleToFolder = require("clients/dropbox/util/titleToFolder");
-const promisify = require("util").promisify;
 
 const sync = require("sync");
 const database = require("clients/dropbox/database");
 const { transferIncomplete } = require("clients/dropbox/util/constants");
-
-const listBlogs = promisify(database.listBlogs);
-const get = promisify(database.get);
-const set = promisify(database.set);
 
 // We sometimes need to move the files in the user's
 // Dropbox / Apps / Blot directory into a subfolder
@@ -75,7 +70,7 @@ async function tryReuseIncompleteTransferFolder(account) {
   // existing account" - swallowing it and falling through to mkdir would
   // risk the same abandoned-partial-folder problem this function exists to
   // prevent. Let it propagate and fail this setup attempt instead.
-  const existing = await get(blog.id);
+  const existing = await database.get(blog.id);
 
   if (!existing) return null;
   if (!transferIncomplete(existing)) return null;
@@ -115,7 +110,9 @@ async function checkAppFolder(account) {
   let blogToMove = null;
   let blogsInAppFolder = null;
 
-  const blogsWithThisDropboxAccount = await listBlogs(account.account_id);
+  const blogsWithThisDropboxAccount = await database.listBlogs(
+    account.account_id
+  );
 
   // If the Dropbox account for this other blog does not
   // have full folder permission and its folder is an empty
@@ -124,7 +121,7 @@ async function checkAppFolder(account) {
   for (const blog of blogsWithThisDropboxAccount) {
     // Ignore the blog we're setting up
     if (blog.id === account.blog.id) continue;
-    const { folder, full_access } = await get(blog.id);
+    const { folder, full_access } = await database.get(blog.id);
     // Another blog on this Dropbox account does not use
     // the app folder
     if (full_access === true) continue;
@@ -168,7 +165,7 @@ function moveExistingFiles(client, otherBlog) {
           });
 
         if (entries.length === 0) {
-          await set(otherBlog.id, {
+          await database.set(otherBlog.id, {
             folder,
             folder_id,
             cursor: "",
@@ -197,7 +194,7 @@ function moveExistingFiles(client, otherBlog) {
             throw new Error("Unknown response " + JSON.stringify(result));
         } while (tag === "in_progress");
 
-        await set(otherBlog.id, {
+        await database.set(otherBlog.id, {
           folder,
           folder_id,
           cursor: "",

@@ -1,14 +1,18 @@
-var async = require("async");
-var isRetryable = require("./classifyError").isRetryable;
+const withCallback = require("helper/withCallback");
+const isRetryable = require("./classifyError").isRetryable;
 
+// Wraps an async function so a failed call is tried again, up to
+// options.times attempts in all, waiting options.interval(attempt) ms
+// between them. The wrapped function still takes a trailing callback from
+// callers that pass one, and returns a promise for those that do not.
 function retry(fn, options) {
   options = options || {};
 
   // Set our defaults
   options.times = options.times || 6;
 
-  // Exponential backoff
-  // 100, 200, 400, 800, 1600, 3200
+  // Exponential backoff, from the second attempt on:
+  // 200, 400, 800, 1600, 3200
   options.interval = options.interval || exponential;
 
   // Do not retry user-actionable failures (401 / invalid grant,
@@ -31,21 +35,25 @@ function retry(fn, options) {
       return isRetryable(err);
     };
 
-  return function () {
-    var args = Array.prototype.slice.call(arguments);
-    var callback = args.pop();
+  return withCallback(async function (...args) {
+    let attempt = 1;
 
-    // Will timeout a single attempt, not the exported function
-    if (options.timeout) fn = async.timeout(fn, options.timeout);
+    for (;;) {
+      try {
+        return await fn.apply(null, args);
+      } catch (err) {
+        // The filter is only consulted when another attempt is left
+        if (attempt++ < options.times && options.errorFilter(err)) {
+          await new Promise((resolve) =>
+            setTimeout(resolve, options.interval(attempt))
+          );
+          continue;
+        }
 
-    async.retry(
-      options,
-      function (done) {
-        fn.apply(null, args.concat(done));
-      },
-      callback
-    );
-  };
+        throw err;
+      }
+    }
+  });
 }
 
 // Exponential backoff

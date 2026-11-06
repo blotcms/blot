@@ -94,14 +94,11 @@ describe("dropbox sync when Redis is unavailable", function () {
     };
     require.cache[databasePath] = {
       exports: {
-        set: function (_blogID, values, callback) {
+        set: async function (_blogID, values) {
           saved.push(Object.assign({}, values));
           Object.assign(store.account, values);
-          callback(null);
         },
-        setError: function (_blogID, _classification, callback) {
-          callback(null);
-        },
+        setError: async function () {},
       },
     };
     delete require.cache[persistErrorPath];

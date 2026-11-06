@@ -57,12 +57,12 @@ describe("dropbox sync/index with a file over the download size limit", function
         callback(null, {}, { folder_id: "", cursor: "old", error_code: 0 }),
     };
     require.cache[databasePath] = {
-      exports: { set: (_id, _values, callback) => callback(null) },
+      exports: { set: async () => {} },
     };
     let calls = 0;
     require.cache[deltaPath] = {
       exports: function () {
-        return function (_cursor, callback) {
+        return async function (_cursor) {
           const entries =
             calls++ === 0
               ? [
@@ -76,7 +76,7 @@ describe("dropbox sync/index with a file over the download size limit", function
                   },
                 ]
               : [];
-          callback(null, { entries, cursor: "new", has_more: false });
+          return { entries, cursor: "new", has_more: false };
         };
       },
     };

@@ -81,22 +81,20 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
     };
     require.cache[databasePath] = {
       exports: {
-        set: function (_blogID, values, callback) {
+        set: async function (_blogID, values) {
           saved.push(values);
-          callback(null);
         },
         // Mirrors database.js's real setError closely enough for these
         // specs: only a persistable classification writes anything, and
         // what it writes is the same error_code/error_source/error_since
         // shape so `saved` reflects it the same way a direct set() would.
-        setError: function (_blogID, classification, callback) {
-          if (!classification || !classification.persist) return callback(null);
+        setError: async function (_blogID, classification) {
+          if (!classification || !classification.persist) return;
           saved.push({
             error_code: classification.status || 0,
             error_source: classification.source || "",
             error_since: Date.now(),
           });
-          callback(null);
         },
       },
     };

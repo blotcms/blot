@@ -1,5 +1,5 @@
 var debug = require("debug")("blot:clients:dropbox:remove");
-var createClient = require("./util/createClient");
+var loadClient = require("./util/loadClient");
 var join = require("path").join;
 var folder = require("storage/folder");
 var retry = require("./util/retry");
@@ -12,30 +12,31 @@ var waitForErrorTimeout = require("./util/waitForErrorTimeout");
 // This method is mildly complicated by the desire to ensure that
 // if we fail to remove the file from Dropbox, then we do not
 // remove the file from Blot's folder for this blog.
-function remove(blogID, path, callback) {
+async function remove(blogID, path) {
   var pathOnDropbox;
 
   debug("Blog:", blogID, "Removing", path);
 
-  createClient(blogID, function (err, client, account) {
-    if (err) {
-      return persistError(blogID, err, SOURCES.AUTH, function () {
-        callback(err);
-      });
-    }
+  const { error, client, account } = await loadClient(blogID);
 
-    pathOnDropbox = join(account.folder || "/", path);
+  if (error) {
+    await persistError(blogID, error, SOURCES.AUTH).catch(function () {});
+    throw error;
+  }
 
-    client
-      .filesDelete({
+  pathOnDropbox = join(account.folder || "/", path);
+
+  try {
+    try {
+      await client.filesDelete({
         path: pathOnDropbox,
-      })
-
+      });
+    } catch (err) {
       // Respect any delay Dropbox would like before
       // potentially retry and requests
-      .catch(waitForErrorTimeout)
-
-      .catch(function (err) {
+      try {
+        await waitForErrorTimeout(err);
+      } catch (err) {
         // This means that error is something other
         // than the file not existing. HTTP 409 means
         // 'CONFLICT' but typically this means that
@@ -43,20 +44,14 @@ function remove(blogID, path, callback) {
         if (err.status !== 409) throw err;
 
         // The file did not exist, no big deal
-        return Promise.resolve();
-      })
-      .then(function () {
-        return folder.remove(blogID, path);
-      })
-      .then(function () {
-        callback(null);
-      })
-      .catch(function (err) {
-        persistError(blogID, err, SOURCES.APPLY, function () {
-          callback(err);
-        });
-      });
-  });
+      }
+    }
+
+    await folder.remove(blogID, path);
+  } catch (err) {
+    await persistError(blogID, err, SOURCES.APPLY).catch(function () {});
+    throw err;
+  }
 }
 
 module.exports = retry(remove);

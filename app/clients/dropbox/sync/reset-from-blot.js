@@ -1,21 +1,22 @@
 const storage = require("storage/folder");
-const { promisify } = require("util");
-// const upload = promisify(require("clients/dropbox/util/upload"));
 const join = require("path").join;
 const clfdate = require("helper/clfdate");
-const upload = promisify(require("../util/upload"));
+const upload = require("../util/upload");
 const {
   isDotfileOrDotfolder,
   INSUFFICIENT_SPACE_ERROR_CODE,
 } = require("../util/constants");
-const set = promisify(require("../database").set);
-const persistError = promisify(require("../util/persistError"));
+const set = (...args) => require("../database").set(...args);
+const persistError = require("../util/persistError");
 const { SOURCES, classify } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
 const resolveCaseConflicts = require("../../util/resolveCaseConflicts");
-const createClient = promisify((blogID, cb) =>
-  require("../util/createClient")(blogID, (err, ...results) => cb(err, results))
-);
+const loadClient = require("../util/loadClient");
+const createClient = async (blogID) => {
+  const { error, client, account } = await loadClient(blogID);
+  if (error) throw error;
+  return [client, account];
+};
 
 const ABORT_ERROR_MESSAGE = "Dropbox reset aborted";
 

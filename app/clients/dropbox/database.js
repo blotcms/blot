@@ -2,6 +2,7 @@ var debug = require("debug")("blot:clients:dropbox:database");
 var redis = require("models/client");
 var Blog = require("models/blog");
 var ensure = require("helper/ensure");
+var withCallback = require("helper/withCallback");
 var Model;
 
 function defaultFor(type) {
@@ -36,16 +37,6 @@ async function getAccount(blogID) {
   return account;
 }
 
-function get(blogID, callback) {
-  getAccount(blogID)
-    .then(function (account) {
-      return callback(null, account);
-    })
-    .catch(function (err) {
-      return callback(err, null);
-    });
-}
-
 async function listAccountBlogs(account_id) {
   var blogs = [];
 
@@ -56,40 +47,25 @@ async function listAccountBlogs(account_id) {
   debug("Found these blog IDs", members);
 
   await Promise.all(
-    members.map(function (id) {
-      return new Promise(function (resolve) {
-        Blog.get({ id: id }, function (err, blog) {
-          if (err) {
-            debug("Error loading blog", id, err);
-            return resolve();
-          }
+    members.map(async function (id) {
+      let blog;
 
-          if (blog && blog.client === "dropbox") {
-            blogs.push(blog);
-          } else {
-            debug(
-              id,
-              "does not match an extant blog using the Dropbox client."
-            );
-          }
+      try {
+        blog = await Blog.get({ id });
+      } catch (err) {
+        debug("Error loading blog", id, err);
+        return;
+      }
 
-          resolve();
-        });
-      });
+      if (blog && blog.client === "dropbox") {
+        blogs.push(blog);
+      } else {
+        debug(id, "does not match an extant blog using the Dropbox client.");
+      }
     })
   );
 
   return blogs;
-}
-
-function listBlogs(account_id, callback) {
-  listAccountBlogs(account_id)
-    .then(function (blogs) {
-      callback(null, blogs);
-    })
-    .catch(function (err) {
-      callback(err);
-    });
 }
 
 async function setAccount(blogID, changes) {
@@ -160,16 +136,6 @@ async function setAccount(blogID, changes) {
   return multi.exec();
 }
 
-function set(blogID, changes, callback) {
-  setAccount(blogID, changes)
-    .then(function (result) {
-      callback(null, result);
-    })
-    .catch(function (err) {
-      callback(err);
-    });
-}
-
 async function dropAccount(blogID) {
   var multi = redis.multi();
   var account = await getAccount(blogID);
@@ -188,42 +154,23 @@ async function dropAccount(blogID) {
   return multi.exec();
 }
 
-function drop(blogID, callback) {
-  dropAccount(blogID)
-    .then(function (result) {
-      callback(null, result);
-    })
-    .catch(function (err) {
-      callback(err);
-    });
-}
-
 // Persist a classified Dropbox error. Repeating the same status+source
 // keeps the original error_since so getHealth can report when the issue
 // first appeared rather than the last time we noticed it.
-function setError(blogID, classification, callback) {
-  if (!classification || !classification.persist) {
-    return callback(null);
-  }
+async function setError(blogID, classification) {
+  if (!classification || !classification.persist) return;
 
-  get(blogID, function (err, account) {
-    if (err) return callback(err);
-    if (!account) return callback(null);
+  const account = await getAccount(blogID);
+  if (!account) return;
 
-    var same =
-      account.error_code === classification.status &&
-      account.error_source === classification.source;
+  var same =
+    account.error_code === classification.status &&
+    account.error_source === classification.source;
 
-    set(
-      blogID,
-      {
-        error_code: classification.status || 0,
-        error_source: classification.source || "",
-        error_since:
-          same && account.error_since ? account.error_since : Date.now(),
-      },
-      callback
-    );
+  return setAccount(blogID, {
+    error_code: classification.status || 0,
+    error_source: classification.source || "",
+    error_since: same && account.error_since ? account.error_since : Date.now(),
   });
 }
 
@@ -313,9 +260,9 @@ Model = {
 };
 
 module.exports = {
-  set,
-  setError,
-  drop,
-  get,
-  listBlogs,
+  set: withCallback(setAccount),
+  setError: withCallback(setError),
+  drop: withCallback(dropAccount),
+  get: withCallback(getAccount),
+  listBlogs: withCallback(listAccountBlogs),
 };

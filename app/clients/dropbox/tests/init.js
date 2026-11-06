@@ -82,12 +82,10 @@ describe("dropbox init", function () {
       };
       require.cache[databasePath] = {
         exports: {
-          get: function (_blogID, callback) {
-            callback(null, account);
+          get: async function () {
+            return account;
           },
-          set: function (_blogID, _values, callback) {
-            callback(null);
-          },
+          set: async function () {},
         },
       };
       require.cache[resetToBlotPath] = {
@@ -274,16 +272,14 @@ describe("dropbox init", function () {
           // The outer pre-check sees a complete transfer - resetToBlot
           // itself is the one that refuses, as if the transfer became
           // incomplete in the time it took to acquire the lock.
-          get: function (_blogID, callback) {
-            callback(null, {
+          get: async function () {
+            return {
               error_code: 0,
               transfer_pending: false,
               last_sync: Date.now(),
-            });
+            };
           },
-          set: function (_blogID, _values, callback) {
-            callback(null);
-          },
+          set: async function () {},
         },
       };
       require.cache[resetToBlotPath] = {
@@ -415,13 +411,12 @@ describe("dropbox init", function () {
         },
       });
       stub("database", {
-        get: (_id, callback) =>
-          callback(null, {
-            error_code: 0,
-            transfer_pending: Boolean(behaviors[_id].transferPending),
-            last_sync: behaviors[_id].lastSync || Date.now(),
-          }),
-        set: (_id, _values, callback) => callback(null),
+        get: async (_id) => ({
+          error_code: 0,
+          transfer_pending: Boolean(behaviors[_id].transferPending),
+          last_sync: behaviors[_id].lastSync || Date.now(),
+        }),
+        set: async () => {},
       });
       stub("lock", function (blogID) {
         if (behaviors[blogID].busy) {
