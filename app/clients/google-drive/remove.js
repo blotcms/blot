@@ -2,8 +2,9 @@ const createDriveClient = require("./serviceAccount/createDriveClient");
 const clfdate = require("helper/clfdate");
 const folder = require("storage/folder");
 const database = require("./database");
+const withCallback = require("helper/withCallback");
 
-module.exports = async function remove(blogID, path, callback) {
+async function remove(blogID, path) {
   const prefix = () =>
     clfdate() + " Google Drive: Remove:" + blogID + ":" + path + ":";
 
@@ -28,10 +29,10 @@ module.exports = async function remove(blogID, path, callback) {
     } else {
       console.log(prefix(), "WARNING No fileId found in db");
     }
-
-    callback(null);
   } catch (e) {
     console.log(prefix(), "Remove: Error", path, e);
-    callback(e);
+    throw e;
   }
-};
+}
+
+module.exports = withCallback(remove);
