@@ -228,13 +228,18 @@ news.post("/sign-up", parse, async function (req, res, next) {
   }
 });
 
-function loadToDo(req, res, next) {
-  fs.readFile(join(root, "TODO"), "utf-8", function (err, todo) {
-    if (err) {
-      console.log(err);
-      res.locals.todo = "";
-      return next();
-    }
+async function loadToDo(req, res, next) {
+  let todo;
+
+  try {
+    todo = await fs.readFile(join(root, "TODO"), "utf-8");
+  } catch (err) {
+    console.log(err);
+    res.locals.todo = "";
+    return next();
+  }
+
+  try {
     res.locals.todo = marked.parse(todo);
 
     var html = res.locals.todo;
@@ -251,8 +256,11 @@ function loadToDo(req, res, next) {
     });
 
     res.locals.todo = $("body").html();
-    return next();
-  });
+  } catch (err) {
+    return next(err);
+  }
+
+  return next();
 }
 
 module.exports = news;

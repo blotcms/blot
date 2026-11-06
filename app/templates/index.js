@@ -6,7 +6,6 @@ var basename = require("path").basename;
 var debug = require("debug")("blot:templates");
 var Mustache = require("mustache");
 var fs = require("fs-extra");
-var async = require("async");
 var Blog = require("models/blog");
 var withCallback = require("helper/withCallback");
 var _ = require("lodash");
@@ -88,8 +87,8 @@ const BUILD_INPUTS = [
   ),
 ];
 
-async function buildIfChanged(options, callback) {
-  let fingerprint = null;
+async function buildIfChanged(options) {
+  let fingerprint;
   let failed = false;
 
   try {
@@ -97,7 +96,7 @@ async function buildIfChanged(options, callback) {
 
     if ((await client.get(BUILD_FINGERPRINT_KEY)) === fingerprint) {
       debug("Templates unchanged since the last build");
-      return callback(null);
+      return;
     }
 
     await client.del(BUILD_FINGERPRINT_KEY);
@@ -110,45 +109,47 @@ async function buildIfChanged(options, callback) {
     failed = true;
   };
 
-  buildLocked({ ...options, onError }, async function (err) {
-    if (!err && !failed && fingerprint) {
-      try {
-        await client.set(BUILD_FINGERPRINT_KEY, fingerprint);
-      } catch (e) {
-        console.error("[templates] build fingerprint not saved: " + e.message);
-      }
-    }
+  let buildError = null;
 
-    callback(err);
-  });
+  try {
+    await buildLocked({ ...options, onError });
+  } catch (err) {
+    buildError = err;
+  }
+
+  if (!buildError && !failed && fingerprint) {
+    try {
+      await client.set(BUILD_FINGERPRINT_KEY, fingerprint);
+    } catch (e) {
+      console.error("[templates] build fingerprint not saved: " + e.message);
+    }
+  }
+
+  if (buildError) throw buildError;
 }
 
-function main(options, callback) {
+async function main(options) {
   const run = options.skipUnchanged ? buildIfChanged : buildLocked;
 
-  run(options, function (err) {
-    if (err) return callback(err);
+  await run(options);
 
-    if (options.watch) {
-      debug("Built all templates.");
-      debug("Watching templates directory for changes");
-      watch(TEMPLATES_DIRECTORY);
+  if (options.watch) {
+    debug("Built all templates.");
+    debug("Watching templates directory for changes");
+    watch(TEMPLATES_DIRECTORY);
 
-      // Rebuilds templates when we load new states
-      // using scripts/state/info.js
-      redisSubscriber({
-        channel: "templates:rebuild",
-        onMessage: function () {
-          main({}, function () {});
-        },
-      });
-    }
-
-    callback(null);
-  });
+    // Rebuilds templates when we load new states
+    // using scripts/state/info.js
+    redisSubscriber({
+      channel: "templates:rebuild",
+      onMessage: function () {
+        main({}).catch(function () {});
+      },
+    });
+  }
 }
 
-async function buildLocked(options, callback) {
+async function buildLocked(options) {
   let held = null;
 
   while (!held) {
@@ -165,12 +166,11 @@ async function buildLocked(options, callback) {
     }
   }
 
-  // buildPass can throw synchronously (e.g. an unreadable directory); every
-  // outcome must still release the lock and reach the callback exactly once.
-  let finished = false;
-  const finish = async function (err) {
-    if (finished) return;
-    finished = true;
+  // buildPass can throw (e.g. an unreadable directory); every outcome must
+  // still release the lock before it is reported.
+  try {
+    await buildPass(options);
+  } finally {
     if (held) {
       try {
         await held.release();
@@ -178,46 +178,46 @@ async function buildLocked(options, callback) {
         console.error("[templates] build lock release failed:", e.message);
       }
     }
-    callback(err);
-  };
-
-  try {
-    buildPass(options, finish);
-  } catch (e) {
-    finish(e);
   }
 }
 
-function buildPass(options, callback) {
-  buildAll(TEMPLATES_DIRECTORY, options, function (err) {
-    if (err) return callback(err);
-    checkForExtinctTemplates(TEMPLATES_DIRECTORY, callback);
-  });
+async function buildPass(options) {
+  await buildAll(TEMPLATES_DIRECTORY, options);
+  await checkForExtinctTemplates(TEMPLATES_DIRECTORY);
 }
 
 // Builds any templates inside the directory
-function buildAll(directory, options, callback) {
+async function buildAll(directory, options) {
   var dirs = templateDirectories(directory);
 
-  async.map(dirs, async.reflect(build), function (err, results) {
-    results.forEach(function (result, i) {
-      if (result.error) {
-        if (!options.watch) {
-          return callback(result.error);
-        } else {
-          console.error("Error building: " + dirs[i]);
-          console.error(result.error.stack);
-          if (options.onError) options.onError();
+  var results = await Promise.all(
+    dirs.map(function (dir) {
+      return build(dir).then(
+        function () {
+          return {};
+        },
+        function (error) {
+          return { error };
         }
-      }
-    });
+      );
+    })
+  );
 
-    callback();
+  results.forEach(function (result, i) {
+    if (result.error) {
+      if (!options.watch) {
+        throw result.error;
+      } else {
+        console.error("Error building: " + dirs[i]);
+        console.error(result.error.stack);
+        if (options.onError) options.onError();
+      }
+    }
   });
 }
 
 // Path to a directory containing template files
-function build(directory, callback) {
+async function build(directory) {
   debug("..", require("path").basename(directory), directory);
 
   client.del(BUILD_FINGERPRINT_KEY).catch(function (e) {
@@ -316,139 +316,133 @@ function build(directory, callback) {
     // process - log it and let the next file change in this folder
     // trigger a fresh, hopefully-complete rebuild.
     e.message = "Failed to build " + basename(directory) + ": " + e.message;
-    return callback(e);
+    throw e;
   }
 
-  Template.getMetadata(id, function (metadataErr, storedMetadata) {
-    if (metadataErr && metadataErr.code !== "ENOENT")
-      return callback(metadataErr);
+  var storedMetadata;
 
-    withCallback(Template.getAllViews)(id, function (viewsErr, viewsResult) {
-      if (viewsErr && viewsErr.code !== "ENOENT") return callback(viewsErr);
+  try {
+    storedMetadata = await Template.getMetadata(id);
+  } catch (metadataErr) {
+    if (metadataErr.code !== "ENOENT") throw metadataErr;
+  }
 
-      var storedViews = viewsResult && viewsResult.views;
+  var viewsResult;
 
-      var metadataSnapshot = {
-        name: name,
-        description: description,
-        locals: normalizeLocalsForComparison(snapshot.locals, true),
-      };
+  try {
+    viewsResult = await Template.getAllViews(id);
+  } catch (viewsErr) {
+    if (viewsErr.code !== "ENOENT") throw viewsErr;
+  }
 
-      var storedMetadataSnapshot = storedMetadata
-        ? {
-            name: storedMetadata.name,
-            description: storedMetadata.description,
-            locals: normalizeLocalsForComparison(storedMetadata.locals || {}),
-          }
-        : null;
+  var storedViews = viewsResult && viewsResult.views;
 
-      var storedViewSnapshot = createStoredViewSnapshot(storedViews);
+  var metadataSnapshot = {
+    name: name,
+    description: description,
+    locals: normalizeLocalsForComparison(snapshot.locals, true),
+  };
 
-      var metadataMatches =
-        storedMetadataSnapshot &&
-        _.isEqual(storedMetadataSnapshot, metadataSnapshot);
-      var viewsMatch = _.isEqual(storedViewSnapshot, snapshot.views);
-
-      if (metadataMatches && viewsMatch) {
-        debug("..", basename(directory), "unchanged, skipping rebuild.");
-        return callback();
+  var storedMetadataSnapshot = storedMetadata
+    ? {
+        name: storedMetadata.name,
+        description: storedMetadata.description,
+        locals: normalizeLocalsForComparison(storedMetadata.locals || {}),
       }
+    : null;
 
-      collectDevelopmentForks(
-        id,
-        storedMetadata,
-        storedViews,
-        function (forkErr, developmentForks) {
-          if (forkErr) return callback(forkErr);
+  var storedViewSnapshot = createStoredViewSnapshot(storedViews);
 
-          Template.drop(TEMPLATES_OWNER, basename(directory), function () {
-            Template.create(TEMPLATES_OWNER, name, template, function (err) {
-              if (err) return callback(err);
+  var metadataMatches =
+    storedMetadataSnapshot &&
+    _.isEqual(storedMetadataSnapshot, metadataSnapshot);
+  var viewsMatch = _.isEqual(storedViewSnapshot, snapshot.views);
 
-              buildViews(id, snapshot.definitions, function (buildViewsErr) {
-                // No blog in production uses a SITE template: Blog.set forks
-                // one into the blog's own copy, which doesn't change with it.
-                // In development the watcher rebuilds inside a running
-                // process, where a preview of this template on any blog
-                // caches its views by that blog's cacheID, so every blog's
-                // cache is flushed there. Every valid view has already been
-                // persisted by buildViews regardless of buildViewsErr, so a
-                // broken view elsewhere shouldn't leave views stuck stale.
-                var bump =
-                  config.environment === "development"
-                    ? bumpCacheIDForEveryBlog
-                    : function (id, done) {
-                        done();
-                      };
+  if (metadataMatches && viewsMatch) {
+    debug("..", basename(directory), "unchanged, skipping rebuild.");
+    return;
+  }
 
-                bump(id, function (err) {
-                  if (err) return callback(err);
-                  if (buildViewsErr) return callback(buildViewsErr);
-                  if (config.environment !== "development") return callback();
+  var developmentForks = await collectDevelopmentForks(
+    id,
+    storedMetadata,
+    storedViews
+  );
 
-                  refreshDevelopmentForks(id, developmentForks, callback);
-                });
-              });
-            });
-          });
-        }
-      );
-    });
-  });
+  // Template.drop's outcome has never been checked here
+  try {
+    await Template.drop(TEMPLATES_OWNER, basename(directory));
+  } catch (e) {}
+
+  await Template.create(TEMPLATES_OWNER, name, template);
+
+  var buildViewsErr = null;
+
+  try {
+    await buildViews(id, snapshot.definitions);
+  } catch (e) {
+    buildViewsErr = e;
+  }
+
+  // No blog in production uses a SITE template: Blog.set forks
+  // one into the blog's own copy, which doesn't change with it.
+  // In development the watcher rebuilds inside a running
+  // process, where a preview of this template on any blog
+  // caches its views by that blog's cacheID, so every blog's
+  // cache is flushed there. Every valid view has already been
+  // persisted by buildViews regardless of buildViewsErr, so a
+  // broken view elsewhere shouldn't leave views stuck stale.
+  if (config.environment === "development") {
+    await bumpCacheIDForEveryBlog(id);
+  }
+
+  if (buildViewsErr) throw buildViewsErr;
+  if (config.environment !== "development") return;
+
+  await refreshDevelopmentForks(id, developmentForks);
 }
 
-function buildViews(id, definitions, callback) {
+async function buildViews(id, definitions) {
   var views = Object.keys(definitions || {}).sort();
   var errors = {};
 
   // One view failing to build (e.g. invalid Mustache) must not prevent
   // every other view from building too - alphabetically-later views
   // would otherwise never get rebuilt after Template.drop() wiped the
-  // previous, working set. So we always call next() and collect errors
+  // previous, working set. So we always carry on and collect errors
   // instead, keyed by view name (same shape readFromFolder.js uses for
   // its own metadata.errors), then persist them once every view has had
   // a chance to build.
-  async.eachSeries(
-    views,
-    function (name, next) {
-      var definition = definitions[name];
-      var view = definition.view;
-      var path = definition.path;
+  for (const name of views) {
+    var definition = definitions[name];
+    var view = definition.view;
+    var path = definition.path;
 
-      Template.setView(id, view, function onSet(err) {
-        if (err) {
-          var errorView = _.cloneDeep(view);
-          errorView.content = err.toString();
-          Template.setView(id, errorView, function () {});
-          if (path) err.message += " in " + path;
-          errors[name] = err.message;
-        }
-
-        next();
-      });
-    },
-    function (err) {
-      if (err) return callback(err);
-
-      // Always write errors, even when empty, so a previously-broken
-      // view's error is cleared once it's fixed rather than lingering.
-      Template.setMetadata(id, { errors }, function (metadataErr) {
-        if (metadataErr) return callback(metadataErr);
-
-        var names = Object.keys(errors);
-        if (!names.length) return callback();
-
-        callback(
-          new Error(
-            names.length +
-              " view" +
-              (names.length === 1 ? "" : "s") +
-              " failed to build: " +
-              names.map((name) => name + ": " + errors[name]).join("; ")
-          )
-        );
-      });
+    try {
+      await Template.setView(id, view);
+    } catch (err) {
+      var errorView = _.cloneDeep(view);
+      errorView.content = err.toString();
+      // Not waited for, and its outcome has never been checked
+      Template.setView(id, errorView).catch(function () {});
+      if (path) err.message += " in " + path;
+      errors[name] = err.message;
     }
+  }
+
+  // Always write errors, even when empty, so a previously-broken
+  // view's error is cleared once it's fixed rather than lingering.
+  await Template.setMetadata(id, { errors });
+
+  var names = Object.keys(errors);
+  if (!names.length) return;
+
+  throw new Error(
+    names.length +
+      " view" +
+      (names.length === 1 ? "" : "s") +
+      " failed to build: " +
+      names.map((name) => name + ": " + errors[name]).join("; ")
   );
 }
 
@@ -635,36 +629,32 @@ function createStoredViewSnapshot(views) {
   return map;
 }
 
-function checkForExtinctTemplates(directory, callback) {
+async function checkForExtinctTemplates(directory) {
   var names = fs.readdirSync(directory).map(function (name) {
     return name.toLowerCase();
   });
 
   debug("Checking for extinct templates...");
 
-  Template.getTemplateList("", function (err, templates) {
-    if (err) return callback(err);
+  var templates = await Template.getTemplateList("");
 
-    templates = templates.filter(function (template) {
-      return template.owner === TEMPLATES_OWNER;
-    });
+  templates = templates.filter(function (template) {
+    return template.owner === TEMPLATES_OWNER;
+  });
 
-    templates = templates.filter(function (template) {
-      return names.indexOf(template.name.toLowerCase()) === -1;
-    });
+  templates = templates.filter(function (template) {
+    return names.indexOf(template.name.toLowerCase()) === -1;
+  });
 
-    if (templates.length) {
-      debug(
-        templates.length +
-          " templates no longer exist. Please run these scripts to safely remove them from the database:"
-      );
-    }
+  if (templates.length) {
+    debug(
+      templates.length +
+        " templates no longer exist. Please run these scripts to safely remove them from the database:"
+    );
+  }
 
-    templates.forEach(function (template) {
-      debug("node scripts/template/archive.js", template.id.split(":")[1]);
-    });
-
-    callback();
+  templates.forEach(function (template) {
+    debug("node scripts/template/archive.js", template.id.split(":")[1]);
   });
 }
 
@@ -673,16 +663,20 @@ function watch(directory) {
   process.stdin.resume();
   debug("Watching", directory, "for changes...");
 
-  var queue = async.queue(function (directory, callback) {
-    console.time("Built " + directory);
-    build(directory, function (err) {
-      if (err) {
+  // Builds one directory at a time, in the order the changes arrived
+  var queue = Promise.resolve();
+
+  function enqueue(directory) {
+    queue = queue.then(async function () {
+      console.time("Built " + directory);
+      try {
+        await build(directory);
+      } catch (err) {
         console.error(err.message);
       }
       console.timeEnd("Built " + directory);
-      callback();
     });
-  });
+  }
 
   // When chokidar first crawls a directory to watch
   // it fires 'add' events for every file it finds.
@@ -704,7 +698,7 @@ function watch(directory) {
 
       if (subdirectory[0] === ".") return;
 
-      queue.push(directory + "/" + subdirectory);
+      enqueue(directory + "/" + subdirectory);
     });
 }
 
@@ -725,81 +719,50 @@ function templateDirectories(directory) {
     });
 }
 
-function bumpCacheIDForEveryBlog(templateID, callback) {
-  Blog.getAllIDs(function (err, ids) {
-    if (err) return callback(err);
-    async.eachSeries(
-      ids,
-      function (blogID, next) {
-        Blog.set(blogID, { cacheID: Date.now() }, function (err) {
-          if (err) return next(err);
+async function bumpCacheIDForEveryBlog(templateID) {
+  var ids = await Blog.getAllIDs();
 
-          debug("..", templateID, "flushed for blog", blogID);
-          next();
-        });
-      },
-      callback
-    );
-  });
+  for (const blogID of ids) {
+    await Blog.set(blogID, { cacheID: Date.now() });
+
+    debug("..", templateID, "flushed for blog", blogID);
+  }
 }
 
 var DELETED_PACKAGE_VALUE = { developmentRefreshDeleted: true };
 
-function collectDevelopmentForks(
-  templateID,
-  baseMetadata,
-  baseViews,
-  callback
-) {
-  if (config.environment !== "development") return callback(null, []);
+async function collectDevelopmentForks(templateID, baseMetadata, baseViews) {
+  if (config.environment !== "development") return [];
 
   var basePackage = packageConfiguration(baseMetadata, baseViews);
-  Blog.getAllIDs(function (err, ids) {
-    if (err) return callback(err);
+  var ids = await Blog.getAllIDs();
+  var forks = [];
 
-    var forks = [];
-    async.eachSeries(
-      ids,
-      function (blogID, next) {
-        Blog.get({ id: blogID }, function (err, blog) {
-          if (err) return next(err);
-          Template.getTemplateList(blogID, function (err, templates) {
-            if (err) return next(err);
+  for (const blogID of ids) {
+    var blog = await Blog.get({ id: blogID });
+    var templates = await Template.getTemplateList(blogID);
 
-            var fork = templates.find(function (template) {
-              return (
-                template.cloneFrom === templateID &&
-                template.owner === blogID &&
-                template.name.toLowerCase() ===
-                  templateID.split(":")[1].toLowerCase()
-              );
-            });
+    var fork = templates.find(function (template) {
+      return (
+        template.cloneFrom === templateID &&
+        template.owner === blogID &&
+        template.name.toLowerCase() === templateID.split(":")[1].toLowerCase()
+      );
+    });
 
-            if (!fork) return next();
+    if (!fork) continue;
 
-            withCallback(Template.getAllViews)(fork.id, function (err, result) {
-              if (err) return next(err);
+    var result = await Template.getAllViews(fork.id);
+    var views = result.views;
 
-              var views = result.views;
+    forks.push({
+      blog: blog,
+      metadata: fork,
+      overlay: packageOverlay(basePackage, packageConfiguration(fork, views)),
+    });
+  }
 
-              forks.push({
-                blog: blog,
-                metadata: fork,
-                overlay: packageOverlay(
-                  basePackage,
-                  packageConfiguration(fork, views)
-                ),
-              });
-              next();
-            });
-          });
-        });
-      },
-      function (err) {
-        callback(err, forks);
-      }
-    );
-  });
+  return forks;
 }
 
 function packageConfiguration(metadata, views) {
@@ -883,99 +846,63 @@ function applyPackageOverlay(value, overlay) {
   return result;
 }
 
-function refreshDevelopmentForks(templateID, forks, callback) {
-  if (config.environment !== "development") return callback();
+async function refreshDevelopmentForks(templateID, forks) {
+  if (config.environment !== "development") return;
 
-  async.eachSeries(
-    forks || [],
-    function (saved, next) {
-      var old = saved.metadata;
-      console.log("Refreshing development template fork", old.id);
+  for (const saved of forks || []) {
+    var old = saved.metadata;
+    console.log("Refreshing development template fork", old.id);
 
-      Template.drop(old.owner, old.slug, function (err) {
-        if (err) return next(err);
+    await Template.drop(old.owner, old.slug);
 
-        Template.create(
-          old.owner,
-          old.name,
-          {
-            slug: old.slug,
-            cloneFrom: templateID,
-            localEditing: old.localEditing === true,
-          },
-          function (err, fresh) {
-            if (err) return next(err);
+    var fresh = await Template.create(old.owner, old.name, {
+      slug: old.slug,
+      cloneFrom: templateID,
+      localEditing: old.localEditing === true,
+    });
 
-            applyForkPackageOverlay(fresh.id, saved.overlay, function (err) {
-              if (err) return next(err);
+    await applyForkPackageOverlay(fresh.id, saved.overlay);
 
-              function finish(err) {
-                if (err) return next(err);
-                updateCdnManifest(fresh.id, function (err) {
-                  if (err) return next(err);
-                  Blog.set(old.owner, { cacheID: Date.now() }, function (err) {
-                    if (err) return next(err);
-                    if (!old.localEditing) return next();
-                    Template.writeToFolder(old.owner, fresh.id, next);
-                  });
-                });
-              }
+    if (saved.blog.template === old.id && fresh.id !== old.id) {
+      await Blog.set(old.owner, { template: fresh.id });
+    }
 
-              if (saved.blog.template === old.id && fresh.id !== old.id) {
-                return Blog.set(old.owner, { template: fresh.id }, finish);
-              }
-              finish();
-            });
-          }
-        );
-      });
-    },
-    callback
+    await updateCdnManifest(fresh.id);
+    await Blog.set(old.owner, { cacheID: Date.now() });
+
+    if (!old.localEditing) continue;
+
+    await Template.writeToFolder(old.owner, fresh.id);
+  }
+}
+
+async function applyForkPackageOverlay(templateID, overlay) {
+  var result = await Template.getAllViews(templateID);
+  var views = result.views;
+  var metadata = result.metadata;
+
+  var packageData = applyPackageOverlay(
+    packageConfiguration(metadata, views),
+    overlay || {}
   );
-}
 
-function applyForkPackageOverlay(templateID, overlay, callback) {
-  withCallback(Template.getAllViews)(templateID, function (err, result) {
-    if (err) return callback(err);
-
-    var views = result.views;
-    var metadata = result.metadata;
-
-    var packageData = applyPackageOverlay(
-      packageConfiguration(metadata, views),
-      overlay || {}
-    );
-
-    Template.setMetadata(
-      templateID,
-      { locals: packageData.locals || {} },
-      function (err) {
-        if (err) return callback(err);
-
-        async.eachSeries(
-          Object.keys(views || {}),
-          function (name, next) {
-            var configuration =
-              (packageData.views && packageData.views[name]) || {};
-            Template.setView(
-              templateID,
-              {
-                name: name,
-                url: configuration.url || "/" + name,
-                locals: configuration.locals || {},
-                partials: configuration.partials || {},
-              },
-              next
-            );
-          },
-          callback
-        );
-      }
-    );
+  await Template.setMetadata(templateID, {
+    locals: packageData.locals || {},
   });
+
+  for (const name of Object.keys(views || {})) {
+    var configuration = (packageData.views && packageData.views[name]) || {};
+
+    await Template.setView(templateID, {
+      name: name,
+      url: configuration.url || "/" + name,
+      locals: configuration.locals || {},
+      partials: configuration.partials || {},
+    });
+  }
 }
 
-module.exports = main;
+module.exports = withCallback(main);
 
 // Last, so every const above is initialised before main() runs
 if (require.main === module) {
@@ -988,9 +915,10 @@ if (require.main === module) {
     !process.argv.includes("--no-watch");
 
   console.log("Building templates... watch=" + watch);
-  main({ watch }, function (err) {
-    if (err) throw err;
+  (async function () {
+    // A failure is an unhandled rejection, which exits the process
+    await main({ watch });
     console.log("Done building templates.");
     if (!watch) process.exit();
-  });
+  })();
 }

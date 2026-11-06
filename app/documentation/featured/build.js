@@ -20,16 +20,16 @@ const verifySiteIsOnline = require("./verifySiteIsOnline");
 const fetchSubscriptionDuration = require("./fetchSubscriptionDuration");
 
 if (require.main === module) {
-  build(async (err, sites) => {
-    if (err) throw err;
+  (async () => {
+    const sites = await build();
     await fs.outputJson(__dirname + "/featured.json", sites, { spaces: 2 });
     // purge the cached version of the featured sites
     await fs.remove(config.data_directory + "/featured");
     process.exit();
-  });
+  })();
 }
 
-async function build(callback) {
+async function build() {
   const avatars = (await fs.readdir(avatarDirectory)).filter(
     (i) => !i.startsWith(".")
   );
@@ -105,9 +105,7 @@ async function build(callback) {
     })
   ).then((sites) => sites.filter((i) => i));
 
-  const result = await generateImages(sites);
-
-  callback(null, result);
+  return await generateImages(sites);
 }
 
 function formatTenureLabel(durationMs) {
