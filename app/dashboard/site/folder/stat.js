@@ -1,4 +1,3 @@
-const moment = require("moment");
 const folder = require("storage/folder");
 const formatDashboardDate = require("dashboard/util/format-dashboard-date");
 
@@ -9,7 +8,6 @@ const format = (stat, timeZone) => {
 
   result.modified = formatDashboardDate(mtime, timeZone);
 
-  result.updated = moment.utc(mtime).from(moment.utc());
   result.unix = mtime.getTime();
   result.bytes = stat.size;
   result.size = humanFileSize(stat.size);

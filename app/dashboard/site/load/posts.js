@@ -41,7 +41,7 @@ const cache = new LRUCache({ max: 2000 });
 // has any); the Posts page needs one page of its filter and the others'
 // totals for their pills. getListIDs has no offset, so a later page reads the
 // IDs before it too, which is cheap next to loading the entries.
-async function loadLists(blogID, { filter, page }) {
+async function loadLists(blogID, { filter, page, timeZone }) {
   const results = await Promise.all(
     lists.map(async function (list) {
       const wanted = filter ? list.key === filter : true;
@@ -87,9 +87,15 @@ async function loadLists(blogID, { filter, page }) {
         })
         .filter(Boolean)
         .map(function (entry) {
+          // The fixed parts of the date are formatted once, here, and cached
+          // with the list; only "3 days ago" is worked out per request
+          const date = moment(entry.dateStamp).tz(timeZone || "UTC");
           return {
             title: entry.title || entry.path,
             dateStamp: entry.dateStamp,
+            datetime: date.toISOString(),
+            fullDate: date.format("MMMM D, YYYY, h:mm A"),
+            shortDate: date.format("MMM D, YYYY, h:mm A"),
             urlPath: entry.path
               .replace(/^\/+/, "")
               .split("/")
@@ -115,11 +121,12 @@ module.exports = async function (req, res, next) {
   res.locals.postGroups = [];
 
   try {
-    const key = `${blogID}:${req.blog.cacheID}:${filter}:${page}`;
+    const timeZone = req.blog.timeZone || "UTC";
+    const key = `${blogID}:${req.blog.cacheID}:${timeZone}:${filter}:${page}`;
     let results = cache.get(key);
 
     if (!results) {
-      results = await loadLists(blogID, { filter, page });
+      results = await loadLists(blogID, { filter, page, timeZone });
       cache.set(key, results);
     }
 
@@ -128,12 +135,11 @@ module.exports = async function (req, res, next) {
       // Every date has the full date as its tooltip.
       const scheduled = result.list.key === "scheduled";
       const items = result.items.map(function (item) {
-        const date = moment(item.dateStamp).tz(req.blog.timeZone || "UTC");
         return {
           title: item.title,
-          date: scheduled ? date.format("MMM D, YYYY, h:mm A") : date.fromNow(),
-          datetime: date.toISOString(),
-          fullDate: date.format("MMMM D, YYYY, h:mm A"),
+          date: scheduled ? item.shortDate : moment(item.dateStamp).fromNow(),
+          datetime: item.datetime,
+          fullDate: item.fullDate,
           urlPath: item.urlPath,
         };
       });

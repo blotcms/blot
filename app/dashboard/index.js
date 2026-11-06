@@ -1,6 +1,7 @@
 const trace = require("helper/trace");
 const config = require("config");
 const express = require("express");
+const { LRUCache } = require("lru-cache");
 const message = require("dashboard/util/message");
 const cookieParser = require("cookie-parser");
 const moment = require("moment");
@@ -12,20 +13,30 @@ const formatDashboardDate = require("dashboard/util/format-dashboard-date");
 
 // The latest status is stored on the blog itself; only read the status log
 // when that is not a "Synced" message, a page at a time.
+// A site that is syncing or failed has to look back through its status log
+// for the last "Synced". That can't change until a new status is written,
+// which changes the blog's stored status, so the answer is cached on it.
+const lastSyncedCache = new LRUCache({ max: 5000 });
+
 async function findLastSynced(blog) {
   if (blog.status && blog.status.message === "Synced") return blog.status;
 
+  const status = blog.status || {};
+  const key = blog.id + ":" + status.datestamp + ":" + status.message;
+  if (lastSyncedCache.has(key)) return lastSyncedCache.get(key);
+
+  let found = null;
   for (let page = 1; page <= 20; page++) {
     const { statuses, next } = await getStatuses(blog.id, {
       page,
       pageSize: 100,
     });
-    const synced = statuses.find((status) => status.message === "Synced");
-    if (synced) return synced;
-    if (!next) break;
+    found = statuses.find((status) => status.message === "Synced") || null;
+    if (found || !next) break;
   }
 
-  return null;
+  lastSyncedCache.set(key, found);
+  return found;
 }
 
 const dashboard = express.Router();
@@ -120,6 +131,13 @@ dashboard.get(
   require("dashboard/util/sites-status-stream")
 );
 
+// The Sites list's text comparisons, as the browser's localeCompare(..., {
+// numeric: true, sensitivity: "base" }) makes them; one collator for all
+const sitesCollator = new Intl.Collator(undefined, {
+  numeric: true,
+  sensitivity: "base",
+});
+
 dashboard.get("/", require("dashboard/util/load-blogs"), async (req, res) => {
   const blogs = req.blogs || [];
   res.locals.siteCount = blogs.length;
@@ -168,11 +186,7 @@ dashboard.get("/", require("dashboard/util/load-blogs"), async (req, res) => {
   // Listed in the order the user last sorted the table by, kept in the
   // sites-sort cookie by js/data-table.js, so the browser has nothing to
   // reorder. The comparisons match the browser's.
-  const compareText = (a, b) =>
-    String(a).localeCompare(String(b), undefined, {
-      numeric: true,
-      sensitivity: "base",
-    });
+  const compareText = (a, b) => sitesCollator.compare(String(a), String(b));
   const sortValues = {
     name: (blog) => blog.pretty.label,
     domain: (blog) => blog.pretty.url,

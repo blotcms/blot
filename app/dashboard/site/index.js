@@ -125,11 +125,47 @@ site.use((req, res, next) => {
   next();
 });
 
-// The sidebar's site switcher lists the user's sites on every page: one
-// HGETALL per site, sent together. Only for pages, not the status stream,
-// image redirects or other non-HTML requests.
-const loadBlogs = require("dashboard/util/load-blogs").basic;
+// The sidebar's site switcher lists the user's sites on every page. It only
+// needs each one's name and address, so it reads those three fields for
+// every site, sent together, rather than loading each site in full. Only
+// for pages, not the status stream, image redirects or other non-HTML
+// requests.
+const config = require("config");
+const client = require("models/client");
+const blogKey = require("models/blog/key");
+const punycode = require("helper/punycode");
+
+async function loadSwitcherBlogs(req, res) {
+  const ids = (req.user && req.user.blogs) || [];
+  // Separate commands, not a MULTI: node-redis pipelines them, and the
+  // client-side cache can answer reads of the blog's info hash (a MULTI
+  // always goes to the server)
+  const rows = await Promise.all(
+    ids.map((id) =>
+      client.hmGet(blogKey.info(id), ["handle", "title", "domain"])
+    )
+  );
+
+  // The label and address as models/blog/extend.js makes them
+  const blogs = [];
+  rows.forEach(([handle, title, domain], i) => {
+    if (!handle) return;
+    const url = domain
+      ? punycode.toUnicode(domain)
+      : handle + "." + config.host;
+    blogs.push({
+      id: ids[i],
+      handle,
+      title,
+      pretty: { url, label: title || url },
+    });
+  });
+  req.blogs = res.locals.blogs = blogs;
+}
 const syncSummary = require("dashboard/util/sync-summary");
+// One collator, not one per comparison (localeCompare with options builds one
+// each time)
+const byName = new Intl.Collator(undefined, { sensitivity: "base" });
 
 site.use((req, res, next) => {
   if (req.method !== "GET" || !req.accepts("html")) return next();
@@ -163,13 +199,10 @@ site.use((req, res, next) => {
       ? "error"
       : "syncing";
 
-  loadBlogs(req, res, (err) => {
-    if (err) return next(err);
+  loadSwitcherBlogs(req, res).then(() => {
     // In name order, like the Sites list
     (res.locals.blogs || []).sort((a, b) =>
-      a.pretty.label.localeCompare(b.pretty.label, undefined, {
-        sensitivity: "base",
-      })
+      byName.compare(a.pretty.label, b.pretty.label)
     );
     (res.locals.blogs || []).forEach((blog) => {
       blog.isCurrent = blog.id === req.blog.id;
@@ -180,7 +213,7 @@ site.use((req, res, next) => {
       blog.ariaCurrent = blog.isCurrent ? "page" : "";
     });
     next();
-  });
+  }, next);
 });
 
 // Each filter of the Posts page has its own URL: /posts, /pages, /drafts
