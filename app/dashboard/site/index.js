@@ -254,8 +254,8 @@ const setView = (view) => (req, res, next) => {
   if (view === "recent") res.locals.breadcrumbs.add("Activity", "activity");
   if (view === "search") res.locals.breadcrumbs.add("Search", "search");
 
-  if (view === "posts")
-    res.locals.breadcrumbs.add(postFilterLabels[filter], filter);
+  // The filters are views of the folder box, so they keep the site's
+  // breadcrumbs, as its tabs do
 
   next();
 };

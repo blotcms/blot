@@ -29,6 +29,11 @@ client_routes.get(
   function (req, res, next) {
     if (!req.blog.client) return next("route");
     res.locals.isSyncTab = true;
+    // The client's own page is a tab of the site's page, so the breadcrumbs
+    // stay the site's, as on the files tab: nothing above the box moves.
+    // Its subpages (resync, disconnect, ...) keep theirs.
+    if (req.path.replace(/\/$/, "") === "/" + req.blog.client)
+      res.locals.breadcrumbs.add = function () {};
     res.locals.showDashboardSearch = true;
     next();
   },
@@ -295,8 +300,11 @@ client_routes
   .route("/")
 
   .get(load.clients, function (req, res) {
+    // The Sync breadcrumb leads to the client's tab
     if (req.blog.client) {
-      return res.redirect(res.locals.dashboardBase);
+      return res.redirect(
+        res.locals.dashboardBase + "/sync/" + req.blog.client
+      );
     }
 
     res.render("dashboard/clients", { title: "Select a client" });

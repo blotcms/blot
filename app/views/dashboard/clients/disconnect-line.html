@@ -32,16 +32,12 @@
 </div>
 {{/blog.healthIssue}}
 
-<a class="line" href="{{{dashboardBase}}}/sync/reset">
-    <span class="label">Reset</span>
-    <span class="link">Resync folder</span>
-</a>
-
-<a class="line" href="{{{dashboardBase}}}/sync/{{blog.client}}/disconnect">
-  <span class="label">Disconnect</span>
-  <span class="link">Disconnect {{client.display_name}}</span>
-</a>
-
+<!-- What can be done with the folder's sync, as buttons -->
+<div class="folder-sync-actions">
+  <a class="btn btn-sm" href="{{{dashboardBase}}}/sync/reset">Resync folder</a>
+  <a class="btn btn-sm" href="{{{dashboardBase}}}/sync/switch">Change sync method</a>
+  <a class="btn btn-sm btn-quiet folder-sync-actions__disconnect" href="{{{dashboardBase}}}/sync/{{blog.client}}/disconnect">Disconnect {{client.display_name}}</a>
+</div>
 
 {{#isDevelopment}}
 <div class="dev-note">

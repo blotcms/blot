@@ -281,8 +281,54 @@ a.folder-tab--sync:focus-visible {
   background: var(--background-color);
 }
 
+/* The client's rows run edge to edge, as the files table's do, at the
+   summary card's size: a label column, then the value */
 .folder-sync-panel {
-  padding: var(--space-2) var(--space-4) var(--space-4);
+  --folder-sync-inset: calc(var(--space-4) + var(--space-2));
+  padding: 0 var(--folder-sync-inset) var(--space-4);
+}
+
+.folder-sync-panel .line {
+  align-items: baseline;
+  margin: 0 calc(var(--folder-sync-inset) * -1);
+  padding: var(--space-3) var(--folder-sync-inset);
+  font-size: var(--text-sm);
+}
+
+.folder-sync-panel .line .label {
+  flex: 0 0 14em;
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
+}
+
+/* "Open in Dropbox" and the like, below the folder's name */
+.folder-sync-open {
+  margin: var(--space-2) 0 var(--space-1);
+}
+
+@media (max-width: 600px) {
+  .folder-sync-panel .line .label {
+    flex-basis: 100%;
+  }
+}
+
+/* Resync, change and disconnect: buttons under the rows, disconnect apart
+   at the end and in red */
+.folder-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) 0;
+}
+
+.folder-sync-actions__disconnect {
+  margin-left: auto;
+  color: var(--danger-color);
+}
+
+.folder-sync-actions__disconnect:hover {
+  color: var(--danger-color);
 }
 
 /* The same line as plain text, where it is not a control (the page for
