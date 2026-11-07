@@ -7,14 +7,7 @@ var stripe = require("stripe")(config.stripe.secret);
 module.exports = async function updateBillingEmail(user) {
   if (!user.subscription || !user.subscription.customer) return;
 
-  return await new Promise(function (resolve, reject) {
-    stripe.customers.update(
-      user.subscription.customer,
-      { email: user.email },
-      function (err, customer) {
-        if (err) return reject(err);
-        resolve(customer);
-      }
-    );
+  return await stripe.customers.update(user.subscription.customer, {
+    email: user.email,
   });
 };
