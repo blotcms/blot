@@ -15,9 +15,8 @@ const ip = config.ip;
 const ipv6 = config.ipv6;
 const host = config.host;
 
-// What the summary card's Domain row shows (site/site-summary.html), on every
-// page that has it: the custom domain, any pending verification problem
-// stored in the session. Reads only the session and
+// What the Domain page shows: the custom domain, and any pending
+// verification problem stored in the session. Reads only the session and
 // the blog, no DNS.
 function domainLocals(req, res) {
   res.locals.domainBase = res.locals.dashboardBase + "/domain";
@@ -68,8 +67,20 @@ function domainLocals(req, res) {
 
 Domain.use((req, res, next) => {
   domainLocals(req, res);
+  res.locals.breadcrumbs.add("Domain", "domain");
   next();
 });
+
+const renderDomain = (edit) => (req, res) => {
+  if (edit) res.locals.edit = { [edit]: true };
+  res.render("dashboard/site/domain", {
+    title: "Domain · " + req.blog.pretty.label,
+  });
+};
+
+Domain.get("/", renderDomain());
+Domain.get("/custom", renderDomain("custom"));
+Domain.get("/subdomain", renderDomain("subdomain"));
 
 function normalizeHostname(hostname) {
   if (!hostname) {
@@ -83,8 +94,6 @@ function normalizeHostname(hostname) {
   return asciiHostname.toLowerCase();
 }
 
-// The GETs (/domain, /domain/custom and /domain/subdomain) are the site's
-// page with the Domain row open (dashboard/site/index.js)
 Domain.route("/").post(async (req, res) => {
   const blogID = req.blog.id;
   const domainInput =
@@ -226,4 +235,3 @@ function triggerAutoSSL(hostname) {
 }
 
 module.exports = Domain;
-module.exports.domainLocals = domainLocals;

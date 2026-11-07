@@ -19,50 +19,16 @@ const RESYNC_REFUSALS = [
   "ICLOUD_SETUP_INCOMPLETE",
 ];
 
-// A connected folder's sync pages are the site's page with its sync
-// settings open under the folder box's top row (partials/
-// folder-settings-layout.html); the client's own page lists the files below
-// them. Their data is loaded before res.locals.base becomes the sync pages'.
-const loadPosts = require("./load/posts");
-const loadSummary = require("./load/summary");
-const loadFolder = require("./folder");
-
-const isClientPage = (req) =>
-  req.path.replace(/\/$/, "") === "/" + req.blog.client;
-
-client_routes.get(
-  /.*/,
-  function (req, res, next) {
-    if (!req.blog.client) return next("route");
-    res.locals.isSyncTab = true;
-    // Resync sits beside the status, for the clients that can, and hides
-    // while the folder syncs (so once it's clicked)
-    res.locals.canResync = !!(
-      clients[req.blog.client] && clients[req.blog.client].resync
-    );
-    res.locals.isSyncing = syncSummary(req.blog).state === "syncing";
-    res.locals.showDashboardSearch = true;
-    // The client's own page is the site's page, so the breadcrumbs stay the
-    // site's: nothing above the box moves. Its subpages (resync,
-    // disconnect, ...) keep theirs.
-    if (isClientPage(req)) res.locals.breadcrumbs.add = function () {};
-    next();
-  },
-  loadPosts,
-  loadSummary,
-  function (req, res, next) {
-    if (isClientPage(req)) return loadFolder(req, res, next);
-    // A subpage shows no files, so none of the filters is chosen
-    res.locals.filesFilter.filterClass = "folder-filters__item";
-    res.locals.filesFilter.ariaCurrent = "";
-    next();
-  },
-  function (req, res, next) {
-    // The files' links are the site's, not the sync pages'
-    if (res.locals.folder) res.locals.folder.base = res.locals.base;
-    next();
-  }
-);
+// A connected folder's sync pages: Resync sits beside the status, for the
+// clients that can, and hides while the folder syncs (so once it's clicked)
+client_routes.get(/.*/, function (req, res, next) {
+  if (!req.blog.client) return next();
+  res.locals.canResync = !!(
+    clients[req.blog.client] && clients[req.blog.client].resync
+  );
+  res.locals.isSyncing = syncSummary(req.blog).state === "syncing";
+  next();
+});
 
 // The sync pages, at /sites/<handle>/sync. Breadcrumbs: Sites > Site > Sync
 client_routes.use(function (req, res, next) {
@@ -321,7 +287,7 @@ client_routes
   .route("/")
 
   .get(load.clients, function (req, res) {
-    // The Sync breadcrumb leads to the client's tab
+    // The Sync breadcrumb leads to the client's page
     if (req.blog.client) {
       return res.redirect(
         res.locals.dashboardBase + "/sync/" + req.blog.client

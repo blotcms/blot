@@ -3,9 +3,19 @@ const express = require("express");
 const updateBlog = require("dashboard/util/update-blog");
 const title = express.Router();
 
-// The GET (/title) is the site's page with the Title row open
-// (dashboard/site/index.js). A save goes back to the site's page, the row
-// closed; an error reopens it.
+// The Title page, linked from the summary card on the site's page. A save
+// goes back to the site's page; an error stays here.
+title.use((req, res, next) => {
+  res.locals.breadcrumbs.add("Title", "title");
+  next();
+});
+
+title.get("/", (req, res) => {
+  res.render("dashboard/site/title", {
+    title: "Title · " + req.blog.pretty.label,
+  });
+});
+
 title.route("/").post(async (req, res) => {
   try {
     const changes = await updateBlog(req.blog.id, {

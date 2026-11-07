@@ -1,0 +1,17 @@
+{{> message}}
+
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">Title</h1></div></header>
+
+<div class="dashboard-form-panel">
+  <div class="dashboard-form-panel__body">
+    <form class="dashboard-form" method="POST">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+      <label for="site-title">Title</label>
+      <input type="text" id="site-title" name="title" value="{{blog.title}}" autofocus placeholder="Title" />
+      <div class="buttons">
+        <button type="submit">Save title</button>
+        <a href="{{{dashboardBase}}}" data-cancel>Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>

@@ -560,8 +560,7 @@ div.folder-box.directory .directory-list tbody td:last-child {
    and its filters. A box that starts lower (a sync issue above it) just
    makes the page scroll a little. */
 @media (min-width: 900px) {
-  .folder-box.directory,
-  .folder-box--sync {
+  .folder-box.directory {
     min-height: max(
       50vh,
       calc(100vh - var(--folder-box-top, 120px) - var(--space-5))
@@ -569,8 +568,7 @@ div.folder-box.directory .directory-list tbody td:last-child {
   }
 
   .site-dashboard.is-overview-view,
-  .site-dashboard.is-posts-view,
-  .site-dashboard.is-sync-view {
+  .site-dashboard.is-posts-view {
     --folder-box-top: 209px;
   }
 }

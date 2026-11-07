@@ -279,7 +279,7 @@ site.get(
   setView("folder"),
   require("./folder"),
   require("./load/posts"),
-  require("./load/summary"),
+  require("./load/live-template"),
   loadClient,
   renderDashboard
 );
@@ -323,7 +323,7 @@ site.get(
   Object.keys(postFilterLabels).map((filter) => "/" + filter),
   setView("posts"),
   require("./load/posts"),
-  require("./load/summary"),
+  require("./load/live-template"),
   loadClient,
   renderDashboard
 );
@@ -418,32 +418,8 @@ site.use("/client", (req, res, next) => {
   res.redirect(308, `${res.locals.base}/sync${suffix}`);
 });
 
-// Title and Domain open in place on the site's page, as rows of its summary
-// card: /title, /domain, /domain/custom and /domain/subdomain render the site
-// page with that row open; the saves POST there. They were Settings tabs.
-const openSummaryRow = (row, edit) => (req, res, next) => {
-  res.locals[row + "Open"] = true;
-  if (edit) res.locals.edit = { [edit]: true };
-  next();
-};
-
-const sitePage = [
-  setView("folder"),
-  require("./folder"),
-  require("./load/posts"),
-  require("./load/summary"),
-  loadClient,
-  renderDashboard,
-];
-
-site.get("/title", openSummaryRow("title"), ...sitePage);
-site.get("/domain", openSummaryRow("domain"), ...sitePage);
-site.get("/domain/custom", openSummaryRow("domain", "custom"), ...sitePage);
-site.get(
-  "/domain/subdomain",
-  openSummaryRow("domain", "subdomain"),
-  ...sitePage
-);
+// Title and Domain are their own pages, linked from the summary card on the
+// site's page. They were Settings tabs.
 site.use("/title", title);
 site.use("/domain", domain);
 
