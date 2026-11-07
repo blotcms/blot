@@ -22,11 +22,21 @@ function showError(form, text) {
   }, 50);
 }
 
+// The sync status at the top of the page shows the save as it goes
+// (js/global-sync.js): "saving", then "saved" or "error"
+function report(state) {
+  document.dispatchEvent(
+    new CustomEvent("blot:settings-save", { detail: { state: state } })
+  );
+}
+
 // onFail runs when the save didn't go through, so the control can be put back
 function submitForm(form, onFail) {
   if (!form) {
     return;
   }
+
+  report("saving");
 
   var xhr = new XMLHttpRequest();
   xhr.open("POST", form.action);
@@ -42,6 +52,7 @@ function submitForm(form, onFail) {
     var box = document.querySelector("[data-autosave-error]");
     if (box) box.parentNode.removeChild(box);
     announce("Saved");
+    report("saved");
 
     // The save may have started a rebuild: js/global-sync.js shows it
     document.dispatchEvent(new CustomEvent("blot:sync-check"));
@@ -51,6 +62,7 @@ function submitForm(form, onFail) {
   xhr.send(new FormData(form));
 
   function fail() {
+    report("error");
     if (onFail) onFail();
     showError(
       form,
@@ -93,3 +105,6 @@ document.querySelectorAll("form[data-autosave]").forEach(function (form) {
     }, 400);
   });
 });
+
+// For the other settings scripts which save as a choice is made
+module.exports.submitForm = submitForm;

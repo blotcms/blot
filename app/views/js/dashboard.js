@@ -28,7 +28,6 @@ require("./domain-custom.js");
 require("./site-settings-autosubmit.js");
 require("./dashboard-message.js");
 require("./site-settings-links.js");
-require("./site-settings-images.js");
 require("./site-settings-redirects.js");
 require("./dashboard-sidebar.js");
 require("./data-table.js");

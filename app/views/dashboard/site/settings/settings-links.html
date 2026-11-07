@@ -6,7 +6,7 @@
     <form method="post" class="dashboard-form settings-section" action="{{{dashboardBase}}}/settings/links" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="{{csrftoken}}">
       <h2>Post links</h2>
-      <p class="setting-note">Choose the URL format Blot uses for your posts. Changes save as soon as you make them.</p>
+      <p class="setting-note">Choose the URL format Blot uses for your posts.</p>
       {{#permalinkFormats}}
       <label class="format">
         <input type="radio" name="format" value="{{value}}" {{checked}}>
@@ -37,7 +37,6 @@
       <input type="hidden" name="_csrf" value="{{csrftoken}}">
       <input type="hidden" name="redirect" value="{{{base}}}/settings/links">
       <h2>Link features</h2>
-      <p class="setting-note">Changes save as soon as you make them.</p>
       {{#categories.Links}}{{> plugin-row}}{{/categories.Links}}
     </form>
   </div>

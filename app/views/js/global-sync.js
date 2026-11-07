@@ -24,8 +24,88 @@ function announceState(el, state) {
   announce(STATE_ANNOUNCEMENTS[state]);
 }
 
+// Settings which save as a choice is made say so here for a moment
+// (js/site-settings-autosubmit.js): "Saving…", then "Saved" or "Not saved",
+// then the pill goes back to the sync status, or to a rebuild the save
+// started. Screen readers hear the save from that script, so not here.
+var SAVE_STATES = {
+  saving: { state: "syncing", text: "Saving…" },
+  saved: { state: "synced", text: "Saved" },
+  error: { state: "error", text: "Not saved" },
+};
+var SAVE_SHOWN_MS = { saved: 2000, error: 4000 };
+var beforeSave = null;
+var saveTimer = null;
+// A sync message which came in while the save showed, applied after it
+var heldMessage = null;
+
+function showSave(el, name) {
+  var show = SAVE_STATES[name];
+  var label = el.querySelector(".global-sync__label");
+  var count = el.querySelector(".global-sync__count");
+  if (!show || !label) return;
+
+  if (!beforeSave) {
+    beforeSave = {
+      className: el.className,
+      title: el.title,
+      label: label.textContent,
+      count: count ? count.textContent : "",
+      progress: el.style.getPropertyValue("--progress"),
+    };
+  }
+
+  clearTimeout(saveTimer);
+  // data-state stays the sync's, so its announcements aren't disturbed
+  el.className = "global-sync is-" + show.state;
+  el.style.removeProperty("--progress");
+  el.title = show.text;
+  label.textContent = show.text;
+  if (count) count.textContent = "";
+
+  if (SAVE_SHOWN_MS[name]) {
+    saveTimer = setTimeout(function () {
+      restoreSync(el);
+    }, SAVE_SHOWN_MS[name]);
+  }
+}
+
+// Puts back what the pill showed before the save, or the sync message which
+// came in meanwhile
+function restoreSync(el) {
+  clearTimeout(saveTimer);
+  if (!beforeSave) return;
+  if (heldMessage !== null) {
+    var message = heldMessage;
+    beforeSave = null;
+    heldMessage = null;
+    render(el, message);
+    return;
+  }
+  var label = el.querySelector(".global-sync__label");
+  var count = el.querySelector(".global-sync__count");
+  el.className = beforeSave.className;
+  el.title = beforeSave.title;
+  if (label) label.textContent = beforeSave.label;
+  if (count) count.textContent = beforeSave.count;
+  if (beforeSave.progress)
+    el.style.setProperty("--progress", beforeSave.progress);
+  beforeSave = null;
+}
+
 function render(el, message) {
   var summary = summarise(message);
+
+  // While a save shows, only a sync in progress (a rebuild the save started)
+  // replaces it; anything else waits until it ends
+  if (beforeSave && summary.state !== "syncing") {
+    heldMessage = message;
+    return summary;
+  }
+  clearTimeout(saveTimer);
+  beforeSave = null;
+  heldMessage = null;
+
   announceState(el, summary.state);
   var label = el.querySelector(".global-sync__label");
   var count = el.querySelector(".global-sync__count");
@@ -52,6 +132,10 @@ function render(el, message) {
 document.addEventListener("DOMContentLoaded", function () {
   var el = document.querySelector(".global-sync");
   if (!el) return;
+
+  document.addEventListener("blot:settings-save", function (event) {
+    showSave(el, event.detail && event.detail.state);
+  });
 
   // A health issue (e.g. a disconnected client) outlasts sync messages
   if (
