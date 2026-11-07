@@ -16,6 +16,22 @@ Pages that lead to the editor (the site overview, the template list) prefetch th
 
 `css/base.css` holds the rules from `css/blot.css` and `css/mobile.css` that dashboard pages use; both bundles include it. Rules that only the brochure and documentation use stay in `blot.css`.
 
+## Consistency
+
+The same thing always has the same name and the same look, everywhere it appears: page headings, column headers, buttons, links, breadcrumbs, `<title>`s, messages and help text. Anything that differs needs a reason. Before adding a label, find what the dashboard already calls that thing, and before adding a control, find the component that already does that job (below). When a term or component changes, change every place it appears.
+
+Words the dashboard uses (what the user sees, not internal names):
+
+- **Site**, not blog. Its **Title** (the setting, and the Sites list's first column) and its **Domain**.
+- **Template**: the one in use is "live on your site". **Edit** is the link to change any value in a row (not "Change" or "Edit template").
+- **Folder** is the site's files (the Folder page and the Folder row). **Files** is the filter that shows them. **Sync** is the connection to Dropbox, Google Drive, iCloud, Git or a local folder, and its pages.
+- **Post**, not entry. The filters are **Posts**, **Pages**, **Drafts** and **Scheduled**. Columns are **Title**, **File**, **Date published**, **Date modified**, **Size**.
+- **Settings** is the site's Settings section.
+- A missing value in a table cell is `--` (a folder's size, a draft's publish date).
+- A form's buttons are **Save changes** (or "Save" plus the thing: "Save title") and **Cancel**. Cancel stays on the page and puts the form back. A destructive step offers **Do not delete** beside the red button.
+
+Not settled yet, so check with the maintainer before relying on them: one name for the sync pages ("Sync", "Folder settings", "Change sync method" and "Resync" all appear), Delete vs Remove for files and other things, and the template editor's own "Settings" tab, which shares a name with the site's Settings.
+
 ## CSS conventions
 
 - Tokens: use the custom properties in `css/tokens.css` (spacing `--space-*`, type `--text-*` and `--weight-*`, colour roles such as `--secondary-text-color` and `--surface-muted-color`, `--radius-*`, `--shadow-*`) and the base palette in `app/views/css/base.css` (`--text-color`, `--border-color`, `--accent-color`, ...). Avoid raw pixel values and hex colours in new rules.
