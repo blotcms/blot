@@ -1,6 +1,7 @@
 const moment = require("moment");
 const config = require("config");
 const Blog = require("models/blog");
+const logContext = require("helper/logContext");
 require("models/template");
 const getBlogHealth = require("./get-blog-health");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
@@ -57,6 +58,7 @@ async function loadBlog(req, res, next, handle) {
     }${slug}-on-${blog.handle}.${config.host}`;
 
     req.blog = blog;
+    logContext.set({ blog: blog.id });
     res.locals.blog = blog;
     if (req.session) req.session.lastBlogHandle = blog.handle;
     res.locals.base = `/sites/${req.params.handle}`;

@@ -1,10 +1,14 @@
 const util = require("util");
+const logContext = require("helper/logContext");
 
 // Makes each console call one line of output, so a grep for a blog, sync or
 // request id finds the whole entry: an error prints as its name, message,
 // status or code and the top of its stack, objects print on one line, and a
-// newline left in a string is written as \n. Installed in production only
-// (app/index.js); development keeps Node's multi-line output.
+// newline left in a string is written as \n. The line ends with the request,
+// blog and sync it ran for (helper/logContext), as req=<id> blog=<id>
+// sync=<id>, except an id the line already has: at the end, so the fields
+// parsers count from the start of a line stay where they were. Installed in
+// production only (app/index.js); development keeps Node's multi-line output.
 
 const METHODS = ["log", "info", "warn", "error", "debug"];
 // Stack frames kept after the message
@@ -44,7 +48,18 @@ function format(...args) {
     ...args.map((arg) => (arg instanceof Error ? formatError(arg) : arg))
   );
 
-  return line.replace(/\r?\n/g, "\\n");
+  return withContext(line).replace(/\r?\n/g, "\\n");
+}
+
+// Lines that name a blog usually give its first 12 characters
+// (blog.id.slice(0, 12)), so that is what counts as already there
+function withContext(line) {
+  const tags = logContext
+    .fields()
+    .filter(([key, value]) => !line.includes(value.slice(0, 12)))
+    .map(([key, value]) => `${key}=${value}`);
+
+  return tags.length ? `${line} ${tags.join(" ")}` : line;
 }
 
 function install() {

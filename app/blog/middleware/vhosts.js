@@ -1,5 +1,6 @@
 const Blog = require("models/blog");
 const config = require("config");
+const logContext = require("helper/logContext");
 const { getBlog } = require("../lib/models");
 const fromCloudflare = require("../lib/fromCloudflare");
 
@@ -121,6 +122,7 @@ module.exports = async function vhosts(req, res, next) {
 
     // Store the blog's info so routes can access it
     req.blog = blog;
+    logContext.set({ blog: blog.id });
 
     req.log("loaded blog");
     return next();

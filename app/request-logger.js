@@ -1,6 +1,7 @@
 const clfdate = require("helper/clfdate");
 const { performance } = require("perf_hooks");
 const config = require("config");
+const logContext = require("helper/logContext");
 
 const DEVELOPMENT = config.environment === "development";
 // A response this slow (in seconds), or a 5xx, prints its steps
@@ -120,5 +121,7 @@ module.exports = function requestLogger(req, res, next) {
     }
   });
 
-  next();
+  // Every line logged for this request carries its id (oneLineConsole)
+  if (req.headers["x-request-id"]) logContext.run({ req: requestId }, next);
+  else next();
 };

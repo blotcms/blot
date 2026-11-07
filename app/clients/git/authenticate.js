@@ -3,6 +3,7 @@ var Blog = require("models/blog");
 var User = require("models/user");
 var database = require("./database");
 var clfdate = require("helper/clfdate");
+var logContext = require("helper/logContext");
 
 // Resolves to whether the user with this email address and token may push to
 // or pull from the repository of the blog with the handle req.gitHandle. A
@@ -69,6 +70,7 @@ async function check(email, token, req) {
   }
 
   req.blog = blog;
+  logContext.set({ blog: blog.id });
 
   console.log(
     clfdate() + " Git: authenticate: user",

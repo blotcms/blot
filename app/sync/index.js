@@ -7,6 +7,7 @@ const messenger = require("./messenger");
 const previewReload = require("helper/publishPreviewReload");
 const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
 const readOnly = require("helper/readOnly");
+const logContext = require("helper/logContext");
 const {
   addPendingSync,
   removePendingSync,
@@ -28,8 +29,10 @@ function sync(blogID, callback) {
   // While the data directory is read-only, wait rather than fail, so the
   // sync runs as soon as the freeze lifts. Nothing is held while waiting,
   // and the blog is loaded afterwards so the sync sees current settings.
+  // Lines the sync logs, here and in the client and code it calls, carry
+  // its blog and sync id (helper/logContext)
   readOnly.whenWritable("sync " + blogID).then(
-    () => start(blogID, callback),
+    () => logContext.run({ blog: blogID }, () => start(blogID, callback)),
     (err) => callback(err)
   );
 }
@@ -48,6 +51,7 @@ async function start(blogID, callback) {
   }
 
   const { log, status, syncID } = messenger(blog);
+  logContext.set({ sync: syncID });
 
   log("Starting sync");
 
