@@ -2,10 +2,10 @@
   The top row of the overview's file box (folder/folder-toolbar.html).
 
   .folder-toolbar         the row
-  .folder-source          its start (folder/folder-source.html), like a row
-                          of the summary card above: "Folder", where it
-                          syncs from, and a chevron, as wide as there's room
-                          for. It opens the sync settings under the row
+  .folder-source          its start (folder/folder-source.html): "Folder",
+                          then where it syncs from, a pill as wide as
+                          there's room for with a chevron at its end. It
+                          opens the sync settings under the row
                           (/sync/<client>, the site's page with
                           .folder-sync-panel open) and closes them again
   .folder-filters         Files, Posts, Pages, Drafts, Scheduled: Files is
@@ -15,17 +15,15 @@
                           (folder/folder-sync-issue.html)
 */
 
-/* Two cells split by a rule: the Folder row on the left, flush with the
-   box's top, left and the table's header line below, then the filters
-   and search, ending where the table's last column does. (Pulled up over
-   the box's own top padding.) */
+/* "Folder" lines up with the summary card's labels above; search ends
+   where the table's last column does */
 .folder-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  column-gap: var(--space-3);
-  margin-top: calc(var(--space-2) * -1);
-  padding: 0 calc(var(--space-1) + var(--space-2)) 0 0;
+  gap: var(--space-2) var(--space-3);
+  padding: 0 calc(var(--space-1) + var(--space-2)) var(--space-2)
+    var(--space-4);
 }
 
 /* The filters (folder/folder-filters.html): one segmented control, like a
@@ -171,78 +169,87 @@
   box-shadow: 0 0 4px 1px var(--indicator-amber-glow);
 }
 
-/* The Folder row: a summary card row (site/site-summary.css) filling its
-   cell, so it hovers as a whole, and takes the row's free width; its label
-   lines up with the summary's. Tinted, its chevron turned, while the sync
-   settings are open under the row. */
-/* (.site-summary__row too, to outrank its baseline alignment) */
-.site-summary__row.folder-source {
-  flex: 1 1 auto;
-  align-self: stretch;
-  align-items: center;
-  padding-top: 0;
-  padding-bottom: 0;
-  min-width: 0;
-  min-height: 44px;
-  box-sizing: border-box;
-  border-right: 1px solid var(--border-color);
-  border-radius: calc(var(--radius-lg) - 1px) 0 0 0;
+/* "Folder", as the summary card labels its rows: its size and width */
+.folder-source__label {
+  flex: 0 0 5.5em;
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
 }
 
-/* Plain text like the summary's values, so the baselines line up; the
-   client's icon sits on the text */
+/* Where the folder syncs from: a pill as wide as there's room for, the
+   chevron at its end, which turns while the sync settings are open. Its
+   text starts where the summary card's values do. */
+.folder-source {
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  min-height: 30px;
+  box-sizing: border-box;
+  margin-left: calc(var(--space-1) - var(--space-3));
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted-color);
+  color: var(--text-color);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease;
+}
+
+.folder-source:hover,
+.folder-source.is-open {
+  background: var(--surface-strong-color);
+}
+
+.folder-source:active {
+  background: var(--border-strong-color);
+}
+
+.folder-source:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.folder-source__value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .folder-source__value .client-icon {
   margin-right: var(--space-1);
   vertical-align: -2px;
 }
 
-.folder-source__chevron svg {
+.folder-source__chevron {
+  display: inline-flex;
+  margin-left: auto;
+  color: var(--medium-text-color);
   transition: transform 150ms ease;
 }
 
-.folder-source.is-open {
-  background: var(--surface-muted-color);
-}
-
-.folder-source.is-open .folder-source__chevron svg {
+.folder-source.is-open .folder-source__chevron {
   transform: rotate(180deg);
 }
 
-/* On phones the Folder row takes the line, ruled off below, and the
-   filters' dropdown and search the next */
+/* On phones "Folder" goes and the pill takes the line, the filters'
+   dropdown and search the next */
 @media (max-width: 600px) {
-  .folder-toolbar {
-    padding-right: 0;
+  .folder-source__label {
+    display: none;
   }
 
-  .site-summary__row.folder-source {
+  .folder-source {
     flex-basis: 100%;
-    border-right: 0;
-    border-bottom: 1px solid var(--border-color);
-    border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px)
-      0 0;
-  }
-
-  .folder-toolbar > :not(.folder-source) {
-    margin: var(--space-2) 0;
-  }
-
-  .folder-toolbar .folder-filters-menu {
-    margin-left: var(--space-4);
-  }
-
-  .folder-toolbar .site-dashboard-search {
-    margin-right: calc(var(--space-1) + var(--space-2));
+    margin-left: 0;
   }
 }
 
-/* No folder yet: the label, then the button in the value's place */
+/* No folder yet: the button in the pill's place */
 .folder-source--connect {
-  align-items: center;
-}
-
-.folder-source--connect:hover {
-  background: none;
+  margin-right: auto;
 }
 
 /* A sync subpage's box (resync, disconnect, ...): the row, then the page */
