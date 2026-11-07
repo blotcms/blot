@@ -290,11 +290,7 @@ describe("payment webhook delivery reliability", function () {
     it("sends the cancellation email on the first CANCELLED transition", async function () {
       await paypal.updateSubscription("I-TEST");
       expect(email.CANCELLED).toHaveBeenCalledTimes(1);
-      expect(email.CANCELLED).toHaveBeenCalledWith(
-        "test-user",
-        {},
-        jasmine.any(Function)
-      );
+      expect(email.CANCELLED).toHaveBeenCalledWith("test-user", {});
       expect(email.CANCELLED_FIRST_PERIOD).not.toHaveBeenCalled();
       expect(client.set).toHaveBeenCalledWith(
         "user:test-user:paypal_cancel_email:I-TEST",
@@ -308,8 +304,7 @@ describe("payment webhook delivery reliability", function () {
       expect(email.CANCELLED_FIRST_PERIOD).toHaveBeenCalledTimes(1);
       expect(email.CANCELLED_FIRST_PERIOD).toHaveBeenCalledWith(
         "test-user",
-        {},
-        jasmine.any(Function)
+        {}
       );
       expect(email.CANCELLED).not.toHaveBeenCalled();
     });
