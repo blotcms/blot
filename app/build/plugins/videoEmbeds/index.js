@@ -1,6 +1,5 @@
 var url = require("url");
 var eachEl = require("build/plugins/eachEl");
-var withPluginCallback = require("../withPluginCallback");
 
 var Players = {
   bandcamp: {
@@ -102,7 +101,7 @@ async function render($) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   category: "embeds",
   title: "Videos",
   description: "Embed videos or audio from media links",

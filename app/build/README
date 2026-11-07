@@ -198,14 +198,14 @@ Each plugin module exports an object with some of the following properties:
 | `optional` | boolean | If `true` (default), the plugin can be disabled by the blog owner. |
 | `isDefault` | boolean | If `true` (default), the plugin is enabled for new blogs. |
 | `first` | boolean | If `true`, the plugin is placed at the front of the processing queue. |
-| `render($, callback, options)` | function | DOM-level renderer using a cheerio instance. |
-| `prerender(html, callback, options)` | function | String-level pre-renderer run before cheerio parsing. |
+| `render($, options)` | async function | DOM-level renderer using a cheerio instance. Resolves to nothing, to an array of dependency paths, or to `{ newDependencies }`. |
+| `prerender(html, options)` | async function | String-level pre-renderer run before cheerio parsing. Resolves to the new HTML. |
 | `formHTML` | string | HTML form for the plugin's settings panel (loaded from `form.html`). |
 | `publicJS` | string | JavaScript appended to every blog page (loaded from `public.js`). |
 | `publicCSS` | string | CSS appended to every blog page (loaded from `public.css`). |
 | `entryHTML` | string | HTML appended to each full entry view (loaded from `entry.html`). |
 
-The `plugins.convert(blog, path, html, callback)` function runs all enabled plugins in series. The `plugins.load(file, blogPlugins, callback)` function aggregates plugin-contributed `entryHTML`, CSS, and JS for a given blog's enabled plugin set. `plugins.list` is a dictionary of all loaded plugins by name. `plugins.defaultList` is the default plugin configuration applied to new blogs.
+The `plugins.convert(blog, path, html)` function runs all enabled plugins in series and resolves to `[html, dependencies]`. A plugin that rejects is skipped; one that has not settled after 10 minutes is moved past. The `plugins.load(file, blogPlugins)` function resolves to the aggregate of plugin-contributed `entryHTML`, CSS, and JS for a given blog's enabled plugin set. `plugins.list` is a dictionary of all loaded plugins by name. `plugins.defaultList` is the default plugin configuration applied to new blogs.
 
 ## Dependencies
 

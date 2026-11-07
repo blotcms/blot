@@ -45,7 +45,7 @@ describe("video-embed plugin", function () {
     nock.enableNetConnect();
   });
 
-  it("embeds videos from youtube, vimeo and music from bandcamp", function (done) {
+  it("embeds videos from youtube, vimeo and music from bandcamp", async function () {
     nock("https://oliviachaney.bandcamp.com")
       .get("/album/circus-of-desire")
       .reply(
@@ -76,10 +76,7 @@ describe("video-embed plugin", function () {
       { decodeEntities: false },
       false
     );
-    videoEmbed.render($, function (err) {
-      expect(err).toEqual(null);
-      expect($("iframe").length).toEqual(4);
-      done();
-    });
+    await videoEmbed.render($, {});
+    expect($("iframe").length).toEqual(4);
   });
 });

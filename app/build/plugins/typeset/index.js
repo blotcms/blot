@@ -1,6 +1,5 @@
 // typeset(html, options), parsing the document once: see ./walk
 var typeset = require("./walk");
-var withPluginCallback = require("../withPluginCallback");
 
 function normalizeBooleanOption(value) {
   if (value === null || value === undefined || value === false || value === 0)
@@ -51,7 +50,7 @@ async function prerender(html, options) {
 }
 
 module.exports = {
-  prerender: withPluginCallback(prerender),
+  prerender,
   category: "Typography",
   title: "Substitution",
   description: "Correct common typographic errors",

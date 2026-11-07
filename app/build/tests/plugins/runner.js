@@ -1,4 +1,4 @@
-const { convert } = require("../../plugins");
+const { convert, list } = require("../../plugins");
 
 describe("plugin runner", function () {
   const blogBase = {
@@ -64,5 +64,48 @@ describe("plugin runner", function () {
     const { dependencies } = await runPlugins(plugins, contents);
 
     expect(dependencies.length).toBe(0);
+  });
+
+  it("skips a plugin whose render rejects and runs the ones after it", async function () {
+    const plugins = {
+      titlecase: { enabled: true, options: {} },
+      mediaPreload: { enabled: true, options: {} },
+    };
+    const contents = "<h1>a title</h1><audio></audio>";
+
+    spyOn(list.titlecase, "render").and.callFake(async () => {
+      throw new Error("plugin failed");
+    });
+
+    const { html } = await runPlugins(plugins, contents);
+
+    expect(html).toContain("<h1>a title</h1>");
+    expect(html).toContain('preload="metadata"');
+  });
+
+  it("collects dependencies from a plugin that resolves to an array", async function () {
+    const plugins = { titlecase: { enabled: true, options: {} } };
+
+    spyOn(list.titlecase, "render").and.callFake(async () => ["/one.txt"]);
+
+    const { dependencies } = await runPlugins(plugins, "<p>text</p>");
+
+    expect(dependencies).toEqual(["/one.txt"]);
+  });
+
+  it("passes cheerio and the plugin's options to render", async function () {
+    const plugins = {
+      titlecase: { enabled: true, options: { custom: "value" } },
+    };
+
+    const render = spyOn(list.titlecase, "render").and.callFake(async () => {});
+
+    await runPlugins(plugins, "<p>text</p>");
+
+    expect(render.calls.count()).toEqual(1);
+    expect(render.calls.argsFor(0).length).toEqual(2);
+    expect(typeof render.calls.argsFor(0)[0]).toEqual("function");
+    expect(render.calls.argsFor(0)[1].custom).toEqual("value");
+    expect(render.calls.argsFor(0)[1].blogID).toEqual("plugin-runner-test");
   });
 });

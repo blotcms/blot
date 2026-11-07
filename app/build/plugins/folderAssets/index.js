@@ -3,7 +3,6 @@ const cheerio = require("cheerio");
 const { join, resolve, posix } = require("path");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
-const withPluginCallback = require("../withPluginCallback");
 const {
   GLOBAL_STATIC_DIR,
   BLOG_STATIC_PATHS,
@@ -405,7 +404,7 @@ function globalStaticFileExists(ctx, path) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   bakeHTML,
   // Internal build optimization, not a user setting: always runs, and is
   // hidden from the plugins page (see dashboard/site/load/plugins.js).

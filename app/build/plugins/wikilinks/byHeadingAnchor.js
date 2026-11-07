@@ -1,9 +1,9 @@
 const makeSlug = require("helper/makeSlug");
 
-module.exports = function byHeadingAnchor($, href, done) {
+module.exports = async function byHeadingAnchor($, href) {
   const target = normalizeTarget(href);
 
-  if (!target) return done(new Error("Not a heading anchor"));
+  if (!target) throw new Error("Not a heading anchor");
 
   const slug = makeSlug(target);
 
@@ -12,13 +12,13 @@ module.exports = function byHeadingAnchor($, href, done) {
     findAnchorByHeadingText($, target, slug) ||
     findAnchorBySlug($, slug);
 
-  if (!resolution) return done(new Error("Not a heading anchor"));
+  if (!resolution) throw new Error("Not a heading anchor");
 
-  done(null, {
+  return {
     url: ensureHash(resolution.anchor),
     path: null,
     title: resolution.title || target,
-  });
+  };
 };
 
 function normalizeTarget(href) {

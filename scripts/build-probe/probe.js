@@ -128,15 +128,19 @@ function noteHeap(heapUsed) {
   }
 }
 
-// Wraps fn(...args, callback) so each call is counted as a step. measure, if
-// given, is passed the callback's arguments and returns { items, bytes } to
-// record what the step produced (e.g. entries loaded and their size).
+// Wraps a function so each call is counted as a step. If fn takes a callback,
+// it is the argument at callbackIndex (the last one by default) and the step
+// ends when it is called; a call with no function there is taken to return a
+// promise (the plugins' render and prerender, the lookups, Entry.get), and
+// the step ends when that settles. measure, if given, is passed the results
+// the step ended with - the callback's arguments, or [resolvedValue] for a
+// promise - and returns { items, bytes } to record what the step produced
+// (e.g. entries loaded and their size).
 function stepped(label, fn, callbackIndex, measure) {
   return function (...args) {
     const index = callbackIndex === undefined ? args.length - 1 : callbackIndex;
     const callback = args[index];
-    if (typeof callback !== "function" || !phases.current())
-      return fn.apply(this, args);
+    if (!phases.current()) return fn.apply(this, args);
 
     const stats = stepStats(label);
     stats.calls++;
@@ -146,25 +150,51 @@ function stepped(label, fn, callbackIndex, measure) {
     const started = instrument.now();
     let finished = false;
 
-    args[index] = function (...results) {
-      if (!finished) {
-        finished = true;
-        noteHeap(process.memoryUsage().heapUsed);
-        stats.ms += instrument.now() - started;
-        const left = activeSteps.get(label) - 1;
-        if (left) activeSteps.set(label, left);
-        else activeSteps.delete(label);
-        if (measure) {
-          try {
-            const { items = 0, bytes = 0 } = measure(results) || {};
-            stats.items += items;
-            stats.itemBytes += bytes;
-          } catch (err) {}
-        }
+    function finish(results) {
+      if (finished) return;
+      finished = true;
+      noteHeap(process.memoryUsage().heapUsed);
+      stats.ms += instrument.now() - started;
+      const left = activeSteps.get(label) - 1;
+      if (left) activeSteps.set(label, left);
+      else activeSteps.delete(label);
+      if (measure) {
+        try {
+          const { items = 0, bytes = 0 } = measure(results) || {};
+          stats.items += items;
+          stats.itemBytes += bytes;
+        } catch (err) {}
       }
-      return callback.apply(this, results);
-    };
-    return fn.apply(this, args);
+    }
+
+    if (typeof callback === "function") {
+      args[index] = function (...results) {
+        finish(results);
+        return callback.apply(this, results);
+      };
+      return fn.apply(this, args);
+    }
+
+    let result;
+    try {
+      result = fn.apply(this, args);
+    } catch (err) {
+      finish([]);
+      throw err;
+    }
+
+    if (result && typeof result.then === "function") {
+      // Observes the promise without changing it: the caller still gets the
+      // original, and a rejection stays the caller's to handle
+      result.then(
+        (value) => finish([value]),
+        () => finish([])
+      );
+    } else {
+      finish([result]);
+    }
+
+    return result;
   };
 }
 
@@ -235,7 +265,8 @@ function instrumentBuild() {
   );
 
   // The plugins list holds these same objects and reads render/prerender
-  // at call time.
+  // at call time. They return promises: render($, options) and
+  // prerender(html, options).
   const pluginsDir = path.dirname(require.resolve("build/plugins"));
   for (const name of require("fs").readdirSync(pluginsDir)) {
     if (name.includes(".")) continue;
@@ -247,14 +278,10 @@ function instrumentBuild() {
     }
     if (!plugin || typeof plugin !== "object") continue;
     if (typeof plugin.render === "function") {
-      plugin.render = stepped(`plugin.${name}.render`, plugin.render, 1);
+      plugin.render = stepped(`plugin.${name}.render`, plugin.render);
     }
     if (typeof plugin.prerender === "function") {
-      plugin.prerender = stepped(
-        `plugin.${name}.prerender`,
-        plugin.prerender,
-        1
-      );
+      plugin.prerender = stepped(`plugin.${name}.prerender`, plugin.prerender);
     }
   }
 }

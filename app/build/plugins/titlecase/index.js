@@ -1,5 +1,4 @@
 const titlecase = require("helper/titlecase");
-const withPluginCallback = require("../withPluginCallback");
 
 async function render($) {
   try {
@@ -18,7 +17,7 @@ async function render($) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   isDefault: false,
   category: "headings",
   title: "Titlecase",

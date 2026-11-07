@@ -18,307 +18,232 @@ describe("image", function () {
     );
   });
 
-  it("returns a different cached image when source image is modified", function (done) {
-    var test = this;
+  // Reads the metadata of an image on disk
+  function metadata(path) {
+    return sharp(path).metadata();
+  }
+
+  it("returns a different cached image when source image is modified", async function () {
     var image = "/tests-image.png";
     var modifiedImage = "/tests-image-modified.png";
     var html = '<img src="' + image + '">';
 
-    folder.writeFrom(test.blog.id, image, __dirname + image).then(() => {
-      render(test.blog, html, function (err, firstResult) {
-        expect(err).toBe(null);
+    await folder.writeFrom(this.blog.id, image, __dirname + image);
 
-        folder
-          .writeFrom(test.blog.id, image, __dirname + modifiedImage)
-          .then(() => {
-            render(test.blog, html, function (err, secondResult) {
-              expect(err).toBe(null);
+    var firstResult = await render(this.blog, html);
 
-              expect(firstResult).toContain("/_image_cache/");
-              expect(secondResult).toContain("/_image_cache/");
-              expect(firstResult).not.toEqual(secondResult);
+    await folder.writeFrom(this.blog.id, image, __dirname + modifiedImage);
 
-              test.result = secondResult;
-              done();
-            });
-          }, done.fail);
-      });
-    }, done.fail);
+    var secondResult = await render(this.blog, html);
+
+    expect(firstResult).toContain("/_image_cache/");
+    expect(secondResult).toContain("/_image_cache/");
+    expect(firstResult).not.toEqual(secondResult);
+
+    this.result = secondResult;
   });
 
-  it("will preserve the color profile of the image", function (done) {
-    var test = this;
+  it("will preserve the color profile of the image", async function () {
     var image = "/tests-p3.jpg";
     var html = '<img src="' + image + '">';
 
-    folder.writeFrom(test.blog.id, image, __dirname + image).then(() => {
-      render(test.blog, html, function (err, result) {
-        if (err) return done.fail(err);
+    await folder.writeFrom(this.blog.id, image, __dirname + image);
 
-        assets
-          .ensureLocal(
-            test.blog.id,
-            extractCachedImagePaths(test.blog, result)[0]
-          )
-          .then(function (path) {
-            sharp(path).metadata(function (err, metadata) {
-              if (err) return done.fail(err);
+    var result = await render(this.blog, html);
+    var path = await assets.ensureLocal(
+      this.blog.id,
+      extractCachedImagePaths(this.blog, result)[0]
+    );
+    var info = await metadata(path);
 
-              expect(metadata.icc).toBeDefined();
-              expect(metadata.icc).toContain("P3"); // Ensure it is preserved
-
-              done();
-            });
-          }, done.fail);
-      });
-    }, done.fail);
+    expect(info.icc).toBeDefined();
+    expect(info.icc).toContain("P3"); // Ensure it is preserved
   });
 
-  it("will fetch dimensions of GIFs but will not resize them", function (done) {
-    var test = this;
+  it("will fetch dimensions of GIFs but will not resize them", async function () {
     var image = "/tests-image.gif";
     var html = '<img src="' + image + '">';
 
-    folder.writeFrom(test.blog.id, image, __dirname + image).then(() => {
-      render(test.blog, html, function (err, result) {
-        if (err) return done.fail(err);
+    await folder.writeFrom(this.blog.id, image, __dirname + image);
 
-        expect(result).toContain("/_image_cache/");
+    var result = await render(this.blog, html);
 
-        // Image cache retrieves dimensions of images that it
-        // does not resize or modify
-        expect(result).toContain('width="450" height="338"');
+    expect(result).toContain("/_image_cache/");
 
-        assets
-          .read(test.blog.id, extractCachedImagePaths(test.blog, result)[0])
-          .then(function (cached) {
-            var cachedContentHash = crypto
-              .createHash("sha1")
-              .update(cached)
-              .digest("hex");
+    // Image cache retrieves dimensions of images that it
+    // does not resize or modify
+    expect(result).toContain('width="450" height="338"');
 
-            var originalContentHash = crypto
-              .createHash("sha1")
-              .update(fs.readFileSync(__dirname + image))
-              .digest("hex");
+    var cached = await assets.read(
+      this.blog.id,
+      extractCachedImagePaths(this.blog, result)[0]
+    );
 
-            expect(originalContentHash).toEqual(cachedContentHash);
-            test.result = result;
-            done();
-          }, done.fail);
-      });
-    }, done.fail);
+    var cachedContentHash = crypto
+      .createHash("sha1")
+      .update(cached)
+      .digest("hex");
+
+    var originalContentHash = crypto
+      .createHash("sha1")
+      .update(fs.readFileSync(__dirname + image))
+      .digest("hex");
+
+    expect(originalContentHash).toEqual(cachedContentHash);
+    this.result = result;
   });
 
-  it("returns the same cached image when re-run", function (done) {
-    var test = this;
+  it("returns the same cached image when re-run", async function () {
     var path = "/tests-image.png";
     var html = '<img src="' + path + '">';
-    var blog = test.blog;
-    folder.writeFrom(test.blog.id, path, __dirname + path).then(() => {
-      render(blog, html, function (err, firstResult) {
-        render(blog, html, function (err, secondResult) {
-          expect(firstResult).toContain("/_image_cache/");
-          expect(secondResult).toContain("/_image_cache/");
-          expect(firstResult).toEqual(secondResult);
-          test.result = secondResult;
-          done();
-        });
-      });
-    }, done.fail);
+    var blog = this.blog;
+
+    await folder.writeFrom(blog.id, path, __dirname + path);
+
+    var firstResult = await render(blog, html);
+    var secondResult = await render(blog, html);
+
+    expect(firstResult).toContain("/_image_cache/");
+    expect(secondResult).toContain("/_image_cache/");
+    expect(firstResult).toEqual(secondResult);
+    this.result = secondResult;
   });
 
-  it("downsizes large images", function (done) {
-    var test = this;
+  it("downsizes large images", async function () {
     var large = "/tests-large-image.jpg";
     var html = '<img src="' + large + '">';
 
-    folder.writeFrom(test.blog.id, large, __dirname + large).then(() => {
-      require("sharp")(__dirname + large).metadata(
-        function (err, originalInfo) {
-          if (err) return done.fail(err);
+    await folder.writeFrom(this.blog.id, large, __dirname + large);
 
-          render(test.blog, html, function (err, result) {
-            if (err) return done.fail(err);
+    var originalInfo = await metadata(__dirname + large);
+    var result = await render(this.blog, html);
+    var image = await assets.ensureLocal(
+      this.blog.id,
+      extractCachedImagePaths(this.blog, result)[0]
+    );
+    var cachedInfo = await metadata(image);
 
-            assets
-              .ensureLocal(
-                test.blog.id,
-                extractCachedImagePaths(test.blog, result)[0]
-              )
-              .then(function (image) {
-                require("sharp")(image).metadata(function (err, cachedInfo) {
-                  if (err) return done.fail(err);
+    // Ensure cached image is smaller than 3000 x 3000 pixels
+    expect(cachedInfo.width <= 3000).toBe(true);
+    expect(cachedInfo.height <= 3000).toBe(true);
 
-                  // Ensure cached image is smaller than 3000 x 3000 pixels
-                  expect(cachedInfo.width <= 3000).toBe(true);
-                  expect(cachedInfo.height <= 3000).toBe(true);
+    // Ensure cached image is same aspect ratio as original
+    expect(Math.floor(cachedInfo.height / cachedInfo.width)).toEqual(
+      Math.floor(originalInfo.height / originalInfo.width)
+    );
 
-                  // Ensure cached image is same aspect ratio as original
-                  expect(
-                    Math.floor(cachedInfo.height / cachedInfo.width)
-                  ).toEqual(
-                    Math.floor(originalInfo.height / originalInfo.width)
-                  );
-
-                  test.result = result;
-                  done();
-                });
-              }, done.fail);
-          });
-        }
-      );
-    }, done.fail);
+    this.result = result;
   });
 
-  it("caches an image", function (done) {
-    var test = this;
+  it("caches an image", async function () {
     var path = "/tests-image.png";
     var html = '<img src="' + path + '">';
 
-    folder.writeFrom(test.blog.id, path, __dirname + path).then(() => {
-      render(test.blog, html, function (err, result) {
-        expect(result).toContain(".png");
-        expect(result).toContain("/_image_cache/");
-        test.result = result;
-        done();
-      });
-    }, done.fail);
+    await folder.writeFrom(this.blog.id, path, __dirname + path);
+
+    var result = await render(this.blog, html);
+
+    expect(result).toContain(".png");
+    expect(result).toContain("/_image_cache/");
+    this.result = result;
   });
 
-  it("resolves an image referenced by its own blot.im subdomain URL from disk instead of fetching it", function (done) {
-    var test = this;
+  it("resolves an image referenced by its own blot.im subdomain URL from disk instead of fetching it", async function () {
     var path = "/tests-image.png";
-    var src = "https://" + test.blog.handle + "." + config.host + path;
+    var src = "https://" + this.blog.handle + "." + config.host + path;
     var html = '<img src="' + src + '">';
 
-    folder.writeFrom(test.blog.id, path, __dirname + path).then(() => {
-      render(test.blog, html, function (err, result) {
-        expect(err).toBe(null);
-        expect(result).toContain(".png");
-        expect(result).toContain("/_image_cache/");
-        test.result = result;
-        done();
-      });
-    }, done.fail);
+    await folder.writeFrom(this.blog.id, path, __dirname + path);
+
+    var result = await render(this.blog, html);
+
+    expect(result).toContain(".png");
+    expect(result).toContain("/_image_cache/");
+    this.result = result;
   });
 
-  it("resolves an image referenced by its own custom domain URL, ignoring the query string", function (done) {
-    var test = this;
+  it("resolves an image referenced by its own custom domain URL, ignoring the query string", async function () {
     var path = "/tests-image.png";
     var src = "https://www.example.com" + path + "?foo=bar";
     var html = '<img src="' + src + '">';
 
-    folder.writeFrom(test.blog.id, path, __dirname + path).then(() => {
-      test.blog.update({ domain: "example.com" }).then(function () {
-        // .update() writes to Redis but doesn't mutate this in-memory
-        // object, so reflect the change the way a fresh blog.get() would.
-        test.blog.domain = "example.com";
+    await folder.writeFrom(this.blog.id, path, __dirname + path);
+    await this.blog.update({ domain: "example.com" });
 
-        render(test.blog, html, function (err, result) {
-          expect(err).toBe(null);
-          expect(result).toContain(".png");
-          expect(result).toContain("/_image_cache/");
-          test.result = result;
-          done();
-        });
-      });
-    }, done.fail);
+    // .update() writes to Redis but doesn't mutate this in-memory
+    // object, so reflect the change the way a fresh blog.get() would.
+    this.blog.domain = "example.com";
+
+    var result = await render(this.blog, html);
+
+    expect(result).toContain(".png");
+    expect(result).toContain("/_image_cache/");
+    this.result = result;
   });
 
-  it("resolves an image referenced by its own domain URL case-insensitively", function (done) {
-    var test = this;
+  it("resolves an image referenced by its own domain URL case-insensitively", async function () {
     var path = "/tests-image.png";
     var src =
       "https://" +
-      test.blog.handle +
+      this.blog.handle +
       "." +
       config.host +
       "/NESTED" +
       path.toUpperCase();
     var html = '<img src="' + src + '">';
 
-    folder
-      .writeFrom(test.blog.id, "/nested" + path, __dirname + path)
-      .then(() => {
-        render(test.blog, html, function (err, result) {
-          expect(err).toBe(null);
-          expect(result).toContain(".png");
-          expect(result).toContain("/_image_cache/");
-          test.result = result;
-          done();
-        });
-      }, done.fail);
+    await folder.writeFrom(this.blog.id, "/nested" + path, __dirname + path);
+
+    var result = await render(this.blog, html);
+
+    expect(result).toContain(".png");
+    expect(result).toContain("/_image_cache/");
+    this.result = result;
   });
 
-  it("caches an image case-insensitively", function (done) {
-    var test = this;
+  it("caches an image case-insensitively", async function () {
     var path = "/tests-image.png";
     var html = '<img src="/nested/' + path.toUpperCase() + '">';
 
-    folder
-      .writeFrom(test.blog.id, "/nested" + path, __dirname + path)
-      .then(() => {
-        render(test.blog, html, function (err, result) {
-          expect(result).toContain(".png");
-          expect(result).toContain("/_image_cache/");
-          test.result = result;
-          done();
-        });
-      }, done.fail);
+    await folder.writeFrom(this.blog.id, "/nested" + path, __dirname + path);
+
+    var result = await render(this.blog, html);
+
+    expect(result).toContain(".png");
+    expect(result).toContain("/_image_cache/");
+    this.result = result;
   });
 
-  it("names cached images after the decoded filename and escapes their URLs", function (done) {
-    var test = this;
-    var name = "/\u8bf4\u660e.png";
+  it("names cached images after the decoded filename and escapes their URLs", async function () {
+    var name = "/说明.png";
     var html = '<img src="/%E8%AF%B4%E6%98%8E.png">';
 
-    folder
-      .writeFrom(test.blog.id, name, __dirname + "/tests-image.png")
-      .then(() => {
-        render(test.blog, html, function (err, result) {
-          if (err) return done.fail(err);
+    await folder.writeFrom(this.blog.id, name, __dirname + "/tests-image.png");
 
-          var src = cheerio.load(result, null, false)("img").attr("src");
+    var result = await render(this.blog, html);
+    var src = cheerio.load(result, null, false)("img").attr("src");
 
-          expect(src).toMatch(
-            /\/_image_cache\/[0-9a-f-]+\/%E8%AF%B4%E6%98%8E\.png$/
-          );
-          test.result = result;
-          done();
-        });
-      }, done.fail);
+    expect(src).toMatch(/\/_image_cache\/[0-9a-f-]+\/%E8%AF%B4%E6%98%8E\.png$/);
+    this.result = result;
   });
 
-  it("makes thumbnails from cached images with long escaped URLs", function (done) {
-    var test = this;
+  it("makes thumbnails from cached images with long escaped URLs", async function () {
     var thumbnail = require("build/thumbnail");
     var name = new Array(31).join("说") + ".png";
     var html = '<img src="/' + encodeURIComponent(name) + '">';
 
-    folder
-      .writeFrom(test.blog.id, "/" + name, __dirname + "/tests-image.png")
-      .then(() => {
-        render(test.blog, html, async function (err, result) {
-          if (err) return done.fail(err);
+    await folder.writeFrom(
+      this.blog.id,
+      "/" + name,
+      __dirname + "/tests-image.png"
+    );
 
-          try {
-            const thumbnails = await thumbnail(
-              test.blog,
-              "/post.txt",
-              {},
-              result
-            );
+    var result = await render(this.blog, html);
+    const thumbnails = await thumbnail(this.blog, "/post.txt", {}, result);
 
-            expect(thumbnails).toEqual(jasmine.any(Object));
-            expect(thumbnails.small).toEqual(jasmine.any(Object));
-            test.result = result;
-            done();
-          } catch (err) {
-            done.fail(err);
-          }
-        });
-      }, done.fail);
+    expect(thumbnails).toEqual(jasmine.any(Object));
+    expect(thumbnails.small).toEqual(jasmine.any(Object));
+    this.result = result;
   });
 
   describe("filenameFromSrc", function () {
@@ -383,7 +308,7 @@ describe("image", function () {
   }
 
   // Wrapper around dumb API for this plugin
-  function render(blog, html, callback) {
+  async function render(blog, html) {
     var options = {
       blogID: blog.id,
       domain: blog.domain,
@@ -391,12 +316,8 @@ describe("image", function () {
     };
     var $ = cheerio.load(html, null, false);
 
-    image.render(
-      $,
-      function () {
-        callback(null, $.html());
-      },
-      options
-    );
+    await image.render($, options);
+
+    return $.html();
   }
 });
