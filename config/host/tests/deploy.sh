@@ -103,7 +103,6 @@ check "a unit's line on the socket lands in app.log with its tag" in_ct '
   cat /var/instance-ssd/logs/app.log; exit 1'
 check "ec2-user, whom read.sh connects as, can read app.log" in_ct '
   [ "$(stat -c %U /var/instance-ssd/logs/app.log)" = ec2-user ] && runuser -u ec2-user -- head -c 1 /var/instance-ssd/logs/app.log > /dev/null'
-check "rsyslog was restarted under the unit deploy's lock" in_ct '[ -e /tmp/blot-proxy-deploy.lock ]'
 check "docker starts after rsyslog at boot" in_ct 'grep -qx "After=rsyslog.service" /etc/systemd/system/docker.service.d/20-rsyslog.conf'
 check "app.log is rotated" in_ct 'logrotate --debug /etc/logrotate.d/app-log 2>&1 | grep -q "/var/instance-ssd/logs/app.log"'
 check "fail2ban accepts the deployed config" in_ct 'fail2ban-client -t'
@@ -160,6 +159,14 @@ in_ct 'rm /tmp/systemctl.log; chown 1234:1234 /var/instance-ssd/logs /var/instan
 check "deploy.sh runs again" deploy "$TMP/run2"
 check "the instance store unit is not started when mounted" in_ct '! grep -q "start mount-instance-store" /tmp/systemctl.log'
 check "rsyslog is not restarted when its config is unchanged" in_ct '! grep -q "restart rsyslog" /tmp/systemctl.log && [ -S /run/blot-log/app.sock ]'
+# A changed rsyslog config, with the deploy lock left by a unit deploy run as
+# another user (the deploy user from GitHub)
+in_ct 'rm -f /tmp/blot-proxy-deploy.lock; runuser -u ec2-user -- touch /tmp/blot-proxy-deploy.lock; echo "# older" >> /etc/rsyslog.d/blot-app-log.conf; rm /tmp/systemctl.log'
+check "deploy.sh restarts rsyslog for a changed config, with another user's deploy lock" deploy "$TMP/run2c"
+check "and did restart it, with the new config in place" in_ct 'grep -qx "restart rsyslog" /tmp/systemctl.log && ! grep -q "# older" /etc/rsyslog.d/blot-app-log.conf && [ -S /run/blot-log/app.sock ]'
+in_ct '(sleep 3; exit 0) & flock /tmp/blot-proxy-deploy.lock sleep 4 & sleep 1; echo "# older" >> /etc/rsyslog.d/blot-app-log.conf; rm /tmp/systemctl.log'
+check "and waits for a unit deploy holding the lock" deploy "$TMP/run2d"
+check "before restarting" in_ct 'grep -qx "restart rsyslog" /tmp/systemctl.log'
 in_ct 'chown root:root /var/instance-ssd/logs/app.log; chmod 600 /var/instance-ssd/logs/app.log'
 check "deploy.sh runs over an app.log rsyslog made root's" deploy "$TMP/run3"
 check "and gives it to ec2-user" in_ct '[ "$(stat -c %U:%G /var/instance-ssd/logs/app.log)" = ec2-user:ec2-user ] && runuser -u ec2-user -- head -c 1 /var/instance-ssd/logs/app.log > /dev/null'
