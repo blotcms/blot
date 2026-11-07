@@ -289,32 +289,34 @@ describe("git store receive", function () {
       expect(reading).toBe(10);
     });
 
-    it("answers only once the hint is written, so another process's serving read straight after sees the push", async function () {
-      // Another process on the same objects, warm, and within the few
-      // seconds its serving reads trust an unchanged hint
+    it("answers before the hint is written, and another process's read straight after still sees the push", async function () {
+      // Another process on the same objects, warm
       const other = { ...store };
-      const now = Date.now();
-      const clock = () => now;
-      const before = await manifest.read(other, { clock });
-      expect((await manifest.read(other, { clock, serving: true })).seq).toBe(
-        before.seq
-      );
+      const before = await manifest.read(other);
 
-      // The hint lands slowly
+      // The hint lands only once the push has been answered
       const real = store.put;
+      let land;
+      const landed = new Promise((resolve) => (land = resolve));
       spyOn(store, "put").and.callFake(async (key, body) => {
-        if (key === LATEST_KEY)
-          await new Promise((resolve) => setTimeout(resolve, 300));
+        if (key === LATEST_KEY) await landed;
         return real(key, body);
       });
 
       const tip = commit("work");
       expect((await push(src, [server.url, "work:master"])).code).toBe(0);
       expect(server.results[0].outcome).toBe("ok");
+      // The hint does not name the push yet
+      const hinted = await store.get(LATEST_KEY).then(
+        (bytes) => JSON.parse(bytes).seq,
+        () => null
+      );
+      expect(hinted).not.toBe(before.seq + 1);
 
-      const seen = await manifest.read(other, { clock, serving: true });
+      const seen = await manifest.read(other);
       expect(seen.seq).toBe(before.seq + 1);
       expect(seen.refs[MASTER]).toBe(tip);
+      land();
     });
 
     it("accepts a push which carries no objects", async function () {

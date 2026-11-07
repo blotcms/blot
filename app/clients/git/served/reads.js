@@ -195,12 +195,7 @@ async function read(
 
   try {
     measured = await measure(async function () {
-      // Served, never built on, so an unchanged hint is enough for a few
-      // seconds (manifest.read's `serving`). The receive-pack advertisement
-      // begins a push, so it asks as a writer does.
-      const current = await manifest.read(store, {
-        serving: kind !== "receive-advertise",
-      });
+      const current = await manifest.read(store);
 
       // Nothing there: a clone of nothing would look like an empty repository
       if (manifest.isEmpty(current)) {

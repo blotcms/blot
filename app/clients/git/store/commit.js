@@ -805,6 +805,7 @@ async function commit({
           base,
           next,
           uploaded: [uploaded.pack.name, uploaded.piece.name],
+          waitForHint: false,
         });
       } catch (err) {
         if (err instanceof OutcomeUnknownError)

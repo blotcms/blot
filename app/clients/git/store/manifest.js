@@ -126,21 +126,6 @@ const RECONFIRM_AFTER = MAX_BASE_AGE / 2;
 // and sends no body.
 const hints = new WeakMap();
 
-// By store, the newest manifest the store last showed to be the newest, and
-// when: { seq, at }, `at` being the start of the read whose HEAD found seq + 1
-// missing (or the LIST that found seq), or when a swap of seq landed.
-const newest = new WeakMap();
-
-// How long a read for serving (read(store, { serving: true }): an
-// advertisement, a clone or a fetch, never the base of a write) trusts an
-// unchanged hint without the HEAD for the next seq. The hint is written after
-// a swap, best-effort, and concurrent swaps can land their hints out of
-// order, so it can lag; within this long of the store's own word that the
-// kept manifest was the newest, a 304 naming it is taken as enough. So a
-// serving read may give refs at most this far behind a swap whose hint was
-// lost or overtaken, and a writer, which always asks, never builds on one.
-const TRUST_UNCHANGED_HINT = 5 * 1000;
-
 const OID = /^[0-9a-f]{40}$/;
 const WRITER = /^[0-9a-zA-Z_-]{1,64}$/;
 
@@ -308,23 +293,16 @@ function remember(store, seq, bytes, confirmed) {
 function forget(store, seq) {
   const bySeq = kept.get(store);
   if (bySeq) bySeq.delete(seq);
-  const last = newest.get(store);
-  if (last && last.seq === seq) newest.delete(store);
-}
-
-// The store showed `seq` to be the newest at `at` (or later)
-function markNewest(store, seq, at) {
-  const last = newest.get(store);
-  if (last && (last.seq > seq || (last.seq === seq && last.at >= at))) return;
-  newest.set(store, { seq, at });
 }
 
 // The manifest with this number, and when the store last confirmed it is
 // there: { m, confirmed }. Bytes kept from an earlier read are used if the
 // store confirmed them within RECONFIRM_AFTER, and otherwise kept after a HEAD
 // says the manifest is still there. `now` is the time to record for a
-// confirmation made here. Throws NotFoundError if there isn't one.
-async function load(store, seq, now) {
+// confirmation made here. Bytes fetched here are kept unless `keep` is false,
+// when they come back as `fetched` for the caller to keep once it knows the
+// manifest is the newest. Throws NotFoundError if there isn't one.
+async function load(store, seq, now, { keep = true } = {}) {
   const bySeq = kept.get(store);
   let entry = bySeq && bySeq.get(seq);
   if (entry && now - entry.confirmed > RECONFIRM_AFTER) {
@@ -335,14 +313,15 @@ async function load(store, seq, now) {
       throw new NotFoundError("No such key: " + manifestKey(seq));
     }
   }
+  let fetched;
   if (!entry) {
-    const bytes = await store.get(manifestKey(seq), { maxBytes: MAX_BYTES });
-    remember(store, seq, bytes, now);
-    entry = { bytes, confirmed: now };
+    fetched = await store.get(manifestKey(seq), { maxBytes: MAX_BYTES });
+    entry = { bytes: fetched, confirmed: now };
   }
   const m = parse(entry.bytes);
   if (m.seq !== seq) fail(manifestKey(seq) + " says it is seq " + m.seq);
-  return { m, confirmed: entry.confirmed };
+  if (fetched && keep) remember(store, seq, fetched, now);
+  return { m, confirmed: entry.confirmed, fetched: keep ? undefined : fetched };
 }
 
 // The seq a hint's bytes name, or null if they aren't one
@@ -395,69 +374,55 @@ function newestKept(store) {
   return Math.max(...bySeq.keys());
 }
 
-// The newest manifest found by starting at the hint and looking forward, as
-// { seq, loading }, or null if there is no usable hint or it is too far
-// behind. `loading`, when there is one, is load() of that seq already under
-// way (settled as { found } or { err }).
+// The newest manifest found from the one this process keeps, or by starting
+// at the hint and looking forward, as { seq, loading }, or null if there is no
+// usable hint or it is too far behind. `loading`, when there is one, is load()
+// of that seq already under way, its bytes not yet kept (settled as { found }
+// or { err }).
 //
-// Two things run alongside the hint's GET, so the usual read waits on one
-// round trip, or two:
+// With bytes kept for seq K, the first request is a GET of K + 1 alone, and
+// missing means K is the newest: the usual warm read is one request in one
+// round trip, for a writer and a server alike, and it rests on the store's
+// word, not the hint's. If K + 1 is there, the hint's GET and the HEAD for
+// K + 2 go together, and the walk goes on as for a cold read. With nothing
+// kept, the GET of the manifest the hint names starts with the HEAD for the
+// one after it, rather than after it. (load() still checks a kept K is there
+// if the store has not confirmed it for a while.)
 //
-// - With bytes kept for seq K (the manifest this process last read or
-//   swapped in), a HEAD for K + 1. If it is missing and the hint is not past
-//   K, K is the newest, as surely as when the hint names K itself: the same
-//   HEAD is what read() would have asked next. (load() still checks K is
-//   there if the store has not confirmed it for a while.)
-// - Otherwise the GET of the manifest the hint names starts with the HEAD
-//   for the one after it, rather than after it.
-//
-// The hint's GET is conditional (see readHint). A read for serving (`serving`)
-// whose kept K the store showed to be the newest within TRUST_UNCHANGED_HINT,
-// and whose last fetch of the hint named K, sends that GET alone: a 304 means
-// K, with no HEAD (the answer then has `trustedAt`, when the store last showed
-// K to be the newest). If the hint changed, it carries on as any read does,
-// with the HEAD after the GET instead of beside it. Every other read sends
-// the HEAD beside the GET as before, a writer's included, so a hint that lags
-// is caught as before.
-async function walkFromHint(store, now, serving) {
-  const keptSeq = newestKept(store);
-  const last = newest.get(store);
-  const known = hints.get(store);
-  const trusting =
-    serving &&
-    keptSeq !== null &&
-    last &&
-    last.seq === keptSeq &&
-    now >= last.at &&
-    now - last.at <= TRUST_UNCHANGED_HINT &&
-    known &&
-    known.seq === keptSeq;
-
-  let hint;
-  let afterKept;
-  if (trusting) {
-    hint = await readHint(store);
-    if (hint.unchanged && hint.seq === keptSeq)
-      return { seq: keptSeq, trustedAt: last.at };
-  } else {
-    [hint, afterKept] = await Promise.all([
-      readHint(store),
-      keptSeq === null ? null : store.head(manifestKey(keptSeq + 1)),
-    ]);
+// That first GET is only sound because the newest manifest kept is always
+// one the store showed to be the newest when it was last confirmed: K there
+// and K + 1 missing then means K + 1 had never existed, since the sweep
+// deletes in order, so a K + 1 missing now is not a hole the sweep left. So
+// what the walk fetches on the way is not kept; read() keeps the manifest it
+// returns, and swap() the one it created.
+async function walkFromHint(store, now) {
+  let keptSeq = newestKept(store);
+  let after = null;
+  if (keptSeq !== null) {
+    try {
+      after = await load(store, keptSeq + 1, now, { keep: false });
+    } catch (err) {
+      if (!(err instanceof NotFoundError)) throw err;
+      return { seq: keptSeq };
+    }
+    keptSeq++;
   }
+
+  const [hint, afterKept] = await Promise.all([
+    readHint(store),
+    keptSeq === null ? null : store.head(manifestKey(keptSeq + 1)),
+  ]);
 
   if (hint.seq === null) return null;
-  if (keptSeq !== null && hint.seq <= keptSeq) {
-    if (afterKept === undefined)
-      afterKept = await store.head(manifestKey(keptSeq + 1));
-    if (!afterKept) return { seq: keptSeq };
-  }
+  if (keptSeq !== null && hint.seq <= keptSeq && !afterKept)
+    return { seq: keptSeq, loading: Promise.resolve({ found: after }) };
 
-  let seq = hint.seq;
+  // A hint behind a seq known to be there is looked past
+  let seq = keptSeq !== null && hint.seq <= keptSeq ? keptSeq + 1 : hint.seq;
   for (let steps = 0; steps < WALK_LIMIT; steps++) {
     const loading =
       steps === 0
-        ? load(store, seq, now).then(
+        ? load(store, seq, now, { keep: false }).then(
             (found) => ({ found }),
             (err) => ({ err })
           )
@@ -482,9 +447,10 @@ async function listNewest(store) {
 // of packs: only the store knows which manifest is the newest). A repository
 // nothing has been pushed to has none, which reads as an empty one with seq 0.
 //
-// In the usual case that is a GET of the hint, a HEAD for the manifest after
-// the one it names (which isn't there), and a GET of the manifest, unless this
-// process already holds its bytes. The hint can only make read() look in the
+// In the usual case that is a GET of the manifest after the one this process
+// last read or swapped in (which isn't there). Cold, it is a GET of the hint,
+// a HEAD for the manifest after the one it names, and a GET of the manifest.
+// The hint can only make read() look in the
 // wrong place, never return the wrong manifest: whatever it names, read() looks
 // forward for newer ones, and if what it names isn't there, LISTs instead.
 //
@@ -495,35 +461,24 @@ async function listNewest(store) {
 // were kept, at most RECONFIRM_AFTER ago. Kept bytes past that are checked
 // with a HEAD, and a manifest gone since (the sweep deleted it, and the hint
 // still names it) is a miss, and the LIST finds the newest.
-//
-// `serving: true` is for a read whose manifest is only served (a ref
-// advertisement, a clone or a fetch) and never built on: it may skip the HEAD
-// for the next seq while the hint is unchanged, for TRUST_UNCHANGED_HINT after
-// the store last showed the kept manifest to be the newest (see walkFromHint),
-// so the usual warm read for serving is one conditional GET answered 304. Its
-// stamp is the earlier of that time and the kept bytes' confirmation, so a
-// writer handed one anyway is still timed from the store's own word.
-async function read(store, { clock = Date.now, serving = false } = {}) {
+async function read(store, { clock = Date.now } = {}) {
   const now = clock();
-  const stamp = ({ m, confirmed }, shown = now) => {
-    readAt.set(m, Math.min(confirmed, shown));
+  const stamp = ({ m, confirmed }) => {
+    readAt.set(m, Math.min(confirmed, now));
     return m;
   };
-  const shown = (seq) => markNewest(store, seq, now);
-  const hinted = await walkFromHint(store, now, serving);
+  const hinted = await walkFromHint(store, now);
   if (hinted !== null) {
     try {
-      if (hinted.trustedAt !== undefined)
-        return stamp(await load(store, hinted.seq, now), hinted.trustedAt);
       let found;
       if (hinted.loading) {
         const settled = await hinted.loading;
         if (settled.err) throw settled.err;
         found = settled.found;
+        if (found.fetched) remember(store, hinted.seq, found.fetched, now);
       } else {
         found = await load(store, hinted.seq, now);
       }
-      shown(hinted.seq);
       return stamp(found);
     } catch (err) {
       if (!(err instanceof NotFoundError)) throw err;
@@ -532,9 +487,7 @@ async function read(store, { clock = Date.now, serving = false } = {}) {
 
   const seq = await listNewest(store);
   if (seq === 0) return stamp({ m: empty(), confirmed: now });
-  const found = await load(store, seq, now);
-  shown(seq);
-  return stamp(found);
+  return stamp(await load(store, seq, now));
 }
 
 // Throws StaleManifestError if the store last showed `base` to be the newest
@@ -1037,18 +990,16 @@ async function swap({
     // base as one just read
     const landedAt = clock();
     remember(store, next.seq, landed || bytes, landedAt);
-    markNewest(store, next.seq, landedAt);
     readAt.set(next, landedAt);
 
     // The swap has happened. The hint only saves the next reader some looking,
     // so a failure to write it is not a failure to swap: it is logged and the
-    // swap resolves. It is waited for by default, so a client told its push
-    // landed finds the new hint on its next request, and a serving read in
-    // another process, which trusts an unchanged hint for a few seconds (see
-    // read()), sees the push. A caller which passes `waitForHint: false` is
-    // answered without waiting: until it lands, a writer starting from the
-    // old hint looks one manifest further forward, and a serving read may give
-    // the manifest before.
+    // swap resolves. No read trusts it (see read()), so a client told its push
+    // landed finds the push on its next request whether or not the hint has
+    // landed: until it does, a process starting from the old hint looks one
+    // manifest further forward. It is waited for by default, so a script
+    // which exits after a swap leaves the hint written; a push and Blot's
+    // commits pass `waitForHint: false` and are answered a round trip sooner.
     const hint = store
       .put(LATEST_KEY, Buffer.from(JSON.stringify({ seq: next.seq }) + "\n"))
       .catch((err) =>
@@ -1067,7 +1018,6 @@ module.exports = {
   VERSION,
   MAX_BYTES,
   MAX_BASE_AGE,
-  TRUST_UNCHANGED_HINT,
   SNAPSHOT_LIMITS,
   empty,
   validate,
