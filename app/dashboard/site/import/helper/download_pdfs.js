@@ -1,4 +1,3 @@
-var async = require("async");
 var basename = require("path").basename;
 var parse = require("url").parse;
 var htmlAssets = require("./html_assets");
@@ -6,15 +5,9 @@ var fs = require("fs-extra");
 var assetDirectory = require("./asset_directory");
 var boundedDownload = require("./download");
 var lifecycle = require("../lifecycle");
+var withCallback = require("helper/withCallback");
 
-function download(url, prefetched, callback) {
-  boundedDownload(url, { kind: "file", check: "pdf", prefetched }).then(
-    ({ data }) => callback(null, data),
-    callback
-  );
-}
-
-module.exports = function download_pdfs(post, callback) {
+async function download_pdfs(post) {
   // if (post.html.indexOf('pdf-embedder') > -1) {
   //   console.log('<<- ', post.html, ' ->>');
   //   throw new Error();
@@ -33,77 +26,81 @@ module.exports = function download_pdfs(post, callback) {
 
   // The post's links to a PDF (each http(s) <a href> ending in .pdf once) are
   // found by the sandbox's parse-html job, not by Node
-  htmlAssets.scan("pdfs", post.html).then(function (scanned) {
-    // The post's PDFs in one jail, where there are several
-    boundedDownload
-      .prefetch(scanned.urls, { kind: "file", check: "pdf" })
-      .then(function (prefetched) {
-        downloadAll(post, scanned, prefetched, callback);
-      }, callback);
-  }, callback);
-};
+  const scanned = await htmlAssets.scan("pdfs", post.html);
 
-function downloadAll(post, scanned, prefetched, callback) {
+  // The post's PDFs in one jail, where there are several
+  const prefetched = await boundedDownload.prefetch(scanned.urls, {
+    kind: "file",
+    check: "pdf",
+  });
+
+  return downloadAll(post, scanned, prefetched);
+}
+
+function directoryOf(post) {
+  return new Promise(function (resolve, reject) {
+    assetDirectory(post, function (err, directory) {
+      if (err) return reject(err);
+      resolve(directory);
+    });
+  });
+}
+
+async function downloadAll(post, scanned, prefetched) {
   var replacements = [];
 
-  async.eachSeries(
-    scanned.urls,
-    function (href, next) {
-      var name;
+  for (const href of scanned.urls) {
+    var name;
 
-      try {
-        name = nameFrom(href);
-      } catch (e) {
-        return next();
-      }
-
-      if (name.charAt(0) !== "_") name = "_" + name;
-
-      console.log("Attempting to download", href);
-
-      download(href, prefetched, function (err, data) {
-        if (err) {
-          console.log("PDF error:", href, err.name, err.statusCode);
-          return next(
-            lifecycle.current() && lifecycle.current().signal.aborted
-              ? err
-              : null
-          );
-        }
-
-        assetDirectory(post, function (err, directory) {
-          if (err) return next();
-
-          fs.outputFile(directory + "/" + name, data, function (err) {
-            if (err) return next();
-
-            replacements.push([href, name]);
-
-            next();
-          });
-        });
-      });
-    },
-    function (err) {
-      if (err) return callback(err);
-
-      // With nothing downloaded, the HTML is what the parser wrote back
-      if (!replacements.length) {
-        post.html = scanned.html;
-        return callback(null, post);
-      }
-
-      // Changes each downloaded link's href, and its text if that was the URL.
-      // From the post's own HTML, so it is parsed and written once, as it was
-      // when Node did it.
-      htmlAssets.rewrite("pdfs", post.html, replacements).then(function (html) {
-        post.html = html;
-        callback(null, post);
-      }, callback);
+    try {
+      name = nameFrom(href);
+    } catch (e) {
+      continue;
     }
-  );
+
+    if (name.charAt(0) !== "_") name = "_" + name;
+
+    console.log("Attempting to download", href);
+
+    var data;
+
+    try {
+      ({ data } = await boundedDownload(href, {
+        kind: "file",
+        check: "pdf",
+        prefetched,
+      }));
+    } catch (err) {
+      console.log("PDF error:", href, err.name, err.statusCode);
+      if (lifecycle.current() && lifecycle.current().signal.aborted) throw err;
+      continue;
+    }
+
+    try {
+      var directory = await directoryOf(post);
+      await fs.outputFile(directory + "/" + name, data);
+    } catch (e) {
+      continue;
+    }
+
+    replacements.push([href, name]);
+  }
+
+  // With nothing downloaded, the HTML is what the parser wrote back
+  if (!replacements.length) {
+    post.html = scanned.html;
+    return post;
+  }
+
+  // Changes each downloaded link's href, and its text if that was the URL.
+  // From the post's own HTML, so it is parsed and written once, as it was
+  // when Node did it.
+  post.html = await htmlAssets.rewrite("pdfs", post.html, replacements);
+  return post;
 }
 
 function nameFrom(src) {
   return "_" + basename(parse(src).pathname);
 }
+
+module.exports = withCallback(download_pdfs);
