@@ -1,7 +1,6 @@
 var debug = require("debug")("blot:entry:build:plugins:images");
 var sandbox = require("sandbox");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
 var tempDir = require("helper/tempDir")();
 var fs = require("fs-extra");
 var { v4: uuid } = require("uuid");
@@ -45,5 +44,4 @@ async function resize(path) {
   return info;
 }
 
-// The sandbox specs still call resize with a callback
-module.exports = withCallback(resize);
+module.exports = resize;

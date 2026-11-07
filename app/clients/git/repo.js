@@ -7,7 +7,6 @@
 // in the storage bucket, keyed by the blog's ID: a change of handle moves
 // nothing.
 var lock = require("helper/lock");
-var withCallback = require("helper/withCallback");
 var clfdate = require("helper/clfdate");
 var treePath = require("./store/commit").treePath;
 
@@ -151,11 +150,11 @@ async function commit(blogID, change) {
 }
 
 module.exports = {
-  exists: withCallback(exists),
-  remove: withCallback(remove),
+  exists: exists,
+  remove: remove,
   handleSmartHttp: handleSmartHttp,
   onPush: onPush,
-  commit: withCallback(commit),
+  commit: commit,
   holdRefLock: holdRefLock,
   receiveHooks: receiveHooks,
 };

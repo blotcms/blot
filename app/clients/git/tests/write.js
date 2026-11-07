@@ -18,9 +18,13 @@ describe("write", function () {
 
     await removeRepo({ store: context.objectStoreFor(blogID) });
 
-    var err = await new Promise(function (resolve) {
-      write(blogID, "/path", "content", resolve);
-    });
+    var err = null;
+
+    try {
+      await write(blogID, "/path", "content");
+    } catch (e) {
+      err = e;
+    }
 
     expect(err.message).toContain("no copy");
     expect(await folder.has(blogID, "/path")).toBe(false);
@@ -29,20 +33,27 @@ describe("write", function () {
   it("should return an error for a path it cannot commit, and leave the blog folder alone", async function () {
     var blogID = this.blog.id;
 
-    var err = await new Promise(function (resolve) {
-      repo.commit(
-        blogID,
-        { path: "/x/.Git/config", contents: "content" },
-        resolve
-      );
-    });
+    var err = null;
+
+    try {
+      await repo.commit(blogID, {
+        path: "/x/.Git/config",
+        contents: "content",
+      });
+    } catch (e) {
+      err = e;
+    }
 
     expect(err).toEqual(jasmine.any(Error));
     expect(await folder.has(blogID, "/x")).toBe(false);
 
-    err = await new Promise(function (resolve) {
-      write(blogID, "/a/../b", "content", resolve);
-    });
+    err = null;
+
+    try {
+      await write(blogID, "/a/../b", "content");
+    } catch (e) {
+      err = e;
+    }
 
     expect(err).toEqual(jasmine.any(Error));
     expect(await folder.has(blogID, "/b")).toBe(false);
@@ -68,41 +79,29 @@ describe("write", function () {
     expect(await repo.exists(blogID)).toBe(true);
   });
 
-  it("writes a file", function (done) {
+  it("writes a file", async function () {
     var repoDirectory = this.repoDirectory;
     var git = Git(repoDirectory).silent(true);
     var path = "/How/about That name.txt";
     var content = "Hello, world!";
     var blogID = this.blog.id;
 
-    write(blogID, path, content, function (err) {
-      if (err) return done.fail(err);
+    await write(blogID, path, content);
+    await git.pull();
 
-      git.pull(function (err) {
-        if (err) return done.fail(err);
-
-        expect(fs.readFileSync(repoDirectory + path, "utf-8")).toEqual(content);
-        done();
-      });
-    });
+    expect(fs.readFileSync(repoDirectory + path, "utf-8")).toEqual(content);
   });
 
-  it("writes a file with foreign characters", function (done) {
+  it("writes a file with foreign characters", async function () {
     var repoDirectory = this.repoDirectory;
     var git = Git(repoDirectory).silent(true);
     var path = "/こんにちは世界.txt";
     var content = "こんにちは世界!";
     var blogID = this.blog.id;
 
-    write(blogID, path, content, function (err) {
-      if (err) return done.fail(err);
+    await write(blogID, path, content);
+    await git.pull();
 
-      git.pull(function (err) {
-        if (err) return done.fail(err);
-
-        expect(fs.readFileSync(repoDirectory + path, "utf-8")).toEqual(content);
-        done();
-      });
-    });
+    expect(fs.readFileSync(repoDirectory + path, "utf-8")).toEqual(content);
   });
 });

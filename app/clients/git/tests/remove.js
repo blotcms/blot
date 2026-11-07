@@ -15,47 +15,36 @@ describe("git client remove", function () {
   it("should return an error if the store has no repository", async function () {
     await removeRepo({ store: context.objectStoreFor(this.blog.id) });
 
-    var err = await new Promise((resolve) =>
-      remove(this.blog.id, "/path", resolve)
-    );
+    var err = null;
+
+    try {
+      await remove(this.blog.id, "/path");
+    } catch (e) {
+      err = e;
+    }
 
     expect(err.message).toContain("no copy");
   });
 
-  it("does not error when removing a file that does not exist", function (done) {
-    remove(this.blog.id, "/path", function (err) {
-      if (err) return done.fail(err);
-
-      done();
-    });
+  it("does not error when removing a file that does not exist", async function () {
+    await remove(this.blog.id, "/path");
   });
 
-  it("removes a file", function (done) {
+  it("removes a file", async function () {
     var repoDirectory = this.repoDirectory;
     var git = Git(repoDirectory).silent(true);
     var path = "/How/about That name.txt";
     var content = "Hello, world!";
     var blogID = this.blog.id;
 
-    write(blogID, path, content, function (err) {
-      if (err) return done.fail(err);
+    await write(blogID, path, content);
+    await git.pull();
 
-      git.pull(function (err) {
-        if (err) return done.fail(err);
+    expect(fs.readFileSync(repoDirectory + path, "utf-8")).toEqual(content);
 
-        expect(fs.readFileSync(repoDirectory + path, "utf-8")).toEqual(content);
+    await remove(blogID, path);
+    await git.pull();
 
-        remove(blogID, path, function (err) {
-          if (err) return done.fail(err);
-
-          git.pull(function (err) {
-            if (err) return done.fail(err);
-
-            expect(fs.readdirSync(repoDirectory)).toEqual([".git"]);
-            done();
-          });
-        });
-      });
-    });
+    expect(fs.readdirSync(repoDirectory)).toEqual([".git"]);
   });
 });

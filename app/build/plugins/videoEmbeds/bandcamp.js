@@ -1,7 +1,6 @@
 // The page is fetched and parsed in the sandbox (sandbox/fetch, kind "html",
 // extraction "og-video"): Node never parses what bandcamp's server sent.
 const sandboxFetch = require("sandbox/fetch");
-const withCallback = require("helper/withCallback");
 
 const ERROR_MESSAGE = "Could not retrieve song properties";
 
@@ -77,4 +76,4 @@ async function bandcamp(href) {
   }
 }
 
-module.exports = withCallback(bandcamp);
+module.exports = bandcamp;

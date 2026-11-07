@@ -1,6 +1,5 @@
 const fetch = require("node-fetch");
 const { parse } = require("url");
-const withCallback = require("helper/withCallback");
 
 async function vimeo(href) {
   try {
@@ -50,4 +49,4 @@ async function vimeo(href) {
   }
 }
 
-module.exports = withCallback(vimeo);
+module.exports = vimeo;

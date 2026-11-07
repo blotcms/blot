@@ -203,8 +203,9 @@ describe("dashboard folder remove route", function () {
   it("maps client and entry errors to 403, 400, and 502 responses", async function () {
     const clients = {
       mockClient: {
-        remove: (blogID, relativePath, cb) =>
-          cb({ code: "EACCES", message: "denied" }),
+        remove: async () => {
+          throw { code: "EACCES", message: "denied" };
+        },
       },
     };
 
@@ -223,8 +224,9 @@ describe("dashboard folder remove route", function () {
     );
     expect(res.statusCode).toBe(403);
 
-    clients.mockClient.remove = (blogID, relativePath, cb) =>
-      cb({ name: "ValidationError", message: "bad target" });
+    clients.mockClient.remove = async () => {
+      throw { name: "ValidationError", message: "bad target" };
+    };
 
     delete require.cache[removeRoutePath];
     handler = require("../site/folder/remove");
@@ -240,8 +242,9 @@ describe("dashboard folder remove route", function () {
     );
     expect(res.statusCode).toBe(400);
 
-    clients.mockClient.remove = (blogID, relativePath, cb) =>
-      cb(new Error("upstream failed"));
+    clients.mockClient.remove = async () => {
+      throw new Error("upstream failed");
+    };
 
     delete require.cache[removeRoutePath];
     handler = require("../site/folder/remove");

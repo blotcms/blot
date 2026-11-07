@@ -18,33 +18,29 @@ describe("git client create", function () {
   var Git = require("./setup/git");
   var folder = require("./setup/folder");
   var setClientToGit = require("./setup/setClientToGit");
-  var inStore = promisify(repo.exists);
+  var inStore = repo.exists;
 
   // this prevents an existing repository from being clobbered
-  it("should fail when the client has already been initialized", function (done) {
+  it("should fail when the client has already been initialized", async function () {
     var blog = this.blog;
 
-    create(blog, function (err) {
-      if (err) return done.fail(err);
+    await create(blog);
 
-      create(blog, async function (err) {
-        try {
-          expect(err.code).toEqual("EEXIST");
-          expect(await inStore(blog.id)).toBe(true);
-          expect(await folder.has(blog.id, "/.git")).toBe(false);
-          done();
-        } catch (e) {
-          done.fail(e);
-        }
-      });
-    });
+    var err = await create(blog).then(
+      () => null,
+      (err) => err
+    );
+
+    expect(err.code).toEqual("EEXIST");
+    expect(await inStore(blog.id)).toBe(true);
+    expect(await folder.has(blog.id, "/.git")).toBe(false);
   });
 
   it("refuses to set up a repository over the one the blog has", async function () {
     var blog = this.blog;
     var messages = [];
 
-    await promisify(create)(blog);
+    await create(blog);
 
     var server = Express()
       .use(function (req, res, next) {
@@ -80,22 +76,12 @@ describe("git client create", function () {
   // this prevents an existing bare repo from being clobbered
   // this simulates a user connecting the git client, disconnecting
   // then connecting again..
-  it("should not fail when disconnect is called in between", function (done) {
+  it("should not fail when disconnect is called in between", async function () {
     var blog = this.blog;
 
-    create(blog, function (err) {
-      if (err) return done.fail(err);
-
-      disconnect(blog.id, function (err) {
-        if (err) return done.fail(err);
-
-        create(blog, function (err) {
-          if (err) return done.fail(err);
-
-          done();
-        });
-      });
-    });
+    await create(blog);
+    await promisify(disconnect)(blog.id);
+    await create(blog);
   });
 
   it("should fail when there is a repo with an origin in the blog's folder", async function () {
@@ -108,7 +94,7 @@ describe("git client create", function () {
       '[remote "origin"]\n\turl = http://git.com/foo.git\n'
     );
 
-    var err = await promisify(create)(blog).then(
+    var err = await create(blog).then(
       () => null,
       (err) => err
     );

@@ -65,12 +65,14 @@ describe("Git sync when Redis is unavailable", function () {
 
     const served = load("../served/sync", {
       "../database": {
-        getApplied: (id, cb) => cb(readError, applied),
-        setApplied: (id, commit, cb) => {
-          if (writeError) return cb(writeError);
+        getApplied: async () => {
+          if (readError) throw readError;
+          return applied;
+        },
+        setApplied: async (id, commit) => {
+          if (writeError) throw writeError;
           writes++;
           applied = commit;
-          cb(null);
         },
       },
       "../store/manifest": {
@@ -117,7 +119,7 @@ describe("Git sync when Redis is unavailable", function () {
         "./served/sync": served,
       });
 
-      sync("test", "test", resolve);
+      sync("test", "test").then(() => resolve(null), resolve);
     });
   }
 

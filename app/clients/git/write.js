@@ -1,11 +1,10 @@
 var debug = require("debug")("blot:clients:git:write");
 var repo = require("./repo");
-var withCallback = require("helper/withCallback");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
 // Used to write a file to the user's blog folder
 // contents is a Buffer or a string, as storage/folder's write takes
-module.exports = withCallback(async function write(blogID, path, contents) {
+module.exports = async function write(blogID, path, contents) {
   debug("Blog:", blogID, "Writing", path);
 
   if (shouldIgnoreFile(path)) {
@@ -13,4 +12,4 @@ module.exports = withCallback(async function write(blogID, path, contents) {
   }
 
   await repo.commit(blogID, { path: path, contents: contents });
-});
+};

@@ -15,10 +15,10 @@ describe("git client disconnect", function () {
   var promisify = require("util").promisify;
   var randomString = require("../../../../scripts/tests/util/randomString");
 
-  var getToken = promisify(database.getToken);
+  var getToken = database.getToken;
   var setBlog = promisify(Blog.set);
   var disconnectBlog = promisify(disconnect);
-  var inStore = promisify(repo.exists);
+  var inStore = repo.exists;
 
   var otherBlog;
 
@@ -95,7 +95,7 @@ describe("git client disconnect", function () {
   });
 
   describe("when the blog is deleted", function () {
-    var createRepo = promisify(require("clients/git/create"));
+    var createRepo = require("clients/git/create");
     var removeBlog = promisify(Blog.remove);
     var getBlog = promisify(Blog.get);
 
