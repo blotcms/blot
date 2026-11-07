@@ -31,7 +31,7 @@ If you are unsure which view maps to which URL, open `package.json` and check `v
 
 - Templates are **Mustache**.
   - Variables are HTML-escaped by default.
-  - Use triple-braces to bypass HTML escaping, typical for `{{{url}}}` or `{{{path}}}`, which contain slashes, and for rendered entry content like `{{{body}}}` and `{{{html}}}`.
+  - Use triple-braces to bypass HTML escaping, typical for `{{{url}}}` or `{{{path}}}`, which contain slashes, and for rendered entry HTML like `{{{body}}}` and `{{{html}}}`.
 - Partials:
   - File partials: `{{> header}}` includes `header.html` (if present) and inherits context.
   - Per-view string partials: from `package.json` under `views[view].partials`, included as `{{> title}}`, etc.
