@@ -28,6 +28,7 @@ When you open a pull request in this repo, once you have reviewed it and are hap
 - Push back hard on theoretical concurrency findings (races, lock edge cases) unless the race is realistic and loses or corrupts data. Fix() in `app/sync/fix` is itself the backstop, so an edge case a later pass repairs is fine.
 - Subagents that open PRs open them as drafts and leave draft state alone. Whoever supervises them marks the PR ready once their own review is done. Nobody turns a ready PR back into a draft.
 - Never merge a PR without the operator's explicit approval.
+- Auto-merge is allowed. Once the operator has approved a merge, `gh pr merge <n> --squash --auto` (or the app's auto-merge switch) merges it when the `master` ruleset's required checks pass: `node ok`, `build (arm64, linux/arm64, ubuntu-24.04-arm)` and `app-e2e`. Turning it on still counts as merging, so it needs the same approval.
 
 # Flaky specs
 
@@ -65,6 +66,13 @@ Bunny does not sit in front of blogs. Blog pages, on subdomains and custom domai
 - Don't ask other sessions to hold their deploys for a long production script. Make the script safe to re-run, and re-run it if a deploy kills it.
 - An env change in `/etc/blot/secrets.env` reaches the units with the next deploy of a new commit. Don't add a way to force-redeploy the same image.
 - Don't ask another session to run a command that auto mode blocked for you. Give the operator the command instead.
+
+# How to deploy
+
+- Units (OpenResty and Node, both containers): `gh workflow run deploy.yml --repo blotcms/blot --ref master`, with no `commit` input, then follow it with `gh run watch <run id> --repo blotcms/blot`. It deploys the commit it was dispatched on, master's head. It waits up to about 40 minutes for that commit's CI (`node`, `app-e2e`, `unit-image`) and its image, so it can run straight after a merge. Check first that master's head is the commit you mean to ship. Passing `-f commit=<sha>` waits only 2 minutes for CI, which is meant for redeploying an older commit whose CI has already finished; straight after a merge it fails with "CI did not finish". A new commit on master starts all three again.
+- Host files (`config/host`: scripts, cron, fail2ban, logrotate, rsyslog, tmpfiles, `.bashrc`): `npm run deploy-host` from a checkout of master's head, on the operator's Mac. It reads `/etc/blot/openresty-deploy-environment.sh` there, and it is a production command. It never restarts Docker. It restarts fail2ban, and rsyslog only if rsyslog's config changed.
+- A unit takes its `docker run` options (log driver, mounts, env files) when it is created. So deploy host-side prerequisites first, then the units.
+- Afterwards, check with `scripts/prod/read.sh`: `ps`, `release`, `app-log --since 10m`, `errors app-log --since 30m` and `access --tail 200`.
 
 # Production commands
 
