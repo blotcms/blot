@@ -68,7 +68,6 @@ function getSidebarSelection(path) {
   )
     return "template";
   if (path.startsWith("/import")) return "import";
-  if (path.startsWith("/export")) return "export";
   return null;
 }
 
@@ -78,7 +77,6 @@ const sidebarLabels = {
   template: "Template",
   siteSettings: "Settings",
   import: "Import",
-  export: "Export",
 };
 
 // Every page has a title of its own: a page that doesn't set one (or sets
@@ -362,6 +360,11 @@ site.get(["/delete", "/delete/confirm"], (req, res) => {
 });
 site.use("/delete", require("./delete"));
 site.use("/import", require("./import"));
+// Export is a Settings tab; the old page leads there, and its download
+// links keep working
+site.get("/export", (req, res) => {
+  res.redirect(302, `${res.locals.base}/settings/export`);
+});
 site.use("/export", require("./export"));
 const domain = require("./domain");
 const title = require("./title");
@@ -430,6 +433,7 @@ const settingsTabs = [
   ["links", "Links"],
   ["redirects", "Redirects"],
   ["integrations", "Integrations"],
+  ["export", "Export"],
   ["delete", "Delete site"],
 ];
 
@@ -443,6 +447,7 @@ const settingsTab = (tab) => (req, res, next) => {
 };
 
 site.use("/settings/title", settingsTab("title"), title);
+site.use("/settings/export", settingsTab("export"), require("./export"));
 site.use("/settings/delete", settingsTab("delete"), require("./delete"));
 site.use("/settings/domain", settingsTab("domain"), domain);
 
