@@ -184,7 +184,10 @@
    the same size and width as those labels, so the client lines up under
    their values. Hidden from screen readers, which hear "Syncs with". */
 .folder-sync-label {
-  flex: 0 0 5.5em;
+  /* A width, not just a flex-basis, which the pill's own width (sized to
+     its content) would leave out, letting Edit spill past its end */
+  flex: 0 0 auto;
+  width: 5.5em;
   /* With the pill's gap, the summary's space between label and value */
   margin-right: var(--space-2);
   color: var(--medium-text-color);
