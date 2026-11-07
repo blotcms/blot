@@ -18,6 +18,8 @@ const host = config.host;
 Domain.use((req, res, next) => {
   res.locals.domainBase = req.baseUrl;
   res.locals.selected = { ...res.locals.selected, domain: "selected" };
+  res.locals.forceSSLPluginClass = req.blog.forceSSL ? "checked" : "";
+  res.locals.forceSSLChecked = req.blog.forceSSL ? "checked" : "";
   res.locals.breadcrumbs.add("Domain", "domain");
 
   const blogID = req.blog.id;

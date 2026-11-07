@@ -1,4 +1,3 @@
-const linkFormat = require("express").Router();
 const { resave: resaveEntries } = require("models/entries");
 const updateBlog = require("dashboard/util/update-blog");
 
@@ -22,62 +21,58 @@ var SAMPLE = function () {
   };
 };
 
-linkFormat.get(
-  "/",
-  function (req, res, next) {
-    var sample, formats;
+// The formats to choose from, each with an example, for the URLs tab
+function loadFormats(req, res, next) {
+  var sample, formats;
 
-    req.trace("Permalink formats: creating sample post");
+  req.trace("Permalink formats: creating sample post");
 
-    sample = new SAMPLE();
-    sample.dateStamp = moment.utc();
+  sample = new SAMPLE();
+  sample.dateStamp = moment.utc();
 
-    formats = FORMATS.slice();
+  formats = FORMATS.slice();
 
-    req.trace("Permalink formats: creating list");
+  req.trace("Permalink formats: creating list");
 
-    formats = formats.map(function (arr) {
-      var checked = "";
-      var example;
+  formats = formats.map(function (arr) {
+    var checked = "";
+    var example;
 
-      if (req.blog.permalink.isCustom && arr[0] === "Custom format") {
-        checked = "checked";
-      } else if (
-        !req.blog.permalink.isCustom &&
-        arr[1] === req.blog.permalink.format
-      ) {
-        checked = "checked";
-      }
+    if (req.blog.permalink.isCustom && arr[0] === "Custom format") {
+      checked = "checked";
+    } else if (
+      !req.blog.permalink.isCustom &&
+      arr[1] === req.blog.permalink.format
+    ) {
+      checked = "checked";
+    }
 
-      req.trace("Permalink formats: Rendering", arr[1]);
-      example = permalink(req.blog.timeZone, arr[1], sample);
-      req.trace("Permalink formats: Rendered", arr[1]);
+    req.trace("Permalink formats: Rendering", arr[1]);
+    example = permalink(req.blog.timeZone, arr[1], sample);
+    req.trace("Permalink formats: Rendered", arr[1]);
 
-      return {
-        name: arr[0],
-        value: arr[1],
-        checked: checked,
-        custom: arr[0] === "Custom format" ? "custom" : "",
-        // The custom field and its buttons show only while Custom is chosen
-        // (js/site-settings-links.js toggles them after that)
-        customStyle: checked ? "" : "display:none",
-        example: example,
-      };
-    });
+    return {
+      name: arr[0],
+      value: arr[1],
+      checked: checked,
+      custom: arr[0] === "Custom format" ? "custom" : "",
+      // The custom field and its buttons show only while Custom is chosen
+      // (js/site-settings-links.js toggles them after that)
+      customStyle: checked ? "" : "display:none",
+      example: example,
+    };
+  });
 
-    formats[formats.length - 1].last = true;
-    res.locals.permalinkFormats = formats;
+  formats[formats.length - 1].last = true;
+  res.locals.permalinkFormats = formats;
 
-    req.trace("Permalink formats: finished generating list");
-    next();
-  },
-  (req, res, next) => {
-    res.locals.edit = !!req.query.edit;
-    res.render("dashboard/site/settings/settings-links");
-  }
-);
+  req.trace("Permalink formats: finished generating list");
+  next();
+}
 
-linkFormat.post("/", async (req, res) => {
+// Saves the chosen format, then shows the URLs tab again
+async function save(req, res) {
+  const back = res.locals.base + "/settings/urls";
   const format = req.body.format || "";
   const custom = req.body.custom || "";
   const isCustom = !format && !!custom;
@@ -95,10 +90,10 @@ linkFormat.post("/", async (req, res) => {
       await resaveEntries(req.blog.id, () => {});
     }
 
-    res.message(req.baseUrl, "Saved changes to link format");
+    res.message(back, "Saved changes to link format");
   } catch (e) {
-    res.message(req.baseUrl, e);
+    res.message(back, e);
   }
-});
+}
 
-module.exports = linkFormat;
+module.exports = { loadFormats, save };

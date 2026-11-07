@@ -1,9 +1,10 @@
 {{> message}}
 {{> settings-tabs}}
 
+<!-- The site's addresses: the link format of its posts, and redirects -->
 <div class="dashboard-form-panel settings-page">
   <div class="dashboard-form-panel__body">
-    <form method="post" class="dashboard-form settings-section" action="{{{dashboardBase}}}/settings/links" enctype="multipart/form-data">
+    <form method="post" class="dashboard-form settings-section" action="{{{dashboardBase}}}/settings/urls" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="{{csrftoken}}">
       <h2>Post links</h2>
       <p class="setting-note">Choose the URL format Blot uses for your posts.</p>
@@ -18,7 +19,7 @@
         </div>
         <div class="buttons" style="{{customStyle}}">
           <button type="submit">Save changes</button>
-          <a href="{{{base}}}/settings/links">Cancel</a>
+          <a href="{{{base}}}/settings/urls">Cancel</a>
         </div>
         {{/custom}}
         <div class="clear"></div>
@@ -28,16 +29,15 @@
         <style>.format-custom { display: block !important; }</style>
         <div class="buttons">
           <button type="submit">Save changes</button>
-          <a href="{{{base}}}/settings/links">Cancel</a>
+          <a href="{{{base}}}/settings/urls">Cancel</a>
         </div>
       </noscript>
     </form>
 
-    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data">
+    <h2 id="redirect-rows-heading">Redirects</h2>
+    <form method="post" aria-labelledby="redirect-rows-heading" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data">
       <input type="hidden" name="_csrf" value="{{csrftoken}}">
-      <input type="hidden" name="redirect" value="{{{base}}}/settings/links">
-      <h2>Link features</h2>
-      {{#categories.Links}}{{> plugin-row}}{{/categories.Links}}
+      {{> redirect-fields}}
     </form>
   </div>
 </div>

@@ -427,12 +427,9 @@ for (const page of ["title", "domain"]) {
 const settingsTabs = [
   ["title", "Title"],
   ["domain", "Domain"],
-  ["writing", "Writing"],
-  ["images", "Images"],
-  ["date", "Date & time"],
-  ["links", "Links"],
-  ["redirects", "Redirects"],
-  ["integrations", "Integrations"],
+  ["posts", "Posts"],
+  ["urls", "URLs"],
+  ["services", "Services"],
   ["export", "Export"],
   ["delete", "Delete site"],
 ];
@@ -461,28 +458,23 @@ const settingsRedirect = (to) => (req, res) => {
 // The first tab
 site.get("/settings", settingsRedirect("title"));
 
-// Earlier versions of this page
-site.get("/settings/content", settingsRedirect("writing"));
-site.get("/settings/embeds", settingsRedirect("integrations"));
-site.get("/settings/services", settingsRedirect("integrations#services"));
-// The 404 log links to ?create=<path> to prefill a redirect
-site.get("/settings/urls", (req, res, next) =>
-  settingsRedirect(req.query.create ? "redirects" : "links")(req, res, next)
-);
+// Earlier versions of these pages: Writing, Images and Links' features are
+// on Posts; the link format and Redirects on URLs; Integrations is Services
+site.get("/settings/content", settingsRedirect("posts"));
+site.get("/settings/writing", settingsRedirect("posts"));
+site.get("/settings/images", settingsRedirect("posts#image-features-heading"));
+site.get("/settings/links", settingsRedirect("urls"));
+site.get("/settings/redirects", settingsRedirect("urls#redirect-rows-heading"));
+site.get("/settings/integrations", settingsRedirect("services"));
+site.get("/settings/embeds", settingsRedirect("services"));
+site.get("/settings/date", settingsRedirect("posts#date-heading"));
 
+// How Blot builds posts: formatting, dates, links in posts, images
 site.get(
-  "/settings/writing",
-  settingsTab("writing"),
+  "/settings/posts",
+  settingsTab("posts"),
   load.plugins,
-  (req, res) => {
-    res.render("dashboard/site/settings/settings-writing");
-  }
-);
-
-site.get(
-  "/settings/images",
-  settingsTab("images"),
-  load.plugins,
+  dateSettings.loadSettings,
   (req, res) => {
     res.locals.publishImagesAsPostsChecked = req.blog.isImgConverterEnabled
       ? "checked"
@@ -495,39 +487,32 @@ site.get(
       ? "checked"
       : "";
     res.locals.imageExifFullChecked = req.blog.isImageExifFull ? "checked" : "";
-    res.render("dashboard/site/settings/settings-images");
+    res.render("dashboard/site/settings/settings-posts");
   }
 );
 
+// The site's addresses: its posts' link format, and redirects. The 404
+// log links here with ?create=<path> to prefill a redirect.
 site.get(
-  "/settings/date",
-  settingsTab("date"),
-  dateSettings.loadSettings,
-  (req, res) => {
-    res.render("dashboard/site/settings/settings-date");
-  }
-);
-
-site.use("/settings/links", settingsTab("links"), load.plugins, linkFormat);
-
-site.get(
-  "/settings/redirects",
-  settingsTab("redirects"),
+  "/settings/urls",
+  settingsTab("urls"),
+  linkFormat.loadFormats,
   load.redirects,
   load.redirectWarnings,
   (req, res) => {
-    res.locals.forceSSLPluginClass = req.blog.forceSSL ? "checked" : "";
-    res.locals.forceSSLChecked = req.blog.forceSSL ? "checked" : "";
-    res.render("dashboard/site/settings/settings-redirects");
+    res.render("dashboard/site/settings/settings-urls");
   }
 );
+site.post("/settings/urls", linkFormat.save);
+// The link format's form posted here before
+site.post("/settings/links", linkFormat.save);
 
 site.get(
-  "/settings/integrations",
-  settingsTab("integrations"),
+  "/settings/services",
+  settingsTab("services"),
   load.plugins,
   (req, res) => {
-    res.render("dashboard/site/settings/integrations");
+    res.render("dashboard/site/settings/services");
   }
 );
 

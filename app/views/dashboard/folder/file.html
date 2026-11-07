@@ -61,7 +61,7 @@
     <details>
       <summary><span class="icon-support"></span> Explain</summary>
     {{#converter.img}}
-      <p>To prevent this file becoming a {{type}}, start the file name with an underscore, move it into a folder that starts with an underscore, or <a href="/sites/default/settings/images">disable image posts</a>.</p>
+      <p>To prevent this file becoming a {{type}}, start the file name with an underscore, move it into a folder that starts with an underscore, or <a href="{{{base}}}/settings/posts#publish-images-heading">disable image posts</a>.</p>
     {{/converter.img}}
     {{^converter.img}}
       <p>To prevent this file becoming a {{type}}, start the file name with an underscore or move it into a folder that starts with an underscore.</p>
@@ -87,7 +87,7 @@
     {{#underscorePath}}It's inside a folder whose name starts with an underscore. {{/underscorePath}}
     {{#underscoreName}}It is ignored because its name starts with an underscore.{{/underscoreName}}
     {{#templateFile}}It's inside the Templates folder.{{/templateFile}}
-    {{#imageConverterDisabled}}Image posts are disabled in your site's image settings, so this image did not become a post or page. You can make this image become a post by enabling image posts on the <a href="/sites/default/settings/images">image settings page</a>.{{/imageConverterDisabled}}
+    {{#imageConverterDisabled}}Image posts are disabled in your site's image settings, so this image did not become a post or page. You can make this image become a post by enabling image posts on the <a href="{{{base}}}/settings/posts#publish-images-heading">image settings page</a>.{{/imageConverterDisabled}}
     {{/ignored}}
   </p>
   </div>
