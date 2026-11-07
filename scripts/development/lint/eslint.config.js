@@ -138,6 +138,7 @@ module.exports = [
       "scripts/deploy/**/*.js",
       "scripts/development/lint/**/*.js",
       "scripts/folder-links/**/*.js",
+      "scripts/get/**/*.js",
       "scripts/probe/**/*.js",
       "scripts/questions/**/*.js",
       "scripts/security/**/*.js",
