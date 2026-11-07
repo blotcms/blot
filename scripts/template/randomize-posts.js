@@ -30,25 +30,7 @@ function getBlog(identifier) {
 }
 
 function eachEntry(blogID, doThis) {
-  return new Promise(function (resolve, reject) {
-    Entries.each(
-      blogID,
-      function (entry, next) {
-        doThis(entry).then(
-          function () {
-            next();
-          },
-          function (err) {
-            next(err);
-          }
-        );
-      },
-      function (err) {
-        if (err) return reject(err);
-        resolve();
-      }
-    );
-  });
+  return Entries.each(blogID, doThis);
 }
 
 async function setEntry(blogID, path, updates) {

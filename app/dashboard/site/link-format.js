@@ -90,7 +90,8 @@ linkFormat.post("/", async (req, res) => {
     });
 
     if (changes && changes.includes("permalink")) {
-      await resaveEntries(req.blog.id, () => {});
+      // Not awaited: the page does not wait on the resave, and its errors are ignored
+      resaveEntries(req.blog.id).catch(() => {});
     }
 
     res.message(req.baseUrl, "Saved changes to link format");

@@ -146,19 +146,15 @@ const getEntry = (blogID, path) =>
 
 // Paths of the blog's entries which aren't deleted, in list order. Only paths
 // are held, so a blog with thousands of entries isn't held in memory at once.
-function listEntryPaths(blog) {
+async function listEntryPaths(blog) {
   const paths = [];
 
-  return new Promise((resolve, reject) =>
-    Entries.each(
-      blog.id,
-      (entry, next) => {
-        if (!entry.deleted) paths.push(entry.path);
-        setImmediate(next);
-      },
-      (err) => (err ? reject(err) : resolve())
-    )
-  ).then(() => paths);
+  await Entries.each(blog.id, async (entry) => {
+    if (!entry.deleted) paths.push(entry.path);
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+
+  return paths;
 }
 
 async function rebuildEntries(blog, paths) {

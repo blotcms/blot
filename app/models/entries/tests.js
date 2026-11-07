@@ -223,11 +223,7 @@ describe("entries", function () {
     }
 
     function sweep(blogID) {
-      return new Promise((resolve, reject) => {
-        Entries.sweepExpiredDeleted(blogID, (err, removed) =>
-          err ? reject(err) : resolve(removed)
-        );
-      });
+      return Entries.sweepExpiredDeleted(blogID);
     }
 
     // What Redis leaves behind once a deleted entry's TTL runs out: the key
@@ -340,9 +336,7 @@ describe("entries", function () {
         }))
       );
 
-      await new Promise((resolve, reject) => {
-        Entries.pruneMissing(blogID, (err) => (err ? reject(err) : resolve()));
-      });
+      await Entries.pruneMissing(blogID);
 
       const members = await redis.zRange(listKey, 0, -1);
       expect(members).toContain(path);
@@ -878,7 +872,7 @@ describe("entries", function () {
       });
     });
 
-    it("should return adjacent entries correctly", async function (done) {
+    it("should return adjacent entries correctly", async function () {
       const key = `blog:${this.blog.id}:entries`;
 
       // Add mock entries in Redis
@@ -888,15 +882,17 @@ describe("entries", function () {
         { score: 3, value: "id3" },
       ]);
 
-      Entries.adjacentTo(this.blog.id, "id2", function (next, previous, rank) {
-        expect(previous).toEqual({ id: "id1" });
-        expect(next).toEqual({ id: "id3" });
-        expect(rank).toBe(2);
-        done();
-      });
+      const { next, previous, index } = await Entries.adjacentTo(
+        this.blog.id,
+        "id2"
+      );
+
+      expect(previous).toEqual({ id: "id1" });
+      expect(next).toEqual({ id: "id3" });
+      expect(index).toBe(2);
     });
 
-    it("should return undefined if the entry is at the start of the list", async function (done) {
+    it("should return undefined if the entry is at the start of the list", async function () {
       const key = `blog:${this.blog.id}:entries`;
 
       // Add mock entries in Redis
@@ -906,15 +902,17 @@ describe("entries", function () {
         { score: 3, value: "id3" },
       ]);
 
-      Entries.adjacentTo(this.blog.id, "id1", function (next, previous, rank) {
-        expect(previous).toBeUndefined();
-        expect(next).toEqual({ id: "id2" });
-        expect(rank).toBe(1);
-        done();
-      });
+      const { next, previous, index } = await Entries.adjacentTo(
+        this.blog.id,
+        "id1"
+      );
+
+      expect(previous).toBeUndefined();
+      expect(next).toEqual({ id: "id2" });
+      expect(index).toBe(1);
     });
 
-    it("should return undefined if the entry is at the end of the list", async function (done) {
+    it("should return undefined if the entry is at the end of the list", async function () {
       const key = `blog:${this.blog.id}:entries`;
 
       // Add mock entries in Redis
@@ -924,15 +922,17 @@ describe("entries", function () {
         { score: 3, value: "id3" },
       ]);
 
-      Entries.adjacentTo(this.blog.id, "id3", function (next, previous, rank) {
-        expect(previous).toEqual({ id: "id2" });
-        expect(next).toBeUndefined();
-        expect(rank).toBe(3);
-        done();
-      });
+      const { next, previous, index } = await Entries.adjacentTo(
+        this.blog.id,
+        "id3"
+      );
+
+      expect(previous).toEqual({ id: "id2" });
+      expect(next).toBeUndefined();
+      expect(index).toBe(3);
     });
 
-    it("reads only the neighbours, never the entry itself", async function (done) {
+    it("reads only the neighbours, never the entry itself", async function () {
       const key = `blog:${this.blog.id}:entries`;
 
       await redis.zAdd(key, [
@@ -941,44 +941,48 @@ describe("entries", function () {
         { score: 3, value: "id3" },
       ]);
 
-      Entries.adjacentTo(this.blog.id, "id2", function () {
-        expect(Entry.get.calls.mostRecent().args[1]).toEqual(["id1", "id3"]);
-        done();
-      });
+      await Entries.adjacentTo(this.blog.id, "id2");
+
+      expect(Entry.get.calls.mostRecent().args[1]).toEqual(["id1", "id3"]);
     });
 
-    it("reads nothing for the only entry", async function (done) {
+    it("reads nothing for the only entry", async function () {
       const key = `blog:${this.blog.id}:entries`;
 
       await redis.zAdd(key, [{ score: 1, value: "id1" }]);
 
-      Entries.adjacentTo(this.blog.id, "id1", function (next, previous, rank) {
-        expect(next).toBeUndefined();
-        expect(previous).toBeUndefined();
-        expect(rank).toBe(1);
-        expect(Entry.get.calls.mostRecent().args[1]).toEqual([]);
-        done();
-      });
+      const { next, previous, index } = await Entries.adjacentTo(
+        this.blog.id,
+        "id1"
+      );
+
+      expect(next).toBeUndefined();
+      expect(previous).toBeUndefined();
+      expect(index).toBe(1);
+      expect(Entry.get.calls.mostRecent().args[1]).toEqual([]);
+    });
+
+    it("resolves nothing for an entry that is not in the list", async function () {
+      const adjacent = await Entries.adjacentTo(this.blog.id, "missing");
+
+      expect(adjacent.next).toBeUndefined();
+      expect(adjacent.previous).toBeUndefined();
+      expect(adjacent.index).toBeUndefined();
+    });
+
+    it("throws when given a callback", function () {
+      expect(() => Entries.adjacentTo(this.blog.id, "id1", () => {})).toThrow();
     });
   });
 
   describe("random", function () {
-    it("returns undefined when there are no published entries", function (done) {
+    it("returns undefined when there are no published entries", async function () {
       spyOn(redis, "zRandMember").and.returnValue(Promise.resolve(null));
 
-      Entries.random(this.blog.id, (entry) => {
-        try {
-          expect(entry).toBeUndefined();
-          done();
-        } catch (err) {
-          done.fail(err);
-        } finally {
-          // no-op
-        }
-      });
+      expect(await Entries.random(this.blog.id)).toBeUndefined();
     });
 
-    it("retries until an entry with a public URL is found", function (done) {
+    it("retries until an entry with a public URL is found", async function () {
       const candidates = ["missing", "valid"];
 
       spyOn(redis, "zRandMember").and.callFake(async function () {
@@ -991,21 +995,16 @@ describe("entries", function () {
         return Promise.resolve({ id: entryID, url: "/valid" });
       });
 
-      Entries.random(this.blog.id, function (entry) {
-        try {
-          expect(entry).toEqual(
-            jasmine.objectContaining({ id: "valid", url: "/valid" })
-          );
-          expect(redis.zRandMember.calls.count()).toBe(2);
-          expect(Entry.get.calls.count()).toBe(2);
-          done();
-        } catch (err) {
-          done.fail(err);
-        }
-      });
+      const entry = await Entries.random(this.blog.id);
+
+      expect(entry).toEqual(
+        jasmine.objectContaining({ id: "valid", url: "/valid" })
+      );
+      expect(redis.zRandMember.calls.count()).toBe(2);
+      expect(Entry.get.calls.count()).toBe(2);
     });
 
-    it("stops after the maximum attempts when entries have no public URL", function (done) {
+    it("stops after the maximum attempts when entries have no public URL", async function () {
       let calls = 0;
 
       spyOn(redis, "zRandMember").and.returnValue(Promise.resolve("missing"));
@@ -1015,35 +1014,119 @@ describe("entries", function () {
         return Promise.resolve({ id: entryID });
       });
 
-      Entries.random(this.blog.id, function (entry) {
-        try {
-          expect(entry).toBeUndefined();
-          expect(calls).toBe(Entries.random.MAX_ATTEMPTS);
-          done();
-        } catch (err) {
-          done.fail(err);
-        }
-      });
+      const entry = await Entries.random(this.blog.id);
+
+      expect(entry).toBeUndefined();
+      expect(calls).toBe(Entries.random.MAX_ATTEMPTS);
     });
 
-    it("handles Redis failures without unhandled rejections", function (done) {
+    it("counts a failed entry read as an attempt", async function () {
+      let calls = 0;
+
+      spyOn(redis, "zRandMember").and.returnValue(Promise.resolve("broken"));
+
+      spyOn(Entry, "get").and.callFake(function () {
+        calls++;
+        return Promise.reject(new Error("boom"));
+      });
+
+      expect(await Entries.random(this.blog.id)).toBeUndefined();
+      expect(calls).toBe(Entries.random.MAX_ATTEMPTS);
+    });
+
+    it("handles Redis failures without unhandled rejections", async function () {
       spyOn(redis, "zRandMember").and.returnValue(
         Promise.reject(new Error("boom"))
       );
 
-      Entries.random(this.blog.id, function (entry) {
-        try {
-          expect(entry).toBeUndefined();
-          done();
-        } catch (err) {
-          done.fail(err);
-        }
+      expect(await Entries.random(this.blog.id)).toBeUndefined();
+    });
+
+    it("throws when given a callback", function () {
+      expect(() => Entries.random(this.blog.id, () => {})).toThrow();
+    });
+  });
+
+  describe("each", function () {
+    it("awaits the function for each entry, one at a time and in order", async function () {
+      const entries = [
+        { path: "entry1", id: "id1" },
+        { path: "entry2", id: "id2" },
+        { path: "entry3", id: "id3" },
+      ];
+
+      await redis.zAdd(`blog:${this.blog.id}:all`, [
+        { score: 1, value: "id1" },
+        { score: 2, value: "id2" },
+        { score: 3, value: "id3" },
+      ]);
+
+      spyOn(Entry, "get").and.callFake((blogID, id) =>
+        Promise.resolve(entries.find((entry) => entry.id === id))
+      );
+
+      const log = [];
+      let running = 0;
+
+      await Entries.each(this.blog.id, async (entry) => {
+        running++;
+        log.push("start " + entry.id);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        expect(running).toBe(1);
+        log.push("end " + entry.id);
+        running--;
       });
+
+      expect(log).toEqual([
+        "start id3",
+        "end id3",
+        "start id2",
+        "end id2",
+        "start id1",
+        "end id1",
+      ]);
+    });
+
+    it("stops and rejects with the error the function throws", async function () {
+      await redis.zAdd(`blog:${this.blog.id}:all`, [
+        { score: 1, value: "id1" },
+        { score: 2, value: "id2" },
+      ]);
+
+      spyOn(Entry, "get").and.callFake((blogID, id) =>
+        Promise.resolve({ id, path: id })
+      );
+
+      const failure = new Error("stop here");
+      const seen = [];
+      let caught;
+
+      try {
+        await Entries.each(this.blog.id, async (entry) => {
+          seen.push(entry.id);
+          throw failure;
+        });
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toBe(failure);
+      expect(seen).toEqual(["id2"]);
+    });
+
+    it("throws when given a callback as the third argument", function () {
+      expect(() =>
+        Entries.each(
+          this.blog.id,
+          async () => {},
+          () => {}
+        )
+      ).toThrow();
     });
   });
 
   describe("resave", function () {
-    it("should update entries with new dateStamps", async function (done) {
+    it("should update entries with new dateStamps", async function () {
       const blog = { id: this.blog.id, permalink: true };
       const entries = [
         { path: "entry1", id: "id1", metadata: {} },
@@ -1071,24 +1154,45 @@ describe("entries", function () {
         expect(changes).toEqual(jasmine.any(Object));
       });
 
-      Entries.resave(this.blog.id, function (err) {
-        expect(err).toBeNull();
-        expect(Entry.set).toHaveBeenCalledTimes(2); // Once per entry
-        done();
-      });
+      await Entries.resave(this.blog.id);
+
+      expect(Entry.set).toHaveBeenCalledTimes(2); // Once per entry
     });
 
-    it("should handle errors when fetching the blog", function (done) {
+    it("should handle errors when fetching the blog", async function () {
       // Mock Blog.get
       spyOn(Blog, "get").and.callFake(async () => {
         throw new Error("Blog not found");
       });
 
-      Entries.resave(this.blog.id, function (err) {
-        expect(err).toEqual(jasmine.any(Error));
-        expect(err.message).toBe("Blog not found");
-        done();
-      });
+      let caught;
+
+      try {
+        await Entries.resave(this.blog.id);
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught).toEqual(jasmine.any(Error));
+      expect(caught.message).toBe("Blog not found");
+    });
+
+    it("rejects when the blog does not exist", async function () {
+      spyOn(Blog, "get").and.callFake(async () => undefined);
+
+      let caught;
+
+      try {
+        await Entries.resave(this.blog.id);
+      } catch (err) {
+        caught = err;
+      }
+
+      expect(caught.message).toBe("no blog");
+    });
+
+    it("throws when given a callback", function () {
+      expect(() => Entries.resave(this.blog.id, () => {})).toThrow();
     });
   });
 

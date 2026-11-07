@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const promiseOnly = require("helper/promiseOnly");
 const client = require("models/client");
 const pathIndex = require("models/entries/pathIndex");
@@ -17,7 +16,7 @@ module.exports = promiseOnly(async function entriesPathIndex(blog) {
 
   if (entriesCount === lexCount) return [];
 
-  const rebuiltCount = await promisify(pathIndex.backfillIndex)(blog.id);
+  const rebuiltCount = await pathIndex.backfillIndex(blog.id);
 
   return [
     ["MISMATCH", { entries: entriesCount, pathIndex: lexCount }],

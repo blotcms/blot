@@ -25,45 +25,45 @@ module.exports = (function () {
     "entries:lex",
   ];
 
-  function resave(blogID, callback) {
-    Blog.get({ id: blogID }).then(function (blog) {
-      if (!blog) return callback(new Error("no blog"));
+  // async resave(blogID) re-saves every entry; rejects with "no blog" if the
+  // blog is gone, or with the first error from Entry.set.
+  async function resave(blogID) {
+    var blog = await Blog.get({ id: blogID });
 
-      each(
-        blogID,
-        function (entry, nextEntry) {
-          var dateStamp = DateStamp(
-            blog,
-            entry.path,
-            entry.metadata,
-            typeof entry.created === "number" ? entry.created : undefined
-          );
-          var changes = {};
+    if (!blog) throw new Error("no blog");
 
-          // This is fine!
-          if (dateStamp !== undefined) changes.dateStamp = dateStamp;
-
-          // We now need to save every entry so that
-          // changes to permalink format take effect.
-          Entry.set(blogID, entry.path, changes).then(function () {
-            nextEntry();
-          }, nextEntry);
-        },
-        callback
+    await each(blogID, async function (entry) {
+      var dateStamp = DateStamp(
+        blog,
+        entry.path,
+        entry.metadata,
+        typeof entry.created === "number" ? entry.created : undefined
       );
-    }, callback);
+      var changes = {};
+
+      // This is fine!
+      if (dateStamp !== undefined) changes.dateStamp = dateStamp;
+
+      // We now need to save every entry so that
+      // changes to permalink format take effect.
+      await Entry.set(blogID, entry.path, changes);
+    });
   }
 
-  function adjacentTo(blogID, entryID, callback) {
-    ensure(blogID, "string").and(entryID, "string").and(callback, "function");
+  // async adjacentTo(blogID, entryID) resolves { next, previous, index }:
+  // next and previous are entries (undefined at a boundary) and index is the
+  // 1-based position of the entry. It resolves {} for an entry with no rank
+  // and on any Redis error, since the caller renders without neighbours.
+  async function adjacentTo(blogID, entryID) {
+    ensure(blogID, "string").and(entryID, "string");
 
-    (async function () {
+    try {
       // Get the index of the entry in the list of entries
       var rank = await redis.zRank(listKey(blogID, "entries"), entryID);
 
       // If the entry has no rank its not got siblings
       // make sure you don't just bang rank, 0 is falsy in JS!
-      if (typeof rank !== "number") return callback();
+      if (typeof rank !== "number") return {};
 
       var lowerBound = rank > 0 ? rank - 1 : 0;
 
@@ -94,10 +94,10 @@ module.exports = (function () {
         else if (entry.id === nextID) next = entry;
       });
 
-      return callback(next, previous, rank + 1);
-    })().catch(function () {
-      return callback();
-    });
+      return { next: next, previous: previous, index: rank + 1 };
+    } catch (err) {
+      return {};
+    }
   }
 
   async function getTotal(blogID) {
@@ -138,8 +138,10 @@ module.exports = (function () {
     return await getRange(blogID, 0, -1, options);
   }
 
-  function get(blogID, options, callback) {
-    ensure(blogID, "string").and(callback, "function");
+  // async get(blogID, options) resolves an object keyed by list name, each
+  // value the list's entries (or IDs when options.skinny is false).
+  async function get(blogID, options) {
+    ensure(blogID, "string");
 
     if (!options.lists && options.list) options.lists = [options.list];
 
@@ -148,29 +150,30 @@ module.exports = (function () {
     // Skinny is true by default
     options.skinny = options.skinny !== false;
 
-    var totalToFetch = 0,
-      response = {},
+    var response = {},
       lists = options.lists.slice();
 
     delete options.lists;
 
-    for (var i in lists) {
-      totalToFetch++;
-      options.list = lists[i];
-      getRangeWithCallback(blogID, 0, -1, options, onComplete(options.list));
-    }
-
-    function onComplete(listName) {
-      return function (listOfEntries) {
-        totalToFetch--;
-
-        response[listName] = listOfEntries;
-
-        if (!totalToFetch) {
-          callback(null, response);
+    await Promise.all(
+      lists.map(async function (listName) {
+        // getRange resolves [] for a Redis error; only bad arguments reject
+        // here: log, and use [] as the list, as before
+        try {
+          response[listName] = await getRange(
+            blogID,
+            0,
+            -1,
+            Object.assign({}, options, { list: listName })
+          );
+        } catch (err) {
+          console.error("Entries: getRange failed", err);
+          response[listName] = [];
         }
-      };
-    }
+      })
+    );
+
+    return response;
   }
 
   var getListIDs = promiseOnly(
@@ -192,31 +195,38 @@ module.exports = (function () {
   );
 
   // includes deleted entries
-  function each(blogID, dothis, callback) {
-    ensure(blogID, "string").and(dothis, "function").and(callback, "function");
+  //
+  // async each(blogID, dothis) awaits dothis(entry) for each entry, one at a
+  // time and in order. The first error dothis throws stops the iteration and
+  // rejects.
+  async function each(blogID, dothis) {
+    ensure(blogID, "string").and(dothis, "function");
 
-    (async function () {
-      var ids = await redis.zRange(listKey(blogID, "all"), 0, -1, {
-        REV: true,
-      });
+    var ids = await redis.zRange(listKey(blogID, "all"), 0, -1, {
+      REV: true,
+    });
 
-      // One entry at a time, in order
-      for (var id of ids) {
-        // A failed read is the same as no entry
-        var entry = await Entry.get(blogID, id).catch(function () {});
+    // One entry at a time, in order
+    for (var id of ids) {
+      // A failed read is the same as no entry
+      var entry = await Entry.get(blogID, id).catch(function () {});
 
-        if (!entry) continue;
+      if (!entry) continue;
 
-        await new Promise(function (resolve, reject) {
-          dothis(entry, function (err) {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
-      }
-    })().then(function () {
-      callback(null);
-    }, callback);
+      await dothis(entry);
+    }
+  }
+
+  // promiseOnly can't guard each: its last argument is always a function. A
+  // third argument is the old callback.
+  function eachOnly(blogID, dothis, ...rest) {
+    if (rest.length) {
+      throw new TypeError(
+        "each no longer takes a callback; pass an async function and await it (#2559)"
+      );
+    }
+
+    return each(blogID, dothis);
   }
 
   // Only whether each entry's key exists matters here, so it's checked with
@@ -306,14 +316,11 @@ module.exports = (function () {
     return removed;
   }
 
-  function pruneMissing(blogID, callback) {
-    if (!callback) callback = function () {};
+  // async pruneMissing(blogID) resolves { listName: [removed ids] }
+  async function pruneMissing(blogID) {
+    ensure(blogID, "string");
 
-    ensure(blogID, "string").and(callback, "function");
-
-    prune(blogID).then(function (removed) {
-      callback(null, removed);
-    }, callback);
+    return await prune(blogID);
   }
 
   async function getCreated(blogID, after) {
@@ -378,75 +385,42 @@ module.exports = (function () {
     });
   }
 
-  // getRange for the callback functions above: calls back with the entries and
-  // no error argument. options.onError, if given, hears of a Redis outage
-  // (or bad arguments) instead, and then the callback is never called.
-  function getRangeWithCallback(blogID, start, end, options, callback) {
-    getRange(
-      blogID,
-      start,
-      end,
-      Object.assign({}, options, { rejectOnOutage: !!options.onError })
-    ).then(
-      function (entries) {
-        callback(entries);
-      },
-      function (err) {
-        if (options.onError) return options.onError(err);
-
-        // Only bad arguments get here (getRange resolves [] for any other
-        // error without rejectOnOutage): log, and call back with [] as it
-        // does for those, rather than leaving the caller hanging
-        console.error("Entries: getRange failed", err);
-        return callback([]);
-      }
-    );
-  }
-
-  function random(blogID, callback) {
-    ensure(blogID, "string").and(callback, "function");
+  // async random(blogID) resolves a random published entry that has a url,
+  // or undefined if there is none within MAX_ATTEMPTS tries or on a Redis error.
+  var random = promiseOnly(async function random(blogID) {
+    ensure(blogID, "string");
 
     var key = listKey(blogID, "entries");
-    var attempts = 0;
 
-    function attempt() {
-      if (attempts >= MAX_RANDOM_ATTEMPTS) return callback();
+    for (var attempts = 0; attempts < MAX_RANDOM_ATTEMPTS; attempts++) {
+      var entryID;
 
-      attempts++;
+      try {
+        entryID = normalizeEntryID(await redis.zRandMember(key));
+      } catch (err) {
+        return;
+      }
 
-      pickRandomEntryID(function (err, entryID) {
-        if (err) return callback();
+      if (!entryID) return;
 
-        if (!entryID) return callback();
+      // A failed read is the same as no entry
+      var entry;
 
-        // A failed read is the same as no entry
-        Entry.get(blogID, entryID).then(function (entry) {
-          if (!entry || !entry.url) return attempt();
+      try {
+        entry = await Entry.get(blogID, entryID);
+      } catch (err) {
+        continue;
+      }
 
-          callback(entry);
-        }, attempt);
-      });
+      if (entry && entry.url) return entry;
     }
+  });
 
-    function pickRandomEntryID(done) {
-      redis
-        .zRandMember(key)
-        .then(function (entryID) {
-          done(null, normalizeEntryID(entryID));
-        })
-        .catch(function (err) {
-          done(err);
-        });
-    }
+  function normalizeEntryID(entryID) {
+    if (Array.isArray(entryID)) entryID = entryID[0];
+    if (Buffer.isBuffer(entryID)) entryID = entryID.toString();
 
-    function normalizeEntryID(entryID) {
-      if (Array.isArray(entryID)) entryID = entryID[0];
-      if (Buffer.isBuffer(entryID)) entryID = entryID.toString();
-
-      return entryID || null;
-    }
-
-    attempt();
+    return entryID || null;
   }
 
   random.MAX_ATTEMPTS = MAX_RANDOM_ATTEMPTS;
@@ -846,12 +820,12 @@ module.exports = (function () {
   }
 
   return {
-    get: get,
-    resave: resave,
-    each: each,
-    pruneMissing: pruneMissing,
+    get: promiseOnly(get),
+    resave: promiseOnly(resave),
+    each: eachOnly,
+    pruneMissing: promiseOnly(pruneMissing),
     sweepExpiredDeleted: require("./sweepExpiredDeleted"),
-    adjacentTo: adjacentTo,
+    adjacentTo: promiseOnly(adjacentTo),
     getPage: getPage,
     getListIDs: getListIDs,
     getAll: getAll,

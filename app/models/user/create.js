@@ -31,12 +31,7 @@ module.exports = promiseOnly(
           passwordHash: passwordHash,
         };
 
-        user = await new Promise(function (resolve, reject) {
-          validate({ uid: uid }, user, function (err, validatedUser) {
-            if (err) return reject(err);
-            return resolve(validatedUser);
-          });
-        });
+        user = (await validate({ uid: uid }, user)).user;
 
         var userString = JSON.stringify(user);
 

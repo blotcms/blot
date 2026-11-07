@@ -1,4 +1,3 @@
-var { promisify } = require("util");
 var Blog = require("models/blog");
 var ensure = require("helper/ensure");
 var debug = require("debug")("blot:entry:assign");
@@ -126,7 +125,7 @@ module.exports = async function (blogID, entry) {
   // Fix(). A failure here only delays that cleanup, so it shouldn't
   // fail the write.
   try {
-    await promisify(sweepExpiredDeleted)(blogID);
+    await sweepExpiredDeleted(blogID);
   } catch (err) {
     console.error(
       clfdate(),
