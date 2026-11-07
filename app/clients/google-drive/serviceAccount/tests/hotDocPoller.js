@@ -210,15 +210,15 @@ describe("google drive hotDocPoller", function () {
 
   it("spaces docs.get slots 250ms apart for a service account", async function () {
     poller.fetchRateLimited.and.callThrough();
-    const times = [];
+    // Compare the slots the calls won, not the clock after they return: a
+    // slow runner can stall between winning a slot and reading the time.
+    const slots = [];
     for (let i = 0; i < 3; i++) {
-      await poller.acquireDocsSlot(serviceAccountId);
-      times.push(Date.now());
+      slots.push(await poller.acquireDocsSlot(serviceAccountId));
     }
-    // Three slots need at least two slot boundaries between them
-    expect(times[2] - times[0]).toBeGreaterThanOrEqual(250);
-    const slots = new Set(times.map((t) => Math.floor(t / 250)));
-    expect(slots.size).toEqual(3);
+    expect(new Set(slots).size).toEqual(3);
+    expect(slots[0]).toBeLessThan(slots[1]);
+    expect(slots[1]).toBeLessThan(slots[2]);
   });
 
   it("evicts the oldest docs beyond the per service account cap", async function () {
