@@ -95,10 +95,14 @@ async function loadGroups(blogID, pageNumber) {
 
     const normalizedPath = Path.posix.normalize(path);
     group.totalFiles++;
+    const name = Path.posix.basename(normalizedPath);
     group.files.push({
       verb: operation.verb,
       path: normalizedPath,
-      name: Path.posix.basename(normalizedPath),
+      name,
+      // The status doesn't say, and checking the folder for each would cost
+      // a read per file: a name without an extension is shown as a folder
+      isFolder: !Path.posix.extname(name),
       urlPath: path
         .replace(/^\/+/, "")
         .split("/")

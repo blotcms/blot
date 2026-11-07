@@ -63,6 +63,11 @@
   --active-background-color: var(--surface-strong-color);
   --selected-background-color: var(--surface-strong-color);
   --form-control-disabled: var(--surface-muted-color);
+  /* base.css's light background is a cool blue-grey, shared with the
+     documentation; in the dashboard it's the warm muted surface, like
+     every other tint here (template cards, code, form panels) */
+  --light-background-color: var(--surface-muted-color);
+
   /* The width of a form's single-line fields and selects, on every page */
   --form-max-width: 30rem;
 

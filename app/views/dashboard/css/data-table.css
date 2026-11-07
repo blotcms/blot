@@ -68,8 +68,16 @@
   position: relative;
 }
 
+/* One row density for every list (the Sites list, a folder, templates,
+   ...): the folder's 34px rows, 14px text */
 .data-table tbody tr {
-  height: 40px;
+  height: 34px;
+}
+
+.data-table tbody td {
+  padding-top: var(--space-1);
+  padding-bottom: var(--space-1);
+  font-size: var(--text-sm);
 }
 
 .data-table tr:hover,
