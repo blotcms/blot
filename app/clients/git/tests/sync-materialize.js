@@ -4,15 +4,14 @@
 describe("git client sync: materializing the blog folder", function () {
   require("./setup")({ clone: false, client: true });
 
-  var util = require("util");
   var database = require("clients/git/database");
-  var write = util.promisify(require("clients/git/write"));
-  var remove = util.promisify(require("clients/git/remove"));
+  var write = require("clients/git/write");
+  var remove = require("clients/git/remove");
   var helpers = require("./setup/helpers");
   var folder = require("./setup/folder");
 
-  var getApplied = util.promisify(database.getApplied);
-  var setApplied = util.promisify(database.setApplied);
+  var getApplied = database.getApplied;
+  var setApplied = database.setApplied;
 
   it("lets Blot write on top of a push that removed and changed files", async function () {
     await this.local.commitFiles({

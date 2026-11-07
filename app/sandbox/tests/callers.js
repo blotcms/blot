@@ -116,17 +116,20 @@ describe("callers of the sandbox when it fails", function () {
     );
   });
 
-  it("image resize passes the error to its callback and leaves the image alone", function (done) {
+  it("image resize rejects with the error and leaves the image alone", async function () {
     const file = path.join(directory, "image.jpg");
     fs.copySync(image, file);
     const before = fs.readFileSync(file);
 
-    require("build/plugins/image/resize")(file, function (err, info) {
-      expect(err.code).toEqual("SANDBOX_TIMEOUT");
-      expect(info).toBeUndefined();
-      expect(fs.readFileSync(file).equals(before)).toBe(true);
-      done();
-    });
+    let err, info;
+    try {
+      info = await require("build/plugins/image/resize")(file);
+    } catch (e) {
+      err = e;
+    }
+    expect(err.code).toEqual("SANDBOX_TIMEOUT");
+    expect(info).toBeUndefined();
+    expect(fs.readFileSync(file).equals(before)).toBe(true);
   });
 
   it("exif is empty, as it is when exiftool fails", async function () {

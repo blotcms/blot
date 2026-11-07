@@ -181,24 +181,18 @@ describe("git client authenticate", function () {
       });
   });
 
-  it("prevents a user with an expired token from accessing their repo", function (done) {
+  it("prevents a user with an expired token from accessing their repo", async function () {
     var tmp = this.tmp;
     var repoUrl = this.repoUrl;
 
     // Now the repoUrl, which contains the token, should be invalid
-    require("clients/git/database").refreshToken(
-      this.blog.owner,
-      function (err) {
-        if (err) return done.fail(err);
+    await require("clients/git/database").refreshToken(this.blog.owner);
 
-        Git(tmp)
-          .silent(true)
-          .clone(repoUrl, function (err) {
-            expect(err.message).toContain("401 Unauthorized");
-            expect(fs.readdirSync(tmp)).toEqual([]);
-            done();
-          });
-      }
-    );
+    var err = await new Promise(function (resolve) {
+      Git(tmp).silent(true).clone(repoUrl, resolve);
+    });
+
+    expect(err.message).toContain("401 Unauthorized");
+    expect(fs.readdirSync(tmp)).toEqual([]);
   });
 });

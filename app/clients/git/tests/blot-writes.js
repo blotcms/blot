@@ -6,9 +6,8 @@
 describe("git client: Blot's own writes", function () {
   require("./setup")({ clone: false, client: true });
 
-  var util = require("util");
-  var write = util.promisify(require("clients/git/write"));
-  var remove = util.promisify(require("clients/git/remove"));
+  var write = require("clients/git/write");
+  var remove = require("clients/git/remove");
   var helpers = require("./setup/helpers");
 
   afterEach(async function () {
@@ -298,13 +297,10 @@ describe("git client: Blot's own writes", function () {
         var error = null;
 
         try {
-          await require("util").promisify(require("clients/git/repo").commit)(
-            this.blog.id,
-            {
-              path: path,
-              contents: "x",
-            }
-          );
+          await require("clients/git/repo").commit(this.blog.id, {
+            path: path,
+            contents: "x",
+          });
         } catch (err) {
           error = err;
         }

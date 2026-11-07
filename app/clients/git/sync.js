@@ -1,5 +1,4 @@
 var Sync = require("sync");
-var withCallback = require("helper/withCallback");
 
 // Brings the blog folder to master in the git store (served/sync.js), inside
 // the sync's folder lock, and passes the changed paths to Blot. The commit
@@ -46,4 +45,4 @@ async function sync(blogID, gitHandle) {
   });
 }
 
-module.exports = withCallback(sync);
+module.exports = sync;

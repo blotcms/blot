@@ -25,7 +25,7 @@ When a user pushes changes from their local repository, Blot automatically detec
   - Authentication middleware application
   - Sync triggering on post-push
 
-- **`repo.js`**: The one internal interface to a blog's repository. Everything else asks it rather than talking to git's protocol or the store: `exists(blogID, callback)` (whether the store has a repository for the blog), `handleSmartHttp(req, res, blogID, blog)` (serves an authenticated fetch or push, through `served/reads.js` and `served/receive.js`), `onPush(callback, { prepare, abandon })` (registers the `(blogID, old, new, prepared)` function called as soon as a push has moved master, which routes.js uses to start a sync, and the hooks that write the follow-up sync before the refs move, see below), `commit(blogID, { path, contents }, callback)` (writes or, with `contents: null`, removes a file in the blog folder, then commits it to master in the store under the ref lock, `served/commit.js`; backs `write.js` and `remove.js`), `remove(blogID, callback)` (removes the repository from the store, `served/remove.js`, used by `disconnect.js`), `holdRefLock(blogID)` and `receiveHooks(blogID)`.
+- **`repo.js`**: The one internal interface to a blog's repository. Everything else asks it rather than talking to git's protocol or the store: `exists(blogID)` (whether the store has a repository for the blog), `handleSmartHttp(req, res, blogID, blog)` (serves an authenticated fetch or push, through `served/reads.js` and `served/receive.js`), `onPush(callback, { prepare, abandon })` (registers the `(blogID, old, new, prepared)` function called as soon as a push has moved master, which routes.js uses to start a sync, and the hooks that write the follow-up sync before the refs move, see below), `commit(blogID, { path, contents })` (writes or, with `contents: null`, removes a file in the blog folder, then commits it to master in the store under the ref lock, `served/commit.js`; backs `write.js` and `remove.js`), `remove(blogID)` (removes the repository from the store, `served/remove.js`, used by `disconnect.js`), `holdRefLock(blogID)` and `receiveHooks(blogID)`.
 
 - **`receivePack.js`**: The parts of git's receive-pack protocol that are about the request: reading a push's commands up to the flush packet, the capabilities Blot advertises (`report-status`, `delete-refs`, `side-band-64k`, `quiet`, `ofs-delta`, `agent`), and small helpers for smart HTTP responses. The pack, the checks and the report are the store's (`store/receive.js`).
 
@@ -86,8 +86,8 @@ All public functions are called by Blot's client framework and should not be inv
 module.exports = {
   display_name: "Git",
   description: "An open-source version control system",
-  remove: require("./remove"),         // (blogID, path, callback) => void
-  write: require("./write"),           // (blogID, path, contents, callback) => void
+  remove: require("./remove"),         // async (blogID, path) => void
+  write: require("./write"),           // async (blogID, path, contents) => void
   disconnect: require("./disconnect"), // (blogID, callback) => void
   dashboard_routes: require("./routes").dashboard,
   site_routes: require("./routes").site,
@@ -96,7 +96,7 @@ module.exports = {
 
 ### Key Functions
 
-#### `write(blogID, path, contents, callback)`
+#### `write(blogID, path, contents)`
 
 Writes a file to the blog folder and commits the change.
 
@@ -104,17 +104,17 @@ Writes a file to the blog folder and commits the change.
   - `blogID` (string): The blog's unique identifier
   - `path` (string): Relative path within the blog folder (e.g., `/drafts/my-post.md`)
   - `contents` (string or buffer): File contents
-  - `callback` (function): `(err) => void`
+- **Returns**: A promise.
 - **Behavior**: Returns error if the file is in the ignore list (via `shouldIgnoreFile`), or for a path with an empty, `.` or `..` component or `.git` in any case. Writes the file to the blog folder, then commits it to master with message "Updated <path>", unless the file already has those contents. Fails, before the folder is touched, if the store has no copy of the repository.
 
-#### `remove(blogID, path, callback)`
+#### `remove(blogID, path)`
 
 Removes a file from the blog folder and commits the deletion.
 
 - **Parameters**:
   - `blogID` (string): The blog's unique identifier
   - `path` (string): Relative path within the blog folder
-  - `callback` (function): `(err) => void`
+- **Returns**: A promise.
 - **Behavior**: Removes the file from the blog folder, then commits the deletion to master with message "Removed <path>". Makes no commit, and is no error, if the repository does not have the file.
 
 #### `disconnect(blogID, callback)`

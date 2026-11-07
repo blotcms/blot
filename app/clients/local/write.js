@@ -3,7 +3,6 @@ const fs = require("fs-extra");
 const folder = require("storage/folder");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const source = require("./source");
-const withCallback = require("helper/withCallback");
 
 async function toBuffer(contents) {
   if (typeof contents === "string" || Buffer.isBuffer(contents))
@@ -31,4 +30,4 @@ async function write(blogID, path, contents) {
   await folder.write(blogID, path, contents);
 }
 
-module.exports = withCallback(write);
+module.exports = write;

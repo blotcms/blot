@@ -1,5 +1,4 @@
 var database = {};
-var withCallback = require("helper/withCallback");
 var client = require("models/client");
 var debug = require("debug")("blot:clients:git:database");
 
@@ -140,26 +139,26 @@ async function removeApplied(blogID) {
   await client.del(appliedKey(blogID));
 }
 
-database.createToken = withCallback(createToken);
-database.checkToken = withCallback(checkToken);
-database.getToken = withCallback(getToken);
+database.createToken = createToken;
+database.checkToken = checkToken;
+database.getToken = getToken;
 
-database.flush = withCallback(flush);
-database.refreshToken = withCallback(refreshToken);
+database.flush = flush;
+database.refreshToken = refreshToken;
 
-database.setStatus = withCallback(setStatus);
-database.getStatus = withCallback(getStatus);
-database.removeStatus = withCallback(removeStatus);
-database.setCreating = withCallback(setCreating);
-database.isCreating = withCallback(isCreating);
-database.clearCreating = withCallback(clearCreating);
+database.setStatus = setStatus;
+database.getStatus = getStatus;
+database.removeStatus = removeStatus;
+database.setCreating = setCreating;
+database.isCreating = isCreating;
+database.clearCreating = clearCreating;
 database.creatingKey = creatingKey;
 database.CREATING_TTL_SECONDS = CREATING_TTL_SECONDS;
 
-database.getApplied = withCallback(getApplied);
-database.setApplied = withCallback(setApplied);
-database.setAppliedIfMissing = withCallback(setAppliedIfMissing);
-database.advanceApplied = withCallback(advanceApplied);
-database.removeApplied = withCallback(removeApplied);
+database.getApplied = getApplied;
+database.setApplied = setApplied;
+database.setAppliedIfMissing = setAppliedIfMissing;
+database.advanceApplied = advanceApplied;
+database.removeApplied = removeApplied;
 
 module.exports = database;

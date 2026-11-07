@@ -74,22 +74,22 @@ Display name shown on the dashboard client page. Value: `"Local folder"`.
 ### `description` (string)
 User-facing description of the client. Value: `"Edit your blog folder directly"`.
 
-### `write(blogID, path, contents, callback)`
+### `write(blogID, path, contents)`
 Writes or overwrites a file in the blog's source folder on the server.
 
 - **blogID** (string): The blog identifier.
 - **path** (string): The file path within the blog folder (e.g., `"/posts/hello.md"`).
 - **contents** (string|Buffer): The file content to write.
-- **callback** (function): Called with `(err)` on completion.
+- **Returns**: A promise.
 
 Returns an error if the path matches an ignored file pattern (see Dependencies section).
 
-### `remove(blogID, path, callback)`
+### `remove(blogID, path)`
 Removes a file or directory from the blog's source folder.
 
 - **blogID** (string): The blog identifier.
 - **path** (string): The file or folder path within the blog folder.
-- **callback** (function): Called with `(err)` on completion.
+- **Returns**: A promise.
 
 ### `disconnect(blogID, callback)`
 Disconnects a blog from the local client by clearing the client field in the Blog model.
@@ -114,11 +114,11 @@ Invoked once by the master process during startup. Performs two operations:
 
 This function must be run in the master process; changes require a server restart, not just worker process restart.
 
-### `setup(blogID, callback)` (internal, exposed for testing)
+### `setup(blogID)` (internal, exposed for testing)
 Sets up a blog folder for the local client and optionally starts file watching in development mode.
 
 - **blogID** (string): The blog identifier.
-- **callback** (function): Called with `(err)` on completion.
+- **Returns**: A promise.
 
 **Note**: This is exposed as a public export for use by the test suite and scripts; it is not part of the standard client interface contract.
 

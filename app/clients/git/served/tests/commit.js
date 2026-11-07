@@ -2,10 +2,9 @@ describe("git store: Blot's own writes", function () {
   // A blog on the git client with a clone, and a memory store per blog
   require("clients/git/tests/setup")({ clone: false, client: true });
 
-  var util = require("util");
   var folder = require("clients/git/tests/setup/folder");
-  var write = util.promisify(require("clients/git/write"));
-  var remove = util.promisify(require("clients/git/remove"));
+  var write = require("clients/git/write");
+  var remove = require("clients/git/remove");
   var database = require("clients/git/database");
   var { manifest } = require("clients/git/store");
 
@@ -14,7 +13,7 @@ describe("git store: Blot's own writes", function () {
   }
 
   function applied(blogID) {
-    return util.promisify(database.getApplied.bind(database))(blogID);
+    return database.getApplied(blogID);
   }
 
   it("commits a write into the store, which a pull brings to the user", async function () {

@@ -1,7 +1,6 @@
 const database = require("./database");
 const storage = require("storage/folder");
 const clfdate = require("helper/clfdate");
-const withCallback = require("helper/withCallback");
 const sync = require("sync");
 
 function delay(ms) {
@@ -64,7 +63,7 @@ async function create(blog) {
   });
 }
 
-module.exports = withCallback(create);
+module.exports = create;
 
 async function createRepository(blog, folder) {
   report(folder, "Creating token");

@@ -5,11 +5,10 @@
 describe("git client push and the sync", function () {
   require("./setup")({ clone: false, client: true });
 
-  var util = require("util");
   var client = require("models/client");
   var lock = require("helper/lock");
   var database = require("clients/git/database");
-  var write = util.promisify(require("clients/git/write"));
+  var write = require("clients/git/write");
   var helpers = require("./setup/helpers");
 
   var ALARM = "alarm:due:git-follow-up-sync";

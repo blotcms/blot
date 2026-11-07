@@ -11,11 +11,7 @@ describe("git store: the blog folder from the store", function () {
   var { EMPTY_TREE } = require("clients/git/served/materialize");
 
   function applied(blogID) {
-    return new Promise(function (resolve, reject) {
-      database.getApplied(blogID, function (err, commit) {
-        return err ? reject(err) : resolve(commit);
-      });
-    });
+    return database.getApplied(blogID);
   }
 
   // How many times the sync wrote the file (Blot's own build may write others)
@@ -25,11 +21,7 @@ describe("git store: the blog folder from the store", function () {
   }
 
   function syncAgain(ctx) {
-    return new Promise(function (resolve, reject) {
-      gitSync(ctx.blog.id, ctx.blog.handle, function (err) {
-        return err ? reject(err) : resolve();
-      });
-    });
+    return gitSync(ctx.blog.id, ctx.blog.handle);
   }
 
   it("applies pushes into the store to the blog folder: added, changed, nested, removed", async function () {
@@ -142,11 +134,7 @@ describe("git store: the blog folder from the store", function () {
     await this.local.push();
 
     // As if nothing had been applied: everything is compared again
-    await new Promise((resolve, reject) =>
-      database.setApplied(this.blog.id, EMPTY_TREE, (err) =>
-        err ? reject(err) : resolve()
-      )
-    );
+    await database.setApplied(this.blog.id, EMPTY_TREE);
 
     spyOn(storage, "write").and.callThrough();
     await syncAgain(this);

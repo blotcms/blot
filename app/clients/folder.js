@@ -43,7 +43,7 @@ async function write(blog, path, contents) {
   const client = clientFor(blog);
 
   if (!client) await require("storage/folder").write(blog.id, path, contents);
-  else await promisify(client.write)(blog.id, path, contents);
+  else await client.write(blog.id, path, contents);
 }
 
 // Like write, from a file on disk. A blog with no client has the file copied
@@ -59,7 +59,7 @@ async function writeFrom(blog, path, sourcePath) {
   }
 
   const contents = await require("fs-extra").readFile(sourcePath);
-  await promisify(client.write)(blog.id, path, contents);
+  await client.write(blog.id, path, contents);
 }
 
 async function remove(blog, path) {
@@ -67,7 +67,7 @@ async function remove(blog, path) {
   const client = clientFor(blog);
 
   if (!client) await require("storage/folder").remove(blog.id, path);
-  else await promisify(client.remove)(blog.id, path);
+  else await client.remove(blog.id, path);
 }
 
 module.exports = { write, writeFrom, remove };

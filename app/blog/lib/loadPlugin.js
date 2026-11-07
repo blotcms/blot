@@ -1,13 +1,8 @@
 const Plugins = require("build/plugins");
 
-// Plugins.load is synchronous work behind a callback API.
+// Plugins.load is synchronous work behind an async API.
 function loadPlugin(file, blogPlugins) {
-  return new Promise((resolve, reject) => {
-    Plugins.load(file, blogPlugins, (err, html) => {
-      if (err) reject(err);
-      else resolve(html);
-    });
-  });
+  return Plugins.load(file, blogPlugins);
 }
 
 module.exports = loadPlugin;

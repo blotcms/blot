@@ -10,13 +10,13 @@ describe("git client: the last applied commit", function () {
   var database = require("clients/git/database");
   var Entry = require("models/entry");
   var disconnect = util.promisify(require("clients/git/disconnect"));
-  var sync = util.promisify(require("clients/git/sync"));
-  var write = util.promisify(require("clients/git/write"));
+  var sync = require("clients/git/sync");
+  var write = require("clients/git/write");
   var helpers = require("./setup/helpers");
 
-  var getApplied = util.promisify(database.getApplied);
-  var setApplied = util.promisify(database.setApplied);
-  var removeApplied = util.promisify(database.removeApplied);
+  var getApplied = database.getApplied;
+  var setApplied = database.setApplied;
+  var removeApplied = database.removeApplied;
 
   var NOT_A_COMMIT = "0123456789012345678901234567890123456789";
 
