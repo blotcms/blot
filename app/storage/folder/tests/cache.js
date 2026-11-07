@@ -594,6 +594,9 @@ describe("storage/folder cache", function () {
     it("counts towards the budget like any other entry", async function () {
       var cache = open({ maxBytes: 10 });
 
+      // The scan on open would otherwise run alongside the puts
+      await cache.ready();
+
       await cache.put(spec("/a.txt", "aaaa"), source("aaaa"));
       await cache.put(spec("/b.txt", "bbbb"), source("bbbb"));
 
