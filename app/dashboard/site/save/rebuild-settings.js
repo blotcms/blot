@@ -16,7 +16,7 @@
 
 const client = require("models/client");
 const Blog = require("models/blog");
-const Sync = require("sync");
+const establishSyncLock = require("sync/establishSyncLock");
 const rebuild = require("sync/rebuild");
 
 const LABEL = "Applying settings";
@@ -31,15 +31,21 @@ const key = (blogID, name) => `blog:${blogID}:settings-rebuild:${name}`;
 // the page that saved in the background) shows the rebuild straight away
 module.exports = async function requestRebuild(blogID) {
   await client.incr(key(blogID, "requests"));
-  await new Promise((resolve) =>
-    Blog.setStatus(blogID, { message: LABEL }, () => resolve())
-  );
+  // A failed status write doesn't stop the rebuild
+  await Blog.setStatus(blogID, { message: LABEL }).catch(() => {});
   client.publish("sync:status:" + blogID, LABEL).catch(() => {});
 
-  run(blogID).catch((err) =>
-    console.log("Settings rebuild failed", blogID, err.message)
-  );
+  // In the background: the save responds without waiting for the rebuild
+  runInBackground(blogID);
 };
+
+async function runInBackground(blogID) {
+  try {
+    await run(blogID);
+  } catch (err) {
+    console.log("Settings rebuild failed", blogID, err.message);
+  }
+}
 
 async function run(blogID) {
   const running = key(blogID, "running");
@@ -63,19 +69,13 @@ async function run(blogID) {
 
       do {
         current = await client.get(requests);
-        await new Promise((resolve, reject) =>
-          rebuild(
-            blogID,
-            {
-              thumbnails: false, // do not re-generate thumbnails
-              imageCache: false, // do not re-cache images in posts
-              status,
-              log: folder.log,
-              shouldStop: async () => (await client.get(requests)) !== current,
-            },
-            (err) => (err ? reject(err) : resolve())
-          )
-        );
+        await rebuild(blogID, {
+          thumbnails: false, // do not re-generate thumbnails
+          imageCache: false, // do not re-cache images in posts
+          status,
+          log: folder.log,
+          shouldStop: async () => (await client.get(requests)) !== current,
+        });
       } while ((await client.get(requests)) !== current);
 
       return current;
@@ -90,29 +90,32 @@ async function run(blogID) {
 }
 
 // Runs fn(folder) holding the folder's sync lock; waits while a sync has it
-function underLock(blogID, fn) {
+async function underLock(blogID, fn) {
   const started = Date.now();
+  let lock;
 
-  return new Promise((resolve, reject) => {
-    (function attempt() {
-      Sync(blogID, (err, folder, done) => {
-        if (err) {
-          if (Date.now() - started > LOCK_GIVE_UP_MS) return reject(err);
-          return setTimeout(attempt, LOCK_RETRY_MS);
-        }
+  while (!lock) {
+    try {
+      lock = await establishSyncLock(blogID);
+    } catch (err) {
+      if (Date.now() - started > LOCK_GIVE_UP_MS) throw err;
+      await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
+    }
+  }
 
-        folder.status(LABEL);
+  const { folder, done } = lock;
+  folder.status(LABEL);
 
-        fn(folder).then(
-          (result) =>
-            done(null, (err) => (err ? reject(err) : resolve(result))),
-          (err) =>
-            done(err, () => {
-              folder.status("Error applying settings");
-              reject(err);
-            })
-        );
-      });
-    })();
-  });
+  let result;
+
+  try {
+    result = await fn(folder);
+  } catch (err) {
+    await done(err).catch(() => {});
+    folder.status("Error applying settings");
+    throw err;
+  }
+
+  await done();
+  return result;
 }
