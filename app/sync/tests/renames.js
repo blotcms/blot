@@ -330,12 +330,18 @@ describe("update", function () {
           function (next) {
             settle(storage.write(blogID, path, content), next);
           },
-          folder.update.bind(this, path),
+          function (next) {
+            settle(folder.update(path), next);
+          },
           function (next) {
             settle(storage.move(blogID, path, newPath), next);
           },
-          folder.update.bind(this, path),
-          folder.update.bind(this, newPath),
+          function (next) {
+            settle(folder.update(path), next);
+          },
+          function (next) {
+            settle(folder.update(newPath), next);
+          },
         ],
         function (err) {
           if (err) return testDone.fail(err);
@@ -376,12 +382,18 @@ describe("update", function () {
           function (next) {
             settle(storage.write(blogID, path, content), next);
           },
-          folder.update.bind(this, path),
+          function (next) {
+            settle(folder.update(path), next);
+          },
           function (next) {
             settle(storage.move(blogID, path, newPath), next);
           },
-          folder.update.bind(this, path),
-          folder.update.bind(this, newPath),
+          function (next) {
+            settle(folder.update(path), next);
+          },
+          function (next) {
+            settle(folder.update(newPath), next);
+          },
         ],
         function (err) {
           if (err) return testDone.fail(err);
