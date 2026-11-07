@@ -377,8 +377,7 @@ async function checkEditorPermissions(drive, folderId, serviceAccountId) {
 
 const establishSyncLock = require("sync/establishSyncLock");
 const createDriveClient = require("../serviceAccount/createDriveClient");
-const { promisify } = require("util");
-const getBlog = promisify(require("models/blog").get);
+const getBlog = (by) => require("models/blog").get(by);
 
 async function restartSetupProcesses() {
   console.log(clfdate(), "Google Drive Client", "Restarting setup processes");

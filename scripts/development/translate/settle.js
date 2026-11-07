@@ -10,10 +10,9 @@
 // appeared within the same second, while a delete took roughly half a minute —
 // file events are queued per blog and each takes a lock on the folder.
 
-const { promisify } = require("util");
 const Blog = require("models/blog");
 
-const getBlog = promisify(Blog.get);
+const getBlog = (by) => Blog.get(by);
 
 const POLL_INTERVAL = 1000;
 // How long cacheID must hold still before we call it settled. Two seconds is

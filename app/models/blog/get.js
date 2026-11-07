@@ -2,12 +2,12 @@ var client = require("models/client");
 var ensure = require("helper/ensure");
 var key = require("./key");
 var serial = require("./serial");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var applyImageExif = require("./util/imageExif").apply;
 var applyConverters = require("./util/converters").apply;
 
 // Resolves to the blog, or undefined when there is none
-module.exports = withCallback(async function get(by) {
+module.exports = promiseOnly(async function get(by) {
   ensure(by, "object");
 
   var blogID;

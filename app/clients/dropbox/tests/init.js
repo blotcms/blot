@@ -68,15 +68,15 @@ describe("dropbox init", function () {
     function load(account) {
       require.cache[blogPath] = {
         exports: {
-          getAllIDs: function (callback) {
-            callback(null, [blogID]);
+          getAllIDs: async function () {
+            return [blogID];
           },
-          get: function (query, callback) {
-            callback(null, {
+          get: async function () {
+            return {
               id: blogID,
               handle: "incomplete-transfer-blog",
               client: "dropbox",
-            });
+            };
           },
         },
       };
@@ -255,15 +255,15 @@ describe("dropbox init", function () {
     function load(onResetToBlotCalled) {
       require.cache[blogPath] = {
         exports: {
-          getAllIDs: function (callback) {
-            callback(null, [blogID]);
+          getAllIDs: async function () {
+            return [blogID];
           },
-          get: function (query, callback) {
-            callback(null, {
+          get: async function () {
+            return {
               id: blogID,
               handle: "refused-blog",
               client: "dropbox",
-            });
+            };
           },
         },
       };
@@ -395,19 +395,19 @@ describe("dropbox init", function () {
       const blogLoads = {};
 
       stub("blog", {
-        getAllIDs: (callback) => callback(null, ids),
-        get: ({ id }, callback) => {
+        getAllIDs: async () => ids,
+        get: async ({ id }) => {
           blogLoads[id] = (blogLoads[id] || 0) + 1;
           // Deleted while the sweep was walking it
           if (blogLoads[id] > 1 && behaviors[id].deletedAfterWalk) {
-            return callback(null, null);
+            return null;
           }
-          callback(null, {
+          return {
             id,
             handle: id + "-handle",
             client: "dropbox",
             load: blogLoads[id],
-          });
+          };
         },
       });
       stub("database", {

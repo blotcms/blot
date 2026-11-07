@@ -129,12 +129,7 @@ async function reconcile() {
   var Entries = require("models/entries");
   var Entry = require("./index");
 
-  var blogIDs = await new Promise(function (resolve, reject) {
-    Blog.getAllIDs(function (err, ids) {
-      if (err) reject(err);
-      else resolve(ids);
-    });
-  });
+  var blogIDs = await Blog.getAllIDs();
 
   // Entries.get swallows failures into an empty list; getListIDs and Entry.get
   // report them, so a read failure is counted rather than mistaken for "none"

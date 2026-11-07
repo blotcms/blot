@@ -25,17 +25,14 @@ function establishTestBlog(user) {
   });
 }
 
-const configureBlog = (blogID) => {
+const configureBlog = async (blogID) => {
+  const blog = await Blog.get({ id: blogID });
+  const client = !blog.client ? "local" : blog.client;
+
   return new Promise((resolve, reject) => {
-    Blog.get({ id: blogID }, (err, blog) => {
+    Blog.set(blogID, { forceSSL: false, client }, (err) => {
       if (err) return reject(err);
-
-      const client = !blog.client ? "local" : blog.client;
-
-      Blog.set(blogID, { forceSSL: false, client }, (err) => {
-        if (err) return reject(err);
-        resolve(blog);
-      });
+      resolve(blog);
     });
   });
 };

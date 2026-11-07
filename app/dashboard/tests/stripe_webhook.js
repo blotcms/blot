@@ -7,7 +7,7 @@ const webhook = require("dashboard/webhooks/stripe_webhook");
 const setUser = User.set;
 const setBlog = promisify(Blog.set);
 const getUser = User.getById;
-const getBlog = promisify(Blog.get);
+const getBlog = (by) => Blog.get(by);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

@@ -85,7 +85,7 @@ function load({
       getAllTotal: async () => 3,
     },
     "models/blog": {
-      get: ({ id }, callback) => callback(null, blogs[id] || null),
+      get: async ({ id }) => blogs[id] || null,
     },
     "sync/establishSyncLock": async (blogID) => {
       if (locks[blogID]) throw locks[blogID];

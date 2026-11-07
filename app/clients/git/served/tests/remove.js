@@ -113,8 +113,8 @@ describe("git store: removing a blog's repository", function () {
 
     // Reconnected, and imported by another process, but Redis fails the lookup
     await store.put(PACK, Buffer.from("x"));
-    Blog.get = function (by, callback) {
-      callback(new Error("Redis went away"));
+    Blog.get = async function () {
+      throw new Error("Redis went away");
     };
 
     try {

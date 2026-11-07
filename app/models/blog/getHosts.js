@@ -1,12 +1,12 @@
 var client = require("models/client");
 var key = require("./key");
 var getAllIDs = require("./getAllIDs");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 var HOST = require("config").host;
 
 // Resolves to a list of [host, blogID] pairs
-module.exports = withCallback(async function getHosts() {
+module.exports = promiseOnly(async function getHosts() {
   var ids = await getAllIDs();
 
   var res = await Promise.all(

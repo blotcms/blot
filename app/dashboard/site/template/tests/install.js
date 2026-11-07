@@ -89,12 +89,7 @@ describe("install template route", function () {
       {}
     );
 
-    const originalTemplate = await new Promise(function (resolve, reject) {
-      Blog.get({ id: blog.id }, function (err, value) {
-        if (err) return reject(err);
-        resolve(value.template);
-      });
-    });
+    const originalTemplate = (await Blog.get({ id: blog.id })).template;
     Blog.set.calls.reset();
 
     const result = await runInstall(blog, otherTemplate.id);
@@ -103,12 +98,7 @@ describe("install template route", function () {
     expect(result.err.status).toBe(403);
     expect(Blog.set).not.toHaveBeenCalled();
 
-    const storedBlog = await new Promise(function (resolve, reject) {
-      Blog.get({ id: blog.id }, function (err, value) {
-        if (err) return reject(err);
-        resolve(value);
-      });
-    });
+    const storedBlog = await Blog.get({ id: blog.id });
     expect(storedBlog.template).toBe(originalTemplate);
   });
 
