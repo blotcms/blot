@@ -139,9 +139,8 @@ describe("icloud status route", function () {
     });
     mockModule(getHealthPath, async () => ({ issues: [] }));
     mockModule(emailPath, {
-      ICLOUD_RESYNC_ISSUE: (_, locals, callback) => {
+      ICLOUD_RESYNC_ISSUE: async (_, locals) => {
         emails.push(locals);
-        callback();
       },
     });
   });

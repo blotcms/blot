@@ -81,9 +81,7 @@ describe("scheduler", function () {
     beforeEach(async function () {
       this.notifyLowDisk = require("../index").notifyLowDisk;
       await client.del(KEYS);
-      spyOn(email, "WARNING_LOW_DISK_SPACE").and.callFake((uid, locals, cb) =>
-        cb()
-      );
+      spyOn(email, "WARNING_LOW_DISK_SPACE").and.returnValue(Promise.resolve());
     });
 
     afterAll(async function () {

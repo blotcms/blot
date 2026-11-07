@@ -12,7 +12,7 @@ const syncReport = require("clients/util/syncReport");
 // and this is the only place a dashboard-triggered repair gets reported.
 // Fire-and-forget: a failure here must never affect the resync flow the user
 // is watching, which is why this takes no callback of its own.
-module.exports = function notifyAdminIfResyncFoundChanges(
+module.exports = async function notifyAdminIfResyncFoundChanges(
   blog,
   client,
   summary,
@@ -27,7 +27,7 @@ module.exports = function notifyAdminIfResyncFoundChanges(
     // These reset POSTs always run on green (see the note above
     // reset/rebuild in client.js), regardless of which client just
     // resynced.
-    email.RESYNC_FOUND_CHANGES(
+    await email.RESYNC_FOUND_CHANGES(
       null,
       Object.assign(
         {
@@ -39,14 +39,9 @@ module.exports = function notifyAdminIfResyncFoundChanges(
           checks,
         },
         changes
-      ),
-      function (err) {
-        if (err) {
-          console.log("Error sending resync found changes email:", err);
-        }
-      }
+      )
     );
   } catch (err) {
-    console.log("Error preparing resync found changes email:", err);
+    console.log("Error sending resync found changes email:", err);
   }
 };

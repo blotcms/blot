@@ -195,9 +195,8 @@ describe("clients/util syncReport", function () {
       syncReport.recordError(report, blog, "walk", new Error("boom"));
       const listed = await syncReport.send(
         report,
-        function (uid, locals, callback) {
+        async function (uid, locals) {
           sent.push({ uid, locals });
-          callback();
         },
         "Test:"
       );
@@ -214,9 +213,8 @@ describe("clients/util syncReport", function () {
       const sent = [];
 
       spyOn(email, "DROPBOX_SYNC_ISSUE").and.callFake(
-        function (uid, locals, cb) {
+        async function (uid, locals) {
           sent.push(locals);
-          cb();
         }
       );
       syncReport.recordError(report, blog, "walk", new Error("boom"));
@@ -232,7 +230,9 @@ describe("clients/util syncReport", function () {
       syncReport.recordError(report, blog, "walk", new Error("boom"));
       await syncReport.send(
         report,
-        (uid, locals, cb) => cb(new Error("mailgun")),
+        async () => {
+          throw new Error("mailgun");
+        },
         "Test:"
       );
 
@@ -362,9 +362,8 @@ describe("clients/util syncReport", function () {
 
       const listed = await syncReport.send(
         report,
-        (uid, locals, cb) => {
+        async (uid, locals) => {
           sent.push(locals);
-          cb();
         },
         "Test:",
         { getHealth: async (blogID) => states[blogID] }
@@ -395,9 +394,8 @@ describe("clients/util syncReport", function () {
       syncReport.recordError(report, blog, "walk", new Error("boom"));
       await syncReport.send(
         report,
-        (uid, locals, cb) => {
+        async (uid, locals) => {
           sent.push(locals);
-          cb();
         },
         "Test:",
         {
@@ -487,9 +485,8 @@ describe("clients/util syncReport", function () {
 
       await syncReport.send(
         report,
-        (uid, locals, cb) => {
+        async (uid, locals) => {
           sent.push(locals);
-          cb();
         },
         "Test:",
         { client: "test" }
@@ -531,7 +528,7 @@ describe("clients/util syncReport", function () {
     it("only clears the issues of the blog that was checked", async function () {
       const other = { id: "blog_other", handle: "other" };
       const sent = [];
-      const mail = (u, l, cb) => (sent.push(l), cb());
+      const mail = async (u, l) => void sent.push(l);
       const report = syncReport.create();
       syncReport.recordError(report, blog, "walk", new Error("a"));
       syncReport.recordError(report, other, "walk", new Error("b"));
@@ -552,7 +549,7 @@ describe("clients/util syncReport", function () {
       syncReport.recordError(report, blog, "fix", new Error("different phase"));
       await syncReport.send(
         report,
-        (u, locals, cb) => (sent.push(locals), cb()),
+        async (u, locals) => void sent.push(locals),
         "Test:",
         {
           client: "test",
@@ -593,7 +590,9 @@ describe("clients/util syncReport", function () {
       syncReport.recordError(report, blog, "walk", new Error("boom"));
       await syncReport.send(
         report,
-        (u, l, cb) => cb(new Error("mailgun")),
+        async () => {
+          throw new Error("mailgun");
+        },
         "Test:",
         {
           client: "test",

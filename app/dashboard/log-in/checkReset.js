@@ -44,10 +44,5 @@ async function sendPasswordResetEmail(uid) {
     },
   });
 
-  await new Promise(function (resolve, reject) {
-    Email.SET_PASSWORD(uid, { url: url }, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+  await Email.SET_PASSWORD(uid, { url: url });
 }

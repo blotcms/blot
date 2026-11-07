@@ -129,17 +129,37 @@ async function loadUser(uid) {
   return User.extend(user);
 }
 
-// The functions this builds are used fire-and-forget all over the app, with
-// or without a callback. They never throw and never return a promise: the
-// outcome goes to the callback (a no-op by default), so a failed send can't
-// become an unhandled rejection.
+// The functions this builds return a promise that rejects if the send fails.
+// Many callers use them fire-and-forget and never await it, so a failure is
+// logged here and the rejection is marked handled, which means a call nobody
+// awaits can't become an unhandled rejection. Callers that await the promise
+// still see the rejection.
 function init(method) {
   ensure(method, "string");
-  return function build(uid = "", locals = {}, callback = function () {}) {
-    deliver.call(this, method, uid, locals).then(function (results) {
-      callback(null, results);
-    }, callback);
+  return function build(uid = "", locals = {}) {
+    const delivery = deliver.call(this, method, uid, locals);
+
+    // Fire-and-forget callers never await this, so failures are logged here
+    // and the rejection is marked handled; callers that await still see it
+    logFailure(delivery, method, uid);
+
+    return delivery;
   };
+}
+
+async function logFailure(delivery, method, uid) {
+  try {
+    await delivery;
+  } catch (err) {
+    console.error(
+      clfdate(),
+      "Email:",
+      method,
+      "failed to send",
+      uid,
+      err && err.message
+    );
+  }
 }
 
 async function deliver(method, uid, locals) {

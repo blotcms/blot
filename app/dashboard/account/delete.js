@@ -47,22 +47,14 @@ Delete.route("/")
 
 async function emailUser(req, res, next) {
   try {
-    await new Promise(function (resolve, reject) {
-      function done(err) {
-        if (err) return reject(err);
-        resolve();
-      }
-
-      if (req.refund?.issued) {
-        return Email.DELETED_FIRST_PERIOD(
-          "",
-          Object.assign({}, req.user, { refund: req.refund }),
-          done
-        );
-      }
-
-      Email.DELETED("", req.user, done);
-    });
+    if (req.refund?.issued) {
+      await Email.DELETED_FIRST_PERIOD(
+        "",
+        Object.assign({}, req.user, { refund: req.refund })
+      );
+    } else {
+      await Email.DELETED("", req.user);
+    }
   } catch (err) {
     return next(err);
   }

@@ -34,9 +34,9 @@ describe("user", function () {
   beforeEach(function () {
     this.sends = [];
     spyOn(email, "WELCOME").and.callFake(
-      function (uid, locals, callback) {
+      async function (uid) {
         this.sends.push(uid);
-        setTimeout(callback, 10);
+        await new Promise((resolve) => setTimeout(resolve, 10));
       }.bind(this)
     );
   });
@@ -183,8 +183,8 @@ describe("user", function () {
 
     await setUser(uid, { welcomeEmailSent: false });
 
-    email.WELCOME.and.callFake(function (uid, locals, callback) {
-      callback(new Error("mail is down"));
+    email.WELCOME.and.callFake(async function () {
+      throw new Error("mail is down");
     });
 
     var failed = false;
@@ -198,9 +198,8 @@ describe("user", function () {
     expect(await client.exists(sentKey(uid))).toBe(0);
     expect((await getUser(uid)).welcomeEmailSent).toBe(false);
 
-    email.WELCOME.and.callFake(function (uid, locals, callback) {
+    email.WELCOME.and.callFake(async function (uid) {
       sends.push(uid);
-      callback();
     });
 
     await scheduleWelcomeEmail.handler(uid);
