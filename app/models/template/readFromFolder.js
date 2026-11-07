@@ -151,17 +151,20 @@ async function loadPackage(blogID, id, dir) {
 
   var contents = buffer.toString("utf-8");
 
-  try {
-    const metadata = JSON.parse(contents);
-    metadata.localEditing = true;
+  var metadata;
 
-    return await new Promise(function (resolve) {
-      savePackage(id, metadata, function (err, views) {
-        resolve({ error: err, views: views, enabled: metadata.enabled });
-      });
-    });
+  try {
+    metadata = JSON.parse(contents);
+    metadata.localEditing = true;
   } catch (err) {
     return { error: new Error(improveJSONErrorMessage(err, contents)) };
+  }
+
+  try {
+    var views = await savePackage(id, metadata);
+    return { views: views, enabled: metadata.enabled };
+  } catch (err) {
+    return { error: err, views: err.views, enabled: metadata.enabled };
   }
 }
 

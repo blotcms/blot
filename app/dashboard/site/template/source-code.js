@@ -102,8 +102,7 @@ SourceCode.route("/:viewSlug/edit")
       } catch (e) {
         return sendError(e);
       }
-      Template.package.save(req.template.id, parsed, function (err, views) {
-        if (err) return sendError(err);
+      Template.package.save(req.template.id, parsed).then(function (views) {
         views = views || {};
 
         Template.getMetadata(req.template.id).then(function (metadata) {
@@ -125,7 +124,7 @@ SourceCode.route("/:viewSlug/edit")
             );
           }, sendError);
         }, sendError);
-      });
+      }, sendError);
     } else {
       Template.setView(req.template.id, view).then(function () {
         writeChangeToFolder(req.blog, req.template, view).then(function () {

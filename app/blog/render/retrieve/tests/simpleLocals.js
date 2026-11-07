@@ -7,17 +7,12 @@ const encodeURIComponentLocal = require("../encode_uri_component");
 const Entries = require("models/entries");
 
 function run(fn, req) {
-  return new Promise((resolve, reject) => {
-    fn(req, {}, (err, result) => (err ? reject(err) : resolve(result)));
-  });
+  return fn(req, {});
 }
 
-function getLambda(fn, req) {
-  return new Promise((resolve, reject) => {
-    fn(req || {}, {}, (err, factory) =>
-      err ? reject(err) : resolve(factory())
-    );
-  });
+async function getLambda(fn, req) {
+  const factory = await fn(req || {}, {});
+  return factory();
 }
 
 describe("simple pass-through retrieve locals", function () {

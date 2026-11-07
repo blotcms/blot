@@ -74,10 +74,13 @@ module.exports = [
   // stays off the list rather than carrying eslint-disable comments.
   {
     files: [
+      "app/blog/lib/asRetriever.js",
       "app/blog/middleware/**/*.js",
       "app/blog/render/load/**/*.js",
+      "app/blog/render/middleware.js",
       "app/blog/render/replaceFolderLinks/**/*.js",
       "app/blog/render/retrieve/**/*.js",
+      "app/blog/render/view.js",
       "app/blog/static/**/*.js",
       "app/build/converters/docx/**/*.js",
       "app/build/converters/html/**/*.js",
@@ -110,6 +113,7 @@ module.exports = [
       "app/helper/tempDir.js",
       "app/helper/transformer/**/*.js",
       "app/models/404/**/*.js",
+      "app/models/blog/bumpCacheID.js",
       "app/models/blog/create.js",
       "app/models/blog/remove.js",
       "app/models/blog/set.js",
@@ -122,6 +126,11 @@ module.exports = [
       "app/models/question/**/*.js",
       "app/models/redirects/**/*.js",
       "app/models/tags/**/*.js",
+      "app/models/template/fullViewCache.js",
+      "app/models/template/getFullView.js",
+      "app/models/template/package.js",
+      "app/models/template/readFromFolder.js",
+      "app/models/template/removeEnabledFromAllTemplates.js",
       "app/models/user/create.js",
       "app/models/user/validate/**/*.js",
       "app/site/**/*.js",

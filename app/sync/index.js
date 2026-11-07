@@ -202,21 +202,17 @@ async function start(blogID, callback) {
         // If Redis is unavailable the bump is retried in the background,
         // and the preview reloaded again once it lands
         log("Updating cacheID of blog");
-        Blog.bumpCacheID(
-          blogID,
-          function (err) {
-            if (err) {
-              log("Error updating cacheID of blog");
-            }
-
+        try {
+          await Blog.bumpCacheID(blogID, function () {
             previewReload.publish(blogID);
+          });
+        } catch (err) {
+          log("Error updating cacheID of blog");
+        }
 
-            callback(syncError || releaseError);
-          },
-          function () {
-            previewReload.publish(blogID);
-          }
-        );
+        previewReload.publish(blogID);
+
+        callback(syncError || releaseError);
       });
   });
 }
