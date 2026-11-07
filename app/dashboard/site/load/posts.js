@@ -277,6 +277,14 @@ module.exports = async function (req, res, next) {
         : "folder-filters__item",
       ariaCurrent: showingFiles ? "page" : "",
     };
+    // On narrow screens the filters are a dropdown named after the choice
+    const selectedGroup = res.locals.postGroups.find((group) => group.isActive);
+    res.locals.selectedFilterTitle = selectedGroup
+      ? selectedGroup.filterTitle
+      : "Files";
+    res.locals.hasScheduled = res.locals.postGroups.some(
+      (group) => group.showDot
+    );
 
     const activeGroup = res.locals.postGroups.find(function (group) {
       return group.isActive;
