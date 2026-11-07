@@ -1,6 +1,6 @@
 var User = require("models/user");
 var Blog = require("models/blog");
-var async = require("async");
+var eachLimit = require("helper/eachLimit");
 var type = require("helper/type");
 var ensure = require("helper/ensure");
 var { promisify } = require("util");
@@ -129,16 +129,7 @@ async function eachBlog(doThis, options = {}) {
     if (options.p) {
       await Promise.all(blogIDs.map((blogID) => processBlog(blogID)));
     } else if (limit) {
-      await new Promise((resolve, reject) => {
-        async.eachLimit(
-          blogIDs,
-          limit,
-          function (blogID, done) {
-            processBlog(blogID).then(() => done(), done);
-          },
-          (err) => (err ? reject(err) : resolve())
-        );
-      });
+      await eachLimit(blogIDs, limit, (blogID) => processBlog(blogID));
     } else {
       for (const blogID of blogIDs) {
         await processBlog(blogID);

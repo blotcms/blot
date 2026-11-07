@@ -16,7 +16,6 @@
  */
 const fs = require("fs");
 const path = require("path");
-const async = require("async");
 
 module.exports = function setupCorpusRender(manifestPath) {
   const templates = require("templates");
@@ -55,32 +54,21 @@ module.exports = function setupCorpusRender(manifestPath) {
     });
   }, 35 * 1000);
 
-  beforeEach(function (done) {
+  beforeEach(async function () {
     const resolvedManifestPath = path.resolve(manifestPath);
 
     if (!fs.existsSync(resolvedManifestPath)) {
-      return done.fail(
-        new Error(`Corpus manifest not found at ${resolvedManifestPath}`)
-      );
+      throw new Error(`Corpus manifest not found at ${resolvedManifestPath}`);
     }
 
     const manifest = JSON.parse(fs.readFileSync(resolvedManifestPath, "utf8"));
-    const context = this;
-
-    async.map(
-      manifest.sites,
-      function (site, next) {
-        Blog.get({ id: site.blogID }, next);
-      },
-      function (err, blogs) {
-        if (err) return done.fail(err);
-
-        context.blogs = blogs;
-        context.blog = blogs[0];
-        context.corpusManifest = manifest;
-        done();
-      }
+    const blogs = await Promise.all(
+      manifest.sites.map((site) => Blog.get({ id: site.blogID }))
     );
+
+    this.blogs = blogs;
+    this.blog = blogs[0];
+    this.corpusManifest = manifest;
   });
 
   beforeEach(function () {

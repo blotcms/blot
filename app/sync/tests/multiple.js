@@ -1,6 +1,6 @@
 describe("multiple blogs", function () {
   var sync = require("../index");
-  var async = require("async");
+  var { eachSeries } = require("../../../scripts/tests/util/callbacks");
 
   // Set up array of 20 test blogs before each test
   // and remove them afterwards
@@ -44,7 +44,7 @@ describe("multiple blogs", function () {
       // Did sync release the child's lock on the blog when the child
       // died (was killed)? We test this by trying to acquire a lock.
       child.on("close", function () {
-        async.eachSeries(
+        eachSeries(
           blogs,
           function (blog, next) {
             syncWhenFree(blog.id, function (err, folder, done) {

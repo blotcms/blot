@@ -1,7 +1,6 @@
-var async = require("async");
+var eachLimit = require("helper/eachLimit");
 var { join, dirname, basename, sep } = require("path");
 var folder = require("storage/folder");
-var callbackify = require("util").callbackify;
 var client = require("models/client");
 var ensure = require("helper/ensure");
 var urlNormalizer = require("helper/urlNormalizer");
@@ -38,25 +37,9 @@ module.exports = withCallback(async function conflicts(blog, redirects) {
 
   checkBlotRoutes(paths, results);
 
-  await new Promise(function (resolve, reject) {
-    async.series(
-      [
-        function (next) {
-          checkEntries(blog.id, paths, results, next);
-        },
-        function (next) {
-          checkTemplateViews(blog.template, paths, results, next);
-        },
-        function (next) {
-          checkFolder(blog.id, paths, results, next);
-        },
-      ],
-      function (err) {
-        if (err) return reject(err);
-        resolve(results);
-      }
-    );
-  });
+  await checkEntries(blog.id, paths, results);
+  await checkTemplateViews(blog.template, paths, results);
+  await checkFolder(blog.id, paths, results);
 
   return results;
 });
@@ -125,10 +108,10 @@ function blotRoute(path) {
   return null;
 }
 
-function checkEntries(blogID, paths, results, callback) {
+async function checkEntries(blogID, paths, results) {
   var indexes = pending(paths, results);
 
-  if (!indexes.length) return callback();
+  if (!indexes.length) return;
 
   // One round trip tells us which paths are worth loading in full. Most
   // redirects don't point at an existing post, so this usually ends here.
@@ -136,104 +119,90 @@ function checkEntries(blogID, paths, results, callback) {
     return Entry.key.url(blogID, decodeURISafely(paths[index]));
   });
 
-  client
-    .mGet(keys)
-    .then(function (entryIDs) {
-      var candidates = indexes.filter(function (index, position) {
-        return !!entryIDs[position];
-      });
+  var entryIDs = await client.mGet(keys);
 
-      async.eachLimit(candidates, 10, checkEntry, callback);
-    })
-    .catch(callback);
+  var candidates = indexes.filter(function (index, position) {
+    return !!entryIDs[position];
+  });
 
-  function checkEntry(index, next) {
+  await eachLimit(candidates, 10, async function checkEntry(index) {
     // A failed lookup is the same as no entry
-    withCallback(Entry.getByUrl)(blogID, paths[index], function (err, entry) {
-      // Blot skips these too, so the redirect still runs
-      if (!entry || entry.deleted || entry.draft || entry.scheduled)
-        return next();
+    var entry = await Entry.getByUrl(blogID, paths[index]).catch(
+      function () {}
+    );
 
-      results[index] = {
-        type: entry.page ? "page" : "post",
-        path: paths[index],
-        message:
-          "This redirect will not be used because " +
-          (entry.page ? "a page" : "a post") +
-          " on your site is already published at " +
-          paths[index] +
-          ".",
-      };
+    // Blot skips these too, so the redirect still runs
+    if (!entry || entry.deleted || entry.draft || entry.scheduled) return;
 
-      next();
-    });
-  }
+    results[index] = {
+      type: entry.page ? "page" : "post",
+      path: paths[index],
+      message:
+        "This redirect will not be used because " +
+        (entry.page ? "a page" : "a post") +
+        " on your site is already published at " +
+        paths[index] +
+        ".",
+    };
+  });
 }
 
-function checkTemplateViews(templateID, paths, results, callback) {
+async function checkTemplateViews(templateID, paths, results) {
   var indexes = pending(paths, results);
 
-  if (!templateID || !indexes.length) return callback();
+  if (!templateID || !indexes.length) return;
 
   var urls = indexes.map(function (index) {
     return decodeURIComponentSafely(paths[index]);
   });
 
-  Template.getViewsByURLs(templateID, urls, function (err, viewNames) {
-    if (err) return callback(err);
+  var viewNames = await Template.getViewsByURLs(templateID, urls);
 
-    indexes.forEach(function (index, position) {
-      if (!viewNames[position]) return;
+  indexes.forEach(function (index, position) {
+    if (!viewNames[position]) return;
 
-      results[index] = {
-        type: "view",
-        path: paths[index],
-        message:
-          "This redirect will not be used because your template renders " +
-          paths[index] +
-          " using the view " +
-          viewNames[position] +
-          ".",
-      };
-    });
-
-    callback();
+    results[index] = {
+      type: "view",
+      path: paths[index],
+      message:
+        "This redirect will not be used because your template renders " +
+        paths[index] +
+        " using the view " +
+        viewNames[position] +
+        ".",
+    };
   });
 }
 
-function checkFolder(blogID, paths, results, callback) {
+async function checkFolder(blogID, paths, results) {
   var indexes = pending(paths, results).filter(function (index) {
     return isServed(paths[index]);
   });
 
-  if (!indexes.length || indexes.length > MAX_PATHS_CHECKED_ON_DISK)
-    return callback();
+  if (!indexes.length || indexes.length > MAX_PATHS_CHECKED_ON_DISK) return;
 
-  async.eachLimit(indexes, 10, checkPath, callback);
-
-  function checkPath(index, next) {
+  await eachLimit(indexes, 10, async function checkPath(index) {
     var candidates = filesWhichWouldBeServed(paths[index]);
+    var file;
 
-    async.detectSeries(
-      candidates,
-      isFile.bind(null, blogID),
-      function (err, file) {
-        if (err) return next(err);
-
-        if (file)
-          results[index] = {
-            type: "file",
-            path: paths[index],
-            message:
-              "This redirect will not be used because a file in your folder is already published at " +
-              paths[index] +
-              ".",
-          };
-
-        next();
+    // In order, stopping at the first file which exists
+    for (var candidate of candidates) {
+      if (await isFile(blogID, candidate)) {
+        file = candidate;
+        break;
       }
-    );
-  }
+    }
+
+    if (file)
+      results[index] = {
+        type: "file",
+        path: paths[index],
+        message:
+          "This redirect will not be used because a file in your folder is already published at " +
+          paths[index] +
+          ".",
+      };
+  });
 }
 
 function isServed(path) {
@@ -268,11 +237,13 @@ function filesWhichWouldBeServed(url) {
     });
 }
 
-function isFile(blogID, file, callback) {
-  callbackify(folder.stat)(blogID, file, function (err, stat) {
-    if (err) return callback(null, false);
-    callback(null, !stat.isDirectory);
-  });
+async function isFile(blogID, file) {
+  try {
+    var stat = await folder.stat(blogID, file);
+    return !stat.isDirectory;
+  } catch (err) {
+    return false;
+  }
 }
 
 // Entry.getByUrl and app/blog/routes/view.js decode the URL differently, so we

@@ -9,7 +9,11 @@ describe("update", function () {
     }, next);
   }
 
-  var async = require("async");
+  var {
+    series,
+    eachSeries,
+    each,
+  } = require("../../../scripts/tests/util/callbacks");
   var redis = require("models/client");
   var entryKey = require("models/entry/key").entry;
 
@@ -123,7 +127,7 @@ describe("update", function () {
       if (err) return testDone.fail(err);
 
       // Write initial files
-      async.eachSeries(
+      eachSeries(
         items,
         function (item, next) {
           settle(
@@ -144,7 +148,7 @@ describe("update", function () {
               if (err) return testDone.fail(err);
 
               // Move files
-              async.eachSeries(
+              eachSeries(
                 items,
                 function (item, next) {
                   settle(
@@ -163,7 +167,7 @@ describe("update", function () {
                   done(null, function (err) {
                     if (err) return testDone.fail(err);
 
-                    async.each(
+                    each(
                       items,
                       function (item, next) {
                         ctx.checkRename(item.oldPath, item.newPath, next);
@@ -211,7 +215,7 @@ describe("update", function () {
             sync(blogID, function (err, folder, done) {
               if (err) return testDone.fail(err);
 
-              async.series(
+              series(
                 [
                   function (next) {
                     settle(storage.remove(blogID, path), function (err) {
@@ -303,7 +307,7 @@ describe("update", function () {
     sync(this.blog.id, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             settle(storage.write(blogID, path, content), next);
@@ -349,7 +353,7 @@ describe("update", function () {
     sync(this.blog.id, function (err, folder, done) {
       if (err) return testDone.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             settle(storage.write(blogID, path, content), next);

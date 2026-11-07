@@ -1,5 +1,4 @@
 var ensure = require("helper/ensure");
-var async = require("async");
 
 var MODEL = require("../model");
 
@@ -7,6 +6,7 @@ var validators = {
   email: require("./email"),
 };
 
+// Calls back (err, user, changes), so it stays callback-shaped.
 module.exports = function validate(user, updates, callback) {
   ensure(user, MODEL).and(updates, "object").and(callback, "function");
 
@@ -18,43 +18,34 @@ module.exports = function validate(user, updates, callback) {
     return callback(err);
   }
 
-  async.eachOf(
-    updates,
-    function (value, name, next) {
-      try {
-        ensure(value, MODEL[name]);
-      } catch (e) {
-        return next(e);
-      }
+  // All the updates are validated at once, and the first error wins
+  Promise.all(
+    Object.keys(updates).map(async function (name) {
+      var value = updates[name];
+
+      ensure(value, MODEL[name]);
 
       if (!validators[name]) {
         user[name] = value;
         changes.push(name);
-        return next();
+        return;
       }
 
-      validators[name](user, value, function (err, value) {
-        if (err) return next(err);
+      value = await validators[name](user, value);
 
-        if (value && user[name] !== value) {
-          user[name] = value;
-          changes.push(name);
-        }
-
-        next();
-      });
-    },
-    function (err) {
-      if (err) return callback(err);
-
-      // Check user properties are correct type
-      try {
-        ensure(user, MODEL, true);
-      } catch (err) {
-        return callback(err);
+      if (value && user[name] !== value) {
+        user[name] = value;
+        changes.push(name);
       }
-
-      return callback(null, user, changes);
+    })
+  ).then(function () {
+    // Check user properties are correct type
+    try {
+      ensure(user, MODEL, true);
+    } catch (err) {
+      return callback(err);
     }
-  );
+
+    return callback(null, user, changes);
+  }, callback);
 };
