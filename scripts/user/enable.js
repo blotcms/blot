@@ -17,12 +17,7 @@ function getUser(handle) {
 async function run() {
   var user = await getUser(handle);
 
-  await new Promise(function (resolve, reject) {
-    User.enable(user, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+  await User.enable(user);
 
   console.log(
     user.email + "'s blot account (" + user.uid + ") has been enabled"

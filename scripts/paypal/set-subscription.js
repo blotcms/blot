@@ -31,7 +31,7 @@ async function main(uid, paypalId) {
   }
 
   console.log("storing", paypal);
-  await promisify(User.set)(uid, { paypal: paypal });
+  await User.set(uid, { paypal: paypal });
 }
 
 const get = require("../get/user");

@@ -5,7 +5,6 @@ var client = require("models/client");
 var key = require("./key");
 var set = require("./set");
 var folder = require("storage/folder");
-var promisify = require("util").promisify;
 var withCallback = require("helper/withCallback");
 var User = require("../user");
 var validate = require("./validate");
@@ -13,12 +12,6 @@ var generateID = require("./generateID");
 var _ = require("lodash");
 
 var UID_PLACEHOLDER = "";
-
-// User.set has no promise form yet. Looked up when called, not when this
-// file loads: models/user and models/blog require each other.
-function setUser(uid, updates) {
-  return promisify(User.set)(uid, updates);
-}
 
 // Resolves to the new blog. Rejects with validate's errors object (fields
 // mapped to errors) or the error that stopped the creation.
@@ -63,7 +56,7 @@ module.exports = withCallback(async function create(uid, info) {
   blogs = user.blogs || [];
   blogs.push(blogID);
 
-  await setUser(uid, { blogs: blogs, lastSession: blogID });
+  await User.set(uid, { blogs: blogs, lastSession: blogID });
 
   await client.sAdd(key.ids, blogID);
   await set(blogID, blog);

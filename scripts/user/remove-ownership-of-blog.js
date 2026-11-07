@@ -5,7 +5,6 @@ if (!userID) throw new Error("Please pass userID as first argument");
 if (!blogID) throw new Error("Please pass blogID as second argument");
 
 var User = require("models/user");
-var { promisify } = require("util");
 
 async function main() {
   var user = await User.getById(userID);
@@ -23,7 +22,7 @@ async function main() {
 
   console.log("BEFORE", before, "AFTER", user.blogs);
 
-  await promisify(User.set)(userID, { blogs: user.blogs });
+  await User.set(userID, { blogs: user.blogs });
 
   console.log(
     "Warning! This will not affect the user's subscription settings to make sure to adjust their bill"

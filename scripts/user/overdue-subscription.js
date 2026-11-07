@@ -72,7 +72,7 @@ async function main() {
   var passwordHash = await User.hashPassword(password);
   console.log(passwordHash);
 
-  var user = await promisify(User.create)(
+  var user = await User.create(
     email,
     passwordHash,
     stripeCustomer.subscription,

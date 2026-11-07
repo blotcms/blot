@@ -1,12 +1,11 @@
-var promisify = require("util").promisify;
 var User = require("../index");
 var Blog = require("models/blog");
 require("models/client");
 
 var getUser = User.getById;
-var setUser = promisify(User.set);
-var disable = promisify(User.disable);
-var enable = promisify(User.enable);
+var setUser = User.set;
+var disable = User.disable;
+var enable = User.enable;
 var getBlog = Blog.get;
 
 describe("user disable", function () {
@@ -31,19 +30,12 @@ describe("user disable", function () {
     expect(updated.lastSession).toEqual("disabled-session");
   });
 
-  it("works with callback signature without updates", function (done) {
-    var context = this;
-    User.getById(context.user.uid, function (err, user) {
-      if (err) return done.fail(err);
-      User.disable(user, function (err) {
-        if (err) return done.fail(err);
-        User.getById(context.user.uid, function (err, updated) {
-          if (err) return done.fail(err);
-          expect(updated.isDisabled).toBe(true);
-          done();
-        });
-      });
-    });
+  it("works without updates argument", async function () {
+    var user = await getUser(this.user.uid);
+    await disable(user);
+
+    var updated = await getUser(this.user.uid);
+    expect(updated.isDisabled).toBe(true);
   });
 });
 
@@ -74,19 +66,12 @@ describe("user enable", function () {
     expect(updated.lastSession).toEqual("enabled-session");
   });
 
-  it("works with callback signature without updates", function (done) {
-    var context = this;
-    User.getById(context.user.uid, function (err, user) {
-      if (err) return done.fail(err);
-      User.enable(user, function (err) {
-        if (err) return done.fail(err);
-        User.getById(context.user.uid, function (err, updated) {
-          if (err) return done.fail(err);
-          expect(updated.isDisabled).toBe(false);
-          done();
-        });
-      });
-    });
+  it("works without updates argument", async function () {
+    var user = await getUser(this.user.uid);
+    await enable(user);
+
+    var updated = await getUser(this.user.uid);
+    expect(updated.isDisabled).toBe(false);
   });
 });
 

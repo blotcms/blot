@@ -33,12 +33,7 @@ function forEachUser(fn) {
 }
 
 function syncUserPaymentMethods(user) {
-  return new Promise(function (resolve, reject) {
-    syncPaymentMethods(user, function (err, paymentMethods) {
-      if (err) return reject(err);
-      resolve(paymentMethods);
-    });
-  });
+  return syncPaymentMethods(user);
 }
 
 async function main(user) {

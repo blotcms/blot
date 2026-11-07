@@ -10,8 +10,6 @@
 // `host` to proxy/e2e/run.js.
 // Only core modules and NODE_PATH-resolved app modules - the script is copied
 // to /tmp inside the container, so it cannot see the app's node_modules.
-const { promisify } = require("util");
-
 const User = require("models/user");
 const Blog = require("models/blog");
 const folder = require("storage/folder");
@@ -29,7 +27,7 @@ if (!email) {
 }
 
 (async () => {
-  const user = await promisify(User.getByEmail)(email);
+  const user = await User.getByEmail(email);
   if (!user) throw new Error("no user found for " + email);
 
   const blog = await new Promise((resolve, reject) => {

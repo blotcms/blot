@@ -59,14 +59,14 @@ describe("payment webhook delivery reliability", function () {
     spyOn(console, "warn");
     spyOn(console, "error");
     spyOn(console, "log");
-    spyOn(User, "getByCustomerId").and.callFake((id, cb) => cb(null, user));
+    spyOn(User, "getByCustomerId").and.callFake(async () => user);
     spyOn(User, "getByPayPalSubscriptionId").and.callFake(async () => user);
-    spyOn(User, "set").and.callFake((id, updates, cb) => cb(null));
-    spyOn(User, "enable").and.callFake((user, updates, cb) =>
-      User.set(user.uid, updates, cb)
+    spyOn(User, "set").and.callFake(async () => undefined);
+    spyOn(User, "enable").and.callFake((user, updates) =>
+      User.set(user.uid, updates)
     );
-    spyOn(User, "disable").and.callFake((user, updates, cb) =>
-      User.set(user.uid, updates, cb)
+    spyOn(User, "disable").and.callFake((user, updates) =>
+      User.set(user.uid, updates)
     );
     spyOn(global, "fetch").and.callFake(async () => ({
       ok: true,
@@ -86,37 +86,50 @@ describe("payment webhook delivery reliability", function () {
     stripe._resetStripeClient();
   });
   const stripeRequest = () => ({ body: Buffer.from(JSON.stringify(event)) });
-  it("acknowledges Stripe only after the update completes", function () {
+  it("acknowledges Stripe only after the update completes", async function () {
     let save;
-    User.set.and.callFake((id, updates, cb) => {
-      save = cb;
+    let started;
+    const saving = new Promise((resolve) => {
+      started = resolve;
     });
-    const res = response();
-    route(stripe)(stripeRequest(), res);
-    expect(typeof save).toBe("function");
-    expect(res.code).toBeUndefined();
-    save(null);
-    expect(res.code).toBe(200);
-  });
-  it("returns a retryable Stripe response on a storage failure", function () {
-    User.set.and.callFake((id, updates, cb) =>
-      cb(new Error("temporary storage failure"))
+    User.set.and.callFake(
+      () =>
+        new Promise((resolve) => {
+          save = resolve;
+          started();
+        })
     );
     const res = response();
     route(stripe)(stripeRequest(), res);
+    await saving;
+    expect(typeof save).toBe("function");
+    expect(res.code).toBeUndefined();
+    save(undefined);
+    await res.done;
+    expect(res.code).toBe(200);
+  });
+  it("returns a retryable Stripe response on a storage failure", async function () {
+    User.set.and.callFake(async () => {
+      throw new Error("temporary storage failure");
+    });
+    const res = response();
+    route(stripe)(stripeRequest(), res);
+    await res.done;
     expect(res.code).toBe(503);
   });
-  it("returns a retryable Stripe response on a provider failure", function () {
+  it("returns a retryable Stripe response on a provider failure", async function () {
     stripeClient.customers.retrieveSubscription = (customer, id, cb) =>
       cb(new Error("offline"));
     const res = response();
     route(stripe)(stripeRequest(), res);
+    await res.done;
     expect(res.code).toBe(503);
     expect(User.set).not.toHaveBeenCalled();
   });
-  it("preserves blog availability when the Stripe account is already enabled", function () {
+  it("preserves blog availability when the Stripe account is already enabled", async function () {
     const res = response();
     route(stripe)(stripeRequest(), res);
+    await res.done;
     expect(User.enable).not.toHaveBeenCalled();
     expect(User.disable).not.toHaveBeenCalled();
     expect(User.set).toHaveBeenCalled();
@@ -165,10 +178,13 @@ describe("payment webhook delivery reliability", function () {
     const saving = new Promise((resolve) => {
       started = resolve;
     });
-    User.set.and.callFake((id, updates, cb) => {
-      save = cb;
-      started();
-    });
+    User.set.and.callFake(
+      () =>
+        new Promise((_, reject) => {
+          save = reject;
+          started();
+        })
+    );
     const res = response();
     const handling = route(paypal)({ body: paypalEvent }, res);
     await saving;
@@ -356,7 +372,9 @@ describe("payment webhook delivery reliability", function () {
       expect(client.set).not.toHaveBeenCalled();
     });
     it("does not email when the save fails", async function () {
-      User.set.and.callFake((id, updates, cb) => cb(new Error("down")));
+      User.set.and.callFake(async () => {
+        throw new Error("down");
+      });
       await expectAsync(paypal.updateSubscription("I-TEST")).toBeRejected();
       expect(client.set).not.toHaveBeenCalled();
       expect(email.CANCELLED).not.toHaveBeenCalled();

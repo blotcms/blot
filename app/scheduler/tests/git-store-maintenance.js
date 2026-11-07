@@ -24,7 +24,7 @@ describe("scheduler git-store-maintenance", function () {
       return { cancel() {} };
     });
 
-    spyOn(User, "getAllIds").and.callFake((callback) => callback(null, []));
+    spyOn(User, "getAllIds").and.callFake(async () => []);
     delete require.cache[indexPath];
   });
 

@@ -225,24 +225,27 @@ webhooks.post(
 
       if (!customerId) return res.sendStatus(200);
 
-      return User.getByCustomerId(customerId, function (err, user) {
-        if (err) {
+      return User.getByCustomerId(customerId).then(
+        function (user) {
+          // Not a Blot customer (or Radar touched a card on some other
+          // Stripe object entirely) - nothing for us to do.
+          if (!user) return res.sendStatus(200);
+
+          syncPaymentMethods(user).then(
+            function () {
+              return res.sendStatus(200);
+            },
+            function (err) {
+              console.error("Failed to sync payment methods", err);
+              return res.sendStatus(503);
+            }
+          );
+        },
+        function (err) {
           console.error("Failed to look up user by customer id", err);
           return res.sendStatus(503);
         }
-
-        // Not a Blot customer (or Radar touched a card on some other
-        // Stripe object entirely) - nothing for us to do.
-        if (!user) return res.sendStatus(200);
-
-        syncPaymentMethods(user, function (err) {
-          if (err) {
-            console.error("Failed to sync payment methods", err);
-            return res.sendStatus(503);
-          }
-          return res.sendStatus(200);
-        });
-      });
+      );
     }
 
     return res.sendStatus(200);
@@ -254,8 +257,8 @@ function update_subscription(customer_id, subscription, callback) {
 
   if (!subscription) return callback(new Error(NO_SUBSCRIPTION));
 
-  User.getByCustomerId(customer_id, function (err, user) {
-    if (err || !user) return callback(err || new Error(NO_USER));
+  User.getByCustomerId(customer_id).then(function (user) {
+    if (!user) return callback(new Error(NO_USER));
 
     var previousSubscription = user.subscription || {};
     var shouldDisable =
@@ -285,8 +288,8 @@ function update_subscription(customer_id, subscription, callback) {
       email.RECOVERED(user.uid);
 
     var updates = { subscription: subscription };
-    var handler = function (next) {
-      User.set(user.uid, updates, next);
+    var handler = function () {
+      return User.set(user.uid, updates);
     };
 
     // Change blog availability only on an account transition: individual
@@ -296,8 +299,8 @@ function update_subscription(customer_id, subscription, callback) {
     // paused it on purpose (see scripts/user/pause-account.js), and a
     // reactivation-looking webhook shouldn't undo that.
     if (shouldDisable && !user.isDisabled) {
-      handler = function (next) {
-        User.disable(user, updates, next);
+      handler = function () {
+        return User.disable(user, updates);
       };
     } else if (
       !shouldDisable &&
@@ -305,13 +308,15 @@ function update_subscription(customer_id, subscription, callback) {
       !subscription.pause_collection &&
       user.isDisabled
     ) {
-      handler = function (next) {
-        User.enable(user, updates, next);
+      handler = function () {
+        return User.enable(user, updates);
       };
     }
 
-    handler(callback);
-  });
+    handler().then(function (changes) {
+      callback(null, changes);
+    }, callback);
+  }, callback);
 }
 
 module.exports = webhooks;

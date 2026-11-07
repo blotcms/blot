@@ -1,7 +1,6 @@
 var get = require("../get/blog");
 var Blog = require("models/blog");
 var User = require("models/user");
-var { promisify } = require("util");
 
 async function main() {
   console.log("Switching blog", process.argv[2], "to user", process.argv[3]);
@@ -23,7 +22,7 @@ async function main() {
 
   // A failed User.set is ignored, as before
   try {
-    await promisify(User.set)(newOwner.uid, { blogs: newOwner.blogs });
+    await User.set(newOwner.uid, { blogs: newOwner.blogs });
   } catch (err) {}
 
   await Blog.set(blog.id, { owner: newOwner.uid });

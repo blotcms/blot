@@ -40,7 +40,7 @@ async function rename(blogID, newHandle) {
 }
 
 async function seed(email, handle) {
-  const user = await promisify(User.getByEmail)(email);
+  const user = await User.getByEmail(email);
   if (!user) throw new Error("no user found for " + email);
 
   const created = await new Promise((resolve, reject) => {

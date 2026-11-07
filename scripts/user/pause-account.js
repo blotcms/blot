@@ -145,7 +145,7 @@ async function main() {
   // Disabling always happens, even if collection was already
   // paused by hand on Stripe: this is what keeps the blogs from
   // rendering.
-  await promisify(User.disable)(user, { subscription: subscription });
+  await User.disable(user, { subscription: subscription });
 
   console.log(colors.green("Paused and disabled " + user.email));
 }

@@ -1,9 +1,9 @@
 var bcrypt = require("bcryptjs");
 var getById = require("./getById");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
-module.exports = withCallback(async function checkPassword(uid, password) {
+module.exports = promiseOnly(async function checkPassword(uid, password) {
   ensure(uid, "string").and(password, "string");
 
   var user = await getById(uid);

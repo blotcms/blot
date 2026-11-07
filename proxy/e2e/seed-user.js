@@ -10,11 +10,12 @@ if (!email || !password) {
   process.exit(1);
 }
 
-User.hashPassword(password, function (err, hash) {
-  if (err) throw err;
-  User.create(email, hash, {}, {}, function (err, user) {
-    if (err) throw err;
-    console.log("seeded user", user.uid, email);
-    process.exit(0);
-  });
+(async () => {
+  const hash = await User.hashPassword(password);
+  const user = await User.create(email, hash, {}, {});
+  console.log("seeded user", user.uid, email);
+  process.exit(0);
+})().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });

@@ -2,8 +2,7 @@ var client = require("models/client");
 var key = require("../key");
 var set = require("../set");
 var getById = require("../getById");
-var promisify = require("util").promisify;
-var save = promisify(set);
+var save = set;
 var get = getById;
 
 describe("atomic user updates", function () {

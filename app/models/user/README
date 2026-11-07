@@ -137,68 +137,66 @@ Defined in `key.js`:
 
 ## Public API
 
-All functions are exposed via `index.js`. Callbacks follow Node.js error-first convention: `callback(err, result)`.
+All functions are exposed via `index.js`. These return a promise and no longer take a callback (a callback throws, #2559): `create`, `set`, `getById`, `getByEmail`, `getAllIds`, `getByCustomerId`, `getByPayPalSubscriptionId`, `remove`, `hashPassword`, `checkPassword`, `generateAccessToken`, `checkAccessToken`, `disable`, `enable`, `scheduleWelcomeEmail` and `syncPaymentMethods`. `validate` still calls back `callback(err, user, changes)`.
 
-`getById`, `getByEmail`, `getAllIds`, `getByCustomerId`, `getByPayPalSubscriptionId`, `checkPassword`, `hashPassword`, `checkAccessToken` and `generateAccessToken` return a promise when called without a callback (`helper/withCallback`, #2559). New code should `await` them; the callback form remains for existing callers.
-
-### `create(email, passwordHash, subscription, paypal, callback)`
+### `create(email, passwordHash, subscription, paypal)`
 
 Creates a user record. Validates all fields, generates a UID, writes atomically to Redis, and schedules a subscription renewal notification. Retries automatically on UID collision.
 
 - `subscription` and `paypal` must be objects (may be empty `{}`).
-- Callback receives `(err, user)`.
+- Resolves to the user.
 
-### `set(uid, updates, callback)`
+### `set(uid, updates)`
 
 Merges `updates` into the existing user record after validation. Maintains all secondary indexes. If `email` changes, the old email key is deleted and the Stripe customer email is updated asynchronously.
 
-- Callback receives `(err, changes)` where `changes` is an array of changed field names.
+- Resolves to `changes`, an array of changed field names.
 
-### `getById(uid, callback)`
+### `getById(uid)`
 
 Fetches a user by UID. Returns `null` as the second argument if the UID does not exist.
 
-### `getByEmail(email, callback)`
+### `getByEmail(email)`
 
 Fetches a user by email address. Normalizes input before lookup. Returns `null` if not found.
 
-### `getByCustomerId(customerId, callback)`
+### `getByCustomerId(customerId)`
 
 Fetches a user by Stripe customer ID. Returns `null` if not found.
 
-### `getByPayPalSubscriptionId(subscriptionId, callback)`
+### `getByPayPalSubscriptionId(subscriptionId)`
 
 Fetches a user by PayPal subscription ID. Returns `null` if not found.
 
-### `getAllIds(callback)`
+### `getAllIds()`
 
 Returns all UIDs as an array via `SMEMBERS` on the `uids` set.
 
-### `remove(uid, callback)`
+### `remove(uid)`
 
 Deletes all Redis keys for the user and removes the UID from the global set. Also removes `sync:lease:{uid}` and `sync:again:{uid}` keys used by the sync subsystem.
 
-### `hashPassword(password, callback)`
+### `hashPassword(password)`
 
-Returns a bcrypt hash of `password` (cost factor 10). Callback receives `(err, hash)`.
+Returns a bcrypt hash of `password` (cost factor 10). Resolves to the hash.
 
-### `checkPassword(uid, password, callback)`
+### `checkPassword(uid, password)`
 
-Compares `password` against the stored hash. Callback receives `(err, isMatch)` where `isMatch` is a boolean.
+Compares `password` against the stored hash. Resolves to a boolean.
 
-### `generateAccessToken(options, callback)`
+### `generateAccessToken(options)`
 
-Generates a single-use token stored in Redis with an expiry. `options.uid` sets the stored value (for password reset); omit for account creation flows. `options.expires` sets TTL in seconds (default: 86400). Callback receives `(err, token)`.
+Generates a single-use token stored in Redis with an expiry. `options.uid` sets the stored value (for password reset); omit for account creation flows. `options.expires` sets TTL in seconds (default: 86400). Resolves to the token.
 
-### `checkAccessToken(token, callback)`
+### `checkAccessToken(token)`
 
-Validates and consumes a token. Returns an error if the token is invalid or already used. Callback receives `(err, value)`.
+Validates and consumes a token. Returns an error if the token is invalid or already used. Resolves to the stored value.
 
-### `disable(user, [updates], callback)`
+### `disable(user, [updates])`
 
 Sets `isDisabled: true` on the user and all owned blogs.
 
-### `enable(user, [updates], callback)`
+### `enable(user, [updates])`
 
 Sets `isDisabled: false` on the user and all owned blogs.
 
@@ -206,7 +204,7 @@ Sets `isDisabled: false` on the user and all owned blogs.
 
 Mutates and returns `user` with derived display fields. Removes sensitive fields. Called by dashboard middleware before attaching the user to `req.user` and `res.locals.user`.
 
-### `scheduleWelcomeEmail(uid, callback)`
+### `scheduleWelcomeEmail(uid)`
 
 Sets a `helper/alarm` (`welcome-email`) for 2 hours after `user.created`; any process polling the alarm sends it, once (Redis marker `welcome-email:sent:<uid>`). Cancels the alarm if `welcomeEmailSent` is already `true`.
 

@@ -101,12 +101,7 @@ async function deleteBlogs(req, res, next) {
 
 async function deleteUser(req, res, next) {
   try {
-    await new Promise(function (resolve, reject) {
-      User.remove(req.user.uid, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await User.remove(req.user.uid);
   } catch (err) {
     return next(err);
   }

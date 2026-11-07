@@ -1,10 +1,10 @@
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var client = require("models/client");
 var key = require("./key");
 var getById = require("./getById");
 
-module.exports = withCallback(async function getBy(email) {
+module.exports = promiseOnly(async function getBy(email) {
   ensure(email, "string");
 
   email = email.trim().toLowerCase();

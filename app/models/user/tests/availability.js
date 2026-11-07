@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const User = require("models/user");
 const Blog = require("models/blog");
 const client = require("models/client");
@@ -6,7 +5,7 @@ const userKey = require("../key");
 const blogKey = require("models/blog/key");
 const getUser = User.getById;
 const getBlog = Blog.get;
-const setUser = promisify(User.set);
+const setUser = User.set;
 const setBlog = Blog.set;
 
 // Fail at the storage boundary once, allowing subsequent retries to use Redis.
@@ -49,7 +48,7 @@ describe("retryable account availability transitions", function () {
 
   ["enable", "disable"].forEach(function (operation) {
     const targetDisabled = operation === "disable";
-    const transition = promisify(User[operation]);
+    const transition = User[operation];
 
     async function prepare(context) {
       await setUser(context.user.uid, {

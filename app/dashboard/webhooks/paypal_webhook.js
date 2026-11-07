@@ -160,16 +160,9 @@ const updateSubscription = async (subscriptionID) => {
   // The model saves the account flag last to keep failures retryable.
   const shouldEnable = paypal.status === "ACTIVE" && user.isDisabled;
 
-  // User.set, User.disable and User.enable are callback-only: resolve once the
-  // save has succeeded, reject with its error otherwise
-  await new Promise((resolve, reject) => {
-    const saved = (err) => (err ? reject(err) : resolve());
-
-    if (shouldDisable && !user.isDisabled)
-      return User.disable(user, updates, saved);
-    if (shouldEnable) return User.enable(user, updates, saved);
-    User.set(user.uid, updates, saved);
-  });
+  if (shouldDisable && !user.isDisabled) await User.disable(user, updates);
+  else if (shouldEnable) await User.enable(user, updates);
+  else await User.set(user.uid, updates);
 
   // CLOSED says the account is now closed. PayPal CANCELLED still leaves
   // access in place until the paid period ends, so send it only with the

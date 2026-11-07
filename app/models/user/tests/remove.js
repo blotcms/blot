@@ -1,9 +1,8 @@
 var client = require("models/client");
 var key = require("../key");
 var User = require("../index");
-var promisify = require("util").promisify;
-var remove = promisify(User.remove);
-var create = promisify(User.create);
+var remove = User.remove;
+var create = User.create;
 var getById = User.getById;
 var hashPassword = User.hashPassword;
 

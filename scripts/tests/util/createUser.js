@@ -17,19 +17,11 @@ module.exports = function (done) {
     done(err);
   }
 
-  User.hashPassword(fakePassword, function (err, passwordHash) {
-    if (err) {
-      return finish(err);
-    }
-
-    User.create(fakeEmail, passwordHash, {}, {}, function (err, user) {
-      if (err) {
-        return finish(err);
-      }
-
+  User.hashPassword(fakePassword).then(function (passwordHash) {
+    User.create(fakeEmail, passwordHash, {}, {}).then(function (user) {
       context.user = user;
       context.user.fakePassword = fakePassword;
       finish();
-    });
-  });
+    }, finish);
+  }, finish);
 };

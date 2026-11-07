@@ -36,10 +36,6 @@ const BANNED_HANDLES = nsv(
   join(config.blot_directory, "app/models/blog/validate/banned.txt")
 );
 
-const getUserByEmail = promisify(User.getByEmail);
-const hashPassword = promisify(User.hashPassword);
-const createUser = promisify(User.create);
-const generateAccessToken = promisify(User.generateAccessToken);
 const getBlog = promisify(Blog.get);
 const setBlog = promisify(Blog.set);
 const createBlog = promisify(Blog.create);
@@ -54,15 +50,15 @@ const emit = (key, value) => console.log(`${key}=${value}`);
 // ------------------------------------------------------------------ user
 
 async function establishUser() {
-  const existing = await getUserByEmail(DEV_EMAIL);
+  const existing = await User.getByEmail(DEV_EMAIL);
 
   if (existing) return existing;
 
   // Mirrors app/configure-local-blogs.js so a fresh Redis works, rather than
   // failing with a confusing "no user" error.
   log(`Creating development user ${DEV_EMAIL}`);
-  const passwordHash = await hashPassword(DEV_PASSWORD);
-  return createUser(DEV_EMAIL, passwordHash, {}, {});
+  const passwordHash = await User.hashPassword(DEV_PASSWORD);
+  return User.create(DEV_EMAIL, passwordHash, {}, {});
 }
 
 // ------------------------------------------------------------------ blog
@@ -263,7 +259,7 @@ async function main(url, requestedHandle) {
 
   const repositoryCreated = await establishRepository(blog);
 
-  const token = await generateAccessToken({ uid: user.uid });
+  const token = await User.generateAccessToken({ uid: user.uid });
   const slug = template.id.split(":").slice(1).join(":");
 
   emit("blogID", blog.id);

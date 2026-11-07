@@ -1,8 +1,6 @@
 var client = require("models/client");
 var key = require("../key");
-var validateEmail = require("../validate/email");
-var promisify = require("util").promisify;
-var validate = promisify(validateEmail);
+var validate = require("../validate/email");
 
 describe("user validate email", function () {
   var uid = "user_validate_eml";
