@@ -38,10 +38,7 @@ describe("templates startup build locks", function () {
       Template.getTemplateList = originalGetTemplateList;
     });
 
-    const run = (templates) =>
-      new Promise((resolve, reject) =>
-        templates({}, (err) => (err ? reject(err) : resolve()))
-      );
+    const run = (templates) => templates({});
 
     it("waits for a held build lock, then runs the pass", async function () {
       const templates = require("templates");
@@ -73,24 +70,20 @@ describe("templates startup build locks", function () {
   });
 
   describe("buildPass failures", function () {
-    it("passes a synchronous build error to the callback once", async function () {
+    it("rejects once with a synchronous build error", async function () {
       const templates = require("templates");
       const original = fsExtra.readdirSync;
       fsExtra.readdirSync = fakeSourceReaddir(original, () => {
         throw new Error("cannot read directory");
       });
-      let calls = 0;
 
       try {
-        const err = await new Promise((resolve) =>
-          templates({}, (e) => {
-            calls++;
-            resolve(e);
-          })
-        );
-        await sleep(50);
-        expect(err && err.message).toBe("cannot read directory");
-        expect(calls).toBe(1);
+        try {
+          await templates({});
+          fail("expected the build to reject");
+        } catch (err) {
+          expect(err.message).toBe("cannot read directory");
+        }
       } finally {
         fsExtra.readdirSync = original;
       }

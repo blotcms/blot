@@ -10,16 +10,14 @@ describe("display math glued to prose by single newlines", function () {
     },
   };
 
-  function convertAndRender(text) {
-    return new Promise((resolve, reject) => {
-      markdownConvert(blog, text, {}, (err, html) => {
-        if (err) return reject(err);
+  async function convertAndRender(text) {
+    const html = await markdownConvert(blog, text, {});
 
-        const $ = cheerio.load(html, { decodeEntities: false }, false);
-        render($, (renderErr) => {
-          if (renderErr) return reject(renderErr);
-          resolve($.html());
-        });
+    return new Promise((resolve, reject) => {
+      const $ = cheerio.load(html, { decodeEntities: false }, false);
+      render($, (renderErr) => {
+        if (renderErr) return reject(renderErr);
+        resolve($.html());
       });
     });
   }

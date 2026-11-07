@@ -2,12 +2,9 @@ require("templates");
 const clfdate = require("helper/clfdate");
 
 module.exports = function () {
-  beforeAll(function (done) {
+  beforeAll(async function () {
     console.log(clfdate(), "[tests] Building global templates");
-    require("templates")({ watch: false }, function (err) {
-      if (err) return done(err);
-      console.log(clfdate(), "[tests] Built global templates");
-      done();
-    });
+    await require("templates")({ watch: false });
+    console.log(clfdate(), "[tests] Built global templates");
   }, 15 * 1000);
 };

@@ -23,8 +23,8 @@ describe("gdoc converter", function () {
   global.test.blog();
 
   // Build the templates
-  beforeAll(function (done) {
-    templates({ watch: false }, done);
+  beforeAll(async function () {
+    await templates({ watch: false });
   }, 10 * 1000); // longer timeout
 
   beforeAll(function (done) {

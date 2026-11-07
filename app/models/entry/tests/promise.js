@@ -10,11 +10,7 @@ describe("entry.set and entry.drop promise form", function () {
   beforeEach(function () {
     this.built = async (path, contents) => {
       await require("storage/folder").write(this.blog.id, path, contents);
-      return new Promise((resolve, reject) => {
-        build(this.blog, path, (err, entry) =>
-          err ? reject(err) : resolve(entry)
-        );
-      });
+      return build(this.blog, path);
     };
   });
 

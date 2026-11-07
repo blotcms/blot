@@ -13,7 +13,6 @@ var moment = require("moment");
 var enabledConverters = require("./converters/enabled");
 var pathNormalizer = require("helper/pathNormalizer");
 var bakeHTML = require("./plugins/folderAssets").bakeHTML;
-var withCallback = require("helper/withCallback");
 
 // Front matter can replace entry.body, teaser and teaserBody with markup the
 // author wrote, after the plugins ran, so folderAssets never saw it. Bake it
@@ -320,6 +319,6 @@ async function buildWith(blog, path, multiInfo) {
   return entry;
 }
 
-module.exports = withCallback(build);
-module.exports.hashEntrySource = withCallback(hashEntrySource);
+module.exports = build;
+module.exports.hashEntrySource = hashEntrySource;
 module.exports.findMultiFolder = findMultiFolder;

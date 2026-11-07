@@ -7,18 +7,11 @@ describe("entry.set changed", function () {
   require("./setup")();
 
   beforeEach(function () {
-    this.buildAndSet = (path, contents) =>
-      require("storage/folder")
-        .write(this.blog.id, path, contents)
-        .then(
-          () =>
-            new Promise((resolve, reject) => {
-              build(this.blog, path, (err, entry) => {
-                if (err) return reject(err);
-                set(this.blog.id, path, entry).then(resolve, reject);
-              });
-            })
-        );
+    this.buildAndSet = async (path, contents) => {
+      await require("storage/folder").write(this.blog.id, path, contents);
+      const entry = await build(this.blog, path);
+      return set(this.blog.id, path, entry);
+    };
   });
 
   it("reports a new entry as changed", async function () {

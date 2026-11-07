@@ -7,7 +7,7 @@ const removeBlog = require("./removeBlog");
 const Server = require("server");
 const checkBrokenLinks = require("./checkBrokenLinks");
 const build = require("documentation/build");
-const templates = require("util").promisify(require("templates"));
+const templates = require("templates");
 const cheerio = require("cheerio");
 
 const clfdate = require("helper/clfdate");

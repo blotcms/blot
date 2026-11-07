@@ -1,7 +1,7 @@
 describe("templates skipUnchanged", function () {
   const client = require("models/client");
   const Template = require("models/template");
-  const templates = require("util").promisify(require("templates"));
+  const templates = require("templates");
   const KEY = "templates:build:fingerprint";
 
   beforeEach(async function () {
@@ -41,7 +41,7 @@ describe("templates skipUnchanged", function () {
     expect(await client.get(KEY)).toBe(null);
   });
 
-  it("returns a promise when called without a callback", async function () {
+  it("returns a promise that rejects when the build fails", async function () {
     const result = require("templates")({ skipUnchanged: true });
     expect(typeof result.then).toBe("function");
     await result;

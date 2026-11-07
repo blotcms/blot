@@ -88,7 +88,7 @@ async function main() {
 
   await require("../tests/util/bucket")();
 
-  await promisify(require("templates"))({ watch: false });
+  await require("templates")({ watch: false });
 
   const context = {};
   await promisify(require("../tests/util/createUser").bind(context))();

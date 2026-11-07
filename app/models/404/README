@@ -62,24 +62,24 @@ list(blog.id, function(err, list, ignored) {
 
 ---
 
-### `ignore(blogID, url, callback)`
+### `ignore(blogID, url)`
 
-Adds `url` to the ignore set for `blogID`. Once ignored, `list` places this URL in the `ignored` bucket rather than `list`. The callback receives `(err, result)` from Redis `SADD`.
+Adds `url` to the ignore set for `blogID`. Once ignored, `list` places this URL in the `ignored` bucket rather than `list`. Returns a promise of the result of Redis `SADD`.
 
 ```js
 const { ignore } = require('models/404');
-ignore(blog.id, '/favicon.ico', callback);
+await ignore(blog.id, '/favicon.ico');
 ```
 
 ---
 
-### `unignore(blogID, url, callback)`
+### `unignore(blogID, url)`
 
-Removes `url` from the ignore set for `blogID`, returning it to the active list. The callback receives `(err, result)` from Redis `SREM`.
+Removes `url` from the ignore set for `blogID`, returning it to the active list. Returns a promise of the result of Redis `SREM`.
 
 ```js
 const { unignore } = require('models/404');
-unignore(blog.id, '/favicon.ico', callback);
+await unignore(blog.id, '/favicon.ico');
 ```
 
 ---

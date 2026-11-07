@@ -4,56 +4,44 @@ describe("build", function () {
 
   global.test.blog();
 
-  const buildEntry = (blog, path) =>
-    new Promise((resolve, reject) =>
-      build(blog, path, (err, entry) => (err ? reject(err) : resolve(entry)))
-    );
+  const buildEntry = (blog, path) => build(blog, path);
 
   beforeEach(function () {
-    this.buildAndCheck = ({ path, contents }, expectedEntry, cb) => {
-      folder.write(this.blog.id, path, contents).then(
-        () => {
-          build(this.blog, path, function (err, entry) {
-            for (let key in expectedEntry)
-              expect(expectedEntry[key]).toEqual(entry[key]);
-            cb();
-          });
-        },
-        (err) => {
-          fail(err);
-          cb();
-        }
-      );
+    this.buildAndCheck = async ({ path, contents }, expectedEntry) => {
+      await folder.write(this.blog.id, path, contents);
+      const entry = await build(this.blog, path);
+      for (let key in expectedEntry)
+        expect(expectedEntry[key]).toEqual(entry[key]);
     };
   });
 
-  it("will use a title to generate an image caption over the alt text", function (done) {
+  it("will use a title to generate an image caption over the alt text", async function () {
     const contents = `![Alt text here](foo.jpg "Title here")`;
     const path = "/hello.txt";
     // foo.jpg isn't in the folder, so it's baked as a pending CDN URL
     const html = `<p><img src="%%BLOT_CDN%%/folder/v-pending/${this.blog.id}/foo.jpg" title="Title here" alt="Alt text here"><span class="caption">Title here</span></p>`;
 
     this.blog.plugins.imageCaption = { enabled: true, options: {} };
-    this.buildAndCheck({ path, contents }, { html }, done);
+    await this.buildAndCheck({ path, contents }, { html });
   });
 
-  it("will turn titles into title case if plugin is enabled", function (done) {
+  it("will turn titles into title case if plugin is enabled", async function () {
     const contents = "# Title goes here";
     const path = "/hello.txt";
     const html = '<h1 id="title-goes-here">Title Goes Here</h1>';
 
     this.blog.plugins.titlecase = { enabled: true, options: {} };
-    this.buildAndCheck({ path, contents }, { html }, done);
+    await this.buildAndCheck({ path, contents }, { html });
   });
 
-  it("will turn titles with nested children into title case if plugin is enabled", function (done) {
+  it("will turn titles with nested children into title case if plugin is enabled", async function () {
     const contents = "# Title *goes [with](/here)* children";
     const path = "/hello.txt";
     const html =
       '<h1 id="title-goes-with-children">Title <em>Goes <a href="/here">With</a></em> Children</h1>';
 
     this.blog.plugins.titlecase = { enabled: true, options: {} };
-    this.buildAndCheck({ path, contents }, { html }, done);
+    await this.buildAndCheck({ path, contents }, { html });
   });
 
   it("defaults embedded media preload to metadata", async function () {

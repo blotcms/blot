@@ -47,7 +47,7 @@ All functions are properties of the object exported by `index.js`. Require the m
 const Entries = require('models/entries');
 ```
 
-`getPage` and `getRecent` return promises and take no callback. `getTotal`, `getAllTotal`, `getAllIDs`, `getListIDs`, `getCreated`, `getDeleted` and `lastUpdate` return promises when called without a callback (via `helper/withCallback`); with a callback they behave as before.
+`getPage`, `getRecent`, `getTotal`, `getAllIDs`, `getCreated`, `getDeleted` and `lastUpdate` return promises and take no callback. `getAllTotal` and `getListIDs` return promises when called without a callback (via `helper/withCallback`); with a callback they behave as before, until the clients and the dashboard stop passing one.
 
 ### `async getPage(blogID, options = {})`
 

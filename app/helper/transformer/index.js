@@ -403,32 +403,39 @@ function Transformer(blogID, name) {
 
     debug(path, "hashing file");
 
-    HashFile(path, function (err, hash) {
-      if (err) return callback(err);
-
-      debug(path, "getting existing result from hash");
-      get(hash, function (err, result) {
-        // Leave early, please pass hash so that
-        // from URL doesn't have to compute it again
-        if (err || result) return callback(err, result, hash);
-
-        debug(path, "transforming new file");
-        transform(path, function (err, result) {
-          if (err) return callback(err);
-
-          // Pass hash so that
+    HashFile(path).then(
+      function (hash) {
+        debug(path, "getting existing result from hash");
+        get(hash, function (err, result) {
+          // Leave early, please pass hash so that
           // from URL doesn't have to compute it again
-          debug(path, "saving result of new transform");
-          set(hash, result, function (setErr) {
-            // Never throw from this async callback. If the cache write
-            // fails, still return the freshly computed result rather than
-            // hanging the build or crashing the process.
-            if (setErr) debug("failed to cache result for hash", hash, setErr);
-            callback(null, result, hash);
-          });
+          if (err || result) return callback(err, result, hash);
+
+          debug(path, "transforming new file");
+          Promise.resolve(transform(path)).then(
+            function (result) {
+              // Pass hash so that
+              // from URL doesn't have to compute it again
+              debug(path, "saving result of new transform");
+              set(hash, result, function (setErr) {
+                // Never throw from this async callback. If the cache write
+                // fails, still return the freshly computed result rather than
+                // hanging the build or crashing the process.
+                if (setErr)
+                  debug("failed to cache result for hash", hash, setErr);
+                callback(null, result, hash);
+              });
+            },
+            function (err) {
+              callback(err);
+            }
+          );
         });
-      });
-    });
+      },
+      function (err) {
+        callback(err);
+      }
+    );
   }
 
   function getURL(url, callback) {

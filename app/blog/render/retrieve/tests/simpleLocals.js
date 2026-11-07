@@ -44,15 +44,12 @@ describe("simple pass-through retrieve locals", function () {
   });
 
   it("total_posts returns the blog's total entry count", async function () {
-    spyOn(Entries, "getTotal").and.callFake((blogID, cb) => cb(null, 42));
+    spyOn(Entries, "getTotal").and.callFake(async () => 42);
 
     const result = await run(totalPosts, { blog: { id: "blog-1" } });
 
     expect(result).toEqual(42);
-    expect(Entries.getTotal).toHaveBeenCalledWith(
-      "blog-1",
-      jasmine.any(Function)
-    );
+    expect(Entries.getTotal).toHaveBeenCalledWith("blog-1");
   });
 });
 

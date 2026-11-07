@@ -100,11 +100,11 @@ module.exports = (function () {
     });
   }
 
-  var getTotal = withCallback(async function getTotal(blogID) {
+  async function getTotal(blogID) {
     var entriesKey = listKey(blogID, "entries");
 
     return await redis.zCard(entriesKey);
-  });
+  }
 
   var getListTotal = withCallback(
     async function getListTotal(blogID, listName) {
@@ -123,11 +123,11 @@ module.exports = (function () {
   });
 
   // includes deleted entries
-  var getAllIDs = withCallback(async function getAllIDs(blogID) {
+  async function getAllIDs(blogID) {
     var allKey = listKey(blogID, "all");
 
     return await redis.zRange(allKey, 0, -1, { REV: true });
-  });
+  }
 
   // includes deleted entries
   //
@@ -325,7 +325,7 @@ module.exports = (function () {
     }, callback);
   }
 
-  var getCreated = withCallback(async function getCreated(blogID, after) {
+  async function getCreated(blogID, after) {
     ensure(blogID, "string").and(after, "number");
 
     var key = listKey(blogID, "created");
@@ -338,9 +338,9 @@ module.exports = (function () {
     });
 
     return entries || [];
-  });
+  }
 
-  var getDeleted = withCallback(async function getDeleted(blogID, after) {
+  async function getDeleted(blogID, after) {
     ensure(blogID, "string").and(after, "number");
 
     var key = listKey(blogID, "deleted");
@@ -353,7 +353,7 @@ module.exports = (function () {
     });
 
     return entries || [];
-  });
+  }
 
   // Resolves to the entries in the list from start to end, newest first: their
   // IDs, or the entries themselves with options.full or options.skinny. A
@@ -808,11 +808,11 @@ module.exports = (function () {
     return { entries, pagination };
   }
 
-  var lastUpdate = withCallback(async function lastUpdate(blogID) {
+  async function lastUpdate(blogID) {
     var entries = await getRange(blogID, 0, 1, { skinny: true });
 
     if (entries && entries.length) return entries[0].dateStamp;
-  });
+  }
 
   // Resolves to the most recent entries, each with its index. A Redis failure
   // resolves [], unless options.rejectOnOutage is set: an outage then rejects

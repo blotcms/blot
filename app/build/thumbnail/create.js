@@ -3,7 +3,6 @@ var Transform = require("./transform");
 var TransformGIF = require("./transform-gif");
 var join = require("path").join;
 var assets = require("storage/assets");
-var withCallback = require("helper/withCallback");
 var extname = require("path").extname;
 var TIMEOUT = 20 * 1000; // 20s
 var debug = require("debug")("blot:entry:build:thumbnail:create");
@@ -62,4 +61,4 @@ async function create(blogID, path) {
   }
 }
 
-module.exports = withCallback(create);
+module.exports = create;

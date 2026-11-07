@@ -396,7 +396,7 @@ describe("entries", function () {
     });
   });
 
-  it("getTotal should return the total number of entries for a blog", async function (done) {
+  it("getTotal should return the total number of entries for a blog", async function () {
     const key = `blog:${this.blog.id}:entries`;
 
     // Add mock entries in Redis
@@ -406,22 +406,14 @@ describe("entries", function () {
       { score: 3, value: "entry3" },
     ]);
 
-    Entries.getTotal(this.blog.id, function (err, total) {
-      expect(err).toBeNull();
-      expect(total).toBe(3);
-      done();
-    });
+    expect(await Entries.getTotal(this.blog.id)).toBe(3);
   });
 
-  it("getTotal should return 0 if no entries exist for a blog", function (done) {
-    Entries.getTotal(this.blog.id, function (err, total) {
-      expect(err).toBeNull();
-      expect(total).toBe(0);
-      done();
-    });
+  it("getTotal should return 0 if no entries exist for a blog", async function () {
+    expect(await Entries.getTotal(this.blog.id)).toBe(0);
   });
 
-  it("getAllIDs should return all entry IDs for a blog", async function (done) {
+  it("getAllIDs should return all entry IDs for a blog", async function () {
     const key = `blog:${this.blog.id}:all`;
 
     // Add mock entries in Redis
@@ -431,19 +423,16 @@ describe("entries", function () {
       { score: 3, value: "id3" },
     ]);
 
-    Entries.getAllIDs(this.blog.id, function (err, ids) {
-      expect(err).toBeNull();
-      expect(ids).toEqual(["id3", "id2", "id1"]); // Returned in descending order
-      done();
-    });
+    // Returned in descending order
+    expect(await Entries.getAllIDs(this.blog.id)).toEqual([
+      "id3",
+      "id2",
+      "id1",
+    ]);
   });
 
-  it("getAllIDs should return an empty array if no entries exist", function (done) {
-    Entries.getAllIDs(this.blog.id, function (err, ids) {
-      expect(err).toBeNull();
-      expect(ids).toEqual([]);
-      done();
-    });
+  it("getAllIDs should return an empty array if no entries exist", async function () {
+    expect(await Entries.getAllIDs(this.blog.id)).toEqual([]);
   });
 
   it("getPage should reject invalid page numbers", async function () {

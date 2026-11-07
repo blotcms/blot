@@ -25,14 +25,9 @@ module.exports = function setup(options) {
     this.set = async (path, contents) => {
       await folder.write(this.blog.id, path, contents);
 
-      return new Promise((resolve, reject) => {
-        build(this.blog, path, (err, entry) => {
-          if (err) return reject(err);
-          Entry.set(this.blog.id, path, entry)
-            .then(() => Entry.get(this.blog.id, path))
-            .then(resolve, reject);
-        });
-      });
+      const entry = await build(this.blog, path);
+      await Entry.set(this.blog.id, path, entry);
+      return Entry.get(this.blog.id, path);
     };
   });
 

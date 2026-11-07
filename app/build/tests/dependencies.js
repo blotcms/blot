@@ -6,10 +6,7 @@ describe("dependencies", function () {
 
   global.test.blog();
 
-  var buildEntry = (blog, path) =>
-    new Promise((resolve, reject) =>
-      build(blog, path, (err, entry) => (err ? reject(err) : resolve(entry)))
-    );
+  var buildEntry = (blog, path) => build(blog, path);
 
   it("are extracted inside entry contents", async function () {
     var path = "/Hello.txt";

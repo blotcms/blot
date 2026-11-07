@@ -130,7 +130,7 @@ async function serve() {
 }
 
 async function seed(shape) {
-  await promisify(require("templates"))({ watch: false });
+  await require("templates")({ watch: false });
   const context = {};
   await promisify(require("../tests/util/createUser").bind(context))();
   const result = { user: context.user };

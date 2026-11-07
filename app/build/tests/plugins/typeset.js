@@ -18,11 +18,7 @@ describe("typeset plugin", function () {
 
     await folder.write(this.blog.id, path, contents);
 
-    const entry = await new Promise((resolve, reject) =>
-      build(this.blog, path, (err, entry) =>
-        err ? reject(err) : resolve(entry)
-      )
-    );
+    const entry = await build(this.blog, path);
 
     expect(entry.html).not.toContain('<span class="small-caps">');
     expect(entry.html).not.toContain("—");
@@ -45,11 +41,7 @@ describe("typeset plugin", function () {
 
     await folder.write(this.blog.id, path, contents);
 
-    const entry = await new Promise((resolve, reject) =>
-      build(this.blog, path, (err, entry) =>
-        err ? reject(err) : resolve(entry)
-      )
-    );
+    const entry = await build(this.blog, path);
 
     expect(entry.html).toContain('<span class="small-caps">NASA</span>');
     expect(entry.html).toContain("“");
