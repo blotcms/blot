@@ -11,9 +11,15 @@ describe("tempDir", function () {
   });
 
   it("rejects a path that does not exist", async function () {
-    await expectAsync(
-      tempDir.isInside(__dirname + "/foo.jpg")
-    ).toBeRejectedWithError(/does not point to a file/);
+    var message;
+
+    try {
+      await tempDir.isInside(__dirname + "/foo.jpg");
+    } catch (err) {
+      message = err.message;
+    }
+
+    expect(message).toMatch(/does not point to a file/);
   });
 
   it("checks a valid dir", async function () {
