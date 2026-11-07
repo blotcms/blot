@@ -90,9 +90,7 @@ describe("git store: removing a blog's repository", function () {
     await disconnected(this.blog.id);
 
     // Reconnected, and set up again
-    await require("util").promisify(require("models/blog").set)(this.blog.id, {
-      client: "git",
-    });
+    await require("models/blog").set(this.blog.id, { client: "git" });
     await store.put(PACK, Buffer.from("x"));
 
     await sleep(1000);

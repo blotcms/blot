@@ -26,24 +26,8 @@ module.exports = function (done) {
 };
 
 function attempt(context, attemptIndex, done) {
-  Blog.create(
-    context.user.uid,
-    { handle: randomString(16) },
-    function (err, blog) {
-      if (err) {
-        if (err.code === "EAGAIN" && attemptIndex < MAX_ATTEMPTS - 1) {
-          return attempt(context, attemptIndex + 1, done);
-        }
-
-        // validate() (see app/models/blog/validate.js) fails with a plain
-        // {field: message} errors object rather than an Error instance; any
-        // other failure (e.g. Blog.create's User.set() call) is already a
-        // proper Error and should be passed through as-is so its real message
-        // (and stack) survives instead of being replaced with a blank
-        // "Error: undefined".
-        return done(err instanceof Error ? err : new Error(err.handle));
-      }
-
+  Blog.create(context.user.uid, { handle: randomString(16) }).then(
+    function (blog) {
       // The blog's folder is in the storage bucket, with no directory on disk.
       // A spec which still reaches for one fails here, rather than writing to
       // a path nothing reads.
@@ -59,7 +43,7 @@ function attempt(context, attemptIndex, done) {
       context.blog = blog;
 
       context.blog.update = async (updates) => {
-        await promisify(Blog.set)(context.blog.id, updates);
+        await Blog.set(context.blog.id, updates);
       };
 
       context.blog.write = async ({ path, content }) => {
@@ -86,7 +70,20 @@ function attempt(context, attemptIndex, done) {
           await context.blog.rebuild();
         };
 
-      done(err);
+      done(null);
+    },
+    function (err) {
+      if (err.code === "EAGAIN" && attemptIndex < MAX_ATTEMPTS - 1) {
+        return attempt(context, attemptIndex + 1, done);
+      }
+
+      // validate() (see app/models/blog/validate.js) fails with a plain
+      // {field: message} errors object rather than an Error instance; any
+      // other failure (e.g. Blog.create's User.set() call) is already a
+      // proper Error and should be passed through as-is so its real message
+      // (and stack) survives instead of being replaced with a blank
+      // "Error: undefined".
+      return done(err instanceof Error ? err : new Error(err.handle));
     }
   );
 }

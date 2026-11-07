@@ -33,11 +33,13 @@ describe("Blog.validate", function () {
     expect(errors.domain).toEqual("Please enter a valid hostname");
   });
 
-  it("still lets a field validator call back", function (done) {
-    require("../validate/title")(this.blog.id, " Hi ", function (err, title) {
-      expect(err).toBe(null);
-      expect(title).toEqual("Hi");
-      done();
-    });
+  it("throws when a field validator is given a callback", async function () {
+    // The callback form is gone: passing one throws instead of calling back.
+    try {
+      await require("../validate/title")(this.blog.id, " Hi ", function () {});
+      fail("should have thrown");
+    } catch (err) {
+      expect(err.message).toMatch(/no longer takes a callback/);
+    }
   });
 });

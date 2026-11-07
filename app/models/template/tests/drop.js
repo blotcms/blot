@@ -1,5 +1,4 @@
 describe("template", function () {
-  const { promisify } = require("util");
   require("./setup")({ createTemplate: true });
 
   var drop = require("../index").drop;
@@ -11,7 +10,7 @@ describe("template", function () {
   var generateCdnUrl = require("../util/generateCdnUrl");
 
   var blogGet = (by) => Blog.get(by);
-  var blogSet = promisify(Blog.set);
+  var blogSet = (blogID, updates) => Blog.set(blogID, updates);
 
   it("drops a template", async function () {
     await drop(this.blog.id, this.template.name);

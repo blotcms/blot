@@ -179,10 +179,7 @@ describe("git store: daily maintenance", function () {
     });
 
     it("skips a blog which is off git", async function () {
-      await require("util").promisify(require("models/blog").set)(
-        this.blog.id,
-        { client: "" }
-      );
+      await require("models/blog").set(this.blog.id, { client: "" });
 
       var result = await this.check();
 

@@ -139,9 +139,7 @@ describe("git client create without a live clone", function () {
 
   it("waits for the ref lock a push holds before it saves the repository", async function () {
     await folder.write(this.blog.id, "/first.txt", "Hello");
-    await util.promisify(require("models/blog").set)(this.blog.id, {
-      client: "git",
-    });
+    await require("models/blog").set(this.blog.id, { client: "git" });
 
     var release = await repo.holdRefLock(this.blog.id);
     var creating = create(this.blog);

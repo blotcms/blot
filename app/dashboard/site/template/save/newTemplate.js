@@ -82,7 +82,8 @@ module.exports = function (req, res, next) {
 
     if (req.body.openEditor) {
       // we need to install this template, and then redirect to the editor
-      return Blog.set(req.blog.id, { template: newTemplate.id }, function () {
+      // A failed install is ignored, as it was: the template was still added
+      const redirectToEditor = function () {
         res.message(
           "/sites/" +
             req.blog.handle +
@@ -91,7 +92,11 @@ module.exports = function (req, res, next) {
             "/settings",
           req.body.shared ? SUCCESS_FROM_SHARED_TEMPLATE : SUCCESS
         );
-      });
+      };
+      return Blog.set(req.blog.id, { template: newTemplate.id }).then(
+        redirectToEditor,
+        redirectToEditor
+      );
     }
 
     res.message(
