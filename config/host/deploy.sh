@@ -220,24 +220,48 @@ if cmp -s /tmp/blot-app-log.conf "$target"; then
   echo "rsyslog config unchanged."
   exit 0
 fi
+# Everything from here on runs under the unit deploy's lock
+# (proxy/deploy/common.sh): Docker refuses to start a unit while the socket is
+# missing, so this waits for a running unit deploy to finish, and one that
+# starts during the restart refuses to run rather than failing halfway. As in
+# acquire_lock there, an existing lock (another user's file in /tmp) is opened
+# read-only: fs.protected_regular refuses even root a creating open of it.
+lock=/tmp/blot-proxy-deploy.lock
+if [ -e "$lock" ]; then
+  exec 9<"$lock"
+else
+  exec 9>>"$lock"
+  chmod 666 "$lock"
+fi
+if ! flock -w 900 9; then
+  rm -f /tmp/blot-app-log.conf
+  echo "ERROR: could not take the deploy lock $lock to restart rsyslog: is a unit deploy stuck? Nothing was changed"
+  exit 1
+fi
 backup=$(mktemp)
 had_old=0
 if [ -e "$target" ]; then cp "$target" "$backup"; had_old=1; fi
+put_back() {
+  if [ "$had_old" = 1 ]; then cp "$backup" "$target"; else rm -f "$target"; fi
+  rm -f "$backup"
+}
 install -m 644 -o root -g root /tmp/blot-app-log.conf "$target"
 rm -f /tmp/blot-app-log.conf
 if ! rsyslogd -N1 >/dev/null 2>&1; then
   rsyslogd -N1 || true
-  if [ "$had_old" = 1 ]; then cp "$backup" "$target"; else rm -f "$target"; fi
-  rm -f "$backup"
+  put_back
   echo "ERROR: rsyslogd -N1 rejected blot-app-log.conf; put the old config back"
   exit 1
 fi
+# A failed restart puts the old config back too, so the next run tries again
+# rather than finding the new one already in place
+if ! systemctl restart rsyslog; then
+  put_back
+  systemctl restart rsyslog || true
+  echo "ERROR: rsyslog did not restart with blot-app-log.conf; put the old config back"
+  exit 1
+fi
 rm -f "$backup"
-# Under the unit deploy's lock (proxy/deploy/common.sh): Docker refuses to start
-# a unit while the socket is missing, so this waits for a running unit deploy to
-# finish, and one that starts during the restart refuses to run rather than
-# failing halfway
-flock -w 900 /tmp/blot-proxy-deploy.lock systemctl restart rsyslog || { echo "ERROR: could not take the deploy lock to restart rsyslog: is a unit deploy stuck?"; exit 1; }
 for i in 1 2 3 4 5; do [ -S /run/blot-log/app.sock ] && break; sleep 1; done
 [ -S /run/blot-log/app.sock ] || { echo "ERROR: rsyslog did not create /run/blot-log/app.sock"; exit 1; }
 echo "rsyslog restarted with blot-app-log.conf."
