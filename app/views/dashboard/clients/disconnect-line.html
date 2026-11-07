@@ -1,12 +1,18 @@
 
 {{^blog.healthIssue}}
-<a class="line" href="{{{dashboardBase}}}/activity">
+<div class="line">
   <span class="label">Status</span>
-  <span class="center sync-status-center">
-    {{> sync-status}}
-    <span class="link">View activity</span>
+  <span class="center folder-sync-status">
+    <span class="sync-status-center">{{> sync-status}}</span>
+    {{#canResync}}{{^isSyncing}}
+    <form class="folder-sync-resync" method="post" action="{{{dashboardBase}}}/sync/reset/resync">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <button type="submit" class="btn btn-sm">Resync</button>
+    </form>
+    {{/isSyncing}}{{/canResync}}
+    <a class="link" href="{{{dashboardBase}}}/activity">View activity</a>
   </span>
-</a>
+</div>
 {{/blog.healthIssue}}
 
 {{#blog.healthIssue}}
@@ -32,9 +38,8 @@
 </div>
 {{/blog.healthIssue}}
 
-<!-- What can be done with the folder's sync, as buttons -->
+<!-- Changing how the folder syncs -->
 <div class="folder-sync-actions">
-  <a class="btn btn-sm" href="{{{dashboardBase}}}/sync/reset">Resync folder</a>
   <a class="btn btn-sm" href="{{{dashboardBase}}}/sync/switch">Change sync method</a>
-  <a class="btn btn-sm btn-quiet folder-sync-actions__disconnect" href="{{{dashboardBase}}}/sync/{{blog.client}}/disconnect">Disconnect {{client.display_name}}</a>
+  <a class="btn btn-sm" href="{{{dashboardBase}}}/sync/{{blog.client}}/disconnect">Disconnect {{client.display_name}}</a>
 </div>

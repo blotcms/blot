@@ -1,4 +1,5 @@
 const clients = require("clients");
+const syncSummary = require("dashboard/util/sync-summary");
 const express = require("express");
 const client_routes = express.Router();
 const Blog = require("models/blog");
@@ -34,6 +35,12 @@ client_routes.get(
   function (req, res, next) {
     if (!req.blog.client) return next("route");
     res.locals.isSyncTab = true;
+    // Resync sits beside the status, for the clients that can, and hides
+    // while the folder syncs (so once it's clicked)
+    res.locals.canResync = !!(
+      clients[req.blog.client] && clients[req.blog.client].resync
+    );
+    res.locals.isSyncing = syncSummary(req.blog).state === "syncing";
     res.locals.showDashboardSearch = true;
     // The client's own page is the site's page, so the breadcrumbs stay the
     // site's: nothing above the box moves. Its subpages (resync,
@@ -198,7 +205,11 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
   Sync(req.blog.id, async function (syncFolder) {
     folder = syncFolder;
 
-    res.message(res.locals.base + "/reset", "Begin resync of your site");
+    // Back to the client's page, where the status shows it running
+    res.message(
+      res.locals.base + "/" + req.blog.client,
+      "Begin resync of your site"
+    );
 
     let summary;
 

@@ -6,7 +6,7 @@
 
   {{#dropboxBreadcrumbs.length}}
   <div class="line">
-    <div class="label">Dropbox folder</div>
+    <div class="label">Folder on Dropbox</div>
     <div class="center">
       
 <span style="margin-top:0em;display:inline-block;">
@@ -16,10 +16,9 @@
   {{#dropboxBreadcrumbs}}
    <span style="color:var(--text-color)">{{name}} {{^last}}<span class="icon-small-chevron-right" style="opacity: 0.5;;position:relative;top:-3px;font-size: 12px;color:var(--light-text-color)"></span>{{/last}}</span>
   {{/dropboxBreadcrumbs}}
-  <br>
   <a class="btn btn-sm btn-soft folder-sync-open" href="{{dropboxUrl}}" target="_blank">Open in Dropbox <svg style="fill:currentColor;transform:rotate(-45deg);position:relative;top:3px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l2.97-2.97H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"></path></svg></a>
 
-  <span style="color:var(--medium-text-color);max-width:500px;display: block;margin-top: 10px;font-size: 14px;">
+  <span class="folder-sync-note">
       {{#preparing}}
       Please wait to make any changes to this folder until the set-up is complete.
       {{/preparing}}
@@ -43,7 +42,7 @@
   {{#preparing}}
   <div class="line">
   {{/preparing}}
-    <span class="label">Dropbox account</span>
+    <span class="label">Account on Dropbox</span>
     <span class="center">{{email}}</span>
     {{^preparing}}
     <span class="right">Edit</span>    
@@ -62,7 +61,7 @@
   {{#preparing}}
   <div class="line">
   {{/preparing}}
-    <span class="label">Dropbox permission</span>
+    <span class="label">Permission on Dropbox</span>
     {{#full_access}}
     <span class="center">Full folder</span>
     {{/full_access}}

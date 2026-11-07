@@ -157,7 +157,7 @@
 
   /* The same on the overview and the filter pages, so the pills don't move
      when one is chosen (outranks the overview's own search width) */
-  .site-dashboard .folder-toolbar .folder-filters + .site-dashboard-search {
+  .site-dashboard .folder-toolbar .folder-filters-menu + .site-dashboard-search {
     flex: 0 1 220px;
     width: 220px;
     min-width: 120px;
@@ -242,30 +242,56 @@
 }
 
 /* The sync settings, open under the row and above the files: ruled off
-   from both, their rows edge to edge like the table's, at the summary
-   card's size, a label column, then the value */
+   above, and below by the table's header (its cells have their own top
+   border), so the two meet without a gap. Their rows run edge to edge like
+   the table's, at the summary card's size: a label column, then the
+   value. */
 .folder-sync-panel {
   --folder-sync-inset: calc(var(--space-4) + var(--space-2));
-  margin-bottom: var(--space-2);
   padding: 0 var(--folder-sync-inset);
   border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
   background: var(--surface-muted-color);
 }
 
 .folder-box--sync .folder-sync-panel {
-  margin-bottom: 0;
   padding-top: var(--space-4);
   padding-bottom: var(--space-4);
-  border-bottom: 0;
 }
 
 .folder-sync-panel .line {
   align-items: baseline;
   margin: 0 calc(var(--folder-sync-inset) * -1);
-  padding: var(--space-3) var(--folder-sync-inset);
+  padding: var(--space-2) var(--folder-sync-inset);
   background: transparent;
   font-size: var(--text-sm);
+}
+
+/* Every value at the label's size, whatever its client's page set */
+.folder-sync-panel .line .center,
+.folder-sync-panel .line .right {
+  font-size: var(--text-sm);
+}
+
+/* A short note under a value, such as what can be done with the folder */
+.folder-sync-note {
+  display: block;
+  max-width: 34em;
+  margin-top: var(--space-1);
+  color: var(--medium-text-color);
+  font-size: var(--text-xs);
+}
+
+/* The status, then Resync (while not syncing) and View activity */
+.folder-sync-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.folder-sync-resync {
+  display: inline;
+  margin: 0;
 }
 
 .folder-sync-panel .line .label {
@@ -280,9 +306,10 @@
   }
 }
 
-/* "Open in Dropbox" and the like, below the folder's name */
+/* "Open in Dropbox" and the like, beside the folder's name */
 .folder-sync-open {
-  margin: var(--space-2) 0 var(--space-1);
+  margin-left: var(--space-3);
+  vertical-align: middle;
 }
 
 @media (max-width: 600px) {
@@ -291,23 +318,13 @@
   }
 }
 
-/* Resync, change and disconnect: buttons under the rows, disconnect apart
-   at the end and in red */
+/* Change sync method and disconnect: plain buttons under the rows */
 .folder-sync-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-4) 0;
-}
-
-.folder-sync-actions__disconnect {
-  margin-left: auto;
-  color: var(--danger-color);
-}
-
-.folder-sync-actions__disconnect:hover {
-  color: var(--danger-color);
+  padding: var(--space-3) 0;
 }
 
 /* The same line as plain text, where it is not a control (the page for
