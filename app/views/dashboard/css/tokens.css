@@ -63,6 +63,8 @@
   --active-background-color: var(--surface-strong-color);
   --selected-background-color: var(--surface-strong-color);
   --form-control-disabled: var(--surface-muted-color);
+  /* The width of a form's single-line fields and selects, on every page */
+  --form-max-width: 30rem;
 
   /* Shape */
   --radius-sm: 4px;

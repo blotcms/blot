@@ -50,6 +50,9 @@
   min-width: 0;
 }
 
+/* (.page-header too, to outrank base.css's h1:first-child line-height of
+   1) */
+.page-header .page-header__title,
 .page-header__title {
   margin: 0;
   padding: 0;
@@ -67,11 +70,13 @@
   font-size: var(--text-md);
 }
 
+/* One title line high, so a page's buttons never move its heading */
 .page-header__actions {
   display: flex;
   flex: 0 0 auto;
   flex-wrap: wrap;
   align-items: center;
+  height: calc(var(--text-2xl) * var(--leading-tight));
   gap: var(--space-2);
 }
 

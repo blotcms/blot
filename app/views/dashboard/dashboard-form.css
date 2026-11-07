@@ -428,7 +428,7 @@ form.dashboard-form label.setting-check {
 }
 
 form.dashboard-form .select-spaced {
-  max-width: 100%;
+  max-width: var(--form-max-width);
   margin-top: var(--space-3);
 }
 
@@ -624,4 +624,24 @@ label.format .buttons {
 #redirects .redirectWarning:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: -2px;
+}
+
+/* A form's single-line fields and selects share one width
+   (--form-max-width), whatever the page */
+.dashboard-form-panel input[type="text"],
+.dashboard-form-panel input[type="email"],
+.dashboard-form-panel input[type="password"],
+.dashboard-form-panel input[type="url"],
+.dashboard-form-panel input[type="number"],
+.dashboard-form-panel input[type="search"],
+.dashboard-form-panel input:not([type]),
+.dashboard-form-panel select,
+form.dashboard-form input[type="text"],
+form.dashboard-form input[type="email"],
+form.dashboard-form input[type="password"],
+form.dashboard-form input[type="url"],
+form.dashboard-form select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--form-max-width);
 }
