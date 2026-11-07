@@ -90,10 +90,9 @@ describe("build", function () {
 
   it("incorporates slug metadata into a permalink format", function (done) {
     const ctx = this;
-    require("models/blog").set(
-      ctx.blog.id,
-      { permalink: { format: "/post/{{slug}}" } },
-      () => {
+    require("models/blog")
+      .set(ctx.blog.id, { permalink: { format: "/post/{{slug}}" } })
+      .then(() => {
         const path = "/hey.txt";
         const content = "Slug: foo\n\nHey!";
 
@@ -101,8 +100,7 @@ describe("build", function () {
         const entry = { path, url: "/post/foo" };
 
         ctx.syncAndCheck(file, entry, done);
-      }
-    );
+      }, done.fail);
   });
 
   it("uses slug metadata", function (done) {

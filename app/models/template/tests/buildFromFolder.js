@@ -1,5 +1,4 @@
 describe("template", function () {
-  const { promisify } = require("util");
   const folder = require("storage/folder");
   const client = require("models/client");
   const Blog = require("models/blog");
@@ -16,7 +15,7 @@ describe("template", function () {
   const folderRenames = require("../folderRenames");
 
   const getBlog = (by) => Blog.get(by);
-  const setBlog = promisify(Blog.set);
+  const setBlog = (blogID, updates) => Blog.set(blogID, updates);
   const getAllViews = require("../index").getAllViews;
   const createShareID = require("../index").createShareID;
   const getByShareID = require("../index").getByShareID;

@@ -55,7 +55,7 @@ module.exports = function setup(options) {
   });
 
   // Create fake dropbox account
-  beforeEach(function (done) {
+  beforeEach(async function () {
     var email = this.fake.internet.email();
     var blogID = this.blog.id;
     var account = {
@@ -73,11 +73,8 @@ module.exports = function setup(options) {
 
     this.account = account;
 
-    Blog.set(blogID, { client: "dropbox" }, function (err) {
-      if (err) return done(err);
-
-      database.set(blogID, account).then(() => done(), done);
-    });
+    await Blog.set(blogID, { client: "dropbox" });
+    await database.set(blogID, account);
   });
 
   // Expose methods for creating fake files, paths, etc.

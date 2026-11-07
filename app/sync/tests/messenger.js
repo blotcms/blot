@@ -3,14 +3,17 @@ describe("sync messenger", function () {
   const client = require("models/client");
   const messenger = require("../messenger");
 
-  it("logs a failed status write instead of dropping it", function () {
+  it("logs a failed status write instead of dropping it", async function () {
     spyOn(console, "log");
     spyOn(client, "publish").and.returnValue(Promise.resolve(1));
-    spyOn(Blog, "setStatus").and.callFake(function (blogID, status, callback) {
-      callback(new Error("redis down"));
+    spyOn(Blog, "setStatus").and.callFake(async function () {
+      throw new Error("redis down");
     });
 
     messenger({ id: "blog_0123456789abcdef" }).status("Syncing");
+
+    // The failed write is logged once its promise has rejected.
+    await new Promise((resolve) => setImmediate(resolve));
 
     const lines = console.log.calls.allArgs().map((args) => args.join(" "));
     expect(

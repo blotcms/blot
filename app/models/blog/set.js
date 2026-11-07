@@ -15,7 +15,7 @@ var normalizeConverters = require("./util/converters").normalize;
 var updateCdnManifest = require("../template/util/updateCdnManifest");
 var forkSiteTemplate = require("../template/util/forkSiteTemplate");
 var serializeRedisHashValues = require("models/redisHashSerializer");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 function Changes(latest, former) {
   var changes = {};
@@ -29,7 +29,7 @@ function Changes(latest, former) {
 
 // Resolves to the list of changed fields. Rejects with validate's errors
 // object, or with the error that stopped the save.
-module.exports = withCallback(async function set(blogID, blog) {
+module.exports = promiseOnly(async function set(blogID, blog) {
   ensure(blogID, "string");
 
   var multi = client.multi();
@@ -197,7 +197,7 @@ module.exports = withCallback(async function set(blogID, blog) {
   // Entries link to the blog's own hosts (see folderAssets), so a new
   // handle or domain means some stored HTML needs baking again. This
   // runs in the background, after the caller has its answer: the
-  // bridge calls back in a microtask, which runs before setImmediate.
+  // caller resumes in a microtask, which runs before setImmediate.
   if (changes.handle || domainChanged) {
     setImmediate(function () {
       rebuildEntriesOnNewHosts(blogID, former);

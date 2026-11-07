@@ -1,11 +1,9 @@
-const { promisify } = require("util");
 const Blog = require("models/blog");
 const email = require("helper/email");
 const User = require("models/user");
 const webhook = require("dashboard/webhooks/stripe_webhook");
 
 const setUser = User.set;
-const setBlog = promisify(Blog.set);
 const getUser = User.getById;
 const getBlog = (by) => Blog.get(by);
 
@@ -98,7 +96,7 @@ describe("Stripe subscription webhooks", function () {
   });
 
   it("preserves an independently disabled blog on an active subscription update", async function () {
-    await setBlog(this.blog.id, { isDisabled: true });
+    await Blog.set(this.blog.id, { isDisabled: true });
     const event = {
       type: "customer.subscription.updated",
       data: { object: { id: this.subscriptionId, customer: this.customerId } },
@@ -319,7 +317,7 @@ describe("Stripe subscription webhooks", function () {
       },
     });
 
-    await setBlog(this.blog.id, { isDisabled: true });
+    await Blog.set(this.blog.id, { isDisabled: true });
 
     const event = {
       type: "customer.subscription.updated",

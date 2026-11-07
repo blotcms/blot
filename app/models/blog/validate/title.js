@@ -1,9 +1,9 @@
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 var TOO_LONG = "Choose a title under 70 characters";
 
-module.exports = withCallback(async function validateTitle(blogID, title) {
+module.exports = promiseOnly(async function validateTitle(blogID, title) {
   ensure(blogID, "string").and(title, "string");
 
   // Normalize to Unicode NFC

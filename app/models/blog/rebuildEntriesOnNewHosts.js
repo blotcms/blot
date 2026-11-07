@@ -109,12 +109,11 @@ async function run(blogID, former) {
   if (!rebuilt) return;
 
   // Same as the end of a sync: render caches are keyed on cacheID.
-  await new Promise((resolve) =>
-    Blog.set(blogID, { cacheID: Date.now() }, (err) => {
-      if (err) log(blogID, "Error updating cacheID", err);
-      resolve();
-    })
-  );
+  try {
+    await Blog.set(blogID, { cacheID: Date.now() });
+  } catch (err) {
+    log(blogID, "Error updating cacheID", err);
+  }
 
   log(blogID, "Rebuilt", rebuilt, "entries");
 }

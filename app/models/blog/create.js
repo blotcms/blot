@@ -5,7 +5,7 @@ var client = require("models/client");
 var key = require("./key");
 var set = require("./set");
 var folder = require("storage/folder");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var User = require("../user");
 var validate = require("./validate");
 var generateID = require("./generateID");
@@ -15,7 +15,7 @@ var UID_PLACEHOLDER = "";
 
 // Resolves to the new blog. Rejects with validate's errors object (fields
 // mapped to errors) or the error that stopped the creation.
-module.exports = withCallback(async function create(uid, info) {
+module.exports = promiseOnly(async function create(uid, info) {
   ensure(uid, "string").and(info, "object");
 
   var blogs;

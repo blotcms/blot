@@ -21,12 +21,14 @@ describe("Blog.set", function () {
     expect(errors.handle).toBeTruthy();
   });
 
-  it("calls back with the changed fields", function (done) {
-    set(this.blog.id, { title: "Callback title" }, function (err, changes) {
-      if (err) return done.fail(err);
-      expect(changes).toEqual(["title"]);
-      done();
-    });
+  it("throws when given a callback", async function () {
+    // The callback form is gone: passing one throws instead of calling back.
+    try {
+      await set(this.blog.id, { title: "Callback title" }, function () {});
+      fail("should have thrown");
+    } catch (err) {
+      expect(err.message).toMatch(/no longer takes a callback/);
+    }
   });
 
   it("will set the domain", async function () {

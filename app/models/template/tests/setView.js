@@ -1,5 +1,3 @@
-const { promisify } = require("util");
-
 describe("template", () => {
   require("./setup")({ createTemplate: true });
 
@@ -369,7 +367,7 @@ describe("template", () => {
 
   it("updates the cache ID of the blog which has the template installed after setting a view", async function () {
     const test = this;
-    await promisify(Blog.set)(test.blog.id, { template: test.template.id });
+    await Blog.set(test.blog.id, { template: test.template.id });
     const initialCacheID = (await Blog.get({ id: test.blog.id })).cacheID;
     const view = { name: "cache-test.html", content: "changed" };
 

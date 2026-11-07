@@ -241,7 +241,7 @@ async function requirePaidPayPalSeat(req, res, next) {
   res.redirect(req.baseUrl + "/inform-paypal");
 }
 
-function saveBlog(req, res, next) {
+async function saveBlog(req, res, next) {
   var title, handle;
 
   if (req.body.no_title) {
@@ -260,46 +260,53 @@ function saveBlog(req, res, next) {
     timeZone: req.body.timeZone,
   };
 
-  Blog.create(req.user.uid, newBlog, function onCreate(err, blog) {
-    if (
-      err &&
-      err.handle &&
-      err.handle.message === "That username was already in use."
-    ) {
-      newBlog.handle += randomChars(5);
-      return Blog.create(req.user.uid, newBlog, onCreate);
-    }
+  var blog;
 
-    if (err && err.handle) {
-      return next(err.handle);
-    }
+  // Blog.create rejects with an object of errors keyed by field when
+  // validation fails, so err.handle is the handle's Error
+  for (;;) {
+    try {
+      blog = await Blog.create(req.user.uid, newBlog);
+      break;
+    } catch (err) {
+      if (
+        err &&
+        err.handle &&
+        err.handle.message === "That username was already in use."
+      ) {
+        newBlog.handle += randomChars(5);
+        continue;
+      }
 
-    if (err) {
+      if (err && err.handle) {
+        return next(err.handle);
+      }
+
       return next(err);
     }
+  }
 
-    // Begin SSL cert fetching process
-    // in the background
-    sandboxFetch
-      .one(
-        {
-          url: Blog.extend(blog).url,
-          kind: "text",
-          maxBytes: 1024,
-          truncate: true,
-          anyStatus: true,
-        },
-        { label: "create-site" }
-      )
-      .then(function () {})
-      .catch(function () {});
+  // Begin SSL cert fetching process
+  // in the background
+  sandboxFetch
+    .one(
+      {
+        url: Blog.extend(blog).url,
+        kind: "text",
+        maxBytes: 1024,
+        truncate: true,
+        anyStatus: true,
+      },
+      { label: "create-site" }
+    )
+    .then(function () {})
+    .catch(function () {});
 
-    Email.CREATED_BLOG(req.user.uid);
+  Email.CREATED_BLOG(req.user.uid);
 
-    req.blog = blog;
+  req.blog = blog;
 
-    next();
-  });
+  next();
 }
 
 function canSkip(user) {
