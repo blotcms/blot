@@ -9,8 +9,8 @@
   .folder-sync            "Folder  Google Drive  Edit", one link
                           (folder/folder-sync.html) to the client's page,
                           which has its options: activity, resync, change,
-                          disconnect ("Sync this folder", in blue, with no
-                          folder yet)
+                          disconnect (with no folder yet, "Folder" and a
+                          blue "Sync this folder" button)
   .folder-sync-issue      a problem with the folder, under the row
                           (folder/folder-sync-issue.html)
 */
@@ -253,12 +253,15 @@
 }
 
 /* No folder connected: the whole pill is the link, in blue */
-.folder-sync__pill--connect {
-  color: var(--accent-color);
-}
-
-.folder-sync__pill--connect:hover {
-  color: var(--accent-hover-color);
+/* No folder yet: the label, then a blue button where the client would be.
+   Pulled left by the folder box's inset only (it has no pill padding), and
+   spaced so the button starts under the summary card's values. */
+.folder-sync--connect {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: calc(var(--space-2) * -1);
 }
 
 /* The same line as plain text, where it is not a control (the page for

@@ -7,5 +7,9 @@
 </a>
 {{/blog.client}}
 {{^blog.client}}
-<a class="folder-sync folder-sync__pill folder-sync__pill--connect" href="{{{dashboardBase}}}/sync"><span class="folder-sync-label" aria-hidden="true">Folder</span>Sync this folder</a>
+<!-- No folder yet: the button to connect one, after the same label -->
+<div class="folder-sync folder-sync--connect">
+  <span class="folder-sync-label" aria-hidden="true">Folder</span>
+  <a class="btn btn-primary btn-sm" href="{{{dashboardBase}}}/sync">Sync this folder</a>
+</div>
 {{/blog.client}}
