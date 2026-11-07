@@ -2,7 +2,6 @@ const createDriveClient = require("./serviceAccount/createDriveClient");
 const clfdate = require("helper/clfdate");
 const folder = require("storage/folder");
 const database = require("./database");
-const promiseOnly = require("helper/promiseOnly");
 
 async function remove(blogID, path) {
   const prefix = () =>
@@ -35,4 +34,4 @@ async function remove(blogID, path) {
   }
 }
 
-module.exports = promiseOnly(remove);
+module.exports = remove;

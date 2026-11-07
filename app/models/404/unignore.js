@@ -13,6 +13,4 @@ async function unignore(blogID, url) {
   return await client.sRem(ignoreKey, url);
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(unignore);
+module.exports = unignore;

@@ -1,5 +1,4 @@
 var redis = require("models/client");
-var promiseOnly = require("helper/promiseOnly");
 var clfdate = require("helper/clfdate");
 var entryKey = require("../entry/key").entry;
 
@@ -71,8 +70,8 @@ async function sweep(blogID) {
 }
 
 // async sweepExpiredDeleted(blogID) resolves the ids removed
-module.exports = promiseOnly(function sweepExpiredDeleted(blogID) {
+module.exports = function sweepExpiredDeleted(blogID) {
   return sweep(blogID);
-});
+};
 
 module.exports.DELETED_ENTRY_TTL_SECONDS = DELETED_ENTRY_TTL_SECONDS;

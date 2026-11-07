@@ -1,10 +1,9 @@
 var getById = require("./getById");
 var ensure = require("helper/ensure");
-var promiseOnly = require("helper/promiseOnly");
 var client = require("models/client");
 var key = require("./key");
 
-module.exports = promiseOnly(async function remove(uid) {
+module.exports = async function remove(uid) {
   ensure(uid, "string");
 
   var user = await getById(uid);
@@ -32,4 +31,4 @@ module.exports = promiseOnly(async function remove(uid) {
   multi.del(keys);
 
   await multi.exec();
-});
+};

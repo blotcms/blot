@@ -12,6 +12,4 @@ async function drop(blogID, from) {
   await client.del(fromKey);
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(drop);
+module.exports = drop;

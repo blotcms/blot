@@ -51,6 +51,4 @@ async function set(blogID, mappings) {
   await multi.exec();
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(set);
+module.exports = set;

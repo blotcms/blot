@@ -1,5 +1,4 @@
 var crypto = require("crypto");
-var promiseOnly = require("helper/promiseOnly");
 
 // A template's views are cached per blog cacheID and template cacheID (see
 // blog/render/full-view-cache), so every change to a template's views or
@@ -30,5 +29,5 @@ async function bumpBlogIfInstalled(owner, templateID) {
 
 module.exports = {
   create,
-  bumpBlogIfInstalled: promiseOnly(bumpBlogIfInstalled),
+  bumpBlogIfInstalled: bumpBlogIfInstalled,
 };

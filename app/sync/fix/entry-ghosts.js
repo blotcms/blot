@@ -1,7 +1,6 @@
 const Entries = require("models/entries");
 const Entry = require("models/entry");
 const storage = require("storage/folder");
-const promiseOnly = require("helper/promiseOnly");
 
 // A folder post is synthesized at a "+"-stripped path with no file behind it
 // (the aggregate for "/Album +" is stored at "/album"). resolvePath would
@@ -147,4 +146,4 @@ async function main(blog) {
   return report;
 }
 
-module.exports = promiseOnly(main);
+module.exports = main;

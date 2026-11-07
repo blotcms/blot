@@ -111,7 +111,5 @@ async function setup(blogID) {
   console.log(prefix(), "Setup complete", blogID);
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(setup);
+module.exports = setup;
 module.exports.reconcileSource = reconcileSource;

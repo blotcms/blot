@@ -2,9 +2,8 @@ var key = require("./key");
 var client = require("models/client");
 var deserialize = require("./util/deserialize");
 var metadataModel = require("./metadataModel");
-var promiseOnly = require("helper/promiseOnly");
 
-module.exports = promiseOnly(async function getMetadata(id) {
+module.exports = async function getMetadata(id) {
   var metadata = await client.hGetAll(key.metadata(id));
   var rawHasFields = metadata && Object.keys(metadata).length > 0;
 
@@ -27,4 +26,4 @@ module.exports = promiseOnly(async function getMetadata(id) {
   metadata.cdn = metadata.cdn || {};
 
   return metadata;
-});
+};

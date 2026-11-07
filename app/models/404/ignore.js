@@ -13,6 +13,4 @@ async function ignore(blogID, url) {
   return await client.sAdd(ignoreKey, url);
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(ignore);
+module.exports = ignore;

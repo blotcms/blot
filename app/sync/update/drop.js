@@ -1,11 +1,10 @@
-var promiseOnly = require("helper/promiseOnly");
 var Entry = require("models/entry");
 var Ignored = require("models/ignoredFiles");
 var Preview = require("./preview");
 var isDraft = require("./drafts").isDraft;
 var rebuildDependents = require("./rebuildDependents");
 
-module.exports = promiseOnly(async function drop(blogID, path) {
+module.exports = async function drop(blogID, path) {
   // We don't know if this file used to be a draft based
   // on its metadata. We should probably look this up?
   // An error is ignored: the file is then treated as not a draft.
@@ -23,4 +22,4 @@ module.exports = promiseOnly(async function drop(blogID, path) {
   await Ignored.drop(blogID, path);
   await Entry.drop(blogID, path);
   await rebuildDependents(blogID, path);
-});
+};

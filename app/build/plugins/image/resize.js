@@ -44,6 +44,4 @@ async function resize(path) {
   return info;
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(resize);
+module.exports = resize;

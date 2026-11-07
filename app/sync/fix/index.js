@@ -4,7 +4,6 @@ const listGhosts = require("./list-ghosts");
 const menuGhosts = require("./menu-ghosts");
 const tagGhosts = require("./tag-ghosts");
 const entriesPathIndex = require("./entries-path-index");
-const promiseOnly = require("helper/promiseOnly");
 const clfdate = require("helper/clfdate");
 
 // Each check below issues many small, sequential Redis round trips (e.g.
@@ -147,5 +146,5 @@ async function Fix(blog, options) {
   return outcome.report;
 }
 
-module.exports = promiseOnly(Fix);
+module.exports = Fix;
 module.exports.getRunningChecks = getRunningChecks;

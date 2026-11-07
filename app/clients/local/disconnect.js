@@ -1,12 +1,11 @@
 var Blog = require("models/blog");
 var Sync = require("sync");
-var promiseOnly = require("helper/promiseOnly");
 var debug = require("debug")("blot:clients:local:disconnect");
 
 // Removes the record which tells Blot that a given blog
 // is synced from a local source folder. When the server
 // starts, Blot will no longer watch that folder.
-module.exports = promiseOnly(function disconnect(blogID) {
+module.exports = function disconnect(blogID) {
   debug("Blog", blogID, "Disconnecting local client");
 
   return new Promise(function (resolve, reject) {
@@ -39,4 +38,4 @@ module.exports = promiseOnly(function disconnect(blogID) {
       );
     });
   });
-});
+};

@@ -77,6 +77,4 @@ async function getAll(blogID, options) {
   return tags;
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(getAll);
+module.exports = getAll;

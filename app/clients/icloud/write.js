@@ -4,7 +4,6 @@ const database = require("./database");
 const health = require("../health");
 const { classify } = require("./error");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
-const promiseOnly = require("helper/promiseOnly");
 
 async function write(blogID, path, contents) {
   if (shouldIgnoreFile(path)) {
@@ -31,4 +30,4 @@ async function write(blogID, path, contents) {
   }
 }
 
-module.exports = promiseOnly(write);
+module.exports = write;

@@ -3,7 +3,6 @@ var folder = require("storage/folder");
 var readFromFolder = require("./readFromFolder");
 var getTemplateList = require("./getTemplateList");
 var drop = require("./drop");
-var promiseOnly = require("helper/promiseOnly");
 var folderRenames = require("./folderRenames");
 var renameLocalTemplate = require("./renameLocalTemplate");
 var makeID = require("./util/makeID");
@@ -15,7 +14,7 @@ var defaults = require("models/blog/defaults");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var clfdate = require("helper/clfdate");
 
-module.exports = promiseOnly(async function buildFromFolder(blogID) {
+module.exports = async function buildFromFolder(blogID) {
   ensure(blogID, "string");
 
   var templateDirs = ["/templates", "/Templates"];
@@ -149,7 +148,7 @@ module.exports = promiseOnly(async function buildFromFolder(blogID) {
       err
     );
   }
-});
+};
 
 // Removes local templates whose folder has gone missing. The installed one
 // might have been renamed rather than deleted, so we hold off for

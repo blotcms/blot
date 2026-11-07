@@ -2,7 +2,6 @@ var fs = require("fs-extra");
 var parseXMLAsync = require("util").promisify(require("xml2js").parseString);
 var colors = require("colors/safe");
 var Item = require("./item");
-var promiseOnly = require("helper/promiseOnly");
 var helper = require("dashboard/site/import/helper");
 
 async function main(sourceFile, outputDirectory, status, options) {
@@ -112,4 +111,4 @@ function injectAttachedThumbnail(item, channel) {
   }
 }
 
-module.exports = promiseOnly(main);
+module.exports = main;

@@ -44,6 +44,4 @@ async function check(blogID, input) {
   }
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(check);
+module.exports = check;

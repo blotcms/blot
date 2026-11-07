@@ -3,7 +3,6 @@ var syncPaymentMethods = require("models/user/syncPaymentMethods");
 var getConfirmation = require("../util/getConfirmation");
 var each = require("../each/user");
 var colors = require("colors/safe");
-var promiseOnly = require("helper/promiseOnly");
 
 // scripts/each/user is callback-based and stops at the first error. Runs fn
 // for each user in turn, and passes a rejection from fn on as the error.
@@ -124,4 +123,4 @@ if (require.main === module) {
   );
 }
 
-module.exports = promiseOnly(main);
+module.exports = main;

@@ -5,7 +5,6 @@ var extname = require("path").extname;
 var Metadata = require("build/metadata");
 var convert = require("./convert");
 var folderStat = require("build/converters/folderStat");
-var promiseOnly = require("helper/promiseOnly");
 
 function is(path) {
   return [".org"].indexOf(extname(path).toLowerCase()) > -1;
@@ -80,4 +79,4 @@ async function read(blog, path) {
 
 // Called back with (err, html, stat); without a callback it resolves to
 // [html, stat]
-module.exports = { read: promiseOnly(read), is: is, id: "org" };
+module.exports = { read: read, is: is, id: "org" };

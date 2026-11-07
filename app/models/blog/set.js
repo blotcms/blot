@@ -15,7 +15,6 @@ var normalizeConverters = require("./util/converters").normalize;
 var updateCdnManifest = require("../template/util/updateCdnManifest");
 var forkSiteTemplate = require("../template/util/forkSiteTemplate");
 var serializeRedisHashValues = require("models/redisHashSerializer");
-var promiseOnly = require("helper/promiseOnly");
 
 function Changes(latest, former) {
   var changes = {};
@@ -29,7 +28,7 @@ function Changes(latest, former) {
 
 // Resolves to the list of changed fields. Rejects with validate's errors
 // object, or with the error that stopped the save.
-module.exports = promiseOnly(async function set(blogID, blog) {
+module.exports = async function set(blogID, blog) {
   ensure(blogID, "string");
 
   var multi = client.multi();
@@ -222,4 +221,4 @@ module.exports = promiseOnly(async function set(blogID, blog) {
   }
 
   return changesList;
-});
+};

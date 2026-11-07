@@ -21,16 +21,6 @@ describe("Blog.set", function () {
     expect(errors.handle).toBeTruthy();
   });
 
-  it("throws when given a callback", async function () {
-    // The callback form is gone: passing one throws instead of calling back.
-    try {
-      await set(this.blog.id, { title: "Callback title" }, function () {});
-      fail("should have thrown");
-    } catch (err) {
-      expect(err.message).toMatch(/no longer takes a callback/);
-    }
-  });
-
   it("will set the domain", async function () {
     var domain = "example.com";
 

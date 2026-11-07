@@ -2,7 +2,6 @@ module.exports = (function () {
   var redis = require("models/client"),
     normalize = require("helper/pathNormalizer"),
     ensure = require("helper/ensure"),
-    promiseOnly = require("helper/promiseOnly"),
     REASONS = {
       TOO_LARGE: {
         message: "too large",
@@ -76,7 +75,7 @@ module.exports = (function () {
   // trip, rather than transferring the entire ignored-files hash. Returns
   // an object mapping normalized path -> reason for the paths that are
   // ignored (paths that aren't ignored are omitted).
-  var getStatuses = promiseOnly(async function getStatuses(blogID, paths) {
+  var getStatuses = async function getStatuses(blogID, paths) {
     ensure(blogID, "string").and(paths, "array");
 
     if (!paths.length) return {};
@@ -90,15 +89,15 @@ module.exports = (function () {
     });
 
     return result;
-  });
+  };
 
-  var getStatus = promiseOnly(async function getStatus(blogID, path) {
+  var getStatus = async function getStatus(blogID, path) {
     ensure(blogID, "string").and(path, "string");
 
     path = normalize(path);
 
     return await redis.hGet(ignoredFilesKey(blogID), path);
-  });
+  };
 
   async function isIt(blogID, path) {
     ensure(blogID, "string").and(path, "string");
@@ -115,13 +114,13 @@ module.exports = (function () {
   }
 
   return {
-    add: promiseOnly(add),
-    drop: promiseOnly(drop),
-    get: promiseOnly(get),
-    getArray: promiseOnly(getArray),
+    add: add,
+    drop: drop,
+    get: get,
+    getArray: getArray,
     getStatus: getStatus,
     getStatuses: getStatuses,
-    isIt: promiseOnly(isIt),
-    flush: promiseOnly(flush),
+    isIt: isIt,
+    flush: flush,
   };
 })();

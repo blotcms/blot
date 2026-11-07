@@ -4,7 +4,6 @@ var Dependencies = require("./dependencies");
 var Plugins = require("./plugins").convert;
 var ensure = require("helper/ensure");
 var enabledConverters = require("./converters/enabled");
-var promiseOnly = require("helper/promiseOnly");
 
 // Resolves to [html, metadata, stat, dependencies, extras].
 async function single(blog, path) {
@@ -67,7 +66,7 @@ async function single(blog, path) {
   return [html, metadata, stat, dependencies, extras];
 }
 
-module.exports = promiseOnly(single);
+module.exports = single;
 
 function fixMustache(str) {
   return str.split("{{&gt;").join("{{>");

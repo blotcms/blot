@@ -8,7 +8,6 @@ const sandbox = require("sandbox");
 const assets = require("storage/assets");
 const exif = require("./exif");
 const Transformer = require("helper/transformer");
-const promiseOnly = require("helper/promiseOnly");
 
 const EXTENSIONS_TO_CONVERT = [
   ".tif",
@@ -124,4 +123,4 @@ function lookupWithTransformer(transformer, src, transform) {
 
 // Called back with (err, html, stat, extras); without a callback it resolves
 // to [html, stat, extras]
-module.exports = { is, read: promiseOnly(read), id: "img" };
+module.exports = { is, read: read, id: "img" };

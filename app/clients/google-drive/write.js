@@ -12,7 +12,6 @@ const { Readable } = require("stream");
 const database = require("./database");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const localName = require("./util/localName");
-const promiseOnly = require("helper/promiseOnly");
 
 // We can make this much more efficient by thoughtfully using
 // streams in pipelines rather than wastefully
@@ -95,7 +94,7 @@ async function write(blogID, path, input) {
   await folder.writeFrom(blogID, path, tempPath, { move: true });
 }
 
-module.exports = promiseOnly(write);
+module.exports = write;
 
 // Turns a buffer or string into a readable stream
 const makeStream = (input) => {

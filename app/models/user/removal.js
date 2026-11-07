@@ -1,5 +1,4 @@
 var moment = require("moment");
-var promiseOnly = require("helper/promiseOnly");
 var subscriptionLifecycle = require("./subscriptionLifecycle");
 var overdueSince = require("./overdueSince");
 
@@ -71,6 +70,6 @@ function removalCandidate(user, overdue) {
 
 module.exports = {
   isPaused: isPaused,
-  overdueFor: promiseOnly(overdueFor),
+  overdueFor: overdueFor,
   removalCandidate: removalCandidate,
 };
