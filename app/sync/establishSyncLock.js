@@ -1,20 +1,4 @@
-const Sync = require("sync");
-const { promisify } = require("util");
-
-module.exports = function (blogID) {
-  return new Promise((resolve, reject) => {
-    Sync(blogID, function check(err, folder, done) {
-      if (err) return reject(err);
-      // folder.update already returns a promise
-      // I don't quite understand this
-      const doneAsync = async function (err) {
-        if (err) {
-          await promisify(done.bind(null, err))();
-        } else {
-          await promisify(done.bind(null, null))();
-        }
-      };
-      resolve({ folder, done: doneAsync });
-    });
-  });
-};
+// await establishSyncLock(blogID) resolves to { folder, done }, for callers
+// which finish the sync somewhere other than the function that took the
+// lock. See sync() in index.js.
+module.exports = require("./index").establishSyncLock;

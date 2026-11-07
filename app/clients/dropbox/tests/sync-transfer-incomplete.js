@@ -43,22 +43,16 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
 
   function load(account) {
     require.cache[lockPath] = {
-      exports: function (_blogID, callback) {
-        callback(
-          null,
-          {
-            log: function () {},
-            status: function () {},
-            path: "/tmp/" + blogID,
-          },
-          function (err, cb) {
-            cb(err);
-          }
-        );
+      exports: async function (_blogID, fn) {
+        return fn({
+          log: function () {},
+          status: function () {},
+          path: "/tmp/" + blogID,
+        });
       },
     };
     require.cache[createClientPath] = {
-      exports: function (_blogID, callback) {
+      exports: async function () {
         // A client whose methods all immediately reject - if the skip check
         // didn't fire, this is how we'd know delta/apply actually ran (via
         // the error_code it would then persist). delta.js (delta.js:278-300)
@@ -76,7 +70,7 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
           filesListFolderContinue: reject,
           filesGetMetadata: reject,
         };
-        callback(null, client, account);
+        return { error: null, client, account };
       },
     };
     require.cache[databasePath] = {
@@ -114,15 +108,20 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
       transfer_pending: true,
     });
 
-    sync({ id: blogID }, function (err) {
-      expect(err).toBeFalsy();
-      expect(
-        saved.every(
-          (values) => !("error_code" in values) && !("cursor" in values)
-        )
-      ).toEqual(true);
-      done();
-    });
+    sync({ id: blogID })
+      .then(
+        () => null,
+        (err) => err
+      )
+      .then(function (err) {
+        expect(err).toBeFalsy();
+        expect(
+          saved.every(
+            (values) => !("error_code" in values) && !("cursor" in values)
+          )
+        ).toEqual(true);
+        done();
+      });
   });
 
   it("skips delta/apply for the legacy out-of-space error code too", function (done) {
@@ -132,15 +131,20 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
       error_code: 507,
     });
 
-    sync({ id: blogID }, function (err) {
-      expect(err).toBeFalsy();
-      expect(
-        saved.every(
-          (values) => !("error_code" in values) && !("cursor" in values)
-        )
-      ).toEqual(true);
-      done();
-    });
+    sync({ id: blogID })
+      .then(
+        () => null,
+        (err) => err
+      )
+      .then(function (err) {
+        expect(err).toBeFalsy();
+        expect(
+          saved.every(
+            (values) => !("error_code" in values) && !("cursor" in values)
+          )
+        ).toEqual(true);
+        done();
+      });
   });
 
   it("does not skip a blog whose transfer has completed", function (done) {
@@ -154,9 +158,14 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
     // The stubbed client's filesListFolder rejects as soon as delta calls
     // it, which persists an error_code - proof the skip check did NOT
     // trigger and delta/apply actually ran.
-    sync({ id: blogID }, function () {
-      expect(saved.some((values) => "error_code" in values)).toEqual(true);
-      done();
-    });
+    sync({ id: blogID })
+      .then(
+        () => null,
+        (err) => err
+      )
+      .then(function () {
+        expect(saved.some((values) => "error_code" in values)).toEqual(true);
+        done();
+      });
   });
 });

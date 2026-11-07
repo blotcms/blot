@@ -6,11 +6,11 @@ var sync = require("../index");
 // continue to sync even if some error or deployment
 // means we need to kill a process while a sync is ongoing.
 process.on("message", function (message) {
-  sync(message, function (error) {
-    if (error) {
-      process.send({ error: error });
-    } else {
-      process.send({ success: true });
-    }
+  // Holds the lock until the process is killed
+  sync(message, function () {
+    process.send({ success: true });
+    return new Promise(function () {});
+  }).catch(function (error) {
+    process.send({ error: error });
   });
 });

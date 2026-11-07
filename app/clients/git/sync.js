@@ -15,33 +15,17 @@ async function sync(blogID, gitHandle) {
   if (typeof gitHandle !== "string" || !gitHandle)
     throw new Error("Git handle must be a non-empty string");
 
-  // Settles when the sync engine calls finish, after it has released the
-  // folder lock
-  await new Promise(function (resolve, reject) {
-    function finish(err) {
-      if (err) return reject(err);
-      resolve();
+  // Attempt to acquire a lock on the blog's folder to apply updates to it.
+  // Rejecting before the function runs typically means we were unable to
+  // acquire the lock, perhaps another process is syncing it. Settles once
+  // the sync has released the lock.
+  await Sync(blogID, async function (folder) {
+    try {
+      await require("./served/sync")(blogID, folder);
+    } catch (err) {
+      folder.log("Error updating blog folder from the store: " + err.message);
+      throw err;
     }
-
-    // Attempt to acquire a lock on the blog's folder
-    // to apply updates to it...
-    Sync(blogID, function (err, folder, done) {
-      // Typically, this error means were unable to acquire a lock
-      // on the folder, perhaps another process is syncing it...
-      if (err) return finish(err);
-
-      require("./served/sync")(blogID, folder).then(
-        function () {
-          done(null, finish);
-        },
-        function (err) {
-          folder.log(
-            "Error updating blog folder from the store: " + err.message
-          );
-          done(err, finish);
-        }
-      );
-    });
   });
 }
 

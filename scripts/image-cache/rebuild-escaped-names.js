@@ -11,7 +11,6 @@
 //
 // Without --apply it only lists the affected blogs and how many files each has.
 
-const { promisify } = require("util");
 const assets = require("storage/assets");
 const Sync = require("sync");
 const Rebuild = require("sync/rebuild");
@@ -34,36 +33,17 @@ async function countEscapedNames(blogID) {
   return count;
 }
 
+// The rebuild's error is reported once the sync is released, or else the
+// error releasing it
 async function rebuild(blogID) {
-  const { folder, done } = await new Promise((resolve, reject) => {
-    Sync(blogID, (err, folder, done) => {
-      if (err) return reject(err);
-      resolve({ folder, done });
-    });
-  });
-
-  // As the dashboard does, the sync itself is not failed: the rebuild's error
-  // is held until the sync is released, and then reported
-  let rebuildErr = null;
-  try {
+  await Sync(blogID, async (folder) => {
     await Rebuild(blogID, {
       thumbnails: true,
       imageCache: true,
       status: folder.status,
       log: folder.log,
     });
-  } catch (err) {
-    rebuildErr = err;
-  }
-
-  let releaseErr = null;
-  try {
-    await promisify(done)(null);
-  } catch (err) {
-    releaseErr = err;
-  }
-
-  if (rebuildErr || releaseErr) throw rebuildErr || releaseErr;
+  });
 }
 
 async function processBlog(blog) {

@@ -1,6 +1,6 @@
-// Callback-style loops for specs whose bodies are nested callbacks (around
-// sync's (err, folder, finish) callback, for instance), where async/await has
-// nothing to unwrap. Each calls back once, with the first error or null.
+// Callback-style loops for specs whose bodies are nested callbacks, where
+// async/await has nothing to unwrap. Each calls back once, with the first
+// error or null.
 // Tasks and iteratees take a node-style callback.
 
 function callTask(fn, ...args) {

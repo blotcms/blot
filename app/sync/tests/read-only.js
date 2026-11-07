@@ -1,5 +1,6 @@
 describe("sync while the data directory is read-only", function () {
   var sync = require("../index");
+  var establishSyncLock = require("../establishSyncLock");
   var lock = require("../lock");
   var readOnly = require("helper/readOnly");
 
@@ -25,15 +26,17 @@ describe("sync while the data directory is read-only", function () {
   it("waits without taking the folder lock, then completes once the freeze lifts", async function () {
     var blog = this.blog;
     var called = false;
-    var result;
+    var finishSync;
 
     await readOnly.enable({ reason: "test", ttl: 100 });
 
-    var finished = new Promise(function (resolve) {
-      sync(blog.id, function (err, folder, done) {
+    var started = new Promise(function (resolve) {
+      var finished = sync(blog.id, function (folder) {
         called = true;
-        result = { err: err, folder: folder, done: done };
-        resolve();
+        resolve({ folder: folder, finished: finished });
+        return new Promise(function (resolve) {
+          finishSync = resolve;
+        });
       });
     });
 
@@ -44,47 +47,34 @@ describe("sync while the data directory is read-only", function () {
     expect((await lock.inspect(blog.id)).held).toBe(false);
 
     await readOnly.disable();
-    await finished;
+    var result = await started;
 
-    expect(result.err).toBeFalsy();
     expect(result.folder.update).toEqual(jasmine.any(Function));
     expect((await lock.inspect(blog.id)).held).toBe(true);
 
-    await new Promise(function (resolve) {
-      result.done(null, resolve);
-    });
+    finishSync();
+    await result.finished;
 
     expect((await lock.inspect(blog.id)).held).toBe(false);
   });
 
-  it("does not wait when writes are allowed", function (testDone) {
-    sync(this.blog.id, function (err, folder, done) {
-      if (err) return testDone.fail(err);
-
+  it("does not wait when writes are allowed", async function () {
+    await sync(this.blog.id, async function (folder) {
       expect(folder.update).toEqual(jasmine.any(Function));
-
-      done(null, testDone);
     });
   });
 
   it("lets a sync that already holds the lock finish while the freeze is on", async function () {
     var blog = this.blog;
 
-    var held = await new Promise(function (resolve, reject) {
-      sync(blog.id, function (err, folder, done) {
-        if (err) return reject(err);
-        resolve({ folder: folder, done: done });
-      });
-    });
+    var held = await establishSyncLock(blog.id);
 
     await readOnly.enable({ reason: "test", ttl: 100 });
 
     // The freeze does not take the lock from a sync that began before it
     expect((await lock.inspect(blog.id)).held).toBe(true);
 
-    await new Promise(function (resolve) {
-      held.done(null, resolve);
-    });
+    await held.done(null);
 
     expect((await lock.inspect(blog.id)).held).toBe(false);
   });

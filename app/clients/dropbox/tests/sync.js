@@ -19,36 +19,48 @@ describe("dropbox client", function () {
     var secondContents = this.fake.file();
 
     write(blog.id, path, contents).then(function () {
-      sync(blog, function (err) {
-        if (err) return done.fail(err);
+      sync(blog)
+        .then(
+          () => null,
+          (err) => err
+        )
+        .then(function (err) {
+          if (err) return done.fail(err);
 
-        client
-          .filesMove({
-            from_path: folder,
-            to_path: newFolder,
-            autorename: false,
-          })
-          .then(function () {
-            write(blog.id, secondPath, secondContents).then(function () {
-              sync(blog, function (err) {
-                if (err) return done.fail(err);
+          client
+            .filesMove({
+              from_path: folder,
+              to_path: newFolder,
+              autorename: false,
+            })
+            .then(function () {
+              write(blog.id, secondPath, secondContents).then(function () {
+                sync(blog)
+                  .then(
+                    () => null,
+                    (err) => err
+                  )
+                  .then(function (err) {
+                    if (err) return done.fail(err);
 
-                Promise.all([
-                  blogFolder.read(blog.id, path),
-                  blogFolder.read(blog.id, secondPath),
-                ]).then(function (buffers) {
-                  expect(buffers[0].toString("utf-8")).toEqual(contents);
-                  expect(buffers[1].toString("utf-8")).toEqual(secondContents);
+                    Promise.all([
+                      blogFolder.read(blog.id, path),
+                      blogFolder.read(blog.id, secondPath),
+                    ]).then(function (buffers) {
+                      expect(buffers[0].toString("utf-8")).toEqual(contents);
+                      expect(buffers[1].toString("utf-8")).toEqual(
+                        secondContents
+                      );
 
-                  done();
-                }, done.fail);
-              });
-            }, done.fail);
-          })
-          .catch(function (err) {
-            done.fail(err);
-          });
-      });
+                      done();
+                    }, done.fail);
+                  });
+              }, done.fail);
+            })
+            .catch(function (err) {
+              done.fail(err);
+            });
+        });
     }, done.fail);
   });
 });

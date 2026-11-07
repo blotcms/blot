@@ -41,13 +41,10 @@ const stats = {
   filesRestored: 0,
 };
 
-const getClient = (blogID) => {
-  return new Promise((resolve, reject) => {
-    createClient(blogID, (err, client, account) => {
-      if (err) return reject(err);
-      resolve({ client, account });
-    });
-  });
+const getClient = async (blogID) => {
+  const { error, client, account } = await createClient(blogID);
+  if (error) throw error;
+  return { client, account };
 };
 
 const readTemplateDirectories = async (blogID) => {

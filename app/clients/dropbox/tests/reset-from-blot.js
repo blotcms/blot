@@ -55,10 +55,10 @@ describe("dropbox resetFromBlot", function () {
 
   function load({ spaceUsage, remote, uploadBehavior }) {
     require.cache[createClientPath] = {
-      exports: function (_blogID, callback) {
-        callback(
-          null,
-          {
+      exports: async function () {
+        return {
+          error: null,
+          client: {
             filesCreateFolder: async () => ({ result: {} }),
             usersGetSpaceUsage: async () => ({ result: spaceUsage }),
             filesListFolderGetLatestCursor: async () => ({
@@ -69,8 +69,8 @@ describe("dropbox resetFromBlot", function () {
               return { result: { entries, has_more: false, cursor: "c" } };
             },
           },
-          { folder_id: "" }
-        );
+          account: { folder_id: "" },
+        };
       },
     };
     require.cache[databasePath] = {

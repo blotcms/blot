@@ -27,11 +27,7 @@ var MAX_CHECKS_WITHOUT_RESULTS = 5;
 // last_sync. The hourly validation's catch-up sync passes false: last_sync
 // is what marks a blog as recently synced by a webhook, so a catch-up must
 // leave whatever stamp is there.
-module.exports = function main(blog, options, callback) {
-  if (typeof options === "function") {
-    callback = options;
-    options = {};
-  }
+module.exports = async function main(blog, options) {
   var stampLastSync = !options || options.stampLastSync !== false;
 
   debug("Blog:", blog.id, "Attempting to acquire lock on the blog folder.");
@@ -39,25 +35,13 @@ module.exports = function main(blog, options, callback) {
   // Redlock options to ensure we acquire a lock eventually...
   // pershaps we should keep track and only issue a second pending sync
   // to prevent an infinite stack of webhooks.
-  Sync(blog.id, function (err, folder, done) {
-    if (err) return callback(err);
-
-    // The sync engine's done is never awaited or returned: it releases the
-    // lock and calls back, and a rejection from the callback must stay
-    // unhandled (the process dies and the lock is released).
-    sync(blog, folder, stampLastSync).then(
-      function () {
-        done(null, callback);
-      },
-      function (err) {
-        done(err, callback);
-      }
-    );
+  await Sync(blog.id, function (folder) {
+    return sync(blog, folder, stampLastSync);
   });
 };
 
 // Resolves when the folder is in sync (or the sync was given up on with the
-// error persisted), and rejects with whatever should be passed to done.
+// error persisted), and rejects with the error the sync fails with.
 async function sync(blog, folder, stampLastSync) {
   if (stampLastSync) {
     Database.set(blog.id, { last_sync: Date.now() }).catch(

@@ -19,8 +19,7 @@ xdescribe("scheduled posts", function () {
     function (done) {
       const path = "/entry.txt";
       const id = guid();
-      sync(this.blog.id, (err, folder, finish) => {
-        if (err) return done.fail(err);
+      sync(this.blog.id, async (folder) => {
         const contents = `Date: ${moment()
           .utc()
           .add(1, "minutes")
@@ -33,25 +32,15 @@ xdescribe("scheduled posts", function () {
               done();
             }, done.fail);
         }, MINUTE);
-        storageFolder.write(this.blog.id, path, contents).then(() => {
-          folder
-            .update(path)
-            .then(
-              () => null,
-              (updateErr) => updateErr
-            )
-            .then((err) => {
-              if (err) return done.fail(err);
-              finish(null, () => {
-                fetch(this.origin)
-                  .then((res) => res.text())
-                  .then((body) => {
-                    expect(body).not.toContain(id);
-                  }, done.fail);
-              });
-            });
-        }, done.fail);
-      });
+        await storageFolder.write(this.blog.id, path, contents);
+        await folder.update(path);
+      }).then(() => {
+        fetch(this.origin)
+          .then((res) => res.text())
+          .then((body) => {
+            expect(body).not.toContain(id);
+          }, done.fail);
+      }, done.fail);
     },
     MINUTE * 2
   );

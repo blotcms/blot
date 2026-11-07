@@ -150,7 +150,7 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
     }
   } finally {
     if (sync && typeof sync.done === "function") {
-      sync.done(null, () => {});
+      await sync.done(null);
     }
   }
 }

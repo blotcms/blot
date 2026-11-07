@@ -90,21 +90,10 @@ describe("drafts work", function () {
     this.server = server.listen(8919, done);
 
     this.writeDraft = (path, contents, callback) => {
-      sync(this.blog.id, (err, folder, done) => {
-        if (err) return callback(err);
-        storageFolder.write(this.blog.id, path, contents).then(() => {
-          folder
-            .update(path)
-            .then(
-              () => null,
-              (updateErr) => updateErr
-            )
-            .then(function (err) {
-              if (err) return callback(err);
-              done(null, callback);
-            });
-        }, callback);
-      });
+      sync(this.blog.id, async (folder) => {
+        await storageFolder.write(this.blog.id, path, contents);
+        await folder.update(path);
+      }).then(() => callback(null), callback);
     };
   });
 

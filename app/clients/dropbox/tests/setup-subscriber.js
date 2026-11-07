@@ -48,16 +48,12 @@ describe("dropbox setup abort subscriber", function () {
       },
     };
     require.cache[syncPath] = {
-      exports: function (_blogID, worker) {
+      exports: async function (_blogID, fn) {
         const folder = {
           status: jasmine.createSpy("status"),
           update: async () => {},
         };
-        const done = jasmine.createSpy("done").and.callFake(function (err, cb) {
-          if (typeof cb === "function") cb(err);
-        });
-        worker(null, folder, done);
-        return done;
+        return fn(folder);
       },
     };
     require.cache[getAccountPath] = {
@@ -96,13 +92,12 @@ describe("dropbox setup abort subscriber", function () {
     const setup = loadSetup({ onMessage: captured, cleanup });
     const session = { dropbox: {}, save: jasmine.createSpy("save") };
 
-    setup({ blog: { id: "blog_1" } }, session, function (err) {
-      expect(err).toBeFalsy();
+    setup({ blog: { id: "blog_1" } }, session).then(function () {
       expect(captured.captured.channel).toBe("sync:status:blog_1");
       expect(cleanup).toHaveBeenCalledTimes(1);
       expect(session.dropbox).toBeUndefined();
       done();
-    });
+    }, done.fail);
   });
 
   it("cleans up when an abort message arrives during setup", function (done) {
@@ -118,15 +113,12 @@ describe("dropbox setup abort subscriber", function () {
       },
     };
     require.cache[syncPath] = {
-      exports: function (_blogID, worker) {
+      exports: async function (_blogID, fn) {
         const folder = {
           status: jasmine.createSpy("status"),
           update: async () => {},
         };
-        const done = jasmine.createSpy("done").and.callFake(function (err, cb) {
-          if (typeof cb === "function") cb(err);
-        });
-        worker(null, folder, done);
+        return fn(folder);
       },
     };
     require.cache[getAccountPath] = {
@@ -159,7 +151,7 @@ describe("dropbox setup abort subscriber", function () {
     const setup = require("clients/dropbox/routes/setup");
     const session = { dropbox: {}, save: jasmine.createSpy("save") };
 
-    setup({ blog: { id: "blog_1" } }, session, function (err) {
+    setup({ blog: { id: "blog_1" } }, session).then(done.fail, function (err) {
       expect(err).toEqual(jasmine.any(Error));
       expect(err.message).toBe("Dropbox setup aborted");
       expect(cleanup).toHaveBeenCalledTimes(1);

@@ -9,6 +9,21 @@ describe("update", function () {
     }, next);
   }
 
+  // Runs work(folder, finish) in a sync of the blog, which ends when work
+  // calls finish(err), then calls callback(err) once the sync has finished
+  function syncThen(blogID, work, callback) {
+    sync(blogID, function (folder) {
+      return new Promise(function (resolve, reject) {
+        work(folder, function (err) {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }).then(function () {
+      callback(null);
+    }, callback);
+  }
+
   var {
     series,
     eachSeries,
@@ -123,75 +138,71 @@ describe("update", function () {
         content: this.fake.file({ title: i + "-" + Date.now() }),
       });
 
-    sync(ctx.blog.id, function (err, folder, done) {
-      if (err) return testDone.fail(err);
+    syncThen(
+      ctx.blog.id,
+      function (folder, finish) {
+        // Write initial files
+        eachSeries(
+          items,
+          function (item, next) {
+            settle(
+              storage.write(ctx.blog.id, item.oldPath, item.content),
+              function (err) {
+                if (err) return next(err);
+                folder
+                  .update(item.oldPath)
+                  .then((result) => next(null, result), next);
+              }
+            );
+          },
+          finish
+        );
+      },
+      function (err) {
+        if (err) return testDone.fail(err);
 
-      // Write initial files
-      eachSeries(
-        items,
-        function (item, next) {
-          settle(
-            storage.write(ctx.blog.id, item.oldPath, item.content),
-            function (err) {
-              if (err) return next(err);
-              folder
-                .update(item.oldPath)
-                .then((result) => next(null, result), next);
-            }
-          );
-        },
-        function (err) {
-          if (err) return testDone.fail(err);
-
-          done(null, function (err) {
+        syncThen(
+          ctx.blog.id,
+          function (folder, finish) {
+            // Move files
+            eachSeries(
+              items,
+              function (item, next) {
+                settle(
+                  storage.move(ctx.blog.id, item.oldPath, item.newPath),
+                  function (err) {
+                    if (err) return next(err);
+                    folder
+                      .update(item.oldPath)
+                      .then(
+                        () => null,
+                        (updateErr) => updateErr
+                      )
+                      .then(function () {
+                        folder
+                          .update(item.newPath)
+                          .then((result) => next(null, result), next);
+                      });
+                  }
+                );
+              },
+              finish
+            );
+          },
+          function (err) {
             if (err) return testDone.fail(err);
 
-            sync(ctx.blog.id, function (err, folder, done) {
-              if (err) return testDone.fail(err);
-
-              // Move files
-              eachSeries(
-                items,
-                function (item, next) {
-                  settle(
-                    storage.move(ctx.blog.id, item.oldPath, item.newPath),
-                    function (err) {
-                      if (err) return next(err);
-                      folder
-                        .update(item.oldPath)
-                        .then(
-                          () => null,
-                          (updateErr) => updateErr
-                        )
-                        .then(function () {
-                          folder
-                            .update(item.newPath)
-                            .then((result) => next(null, result), next);
-                        });
-                    }
-                  );
-                },
-                function (err) {
-                  if (err) return testDone.fail(err);
-
-                  done(null, function (err) {
-                    if (err) return testDone.fail(err);
-
-                    each(
-                      items,
-                      function (item, next) {
-                        ctx.checkRename(item.oldPath, item.newPath, next);
-                      },
-                      testDone
-                    );
-                  });
-                }
-              );
-            });
-          });
-        }
-      );
-    });
+            each(
+              items,
+              function (item, next) {
+                ctx.checkRename(item.oldPath, item.newPath, next);
+              },
+              testDone
+            );
+          }
+        );
+      }
+    );
   });
 
   it("skips missing deleted-entry records while detecting renames", function (testDone) {
@@ -222,86 +233,84 @@ describe("update", function () {
           ctx.writeAndSync(ghostNewPath, ghostContent, function (err) {
             if (err) return testDone.fail(err);
 
-            sync(blogID, function (err, folder, done) {
-              if (err) return testDone.fail(err);
+            syncThen(
+              blogID,
+              function (folder, finish) {
+                series(
+                  [
+                    function (next) {
+                      settle(storage.remove(blogID, path), function (err) {
+                        if (err) return next(err);
+                        folder
+                          .update(path)
+                          .then((result) => next(null, result), next);
+                      });
+                    },
+                    function (next) {
+                      settle(storage.remove(blogID, ghostPath), function (err) {
+                        if (err) return next(err);
+                        folder
+                          .update(ghostPath)
+                          .then(
+                            () => null,
+                            (updateErr) => updateErr
+                          )
+                          .then(function (err) {
+                            if (err) return next(err);
 
-              series(
-                [
-                  function (next) {
-                    settle(storage.remove(blogID, path), function (err) {
-                      if (err) return next(err);
-                      folder
-                        .update(path)
-                        .then((result) => next(null, result), next);
-                    });
-                  },
-                  function (next) {
-                    settle(storage.remove(blogID, ghostPath), function (err) {
-                      if (err) return next(err);
-                      folder
-                        .update(ghostPath)
-                        .then(
-                          () => null,
-                          (updateErr) => updateErr
-                        )
-                        .then(function (err) {
-                          if (err) return next(err);
+                            ctx.checkEntry(
+                              { path: ghostPath, deleted: true },
+                              function (err, entry) {
+                                if (err) return next(err);
+                                ghostEntryID = entry.id;
+                                next();
+                              }
+                            );
+                          });
+                      });
+                    },
+                    function (next) {
+                      redis
+                        .del(entryKey(blogID, ghostPath))
+                        .then(function () {
+                          var deletedListKey = "blog:" + blogID + ":deleted";
 
-                          ctx.checkEntry(
-                            { path: ghostPath, deleted: true },
-                            function (err, entry) {
-                              if (err) return next(err);
-                              ghostEntryID = entry.id;
-                              next();
-                            }
-                          );
-                        });
-                    });
-                  },
-                  function (next) {
-                    redis
-                      .del(entryKey(blogID, ghostPath))
-                      .then(function () {
-                        var deletedListKey = "blog:" + blogID + ":deleted";
+                          return redis.zScore(deletedListKey, ghostEntryID);
+                        })
+                        .then(function (score) {
+                          expect(score).not.toBeNull();
+                          next();
+                        })
+                        .catch(next);
+                    },
+                  ],
+                  finish
+                );
+              },
+              function (err) {
+                if (err) return testDone.fail(err);
 
-                        return redis.zScore(deletedListKey, ghostEntryID);
-                      })
-                      .then(function (score) {
-                        expect(score).not.toBeNull();
-                        next();
-                      })
-                      .catch(next);
-                  },
-                ],
-                function (err) {
+                ctx.checkRename(path, newPath, function (err) {
                   if (err) return testDone.fail(err);
 
-                  done(null, function (err) {
-                    if (err) return testDone.fail(err);
-
-                    ctx.checkRename(path, newPath, function (err) {
+                  ctx.checkEntry(
+                    { path: ghostPath, ignored: true },
+                    function (err, entry) {
                       if (err) return testDone.fail(err);
+                      expect(entry).toBeFalsy();
 
                       ctx.checkEntry(
-                        { path: ghostPath, ignored: true },
-                        function (err, entry) {
+                        { path: ghostNewPath, deleted: false },
+                        function (err) {
                           if (err) return testDone.fail(err);
-                          expect(entry).toBeFalsy();
-
-                          ctx.checkEntry(
-                            { path: ghostNewPath, deleted: false },
-                            function (err) {
-                              if (err) return testDone.fail(err);
-                              testDone();
-                            }
-                          );
+                          testDone();
                         }
                       );
-                    });
-                  });
-                }
-              );
-            });
+                    }
+                  );
+                });
+              }
+            );
           });
         });
       });
@@ -322,49 +331,23 @@ describe("update", function () {
     var ctx = this;
     var blogID = this.blog.id;
 
-    sync(this.blog.id, function (err, folder, done) {
-      if (err) return testDone.fail(err);
+    sync(blogID, async function (folder) {
+      await storage.write(blogID, path, content);
+      await folder.update(path);
+      await storage.move(blogID, path, newPath);
+      await folder.update(path);
+      await folder.update(newPath);
+    }).then(function () {
+      ctx.checkEntry({ path: newPath, deleted: false }, function (err, entry) {
+        if (err) return testDone.fail(err);
 
-      series(
-        [
-          function (next) {
-            settle(storage.write(blogID, path, content), next);
-          },
-          function (next) {
-            settle(folder.update(path), next);
-          },
-          function (next) {
-            settle(storage.move(blogID, path, newPath), next);
-          },
-          function (next) {
-            settle(folder.update(path), next);
-          },
-          function (next) {
-            settle(folder.update(newPath), next);
-          },
-        ],
-        function (err) {
-          if (err) return testDone.fail(err);
+        expect(moment.utc(entry.dateStamp).format("YYYY-MM-DD HH:mm")).toEqual(
+          moment.utc(entry.created).format("YYYY-MM-DD HH:mm")
+        );
 
-          done(null, function (err) {
-            if (err) return testDone.fail(err);
-
-            ctx.checkEntry(
-              { path: newPath, deleted: false },
-              function (err, entry) {
-                if (err) return testDone.fail(err);
-
-                expect(
-                  moment.utc(entry.dateStamp).format("YYYY-MM-DD HH:mm")
-                ).toEqual(moment.utc(entry.created).format("YYYY-MM-DD HH:mm"));
-
-                testDone();
-              }
-            );
-          });
-        }
-      );
-    });
+        testDone();
+      });
+    }, testDone.fail);
   });
 
   it("detects a renamed file", function (testDone) {
@@ -374,37 +357,15 @@ describe("update", function () {
     var checkRename = this.checkRename;
     var blogID = this.blog.id;
 
-    sync(this.blog.id, function (err, folder, done) {
-      if (err) return testDone.fail(err);
-
-      series(
-        [
-          function (next) {
-            settle(storage.write(blogID, path, content), next);
-          },
-          function (next) {
-            settle(folder.update(path), next);
-          },
-          function (next) {
-            settle(storage.move(blogID, path, newPath), next);
-          },
-          function (next) {
-            settle(folder.update(path), next);
-          },
-          function (next) {
-            settle(folder.update(newPath), next);
-          },
-        ],
-        function (err) {
-          if (err) return testDone.fail(err);
-
-          done(null, function (err) {
-            if (err) return testDone.fail(err);
-            checkRename(path, newPath, testDone);
-          });
-        }
-      );
-    });
+    sync(blogID, async function (folder) {
+      await storage.write(blogID, path, content);
+      await folder.update(path);
+      await storage.move(blogID, path, newPath);
+      await folder.update(path);
+      await folder.update(newPath);
+    }).then(function () {
+      checkRename(path, newPath, testDone);
+    }, testDone.fail);
   });
 
   // Set up a test blog before each test
@@ -444,54 +405,20 @@ describe("update", function () {
     };
 
     this.removeAndSync = function (path, callback) {
-      sync(blog.id, function (err, folder, done) {
-        if (err) return callback(err);
-
-        settle(storage.remove(blog.id, path), function (err) {
-          if (err) return callback(err);
-
-          folder
-            .update(path)
-            .then(
-              () => null,
-              (updateErr) => updateErr
-            )
-            .then(function (err) {
-              if (err) return callback(err);
-
-              done(null, function (err) {
-                if (err) return callback(err);
-
-                checkEntry({ path: path, deleted: true }, callback);
-              });
-            });
-        });
-      });
+      sync(blog.id, async function (folder) {
+        await storage.remove(blog.id, path);
+        await folder.update(path);
+      }).then(function () {
+        checkEntry({ path: path, deleted: true }, callback);
+      }, callback);
     };
     this.writeAndSync = function (path, contents, callback) {
-      sync(blog.id, function (err, folder, done) {
-        if (err) return callback(err);
-
-        settle(storage.write(blog.id, path, contents), function (err) {
-          if (err) return callback(err);
-
-          folder
-            .update(path)
-            .then(
-              () => null,
-              (updateErr) => updateErr
-            )
-            .then(function (err) {
-              if (err) return callback(err);
-
-              done(null, function (err) {
-                if (err) return callback(err);
-
-                checkEntry({ path: path, deleted: false }, callback);
-              });
-            });
-        });
-      });
+      sync(blog.id, async function (folder) {
+        await storage.write(blog.id, path, contents);
+        await folder.update(path);
+      }).then(function () {
+        checkEntry({ path: path, deleted: false }, callback);
+      }, callback);
     };
   });
 });

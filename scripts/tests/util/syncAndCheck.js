@@ -9,27 +9,19 @@ module.exports = function SyncAndCheck(blogID) {
     if (type(files) === "object") files = [files];
     if (type(entries) === "object") entries = [entries];
 
-    sync(blogID, (err, folder, syncDone) => {
-      if (err) return callback(err);
+    // The entries are checked before the sync finishes
+    sync(blogID, async (folder) => {
+      for (const { path, content } of files) {
+        await storage.write(blogID, path, content);
+        await folder.update(path);
+      }
 
-      eachSeries(
-        files,
-        ({ path, content }, next) => {
-          storage
-            .write(blogID, path, content)
-            .then(
-              () =>
-                folder.update(path).then((result) => next(null, result), next),
-              next
-            );
-        },
-        (err) => {
-          if (err) return syncDone(err, callback);
-          eachSeries(entries, CheckEntry(blogID), (err) => {
-            syncDone(err, callback);
-          });
-        }
-      );
-    });
+      await new Promise((resolve, reject) => {
+        eachSeries(entries, CheckEntry(blogID), (err) => {
+          if (err) return reject(err);
+          resolve();
+        });
+      });
+    }).then(() => callback(null), callback);
   };
 };

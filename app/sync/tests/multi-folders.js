@@ -1,15 +1,9 @@
 describe("sync multi-folder support", function () {
   var storage = require("storage/folder");
   var path = require("path");
-  var { series } = require("../../../scripts/tests/util/callbacks");
   var Entry = require("models/entry");
   var Entries = require("models/entries");
   var syncFolder = require("sync");
-
-  // Runs fn once the promise resolves; calls fail with its error otherwise
-  function after(promise, fail, fn) {
-    promise.then(fn, fail);
-  }
 
   var drafts = require("../update/drafts");
   var previewPath = drafts.previewPath;
@@ -216,1195 +210,340 @@ describe("sync multi-folder support", function () {
     );
   });
 
-  it("handles renaming a directory to use the + convention", function (done) {
+  // Writes each [path, contents] pair and syncs it, in order, in one sync
+  function writeAndSync(blogID, files) {
+    return syncFolder(blogID, async function (folder) {
+      for (const [path, contents] of files) {
+        await storage.write(blogID, path, contents);
+        await folder.update(path);
+      }
+    });
+  }
+
+  // Syncs each path, in order, in one sync
+  function syncPaths(blogID, paths) {
+    return syncFolder(blogID, async function (folder) {
+      for (const path of paths) await folder.update(path);
+    });
+  }
+
+  it("handles renaming a directory to use the + convention", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [["/images/photo.md", "# Photo"]]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/images/photo.md", "# Photo"),
-              next,
-              function () {
-                folder
-                  .update("/images/photo.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (err) {
-          finish(err, function (finishErr) {
-            if (err || finishErr) return done.fail(err || finishErr);
+    var initialEntry = await Entry.get(blogID, "/images/photo.md");
+    expect(initialEntry).toBeDefined();
 
-            after(
-              Entry.get(blogID, "/images/photo.md"),
-              done.fail,
-              function (initialEntry) {
-                expect(initialEntry).toBeDefined();
+    await storage.move(blogID, "/images", "/images+");
+    await syncPaths(blogID, [
+      "/images/photo.md",
+      "/images+/photo.md",
+      "/images+",
+    ]);
 
-                after(
-                  storage.move(blogID, "/images", "/images+"),
-                  done.fail,
-                  function () {
-                    syncFolder(blogID, function (err2, folder2, finish2) {
-                      if (err2) return done.fail(err2);
+    var aggregatedEntry = await Entry.get(blogID, "/images");
+    expect(aggregatedEntry).toBeDefined();
+    expect(aggregatedEntry.deleted).toBeFalsy();
+    expect(aggregatedEntry.path).toEqual("/images");
+    expect(aggregatedEntry.metadata._sourcePaths).toBeUndefined();
 
-                      series(
-                        [
-                          function (next) {
-                            folder2
-                              .update("/images/photo.md")
-                              .then((result) => next(null, result), next);
-                          },
-                          function (next) {
-                            folder2
-                              .update("/images+/photo.md")
-                              .then((result) => next(null, result), next);
-                          },
-                          function (next) {
-                            folder2
-                              .update("/images+")
-                              .then((result) => next(null, result), next);
-                          },
-                        ],
-                        function (seriesErr) {
-                          finish2(seriesErr, function (finishErr2) {
-                            if (seriesErr || finishErr2)
-                              return done.fail(seriesErr || finishErr2);
-
-                            after(
-                              Entry.get(blogID, "/images"),
-                              done.fail,
-                              function (aggregatedEntry) {
-                                expect(aggregatedEntry).toBeDefined();
-                                expect(aggregatedEntry.deleted).toBeFalsy();
-                                expect(aggregatedEntry.path).toEqual("/images");
-                                expect(
-                                  aggregatedEntry.metadata._sourcePaths
-                                ).toBeUndefined();
-
-                                after(
-                                  Entry.get(blogID, "/images/photo.md"),
-                                  done.fail,
-                                  function (oldEntry) {
-                                    if (oldEntry) {
-                                      expect(oldEntry.deleted).toBe(true);
-                                    }
-                                    done();
-                                  }
-                                );
-                              }
-                            );
-                          });
-                        }
-                      );
-                    });
-                  }
-                );
-              }
-            );
-          });
-        }
-      );
-    });
+    var oldEntry = await Entry.get(blogID, "/images/photo.md");
+    if (oldEntry) {
+      expect(oldEntry.deleted).toBe(true);
+    }
   });
 
-  it("rebuilds the aggregated entry when a child file is removed", function (done) {
+  it("rebuilds the aggregated entry when a child file is removed", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/album+/one.md", "# One"],
+      ["/album+/two.md", "# Two"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/album+/one.md", "# One"),
-              next,
-              function () {
-                folder
-                  .update("/album+/one.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/album+/two.md", "# Two"),
-              next,
-              function () {
-                folder
-                  .update("/album+/two.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    var initialEntry = await Entry.get(blogID, "/album");
+    expect(initialEntry).toBeDefined();
+    expect(initialEntry.html.indexOf("One")).toBeGreaterThan(-1);
+    expect(initialEntry.html.indexOf("Two")).toBeGreaterThan(-1);
 
-            after(
-              Entry.get(blogID, "/album"),
-              done.fail,
-              function (initialEntry) {
-                expect(initialEntry).toBeDefined();
-                expect(initialEntry.html.indexOf("One")).toBeGreaterThan(-1);
-                expect(initialEntry.html.indexOf("Two")).toBeGreaterThan(-1);
+    await storage.remove(blogID, "/album+/two.md");
+    await syncPaths(blogID, ["/album+/two.md"]);
 
-                after(
-                  storage.remove(blogID, "/album+/two.md"),
-                  done.fail,
-                  function () {
-                    syncFolder(blogID, function (err2, folder2, finish2) {
-                      if (err2) return done.fail(err2);
-
-                      folder2
-                        .update("/album+/two.md")
-                        .then(
-                          () => null,
-                          (updateErr) => updateErr
-                        )
-                        .then(function (updateErr) {
-                          finish2(updateErr, function (finishErr2) {
-                            if (updateErr || finishErr2)
-                              return done.fail(updateErr || finishErr2);
-
-                            after(
-                              Entry.get(blogID, "/album"),
-                              done.fail,
-                              function (rebuiltEntry) {
-                                expect(rebuiltEntry).toBeDefined();
-                                expect(rebuiltEntry.deleted).toBeFalsy();
-                                expect(
-                                  rebuiltEntry.html.indexOf("One")
-                                ).toBeGreaterThan(-1);
-                                expect(rebuiltEntry.html.indexOf("Two")).toBe(
-                                  -1
-                                );
-                                done();
-                              }
-                            );
-                          });
-                        });
-                    });
-                  }
-                );
-              }
-            );
-          });
-        }
-      );
-    });
+    var rebuiltEntry = await Entry.get(blogID, "/album");
+    expect(rebuiltEntry).toBeDefined();
+    expect(rebuiltEntry.deleted).toBeFalsy();
+    expect(rebuiltEntry.html.indexOf("One")).toBeGreaterThan(-1);
+    expect(rebuiltEntry.html.indexOf("Two")).toBe(-1);
   });
 
-  it("drops the synthesized entry when the + folder is removed", function (done) {
+  it("drops the synthesized entry when the + folder is removed", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/gallery+/a.md", "# A"],
+      ["/gallery+/b.md", "# B"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/gallery+/a.md", "# A"),
-              next,
-              function () {
-                folder
-                  .update("/gallery+/a.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/gallery+/b.md", "# B"),
-              next,
-              function () {
-                folder
-                  .update("/gallery+/b.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    var initialEntry = await Entry.get(blogID, "/gallery");
+    expect(initialEntry).toBeDefined();
+    expect(initialEntry.deleted).toBeFalsy();
 
-            after(
-              Entry.get(blogID, "/gallery"),
-              done.fail,
-              function (initialEntry) {
-                expect(initialEntry).toBeDefined();
-                expect(initialEntry.deleted).toBeFalsy();
+    await storage.remove(blogID, "/gallery+");
+    await syncPaths(blogID, ["/gallery+/a.md", "/gallery+/b.md", "/gallery+"]);
 
-                after(
-                  storage.remove(blogID, "/gallery+"),
-                  done.fail,
-                  function () {
-                    syncFolder(blogID, function (err2, folder2, finish2) {
-                      if (err2) return done.fail(err2);
-
-                      series(
-                        [
-                          function (next) {
-                            folder2
-                              .update("/gallery+/a.md")
-                              .then((result) => next(null, result), next);
-                          },
-                          function (next) {
-                            folder2
-                              .update("/gallery+/b.md")
-                              .then((result) => next(null, result), next);
-                          },
-                          function (next) {
-                            folder2
-                              .update("/gallery+")
-                              .then((result) => next(null, result), next);
-                          },
-                        ],
-                        function (seriesErr2) {
-                          finish2(seriesErr2, function (finishErr2) {
-                            if (seriesErr2 || finishErr2)
-                              return done.fail(seriesErr2 || finishErr2);
-
-                            after(
-                              Entry.get(blogID, "/gallery"),
-                              done.fail,
-                              function (droppedEntry) {
-                                if (droppedEntry) {
-                                  expect(droppedEntry.deleted).toBe(true);
-                                } else {
-                                  expect(droppedEntry).toBeFalsy();
-                                }
-                                done();
-                              }
-                            );
-                          });
-                        }
-                      );
-                    });
-                  }
-                );
-              }
-            );
-          });
-        }
-      );
-    });
+    var droppedEntry = await Entry.get(blogID, "/gallery");
+    if (droppedEntry) {
+      expect(droppedEntry.deleted).toBe(true);
+    } else {
+      expect(droppedEntry).toBeFalsy();
+    }
   });
 
-  it("keeps the aggregate entry when Fix runs on server restart", function (done) {
+  it("keeps the aggregate entry when Fix runs on server restart", async function () {
     var Fix = require("sync/fix");
     var blog = this.blog;
     var blogID = blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/essay+/one.md", "# One"],
+      ["/essay+/two.md", "# Two"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/essay+/one.md", "# One"),
-              next,
-              function () {
-                folder
-                  .update("/essay+/one.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/essay+/two.md", "# Two"),
-              next,
-              function () {
-                folder
-                  .update("/essay+/two.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    var initialEntry = await Entry.get(blogID, "/essay");
+    expect(initialEntry).toBeDefined();
+    expect(initialEntry.deleted).toBeFalsy();
 
-            after(
-              Entry.get(blogID, "/essay"),
-              done.fail,
-              function (initialEntry) {
-                expect(initialEntry).toBeDefined();
-                expect(initialEntry.deleted).toBeFalsy();
+    // Fix() runs on every client startup / server restart. The
+    // folder post's aggregate lives at a "+"-stripped path with no
+    // file behind it, so entry-ghosts must not treat it as a ghost.
+    await Fix(blog);
 
-                // Fix() runs on every client startup / server restart. The
-                // folder post's aggregate lives at a "+"-stripped path with no
-                // file behind it, so entry-ghosts must not treat it as a ghost.
-                Fix(blog)
-                  .then(
-                    () => null,
-                    (fixErr) => fixErr
-                  )
-                  .then(function (fixErr) {
-                    if (fixErr) return done.fail(fixErr);
-
-                    after(
-                      Entry.get(blogID, "/essay"),
-                      done.fail,
-                      function (afterEntry) {
-                        expect(afterEntry).toBeDefined();
-                        expect(afterEntry.deleted).toBeFalsy();
-                        expect(afterEntry.html.indexOf("One")).toBeGreaterThan(
-                          -1
-                        );
-                        expect(afterEntry.html.indexOf("Two")).toBeGreaterThan(
-                          -1
-                        );
-                        done();
-                      }
-                    );
-                  });
-              }
-            );
-          });
-        }
-      );
-    });
+    var afterEntry = await Entry.get(blogID, "/essay");
+    expect(afterEntry).toBeDefined();
+    expect(afterEntry.deleted).toBeFalsy();
+    expect(afterEntry.html.indexOf("One")).toBeGreaterThan(-1);
+    expect(afterEntry.html.indexOf("Two")).toBeGreaterThan(-1);
   });
 
-  it("drops the aggregate through Fix when the + folder is gone", function (done) {
+  it("drops the aggregate through Fix when the + folder is gone", async function () {
     var Fix = require("sync/fix");
     var blog = this.blog;
     var blogID = blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/essay+/one.md", "# One"],
+      ["/essay+/two.md", "# Two"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/essay+/one.md", "# One"),
-              next,
-              function () {
-                folder
-                  .update("/essay+/one.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/essay+/two.md", "# Two"),
-              next,
-              function () {
-                folder
-                  .update("/essay+/two.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    var initialEntry = await Entry.get(blogID, "/essay");
+    expect(initialEntry).toBeDefined();
+    expect(initialEntry.deleted).toBeFalsy();
 
-            after(
-              Entry.get(blogID, "/essay"),
-              done.fail,
-              function (initialEntry) {
-                expect(initialEntry).toBeDefined();
-                expect(initialEntry.deleted).toBeFalsy();
+    // Remove the folder without letting sync see it, then let Fix
+    // reconcile: the aggregate has no source folder left on disk, so
+    // it is a genuine ghost and must be dropped.
+    await storage.remove(blogID, "/essay+");
+    await Fix(blog);
 
-                // Remove the folder without letting sync see it, then let Fix
-                // reconcile: the aggregate has no source folder left on disk, so
-                // it is a genuine ghost and must be dropped.
-                after(
-                  storage.remove(blogID, "/essay+"),
-                  done.fail,
-                  function () {
-                    Fix(blog)
-                      .then(
-                        () => null,
-                        (fixErr) => fixErr
-                      )
-                      .then(function (fixErr) {
-                        if (fixErr) return done.fail(fixErr);
-
-                        after(
-                          Entry.get(blogID, "/essay"),
-                          done.fail,
-                          function (afterEntry) {
-                            if (afterEntry) {
-                              expect(afterEntry.deleted).toBe(true);
-                            } else {
-                              expect(afterEntry).toBeFalsy();
-                            }
-                            done();
-                          }
-                        );
-                      });
-                  }
-                );
-              }
-            );
-          });
-        }
-      );
-    });
+    var afterEntry = await Entry.get(blogID, "/essay");
+    if (afterEntry) {
+      expect(afterEntry.deleted).toBe(true);
+    } else {
+      expect(afterEntry).toBeFalsy();
+    }
   });
 
-  it("drops the aggregate when the + folder is replaced by a file", function (done) {
+  it("drops the aggregate when the + folder is replaced by a file", async function () {
     var Fix = require("sync/fix");
     var blog = this.blog;
     var blogID = blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/essay+/one.md", "# One"],
+      ["/essay+/two.md", "# Two"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/essay+/one.md", "# One"),
-              next,
-              function () {
-                folder
-                  .update("/essay+/one.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/essay+/two.md", "# Two"),
-              next,
-              function () {
-                folder
-                  .update("/essay+/two.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    var initialEntry = await Entry.get(blogID, "/essay");
+    expect(initialEntry).toBeDefined();
 
-            after(
-              Entry.get(blogID, "/essay"),
-              done.fail,
-              function (initialEntry) {
-                expect(initialEntry).toBeDefined();
+    // Swap the directory for a plain file at the same path.
+    await storage.remove(blogID, "/essay+");
+    await storage.write(blogID, "/essay+", "not a folder");
+    await syncPaths(blogID, ["/essay+"]);
 
-                // Swap the directory for a plain file at the same path.
-                after(
-                  storage.remove(blogID, "/essay+").then(function () {
-                    return storage.write(blogID, "/essay+", "not a folder");
-                  }),
-                  done.fail,
-                  function () {
-                    syncFolder(blogID, function (err2, folder2, finish2) {
-                      if (err2) return done.fail(err2);
+    var afterUpdate = await Entry.get(blogID, "/essay");
+    if (afterUpdate) {
+      expect(afterUpdate.deleted).toBe(true);
+    } else {
+      expect(afterUpdate).toBeFalsy();
+    }
 
-                      folder2
-                        .update("/essay+")
-                        .then(
-                          () => null,
-                          (updateErr) => updateErr
-                        )
-                        .then(function (updateErr) {
-                          finish2(updateErr, function (finishErr2) {
-                            if (finishErr2) return done.fail(finishErr2);
+    // Fix() also treats a non-directory "+" path as a ghost.
+    await Fix(blog);
 
-                            after(
-                              Entry.get(blogID, "/essay"),
-                              done.fail,
-                              function (afterUpdate) {
-                                if (afterUpdate) {
-                                  expect(afterUpdate.deleted).toBe(true);
-                                } else {
-                                  expect(afterUpdate).toBeFalsy();
-                                }
-
-                                // Fix() also treats a non-directory "+" path as a ghost.
-                                Fix(blog)
-                                  .then(
-                                    () => null,
-                                    (fixErr) => fixErr
-                                  )
-                                  .then(function (fixErr) {
-                                    if (fixErr) return done.fail(fixErr);
-
-                                    after(
-                                      Entry.get(blogID, "/essay"),
-                                      done.fail,
-                                      function (afterFix) {
-                                        if (afterFix) {
-                                          expect(afterFix.deleted).toBe(true);
-                                        } else {
-                                          expect(afterFix).toBeFalsy();
-                                        }
-                                        done();
-                                      }
-                                    );
-                                  });
-                              }
-                            );
-                          });
-                        });
-                    });
-                  }
-                );
-              }
-            );
-          });
-        }
-      );
-    });
+    var afterFix = await Entry.get(blogID, "/essay");
+    if (afterFix) {
+      expect(afterFix.deleted).toBe(true);
+    } else {
+      expect(afterFix).toBeFalsy();
+    }
   });
 
-  it("keeps a sibling post when a plain +-suffixed file shares its stripped path", function (done) {
+  it("keeps a sibling post when a plain +-suffixed file shares its stripped path", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/post.md", "# The Real Post"],
+      // A file that just happens to end in "+", never a folder.
+      ["/post.md+", "leftover"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/post.md", "# The Real Post"),
-              next,
-              function () {
-                folder
-                  .update("/post.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            // A file that just happens to end in "+", never a folder.
-            after(
-              storage.write(blogID, "/post.md+", "leftover"),
-              next,
-              function () {
-                folder
-                  .update("/post.md+")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
-
-            after(Entry.get(blogID, "/post.md"), done.fail, function (entry) {
-              expect(entry).toBeDefined();
-              expect(entry.deleted).toBeFalsy();
-              expect(entry.html.indexOf("The Real Post")).toBeGreaterThan(-1);
-              done();
-            });
-          });
-        }
-      );
-    });
+    var entry = await Entry.get(blogID, "/post.md");
+    expect(entry).toBeDefined();
+    expect(entry.deleted).toBeFalsy();
+    expect(entry.html.indexOf("The Real Post")).toBeGreaterThan(-1);
   });
 
-  it("keeps a sibling file's entry when a + folder collides with its stripped path", function (done) {
+  it("keeps a sibling file's entry when a + folder collides with its stripped path", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/article.md", "# The Real Article"],
+      ["/article.md+/extra.md", "# Extra"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/article.md", "# The Real Article"),
-              next,
-              function () {
-                folder
-                  .update("/article.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/article.md+/extra.md", "# Extra"),
-              next,
-              function () {
-                folder
-                  .update("/article.md+/extra.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
-
-            after(
-              Entry.get(blogID, "/article.md"),
-              done.fail,
-              function (entry) {
-                expect(entry).toBeDefined();
-                expect(entry.deleted).toBeFalsy();
-                expect(entry.html.indexOf("The Real Article")).toBeGreaterThan(
-                  -1
-                );
-                expect(entry.html.indexOf("multi-file-post")).toBe(-1);
-                done();
-              }
-            );
-          });
-        }
-      );
-    });
+    var entry = await Entry.get(blogID, "/article.md");
+    expect(entry).toBeDefined();
+    expect(entry.deleted).toBeFalsy();
+    expect(entry.html.indexOf("The Real Article")).toBeGreaterThan(-1);
+    expect(entry.html.indexOf("multi-file-post")).toBe(-1);
   });
 
-  it("drops the aggregate when every file is removed and only the files are synced", function (done) {
+  it("drops the aggregate when every file is removed and only the files are synced", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/notes/multi+/a.md", "# A"],
+      ["/notes/multi+/b.md", "# B"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/notes/multi+/a.md", "# A"),
-              next,
-              function () {
-                folder
-                  .update("/notes/multi+/a.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/notes/multi+/b.md", "# B"),
-              next,
-              function () {
-                folder
-                  .update("/notes/multi+/b.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    var initialEntry = await Entry.get(blogID, "/notes/multi");
+    expect(initialEntry).toBeDefined();
+    expect(initialEntry.deleted).toBeFalsy();
 
-            after(
-              Entry.get(blogID, "/notes/multi"),
-              done.fail,
-              function (initialEntry) {
-                expect(initialEntry).toBeDefined();
-                expect(initialEntry.deleted).toBeFalsy();
+    // Like a push to a repository: the files and the folder are
+    // gone, and only the file paths are reported.
+    await storage.remove(blogID, "/notes/multi+");
+    await syncPaths(blogID, ["/notes/multi+/a.md", "/notes/multi+/b.md"]);
 
-                // Like a push to a repository: the files and the folder are
-                // gone, and only the file paths are reported.
-                after(
-                  storage.remove(blogID, "/notes/multi+"),
-                  done.fail,
-                  function () {
-                    syncFolder(blogID, function (err2, folder2, finish2) {
-                      if (err2) return done.fail(err2);
+    var dropped = await Entry.get(blogID, "/notes/multi");
+    expect(dropped && !dropped.deleted).toBeFalsy();
 
-                      series(
-                        [
-                          function (next) {
-                            folder2
-                              .update("/notes/multi+/a.md")
-                              .then((result) => next(null, result), next);
-                          },
-                          function (next) {
-                            folder2
-                              .update("/notes/multi+/b.md")
-                              .then((result) => next(null, result), next);
-                          },
-                        ],
-                        function (seriesErr2) {
-                          finish2(seriesErr2, function (finishErr2) {
-                            if (seriesErr2 || finishErr2)
-                              return done.fail(seriesErr2 || finishErr2);
-
-                            after(
-                              Entry.get(blogID, "/notes/multi"),
-                              done.fail,
-                              function (dropped) {
-                                expect(dropped && !dropped.deleted).toBeFalsy();
-
-                                after(
-                                  Entries.getListIDs(blogID, "entries", {}),
-                                  done.fail,
-                                  function (ids) {
-                                    expect(ids).not.toContain("/notes/multi");
-                                    done();
-                                  }
-                                );
-                              }
-                            );
-                          });
-                        }
-                      );
-                    });
-                  }
-                );
-              }
-            );
-          });
-        }
-      );
-    });
+    var ids = await Entries.getListIDs(blogID, "entries", {});
+    expect(ids).not.toContain("/notes/multi");
   });
 
-  it("keeps a sibling file's entry when every file of its colliding + folder is removed", function (done) {
+  it("keeps a sibling file's entry when every file of its colliding + folder is removed", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/article.md", "# The Real Article"],
+      ["/article.md+/a.md", "# A"],
+      ["/article.md+/b.md", "# B"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/article.md", "# The Real Article"),
-              next,
-              function () {
-                folder
-                  .update("/article.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/article.md+/a.md", "# A"),
-              next,
-              function () {
-                folder
-                  .update("/article.md+/a.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/article.md+/b.md", "# B"),
-              next,
-              function () {
-                folder
-                  .update("/article.md+/b.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    await storage.remove(blogID, "/article.md+");
+    await syncPaths(blogID, ["/article.md+/a.md", "/article.md+/b.md"]);
 
-            after(
-              storage.remove(blogID, "/article.md+"),
-              done.fail,
-              function () {
-                syncFolder(blogID, function (err2, folder2, finish2) {
-                  if (err2) return done.fail(err2);
-
-                  series(
-                    [
-                      function (next) {
-                        folder2
-                          .update("/article.md+/a.md")
-                          .then((result) => next(null, result), next);
-                      },
-                      function (next) {
-                        folder2
-                          .update("/article.md+/b.md")
-                          .then((result) => next(null, result), next);
-                      },
-                    ],
-                    function (seriesErr2) {
-                      finish2(seriesErr2, function (finishErr2) {
-                        if (seriesErr2 || finishErr2)
-                          return done.fail(seriesErr2 || finishErr2);
-
-                        after(
-                          Entry.get(blogID, "/article.md"),
-                          done.fail,
-                          function (entry) {
-                            expect(entry).toBeDefined();
-                            expect(entry.deleted).toBeFalsy();
-                            expect(
-                              entry.html.indexOf("The Real Article")
-                            ).toBeGreaterThan(-1);
-                            done();
-                          }
-                        );
-                      });
-                    }
-                  );
-                });
-              }
-            );
-          });
-        }
-      );
-    });
+    var entry = await Entry.get(blogID, "/article.md");
+    expect(entry).toBeDefined();
+    expect(entry.deleted).toBeFalsy();
+    expect(entry.html.indexOf("The Real Article")).toBeGreaterThan(-1);
   });
 
-  it("keeps a sibling file's entry when its colliding + folder is deleted", function (done) {
+  it("keeps a sibling file's entry when its colliding + folder is deleted", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/article.md", "# The Real Article"],
+      ["/article.md+/extra.md", "# Extra"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/article.md", "# The Real Article"),
-              next,
-              function () {
-                folder
-                  .update("/article.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/article.md+/extra.md", "# Extra"),
-              next,
-              function () {
-                folder
-                  .update("/article.md+/extra.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    // Delete the colliding "+" folder outright.
+    await storage.remove(blogID, "/article.md+");
+    await syncPaths(blogID, ["/article.md+"]);
 
-            // Delete the colliding "+" folder outright.
-            after(
-              storage.remove(blogID, "/article.md+"),
-              done.fail,
-              function () {
-                syncFolder(blogID, function (err2, folder2, finish2) {
-                  if (err2) return done.fail(err2);
-
-                  folder2
-                    .update("/article.md+")
-                    .then(
-                      () => null,
-                      (updateErr) => updateErr
-                    )
-                    .then(function (updateErr) {
-                      finish2(updateErr, function (finishErr2) {
-                        if (finishErr2) return done.fail(finishErr2);
-
-                        after(
-                          Entry.get(blogID, "/article.md"),
-                          done.fail,
-                          function (entry) {
-                            expect(entry).toBeDefined();
-                            expect(entry.deleted).toBeFalsy();
-                            expect(
-                              entry.html.indexOf("The Real Article")
-                            ).toBeGreaterThan(-1);
-                            done();
-                          }
-                        );
-                      });
-                    });
-                });
-              }
-            );
-          });
-        }
-      );
-    });
+    var entry = await Entry.get(blogID, "/article.md");
+    expect(entry).toBeDefined();
+    expect(entry.deleted).toBeFalsy();
+    expect(entry.html.indexOf("The Real Article")).toBeGreaterThan(-1);
   });
 
-  it("rebuilds a colliding + folder once the blocking sibling file is deleted", function (done) {
+  it("rebuilds a colliding + folder once the blocking sibling file is deleted", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/article.md", "# The Real Article"],
+      ["/article.md+/extra.md", "# Extra"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/article.md", "# The Real Article"),
-              next,
-              function () {
-                folder
-                  .update("/article.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/article.md+/extra.md", "# Extra"),
-              next,
-              function () {
-                folder
-                  .update("/article.md+/extra.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    // Remove the sibling file that was blocking the folder post.
+    await storage.remove(blogID, "/article.md");
+    await syncPaths(blogID, ["/article.md"]);
 
-            // Remove the sibling file that was blocking the folder post.
-            after(
-              storage.remove(blogID, "/article.md"),
-              done.fail,
-              function () {
-                syncFolder(blogID, function (err2, folder2, finish2) {
-                  if (err2) return done.fail(err2);
-
-                  folder2
-                    .update("/article.md")
-                    .then(
-                      () => null,
-                      (updateErr) => updateErr
-                    )
-                    .then(function (updateErr) {
-                      finish2(updateErr, function (finishErr2) {
-                        if (finishErr2) return done.fail(finishErr2);
-
-                        after(
-                          Entry.get(blogID, "/article.md"),
-                          done.fail,
-                          function (entry) {
-                            expect(entry).toBeDefined();
-                            expect(entry.deleted).toBeFalsy();
-                            expect(
-                              entry.html.indexOf("multi-file-post")
-                            ).toBeGreaterThan(-1);
-                            expect(entry.html.indexOf("Extra")).toBeGreaterThan(
-                              -1
-                            );
-                            done();
-                          }
-                        );
-                      });
-                    });
-                });
-              }
-            );
-          });
-        }
-      );
-    });
+    var entry = await Entry.get(blogID, "/article.md");
+    expect(entry).toBeDefined();
+    expect(entry.deleted).toBeFalsy();
+    expect(entry.html.indexOf("multi-file-post")).toBeGreaterThan(-1);
+    expect(entry.html.indexOf("Extra")).toBeGreaterThan(-1);
   });
 
-  it("drops the aggregate when a source exceeds the size limit and recovers after shrinking", function (done) {
+  it("drops the aggregate when a source exceeds the size limit and recovers after shrinking", async function () {
     var limit = require("build/converters/post-source-size").MARKDOWN.bytes;
     var IgnoredFiles = require("models/ignoredFiles");
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      ["/album+/01.md", "# One"],
+      ["/album+/02.md", "# Two"],
+      // Grow one source past its converter limit.
+      ["/album+/02.md", Buffer.alloc(limit + 1, 32)],
+    ]);
 
-      series(
-        [
-          function (next) {
-            after(
-              storage.write(blogID, "/album+/01.md", "# One"),
-              next,
-              function () {
-                folder
-                  .update("/album+/01.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(blogID, "/album+/02.md", "# Two"),
-              next,
-              function () {
-                folder
-                  .update("/album+/02.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            // Grow one source past its converter limit.
-            after(
-              storage.write(
-                blogID,
-                "/album+/02.md",
-                Buffer.alloc(limit + 1, 32)
-              ),
-              next,
-              function () {
-                folder
-                  .update("/album+/02.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
+    var aggregate = await Entry.get(blogID, "/album");
+    // The stale folder post is dropped rather than left published.
+    expect(aggregate && aggregate.deleted).toBe(true);
 
-            after(Entry.get(blogID, "/album"), done.fail, function (aggregate) {
-              // The stale folder post is dropped rather than left published.
-              expect(aggregate && aggregate.deleted).toBe(true);
+    var reason = await IgnoredFiles.getStatus(blogID, "/album+/02.md");
+    expect(reason).toBe("TOO_LARGE");
 
-              after(
-                IgnoredFiles.getStatus(blogID, "/album+/02.md"),
-                done.fail,
-                function (reason) {
-                  expect(reason).toBe("TOO_LARGE");
+    await writeAndSync(blogID, [["/album+/02.md", "# Two again"]]);
 
-                  syncFolder(blogID, function (err2, folder2, finish2) {
-                    if (err2) return done.fail(err2);
+    var recovered = await Entry.get(blogID, "/album");
+    expect(recovered).toBeTruthy();
+    expect(recovered.deleted).toBeFalsy();
+    expect(recovered.html).toContain("Two again");
 
-                    after(
-                      storage.write(blogID, "/album+/02.md", "# Two again"),
-                      done.fail,
-                      function () {
-                        folder2
-                          .update("/album+/02.md")
-                          .then(
-                            () => null,
-                            (updateErr) => updateErr
-                          )
-                          .then(function (updateErr) {
-                            finish2(updateErr, function (finishErr2) {
-                              if (updateErr || finishErr2)
-                                return done.fail(updateErr || finishErr2);
-
-                              after(
-                                Entry.get(blogID, "/album"),
-                                done.fail,
-                                function (recovered) {
-                                  expect(recovered).toBeTruthy();
-                                  expect(recovered.deleted).toBeFalsy();
-                                  expect(recovered.html).toContain("Two again");
-
-                                  after(
-                                    IgnoredFiles.getStatus(
-                                      blogID,
-                                      "/album+/02.md"
-                                    ),
-                                    done.fail,
-                                    function (reason3) {
-                                      // The recovered source is no longer hidden on
-                                      // the dashboard.
-                                      expect(reason3).toBeFalsy();
-                                      done();
-                                    }
-                                  );
-                                }
-                              );
-                            });
-                          });
-                      }
-                    );
-                  });
-                }
-              );
-            });
-          });
-        }
-      );
-    });
+    // The recovered source is no longer hidden on the dashboard.
+    var reason3 = await IgnoredFiles.getStatus(blogID, "/album+/02.md");
+    expect(reason3).toBeFalsy();
   });
 
-  it("does not overwrite a sibling file when a draft folder post writes its preview", function (done) {
+  it("does not overwrite a sibling file when a draft folder post writes its preview", async function () {
     var blogID = this.blog.id;
 
-    syncFolder(blogID, function (err, folder, finish) {
-      if (err) return done.fail(err);
+    await writeAndSync(blogID, [
+      // A real source file at the folder post's published path + .html
+      ["/album.html", "<p>real sibling</p>"],
+      ["/album+/01.md", "Draft: yes\n\n# Draft album"],
+    ]);
 
-      series(
-        [
-          function (next) {
-            // A real source file at the folder post's published path + .html
-            after(
-              storage.write(blogID, "/album.html", "<p>real sibling</p>"),
-              next,
-              function () {
-                folder
-                  .update("/album.html")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          function (next) {
-            after(
-              storage.write(
-                blogID,
-                "/album+/01.md",
-                "Draft: yes\n\n# Draft album"
-              ),
-              next,
-              function () {
-                folder
-                  .update("/album+/01.md")
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-        ],
-        function (seriesErr) {
-          finish(seriesErr, function (finishErr) {
-            if (seriesErr || finishErr)
-              return done.fail(seriesErr || finishErr);
-
-            after(Entry.get(blogID, "/album"), done.fail, function (aggregate) {
-              expect(aggregate && aggregate.draft).toBe(true);
-              // previewPath("/album") is "/album.html"; the sibling on disk
-              // must be left untouched.
-              storage.read(blogID, "/album.html").then(function (contents) {
-                expect(contents.toString()).toEqual("<p>real sibling</p>");
-                done();
-              }, done.fail);
-            });
-          });
-        }
-      );
-    });
+    var aggregate = await Entry.get(blogID, "/album");
+    expect(aggregate && aggregate.draft).toBe(true);
+    // previewPath("/album") is "/album.html"; the sibling on disk
+    // must be left untouched.
+    var contents = await storage.read(blogID, "/album.html");
+    expect(contents.toString()).toEqual("<p>real sibling</p>");
   });
 });
