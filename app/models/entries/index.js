@@ -217,6 +217,18 @@ module.exports = (function () {
     }
   }
 
+  // promiseOnly can't guard each: its last argument is always a function. A
+  // third argument is the old callback.
+  function eachOnly(blogID, dothis, ...rest) {
+    if (rest.length) {
+      throw new TypeError(
+        "each no longer takes a callback; pass an async function and await it (#2559)"
+      );
+    }
+
+    return each(blogID, dothis);
+  }
+
   // Only whether each entry's key exists matters here, so it's checked with
   // EXISTS rather than by reading the entry. Reading entries in full (content
   // included) is what used to exhaust the heap when a blog with many large
@@ -810,7 +822,7 @@ module.exports = (function () {
   return {
     get: promiseOnly(get),
     resave: promiseOnly(resave),
-    each: promiseOnly(each),
+    each: eachOnly,
     pruneMissing: promiseOnly(pruneMissing),
     sweepExpiredDeleted: require("./sweepExpiredDeleted"),
     adjacentTo: promiseOnly(adjacentTo),
