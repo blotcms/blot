@@ -42,7 +42,7 @@ site.post(
 
 function getSidebarSelection(path) {
   // The overview and everything it leads to (all files, a file or
-  // subfolder, posts, recent activity) are under Home
+  // subfolder, posts, recent activity) are under Overview
   if (
     path === "/" ||
     path === "/files" ||
@@ -69,19 +69,20 @@ function getSidebarSelection(path) {
     path.startsWith("/template-folder")
   )
     return "template";
-  if (path.startsWith("/import")) return "import";
+  // Import is a Settings tab, at its own URL: the proxy pins /import to one
+  // container (proxy/config/blot-site.conf)
+  if (path === "/import" || path.startsWith("/import/")) return "siteSettings";
   return null;
 }
 
 // What the phone navigation bar shows as the current section
 const sidebarLabels = {
-  folder: "Home",
+  folder: "Overview",
   title: "Title",
   domain: "Domain",
   template: "Template",
   sync: "Sync",
   siteSettings: "Settings",
-  import: "Import",
 };
 
 // Every page has a title of its own: a page that doesn't set one (or sets
@@ -364,7 +365,6 @@ site.get(["/delete", "/delete/confirm"], (req, res) => {
   );
 });
 site.use("/delete", require("./delete"));
-site.use("/import", require("./import"));
 // Export is a Settings tab; the old page leads there, and its download
 // links keep working
 site.get("/export", (req, res) => {
@@ -436,6 +436,7 @@ const settingsTabs = [
   ["posts", "Posts"],
   ["redirects", "Redirects"],
   ["services", "Services"],
+  ["import", "Import"],
   ["export", "Export"],
   ["delete", "Delete site"],
 ];
@@ -443,12 +444,19 @@ const settingsTabs = [
 const settingsTab = (tab) => (req, res, next) => {
   res.locals.settingsTabs = settingsTabs.map(([slug, label]) => ({
     label,
-    url: `${res.locals.base}/settings/${slug}`,
+    // Import keeps its own URL, which the proxy pins to one container
+    url:
+      slug === "import"
+        ? `${res.locals.base}/import`
+        : `${res.locals.base}/settings/${slug}`,
     current: slug === tab ? "page" : "",
   }));
   next();
 };
 
+// Import is a Settings tab but keeps its URL: the proxy pins /import to one
+// container, since an import's state is in that container's temp files
+site.use("/import", settingsTab("import"), require("./import"));
 site.use("/settings/export", settingsTab("export"), require("./export"));
 site.use("/settings/delete", settingsTab("delete"), require("./delete"));
 

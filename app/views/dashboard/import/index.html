@@ -1,3 +1,6 @@
+{{> message}}
+{{> settings-tabs}}
+
 <style>
     
   .imports {padding: 0 0 var(--space-5);display: flex;flex-wrap: wrap;list-style: none;gap: 1em;max-width: none;}
@@ -32,12 +35,8 @@
   
   
 
-<div class="dashboard-form-panel" data-import-base="{{{importBase}}}">
-        <header class="page-header">
-          <div class="page-header__text">
-            <h1 class="page-header__title">Import</h1>
-          </div>
-        </header>
+<!-- A Settings tab: the tabs above head the page, as on the others -->
+<div class="dashboard-form-panel settings-page" data-import-base="{{{importBase}}}">
 
 {{#imports.length}}
 <div class="live-updates">
