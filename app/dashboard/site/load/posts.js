@@ -313,8 +313,11 @@ module.exports = async function (req, res, next) {
     }
 
     if (activeGroup && activeGroup.count === 0) {
+      // "No posts yet.", but "Nothing scheduled yet."
       res.locals.emptyPostFilterMessage =
-        "No " + activeGroup.filterTitle.toLowerCase() + " yet.";
+        activeGroup.key === "scheduled"
+          ? "Nothing scheduled yet."
+          : "No " + activeGroup.filterTitle.toLowerCase() + " yet.";
     }
   } catch (err) {
     console.log(err);
