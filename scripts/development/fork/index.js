@@ -33,125 +33,111 @@ function done(err) {
   process.exit();
 }
 
-function freeHandle(base, attempt, callback) {
+async function freeHandle(base, attempt) {
   var candidate = attempt ? base + attempt : base;
-  validate("", candidate).then(
-    function (handle) {
-      callback(null, handle);
-    },
-    function (err) {
-      if (attempt >= 50) return callback(err);
-      freeHandle(base, attempt + 1, callback);
-    }
-  );
+
+  try {
+    return await validate("", candidate);
+  } catch (err) {
+    if (attempt >= 50) throw err;
+    return freeHandle(base, attempt + 1);
+  }
 }
 
-function create(base, settings, callback) {
-  function notFound() {
-    callback(
-      new Error(EMAIL + " not found — start the local server first (npm start)")
+async function create(base, settings) {
+  var user = await User.getByEmail(EMAIL).catch(function () {});
+
+  if (!user) {
+    throw new Error(
+      EMAIL + " not found — start the local server first (npm start)"
     );
   }
 
-  User.getByEmail(EMAIL).then(function (user) {
-    if (!user) return notFound();
+  var handle = await freeHandle(
+    base.toLowerCase().replace(/[^a-z0-9]/g, ""),
+    0
+  );
+  var blog = await Blog.create(user.uid, { handle: handle });
 
-    freeHandle(
-      base.toLowerCase().replace(/[^a-z0-9]/g, ""),
-      0,
-      function (err, handle) {
-        if (err) return callback(err);
+  // Production settings first, then the same overrides
+  // app/configure-local-blogs.js gives local blogs
+  var changes = Object.assign({}, settings, {
+    forceSSL: false,
+    client: "local",
+  });
 
-        Blog.create(user.uid, { handle: handle }).then(function (blog) {
-          // Production settings first, then the same overrides
-          // app/configure-local-blogs.js gives local blogs
-          var changes = Object.assign({}, settings, {
-            forceSSL: false,
-            client: "local",
-          });
+  await Blog.set(blog.id, changes);
 
-          Blog.set(blog.id, changes).then(function () {
-            console.log("blogID=" + blog.id);
-            console.log("handle=" + blog.handle);
-            callback();
-          }, callback);
-        }, callback);
-      }
-    );
-  }, notFound);
+  console.log("blogID=" + blog.id);
+  console.log("handle=" + blog.handle);
 }
 
-function finish(blogID, slug, callback) {
+async function finish(blogID, slug) {
   // The folder was copied into the Local client's source directory; copy it
   // from there into the blog's folder, then rebuild
-  require("clients/local/setup")
-    .reconcileSource(blogID)
-    .then(function () {
-      rebuildAndWatch();
-    }, callback);
+  await require("clients/local/setup").reconcileSource(blogID);
+  await rebuild(blogID, {});
 
-  function rebuildAndWatch() {
-    rebuild(blogID, {}).then(function () {
-      // rebuild skips /Templates, so build the folder's templates explicitly
-      Template.buildFromFolder(blogID).then(function () {
-        if (!slug) return watch(blogID, callback);
-        activate(blogID, slug, function (err) {
-          if (err) return callback(err);
-          watch(blogID, callback);
-        });
-      }, callback);
-    }, callback);
-  }
+  // rebuild skips /Templates, so build the folder's templates explicitly
+  await Template.buildFromFolder(blogID);
+
+  if (slug) await activate(blogID, slug);
+
+  await watch(blogID);
 }
 
 // Only after the folder is fully copied and built: the watcher ignores
 // existing files, and starting it earlier races with the rsync and rebuild.
 // It must start in the master process, which only hears about new folders
 // through this channel (payload must be JSON).
-function watch(blogID, callback) {
-  client
-    .publish(LOCAL_CLIENT_CHANNEL, JSON.stringify({ blogID: blogID }))
-    .then(function () {
-      Blog.get({ id: blogID }).then(function (blog) {
-        console.log("url=https://" + blog.handle + "." + config.host);
-        callback();
-      }, callback);
-    }, callback);
-}
-
-function activate(blogID, slug, callback) {
-  var templateID = Template.makeID(blogID, slug);
-
-  Template.getMetadata(templateID).then(
-    function (template) {
-      if (!template) {
-        return callback(new Error("Template " + templateID + " was not built"));
-      }
-
-      Blog.set(blogID, { template: templateID }).then(function (changes) {
-        callback(null, changes);
-      }, callback);
-    },
-    function () {
-      callback(new Error("Template " + templateID + " was not built"));
-    }
+async function watch(blogID) {
+  await client.publish(
+    LOCAL_CLIENT_CHANNEL,
+    JSON.stringify({ blogID: blogID })
   );
+
+  var blog = await Blog.get({ id: blogID });
+
+  console.log("url=https://" + blog.handle + "." + config.host);
 }
 
-var command = process.argv[2];
+async function activate(blogID, slug) {
+  var templateID = Template.makeID(blogID, slug);
+  var template;
 
-if (command === "create" && process.argv[3]) {
-  fs.readFile(0, "utf-8", function (err, input) {
-    if (err) return done(err);
-    var settings;
-    try {
-      settings = input.trim() ? JSON.parse(input) : {};
-    } catch (e) {
-      return done(new Error("Settings on stdin are not valid JSON"));
-    }
-    create(process.argv[3], settings, done);
-  });
-} else if (command === "finish" && process.argv[3])
-  finish(process.argv[3], process.argv[4], done);
-else
-  done(new Error("Usage: fork create <handle> | fork finish <blogID> [slug]"));
+  try {
+    template = await Template.getMetadata(templateID);
+  } catch (err) {}
+
+  if (!template) {
+    throw new Error("Template " + templateID + " was not built");
+  }
+
+  await Blog.set(blogID, { template: templateID });
+}
+
+async function readSettings() {
+  var input = await fs.readFile(0, "utf-8");
+
+  try {
+    return input.trim() ? JSON.parse(input) : {};
+  } catch (e) {
+    throw new Error("Settings on stdin are not valid JSON", { cause: e });
+  }
+}
+
+async function main() {
+  var command = process.argv[2];
+
+  if (command === "create" && process.argv[3]) {
+    await create(process.argv[3], await readSettings());
+  } else if (command === "finish" && process.argv[3]) {
+    await finish(process.argv[3], process.argv[4]);
+  } else {
+    throw new Error(
+      "Usage: fork create <handle> | fork finish <blogID> [slug]"
+    );
+  }
+}
+
+main().then(() => done(), done);

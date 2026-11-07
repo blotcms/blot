@@ -1,7 +1,6 @@
 var get = require("../get/entry");
 var establishSyncLock = require("sync/establishSyncLock");
 var wipeCaches = require("./wipe-image-and-thumbnail-cache");
-var { promisify } = require("util");
 
 if (!process.argv[2]) {
   console.log(
@@ -14,14 +13,7 @@ async function rebuild(url) {
   // Will rebuild and recache any thumbnails or images
   console.log("Getting info from:", url);
 
-  const found = await new Promise((resolve) =>
-    get(url, (err, user, blog, entry) => resolve({ err, blog, entry }))
-  );
-
-  if (found.err && found.err.message !== "No entry") throw found.err;
-
-  const blog = found.blog;
-  const entry = found.entry;
+  const { blog, entry } = await get(url);
 
   var path;
 
@@ -36,7 +28,7 @@ async function rebuild(url) {
   const lock = await establishSyncLock(blog.id);
 
   try {
-    await promisify(wipeCaches)(url);
+    await wipeCaches(url);
   } catch (err) {
     console.log(err);
   }

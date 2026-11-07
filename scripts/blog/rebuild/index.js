@@ -3,11 +3,7 @@ var get = require("../../get/blog");
 var rebuild = require("sync/rebuild");
 
 async function main() {
-  const blog = await new Promise((resolve, reject) => {
-    get(process.argv[2], (err, user, blog) =>
-      err ? reject(err) : resolve(blog)
-    );
-  });
+  const { blog } = await get(process.argv[2]);
 
   const options = {};
 

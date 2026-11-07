@@ -123,12 +123,13 @@ async function printResult(result) {
 }
 
 // Resolves to { user, blog }, or to undefined when the lookup fails
-function lookupBlog(identifier) {
-  return new Promise((resolve) => {
-    getBlog(identifier, (err, user, blog) =>
-      resolve(err ? undefined : { user, blog })
-    );
-  });
+async function lookupBlog(identifier) {
+  try {
+    const { user, blog } = await getBlog(identifier);
+    return { user, blog };
+  } catch (err) {
+    return undefined;
+  }
 }
 
 async function searchOne() {

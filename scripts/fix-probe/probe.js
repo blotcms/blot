@@ -367,13 +367,14 @@ async function tagStats(blogID, Tags, entryKey) {
   };
 }
 
+// Times a function that returns a promise, from the call until it settles,
+// and records the tag (second argument) and how many results it resolved to.
 function wrapAsync(object, name, out, label) {
   const original = object[name];
   object[name] = function (...args) {
-    const callback = args[args.length - 1];
-    if (typeof callback !== "function") return original.apply(this, args);
     const started = performance.now();
-    args[args.length - 1] = function (err, result) {
+
+    function record(result, err) {
       out.append("calls.ndjson", {
         t: instrument.now(),
         call: label,
@@ -382,9 +383,28 @@ function wrapAsync(object, name, out, label) {
         results: Array.isArray(result) ? result.length : undefined,
         error: err ? String(err.message || err) : undefined,
       });
-      callback.apply(this, arguments);
-    };
-    return original.apply(this, args);
+    }
+
+    let result;
+    try {
+      result = original.apply(this, args);
+    } catch (err) {
+      record(undefined, err);
+      throw err;
+    }
+
+    if (result && typeof result.then === "function") {
+      // Observes the promise without changing it: the caller still gets the
+      // original, and a rejection stays the caller's to handle
+      result.then(
+        (value) => record(value),
+        (err) => record(undefined, err)
+      );
+    } else {
+      record(result);
+    }
+
+    return result;
   };
 }
 

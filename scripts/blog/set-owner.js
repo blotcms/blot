@@ -5,11 +5,7 @@ var User = require("models/user");
 async function main() {
   console.log("Switching blog", process.argv[2], "to user", process.argv[3]);
 
-  const blog = await new Promise((resolve, reject) => {
-    get(process.argv[2], (err, user, blog) =>
-      err ? reject(err) : resolve(blog)
-    );
-  });
+  const { blog } = await get(process.argv[2]);
 
   // A failed lookup is ignored, so newOwner is undefined and the next line
   // throws, as it always has

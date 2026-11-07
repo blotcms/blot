@@ -34,13 +34,9 @@ function forEachUser(fn) {
   });
 }
 
-function getUser(identifier) {
-  return new Promise(function (resolve, reject) {
-    get(identifier, function (err, user) {
-      if (err) return reject(err);
-      resolve(user);
-    });
-  });
+async function getUser(identifier) {
+  const { user } = await get(identifier);
+  return user;
 }
 
 // Runs one of the Delete steps and records its outcome, so the next step
