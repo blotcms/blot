@@ -62,13 +62,16 @@ load_worker() {
 }
 
 load_worker 1 &
+load_worker 2 &
+load_worker 3 &
+load_worker 4 &
 loop=$!
 sleep 1
 rc=0
 bash "$HERE/../blue-green.sh" "$IMAGE" || rc=$?
 sleep 2
 touch "$WORK/done"
-wait "$loop"
+wait
 
 total=$(wc -l < "$codes"); bad=$(grep -vc '^200$' "$codes" || true)
 echo "total=$total bad=$bad"; sort "$codes" | uniq -c
