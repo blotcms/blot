@@ -1,6 +1,7 @@
 var redis = require("models/client");
 var ensure = require("helper/ensure");
 var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var Entry = require("../entry");
 var entryKey = require("../entry/key").entry;
 var pathNormalizer = require("helper/pathNormalizer");
@@ -858,13 +859,13 @@ module.exports = (function () {
     getCatalog: require("./catalog"),
     getCachedPage: require("./cachedPage"),
     getCachedRecent: require("./cachedRecent"),
-    getAllIDs: getAllIDs,
-    getTotal: getTotal,
+    getAllIDs: promiseOnly(getAllIDs),
+    getTotal: promiseOnly(getTotal),
     getAllTotal: getAllTotal,
     getRecent: getRecent,
-    lastUpdate: lastUpdate,
-    getCreated: getCreated,
-    getDeleted: getDeleted,
+    lastUpdate: promiseOnly(lastUpdate),
+    getCreated: promiseOnly(getCreated),
+    getDeleted: promiseOnly(getDeleted),
     random: random,
     // Note: validatePageSize is NOT exported - it's internal to the model
   };

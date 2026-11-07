@@ -234,6 +234,8 @@ for (var i in MESSAGES) {
   exports[method] = init(method);
 }
 
-exports.send = send;
+const promiseOnly = require("helper/promiseOnly");
+
+exports.send = promiseOnly(send);
 
 module.exports = exports;

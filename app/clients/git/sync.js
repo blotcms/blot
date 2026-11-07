@@ -45,4 +45,6 @@ async function sync(blogID, gitHandle) {
   });
 }
 
-module.exports = sync;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(sync);

@@ -149,12 +149,14 @@ async function commit(blogID, change) {
   await require("./served/commit")(blogID, change);
 }
 
+const promiseOnly = require("helper/promiseOnly");
+
 module.exports = {
-  exists: exists,
-  remove: remove,
+  exists: promiseOnly(exists),
+  remove: promiseOnly(remove),
   handleSmartHttp: handleSmartHttp,
   onPush: onPush,
-  commit: commit,
+  commit: promiseOnly(commit),
   holdRefLock: holdRefLock,
   receiveHooks: receiveHooks,
 };

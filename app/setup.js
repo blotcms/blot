@@ -310,4 +310,6 @@ async function createSSLKey() {
 
 main.runPostListenTasks = runPostListenTasks;
 
-module.exports = main;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(main);

@@ -3,6 +3,7 @@ module.exports = (function () {
     normalize = require("helper/pathNormalizer"),
     ensure = require("helper/ensure"),
     withCallback = require("helper/withCallback"),
+    promiseOnly = require("helper/promiseOnly"),
     REASONS = {
       TOO_LARGE: {
         message: "too large",
@@ -117,13 +118,13 @@ module.exports = (function () {
   }
 
   return {
-    add: add,
-    drop: drop,
-    get: get,
-    getArray: getArray,
+    add: promiseOnly(add),
+    drop: promiseOnly(drop),
+    get: promiseOnly(get),
+    getArray: promiseOnly(getArray),
     getStatus: getStatus,
     getStatuses: getStatuses,
-    isIt: isIt,
-    flush: flush,
+    isIt: promiseOnly(isIt),
+    flush: promiseOnly(flush),
   };
 })();
