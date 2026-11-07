@@ -1,34 +1,8 @@
 describe("update", function () {
+  var { promisify } = require("util");
   var sync = require("../index");
   var storage = require("storage/folder");
 
-  // Calls next(err) when the promise settles
-  function settle(promise, next) {
-    promise.then(function () {
-      next();
-    }, next);
-  }
-
-  // Runs work(folder, finish) in a sync of the blog, which ends when work
-  // calls finish(err), then calls callback(err) once the sync has finished
-  function syncThen(blogID, work, callback) {
-    sync(blogID, function (folder) {
-      return new Promise(function (resolve, reject) {
-        work(folder, function (err) {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
-    }).then(function () {
-      callback(null);
-    }, callback);
-  }
-
-  var {
-    series,
-    eachSeries,
-    each,
-  } = require("../../../scripts/tests/util/callbacks");
   var redis = require("models/client");
   var entryKey = require("models/entry/key").entry;
 
@@ -113,10 +87,11 @@ describe("update", function () {
     });
   });
 
-  it("detects a large number of renamed files", function (testDone) {
+  it("detects a large number of renamed files", async function () {
     var items = [];
     var ctx = this;
     var usedPaths = new Set();
+    var checkRename = promisify(ctx.checkRename);
 
     function uniquePath(ext) {
       var path;
@@ -138,76 +113,35 @@ describe("update", function () {
         content: this.fake.file({ title: i + "-" + Date.now() }),
       });
 
-    syncThen(
-      ctx.blog.id,
-      function (folder, finish) {
-        // Write initial files
-        eachSeries(
-          items,
-          function (item, next) {
-            settle(
-              storage.write(ctx.blog.id, item.oldPath, item.content),
-              function (err) {
-                if (err) return next(err);
-                folder
-                  .update(item.oldPath)
-                  .then((result) => next(null, result), next);
-              }
-            );
-          },
-          finish
-        );
-      },
-      function (err) {
-        if (err) return testDone.fail(err);
-
-        syncThen(
-          ctx.blog.id,
-          function (folder, finish) {
-            // Move files
-            eachSeries(
-              items,
-              function (item, next) {
-                settle(
-                  storage.move(ctx.blog.id, item.oldPath, item.newPath),
-                  function (err) {
-                    if (err) return next(err);
-                    folder
-                      .update(item.oldPath)
-                      .then(
-                        () => null,
-                        (updateErr) => updateErr
-                      )
-                      .then(function () {
-                        folder
-                          .update(item.newPath)
-                          .then((result) => next(null, result), next);
-                      });
-                  }
-                );
-              },
-              finish
-            );
-          },
-          function (err) {
-            if (err) return testDone.fail(err);
-
-            each(
-              items,
-              function (item, next) {
-                ctx.checkRename(item.oldPath, item.newPath, next);
-              },
-              testDone
-            );
-          }
-        );
+    // Write initial files
+    await sync(ctx.blog.id, async function (folder) {
+      for (const item of items) {
+        await storage.write(ctx.blog.id, item.oldPath, item.content);
+        await folder.update(item.oldPath);
       }
+    });
+
+    // Move files
+    await sync(ctx.blog.id, async function (folder) {
+      for (const item of items) {
+        await storage.move(ctx.blog.id, item.oldPath, item.newPath);
+        // The old path no longer exists, so its update may fail
+        await folder.update(item.oldPath).catch(() => null);
+        await folder.update(item.newPath);
+      }
+    });
+
+    await Promise.all(
+      items.map((item) => checkRename(item.oldPath, item.newPath))
     );
   });
 
-  it("skips missing deleted-entry records while detecting renames", function (testDone) {
+  it("skips missing deleted-entry records while detecting renames", async function () {
     var ctx = this;
     var blogID = ctx.blog.id;
+    var writeAndSync = promisify(ctx.writeAndSync);
+    var checkEntry = promisify(ctx.checkEntry);
+    var checkRename = promisify(ctx.checkRename);
 
     var path = ctx.fake.path(".txt");
     var newPath = ctx.fake.path(".txt");
@@ -219,102 +153,34 @@ describe("update", function () {
     // exact permalink-reuse assertion.
     var content = ctx.fake.file({ title: ctx.fake.random.uuid() });
     var ghostContent = ctx.fake.file({ title: ctx.fake.random.uuid() });
-    var ghostEntryID;
 
-    ctx.writeAndSync(path, content, function (err) {
-      if (err) return testDone.fail(err);
+    await writeAndSync(path, content);
+    await writeAndSync(newPath, content);
+    await writeAndSync(ghostPath, ghostContent);
+    await writeAndSync(ghostNewPath, ghostContent);
 
-      ctx.writeAndSync(newPath, content, function (err) {
-        if (err) return testDone.fail(err);
+    await sync(blogID, async function (folder) {
+      await storage.remove(blogID, path);
+      await folder.update(path);
 
-        ctx.writeAndSync(ghostPath, ghostContent, function (err) {
-          if (err) return testDone.fail(err);
+      await storage.remove(blogID, ghostPath);
+      await folder.update(ghostPath);
 
-          ctx.writeAndSync(ghostNewPath, ghostContent, function (err) {
-            if (err) return testDone.fail(err);
+      var ghostEntry = await checkEntry({ path: ghostPath, deleted: true });
 
-            syncThen(
-              blogID,
-              function (folder, finish) {
-                series(
-                  [
-                    function (next) {
-                      settle(storage.remove(blogID, path), function (err) {
-                        if (err) return next(err);
-                        folder
-                          .update(path)
-                          .then((result) => next(null, result), next);
-                      });
-                    },
-                    function (next) {
-                      settle(storage.remove(blogID, ghostPath), function (err) {
-                        if (err) return next(err);
-                        folder
-                          .update(ghostPath)
-                          .then(
-                            () => null,
-                            (updateErr) => updateErr
-                          )
-                          .then(function (err) {
-                            if (err) return next(err);
+      await redis.del(entryKey(blogID, ghostPath));
 
-                            ctx.checkEntry(
-                              { path: ghostPath, deleted: true },
-                              function (err, entry) {
-                                if (err) return next(err);
-                                ghostEntryID = entry.id;
-                                next();
-                              }
-                            );
-                          });
-                      });
-                    },
-                    function (next) {
-                      redis
-                        .del(entryKey(blogID, ghostPath))
-                        .then(function () {
-                          var deletedListKey = "blog:" + blogID + ":deleted";
-
-                          return redis.zScore(deletedListKey, ghostEntryID);
-                        })
-                        .then(function (score) {
-                          expect(score).not.toBeNull();
-                          next();
-                        })
-                        .catch(next);
-                    },
-                  ],
-                  finish
-                );
-              },
-              function (err) {
-                if (err) return testDone.fail(err);
-
-                ctx.checkRename(path, newPath, function (err) {
-                  if (err) return testDone.fail(err);
-
-                  ctx.checkEntry(
-                    { path: ghostPath, ignored: true },
-                    function (err, entry) {
-                      if (err) return testDone.fail(err);
-                      expect(entry).toBeFalsy();
-
-                      ctx.checkEntry(
-                        { path: ghostNewPath, deleted: false },
-                        function (err) {
-                          if (err) return testDone.fail(err);
-                          testDone();
-                        }
-                      );
-                    }
-                  );
-                });
-              }
-            );
-          });
-        });
-      });
+      var deletedListKey = "blog:" + blogID + ":deleted";
+      var score = await redis.zScore(deletedListKey, ghostEntry.id);
+      expect(score).not.toBeNull();
     });
+
+    await checkRename(path, newPath);
+
+    var ignored = await checkEntry({ path: ghostPath, ignored: true });
+    expect(ignored).toBeFalsy();
+
+    await checkEntry({ path: ghostNewPath, deleted: false });
   });
 
   it("carries the same-day creation time through a rename when metadata specifies a date-only value", function (testDone) {
