@@ -179,7 +179,8 @@
 }
 
 /* Visit site, at the right end of the row: fixed in place, so the status's
-   icon beside it stays put too. Its arrow sits in a small circle and, on
+   icon beside it stays put too. Blue, as a link out of the dashboard, beside
+   the grey status. Its arrow sits in a small circle and, on
    hover or focus, slides out of the corner it points to and back in from the
    opposite one. */
 .visit-site-pill {
@@ -191,8 +192,8 @@
   box-sizing: border-box;
   padding: var(--space-0) var(--space-1) var(--space-0) var(--space-3);
   border-radius: var(--radius-pill);
-  background: var(--surface-muted-color);
-  color: var(--medium-text-color);
+  background: var(--accent-soft-color);
+  color: var(--accent-color);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
   text-decoration: none;
@@ -201,12 +202,13 @@
 }
 
 .visit-site-pill:hover {
-  background: var(--surface-strong-color);
-  color: var(--text-color);
+  background: var(--accent-soft-hover-color);
+  color: var(--accent-hover-color);
 }
 
 .visit-site-pill:active {
-  background: var(--border-strong-color);
+  background: var(--accent-soft-hover-color);
+  color: var(--accent-active-color);
 }
 
 .visit-site-pill:focus-visible {
@@ -223,13 +225,17 @@
   height: 16px;
   overflow: hidden;
   border-radius: 50%;
-  background: var(--medium-text-color);
+  background: var(--accent-color);
   color: var(--background-color);
   transition: background-color 150ms ease;
 }
 
 .visit-site-pill:hover .visit-site-pill__icon {
-  background: var(--text-color);
+  background: var(--accent-hover-color);
+}
+
+.visit-site-pill:active .visit-site-pill__icon {
+  background: var(--accent-active-color);
 }
 
 .visit-site-pill__icon svg {
