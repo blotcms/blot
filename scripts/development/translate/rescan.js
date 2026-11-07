@@ -12,7 +12,6 @@
 // explicitly. This is the same mechanism app/templates/folders/index.js uses to
 // load the demo folders.
 
-const { promisify } = require("util");
 const { posix } = require("path");
 
 const sync = require("sync");
@@ -86,7 +85,7 @@ function rescanOnce(blogID) {
     sync(blogID, async function (err, folder, done) {
       if (err) return reject(err);
 
-      const update = promisify(folder.update);
+      const update = folder.update;
       let paths = [];
       let updated = 0;
       let failed = 0;

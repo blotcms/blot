@@ -38,7 +38,7 @@ async function hasCommit(reader, oid) {
   }
 }
 
-// folder is what the sync lock gives: { log, update(path, callback) }
+// folder is what the sync lock gives: { log, update(path) }
 async function sync(blogID, folder) {
   const store = context.storeFor(blogID);
   const cache = context.cache();
@@ -95,7 +95,13 @@ async function sync(blogID, folder) {
   // In series until entry.set is atomic: changes to the blog's menu cannot be
   // made concurrently
   for (const path of paths) {
-    const err = await new Promise((resolve) => folder.update(path, resolve));
+    let err = null;
+
+    try {
+      await folder.update(path);
+    } catch (e) {
+      err = e;
+    }
 
     // Redis cannot take the write, so this path and those after it are not
     // in the database. Stop before recording the commit as applied: the next

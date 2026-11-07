@@ -71,10 +71,16 @@ describe("date integration tests", function () {
       if (err) return callback(err);
       storage.write(test.blog.id, path, contents).then(
         function () {
-          folder.update(path, function (err) {
-            if (err) return callback(err);
-            done(null, callback);
-          });
+          folder
+            .update(path)
+            .then(
+              () => null,
+              (updateErr) => updateErr
+            )
+            .then(function (err) {
+              if (err) return callback(err);
+              done(null, callback);
+            });
         },
         function (err) {
           done(err, callback);
