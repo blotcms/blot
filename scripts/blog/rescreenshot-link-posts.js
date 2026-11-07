@@ -48,12 +48,11 @@ const processBlog = async (blog) => {
     }
 
     console.log("Rebuilding", entry.id);
-    await new Promise((resolve) => {
-      folder.update(entry.id, function (err) {
-        if (err) console.log(err);
-        resolve();
-      });
-    });
+    try {
+      await folder.update(entry.id);
+    } catch (err) {
+      if (err) console.log(err);
+    }
   }
 
   await new Promise((resolve, reject) => {

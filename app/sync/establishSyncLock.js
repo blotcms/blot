@@ -5,7 +5,7 @@ module.exports = function (blogID) {
   return new Promise((resolve, reject) => {
     Sync(blogID, function check(err, folder, done) {
       if (err) return reject(err);
-      folder.update = promisify(folder.update);
+      // folder.update already returns a promise
       // I don't quite understand this
       const doneAsync = async function (err) {
         if (err) {
