@@ -1,7 +1,8 @@
-<!-- The folder box's first row, like a row of the summary card above it:
-     "Folder", where it syncs from, and a chevron. The whole row opens the
-     sync settings under it (/sync/<client>, the site's page with them open)
-     and closes them again. With no folder yet, a button to connect one. -->
+<!-- The start of the folder box's top row, like a row of the summary card
+     above it: "Folder", where it syncs from, and a chevron. It opens the
+     sync settings under the row (/sync/<client>, the site's page with them
+     open) and closes them again. With no folder yet, a button to connect
+     one. -->
 {{#blog.client}}
 {{#isSyncTab}}<a class="site-summary__row folder-source is-open" href="{{{dashboardBase}}}" aria-current="page">{{/isSyncTab}}{{^isSyncTab}}<a class="site-summary__row folder-source" href="{{{dashboardBase}}}/sync/{{blog.client}}">{{/isSyncTab}}
   <span class="site-summary__label">Folder</span><span class="visually-hidden">: </span>

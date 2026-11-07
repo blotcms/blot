@@ -12,12 +12,11 @@
           <div class="folder-container">
             {{#folder}}<div class="folder-box root directory {{boxState}}" data-folder-base="{{base}}" data-csrf-token="{{csrftoken}}" style="position:relative;">{{/folder}}
             {{^folder}}<div class="folder-box root folder-box--sync">{{/folder}}
-              {{> folder-source}}
+              {{> folder-toolbar}}
+              {{> folder-sync-issue}}
               <div class="folder-sync-panel">
                 {{> body}}
               </div>
-              {{> folder-toolbar}}
-              {{> folder-sync-issue}}
               {{#folder}}{{> directory-table}}{{/folder}}
             </div>
           </div>
