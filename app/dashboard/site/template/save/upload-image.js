@@ -29,12 +29,7 @@ const update = (blog, slug, locals) =>
       error ? reject(error) : resolve()
     )
   );
-const sync = (blog, template) =>
-  new Promise((resolve, reject) =>
-    writeChangeToFolder(blog, template, {}, (error) =>
-      error ? reject(error) : resolve()
-    )
-  );
+const sync = (blog, template) => writeChangeToFolder(blog, template, {});
 const operations = { update, sync };
 
 async function saveProfileImageFavicon(req, file, crop) {

@@ -5,10 +5,9 @@ describe("git client dashboard: a setup in progress", function () {
   require("./setup")({ setClientToGit: false, clone: false });
 
   var Express = require("express");
-  var promisify = require("util").promisify;
   var client = require("models/client");
   var database = require("clients/git/database");
-  var disconnect = promisify(require("clients/git/disconnect"));
+  var disconnect = require("clients/git/disconnect");
   var setStatus = database.setStatus;
   var setCreating = database.setCreating;
   var isCreating = database.isCreating;

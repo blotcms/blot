@@ -154,13 +154,18 @@ describe("callers of the sandbox when it fails", function () {
     );
 
     folder.writeFrom(test.blog.id, "/car.heic", source).then(function () {
-      img.read(test.blog, "/car.heic", function (err) {
-        expect(err).toBeTruthy();
-        expect(sandbox.run.calls.allArgs().map((a) => a[0])).toContain(
-          "to-png"
-        );
-        done();
-      });
+      img.read(test.blog, "/car.heic").then(
+        function () {
+          done.fail(new Error("Expected the read to be rejected"));
+        },
+        function (err) {
+          expect(err).toBeTruthy();
+          expect(sandbox.run.calls.allArgs().map((a) => a[0])).toContain(
+            "to-png"
+          );
+          done();
+        }
+      );
     }, done.fail);
   });
 
@@ -173,11 +178,10 @@ describe("callers of the sandbox when it fails", function () {
     );
 
     folder.writeFrom(test.blog.id, "/bunny.png", source).then(function () {
-      img.read(test.blog, "/bunny.png", function (err, html) {
-        expect(err).toBe(null);
+      img.read(test.blog, "/bunny.png").then(function ([html]) {
         expect(html).toContain("/bunny.png");
         done();
-      });
+      }, done.fail);
     }, done.fail);
   });
 
@@ -190,14 +194,18 @@ describe("callers of the sandbox when it fails", function () {
     );
 
     folder.writeFrom(test.blog.id, "/image.docx", source).then(function () {
-      docx.read(test.blog, "/image.docx", function (err, html) {
-        // a pandoc worker that times out is the document's failure, as
-        // pandoc's own timeout is (build/converters/pandoc.js)
-        expect(err.message).toMatch(/^Pandoc exited .*\(timed out\)/);
-        expect(html).toBeUndefined();
-        expect(sandbox.run.calls.argsFor(0)[0]).toEqual("pandoc");
-        done();
-      });
+      docx.read(test.blog, "/image.docx").then(
+        function () {
+          done.fail(new Error("Expected the read to be rejected"));
+        },
+        function (err) {
+          // a pandoc worker that times out is the document's failure, as
+          // pandoc's own timeout is (build/converters/pandoc.js)
+          expect(err.message).toMatch(/^Pandoc exited .*\(timed out\)/);
+          expect(sandbox.run.calls.argsFor(0)[0]).toEqual("pandoc");
+          done();
+        }
+      );
     }, done.fail);
   });
 
@@ -206,12 +214,16 @@ describe("callers of the sandbox when it fails", function () {
     const markdown = require("build/converters/markdown");
 
     folder.write(test.blog.id, "/post.md", "# Hello").then(function () {
-      markdown.read(test.blog, "/post.md", function (err, html) {
-        expect(err.message).toMatch(/^Pandoc exited .*\(timed out\)/);
-        expect(html).toBeUndefined();
-        expect(sandbox.run.calls.argsFor(0)[1].from).toEqual("markdown");
-        done();
-      });
+      markdown.read(test.blog, "/post.md").then(
+        function () {
+          done.fail(new Error("Expected the read to be rejected"));
+        },
+        function (err) {
+          expect(err.message).toMatch(/^Pandoc exited .*\(timed out\)/);
+          expect(sandbox.run.calls.argsFor(0)[1].from).toEqual("markdown");
+          done();
+        }
+      );
     }, done.fail);
   });
 });

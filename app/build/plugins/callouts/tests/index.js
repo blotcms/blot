@@ -103,13 +103,10 @@ describe("callouts plugin integration", function () {
     });
   });
 
-  it("does not post-process HTML from non-Markdown converters", function (done) {
+  it("does not post-process HTML from non-Markdown converters", async function () {
     this.blog.plugins.callouts = { enabled: true, options: {} };
     const html = "<blockquote><p>[!note] Title</p></blockquote>";
-    plugins.convert(this.blog, "/post.html", html, function (err, result) {
-      if (err) return done.fail(err);
-      expect(result).toBe(html);
-      done();
-    });
+    const [result] = await plugins.convert(this.blog, "/post.html", html);
+    expect(result).toBe(html);
   });
 });

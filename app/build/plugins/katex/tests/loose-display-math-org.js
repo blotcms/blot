@@ -5,16 +5,14 @@ const { render } = require("../index");
 describe("org: display math glued to prose by single newlines", function () {
   const blog = { id: "loose-display-math-org-test" };
 
-  function convertAndRender(text) {
-    return new Promise((resolve, reject) => {
-      orgConvert(blog, text, (err, html) => {
-        if (err) return reject(err);
+  async function convertAndRender(text) {
+    const [html] = await orgConvert(blog, text);
 
-        const $ = cheerio.load(html, { decodeEntities: false }, false);
-        render($, (renderErr) => {
-          if (renderErr) return reject(renderErr);
-          resolve($.html());
-        });
+    return new Promise((resolve, reject) => {
+      const $ = cheerio.load(html, { decodeEntities: false }, false);
+      render($, (renderErr) => {
+        if (renderErr) return reject(renderErr);
+        resolve($.html());
       });
     });
   }

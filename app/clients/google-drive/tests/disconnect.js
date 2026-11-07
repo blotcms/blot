@@ -42,7 +42,7 @@ describe("Drive disconnect", function () {
       },
     });
 
-    await new Promise((resolve) => disconnect("blog-1", resolve));
+    await disconnect("blog-1");
 
     expect(resetArgs).toEqual({
       folderId: "folder-1",
@@ -71,7 +71,7 @@ describe("Drive disconnect", function () {
       },
     });
 
-    await new Promise((resolve) => disconnect("blog-1", resolve));
+    await disconnect("blog-1");
 
     expect(folderCalled).toBe(false);
   });

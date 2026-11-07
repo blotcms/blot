@@ -21,13 +21,9 @@ describe("converter math normalization", function () {
     await folder.removeAll(blog.id);
   });
 
-  function readWith(converter, filePath) {
-    return new Promise((resolve, reject) => {
-      converter.read(blog, filePath, (err, html) => {
-        if (err) return reject(err);
-        resolve(html);
-      });
-    });
+  async function readWith(converter, filePath) {
+    const [html] = await converter.read(blog, filePath);
+    return html;
   }
 
   function convertMarkdown(text) {
@@ -38,13 +34,9 @@ describe("converter math normalization", function () {
     return rtfConvert(blog, text);
   }
 
-  function convertDirect(converter, text) {
-    return new Promise((resolve, reject) => {
-      converter(blog, text, (err, html) => {
-        if (err) return reject(err);
-        resolve(html);
-      });
-    });
+  async function convertDirect(converter, text) {
+    const [html] = await converter(blog, text);
+    return html;
   }
 
   function renderWithKatex(html) {

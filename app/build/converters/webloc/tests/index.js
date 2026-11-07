@@ -5,12 +5,13 @@ describe("webloc converter", function () {
   global.test.blog();
 
   // Resolves to { err, result }
-  function read(blog, path) {
-    return new Promise(function (resolve) {
-      webloc.read(blog, path, function (err, result) {
-        resolve({ err: err, result: result });
-      });
-    });
+  async function read(blog, path) {
+    try {
+      const [result] = await webloc.read(blog, path);
+      return { err: null, result: result };
+    } catch (err) {
+      return { err: err, result: undefined };
+    }
   }
 
   it("extracts a URL from an XML webloc file (Chrome/Firefox format)", async function () {
@@ -64,15 +65,13 @@ describe("webloc converter", function () {
     expect(result).toBeUndefined();
   });
 
-  it("returns an error when the file does not exist", function (done) {
+  it("returns an error when the file does not exist", async function () {
     const test = this;
     const path = "/does-not-exist.webloc";
 
-    webloc.read(test.blog, path, function (err, result) {
-      expect(err).toBeTruthy();
-      expect(result).toBeUndefined();
-      done();
-    });
+    const { err, result } = await read(test.blog, path);
+    expect(err).toBeTruthy();
+    expect(result).toBeUndefined();
   });
 
   it("recognizes .webloc and .url paths and rejects others", function () {

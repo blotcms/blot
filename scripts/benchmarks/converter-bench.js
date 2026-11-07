@@ -184,11 +184,10 @@ async function benchmarkConverter(name, n, options = {}) {
     const blogPath = fixtureTasks[fixtureIndex];
 
     const startedAt = performance.now();
-    const err = await new Promise((resolve) => {
-      converterModule.read(blog, blogPath, (err) => {
-        resolve(err || null);
-      });
-    });
+    const err = await converterModule.read(blog, blogPath).then(
+      () => null,
+      (err) => err || null
+    );
     const elapsedMs = performance.now() - startedAt;
 
     // A callback error (missing tool, malformed fixture) is not a fast

@@ -111,21 +111,17 @@ async function deleteKeys(blog) {
   await multi.exec();
 }
 
-function disconnectClient(blog) {
+async function disconnectClient(blog) {
   var clients = require("clients");
 
-  if (!blog.client || !clients[blog.client]) return Promise.resolve();
+  if (!blog.client || !clients[blog.client]) return;
 
-  return new Promise(function (resolve) {
-    clients[blog.client].disconnect(blog.id, function (err) {
-      // we still want to continue even if there is an error
-      if (err) {
-        console.error("Error disconnecting client:", err);
-      }
-
-      resolve();
-    });
-  });
+  try {
+    await clients[blog.client].disconnect(blog.id);
+  } catch (err) {
+    // we still want to continue even if there is an error
+    console.error("Error disconnecting client:", err);
+  }
 }
 
 async function updateUser(blog) {

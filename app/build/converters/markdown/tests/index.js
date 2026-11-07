@@ -16,12 +16,7 @@ describe("markdown converter", function () {
           await test.folder.copyDirectory(this.blog.id, dir);
 
           const path = "/" + file;
-          let html = await new Promise((resolve, reject) => {
-            markdown.read(this.blog, path, function (err, html) {
-              if (err) return reject(err);
-              resolve(html);
-            });
-          });
+          let [html] = await markdown.read(this.blog, path);
 
           {
             let expected;

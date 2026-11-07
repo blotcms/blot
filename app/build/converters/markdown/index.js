@@ -11,7 +11,7 @@ var extractBibAndCSL = require("./extractBibAndCSL");
 var linebreaks = require("./linebreaks");
 var postSourceSize = require("build/converters/post-source-size");
 var folderStat = require("build/converters/folderStat");
-var withResults = require("build/withResults");
+var promiseOnly = require("helper/promiseOnly");
 
 function is(path) {
   return (
@@ -85,4 +85,4 @@ async function read(blog, path) {
 
 // Called back with (err, html, stat); without a callback it resolves to
 // [html, stat]
-module.exports = { read: withResults(read), is: is, id: "markdown" };
+module.exports = { read: promiseOnly(read), is: is, id: "markdown" };

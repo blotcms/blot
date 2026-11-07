@@ -4,18 +4,17 @@ const folder = require("storage/folder");
 const path = require("path");
 const hash = require("helper/hash");
 const assets = require("storage/assets");
-const { promisify } = require("util");
 
 describe("img converter", function () {
   global.test.blog();
 
-  // Resolves to every argument of the read callback: [err, html, stat, extras]
-  function readAll(blog, path) {
-    return new Promise(function (resolve) {
-      img.read(blog, path, function () {
-        resolve(Array.from(arguments));
-      });
-    });
+  // Resolves to [err, html, stat, extras]
+  async function readAll(blog, path) {
+    try {
+      return [null, ...(await img.read(blog, path))];
+    } catch (err) {
+      return [err];
+    }
   }
 
   const tests = fs.readdirSync(__dirname).filter((i) => img.is(i));
@@ -130,7 +129,7 @@ describe("img converter", function () {
   it("reuses cached conversions on repeat builds", async function () {
     const test = this;
     const relativePath = "/land.avif";
-    const read = promisify(img.read);
+    const read = async (...args) => (await img.read(...args))[0];
 
     await folder.writeFrom(
       test.blog.id,
@@ -160,7 +159,7 @@ describe("img converter", function () {
     const test = this;
     const firstPath = "/land.avif";
     const secondPath = "/land-copy.avif";
-    const read = promisify(img.read);
+    const read = async (...args) => (await img.read(...args))[0];
 
     await folder.writeFrom(test.blog.id, firstPath, __dirname + firstPath);
 
@@ -189,13 +188,18 @@ describe("img converter", function () {
     expect(await assets.exists(test.blog.id, fallbackAssetPath)).toBe(false);
   });
 
-  it("returns an error if the image does not exist", function (done) {
+  it("returns an error if the image does not exist", async function () {
     const test = this;
     const path = "/test.png";
 
-    img.read(test.blog, path, function (err) {
-      expect(err).toBeTruthy();
-      done();
-    });
+    let error;
+
+    try {
+      await img.read(test.blog, path);
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toBeTruthy();
   });
 });

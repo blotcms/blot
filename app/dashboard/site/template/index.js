@@ -2,7 +2,6 @@ const Express = require("express");
 const TemplateEditor = new Express.Router();
 const formJSON = require("helper/formJSON");
 const Template = require("models/template");
-const withCallback = require("helper/withCallback");
 const Blog = require("models/blog");
 const archiver = require("archiver");
 const duplicateTemplate = require("./save/duplicate-template");
@@ -398,7 +397,7 @@ TemplateEditor.route("/:templateSlug/download-zip").get(function (req, res) {
   // Pipe the archive data to the response.
   archive.pipe(res);
 
-  withCallback(Template.getAllViews)(req.template.id, function (err, result) {
+  const respond = function (err, result) {
     var views = result && result.views;
     var template = result && result.metadata;
 
@@ -417,7 +416,12 @@ TemplateEditor.route("/:templateSlug/download-zip").get(function (req, res) {
 
     // Finalize the archive
     archive.finalize();
-  });
+  };
+
+  Template.getAllViews(req.template.id).then(
+    (result) => respond(null, result),
+    (err) => respond(err)
+  );
 });
 
 TemplateEditor.route("/:templateSlug/duplicate")

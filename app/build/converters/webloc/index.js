@@ -3,7 +3,7 @@ var bplist = require("bplist-parser");
 var ensure = require("helper/ensure");
 var titlify = require("build/prepare/titlify");
 var withLocal = require("build/converters/folderStat").withLocal;
-var withResults = require("build/withResults");
+var promiseOnly = require("helper/promiseOnly");
 var extname = require("path").extname;
 
 var INVALID = "Invalid webloc file";
@@ -80,4 +80,4 @@ async function read(blog, path) {
 
 // Called back with (err, html, stat); without a callback it resolves to
 // [html, stat]
-module.exports = { is: is, read: withResults(read), id: "webloc" };
+module.exports = { is: is, read: promiseOnly(read), id: "webloc" };

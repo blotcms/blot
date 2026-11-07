@@ -7,18 +7,13 @@ describe("plugin runner", function () {
     id: "plugin-runner-test",
   };
 
-  function runPlugins(plugins, contents) {
-    return new Promise((resolve, reject) => {
-      convert(
-        { ...blogBase, plugins },
-        "/post.html",
-        contents,
-        function (err, html, dependencies) {
-          if (err) return reject(err);
-          resolve({ html, dependencies });
-        }
-      );
-    });
+  async function runPlugins(plugins, contents) {
+    const [html, dependencies] = await convert(
+      { ...blogBase, plugins },
+      "/post.html",
+      contents
+    );
+    return { html, dependencies };
   }
 
   it("collects newDependencies from plugin results", async function () {

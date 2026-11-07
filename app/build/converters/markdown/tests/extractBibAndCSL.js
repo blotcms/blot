@@ -3,12 +3,13 @@ const extractBibAndCSL = require("../extractBibAndCSL");
 const extractMetadata = require("build/metadata");
 
 // Resolves to { err, bib, csl }
-function extract(blog, path, metadata) {
-  return new Promise(function (resolve) {
-    extractBibAndCSL(blog, path, metadata, (err, bib, csl) => {
-      resolve({ err, bib, csl });
-    });
-  });
+async function extract(blog, path, metadata) {
+  try {
+    const [bib, csl] = await extractBibAndCSL(blog, path, metadata);
+    return { err: null, bib, csl };
+  } catch (err) {
+    return { err, bib: undefined, csl: undefined };
+  }
 }
 
 describe("markdown converter bib/csl extractor", function () {

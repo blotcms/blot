@@ -74,11 +74,10 @@ describe("gdoc converter", function () {
       );
 
       folder.write(test.blog.id, path, input).then(function () {
-        gdoc.read(test.blog, path, function (err, result) {
-          if (err) return done.fail(err);
+        gdoc.read(test.blog, path).then(function ([result]) {
           expect(result).toEqual(expected);
           done();
-        });
+        }, done.fail);
       }, done.fail);
     });
   });
@@ -107,13 +106,10 @@ describe("gdoc converter", function () {
 
     await folder.write(test.blog.id, path, input);
 
-    const readDoc = () =>
-      new Promise((resolve, reject) => {
-        gdoc.read(test.blog, path, function (err, result) {
-          if (err) return reject(err);
-          resolve(result);
-        });
-      });
+    const readDoc = async () => {
+      const [result] = await gdoc.read(test.blog, path);
+      return result;
+    };
 
     try {
       const expected = `<img alt="Album cover" src="/_assets/5cfb3e701e0cc48c37e89045580a3bce/0ae35d488e755ba7235e788e58e882ad.jpeg" title="Title of image">`;
@@ -143,12 +139,7 @@ describe("gdoc converter", function () {
 
     await folder.write(test.blog.id, path, minimalHtml);
 
-    const result = await new Promise((resolve, reject) => {
-      gdoc.read(test.blog, path, (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      });
-    });
+    const [result] = await gdoc.read(test.blog, path);
 
     expect(result).toContain(assetPath);
   });
@@ -167,12 +158,7 @@ describe("gdoc converter", function () {
 
     await folder.write(test.blog.id, path, minimalHtml);
 
-    const result = await new Promise((resolve, reject) => {
-      gdoc.read(test.blog, path, (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      });
-    });
+    const [result] = await gdoc.read(test.blog, path);
 
     expect(result).toContain(assetSrc);
   });
