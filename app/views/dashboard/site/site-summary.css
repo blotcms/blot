@@ -63,12 +63,6 @@
   color: var(--light-text-color);
 }
 
-/* The Sync row's client icon, sitting on the text */
-.site-summary__value .client-icon {
-  margin-right: var(--space-1);
-  vertical-align: -2px;
-}
-
 /* A grey chevron at the end of each row: the whole row is the link */
 .site-summary__chevron {
   display: inline-flex;
