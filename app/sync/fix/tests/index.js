@@ -62,25 +62,34 @@ describe("sync/fix", function () {
     restoreCache = null;
   });
 
-  it("throws when called without a blog", function () {
+  var clean = async function (blog) {
+    return [];
+  };
+
+  it("rejects when called without a blog", async function () {
     var fix = require("../index");
-    expect(function () {
-      fix(undefined, function () {});
-    }).toThrowError(TypeError);
+    try {
+      await fix(undefined);
+      fail("expected a rejection");
+    } catch (err) {
+      expect(err instanceof TypeError).toBe(true);
+    }
   });
 
-  it("throws when called without a callback", function () {
+  it("throws when given a callback", function () {
     var fix = require("../index");
     expect(function () {
-      fix({ id: "blog-id" }, {});
-    }).toThrowError(TypeError);
+      fix({ id: "blog-id" }, function () {});
+    }).toThrowError(TypeError, /no longer takes a callback/);
   });
 
-  it("returns an empty report and does not touch the blog when nothing is wrong", function (done) {
-    var clean = async function (blog) {
-      return [];
-    };
+  it("keeps getRunningChecks", function () {
+    var fix = require("../index");
+    expect(typeof fix.getRunningChecks).toBe("function");
+    expect(Array.isArray(fix.getRunningChecks())).toBe(true);
+  });
 
+  it("resolves an empty report and does not touch the blog when nothing is wrong", async function () {
     var fix = loadFixWithStubs({
       "entry-ghosts": clean,
       "tag-ghosts": clean,
@@ -91,18 +100,12 @@ describe("sync/fix", function () {
 
     spyOn(Blog, "set");
 
-    fix({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual({});
-      expect(Blog.set).not.toHaveBeenCalled();
-      done();
-    });
+    var report = await fix({ id: "blog-id" });
+    expect(report).toEqual({});
+    expect(Blog.set).not.toHaveBeenCalled();
   });
 
-  it("bumps the blog's cacheID when a check reports a fix", function (done) {
-    var clean = async function (blog) {
-      return [];
-    };
+  it("bumps the blog's cacheID when a check reports a fix", async function () {
     var reported = async function (blog) {
       return ["fixed something"];
     };
@@ -120,21 +123,15 @@ describe("sync/fix", function () {
       expect(typeof updates.cacheID).toBe("number");
     });
 
-    fix({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual({ "entry-ghosts": ["fixed something"] });
-      expect(Blog.set).toHaveBeenCalled();
-      done();
-    });
+    var report = await fix({ id: "blog-id" });
+    expect(report).toEqual({ "entry-ghosts": ["fixed something"] });
+    expect(Blog.set).toHaveBeenCalled();
   });
 
-  it("does not email the admin about what it repaired - callers report the returned report", function (done) {
+  it("does not email the admin about what it repaired - callers report the returned report", async function () {
     var email = require("helper/email");
     var reported = async function (blog) {
       return ["fixed something"];
-    };
-    var clean = async function (blog) {
-      return [];
     };
 
     var fix = loadFixWithStubs({
@@ -150,23 +147,16 @@ describe("sync/fix", function () {
     });
     spyOn(Blog, "set").and.callFake(async function (blogID, updates) {});
 
-    fix({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual({ "entry-ghosts": ["fixed something"] });
-      Object.keys(email).forEach(function (name) {
-        if (typeof email[name] === "function") {
-          expect(email[name]).not.toHaveBeenCalled();
-        }
-      });
-      done();
+    var report = await fix({ id: "blog-id" });
+    expect(report).toEqual({ "entry-ghosts": ["fixed something"] });
+    Object.keys(email).forEach(function (name) {
+      if (typeof email[name] === "function") {
+        expect(email[name]).not.toHaveBeenCalled();
+      }
     });
   });
 
-  it("reports progress through the status callback in order", function (done) {
-    var clean = async function (blog) {
-      return [];
-    };
-
+  it("reports progress through the status callback in order", async function () {
     var fix = loadFixWithStubs({
       "entry-ghosts": clean,
       "tag-ghosts": clean,
@@ -177,35 +167,56 @@ describe("sync/fix", function () {
 
     var statuses = [];
 
-    fix(
+    await fix(
       { id: "blog-id" },
       {
         status: function (message) {
           statuses.push(message);
         },
-      },
-      function (err) {
-        expect(err).toBeNull();
-        expect(statuses).toEqual([
-          "(1/5) Checking entry-ghosts",
-          "(2/5) Checking tag-ghosts",
-          "(3/5) Checking list-ghosts",
-          "(4/5) Checking menu-ghosts",
-          "(5/5) Checking entries-path-index",
-        ]);
-        done();
       }
     );
+
+    expect(statuses).toEqual([
+      "(1/5) Checking entry-ghosts",
+      "(2/5) Checking tag-ghosts",
+      "(3/5) Checking list-ghosts",
+      "(4/5) Checking menu-ghosts",
+      "(5/5) Checking entries-path-index",
+    ]);
   });
 
-  it("stops running further checks once one errors, and still surfaces the error", function (done) {
+  it("rejects with a status function's error and an empty report", async function () {
+    var statusError = new Error("status exploded");
+    var fix = loadFixWithStubs({
+      "entry-ghosts": clean,
+      "tag-ghosts": clean,
+      "list-ghosts": clean,
+      "menu-ghosts": clean,
+      "entries-path-index": clean,
+    });
+
+    try {
+      await fix(
+        { id: "blog-id" },
+        {
+          status: function () {
+            throw statusError;
+          },
+        }
+      );
+      fail("expected a rejection");
+    } catch (err) {
+      expect(err).toBe(statusError);
+      expect(err.report).toEqual({});
+    }
+  });
+
+  it("stops running further checks once one errors, and still surfaces the error", async function () {
     var checkError = new Error("tag-ghosts exploded");
     var listGhostsCalled = false;
 
     var fix = loadFixWithStubs({
-      "entry-ghosts": async function (blog) {
-        return [];
-      },
+      "entry-ghosts": clean,
       "tag-ghosts": async function (blog) {
         throw checkError;
       },
@@ -213,22 +224,21 @@ describe("sync/fix", function () {
         listGhostsCalled = true;
         return [];
       },
-      "menu-ghosts": async function (blog) {
-        return [];
-      },
-      "entries-path-index": async function (blog) {
-        return [];
-      },
+      "menu-ghosts": clean,
+      "entries-path-index": clean,
     });
 
-    fix({ id: "blog-id" }, function (err) {
+    try {
+      await fix({ id: "blog-id" });
+      fail("expected a rejection");
+    } catch (err) {
       expect(err).toBe(checkError);
+      expect(err.report).toEqual({});
       expect(listGhostsCalled).toBe(false);
-      done();
-    });
+    }
   });
 
-  it("still surfaces a check's error even when an earlier check already found something to fix and the cacheID bump succeeds", function (done) {
+  it("still surfaces a check's error, with the earlier repairs as err.report, when the cacheID bump succeeds", async function () {
     var checkError = new Error("tag-ghosts exploded");
 
     var fix = loadFixWithStubs({
@@ -238,23 +248,48 @@ describe("sync/fix", function () {
       "tag-ghosts": async function (blog) {
         throw checkError;
       },
-      "list-ghosts": async function (blog) {
-        return [];
-      },
-      "menu-ghosts": async function (blog) {
-        return [];
-      },
-      "entries-path-index": async function (blog) {
-        return [];
-      },
+      "list-ghosts": clean,
+      "menu-ghosts": clean,
+      "entries-path-index": clean,
     });
 
     spyOn(Blog, "set").and.callFake(async function (blogID, updates) {});
 
-    fix({ id: "blog-id" }, function (err, report) {
+    try {
+      await fix({ id: "blog-id" });
+      fail("expected a rejection");
+    } catch (err) {
       expect(err).toBe(checkError);
-      expect(report).toEqual({ "entry-ghosts": ["fixed something"] });
-      done();
+      expect(err.report).toEqual({ "entry-ghosts": ["fixed something"] });
+      expect(Blog.set).toHaveBeenCalled();
+      // Not enumerable, so logging the error prints what it did before
+      expect(Object.keys(err)).not.toContain("report");
+    }
+  });
+
+  it("rejects with the cacheID bump's error, with the repairs as err.report", async function () {
+    var setError = new Error("set exploded");
+
+    var fix = loadFixWithStubs({
+      "entry-ghosts": async function (blog) {
+        return ["fixed something"];
+      },
+      "tag-ghosts": clean,
+      "list-ghosts": clean,
+      "menu-ghosts": clean,
+      "entries-path-index": clean,
     });
+
+    spyOn(Blog, "set").and.callFake(async function () {
+      throw setError;
+    });
+
+    try {
+      await fix({ id: "blog-id" });
+      fail("expected a rejection");
+    } catch (err) {
+      expect(err).toBe(setError);
+      expect(err.report).toEqual({ "entry-ghosts": ["fixed something"] });
+    }
   });
 });

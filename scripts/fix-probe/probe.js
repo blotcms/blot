@@ -524,8 +524,10 @@ async function main() {
     summary.runs = [];
     for (let run = 1; run <= options.repeat; run++) {
       const started = performance.now();
-      const result = await new Promise((done) =>
-        check(blog, (err, report) => done({ err, report }))
+      // The checks are promise-only (#2559)
+      const result = await check(blog).then(
+        (report) => ({ err: null, report }),
+        (err) => ({ err, report: undefined })
       );
       const ms = Math.round(performance.now() - started);
       console.log(

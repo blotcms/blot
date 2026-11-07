@@ -16,7 +16,6 @@
 // "current behaviour" throughout. Do not "fix" these without checking
 // whether production relies on them.
 
-const { promisify } = require("util");
 const folder = require("storage/folder");
 
 const fix = require("../index");
@@ -28,7 +27,6 @@ const pathIndex = require("models/entries/pathIndex");
 
 const getEntry = (blogID, id) => Entry.get(blogID, id);
 const getBlog = (id) => Blog.get({ id });
-const fixOnBlogID = promisify(fix);
 
 // Fix() reads whatever `.menu` is already on the blog object it's handed
 // (menu-ghosts never re-fetches it) - every real caller (see
@@ -40,7 +38,7 @@ const fixOnBlogID = promisify(fix);
 // here to match that real calling convention.
 async function fixAsync(blog) {
   const fresh = await getBlog(blog.id);
-  return fixOnBlogID(fresh);
+  return fix(fresh);
 }
 
 const LISTS = ["all", "created", "entries", "drafts", "scheduled", "pages"];
