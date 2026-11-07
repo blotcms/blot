@@ -278,6 +278,25 @@ ul.task-list {
   margin: 0 auto
 }
 
+/* The frame's inline width and height fit the image's aspect ratio inside the square cell. */
+.post .frame {
+  position: relative;
+  display: block;
+  flex-shrink: 0;
+  margin: 0 auto;
+  background: var(--text-color-05);
+}
+
+.post .frame img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+}
+
 .post.no-thumbnail .thumbnail:after {
   border-color: var(--border-color);
   border-width: var(--border-width-thick)
@@ -307,6 +326,22 @@ ul.task-list {
   visibility: visible;
   opacity: 1;
   transition: opacity 0.3s, visibility 0.3s;
+}
+
+/* Thumbnails fade in once loaded, over a placeholder in their final shape. */
+.pre-loaded {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.pre-loaded.loaded {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pre-loaded {
+    transition: none;
+  }
 }
 
 #searchForm {

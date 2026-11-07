@@ -368,6 +368,40 @@ pre code.hljs {
   font-size: 0.8em;
 }
 
+/* The inline padding-bottom holds the thumbnail's aspect ratio. */
+.grid-item .thumbnail {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 0;
+  margin: 0 0 1em 0;
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05);
+}
+
+.grid-item .thumbnail img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Thumbnails fade in once loaded, over a placeholder in their final shape. */
+.pre-loaded {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.pre-loaded.loaded {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pre-loaded {
+    transition: none;
+  }
+}
+
 @media (max-width: 1200px) {
   .grid-sizer,
   .grid-item {
