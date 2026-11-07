@@ -3,32 +3,35 @@ describe("template", function () {
 
   var getView = require("../index").getView;
 
-  it("gets a view", function (done) {
+  it("gets a view", async function () {
     var test = this;
-    getView(test.template.id, test.view.name, function (err, savedView) {
-      if (err) return done.fail(err);
-      expect(savedView.name).toEqual(test.view.name);
-      expect(savedView.content).toEqual(test.view.content);
-      done();
-    });
+    var savedView = await getView(test.template.id, test.view.name);
+    expect(savedView.name).toEqual(test.view.name);
+    expect(savedView.content).toEqual(test.view.content);
   });
 
-  it("returns an error for a non-existent view", function (done) {
+  it("returns an error for a non-existent view", async function () {
     var test = this;
-    getView(test.template.id, "", function (err, savedView) {
+    var savedView;
+    try {
+      savedView = await getView(test.template.id, "");
+      fail("should have thrown");
+    } catch (err) {
       expect(err instanceof Error).toBe(true);
       expect(savedView).toBeFalsy();
-      done();
-    });
+    }
   });
 
-  it("returns an error for a non-existent template", function (done) {
+  it("returns an error for a non-existent template", async function () {
     var test = this;
-    getView("", test.view.name, function (err, savedView) {
+    var savedView;
+    try {
+      savedView = await getView("", test.view.name);
+      fail("should have thrown");
+    } catch (err) {
       expect(err instanceof Error).toBe(true);
       expect(savedView).toBeFalsy();
-      done();
-    });
+    }
   });
 
   it("returns a promise when called without a callback", async function () {

@@ -4,7 +4,6 @@ var Blog = require("models/blog");
 var fs = require("fs-extra");
 var templateDir = require("path").resolve(__dirname + "/../../app/templates");
 var makeSlug = require("helper/makeSlug");
-var promisify = require("util").promisify;
 
 // This script is used to archive one of Blot's included templates
 // It will create a copy of the template for each blog on which it
@@ -51,8 +50,8 @@ function eachBlogAsync(doThis) {
 
 async function main(name) {
   var templateID = "SITE:" + name;
-  var setTemplateMetadata = promisify(Template.setMetadata);
-  var dropTemplate = promisify(Template.drop);
+  var setTemplateMetadata = Template.setMetadata;
+  var dropTemplate = Template.drop;
 
   if (!fs.existsSync(templateDir + "/" + name))
     console.warn(
@@ -129,7 +128,7 @@ async function main(name) {
 // Template slugs must be unique per blog, so retry with a suffixed slug when
 // cloning into a namespace that already owns the target slug.
 async function createCloneWithUniqueSlug(owner, name, metadata) {
-  var createTemplate = promisify(Template.create);
+  var createTemplate = Template.create;
   var baseSlug = makeSlug(name).slice(0, 30);
   var attempt = 1;
 

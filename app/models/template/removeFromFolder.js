@@ -2,7 +2,7 @@ var joinpath = require("path").join;
 var isOwner = require("./isOwner");
 var blogFolder = require("clients/folder");
 var getAllViews = require("./getAllViews");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var determineTemplateFolder = require("./determineTemplateFolder");
 var withFolderLock = require("./withFolderLock");
 
@@ -23,4 +23,4 @@ async function removeFromFolderUnlocked(blogID, templateID) {
   return blogFolder.remove(blogID, dir);
 }
 
-module.exports = withCallback(withFolderLock(removeFromFolderUnlocked));
+module.exports = promiseOnly(withFolderLock(removeFromFolderUnlocked));

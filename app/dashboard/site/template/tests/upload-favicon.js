@@ -11,16 +11,11 @@ describe("upload favicon", function () {
   const storage = require("storage/assets");
   const asset = (name) => "_template_assets/" + name;
 
-  beforeEach(function (done) {
+  beforeEach(async function () {
     const test = this;
-    Template.create(test.blog.id, "Favicon Test", {}, function (err) {
-      if (err) return done.fail(err);
-      Template.getTemplateList(test.blog.id, function (err, templates) {
-        if (err) return done.fail(err);
-        test.template = templates.find((t) => t.name === "Favicon Test");
-        done();
-      });
-    });
+    await Template.create(test.blog.id, "Favicon Test", {});
+    const templates = await Template.getTemplateList(test.blog.id);
+    test.template = templates.find((t) => t.name === "Favicon Test");
   });
 
   const makeReq = async function (test, body, { withFile } = {}) {
@@ -83,11 +78,7 @@ describe("upload favicon", function () {
     expect(result.body.favicon.appleTouch).toMatch(/-180\.png$/);
 
     // Persisted, and the generated files are on disk.
-    const templates = await new Promise((resolve, reject) =>
-      Template.getTemplateList(this.blog.id, (err, list) =>
-        err ? reject(err) : resolve(list)
-      )
-    );
+    const templates = await Template.getTemplateList(this.blog.id);
     const saved = templates.find((t) => t.id === this.template.id);
     expect(saved.locals.favicon.prefix).toEqual(result.body.favicon.prefix);
     expect(
@@ -148,11 +139,7 @@ describe("upload favicon", function () {
       await storage.exists(this.blog.id, asset(`${favicon.prefix}.ico`))
     ).toBe(false);
 
-    const templates = await new Promise((resolve, reject) =>
-      Template.getTemplateList(this.blog.id, (err, list) =>
-        err ? reject(err) : resolve(list)
-      )
-    );
+    const templates = await Template.getTemplateList(this.blog.id);
     expect(
       templates.find((t) => t.id === this.template.id).locals.favicon
     ).toBeUndefined();

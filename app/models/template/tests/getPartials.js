@@ -4,24 +4,24 @@ describe("template", function () {
   var getPartials = require("../index").getPartials;
   var setView = require("../index").setView;
 
-  it("gets a partials for a view", function (done) {
+  it("gets a partials for a view", async function () {
     var test = this;
     var partials = {};
 
     partials[test.view.name] = "";
 
-    getPartials(test.blog.id, test.template.id, partials)
-      .then(function ({ allPartials: partials, retrieve: retrieve }) {
-        expect(partials[test.view.name]).toEqual(test.view.content);
-        done();
-      })
-      .catch(done.fail);
+    var { allPartials } = await getPartials(
+      test.blog.id,
+      test.template.id,
+      partials
+    );
+    expect(allPartials[test.view.name]).toEqual(test.view.content);
   });
 
   // If you have a template view 'header.html' which embeds
   // the partial view 'nav.html', when you get the partials
   // for header.html, you should recieve nav.html too.
-  it("retrieves partial used in a partial", function (done) {
+  it("retrieves partial used in a partial", async function () {
     var test = this;
 
     // We create a second view which embeds the view
@@ -38,20 +38,17 @@ describe("template", function () {
 
     partials[parentView.name] = "";
 
-    setView(test.template.id, parentView, function (err) {
-      if (err) return done.fail(err);
-      getPartials(test.blog.id, test.template.id, partials)
-        .then(function ({ allPartials: partials, retrieve: retrieve }) {
-          expect(partials[test.view.name]).toEqual(test.view.content);
-          expect(partials[parentView.name]).toEqual(parentView.content);
-
-          done();
-        })
-        .catch(done.fail);
-    });
+    await setView(test.template.id, parentView);
+    var { allPartials } = await getPartials(
+      test.blog.id,
+      test.template.id,
+      partials
+    );
+    expect(allPartials[test.view.name]).toEqual(test.view.content);
+    expect(allPartials[parentView.name]).toEqual(parentView.content);
   });
 
-  it("merges projected allEntries fields from nested partials", function (done) {
+  it("merges projected allEntries fields from nested partials", async function () {
     var test = this;
 
     var itemTitle = {
@@ -69,31 +66,24 @@ describe("template", function () {
       content: "{{> " + itemTitle.name + "}}{{> " + itemURL.name + "}}",
     };
 
-    setView(test.template.id, itemTitle, function (err) {
-      if (err) return done.fail(err);
-      setView(test.template.id, itemURL, function (err) {
-        if (err) return done.fail(err);
-        setView(test.template.id, parentView, function (err) {
-          if (err) return done.fail(err);
+    await setView(test.template.id, itemTitle);
+    await setView(test.template.id, itemURL);
+    await setView(test.template.id, parentView);
 
-          var partials = {};
-          partials[parentView.name] = "";
+    var partials = {};
+    partials[parentView.name] = "";
 
-          getPartials(test.blog.id, test.template.id, partials)
-            .then(function ({ allPartials: partials, retrieve: retrieve }) {
-              expect(retrieve).toEqual({
-                allEntries: { fields: { title: true, url: true } },
-              });
-
-              done();
-            })
-            .catch(done.fail);
-        });
-      });
+    var { retrieve } = await getPartials(
+      test.blog.id,
+      test.template.id,
+      partials
+    );
+    expect(retrieve).toEqual({
+      allEntries: { fields: { title: true, url: true } },
     });
   });
 
-  it("projects fields from a partial used inside tagged.entries", function (done) {
+  it("projects fields from a partial used inside tagged.entries", async function () {
     var test = this;
 
     var itemTitle = {
@@ -107,28 +97,23 @@ describe("template", function () {
         "{{#tagged.entries}}{{> " + itemTitle.name + "}}{{/tagged.entries}}",
     };
 
-    setView(test.template.id, itemTitle, function (err) {
-      if (err) return done.fail(err);
-      setView(test.template.id, parentView, function (err) {
-        if (err) return done.fail(err);
+    await setView(test.template.id, itemTitle);
+    await setView(test.template.id, parentView);
 
-        var partials = {};
-        partials[parentView.name] = "";
+    var partials = {};
+    partials[parentView.name] = "";
 
-        getPartials(test.blog.id, test.template.id, partials)
-          .then(function ({ allPartials: partials, retrieve: retrieve }) {
-            expect(retrieve).toEqual({
-              tagged: { fields: { title: true } },
-            });
-
-            done();
-          })
-          .catch(done.fail);
-      });
+    var { retrieve } = await getPartials(
+      test.blog.id,
+      test.template.id,
+      partials
+    );
+    expect(retrieve).toEqual({
+      tagged: { fields: { title: true } },
     });
   });
 
-  it("does not attribute a partial in an explicit dotted section to the root list", function (done) {
+  it("does not attribute a partial in an explicit dotted section to the root list", async function () {
     var test = this;
 
     var item = {
@@ -142,26 +127,21 @@ describe("template", function () {
       content: "{{#author.posts}}{{> " + item.name + "}}{{/author.posts}}",
     };
 
-    setView(test.template.id, item, function (err) {
-      if (err) return done.fail(err);
-      setView(test.template.id, parentView, function (err) {
-        if (err) return done.fail(err);
+    await setView(test.template.id, item);
+    await setView(test.template.id, parentView);
 
-        var partials = {};
-        partials[parentView.name] = "";
+    var partials = {};
+    partials[parentView.name] = "";
 
-        getPartials(test.blog.id, test.template.id, partials)
-          .then(function ({ allPartials: partials, retrieve: retrieve }) {
-            expect(retrieve.posts).toBeUndefined();
-
-            done();
-          })
-          .catch(done.fail);
-      });
-    });
+    var { retrieve } = await getPartials(
+      test.blog.id,
+      test.template.id,
+      partials
+    );
+    expect(retrieve.posts).toBeUndefined();
   });
 
-  it("keeps a partial's stored dependency when it is used inside a section", function (done) {
+  it("keeps a partial's stored dependency when it is used inside a section", async function () {
     var test = this;
 
     // `item` is used inside {{#posts}}, so it inherits the posts context.
@@ -178,24 +158,19 @@ describe("template", function () {
       content: "{{#posts}}{{> " + item.name + "}}{{/posts}}",
     };
 
-    setView(test.template.id, item, function (err) {
-      if (err) return done.fail(err);
-      setView(test.template.id, parentView, function (err) {
-        if (err) return done.fail(err);
+    await setView(test.template.id, item);
+    await setView(test.template.id, parentView);
 
-        var partials = {};
-        partials[parentView.name] = "";
+    var partials = {};
+    partials[parentView.name] = "";
 
-        getPartials(test.blog.id, test.template.id, partials)
-          .then(function ({ allPartials: resolved, retrieve: retrieve }) {
-            expect(retrieve.latestEntry).toBe(true);
-            expect(retrieve.posts).toEqual({ fields: { title: true } });
-
-            done();
-          })
-          .catch(done.fail);
-      });
-    });
+    var { retrieve } = await getPartials(
+      test.blog.id,
+      test.template.id,
+      partials
+    );
+    expect(retrieve.latestEntry).toBe(true);
+    expect(retrieve.posts).toEqual({ fields: { title: true } });
   });
 
   it("resolves file-backed partial paths case-insensitively", async function () {

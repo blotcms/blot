@@ -20,9 +20,7 @@ const client = require("models/client");
 // edit files; the client copies them into the blog's folder
 const sourceDirectory = require("clients/local/source").directory;
 const nsv = require("helper/nsv");
-const determineTemplateFolder = promisify(
-  require("models/template/determineTemplateFolder")
-);
+const determineTemplateFolder = require("models/template/determineTemplateFolder");
 
 const { resolve: resolveHandle } = require("./handle");
 
@@ -45,9 +43,9 @@ const generateAccessToken = promisify(User.generateAccessToken);
 const getBlog = promisify(Blog.get);
 const setBlog = promisify(Blog.set);
 const createBlog = promisify(Blog.create);
-const createTemplate = promisify(Template.create);
-const setTemplateMetadata = promisify(Template.setMetadata);
-const writeTemplateToFolder = promisify(Template.writeToFolder);
+const createTemplate = Template.create;
+const setTemplateMetadata = Template.setMetadata;
+const writeTemplateToFolder = Template.writeToFolder;
 const execFileAsync = promisify(execFile);
 
 const log = (...args) => console.error("[translate]", ...args);
@@ -137,7 +135,7 @@ async function establishTemplate(blog, name) {
     if (err.code !== "EEXISTS") throw err;
 
     const id = Template.makeID(blog.id, name);
-    template = await promisify(Template.getMetadata)(id);
+    template = await Template.getMetadata(id);
     log(`Reusing template ${template.id}`);
   }
 
@@ -147,7 +145,7 @@ async function establishTemplate(blog, name) {
   // Install it so the local site renders with it during verification.
   await setBlog(blog.id, { template: template.id });
 
-  return promisify(Template.getMetadata)(template.id);
+  return Template.getMetadata(template.id);
 }
 
 // --------------------------------------------------------------- readmes

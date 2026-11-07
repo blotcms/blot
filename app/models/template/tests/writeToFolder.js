@@ -28,8 +28,8 @@ describe("template", function () {
       content: "<h1>Post content</h1>",
     };
 
-    await promisify(setView)(this.template.id, view);
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await setView(this.template.id, view);
+    await writeToFolder(test.blog.id, test.template.id);
 
     var upperPath = "/Templates/" + test.template.slug + "/" + view.name;
     var lowerPath = "/templates/" + test.template.slug + "/" + view.name;
@@ -48,8 +48,8 @@ describe("template", function () {
     var test = this;
     var metadata = { locals: { foo: "bar" } };
 
-    await promisify(setMetadata)(this.template.id, metadata);
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await setMetadata(this.template.id, metadata);
+    await writeToFolder(test.blog.id, test.template.id);
 
     var targetPath = await getTemplatePath(test, "package.json");
 
@@ -149,8 +149,8 @@ describe("template", function () {
       locals: { foo: "bar" },
     };
 
-    await promisify(setView)(this.template.id, view);
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await setView(this.template.id, view);
+    await writeToFolder(test.blog.id, test.template.id);
 
     var targetPath = await getTemplatePath(test, "package.json");
 
@@ -171,8 +171,8 @@ describe("template", function () {
 
     await folder.mkdir(test.blog.id, lowercaseBase);
 
-    await promisify(setView)(this.template.id, view);
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await setView(this.template.id, view);
+    await writeToFolder(test.blog.id, test.template.id);
 
     expect(await readText(test, expectedPath)).toEqual(view.content);
     expect(await exists(test, "/Templates")).toEqual(false);
@@ -189,8 +189,8 @@ describe("template", function () {
     await folder.mkdir(test.blog.id, "/posts");
     await folder.mkdir(test.blog.id, "/drafts");
 
-    await promisify(setView)(this.template.id, view);
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await setView(this.template.id, view);
+    await writeToFolder(test.blog.id, test.template.id);
 
     expect(await readText(test, lowercasePath)).toEqual(view.content);
     expect(await exists(test, "/Templates")).toEqual(false);
@@ -203,13 +203,13 @@ describe("template", function () {
       content: "<h1>Static content</h1>",
     };
 
-    await promisify(setView)(this.template.id, view);
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await setView(this.template.id, view);
+    await writeToFolder(test.blog.id, test.template.id);
 
     var targetPath = await getTemplatePath(test, view.name);
     var originalStat = await folder.stat(test.blog.id, targetPath);
 
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await writeToFolder(test.blog.id, test.template.id);
 
     var updatedStat = await folder.stat(test.blog.id, targetPath);
     expect(updatedStat.modified).toEqual(originalStat.modified);
@@ -222,14 +222,14 @@ describe("template", function () {
       content: "<h1>Clean template</h1>",
     };
 
-    await promisify(setView)(this.template.id, view);
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await setView(this.template.id, view);
+    await writeToFolder(test.blog.id, test.template.id);
 
     var templateDir = await getTemplateDir(test);
     var orphanPath = join(templateDir, "orphan.html");
     await folder.write(test.blog.id, orphanPath, "orphan");
 
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await writeToFolder(test.blog.id, test.template.id);
 
     expect(await exists(test, orphanPath)).toEqual(false);
     expect(await readText(test, join(templateDir, view.name))).toEqual(
@@ -240,12 +240,12 @@ describe("template", function () {
   it("leaves a file with a backslash in its name, which can't be a view", async function () {
     var test = this;
 
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await writeToFolder(test.blog.id, test.template.id);
 
     var filePath = join(await getTemplateDir(test), "notes\\backup.txt");
     await folder.write(test.blog.id, filePath, "keep");
 
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await writeToFolder(test.blog.id, test.template.id);
 
     expect(await exists(test, filePath)).toEqual(true);
   });
@@ -258,8 +258,8 @@ describe("template", function () {
     };
 
     await this.blog.update({ client: "local" });
-    await promisify(setView)(test.template.id, view);
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await setView(test.template.id, view);
+    await writeToFolder(test.blog.id, test.template.id);
 
     var templateDir = await getTemplateDir(test);
     var viewPath = join(templateDir, view.name);
@@ -268,7 +268,7 @@ describe("template", function () {
 
     await folder.write(test.blog.id, orphanPath, "orphan");
 
-    await promisify(writeToFolder)(test.blog.id, test.template.id);
+    await writeToFolder(test.blog.id, test.template.id);
 
     var rewrittenStat = await folder.stat(test.blog.id, viewPath);
 
@@ -279,9 +279,8 @@ describe("template", function () {
 
   it("waits for the folder lock to be released before writing", async function () {
     var folderLock = require("sync/lock");
-    var { promisify } = require("util");
 
-    await promisify(setView)(this.template.id, {
+    await setView(this.template.id, {
       name: "post.html",
       content: "<h1>Locked</h1>",
     });
@@ -294,7 +293,7 @@ describe("template", function () {
       held.release();
     }, 1200);
 
-    await promisify(writeToFolder)(this.blog.id, this.template.id);
+    await writeToFolder(this.blog.id, this.template.id);
 
     // The write only ran once the lock was free, and gave the lock back
     expect(released).toEqual(true);
@@ -330,13 +329,12 @@ describe("template", function () {
   it("does not lock again inside a request that already holds the lock", async function () {
     var folderLock = require("sync/lock");
     var { holdForRequest } = require("../withFolderLock");
-    var { promisify } = require("util");
     var EventEmitter = require("events");
     var blogID = this.blog.id;
     var templateID = this.template.id;
     var res = new EventEmitter();
 
-    await promisify(setView)(this.template.id, {
+    await setView(this.template.id, {
       name: "post.html",
       content: "<h1>Held</h1>",
     });
@@ -347,14 +345,16 @@ describe("template", function () {
       holdForRequest({ blog: { id: blogID } }, res, function (err) {
         if (err) return reject(err);
 
-        writeToFolder(blogID, templateID, function (err) {
-          if (err) return reject(err);
-          folderLock.inspect(blogID).then(function (state) {
+        writeToFolder(blogID, templateID)
+          .then(function () {
+            return folderLock.inspect(blogID);
+          })
+          .then(function (state) {
             expect(state.held).toEqual(true);
             res.emit("finish");
             resolve();
-          }, reject);
-        });
+          })
+          .catch(reject);
       });
     });
 

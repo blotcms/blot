@@ -1,6 +1,5 @@
 describe("redirects.conflicts", function () {
   const folder = require("storage/folder");
-  const { promisify } = require("util");
   const build = require("build");
   const Entry = require("models/entry");
   const Template = require("models/template");
@@ -26,14 +25,10 @@ describe("redirects.conflicts", function () {
       await folder.write(this.blog.id, path, content);
 
     this.useTemplate = async (views) => {
-      const { id } = await promisify(Template.create)(
-        this.blog.id,
-        "conflicts",
-        {}
-      );
+      const { id } = await Template.create(this.blog.id, "conflicts", {});
 
       for (const view of views)
-        await promisify(Template.setView)(id, {
+        await Template.setView(id, {
           ...view,
           content: view.content || "Hello",
         });

@@ -48,51 +48,57 @@ module.exports = function (req, res, next) {
     cloneFrom: req.body.cloneFrom,
   };
 
-  Template.create(
-    req.blog.id,
-    name,
-    template,
-    function then(error, newTemplate) {
-      // If template name was 'example', deduplicated name
-      // will be first 'example 2' then 'example 3' etc...
-      // We preserve the original name to ensure that we
-      // don't produce 'example 2 3' or 'example 2 3 4'...
-      if (
-        error &&
-        error.code === "EEXISTS" &&
-        deduplicatingCounter < MAX_DEDUPLICATION_ATTEMPTS
-      ) {
-        deduplicatingCounter++;
-        deduplicatedName = name + " " + deduplicatingCounter;
-        template.name = deduplicatedName;
-        template.slug = slugForName(req.blog.id, deduplicatedName);
-        return Template.create(req.blog.id, deduplicatedName, template, then);
+  function create(templateName, then) {
+    Template.create(req.blog.id, templateName, template).then(
+      function (newTemplate) {
+        then(null, newTemplate);
+      },
+      function (error) {
+        then(error);
       }
+    );
+  }
 
-      if (error) {
-        return next(error);
-      }
-
-      if (req.body.openEditor) {
-        // we need to install this template, and then redirect to the editor
-        return Blog.set(req.blog.id, { template: newTemplate.id }, function () {
-          res.message(
-            "/sites/" +
-              req.blog.handle +
-              "/template/edit/" +
-              newTemplate.slug +
-              "/settings",
-            req.body.shared ? SUCCESS_FROM_SHARED_TEMPLATE : SUCCESS
-          );
-        });
-      }
-
-      res.message(
-        redirect,
-        req.body.shared
-          ? `Added template <b>${newTemplate.name}</b> to your templates`
-          : `Duplicated template <b>${newTemplate.name}</b>`
-      );
+  create(name, function then(error, newTemplate) {
+    // If template name was 'example', deduplicated name
+    // will be first 'example 2' then 'example 3' etc...
+    // We preserve the original name to ensure that we
+    // don't produce 'example 2 3' or 'example 2 3 4'...
+    if (
+      error &&
+      error.code === "EEXISTS" &&
+      deduplicatingCounter < MAX_DEDUPLICATION_ATTEMPTS
+    ) {
+      deduplicatingCounter++;
+      deduplicatedName = name + " " + deduplicatingCounter;
+      template.name = deduplicatedName;
+      template.slug = slugForName(req.blog.id, deduplicatedName);
+      return create(deduplicatedName, then);
     }
-  );
+
+    if (error) {
+      return next(error);
+    }
+
+    if (req.body.openEditor) {
+      // we need to install this template, and then redirect to the editor
+      return Blog.set(req.blog.id, { template: newTemplate.id }, function () {
+        res.message(
+          "/sites/" +
+            req.blog.handle +
+            "/template/edit/" +
+            newTemplate.slug +
+            "/settings",
+          req.body.shared ? SUCCESS_FROM_SHARED_TEMPLATE : SUCCESS
+        );
+      });
+    }
+
+    res.message(
+      redirect,
+      req.body.shared
+        ? `Added template <b>${newTemplate.name}</b> to your templates`
+        : `Duplicated template <b>${newTemplate.name}</b>`
+    );
+  });
 };

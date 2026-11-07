@@ -1,11 +1,15 @@
 describe("template", function () {
   require("./setup")({ createTemplate: true });
 
-  var { each } = require("../../../../scripts/tests/util/callbacks");
-  var getFullView = require("../index").getFullView;
+  const { promisify } = require("util");
+  var getFullView = promisify(require("../index").getFullView);
   var setView = require("../index").setView;
 
-  it("gets a full view", function (done) {
+  // Saves the views in parallel, as the callback each() loop used to
+  const setViews = (templateID, views) =>
+    Promise.all(views.map((view) => setView(templateID, view)));
+
+  it("gets a full view", async function () {
     var test = this;
 
     var header = {
@@ -21,31 +25,24 @@ describe("template", function () {
 
     var views = [view, header];
 
-    each(views, setView.bind(null, test.template.id), function (err) {
-      if (err) return done.fail(err);
+    await setViews(test.template.id, views);
 
-      getFullView(
-        test.blog.id,
-        test.template.id,
-        view.name,
-        function (err, fullView) {
-          if (err) return done.fail(err);
+    const fullView = await getFullView(
+      test.blog.id,
+      test.template.id,
+      view.name
+    );
 
-          expect(fullView).toEqual(jasmine.any(Array));
+    expect(fullView).toEqual(jasmine.any(Array));
 
-          var allPartials = {};
-          allPartials[header.name] = header.content;
+    var allPartials = {};
+    allPartials[header.name] = header.content;
 
-          expect(fullView[0]).toEqual(view.locals); // view.locals
-          expect(fullView[1]).toEqual(allPartials); // allPartials
-          expect(fullView[2]).toEqual({}); // view.retrieve
-          expect(fullView[3]).toEqual("text/html"); // view.type
-          expect(fullView[4]).toEqual(view.content);
-
-          done();
-        }
-      );
-    });
+    expect(fullView[0]).toEqual(view.locals); // view.locals
+    expect(fullView[1]).toEqual(allPartials); // allPartials
+    expect(fullView[2]).toEqual({}); // view.retrieve
+    expect(fullView[3]).toEqual("text/html"); // view.type
+    expect(fullView[4]).toEqual(view.content);
   });
 
   [
@@ -63,35 +60,25 @@ describe("template", function () {
     ],
     ["neither", "{{title}}{{> links.html}}", "{{url}}", false],
   ].forEach(function (example) {
-    it("says whether backlinks are used: " + example[0], function (done) {
+    it("says whether backlinks are used: " + example[0], async function () {
       var test = this;
 
-      each(
-        [
-          { name: "entry.html", content: example[1] },
-          { name: "links.html", content: example[2] },
-        ],
-        setView.bind(null, test.template.id),
-        function (err) {
-          if (err) return done.fail(err);
+      await setViews(test.template.id, [
+        { name: "entry.html", content: example[1] },
+        { name: "links.html", content: example[2] },
+      ]);
 
-          getFullView(
-            test.blog.id,
-            test.template.id,
-            "entry.html",
-            function (err, fullView) {
-              if (err) return done.fail(err);
-
-              expect(fullView[5]).toBe(example[3]);
-              done();
-            }
-          );
-        }
+      const fullView = await getFullView(
+        test.blog.id,
+        test.template.id,
+        "entry.html"
       );
+
+      expect(fullView[5]).toBe(example[3]);
     });
   });
 
-  it("merges projected allEntries fields from view and partials", function (done) {
+  it("merges projected allEntries fields from view and partials", async function () {
     var test = this;
 
     var partial = {
@@ -105,27 +92,20 @@ describe("template", function () {
         "{{#allEntries}}{{title}}{{/allEntries}}{{> " + partial.name + "}}",
     };
 
-    each([view, partial], setView.bind(null, test.template.id), function (err) {
-      if (err) return done.fail(err);
+    await setViews(test.template.id, [view, partial]);
 
-      getFullView(
-        test.blog.id,
-        test.template.id,
-        view.name,
-        function (err, fullView) {
-          if (err) return done.fail(err);
+    const fullView = await getFullView(
+      test.blog.id,
+      test.template.id,
+      view.name
+    );
 
-          expect(fullView[2]).toEqual({
-            allEntries: { fields: { title: true, url: true } },
-          });
-
-          done();
-        }
-      );
+    expect(fullView[2]).toEqual({
+      allEntries: { fields: { title: true, url: true } },
     });
   });
 
-  it("handles partial usage inside allEntries sections", function (done) {
+  it("handles partial usage inside allEntries sections", async function () {
     var test = this;
 
     var partial = {
@@ -138,27 +118,20 @@ describe("template", function () {
       content: "{{#allEntries}}{{> " + partial.name + "}}{{/allEntries}}",
     };
 
-    each([view, partial], setView.bind(null, test.template.id), function (err) {
-      if (err) return done.fail(err);
+    await setViews(test.template.id, [view, partial]);
 
-      getFullView(
-        test.blog.id,
-        test.template.id,
-        view.name,
-        function (err, fullView) {
-          if (err) return done.fail(err);
+    const fullView = await getFullView(
+      test.blog.id,
+      test.template.id,
+      view.name
+    );
 
-          expect(fullView[2]).toEqual({
-            allEntries: { fields: { html: true } },
-          });
-
-          done();
-        }
-      );
+    expect(fullView[2]).toEqual({
+      allEntries: { fields: { html: true } },
     });
   });
 
-  it("keeps a heavy field a partial renders under a nested entry predicate", function (done) {
+  it("keeps a heavy field a partial renders under a nested entry predicate", async function () {
     var test = this;
 
     var partial = {
@@ -174,30 +147,23 @@ describe("template", function () {
         "}}{{/thumbnail}}{{/allEntries}}",
     };
 
-    each([view, partial], setView.bind(null, test.template.id), function (err) {
-      if (err) return done.fail(err);
+    await setViews(test.template.id, [view, partial]);
 
-      getFullView(
-        test.blog.id,
-        test.template.id,
-        view.name,
-        function (err, fullView) {
-          if (err) return done.fail(err);
+    const fullView = await getFullView(
+      test.blog.id,
+      test.template.id,
+      view.name
+    );
 
-          // {{{html}}} inside {{#thumbnail}} has no `thumbnail.html`, so Mustache
-          // resolves it from the parent entry - projection must keep `html`.
-          // `thumbnail` is still recorded, and nothing leaks to the top level.
-          expect(fullView[2]).toEqual({
-            allEntries: { fields: { thumbnail: true, html: true } },
-          });
-
-          done();
-        }
-      );
+    // {{{html}}} inside {{#thumbnail}} has no `thumbnail.html`, so Mustache
+    // resolves it from the parent entry - projection must keep `html`.
+    // `thumbnail` is still recorded, and nothing leaks to the top level.
+    expect(fullView[2]).toEqual({
+      allEntries: { fields: { thumbnail: true, html: true } },
     });
   });
 
-  it("projects fields from partials used inside tagged.entries", function (done) {
+  it("projects fields from partials used inside tagged.entries", async function () {
     var test = this;
 
     var partial = {
@@ -211,27 +177,20 @@ describe("template", function () {
         "{{#tagged.entries}}{{> " + partial.name + "}}{{/tagged.entries}}",
     };
 
-    each([view, partial], setView.bind(null, test.template.id), function (err) {
-      if (err) return done.fail(err);
+    await setViews(test.template.id, [view, partial]);
 
-      getFullView(
-        test.blog.id,
-        test.template.id,
-        view.name,
-        function (err, fullView) {
-          if (err) return done.fail(err);
+    const fullView = await getFullView(
+      test.blog.id,
+      test.template.id,
+      view.name
+    );
 
-          expect(fullView[2]).toEqual({
-            tagged: { fields: { title: true } },
-          });
-
-          done();
-        }
-      );
+    expect(fullView[2]).toEqual({
+      tagged: { fields: { title: true } },
     });
   });
 
-  it("keeps a heavy field a nested partial renders in a fresh context", function (done) {
+  it("keeps a heavy field a nested partial renders in a fresh context", async function () {
     var test = this;
 
     // `item` is first used at the root, then reached again through `wrapper`
@@ -251,30 +210,19 @@ describe("template", function () {
         "}}{{/allEntries}}",
     };
 
-    each(
-      [item, wrapper, view],
-      setView.bind(null, test.template.id),
-      function (err) {
-        if (err) return done.fail(err);
+    await setViews(test.template.id, [item, wrapper, view]);
 
-        getFullView(
-          test.blog.id,
-          test.template.id,
-          view.name,
-          function (err, fullView) {
-            if (err) return done.fail(err);
-
-            expect(fullView[2].allEntries.fields.html).toBe(true);
-            expect(fullView[2].allEntries.fields.title).toBe(true);
-
-            done();
-          }
-        );
-      }
+    const fullView = await getFullView(
+      test.blog.id,
+      test.template.id,
+      view.name
     );
+
+    expect(fullView[2].allEntries.fields.html).toBe(true);
+    expect(fullView[2].allEntries.fields.title).toBe(true);
   });
 
-  it("does not keep a heavy field referenced only from a string local", function (done) {
+  it("does not keep a heavy field referenced only from a string local", async function () {
     var test = this;
 
     var view = {
@@ -283,22 +231,15 @@ describe("template", function () {
       content: "{{#allEntries}}{{title}}{{/allEntries}}{{{snippet}}}",
     };
 
-    setView(test.template.id, view, function (err) {
-      if (err) return done.fail(err);
+    await setView(test.template.id, view);
 
-      getFullView(
-        test.blog.id,
-        test.template.id,
-        view.name,
-        function (err, fullView) {
-          if (err) return done.fail(err);
+    const fullView = await getFullView(
+      test.blog.id,
+      test.template.id,
+      view.name
+    );
 
-          expect(fullView[2].allEntries.fields.html).toBeUndefined();
-          expect(fullView[2].allEntries.fields.title).toBe(true);
-
-          done();
-        }
-      );
-    });
+    expect(fullView[2].allEntries.fields.html).toBeUndefined();
+    expect(fullView[2].allEntries.fields.title).toBe(true);
   });
 });

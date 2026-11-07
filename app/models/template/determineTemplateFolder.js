@@ -1,7 +1,7 @@
 var folder = require("storage/folder");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
-module.exports = withCallback(async function determineTemplateFolder(blogID) {
+module.exports = promiseOnly(async function determineTemplateFolder(blogID) {
   var listing;
 
   try {

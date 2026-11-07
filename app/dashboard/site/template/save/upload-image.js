@@ -24,11 +24,7 @@ const url = (blog, name) =>
 const first = (files) =>
   Array.isArray(files && files.image) ? files.image[0] : files && files.image;
 const update = (blog, slug, locals) =>
-  new Promise((resolve, reject) =>
-    Template.update(blog.id, slug, { locals }, (error) =>
-      error ? reject(error) : resolve()
-    )
-  );
+  Template.update(blog.id, slug, { locals });
 const sync = (blog, template) => writeChangeToFolder(blog, template, {});
 const operations = { update, sync };
 
@@ -75,17 +71,11 @@ function getTemplatesStrictly(blogID) {
   ]).then(([siteIDs, blogIDs]) => {
     const ids = [...new Set([...(siteIDs || []), ...(blogIDs || [])])];
     return Promise.all(
-      ids.map(
-        (id) =>
-          new Promise((resolve, reject) => {
-            Template.getMetadata(id, (error, metadata) => {
-              if (error) return reject(error);
-              if (!metadata)
-                return reject(new Error(`Missing metadata for template ${id}`));
-              resolve(metadata);
-            });
-          })
-      )
+      ids.map(async (id) => {
+        const metadata = await Template.getMetadata(id);
+        if (!metadata) throw new Error(`Missing metadata for template ${id}`);
+        return metadata;
+      })
     );
   });
 }

@@ -1,5 +1,5 @@
 var getAllViews = require("./getAllViews");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var ensure = require("helper/ensure");
 var client = require("models/client");
 var key = require("./key");
@@ -8,7 +8,7 @@ var cacheID = require("./util/cacheID");
 var generateCdnUrl = require("./util/generateCdnUrl");
 var purgeCdnUrls = require("helper/purgeCdnUrls");
 
-module.exports = withCallback(async function drop(owner, templateName) {
+module.exports = promiseOnly(async function drop(owner, templateName) {
   var templateID = makeID(owner, templateName);
   var multi = client.multi();
 

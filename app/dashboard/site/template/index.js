@@ -86,9 +86,10 @@ TemplateEditor.param("templateSlug", function (req, res, next, slug) {
 
   // /template/:slug shows the SITE original while the blog's own copy is in
   // the folder, but saves made there land on that copy (see fork-if-needed)
-  Template.getMetadata(
-    Template.makeID(req.blog.id, makeSlug(slug)),
-    function (err, own) {
+  // (a failed lookup is the same as no template)
+  Template.getMetadata(Template.makeID(req.blog.id, makeSlug(slug)))
+    .catch(function () {})
+    .then(function (own) {
       if (
         (own && own.localEditing) ||
         (req.template && req.template.localEditing)
@@ -96,8 +97,7 @@ TemplateEditor.param("templateSlug", function (req, res, next, slug) {
         return holdFolderLock(req, res, next);
       }
       next();
-    }
-  );
+    });
 });
 
 TemplateEditor.use((req, res, next) => {
@@ -353,23 +353,23 @@ TemplateEditor.route("/:templateSlug/local-editing")
   })
   .post(require("./save/fork-if-needed"), function (req, res, next) {
     if (req.template.localEditing) {
-      Template.removeFromFolder(req.blog.id, req.template.id, function () {
-        Template.setMetadata(
-          req.template.id,
-          { localEditing: false },
-          function (err) {
-            if (err) return next(err);
-            res.message(
-              "/sites/" +
-                req.blog.handle +
-                "/template/" +
-                req.template.id.split(":").slice(1).join(":") +
-                "/source-code",
-              "Moved template from your folder"
-            );
-          }
-        );
-      });
+      Template.removeFromFolder(req.blog.id, req.template.id)
+        .catch(function () {})
+        .then(function () {
+          Template.setMetadata(req.template.id, { localEditing: false }).then(
+            function () {
+              res.message(
+                "/sites/" +
+                  req.blog.handle +
+                  "/template/" +
+                  req.template.id.split(":").slice(1).join(":") +
+                  "/source-code",
+                "Moved template from your folder"
+              );
+            },
+            next
+          );
+        });
     } else {
       require("./save/enable-local-editing")(req, res, next);
     }
@@ -509,27 +509,27 @@ TemplateEditor.route("/:templateSlug/delete")
         ),
       }));
 
-    Template.removeFromFolder(req.blog.id, req.template.id, function () {
-      Template.drop(req.blog.id, idSlug, function (err) {
-        if (err) return next(err);
+    Template.removeFromFolder(req.blog.id, req.template.id)
+      .catch(function () {})
+      .then(function () {
+        Template.drop(req.blog.id, idSlug).then(function () {
+          removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
+            .then(() => {
+              const currentTemplateIDSlug = req.blog.template
+                .split(":")
+                .slice(1)
+                .join(":");
 
-        removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
-          .then(() => {
-            const currentTemplateIDSlug = req.blog.template
-              .split(":")
-              .slice(1)
-              .join(":");
-
-            res.message(
-              res.locals.dashboardBase +
-                "/template/" +
-                (currentTemplateIDSlug || ""),
-              "Deleted template <b>" + req.template.displayName + "</b>"
-            );
-          })
-          .catch(next);
+              res.message(
+                res.locals.dashboardBase +
+                  "/template/" +
+                  (currentTemplateIDSlug || ""),
+                "Deleted template <b>" + req.template.displayName + "</b>"
+              );
+            })
+            .catch(next);
+        }, next);
       });
-    });
   });
 
 TemplateEditor.route("/:templateSlug/reset")
@@ -564,8 +564,7 @@ TemplateEditor.route("/:templateSlug/reset")
     };
 
     // work out if this template is currently installed on this site
-    Template.drop(req.blog.id, idSlug, function (err) {
-      if (err) return next(err);
+    Template.drop(req.blog.id, idSlug).then(function () {
       if (req.blog.template === req.template.id) {
         Blog.set(req.blog.id, { template: "SITE:" + idSlug }, function (err) {
           if (err) return next(err);
@@ -574,7 +573,7 @@ TemplateEditor.route("/:templateSlug/reset")
       } else {
         finishReset();
       }
-    });
+    }, next);
   });
 
 TemplateEditor.use("/:templateSlug/source-code", require("./source-code"));

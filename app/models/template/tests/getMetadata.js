@@ -3,22 +3,22 @@ describe("template", function () {
 
   var getMetadata = require("../index").getMetadata;
 
-  it("gets a template", function (done) {
+  it("gets a template", async function () {
     var test = this;
-    getMetadata(test.template.id, function (err, template) {
-      expect(err).toBeNull();
-      expect(template).toEqual(test.template);
-      done();
-    });
+    var template = await getMetadata(test.template.id);
+    expect(template).toEqual(test.template);
   });
 
-  it("returns ENOENT when template does not exist", function (done) {
-    getMetadata("nonexistent:template", function (err, template) {
+  it("returns ENOENT when template does not exist", async function () {
+    var template;
+    try {
+      template = await getMetadata("nonexistent:template");
+      fail("should have thrown");
+    } catch (err) {
       expect(err instanceof Error).toBe(true);
       expect(err.code).toEqual("ENOENT");
       expect(template).toBeFalsy();
-      done();
-    });
+    }
   });
 
   it("returns a promise when called without a callback", async function () {

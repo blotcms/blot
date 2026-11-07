@@ -7,14 +7,14 @@ describe("updateCdnManifest folder files", function () {
   const Blog = require("models/blog");
   const Template = require("../index");
   const key = require("../key");
-  const updateCdnManifest = promisify(require("../util/updateCdnManifest"));
+  const updateCdnManifest = require("../util/updateCdnManifest");
   const rebuildDependents = require("sync/update/rebuildDependents");
   const renderView = require("blog/render/view");
   const config = require("config");
 
-  const getMetadata = promisify(Template.getMetadata);
-  const dropTemplate = promisify(Template.drop);
-  const createTemplate = promisify(Template.create);
+  const getMetadata = Template.getMetadata;
+  const dropTemplate = Template.drop;
+  const createTemplate = Template.create;
   const blogSet = promisify(Blog.set);
   const blogGet = promisify(Blog.get);
 
@@ -245,7 +245,7 @@ describe("updateCdnManifest folder files", function () {
   });
 
   describe("values which never pass through a view's text", function () {
-    const setMetadata = promisify(Template.setMetadata);
+    const setMetadata = Template.setMetadata;
 
     it("resolves a template local which links to a folder file", async function () {
       await this.write({ path: "/img/logo.png", content: "one" });

@@ -1,14 +1,14 @@
 var ensure = require("helper/ensure");
 var extend = require("helper/extend");
 var getAllViews = require("./getAllViews");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var setMultipleViews = require("./setMultipleViews");
 var getMetadata = require("./getMetadata");
 var setMetadata = require("./setMetadata");
 var updateCdnManifest = require("./util/updateCdnManifest");
 var cacheID = require("./util/cacheID");
 
-module.exports = withCallback(async function clone(fromID, toID, metadata) {
+module.exports = promiseOnly(async function clone(fromID, toID, metadata) {
   ensure(fromID, "string").and(toID, "string").and(metadata, "object");
 
   var allViews;

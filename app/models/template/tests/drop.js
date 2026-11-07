@@ -1,4 +1,5 @@
 describe("template", function () {
+  const { promisify } = require("util");
   require("./setup")({ createTemplate: true });
 
   var drop = require("../index").drop;
@@ -9,27 +10,23 @@ describe("template", function () {
   var key = require("../key");
   var generateCdnUrl = require("../util/generateCdnUrl");
 
-  it("drops a template", function (done) {
-    drop(this.blog.id, this.template.name, done);
+  var blogGet = promisify(Blog.get);
+  var blogSet = promisify(Blog.set);
+
+  it("drops a template", async function () {
+    await drop(this.blog.id, this.template.name);
   });
 
-  it("drop removes a template from the list of templates", function (done) {
+  it("drop removes a template from the list of templates", async function () {
     var test = this;
-    getTemplateList(test.blog.id, function (err, templates) {
-      if (err) return done.fail(err);
-      expect(templates).toContain(test.template);
-      drop(test.blog.id, test.template.name, function (err) {
-        if (err) return done.fail(err);
-        getTemplateList(test.blog.id, function (err, templates) {
-          if (err) return done.fail(err);
-          expect(templates).not.toContain(test.template);
-          done();
-        });
-      });
-    });
+    const templates = await getTemplateList(test.blog.id);
+    expect(templates).toContain(test.template);
+    await drop(test.blog.id, test.template.name);
+    const remaining = await getTemplateList(test.blog.id);
+    expect(remaining).not.toContain(test.template);
   });
 
-  it("drop removes the URL key for a view in the template", function (done) {
+  it("drop removes the URL key for a view in the template", async function () {
     var test = this;
     var view = {
       name: "notes.txt",
@@ -37,147 +34,81 @@ describe("template", function () {
       url: "/notes",
     };
 
-    require("../index").setView(test.template.id, view, function (err) {
-      if (err) return done.fail(err);
-      drop(test.blog.id, test.template.name, function (err) {
-        if (err) return done.fail(err);
-        client
-          .keys("*" + test.template.id + "*")
-          .then(function (result) {
-            expect(result).toEqual([]);
-            done();
-          })
-          .catch(done.fail);
-      });
-    });
+    await require("../index").setView(test.template.id, view);
+    await drop(test.blog.id, test.template.name);
+    const result = await client.keys("*" + test.template.id + "*");
+    expect(result).toEqual([]);
   });
 
-  it("drop removes all keys for the template", function (done) {
+  it("drop removes all keys for the template", async function () {
     var test = this;
-    drop(test.blog.id, test.template.name, function (err) {
-      if (err) return done.fail(err);
-      client
-        .keys("*" + test.template.id + "*")
-        .then(function (result) {
-          expect(result).toEqual([]);
-          done();
-        })
-        .catch(done.fail);
-    });
+    await drop(test.blog.id, test.template.name);
+    const result = await client.keys("*" + test.template.id + "*");
+    expect(result).toEqual([]);
   });
 
-  it("updates the cache ID of the blog which has the template installed after dropping", function (done) {
+  it("updates the cache ID of the blog which has the template installed after dropping", async function () {
     var test = this;
-    Blog.set(test.blog.id, { template: test.template.id }, function (err) {
-      if (err) return done.fail(err);
-      Blog.get({ id: test.blog.id }, function (err, installed) {
-        if (err) return done.fail(err);
-        drop(test.blog.id, test.template.name, function (err) {
-          if (err) return done.fail(err);
-          Blog.get({ id: test.template.owner }, function (err, blog) {
-            if (err) return done.fail(err);
-            expect(blog.cacheID).not.toEqual(installed.cacheID);
-            done();
-          });
-        });
-      });
-    });
+    await blogSet(test.blog.id, { template: test.template.id });
+    const installed = await blogGet({ id: test.blog.id });
+    await drop(test.blog.id, test.template.name);
+    const blog = await blogGet({ id: test.template.owner });
+    expect(blog.cacheID).not.toEqual(installed.cacheID);
   });
 
-  it("leaves the owner blog's cache ID alone when dropping a template it doesn't use", function (done) {
+  it("leaves the owner blog's cache ID alone when dropping a template it doesn't use", async function () {
     var test = this;
-    Blog.get({ id: test.blog.id }, function (err, before) {
-      if (err) return done.fail(err);
-      drop(test.blog.id, test.template.name, function (err) {
-        if (err) return done.fail(err);
-        Blog.get({ id: test.blog.id }, function (err, blog) {
-          if (err) return done.fail(err);
-          expect(blog.cacheID).toEqual(before.cacheID);
-          done();
-        });
-      });
-    });
+    const before = await blogGet({ id: test.blog.id });
+    await drop(test.blog.id, test.template.name);
+    const blog = await blogGet({ id: test.blog.id });
+    expect(blog.cacheID).toEqual(before.cacheID);
   });
 
-  it("cleans up references when metadata is missing", function (done) {
+  it("cleans up references when metadata is missing", async function () {
     var test = this;
 
-    client
-      .del(key.metadata(test.template.id))
-      .then(function () {
-        drop(test.blog.id, test.template.name, function (err) {
-          if (err) return done.fail(err);
-
-          client
-            .sIsMember(key.blogTemplates(test.blog.id), test.template.id)
-            .then(function (isMember) {
-              expect(!!isMember).toBe(false);
-              done();
-            })
-            .catch(done.fail);
-        });
-      })
-      .catch(done.fail);
+    await client.del(key.metadata(test.template.id));
+    await drop(test.blog.id, test.template.name);
+    const isMember = await client.sIsMember(
+      key.blogTemplates(test.blog.id),
+      test.template.id
+    );
+    expect(!!isMember).toBe(false);
   });
 
-  it("drop resolves without an error when the template does not exist", function (done) {
+  it("drop resolves without an error when the template does not exist", async function () {
     var test = this;
-    drop(test.blog.id, "nonexistent-template", function (err, message) {
-      if (err) return done.fail(err);
-      expect(typeof message).toBe("string");
-      done();
-    });
+    const message = await drop(test.blog.id, "nonexistent-template");
+    expect(typeof message).toBe("string");
   });
 
-  it("removes rendered output Redis keys from CDN manifest entries", function (done) {
+  it("removes rendered output Redis keys from CDN manifest entries", async function () {
     var test = this;
     var manifest = {
       "assets/style.css": "a1b2c3d4e5f6a7b8",
       "partials/header.html": "b1c2d3e4f5a6b7c8",
     };
 
-    Promise.all(
+    await Promise.all(
       Object.keys(manifest).map(function (target) {
         var hash = manifest[target];
         var renderedKey = key.renderedOutput(hash);
         return client.set(renderedKey, "rendered");
       })
-    )
-      .then(function () {
-        return new Promise(function (resolve, reject) {
-          setMetadata(test.template.id, { cdn: manifest }, function (err) {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
+    );
+    await setMetadata(test.template.id, { cdn: manifest });
+    await drop(test.blog.id, test.template.name);
+    await Promise.all(
+      Object.keys(manifest).map(async function (target) {
+        var hash = manifest[target];
+        var renderedKey = key.renderedOutput(hash);
+        const result = await client.get(renderedKey);
+        expect(result).toBeNull();
       })
-      .then(function () {
-        return new Promise(function (resolve, reject) {
-          drop(test.blog.id, test.template.name, function (err) {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
-      })
-      .then(function () {
-        return Promise.all(
-          Object.keys(manifest).map(function (target) {
-            var hash = manifest[target];
-            var renderedKey = key.renderedOutput(hash);
-
-            return client.get(renderedKey).then(function (result) {
-              expect(result).toBeNull();
-            });
-          })
-        );
-      })
-      .then(function () {
-        done();
-      })
-      .catch(done.fail);
+    );
   });
 
-  it("purges CDN URLs from metadata manifest entries when dropping a template", function (done) {
+  it("purges CDN URLs from metadata manifest entries when dropping a template", async function () {
     var test = this;
     var manifest = {
       "assets/style.css": "d1e2f3a4b5c6d7e8",
@@ -201,97 +132,44 @@ describe("template", function () {
     delete require.cache[dropPath];
     var dropWithPurgeStub = require("../drop");
 
-    new Promise(function (resolve, reject) {
-      client
-        .hSet(metadataKey, "cdn", JSON.stringify(manifest))
-        .then(resolve, reject);
-    })
-      .then(function () {
-        return new Promise(function (resolve, reject) {
-          client.hGet(metadataKey, "cdn").then(function (rawCdn) {
-            expect(JSON.parse(rawCdn)).toEqual(manifest);
-            resolve();
-          }, reject);
-        });
-      })
-      .then(function () {
-        return new Promise(function (resolve, reject) {
-          dropWithPurgeStub(test.blog.id, test.template.name, function (err) {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
-      })
-      .then(function () {
-        var expectedUrls = Object.keys(manifest).map(function (target) {
-          return generateCdnUrl(target, manifest[target]);
-        });
-        expect(purgeSpy).toHaveBeenCalledTimes(1);
-        expect(purgeSpy).toHaveBeenCalledWith(expectedUrls);
-      })
-      .then(function () {
-        if (originalPurgeModule) {
-          require.cache[purgePath] = originalPurgeModule;
-        } else {
-          delete require.cache[purgePath];
-        }
+    try {
+      await client.hSet(metadataKey, "cdn", JSON.stringify(manifest));
+      const rawCdn = await client.hGet(metadataKey, "cdn");
+      expect(JSON.parse(rawCdn)).toEqual(manifest);
 
-        if (originalDropModule) {
-          require.cache[dropPath] = originalDropModule;
-        } else {
-          delete require.cache[dropPath];
-        }
-        done();
-      })
-      .catch(function (err) {
-        if (originalPurgeModule) {
-          require.cache[purgePath] = originalPurgeModule;
-        } else {
-          delete require.cache[purgePath];
-        }
+      await dropWithPurgeStub(test.blog.id, test.template.name);
 
-        if (originalDropModule) {
-          require.cache[dropPath] = originalDropModule;
-        } else {
-          delete require.cache[dropPath];
-        }
-
-        done.fail(err);
+      var expectedUrls = Object.keys(manifest).map(function (target) {
+        return generateCdnUrl(target, manifest[target]);
       });
+      expect(purgeSpy).toHaveBeenCalledTimes(1);
+      expect(purgeSpy).toHaveBeenCalledWith(expectedUrls);
+    } finally {
+      if (originalPurgeModule) {
+        require.cache[purgePath] = originalPurgeModule;
+      } else {
+        delete require.cache[purgePath];
+      }
+
+      if (originalDropModule) {
+        require.cache[dropPath] = originalDropModule;
+      } else {
+        delete require.cache[dropPath];
+      }
+    }
   });
 
-  it("still drops when metadata.cdn is missing or malformed", function (done) {
+  it("still drops when metadata.cdn is missing or malformed", async function () {
     var test = this;
     var metadataKey = key.metadata(test.template.id);
 
-    client
-      .hDel(metadataKey, "cdn")
-      .then(function () {
-        drop(test.blog.id, test.template.name, function (err) {
-          if (err) return done.fail(err);
+    await client.hDel(metadataKey, "cdn");
+    await drop(test.blog.id, test.template.name);
+    await require("../index").create(test.blog.id, "malformed-cdn", {});
 
-          require("../index").create(
-            test.blog.id,
-            "malformed-cdn",
-            {},
-            function (err) {
-              if (err) return done.fail(err);
-
-              var malformedTemplateID = test.blog.id + ":malformed-cdn";
-              client
-                .hSet(key.metadata(malformedTemplateID), "cdn", '"broken"')
-                .then(function () {
-                  drop(test.blog.id, "malformed-cdn", function (err, message) {
-                    if (err) return done.fail(err);
-                    expect(typeof message).toBe("string");
-                    done();
-                  });
-                })
-                .catch(done.fail);
-            }
-          );
-        });
-      })
-      .catch(done.fail);
+    var malformedTemplateID = test.blog.id + ":malformed-cdn";
+    await client.hSet(key.metadata(malformedTemplateID), "cdn", '"broken"');
+    const message = await drop(test.blog.id, "malformed-cdn");
+    expect(typeof message).toBe("string");
   });
 });

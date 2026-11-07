@@ -3,11 +3,10 @@ const { promisify } = require("util");
 describe("template", () => {
   require("./setup")({ createTemplate: true });
 
-  const setViewCallback = require("../index").setView;
-  const setView = promisify(setViewCallback);
-  const setMetadata = promisify(require("../index").setMetadata);
-  const getView = promisify(require("../index").getView);
-  const getMetadata = promisify(require("../index").getMetadata);
+  const setView = require("../index").setView;
+  const setMetadata = require("../index").setMetadata;
+  const getView = require("../index").getView;
+  const getMetadata = require("../index").getMetadata;
   const Blog = require("models/blog");
   const client = require("models/client");
   const hdel = client.hDel.bind(client);
@@ -352,22 +351,20 @@ describe("template", () => {
     }
   });
 
-  it("forwards Redis url mapping failures to callback", function (done) {
+  it("forwards Redis url mapping failures to callback", async function () {
     const expectedError = new Error("redis set failed");
     spyOn(client, "set").and.callFake(() => Promise.reject(expectedError));
 
-    setViewCallback(
-      this.template.id,
-      {
+    try {
+      await setView(this.template.id, {
         name: "redis-error.html",
         content: "hello",
         url: "/redis-error",
-      },
-      (err) => {
-        expect(err).toBe(expectedError);
-        done();
-      }
-    );
+      });
+      fail("should have thrown");
+    } catch (err) {
+      expect(err).toBe(expectedError);
+    }
   });
 
   it("updates the cache ID of the blog which has the template installed after setting a view", async function () {

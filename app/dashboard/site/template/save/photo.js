@@ -23,18 +23,10 @@ const runForkIfNeeded = (req, res) =>
   });
 
 const removeTemplateFromFolder = (blogID, templateID) =>
-  new Promise((resolve, reject) => {
-    Template.removeFromFolder(blogID, templateID, (error) =>
-      error ? reject(error) : resolve()
-    );
-  });
+  Template.removeFromFolder(blogID, templateID);
 
 const dropTemplate = (blogID, templateSlug) =>
-  new Promise((resolve, reject) => {
-    Template.drop(blogID, templateSlug, (error) =>
-      error ? reject(error) : resolve()
-    );
-  });
+  Template.drop(blogID, templateSlug);
 
 async function rollbackFork(req, res) {
   const fork = req.templateFork;

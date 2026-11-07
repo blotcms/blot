@@ -114,7 +114,7 @@ Stored as a Redis hash at key `template:{id}:view:{viewName}`.
 
 All functions below are exported from `index.js`. All callbacks follow the Node.js `(err, result)` convention unless noted.
 
-`getMetadata`, `getView`, `getViewsByURLs`, `getTemplateList`, `getByShareID` and `isOwner` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `getViewByURL`, `getPartials` and `getAllViews` are `async` functions with no callback form.
+The template functions return a promise (`helper/promiseOnly`, #2559); they throw if given a callback. `getViewByURL`, `getPartials` and `getAllViews` are `async` functions with no callback form.
 
 ### Template lifecycle
 

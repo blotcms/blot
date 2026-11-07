@@ -2,13 +2,13 @@ var client = require("models/client");
 var key = require("./key");
 var getMetadata = require("./getMetadata");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 // The list of possible template choices
 // for a given blog. Accepts a UID and
 // returns an array of template metadata
 // objects. Does not contain any view info
-module.exports = withCallback(async function getTemplateList(blogID) {
+module.exports = promiseOnly(async function getTemplateList(blogID) {
   ensure(blogID, "string");
 
   var results = await Promise.all([
