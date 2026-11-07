@@ -69,7 +69,8 @@ chmod +x sudo systemctl mountpoint mount nvme blkid
 cat >> systemctl <<"EOF"
 if [ "$*" = "restart rsyslog" ]; then
   [ ! -f /run/rsyslogd.pid ] || { kill "$(cat /run/rsyslogd.pid)"; while [ -f /run/rsyslogd.pid ]; do sleep 0.1; done; }
-  rsyslogd
+  # as systemd starts it: rsyslog.service has UMask=0066
+  (umask 0066; rsyslogd)
 fi
 EOF'
 
@@ -100,6 +101,8 @@ check "a unit's line on the socket lands in app.log with its tag" in_ct '
   logger -u /run/blot-log/app.sock -i -t blot-blue/abc1234 "[blue/node-a] hello from the unit"
   for i in $(seq 20); do grep -q " blot-blue/abc1234 \[blue/node-a\] hello from the unit$" /var/instance-ssd/logs/app.log 2> /dev/null && exit 0; sleep 0.2; done
   cat /var/instance-ssd/logs/app.log; exit 1'
+check "ec2-user, whom read.sh connects as, can read app.log" in_ct '
+  [ "$(stat -c %U /var/instance-ssd/logs/app.log)" = ec2-user ] && runuser -u ec2-user -- head -c 1 /var/instance-ssd/logs/app.log > /dev/null'
 check "docker starts after rsyslog at boot" in_ct 'grep -qx "After=rsyslog.service" /etc/systemd/system/docker.service.d/20-rsyslog.conf'
 check "app.log is rotated" in_ct 'logrotate --debug /etc/logrotate.d/app-log 2>&1 | grep -q "/var/instance-ssd/logs/app.log"'
 check "fail2ban accepts the deployed config" in_ct 'fail2ban-client -t'
@@ -156,6 +159,9 @@ in_ct 'rm /tmp/systemctl.log; chown 1234:1234 /var/instance-ssd/logs /var/instan
 check "deploy.sh runs again" deploy "$TMP/run2"
 check "the instance store unit is not started when mounted" in_ct '! grep -q "start mount-instance-store" /tmp/systemctl.log'
 check "rsyslog is not restarted when its config is unchanged" in_ct '! grep -q "restart rsyslog" /tmp/systemctl.log && [ -S /run/blot-log/app.sock ]'
+in_ct 'chown root:root /var/instance-ssd/logs/app.log; chmod 600 /var/instance-ssd/logs/app.log'
+check "deploy.sh runs over an app.log rsyslog made root's" deploy "$TMP/run3"
+check "and gives it to ec2-user" in_ct '[ "$(stat -c %U:%G /var/instance-ssd/logs/app.log)" = ec2-user:ec2-user ] && runuser -u ec2-user -- head -c 1 /var/instance-ssd/logs/app.log > /dev/null'
 check "the Redis backup unit is not started when /backups is mounted" in_ct '! grep -q "start blot-instance-store" /tmp/systemctl.log'
 check "docker is never started, restarted or stopped" in_ct '! grep -E "(start|stop|restart).* docker" /tmp/systemctl.log'
 check "the existing log directory and access log keep their owner" in_ct '

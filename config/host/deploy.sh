@@ -210,6 +210,11 @@ scp -P "$SSH_PORT" -i "$SSH_KEY" "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pw
 ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo bash -s" <<'RSYSLOG'
 set -eu
 target=/etc/rsyslog.d/blot-app-log.conf
+# An app.log rsyslog created before the config named its owner is root's, and
+# 0600 (rsyslog.service's UMask), so read.sh could not read it. rsyslog keeps
+# writing to it either way.
+log=/var/instance-ssd/logs/app.log
+[ ! -e "$log" ] || [ "$(stat -c %U "$log")" = ec2-user ] || chown ec2-user:ec2-user "$log"
 if cmp -s /tmp/blot-app-log.conf "$target"; then
   rm -f /tmp/blot-app-log.conf
   echo "rsyslog config unchanged."
