@@ -2,6 +2,7 @@
   <span class="thumbnail">
     <span class="container">
       {{#thumbnail.medium}}
+      <span class="frame" style="width:min(100%, 100% * {{width}} / {{height}});height:min(100%, 100% * {{height}} / {{width}})">
       <img
         loading="lazy"
         src="{{{url}}}"
@@ -11,8 +12,9 @@
           {{{thumbnail.large.url}}} {{thumbnail.large.width}}w
         "
         sizes="(max-width: 500px) 100vw, (max-width: 900px) calc(100vw / min(2, {{columns}})), (max-width: 1200px) calc(100vw / min(3, {{columns}})), calc(100vw / {{columns}})"
-        class="fadeMe"
-        onload="this.className+=' fadeIn';" />
+        class="pre-loaded"
+        onload="this.classList.add('loaded')"
+        onerror="this.classList.add('loaded')" />
       <noscript>  
       <img
         loading="lazy"
@@ -24,6 +26,7 @@
         "
         sizes="(max-width: 500px) 100vw, (max-width: 900px) calc(100vw / min(2, {{columns}})), (max-width: 1200px) calc(100vw / min(3, {{columns}})), calc(100vw / {{columns}})" />
       </noscript>
+      </span>
       {{/thumbnail.medium}}
       {{^thumbnail.medium}}
       <span style="width:100%">
