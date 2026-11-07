@@ -143,9 +143,7 @@ describe("dashboard subscription cancel", function () {
     const customers = Object.getPrototypeOf(
       require("stripe")("sk_test_unused").customers
     );
-    spyOn(customers, "cancelSubscription").and.callFake(
-      (customer, id, options, cb) => cb(null, cancelled)
-    );
+    spyOn(customers, "cancelSubscription").and.callFake(async () => cancelled);
     spyOn(User, "set").and.callFake(async () => undefined);
 
     const result = await post({
@@ -166,9 +164,7 @@ describe("dashboard subscription cancel", function () {
     const customers = Object.getPrototypeOf(
       require("stripe")("sk_test_unused").customers
     );
-    spyOn(customers, "cancelSubscription").and.callFake(
-      (customer, id, options, cb) => cb(null, cancelled)
-    );
+    spyOn(customers, "cancelSubscription").and.callFake(async () => cancelled);
     spyOn(User, "set").and.callFake(async () => undefined);
 
     const result = await post({
@@ -180,8 +176,7 @@ describe("dashboard subscription cancel", function () {
     expect(customers.cancelSubscription).toHaveBeenCalledWith(
       "cus_1",
       "sub_1",
-      { at_period_end: true },
-      jasmine.any(Function)
+      { at_period_end: true }
     );
     expect(User.set).toHaveBeenCalledWith("uid", { subscription: cancelled });
     expect(fetch).not.toHaveBeenCalled();

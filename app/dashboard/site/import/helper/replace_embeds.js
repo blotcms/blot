@@ -1,7 +1,7 @@
 var cheerio = require("cheerio");
 var parse = require("url").parse;
 
-module.exports = function replaceEmbeds(html, callback) {
+module.exports = function replaceEmbeds(html) {
   var $ = cheerio.load(html, { decodeEntities: false });
 
   $("iframe").each(function () {
@@ -21,5 +21,5 @@ module.exports = function replaceEmbeds(html, callback) {
     }
   });
 
-  return callback($.html());
+  return $.html();
 };

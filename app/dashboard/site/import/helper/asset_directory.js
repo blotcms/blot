@@ -3,40 +3,30 @@ var os = require("os");
 var path = require("path");
 
 // Assets are staged outside the output tree. This keeps their directories from
-// influencing final path allocation before the entry itself is written.
-module.exports = function assetDirectory(entry, callback) {
-  if (entry.asset_directory) {
-    return process.nextTick(function () {
-      callback(null, entry.asset_directory);
-    });
-  }
+// influencing final path allocation before the entry itself is written. The
+// in-flight promise is kept on the entry, so concurrent calls share one
+// directory.
+module.exports = async function assetDirectory(entry) {
+  if (entry.asset_directory) return entry.asset_directory;
 
-  if (entry.asset_directory_callbacks) {
-    entry.asset_directory_callbacks.push(callback);
-    return;
-  }
-
-  entry.asset_directory_callbacks = [callback];
+  if (entry.asset_directory_promise) return entry.asset_directory_promise;
 
   const state = require("../lifecycle").current();
   const parent = state ? state.stagingDirectory : os.tmpdir();
-  fs.ensureDir(parent, function (err) {
-    if (err) return finish(err);
-    fs.mkdtemp(path.join(parent, "blot-import-"), finish);
-  });
 
-  function finish(err, directory) {
-    var callbacks = entry.asset_directory_callbacks;
+  entry.asset_directory_promise = (async function () {
+    try {
+      await fs.ensureDir(parent);
+      const directory = await fs.mkdtemp(path.join(parent, "blot-import-"));
 
-    delete entry.asset_directory_callbacks;
-
-    if (!err) {
       entry.asset_directory = directory;
       if (state) state.assets.add(directory);
-    }
 
-    callbacks.forEach(function (callback) {
-      callback(err, directory);
-    });
-  }
+      return directory;
+    } finally {
+      delete entry.asset_directory_promise;
+    }
+  })();
+
+  return entry.asset_directory_promise;
 };

@@ -74,8 +74,11 @@ describe("payment webhook delivery reliability", function () {
     }));
     stripeClient = {
       customers: {
-        retrieveSubscription: (customer, id, cb) =>
-          cb(null, { id, customer, status: "active" }),
+        retrieveSubscription: async (customer, id) => ({
+          id,
+          customer,
+          status: "active",
+        }),
       },
     };
     stripe._setStripeClient(stripeClient);
@@ -118,8 +121,9 @@ describe("payment webhook delivery reliability", function () {
     expect(res.code).toBe(503);
   });
   it("returns a retryable Stripe response on a provider failure", async function () {
-    stripeClient.customers.retrieveSubscription = (customer, id, cb) =>
-      cb(new Error("offline"));
+    stripeClient.customers.retrieveSubscription = async () => {
+      throw new Error("offline");
+    };
     const res = response();
     route(stripe)(stripeRequest(), res);
     await res.done;

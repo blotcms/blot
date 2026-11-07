@@ -1,5 +1,5 @@
-var fs = require("fs");
+var fs = require("fs-extra");
 
-module.exports = function (output_directory, callback) {
-  fs.emptyDir(output_directory, callback);
+module.exports = async function (output_directory) {
+  await fs.emptyDir(output_directory);
 };

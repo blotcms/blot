@@ -43,18 +43,26 @@ Importer.route("/squarespace")
     });
     const inputXML = exportUpload.path;
 
-    job
-      .run(async () => {
-        await fs.outputFile(
-          join(importDirectory, "identifier.txt"),
-          identifier,
-          "utf8"
-        );
-        await wordpress(inputXML, outputDirectory, status, {});
-      })
-      .catch((error) => console.error("Failed to clean up import", error))
-      .finally(() => releaseUpload())
-      .catch((error) => console.error("Failed to remove import upload", error));
+    (async () => {
+      try {
+        await job.run(async () => {
+          await fs.outputFile(
+            join(importDirectory, "identifier.txt"),
+            identifier,
+            "utf8"
+          );
+          await wordpress(inputXML, outputDirectory, status, {});
+        });
+      } catch (error) {
+        console.error("Failed to clean up import", error);
+      }
+
+      try {
+        await releaseUpload();
+      } catch (error) {
+        console.error("Failed to remove import upload", error);
+      }
+    })();
   });
 
 module.exports = Importer;

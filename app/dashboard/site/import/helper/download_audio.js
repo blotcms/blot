@@ -20,15 +20,6 @@ async function download_audio(post) {
   return downloadAll(post, scanned, prefetched);
 }
 
-function directoryOf(post) {
-  return new Promise(function (resolve, reject) {
-    assetDirectory(post, function (err, directory) {
-      if (err) return reject(err);
-      resolve(directory);
-    });
-  });
-}
-
 async function downloadAll(post, scanned, prefetched) {
   var replacements = [];
 
@@ -58,7 +49,7 @@ async function downloadAll(post, scanned, prefetched) {
     }
 
     try {
-      var directory = await directoryOf(post);
+      var directory = await assetDirectory(post);
       await fs.outputFile(directory + "/" + name, data);
     } catch (e) {
       continue;

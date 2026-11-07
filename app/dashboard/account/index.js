@@ -29,7 +29,7 @@ function describeBalance(balance) {
 }
 
 function loadSubscriptionBalance({ cached } = {}) {
-  return function (req, res, next) {
+  return async function (req, res, next) {
     const customerID = req.user.subscription && req.user.subscription.customer;
     if (!customerID) return next();
 
@@ -38,17 +38,21 @@ function loadSubscriptionBalance({ cached } = {}) {
       return next();
     }
 
-    stripe.customers.retrieve(customerID, function (err, customer) {
+    let customer;
+
+    try {
+      customer = await stripe.customers.retrieve(customerID);
+    } catch (err) {
       // If we're offline or Stripe is down don't take the settings
       // page
       if (err && err.type === "StripeConnectionError") return next();
 
-      if (err) return next(err);
+      return next(err);
+    }
 
-      balances.set(customerID, customer.balance);
-      res.locals.balance = describeBalance(customer.balance);
-      next();
-    });
+    balances.set(customerID, customer.balance);
+    res.locals.balance = describeBalance(customer.balance);
+    next();
   };
 }
 

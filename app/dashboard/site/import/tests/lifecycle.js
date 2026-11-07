@@ -131,9 +131,7 @@ describe("import job lifecycle", function () {
         path.join(job.outputDirectory, "partial.txt"),
         "partial"
       );
-      staging = await new Promise((resolve, reject) =>
-        assetDirectory({}, (err, dir) => (err ? reject(err) : resolve(dir)))
-      );
+      staging = await assetDirectory({});
       await fs.outputFile(path.join(staging, "asset"), "partial");
       await lifecycle.cancel(job.importDirectory);
     });
@@ -183,9 +181,9 @@ describe("import job lifecycle", function () {
   it("reports WordPress write errors with the post title and stops before the next post", async function () {
     const input = path.join(job.importDirectory, "input.xml");
     await fs.outputFile(input, xml);
-    const writer = jasmine
-      .createSpy("writer")
-      .and.callFake((post, cb) => cb(new Error("ENOSPC")));
+    const writer = jasmine.createSpy("writer").and.callFake(async () => {
+      throw new Error("ENOSPC");
+    });
     spyOn(helper.write, "createWriter").and.returnValue(writer);
     await job.run(() => wordpress(input, job.outputDirectory, job.status, {}));
     expect(writer.calls.count()).toBe(1);
@@ -203,8 +201,8 @@ describe("import job lifecycle", function () {
   it("stops between WordPress entries without finalizing", async function () {
     const input = path.join(job.importDirectory, "input.xml");
     await fs.outputFile(input, xml);
-    const writer = jasmine.createSpy("writer").and.callFake((post, cb) => {
-      lifecycle.cancel(job.importDirectory).then(() => cb(), cb);
+    const writer = jasmine.createSpy("writer").and.callFake(async () => {
+      await lifecycle.cancel(job.importDirectory);
     });
     spyOn(helper.write, "createWriter").and.returnValue(writer);
     await job.run(() => wordpress(input, job.outputDirectory, job.status, {}));
