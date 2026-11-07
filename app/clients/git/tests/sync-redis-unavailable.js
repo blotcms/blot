@@ -119,7 +119,7 @@ describe("Git sync when Redis is unavailable", function () {
         "./served/sync": served,
       });
 
-      sync("test", "test", resolve);
+      sync("test", "test").then(() => resolve(null), resolve);
     });
   }
 
