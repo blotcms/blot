@@ -1,19 +1,22 @@
 {{#blog.client}}
-<!-- A connected folder's sync pages are the folder box's other tab: the
-     site's summary, then the box with the client's page in place of the
-     files -->
-<div class="site-dashboard is-sync-view">
+<!-- A connected folder's sync pages are the site's page with its sync
+     settings open: the summary, then the folder box with the settings under
+     its top row and, on the client's own page, the files below them -->
+<div class="site-dashboard is-overview-view is-sync-view">
   <div class="site-dashboard-folder-layout">
     <div class="site-dashboard-folder-view">
       <div class="dashboard-main">
         {{> site-summary}}
-        <section class="site-dashboard-view-panel" aria-label="{{client.display_name}} sync settings">
+        <section id="site-dashboard-folder" class="site-dashboard-view-panel" aria-label="Site folder">
           <div class="folder-container">
-            <div class="folder-box root has-tabs folder-box--sync">
-              {{> folder-tabs}}
+            {{#folder}}<div class="folder-box root directory {{boxState}}" data-folder-base="{{base}}" data-csrf-token="{{csrftoken}}" style="position:relative;">{{/folder}}
+            {{^folder}}<div class="folder-box root folder-box--sync">{{/folder}}
+              {{> folder-toolbar}}
+              {{> folder-sync-issue}}
               <div class="folder-sync-panel">
                 {{> body}}
               </div>
+              {{#folder}}{{> directory-table}}{{/folder}}
             </div>
           </div>
         </section>

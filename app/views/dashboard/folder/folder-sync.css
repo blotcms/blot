@@ -1,25 +1,28 @@
 /*
-  The top edge of the overview's file box (folder/folder-tabs.html): two
-  tabs, like a folder's. The selected one joins the box below it.
+  The top row of the overview's file box (folder/folder-toolbar.html):
+  "Folder", where it syncs from, then the filters and search.
 
-  .folder-tabs            the row of tabs
-  .folder-tab--sync       the client's icon and name, a link to its sync
-                          settings (/sync/<client>), which render in the box
-                          as this tab's page; with no folder yet, a blue
-                          "Sync this folder" button
-  .folder-tab--files      the files: the filters, then search
+  .folder-toolbar         the row
+  .folder-sync-toggle     "Syncs from Git", a pill that shows or hides the
+                          folder's sync settings: a link to /sync/<client>,
+                          which is the site's page with the settings open
+                          (.folder-sync-panel) above the files, and back
   .folder-filters         Files, Posts, Pages, Drafts, Scheduled: Files is
                           the folder itself and the others filter it to its
                           entries (their own pages); one is always selected
-  .folder-sync-issue      a problem with the folder, under the tabs
+  .folder-sync-issue      a problem with the folder, under the row
                           (folder/folder-sync-issue.html)
 */
 
+/* No padding above: the folder box's own gives the same space as the
+   row's below. Its left edge lines up with the summary card's labels. */
 .folder-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) var(--space-4);
+  gap: var(--space-2) var(--space-3);
+  padding: 0 calc(var(--space-1) + var(--space-2)) var(--space-2)
+    var(--space-4);
 }
 
 /* The filters (folder/folder-filters.html): one segmented control, like a
@@ -172,126 +175,96 @@
   box-shadow: 0 0 4px 1px var(--indicator-amber-glow);
 }
 
-/* The tabs. The box has no top edge of its own: the tabs draw it, pulled
-   out over the box's side borders. The client's tab stands a little
-   higher than the files', as a folder's tab does. */
-div.folder-box.has-tabs {
-  padding-top: 0;
-  border-top: 0;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
+/* "Folder", as the summary card above labels its rows: its size and width,
+   lined up under them */
+.folder-toolbar__label {
+  flex: 0 0 5.5em;
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
 }
 
-.folder-tabs {
-  display: flex;
-  align-items: flex-end;
-  margin: 0 -1px var(--space-2);
-}
-
-.folder-tab {
-  box-sizing: border-box;
-  border: 1px solid var(--border-color);
-  background: var(--surface-muted-color);
-}
-
-/* The selected tab joins the box: the box's colour, no line below it */
-.folder-tab.is-selected {
-  border-bottom-color: transparent;
-  background: var(--background-color);
-}
-
-.folder-tab--sync {
+/* Where the folder syncs from: a small pill that shows or hides its sync
+   settings, with a chevron that turns when they're open */
+.folder-sync-toggle {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-2);
-  min-height: 48px;
-  padding: 0 var(--space-5) 0 calc(var(--space-4) + var(--space-2));
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  min-height: 26px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-radius: var(--radius-pill);
+  background: var(--surface-muted-color);
   color: var(--text-color);
-  font-size: var(--text-sm);
+  font-size: var(--text-xs);
   text-decoration: none;
   white-space: nowrap;
   transition: background-color 150ms ease;
 }
 
-a.folder-tab--sync:not(.is-selected):hover {
+.folder-sync-toggle:hover,
+.folder-sync-toggle.is-open {
   background: var(--surface-strong-color);
 }
 
-a.folder-tab--sync:focus-visible {
+.folder-sync-toggle:active {
+  background: var(--border-strong-color);
+}
+
+.folder-sync-toggle:focus-visible {
   outline: 2px solid var(--accent-color);
-  outline-offset: -2px;
+  outline-offset: 1px;
 }
 
-.folder-tab--connect {
-  padding-left: calc(var(--space-4) + var(--space-1));
+.folder-sync-toggle__chevron {
+  display: inline-flex;
+  color: var(--medium-text-color);
+  transition: transform 150ms ease;
 }
 
-/* Lower than the client's tab, and the rest of the width */
-.folder-tab--files {
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 42px;
-  padding: var(--space-1) calc(var(--space-1) + var(--space-2))
-    var(--space-1) var(--space-4);
-  border-left: 0;
-  border-radius: 0 var(--radius-lg) 0 0;
+.folder-sync-toggle.is-open .folder-sync-toggle__chevron {
+  transform: rotate(180deg);
 }
 
-/* Where the filters are a dropdown, the files tab stays one line: search
-   first, filling what's left, then the dropdown */
+/* On phones the row keeps the pill, the filters' dropdown and search */
 @media (max-width: 600px) {
-  .folder-tab--files {
-    flex-wrap: nowrap;
-    gap: var(--space-2);
-  }
-
-  /* (.site-dashboard outranks the overview's own search width) */
-  .site-dashboard .folder-tabs .folder-tab--files .site-dashboard-search {
-    flex: 1 1 auto;
-    order: -1;
-    width: auto;
-    min-width: 0;
-    margin: 0;
-  }
-
-  .folder-tab--files .folder-filters-menu {
-    flex: 0 0 auto;
+  .folder-toolbar__label {
+    display: none;
   }
 }
 
-/* On phones the client's tab is narrower */
-@media (max-width: 480px) {
-  .folder-tab--sync {
-    padding: 0 var(--space-3) 0 var(--space-4);
-  }
-
-  .folder-tab--files {
-    padding-left: var(--space-2);
-  }
-}
-
-/* The sync tab's page: the client's settings rows, inset like the files */
+/* A sync subpage's box (resync, disconnect, ...): the row, then the page */
 .folder-box--sync {
   box-sizing: border-box;
-  padding: 0 0 var(--space-2);
+  padding: var(--space-2) 0;
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   background: var(--background-color);
 }
 
-/* The client's rows run edge to edge, as the files table's do, at the
-   summary card's size: a label column, then the value */
+/* The sync settings, open under the row and above the files: ruled off
+   from both, their rows edge to edge like the table's, at the summary
+   card's size, a label column, then the value */
 .folder-sync-panel {
   --folder-sync-inset: calc(var(--space-4) + var(--space-2));
-  padding: 0 var(--folder-sync-inset) var(--space-4);
+  margin-bottom: var(--space-2);
+  padding: 0 var(--folder-sync-inset);
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-muted-color);
+}
+
+.folder-box--sync .folder-sync-panel {
+  margin-bottom: 0;
+  padding-top: var(--space-4);
+  padding-bottom: var(--space-4);
+  border-bottom: 0;
 }
 
 .folder-sync-panel .line {
   align-items: baseline;
   margin: 0 calc(var(--folder-sync-inset) * -1);
   padding: var(--space-3) var(--folder-sync-inset);
+  background: transparent;
   font-size: var(--text-sm);
 }
 
@@ -299,6 +272,12 @@ a.folder-tab--sync:focus-visible {
   flex: 0 0 14em;
   color: var(--medium-text-color);
   font-size: var(--text-sm);
+}
+
+@media (max-width: 600px) {
+  .folder-sync-panel .line .label {
+    flex-basis: 100%;
+  }
 }
 
 /* "Open in Dropbox" and the like, below the folder's name */

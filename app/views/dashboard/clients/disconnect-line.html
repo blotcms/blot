@@ -38,12 +38,3 @@
   <a class="btn btn-sm" href="{{{dashboardBase}}}/sync/switch">Change sync method</a>
   <a class="btn btn-sm btn-quiet folder-sync-actions__disconnect" href="{{{dashboardBase}}}/sync/{{blog.client}}/disconnect">Disconnect {{client.display_name}}</a>
 </div>
-
-{{#isDevelopment}}
-<div class="dev-note">
-  <div class="dev-note__title">Development server only:</div>
-  <a href="{{{dashboardBase}}}/sync/open">Open local {{client.display_name}}</a>
-  &nbsp;&middot;&nbsp;
-  <a href="{{{dashboardBase}}}/sync/open?local=true">Open data directory</a>
-</div>
-{{/isDevelopment}}

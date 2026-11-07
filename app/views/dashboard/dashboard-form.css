@@ -531,32 +531,6 @@ form.dashboard-form.dashboard-form--narrow,
   margin: var(--space-3) 0 0;
 }
 
-.dev-note {
-  margin-top: var(--space-4);
-  padding: var(--space-3);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  color: var(--light-text-color);
-  font-size: var(--text-xs);
-}
-
-.dev-note__title {
-  margin-bottom: var(--space-2);
-}
-
-.dev-note a {
-  color: var(--light-text-color);
-  transition: color 150ms ease;
-}
-
-.dev-note a:hover {
-  color: var(--accent-hover-color);
-}
-
-.dev-note a:active {
-  color: var(--accent-active-color);
-}
-
 /* Account pages */
 .price-highlight {
   background: var(--surface-strong-color);

@@ -18,31 +18,41 @@ const RESYNC_REFUSALS = [
   "ICLOUD_SETUP_INCOMPLETE",
 ];
 
-// A connected folder's sync pages render as the folder box's sync tab, under
-// the site's summary, with the files tab's filters beside it. Their data is
-// loaded before res.locals.base becomes the sync pages' own.
+// A connected folder's sync pages are the site's page with its sync
+// settings open under the folder box's top row (partials/
+// folder-settings-layout.html); the client's own page lists the files below
+// them. Their data is loaded before res.locals.base becomes the sync pages'.
 const loadPosts = require("./load/posts");
 const loadLiveTemplate = require("./load/live-template");
+const loadFolder = require("./folder");
+
+const isClientPage = (req) =>
+  req.path.replace(/\/$/, "") === "/" + req.blog.client;
 
 client_routes.get(
   /.*/,
   function (req, res, next) {
     if (!req.blog.client) return next("route");
     res.locals.isSyncTab = true;
-    // The client's own page is a tab of the site's page, so the breadcrumbs
-    // stay the site's, as on the files tab: nothing above the box moves.
-    // Its subpages (resync, disconnect, ...) keep theirs.
-    if (req.path.replace(/\/$/, "") === "/" + req.blog.client)
-      res.locals.breadcrumbs.add = function () {};
     res.locals.showDashboardSearch = true;
+    // The client's own page is the site's page, so the breadcrumbs stay the
+    // site's: nothing above the box moves. Its subpages (resync,
+    // disconnect, ...) keep theirs.
+    if (isClientPage(req)) res.locals.breadcrumbs.add = function () {};
     next();
   },
   loadPosts,
   loadLiveTemplate,
   function (req, res, next) {
-    // The files tab isn't the one shown, so none of its filters is chosen
+    if (isClientPage(req)) return loadFolder(req, res, next);
+    // A subpage shows no files, so none of the filters is chosen
     res.locals.filesFilter.filterClass = "folder-filters__item";
     res.locals.filesFilter.ariaCurrent = "";
+    next();
+  },
+  function (req, res, next) {
+    // The files' links are the site's, not the sync pages'
+    if (res.locals.folder) res.locals.folder.base = res.locals.base;
     next();
   }
 );
