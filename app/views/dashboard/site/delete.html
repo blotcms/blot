@@ -1,16 +1,16 @@
 {{> message}}
 
-<div class="dashboard-form-panel site-delete">
-  <header class="page-header">
-    <div class="page-header__text">
-      <h1 class="page-header__title">Delete site</h1>
-    </div>
-  </header>
+{{> settings-tabs}}
+
+<div class="dashboard-form-panel settings-page site-delete">
+  <div class="dashboard-form-panel__body">
+  <h2>Delete {{blog.pretty.label}}</h2>
 
   <div class="btn-row">
-    <a class="btn btn-danger" href="{{{base}}}/delete/confirm">Delete {{blog.pretty.label}}</a>
+    <a class="btn btn-danger" href="{{{base}}}/settings/delete/confirm">Delete site</a>
     <a class="btn" href="{{{base}}}">Do not delete</a>
   </div>
 
   <p class="setting-note">Deleting a site removes Blot’s copy of its folder, its templates and its settings, and takes it offline. The files in your own folder stay where they are. This cannot be undone. The next step lists what will go and asks for your password.</p>
+  </div>
 </div>

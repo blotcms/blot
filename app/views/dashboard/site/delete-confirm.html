@@ -1,11 +1,11 @@
 {{> message}}
 
-<form method="POST" action="{{{base}}}/delete/confirm" class="dashboard-form dashboard-form-panel site-delete">
-  <header class="page-header">
-    <div class="page-header__text">
-      <h1 class="page-header__title">Delete {{blog.pretty.label}}?</h1>
-    </div>
-  </header>
+{{> settings-tabs}}
+
+<div class="dashboard-form-panel settings-page site-delete">
+  <div class="dashboard-form-panel__body">
+  <h2>Delete {{blog.pretty.label}}?</h2>
+<form method="POST" action="{{{base}}}/settings/delete/confirm" class="dashboard-form">
   <input type="hidden" name="_csrf" value="{{csrftoken}}" />
 
   <p>Deleting this site removes, for good:</p>
@@ -27,3 +27,5 @@
     <a class="btn" href="{{{base}}}">Do not delete</a>
   </div>
 </form>
+  </div>
+</div>

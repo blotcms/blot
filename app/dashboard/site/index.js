@@ -69,7 +69,6 @@ function getSidebarSelection(path) {
     return "template";
   if (path.startsWith("/import")) return "import";
   if (path.startsWith("/export")) return "export";
-  if (path.startsWith("/delete")) return "delete";
   return null;
 }
 
@@ -80,7 +79,6 @@ const sidebarLabels = {
   siteSettings: "Settings",
   import: "Import",
   export: "Export",
-  delete: "Delete site",
 };
 
 // Every page has a title of its own: a page that doesn't set one (or sets
@@ -354,6 +352,14 @@ site.use("/template", templateEditor);
 // way regardless of which prefix was used to reach it, since express.Router
 // sets req.baseUrl to whichever one actually matched.
 site.use("/template-folder", templateEditor);
+// Delete site is the last Settings tab; the old addresses lead there, and a
+// form still posting to /delete still works
+site.get(["/delete", "/delete/confirm"], (req, res) => {
+  res.redirect(
+    302,
+    `${res.locals.base}/settings${req.originalUrl.slice(req.originalUrl.indexOf("/delete"))}`
+  );
+});
 site.use("/delete", require("./delete"));
 site.use("/import", require("./import"));
 site.use("/export", require("./export"));
@@ -424,6 +430,7 @@ const settingsTabs = [
   ["links", "Links"],
   ["redirects", "Redirects"],
   ["integrations", "Integrations"],
+  ["delete", "Delete site"],
 ];
 
 const settingsTab = (tab) => (req, res, next) => {
@@ -436,6 +443,7 @@ const settingsTab = (tab) => (req, res, next) => {
 };
 
 site.use("/settings/title", settingsTab("title"), title);
+site.use("/settings/delete", settingsTab("delete"), require("./delete"));
 site.use("/settings/domain", settingsTab("domain"), domain);
 
 const settingsRedirect = (to) => (req, res) => {
