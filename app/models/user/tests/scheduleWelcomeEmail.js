@@ -88,8 +88,10 @@ describe("user", function () {
     var uid = this.user.uid;
 
     await setUser(uid, { welcomeEmailSent: false });
-    // A claim left by a process that died mid-send
-    await client.set(sentKey(uid), "1", { PX: 150 });
+    // A claim left by a process that died mid-send. Its TTL is long enough
+    // that a slow runner cannot expire it before the first call; it is
+    // shortened below to stand in for the wait.
+    await client.set(sentKey(uid), "1", { PX: 30 * 1000 });
 
     var failed = false;
     try {
@@ -100,8 +102,17 @@ describe("user", function () {
     expect(failed).toBe(true);
     expect(this.sends).toEqual([]);
 
-    await sleep(250);
-    await scheduleWelcomeEmail.handler(uid);
+    await client.pExpire(sentKey(uid), 100);
+
+    // Retry until the claim has expired and the handler wins it
+    for (var i = 0; i < 100 && !this.sends.length; i++) {
+      await sleep(100);
+      try {
+        await scheduleWelcomeEmail.handler(uid);
+      } catch (err) {
+        // still claimed
+      }
+    }
 
     expect(this.sends).toEqual([uid]);
     expect((await getUser(uid)).welcomeEmailSent).toBe(true);
