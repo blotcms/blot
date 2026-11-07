@@ -40,13 +40,8 @@ function getUser(uid) {
   return getById(uid);
 }
 
-function sendWelcome(uid) {
-  return new Promise(function (resolve, reject) {
-    email.WELCOME(uid, {}, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+async function sendWelcome(uid) {
+  await email.WELCOME(uid, {});
 }
 
 async function setUser(uid, updates) {

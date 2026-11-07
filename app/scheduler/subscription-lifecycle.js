@@ -171,7 +171,7 @@ module.exports = async function processSubscriptionLifecycle() {
   if (!usersToRemove.length) return;
 
   try {
-    await promisify(email.USERS_DUE_FOR_REMOVAL)("", {
+    await email.USERS_DUE_FOR_REMOVAL("", {
       users: usersToRemove,
       count: usersToRemove.length,
       singular: usersToRemove.length === 1,

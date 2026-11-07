@@ -279,7 +279,9 @@ describe("payment webhook delivery reliability", function () {
         "CANCELLED_FIRST_PERIOD",
         "CLOSED",
         "ALREADY_CANCELLED",
-      ].forEach((name) => spyOn(email, name));
+      ].forEach((name) =>
+        spyOn(email, name).and.returnValue(Promise.resolve())
+      );
     });
     afterEach(function () {
       delete user.paypal;
@@ -334,16 +336,14 @@ describe("payment webhook delivery reliability", function () {
         return Promise.resolve([]);
       };
       spyOn(client, "multi").and.returnValue(multi);
-      email.CANCELLED.and.callFake((uid, locals, cb) =>
-        cb(new Error("mailgun"))
-      );
+      email.CANCELLED.and.callFake(() => Promise.reject(new Error("mailgun")));
       await paypal.updateSubscription("I-TEST");
       await new Promise((r) => setImmediate(r));
       expect(multi.del).toHaveBeenCalledWith(K);
       expect(multi.set).toHaveBeenCalledWith(K + ":failed", "1", {
         EX: (90 * DAY) / 1000,
       });
-      email.CANCELLED.and.stub();
+      email.CANCELLED.and.returnValue(Promise.resolve());
       user.paypal = { status: "CANCELLED" };
       await paypal.updateSubscription("I-TEST");
       await paypal.updateSubscription("I-TEST");

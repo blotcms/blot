@@ -1,5 +1,4 @@
 var Email = require("helper/email");
-var { promisify } = require("util");
 var clfdate = require("helper/clfdate");
 
 async function main() {
@@ -43,7 +42,7 @@ async function main() {
     }
   }
 
-  await promisify(Email.DAILY_UPDATE)("", view);
+  await Email.DAILY_UPDATE("", view);
 }
 
 if (require.main === module) require("./cli")(main);

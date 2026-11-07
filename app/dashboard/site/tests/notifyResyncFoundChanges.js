@@ -23,9 +23,8 @@ describe("notifyAdminIfResyncFoundChanges", function () {
       filename: emailPath,
       loaded: true,
       exports: {
-        RESYNC_FOUND_CHANGES: function (uid, locals, callback) {
+        RESYNC_FOUND_CHANGES: async function (uid, locals) {
           sentEmails.push(locals);
-          callback();
         },
       },
     };

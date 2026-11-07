@@ -37,7 +37,7 @@ const DISK_NOTIFY_TTL_MS = 24 * 60 * 60 * 1000;
 // Never rejects: a failure to send is logged
 async function sendLowDiskEmail(disks, headline) {
   try {
-    await promisify(email.WARNING_LOW_DISK_SPACE)(null, { disks, headline });
+    await email.WARNING_LOW_DISK_SPACE(null, { disks, headline });
   } catch (err) {
     console.log(clfdate(), err);
   }
@@ -345,12 +345,7 @@ module.exports = function () {
 
       try {
         const { sent } = await checkSSLCertificates({
-          sendEmail: (view) =>
-            new Promise((resolve, reject) =>
-              email.SSL_CERTIFICATE_ISSUES(null, view, (err) =>
-                err ? reject(err) : resolve()
-              )
-            ),
+          sendEmail: (view) => email.SSL_CERTIFICATE_ISSUES(null, view),
         });
 
         console.log(
@@ -379,12 +374,7 @@ module.exports = function () {
       const { sent, report } = await checkRedisHost({
         lastCheckAt: redisHostCheckedAt,
         hostMemory: readHostMemory,
-        sendEmail: (view) =>
-          new Promise((resolve, reject) =>
-            email.REDIS_HOST_ALERT(null, view, (err) =>
-              err ? reject(err) : resolve()
-            )
-          ),
+        sendEmail: (view) => email.REDIS_HOST_ALERT(null, view),
       });
       redisHostCheckedAtInMemory = report.now;
       try {
@@ -412,12 +402,7 @@ module.exports = function () {
   lock.cron("sweep-git", { hour: 5, minute: 0 }, async function () {
     try {
       const { stuck, sent } = await sweepGit({
-        sendEmail: (view) =>
-          new Promise((resolve, reject) =>
-            email.GIT_SWEEP_ALERT(null, view, (err) =>
-              err ? reject(err) : resolve()
-            )
-          ),
+        sendEmail: (view) => email.GIT_SWEEP_ALERT(null, view),
       });
 
       console.log(

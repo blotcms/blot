@@ -471,9 +471,8 @@ describe("dropbox init", function () {
         },
       });
       stub("email", {
-        DROPBOX_SYNC_ISSUE: function (uid, locals, callback) {
+        DROPBOX_SYNC_ISSUE: async function (uid, locals) {
           sentEmails.push(locals);
-          callback();
         },
       });
       delete require.cache[paths.init];

@@ -34,9 +34,9 @@ describe("user", function () {
   beforeEach(function () {
     this.sends = [];
     spyOn(email, "WELCOME").and.callFake(
-      function (uid, locals, callback) {
+      async function (uid) {
         this.sends.push(uid);
-        setTimeout(callback, 10);
+        await new Promise((resolve) => setTimeout(resolve, 10));
       }.bind(this)
     );
   });

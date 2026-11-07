@@ -4,6 +4,16 @@
 (to the user whose uid is passed), named after the method: `email.SERVER_START(uid, locals)`
 renders `admin/SERVER_START.txt`. A new template needs its name added to `MESSAGES`.
 
+## Sending
+
+Each message function (`email.WELCOME(uid, locals)`) returns a promise that
+resolves when the message has been handed to Mailgun and rejects if the send
+fails. Await it where the caller needs to know the send worked. Call it without
+awaiting for fire-and-forget: the function logs a failed send itself
+(`Email: WELCOME failed to send <uid> <message>`) and marks the rejection
+handled, so an unawaited call can't cause an unhandled rejection. There is no
+callback argument.
+
 ## Template format
 
 - Line 1 is the subject, line 2 is blank, and the rest is the body.
