@@ -22,39 +22,38 @@ This module sits in the `app/models` layer, which owns all persistence logic. It
 
 ## Public API
 
-All functions accept Node-style callbacks unless otherwise noted. Arguments are validated at runtime via `helper/ensure`; passing the wrong type throws immediately.
+All functions return promises. Arguments are validated at runtime via `helper/ensure`; passing the wrong type throws immediately.
 
 ---
 
-### `set(blogID, url, callback)`
+### `set(blogID, url)`
 
 Records `url` as a 404 hit for `blogID`. Uses a Redis sorted set with the current Unix timestamp as the score. On each write, it also prunes the set by:
 
 - Removing entries older than 30 days.
 - Capping the set to the 500 most recent entries.
 
-The callback receives `(err)`.
+Returns a promise that resolves once the write is done. The 404 handler does not wait for it and ignores a rejection.
 
 ```js
 const { set } = require('models/404');
-set(blog.id, req.url, function(err) { /* ... */ });
+await set(blog.id, req.url);
 ```
 
 ---
 
-### `list(blogID, callback)`
+### `list(blogID)`
 
-Retrieves all stored 404 entries for `blogID`. The callback receives `(err, list, ignored)`:
+Retrieves all stored 404 entries for `blogID`. Returns a promise of `{ list, ignored }`:
 
 - `list` — array of active (non-ignored) entries, each `{ url: string, time: string }` where `time` is a human-readable relative timestamp (e.g. `"3 days ago"`), sorted most-recent-first.
 - `ignored` — array of entries in the same shape that have been marked as ignored.
 
 ```js
 const { list } = require('models/404');
-list(blog.id, function(err, list, ignored) {
-  // list: [{ url: '/missing-page', time: '2 hours ago' }, ...]
-  // ignored: [{ url: '/favicon.ico', time: '5 days ago' }, ...]
-});
+const { list: active, ignored } = await list(blog.id);
+// active: [{ url: '/missing-page', time: '2 hours ago' }, ...]
+// ignored: [{ url: '/favicon.ico', time: '5 days ago' }, ...]
 ```
 
 ---
