@@ -10,7 +10,7 @@ describe("dropbox download", function () {
     await folder.removeAll(blogID);
   });
 
-  it("downloads a file without setting its mtime from client_modified", function (done) {
+  it("downloads a file without setting its mtime from client_modified", async function () {
     const beforeDownload = Date.now();
 
     const fakeClient = {
@@ -30,20 +30,12 @@ describe("dropbox download", function () {
       }),
     };
 
-    download(fakeClient, "/post.txt", blogID, destination, async (err) => {
-      try {
-        expect(err).toBeFalsy();
+    await download(fakeClient, "/post.txt", blogID, destination);
 
-        const contents = await folder.read(blogID, destination);
-        expect(contents.toString()).toBe("hello world");
+    const contents = await folder.read(blogID, destination);
+    expect(contents.toString()).toBe("hello world");
 
-        const stat = await folder.stat(blogID, destination);
-        expect(stat.modified).toBeGreaterThanOrEqual(beforeDownload - 1000);
-
-        done();
-      } catch (assertionError) {
-        done(assertionError);
-      }
-    });
+    const stat = await folder.stat(blogID, destination);
+    expect(stat.modified).toBeGreaterThanOrEqual(beforeDownload - 1000);
   });
 });

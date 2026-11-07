@@ -34,7 +34,7 @@ function retry(fn, options) {
       return isRetryable(err);
     };
 
-  return promiseOnly(async function (...args) {
+  const retried = async function (...args) {
     let attempt = 1;
 
     for (;;) {
@@ -52,7 +52,12 @@ function retry(fn, options) {
         throw err;
       }
     }
-  });
+  };
+
+  // Names the guard's error after the wrapped function
+  Object.defineProperty(retried, "name", { value: fn.name || "retried" });
+
+  return promiseOnly(retried);
 }
 
 // Exponential backoff
