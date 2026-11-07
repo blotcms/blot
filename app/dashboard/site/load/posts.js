@@ -247,10 +247,7 @@ module.exports = async function (req, res, next) {
       return {
         key: result.list.key,
         url: res.locals.base + "/" + result.list.key,
-        // A selected pill turns its filter off: it leads back to the folder
-        href: isActive
-          ? res.locals.base
-          : res.locals.base + "/" + result.list.key,
+        href: res.locals.base + "/" + result.list.key,
         // Scheduled posts stand out, so one scheduled by mistake is noticed
         showDot: result.list.key === "scheduled" && result.total > 0,
         filterTitle: result.list.filterTitle,
@@ -269,6 +266,17 @@ module.exports = async function (req, res, next) {
     res.locals.postCount = results.reduce(function (sum, result) {
       return sum + result.total;
     }, 0);
+
+    // Files, the folder itself, comes first and is selected on every folder
+    // page, so one segment always shows which view this is
+    const showingFiles = !res.locals.postGroups.some((group) => group.isActive);
+    res.locals.filesFilter = {
+      href: res.locals.base,
+      filterClass: showingFiles
+        ? "folder-filters__item is-selected"
+        : "folder-filters__item",
+      ariaCurrent: showingFiles ? "page" : "",
+    };
 
     const activeGroup = res.locals.postGroups.find(function (group) {
       return group.isActive;

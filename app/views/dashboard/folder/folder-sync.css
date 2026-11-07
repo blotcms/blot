@@ -3,9 +3,9 @@
   folder syncs from, then search.
 
   .folder-toolbar         the row
-  .folder-filters         Posts, Pages, Drafts, Scheduled: each filters the
-                          folder to its entries (their own pages); the
-                          selected one leads back to the folder
+  .folder-filters         Files, Posts, Pages, Drafts, Scheduled: Files is
+                          the folder itself and the others filter it to its
+                          entries (their own pages); one is always selected
   .folder-sync            "Syncs with [icon] Google Drive  Edit", one link
                           (folder/folder-sync.html) to the client's page,
                           which has its options: activity, resync, change,
@@ -70,6 +70,22 @@
 
 .folder-filters + .site-dashboard-search {
   margin-left: 0;
+}
+
+/* On phones the control takes its own row, its segments sharing the width,
+   so five of them fit inside the card */
+@media (max-width: 480px) {
+  .folder-filters {
+    box-sizing: border-box;
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .folder-filters__item {
+    flex: 1 1 auto;
+    justify-content: center;
+    padding: 0 var(--space-1);
+  }
 }
 
 /* On wider screens the header stays one line: the pills keep their size and
