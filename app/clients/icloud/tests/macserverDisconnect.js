@@ -105,6 +105,16 @@ describe("icloud macserver disconnect handling", function () {
     spyOn(console, "error");
   });
 
+  // Poll until the first job has started (Bottleneck starts it
+  // asynchronously, and a fixed sleep is too short on a loaded runner).
+  const until = async (condition) => {
+    const deadline = Date.now() + 10000;
+    while (!condition()) {
+      if (Date.now() > deadline) throw new Error("Timed out waiting for job");
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
+  };
+
   describe("removeLimiterForBlogID", function () {
     it("drops waiting jobs, lets the running job finish and rejects the dropped ones", async function () {
       const blogID = newBlogID();
@@ -119,8 +129,7 @@ describe("icloud macserver disconnect handling", function () {
         limiter.schedule(async () => ran.push(n)).catch((error) => error)
       );
 
-      // let the first job start
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await until(() => release);
 
       limiters.removeLimiterForBlogID(blogID);
       release();
@@ -149,8 +158,7 @@ describe("icloud macserver disconnect handling", function () {
         actions.performAction(blogID, "/b.txt", "remove"),
         actions.performAction(blogID, "/c.txt", "remove"),
       ];
-      // let the first job start
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await until(() => release);
 
       limiters.removeLimiterForBlogID(blogID);
       release();

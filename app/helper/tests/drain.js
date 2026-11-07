@@ -35,27 +35,49 @@ describe("drain", function () {
     server = null;
   });
 
+  // A handler that holds each request open until the spec calls release(),
+  // so the spec does not depend on how long anything takes. received()
+  // resolves once a request has reached the handler.
+  function gate() {
+    const held = [];
+    let arrived;
+    const received = new Promise((resolve) => (arrived = resolve));
+    return {
+      handler(req, res) {
+        held.push(res);
+        arrived();
+      },
+      received: () => received,
+      release: () => held.forEach((res) => res.end("ok")),
+    };
+  }
+
   it("lets an in-flight request finish before resolving", async function () {
-    await listen((req, res) => setTimeout(() => res.end("ok"), 200));
+    const request = gate();
+    await listen(request.handler);
 
     const inFlight = get(false);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await request.received();
     let finished = false;
     const done = drain.start({ timeout: 5000 }).then(() => (finished = true));
-    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    // Give drain every chance to resolve early while the request is held
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(drain.isDraining()).toBe(true);
     expect(finished).toBe(false);
+    request.release();
     expect(await inFlight).toBe(200);
     await done;
     expect(finished).toBe(true);
   });
 
   it("refuses new connections once draining begins", async function () {
-    await listen((req, res) => setTimeout(() => res.end("ok"), 200));
+    const request = gate();
+    await listen(request.handler);
 
     const inFlight = get(false);
-    await new Promise((resolve) => setTimeout(resolve, 50));
+    await request.received();
     const done = drain.start({ timeout: 5000 });
 
     let code;
@@ -66,6 +88,7 @@ describe("drain", function () {
     }
 
     expect(code).toBe("ECONNREFUSED");
+    request.release();
     await inFlight;
     await done;
   });
