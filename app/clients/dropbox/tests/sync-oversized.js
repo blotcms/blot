@@ -46,7 +46,7 @@ describe("dropbox sync/index with a file over the download size limit", function
           {
             log: function () {},
             status: function () {},
-            update: (path, cb) => cb(),
+            update: async () => {},
           },
           (err, cb) => cb(err)
         );

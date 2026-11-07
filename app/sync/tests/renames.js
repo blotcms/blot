@@ -134,7 +134,9 @@ describe("update", function () {
             storage.write(ctx.blog.id, item.oldPath, item.content),
             function (err) {
               if (err) return next(err);
-              folder.update(item.oldPath, next);
+              folder
+                .update(item.oldPath)
+                .then((result) => next(null, result), next);
             }
           );
         },
@@ -155,9 +157,17 @@ describe("update", function () {
                     storage.move(ctx.blog.id, item.oldPath, item.newPath),
                     function (err) {
                       if (err) return next(err);
-                      folder.update(item.oldPath, function () {
-                        folder.update(item.newPath, next);
-                      });
+                      folder
+                        .update(item.oldPath)
+                        .then(
+                          () => null,
+                          (updateErr) => updateErr
+                        )
+                        .then(function () {
+                          folder
+                            .update(item.newPath)
+                            .then((result) => next(null, result), next);
+                        });
                     }
                   );
                 },
@@ -220,24 +230,32 @@ describe("update", function () {
                   function (next) {
                     settle(storage.remove(blogID, path), function (err) {
                       if (err) return next(err);
-                      folder.update(path, next);
+                      folder
+                        .update(path)
+                        .then((result) => next(null, result), next);
                     });
                   },
                   function (next) {
                     settle(storage.remove(blogID, ghostPath), function (err) {
                       if (err) return next(err);
-                      folder.update(ghostPath, function (err) {
-                        if (err) return next(err);
+                      folder
+                        .update(ghostPath)
+                        .then(
+                          () => null,
+                          (updateErr) => updateErr
+                        )
+                        .then(function (err) {
+                          if (err) return next(err);
 
-                        ctx.checkEntry(
-                          { path: ghostPath, deleted: true },
-                          function (err, entry) {
-                            if (err) return next(err);
-                            ghostEntryID = entry.id;
-                            next();
-                          }
-                        );
-                      });
+                          ctx.checkEntry(
+                            { path: ghostPath, deleted: true },
+                            function (err, entry) {
+                              if (err) return next(err);
+                              ghostEntryID = entry.id;
+                              next();
+                            }
+                          );
+                        });
                     });
                   },
                   function (next) {
@@ -312,12 +330,18 @@ describe("update", function () {
           function (next) {
             settle(storage.write(blogID, path, content), next);
           },
-          folder.update.bind(this, path),
+          function (next) {
+            settle(folder.update(path), next);
+          },
           function (next) {
             settle(storage.move(blogID, path, newPath), next);
           },
-          folder.update.bind(this, path),
-          folder.update.bind(this, newPath),
+          function (next) {
+            settle(folder.update(path), next);
+          },
+          function (next) {
+            settle(folder.update(newPath), next);
+          },
         ],
         function (err) {
           if (err) return testDone.fail(err);
@@ -358,12 +382,18 @@ describe("update", function () {
           function (next) {
             settle(storage.write(blogID, path, content), next);
           },
-          folder.update.bind(this, path),
+          function (next) {
+            settle(folder.update(path), next);
+          },
           function (next) {
             settle(storage.move(blogID, path, newPath), next);
           },
-          folder.update.bind(this, path),
-          folder.update.bind(this, newPath),
+          function (next) {
+            settle(folder.update(path), next);
+          },
+          function (next) {
+            settle(folder.update(newPath), next);
+          },
         ],
         function (err) {
           if (err) return testDone.fail(err);
@@ -420,15 +450,21 @@ describe("update", function () {
         settle(storage.remove(blog.id, path), function (err) {
           if (err) return callback(err);
 
-          folder.update(path, function (err) {
-            if (err) return callback(err);
-
-            done(null, function (err) {
+          folder
+            .update(path)
+            .then(
+              () => null,
+              (updateErr) => updateErr
+            )
+            .then(function (err) {
               if (err) return callback(err);
 
-              checkEntry({ path: path, deleted: true }, callback);
+              done(null, function (err) {
+                if (err) return callback(err);
+
+                checkEntry({ path: path, deleted: true }, callback);
+              });
             });
-          });
         });
       });
     };
@@ -439,15 +475,21 @@ describe("update", function () {
         settle(storage.write(blog.id, path, contents), function (err) {
           if (err) return callback(err);
 
-          folder.update(path, function (err) {
-            if (err) return callback(err);
-
-            done(null, function (err) {
+          folder
+            .update(path)
+            .then(
+              () => null,
+              (updateErr) => updateErr
+            )
+            .then(function (err) {
               if (err) return callback(err);
 
-              checkEntry({ path: path, deleted: false }, callback);
+              done(null, function (err) {
+                if (err) return callback(err);
+
+                checkEntry({ path: path, deleted: false }, callback);
+              });
             });
-          });
         });
       });
     };

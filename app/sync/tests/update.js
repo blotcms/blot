@@ -31,12 +31,7 @@ describe("update", function () {
   }
 
   function update(syncFolder, path) {
-    return new Promise(function (resolve, reject) {
-      syncFolder.update(path, function (err, result) {
-        if (err) return reject(err);
-        resolve(result);
-      });
-    });
+    return syncFolder.update(path);
   }
 
   function checkEntry(check, spec) {

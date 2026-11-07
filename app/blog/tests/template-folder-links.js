@@ -374,7 +374,13 @@ describe("folder links in templates", function () {
           for (const path in files) {
             await this.blog.write({ path, content: files[path] });
             await new Promise((next, fail) =>
-              folder.update(path, (e) => (e ? fail(e) : next()))
+              folder
+                .update(path)
+                .then(
+                  () => null,
+                  (updateErr) => updateErr
+                )
+                .then((e) => (e ? fail(e) : next()))
             );
           }
 

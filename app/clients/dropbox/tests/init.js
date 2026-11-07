@@ -169,9 +169,7 @@ describe("dropbox init", function () {
         exports: function () {
           return Promise.resolve({
             folder: {
-              update: function (path, cb) {
-                cb(null);
-              },
+              update: async function () {},
             },
             done: async function () {},
           });
@@ -294,9 +292,7 @@ describe("dropbox init", function () {
         exports: function () {
           return Promise.resolve({
             folder: {
-              update: function (path, cb) {
-                cb(null);
-              },
+              update: async function () {},
             },
             done: async function () {},
           });
@@ -423,7 +419,7 @@ describe("dropbox init", function () {
           return Promise.reject(new Error("Failed to acquire folder lock"));
         }
         return Promise.resolve({
-          folder: { update: (path, cb) => cb(null) },
+          folder: { update: async () => {} },
           done: async function () {},
         });
       });

@@ -105,10 +105,14 @@ describe("Git sync when Redis is unavailable", function () {
               log(message) {
                 logs.push(message);
               },
-              update(path, callback) {
+              async update(path) {
                 updates.push(path);
-                if (crash === path) return resolve("crashed");
-                callback(failing[path] || null);
+                // A crash never settles
+                if (crash === path) {
+                  resolve("crashed");
+                  return new Promise(() => {});
+                }
+                if (failing[path]) throw failing[path];
               },
             },
             (err, cb) => {

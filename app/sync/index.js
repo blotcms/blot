@@ -8,6 +8,7 @@ const previewReload = require("helper/publishPreviewReload");
 const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
 const readOnly = require("helper/readOnly");
 const logContext = require("helper/logContext");
+const promiseOnly = require("helper/promiseOnly");
 const {
   addPendingSync,
   removePendingSync,
@@ -85,40 +86,31 @@ async function start(blogID, callback) {
 
   // we want to know if folder.update or folder.rename is called
   let changes = false;
-  let _update = new Update(blog, log, status);
-  const originalUpdate = _update;
-  _update = function (path, callback) {
-    if (typeof callback !== "function") {
-      return originalUpdate.apply(originalUpdate, arguments);
-    }
-    addPendingUpdate(blogID, syncID, path);
-    let called = false;
-    const wrappedCallback = function () {
-      if (!called) {
-        called = true;
-        removePendingUpdate(blogID, syncID, path);
-      }
-      return callback.apply(this, arguments);
-    };
-    return originalUpdate.call(originalUpdate, path, wrappedCallback);
-  };
+  const originalUpdate = new Update(blog, log, status);
   // There is no path to the blog's folder here: clients read and write it
   // through storage/folder, by blogID
-  // An update which calls back { changed: false } built exactly the entry
+  // An update which resolves { changed: false } built exactly the entry
   // already stored (see update/index.js), so it needs no cacheID bump. Any
-  // other outcome, or an update without a callback, counts as a change.
+  // other outcome counts as a change. Each update is listed as pending for
+  // lock-diagnostics until it settles.
   const folder = {
-    update: function (path, callback) {
-      if (typeof callback !== "function") {
+    update: promiseOnly(async function update(path) {
+      let result;
+
+      addPendingUpdate(blogID, syncID, path);
+
+      try {
+        result = await originalUpdate(path);
+      } catch (err) {
+        removePendingUpdate(blogID, syncID, path);
         changes = true;
-        return _update.apply(_update, arguments);
+        throw err;
       }
 
-      _update(path, function (err, result) {
-        if (err || !result || result.changed !== false) changes = true;
-        return callback.apply(this, arguments);
-      });
-    },
+      removePendingUpdate(blogID, syncID, path);
+      if (!result || result.changed !== false) changes = true;
+      return result;
+    }),
     status,
     log,
   };

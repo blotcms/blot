@@ -153,12 +153,7 @@ async function sync(blog, folder, stampLastSync) {
       folder.log(pathToUpdate, "Updating path");
 
       try {
-        await new Promise(function (resolve, reject) {
-          folder.update(pathToUpdate, function (err) {
-            if (err) return reject(err);
-            resolve();
-          });
-        });
+        await folder.update(pathToUpdate);
       } catch (err) {
         // Redis cannot take writes (a host cutover, an outage), so
         // this change and those after it are not in the database.

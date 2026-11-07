@@ -25,7 +25,7 @@ sync/
                             file-update paths. Consulted by lock-diagnostics.js.
 
   update/
-    index.js                Constructs the update(path, callback) function bound to a
+    index.js                Constructs the update(path) function bound to a
                             blog. Dispatches to set or drop based on whether the file
                             exists. Detects file changes mid-update and re-runs.
     set.js                  Handles an existing file: classifies it as public, template,
@@ -104,7 +104,7 @@ Acquires the blog's Redis folder lock (`lock.js`), then calls `callback(err, fol
 - `callback(err, folder, done)` — called once the lock is acquired or on failure.
   - `err` — non-null if the blog cannot be found, is disabled, or the lock could not be acquired.
   - `folder.path` — absolute path to the blog's local folder (trailing slash stripped).
-  - `folder.update(path, callback)` — processes a single path. See `update/index.js`.
+  - `folder.update(path)` — processes a single path and returns a promise (it throws if given a callback). It resolves `{ error, changed }` (a per-file error is logged and returned as `error`) and rejects when Redis is unavailable or the path cannot be read (a symlink in its way, say). See `update/index.js`.
   - `folder.status(message)` — broadcasts a status message via Redis pub/sub.
   - `folder.log(...args)` — writes a prefixed log line to stdout.
   - `done(syncError, callback)` — releases the lock. Must be called exactly once. Internally runs `renames`, `buildFromFolder` (templates), and bumps `blog.cacheID` when at least one `folder.update` was called.
@@ -119,7 +119,7 @@ Acquires the blog's Redis folder lock (`lock.js`), then calls `callback(err, fol
 
 **File:** `rebuild.js`
 
-Walks every file in the blog's folder (one `storage/folder` `listNames` per directory, symlinks skipped) and calls `update(path, ...)` on each in series. Does not acquire the sync lock; intended to be called by the caller's own sync session or an administrative tool.
+Walks every file in the blog's folder (one `storage/folder` `listNames` per directory, symlinks skipped) and calls `await update(path)` on each in series. Does not acquire the sync lock; intended to be called by the caller's own sync session or an administrative tool.
 
 - `options.thumbnails` — boolean. Flushes the thumbnail Transformer store and empties the `_thumbnails` static directory before rebuilding.
 - `options.imageCache` — boolean. Flushes the image-cache Transformer store and empties the `_image_cache` static directory before rebuilding.
@@ -128,13 +128,13 @@ Walks every file in the blog's folder (one `storage/folder` `listNames` per dire
 
 **File:** `establishSyncLock.js`
 
-Promise-based wrapper. Resolves to `{ folder, done }` where `folder.update` is promisified and `done` is an async function. Used by async/await callers.
+Promise-based wrapper. Resolves to `{ folder, done }` where `folder.update` returns a promise, as it does from `sync`, and `done` is an async function. Used by async/await callers.
 
 ## Internal Modules
 
 ### `update/index.js`
 
-Returns a closure `update(path, callback)` bound to a `blog` object, a `log` function, and a `status` function.
+Returns a closure `update(path)`, which returns a promise, bound to a `blog` object, a `log` function, and a `status` function.
 
 **Dispatch logic:**
 
@@ -249,7 +249,7 @@ sync(blogID, cb)
   └─ messenger(blog)                 Create log/status/syncID
   └─ folderLock.lock(blogID)        Acquire Redis folder lock
   └─ callback(null, folder, done)    Yield control to caller
-       └─ folder.update(path, ...)   [zero or more times]
+       └─ await folder.update(path) [zero or more times]
             └─ fs.stat fingerprint (before)
             └─ fs.stat
                  ├─ ENOENT → drop

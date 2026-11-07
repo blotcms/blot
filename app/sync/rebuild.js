@@ -123,11 +123,14 @@ module.exports = promiseOnly(async function main(blogID, options = {}) {
     current += updatePathCounts.get(path);
     status(`(${current}/${total}) Rebuilding ${path}`);
 
-    const { err, result } = await new Promise(function (resolve) {
-      update(path, function (err, result) {
-        resolve({ err, result });
-      });
-    });
+    let err = null;
+    let result;
+
+    try {
+      result = await update(path);
+    } catch (e) {
+      err = e;
+    }
 
     // Redis is unavailable, so every path after this one would fail
     // the same way. Stop, and tell the caller.
