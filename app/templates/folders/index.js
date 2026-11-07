@@ -185,7 +185,7 @@ async function build(options = {}) {
     console.log();
   });
 
-  console.log("Dashboard:\n" + url);
+  if (url) console.log("Dashboard:\n" + url);
 }
 
 // Like templates(), wait for the lock (retries with backoff, about 95s in

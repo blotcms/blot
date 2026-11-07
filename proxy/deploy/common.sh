@@ -24,6 +24,10 @@
 #                                               proxy container on the host shares
 #   PROXY_LOG_DIR          /var/instance-ssd/logs   fail2ban and logrotate
 #                                               read the access log here
+#   PROXY_APP_LOG_SOCKET   /run/blot-log/app.sock  rsyslog's socket for app.log
+#                                               (config/host/rsyslog); without
+#                                               it a unit logs to json-file only
+#                                               (see log_args)
 #   PROXY_CERT_DIR         /etc/ssl/private     wildcard cert + key (read-only)
 #   PROXY_GLOBAL_STATIC_DIR /var/www/blot/app/blog/static  the app's own static
 #                                               assets, read-only in the units
@@ -65,6 +69,7 @@
 ENV_FILE="${PROXY_ENV_FILE:-/etc/blot/proxy.env}"
 DISK_CACHE_DIR="${PROXY_DISK_CACHE_DIR:-/var/instance-ssd/disk-cache}"
 LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
+APP_LOG_SOCKET="${PROXY_APP_LOG_SOCKET:-/run/blot-log/app.sock}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
 GLOBAL_STATIC_DIR="${PROXY_GLOBAL_STATIC_DIR:-/var/www/blot/app/blog/static}"
 SANDBOX_CGROUP_DIR="${PROXY_SANDBOX_CGROUP_DIR:-/sys/fs/cgroup/blot-sandbox}"
@@ -332,6 +337,7 @@ sync_static() { # sync_static <image>
 # refuses a key the two files set differently.
 run_args() { # run_args <name>
   local name="$1" unit upper var proxy_port
+  log_args "$name"
   unit="$(unit_of "$name")"
   upper="$(printf '%s' "$unit" | tr '[:lower:]' '[:upper:]')"
   var="SANDBOX_${upper}_PROXY_PORT"; proxy_port="${!var}"
@@ -345,7 +351,7 @@ run_args() { # run_args <name>
     --ulimit "nofile=$NOFILE:$NOFILE"
     # must stay above the app's drain timeout (app/helper/drain.js)
     --stop-timeout "$UNIT_STOP_TIMEOUT"
-    --log-driver json-file --log-opt "max-size=$LOG_MAX_SIZE" --log-opt "max-file=$LOG_MAX_FILE" --log-opt "compress=$LOG_COMPRESS"
+    "${LOG_ARGS[@]}"
     --memory "$UNIT_MEMORY" --cpus "$UNIT_CPUS" --cpu-shares "$UNIT_CPU_SHARES"
     --env-file "$SECRETS_ENV_FILE"
     --env-file "$ENV_FILE"
@@ -389,6 +395,29 @@ run_args() { # run_args <name>
       # to one with units.sh still finds its proxy
       -e "BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:$proxy_port"
     )
+  fi
+}
+
+# The unit's output goes to rsyslog, which appends it to app.log in $LOG_DIR
+# (config/host/rsyslog/blot-app-log.conf), tagged <name>/<commit>: unlike the
+# json-file logs it outlives the container. Docker keeps its own copy too
+# (dual logging, the cache-* options, as large as the json-file logs were), so
+# `docker logs` still works. Non-blocking: if rsyslog falls behind, Docker
+# drops lines past its buffer rather than block the app's stdout. Docker
+# refuses to start a container whose syslog socket is missing, so a host
+# without it (before config/host/deploy.sh has run) keeps json-file.
+log_args() { # log_args <name>
+  if [ -S "$APP_LOG_SOCKET" ]; then
+    LOG_ARGS=(
+      --log-driver syslog
+      --log-opt "syslog-address=unixgram://$APP_LOG_SOCKET"
+      --log-opt "tag=$1/${RELEASE_ID:0:7}"
+      --log-opt mode=non-blocking --log-opt max-buffer-size=16m
+      --log-opt "cache-max-size=$LOG_MAX_SIZE" --log-opt "cache-max-file=$LOG_MAX_FILE" --log-opt "cache-compress=$LOG_COMPRESS"
+    )
+  else
+    log "No $APP_LOG_SOCKET: $1 logs to json-file only, not app.log (run config/host/deploy.sh)"
+    LOG_ARGS=(--log-driver json-file --log-opt "max-size=$LOG_MAX_SIZE" --log-opt "max-file=$LOG_MAX_FILE" --log-opt "compress=$LOG_COMPRESS")
   fi
 }
 

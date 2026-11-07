@@ -11,7 +11,10 @@ set -euo pipefail
 #   scripts/prod/read.sh ps                         unit containers, status, created
 #   scripts/prod/read.sh inspect <unit>             OOMKilled, exit code, start time, restarts, memory limit
 #   scripts/prod/read.sh stats                      docker stats, one sample
-#   scripts/prod/read.sh logs <unit> [opts]         a unit's container logs, with timestamps
+#   scripts/prod/read.sh app-log [unit] [opts]      app.log: both units' output, kept across deploys
+#                                                   (14 days), each line tagged <container>/<commit>
+#   scripts/prod/read.sh logs <unit> [opts]         a unit's container logs, with timestamps (only
+#                                                   since its last deploy: prefer app-log)
 #   scripts/prod/read.sh access [opts]              openresty access log
 #   scripts/prod/read.sh error-log [opts]           openresty error log
 #   scripts/prod/read.sh log-files                  list the log directory, with rotated days
@@ -32,18 +35,18 @@ set -euo pipefail
 #   scripts/prod/read.sh redis-log [opts]           Redis's own log
 #   scripts/prod/read.sh redis-journal [hours]      journalctl for the redis6 unit
 #   scripts/prod/read.sh fail2ban <jail>            a fail2ban jail's status
-#   scripts/prod/read.sh errors <unit|error-log> [--since <window>] [--top <n>]
+#   scripts/prod/read.sh errors <unit|app-log|error-log> [--since <window>] [--top <n>]
 #                                                   error and warning lines collapsed into
 #                                                   templates (ids, URLs, numbers stripped),
 #                                                   most frequent first: count, template, one example
 #
-# Options for logs, access, error-log, health-check-log and redis-log:
-#   --since <30m|6h|2d|ISO time>   logs only: start of the window
+# Options for app-log, logs, access, error-log, health-check-log and redis-log:
+#   --since <30m|6h|2d|ISO time>   app-log and logs only: start of the window
 #   --tail <n>                     last n lines (after --grep)
 #   --grep <text>                  keep lines containing the text (fixed string)
 #   --yesterday                    access only: yesterday's requests too (the file rotated today)
-#   --day <YYYYMMDD>               access only: just the file rotated on that date, which holds
-#                                  the previous day's requests (gzipped or not)
+#   --day <YYYYMMDD>               access and app-log only: just the file rotated on that date,
+#                                  which holds the previous day's lines (gzipped or not)
 #   --rotated                      error-log only: include the rotated (and gzipped) files
 #
 # Writes nothing on the host. Anything else (scripts in a container, docker cp,
@@ -124,6 +127,24 @@ filtered() {
   printf '%s' "$PATTERN" | remote_stdin "pattern=\$(cat); { $command; }$filters"
 }
 
+# The remote command that prints app.log from SINCE (as parse_options leaves it)
+# on: every file, rotated or not, written to since then, oldest first, and of
+# those only the lines from then on. Lines start with an RFC 3339 time, so a
+# string comparison does. With no SINCE, today's file.
+app_log_since() {
+  local when
+  if [[ -z "$SINCE" ]]; then
+    echo "cat $LOG_DIRECTORY/app.log"
+    return
+  fi
+  if [[ "$SINCE" =~ ^([0-9]+)([smh])$ ]]; then
+    case "${BASH_REMATCH[2]}" in s) when="${BASH_REMATCH[1]} seconds ago" ;; m) when="${BASH_REMATCH[1]} minutes ago" ;; h) when="${BASH_REMATCH[1]} hours ago" ;; esac
+  else
+    when="$SINCE"
+  fi
+  echo "e=\$(date -u -d '$when' +%s); c=\$(date -u -d @\$e +%Y-%m-%dT%H:%M:%S); find $LOG_DIRECTORY -maxdepth 1 -name 'app.log*' -newermt @\$e -printf '%T@ %p\\n' | sort -n | cut -d' ' -f2 | while read -r f; do zcat -f \$f; done | awk -v c=\$c '\$1 >= c'"
+}
+
 [[ $# -ge 1 ]] || usage
 command="$1"; shift
 
@@ -142,6 +163,20 @@ case "$command" in
     since=""
     [[ -n "$SINCE" ]] && since="--since $SINCE"
     filtered "docker logs --timestamps $since $name 2>&1" ;;
+  app-log)
+    tag=""
+    if [[ -n "${1:-}" && "$1" != -* ]]; then tag="$(unit_name "$1")/"; shift; fi
+    parse_options "$@"
+    [[ -z "$YESTERDAY$ROTATED" ]] || fail "app-log takes --since, --day, --grep and --tail"
+    [[ -z "$DAY" || -z "$SINCE" ]] || fail "use --day or --since, not both"
+    if [[ -n "$DAY" ]]; then
+      input="f=$LOG_DIRECTORY/app.log-$DAY; [ -e \$f ] || f=\$f.gz; zcat -f \$f"
+    else
+      input="$(app_log_since)"
+    fi
+    # The tag is the second field: blot-blue/<commit>
+    [[ -z "$tag" ]] || input="$input | awk -v t=$tag 'index(\$2, t) == 1'"
+    filtered "$input" ;;
   access)
     parse_options "$@"
     [[ -z "$SINCE$ROTATED" ]] || fail "access takes --grep, --tail, --yesterday and --day"
@@ -229,6 +264,9 @@ case "$command" in
     if [[ "$source" == error-log ]]; then
       [[ -z "$since" ]] || fail "error-log has no --since"
       input="grep -aE '\\[(error|crit|alert|emerg|warn)\\]' $LOG_DIRECTORY/error.log"
+    elif [[ "$source" == app-log ]]; then
+      SINCE="$since"
+      input="$(app_log_since) | grep -aiE 'error|exception|fatal|unhandled|warn|timed? ?out|ECONN|EPIPE|refused'"
     else
       name=$(unit_name "$source")
       input="docker logs ${since:+--since $since} $name 2>&1 | grep -aiE 'error|exception|fatal|unhandled|warn|timed? ?out|ECONN|EPIPE|refused'"
@@ -238,7 +276,8 @@ case "$command" in
 {
   line = $0
   t = line
-  sub(/^[0-9TZ:.-]+ /, "", t)                                # docker timestamp
+  sub(/^[0-9TZ:.+-]+ /, "", t)                               # docker or app.log timestamp
+  sub(/^blot-[a-z]+\/[0-9a-f]+ /, "", t)                      # app.log tag
   gsub(/\[[0-9]{2}\/[A-Za-z]{3}\/[0-9:]+ [+-][0-9]{4}\]/, "", t) # [06/Nov/2026:21:12:51 +0000]
   sub(/^[0-9\/]+ [0-9:]+ /, "", t)                            # error.log date
   gsub(/https?:\/\/[^ ]+/, "<url>", t)

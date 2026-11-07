@@ -88,7 +88,13 @@ req() {
     local c
     {
         tail -n 1000000 $LOGS/error.log $LOGS/access.log
-        for c in $(app_containers); do docker logs "$c" 2>&1; done
+        # app.log has both units' output across deploys; before rsyslog was
+        # set up there was only docker logs
+        if [ -f $LOGS/app.log ]; then
+            tail -n 1000000 $LOGS/app.log
+        else
+            for c in $(app_containers); do docker logs "$c" 2>&1; done
+        fi
     } | grep -h --line-buffered "$1"
 }
 
@@ -96,12 +102,18 @@ live() {
   containers=($(app_containers))
   pids=()
 
-  # Start docker logs for each container
-   for c in "${containers[@]}"; do
-    docker logs -f --since 0s "$c" 2>&1 &
+  # Follow app.log (both units), or docker logs for each container on a host
+  # without it
+  if [ -f "$LOGS/app.log" ]; then
+    tail -F -n 0 "$LOGS/app.log" &
     pids+=($!)
-  done
- 
+  else
+    for c in "${containers[@]}"; do
+      docker logs -f --since 0s "$c" 2>&1 &
+      pids+=($!)
+    done
+  fi
+
   # Start tail -f on $LOGS/access.log, injecting [openresty] (the proxy container writes this log) after the timestamp
   if [ -n "$LOGS" ] && [ -f "$LOGS/access.log" ]; then
     tail -F "$LOGS/access.log" | sed -u 's/^\(\[[^]]\+\]\) /\1 [openresty] /' &

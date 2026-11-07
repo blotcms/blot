@@ -1,10 +1,12 @@
+# Daily, or sooner past 150M, and two weeks of rotated files: with rotate 0
+# each rotation deleted the log it had just rotated.
 /var/instance-ssd/logs/error.log {
-    size 150M
+    daily
+    maxsize 150M
+    rotate 14
     missingok
     notifempty
     compress
     delaycompress
     copytruncate
-    rotate 0
-    daily
 }

@@ -67,9 +67,11 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "printf '%s\n' '# Installed b
 # host (fail2ban below needs the log directory on it). On a running host the
 # mount is there and nothing is started; the new docker ordering takes effect at
 # the next reboot.
-echo "Installing mount-instance-store.service and its docker.service.d drop-in on $PUBLIC_IP"
+# 20-rsyslog.conf orders docker after rsyslog the same way, for the units'
+# syslog log driver (see the rsyslog section below).
+echo "Installing mount-instance-store.service and its docker.service.d drop-ins on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo cp /home/ec2-user/scripts/mount-instance-store.service /etc/systemd/system/mount-instance-store.service"
-ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/docker.service.d && sudo cp /home/ec2-user/scripts/docker.service.d/10-instance-store.conf /etc/systemd/system/docker.service.d/10-instance-store.conf"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/docker.service.d && sudo cp /home/ec2-user/scripts/docker.service.d/*.conf /etc/systemd/system/docker.service.d/"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl daemon-reload"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl enable mount-instance-store.service"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "mountpoint -q /var/instance-ssd || sudo systemctl start mount-instance-store.service"
@@ -190,6 +192,47 @@ echo "logrotate deployment complete."
 echo "Installing tmpfiles.d/blot.conf on $PUBLIC_IP"
 scp -P "$SSH_PORT" -i "$SSH_KEY" "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/tmpfiles.d/blot.conf" ec2-user@$PUBLIC_IP:/tmp/blot-tmpfiles.conf
 ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo mv /tmp/blot-tmpfiles.conf /etc/tmpfiles.d/blot.conf && sudo chown root:root /etc/tmpfiles.d/blot.conf && sudo systemd-tmpfiles --create /etc/tmpfiles.d/blot.conf"
+#########################################################
+
+#########################################################
+# Begin rsyslog deployment section
+#########################################################
+
+# app.log: the units' output, through Docker's syslog log driver to rsyslog's
+# socket in /run/blot-log (made by the tmpfiles section above). See
+# rsyslog/blot-app-log.conf. A config rsyslogd -N1 rejects is taken out again,
+# so rsyslog keeps running on the old one. rsyslog is restarted only when the
+# file changed; while it restarts, running units lose a few lines of app.log
+# (`docker logs` still has them), and a unit deployed while the socket is
+# missing logs to json-file instead (proxy/deploy/common.sh).
+echo "Installing rsyslog/blot-app-log.conf on $PUBLIC_IP"
+scp -P "$SSH_PORT" -i "$SSH_KEY" "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )/rsyslog/blot-app-log.conf" ec2-user@$PUBLIC_IP:/tmp/blot-app-log.conf
+ssh -p "$SSH_PORT" -i "$SSH_KEY" ec2-user@$PUBLIC_IP "sudo bash -s" <<'RSYSLOG'
+set -eu
+target=/etc/rsyslog.d/blot-app-log.conf
+if cmp -s /tmp/blot-app-log.conf "$target"; then
+  rm -f /tmp/blot-app-log.conf
+  echo "rsyslog config unchanged."
+  exit 0
+fi
+backup=$(mktemp)
+had_old=0
+if [ -e "$target" ]; then cp "$target" "$backup"; had_old=1; fi
+install -m 644 -o root -g root /tmp/blot-app-log.conf "$target"
+rm -f /tmp/blot-app-log.conf
+if ! rsyslogd -N1 >/dev/null 2>&1; then
+  rsyslogd -N1 || true
+  if [ "$had_old" = 1 ]; then cp "$backup" "$target"; else rm -f "$target"; fi
+  rm -f "$backup"
+  echo "ERROR: rsyslogd -N1 rejected blot-app-log.conf; put the old config back"
+  exit 1
+fi
+rm -f "$backup"
+systemctl restart rsyslog
+for i in 1 2 3 4 5; do [ -S /run/blot-log/app.sock ] && break; sleep 1; done
+[ -S /run/blot-log/app.sock ] || { echo "ERROR: rsyslog did not create /run/blot-log/app.sock"; exit 1; }
+echo "rsyslog restarted with blot-app-log.conf."
+RSYSLOG
 #########################################################
 
 #########################################################
