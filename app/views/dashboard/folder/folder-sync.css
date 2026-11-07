@@ -180,25 +180,30 @@
 /* One link: transparent until hovered, then a grey pill. It leads to the
    client's page (or, with no folder, to connecting one). */
 /* "Folder", labelling the row as the overview's summary labels its rows
-   (site/site-summary.css): the same size and width, so the client lines up
-   under their values. Hidden from screen readers, which hear "Syncs with". */
+   (site/site-summary.css), inside the link so the whole pill is clickable:
+   the same size and width as those labels, so the client lines up under
+   their values. Hidden from screen readers, which hear "Syncs with". */
 .folder-sync-label {
   flex: 0 0 5.5em;
-  /* Back out the folder box's inset, which the summary card doesn't have */
-  margin-left: calc(var(--space-2) * -1);
+  /* With the pill's gap, the summary's space between label and value */
+  margin-right: var(--space-2);
   color: var(--medium-text-color);
   font-size: var(--text-sm);
 }
 
+/* Pulled left by its own padding and the folder box's inset (which the
+   summary card doesn't have), so the label sits under the summary's */
 .folder-sync {
   position: relative;
   min-width: 0;
-  margin-left: calc(var(--space-2) * -1);
+  margin-left: calc(var(--space-2) * -2);
 }
 
 .folder-sync__pill {
   display: inline-flex;
-  flex-wrap: wrap;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+  white-space: nowrap;
   align-items: center;
   gap: var(--space-1) var(--space-2);
   min-height: 30px;
