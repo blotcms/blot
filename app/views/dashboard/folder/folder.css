@@ -490,11 +490,6 @@ div.folder-box.directory {
   padding-left: 0;
 }
 
-div.folder-box.directory .folder-toolbar {
-  padding-right: calc(var(--space-1) + var(--space-2));
-  padding-left: calc(var(--space-4) + var(--space-2));
-}
-
 div.folder-box.directory .directory-list th:first-child {
   padding-left: calc(var(--space-4) + var(--space-2));
 }
@@ -565,7 +560,8 @@ div.folder-box.directory .directory-list tbody td:last-child {
    and its filters. A box that starts lower (a sync issue above it) just
    makes the page scroll a little. */
 @media (min-width: 900px) {
-  .folder-box.directory {
+  .folder-box.directory,
+  .folder-box--sync {
     min-height: max(
       50vh,
       calc(100vh - var(--folder-box-top, 120px) - var(--space-5))
@@ -573,7 +569,8 @@ div.folder-box.directory .directory-list tbody td:last-child {
   }
 
   .site-dashboard.is-overview-view,
-  .site-dashboard.is-posts-view {
+  .site-dashboard.is-posts-view,
+  .site-dashboard.is-sync-view {
     --folder-box-top: 209px;
   }
 }

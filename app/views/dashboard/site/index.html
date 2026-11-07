@@ -81,12 +81,8 @@
              folder rows -->
         <section id="site-dashboard-posts" class="site-dashboard-view-panel" aria-label="{{pageHeading}}">
           <div class="folder-container">
-            <div class="folder-box root directory" data-folder-base="{{base}}" data-csrf-token="{{csrftoken}}" data-filtered>
-              <div class="folder-toolbar">
-                {{> folder-sync}}
-                {{> folder-filters}}
-                {{> site-dashboard-views}}
-              </div>
+            <div class="folder-box root directory has-tabs" data-folder-base="{{base}}" data-csrf-token="{{csrftoken}}" data-filtered>
+              {{> folder-tabs}}
               {{> folder-sync-issue}}
               {{#postColumns.length}}
               <div class="directory-scroll">

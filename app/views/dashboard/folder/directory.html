@@ -9,14 +9,10 @@
   <div class="folder-container">
   {{/root}}
 
-    <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}} {{boxState}}" data-folder-base="{{base}}" data-csrf-token="{{csrftoken}}" style="position:relative;">
+    <div class="folder-box {{#root}}root{{/root}} {{#directory}}directory{{/directory}} {{#root}}{{#isFolderView}}has-tabs{{/isFolderView}}{{/root}} {{boxState}}" data-folder-base="{{base}}" data-csrf-token="{{csrftoken}}" style="position:relative;">
     <div class="folder-drop-target" aria-hidden="true" style="display:none;position:absolute;inset:0;z-index:10;align-items:center;justify-content:center;background:rgba(0, 112, 232, 0.08);border:2px dashed rgba(0, 112, 232, 0.6);border-radius:6px;color:var(--text-color);font-weight:600;pointer-events:none;">Drop files to upload</div>
     {{#root}}{{#isFolderView}}
-    <div class="folder-toolbar">
-      {{> folder-sync}}
-      {{> folder-filters}}
-      {{> site-dashboard-views}}
-    </div>
+    {{> folder-tabs}}
     {{> folder-sync-issue}}
     {{/isFolderView}}{{/root}}
     {{#directory}}

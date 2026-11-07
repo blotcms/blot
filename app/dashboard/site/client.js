@@ -18,6 +18,30 @@ const RESYNC_REFUSALS = [
   "ICLOUD_SETUP_INCOMPLETE",
 ];
 
+// A connected folder's sync pages render as the folder box's sync tab, under
+// the site's summary, with the files tab's filters beside it. Their data is
+// loaded before res.locals.base becomes the sync pages' own.
+const loadPosts = require("./load/posts");
+const loadLiveTemplate = require("./load/live-template");
+
+client_routes.get(
+  /.*/,
+  function (req, res, next) {
+    if (!req.blog.client) return next("route");
+    res.locals.isSyncTab = true;
+    res.locals.showDashboardSearch = true;
+    next();
+  },
+  loadPosts,
+  loadLiveTemplate,
+  function (req, res, next) {
+    // The files tab isn't the one shown, so none of its filters is chosen
+    res.locals.filesFilter.filterClass = "folder-filters__item";
+    res.locals.filesFilter.ariaCurrent = "";
+    next();
+  }
+);
+
 // The sync pages, at /sites/<handle>/sync. Breadcrumbs: Sites > Site > Sync
 client_routes.use(function (req, res, next) {
   res.locals.base = req.baseUrl;

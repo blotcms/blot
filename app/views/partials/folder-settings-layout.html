@@ -1,5 +1,31 @@
+{{#blog.client}}
+<!-- A connected folder's sync pages are the folder box's other tab: the
+     site's summary, then the box with the client's page in place of the
+     files -->
+<div class="site-dashboard is-sync-view">
+  <div class="site-dashboard-folder-layout">
+    <div class="site-dashboard-folder-view">
+      <div class="dashboard-main">
+        {{> site-summary}}
+        <section class="site-dashboard-view-panel" aria-label="{{client.display_name}} sync settings">
+          <div class="folder-container">
+            <div class="folder-box root has-tabs folder-box--sync">
+              {{> folder-tabs}}
+              <div class="folder-sync-panel">
+                {{> body}}
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+{{/blog.client}}
+{{^blog.client}}
 <div class="dashboard-form-panel">
   <div class="dashboard-form-panel__body">
     {{> body}}
   </div>
 </div>
+{{/blog.client}}

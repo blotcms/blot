@@ -24,7 +24,7 @@ Words the dashboard uses (what the user sees, not internal names):
 
 - **Site**, not blog. Its **Title** (the setting, and the Sites list's first column) and its **Domain**.
 - **Template**: the one in use is "live on your site". **Edit** is the link to change any value in a row (not "Change" or "Edit template"). Where the whole row is the link, as in the summary card at the top of a site's folder, a grey chevron at its end stands in for Edit, which screen readers still hear.
-- **Folder** is the site's files (the Folder page and the Folder row). **Files** is the filter that shows them. **Sync** is the connection to Dropbox, Google Drive, iCloud, Git or a local folder, and its pages.
+- **Folder** is the site's files (the Folder page and the folder box). **Files** is the filter that shows them. **Sync** is the connection to Dropbox, Google Drive, iCloud, Git or a local folder, and its pages, which are the folder box's other tab, named after the client (`folder/folder-tabs.html`).
 - **Post**, not entry. The filters are **Posts**, **Pages**, **Drafts** and **Scheduled**. Columns are **Title**, **File**, **Date published**, **Date modified**, **Size**.
 - **Settings** is the site's Settings section.
 - A missing value in a table cell is `--` (a folder's size, a draft's publish date).

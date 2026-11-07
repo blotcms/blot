@@ -1,28 +1,25 @@
 /*
-  The top row of the overview's file box (folder/directory.html): where the
-  folder syncs from, then search.
+  The top edge of the overview's file box (folder/folder-tabs.html): two
+  tabs, like a folder's. The selected one joins the box below it.
 
-  .folder-toolbar         the row
+  .folder-tabs            the row of tabs
+  .folder-tab--sync       the client's icon and name, a link to its sync
+                          settings (/sync/<client>), which render in the box
+                          as this tab's page; with no folder yet, a blue
+                          "Sync this folder" button
+  .folder-tab--files      the files: the filters, then search
   .folder-filters         Files, Posts, Pages, Drafts, Scheduled: Files is
                           the folder itself and the others filter it to its
                           entries (their own pages); one is always selected
-  .folder-sync            "Folder  Google Drive  Edit", one link
-                          (folder/folder-sync.html) to the client's page,
-                          which has its options: activity, resync, change,
-                          disconnect (with no folder yet, "Folder" and a
-                          blue "Sync this folder" button)
-  .folder-sync-issue      a problem with the folder, under the row
+  .folder-sync-issue      a problem with the folder, under the tabs
                           (folder/folder-sync-issue.html)
 */
 
-/* No padding above: the folder box's own padding gives the same space as
-   the toolbar's below */
 .folder-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-4);
-  padding: 0 var(--space-1) var(--space-2) var(--space-4);
 }
 
 /* The filters (folder/folder-filters.html): one segmented control, like a
@@ -155,10 +152,6 @@
     flex-shrink: 0;
   }
 
-  .folder-toolbar .folder-sync {
-    flex-shrink: 0;
-  }
-
   /* The same on the overview and the filter pages, so the pills don't move
      when one is chosen (outranks the overview's own search width) */
   .site-dashboard .folder-toolbar .folder-filters + .site-dashboard-search {
@@ -179,89 +172,117 @@
   box-shadow: 0 0 4px 1px var(--indicator-amber-glow);
 }
 
-/* One link: transparent until hovered, then a grey pill. It leads to the
-   client's page (or, with no folder, to connecting one). */
-/* "Folder", labelling the row as the overview's summary labels its rows
-   (site/site-summary.css), inside the link so the whole pill is clickable:
-   the same size and width as those labels, so the client lines up under
-   their values. Hidden from screen readers, which hear "Syncs with". */
-.folder-sync-label {
-  /* A width, not just a flex-basis, which the pill's own width (sized to
-     its content) would leave out, letting Edit spill past its end */
-  flex: 0 0 auto;
-  width: 5.5em;
-  /* With the pill's gap, the summary's space between label and value */
-  margin-right: var(--space-2);
-  color: var(--medium-text-color);
-  font-size: var(--text-sm);
+/* The tabs. The box has no top edge of its own: the tabs draw it, pulled
+   out over the box's side borders. The client's tab stands a little
+   higher than the files', as a folder's tab does. */
+div.folder-box.has-tabs {
+  padding-top: 0;
+  border-top: 0;
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
 }
 
-/* Pulled left by its own padding and the folder box's inset (which the
-   summary card doesn't have), so the label sits under the summary's */
-.folder-sync {
-  position: relative;
-  min-width: 0;
-  margin-left: calc(var(--space-2) * -2);
+.folder-tabs {
+  display: flex;
+  align-items: flex-end;
+  margin: 0 -1px var(--space-2);
 }
 
-.folder-sync__pill {
-  display: inline-flex;
-  flex: 0 0 auto;
-  flex-wrap: nowrap;
-  white-space: nowrap;
-  align-items: center;
-  gap: var(--space-1) var(--space-2);
-  min-height: 30px;
+.folder-tab {
   box-sizing: border-box;
-  padding: var(--space-1) var(--space-3) var(--space-1) var(--space-2);
-  border-radius: var(--radius-pill);
-  color: inherit;
-  cursor: pointer;
-  /* The summary card's size, so the client reads like its values */
-  font-size: var(--text-sm);
-  text-decoration: none;
-  transition: background-color 150ms ease;
-}
-
-.folder-sync__pill:hover {
+  border: 1px solid var(--border-color);
   background: var(--surface-muted-color);
 }
 
-.folder-sync__pill:active {
-  background: var(--surface-strong-color);
+/* The selected tab joins the box: the box's colour, no line below it */
+.folder-tab.is-selected {
+  border-bottom-color: transparent;
+  background: var(--background-color);
 }
 
-.folder-sync__pill:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
-}
-
-.folder-sync__label {
-  color: var(--medium-text-color);
-}
-
-.folder-sync__client {
-  color: var(--text-color);
-}
-
-.folder-sync__edit {
-  color: var(--accent-color);
-}
-
-.folder-sync__pill:hover .folder-sync__edit {
-  color: var(--accent-hover-color);
-}
-
-/* No folder connected: the whole pill is the link, in blue */
-/* No folder yet: the label, then a blue button where the client would be.
-   Pulled left by the folder box's inset only (it has no pill padding), and
-   spaced so the button starts under the summary card's values. */
-.folder-sync--connect {
+.folder-tab--sync {
   display: inline-flex;
   flex: 0 0 auto;
   align-items: center;
   gap: var(--space-2);
-  margin-left: calc(var(--space-2) * -1);
+  min-height: 48px;
+  padding: 0 var(--space-5) 0 calc(var(--space-4) + var(--space-2));
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  color: var(--text-color);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease;
+}
+
+a.folder-tab--sync:not(.is-selected):hover {
+  background: var(--surface-strong-color);
+}
+
+a.folder-tab--sync:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.folder-tab--connect {
+  padding-left: calc(var(--space-4) + var(--space-1));
+}
+
+/* Lower than the client's tab, and the rest of the width */
+.folder-tab--files {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 42px;
+  padding: var(--space-1) calc(var(--space-1) + var(--space-2))
+    var(--space-1) var(--space-4);
+  border-left: 0;
+  border-radius: 0 var(--radius-lg) 0 0;
+}
+
+/* Where the filters are a dropdown, the files tab stays one line: search
+   first, filling what's left, then the dropdown */
+@media (max-width: 600px) {
+  .folder-tab--files {
+    flex-wrap: nowrap;
+    gap: var(--space-2);
+  }
+
+  /* (.site-dashboard outranks the overview's own search width) */
+  .site-dashboard .folder-tabs .folder-tab--files .site-dashboard-search {
+    flex: 1 1 auto;
+    order: -1;
+    width: auto;
+    min-width: 0;
+    margin: 0;
+  }
+
+  .folder-tab--files .folder-filters-menu {
+    flex: 0 0 auto;
+  }
+}
+
+/* On phones the client's tab is narrower */
+@media (max-width: 480px) {
+  .folder-tab--sync {
+    padding: 0 var(--space-3) 0 var(--space-4);
+  }
+
+  .folder-tab--files {
+    padding-left: var(--space-2);
+  }
+}
+
+/* The sync tab's page: the client's settings rows, inset like the files */
+.folder-box--sync {
+  box-sizing: border-box;
+  padding: 0 0 var(--space-2);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--background-color);
+}
+
+.folder-sync-panel {
+  padding: var(--space-2) var(--space-4) var(--space-4);
 }
 
 /* The same line as plain text, where it is not a control (the page for
