@@ -4,6 +4,7 @@
 // Prettier the ignores below too.
 const js = require("@eslint/js");
 const globals = require("globals");
+const promise = require("eslint-plugin-promise");
 
 module.exports = [
   {
@@ -62,6 +63,87 @@ module.exports = [
         },
       ],
     },
+  },
+
+  // promise/prefer-await-to-callbacks (eslint-plugin-promise), so callback
+  // style can't come back where it has been removed (#2559). Only folders with
+  // no violations are listed, and folders join the list as phase 3 converts
+  // them. Specs are left out. The rule also flags any parameter named
+  // callback, cb or done, and error-first handlers such as .catch((err) =>
+  // ...), so a folder whose only hits are Express next or stream callbacks
+  // stays off the list rather than carrying eslint-disable comments.
+  {
+    files: [
+      "app/blog/middleware/**/*.js",
+      "app/blog/render/load/**/*.js",
+      "app/blog/render/replaceFolderLinks/**/*.js",
+      "app/blog/render/retrieve/**/*.js",
+      "app/blog/static/**/*.js",
+      "app/build/converters/docx/**/*.js",
+      "app/build/converters/html/**/*.js",
+      "app/build/converters/markdown/**/*.js",
+      "app/build/converters/odt/**/*.js",
+      "app/build/converters/org/**/*.js",
+      "app/build/converters/rtf/**/*.js",
+      "app/build/converters/webloc/**/*.js",
+      "app/build/dependencies/**/*.js",
+      "app/build/plugins/analytics/**/*.js",
+      "app/build/plugins/autoImage/**/*.js",
+      "app/build/plugins/bluesky/**/*.js",
+      "app/build/plugins/callouts/**/*.js",
+      "app/build/plugins/codeHighlighting/**/*.js",
+      "app/build/plugins/disqus/**/*.js",
+      "app/build/plugins/externalLinks/**/*.js",
+      "app/build/plugins/flickr/**/*.js",
+      "app/build/plugins/folderAssets/**/*.js",
+      "app/build/plugins/image/**/*.js",
+      "app/build/plugins/imageCaption/**/*.js",
+      "app/build/plugins/injectTitle/**/*.js",
+      "app/build/plugins/katex/**/*.js",
+      "app/build/plugins/linebreaks/**/*.js",
+      "app/build/plugins/linkScreenshot/**/*.js",
+      "app/build/plugins/mediaPreload/**/*.js",
+      "app/build/plugins/titlecase/**/*.js",
+      "app/build/plugins/twitter/**/*.js",
+      "app/build/plugins/typeset/**/*.js",
+      "app/build/plugins/videoEmbeds/**/*.js",
+      "app/build/plugins/zoom/**/*.js",
+      "app/build/prepare/**/*.js",
+      "app/cdn/**/*.js",
+      "app/clients/git/store/objectStore/**/*.js",
+      "app/clients/google-drive/serviceAccount/**/*.js",
+      "app/clients/google-drive/sync/**/*.js",
+      "app/clients/icloud/routes/site/middleware/**/*.js",
+      "app/clients/icloud/sync/util/**/*.js",
+      "app/clients/icloud/util/**/*.js",
+      "app/dashboard/account/util/**/*.js",
+      "app/dashboard/site/save/**/*.js",
+      "app/dashboard/site/template/load/**/*.js",
+      "app/documentation/questions/**/*.js",
+      "app/documentation/tools/finder/**/*.js",
+      "app/documentation/tools/typeset/**/*.js",
+      "app/helper/egress/**/*.js",
+      "app/helper/lock/**/*.js",
+      "app/models/blog/util/**/*.js",
+      "app/models/blog/validate/**/*.js",
+      "app/models/file/**/*.js",
+      "app/models/ignoredFiles/**/*.js",
+      "app/models/question/**/*.js",
+      "app/models/redirects/**/*.js",
+      "app/models/tags/**/*.js",
+      "app/site/**/*.js",
+      "app/sync/update/preview/**/*.js",
+      "scripts/deploy/**/*.js",
+      "scripts/development/lint/**/*.js",
+      "scripts/folder-links/**/*.js",
+      "scripts/probe/**/*.js",
+      "scripts/questions/**/*.js",
+      "scripts/security/**/*.js",
+      "scripts/test/**/*.js",
+    ],
+    ignores: ["**/tests/**", "**/tests.js"],
+    plugins: { promise },
+    rules: { "promise/prefer-await-to-callbacks": "error" },
   },
 
   // ES modules: the macserver's package.json sets "type": "module"
