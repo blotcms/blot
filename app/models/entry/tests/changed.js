@@ -15,10 +15,7 @@ describe("entry.set changed", function () {
             new Promise((resolve, reject) => {
               build(this.blog, path, (err, entry) => {
                 if (err) return reject(err);
-                set(this.blog.id, path, entry, (err, result) => {
-                  if (err) return reject(err);
-                  resolve(result);
-                });
+                set(this.blog.id, path, entry).then(resolve, reject);
               });
             })
         );

@@ -159,9 +159,8 @@ function makeReadOnly(Entry) {
     return multi;
   };
   client.multi = client.MULTI = recorder;
-  Entry.set = (blogID, id, entry, callback) => {
+  Entry.set = async () => {
     record("Entry.set");
-    setImmediate(callback, null);
   };
 
   return { refused, wouldWrite };

@@ -2,9 +2,8 @@ var client = require("models/client");
 var ensure = require("helper/ensure");
 var key = require("./key");
 var _ = require("lodash");
-var withCallback = require("helper/withCallback");
 
-module.exports = withCallback(async function list(blogID) {
+module.exports = async function list(blogID) {
   ensure(blogID, "string");
 
   var redirects = key.redirects(blogID);
@@ -34,4 +33,4 @@ module.exports = withCallback(async function list(blogID) {
       index: i++,
     };
   });
-});
+};

@@ -18,7 +18,7 @@ describe("redirects.conflicts", function () {
     this.publish = async (path, content) => {
       await folder.write(this.blog.id, path, content);
       const entry = await promisify(build)(this.blog, path);
-      await promisify(Entry.set)(this.blog.id, path, entry);
+      await Entry.set(this.blog.id, path, entry);
       return entry;
     };
 

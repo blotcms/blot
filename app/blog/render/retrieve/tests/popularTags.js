@@ -65,12 +65,7 @@ describe("popular tags", function () {
 
     await this.blog.rebuild();
 
-    const results = await new Promise((resolve, reject) => {
-      Tags.popular(this.blog.id, { limit: 1, offset: 1 }, function (err, tags) {
-        if (err) return reject(err);
-        resolve(tags);
-      });
-    });
+    const results = await Tags.popular(this.blog.id, { limit: 1, offset: 1 });
 
     expect(results.length).toEqual(1);
     expect(results[0].slug).toEqual("beta");

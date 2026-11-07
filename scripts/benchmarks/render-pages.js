@@ -142,8 +142,7 @@ async function seed(shape) {
   const entries = content.entries(shape, "render-pages");
   const log = console.log;
   console.log = function () {}; // Entry.set logs every write
-  for (const entry of entries)
-    await promisify(Entry.set)(blog.id, entry.path, entry);
+  for (const entry of entries) await Entry.set(blog.id, entry.path, entry);
   console.log = log;
 
   const urls = [];

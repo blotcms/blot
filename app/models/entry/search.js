@@ -1,5 +1,4 @@
 const ensure = require("helper/ensure");
-const withCallback = require("helper/withCallback");
 const client = require("models/client");
 const { sortEntries } = require("blog/sortOptions");
 const metadataCaseInsensitive = require("helper/metadataCaseInsensitive");
@@ -64,11 +63,7 @@ function isFalsy(value) {
   return value === "false" || value === "no" || value === "0";
 }
 
-module.exports = withCallback(async function search(
-  blogID,
-  query,
-  options = {}
-) {
+module.exports = async function search(blogID, query, options = {}) {
   options = options || {};
 
   ensure(blogID, "string").and(query, "string");
@@ -122,4 +117,4 @@ module.exports = withCallback(async function search(
   await scanList("blog:" + blogID + ":pages");
 
   return sortEntries(results, options).slice(0, MAX_RESULTS);
-});
+};

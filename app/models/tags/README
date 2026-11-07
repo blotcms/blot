@@ -51,9 +51,9 @@ Defined in `key.js`.
 
 ## Public API
 
-`list` and `popular` return a promise when called without a callback (`helper/withCallback`, #2559); with one they behave as before. `get` returns a promise only: it resolves to an object, which the callback bridge can't carry.
+`set`, `get`, `list` and `popular` are async functions that return a promise and take no callback.
 
-### `set(blogID, entry, callback)`
+### `set(blogID, entry)`
 
 Reconciles the tag index for a single entry against its current state in Redis.
 
@@ -72,7 +72,7 @@ Reconciles the tag index for a single entry against its current state in Redis.
 - Removes any tags whose popularity score has dropped to zero or below via `ZREMRANGEBYSCORE ... -inf 0`.
 - All writes are executed as a single Redis `MULTI` transaction.
 - Entries that are deleted, drafted, scheduled, or located under a path component beginning with `_` have their tags suppressed: the effective tag list is treated as empty, which removes the entry from all tag index structures.
-- Calls back with `(err)`. On Redis error, throws rather than passing to callback.
+- Resolves to `{ changed }`, and rejects on a Redis error.
 
 ### `get(blogID, tag, [options])`
 
@@ -88,14 +88,14 @@ Retrieves the entry IDs associated with a tag, tolerating URL-encoded or non-nor
   - `prettyTag`: the original display-form tag name as stored, or the queried tag string if no display name is recorded.
   - `total`: total number of entries associated with the tag regardless of `limit`/`offset`.
 
-### `list(blogID, callback)`
+### `list(blogID, [options])`
 
 Returns all tags defined on a blog.
 
 - Fetches all normalised slug members from `blog:{blogID}:tags:all`.
 - For each slug, retrieves the display name and the entry count in parallel.
 - Excludes tags whose entry count is zero.
-- Calls back with `(err, tags)` where each element of `tags` is:
+- Resolves to `tags`, where each element is:
   ```js
   {
     name: string,   // original display-form tag name
@@ -104,15 +104,15 @@ Returns all tags defined on a blog.
   }
   ```
 
-### `popular(blogID, [options], callback)`
+### `popular(blogID, [options])`
 
 Returns the most-used tags on a blog, ranked by use count descending.
 
-- `options.limit` (number): number of tags to return. Defaults to `10`. Passing `0` calls back with an empty array immediately.
+- `options.limit` (number): number of tags to return. Defaults to `10`. Passing `0` resolves to an empty array immediately.
 - `options.offset` (number): zero-based rank to start from. Defaults to `0`.
 - `options` may be passed as a plain number (treated as `{ limit: options }`).
 - Queries `blog:{blogID}:tags:popular` with `ZREVRANGE ... WITHSCORES`, then fetches display names in a batch.
-- Calls back with `(err, tags)` where each element of `tags` is:
+- Resolves to `tags`, where each element is:
   ```js
   {
     name: string,   // original display-form tag name (falls back to slug if not recorded)

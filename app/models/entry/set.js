@@ -1,4 +1,3 @@
-var { promisify } = require("util");
 var ensure = require("helper/ensure");
 var model = require("./model");
 var redis = require("models/client");
@@ -6,7 +5,6 @@ var guid = require("helper/guid");
 var clfdate = require("helper/clfdate");
 var debug = require("debug")("blot:entry:set");
 var get = require("./get");
-var withCallback = require("helper/withCallback");
 var key = require("./key");
 var setUrl = require("./_setUrl");
 var Candidates = setUrl.Candidates;
@@ -191,7 +189,7 @@ async function set(blogID, path, updates) {
 
   // These all start at once and run in parallel. updateTagList is first.
   var queue = [
-    promisify(updateTagList)(blogID, entry),
+    updateTagList(blogID, entry),
     assignToLists(blogID, entry),
     rebuildDependencyGraph(blogID, entry, previousDependencies),
   ];
@@ -263,4 +261,4 @@ async function set(blogID, path, updates) {
   };
 }
 
-module.exports = withCallback(set);
+module.exports = set;

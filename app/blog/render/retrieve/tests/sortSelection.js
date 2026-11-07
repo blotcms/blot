@@ -64,14 +64,10 @@ describe("post sorting across retrieve helpers", function () {
     beforeEach(function () {
       received = undefined;
       spyOn(Entry, "search").and.callFake(
-        function (blogID, query, options, cb) {
-          if (typeof options === "function") {
-            cb = options;
-            options = undefined;
-          }
+        async function (blogID, query, options) {
           received = { blogID, query, options };
           // Entry.search returns already sorted + capped; the helper passes through.
-          cb(null, newestFirst());
+          return newestFirst();
         }
       );
     });

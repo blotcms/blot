@@ -5,7 +5,7 @@ const searchQueryString = require("blog/lib/searchQuery");
 
 // The results are listed like the folder's files: name, size and date
 // modified, from a stat of each (at most 25, see models/entry/search.js)
-module.exports = function (req, res, next) {
+module.exports = async function (req, res, next) {
   const rawQuery = searchQueryString(req.query.q);
   const query = typeof rawQuery === "string" ? rawQuery.trim() : "";
 
@@ -14,40 +14,37 @@ module.exports = function (req, res, next) {
 
   if (!query) return next();
 
-  Entry.search(
-    req.blog.id,
-    query,
-    getTemplateSortOptions(req.template && req.template.locals),
-    async function (err, entries) {
-      if (err) return next(err);
+  try {
+    const entries = await Entry.search(
+      req.blog.id,
+      query,
+      getTemplateSortOptions(req.template && req.template.locals)
+    );
 
-      try {
-        res.locals.searchResults = await Promise.all(
-          entries.map(async function (entry) {
-            const path = entry.path || entry.id;
-            // A file removed since it was indexed shows without a size or date
-            const stat = await Stat(req.blog.id, path, req.blog.timeZone).catch(
-              () => null
-            );
-
-            return {
-              name: path.split("/").pop(),
-              path: path,
-              urlPath: path
-                .replace(/^\/+/, "")
-                .split("/")
-                .map(encodeURIComponent)
-                .join("/"),
-              size: stat ? stat.size : "--",
-              modified: stat ? stat.modified : "",
-            };
-          })
+    res.locals.searchResults = await Promise.all(
+      entries.map(async function (entry) {
+        const path = entry.path || entry.id;
+        // A file removed since it was indexed shows without a size or date
+        const stat = await Stat(req.blog.id, path, req.blog.timeZone).catch(
+          () => null
         );
-      } catch (err) {
-        return next(err);
-      }
 
-      next();
-    }
-  );
+        return {
+          name: path.split("/").pop(),
+          path: path,
+          urlPath: path
+            .replace(/^\/+/, "")
+            .split("/")
+            .map(encodeURIComponent)
+            .join("/"),
+          size: stat ? stat.size : "--",
+          modified: stat ? stat.modified : "",
+        };
+      })
+    );
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 };

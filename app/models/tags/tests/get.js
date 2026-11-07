@@ -2,12 +2,8 @@ describe("tags.get", function () {
   const set = require("../set");
   const get = require("../get");
 
-  function setAsync(blogID, entry) {
-    return new Promise(function (resolve, reject) {
-      set(blogID, entry, function (err) {
-        err ? reject(err) : resolve();
-      });
-    });
+  async function setAsync(blogID, entry) {
+    await set(blogID, entry);
   }
 
   // Create a test user and blog before each spec

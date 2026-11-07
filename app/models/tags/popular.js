@@ -2,9 +2,8 @@ const client = require("models/client");
 const ensure = require("helper/ensure");
 const type = require("helper/type");
 const key = require("./key");
-const withCallback = require("helper/withCallback");
 
-module.exports = withCallback(async function getPopular(blogID, options) {
+module.exports = async function getPopular(blogID, options) {
   if (typeof options === "number") {
     options = { limit: options };
   }
@@ -81,4 +80,4 @@ module.exports = withCallback(async function getPopular(blogID, options) {
   });
 
   return hydrated;
-});
+};

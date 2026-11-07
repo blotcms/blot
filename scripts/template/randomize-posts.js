@@ -51,13 +51,8 @@ function eachEntry(blogID, doThis) {
   });
 }
 
-function setEntry(blogID, path, updates) {
-  return new Promise(function (resolve, reject) {
-    Entry.set(blogID, path, updates, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+async function setEntry(blogID, path, updates) {
+  await Entry.set(blogID, path, updates);
 }
 
 async function main() {

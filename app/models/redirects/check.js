@@ -3,11 +3,10 @@ var ensure = require("helper/ensure");
 var key = require("./key");
 var get = require("./get");
 var util = require("./util");
-var withCallback = require("helper/withCallback");
 var is = util.is;
 var isRegex = util.isRegex;
 
-module.exports = withCallback(async function check(blogID, input) {
+module.exports = async function check(blogID, input) {
   ensure(blogID, "string").and(input, "string");
 
   var redirects = key.redirects(blogID);
@@ -43,4 +42,4 @@ module.exports = withCallback(async function check(blogID, input) {
       return;
     }
   }
-});
+};

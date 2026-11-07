@@ -73,11 +73,7 @@ describe("entry scheduled publication", function () {
     expect(await alarms.when(id)).not.toBe(null);
 
     const set = require("../set");
-    await new Promise((resolve, reject) =>
-      set(this.blog.id, "/future.txt", { draft: true }, (err) =>
-        err ? reject(err) : resolve()
-      )
-    );
+    await set(this.blog.id, "/future.txt", { draft: true });
 
     expect(await alarms.when(id)).toBe(null);
   });

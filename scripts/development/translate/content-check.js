@@ -17,7 +17,6 @@ const Tags = require("models/tags");
 
 const getBlog = promisify(Blog.get);
 const getListIDs = promisify(Entries.getListIDs);
-const listTags = promisify(Tags.list);
 
 const emit = (key, value) => console.log(`${key}=${value}`);
 
@@ -86,7 +85,7 @@ function getEntry(blogID, path) {
 
 async function countTags(blogID) {
   try {
-    const tags = await listTags(blogID);
+    const tags = await Tags.list(blogID);
     return Array.isArray(tags) ? tags.length : Object.keys(tags || {}).length;
   } catch (e) {
     return 0;
