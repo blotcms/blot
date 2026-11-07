@@ -21,6 +21,7 @@ const pluginsOnFlagsPage = [
   "twitter",
   "videoEmbeds",
   "linkScreenshot",
+  "image",
 ];
 
 // The categories depend only on the blog's plugin settings. Templates only
