@@ -22,7 +22,7 @@ set -euo pipefail
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
-pkgs=$(node -p 'const d = require("./package.json").devDependencies; ["eslint", "@eslint/js", "globals", "prettier"].map((n) => n + "@" + d[n]).join(" ")')
+pkgs=$(node -p 'const d = require("./package.json").devDependencies; ["eslint", "@eslint/js", "eslint-plugin-promise", "globals", "prettier"].map((n) => n + "@" + d[n]).join(" ")')
 
 if [ -n "${LINT_TOOLS_DIR:-}" ]; then
   dir=$LINT_TOOLS_DIR
