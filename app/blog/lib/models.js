@@ -43,30 +43,15 @@ function getFullView(blogID, templateID, viewName, options) {
 }
 
 function searchEntries(blogID, query, options) {
-  return new Promise((resolve, reject) => {
-    Entry.search(blogID, query, options, (err, results) => {
-      if (err) reject(err);
-      else resolve(results);
-    });
-  });
+  return Entry.search(blogID, query, options);
 }
 
 function popularTags(blogID, options) {
-  return new Promise((resolve, reject) => {
-    Tags.popular(blogID, options, (err, tags) => {
-      if (err) reject(err);
-      else resolve(tags);
-    });
-  });
+  return Tags.popular(blogID, options);
 }
 
 function checkRedirect(blogID, url) {
-  return new Promise((resolve, reject) => {
-    Redirects.check(blogID, url, (err, redirect) => {
-      if (err) reject(err);
-      else resolve(redirect);
-    });
-  });
+  return Redirects.check(blogID, url);
 }
 
 function getUserById(id) {

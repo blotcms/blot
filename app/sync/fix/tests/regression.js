@@ -332,7 +332,7 @@ describe("sync/fix regression (outcome-based)", function () {
       await blog.write({ path: "/gone.txt", content: "# Gone" });
       await blog.rebuild();
 
-      await promisify(Entry.drop)(blog.id, "/gone.txt");
+      await Entry.drop(blog.id, "/gone.txt");
       expect(await listIds(blog.id, "all")).toContain("/gone.txt");
 
       // What a day later looks like: the deleted entry's key has expired
@@ -357,7 +357,7 @@ describe("sync/fix regression (outcome-based)", function () {
       await blog.write({ path: "/early.txt", content: "# Early" });
       await blog.rebuild();
 
-      await promisify(Entry.drop)(blog.id, "/early.txt");
+      await Entry.drop(blog.id, "/early.txt");
       await client.del(Entry.key.entry(blog.id, "/early.txt"));
 
       const report = await fixAsync(blog);

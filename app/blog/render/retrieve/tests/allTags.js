@@ -105,8 +105,8 @@ describe("all_tags cache", function () {
   }
 
   it("reuses cached tags for identical cacheIDs and path_prefix", function (done) {
-    spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
-      callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
+    spyOn(Tags, "list").and.callFake(async function () {
+      return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
@@ -120,8 +120,8 @@ describe("all_tags cache", function () {
   });
 
   it("refetches when cacheID changes", function (done) {
-    spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
-      callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
+    spyOn(Tags, "list").and.callFake(async function () {
+      return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
     allTags(
@@ -141,8 +141,8 @@ describe("all_tags cache", function () {
   });
 
   it("keys the cache on path_prefix as well as cacheID", function (done) {
-    spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
-      callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
+    spyOn(Tags, "list").and.callFake(async function () {
+      return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
     const blog = { id: "blog-1", cacheID: 100 };
@@ -168,8 +168,8 @@ describe("all_tags cache", function () {
     // filter" but normalizes the string "1" into "/1" - a naive String()
     // cache key would turn both into the same "1" and let one view's tags
     // leak into the other.
-    spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
-      callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
+    spyOn(Tags, "list").and.callFake(async function () {
+      return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
     const blog = { id: "blog-1", cacheID: 100 };
@@ -193,8 +193,8 @@ describe("all_tags cache", function () {
   });
 
   it("returns isolated copies so caller mutations do not taint cache", function (done) {
-    spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
-      callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
+    spyOn(Tags, "list").and.callFake(async function () {
+      return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
@@ -210,8 +210,8 @@ describe("all_tags cache", function () {
   });
 
   it("shares the cache with preview requests", function (done) {
-    spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
-      callback(null, [{ name: "abc", slug: "abc", entries: ["1"] }]);
+    spyOn(Tags, "list").and.callFake(async function () {
+      return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
@@ -226,11 +226,11 @@ describe("all_tags cache", function () {
   });
 
   it("restores all_tags_total_posts from the cache on a hit", function (done) {
-    spyOn(Tags, "list").and.callFake(function (blogID, options, callback) {
-      callback(null, [
+    spyOn(Tags, "list").and.callFake(async function () {
+      return [
         { name: "abc", slug: "abc", entries: ["1", "2"] },
         { name: "def", slug: "def", entries: ["2"] },
-      ]);
+      ];
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });

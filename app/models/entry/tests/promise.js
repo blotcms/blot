@@ -3,8 +3,7 @@ const set = require("../set");
 const drop = require("../drop");
 const setUrl = require("../_setUrl");
 
-// Entry.set and Entry.drop return a promise when they are not given a
-// callback, and still call back when they are (#2559)
+// Entry.set, Entry.drop and setUrl return a promise (#2559)
 describe("entry.set and entry.drop promise form", function () {
   require("./setup")();
 

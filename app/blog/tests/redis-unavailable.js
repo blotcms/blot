@@ -20,8 +20,8 @@ describe("when redis is unavailable", function () {
 
   it("responds 503 when redis fails partway through a request", async function () {
     const Redirects = require("models/redirects");
-    spyOn(Redirects, "check").and.callFake(function (blogID, url, callback) {
-      callback(new ClientOfflineError());
+    spyOn(Redirects, "check").and.callFake(async function () {
+      throw new ClientOfflineError();
     });
 
     const res = await this.get("/no-such-page");

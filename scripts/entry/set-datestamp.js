@@ -1,5 +1,4 @@
 const readline = require("readline");
-const { promisify } = require("util");
 const moment = require("moment");
 
 const get = require("../get/entry");
@@ -111,7 +110,7 @@ async function main() {
   }
 
   try {
-    await promisify(Entry.set)(blog.id, entry.path, {
+    await Entry.set(blog.id, entry.path, {
       dateStamp: newDateStamp,
     });
   } catch (err) {

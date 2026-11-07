@@ -17,7 +17,6 @@ describe("git client: the last applied commit", function () {
   var getApplied = util.promisify(database.getApplied);
   var setApplied = util.promisify(database.setApplied);
   var removeApplied = util.promisify(database.removeApplied);
-  var drop = util.promisify(Entry.drop);
 
   var NOT_A_COMMIT = "0123456789012345678901234567890123456789";
 
@@ -39,7 +38,7 @@ describe("git client: the last applied commit", function () {
     // As if the sync stopped after moving the blog folder to the new commit,
     // and before the entry was saved
     await setApplied(this.blog.id, before);
-    await drop(this.blog.id, "/interrupted.txt");
+    await Entry.drop(this.blog.id, "/interrupted.txt");
     expect(
       (await helpers.entry(this.blog.id, "/interrupted.txt")).deleted
     ).toBe(true);

@@ -15,21 +15,15 @@ module.exports = function () {
     this.search = (query) => search(this.blog.id, query);
 
     this.drop = async (path) => {
-      return new Promise((resolve) => {
-        drop(this.blog.id, path, () => {
-          resolve();
-        });
-      });
+      // Errors are ignored, as they were with the empty callback
+      await drop(this.blog.id, path).catch(() => {});
     };
 
     this.remove = async (path) => {
       await folder.remove(this.blog.id, path);
 
-      return new Promise((resolve) => {
-        drop(this.blog.id, path, () => {
-          resolve();
-        });
-      });
+      // Errors are ignored, as they were with the empty callback
+      await drop(this.blog.id, path).catch(() => {});
     };
 
     this.set = async (path, contents) => {
@@ -38,10 +32,9 @@ module.exports = function () {
       return new Promise((resolve, reject) => {
         build(this.blog, path, (err, entry) => {
           if (err) return reject(err);
-          set(this.blog.id, path, entry, (err) => {
-            if (err) return reject(err);
-            get(this.blog.id, path).then(resolve, reject);
-          });
+          set(this.blog.id, path, entry)
+            .then(() => get(this.blog.id, path))
+            .then(resolve, reject);
         });
       });
     };

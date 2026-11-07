@@ -4,7 +4,6 @@ var _ = require("lodash");
 var ensure = require("helper/ensure");
 var normalize = require("./normalize");
 var model = require("../entry/model");
-var withCallback = require("helper/withCallback");
 
 // a normalized tag is lowercased, and can be part of a url
 
@@ -25,7 +24,7 @@ var withCallback = require("helper/withCallback");
 // lookup original tag against normalized tag
 
 // Resolves to { changed }
-module.exports = withCallback(async function set(blogID, entry) {
+module.exports = async function set(blogID, entry) {
   ensure(blogID, "string").and(entry, model);
 
   // Clone the list of tags
@@ -134,7 +133,7 @@ module.exports = withCallback(async function set(blogID, entry) {
   return {
     changed: renamed || added.length > 0 || removed.length > 0,
   };
-});
+};
 
 // we need a better way to determine if we should ignore the entry (i.e. if has an underscore in its path)
 

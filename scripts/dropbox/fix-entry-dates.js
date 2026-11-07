@@ -1,7 +1,6 @@
 // docker exec -it blot-node-app-1 node scripts/dropbox/fix-entry-dates.js
 
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
-const { promisify } = require("util");
 const Entries = require("models/entries");
 const Entry = require("models/entry");
 
@@ -76,7 +75,7 @@ const processBlog = async (blog) => {
       continue;
     }
 
-    await promisify(Entry.set)(blogID, id, {
+    await Entry.set(blogID, id, {
       dateStamp: deletedEntry.dateStamp,
       created: deletedEntry.created,
       updated: deletedEntry.updated,

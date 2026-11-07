@@ -71,9 +71,6 @@ module.exports = withCallback(async function renames(blogID) {
     blog = await Blog.get({ id: blogID });
   } catch (err) {}
 
-  // Looked up when called, not when the file loads: the models require
-  // each other
-  var setEntry = promisify(Entry.set);
   var isDraftAsync = promisify(isDraft);
 
   for (var rename of Object.values(renames)) {
@@ -133,7 +130,7 @@ module.exports = withCallback(async function renames(blogID) {
 
     // we need to remove the guid of the deleted entry
     // so it is only renamed once
-    await setEntry(blogID, createdEntry.path, updates);
-    await setEntry(blogID, deletedEntry.path, { guid: "" });
+    await Entry.set(blogID, createdEntry.path, updates);
+    await Entry.set(blogID, deletedEntry.path, { guid: "" });
   }
 });

@@ -16,7 +16,7 @@ const normalize = (redirect) => {
   return redirect;
 };
 
-module.exports = function (req, res, next) {
+module.exports = async function (req, res, next) {
   if (!req.body.has_redirects) return next();
 
   var mappings = formJSON(req.body, { redirects: "object" });
@@ -28,5 +28,11 @@ module.exports = function (req, res, next) {
       return { from: normalize(from), to: normalize(to) };
     });
 
-  Redirects.set(req.blog.id, mappings, next);
+  try {
+    await Redirects.set(req.blog.id, mappings);
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 };

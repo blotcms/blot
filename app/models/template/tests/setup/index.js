@@ -28,10 +28,9 @@ module.exports = function setup(options) {
       return new Promise((resolve, reject) => {
         build(this.blog, path, (err, entry) => {
           if (err) return reject(err);
-          Entry.set(this.blog.id, path, entry, (err) => {
-            if (err) return reject(err);
-            Entry.get(this.blog.id, path).then(resolve, reject);
-          });
+          Entry.set(this.blog.id, path, entry)
+            .then(() => Entry.get(this.blog.id, path))
+            .then(resolve, reject);
         });
       });
     };

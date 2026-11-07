@@ -121,7 +121,6 @@ describe("rebuild", function () {
 
   it("keeps a folder post aggregate through a full rebuild", async function (done) {
     const Entry = require("models/entry");
-    const { promisify } = require("util");
     const getEntry = (id) => Entry.get(this.blog.id, id);
 
     await this.blog.write({ path: "/essay+/01 intro.md", content: "# Intro" });
@@ -146,7 +145,7 @@ describe("rebuild", function () {
 
     // And if the aggregate goes missing (e.g. an over-eager ghost sweep), a
     // full rebuild restores it from the "+" folder on disk.
-    await promisify(Entry.drop)(this.blog.id, "/essay");
+    await Entry.drop(this.blog.id, "/essay");
     const dropped = await getEntry("/essay");
     expect(!dropped || dropped.deleted).toBeTruthy();
 

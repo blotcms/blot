@@ -257,10 +257,9 @@ describe("build", function () {
     var Entry = require("models/entry");
     var moment = require("moment");
 
-    var setEntry = (blogID, path, entry) =>
-      new Promise((resolve, reject) =>
-        Entry.set(blogID, path, entry, (err) => (err ? reject(err) : resolve()))
-      );
+    var setEntry = async (blogID, path, entry) => {
+      await Entry.set(blogID, path, entry);
+    };
 
     it("uses the current time for a brand new entry whose date-only metadata matches today", async function () {
       var path = "/date-only-brand-new.txt";
@@ -476,10 +475,9 @@ describe("build", function () {
     var Entry = require("models/entry");
     var moment = require("moment");
 
-    var setEntry = (blogID, path, entry) =>
-      new Promise((resolve, reject) =>
-        Entry.set(blogID, path, entry, (err) => (err ? reject(err) : resolve()))
-      );
+    var setEntry = async (blogID, path, entry) => {
+      await Entry.set(blogID, path, entry);
+    };
 
     // Builds a file already in the blog's folder, leaving its mtime alone
     var buildExisting = buildEntry;
