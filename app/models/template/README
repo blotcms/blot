@@ -178,9 +178,9 @@ setMultipleViews(name, views, callback)
 Writes multiple views in parallel. Used internally by `clone`.
 
 ```js
-getFullView(blogID, templateID, viewName, callback)
+getFullView(blogID, templateID, viewName)
 ```
-Returns `(err, [locals, allPartials, retrieve, mimeType, content, usesBacklinks])` — the complete rendering payload for a view, with all partials resolved and retrieve descriptors merged across the partial tree. `content` is the render source: on a template `blogID` owns, the view's content with its folder links wrapped (see Folder links in views). `usesBacklinks` is whether the view or any of its partials names `backlinks` (see util/referencedIdentifiers.js), so rendering can skip resolving them.
+Async; returns a promise (no callback form). Resolves to `null` when the view doesn't exist, otherwise `[locals, allPartials, retrieve, mimeType, content, usesBacklinks])` — the complete rendering payload for a view, with all partials resolved and retrieve descriptors merged across the partial tree. `content` is the render source: on a template `blogID` owns, the view's content with its folder links wrapped (see Folder links in views). `usesBacklinks` is whether the view or any of its partials names `backlinks` (see util/referencedIdentifiers.js), so rendering can skip resolving them.
 
 ```js
 getPartials(blogID, templateID, partials, contextMap, parentContextPath, wrapOptions)
@@ -237,9 +237,9 @@ removeFromFolder(blogID, templateID, callback)
 Removes a locally-edited template's folder from the blog's file system. No-ops when `metadata.localEditing` is false.
 
 ```js
-removeEnabledFromAllTemplates(blogID, callback)
+removeEnabledFromAllTemplates(blogID)
 ```
-Sets `enabled: false` in `package.json` for every template folder in the blog's directory. Writes updated metadata back to locally-edited templates.
+Async; resolves to the slugs it changed. When some packages couldn't be updated it rejects with an aggregate error (`err.errors`), whose `err.modifiedSlugs` lists the ones that were. Sets `enabled: false` in `package.json` for every template folder in the blog's directory. Writes updated metadata back to locally-edited templates.
 
 ### Utilities
 

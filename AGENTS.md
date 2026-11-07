@@ -5,6 +5,12 @@
 - After editing JavaScript, run `scripts/development/lint.sh fix <files>` on the files you changed, and `scripts/development/lint.sh check` before you push. Fix what ESLint reports. Don't silence a rule with `eslint-disable` unless the code is right and the rule is wrong there, and give the reason in the comment (`-- reason`).
 - The pre-commit hook in `scripts/development/lint/hooks` checks staged files once enabled with `git config core.hooksPath scripts/development/lint/hooks`. `lint.sh claude-hook` is a Claude Code PostToolUse hook that formats and lints each file an edit touches.
 
+# Async code
+
+- Write new code with `async`/`await` and promises, not callbacks. A function of Blot's own returns a promise and throws on error; it never takes a callback, even as an option. Don't add a callback fallback, `util.callbackify`, or `require("async")` (lint bans it).
+- When you change a callback API, convert every caller in the same PR (`app/`, `scripts/`, `proxy/` and specs). Nothing checks for a leftover callback, so a caller still passing one hangs silently.
+- Callbacks that a library or Node requires stay: Express middleware's `next`, stream and event handlers, `child_process`, and SDK hooks.
+
 # Pull request descriptions
 
 When opening a pull request in this repo:

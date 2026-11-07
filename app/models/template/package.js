@@ -63,11 +63,11 @@ module.exports = {
 
     return Package;
   },
-  save: function (id, metadata, callback) {
+  save: async function (id, metadata) {
     let views = {};
     let changes = {};
 
-    if (!metadata) return callback(null, views);
+    if (!metadata) return views;
 
     if (metadata.name) {
       changes.name = metadata.name;
@@ -85,14 +85,16 @@ module.exports = {
       views = metadata.views;
     }
 
-    setMetadata(id, changes).then(
-      function () {
-        callback(null, views);
-      },
-      function (err) {
-        callback(err, views);
-      }
-    );
+    try {
+      await setMetadata(id, changes);
+    } catch (err) {
+      // The views from the package are still wanted by a caller reporting
+      // the failure (readFromFolder)
+      err.views = views;
+      throw err;
+    }
+
+    return views;
   },
 };
 

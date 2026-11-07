@@ -13,40 +13,26 @@ var folder = require("storage/folder");
 var config = require("config");
 var assets = require("storage/assets");
 var resolve = require("path").resolve;
-var callbackify = require("util").callbackify;
-var resolveCaseInsensitive = callbackify(folder.resolveCaseInsensitive);
 var he = require("he");
 var unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
 var decodeFolderPath =
   require("blog/render/replaceFolderLinks/shared").decodeFolderPath;
 
-// Tries each task (a function taking a callback) in turn until one doesn't
-// fail, then calls back with that task's results: its single result, or an
-// array when it passed several. If every task fails it calls back with the
-// last error. Tasks run one after another, never together.
-async function runTasks(tasks) {
+// Tries each task (an async function) in turn until one doesn't fail, then
+// resolves with that task's result. If every task fails it throws the last
+// error. Tasks run one after another, never together.
+async function tryEach(tasks) {
   var error = null;
 
   for (var task of tasks) {
     try {
-      return await new Promise(function (resolve, reject) {
-        task(function (err, ...args) {
-          if (err) return reject(err);
-          resolve(args.length <= 1 ? args[0] : args);
-        });
-      });
+      return await task();
     } catch (err) {
       error = err;
     }
   }
 
   if (error) throw error;
-}
-
-function tryEach(tasks, callback) {
-  runTasks(tasks).then(function (results) {
-    callback(null, results);
-  }, callback);
 }
 
 // Maps https://cdn.blot.im/blog_xyz/_image_cache/abc.jpg to
@@ -106,18 +92,18 @@ function Transformer(blogID, name) {
   // for local paths never pay for this lookup.
   var ownHostnamesPromise;
 
-  function getOwnHostnames() {
-    if (!ownHostnamesPromise) {
-      ownHostnamesPromise = client
-        .hmGet(blogKey.info(blogID), ["domain", "handle"])
-        .then(function (res) {
-          return ownHost.hostnames({ domain: res[0], handle: res[1] });
-        })
-        .catch(function (err) {
-          debug(blogID, "failed to fetch own hostnames", err);
-          return [];
-        });
+  async function fetchOwnHostnames() {
+    try {
+      var res = await client.hmGet(blogKey.info(blogID), ["domain", "handle"]);
+      return ownHost.hostnames({ domain: res[0], handle: res[1] });
+    } catch (err) {
+      debug(blogID, "failed to fetch own hostnames", err);
+      return [];
     }
+  }
+
+  function getOwnHostnames() {
+    if (!ownHostnamesPromise) ownHostnamesPromise = fetchOwnHostnames();
 
     return ownHostnamesPromise;
   }
@@ -129,13 +115,13 @@ function Transformer(blogID, name) {
   // image cache's optimize(), which mints a uuid per call - can therefore
   // leave an orphaned artifact. Accepted trade-off, not a bug; see
   // readme.txt.
-  function lookup(src, transform, callback) {
+  async function lookup(src, transform) {
     if (type(src) !== "string") {
-      return callback(new Error("Transformer: src is not a string"));
+      throw new Error("Transformer: src is not a string");
     }
 
     if (type(transform) !== "function") {
-      return callback(new Error("Transformer: transformer is not a function"));
+      throw new Error("Transformer: transformer is not a function");
     }
 
     src = resolveCDNPath(src);
@@ -159,37 +145,39 @@ function Transformer(blogID, name) {
       // local-path fallback below), and only hit the network if that
       // fails - e.g. the file has since been deleted, or the URL doesn't
       // actually map onto the folder.
-      return getOwnHostnames().then(function (ownHostnames) {
-        var ownPath = ownHost.resolve(url, ownHostnames);
+      var ownHostnames = await getOwnHostnames();
+      var ownPath = ownHost.resolve(url, ownHostnames);
 
-        if (ownPath) {
+      if (ownPath) {
+        debug(
+          src,
+          "matches this blog's own domain, trying local path first:",
+          ownPath
+        );
+
+        try {
+          return await lookup(ownPath, transform);
+        } catch (err) {
           debug(
             src,
-            "matches this blog's own domain, trying local path first:",
-            ownPath
+            "local lookup for own-domain URL failed, falling back to network fetch:",
+            err
           );
-          return lookup(ownPath, transform, function (err, result, hash) {
-            if (!err) return callback(null, result, hash);
-            debug(
-              src,
-              "local lookup for own-domain URL failed, falling back to network fetch:",
-              err
-            );
-            fromURL(url, transform, callback);
-          });
         }
 
-        debug(src, "seemes to be a URL");
-        fromURL(url, transform, callback);
-      });
+        return await fromURL(url, transform);
+      }
+
+      debug(src, "seemes to be a URL");
+      return await fromURL(url, transform);
     }
 
     if (path.length > 300) {
-      return callback(new Error("Transformer: source too long: " + clip(src)));
+      throw new Error("Transformer: source too long: " + clip(src));
     }
 
     if (path.indexOf("data:") === 0) {
-      return callback(new Error("Transformer: source is unsupported protocol"));
+      throw new Error("Transformer: source is unsupported protocol");
     }
 
     // We try and look up the URI-decoded version of a path
@@ -208,8 +196,8 @@ function Transformer(blogID, name) {
     // this blog's own static directory. resolve("/", src) strips any "../"
     // and yields an absolute path, which join() then re-roots under the
     // blog's folder - the same containment trick storage/folder uses.
-    tasks.push(function (next) {
-      fromAssets(src, transform, next);
+    tasks.push(function () {
+      return fromAssets(src, transform);
     });
 
     // Generated assets with non-ASCII names (e.g. the image cache's
@@ -218,8 +206,8 @@ function Transformer(blogID, name) {
     var decodedAssetPath = safeDecodeComponent(src);
 
     if (decodedAssetPath !== src)
-      tasks.push(function (next) {
-        fromAssets(decodedAssetPath, transform, next);
+      tasks.push(function () {
+        return fromAssets(decodedAssetPath, transform);
       });
 
     // If we make it here, the file doesn't match anything in the static
@@ -227,25 +215,25 @@ function Transformer(blogID, name) {
     // those paths are added by Blot and guaranteed correct and lowercase.
 
     // First we check if this path matches a file in the blog folder exactly.
-    tasks.push(function (next) {
+    tasks.push(function () {
       debug("attempting to resolve path exactly");
-      fromFolder(path, transform, next);
+      return fromFolder(path, transform);
     });
 
     // Next we attempt to resolve the path case-insensitively
-    tasks.push(function (next) {
+    tasks.push(function () {
       debug("attempting to resolve path case-insensitively");
-      fromFolderIgnoringCase(path, transform, next);
+      return fromFolderIgnoringCase(path, transform);
     });
 
     // Finally we attempt to resolve the URI-decoded path case-insensitively
     if (decodedURI)
-      tasks.push(function (next) {
+      tasks.push(function () {
         debug(
           "attempting to resolve URI-decoded path case-insensitively",
           decodedURI
         );
-        fromFolderIgnoringCase(decodedURI, transform, next);
+        return fromFolderIgnoringCase(decodedURI, transform);
       });
 
     // If the path contains a backward slash, we try and resolve it as if
@@ -253,242 +241,201 @@ function Transformer(blogID, name) {
     // Windows convention of backward slashes in paths.
     if (path.indexOf("\\") !== -1) {
       // first with the original case
-      tasks.push(function (next) {
+      tasks.push(function () {
         var backslashPath = path.split("\\").join("/");
         debug("attempting to resolve backslash path", backslashPath);
-        fromFolder(backslashPath, transform, next);
+        return fromFolder(backslashPath, transform);
       });
 
       // then case-insensitively
-      tasks.push(function (next) {
+      tasks.push(function () {
         var backslashPath = path.split("\\").join("/");
         debug("attempting backslash path case-insensitively", backslashPath);
-        fromFolderIgnoringCase(backslashPath, transform, next);
+        return fromFolderIgnoringCase(backslashPath, transform);
       });
 
       // then URI-decoded and case-insensitively
       if (decodedURI)
-        tasks.push(function (next) {
+        tasks.push(function () {
           var backslashPath = decodedURI.split("\\").join("/");
           debug(
             "attempting backslash URI-decoded path case-insensitively",
             backslashPath
           );
-          fromFolderIgnoringCase(backslashPath, transform, next);
+          return fromFolderIgnoringCase(backslashPath, transform);
         });
     }
 
     // Will work down the list of paths. If one of the paths
     // works then it'll stop and return the result!
-    tryEach(tasks, function (err, results) {
-      if (err) return callback(err);
-      debug(results);
-      callback(null, results[0], results[1]);
-    });
+    var found = await tryEach(tasks);
+    debug(found);
+    return found.result;
   }
 
+  // The from* functions resolve with { result, hash }: the transform's result
+  // and the hash of the file's content, so that fromURL doesn't have to
+  // compute it again.
+
   // A file in the blog's generated assets
-  function fromAssets(path, transform, callback) {
-    callbackify(assets.ensureLocal)(
-      blogID,
-      resolve("/", path),
-      function (err, fullLocalPath) {
-        if (err) return callback(err);
-        fromPath(fullLocalPath, transform, callback);
-      }
-    );
+  async function fromAssets(path, transform) {
+    var fullLocalPath = await assets.ensureLocal(blogID, resolve("/", path));
+    return fromPath(fullLocalPath, transform);
   }
 
   // A file in the blog's folder, at exactly this path
-  function fromFolder(path, transform, callback) {
+  function fromFolder(path, transform) {
     // The transform (sharp, ffmpeg, exiftool) may run for longer than the
     // cache keeps a path, so the file is held until it is done
-    folder
-      .withLocal(blogID, path, function (fullLocalPath) {
-        return new Promise(function (resolve, reject) {
-          fromPath(fullLocalPath, transform, function (err, result, hash) {
-            if (err) return reject(err);
-            resolve([result, hash]);
-          });
-        });
-      })
-      .then(
-        function (found) {
-          callback(null, found[0], found[1]);
-        },
-        function (err) {
-          callback(err);
-        }
-      );
-  }
-
-  // The same, matching the path without regard to case
-  function fromFolderIgnoringCase(path, transform, callback) {
-    resolveCaseInsensitive(blogID, path, function (err, resolvedPath) {
-      if (err) return callback(err);
-      fromFolder(resolvedPath, transform, callback);
+    return folder.withLocal(blogID, path, function (fullLocalPath) {
+      return fromPath(fullLocalPath, transform);
     });
   }
 
-  // callback must be passed an error or null and result
-  function fromURL(url, transform, callback) {
+  // The same, matching the path without regard to case
+  async function fromFolderIgnoringCase(path, transform) {
+    var resolvedPath = await folder.resolveCaseInsensitive(blogID, path);
+    return fromFolder(resolvedPath, transform);
+  }
+
+  async function fromURL(url, transform) {
     var tasks = [];
 
     // Look in the database to see if we have downloaded
     // this URL in the past. If so, retrieve the response
     // headers, hash of the file's content and the result
     // application of the 'transform' called 'result'
-    getURL(url, function (err, headers, hash, result) {
-      if (err) return callback(err);
+    var stored = await getURL(url);
+    var headers = stored.headers;
+    var result = stored.result;
 
-      // Right now ampersands in URL queries are escaped
-      // which isn't ideal and breaks the thumbnail generator.
-      // So we try the URL with unescaped ampersands first.
-      if (url.indexOf("&amp;") > -1) {
-        tasks.push(function (next) {
-          download(url.split("&amp;").join("&"), headers, next);
-        });
-      }
-
-      tasks.push(function (next) {
-        download(url, headers, next);
+    // Right now ampersands in URL queries are escaped
+    // which isn't ideal and breaks the thumbnail generator.
+    // So we try the URL with unescaped ampersands first.
+    if (url.indexOf("&amp;") > -1) {
+      tasks.push(function () {
+        return download(url.split("&amp;").join("&"), headers);
       });
+    }
 
-      tryEach(tasks, function (err, results) {
-        // Now we try and download the URL, passing in previously
-        // stored headers if any. This module interprets 304
-        // responses nicely.
-        if (err) {
-          if (result) return callback(null, result);
-          return callback(err);
-        }
-
-        if (!Array.isArray(results)) results = [];
-
-        var path = results[0];
-        var newHeaders = results[1];
-
-        if (newHeaders) headers = newHeaders;
-
-        // We didn't redownload the file since it's
-        if (!path && result) return callback(null, result);
-
-        // Something went wrong, if there is no path, no error
-        // and no result. So leave before breaking shit.
-        if (!path && !result) return callback(missing(url));
-
-        fromPath(path, transform, function (err, result, hash) {
-          // The file was downloaded to the temp
-          // directory so we remove it now...
-          // do this before handling any errors...
-          fs.remove(path);
-
-          if (err) return callback(err);
-
-          setURL(url, headers, hash, result, function (setErr) {
-            // The transform already succeeded. A failed cache write must
-            // not throw from this async callback (crash / hung build) or
-            // discard the result - worst case we transform again next time.
-            if (setErr) debug("failed to cache result for url", url, setErr);
-            callback(null, result);
-          });
-        });
-      });
+    tasks.push(function () {
+      return download(url, headers);
     });
+
+    var downloaded;
+
+    // Now we try and download the URL, passing in previously
+    // stored headers if any. This module interprets 304
+    // responses nicely.
+    try {
+      downloaded = await tryEach(tasks);
+    } catch (err) {
+      if (result) return result;
+      throw err;
+    }
+
+    var path = downloaded.path;
+
+    if (downloaded.headers) headers = downloaded.headers;
+
+    // We didn't redownload the file since it's
+    if (!path && result) return result;
+
+    // Something went wrong, if there is no path, no error
+    // and no result. So leave before breaking shit.
+    if (!path && !result) throw missing(url);
+
+    var found;
+
+    try {
+      found = await fromPath(path, transform);
+    } finally {
+      // The file was downloaded to the temp
+      // directory so we remove it now...
+      // do this before handling any errors...
+      fs.remove(path);
+    }
+
+    try {
+      await setURL(url, headers, found.hash, found.result);
+    } catch (setErr) {
+      // The transform already succeeded. A failed cache write must
+      // not discard the result - worst case we transform again next time.
+      debug("failed to cache result for url", url, setErr);
+    }
+
+    return found.result;
   }
 
-  function fromPath(path, transform, callback) {
-    ensure(path, "string").and(transform, "function").and(callback, "function");
+  async function fromPath(path, transform) {
+    ensure(path, "string").and(transform, "function");
 
     debug(path, "hashing file");
 
-    HashFile(path).then(
-      function (hash) {
-        debug(path, "getting existing result from hash");
-        get(hash, function (err, result) {
-          // Leave early, please pass hash so that
-          // from URL doesn't have to compute it again
-          if (err || result) return callback(err, result, hash);
+    var hash = await HashFile(path);
 
-          debug(path, "transforming new file");
-          Promise.resolve(transform(path)).then(
-            function (result) {
-              // Pass hash so that
-              // from URL doesn't have to compute it again
-              debug(path, "saving result of new transform");
-              set(hash, result, function (setErr) {
-                // Never throw from this async callback. If the cache write
-                // fails, still return the freshly computed result rather than
-                // hanging the build or crashing the process.
-                if (setErr)
-                  debug("failed to cache result for hash", hash, setErr);
-                callback(null, result, hash);
-              });
-            },
-            function (err) {
-              callback(err);
-            }
-          );
-        });
-      },
-      function (err) {
-        callback(err);
-      }
-    );
+    debug(path, "getting existing result from hash");
+
+    var existing = await get(hash);
+
+    // Leave early, please pass hash so that
+    // from URL doesn't have to compute it again
+    if (existing) return { result: existing, hash: hash };
+
+    debug(path, "transforming new file");
+
+    var result = await transform(path);
+
+    // Pass hash so that
+    // from URL doesn't have to compute it again
+    debug(path, "saving result of new transform");
+
+    try {
+      await set(hash, result);
+    } catch (setErr) {
+      // If the cache write fails, still return the freshly computed
+      // result rather than failing the build.
+      debug("failed to cache result for hash", hash, setErr);
+    }
+
+    return { result: result, hash: hash };
   }
 
-  function getURL(url, callback) {
+  async function getURL(url) {
     var info = [keys.url.headers(url), keys.url.content(url)];
+    var res = await client.mGet(info);
 
-    (async function () {
-      try {
-        const res = await client.mGet(info);
+    var headers = null;
+    var hash = null;
 
-        var headers = null;
-        var hash = null;
+    try {
+      headers = JSON.parse(res[0]);
+      hash = res[1];
+    } catch (e) {}
 
-        try {
-          headers = JSON.parse(res[0]);
-          hash = res[1];
-        } catch (e) {}
+    if (hash === null) return { headers: headers, hash: hash, result: null };
 
-        if (hash === null) return callback(null, headers, hash, null);
+    var result = await get(hash);
 
-        get(hash, function (err, result) {
-          callback(err, headers, hash, result);
-        });
-      } catch (err) {
-        callback(err);
-      }
-    })();
+    return { headers: headers, hash: hash, result: result };
   }
 
-  function get(hash, callback) {
-    (async function () {
-      try {
-        const stringifiedResult = await client.get(keys.content(hash));
+  async function get(hash) {
+    var stringifiedResult = await client.get(keys.content(hash));
+    var res = null;
 
-        var res = null;
+    try {
+      res = JSON.parse(stringifiedResult);
+    } catch (e) {}
 
-        try {
-          res = JSON.parse(stringifiedResult);
-        } catch (e) {}
-
-        return callback(null, res);
-      } catch (err) {
-        callback(err);
-      }
-    })();
+    return res;
   }
 
-  function setURL(url, headers, hash, result, callback) {
-    callback = callback || nothing;
-
+  async function setURL(url, headers, hash, result) {
     ensure(url, "string")
       .and(headers, "object")
       .and(hash, "string")
-      .and(result, "object")
-      .and(callback, "function");
+      .and(result, "object");
 
     var urlContentKey = keys.url.content(url);
     var urlHeadersKey = keys.url.headers(url);
@@ -497,42 +444,26 @@ function Transformer(blogID, name) {
     var stringifiedHeaders = JSON.stringify(headers);
     var stringifiedResult = JSON.stringify(result);
 
-    (async function () {
-      try {
-        const tx = client.multi();
-        tx.sAdd(keys.everything, [contentKey, urlContentKey, urlHeadersKey]);
-        tx.mSet({
-          [urlContentKey]: hash,
-          [urlHeadersKey]: stringifiedHeaders,
-          [contentKey]: stringifiedResult,
-        });
-        await tx.exec();
-        callback();
-      } catch (err) {
-        callback(err);
-      }
-    })();
+    const tx = client.multi();
+    tx.sAdd(keys.everything, [contentKey, urlContentKey, urlHeadersKey]);
+    tx.mSet({
+      [urlContentKey]: hash,
+      [urlHeadersKey]: stringifiedHeaders,
+      [contentKey]: stringifiedResult,
+    });
+    await tx.exec();
   }
 
-  function set(hash, result, callback) {
-    callback = callback || nothing;
-
-    ensure(hash, "string").and(result, "object").and(callback, "function");
+  async function set(hash, result) {
+    ensure(hash, "string").and(result, "object");
 
     var stringifiedResult = JSON.stringify(result);
     var contentKey = keys.content(hash);
 
-    (async function () {
-      try {
-        const tx = client.multi();
-        tx.sAdd(keys.everything, contentKey);
-        tx.set(contentKey, stringifiedResult);
-        await tx.exec();
-        callback();
-      } catch (err) {
-        callback(err);
-      }
-    })();
+    const tx = client.multi();
+    tx.sAdd(keys.everything, contentKey);
+    tx.set(contentKey, stringifiedResult);
+    await tx.exec();
   }
 
   async function flush() {
@@ -546,13 +477,6 @@ function Transformer(blogID, name) {
     lookup: lookup,
     flush: flush,
   };
-}
-
-function nothing(err) {
-  // Default callback for fire-and-forget cache writes. Swallow the error
-  // (log under debug) - throwing here would surface as an unhandled
-  // rejection from the async write and take down the process.
-  if (err) debug("transformer: ignored cache write error", err);
 }
 
 function missing(src) {

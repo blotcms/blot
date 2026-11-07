@@ -52,23 +52,24 @@ async function thumbnail(blog, path, metadata, html) {
 
 // Looks up the thumbnails for one candidate. Resolves to undefined if there
 // aren't any, whether the candidate was rejected or failed.
-function lookup(store, candidate, create) {
-  return new Promise(function (resolve) {
-    store.lookup(candidate, create, function (err, thumbnails) {
-      if (thumbnails && thumbnails.rejected !== undefined) {
-        debug(candidate, "rejected:", thumbnails.rejected);
-        thumbnails = undefined;
-      }
+async function lookup(store, candidate, create) {
+  var thumbnails;
 
-      if (err) {
-        debug(err);
-      }
+  try {
+    thumbnails = await store.lookup(candidate, create);
+  } catch (err) {
+    debug(candidate, err);
+    return undefined;
+  }
 
-      debug(candidate, err, thumbnails);
+  if (thumbnails && thumbnails.rejected !== undefined) {
+    debug(candidate, "rejected:", thumbnails.rejected);
+    return undefined;
+  }
 
-      resolve(thumbnails);
-    });
-  });
+  debug(candidate, null, thumbnails);
+
+  return thumbnails;
 }
 
 module.exports = thumbnail;

@@ -79,36 +79,13 @@ async function renderView(templateID, viewName) {
       return null;
     }
 
-    await new Promise((resolve) => {
-      res.renderView(
-        viewName,
-        (err) => {
-          // next callback - called on errors
-          if (err) {
-            if (err.code === "NO_VIEW") {
-              // Missing view - skip in manifest (not an error)
-              renderError = null;
-            } else {
-              renderError = err;
-              console.error(`Error rendering view ${viewName} for CDN:`, err);
-            }
-          }
-          resolve();
-        },
-        (err, output) => {
-          // callback pattern - captures output directly
-          if (err) {
-            renderError = err;
-            console.error(`Error rendering view ${viewName} for CDN:`, err);
-          } else {
-            renderedOutput = output;
-          }
-          resolve();
-        }
-      );
-    });
+    try {
+      renderedOutput = await res.renderViewToString(viewName);
+    } catch (err) {
+      // A missing view is skipped in the manifest, not an error
+      if (err.code !== "NO_VIEW")
+        console.error(`Error rendering view ${viewName} for CDN:`, err);
 
-    if (renderError) {
       return null;
     }
 

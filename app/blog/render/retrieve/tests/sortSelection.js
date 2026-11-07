@@ -15,18 +15,15 @@ describe("post sorting across retrieve helpers", function () {
   const ids = (entries) => entries.map((entry) => entry.id);
 
   function run(helper, locals) {
-    return new Promise((resolve, reject) => {
-      helper(
-        {
-          blog: { id: "b1", cacheID: 1 },
-          query: { q: "x" },
-          params: {},
-          template: { locals },
-        },
-        { locals: {} },
-        (err, value) => (err ? reject(err) : resolve(value))
-      );
-    });
+    return helper(
+      {
+        blog: { id: "b1", cacheID: 1 },
+        query: { q: "x" },
+        params: {},
+        template: { locals },
+      },
+      { locals: {} }
+    );
   }
 
   describe("recent_entries (feeds)", function () {
@@ -86,16 +83,12 @@ describe("post sorting across retrieve helpers", function () {
       expect(received.options).toEqual({ sortBy: undefined, order: undefined });
     });
 
-    it("returns [] when there is no query", function (done) {
-      searchResults(
+    it("returns [] when there is no query", async function () {
+      const value = await searchResults(
         { blog: { id: "b1" }, query: {}, template: { locals: {} } },
-        { locals: {} },
-        (err, value) => {
-          expect(err).toBe(null);
-          expect(value).toEqual([]);
-          done();
-        }
+        { locals: {} }
       );
+      expect(value).toEqual([]);
     });
   });
 });

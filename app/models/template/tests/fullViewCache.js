@@ -1,9 +1,8 @@
-const { promisify } = require("util");
 const fullViewCache = require("../fullViewCache");
 
 // The old options-object call, kept so the cases below read as before
 function getCachedFullView({ blog, template, viewName }) {
-  return promisify(fullViewCache)(blog.id, template.id, viewName, {
+  return fullViewCache(blog.id, template.id, viewName, {
     blogCacheID: blog.cacheID,
     templateCacheID: template.cacheID === undefined ? null : template.cacheID,
   });
@@ -33,11 +32,9 @@ describe("Template.getFullView cache", function () {
       "{{title}}",
     ];
 
-    spyOn(fullViewCache, "_build").and.callFake(
-      function (blogID, templateID, viewName, callback) {
-        callback(null, response);
-      }
-    );
+    spyOn(fullViewCache, "_build").and.callFake(async function () {
+      return response;
+    });
 
     const options = {
       blog: { id: "blog-1", cacheID: 111 },
@@ -57,17 +54,15 @@ describe("Template.getFullView cache", function () {
   });
 
   it("returns isolated copies so caller mutations do not taint cache", async function () {
-    spyOn(fullViewCache, "_build").and.callFake(
-      function (blogID, templateID, viewName, callback) {
-        callback(null, [
-          { title: "Original" },
-          { head: "" },
-          [{ id: "asset-1" }],
-          "text/html",
-          "{{title}}",
-        ]);
-      }
-    );
+    spyOn(fullViewCache, "_build").and.callFake(async function () {
+      return [
+        { title: "Original" },
+        { head: "" },
+        [{ id: "asset-1" }],
+        "text/html",
+        "{{title}}",
+      ];
+    });
 
     const options = {
       blog: { id: "blog-1", cacheID: 111 },
@@ -87,14 +82,14 @@ describe("Template.getFullView cache", function () {
 
   it("misses the cache when blog/template/view inputs differ", async function () {
     spyOn(fullViewCache, "_build").and.callFake(
-      function (blogID, templateID, viewName, callback) {
-        callback(null, [
+      async function (blogID, templateID, viewName) {
+        return [
           { blogID: blogID, templateID: templateID, viewName: viewName },
           {},
           [],
           "text/html",
           "",
-        ]);
+        ];
       }
     );
 
@@ -113,11 +108,9 @@ describe("Template.getFullView cache", function () {
   });
 
   it("misses when the template's cacheID changes", async function () {
-    spyOn(fullViewCache, "_build").and.callFake(
-      function (blogID, templateID, viewName, callback) {
-        callback(null, [{}, {}, [], "text/html", "{{title}}"]);
-      }
-    );
+    spyOn(fullViewCache, "_build").and.callFake(async function () {
+      return [{}, {}, [], "text/html", "{{title}}"];
+    });
 
     const blog = { id: "blog-1", cacheID: 111 };
 
@@ -170,11 +163,9 @@ describe("Template.getFullView cache", function () {
   });
 
   it("recomputes when blog.cacheID changes", async function () {
-    spyOn(fullViewCache, "_build").and.callFake(
-      function (blogID, templateID, viewName, callback) {
-        callback(null, [{ cacheID: Date.now() }, {}, [], "text/html", ""]);
-      }
-    );
+    spyOn(fullViewCache, "_build").and.callFake(async function () {
+      return [{ cacheID: Date.now() }, {}, [], "text/html", ""];
+    });
 
     await getCachedFullView({
       blog: { id: "blog-1", cacheID: 111 },
@@ -192,15 +183,15 @@ describe("Template.getFullView cache", function () {
 
   it("reads the cacheIDs from Redis when the caller doesn't pass them", async function () {
     const client = require("models/client");
-    spyOn(fullViewCache, "_build").and.callFake(function (b, t, v, callback) {
-      callback(null, [{}, {}, [], "text/html", ""]);
+    spyOn(fullViewCache, "_build").and.callFake(async function () {
+      return [{}, {}, [], "text/html", ""];
     });
     spyOn(client, "hGet").and.callFake(async function (key) {
       return key === "blog:blog-1:info" ? "111" : "a";
     });
 
-    await promisify(fullViewCache)("blog-1", "blog-1:t", "entry.html");
-    await promisify(fullViewCache)("blog-1", "blog-1:t", "entry.html");
+    await fullViewCache("blog-1", "blog-1:t", "entry.html");
+    await fullViewCache("blog-1", "blog-1:t", "entry.html");
 
     expect(fullViewCache._build).toHaveBeenCalledTimes(1);
     expect(client.hGet).toHaveBeenCalledWith("blog:blog-1:info", "cacheID");

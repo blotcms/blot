@@ -195,20 +195,27 @@ TemplateEditor.route("/:templateSlug/install")
       log("Installed template", templateID);
       log("Removing enabled from local templates");
 
-      Template.removeEnabledFromAllTemplates(req.blog.id, function (removeErr) {
-        log("Removed enabled from local templates");
-
-        if (removeErr) {
+      Template.removeEnabledFromAllTemplates(req.blog.id).then(
+        function () {
+          log("Removed enabled from local templates");
+          redirect();
+        },
+        function (removeErr) {
+          log("Removed enabled from local templates");
           console.warn(
             "Failed to remove enabled from local templates after install",
             req.blog.id,
             removeErr
           );
+          redirect();
         }
+      );
+
+      function redirect() {
         res.redirect(
           "/sites/" + req.blog.handle + "/template/" + req.params.templateSlug
         );
-      });
+      }
     }, next);
   });
 
