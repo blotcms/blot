@@ -240,14 +240,14 @@ class HotDocPoller {
   // across second boundaries. If no slot is won after DOCS_GET_MAX_SLOT_ATTEMPTS
   // we proceed anyway: Redis being busy or the account being saturated for
   // ten seconds shouldn't wedge the poll, and a real 429 is handled by the
-  // caller's backoff.
+  // caller's backoff. Resolves to the slot won (undefined if it gave up).
   async acquireDocsSlot(serviceAccountId) {
     for (let attempt = 0; attempt < DOCS_GET_MAX_SLOT_ATTEMPTS; attempt++) {
       const now = Date.now();
       const slot = Math.floor(now / DOCS_GET_SLOT_MS);
       const key = RATE_PREFIX + serviceAccountId + ":" + slot;
       const won = await client.set(key, "1", { NX: true, PX: 1000 });
-      if (won !== null) return;
+      if (won !== null) return slot;
       const untilNextSlot = (slot + 1) * DOCS_GET_SLOT_MS - Date.now();
       await sleep(Math.max(0, untilNextSlot) + 1 + jitterMs(20));
     }

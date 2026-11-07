@@ -138,6 +138,9 @@ function createCache(options) {
   };
   var timer = null;
   var checking = null;
+  // While a scan runs: the names evicted since it started, which its listing
+  // may still show
+  var evictedDuringScan = null;
   // Heartbeats of the entries use() is holding
   var heartbeats = new Set();
 
@@ -274,6 +277,7 @@ function createCache(options) {
 
       await fs.remove(dirname(entry.file));
       counters.evictions++;
+      if (evictedDuringScan) evictedDuringScan.add(name);
     } catch (err) {
       // Gone already: another process evicted it
       if (err.code !== "ENOENT")
@@ -483,6 +487,8 @@ function createCache(options) {
     var started = Date.now();
     var found = [];
 
+    evictedDuringScan = new Set();
+
     await fs.ensureDir(blogsDir);
 
     for (var temporary of await readdir(tmpDir)) {
@@ -515,6 +521,15 @@ function createCache(options) {
     }
 
     var previous = entries;
+    var evicted = evictedDuringScan;
+
+    evictedDuringScan = null;
+
+    // The listing may predate an eviction. Counting the entry again would
+    // make the next eviction pass remove a live one to make up for it.
+    found = found.filter(function (item) {
+      return !evicted.has(item.name) || previous.has(item.name);
+    });
 
     found.forEach(function (item) {
       var known = previous.get(item.name);
