@@ -381,9 +381,10 @@ reserved; `disk_backups` is left out when
 The daily email (`app/scheduler/daily/redis-server.js`) has two lines from this
 and Redis itself:
 `Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago, offsite 9h ago`
-`Server: disk 21% (stable, 19 GB free), RAM 75% available (12 GB)`
-Memory is `used_memory` against `maxmemory`; disk is the root disk from the
-sample, and RAM the host's available memory. Each is `percent (trend, free space)`: the trend is when it would reach
+`Server: root disk 21% (stable, 19 GB free), memory 25% (12 GB free)`
+Redis's memory is `used_memory` against `maxmemory`; the root disk is from the
+sample, and the server's memory is the host's memory in use (all but
+`MemAvailable`). Redis memory and the disk are `percent (trend, free space)`: the trend is when it would reach
 its limit (80% of `maxmemory`, 80% of the disk) at the rate it grew over the
 last week, or "stable" if it is flat or over a year away, and left out until
 there is an earlier reading. The daily job keeps the last 8 daily readings in

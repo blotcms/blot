@@ -20,8 +20,8 @@ function buildRows(siteClients) {
       client,
       sites,
       percentage:
-        (siteClients.length ? (sites / siteClients.length) * 100 : 0).toFixed(
-          1
+        Math.round(
+          siteClients.length ? (sites / siteClients.length) * 100 : 0
         ) + "%",
     };
   });
@@ -67,10 +67,14 @@ async function main() {
     }
   }
 
+  // Clients without config here (or a stale name) keep the stored name
+  const clients = require("clients");
   const rows = buildRows(siteClients);
   const syncSummary = rows
     .map(function (row) {
-      return `${row.client}: ${row.sites} sites (${row.percentage})`;
+      const client = clients[row.client];
+      const name = (client && client.display_name) || row.client;
+      return `${row.percentage} ${name} (${row.sites} sites)`;
     })
     .join(", ");
 

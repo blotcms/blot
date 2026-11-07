@@ -1,7 +1,7 @@
 // The storage bucket's line of the daily email, one line in the style of the
 // Redis line (a comma-joined set of parts):
 //
-//   Storage: 2 TB in 1,234,567 objects (+12 GB this week), offsite copied 9h ago
+//   Storage: 2 TB (+12 GB this week, 1,234,567 objects), offsite 9h ago
 //
 // config/storage-bucket/bin/offsite-sync.sh records each successful daily copy
 // of the whole bucket to B2 in STORAGE_OFFSITE_KEY, with the objects and bytes
@@ -55,8 +55,8 @@ function offsitePart(copy, now) {
   const age = now - copy.time;
 
   return age > OVERDUE_MS
-    ? `**last offsite copy ${compact(age)} ago, overdue**`
-    : `offsite copied ${compact(age)} ago`;
+    ? `**offsite ${compact(age)} ago, overdue**`
+    : `offsite ${compact(age)} ago`;
 }
 
 // The line, or null where no copy was ever recorded (`value` is the key's raw
@@ -68,9 +68,8 @@ function line(value, { history = [], now = Date.now() } = {}) {
   if (!copy) return "Storage: **offsite copy record unreadable**";
 
   const change = growth(copy, history);
-  const bucket =
-    `${size(copy.bytes)} in ${copy.objects.toLocaleString("en-US")} objects` +
-    (change ? ` (${change})` : "");
+  const objects = `${copy.objects.toLocaleString("en-US")} objects`;
+  const bucket = `${size(copy.bytes)} (${[change, objects].filter(Boolean).join(", ")})`;
 
   return "Storage: " + [bucket, offsitePart(copy, now)].join(", ");
 }
