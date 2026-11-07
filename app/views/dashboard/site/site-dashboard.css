@@ -1,0 +1,466 @@
+  .site-dashboard {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    row-gap: 0;
+  }
+
+  .site-dashboard-page > .content {
+    background: var(--template-main-background-color);
+  }
+
+  .site-dashboard-page > .header {
+    display: none;
+  }
+
+  .site-dashboard > * {
+    min-width: 0;
+    margin-left: 0;
+    margin-right: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .site-dashboard-title {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--text-color);
+    font-size: var(--text-xl);
+    font-weight: var(--weight-semibold);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .directory-list {
+    table-layout: fixed;
+    font-size: var(--text-md);
+  }
+
+  .directory-list th,
+  .directory-list td {
+    padding-top: var(--space-1);
+    padding-bottom: var(--space-1);
+  }
+
+  .directory-list tbody tr {
+    height: 34px;
+  }
+
+  .directory-list tbody tr:hover > td {
+    background-color: transparent;
+  }
+
+  .directory-list tbody tr.directory-row:hover > td {
+    background-color: var(--hover-background-color);
+  }
+
+  .directory-list tbody tr.directory-row:active > td {
+    background-color: var(--active-background-color);
+  }
+
+  .directory-list td:first-child .directory-row__link {
+    color: var(--text-color);
+    font-weight: var(--weight-regular);
+  }
+
+  .directory-list td[data-sort] {
+    color: var(--light-text-color);
+    font-size: var(--text-xs);
+  }
+
+  .dashboard-main {
+    display: contents;
+    min-width: 0;
+  }
+
+  /* Sized by width, not flex-basis: it sits in both row and column flex
+     containers, and in a column a basis would set its height */
+  .site-dashboard-search {
+    flex: 0 1 auto;
+    box-sizing: border-box;
+    width: 260px;
+    max-width: 100%;
+    min-width: 140px;
+    margin-left: auto;
+  }
+
+  /* Like the macOS Finder's search field, on white: a lightly bordered
+     field with a magnifier, and the system's soft blue ring when focused */
+  .site-dashboard-search input {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 28px;
+    padding: 0 var(--space-2) 0 28px;
+    border: 1px solid rgba(0, 0, 0, 0.14);
+    border-radius: 7px;
+    background: var(--background-color)
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6.75' cy='6.75' r='4.75' fill='none' stroke='%236e6e73' stroke-width='1.5'/%3E%3Cpath d='m10.25 10.25 3.5 3.5' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")
+      no-repeat 9px center / 14px 14px;
+    color: var(--text-color);
+    font: inherit;
+    font-size: var(--text-md);
+    caret-color: var(--accent-color);
+    -webkit-appearance: none;
+    appearance: none;
+    transition: box-shadow 150ms ease;
+  }
+
+  .site-dashboard-search input::placeholder {
+    color: #a1a1a6;
+    opacity: 1;
+  }
+
+  .site-dashboard-search input:focus {
+    outline: none;
+    border-color: transparent;
+    box-shadow: 0 0 0 3px rgba(0, 103, 244, 0.45);
+  }
+
+  /* Search results are folder rows (folder/directory.html's table), in a
+     box only as tall as the results */
+  .site-dashboard-search-results .folder-box.directory {
+    min-height: 0;
+  }
+
+  .site-dashboard-post-filter {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    min-height: 30px;
+    padding: 0 var(--space-3);
+    border: 0;
+    border-radius: var(--radius-pill);
+    background: var(--surface-muted-color);
+    color: var(--text-color);
+    font: inherit;
+    font-size: var(--text-xs);
+    cursor: pointer;
+    text-decoration: none;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .site-dashboard-post-filter:hover {
+    background: var(--surface-strong-color);
+  }
+
+  .site-dashboard-post-filter:active {
+    background: var(--border-strong-color);
+  }
+
+  .site-dashboard-post-filter.is-active,
+  .site-dashboard-post-filter.is-active:hover {
+    background: var(--text-color);
+    color: var(--background-color);
+  }
+
+  .site-dashboard-post-filter:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+  }
+
+  .site-dashboard-view-panel[hidden] {
+    display: none;
+  }
+
+  .site-dashboard-folder-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4);
+    align-items: start;
+  }
+
+  .site-dashboard-folder-view {
+    display: contents;
+  }
+
+  #site-dashboard-folder,
+  #site-dashboard-posts,
+  #site-dashboard-recent {
+    min-width: 0;
+  }
+
+  /* Cards (activity, files, posts). Rows in every card share one grid: 34px
+     tall, 16px of padding inside a card that has 8px, so text lines up with
+     the file table's. */
+  .site-dashboard-recent-list,
+  .folder-box.directory {
+    box-sizing: border-box;
+    padding: var(--space-2);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    background: var(--background-color);
+  }
+
+  .site-dashboard-recent-group ul {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  .site-dashboard-recent-group li {
+    position: relative;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+  }
+
+  .export-option + .export-option {
+    margin-top: var(--space-6);
+  }
+
+  .export-option__description {
+    max-width: 52ch;
+    margin: var(--space-2) 0 0;
+    color: var(--light-text-color);
+    font-size: var(--text-sm);
+  }
+
+  .site-dashboard-recent-time {
+    margin: 0;
+    padding: var(--space-2) var(--space-4) var(--space-1);
+    color: var(--light-text-color);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1.4;
+  }
+
+  .site-dashboard-recent-group + .site-dashboard-recent-group {
+    margin-top: var(--space-2);
+  }
+
+  .site-dashboard-recent-group li[hidden] {
+    display: none;
+  }
+
+  .site-dashboard-recent-file-details {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    column-gap: var(--space-4);
+    box-sizing: border-box;
+    min-width: 0;
+    min-height: 34px;
+    padding: var(--space-1) var(--space-4);
+    border-radius: var(--radius-lg);
+    color: var(--text-color);
+    font-size: var(--text-md);
+    line-height: var(--leading-normal);
+    text-decoration: none;
+    transition: background-color 150ms ease;
+  }
+
+  .site-dashboard-recent-file-details {
+    position: relative;
+  }
+
+  .site-dashboard-recent-file-details:hover {
+    background-color: var(--hover-background-color);
+  }
+
+  .site-dashboard-recent-file-details:active {
+    background-color: var(--active-background-color);
+  }
+
+  .site-dashboard-recent-file-name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    width: 100%;
+    min-width: 0;
+    color: var(--text-color);
+    font-weight: var(--weight-regular);
+    text-decoration: none;
+  }
+
+  /* The whole row is the link */
+  .site-dashboard-recent-file-name::after {
+    position: absolute;
+    inset: 0;
+    border-radius: var(--radius-lg);
+    content: "";
+  }
+
+  .site-dashboard-recent-file-name:focus-visible {
+    outline: none;
+  }
+
+  .site-dashboard-recent-file-name:focus-visible::after {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+  }
+
+  .site-dashboard-recent-file-icon {
+    display: block;
+    flex: 0 0 auto;
+    width: 16px;
+    height: 16px;
+    background-color: var(--light-text-color);
+  }
+
+  .site-dashboard-recent-file-label {
+    display: block;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .site-dashboard-recent-file-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-1);
+    color: var(--light-text-color);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    white-space: nowrap;
+  }
+
+  /* "and 12 more" and the expander for older changes sit in the card as rows */
+  .site-dashboard-more,
+  .site-dashboard-empty {
+    margin: 0;
+    padding: var(--space-1) var(--space-4);
+    color: var(--light-text-color);
+    font-size: var(--text-md);
+    line-height: var(--leading-normal);
+  }
+
+  .site-dashboard-empty {
+    padding-top: var(--space-3);
+    padding-bottom: var(--space-3);
+  }
+
+  .site-dashboard-recent-expand {
+    display: block;
+    min-height: 34px;
+    box-sizing: border-box;
+    border: 0;
+    border-radius: var(--radius-lg);
+    background: transparent;
+    color: var(--accent-color);
+    font: inherit;
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: background-color 150ms ease, color 150ms ease;
+  }
+
+  .site-dashboard-recent-expand:hover {
+    background-color: var(--hover-background-color);
+    color: var(--accent-hover-color);
+  }
+
+  .site-dashboard-recent-expand:active {
+    background-color: var(--active-background-color);
+    color: var(--accent-active-color);
+  }
+
+  .site-dashboard-recent-expand:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+  }
+
+  .site-dashboard-recent-more > summary {
+    list-style: none;
+  }
+
+  .site-dashboard-recent-more > summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .site-dashboard-pager-link {
+    margin-top: var(--space-4);
+  }
+
+  .site-dashboard-pager-link {
+    margin-right: var(--space-4);
+  }
+
+  @media screen and (max-width: 1279px) {
+    .site-dashboard-folder-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .site-dashboard.is-folder-view .site-dashboard-folder-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .site-dashboard-folder-view {
+      display: contents;
+    }
+
+  }
+
+  
+
+  @media screen and (max-width: 600px) {
+
+    .site-dashboard-folder-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .site-dashboard-recent-file-details {
+      grid-template-columns: minmax(0, 1fr);
+      row-gap: var(--space-0);
+    }
+
+    .site-dashboard-recent-file-meta {
+      justify-content: flex-start;
+      padding-left: calc(16px + var(--space-2));
+    }
+  }
+
+  .site-dashboard.is-overview-view .site-dashboard-folder-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .site-dashboard.is-overview-view #site-dashboard-folder .folder-container,
+  .site-dashboard.is-overview-view #site-dashboard-folder .folder-box {
+    flex: 0 0 auto;
+  }
+
+  .site-dashboard.is-overview-view .site-dashboard-search {
+    width: min(260px, 100%);
+    flex: 0 0 auto;
+  }
+
+  /* One style for every "See all ..." link */
+  .site-dashboard-see-more {
+    display: inline-block;
+    flex: 0 0 auto;
+    color: var(--accent-color);
+    font-size: var(--text-sm);
+    line-height: var(--leading-normal);
+    text-decoration: none;
+    white-space: nowrap;
+    transition: color 150ms ease;
+  }
+
+  .site-dashboard-see-more:hover {
+    color: var(--accent-hover-color);
+    text-decoration: underline;
+  }
+
+  .site-dashboard-see-more:active {
+    color: var(--accent-active-color);
+  }
+
+  .site-dashboard-see-more:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
+  }
+
+  .site-dashboard.is-overview-view .site-dashboard-folder-layout {
+    row-gap: var(--space-5);
+  }
+
+  /* On the results page the box leads the card at full width */
+  .site-dashboard.is-search-view .site-dashboard-search {
+    width: 100%;
+    margin: 0 0 var(--space-3);
+  }
+

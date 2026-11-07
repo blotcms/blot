@@ -119,7 +119,20 @@ module.exports = promiseOnly(async function main(blogID, options = {}) {
   // One at a time on purpose: Entry.set is not safe for two paths of a
   // blog at once (URL claims in models/entry/_setUrl.js and the blog
   // menu in models/entry/_assign.js are read-then-write), see #2258.
+  // options.shouldStop, if given, is asked before each path. When it
+  // says a newer rebuild is on its way, the rest is left to that one
+  // (the dashboard's settings rebuilds: dashboard/site/save/rebuild-settings.js)
   for (const path of updatePaths) {
+    if (options.shouldStop) {
+      const stop = await Promise.resolve(options.shouldStop()).catch(
+        () => false
+      );
+      if (stop) {
+        log("Rebuild stopped before", path, "for a newer one");
+        break;
+      }
+    }
+
     current += updatePathCounts.get(path);
     status(`(${current}/${total}) Rebuilding ${path}`);
 

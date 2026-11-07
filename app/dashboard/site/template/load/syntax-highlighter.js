@@ -5,13 +5,15 @@ module.exports = function (req, res, next) {
   if (!Object.keys(req.template.locals).includes("syntax_highlighter"))
     return next();
 
+  // Only the theme's id is read from the template's setting (a shared
+  // template keeps its settings); the theme's CSS printed into the page comes
+  // from Blot's own list
   res.locals.syntax_themes = {
     key: "syntax_highlighter",
     value: {
       ...(Themes.find(
         ({ id }) => id === req.template.locals.syntax_highlighter.id
       ) || {}),
-      ...req.template.locals.syntax_highlighter,
       background: Themes.find(
         ({ id }) => id === req.template.locals.syntax_highlighter.id
       )?.background,

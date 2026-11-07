@@ -1,10 +1,14 @@
-{{> settings-form-header}}
+{{> message}}
+{{> settings-tabs}}
 
-<h1>External services</h1>
-
-<input type="hidden" name="redirect" value="{{{base}}}/settings/services" />
-
-{{#categories.Services}}
-{{> plugin-row}}
-{{/categories.Services}}
-</form>
+<div class="dashboard-form-panel settings-page">
+  <div class="dashboard-form-panel__body">
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="services">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/services">
+      <h2 id="services">External services</h2>
+      <p class="setting-note">Connect analytics, comments and other services to your site.</p>
+      {{#categories.Services}}{{> plugin-row}}{{/categories.Services}}
+    </form>
+  </div>
+</div>

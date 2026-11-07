@@ -14,7 +14,10 @@
     <li><a href="/contact">Contact</a></li>
   </ul>
 </footer>
-<script defer src="{{#cdn}}/documentation.min.js{{/cdn}}"></script>
-{{#user}}
+{{#selected.dashboard}}
+{{> truncate-script}}
 <script defer src="{{#cdn}}/dashboard.min.js{{/cdn}}"></script>
-{{/user}}
+{{/selected.dashboard}}
+{{^selected.dashboard}}
+<script defer src="{{#cdn}}/documentation.min.js{{/cdn}}"></script>
+{{/selected.dashboard}}

@@ -1,4 +1,6 @@
 const blogScheme = require("models/blog/scheme");
+const pluginList = require("build/plugins").list;
+const { pluginsOnFlagsPage } = require("./load/plugins");
 const blogDefaults = require("models/blog/defaults");
 
 const flagKeys = Object.keys(blogScheme.TYPE.flags || {});
@@ -23,10 +25,23 @@ exports.get = (req, res) => {
     defaultValue: !!defaultFlags[key],
   }));
 
+  // Settings most sites leave on, kept here rather than on the Settings tabs
+  const plugins = pluginsOnFlagsPage
+    .filter((id) => pluginList[id])
+    .map((id) => {
+      const state = (req.blog.plugins || {})[id];
+      return {
+        id,
+        description: pluginList[id].description,
+        checked: state && state.enabled ? "checked" : "",
+      };
+    });
+
   res.locals.breadcrumbs.add("Flags", "flags");
 
   res.render("dashboard/site/settings/flags", {
     title: "Flags",
     flags,
+    plugins,
   });
 };

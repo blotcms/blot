@@ -53,6 +53,19 @@ Prefer plain commands and `multi()`/`exec()`. Use a Lua script (`client.eval`) o
 
 Bunny does not sit in front of blogs. Blog pages, on subdomains and custom domains, reach the openresty proxy directly, so the proxy sees every visitor's request. Bunny serves only `cdn.blot.im` URLs: static assets, blog CSS and JS, and folder files and generated assets that blog links point there (see `config/storage-bucket/README.md`).
 
+# Front end and the dashboard
+
+The maintainer's priorities, in order: pages that load fast and work without bugs, then everything else. Concretely:
+
+- Render on the server. Static HTML sent straight to the browser is best; add client JS only where it makes the page clearly more responsive (the template editor, sortable tables with infinite scroll) and keep it small. Prefer native HTML (`<details>`, forms, links) over scripts.
+- Ship less. Every dashboard page loads one CSS bundle and one JS bundle; feature code that only a few pages use gets its own bundle, loaded on those pages and prefetched (`<link rel="prefetch">`) from the pages that lead to them. Render only the HTML the current view shows, never hidden panels.
+- Target about 10 ms server time at p50 for dashboard pages, in line with blog rendering. Measure before and after (count Redis commands per request, time the middleware and the render), and cache in-process with `lru-cache` when it helps. Key caches on values stored in Redis (`blog.cacheID`, the blog's latest status, the plugin settings): GETs and POSTs to `/sites/...` are served by different containers, so in-process invalidation does not work (see the note at the top of `app/dashboard/site/index.js`).
+- No unit or UI specs for the dashboard. Keep the broken-links spec (`app/dashboard/tests/index.js`) and specs that guard security, billing, data loss or importers.
+- CSS must work in older browsers: no native nesting, and no `:has()` or `color-mix()` without a fallback. Use the design tokens and shared components described in `app/views/dashboard/AGENTS.md` instead of raw values and one-off styles.
+- Don't add user-facing features or change flows without asking; visual-consistency fixes are fine. Collect UX ideas as suggestions for the maintainer.
+- Screen readers and keyboards must work: icon-only controls need accessible names, decorative icons `aria-hidden`, the current page `aria-current`, live status in an `aria-live` region, visible focus styles, and labels on every form control. Check new pages with axe (see `scripts/development/dashboard-qa/README.md`).
+- Prefer async/await in new or rewritten dashboard code.
+
 # AWS resources
 
 - Tag every throwaway instance, volume and security group `BlotDrill=true`, with its own security group that has no inbound rules.

@@ -16,7 +16,11 @@ const ipv6 = config.ipv6;
 const host = config.host;
 
 Domain.use((req, res, next) => {
-  res.locals.breadcrumbs.add("Domain", "/domain");
+  res.locals.domainBase = req.baseUrl;
+  res.locals.selected = { ...res.locals.selected, domain: "selected" };
+  res.locals.forceSSLPluginClass = req.blog.forceSSL ? "checked" : "";
+  res.locals.forceSSLChecked = req.blog.forceSSL ? "checked" : "";
+  res.locals.breadcrumbs.add("Domain", "domain");
 
   const blogID = req.blog.id;
   const warning =
@@ -89,12 +93,13 @@ Domain.route("/")
     if (req.body.handle) {
       try {
         await updateHandle(blogID, req.body.handle);
+        const routeSuffix = res.locals.domainBase.slice(res.locals.base.length);
         return res.message(
-          "/sites/" + req.body.handle + "/domain",
+          `/sites/${req.body.handle}${routeSuffix}`,
           "Updated subdomain on Blot"
         );
       } catch (e) {
-        return res.message(res.locals.base + "/domain/subdomain", e);
+        return res.message(res.locals.domainBase + "/subdomain", e);
       }
     }
 
@@ -105,11 +110,11 @@ Domain.route("/")
         delete req.session[`${blogID}:domainError`];
         delete req.session[`${blogID}:domainWarning`];
         req.session.save();
-        return res.message(res.locals.base + "/domain", "Domain removed");
+        return res.message(res.locals.domainBase, "Domain removed");
       }
 
       return res.message(
-        res.locals.base + "/domain/custom",
+        res.locals.domainBase + "/custom",
         new Error("Please enter a valid domain")
       );
     }
@@ -119,14 +124,14 @@ Domain.route("/")
       try {
         await updateDomain(blogID, "");
       } catch (error) {
-        return res.message(res.locals.base + "/domain/custom", error);
+        return res.message(res.locals.domainBase + "/custom", error);
       }
     }
 
     try {
       await updateDomain(blogID, hostname);
     } catch (error) {
-      return res.message(res.locals.base + "/domain/custom", error);
+      return res.message(res.locals.domainBase + "/custom", error);
     }
 
     try {
@@ -144,7 +149,7 @@ Domain.route("/")
         delete req.session[`${blogID}:domainWarning`];
         req.session.save();
         triggerAutoSSL(hostname);
-        return res.message(res.locals.base + "/domain", "Domain added");
+        return res.message(res.locals.domainBase, "Domain added");
       } else {
         throw new Error("Domain verification failed.");
       }
@@ -172,7 +177,7 @@ Domain.route("/")
       req.session.save();
       triggerAutoSSL(hostname);
       return res.message(
-        res.locals.base + "/domain/custom",
+        res.locals.domainBase + "/custom",
         "Domain saved. Verification is still pending."
       );
     }

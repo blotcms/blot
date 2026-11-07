@@ -1,38 +1,16 @@
-{{> close-button}}
-
 {{> message}}
 
-<form method="POST" class="dashboard-form" style="border:1px solid var(--border-color);border-radius:var(--border-radius);padding:20px;box-sizing:border-box">
-  <input type="hidden" name="_csrf" value="{{ csrftoken }}" />
-  {{#blog}}
+{{> settings-tabs}}
 
-  <p>
-    If you <b>delete {{ blog.pretty.label }}</b
-    >, Blot will permanently remove its copy of
-    the folder, along with its templates and other settings. This cannot be undone.
-    <!-- Consider <a href="/dashboard/account/export">exporting this data</a>. -->
-  </p>
+<div class="dashboard-form-panel settings-page site-delete">
+  <div class="dashboard-form-panel__body">
+  <h2>Delete {{blog.pretty.label}}</h2>
 
-  <!--
-  {{#reduction}}
-  <p>
-    Your next bill on {{ user.pretty.expiry }} will decrease by {{ reduction }}.
-  </p>
-  {{/reduction}}
--->
-  <label
-    >Enter your password:
-    <input autofocus type="password" name="password" />
-  </label>
-
-  <div class="buttons">
-    <button
-      type="submit"
-      class="red">
-      Delete site
-    </button>
-    <a href="{{{base}}}">Do not delete</a>
+  <div class="btn-row">
+    <a class="btn btn-danger" href="{{{base}}}/settings/delete/confirm">Delete site</a>
+    <a class="btn" href="{{{base}}}">Do not delete</a>
   </div>
 
-  {{/blog}}
-</form>
+  <p class="setting-note">Deleting a site removes Blot’s copy of its folder, its templates and its settings, and takes it offline. The files in your own folder stay where they are. This cannot be undone. The next step lists what will go and asks for your password.</p>
+  </div>
+</div>

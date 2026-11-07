@@ -1,0 +1,247 @@
+/*
+  Menus: the one surface and item style every dropdown in the dashboard
+  shares (row action menus, the site and template switchers, the phone
+  navigation Menu, the template font picker).
+
+  Surface (background, 1px border, --radius-md, --shadow-lg):
+    .menu                          generic menu panel
+    .row-action-menu               floating row menu, filled by js/row-menu.js
+    .site-switcher__menu           site and template switcher panel
+    .dashboard-sidebar__menu-panel phone navigation Menu panel
+    (the font picker, .template-font-picker, repeats these values in
+    template/controls/font.css, which ships in the editor's own bundle)
+
+  Items (padding --space-2 --space-3, --text-md; hover, pressed, current):
+    .menu__item                    a link or button in a menu
+    .row-action-menu a             items in a row menu
+    .site-switcher__site, .site-switcher__create
+    .dashboard-sidebar__menu-panel .dashboard-sidebar__link
+    .is-current                    current/selected item (also aria-current)
+    .is-disabled                   unavailable item
+    .menu__item--danger            destructive item, --danger-color; row menu
+                                   links marked data-menu-link="delete" or
+                                   "remove" get it automatically
+    .menu__separator               <li role="separator"> between groups
+
+  Row menu triggers (the "..." buttons, one per row):
+    .row-action-menu__trigger      shown on row hover/focus and while open
+    .row-action-menu-row           the row holding one; .menu-open while its
+                                   menu is showing
+*/
+
+:root {
+  --row-action-menu-trigger-color: var(--light-text-color);
+  --row-action-menu-trigger-opacity: 0;
+  --row-action-menu-trigger-opacity-active: 1;
+  --row-action-menu-width: 180px;
+}
+
+/* Surface */
+.menu,
+.row-action-menu,
+.site-switcher__menu,
+.dashboard-sidebar__menu-panel {
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: var(--background-color);
+  box-shadow: var(--shadow-lg);
+}
+
+.menu ul,
+.row-action-menu ul {
+  margin: 0;
+  padding: var(--space-1);
+  list-style: none;
+}
+
+.menu li,
+.row-action-menu li {
+  margin: 0;
+}
+
+.menu li[hidden],
+.row-action-menu li[hidden] {
+  display: none;
+}
+
+/* Items */
+.menu__item,
+.row-action-menu a,
+.site-switcher__site,
+.site-switcher__create,
+.dashboard-sidebar__menu-panel .dashboard-sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-color);
+  font: inherit;
+  font-size: var(--text-md);
+  line-height: var(--leading-tight);
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease;
+}
+
+.menu__item:hover,
+.row-action-menu a:hover,
+.site-switcher__site:hover,
+.site-switcher__create:hover,
+.dashboard-sidebar__menu-panel .dashboard-sidebar__link:hover {
+  background: var(--hover-background-color);
+  color: var(--text-color);
+}
+
+.menu__item:focus-visible,
+.row-action-menu a:focus-visible,
+.site-switcher__site:focus-visible,
+.site-switcher__create:focus-visible,
+.dashboard-sidebar__menu-panel .dashboard-sidebar__link:focus-visible {
+  background: var(--hover-background-color);
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.menu__item:active,
+.row-action-menu a:active,
+.site-switcher__site:active,
+.site-switcher__create:active,
+.dashboard-sidebar__menu-panel .dashboard-sidebar__link:active {
+  background: var(--active-background-color);
+}
+
+.menu__item.is-current,
+.menu__item[aria-current="true"],
+.menu__item[aria-current="page"],
+.row-action-menu a.is-current,
+.site-switcher__site.is-current,
+.site-switcher__site[aria-current="true"] {
+  background: var(--selected-background-color);
+}
+
+/* Unavailable items stay in the menu but do nothing */
+.menu__item.is-disabled,
+.row-action-menu a.is-disabled {
+  color: var(--light-text-color);
+  cursor: default;
+}
+
+.menu__item.is-disabled:hover,
+.menu__item.is-disabled:active,
+.row-action-menu a.is-disabled:hover,
+.row-action-menu a.is-disabled:active {
+  background: transparent;
+}
+
+/* Destructive items */
+.menu__item--danger,
+.row-action-menu a[data-menu-link="delete"],
+.row-action-menu a[data-menu-link="remove"] {
+  color: var(--danger-color);
+}
+
+.menu__item--danger:hover,
+.row-action-menu a[data-menu-link="delete"]:hover,
+.row-action-menu a[data-menu-link="remove"]:hover {
+  color: var(--danger-color);
+}
+
+.row-action-menu a.is-disabled[data-menu-link="delete"],
+.row-action-menu a.is-disabled[data-menu-link="remove"] {
+  color: var(--light-text-color);
+}
+
+/* Separators */
+.menu__separator {
+  height: 1px;
+  margin: var(--space-1) calc(var(--space-1) * -1);
+  padding: 0;
+  background: var(--border-color);
+  list-style: none;
+}
+
+/* Row menu: one per list, placed by js/row-menu.js under the row's trigger */
+.row-action-menu {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 30;
+  min-width: var(--row-action-menu-width);
+  opacity: 0;
+  transform: translateY(-6px);
+  /* Hidden menus must not take keyboard focus; visibility waits for the fade */
+  visibility: hidden;
+  transition: opacity 150ms ease, transform 150ms ease, visibility 0s linear 150ms;
+  pointer-events: none;
+}
+
+.row-action-menu.is-open {
+  visibility: visible;
+  transition-delay: 0s;
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Triggers. They sit on a row that is already tinted on hover, so their own
+   hover and open states are one step stronger than the row's. */
+.row-action-menu__trigger {
+  appearance: none;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  margin: 0 var(--space-1) 0 0;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--row-action-menu-trigger-color);
+  font-size: var(--text-base);
+  line-height: 1;
+  cursor: pointer;
+  opacity: var(--row-action-menu-trigger-opacity);
+  transition: opacity 150ms ease, background-color 150ms ease, color 150ms ease;
+}
+
+.row-action-menu-row:hover .row-action-menu__trigger,
+.row-action-menu-row.menu-open .row-action-menu__trigger,
+.row-action-menu__trigger:focus-visible,
+.row-action-menu__trigger[aria-expanded="true"] {
+  opacity: var(--row-action-menu-trigger-opacity-active);
+}
+
+.row-action-menu__trigger:hover {
+  background: var(--active-background-color);
+  color: var(--text-color);
+}
+
+.row-action-menu__trigger:active {
+  background: var(--border-strong-color);
+  color: var(--text-color);
+}
+
+.row-action-menu__trigger[aria-expanded="true"] {
+  background: var(--selected-background-color);
+  color: var(--text-color);
+}
+
+.row-action-menu__trigger:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+/* No hover on touch screens: keep the triggers visible */
+@media (hover: none) {
+  .row-action-menu-row .row-action-menu__trigger {
+    opacity: 1;
+  }
+}

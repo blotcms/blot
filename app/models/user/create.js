@@ -28,6 +28,7 @@ module.exports = promiseOnly(
           subscription: subscription,
           paypal: paypal,
           paymentMethods: [],
+          paymentMethodsSyncedAt: 0,
           passwordHash: passwordHash,
         };
 

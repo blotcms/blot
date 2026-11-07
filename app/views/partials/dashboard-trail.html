@@ -1,0 +1,16 @@
+{{^hidebreadcrumbs}}
+{{#breadcrumbs.1}}
+<div class="dashboard-topbar">
+  <nav class="trail dashboard-trail" aria-label="Breadcrumb">
+    <ol>
+      {{#breadcrumbs}}
+      {{^last}}<li><a href="{{{url}}}">{{label}}</a></li>{{/last}}
+      {{#last}}<li aria-current="page"><span class="truncate">{{label}}</span></li>{{/last}}
+      {{/breadcrumbs}}
+    </ol>
+  </nav>
+  {{#globalSync}}{{> global-sync}}{{/globalSync}}
+  {{#blog.pretty.url}}<a class="visit-site-pill" href="https://{{{blog.pretty.url}}}" target="_blank" rel="noopener"><span class="visit-site-pill__text">Visit site</span><span class="visit-site-pill__icon" aria-hidden="true"><svg viewBox="0 0 12 12" width="10" height="10"><path d="M3.5 8.5 8.5 3.5M4.5 3.5h4v4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span><span class="visually-hidden"> (opens in a new tab)</span></a>{{/blog.pretty.url}}
+</div>
+{{/breadcrumbs.1}}
+{{/hidebreadcrumbs}}

@@ -1,8 +1,10 @@
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">{{title}}</h1></div></header>
 <form method="POST" class="account">
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
 
-  <p>If you <b>cancel your subscription</b>, {{#blogs.length}} your site{{user.s}} will stop working and{{/blogs.length}} your account will permanently close on {{user.pretty.expiry}}. Until that date, you will be able to use your account.{{#paypal}} PayPal will not take any further payments.{{/paypal}}</p>
+  <p>If you <b>cancel your subscription</b>, {{#blogs.length}}your site{{user.s}} will go offline and {{/blogs.length}}your account will close on <b>{{user.pretty.expiry}}</b>. Until then you can use your account as normal, and you can restart your subscription at any time before that date to carry on as you were.{{#paypal}} PayPal will not take any further payments.{{/paypal}}</p>
+
 
   <p>If you would rather close your account immediately, consider <a href="/sites/account/subscription/delete">deleting your account</a> instead.</p>
 

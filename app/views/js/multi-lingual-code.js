@@ -8,6 +8,9 @@ var dictionary = {
 document
   .querySelectorAll("section.multilingual")
   .forEach(function (block, blockIndex) {
+    // Rendered with its tabs already (the dashboard's file page)
+    if (block.querySelector(".lang-tabs")) return;
+
     // Create a <ul> element to hold the language tabs
     var tabs = document.createElement("ul");
     tabs.classList.add("lang-tabs");
@@ -17,7 +20,7 @@ document
 
     // Iterate over each <pre> element within the block
     block.querySelectorAll("pre").forEach(function (code, i) {
-      var lang = code.getAttribute("lang");
+      var lang = code.getAttribute("data-lang") || code.getAttribute("lang");
 
       // If it's not the first code block, hide it
       if (i > 0) {

@@ -1,0 +1,6 @@
+<nav class="directory-pagination" aria-label="Pages">
+  {{#hasNewerPosts}}<a class="directory-pagination__link" href="{{{newerPostsURL}}}" rel="prev">Previous</a>{{/hasNewerPosts}}
+  {{^hasNewerPosts}}<span class="directory-pagination__link is-disabled" aria-disabled="true">Previous</span>{{/hasNewerPosts}}
+  {{#hasOlderPosts}}<a class="directory-pagination__link" href="{{{olderPostsURL}}}" rel="next">Next</a>{{/hasOlderPosts}}
+  {{^hasOlderPosts}}<span class="directory-pagination__link is-disabled" aria-disabled="true">Next</span>{{/hasOlderPosts}}
+</nav>

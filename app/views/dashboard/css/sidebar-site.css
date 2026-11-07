@@ -1,0 +1,138 @@
+/*
+  The site block at the top of a site's sidebar (partials/sidebar-site.html):
+  the site's title, which opens the site switcher. The menu lists the user's
+  sites, then All sites and Create site. On phones it sits in the navigation
+  bar with the current section's name under the title.
+
+  .sidebar-site            <details>
+  .sidebar-site__trigger   <summary>: folder icon, title, chevron
+  .sidebar-site__section   the section name, phones only
+  The menu reuses .site-switcher__menu (site/site-dashboard-shared.css) and
+  the surface and items in css/menu.css.
+*/
+
+.sidebar-site {
+  position: relative;
+  margin: 0 0 var(--space-5);
+}
+
+/* As tall as the sidebar's links (.dashboard-sidebar__link), with the same
+   states */
+.sidebar-site__trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 0 var(--space-1) 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--text-color);
+  cursor: pointer;
+  list-style: none;
+  transition: background-color 150ms ease;
+}
+
+.sidebar-site__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.sidebar-site__trigger:hover {
+  background: var(--hover-background-color);
+}
+
+.sidebar-site__trigger:active,
+.sidebar-site[open] > .sidebar-site__trigger {
+  background: var(--active-background-color);
+}
+
+.sidebar-site__trigger:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.sidebar-site__icon {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  mask-size: contain;
+}
+
+.sidebar-site__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.sidebar-site__title {
+  font-size: var(--text-md);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+.sidebar-site__section {
+  display: none;
+}
+
+.sidebar-site__chevron {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--medium-text-color);
+}
+
+.sidebar-site__chevron svg {
+  width: 16px;
+  height: 16px;
+  transition: transform 150ms ease;
+}
+
+.sidebar-site[open] .sidebar-site__chevron svg {
+  transform: rotate(180deg);
+}
+
+/* Under the block and as wide as it: the sidebar scrolls, so no wider */
+.sidebar-site .site-switcher__menu {
+  top: calc(100% + var(--space-1));
+  right: 0;
+  left: 0;
+  width: auto;
+}
+
+@media screen and (max-width: 768px) {
+  .sidebar-site {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0 var(--space-2) 0 0;
+  }
+
+  .sidebar-site__trigger {
+    min-height: 44px;
+    padding: 0 var(--space-1) 0 var(--space-2);
+  }
+
+  .sidebar-site__title {
+    font-size: var(--text-sm);
+  }
+
+  .sidebar-site__section {
+    display: block;
+    overflow: hidden;
+    color: var(--medium-text-color);
+    font-size: var(--text-xs);
+    line-height: var(--leading-tight);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Under the bar, like the Menu panel; the bar clips its overflow */
+  .sidebar-site .site-switcher__menu {
+    position: fixed;
+    inset: 64px var(--space-3) auto;
+    z-index: 101;
+    width: auto;
+  }
+}

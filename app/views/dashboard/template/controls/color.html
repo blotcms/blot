@@ -2,13 +2,13 @@
     <input type="hidden" name="_csrf" value="{{csrftoken}}" />
     <input class="name" placeholder="e.g. background" type="hidden" value="{{key}}" />
     <input class="value" name="locals.{{key}}" placeholder="e.g. #FFFFFF" type="hidden" value="{{value}}" />
-    <div class="color-picker-popup">
+    <button type="button" class="color-picker-popup" aria-haspopup="dialog" aria-labelledby="color_label_{{key}}">
         <span class="previous" style="background:{{value}}"></span>
-        <span class="color-label">{{label}}</span>
+        <span class="color-label" id="color_label_{{key}}">{{label}}</span>
         <span class="pcr-color-preview">
             <span class="pcr-current-color"></span>
         </span>
-    </div>
+    </button>
     <svg class="color-picker-chevron" viewBox="0 0 16 16" aria-hidden="true"><path fill="currentColor" d="M4.22 6.22a.75.75 0 0 1 1.06 0L8 8.94l2.72-2.72a.75.75 0 1 1 1.06 1.06l-3.25 3.25a.75.75 0 0 1-1.06 0L4.22 7.28a.75.75 0 0 1 0-1.06Z"></path></svg>
     <div class="clear"></div>
 </form>

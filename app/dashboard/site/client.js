@@ -1,9 +1,6 @@
 const clients = require("clients");
-const _ = require("lodash");
-const moment = require("moment");
 const express = require("express");
 const client_routes = express.Router();
-const Path = require("path");
 const Blog = require("models/blog");
 const load = require("./load");
 const Sync = require("sync");
@@ -21,11 +18,13 @@ const RESYNC_REFUSALS = [
   "ICLOUD_FOLDER_MISSING",
   "ICLOUD_SETUP_INCOMPLETE",
 ];
-const getStatuses = (...args) => Blog.getStatuses(...args);
 
-// So the breadcrumbs look like: Settings > Client
+// The sync pages, at /sites/<handle>/sync. Breadcrumbs: Sites > Site > Sync
 client_routes.use(function (req, res, next) {
-  res.locals.breadcrumbs.add("Folder", "client");
+  res.locals.base = req.baseUrl;
+  res.locals.selected = { ...res.locals.selected, folder: "is-active" };
+  res.locals.isFolderSettingsView = true;
+  res.locals.breadcrumbs.add("Sync", "sync");
   next();
 });
 
@@ -47,15 +46,21 @@ client_routes
 
     res.locals.breadcrumbs.add("Switch", "switch");
 
+    // ?to=<client> asks the user to confirm before the POST below
+    // disconnects the current client
+    const target = res.locals.clients.find((c) => c.name === req.query.to);
+
     res.render("dashboard/clients/switch", {
       title: "Switch to another client",
+      confirm: target || false,
     });
   })
 
   .post(async function (req, res, next) {
     const redirect = req.baseUrl + "/" + req.body.client;
 
-    if (!req.body.client) {
+    // A client Blot has, by name (own keys only)
+    if (!req.body.client || !Object.hasOwn(clients, req.body.client)) {
       return next(new Error("Please select a client"));
     }
 
@@ -71,71 +76,13 @@ client_routes
     }
   });
 
-// Used to change tense of activity on dashboard
-// and to help parse paths from status messages
-const verbs = {
-  Downloading: "downloaded",
-  Syncing: "synced",
-  Transferring: "transferred",
-  Removing: "removed",
-};
-
-// Reset progress messages are prefixed with "(current/total) ", e.g.
-// "(1/10) Downloading /post.md" - strip it before matching a verb so
-// these still parse into a path, verb and folder URL below.
-const PROGRESS_PREFIX = /^\(\d+\/\d+\)\s+/;
-
-client_routes
-  .route("/activity")
-  .get(load.clients, async function (req, res, next) {
-    try {
-      res.locals.breadcrumbs.add("Activity", "activity");
-
-      let { statuses, next, previous } = await getStatuses(req.blog.id);
-
-      statuses = _.chain(statuses)
-        .groupBy("syncID")
-        .map((value, key) => ({
-          syncID: key,
-          messages: value
-            .map((item) => {
-              const message = item.message.replace(PROGRESS_PREFIX, "");
-              const matchedVerb = Object.keys(verbs).find((i) =>
-                message.startsWith(i + " /")
-              );
-
-              if (matchedVerb) {
-                const path = message.slice((matchedVerb + " ").length);
-                item.path = Path.parse(path);
-                item.verb = verbs[matchedVerb];
-                item.url = Path.join(
-                  res.locals.base,
-                  "folder",
-                  encodeURIComponent(path.slice(1))
-                );
-              }
-
-              item.fromNow = moment(item.datestamp).fromNow();
-
-              return item;
-            })
-            .filter(
-              ({ message }) => message !== "Syncing" && message !== "Synced"
-            ),
-        }))
-        .filter((i) => i.messages && i.messages.length)
-        .value();
-
-      res.render("dashboard/clients/activity", {
-        title: "Activity",
-        statuses,
-        next,
-        previous,
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
+// The sync log moved to the site's Activity page
+client_routes.get("/activity", function (req, res) {
+  const query = req.originalUrl.includes("?")
+    ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
+    : "";
+  res.redirect(302, res.locals.dashboardBase + "/activity" + query);
+});
 
 client_routes
 
@@ -154,15 +101,12 @@ client_routes.post("/reset/rebuild", function (req, res) {
   Sync(req.blog.id, function (err, folder, done) {
     if (err) {
       return res.message(
-        res.locals.base + "/client/reset",
+        res.locals.base + "/reset",
         new Error("Failed to rebuild folder since it is syncing")
       );
     }
 
-    res.message(
-      res.locals.base + "/client/reset",
-      "Begin rebuild of your site"
-    );
+    res.message(res.locals.base + "/reset", "Begin rebuild of your site");
 
     folder.status("Rebuilding your site");
 
@@ -210,12 +154,12 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
   Sync(req.blog.id, async function (err, folder, done) {
     if (err) {
       return res.message(
-        res.locals.base + "/client/reset",
+        res.locals.base + "/reset",
         new Error("Failed to resync folder since it is syncing")
       );
     }
 
-    res.message(res.locals.base + "/client/reset", "Begin resync of your site");
+    res.message(res.locals.base + "/reset", "Begin resync of your site");
 
     let summary;
 
@@ -300,8 +244,8 @@ if (config.environment === "development") {
       }
 
       res.redirect(
-        res.locals.base +
-          "/client" +
+        res.locals.dashboardBase +
+          "/sync" +
           (req.blog.client ? "/" + req.blog.client : "")
       );
     } catch (error) {
@@ -315,7 +259,7 @@ client_routes
 
   .get(load.clients, function (req, res) {
     if (req.blog.client) {
-      return res.redirect(req.baseUrl + "/" + req.blog.client);
+      return res.redirect(res.locals.dashboardBase);
     }
 
     res.render("dashboard/clients", { title: "Select a client" });
@@ -335,11 +279,11 @@ client_routes
 
 client_routes.use("/:client", function (req, res, next) {
   if (clients[req.params.client] === undefined) {
-    return res.redirect(res.locals.base + "/client");
+    return res.redirect(res.locals.dashboardBase + "/sync");
   }
 
   if (req.blog.client && req.params.client !== req.blog.client) {
-    return res.redirect(res.locals.base + "/client/" + req.blog.client);
+    return res.redirect(res.locals.dashboardBase + "/sync/" + req.blog.client);
   }
 
   if (!req.blog.client) {
@@ -356,7 +300,7 @@ client_routes.use("/:client", function (req, res, next) {
     ]);
 
     if (!allowedUnpersistedPaths.has(relativePath)) {
-      return res.redirect(res.locals.base + "/client");
+      return res.redirect(res.locals.dashboardBase + "/sync");
     }
   }
 
@@ -375,7 +319,7 @@ for (let client_name in clients) {
 }
 
 client_routes.use("/:client", (req, res) => {
-  res.redirect(`/sites/${req.blog.handle}/client`);
+  res.redirect(`${res.locals.dashboardBase}/sync`);
 });
 
 module.exports = client_routes;

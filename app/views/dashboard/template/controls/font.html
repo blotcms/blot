@@ -9,11 +9,11 @@
   <input
     type="hidden"
     name="locals.{{key}}.id"
-    value="{{{value.id}}}"
+    value="{{value.id}}"
     data-font-picker-value
   >
 
-  {{^singleFontInput}}<span class="font-row-label">{{label}}</span>{{/singleFontInput}}
+  {{^singleFontInput}}<span class="template-setting-label font-row-label" id="font_label_{{key}}">{{label}}:</span>{{/singleFontInput}}
 
   <button
     type="button"
@@ -22,12 +22,14 @@
     aria-haspopup="listbox"
     aria-expanded="false"
     aria-controls="template-font-picker"
+    aria-labelledby="font_label_{{key}} font_trigger_{{key}}"
+    id="font_trigger_{{key}}"
   >
     <span data-font-picker-label>
       {{#value}}
       {{#name}}
         {{#specimenURL}}
-          <img class="font-specimen" src="{{{specimenURL}}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async">
+          <img class="font-specimen" src="{{specimenURL}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async">
         {{/specimenURL}}
         {{^specimenURL}}
           <span style="font-family: {{stack}};">{{name}}</span>
@@ -38,17 +40,5 @@
     </span>
   </button>
 
-  <input
-    type="number"
-    class="number-stepper__input"
-    data-number-stepper
-    data-number-stepper-label="font size"
-    id="locals.{{key}}.font_size"
-    name="locals.{{key}}.font_size"
-    value="{{font_size}}"
-    min="9"
-    max="96"
-    step="1"
-    inputmode="numeric"
-  >
+  {{> number-stepper}}
 </form>

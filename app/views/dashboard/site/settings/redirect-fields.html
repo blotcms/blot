@@ -1,0 +1,103 @@
+
+
+<input type="hidden" name="redirect" value="{{{base}}}/settings/redirects" />
+<input type="hidden" name="has_redirects" value="true" />
+
+
+<p class="setting-note">Redirects save when you press Save changes. Blot checks them after your posts, pages and files, so they never hide an existing page.</p>
+
+<div class="redirect-tools">
+  <button type="button" class="btn btn-soft btn-sm" id="addRedirect"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M7.75 2a.75.75 0 0 1 .75.75V7h4.25a.75.75 0 0 1 0 1.5H8.5v4.25a.75.75 0 0 1-1.5 0V8.5H2.75a.75.75 0 0 1 0-1.5H7V2.75A.75.75 0 0 1 7.75 2Z"></path></svg>Add redirect</button>
+  <a class="btn btn-sm" href="{{{base}}}/settings/redirects/bulk"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M11.013 1.427a1.75 1.75 0 0 1 2.474 0l1.086 1.086a1.75 1.75 0 0 1 0 2.474l-8.61 8.61c-.21.21-.47.364-.756.445l-3.251.93a.75.75 0 0 1-.927-.928l.929-3.25c.081-.286.235-.547.445-.758l8.61-8.61Zm.176 4.823L9.75 4.81l-6.286 6.287a.253.253 0 0 0-.064.108l-.558 1.953 1.953-.558a.253.253 0 0 0 .108-.064Zm1.238-3.763a.25.25 0 0 0-.354 0L10.811 3.75l1.439 1.44 1.263-1.263a.25.25 0 0 0 0-.354Z"></path></svg>Bulk editor</a>
+</div>
+
+{{#redirectWarnings}}
+<p class="redirectWarningsNotice">
+  <span class="icon-small-alert" aria-hidden="true"></span>
+  Blot checks your redirects last, once it has failed to find a post, a page,
+  a template view or a file at a URL. The redirects marked below will never be
+  used because something on your site already answers to the URL they redirect
+  from. <a href="/how/configure/redirects">Read more</a>
+</p>
+{{/redirectWarnings}}
+
+<section id="stage">
+  
+  <section id="redirects" class="fullRow sortable">
+
+    <span id="emptyRedirects" class="redirects-empty" style="display:{{redirectsEmptyDisplay}}">
+      No redirects
+    </span>
+
+
+    {{#redirects}}
+    <section>
+      <button type="button" class="handle" aria-label="Move redirect{{#from}} from {{from}}{{/from}}"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="8" height="16" fill="none" viewBox="0 0 8 16"><circle cx="6.5" cy="3" r="1.4" fill="currentColor" transform="rotate(90 6.5 3)"></circle><circle cx="1.5" cy="3" r="1.4" fill="currentColor" transform="rotate(90 1.5 3)"></circle><circle cx="6.5" cy="8" r="1.4" fill="currentColor" transform="rotate(90 6.5 8)"></circle><circle cx="1.5" cy="8" r="1.4" fill="currentColor" transform="rotate(90 1.5 8)"></circle><circle cx="6.5" cy="13" r="1.4" fill="currentColor" transform="rotate(90 6.5 13)"></circle><circle cx="1.5" cy="13" r="1.4" fill="currentColor" transform="rotate(90 1.5 13)"></circle></svg></button>
+          <input
+        class="lab"
+        placeholder="/from"
+        aria-label="Redirect from"
+        type="text"
+        name="redirects.{{ index }}.from"
+        value="{{ from }}" />
+      <input
+        class="val"
+        placeholder="/to"
+        aria-label="Redirect to"
+        type="text"
+        name="redirects.{{ index }}.to"
+        value="{{ to }}" />
+      {{#warning}}
+      <span class="redirectWarning" tabindex="0" role="img" aria-label="{{ warning }}">
+        <span class="icon-small-alert" aria-hidden="true"></span>
+        <span class="redirectWarningMessage" aria-hidden="true">{{ warning }}</span>
+      </span>
+      {{/warning}}
+      <button type="button" class="removeLink" aria-label="Remove redirect{{#from}} from {{from}}{{/from}}"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M11 1.75V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.675l.66 6.6a.25.25 0 0 0 .249.225h5.19a.25.25 0 0 0 .249-.225l.66-6.6a.75.75 0 0 1 1.492.149l-.66 6.6A1.748 1.748 0 0 1 10.595 15h-5.19a1.75 1.75 0 0 1-1.741-1.575l-.66-6.6a.75.75 0 1 1 1.492-.15ZM6.5 1.75V3h3V1.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25Z"></path></svg>Remove</button>
+    </section>
+    {{/redirects}}
+  </section>
+</section>
+
+
+<section id="new_redirect" style="display: none;">
+  <button type="button" class="handle" aria-label="Move redirect"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="8" height="16" fill="none" viewBox="0 0 8 16"><circle cx="6.5" cy="3" r="1.4" fill="currentColor" transform="rotate(90 6.5 3)"></circle><circle cx="1.5" cy="3" r="1.4" fill="currentColor" transform="rotate(90 1.5 3)"></circle><circle cx="6.5" cy="8" r="1.4" fill="currentColor" transform="rotate(90 6.5 8)"></circle><circle cx="1.5" cy="8" r="1.4" fill="currentColor" transform="rotate(90 1.5 8)"></circle><circle cx="6.5" cy="13" r="1.4" fill="currentColor" transform="rotate(90 6.5 13)"></circle><circle cx="1.5" cy="13" r="1.4" fill="currentColor" transform="rotate(90 1.5 13)"></circle></svg></button>
+  <input
+    disabled
+    class="lab"
+    placeholder="/from"
+    aria-label="Redirect from"
+    type="text"
+    name="redirects.{index}.from"
+    value="" />
+  <input
+    disabled
+    class="val"
+    placeholder="/to"
+    aria-label="Redirect to"
+    type="text"
+    name="redirects.{index}.to"
+    value="" />
+  <button type="button" class="removeLink" aria-label="Remove redirect"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M11 1.75V3h2.25a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1 0-1.5H5V1.75C5 .784 5.784 0 6.75 0h2.5C10.216 0 11 .784 11 1.75ZM4.496 6.675l.66 6.6a.25.25 0 0 0 .249.225h5.19a.25.25 0 0 0 .249-.225l.66-6.6a.75.75 0 0 1 1.492.149l-.66 6.6A1.748 1.748 0 0 1 10.595 15h-5.19a1.75 1.75 0 0 1-1.741-1.575l-.66-6.6a.75.75 0 1 1 1.492-.15ZM6.5 1.75V3h3V1.75a.25.25 0 0 0-.25-.25h-2.5a.25.25 0 0 0-.25.25Z"></path></svg>Remove</button>
+</section>
+
+<div class="clear"></div>
+
+
+
+
+
+
+<!-- Hidden until there's a change to save (js/redirects.js); without
+     scripts it shows, so the form still saves -->
+<div class="buttons redirects-save" hidden>
+	<button type="submit">
+		Save changes
+	</button>
+	<a href="{{{base}}}/settings/redirects" class="redirects-cancel">Cancel</a>
+</div>
+<noscript><style>.redirects-save[hidden] { display: flex; }</style></noscript>
+<br><Br>
+
+<a class="redirect-link" href="/how/configure/redirects">Guide to redirects <span aria-hidden="true">&rarr;</span></a>
+<a class="redirect-link" href="{{{base}}}/settings/redirects/404s">404 log <span aria-hidden="true">&rarr;</span></a>

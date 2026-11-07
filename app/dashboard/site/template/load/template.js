@@ -119,7 +119,9 @@ module.exports = async function (req, res, next) {
 
     req.template = res.locals.template = hydrated;
 
-    res.locals.base = `${req.protocol}://${req.hostname}${req.baseUrl}/${req.params.templateSlug}`;
+    // The slug as it was in the URL, encoded again: Express decodes params,
+    // and pages print base unescaped in links ({{{base}}})
+    res.locals.base = `${req.protocol}://${req.hostname}${req.baseUrl}/${encodeURIComponent(req.params.templateSlug)}`;
     // used to filter messages sent from the iframe which contains a preview of the
     // template in the template editor, such that we only save the pages which are
     // part of the template.
@@ -130,6 +132,19 @@ module.exports = async function (req, res, next) {
     // the most recent path in localStorage and applies it on load
 
     res.locals.preview = res.locals.previewOrigin;
+
+    // aria-current for the Settings and Code tabs, from whichever page sets
+    // res.locals.selected, read when the page renders
+    Object.defineProperty(res.locals, "currentPage", {
+      enumerable: true,
+      get() {
+        const selected = res.locals.selected || {};
+        return {
+          settings: selected.settings ? 'aria-current="page"' : "",
+          source: selected.source ? 'aria-current="page"' : "",
+        };
+      },
+    });
 
     res.locals.breadcrumbs.add(hydrated.displayName, hydrated.slug);
 

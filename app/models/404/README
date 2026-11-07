@@ -42,12 +42,15 @@ set(blog.id, req.url, function(err) { /* ... */ });
 
 ---
 
-### `list(blogID, callback)`
+### `list(blogID, [options], callback)`
 
-Retrieves all stored 404 entries for `blogID`. The callback receives `(err, list, ignored)`:
+Retrieves the stored 404 entries for `blogID`. The callback receives `(err, list, ignored, totals)`:
 
 - `list` — array of active (non-ignored) entries, each `{ url: string, time: string }` where `time` is a human-readable relative timestamp (e.g. `"3 days ago"`), sorted most-recent-first.
 - `ignored` — array of entries in the same shape that have been marked as ignored.
+- `totals` — `{ list, ignored }`, the number of rows in each bucket before any limit.
+
+`options.limit` caps `list` and `ignored` at that many entries each, and only those are formatted. Without it every entry is returned.
 
 ```js
 const { list } = require('models/404');

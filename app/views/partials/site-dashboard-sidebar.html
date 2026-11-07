@@ -1,0 +1,31 @@
+<aside class="{{siteDashboardSidebarClass}}" aria-label="Site dashboard" data-dashboard-sidebar>
+  {{> sidebar-site}}
+
+  <nav class="dashboard-sidebar__nav dashboard-sidebar__nav--desktop" aria-label="Site navigation">
+{{> site-dashboard-nav-links}}
+  </nav>
+  <!-- Help: Support, then the same links as the Sites page's sidebar. Sites
+       and Account are in the site switcher above. -->
+  <nav class="dashboard-sidebar__footer dashboard-sidebar__nav--desktop" aria-label="Help and examples">
+    <a class="dashboard-sidebar__footer-link" href="/sites/support">Support</a>
+    <a class="dashboard-sidebar__footer-link" href="/how">Documentation</a>
+    <a class="dashboard-sidebar__footer-link" href="/questions">Questions</a>
+    <a class="dashboard-sidebar__footer-link" href="/examples">Examples</a>
+  </nav>
+
+  <!-- Phones: the site block above (with the section name) and a Menu
+       disclosure replace the sidebar -->
+  <details class="dashboard-sidebar__menu" data-dismissable>
+    <summary>Menu</summary>
+    <nav class="dashboard-sidebar__menu-panel" aria-label="Site menu">
+{{> site-dashboard-nav-links}}
+      <div class="dashboard-sidebar__section">
+        <a class="dashboard-sidebar__link" href="/sites/support">Support</a>
+        <a class="dashboard-sidebar__link" href="/how">Documentation</a>
+        <a class="dashboard-sidebar__link" href="/questions">Questions</a>
+        <a class="dashboard-sidebar__link" href="/examples">Examples</a>
+      </div>
+    </nav>
+  </details>
+  {{> dashboard-sidebar-resize-handle}}
+</aside>

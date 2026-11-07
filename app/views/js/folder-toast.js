@@ -1,3 +1,5 @@
+var announce = require("./announce.js");
+
 /**
  * Folder toast: top-center confirmation toasts for download, upload, remove.
  * Usage: showFolderToast('Message') or showFolderToast({ message: '...', type: 'success' })
@@ -32,6 +34,7 @@ function showFolderToast(messageOrOptions) {
   toast.appendChild(text);
 
   root.appendChild(toast);
+  announce(message);
   void toast.offsetWidth;
   toast.classList.add("folder-toast--in");
 

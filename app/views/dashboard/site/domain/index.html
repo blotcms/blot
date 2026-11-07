@@ -1,8 +1,10 @@
-{{> close-button}}
 
 {{> message}}
+{{> settings-tabs}}
 
-<form class="dashboard-form" action="{{{base}}}/domain" method="POST">
+<div class="dashboard-form-panel settings-page">
+<div class="dashboard-form-panel__body">
+<form class="dashboard-form" action="{{{domainBase}}}" method="POST">
 <div style="border:1px solid #eeeeec;border-radius: 5px;overflow: hidden;">
 <input type="hidden" name="_csrf" value="{{csrftoken}}" />
 
@@ -10,7 +12,7 @@
 {{> custom-domain}}
 {{/edit.custom}}
 {{^edit.custom}}
-<a class="line" href="{{{base}}}/domain/custom" >
+<a class="line" href="{{{domainBase}}}/custom" >
   <span class="label">Domain</span>
   <span class="center" style="display: flex;max-width: 100%;">
     <span style="display: flex;width: 100%;">
@@ -21,7 +23,7 @@
       {{#domainWarning}}
       <span style="color: orange; font-size: 12px; margin-right: 4px; position: relative; top: 6px" class="icon-small-alert"></span>
       {{/domainWarning}}
-      <span style="color:var(--light-text-color);opacity: 0.75;">https://</span>
+      <span style="color:var(--light-text-color)">https://</span>
       <span class="truncate">{{customDomain}}</span>
       <span class="link" style="margin-left: 12px;">Edit</span>
       {{/customDomain}}      
@@ -48,11 +50,11 @@
 
 
 {{^edit.subdomain}}
-<a class="line" href="{{{base}}}/domain/subdomain" style="border-bottom: none;">
+<a class="line" href="{{{domainBase}}}/subdomain" style="border-bottom: none;">
   <span class="label">Subdomain on Blot</span>
   <span class="center" style="display: flex;max-width: 100%;">
     <span style="display: flex;width: 100%;">
-      <span style="color:var(--light-text-color);opacity: 0.75;">https://</span>
+      <span style="color:var(--light-text-color)">https://</span>
       <span class="truncate">{{blog.handle}}.{{host}}</span>
       <span class="link" style="margin-left: 12px;">Edit</span>
     </span>
@@ -68,6 +70,30 @@
 
 </div>
 </form>
+
+<!-- Saves as soon as it changes, in its own form -->
+<h2>HTTPS</h2>
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/domain">
+    <div class="line plugins" style="max-width: 400px;">
+      <span class="center">
+        <div class="plugin {{{forceSSLPluginClass}}}">
+          <label class="setting-check">
+            <span class="setting-check__text">Redirect HTTP to HTTPS</span>
+            <span>
+              <input name='forceSSL' type='hidden' value='off' >
+              <input name='forceSSL' type="checkbox" {{{forceSSLChecked}}}/>
+              &nbsp;
+            </span>
+          </label>
+  
+        </div>
+      </span>
+    </div>
+    </form>
+</div>
+</div>
 
 <style>
   th, td {

@@ -1,0 +1,29 @@
+<details class="sidebar-site" data-dismissable>
+  <summary class="sidebar-site__trigger" title="{{blog.pretty.label}} · {{blog.pretty.url}}">
+    <span class="icon-folder sidebar-site__icon" aria-hidden="true"></span>
+    <span class="sidebar-site__text">
+      <span class="sidebar-site__title truncate">{{blog.pretty.label}}</span>
+      <span class="sidebar-site__section">{{currentSectionLabel}}</span>
+    </span>
+    <span class="visually-hidden">Switch site</span>
+    <span class="sidebar-site__chevron" aria-hidden="true">
+      <svg viewBox="0 0 16 16"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg>
+    </span>
+  </summary>
+  <div class="site-switcher__menu">
+    <nav class="site-switcher__sites" aria-label="Your sites">
+      {{#blogs}}
+      <a class="{{switcherClass}}" href="/sites/{{handle}}" aria-current="{{ariaCurrent}}">
+        <span class="site-switcher__site-info">
+          <span class="site-switcher__site-title">{{pretty.label}}</span>
+          <span class="site-switcher__site-domain">{{pretty.url}}</span>
+        </span>
+        {{#isCurrent}}<span class="site-switcher__check" aria-hidden="true">✓</span><span class="visually-hidden"> (current site)</span>{{/isCurrent}}
+      </a>
+      {{/blogs}}
+    </nav>
+    <a class="site-switcher__create" href="/sites">Sites</a>
+    <a class="site-switcher__create" href="/sites/account/create-site">Create site</a>
+    <a class="site-switcher__create" href="/sites/account">Account</a>
+  </div>
+</details>

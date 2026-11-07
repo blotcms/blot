@@ -10,6 +10,7 @@ const CLASSES = [
   ["patterns", /^template:[^:]+:[^:]+:url_patterns$/],
   ["owners", /^template:owned_by:[^:]+$/],
   ["session", /^sess:/],
+  ["readonly", /^blot:read-only$/],
   ["user", /^user:[^:]+:info$/],
   ["url", /^blog:[^:]+:url:/],
   ["entry", /^blog:[^:]+:entry:/],
@@ -19,6 +20,9 @@ const CLASSES = [
 
 // Small, hot keys read on nearly every blog or dashboard request, rarely
 // written, and no more numerous than blogs, templates, users or sessions.
+// The read-only freeze (helper/readOnly) is one key, read by every dashboard
+// page and almost always missing; Redis tracks a missing key too, so "not
+// frozen" is served locally until an operator sets it.
 // Keys named after a request path (entries, entry and template URLs,
 // redirects) are left out: crawlers and scanners would flood the cache and
 // evict these, and Redis tracks every key read, even a missing one, until it
@@ -32,6 +36,7 @@ const ALLOWED = new Set([
   "owners",
   "session",
   "user",
+  "readonly",
 ]);
 
 // Classes with their own bounded share of the cache, each evicting its own

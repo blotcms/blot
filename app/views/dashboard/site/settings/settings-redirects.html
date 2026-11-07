@@ -1,0 +1,13 @@
+{{> message}}
+{{> settings-tabs}}
+
+<!-- Redirects, with links to the bulk editor and the 404 log -->
+<div class="dashboard-form-panel settings-page">
+  <div class="dashboard-form-panel__body">
+    <h2 id="redirect-rows-heading">Redirects</h2>
+    <form method="post" aria-labelledby="redirect-rows-heading" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      {{> redirect-fields}}
+    </form>
+  </div>
+</div>

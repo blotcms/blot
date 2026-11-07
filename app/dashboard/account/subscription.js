@@ -9,10 +9,7 @@ var prettyPrice = require("helper/prettyPrice");
 const PLAN_MAP = config.stripe.plan_map;
 
 Subscription.route("/").get(function (req, res) {
-  res.render("dashboard/account/subscription", {
-    title: "Your account",
-    monthly: req.user.isMonthly,
-  });
+  res.redirect("/sites/account");
 });
 
 Subscription.use("/delete", require("./delete"));
