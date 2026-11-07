@@ -99,6 +99,9 @@ module.exports = function register(blog) {
     };
 
     res.renderViewToString("error.html").then(function (output) {
+      // No template to render the error page with
+      if (output === null) return next();
+
       res.status(status || 400);
       res.send(output);
     }, next);

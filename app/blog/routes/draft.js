@@ -55,6 +55,8 @@ async function renderDraft(req, res, next, filePath, callback) {
     }
 
     res.renderViewToString("entry.html").then(function (output) {
+      if (output === null) return renderNext();
+
       try {
         drafts.injectScript(output, filePath, function (html, bodyHTML) {
           try {

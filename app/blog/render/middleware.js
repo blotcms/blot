@@ -58,9 +58,12 @@ module.exports = function attachRenderView(req, res, _next) {
   // Renders a view to a string instead of responding with it (the CDN
   // manifest build and the draft preview use this). Resolves with the output,
   // or the debug locals when the request asked for ?debug or ?json, and
-  // rejects with what render() passes to next(err).
+  // null when the request has no template. Rejects with what render() passes to next(err).
   async function renderToString(name) {
     ensure(name, "string");
+
+    // As render(): without a template there is nothing to render
+    if (!req.template) return null;
 
     const built = await build(name);
 
