@@ -24,7 +24,7 @@ const RESYNC_REFUSALS = [
 // folder-settings-layout.html); the client's own page lists the files below
 // them. Their data is loaded before res.locals.base becomes the sync pages'.
 const loadPosts = require("./load/posts");
-const loadLiveTemplate = require("./load/live-template");
+const loadSummary = require("./load/summary");
 const loadFolder = require("./folder");
 
 const isClientPage = (req) =>
@@ -49,7 +49,7 @@ client_routes.get(
     next();
   },
   loadPosts,
-  loadLiveTemplate,
+  loadSummary,
   function (req, res, next) {
     if (isClientPage(req)) return loadFolder(req, res, next);
     // A subpage shows no files, so none of the filters is chosen

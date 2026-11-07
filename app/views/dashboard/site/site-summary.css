@@ -79,3 +79,131 @@
 .site-summary__row:hover .site-summary__chevron {
   color: var(--medium-text-color);
 }
+
+/* Title and Domain open in place: the row is a <summary>, its chevron
+   points down and turns when open, and the form opens under it */
+.site-summary__item > summary {
+  list-style: none;
+  cursor: pointer;
+}
+
+.site-summary__item > summary::-webkit-details-marker {
+  display: none;
+}
+
+.site-summary__chevron--open svg {
+  transition: transform 150ms ease;
+}
+
+.site-summary__item[open] > summary .site-summary__chevron--open svg {
+  transform: rotate(180deg);
+}
+
+.site-summary__item[open] > summary {
+  background: var(--surface-muted-color);
+}
+
+/* The open row's form, under its label, on the same tint as the row */
+.site-summary__panel {
+  padding: var(--space-1) var(--space-4) var(--space-4)
+    calc(var(--space-4) + 5.5em + var(--space-4));
+  background: var(--surface-muted-color);
+  font-size: var(--text-sm);
+}
+
+/* A form here fills the card rather than taking a settings page's width */
+.site-summary .dashboard-form {
+  width: 100%;
+  min-width: 0;
+  max-width: 34em;
+}
+
+/* Title's form: the field and its buttons on one line, at the card's size */
+.site-summary__form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  max-width: 34em;
+}
+
+.site-summary__form input[type="text"] {
+  flex: 1 1 14em;
+  min-width: 0;
+  margin: 0;
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 600px) {
+  .site-summary__panel {
+    padding-left: var(--space-4);
+  }
+}
+
+/* The domain's DNS record guide (site/domain/record-guide.html) is a plain
+   table: no cell rules but the header's */
+.domain-panel th,
+.domain-panel td {
+  padding: 0;
+  border-bottom: none;
+}
+
+.domain-panel th {
+  border-bottom: 1px solid var(--border-color);
+}
+
+/* The domain's own forms (site/domain/custom-domain.html and
+   sub-domain.html) at the card's size, like Title's */
+.domain-panel input[type="text"] {
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-sm);
+}
+
+.domain-panel .buttons {
+  margin-top: var(--space-2);
+}
+
+.domain-panel .buttons button,
+.domain-panel .buttons a {
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+
+/* Title's field takes the title's place in its row: the row stays one line
+   tall, the title text hidden while it's open and the form laid over where
+   it was, up to the chevron, which still closes it. On phones there's no
+   room, so the form opens under the row. */
+.site-summary__item--title {
+  position: relative;
+}
+
+@media (min-width: 601px) {
+  .site-summary__item--title[open] > summary .site-summary__value {
+    visibility: hidden;
+  }
+
+  .site-summary__panel--inline {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: calc(var(--space-4) + 5.5em + var(--space-4));
+    right: calc(var(--space-4) + 14px + var(--space-4));
+    display: flex;
+    align-items: center;
+    padding: 0;
+    background: transparent;
+  }
+
+  .site-summary__panel--inline .site-summary__form {
+    flex: 1 1 auto;
+    flex-wrap: nowrap;
+    margin-left: calc(var(--space-2) * -1 - 1px);
+  }
+
+  .site-summary__panel--inline input[type="text"] {
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+}

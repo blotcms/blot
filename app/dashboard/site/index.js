@@ -42,7 +42,8 @@ site.post(
 
 function getSidebarSelection(path) {
   // The overview and everything it leads to (all files, a file or
-  // subfolder, posts, recent activity, folder settings) are under Folder
+  // subfolder, posts, recent activity, folder settings, its open Title and
+  // Domain rows) are under Folder
   if (
     path === "/" ||
     path === "/files" ||
@@ -56,7 +57,10 @@ function getSidebarSelection(path) {
     path === "/scheduled" ||
     path.startsWith("/folder/") ||
     path === "/sync" ||
-    path.startsWith("/sync/")
+    path.startsWith("/sync/") ||
+    path === "/title" ||
+    path === "/domain" ||
+    path.startsWith("/domain/")
   )
     return "folder";
   if (path === "/settings" || path.startsWith("/settings/"))
@@ -275,7 +279,7 @@ site.get(
   setView("folder"),
   require("./folder"),
   require("./load/posts"),
-  require("./load/live-template"),
+  require("./load/summary"),
   loadClient,
   renderDashboard
 );
@@ -319,7 +323,7 @@ site.get(
   Object.keys(postFilterLabels).map((filter) => "/" + filter),
   setView("posts"),
   require("./load/posts"),
-  require("./load/live-template"),
+  require("./load/summary"),
   loadClient,
   renderDashboard
 );
@@ -414,19 +418,44 @@ site.use("/client", (req, res, next) => {
   res.redirect(308, `${res.locals.base}/sync${suffix}`);
 });
 
-// The title and domain pages also moved under Settings
+// Title and Domain open in place on the site's page, as rows of its summary
+// card: /title, /domain, /domain/custom and /domain/subdomain render the site
+// page with that row open; the saves POST there. They were Settings tabs.
+const openSummaryRow = (row, edit) => (req, res, next) => {
+  res.locals[row + "Open"] = true;
+  if (edit) res.locals.edit = { [edit]: true };
+  next();
+};
+
+const sitePage = [
+  setView("folder"),
+  require("./folder"),
+  require("./load/posts"),
+  require("./load/summary"),
+  loadClient,
+  renderDashboard,
+];
+
+site.get("/title", openSummaryRow("title"), ...sitePage);
+site.get("/domain", openSummaryRow("domain"), ...sitePage);
+site.get("/domain/custom", openSummaryRow("domain", "custom"), ...sitePage);
+site.get(
+  "/domain/subdomain",
+  openSummaryRow("domain", "subdomain"),
+  ...sitePage
+);
+site.use("/title", title);
+site.use("/domain", domain);
+
 for (const page of ["title", "domain"]) {
-  site.use("/" + page, (req, res) => {
+  site.use("/settings/" + page, (req, res) => {
     const suffix = req.url === "/" ? "" : req.url;
-    res.redirect(308, `${res.locals.base}/settings/${page}${suffix}`);
+    res.redirect(308, `${res.locals.base}/${page}${suffix}`);
   });
 }
 
 // The Settings page: one tab per group of settings, each its own page
-// Title and Domain are settings too, first since they're the most used
 const settingsTabs = [
-  ["title", "Title"],
-  ["domain", "Domain"],
   ["posts", "Posts"],
   ["redirects", "Redirects"],
   ["services", "Services"],
@@ -443,10 +472,8 @@ const settingsTab = (tab) => (req, res, next) => {
   next();
 };
 
-site.use("/settings/title", settingsTab("title"), title);
 site.use("/settings/export", settingsTab("export"), require("./export"));
 site.use("/settings/delete", settingsTab("delete"), require("./delete"));
-site.use("/settings/domain", settingsTab("domain"), domain);
 
 const settingsRedirect = (to) => (req, res) => {
   const query = req.originalUrl.includes("?")
@@ -456,7 +483,7 @@ const settingsRedirect = (to) => (req, res) => {
 };
 
 // The first tab
-site.get("/settings", settingsRedirect("title"));
+site.get("/settings", settingsRedirect("posts"));
 
 // Earlier versions of these pages: Writing, Date and time, Images and Links
 // are sections of Posts; Integrations is Services. A URLs tab briefly held
@@ -501,6 +528,8 @@ site.get(
   load.redirects,
   load.redirectWarnings,
   (req, res) => {
+    res.locals.forceSSLPluginClass = req.blog.forceSSL ? "checked" : "";
+    res.locals.forceSSLChecked = req.blog.forceSSL ? "checked" : "";
     res.render("dashboard/site/settings/settings-redirects");
   }
 );

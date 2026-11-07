@@ -23,7 +23,7 @@ The same thing always has the same name and the same look, everywhere it appears
 Words the dashboard uses (what the user sees, not internal names):
 
 - **Site**, not blog. Its **Title** (the setting, and the Sites list's first column) and its **Domain**.
-- **Template**: the one in use is "live on your site". **Edit** is the link to change any value in a row (not "Change" or "Edit template"). Where the whole row is the link, as in the summary card at the top of a site's folder, a grey chevron at its end stands in for Edit, which screen readers still hear.
+- **Template**: the one in use is "live on your site". **Edit** is the link to change any value in a row (not "Change" or "Edit template"). In the summary card at the top of a site's folder, a row that opens in place (Title, Domain) ends in a grey chevron pointing down that turns when open, and a row that is a link to another page (Template) in one pointing right; screen readers still hear Edit.
 - **Folder** is the site's files (the Folder page and the folder box). **Files** is the filter that shows them. **Sync** is the connection to Dropbox, Google Drive, iCloud, Git or a local folder, and its pages. The folder box's top row says where the folder syncs from ("Syncs from Git"), a pill that opens the sync settings above the files (`folder/folder-toolbar.html`).
 - **Post**, not entry. The filters are **Posts**, **Pages**, **Drafts** and **Scheduled**. Columns are **Title**, **File**, **Date published**, **Date modified**, **Size**.
 - **Settings** is the site's Settings section.

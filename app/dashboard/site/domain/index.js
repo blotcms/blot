@@ -15,12 +15,12 @@ const ip = config.ip;
 const ipv6 = config.ipv6;
 const host = config.host;
 
-Domain.use((req, res, next) => {
-  res.locals.domainBase = req.baseUrl;
-  res.locals.selected = { ...res.locals.selected, domain: "selected" };
-  res.locals.forceSSLPluginClass = req.blog.forceSSL ? "checked" : "";
-  res.locals.forceSSLChecked = req.blog.forceSSL ? "checked" : "";
-  res.locals.breadcrumbs.add("Domain", "domain");
+// What the summary card's Domain row shows (site/site-summary.html), on every
+// page that has it: the custom domain, any pending verification problem
+// stored in the session. Reads only the session and
+// the blog, no DNS.
+function domainLocals(req, res) {
+  res.locals.domainBase = res.locals.dashboardBase + "/domain";
 
   const blogID = req.blog.id;
   const warning =
@@ -64,7 +64,10 @@ Domain.use((req, res, next) => {
     res.locals.code = {};
     res.locals.code[activeWarning.code] = true;
   }
+}
 
+Domain.use((req, res, next) => {
+  domainLocals(req, res);
   next();
 });
 
@@ -80,117 +83,105 @@ function normalizeHostname(hostname) {
   return asciiHostname.toLowerCase();
 }
 
-Domain.route("/")
-  .get((req, res) => {
-    res.render("dashboard/site/domain");
-  })
-  .post(async (req, res) => {
-    const blogID = req.blog.id;
-    const domainInput =
-      typeof req.body.domain === "string" ? req.body.domain : "";
-    const { hostname } = parse(domainInput);
+// The GETs (/domain, /domain/custom and /domain/subdomain) are the site's
+// page with the Domain row open (dashboard/site/index.js)
+Domain.route("/").post(async (req, res) => {
+  const blogID = req.blog.id;
+  const domainInput =
+    typeof req.body.domain === "string" ? req.body.domain : "";
+  const { hostname } = parse(domainInput);
 
-    if (req.body.handle) {
-      try {
-        await updateHandle(blogID, req.body.handle);
-        const routeSuffix = res.locals.domainBase.slice(res.locals.base.length);
-        return res.message(
-          `/sites/${req.body.handle}${routeSuffix}`,
-          "Updated subdomain on Blot"
-        );
-      } catch (e) {
-        return res.message(res.locals.domainBase + "/subdomain", e);
-      }
-    }
-
-    if (!hostname) {
-      if (!domainInput || !domainInput.trim()) {
-        await updateDomain(blogID, "");
-        // Clear the domain error from the session
-        delete req.session[`${blogID}:domainError`];
-        delete req.session[`${blogID}:domainWarning`];
-        req.session.save();
-        return res.message(res.locals.domainBase, "Domain removed");
-      }
-
-      return res.message(
-        res.locals.domainBase + "/custom",
-        new Error("Please enter a valid domain")
-      );
-    }
-
-    // Remove the existing domain if it is set and differs from the new one
-    if (req.blog.domain && req.blog.domain !== hostname) {
-      try {
-        await updateDomain(blogID, "");
-      } catch (error) {
-        return res.message(res.locals.domainBase + "/custom", error);
-      }
-    }
-
+  if (req.body.handle) {
     try {
-      await updateDomain(blogID, hostname);
+      await updateHandle(blogID, req.body.handle);
+      const routeSuffix = res.locals.domainBase.slice(res.locals.base.length);
+      return res.message(
+        `/sites/${req.body.handle}${routeSuffix}`,
+        "Updated subdomain on Blot"
+      );
+    } catch (e) {
+      return res.message(res.locals.domainBase + "/subdomain", e);
+    }
+  }
+
+  if (!hostname) {
+    if (!domainInput || !domainInput.trim()) {
+      await updateDomain(blogID, "");
+      // Clear the domain error from the session
+      delete req.session[`${blogID}:domainError`];
+      delete req.session[`${blogID}:domainWarning`];
+      req.session.save();
+      return res.message(res.locals.domainBase, "Domain removed");
+    }
+
+    return res.message(
+      res.locals.domainBase + "/custom",
+      new Error("Please enter a valid domain")
+    );
+  }
+
+  // Remove the existing domain if it is set and differs from the new one
+  if (req.blog.domain && req.blog.domain !== hostname) {
+    try {
+      await updateDomain(blogID, "");
     } catch (error) {
       return res.message(res.locals.domainBase + "/custom", error);
     }
+  }
 
-    try {
-      const isValid = await verify({
-        hostname,
-        handle: req.blog.handle,
-        ourIP: ip,
-        ourIPv6: ipv6,
-        ourHost: host,
-      });
+  try {
+    await updateDomain(blogID, hostname);
+  } catch (error) {
+    return res.message(res.locals.domainBase + "/custom", error);
+  }
 
-      if (isValid) {
-        // Clear the blog session
-        delete req.session[`${blogID}:domainError`];
-        delete req.session[`${blogID}:domainWarning`];
-        req.session.save();
-        triggerAutoSSL(hostname);
-        return res.message(res.locals.domainBase, "Domain added");
-      } else {
-        throw new Error("Domain verification failed.");
-      }
-    } catch (error) {
-      console.log(error);
+  try {
+    const isValid = await verify({
+      hostname,
+      handle: req.blog.handle,
+      ourIP: ip,
+      ourIPv6: ipv6,
+      ourHost: host,
+    });
 
-      // if this is a re-attempt or not
-      const previousWarning =
-        req.session[`${blogID}:domainWarning`] ||
-        req.session[`${blogID}:domainError`];
-      const revalidation =
-        previousWarning && previousWarning.hostname === hostname;
-
-      // Store warning details in the session
-      req.session[`${blogID}:domainWarning`] = {
-        hostname,
-        code: error.message,
-        nameservers: error.nameservers || [],
-        recordToRemove: error.recordToRemove || [],
-        lastChecked: Date.now(),
-        revalidation,
-      };
+    if (isValid) {
+      // Clear the blog session
       delete req.session[`${blogID}:domainError`];
-
+      delete req.session[`${blogID}:domainWarning`];
       req.session.save();
       triggerAutoSSL(hostname);
-      return res.message(
-        res.locals.domainBase + "/custom",
-        "Domain saved. Verification is still pending."
-      );
+      return res.message(res.locals.domainBase, "Domain added");
+    } else {
+      throw new Error("Domain verification failed.");
     }
-  });
+  } catch (error) {
+    console.log(error);
 
-Domain.route("/custom").get((req, res) => {
-  res.locals.edit = { custom: true };
-  res.render("dashboard/site/domain");
-});
+    // if this is a re-attempt or not
+    const previousWarning =
+      req.session[`${blogID}:domainWarning`] ||
+      req.session[`${blogID}:domainError`];
+    const revalidation =
+      previousWarning && previousWarning.hostname === hostname;
 
-Domain.route("/subdomain").get((req, res) => {
-  res.locals.edit = { subdomain: true };
-  res.render("dashboard/site/domain");
+    // Store warning details in the session
+    req.session[`${blogID}:domainWarning`] = {
+      hostname,
+      code: error.message,
+      nameservers: error.nameservers || [],
+      recordToRemove: error.recordToRemove || [],
+      lastChecked: Date.now(),
+      revalidation,
+    };
+    delete req.session[`${blogID}:domainError`];
+
+    req.session.save();
+    triggerAutoSSL(hostname);
+    return res.message(
+      res.locals.domainBase + "/custom",
+      "Domain saved. Verification is still pending."
+    );
+  }
 });
 
 const updateDomain = (blogID, domain) => {
@@ -235,3 +226,4 @@ function triggerAutoSSL(hostname) {
 }
 
 module.exports = Domain;
+module.exports.domainLocals = domainLocals;

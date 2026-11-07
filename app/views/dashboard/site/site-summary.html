@@ -1,6 +1,29 @@
-<!-- The site's title, domain and live template, each a link to change it -->
+<!-- The site's title, domain and live template. Title and Domain open in
+     place (a chevron that turns), each to its form; /title and /domain
+     render the page with that row open. Template is a link to its editor
+     (a chevron pointing on). -->
 <ul class="site-summary" aria-label="Site details">
-  <li><a class="site-summary__row" href="{{{base}}}/settings/title"><span class="site-summary__label">Title</span><span class="visually-hidden">: </span>{{#blog.title}}<span class="site-summary__value truncate">{{blog.title}}</span>{{/blog.title}}{{^blog.title}}<span class="site-summary__value site-summary__value--empty">No title</span>{{/blog.title}}<span class="visually-hidden">, Edit</span><span class="site-summary__chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a></li>
-  <li><a class="site-summary__row" href="{{{base}}}/settings/domain"><span class="site-summary__label">Domain</span><span class="visually-hidden">: </span><span class="site-summary__value truncate">{{blog.pretty.url}}</span><span class="visually-hidden">, Edit</span><span class="site-summary__chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a></li>
+  <li>
+    {{#titleOpen}}<details class="site-summary__item site-summary__item--title" open>{{/titleOpen}}{{^titleOpen}}<details class="site-summary__item site-summary__item--title">{{/titleOpen}}
+      <summary class="site-summary__row"><span class="site-summary__label">Title</span><span class="visually-hidden">: </span>{{#blog.title}}<span class="site-summary__value truncate">{{blog.title}}</span>{{/blog.title}}{{^blog.title}}<span class="site-summary__value site-summary__value--empty">No title</span>{{/blog.title}}<span class="visually-hidden">, Edit</span><span class="site-summary__chevron site-summary__chevron--open" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></summary>
+      <div class="site-summary__panel site-summary__panel--inline">
+        <form class="site-summary__form" method="post" action="{{{dashboardBase}}}/title">
+          <input type="hidden" name="_csrf" value="{{csrftoken}}">
+          <label class="visually-hidden" for="site-title">Title</label>
+          <input type="text" id="site-title" name="title" value="{{blog.title}}" placeholder="Title">
+          <button type="submit" class="btn btn-primary btn-sm">Save title</button>
+          <a class="btn btn-sm" href="{{{dashboardBase}}}">Cancel</a>
+        </form>
+      </div>
+    </details>
+  </li>
+  <li>
+    {{#domainOpen}}<details class="site-summary__item" open>{{/domainOpen}}{{^domainOpen}}<details class="site-summary__item">{{/domainOpen}}
+      <summary class="site-summary__row"><span class="site-summary__label">Domain</span><span class="visually-hidden">: </span><span class="site-summary__value truncate">{{blog.pretty.url}}</span><span class="visually-hidden">, Edit</span><span class="site-summary__chevron site-summary__chevron--open" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></summary>
+      <div class="site-summary__panel">
+        {{> domain-panel}}
+      </div>
+    </details>
+  </li>
   <li><a class="site-summary__row" href="{{{liveTemplate.url}}}"><span class="site-summary__label">Template</span><span class="visually-hidden">: </span><span class="site-summary__value truncate">{{liveTemplate.name}}</span><span class="visually-hidden">, Edit</span><span class="site-summary__chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14"><path d="m6 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a></li>
 </ul>

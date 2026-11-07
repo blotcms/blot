@@ -16,12 +16,12 @@ describe("Blot dashboard settings", function () {
     await page.goto("/sites");
     await page.click('a[href="/sites/' + handle + '"]');
 
-    // click on the title settings link
-    await page.click('a[href="/sites/' + handle + '/settings/title"]');
+    // open the Title row of the site's summary
+    await page.click(".site-summary__item--title summary");
 
-    // enter a new title and submit the form
+    // enter a new title and submit the row's form
     page.type("input[name=title]", "New title");
-    await page.click("[type=submit]");
+    await page.click(".site-summary__form [type=submit]");
 
     // go back to the dashboard
     await page.click('a[href="/sites/' + handle + '"]');
