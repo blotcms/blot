@@ -7,7 +7,6 @@ var extend = require("helper/extend");
 var deCamelize = require("helper/deCamelize");
 var time = require("helper/time");
 var _ = require("lodash");
-var withResults = require("../withResults");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const { GLOBAL_STATIC_SUBDIRECTORIES } = require("blog/lib/staticPaths");
 
@@ -67,8 +66,7 @@ var plugins = loaded.plugins;
 var prerenderers = loaded.prerenderers;
 
 // Takes a string and based on the user's
-// plugins converts it into an HTML string. Calls back with
-// (err, html, dependencies); without a callback it resolves to
+// plugins converts it into an HTML string. Resolves to
 // [html, dependencies].
 async function convert(blog, path, contents) {
   ensure(contents, "string").and(path, "string").and(blog, "object");
@@ -313,7 +311,7 @@ function Timeout(name, cb) {
 const promiseOnly = require("helper/promiseOnly");
 
 module.exports = {
-  convert: withResults(convert),
+  convert: promiseOnly(convert),
   load: promiseOnly(load),
   list: list,
   defaultList: defaultPlugins,

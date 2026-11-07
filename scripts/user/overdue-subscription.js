@@ -115,7 +115,7 @@ async function main() {
     // async.each's final callback ignored errors and carried on, so do the same
   }
 
-  await promisify(fetchSubscription)(user);
+  await fetchSubscription(user);
 
   return { email: email, invoices: invoices };
 }

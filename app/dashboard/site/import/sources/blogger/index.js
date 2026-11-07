@@ -11,18 +11,18 @@ function callStep(step, entry) {
 }
 
 async function processEntry(entry, outputDirectory) {
-  const steps = [
-    helper.determine_path(outputDirectory),
-    helper.download_pdfs,
-    helper.download_images,
-    helper.convert_to_markdown,
-    helper.insert_metadata,
-    helper.write,
-  ];
-  for (const step of steps) {
-    lifecycle.check();
-    entry = await callStep(step, entry);
-  }
+  lifecycle.check();
+  entry = await callStep(helper.determine_path(outputDirectory), entry);
+  lifecycle.check();
+  entry = await helper.download_pdfs(entry);
+  lifecycle.check();
+  entry = await helper.download_images(entry);
+  lifecycle.check();
+  entry = await callStep(helper.convert_to_markdown, entry);
+  lifecycle.check();
+  entry = await callStep(helper.insert_metadata, entry);
+  lifecycle.check();
+  await callStep(helper.write, entry);
 }
 
 async function importBlogger(sourceFile, outputDirectory, status, siteHost) {

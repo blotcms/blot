@@ -389,7 +389,7 @@ dashboard.get("/disconnect", function (req, res) {
   res.render(views + "disconnect");
 });
 
-dashboard.post("/disconnect", function (req, res, next) {
+dashboard.post("/disconnect", async function (req, res, next) {
   if (!req.blog.client) {
     return res.redirect(res.locals.dashboardBase + "/sync");
   }
@@ -403,7 +403,14 @@ dashboard.post("/disconnect", function (req, res, next) {
       console.error("failed to publish dropbox disconnect status", err)
     );
   delete req.session.dropbox;
-  disconnect(req.blog.id, next);
+
+  try {
+    await disconnect(req.blog.id);
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 });
 
 module.exports = dashboard;

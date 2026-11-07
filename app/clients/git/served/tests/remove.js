@@ -12,12 +12,7 @@ describe("git store: removing a blog's repository", function () {
   var { manifest } = require("clients/git/store");
 
   function disconnected(blogID) {
-    return new Promise(function (resolve, reject) {
-      disconnect(blogID, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    return disconnect(blogID);
   }
 
   function sleep(ms) {

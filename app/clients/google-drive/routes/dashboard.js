@@ -70,8 +70,14 @@ dashboard
   .get(function (req, res) {
     res.render(VIEWS + "disconnect");
   })
-  .post(function (req, res, next) {
-    disconnect(req.blog.id, next);
+  .post(async function (req, res, next) {
+    try {
+      await disconnect(req.blog.id);
+    } catch (err) {
+      return next(err);
+    }
+
+    next();
   });
 
 dashboard.route("/connect").get(function (req, res) {
@@ -130,7 +136,13 @@ dashboard
           return res.redirect(req.baseUrl);
         }
 
-        return disconnect(req.blog.id, next);
+        try {
+          await disconnect(req.blog.id);
+        } catch (disconnectError) {
+          return next(disconnectError);
+        }
+
+        return next();
       }
 
       if (!req.body.email) {

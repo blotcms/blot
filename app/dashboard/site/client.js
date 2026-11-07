@@ -67,12 +67,7 @@ client_routes
     if (req.body.client === req.blog.client) return res.redirect(redirect);
 
     try {
-      await new Promise((resolve, reject) => {
-        clients[req.blog.client].disconnect(req.blog.id, function (err) {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
+      await clients[req.blog.client].disconnect(req.blog.id);
       await Blog.set(req.blog.id, { client: req.body.client });
 
       res.redirect(redirect);

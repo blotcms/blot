@@ -163,12 +163,8 @@ SourceCode.route("/:viewSlug/edit")
           const templateForSync = metadata || req.template;
 
           saveViews(req.template.id, views).then(function () {
-            writeChangeToFolder(
-              req.blog,
-              templateForSync,
-              view,
-              function (err) {
-                if (err) return sendError(err);
+            writeChangeToFolder(req.blog, templateForSync, view).then(
+              function () {
                 // package.json is metadata, not a view file. Publish after the
                 // locals and any view metadata from it are stored so an
                 // open preview tab reloads.
@@ -177,7 +173,8 @@ SourceCode.route("/:viewSlug/edit")
                   res.set("X-Template-Forked", "1");
                 }
                 res.send("Saved changes!");
-              }
+              },
+              sendError
             );
           }, sendError);
         });
@@ -185,13 +182,12 @@ SourceCode.route("/:viewSlug/edit")
     } else {
       Template.setView(req.template.id, view, function (err) {
         if (err) return sendError(err);
-        writeChangeToFolder(req.blog, req.template, view, function (err) {
-          if (err) return sendError(err);
+        writeChangeToFolder(req.blog, req.template, view).then(function () {
           if (res.locals.templateForked) {
             res.set("X-Template-Forked", "1");
           }
           res.send("Saved changes!");
-        });
+        }, sendError);
       });
     }
   });
@@ -332,15 +328,13 @@ SourceCode.route("/:viewSlug/configure")
     Template.setView(req.template.id, updates, function (err) {
       if (err) return next(err);
 
-      writeChangeToFolder(req.blog, req.template, updates, function (err) {
-        if (err) return next(err);
-
+      writeChangeToFolder(req.blog, req.template, updates).then(function () {
         if (res.locals.templateForked) {
           res.set("X-Template-Forked", "1");
         }
 
         res.send("Saved changes!");
-      });
+      }, next);
     });
   });
 

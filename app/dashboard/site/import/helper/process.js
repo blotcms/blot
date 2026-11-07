@@ -15,17 +15,13 @@ module.exports = (output_directory, posts, options = {}) => {
 
   (async () => {
     for (const post of posts) {
-      const steps = [
-        determinePath,
-        require("./download_audio"),
-        require("./download_pdfs"),
-        require("./download_images"),
-        require("./convert_to_markdown"),
-        require("./insert_metadata"),
-        write,
-      ];
-      let result = post;
-      for (const step of steps) result = await callStep(step, result);
+      let result = await callStep(determinePath, post);
+      result = await require("./download_audio")(result);
+      result = await require("./download_pdfs")(result);
+      result = await require("./download_images")(result);
+      result = await callStep(require("./convert_to_markdown"), result);
+      result = await callStep(require("./insert_metadata"), result);
+      await callStep(write, result);
     }
   })().then(
     () => {

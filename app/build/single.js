@@ -4,10 +4,9 @@ var Dependencies = require("./dependencies");
 var Plugins = require("./plugins").convert;
 var ensure = require("helper/ensure");
 var enabledConverters = require("./converters/enabled");
-var withResults = require("./withResults");
+var promiseOnly = require("helper/promiseOnly");
 
-// Calls back with (err, html, metadata, stat, dependencies, extras); without
-// a callback it resolves to [html, metadata, stat, dependencies, extras].
+// Resolves to [html, metadata, stat, dependencies, extras].
 async function single(blog, path) {
   ensure(blog, "object").and(path, "string");
 
@@ -68,7 +67,7 @@ async function single(blog, path) {
   return [html, metadata, stat, dependencies, extras];
 }
 
-module.exports = withResults(single);
+module.exports = promiseOnly(single);
 
 function fixMustache(str) {
   return str.split("{{&gt;").join("{{>");

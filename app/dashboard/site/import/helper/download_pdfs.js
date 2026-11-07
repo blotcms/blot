@@ -5,7 +5,7 @@ var fs = require("fs-extra");
 var assetDirectory = require("./asset_directory");
 var boundedDownload = require("./download");
 var lifecycle = require("../lifecycle");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 async function download_pdfs(post) {
   // if (post.html.indexOf('pdf-embedder') > -1) {
@@ -103,4 +103,4 @@ function nameFrom(src) {
   return "_" + basename(parse(src).pathname);
 }
 
-module.exports = withCallback(download_pdfs);
+module.exports = promiseOnly(download_pdfs);

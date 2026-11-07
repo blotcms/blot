@@ -1,6 +1,5 @@
 var redis = require("models/client");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
 var promiseOnly = require("helper/promiseOnly");
 var Entry = require("../entry");
 var entryKey = require("../entry/key").entry;
@@ -392,23 +391,23 @@ module.exports = (function () {
   // no error argument. options.onError, if given, hears of a Redis outage
   // (or bad arguments) instead, and then the callback is never called.
   function getRangeWithCallback(blogID, start, end, options, callback) {
-    withCallback(getRange)(
+    getRange(
       blogID,
       start,
       end,
-      Object.assign({}, options, { rejectOnOutage: !!options.onError }),
-      function (err, entries) {
-        if (err) {
-          if (options.onError) return options.onError(err);
-
-          // Only bad arguments get here (getRange resolves [] for any other
-          // error without rejectOnOutage): log, and call back with [] as it
-          // does for those, rather than leaving the caller hanging
-          console.error("Entries: getRange failed", err);
-          return callback([]);
-        }
-
+      Object.assign({}, options, { rejectOnOutage: !!options.onError })
+    ).then(
+      function (entries) {
         callback(entries);
+      },
+      function (err) {
+        if (options.onError) return options.onError(err);
+
+        // Only bad arguments get here (getRange resolves [] for any other
+        // error without rejectOnOutage): log, and call back with [] as it
+        // does for those, rather than leaving the caller hanging
+        console.error("Entries: getRange failed", err);
+        return callback([]);
       }
     );
   }
@@ -430,11 +429,11 @@ module.exports = (function () {
         if (!entryID) return callback();
 
         // A failed read is the same as no entry
-        withCallback(Entry.get)(blogID, entryID, function (err, entry) {
+        Entry.get(blogID, entryID).then(function (entry) {
           if (!entry || !entry.url) return attempt();
 
           callback(entry);
-        });
+        }, attempt);
       });
     }
 

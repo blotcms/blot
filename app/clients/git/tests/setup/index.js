@@ -126,8 +126,8 @@ module.exports = function setup(options) {
     this.fake = global.test.fake;
   });
 
-  after(function (done) {
-    disconnect(this.blog.id, done);
+  after(async function () {
+    await disconnect(this.blog.id);
   });
 
   if (options.setClientToGit !== false)

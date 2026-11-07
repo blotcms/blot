@@ -7,7 +7,7 @@ var Single = require("./single");
 var enabledConverters = require("./converters/enabled");
 var titlecase = require("helper/titlecase");
 var cheerio = require("cheerio");
-var withResults = require("./withResults");
+var promiseOnly = require("helper/promiseOnly");
 
 // Mirrors the traversal in prepare/title.js exactly: preferred tag order and
 // the "first three nodes at each nesting level" limit.
@@ -16,8 +16,7 @@ var TITLE_MAX_DEPTH = 3;
 
 var MAX_MULTI_FILES = 50;
 
-// Calls back with (err, html, metadata, stat, dependencies, extras); without
-// a callback it resolves to [html, metadata, stat, dependencies, extras].
+// Resolves to [html, metadata, stat, dependencies, extras].
 async function buildMultiple(blog, info) {
   ensure(blog, "object")
     .and(info, "object")
@@ -134,7 +133,7 @@ async function buildMultiple(blog, info) {
   return [html, metadata, stat, combinedDependencies, combinedExtras];
 }
 
-module.exports = withResults(buildMultiple);
+module.exports = promiseOnly(buildMultiple);
 
 async function collectConvertibleFiles(blog, folderPath) {
   const files = [];

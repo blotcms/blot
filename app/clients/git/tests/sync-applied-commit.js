@@ -6,10 +6,9 @@
 describe("git client: the last applied commit", function () {
   require("./setup")({ clone: false, client: true });
 
-  var util = require("util");
   var database = require("clients/git/database");
   var Entry = require("models/entry");
-  var disconnect = util.promisify(require("clients/git/disconnect"));
+  var disconnect = require("clients/git/disconnect");
   var sync = require("clients/git/sync");
   var write = require("clients/git/write");
   var helpers = require("./setup/helpers");

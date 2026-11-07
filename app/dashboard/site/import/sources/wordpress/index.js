@@ -1,77 +1,62 @@
 var fs = require("fs-extra");
-var parseXML = require("xml2js").parseString;
+var parseXMLAsync = require("util").promisify(require("xml2js").parseString);
 var colors = require("colors/safe");
 var Item = require("./item");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var helper = require("dashboard/site/import/helper");
 
-function main(sourceFile, outputDirectory, status, options, callback) {
+async function main(sourceFile, outputDirectory, status, options) {
   fs.emptyDirSync(outputDirectory);
 
   status("Reading WordPress XML file");
 
-  fs.readFile(sourceFile, "utf-8", function (err, xml) {
-    if (err) return callback(err);
+  const xml = await fs.readFile(sourceFile, "utf-8");
 
-    // Without strict:false, sometimes we run into errors with invalid/unescaped
-    // characters in the XML provided by WordPress.
-    // Strict seems to have some side-effects, which is why we also normalize:true
-    // and normalizeTags:true.
-    parseXML(
-      xml,
-      { strict: false, normalizeTags: true },
-      function (err, result) {
-        if (err) return callback(err);
-
-        try {
-          var channel = result.rss.channel[0];
-          var link = channel && channel.link && channel.link[0];
-          var exportVersion =
-            channel &&
-            channel["wp:wxr_version"] &&
-            channel["wp:wxr_version"][0];
-
-          console.log(colors.dim("Site URL:"), link);
-          console.log(colors.dim("Export Version"), exportVersion);
-
-          // If you want to see other properties available,
-          // log this to STDOUT
-          // console.log(result.rss.channel);
-
-          if (options.filter) {
-            console.log("filter by:", options.filter);
-            channel.item = channel.item.filter(function (item) {
-              return (
-                item.title[0]
-                  .toLowerCase()
-                  .indexOf(options.filter.toLowerCase()) > -1
-              );
-            });
-          }
-
-          var items = channel.item;
-
-          var totalItems = items.length;
-        } catch (e) {
-          return callback(new Error("Invalid XML"));
-        }
-
-        // Final destinations are allocated only after downloads have established
-        // whether an entry needs a directory-backed post.txt representation.
-        var write = helper.write.createWriter();
-
-        withCallback(importItems)(
-          items,
-          channel,
-          totalItems,
-          outputDirectory,
-          status,
-          write,
-          callback
-        );
-      }
-    );
+  // Without strict:false, sometimes we run into errors with invalid/unescaped
+  // characters in the XML provided by WordPress.
+  // Strict seems to have some side-effects, which is why we also normalize:true
+  // and normalizeTags:true.
+  const result = await parseXMLAsync(xml, {
+    strict: false,
+    normalizeTags: true,
   });
+
+  var channel, items, totalItems;
+
+  try {
+    channel = result.rss.channel[0];
+    var link = channel && channel.link && channel.link[0];
+    var exportVersion =
+      channel && channel["wp:wxr_version"] && channel["wp:wxr_version"][0];
+
+    console.log(colors.dim("Site URL:"), link);
+    console.log(colors.dim("Export Version"), exportVersion);
+
+    // If you want to see other properties available,
+    // log this to STDOUT
+    // console.log(result.rss.channel);
+
+    if (options.filter) {
+      console.log("filter by:", options.filter);
+      channel.item = channel.item.filter(function (item) {
+        return (
+          item.title[0].toLowerCase().indexOf(options.filter.toLowerCase()) > -1
+        );
+      });
+    }
+
+    items = channel.item;
+
+    totalItems = items.length;
+  } catch (e) {
+    throw new Error("Invalid XML", { cause: e });
+  }
+
+  // Final destinations are allocated only after downloads have established
+  // whether an entry needs a directory-backed post.txt representation.
+  var write = helper.write.createWriter();
+
+  await importItems(items, channel, totalItems, outputDirectory, status, write);
 }
 
 async function importItems(
@@ -127,4 +112,4 @@ function injectAttachedThumbnail(item, channel) {
   }
 }
 
-module.exports = main;
+module.exports = promiseOnly(main);

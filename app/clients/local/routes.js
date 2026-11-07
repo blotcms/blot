@@ -30,8 +30,14 @@ Dashboard.route("/disconnect")
   .get(function (req, res) {
     res.render(__dirname + "/views/disconnect.html");
   })
-  .post(function (req, res, next) {
-    disconnect(req.blog.id, next);
+  .post(async function (req, res, next) {
+    try {
+      await disconnect(req.blog.id);
+    } catch (err) {
+      return next(err);
+    }
+
+    next();
   });
 
 module.exports = Dashboard;

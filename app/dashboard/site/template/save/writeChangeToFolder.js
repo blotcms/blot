@@ -1,11 +1,8 @@
 const clfdate = require("helper/clfdate");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 const { getMetadata, writeToFolder } = require("models/template");
 
-// Callers outside this file still pass a callback (source-code.js,
-// upload-image.js, upload-favicon.js, persist-template-update.js), so the
-// export keeps accepting one.
-module.exports = withCallback(
+module.exports = promiseOnly(
   async function writeChangeToFolder(blog, template, view) {
     console.log(
       clfdate(),

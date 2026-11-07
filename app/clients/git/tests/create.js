@@ -80,7 +80,7 @@ describe("git client create", function () {
     var blog = this.blog;
 
     await create(blog);
-    await promisify(disconnect)(blog.id);
+    await disconnect(blog.id);
     await create(blog);
   });
 

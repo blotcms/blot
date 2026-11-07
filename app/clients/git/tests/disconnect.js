@@ -17,7 +17,7 @@ describe("git client disconnect", function () {
 
   var getToken = database.getToken;
   var setBlog = promisify(Blog.set);
-  var disconnectBlog = promisify(disconnect);
+  var disconnectBlog = disconnect;
   var inStore = repo.exists;
 
   var otherBlog;

@@ -51,11 +51,7 @@ Importer.route("/wordpress")
           identifier,
           "utf8"
         );
-        await new Promise((resolve, reject) => {
-          wordpress(inputXML, outputDirectory, status, {}, (err) =>
-            err ? reject(err) : resolve()
-          );
-        });
+        await wordpress(inputXML, outputDirectory, status, {});
       })
       .catch((error) => console.error("Failed to clean up import", error))
       .finally(() => releaseUpload())

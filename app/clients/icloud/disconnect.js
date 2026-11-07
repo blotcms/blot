@@ -2,11 +2,13 @@ const Blog = require("models/blog");
 const database = require("./database");
 const fetch = require("./util/rateLimitedFetchWithRetriesAndTimeout");
 const config = require("config");
+const promiseOnly = require("helper/promiseOnly");
 
 const MACSERVER_URL = config.icloud.server_address; // The Macserver base URL from config
 const MACSERVER_AUTH = config.icloud.secret; // The Macserver Authorization secret from config
 
-module.exports = async (blogID, callback) => {
+// Resolves to the warning when the Mac server could not be told, else null.
+module.exports = promiseOnly(async function disconnect(blogID) {
   let remoteWarning = null;
 
   try {
@@ -36,13 +38,9 @@ module.exports = async (blogID, callback) => {
     );
   }
 
-  try {
-    // Phase B (authoritative local): always disconnect locally.
-    await database.delete(blogID);
-    await Blog.set(blogID, { client: "" });
+  // Phase B (authoritative local): always disconnect locally.
+  await database.delete(blogID);
+  await Blog.set(blogID, { client: "" });
 
-    callback(null, remoteWarning);
-  } catch (error) {
-    callback(error);
-  }
-};
+  return remoteWarning;
+});

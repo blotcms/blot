@@ -131,7 +131,7 @@ describe("template", function () {
     });
 
     await promisify(packageAPI.save)(this.template.id, packageMetadata);
-    await promisify(writeChangeToFolder)(test.blog, staleTemplate, {
+    await writeChangeToFolder(test.blog, staleTemplate, {
       name: "package.json",
     });
 

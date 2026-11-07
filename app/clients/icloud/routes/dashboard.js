@@ -63,19 +63,23 @@ dashboard
   .get(function (req, res) {
     res.render(VIEWS + "disconnect");
   })
-  .post(function (req, res, next) {
-    disconnect(req.blog.id, function (err, warning) {
-      if (err) return next(err);
+  .post(async function (req, res, next) {
+    let warning;
 
-      if (warning) {
-        return res.message(
-          req.baseUrl,
-          "Disconnected from iCloud. Remote cleanup will retry in the background."
-        );
-      }
+    try {
+      warning = await disconnect(req.blog.id);
+    } catch (err) {
+      return next(err);
+    }
 
-      res.message(req.baseUrl, "Disconnected from iCloud");
-    });
+    if (warning) {
+      return res.message(
+        req.baseUrl,
+        "Disconnected from iCloud. Remote cleanup will retry in the background."
+      );
+    }
+
+    res.message(req.baseUrl, "Disconnected from iCloud");
   });
 
 dashboard
@@ -87,7 +91,13 @@ dashboard
           return res.redirect(res.locals.dashboardBase + "/sync");
         }
 
-        return disconnect(req.blog.id, next);
+        try {
+          await disconnect(req.blog.id);
+        } catch (disconnectError) {
+          return next(disconnectError);
+        }
+
+        return next();
       }
 
       try {
