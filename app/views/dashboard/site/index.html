@@ -90,10 +90,10 @@
               {{> folder-sync-issue}}
               {{#postColumns.length}}
               <div class="directory-scroll">
-                <table class="data-table data-table--zebra directory-list folder-filter-table{{^postItems.length}} empty{{/postItems.length}}" data-table-sort="link" data-table-resizable data-table-resize-key="{{postFilterKey}}-columns">
+                <table class="data-table data-table--zebra directory-list folder-filter-table{{^postItems.length}} empty{{/postItems.length}}" data-table-sort="link" data-table-resizable data-table-resize-key="filter-columns">
                   <thead>
                     <tr>
-                      {{#postColumns}}<th scope="col" data-sort-key="{{key}}" aria-sort="{{ariaSort}}" style="width:var(--{{postFilterKey}}-columns-{{key}}, {{width}})"><a class="data-table__sort" href="{{href}}">{{label}}</a></th>{{/postColumns}}
+                      {{#postColumns}}<th scope="col" data-sort-key="{{key}}" aria-sort="{{ariaSort}}" style="width:var(--filter-columns-{{key}}, {{width}})"><a class="data-table__sort" href="{{href}}">{{label}}</a></th>{{/postColumns}}
                       <th scope="col" class="folder-filter-table__actions"><span class="visually-hidden">Actions</span></th>
                     </tr>
                   </thead>

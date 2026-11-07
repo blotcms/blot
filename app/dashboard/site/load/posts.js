@@ -34,66 +34,31 @@ const lists = [
   },
 ];
 
-// How each column sorts: by a text or a number from the entry, and which
-// way its first click goes. "date" is the list's own order (by dateStamp),
-// so it is read a page at a time like the default order; the others read
-// the whole list once and keep its order in the cache.
+// How each column sorts: by a text from the entry, and which way its first
+// click goes. "date" is the list's own order (by dateStamp), so it is read a
+// page at a time like the default order; the others read the whole list
+// once and keep its order in the cache.
 const SORTS = {
   title: { first: "asc", text: (entry) => entryTitle(entry) },
   file: { first: "asc", text: (entry) => entry.path.split("/").pop() },
-  tags: { first: "asc", text: (entry) => (entry.tags || []).join(", ") },
-  url: { first: "asc", text: (entry) => entry.url || "" },
-  menu: { first: "desc", number: (entry) => (entry.menu ? 1 : 0) },
-  updated: { first: "desc", number: (entry) => entry.updated || 0 },
   date: { first: "desc" },
 };
 
-// The columns each filter's rows show after the title, as [sort key, label,
-// width] and how a row fills them
-const COLUMNS = {
-  posts: [
-    ["file", "File", "22%", (item) => ({ text: item.name, title: item.path })],
-    [
-      "date",
-      "Published",
-      "16%",
-      (item) => ({ text: item.published, datetime: item.publishedISO }),
-    ],
-    ["tags", "Tags", "18%", (item) => ({ text: item.tags })],
+// Every filter shows the same columns after the title, so their widths and
+// sort carry from one to the next: [sort key, label, width] and how a row
+// fills them. A draft has no publish date yet, shown as a folder's size is.
+const COLUMNS = [
+  ["file", "File", "26%", (item) => ({ text: item.name, title: item.path })],
+  [
+    "date",
+    "Date published",
+    "20%",
+    (item, listKey) =>
+      listKey === "drafts"
+        ? { text: "--" }
+        : { text: item.published, datetime: item.publishedISO },
   ],
-  pages: [
-    ["url", "URL", "26%", (item) => ({ text: item.url })],
-    ["menu", "Menu", "12%", (item) => ({ text: item.inMenu })],
-    [
-      "updated",
-      "Updated",
-      "16%",
-      (item) => ({ text: item.updated, datetime: item.updatedISO }),
-    ],
-  ],
-  drafts: [
-    ["file", "File", "30%", (item) => ({ text: item.name, title: item.path })],
-    [
-      "updated",
-      "Last edited",
-      "20%",
-      (item) => ({ text: item.updated, datetime: item.updatedISO }),
-    ],
-  ],
-  scheduled: [
-    [
-      "date",
-      "Publishes",
-      "30%",
-      // When, in the site's time zone, and how soon
-      (item) => ({
-        text: item.publishes + " · " + moment(item.dateStamp).fromNow(),
-        datetime: item.publishedISO,
-      }),
-    ],
-    ["file", "File", "22%", (item) => ({ text: item.name, title: item.path })],
-  ],
-};
+];
 
 function entryTitle(entry) {
   return entry.title || entry.path.split("/").pop();
@@ -101,7 +66,7 @@ function entryTitle(entry) {
 
 // The sort a filter page was asked for, if its table has that column
 function parseSort(filter, query) {
-  const keys = ["title"].concat((COLUMNS[filter] || []).map(([key]) => key));
+  const keys = ["title"].concat(COLUMNS.map(([key]) => key));
   if (!keys.includes(query.sort)) return null;
   return { key: query.sort, order: query.order === "desc" ? "desc" : "asc" };
 }
@@ -247,7 +212,12 @@ module.exports = async function (req, res, next) {
       return {
         key: result.list.key,
         url: res.locals.base + "/" + result.list.key,
-        href: res.locals.base + "/" + result.list.key,
+        // The sort carries from filter to filter, as the columns are shared
+        href:
+          res.locals.base +
+          "/" +
+          result.list.key +
+          (sort ? "?sort=" + sort.key + "&order=" + sort.order : ""),
         // Scheduled posts stand out, so one scheduled by mistake is noticed
         showDot: result.list.key === "scheduled" && result.total > 0,
         filterTitle: result.list.filterTitle,
@@ -291,7 +261,7 @@ module.exports = async function (req, res, next) {
     });
     // The filter page's table: a title column, the filter's own columns, and
     // a narrow one for each row's menu
-    const columns = activeGroup ? COLUMNS[activeGroup.key] || [] : [];
+    const columns = activeGroup ? COLUMNS : [];
     const query = (params) => {
       const search = new URLSearchParams(params).toString();
       return activeGroup.url + (search ? "?" + search : "");
@@ -325,11 +295,10 @@ module.exports = async function (req, res, next) {
     res.locals.postItems = activeGroup
       ? activeGroup.items.map((item) => ({
           ...item,
-          cells: columns.map(([, , , cell]) => cell(item)),
+          cells: columns.map(([, , , cell]) => cell(item, activeGroup.key)),
         }))
       : [];
     res.locals.postColumnCount = res.locals.postColumns.length + 1;
-    res.locals.postFilterKey = activeGroup ? activeGroup.key : "";
 
     // Previous and Next links (Scheduled lists the soonest first, so not
     // Newer and Older as on the Activity page), keeping the sort
