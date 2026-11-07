@@ -16,7 +16,7 @@ const User = require("models/user");
 const Blog = require("models/blog");
 const folder = require("storage/folder");
 const config = require("config");
-const buildTemplates = promisify(require("templates"));
+const buildTemplates = require("templates");
 const rebuild = promisify(require("sync/rebuild"));
 
 const email = process.argv[2];

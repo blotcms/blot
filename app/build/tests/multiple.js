@@ -6,13 +6,7 @@ describe("build multiple", function () {
   global.test.blog();
 
   beforeEach(function () {
-    this.buildEntry = (targetPath) =>
-      new Promise((resolve, reject) => {
-        build(this.blog, targetPath, function (err, entry) {
-          if (err) return reject(err);
-          resolve(entry);
-        });
-      });
+    this.buildEntry = (targetPath) => build(this.blog, targetPath);
   });
 
   it("aggregates convertible files inside a + folder", async function () {
@@ -370,16 +364,19 @@ describe("build multiple", function () {
     expect(a.entryPath).not.toEqual(b.entryPath);
   });
 
-  it("returns an EMPTY error when no convertible files are present", function (done) {
+  it("returns an EMPTY error when no convertible files are present", async function () {
     var blog = this.blog;
 
-    folder.mkdir(blog.id, "/void+").then(function () {
-      build(blog, "/void+", function (err) {
-        expect(err).toBeDefined();
-        expect(err.code).toEqual("EMPTY");
-        done();
-      });
-    }, done.fail);
+    await folder.mkdir(blog.id, "/void+");
+
+    var err;
+    try {
+      await build(blog, "/void+");
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toBeDefined();
+    expect(err.code).toEqual("EMPTY");
   });
 
   it("does not treat a plain file whose name ends in + as a folder post", async function () {

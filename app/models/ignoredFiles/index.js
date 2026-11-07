@@ -18,40 +18,41 @@ module.exports = (function () {
       },
     };
 
-  // Each of these takes an optional callback (withCallback) and otherwise
-  // returns a promise
+  // These return promises. getStatus and getStatuses also take an optional
+  // callback (withCallback) while the dashboard folder views and the sync
+  // specs still pass one.
 
-  var add = withCallback(async function add(blogID, path, reason) {
+  async function add(blogID, path, reason) {
     ensure(blogID, "string").and(path, "string").and(reason, "string");
 
     path = normalize(path);
 
     await redis.hSet(ignoredFilesKey(blogID), path, reason);
-  });
+  }
 
-  var drop = withCallback(async function drop(blogID, path) {
+  async function drop(blogID, path) {
     ensure(blogID, "string").and(path, "string");
 
     path = normalize(path);
 
     await redis.hDel(ignoredFilesKey(blogID), path);
-  });
+  }
 
-  var get = withCallback(async function get(blogID) {
+  async function get(blogID) {
     ensure(blogID, "string");
 
     var ignoredFiles = await redis.hGetAll(ignoredFilesKey(blogID));
 
     return ignoredFiles || {};
-  });
+  }
 
-  var flush = withCallback(async function flush(blogID) {
+  async function flush(blogID) {
     ensure(blogID, "string");
 
     await redis.del(ignoredFilesKey(blogID));
-  });
+  }
 
-  var getArray = withCallback(async function getArray(blogID) {
+  async function getArray(blogID) {
     ensure(blogID, "string");
 
     var ignoredFiles = await get(blogID);
@@ -71,7 +72,7 @@ module.exports = (function () {
     }
 
     return ignoredFileList;
-  });
+  }
 
   // Look up the ignored status for a specific set of paths in one round
   // trip, rather than transferring the entire ignored-files hash. Returns
@@ -101,7 +102,7 @@ module.exports = (function () {
     return await redis.hGet(ignoredFilesKey(blogID), path);
   });
 
-  var isIt = withCallback(async function isIt(blogID, path) {
+  async function isIt(blogID, path) {
     ensure(blogID, "string").and(path, "string");
 
     path = normalize(path);
@@ -109,7 +110,7 @@ module.exports = (function () {
     var exists = await redis.hExists(ignoredFilesKey(blogID), path);
 
     return !!exists;
-  });
+  }
 
   function ignoredFilesKey(blogID) {
     return "blog:" + blogID + ":ignored_files";

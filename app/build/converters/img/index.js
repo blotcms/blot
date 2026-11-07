@@ -115,18 +115,10 @@ async function read(blog, path) {
 
 function lookupWithTransformer(transformer, src, transform) {
   return new Promise((resolve, reject) => {
-    transformer.lookup(
-      src,
-      (resolvedPath, done) => {
-        Promise.resolve(transform(resolvedPath))
-          .then((result) => done(null, result))
-          .catch(done);
-      },
-      (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      }
-    );
+    transformer.lookup(src, transform, (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    });
   });
 }
 

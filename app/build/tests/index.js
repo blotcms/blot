@@ -21,10 +21,7 @@ describe("build", function () {
 
   global.test.server(app);
 
-  var buildEntry = (blog, path) =>
-    new Promise((resolve, reject) =>
-      build(blog, path, (err, entry) => (err ? reject(err) : resolve(entry)))
-    );
+  var buildEntry = (blog, path) => build(blog, path);
 
   // Writes a file into the blog's folder with the given modified time (ms)
   var put = async (blogID, path, contents, modified) => {

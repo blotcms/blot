@@ -111,12 +111,7 @@ function getAll(blogID) {
 }
 
 function getTotal(blogID) {
-  return new Promise((resolve, reject) => {
-    Entries.getTotal(blogID, (err, total) => {
-      if (err) reject(err);
-      else resolve(total);
-    });
-  });
+  return Entries.getTotal(blogID);
 }
 
 module.exports = {

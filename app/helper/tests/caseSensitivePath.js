@@ -1,8 +1,5 @@
 describe("caseSensitivePath ", function () {
-  var { promisify } = require("util");
-  var resolveCaseInsensitivePathToFile = promisify(
-    require("../caseSensitivePath")
-  );
+  var resolveCaseInsensitivePathToFile = require("../caseSensitivePath");
   var fs = require("fs-extra");
   var os = require("os");
 

@@ -1,7 +1,6 @@
 var time = require("helper/time");
 var pandoc = require("build/converters/pandoc");
 var debug = require("debug")("blot:converters:rtf");
-var withCallback = require("helper/withCallback");
 var cheerio = require("cheerio");
 var normalizeLiteralDollarMath =
   require("build/math/normalizeLiteralDollars").normalizeLiteralDollarMath;
@@ -28,5 +27,4 @@ async function convert(blog, text) {
   return result;
 }
 
-// The katex specs call this with a callback
-module.exports = withCallback(convert);
+module.exports = convert;

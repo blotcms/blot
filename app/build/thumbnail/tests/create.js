@@ -23,8 +23,14 @@ describe("create", function () {
         if (err) return done.fail(err);
         ratio = Math.floor(metadata.width / metadata.height);
 
-        create(test.blog.id, path, function (err, thumbnails) {
-          if (err) return done.fail(err);
+        (async function () {
+          let thumbnails;
+          try {
+            thumbnails = await create(test.blog.id, path);
+          } catch (err) {
+            return done.fail(err);
+          }
+
           expect(thumbnails).toEqual(jasmine.any(Object));
 
           // Square thumbnail is square
@@ -43,18 +49,21 @@ describe("create", function () {
           expect(thumbnails.square.name).toEqual("square.jpg");
 
           // Each thumbnail was uploaded
-          Promise.all(
-            Object.keys(thumbnails).map(function (size) {
-              return assets.exists(test.blog.id, thumbnails[size].path);
-            })
-          ).then(function (found) {
+          try {
+            const found = await Promise.all(
+              Object.keys(thumbnails).map(function (size) {
+                return assets.exists(test.blog.id, thumbnails[size].path);
+              })
+            );
             found.forEach(function (exists) {
               expect(exists).toBe(true);
             });
 
             done();
-          }, done.fail);
-        });
+          } catch (err) {
+            done.fail(err);
+          }
+        })();
       }
     );
   });

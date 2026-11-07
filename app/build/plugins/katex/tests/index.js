@@ -5,8 +5,8 @@ const templates = require("templates");
 const SINGLE_SPEC = "";
 
 // Build the templates
-beforeAll(function (done) {
-  templates({ watch: false }, done);
+beforeAll(async function () {
+  await templates({ watch: false });
 }, 10 * 1000); // longer timeout
 
 describe("katex plugin integration", function () {
@@ -19,7 +19,7 @@ describe("katex plugin integration", function () {
     .filter((file) => supportedExtensions.some((ext) => file.endsWith(ext)))
     .filter((file) => (SINGLE_SPEC ? file === SINGLE_SPEC : true))
     .forEach((file) => {
-      it("handles " + file.split("-").join(" "), function (done) {
+      it("handles " + file.split("-").join(" "), async function () {
         const path = "/" + file;
         const contents = fs.readFileSync(dir + path, "utf8");
         const expectedPath = dir + path + ".html";
@@ -29,19 +29,15 @@ describe("katex plugin integration", function () {
           expected = fs.readFileSync(expectedPath, "utf8");
         } catch (e) {}
 
-        test.folder.writeFiles(this.blog.id, { [path]: contents }).then(() => {
-          build(this.blog, path, (err, entry) => {
-            if (err) return done.fail(err);
-            const html = entry.html;
+        await test.folder.writeFiles(this.blog.id, { [path]: contents });
+        const entry = await build(this.blog, path);
+        const html = entry.html;
 
-            if (html !== expected) {
-              fs.outputFileSync(expectedPath + ".expected.html", html);
-            }
+        if (html !== expected) {
+          fs.outputFileSync(expectedPath + ".expected.html", html);
+        }
 
-            expect(expected).toEqual(html);
-            done();
-          });
-        }, done.fail);
+        expect(expected).toEqual(html);
       });
     });
 });

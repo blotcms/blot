@@ -1,7 +1,6 @@
 var fs = require("fs-extra");
 var crypto = require("crypto");
 var debug = require("debug")("blot:helper:transformer:hash");
-var withCallback = require("helper/withCallback");
 
 async function hash(path) {
   var hasher = crypto.createHash("sha1");
@@ -13,4 +12,4 @@ async function hash(path) {
   return digest;
 }
 
-module.exports = withCallback(hash);
+module.exports = hash;

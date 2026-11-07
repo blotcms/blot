@@ -35,27 +35,24 @@ module.exports = function setup(options = {}) {
 
   global.test.server(router);
 
-  beforeAll(function (done) {
-    let settled = false;
+  beforeAll(async function () {
+    let timer;
 
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      done.fail(
-        new Error(
-          `templates({ watch: false }) did not finish within ${templateBuildTimeoutMs}ms`
-        )
-      );
-    }, templateBuildTimeoutMs);
-
-    templates({ watch: false }, (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-
-      if (err) return done.fail(err);
-      done();
+    const timeout = new Promise((resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(
+          new Error(
+            `templates({ watch: false }) did not finish within ${templateBuildTimeoutMs}ms`
+          )
+        );
+      }, templateBuildTimeoutMs);
     });
+
+    try {
+      await Promise.race([templates({ watch: false }), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }, templateBuildJasmineTimeoutMs);
 
   beforeEach(function () {

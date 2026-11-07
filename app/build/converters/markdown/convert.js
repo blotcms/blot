@@ -4,7 +4,6 @@ var loosenDisplayMath = require("build/math/loosenDisplayMath");
 var time = require("helper/time");
 var pandoc = require("build/converters/pandoc");
 var debug = require("debug")("blot:converters:markdown");
-var withCallback = require("helper/withCallback");
 
 // insert a <br /> for each carriage return
 // '+hard_line_breaks' +
@@ -78,8 +77,7 @@ async function convert(blog, text, options) {
   return result;
 }
 
-// The katex specs call this with a callback
-module.exports = withCallback(convert);
+module.exports = convert;
 
 function safely(method, input) {
   try {

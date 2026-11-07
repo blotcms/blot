@@ -32,12 +32,7 @@ async function sendToUsers(emailFile, users) {
 
   for (const user of users) {
     try {
-      await new Promise(function (resolve, reject) {
-        send(user, emailFile, user.email, function (err) {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
+      await send(user, emailFile, user.email);
     } catch (err) {
       console.log("Error sending message to", user.email);
     }

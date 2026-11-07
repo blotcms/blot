@@ -1,8 +1,7 @@
 const fs = require("fs-extra");
 const crypto = require("crypto");
-const { promisify } = require("util");
 const folder = require("storage/folder");
-const hashFileAsync = promisify(require("./transformer/hash"));
+const hashFileAsync = require("./transformer/hash");
 
 // Below this, read the whole file into memory and hash it synchronously
 // instead of going through helper/transformer/hash's readable-stream

@@ -1,5 +1,4 @@
 var client = require("models/client");
-var withCallback = require("helper/withCallback");
 
 async function main(string) {
   var types = {};
@@ -159,4 +158,4 @@ function normalizeScanReply(reply) {
   return { cursor: "0", keys: [] };
 }
 
-module.exports = withCallback(main);
+module.exports = main;

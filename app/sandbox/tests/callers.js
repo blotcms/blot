@@ -62,20 +62,21 @@ describe("callers of the sandbox when it fails", function () {
     expect(thrown.code).toEqual("SANDBOX_BUSY");
   });
 
-  it("thumbnail transform passes the error to its callback and writes nothing", function (done) {
-    require("build/thumbnail/transform")(
-      image,
-      directory,
-      function (err, result) {
-        expect(err.code).toEqual("SANDBOX_TIMEOUT");
-        expect(result).toBeUndefined();
-        expect(fs.readdirSync(directory)).toEqual([]);
-        done();
-      }
-    );
+  it("thumbnail transform passes the error to its callback and writes nothing", async function () {
+    let thrown;
+    let result;
+    try {
+      result = await require("build/thumbnail/transform")(image, directory);
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown.code).toEqual("SANDBOX_TIMEOUT");
+    expect(result).toBeUndefined();
+    expect(fs.readdirSync(directory)).toEqual([]);
   });
 
-  it("thumbnail transform checks the candidate in the same job and writes nothing for one it refuses", function (done) {
+  it("thumbnail transform checks the candidate in the same job and writes nothing for one it refuses", async function () {
     const output = path.join(directory, "thumbnails");
     sandbox.run.and.callFake(function () {
       return Promise.resolve({
@@ -86,34 +87,40 @@ describe("callers of the sandbox when it fails", function () {
         outputs: [],
       });
     });
-    require("build/thumbnail/transform")(image, output, function (err, result) {
-      expect(err.message).toEqual("Image (10px wide) is too small");
-      expect(err.invalid).toBe(true);
-      expect(result).toBeUndefined();
-      expect(fs.existsSync(output)).toBe(false);
-      expect(sandbox.run.calls.count()).toEqual(1);
-      expect(sandbox.run.calls.argsFor(0)[0]).toEqual("thumbnail");
-      expect(sandbox.run.calls.argsFor(0)[1].accept).toEqual({
-        formats: ["png", "jpeg", "jpg", "svg", "gif", "webp"],
-        minWidth: 64,
-        minHeight: 64,
-      });
-      done();
+    let thrown;
+    let result;
+    try {
+      result = await require("build/thumbnail/transform")(image, output);
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown.message).toEqual("Image (10px wide) is too small");
+    expect(thrown.invalid).toBe(true);
+    expect(result).toBeUndefined();
+    expect(fs.existsSync(output)).toBe(false);
+    expect(sandbox.run.calls.count()).toEqual(1);
+    expect(sandbox.run.calls.argsFor(0)[0]).toEqual("thumbnail");
+    expect(sandbox.run.calls.argsFor(0)[1].accept).toEqual({
+      formats: ["png", "jpeg", "jpg", "svg", "gif", "webp"],
+      minWidth: 64,
+      minHeight: 64,
     });
   });
 
-  it("animated thumbnail transform passes the error to its callback and writes nothing", function (done) {
-    require("build/thumbnail/transform-gif")(
-      image,
-      directory,
-      function (err, result) {
-        expect(err.code).toEqual("SANDBOX_TIMEOUT");
-        expect(result).toBeUndefined();
-        expect(fs.readdirSync(directory)).toEqual([]);
-        expect(sandbox.run.calls.argsFor(0)[1].animated).toBe(true);
-        done();
-      }
-    );
+  it("animated thumbnail transform passes the error to its callback and writes nothing", async function () {
+    let thrown;
+    let result;
+    try {
+      result = await require("build/thumbnail/transform-gif")(image, directory);
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown.code).toEqual("SANDBOX_TIMEOUT");
+    expect(result).toBeUndefined();
+    expect(fs.readdirSync(directory)).toEqual([]);
+    expect(sandbox.run.calls.argsFor(0)[1].animated).toBe(true);
   });
 
   it("image resize rejects with the error and leaves the image alone", async function () {

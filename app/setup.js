@@ -7,7 +7,6 @@ const documentation = require("./documentation/build");
 const templates = require("./templates");
 const folders = require("./templates/folders");
 const clfdate = require("helper/clfdate");
-const withCallback = require("helper/withCallback");
 const scheduler = require("./scheduler");
 const logRedisCacheStats = require("./scheduler/redis-cache-stats");
 const logRenderCacheStats = require("./scheduler/render-cache-stats");
@@ -42,14 +41,10 @@ async function runPostListenTasks() {
   // the shared dev templates with their worktree's copy.
   log("Building templates after listen");
   try {
-    await new Promise((resolve, reject) => {
-      const development = config.environment === "development";
-      // One watcher is enough: node-a's (node-b runs in local development too)
-      const watch = development && !config.worker_child;
-      templates({ watch, skipUnchanged: development }, (err) =>
-        err ? reject(err) : resolve()
-      );
-    });
+    const development = config.environment === "development";
+    // One watcher is enough: node-a's (node-b runs in local development too)
+    const watch = development && !config.worker_child;
+    await templates({ watch, skipUnchanged: development });
     templatesBuilt = true;
     log("Built templates after listen");
   } catch (err) {
@@ -227,9 +222,9 @@ async function runPostListenTasks() {
 }
 
 // The boot sequence, one step after another. The first step to fail stops
-// the rest and the error goes to the callback, which app/index.js throws, so
+// the rest and the promise rejects, which app/index.js leaves unhandled, so
 // a failed boot exits the process.
-const main = withCallback(async function main() {
+async function main() {
   // Generated assets live only in the storage bucket: without one every
   // build and upload would fail, so refuse to start
   assertStorageBucket();
@@ -250,7 +245,7 @@ const main = withCallback(async function main() {
   log("Building documentation assets");
   await documentation({ watch: true });
   log("Built documentation assets");
-});
+}
 
 async function refreshFeatured() {
   // The parent of a forked worker child has cleared it

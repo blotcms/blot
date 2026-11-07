@@ -1,6 +1,5 @@
 var fs = require("fs");
 var Path = require("path");
-var withCallback = require("helper/withCallback");
 
 // Picks which entry of a directory listing a name refers to: the exact name
 // if present, otherwise the first entry (in listing order) which matches
@@ -60,5 +59,5 @@ async function caseSensitivePath(cwd, path) {
   }
 }
 
-module.exports = withCallback(caseSensitivePath);
+module.exports = caseSensitivePath;
 module.exports.pick = pick;

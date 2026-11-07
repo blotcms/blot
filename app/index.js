@@ -119,8 +119,10 @@ if (config.worker_child) {
 }
 
 console.log(clfdate(), `Starting server env=${config.environment}`);
-setup(async (err) => {
-  if (err) throw err;
+// A failed boot rejects here and is left unhandled, so the process exits
+// (see the unhandledRejection listener above)
+(async () => {
+  await setup();
 
   console.log(clfdate(), "Finished setting up server");
 
@@ -206,4 +208,4 @@ setup(async (err) => {
   });
 
   httpServers.forEach((s) => drain.setServer(s));
-});
+})();

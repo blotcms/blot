@@ -6,7 +6,6 @@ const tempDir = require("helper/tempDir")();
 const Mustache = require("mustache");
 const { marked } = require("marked");
 const clfdate = require("helper/clfdate");
-const withCallback = require("helper/withCallback");
 
 const mailgunClient = (() => {
   if (config && config.mailgun && config.mailgun.key && config.mailgun.domain) {
@@ -164,7 +163,7 @@ async function deliver(method, uid, locals) {
   return await Promise.all(emails);
 }
 
-const send = withCallback(async function send(locals, messageFile, to) {
+async function send(locals, messageFile, to) {
   ensure(locals, "object").and(messageFile, "string").and(to, "string");
 
   const text = await fs.readFile(messageFile, "utf-8");
@@ -226,7 +225,7 @@ const send = withCallback(async function send(locals, messageFile, to) {
     );
     throw err;
   }
-});
+}
 
 var exports = {};
 

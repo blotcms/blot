@@ -3,7 +3,6 @@ describe("Blog.remove", function () {
   var remove = require("../remove");
   var getAllIDs = require("../getAllIDs");
   var redisSearch = require("helper/redisSearch");
-  var { promisify } = require("util");
 
   // Create a test user and blog before each spec
   global.test.user();
@@ -22,7 +21,7 @@ describe("Blog.remove", function () {
   it("removes a blog", async function () {
     await remove(this.blog.id);
 
-    const results = await promisify(redisSearch)(this.blog.id);
+    const results = await redisSearch(this.blog.id);
 
     expect(results).toEqual([]);
   });

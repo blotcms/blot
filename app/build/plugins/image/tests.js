@@ -299,23 +299,24 @@ describe("image", function () {
     folder
       .writeFrom(test.blog.id, "/" + name, __dirname + "/tests-image.png")
       .then(() => {
-        render(test.blog, html, function (err, result) {
+        render(test.blog, html, async function (err, result) {
           if (err) return done.fail(err);
 
-          thumbnail(
-            test.blog,
-            "/post.txt",
-            {},
-            result,
-            function (err, thumbnails) {
-              if (err) return done.fail(err);
+          try {
+            const thumbnails = await thumbnail(
+              test.blog,
+              "/post.txt",
+              {},
+              result
+            );
 
-              expect(thumbnails).toEqual(jasmine.any(Object));
-              expect(thumbnails.small).toEqual(jasmine.any(Object));
-              test.result = result;
-              done();
-            }
-          );
+            expect(thumbnails).toEqual(jasmine.any(Object));
+            expect(thumbnails.small).toEqual(jasmine.any(Object));
+            test.result = result;
+            done();
+          } catch (err) {
+            done.fail(err);
+          }
         });
       }, done.fail);
   });
