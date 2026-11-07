@@ -14,12 +14,7 @@ module.exports = async function (req, res, next) {
     // The raw list is every path; the page formats only the latest 100
     var options = req.query.raw ? {} : { limit: MAX_SHOWN };
 
-    var [list, ignored, totals] = await new Promise((resolve, reject) => {
-      List(req.blog.id, options, (err, list, ignored, totals) => {
-        if (err) return reject(err);
-        resolve([list, ignored, totals]);
-      });
-    });
+    var { list, ignored, totals } = await List(req.blog.id, options);
 
     var has_ignored;
 
