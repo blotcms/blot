@@ -42,8 +42,8 @@ site.post(
 
 function getSidebarSelection(path) {
   // The overview and everything it leads to (all files, a file or
-  // subfolder, posts, recent activity, folder settings, its open Title and
-  // Domain rows) are under Folder
+  // subfolder, posts, recent activity, the Title and Domain pages its
+  // summary links to) are under Folder
   if (
     path === "/" ||
     path === "/files" ||
@@ -56,13 +56,13 @@ function getSidebarSelection(path) {
     path === "/drafts" ||
     path === "/scheduled" ||
     path.startsWith("/folder/") ||
-    path === "/sync" ||
-    path.startsWith("/sync/") ||
     path === "/title" ||
     path === "/domain" ||
     path.startsWith("/domain/")
   )
     return "folder";
+  // The folder's sync settings and their subpages
+  if (path === "/sync" || path.startsWith("/sync/")) return "sync";
   if (path === "/settings" || path.startsWith("/settings/"))
     return "siteSettings";
   if (
@@ -79,6 +79,7 @@ function getSidebarSelection(path) {
 const sidebarLabels = {
   folder: "Folder",
   template: "Template",
+  sync: "Sync",
   siteSettings: "Settings",
   import: "Import",
 };

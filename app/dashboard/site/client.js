@@ -30,12 +30,11 @@ client_routes.get(/.*/, function (req, res, next) {
   next();
 });
 
-// The sync pages, at /sites/<handle>/sync. Breadcrumbs: Sites > Site > Folder
+// The sync pages, at /sites/<handle>/sync. Breadcrumbs: Sites > Site > Sync
 client_routes.use(function (req, res, next) {
   res.locals.base = req.baseUrl;
-  res.locals.selected = { ...res.locals.selected, folder: "is-active" };
   res.locals.isFolderSettingsView = true;
-  res.locals.breadcrumbs.add("Folder", "sync");
+  res.locals.breadcrumbs.add("Sync", "sync");
   next();
 });
 
@@ -287,7 +286,7 @@ client_routes
   .route("/")
 
   .get(load.clients, function (req, res) {
-    // The Folder breadcrumb leads to the client's page
+    // The Sync breadcrumb leads to the client's page
     if (req.blog.client) {
       return res.redirect(
         res.locals.dashboardBase + "/sync/" + req.blog.client
