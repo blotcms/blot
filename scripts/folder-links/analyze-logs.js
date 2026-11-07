@@ -8,22 +8,15 @@
 //
 // Dependency-free: reads log text on stdin, so it runs locally on piped
 // output or on the production host. Run it from the repo root (or anywhere,
-// by path). One container:
+// by path). Both units' app.log, kept for 14 days across deploys:
 //
-//   ssh blot "docker logs --since 24h blot-blue 2>&1" \
-//     | node scripts/folder-links/analyze-logs.js
+//   scripts/prod/read.sh app-log --since 24h --grep "[folder-asset" \
+//     | node scripts/folder-links/analyze-logs.js --top 30
 //
-// Both units (the same loop the node-response-time-review skill
-// uses to collect app logs):
-//
-//   for c in blue green; do
-//     ssh blot "docker logs --since 24h blot-$c 2>&1"
-//   done | node scripts/folder-links/analyze-logs.js --top 30
+// One unit: `read.sh app-log blue ...`. A longer window: --since 7d, or one
+// day's rotated file with --day YYYYMMDD.
 //
 // Flags: --top N (rows per table, default 10), --json (machine-readable).
-//
-// Containers only keep logs back to their last deploy/restart, so --since
-// can't reach further back than that.
 
 const ASSET_MARKER = "[folder-asset] ";
 const OLD_ASSET_MARKER = "[folder-asset-origin] ";

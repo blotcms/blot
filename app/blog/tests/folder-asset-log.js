@@ -3,7 +3,7 @@ describe("[folder-asset] log", function () {
 
   const config = require("config");
 
-  // The blog router logs through req.log, which console.logs one string:
+  // The blog router logs through req.logNow, which console.logs one string:
   // the request logger puts a date, the request id and +Nms before the
   // arguments. Keep the text after the marker, which is the end of the line.
   // The marker must follow the +Nms: the logger's response line can quote

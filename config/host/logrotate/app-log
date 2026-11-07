@@ -1,0 +1,15 @@
+# The units' output (rsyslog/blot-app-log.conf). Daily, or sooner past 4G, and
+# two weeks of rotated files. rsyslog reopens the file on HUP, as in Amazon
+# Linux's own /etc/logrotate.d/rsyslog.
+/var/instance-ssd/logs/app.log {
+    daily
+    maxsize 4G
+    rotate 14
+    missingok
+    notifempty
+    compress
+    delaycompress
+    postrotate
+        /usr/bin/systemctl kill -s HUP rsyslog.service >/dev/null 2>&1 || true
+    endscript
+}
