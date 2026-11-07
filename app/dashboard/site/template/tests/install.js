@@ -22,14 +22,14 @@ describe("install template route", function () {
       };
       const res = {
         message: jasmine.createSpy("message"),
-        redirect: jasmine.createSpy("redirect"),
+        redirect: jasmine.createSpy("redirect").and.callFake(function () {
+          resolve({ res: res });
+        }),
       };
 
       installHandler(req, res, function (err) {
         resolve({ err: err, res: res });
       });
-
-      if (res.redirect.calls.any()) resolve({ res: res });
     });
   }
 
@@ -49,11 +49,7 @@ describe("install template route", function () {
     const result = await runInstall(blog, templateID);
 
     expect(result.err).toBeUndefined();
-    expect(Blog.set).toHaveBeenCalledWith(
-      blog.id,
-      { template: templateID },
-      jasmine.any(Function)
-    );
+    expect(Blog.set).toHaveBeenCalledWith(blog.id, { template: templateID });
     expect(result.res.redirect).toHaveBeenCalledWith(
       "/sites/" + blog.handle + "/template/installed-template"
     );
@@ -67,11 +63,7 @@ describe("install template route", function () {
     const result = await runInstall(blog, templateID);
 
     expect(result.err).toBeUndefined();
-    expect(Blog.set).toHaveBeenCalledWith(
-      blog.id,
-      { template: templateID },
-      jasmine.any(Function)
-    );
+    expect(Blog.set).toHaveBeenCalledWith(blog.id, { template: templateID });
     expect(result.res.redirect).toHaveBeenCalledWith(
       "/sites/" + blog.handle + "/template/installed-template"
     );
