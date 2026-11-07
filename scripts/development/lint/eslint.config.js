@@ -104,6 +104,7 @@ module.exports = [
       "app/documentation/tools/typeset/**/*.js",
       "app/helper/egress/**/*.js",
       "app/helper/lock/**/*.js",
+      "app/models/404/**/*.js",
       "app/models/blog/create.js",
       "app/models/blog/remove.js",
       "app/models/blog/set.js",

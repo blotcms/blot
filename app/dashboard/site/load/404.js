@@ -3,12 +3,7 @@ var List = fourOhFour.list;
 
 module.exports = async function (req, res, next) {
   try {
-    var [list, ignored] = await new Promise((resolve, reject) => {
-      List(req.blog.id, (err, list, ignored) => {
-        if (err) return reject(err);
-        resolve([list, ignored]);
-      });
-    });
+    var { list, ignored } = await List(req.blog.id);
 
     var has_ignored;
 

@@ -45,8 +45,9 @@ module.exports = function register(blog) {
     res.status(404);
     res.renderView("error.html", next);
 
-    // We expose these to the user
-    store404(req.blog.id, req.url);
+    // We expose these to the user. Nothing waits for it and a failure to
+    // record the URL is ignored, as it always was
+    store404(req.blog.id, req.url).catch(function () {});
   });
 
   // Redis unreachable: 503 and a generic page, not a template error
