@@ -1,14 +1,10 @@
 const cheerio = require("cheerio");
 const { render } = require("./index.js");
 
-const runTest = (html) => {
-  return new Promise((resolve, reject) => {
-    const $ = cheerio.load(html);
-    render($, function (err) {
-      if (err) return reject(err);
-      resolve($.html());
-    });
-  });
+const runTest = async (html) => {
+  const $ = cheerio.load(html);
+  await render($, {});
+  return $.html();
 };
 
 describe("imageCaption plugin", function () {

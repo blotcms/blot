@@ -24,7 +24,6 @@ You can learn more about oEmbed at https://oembed.com. Bluesky is a registered p
 const each = require("../eachEl");
 const Url = require("url");
 const fetch = require("node-fetch");
-const withPluginCallback = require("../withPluginCallback");
 
 async function render($) {
   await each($, "a", async (el) => {
@@ -73,7 +72,7 @@ async function render($) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   category: "embeds",
   title: "Bluesky",
   description: "Embed posts from Bluesky links",

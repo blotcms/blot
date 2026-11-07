@@ -13,7 +13,6 @@ https://www.flickr.com/services/oembed/
 const each = require("../eachEl");
 const Url = require("url");
 const fetch = require("node-fetch");
-const withPluginCallback = require("../withPluginCallback");
 
 async function render($) {
   await each($, "a", async (el) => {
@@ -62,7 +61,7 @@ async function render($) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   category: "embeds",
   title: "Flickr",
   description: "Embed photos and galleries from Flickr links",

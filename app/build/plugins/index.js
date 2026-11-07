@@ -107,8 +107,8 @@ async function convert(blog, path, contents) {
 
     await runPlugin(
       id,
-      function (callback) {
-        prerender(contents, callback, options);
+      function () {
+        return prerender(contents, options);
       },
       function (err, result) {
         if (result && !err) contents = result;
@@ -135,11 +135,10 @@ async function convert(blog, path, contents) {
 
     await runPlugin(
       id,
-      function (callback) {
-        // Plugins should call their render callbacks with
-        // cb(null, { newDependencies }) to allow us to extend
+      function () {
+        // Plugins resolve to { newDependencies } to allow us to extend
         // the result object with future fields (e.g. toc).
-        plugin.render($, callback, options);
+        return plugin.render($, options);
       },
       function (err, result) {
         const res = Array.isArray(result)
@@ -158,30 +157,37 @@ async function convert(blog, path, contents) {
   return [$.html(), dependencies];
 }
 
-// Calls a plugin, which takes a callback, and resolves once it has called
-// back, or once TIMEOUT has passed without it doing so, so that one plugin
-// that never calls back cannot hold up the others. The plugin's late
-// callback still runs `handle`, as it always did.
-function runPlugin(id, call, handle) {
-  return new Promise(function (resolve) {
-    var timeout = Timeout(id, resolve);
-
-    time(id);
-
-    try {
-      call(function (err, result) {
-        time.end(id);
-        clearTimeout(timeout);
-
-        handle(err, result);
-
-        resolve();
-      });
-    } catch (e) {
-      clearTimeout(timeout);
-      throw e;
-    }
+// Calls a plugin, which returns a promise, and resolves once it has settled,
+// or once TIMEOUT has passed without it doing so, so that one plugin that
+// never settles cannot hold up the others. `handle(err, result)` is given
+// the plugin's rejection or its value; a plugin that settles late still runs
+// `handle`, as it always did. An error is left to `handle`, which skips it.
+async function runPlugin(id, call, handle) {
+  var timeout;
+  var timedOut = new Promise(function (resolve) {
+    timeout = Timeout(id, resolve);
   });
+
+  time(id);
+
+  var settled = (async function () {
+    var failure = null;
+    var result;
+
+    // A plugin that throws before returning is an error like any other
+    try {
+      result = await call();
+    } catch (error) {
+      failure = error;
+    }
+
+    time.end(id);
+    clearTimeout(timeout);
+
+    handle(failure, result);
+  })();
+
+  await Promise.race([settled, timedOut]);
 }
 
 // Load plugin templates. This is synchronous work, so it is
@@ -301,10 +307,10 @@ function loadPlugins(plugins) {
   };
 }
 
-function Timeout(name, cb) {
+function Timeout(name, onTimeout) {
   return setTimeout(function () {
     console.warn(name + " timed out. Moving to next plugin.");
-    cb();
+    onTimeout();
   }, TIMEOUT);
 }
 

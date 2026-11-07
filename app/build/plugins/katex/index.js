@@ -1,7 +1,6 @@
 // Render span.math.inline and span.math.display, the normalized internal representation for TeX emitted by converters, into KaTeX HTML.
 const katex = require("katex");
 const HARD_BREAK_SENTINEL = require("../../math/hardBreakSentinel");
-const withPluginCallback = require("../withPluginCallback");
 
 const SKIP_TAGS = ["script", "style", "code", "pre"];
 const BLOCK_BOUNDARY_TAGS = [
@@ -146,5 +145,5 @@ module.exports = {
   category: "codemath",
   title: "Math",
   description: "Enable TeX equations",
-  render: withPluginCallback(render),
+  render,
 };

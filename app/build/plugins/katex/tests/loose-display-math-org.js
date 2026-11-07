@@ -8,13 +8,9 @@ describe("org: display math glued to prose by single newlines", function () {
   async function convertAndRender(text) {
     const [html] = await orgConvert(blog, text);
 
-    return new Promise((resolve, reject) => {
-      const $ = cheerio.load(html, { decodeEntities: false }, false);
-      render($, (renderErr) => {
-        if (renderErr) return reject(renderErr);
-        resolve($.html());
-      });
-    });
+    const $ = cheerio.load(html, { decodeEntities: false }, false);
+    await render($, {});
+    return $.html();
   }
 
   it("renders a multi-line $$ block on its own single-newline-separated line as display", async function () {

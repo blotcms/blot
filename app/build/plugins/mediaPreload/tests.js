@@ -1,14 +1,10 @@
 const cheerio = require("cheerio");
 const { render } = require("./index.js");
 
-function runPlugin(html) {
-  return new Promise((resolve, reject) => {
-    const $ = cheerio.load(html, { decodeEntities: false });
-    render($, (err) => {
-      if (err) return reject(err);
-      resolve($.html());
-    });
-  });
+async function runPlugin(html) {
+  const $ = cheerio.load(html, { decodeEntities: false });
+  await render($, {});
+  return $.html();
 }
 
 describe("media preload plugin", function () {

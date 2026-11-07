@@ -2,7 +2,6 @@ var Transformer = require("helper/transformer");
 var debug = require("debug")("blot:entry:build:plugins:image");
 var optimize = require("./optimize");
 var url = require("url");
-var withPluginCallback = require("../withPluginCallback");
 
 // Images looked up at once for one entry. Each lookup is a sandbox job (a
 // fresh jail, ~70ms before any work), so two at a time overlap their start-up.
@@ -116,8 +115,6 @@ async function render($, { blogID }) {
 
     debug(src, "complete!");
   });
-
-  debug("Invoking callback now!");
 }
 
 function isRetina(url) {
@@ -125,7 +122,7 @@ function isRetina(url) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   category: "images",
   title: "Cache",
   description: "Cache and optimize images",

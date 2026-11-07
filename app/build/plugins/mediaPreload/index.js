@@ -1,5 +1,3 @@
-const withPluginCallback = require("../withPluginCallback");
-
 async function render($) {
   ["audio", "video"].forEach((tag) => {
     $(tag).each(function () {
@@ -17,7 +15,7 @@ async function render($) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   description:
     'Ensures embedded <audio> and <video> elements default to preload="metadata"',
   category: "Performance",

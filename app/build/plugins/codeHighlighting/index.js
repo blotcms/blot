@@ -1,6 +1,5 @@
 const he = require("he");
 const hljs = require("highlight.js");
-const withPluginCallback = require("../withPluginCallback");
 
 async function render($) {
   $("pre code").each(function () {
@@ -36,6 +35,6 @@ function highlight(code, lang) {
 module.exports = {
   category: "codemath",
   title: "Code",
-  render: withPluginCallback(render),
+  render,
   description: "Highlight code syntax",
 };

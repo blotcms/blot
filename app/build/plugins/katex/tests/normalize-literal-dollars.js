@@ -7,52 +7,41 @@ const {
 const { render } = require("../index");
 
 describe("literal dollar math normalization", function () {
-  function normalizeAndRender(html, callback) {
+  async function normalizeAndRender(html) {
     const $ = cheerio.load(html, { decodeEntities: false }, false);
     normalizeLiteralDollarMath($);
-    render($, function (err) {
-      if (err) return callback(err);
-      callback(null, $.html());
-    });
+    await render($, {});
+    return $.html();
   }
 
-  it("normalizes literal $$ before KaTeX rendering", function (done) {
-    normalizeAndRender("<p>Inline $$a+b$$ math</p>", function (err, html) {
-      if (err) return done.fail(err);
-      expect(html).toContain('class="katex"');
-      expect(html).not.toContain("$$a+b$$");
-      done();
-    });
+  it("normalizes literal $$ before KaTeX rendering", async function () {
+    const html = await normalizeAndRender("<p>Inline $$a+b$$ math</p>");
+    expect(html).toContain('class="katex"');
+    expect(html).not.toContain("$$a+b$$");
   });
 
-  it("normalizes math in original siblings after an expanding replacement", function (done) {
+  it("normalizes math in original siblings after an expanding replacement", async function () {
     const input = "<p>First $x$ then <em>$y$</em><strong>after</strong></p>";
 
-    normalizeAndRender(input, function (err, html) {
-      if (err) return done.fail(err);
-      const $ = cheerio.load(html, { decodeEntities: false }, false);
-      expect($(".katex").length).toBe(2);
-      expect(html).not.toContain("$x$");
-      expect(html).not.toContain("$y$");
-      expect($("strong").text()).toBe("after");
-      done();
-    });
+    const html = await normalizeAndRender(input);
+    const $ = cheerio.load(html, { decodeEntities: false }, false);
+    expect($(".katex").length).toBe(2);
+    expect(html).not.toContain("$x$");
+    expect(html).not.toContain("$y$");
+    expect($("strong").text()).toBe("after");
   });
 
-  it("leaves literal $$ untouched during the KaTeX render phase", function (done) {
+  it("leaves literal $$ untouched during the KaTeX render phase", async function () {
     const $ = cheerio.load(
       "<p>Inline $$a+b$$ math</p>",
       { decodeEntities: false },
       false
     );
 
-    render($, function (err) {
-      if (err) return done.fail(err);
-      const html = $.html();
-      expect(html).not.toContain('class="katex"');
-      expect(html).toContain("$$a+b$$");
-      done();
-    });
+    await render($, {});
+    const html = $.html();
+    expect(html).not.toContain('class="katex"');
+    expect(html).toContain("$$a+b$$");
   });
 
   it("normalizes single-dollar inline math", function () {
@@ -85,19 +74,16 @@ describe("literal dollar math normalization", function () {
     });
   });
 
-  it("preserves empty dollar-delimited runs through KaTeX rendering", function (done) {
+  it("preserves empty dollar-delimited runs through KaTeX rendering", async function () {
     const inputs = ["$$$$", "$$ $$", "Text $$$$ text", "$$$ a+b $$$"];
     const input = inputs.map((value) => "<p>" + value + "</p>").join("");
 
-    normalizeAndRender(input, function (err, html) {
-      if (err) return done.fail(err);
-      inputs.forEach((value) => {
-        expect(html).toContain("<p>" + value + "</p>");
-      });
-      expect(html).not.toContain('class="katex"');
-      expect(html).not.toContain('class="math');
-      done();
+    const html = await normalizeAndRender(input);
+    inputs.forEach((value) => {
+      expect(html).toContain("<p>" + value + "</p>");
     });
+    expect(html).not.toContain('class="katex"');
+    expect(html).not.toContain('class="math');
   });
 
   it("leaves currency text literal", function () {
@@ -152,55 +138,43 @@ describe("literal dollar math normalization", function () {
     );
   });
 
-  it("keeps the line break after inline double-dollar math", function (done) {
-    normalizeAndRender("<p>$$x$$<br>next</p>", function (err, html) {
-      if (err) return done.fail(err);
-      const $ = cheerio.load(html, { decodeEntities: false }, false);
-      expect($(".katex").length).toBe(1);
-      expect($(".katex-display").length).toBe(0);
-      expect($("br").length).toBe(1);
-      expect($("p").text()).toContain("next");
-      done();
-    });
+  it("keeps the line break after inline double-dollar math", async function () {
+    const html = await normalizeAndRender("<p>$$x$$<br>next</p>");
+    const $ = cheerio.load(html, { decodeEntities: false }, false);
+    expect($(".katex").length).toBe(1);
+    expect($(".katex-display").length).toBe(0);
+    expect($("br").length).toBe(1);
+    expect($("p").text()).toContain("next");
   });
 
-  it("does not consume line breaks for an unfinished delimiter", function (done) {
-    normalizeAndRender("<p>Unfinished $$x<br>next</p>", function (err, html) {
-      if (err) return done.fail(err);
-      const $ = cheerio.load(html, { decodeEntities: false }, false);
-      expect($(".katex").length).toBe(0);
-      expect($("br").length).toBe(1);
-      expect($("p").html()).toBe("Unfinished $$x<br>next");
-      done();
-    });
+  it("does not consume line breaks for an unfinished delimiter", async function () {
+    const html = await normalizeAndRender("<p>Unfinished $$x<br>next</p>");
+    const $ = cheerio.load(html, { decodeEntities: false }, false);
+    expect($(".katex").length).toBe(0);
+    expect($("br").length).toBe(1);
+    expect($("p").html()).toBe("Unfinished $$x<br>next");
   });
 
-  it("normalizes a bounded three-line display and preserves surrounding content", function (done) {
+  it("normalizes a bounded three-line display and preserves surrounding content", async function () {
     const input = "<p>before<br>$$<br>x+y<br>$$<br>after</p>";
-    normalizeAndRender(input, function (err, html) {
-      if (err) return done.fail(err);
-      const $ = cheerio.load(html, { decodeEntities: false }, false);
-      // Display tokens mixed with other paragraph content render inline.
-      expect($(".katex").length).toBe(1);
-      expect($(".katex-display").length).toBe(0);
-      expect($("br").length).toBe(4);
-      expect($("p").text()).toContain("before");
-      expect($("p").text()).toContain("after");
-      done();
-    });
+    const html = await normalizeAndRender(input);
+    const $ = cheerio.load(html, { decodeEntities: false }, false);
+    // Display tokens mixed with other paragraph content render inline.
+    expect($(".katex").length).toBe(1);
+    expect($(".katex-display").length).toBe(0);
+    expect($("br").length).toBe(4);
+    expect($("p").text()).toContain("before");
+    expect($("p").text()).toContain("after");
   });
 
-  it("preserves unrelated line breaks around display math", function (done) {
+  it("preserves unrelated line breaks around display math", async function () {
     const input = "<p>one<br>two<br>$$<br>z<br>$$<br>three<br>four</p>";
-    normalizeAndRender(input, function (err, html) {
-      if (err) return done.fail(err);
-      const $ = cheerio.load(html, { decodeEntities: false }, false);
-      expect($(".katex").length).toBe(1);
-      expect($(".katex-display").length).toBe(0);
-      expect($("br").length).toBe(6);
-      expect($("p").text()).toContain("onetwo");
-      expect($("p").text()).toContain("threefour");
-      done();
-    });
+    const html = await normalizeAndRender(input);
+    const $ = cheerio.load(html, { decodeEntities: false }, false);
+    expect($(".katex").length).toBe(1);
+    expect($(".katex-display").length).toBe(0);
+    expect($("br").length).toBe(6);
+    expect($("p").text()).toContain("onetwo");
+    expect($("p").text()).toContain("threefour");
   });
 });

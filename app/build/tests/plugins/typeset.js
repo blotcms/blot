@@ -52,14 +52,10 @@ describe("typeset plugin", function () {
     const plugin = require("build/plugins/typeset");
 
     function run(html) {
-      return new Promise(function (resolve) {
-        plugin.prerender(
-          html,
-          function (err, html) {
-            resolve(html);
-          },
-          { punctuation: true, smallCaps: false, hangingPunctuation: false }
-        );
+      return plugin.prerender(html, {
+        punctuation: true,
+        smallCaps: false,
+        hangingPunctuation: false,
       });
     }
 
