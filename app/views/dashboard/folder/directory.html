@@ -33,17 +33,7 @@
       
           {{^contents.length}}
           <tr>
-            <td colspan="3" style="vertical-align: middle;">
-              <small style="display: flex;flex-grow: 1;
-              font-size: 14px;
-              text-align: center;{{#directory}}min-height: 300px;{{/directory}}
-              color: var(--light-text-color);justify-content: center;">  
-                <span style="align-self: center; text-align: center;display: block;">
-                  {{#root}}Folder is empty.{{/root}}
-                  {{^root}}There is nothing here.{{/root}}
-                </span>
-              </small>
-            </td>
+            <td colspan="3" class="directory-list__empty">{{#root}}Folder is empty.{{/root}}{{^root}}There is nothing here.{{/root}}</td>
           </tr>
           {{/contents.length}}
       

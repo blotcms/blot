@@ -137,13 +137,32 @@
   height: 100%;
 }
 
-/* The one row of an empty list, its message centred like the empty folder's */
+/* The one row of an empty list (the folder, or a filter with nothing in
+   it): its message is centred in the whole list area, however tall the box
+   has grown. It takes no clicks, so the column headers it lies over still
+   sort and resize. */
+.directory-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.directory-list.empty {
+  flex: 1 0 auto;
+}
+
 .directory-list .directory-list__empty {
-  height: 300px;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  padding: 0;
+  border: 0;
+  background: none;
   color: var(--light-text-color);
   font-size: var(--text-sm);
-  text-align: center;
-  vertical-align: middle;
+  pointer-events: none;
 }
 
 .directory-list td[data-sort] {
@@ -460,6 +479,72 @@ body.upload-modal-open {
   min-height: 50vh;
   --row-action-menu-trigger-opacity: 1;
   --row-action-menu-trigger-color: var(--light-text-color);
+}
+
+/* The table runs to the box's edges, so the header's line and hover and the
+   rows' stripes fill it. The box's side padding moves onto the toolbar and
+   the table's first and last columns, so no text moves. (div. outranks the
+   card rule in site/site-dashboard.css, whichever loads first.) */
+div.folder-box.directory {
+  padding-right: 0;
+  padding-left: 0;
+}
+
+div.folder-box.directory .folder-toolbar {
+  padding-right: calc(var(--space-1) + var(--space-2));
+  padding-left: calc(var(--space-4) + var(--space-2));
+}
+
+div.folder-box.directory .directory-list th:first-child,
+div.folder-box.directory .directory-list td:first-child {
+  padding-left: calc(var(--space-4) + var(--space-2));
+}
+
+div.folder-box.directory .directory-list td:last-child {
+  padding-right: calc(var(--space-2) + var(--space-2));
+}
+
+div.folder-box.directory .directory-list th:last-child {
+  padding-right: calc(var(--space-6) + var(--space-2));
+}
+
+div.folder-box.directory .directory-list th:last-child::after {
+  right: calc(var(--space-4) + var(--space-2));
+}
+
+/* On phones the name is the only column, so it takes the right-hand
+   padding too */
+@media screen and (max-width: 480px) {
+  div.folder-box.directory .directory-list th:first-child,
+  div.folder-box.directory .directory-list td:first-child {
+    padding-right: calc(var(--space-2) + var(--space-2));
+  }
+}
+
+/* Edge to edge, so square: rounded ends would leave notches at the box's
+   border */
+div.folder-box.directory .data-table tbody tr > td {
+  border-radius: 0;
+}
+
+/* On desktop it reaches down to just above the bottom of the window, so a
+   short folder fills the page rather than ending halfway. Each page sets
+   where the box starts (--folder-box-top): below the breadcrumbs and
+   heading on a subfolder or search, below the summary card on the folder
+   and its filters. A box that starts lower (a sync issue above it) just
+   makes the page scroll a little. */
+@media (min-width: 900px) {
+  .folder-box.directory {
+    min-height: max(
+      50vh,
+      calc(100vh - var(--folder-box-top, 120px) - var(--space-5))
+    );
+  }
+
+  .site-dashboard.is-overview-view,
+  .site-dashboard.is-posts-view {
+    --folder-box-top: 209px;
+  }
 }
 
 .directory-row__menu-trigger {
