@@ -1,4 +1,4 @@
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var Entry = require("models/entry");
 var build = require("build");
 var folderPostSource = require("./folderPostSourceFolder");
@@ -12,7 +12,7 @@ var folderPostSource = require("./folderPostSourceFolder");
 // does not exist on disk (e.g. the aggregate for /album+ is stored at /album),
 // so it is rebuilt through its source folder; otherwise build() would fail
 // with ENOENT/WRONGTYPE for a perfectly valid aggregate.
-module.exports = withCallback(async function rebuildEntry(blog, entry) {
+module.exports = promiseOnly(async function rebuildEntry(blog, entry) {
   var folderSource = folderPostSource(entry);
   var buildPath = folderSource || entry.path;
 

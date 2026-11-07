@@ -1,6 +1,5 @@
 var Entries = require("models/entries");
-var withCallback = require("helper/withCallback");
-var { promisify } = require("util");
+var promiseOnly = require("helper/promiseOnly");
 var Entry = require("models/entry");
 var Blog = require("models/blog");
 var clfdate = require("helper/clfdate");
@@ -8,7 +7,7 @@ var DateStamp = require("build/prepare/dateStamp");
 
 const { isDraft } = require("sync/update/drafts");
 
-module.exports = withCallback(async function renames(blogID) {
+module.exports = promiseOnly(async function renames(blogID) {
   var RENAME_PERIOD = 1000 * 30; // 30 seconds
   var after = Date.now() - RENAME_PERIOD;
 
@@ -71,8 +70,6 @@ module.exports = withCallback(async function renames(blogID) {
     blog = await Blog.get({ id: blogID });
   } catch (err) {}
 
-  var isDraftAsync = promisify(isDraft);
-
   for (var rename of Object.values(renames)) {
     var createdEntry = rename.createdEntry;
     var deletedEntry = rename.deletedEntry;
@@ -99,7 +96,7 @@ module.exports = withCallback(async function renames(blogID) {
     var draft;
 
     try {
-      draft = await isDraftAsync(blogID, deletedEntry.path);
+      draft = await isDraft(blogID, deletedEntry.path);
     } catch (err) {
       draft = undefined;
     }

@@ -55,7 +55,7 @@ async function saveAndFinish(req, res, next) {
       thumbnails: false, // do not re-generate thumbnails
       imageCache: false, // do not re-cache images in posts
     };
-    rebuild(req.blog.id, options, function () {});
+    rebuild(req.blog.id, options).catch(function () {});
   }
 
   // Add success message if we're going to the settings page

@@ -7,12 +7,7 @@ describe("regenerateTemplateManifests", function () {
 
   global.test.blog();
 
-  var run = (blogID, log) =>
-    new Promise((resolve, reject) =>
-      regenerateTemplateManifests(blogID, log, (err, count) =>
-        err ? reject(err) : resolve(count)
-      )
-    );
+  var run = (blogID, log) => regenerateTemplateManifests(blogID, { log });
 
   beforeEach(async function () {
     await promisify(Template.create)(this.blog.id, "template", {});

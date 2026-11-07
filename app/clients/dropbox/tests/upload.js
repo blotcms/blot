@@ -19,7 +19,7 @@ describe("dropbox upload", function () {
     await fs.remove(source);
   });
 
-  it("uploads without sending client_modified", function (done) {
+  it("uploads without sending client_modified", async function () {
     let uploadArgs;
     const fakeClient = {
       filesUpload: async (args) => {
@@ -28,17 +28,11 @@ describe("dropbox upload", function () {
       },
     };
 
-    upload(fakeClient, source, "/post.txt", (err) => {
-      try {
-        expect(err).toBeFalsy();
-        expect(uploadArgs.path).toBe("/post.txt");
-        expect(uploadArgs.client_modified).toBeUndefined();
-        expect("client_modified" in uploadArgs).toBe(false);
-        done();
-      } catch (assertionError) {
-        done(assertionError);
-      }
-    });
+    await upload(fakeClient, source, "/post.txt");
+
+    expect(uploadArgs.path).toBe("/post.txt");
+    expect(uploadArgs.client_modified).toBeUndefined();
+    expect("client_modified" in uploadArgs).toBe(false);
   });
   it("uses filesUpload for files under the threshold", async function () {
     const calls = [];
@@ -47,11 +41,7 @@ describe("dropbox upload", function () {
       filesUploadSessionStart: async () => calls.push("start"),
     };
 
-    await new Promise((resolve, reject) =>
-      upload(fakeClient, source, "/post.txt", (e) =>
-        e ? reject(e) : resolve()
-      )
-    );
+    await upload(fakeClient, source, "/post.txt");
     expect(calls).toEqual(["filesUpload"]);
   });
 
@@ -99,11 +89,7 @@ describe("dropbox upload", function () {
       delays.splice(0, delays.length, 1, 1, 1);
 
       try {
-        await new Promise((resolve, reject) =>
-          upload(fakeClient, source, "/big.txt", (e) =>
-            e ? reject(e) : resolve()
-          )
-        );
+        await upload(fakeClient, source, "/big.txt");
       } finally {
         delays.splice(0, delays.length, ...saved);
       }
@@ -160,11 +146,7 @@ describe("dropbox upload", function () {
       delays.splice(0, delays.length, 1, 1, 1);
 
       try {
-        await new Promise((resolve, reject) =>
-          upload(fakeClient, source, "/big.txt", (e) =>
-            e ? reject(e) : resolve()
-          )
-        );
+        await upload(fakeClient, source, "/big.txt");
       } finally {
         delays.splice(0, delays.length, ...saved);
       }
@@ -203,11 +185,7 @@ describe("dropbox upload", function () {
         },
       };
 
-      await new Promise((resolve, reject) =>
-        upload(fakeClient, source, "/big.txt", (e) =>
-          e ? reject(e) : resolve()
-        )
-      );
+      await upload(fakeClient, source, "/big.txt");
 
       // hell|o wo|rld, but Dropbox only holds "he": resume from offset 2.
       expect(appendOffsets).toEqual([4, 2, 6]);
@@ -227,8 +205,9 @@ describe("dropbox upload", function () {
         },
         filesUploadSessionFinish: async () => ({ result: {} }),
       };
-      const error = await new Promise((resolve) =>
-        upload(fakeClient, source, "/big.txt", (e) => resolve(e))
+      const error = await upload(fakeClient, source, "/big.txt").then(
+        () => undefined,
+        (e) => e
       );
       expect(error).toBeTruthy();
     });
@@ -255,8 +234,9 @@ describe("dropbox upload", function () {
         ),
       };
 
-      const error = await new Promise((resolve) =>
-        upload(fakeClient, source, "/big.txt", (e) => resolve(e))
+      const error = await upload(fakeClient, source, "/big.txt").then(
+        () => undefined,
+        (e) => e
       );
       await new Promise((resolve) => setTimeout(resolve, 300));
 

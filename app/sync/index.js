@@ -131,80 +131,86 @@ function start(blogID, callback) {
         throw new Error("Pass a callback to done");
 
       log("Checking for renamed files");
-      renames(blogID, async function (err) {
-        if (err) {
-          folder.status("Error checking file renames");
-          log("Error checking file renames");
-          console.log(err);
-        }
-
-        log("Building templates from folder");
-        buildFromFolder(blogID, async function (err) {
+      // The rest of the sync runs from the end of this chain, as it did from
+      // the callback: a throw below is an unhandled rejection, which exits the
+      // process and so releases the folder lock.
+      renames(blogID)
+        .then(
+          () => null,
+          (err) => err
+        )
+        .then(async function (err) {
           if (err) {
-            folder.status("Error building templates from folder");
-            log("Error building templates in folder");
+            folder.status("Error checking file renames");
+            log("Error checking file renames");
             console.log(err);
           }
 
-          // Templates which link to files that changed in this sync have
-          // their CDN manifest regenerated once, now, rather than once per
-          // file (see update/rebuildDependents). The blog's cacheID is
-          // bumped below, as for any sync with changes.
-          log("Updating CDN manifests of templates");
-          try {
-            const updated = await new Promise((resolve, reject) =>
-              regenerateTemplateManifests(blogID, log, (err, count) =>
-                err ? reject(err) : resolve(count)
-              )
-            );
-
-            if (updated) changes = true;
-          } catch (manifestError) {
-            log(
-              "Error updating CDN manifests of templates",
-              manifestError.message
-            );
-          }
-
-          // We could do these next two things in parallel
-          // but it's a little bit of refactoring...
-          log("Releasing lock");
-          let releaseError = null;
-          try {
-            await release();
-            log("Finished sync");
-          } catch (err) {
-            // Redis unreachable or the lock was already lost. Never leave
-            // the caller's callback pending; surface the failure instead.
-            // The folder still changed, so the cacheID must still be bumped.
-            log("Failed to release lock", err.message);
-            releaseError = err;
-          }
-
-          if (!changes) {
-            return callback(syncError || releaseError);
-          }
-
-          // If Redis is unavailable the bump is retried in the background,
-          // and the preview reloaded again once it lands
-          log("Updating cacheID of blog");
-          Blog.bumpCacheID(
-            blogID,
-            function (err) {
-              if (err) {
-                log("Error updating cacheID of blog");
-              }
-
-              previewReload.publish(blogID);
-
-              callback(syncError || releaseError);
-            },
-            function () {
-              previewReload.publish(blogID);
+          log("Building templates from folder");
+          buildFromFolder(blogID, async function (err) {
+            if (err) {
+              folder.status("Error building templates from folder");
+              log("Error building templates in folder");
+              console.log(err);
             }
-          );
+
+            // Templates which link to files that changed in this sync have
+            // their CDN manifest regenerated once, now, rather than once per
+            // file (see update/rebuildDependents). The blog's cacheID is
+            // bumped below, as for any sync with changes.
+            log("Updating CDN manifests of templates");
+            try {
+              const updated = await regenerateTemplateManifests(blogID, {
+                log,
+              });
+
+              if (updated) changes = true;
+            } catch (manifestError) {
+              log(
+                "Error updating CDN manifests of templates",
+                manifestError.message
+              );
+            }
+
+            // We could do these next two things in parallel
+            // but it's a little bit of refactoring...
+            log("Releasing lock");
+            let releaseError = null;
+            try {
+              await release();
+              log("Finished sync");
+            } catch (err) {
+              // Redis unreachable or the lock was already lost. Never leave
+              // the caller's callback pending; surface the failure instead.
+              // The folder still changed, so the cacheID must still be bumped.
+              log("Failed to release lock", err.message);
+              releaseError = err;
+            }
+
+            if (!changes) {
+              return callback(syncError || releaseError);
+            }
+
+            // If Redis is unavailable the bump is retried in the background,
+            // and the preview reloaded again once it lands
+            log("Updating cacheID of blog");
+            Blog.bumpCacheID(
+              blogID,
+              function (err) {
+                if (err) {
+                  log("Error updating cacheID of blog");
+                }
+
+                previewReload.publish(blogID);
+
+                callback(syncError || releaseError);
+              },
+              function () {
+                previewReload.publish(blogID);
+              }
+            );
+          });
         });
-      });
     });
   });
 }

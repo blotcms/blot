@@ -139,12 +139,9 @@ async function reconcile() {
   // Entries.get swallows failures into an empty list; getListIDs and Entry.get
   // report them, so a read failure is counted rather than mistaken for "none"
   function scheduledEntries(blogID) {
-    return new Promise(function (resolve, reject) {
-      Entries.getListIDs(blogID, "scheduled", {}, function (err, ids) {
-        if (err) return reject(err);
-        if (!ids.length) return resolve([]);
-        Entry.get(blogID, ids).then(resolve, reject);
-      });
+    return Entries.getListIDs(blogID, "scheduled", {}).then(function (ids) {
+      if (!ids.length) return [];
+      return Entry.get(blogID, ids);
     });
   }
 

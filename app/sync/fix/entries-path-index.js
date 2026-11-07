@@ -1,9 +1,9 @@
 const { promisify } = require("util");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 const client = require("models/client");
 const pathIndex = require("models/entries/pathIndex");
 
-module.exports = withCallback(async function entriesPathIndex(blog) {
+module.exports = promiseOnly(async function entriesPathIndex(blog) {
   const entriesKey = "blog:" + blog.id + ":entries";
   const lexKey = pathIndex.lexKey(blog.id);
 

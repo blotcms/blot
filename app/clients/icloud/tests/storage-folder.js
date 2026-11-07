@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const folder = require("storage/folder");
 const localReaddir = require("../sync/util/localReaddir");
 const resolveCaseConflicts = require("../../util/resolveCaseConflicts");
@@ -32,12 +31,12 @@ describe("iCloud client access to the blog folder", function () {
     delete require.cache[mocked[3]];
 
     try {
-      await promisify(require(mocked[2]))(blogID, "/posts/a.txt", "hello");
+      await require(mocked[2])(blogID, "/posts/a.txt", "hello");
       expect((await folder.read(blogID, "/posts/a.txt")).toString()).toBe(
         "hello"
       );
 
-      await promisify(require(mocked[3]))(blogID, "/posts");
+      await require(mocked[3])(blogID, "/posts");
       expect(await folder.exists(blogID, "/posts")).toBe(false);
     } finally {
       mocked.forEach((p, i) => {

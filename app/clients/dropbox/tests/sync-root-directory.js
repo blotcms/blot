@@ -13,9 +13,7 @@ describe("dropbox client", function () {
     var contents = this.fake.file();
     var contentsInBlogDirectory;
 
-    write(blog.id, path, contents, function (err) {
-      if (err) return done.fail(err);
-
+    write(blog.id, path, contents).then(function () {
       sync(blog, function (err) {
         if (err) return done.fail(err);
 
@@ -36,6 +34,6 @@ describe("dropbox client", function () {
             }, done.fail);
           });
       });
-    });
+    }, done.fail);
   });
 });

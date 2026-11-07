@@ -12,9 +12,7 @@ async function main() {
   const options = {};
 
   try {
-    await new Promise((resolve, reject) => {
-      rebuild(blog.id, options, (err) => (err ? reject(err) : resolve()));
-    });
+    await rebuild(blog.id, options);
   } catch (err) {
     console.error(colors.red("Error:", err.message));
     return process.exit(1);

@@ -20,7 +20,8 @@ const Entries = require("models/entries");
 const Entry = require("models/entry");
 
 const getBlog = promisify(Blog.get);
-const getListIDs = promisify(Entries.getListIDs);
+const getListIDs = (blogID, list, options) =>
+  Entries.getListIDs(blogID, list, options);
 
 // A failed read is the same as no entry (as before)
 const getEntry = (blogID, path) =>

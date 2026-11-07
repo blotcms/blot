@@ -8,7 +8,7 @@ describe("updateCdnManifest folder files", function () {
   const Template = require("../index");
   const key = require("../key");
   const updateCdnManifest = promisify(require("../util/updateCdnManifest"));
-  const rebuildDependents = promisify(require("sync/update/rebuildDependents"));
+  const rebuildDependents = require("sync/update/rebuildDependents");
   const renderView = require("blog/render/view");
   const config = require("config");
 
@@ -524,9 +524,8 @@ describe("updateCdnManifest folder files", function () {
   });
 
   describe("when a file in the blog's folder changes", function () {
-    const regenerateTemplateManifests = promisify(
-      require("sync/update/regenerateTemplateManifests")
-    );
+    const regenerateTemplateManifests = (blogID, log) =>
+      require("sync/update/regenerateTemplateManifests")(blogID, { log });
     const pending = (blogID) =>
       client.sMembers(key.templateManifestsPending(blogID));
 

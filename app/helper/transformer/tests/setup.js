@@ -166,8 +166,8 @@ module.exports = function setup(options) {
   });
 
   // Clean up the transformer used in each test
-  afterEach(function (done) {
-    this.transformer.flush(done);
+  afterEach(async function () {
+    await this.transformer.flush();
   });
 
   global.test.server(server);

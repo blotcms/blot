@@ -1,4 +1,4 @@
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 const Entry = require("models/entry");
 const Blog = require("models/blog");
 const _ = require("lodash");
@@ -116,4 +116,4 @@ async function main(blog) {
   return report;
 }
 
-module.exports = withCallback(main);
+module.exports = promiseOnly(main);

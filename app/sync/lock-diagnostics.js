@@ -1,5 +1,4 @@
 const os = require("os");
-const { promisify } = require("util");
 const freeDiskSpace = require("../scheduler/free-disk-space");
 const {
   getPendingSyncs,
@@ -8,7 +7,6 @@ const {
 
 const folderLock = require("./lock");
 const { getRunningChecks } = require("./fix");
-const freeDiskSpaceAsync = promisify(freeDiskSpace);
 const DEFAULT_TIMEOUT_MS = 2000;
 
 const serializeError = (error) => {
@@ -128,7 +126,7 @@ const gatherLockDiagnostics = async ({
   addResult(
     diagnostics,
     "diskSpace",
-    await runWithTimeout(() => freeDiskSpaceAsync(), timeLeft())
+    await runWithTimeout(() => freeDiskSpace(), timeLeft())
   );
 
   if (blogID) {

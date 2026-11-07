@@ -76,7 +76,7 @@ module.exports = function setup(options) {
     Blog.set(blogID, { client: "dropbox" }, function (err) {
       if (err) return done(err);
 
-      database.set(blogID, account, done);
+      database.set(blogID, account).then(() => done(), done);
     });
   });
 
@@ -99,13 +99,13 @@ module.exports = function setup(options) {
       this.folder = folder || "";
       this.folderID = folderID || "";
 
-      database.set(this.blog.id, { folder, folderID }, done);
+      database.set(this.blog.id, { folder, folderID }).then(() => done(), done);
     });
   });
 
   // Remove fake account
-  afterEach(function (done) {
-    database.drop(this.blog.id, done);
+  afterEach(async function () {
+    await database.drop(this.blog.id);
   });
 
   beforeEach(function () {

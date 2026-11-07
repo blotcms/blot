@@ -29,7 +29,7 @@ describe("dropbox client", function () {
     expect(res.fileBinary.toString("utf-8")).toEqual(contents);
   });
 
-  xit("writes a file", function (done) {
-    write(this.blog.id, this.path, this.contents, done);
+  xit("writes a file", async function () {
+    await write(this.blog.id, this.path, this.contents);
   });
 });
