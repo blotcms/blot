@@ -106,11 +106,9 @@ module.exports = (function () {
     return await redis.zCard(entriesKey);
   }
 
-  var getListTotal = withCallback(
-    async function getListTotal(blogID, listName) {
-      return await redis.zCard(listKey(blogID, listName));
-    }
-  );
+  async function getListTotal(blogID, listName) {
+    return await redis.zCard(listKey(blogID, listName));
+  }
 
   // Count of the "all" list, the same set Fix()'s each()-based checks (e.g.
   // entry-ghosts) scan one Redis round trip at a time - includes drafts,
