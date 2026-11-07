@@ -326,7 +326,9 @@ SafeHop on.
 - **Caching.** Smart Cache off, so every response is cached with the 1-year
   override (with it on, m4a, mov and octet-stream files were never cached);
   cache expiration overridden to 1 year; browser
-  cache "match server"; query string sort on; vary cache by URL query string,
+  cache "match server", which sends browsers a `Cache-Control` made from that
+  1-year edge time, never the origin's (so the origin's `immutable` is lost
+  without edge rule 8 below); query string sort on; vary cache by URL query string,
   limited to the `version` parameter (the only one CDN URLs use, as the
   fonts' cache-buster; no CDN route reads the query string, so other
   parameters only fragmented the cache); cache error responses on (errors
@@ -336,8 +338,11 @@ SafeHop on.
 - **Perma-Cache** on, storage zone `blot-cdn-storage`. It serves any object it
   already holds without asking the origin.
 - **Request coalescing** on, 30 s lock timeout.
-- **Headers:** "Add CORS headers" on for `eot, ttf, woff, woff2, css, otf`
-  (added whatever the origin); canonical headers off.
+- **Headers:** "Add CORS headers" on for `eot, ttf, woff, woff2, css, otf, js,
+  mjs` (added whatever the origin, and the only CORS headers on a Perma-Cache
+  hit, which keeps none of the origin's headers); canonical headers off. `js`
+  and `mjs` are there for the templates' `type="module"` scripts, loaded with
+  `{{#cdn}}`, which browsers refuse without CORS.
 - **Optimizer** off and no token authentication or URL signing (everything on
   the CDN is public by design), so Bunny requests the origin with the plain
   path.
@@ -364,15 +369,29 @@ SafeHop on.
      conditions; `*` matches across `/`, so every pattern names the host (a
      host-less `*/fonts/*` would let `/.env/fonts/x` through). Rollback: switch
      the rule off.
-  8. "Short cache for pending folder images": Override Cache Time 3600 s and
+  8. "Immutable browser cache": Browser Cache Header (Cache-Control) Override
+     to `public, max-age=31536000, immutable`, when all of: the URL is on one
+     of the three hostnames (`*://cdn.blot.im/*`, `*://cdn.blot.site/*`,
+     `*://blot-cdn.b-cdn.net/*`), the status is 200, and the URL matches none
+     of `*/folder/v-pending/*`, `*/health*`, `*/favicon.ico*`,
+     `*/robots.txt*`. Every other CDN URL is versioned or never changes, so
+     browsers need not revalidate it even on reload. The exclusions are
+     host-less, so they also leave out the odd asset whose path contains one
+     of them; those keep the plain 1-year header. Errors keep the 5 s of
+     "cache error responses". Rollback: switch the rule off.
+
+  9. "Short cache for pending folder images": Override Cache Time 60 s and
      Bypass Perma-Cache on `*://cdn.blot.im/folder/v-pending/*` (and the same
      for `cdn.blot.site` and `blot-cdn.b-cdn.net`). The build links an image
      that hasn't synced yet there (`app/build/plugins/folderAssets`), and the
      rebuild when it arrives moves the post to the image's content-versioned
-     URL, but feed readers and cached pages keep the pending one. Its 404 is
-     held for the 5 s of "cache error responses"; without this rule the image
-     it then serves would be cached for a year, and perma-cached, so a
-     replaced image would stay stale on those copies.
+     URL, but feed readers and cached pages keep the pending one. Without
+     this rule the image it then serves would be cached for a year, and
+     perma-cached, so a replaced image would stay stale on those copies. The
+     override applies to the 404 before the image arrives too (instead of the
+     5 s of "cache error responses"), so it is 60 s, the minute Node asks for
+     that 404, rather than an hour. Recreated on 7 Nov 2026: the pull zone
+     had lost it.
 
 Large folder files and generated assets (`/_image_cache/`, `/_assets/`, ...)
 requested on a blog host answer with a 302 to this CDN (see
