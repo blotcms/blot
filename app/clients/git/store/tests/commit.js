@@ -902,9 +902,11 @@ describe("git store commit", function () {
 
     it("returns an unknown outcome, not a success or a failure, when the swap cannot be read back", async function () {
       const key = manifestKey(2);
+      // The commit's own read asks for seq 2 first (it isn't there yet); the
+      // read back after the create is the one that fails
       store
         .inject("putIfAbsent", { key, after: dropped() })
-        .inject("get", { key, before: dropped() });
+        .inject("get", { key, before: dropped(), skip: 1 });
 
       const result = await commit({
         store,
@@ -1210,8 +1212,8 @@ describe("git store commit", function () {
         })
       );
 
-      // Reading: the hint, and a HEAD for what follows it. The manifest's bytes
-      // are kept from the last swap, and the commit and trees are in the cache.
+      // Reading: a GET of the manifest after the one kept from the last swap,
+      // which isn't there. The commit and trees are in the cache.
       expect(spent.gets).toBe(1);
       expect(spent.reads).toBe(0);
       expect(spent.lists).toBe(0);
@@ -1221,9 +1223,9 @@ describe("git store commit", function () {
       // the files were just uploaded, and the create decides the rest.
       expect(spent.puts).toBe(5 + 1);
       expect(spent.putIfAbsents).toBe(1);
-      expect(spent.heads).toBe(1);
+      expect(spent.heads).toBe(0);
 
-      expect(spent.reading + spent.writing).toBe(9);
+      expect(spent.reading + spent.writing).toBe(8);
     });
 
     it("takes the same number however deep the history is", async function () {

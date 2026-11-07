@@ -275,18 +275,18 @@ describe("git store receive", function () {
       // The pack, its index and reverse index, the history piece and its index, and the hint
       expect(used.puts).toBe(6);
 
-      // Everything else is looking, 10 requests where it was 18: the
-      // advertisement's manifest read (the hint, a HEAD for what follows it
-      // and the manifest), receive's own (the hint and a HEAD, run together,
-      // the manifest's bytes kept), the pack's index read whole (one GET, no
-      // HEAD) and a HEAD for the pack, and the entries read for the bases, the
-      // parent commit and the trees the new commit changed. None of it grows
-      // with the repository's history.
+      // Everything else is looking, 8 requests where it was 18: the
+      // advertisement's manifest read and receive's own (each a GET of the
+      // manifest after the one this process keeps, which isn't there), the
+      // pack's index read whole (one GET, no HEAD) and a HEAD for the pack,
+      // and the entries read for the bases, the parent commit and the trees
+      // the new commit changed. None of it grows with the repository's
+      // history.
       const reading = used.heads + used.reads + used.gets;
       expect(used.gets).toBe(3);
-      expect(used.heads).toBe(3);
+      expect(used.heads).toBe(1);
       expect(used.reads).toBe(4);
-      expect(reading).toBe(10);
+      expect(reading).toBe(8);
     });
 
     it("answers before the hint is written, and another process's read straight after still sees the push", async function () {
@@ -1387,7 +1387,8 @@ describe("git store receive", function () {
 
       // The manifest lands, the answer is lost, and so is the read back
       faulty.inject("putIfAbsent", { key: next, after: dropped() });
-      faulty.inject("get", { key: next, before: dropped(), times: 5 });
+      // (after the push's own read, which asks for it first)
+      faulty.inject("get", { key: next, before: dropped(), skip: 1, times: 5 });
 
       const result = await direct([update(tip)], thin(tip));
       expect(result.outcome).toBe("unknown");
@@ -1569,11 +1570,11 @@ describe("git store receive", function () {
           for (const entry of uploads)
             expect(entry.end).toBeLessThanOrEqual(create.start);
 
-          // A warm push makes the same requests as before: the hint and a HEAD,
-          // the five uploads, the create and the hint
+          // A warm push: a GET of the manifest after the one it keeps, the
+          // five uploads, the create and the hint
           if (warm)
             expect(timeline.filter((entry) => entry.op !== "say").length).toBe(
-              9
+              8
             );
         }
       );
