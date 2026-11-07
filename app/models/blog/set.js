@@ -144,6 +144,10 @@ module.exports = async function set(blogID, blog) {
     changes.template ||
     changes.plugins ||
     changes.cacheID ||
+    // A caller that passes a cacheID is asking for a bump. When its
+    // Date.now() equals the current cacheID (two bumps in one millisecond)
+    // the value doesn't differ, so the change check above misses it.
+    Object.prototype.hasOwnProperty.call(latest, "cacheID") ||
     changes.menu ||
     changes.handle ||
     domainChanged
