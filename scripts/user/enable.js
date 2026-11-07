@@ -5,13 +5,10 @@ var handle = process.argv[2];
 
 if (!handle) throw "Please pass the user's handle as an argument.";
 
-function getUser(handle) {
-  return new Promise(function (resolve, reject) {
-    get(handle, function (err, user) {
-      if (err || !user) return reject(err || "No user");
-      resolve(user);
-    });
-  });
+async function getUser(handle) {
+  const { user } = await get(handle);
+  if (!user) throw "No user";
+  return user;
 }
 
 async function run() {

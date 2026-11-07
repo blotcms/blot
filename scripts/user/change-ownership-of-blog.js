@@ -12,15 +12,12 @@ if (!addToUserID)
     "Please pass user identifer to move the blog to as second argument"
   );
 
-function findBlog(identifier) {
-  return new Promise(function (resolve, reject) {
-    getBlog(identifier, function (err, user, blog, url) {
-      if (err || !user || !blog)
-        return reject(err || new Error("No blog with identifer " + identifier));
+async function findBlog(identifier) {
+  const { user, blog, url } = await getBlog(identifier);
 
-      resolve({ user: user, blog: blog, url: url });
-    });
-  });
+  if (!user || !blog) throw new Error("No blog with identifer " + identifier);
+
+  return { user: user, blog: blog, url: url };
 }
 
 async function setBlogs(uid, blogs) {
@@ -33,16 +30,10 @@ async function main() {
   var blog = found.blog;
   var url = found.url;
 
-  var newOwner = await new Promise(function (resolve, reject) {
-    getUser(addToUserID, function (err, newOwnerUser, newOwnerURL) {
-      if (err || !user)
-        return reject(
-          err || new Error("No user with identifer " + addToUserID)
-        );
+  var newOwner = await getUser(addToUserID);
 
-      resolve({ user: newOwnerUser, url: newOwnerURL });
-    });
-  });
+  if (!user) throw new Error("No user with identifer " + addToUserID);
+
   var newOwnerUser = newOwner.user;
   var newOwnerURL = newOwner.url;
 

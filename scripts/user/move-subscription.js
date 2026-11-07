@@ -4,14 +4,13 @@ var to = process.argv[3];
 var get = require("../get/user");
 
 var User = require("models/user");
-var { promisify } = require("util");
 
 console.log(from);
 console.log(to);
 
 async function main() {
-  var oldUser = await promisify(get)(from);
-  var newUser = await promisify(get)(to);
+  var { user: oldUser } = await get(from);
+  var { user: newUser } = await get(to);
 
   var customerID = oldUser.subscription.customer;
 

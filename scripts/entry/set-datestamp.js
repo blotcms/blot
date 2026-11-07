@@ -29,17 +29,15 @@ function promptForDate(message) {
 }
 
 async function main() {
-  const found = await new Promise((resolve) =>
-    get(url, (err, user, blog, entry) => resolve({ err, blog, entry }))
-  );
+  let blog, entry;
 
-  if (found.err) {
-    console.error("Error retrieving entry:", found.err.message);
+  try {
+    ({ blog, entry } = await get(url));
+    if (!entry) throw new Error("No entry");
+  } catch (err) {
+    console.error("Error retrieving entry:", err.message);
     process.exit(1);
   }
-
-  const blog = found.blog;
-  const entry = found.entry;
 
   if (!entry) {
     console.error("No entry found at the provided URL.");

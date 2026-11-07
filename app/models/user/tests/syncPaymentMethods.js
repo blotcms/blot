@@ -8,20 +8,23 @@ function baseStripeClient(overrides) {
         {
           retrieveSubscription: jasmine
             .createSpy("retrieveSubscription")
-            .and.callFake(function (customerId, subscriptionId, cb) {
-              cb(null, { id: subscriptionId, default_payment_method: null });
+            .and.callFake(function (customerId, subscriptionId) {
+              return Promise.resolve({
+                id: subscriptionId,
+                default_payment_method: null,
+              });
             }),
           listCards: jasmine
             .createSpy("listCards")
-            .and.callFake(function (customerId, params, cb) {
-              cb(null, { data: [] });
+            .and.callFake(function (customerId, params) {
+              return Promise.resolve({ data: [] });
             }),
         },
         (overrides && overrides.customers) || {}
       ),
       paymentMethods: (overrides && overrides.paymentMethods) || {
-        list: jasmine.createSpy("list").and.callFake(function (params, cb) {
-          cb(null, { data: [] });
+        list: jasmine.createSpy("list").and.callFake(function (params) {
+          return Promise.resolve({ data: [] });
         }),
       },
     },
@@ -57,8 +60,8 @@ describe("user syncPaymentMethods", function () {
         customers: {
           retrieve: jasmine
             .createSpy("retrieve")
-            .and.callFake(function (customerId, cb) {
-              cb(null, {
+            .and.callFake(function (customerId) {
+              return Promise.resolve({
                 id: customerId,
                 invoice_settings: { default_payment_method: "pm_2" },
                 default_source: null,
@@ -66,8 +69,8 @@ describe("user syncPaymentMethods", function () {
             }),
         },
         paymentMethods: {
-          list: jasmine.createSpy("list").and.callFake(function (params, cb) {
-            cb(null, {
+          list: jasmine.createSpy("list").and.callFake(function (params) {
+            return Promise.resolve({
               data: [
                 {
                   id: "pm_1",
@@ -125,8 +128,8 @@ describe("user syncPaymentMethods", function () {
         customers: {
           retrieve: jasmine
             .createSpy("retrieve")
-            .and.callFake(function (customerId, cb) {
-              cb(null, {
+            .and.callFake(function (customerId) {
+              return Promise.resolve({
                 id: customerId,
                 invoice_settings: { default_payment_method: "pm_1" },
                 default_source: null,
@@ -134,13 +137,16 @@ describe("user syncPaymentMethods", function () {
             }),
           retrieveSubscription: jasmine
             .createSpy("retrieveSubscription")
-            .and.callFake(function (customerId, subscriptionId, cb) {
-              cb(null, { id: subscriptionId, default_payment_method: "pm_2" });
+            .and.callFake(function (customerId, subscriptionId) {
+              return Promise.resolve({
+                id: subscriptionId,
+                default_payment_method: "pm_2",
+              });
             }),
         },
         paymentMethods: {
-          list: jasmine.createSpy("list").and.callFake(function (params, cb) {
-            cb(null, {
+          list: jasmine.createSpy("list").and.callFake(function (params) {
+            return Promise.resolve({
               data: [
                 {
                   id: "pm_1",
@@ -188,8 +194,8 @@ describe("user syncPaymentMethods", function () {
         customers: {
           retrieve: jasmine
             .createSpy("retrieve")
-            .and.callFake(function (customerId, cb) {
-              cb(null, {
+            .and.callFake(function (customerId) {
+              return Promise.resolve({
                 id: customerId,
                 invoice_settings: { default_payment_method: "pm_1" },
                 default_source: null,
@@ -197,15 +203,15 @@ describe("user syncPaymentMethods", function () {
             }),
           retrieveSubscription: jasmine
             .createSpy("retrieveSubscription")
-            .and.callFake(function (customerId, subscriptionId, cb) {
+            .and.callFake(function (customerId, subscriptionId) {
               var notFound = new Error("No such subscription");
               notFound.code = "resource_missing";
-              cb(notFound);
+              return Promise.reject(notFound);
             }),
         },
         paymentMethods: {
-          list: jasmine.createSpy("list").and.callFake(function (params, cb) {
-            cb(null, {
+          list: jasmine.createSpy("list").and.callFake(function (params) {
+            return Promise.resolve({
               data: [
                 {
                   id: "pm_1",
@@ -234,8 +240,8 @@ describe("user syncPaymentMethods", function () {
         customers: {
           retrieve: jasmine
             .createSpy("retrieve")
-            .and.callFake(function (customerId, cb) {
-              cb(null, {
+            .and.callFake(function (customerId) {
+              return Promise.resolve({
                 id: customerId,
                 invoice_settings: {},
                 default_source: null,
@@ -243,8 +249,10 @@ describe("user syncPaymentMethods", function () {
             }),
           retrieveSubscription: jasmine
             .createSpy("retrieveSubscription")
-            .and.callFake(function (customerId, subscriptionId, cb) {
-              cb(new Error("Stripe is temporarily unavailable"));
+            .and.callFake(function (customerId, subscriptionId) {
+              return Promise.reject(
+                new Error("Stripe is temporarily unavailable")
+              );
             }),
         },
       });
@@ -264,8 +272,8 @@ describe("user syncPaymentMethods", function () {
         customers: {
           retrieve: jasmine
             .createSpy("retrieve")
-            .and.callFake(function (customerId, cb) {
-              cb(null, {
+            .and.callFake(function (customerId) {
+              return Promise.resolve({
                 id: customerId,
                 invoice_settings: {},
                 default_source: "card_customer_default",
@@ -273,8 +281,8 @@ describe("user syncPaymentMethods", function () {
             }),
           retrieveSubscription: jasmine
             .createSpy("retrieveSubscription")
-            .and.callFake(function (customerId, subscriptionId, cb) {
-              cb(null, {
+            .and.callFake(function (customerId, subscriptionId) {
+              return Promise.resolve({
                 id: subscriptionId,
                 default_payment_method: null,
                 default_source: "card_subscription_default",
@@ -282,8 +290,8 @@ describe("user syncPaymentMethods", function () {
             }),
           listCards: jasmine
             .createSpy("listCards")
-            .and.callFake(function (customerId, params, cb) {
-              cb(null, {
+            .and.callFake(function (customerId, params) {
+              return Promise.resolve({
                 data: [
                   {
                     id: "card_customer_default",
@@ -351,8 +359,8 @@ describe("user syncPaymentMethods", function () {
         customers: {
           retrieve: jasmine
             .createSpy("retrieve")
-            .and.callFake(function (customerId, cb) {
-              cb(null, {
+            .and.callFake(function (customerId) {
+              return Promise.resolve({
                 id: customerId,
                 invoice_settings: {},
                 default_source: null,
@@ -360,9 +368,10 @@ describe("user syncPaymentMethods", function () {
             }),
           listCards: jasmine
             .createSpy("listCards")
-            .and.callFake(function (customerId, params, cb) {
-              if (params.starting_after === "card_1") return cb(null, pageTwo);
-              cb(null, pageOne);
+            .and.callFake(function (customerId, params) {
+              if (params.starting_after === "card_1")
+                return Promise.resolve(pageTwo);
+              return Promise.resolve(pageOne);
             }),
         },
       });
@@ -413,8 +422,8 @@ describe("user syncPaymentMethods", function () {
         customers: {
           retrieve: jasmine
             .createSpy("retrieve")
-            .and.callFake(function (customerId, cb) {
-              cb(null, {
+            .and.callFake(function (customerId) {
+              return Promise.resolve({
                 id: customerId,
                 invoice_settings: {},
                 default_source: null,
@@ -422,9 +431,10 @@ describe("user syncPaymentMethods", function () {
             }),
         },
         paymentMethods: {
-          list: jasmine.createSpy("list").and.callFake(function (params, cb) {
-            if (params.starting_after === "pm_1") return cb(null, pageTwo);
-            cb(null, pageOne);
+          list: jasmine.createSpy("list").and.callFake(function (params) {
+            if (params.starting_after === "pm_1")
+              return Promise.resolve(pageTwo);
+            return Promise.resolve(pageOne);
           }),
         },
       });
@@ -446,8 +456,8 @@ describe("user syncPaymentMethods", function () {
         customers: {
           retrieve: jasmine
             .createSpy("retrieve")
-            .and.callFake(function (customerId, cb) {
-              cb(null, {
+            .and.callFake(function (customerId) {
+              return Promise.resolve({
                 id: customerId,
                 invoice_settings: {},
                 default_source: "card_legacy1",
@@ -455,8 +465,8 @@ describe("user syncPaymentMethods", function () {
             }),
           listCards: jasmine
             .createSpy("listCards")
-            .and.callFake(function (customerId, params, cb) {
-              cb(null, {
+            .and.callFake(function (customerId, params) {
+              return Promise.resolve({
                 data: [
                   {
                     id: "card_legacy1",

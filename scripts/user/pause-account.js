@@ -13,7 +13,6 @@ var colors = require("colors/safe");
 var User = require("models/user");
 var get = require("../get/user");
 var getConfirmation = require("../util/getConfirmation");
-var { promisify } = require("util");
 
 var email = process.argv[2];
 
@@ -60,7 +59,7 @@ async function clearExistingInvoices(subscriptionId) {
 }
 
 async function main() {
-  var user = await promisify(get)(email);
+  var { user } = await get(email);
 
   if (
     !user.subscription ||
