@@ -71,10 +71,8 @@ describe("dashboard folder upload sync lock", function () {
 
     const clients = {
       mockClient: {
-        write: (blogID, filePath, contents, cb) => {
-          if (filePath === "client-fail.txt")
-            return cb(new Error("client failed"));
-          cb(null);
+        write: async (blogID, filePath) => {
+          if (filePath === "client-fail.txt") throw new Error("client failed");
         },
       },
     };

@@ -45,7 +45,7 @@ describe("youtube embeds", function () {
     } catch (e) {
       err = e;
     }
-    expect(err).toEqual(null);
+    expect(err).toBeUndefined();
     expect(template).toEqual(
       `<div style="width:0;height:0"> </div><div class="videoContainer" style="padding-bottom:56.25%"><iframe src="https://www.youtube-nocookie.com/embed/YaT_5KoGh1Q?rel=0&wmode=transparent&rel=0&autohide=1&showinfo=0" frameborder="0" allowfullscreen></iframe></div>`
     );

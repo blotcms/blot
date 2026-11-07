@@ -74,7 +74,7 @@ describe("bandcamp embeds", function () {
     } catch (e) {
       err = e;
     }
-    expect(err).toEqual(null);
+    expect(err).toBeUndefined();
     expect(template).toEqual(
       `<div style="width:0;height:0"> </div><div class="videoContainer bandcamp" style="padding-bottom: 120px"><iframe width="400" height="120" src="https://bandcamp.com/EmbeddedPlayer/v=2/album=2447688282/size=large/tracklist=false/artwork=small/" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen></iframe></div>`
     );
@@ -136,7 +136,7 @@ describe("bandcamp embeds", function () {
     } catch (e) {
       err = e;
     }
-    expect(err).toEqual(null);
+    expect(err).toBeUndefined();
     expect(template).toContain("bandcamp.com/EmbeddedPlayer");
   });
 
@@ -158,7 +158,7 @@ describe("bandcamp embeds", function () {
     } catch (e) {
       err = e;
     }
-    expect(err).toEqual(null);
+    expect(err).toBeUndefined();
     expect(template).toEqual(
       `<div style="width:0;height:0"> </div><div class="videoContainer bandcamp" style="padding-bottom: 120px"><iframe width="400" height="120" src="https://bandcamp.com/EmbeddedPlayer/v=2/track=2483181576/size=large/tracklist=false/artwork=small/" frameborder="0" webkitallowfullscreen mozallowfullscreen allowfullscreen></iframe></div>`
     );
@@ -253,7 +253,7 @@ describe("bandcamp embeds", function () {
       } catch (e) {
         err = e;
       }
-      expect(err).toEqual(null);
+      expect(err).toBeUndefined();
       expect(template).toContain(
         'src="https://bandcamp.com/EmbeddedPlayer/v=2/album=1/"'
       );
