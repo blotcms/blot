@@ -233,7 +233,11 @@ if ! rsyslogd -N1 >/dev/null 2>&1; then
   exit 1
 fi
 rm -f "$backup"
-systemctl restart rsyslog
+# Under the unit deploy's lock (proxy/deploy/common.sh): Docker refuses to start
+# a unit while the socket is missing, so this waits for a running unit deploy to
+# finish, and one that starts during the restart refuses to run rather than
+# failing halfway
+flock -w 900 /tmp/blot-proxy-deploy.lock systemctl restart rsyslog || { echo "ERROR: could not take the deploy lock to restart rsyslog: is a unit deploy stuck?"; exit 1; }
 for i in 1 2 3 4 5; do [ -S /run/blot-log/app.sock ] && break; sleep 1; done
 [ -S /run/blot-log/app.sock ] || { echo "ERROR: rsyslog did not create /run/blot-log/app.sock"; exit 1; }
 echo "rsyslog restarted with blot-app-log.conf."
