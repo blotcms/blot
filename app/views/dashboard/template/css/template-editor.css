@@ -831,10 +831,6 @@ h2.template-heading:not(:first-child) {
   font: inherit;
 }
 
-.template-heading-row .template-button svg {
-  fill: currentColor;
-}
-
 .template-heading-row .template-button span {
   color: currentColor;
 }
