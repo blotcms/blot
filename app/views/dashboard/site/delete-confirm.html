@@ -1,0 +1,29 @@
+{{> message}}
+
+<form method="POST" action="{{{base}}}/delete/confirm" class="dashboard-form dashboard-form-panel site-delete">
+  <header class="page-header">
+    <div class="page-header__text">
+      <h1 class="page-header__title">Delete {{blog.pretty.label}}?</h1>
+    </div>
+  </header>
+  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+
+  <p>Deleting this site removes, for good:</p>
+  <ul class="site-delete__list">
+    {{#deleteSummary}}
+    <li>{{text}}</li>
+    {{/deleteSummary}}
+  </ul>
+  {{#reduction}}<p>Your next bill will go down by {{reduction}}.</p>{{/reduction}}
+
+  <p class="setting-note">The files in your own folder stay where they are. To keep a copy of everything Blot has, download an export first.</p>
+  <p><a class="btn" href="{{{base}}}/export/download" target="_blank" rel="noopener">Download export</a></p>
+
+  <label for="delete-password">Enter your password to delete this site</label>
+  <input id="delete-password" autofocus type="password" name="password" autocomplete="current-password" />
+
+  <div class="btn-row">
+    <button type="submit" class="btn btn-danger">Delete site</button>
+    <a class="btn" href="{{{base}}}">Do not delete</a>
+  </div>
+</form>

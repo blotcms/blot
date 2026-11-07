@@ -1,0 +1,23 @@
+/*
+  Deleting a site (site/delete.html, then site/delete-confirm.html): the
+  choice, then what will go and the password.
+*/
+
+.site-delete .btn-row {
+  margin: var(--space-4) 0;
+}
+
+.site-delete__list {
+  margin: 0 0 var(--space-4);
+  padding-left: var(--space-5);
+}
+
+.site-delete__list li {
+  margin: var(--space-1) 0;
+}
+
+.site-delete .setting-note {
+  max-width: 40em;
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
+}
