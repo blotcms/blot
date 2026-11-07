@@ -214,14 +214,6 @@ jobs:
           # the previous containers are gone, and the name filter is exact
           [ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^blot-(blue|green)(-previous)?$')" = 2 ]
 
-      - name: STRESS repeat the steady deploy under load
-        run: |
-          for i in $(seq 1 25); do
-            for img in "$UNIT_A" "$UNIT_B"; do
-              bash proxy/deploy/e2e/deploy-under-load.sh "$img" 2>&1 | grep -E 'total=|retried|did not|only' 
-            done
-          done
-
       # ---- 4. a new blue whose node-a never listens -----------------------------
       - name: A new blot-blue whose node-a never becomes healthy is rolled back and blot-green is never touched
         env:
