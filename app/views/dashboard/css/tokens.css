@@ -49,7 +49,9 @@
   --accent-active-color: #0058c2;
   --danger-color: var(--error-text-color);
   --danger-hover-color: #a81f02;
-  --success-color: var(--success-text-color);
+  /* A little darker than base.css's green, so small text such as "Live on
+     your site" keeps 4.5:1 on the warm muted surface */
+  --success-color: #027a00;
   --warning-color: var(--warning-text-color);
   /* A small lit indicator (the Scheduled filter's dot): brighter than the
      warning text, with a glow of the same colour */
