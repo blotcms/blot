@@ -201,20 +201,23 @@ describe("scheduleSubscriptionEmail", function () {
 
       await setUser(uid, { subscription: sub });
       // Simulate a process that sent, then died before setting the durable
-      // marker: only a (short-lived) claim remains.
-      await client.set(
-        subscriptionEmail.sendingKey(uid, sub.current_period_end),
-        "1",
-        { PX: 150 }
-      );
+      // marker: only a claim remains. Its TTL is long enough that a slow
+      // runner cannot expire it before the first call; it is shortened below
+      // to stand in for the wait.
+      var claim = subscriptionEmail.sendingKey(uid, sub.current_period_end);
+      await client.set(claim, "1", { PX: 30 * 1000 });
 
       expect(await subscriptionEmail.sendForUser(uid, now)).toBe(null);
-      await new Promise(function (r) {
-        setTimeout(r, 250);
-      });
-      expect(await subscriptionEmail.sendForUser(uid, now)).toBe(
-        "UPCOMING_RENEWAL"
-      );
+      await client.pExpire(claim, 100);
+
+      var resent = null;
+      for (var i = 0; i < 100 && !resent; i++) {
+        await new Promise(function (r) {
+          setTimeout(r, 100);
+        });
+        resent = await subscriptionEmail.sendForUser(uid, now);
+      }
+      expect(resent).toBe("UPCOMING_RENEWAL");
       expect(await subscriptionEmail.sendForUser(uid, now)).toBe(null);
     });
 

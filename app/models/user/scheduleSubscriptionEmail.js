@@ -131,6 +131,13 @@ async function sendForUser(uid, now) {
 
   if (!won) return null;
 
+  // Another run may have sent, set the marker and released its claim between
+  // our first check and winning the claim here; look again before sending.
+  if (await client.exists(durable)) {
+    await client.del(claim);
+    return null;
+  }
+
   debug(uid, user.email, "Sending", decision.name);
 
   try {
