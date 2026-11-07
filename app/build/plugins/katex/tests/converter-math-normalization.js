@@ -39,14 +39,10 @@ describe("converter math normalization", function () {
     return html;
   }
 
-  function renderWithKatex(html) {
-    return new Promise((resolve, reject) => {
-      const $ = cheerio.load(html, { decodeEntities: false }, false);
-      render($, (err) => {
-        if (err) return reject(err);
-        resolve($.html());
-      });
-    });
+  async function renderWithKatex(html) {
+    const $ = cheerio.load(html, { decodeEntities: false }, false);
+    await render($, {});
+    return $.html();
   }
 
   const tex = "\\frac{1}{2}";

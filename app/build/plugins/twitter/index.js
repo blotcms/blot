@@ -1,7 +1,6 @@
 const each = require("../eachEl");
 const Url = require("url");
 const fetch = require("node-fetch");
-const withPluginCallback = require("../withPluginCallback");
 
 async function render($) {
   await each($, "a", async (el) => {
@@ -50,7 +49,7 @@ async function render($) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   category: "embeds",
   title: "Tweets",
   description: "Embed posts from Twitter links",

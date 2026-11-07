@@ -1,5 +1,4 @@
 var Url = require("url");
-const withPluginCallback = require("../withPluginCallback");
 
 async function render($, options) {
   // Links with these hosts
@@ -32,7 +31,7 @@ async function render($, options) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   isDefault: false,
   category: "links",
   description: "Open external links in a new tab",

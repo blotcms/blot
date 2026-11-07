@@ -1,6 +1,5 @@
 const { URL } = require("url");
 const { posix } = require("path");
-const withPluginCallback = require("../withPluginCallback");
 
 // Define a list of common image extensions
 const imageExtensions = [
@@ -104,7 +103,7 @@ function IsImage(url) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   category: "embeds",
   title: "Images",
   description: "Embed images from image links",

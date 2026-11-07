@@ -12,11 +12,11 @@ describe("linebreaks plugin", function () {
     this.blog.plugins.linebreaks = { enabled: false, options: {} };
   });
 
-  it("will preserve linebreaks if enabled", function (done) {
+  it("will preserve linebreaks if enabled", async function () {
     const contents = "A line\nwith a break";
     const path = "/hello.txt";
     const html = "<p>A line<br>\nwith a break</p>";
 
-    this.buildAndCheck({ path, contents }, { html }, done);
+    await this.buildAndCheck({ path, contents }, { html });
   });
 });

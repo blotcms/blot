@@ -7,7 +7,6 @@
 // settings.
 const titlify = require("../../prepare/titlify");
 const makeSlug = require("helper/makeSlug");
-const withPluginCallback = require("../withPluginCallback");
 
 async function render($, options = {}) {
   try {
@@ -61,7 +60,7 @@ function isMarkdown(path = "") {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   isDefault: false,
   category: "headings",
   title: "Inject title",

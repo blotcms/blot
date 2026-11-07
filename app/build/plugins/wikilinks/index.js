@@ -1,6 +1,5 @@
 const path = require("path");
 const { resolve, dirname, extname } = path;
-const withPluginCallback = require("../withPluginCallback");
 const byPath = require("./byPath");
 const byFilename = require("./byFilename");
 const byURL = require("./byURL");
@@ -17,13 +16,6 @@ function isMarkdownFile(path) {
   if (!path) return false;
   const ext = extname(path).toLowerCase();
   return [".txt", ".text", ".md", ".markdown"].indexOf(ext) > -1;
-}
-
-// byHeadingAnchor still takes a callback, last, as (err, result)
-function callbackLookup(lookup, ...args) {
-  return new Promise((resolve, reject) =>
-    lookup(...args, (err, result) => (err ? reject(err) : resolve(result)))
-  );
 }
 
 async function render($, { blogID, path }) {
@@ -128,7 +120,7 @@ async function render($, { blogID, path }) {
         () => byFilename(blogID, path, href, isLink),
         () => byURL(blogID, href),
         () => byTitle(titles, href),
-        () => callbackLookup(byHeadingAnchor, $, href),
+        () => byHeadingAnchor($, href),
       ];
 
       // The first lookup to find a result wins; each is tried in turn
@@ -288,7 +280,7 @@ async function render($, { blogID, path }) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   category: "links",
   title: "Wikilinks",
   description: "Convert wikilinks to standard links",

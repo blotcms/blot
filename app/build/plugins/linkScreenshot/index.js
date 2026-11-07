@@ -1,6 +1,5 @@
 const screenshot = require("helper/screenshot");
 const assets = require("storage/assets");
-const withPluginCallback = require("../withPluginCallback");
 const clfdate = require("helper/clfdate");
 const { v4: uuid } = require("uuid");
 const { is } = require("build/converters/webloc");
@@ -82,7 +81,7 @@ async function render($, { blogID, path }) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   isDefault: true,
   category: "images",
   description: "Add screenshots to bookmark file posts",

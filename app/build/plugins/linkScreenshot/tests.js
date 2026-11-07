@@ -48,31 +48,21 @@ describe("linkScreenshot plugin", function () {
     delete require.cache[screenshotPath];
   });
 
-  it("hands a plain https URL to the screenshot service", function (done) {
+  it("hands a plain https URL to the screenshot service", async function () {
     const href = "https://example.com/";
 
-    render(
-      doc(href),
-      function () {
-        expect(calls).toEqual([href]);
-        done();
-      },
-      opts
-    );
+    await render(doc(href), opts);
+
+    expect(calls).toEqual([href]);
   });
 
-  it("marks the screenshot untrusted so it must run in the sandbox", function (done) {
+  it("marks the screenshot untrusted so it must run in the sandbox", async function () {
     const href = "https://example.com/";
 
-    render(
-      doc(href),
-      function () {
-        expect(optionsSeen.length).toBe(1);
-        expect(optionsSeen[0].untrusted).toBe(true);
-        done();
-      },
-      opts
-    );
+    await render(doc(href), opts);
+
+    expect(optionsSeen.length).toBe(1);
+    expect(optionsSeen[0].untrusted).toBe(true);
   });
 
   // A URL this plugin must refuse to hand to the screenshot service.
@@ -86,20 +76,15 @@ describe("linkScreenshot plugin", function () {
   ];
 
   refused.forEach((href) => {
-    it("refuses " + href, function (done) {
+    it("refuses " + href, async function () {
       const $ = doc(href);
 
-      render(
-        $,
-        function () {
-          expect(calls).toEqual([]);
-          // The link is left untouched - no screenshot wrapper was added.
-          expect($.html()).not.toContain("bookmark-container");
-          expect($.html()).not.toContain("bookmark-screenshot");
-          done();
-        },
-        opts
-      );
+      await render($, opts);
+
+      expect(calls).toEqual([]);
+      // The link is left untouched - no screenshot wrapper was added.
+      expect($.html()).not.toContain("bookmark-container");
+      expect($.html()).not.toContain("bookmark-screenshot");
     });
   });
 
@@ -108,44 +93,29 @@ describe("linkScreenshot plugin", function () {
   // address is handed to the screenshot service same as any other. It's
   // the browser jail's egress filter (proxy/unit/sandbox/egress.nft) that has
   // to reject this one, not this layer - see app/sandbox/README.md.
-  it("passes the metadata address through - it's the sandbox's job to block it", function (done) {
+  it("passes the metadata address through - it's the sandbox's job to block it", async function () {
     const href = "http://169.254.169.254/latest/meta-data/";
 
-    render(
-      doc(href),
-      function () {
-        expect(calls).toEqual([href]);
-        done();
-      },
-      opts
-    );
+    await render(doc(href), opts);
+
+    expect(calls).toEqual([href]);
   });
 
-  it("does nothing when there is no href", function (done) {
+  it("does nothing when there is no href", async function () {
     const $ = cheerio.load(`<p><a class="bookmark">Example</a></p>`);
 
-    render(
-      $,
-      function () {
-        expect(calls).toEqual([]);
-        expect($.html()).not.toContain("bookmark-container");
-        done();
-      },
-      opts
-    );
+    await render($, opts);
+
+    expect(calls).toEqual([]);
+    expect($.html()).not.toContain("bookmark-container");
   });
 
-  it("does nothing for a non-webloc path", function (done) {
+  it("does nothing for a non-webloc path", async function () {
     const $ = doc("https://example.com/");
 
-    render(
-      $,
-      function () {
-        expect(calls).toEqual([]);
-        expect($.html()).not.toContain("bookmark-container");
-        done();
-      },
-      { blogID: "blog_test", path: "/note.txt" }
-    );
+    await render($, { blogID: "blog_test", path: "/note.txt" });
+
+    expect(calls).toEqual([]);
+    expect($.html()).not.toContain("bookmark-container");
   });
 });

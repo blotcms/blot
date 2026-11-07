@@ -1,18 +1,10 @@
 const cheerio = require("cheerio");
 const { render } = require("./index.js");
 
-const runTest = (html, options) => {
-  return new Promise((resolve, reject) => {
-    const $ = cheerio.load(html);
-    render(
-      $,
-      function (err) {
-        if (err) return reject(err);
-        resolve($.html());
-      },
-      options
-    );
-  });
+const runTest = async (html, options) => {
+  const $ = cheerio.load(html);
+  await render($, options);
+  return $.html();
 };
 
 const options = {

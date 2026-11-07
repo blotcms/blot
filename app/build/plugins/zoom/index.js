@@ -2,7 +2,6 @@
 var MIN_WIDTH = 320;
 var Url = require("url");
 var fs = require("fs");
-const withPluginCallback = require("../withPluginCallback");
 
 async function render($) {
   $("img").each(function () {
@@ -58,7 +57,7 @@ function publicJS() {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   publicJS: publicJS(),
   isDefault: false,
   category: "images",

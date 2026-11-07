@@ -1,5 +1,3 @@
-const withPluginCallback = require("../withPluginCallback");
-
 async function render($) {
   $("img").each(function () {
     var altText = $(this).attr("title") || $(this).attr("alt");
@@ -40,7 +38,7 @@ async function render($) {
 }
 
 module.exports = {
-  render: withPluginCallback(render),
+  render,
   category: "images",
   isDefault: true,
   title: "Caption",
