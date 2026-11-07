@@ -1,7 +1,6 @@
 const sync = require("sync");
 const redisSubscriber = require("helper/redisSubscriber");
 
-const promisify = require("util").promisify;
 const database = require("clients/dropbox/database");
 
 const getAccount = require("./getAccount");
@@ -114,8 +113,7 @@ function setup(account, session, callback) {
         account.blog.id,
         folder.status,
         signal,
-        // folder.update is callback-style, resetFromBlot awaits it
-        promisify(folder.update)
+        folder.update
       );
 
       if (handleAbort()) return;

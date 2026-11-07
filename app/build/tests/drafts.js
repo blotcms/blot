@@ -93,10 +93,16 @@ describe("drafts work", function () {
       sync(this.blog.id, (err, folder, done) => {
         if (err) return callback(err);
         storageFolder.write(this.blog.id, path, contents).then(() => {
-          folder.update(path, function (err) {
-            if (err) return callback(err);
-            done(null, callback);
-          });
+          folder
+            .update(path)
+            .then(
+              () => null,
+              (updateErr) => updateErr
+            )
+            .then(function (err) {
+              if (err) return callback(err);
+              done(null, callback);
+            });
         }, callback);
       });
     };

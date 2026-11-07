@@ -34,16 +34,22 @@ xdescribe("scheduled posts", function () {
             }, done.fail);
         }, MINUTE);
         storageFolder.write(this.blog.id, path, contents).then(() => {
-          folder.update(path, (err) => {
-            if (err) return done.fail(err);
-            finish(null, () => {
-              fetch(this.origin)
-                .then((res) => res.text())
-                .then((body) => {
-                  expect(body).not.toContain(id);
-                }, done.fail);
+          folder
+            .update(path)
+            .then(
+              () => null,
+              (updateErr) => updateErr
+            )
+            .then((err) => {
+              if (err) return done.fail(err);
+              finish(null, () => {
+                fetch(this.origin)
+                  .then((res) => res.text())
+                  .then((body) => {
+                    expect(body).not.toContain(id);
+                  }, done.fail);
+              });
             });
-          });
         }, done.fail);
       });
     },

@@ -172,7 +172,7 @@ The sync flow coordinates changes between the file system and Blot's internal st
    - If lock acquisition fails, the sync is abandoned.
 
 4. **Update Processing** (`app/sync/index.js`): Once locked:
-   - Creates a `folder` object with promisified `update(path)` via `establishSyncLock`.
+   - Creates a `folder` object whose `update(path)` returns a promise via `establishSyncLock`.
    - Processes every path in the batch serially with `folder.update`, continuing with later paths if one update fails.
    - Updates are wrapped to track pending operations.
 

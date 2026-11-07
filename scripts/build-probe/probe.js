@@ -487,8 +487,8 @@ async function buildOnly(blog, entryPath, tag) {
 
 // Mirrors scripts/entry/rebuild.js: one sync per blog, every path updated
 // inside it, then the sync's completion step, each measured separately.
-// folder.update() never fails its callback for a build or save error; it
-// logs it and passes it back as { error } instead.
+// folder.update() never rejects for a build or save error; it logs it and
+// resolves { error } instead.
 function syncAndUpdate(blog, paths, tag) {
   return new Promise((resolve, reject) => {
     startPhase(`${tag} acquire lock`);
@@ -498,10 +498,9 @@ function syncAndUpdate(blog, paths, tag) {
 
       for (const entryPath of paths) {
         startPhase(`${tag} update ${entryPath}`);
-        const updateErr = await new Promise((next) =>
-          folder.update(entryPath, (err, status) =>
-            next(err || (status && status.error))
-          )
+        const updateErr = await folder.update(entryPath).then(
+          (status) => status && status.error,
+          (err) => err
         );
         endPhase({ error: errorMessage(updateErr) });
       }

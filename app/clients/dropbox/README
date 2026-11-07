@@ -214,7 +214,7 @@ validation and recovery):
 - **Parameters**:
   - `blogID`: String identifier for the blog.
   - `publish(args...)`: Callback to report progress (typically logs to console or updates UI).
-  - `update(path, callback)`: Notifies Blot's Entry model about each changed path.
+  - `update(path)` (returns a promise): Notifies Blot's Entry model about each changed path.
 - **Returns**: Promise resolving to a summary object with `{ downloaded, removed, createdDirs, skipped }`.
 - **Behavior**:
   - Walks the entire Dropbox folder recursively.
