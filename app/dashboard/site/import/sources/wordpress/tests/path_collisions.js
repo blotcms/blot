@@ -4,7 +4,7 @@ var path = require("path");
 var importWordpress = require("../index");
 
 describe("wordpress import path collisions", function () {
-  it("preserves both colliding entries in distinct files", function (done) {
+  it("preserves both colliding entries in distinct files", async function () {
     var directory = fs.mkdtempSync(path.join(os.tmpdir(), "wordpress-import-"));
     var source = path.join(directory, "export.xml");
     var output = path.join(directory, "output");
@@ -30,26 +30,17 @@ describe("wordpress import path collisions", function () {
       "</channel></rss>";
 
     fs.writeFileSync(source, xml);
-    importWordpress(
-      source,
-      output,
-      function () {},
-      {},
-      function (err) {
-        if (err) return done.fail(err);
-        var first = fs.readFileSync(
-          path.join(output, "2020", "08-04-Collision.txt"),
-          "utf8"
-        );
-        var second = fs.readFileSync(
-          path.join(output, "2020", "08-04-Collision-2.txt"),
-          "utf8"
-        );
-        expect(first).toContain("first body");
-        expect(second).toContain("second body");
-        fs.removeSync(directory);
-        done();
-      }
+    await importWordpress(source, output, function () {}, {});
+    var first = fs.readFileSync(
+      path.join(output, "2020", "08-04-Collision.txt"),
+      "utf8"
     );
+    var second = fs.readFileSync(
+      path.join(output, "2020", "08-04-Collision-2.txt"),
+      "utf8"
+    );
+    expect(first).toContain("first body");
+    expect(second).toContain("second body");
+    fs.removeSync(directory);
   });
 });

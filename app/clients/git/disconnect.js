@@ -3,7 +3,7 @@ var Blog = require("models/blog");
 var User = require("models/user");
 var database = require("./database");
 var repo = require("./repo");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 // The git token is account-wide: every site the owner has connected to
 // git shares it, so it can only be flushed with the owner's last git site.
@@ -64,4 +64,4 @@ async function removeLiveClone(blog) {
   await flushTokenIfUnused(blog);
 }
 
-module.exports = withCallback(disconnect);
+module.exports = promiseOnly(disconnect);

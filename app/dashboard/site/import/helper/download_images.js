@@ -7,7 +7,7 @@ var mime = require("mime-types");
 var assetDirectory = require("./asset_directory");
 var boundedDownload = require("./download");
 var lifecycle = require("../lifecycle");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 // The jail re-encodes each image (app/sandbox/jobs/fetch.js), so what is
 // written is what libvips made of it and its format is known. One that isn't a
@@ -123,7 +123,7 @@ async function downloadAll(post, scanned, prefetched) {
   return post;
 }
 
-module.exports = withCallback(download_images);
+module.exports = promiseOnly(download_images);
 
 function nameFrom(src, headers, format) {
   var name =

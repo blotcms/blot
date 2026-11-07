@@ -5,10 +5,7 @@ describe("import download stages", function () {
   const downloadAudio = require("../download_audio");
   const downloadPdfs = require("../download_pdfs");
 
-  const run = (stage, post) =>
-    new Promise((resolve, reject) =>
-      stage(post, (err, result) => (err ? reject(err) : resolve(result)))
-    );
+  const run = (stage, post) => stage(post);
 
   const image = (format) => (request) => ({
     ok: true,

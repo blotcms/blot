@@ -187,14 +187,7 @@ describe("import job lifecycle", function () {
       .createSpy("writer")
       .and.callFake((post, cb) => cb(new Error("ENOSPC")));
     spyOn(helper.write, "createWriter").and.returnValue(writer);
-    await job.run(
-      () =>
-        new Promise((resolve, reject) =>
-          wordpress(input, job.outputDirectory, job.status, {}, (err) =>
-            err ? reject(err) : resolve()
-          )
-        )
-    );
+    await job.run(() => wordpress(input, job.outputDirectory, job.status, {}));
     expect(writer.calls.count()).toBe(1);
     expect(
       fs.readFileSync(path.join(job.importDirectory, "error.txt"), "utf8")
@@ -214,14 +207,7 @@ describe("import job lifecycle", function () {
       lifecycle.cancel(job.importDirectory).then(() => cb(), cb);
     });
     spyOn(helper.write, "createWriter").and.returnValue(writer);
-    await job.run(
-      () =>
-        new Promise((resolve, reject) =>
-          wordpress(input, job.outputDirectory, job.status, {}, (err) =>
-            err ? reject(err) : resolve()
-          )
-        )
-    );
+    await job.run(() => wordpress(input, job.outputDirectory, job.status, {}));
     expect(writer.calls.count()).toBe(1);
     expect(
       fs.readFileSync(path.join(job.importDirectory, "status.txt"), "utf8")

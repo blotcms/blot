@@ -8,10 +8,13 @@ describe("import stages' use of the parse-html job", function () {
   const downloadAudio = require("../download_audio");
   const convertToMarkdown = require("../convert_to_markdown");
 
+  // convert_to_markdown still takes a callback, the download stages do not
   const run = (stage, post) =>
-    new Promise((resolve, reject) =>
-      stage(post, (err, result) => (err ? reject(err) : resolve(result)))
-    );
+    stage === convertToMarkdown
+      ? new Promise((resolve, reject) =>
+          stage(post, (err, result) => (err ? reject(err) : resolve(result)))
+        )
+      : stage(post);
   const jobs = () =>
     sandbox.run.calls
       .allArgs()

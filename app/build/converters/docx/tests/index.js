@@ -3,12 +3,13 @@ const fs = require("fs-extra");
 const folder = require("storage/folder");
 
 // Resolves to { err, result } so specs can assert on failures too
-function read(blog, path) {
-  return new Promise(function (resolve) {
-    docx.read(blog, path, function (err, result) {
-      resolve({ err: err, result: result });
-    });
-  });
+async function read(blog, path) {
+  try {
+    const [result] = await docx.read(blog, path);
+    return { err: null, result: result };
+  } catch (err) {
+    return { err: err, result: undefined };
+  }
 }
 
 describe("docx converter", function () {

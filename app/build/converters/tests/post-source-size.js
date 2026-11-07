@@ -40,12 +40,11 @@ describe("post source size limit", function () {
       folder
         .write(blog.id, entryPath, Buffer.alloc(limit.bytes, 32))
         .then(function () {
-          converter.read(blog, entryPath, function (err, output, stat) {
-            if (err) return done.fail(err);
+          converter.read(blog, entryPath).then(function ([output, stat]) {
             expect(typeof output).toBe("string");
             expect(stat.size).toBe(limit.bytes);
             done();
-          });
+          }, done.fail);
         }, done.fail);
     });
   });
@@ -74,11 +73,16 @@ describe("post source size limit", function () {
       folder
         .write(blog.id, entryPath, Buffer.alloc(limit.bytes + 1, 32))
         .then(function () {
-          converter.read(blog, entryPath, function (err) {
-            expect(err).toEqual(jasmine.any(Error));
-            expect(err.code).toBe("TOO_LARGE");
-            done();
-          });
+          converter.read(blog, entryPath).then(
+            function () {
+              done.fail(new Error("Expected the read to be rejected"));
+            },
+            function (err) {
+              expect(err).toEqual(jasmine.any(Error));
+              expect(err.code).toBe("TOO_LARGE");
+              done();
+            }
+          );
         }, done.fail);
     });
   });

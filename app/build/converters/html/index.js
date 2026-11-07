@@ -7,7 +7,7 @@ var normalizeLiteralDollarMath =
   require("build/math/normalizeLiteralDollars").normalizeLiteralDollarMath;
 var postSourceSize = require("build/converters/post-source-size");
 var folderStat = require("build/converters/folderStat");
-var withResults = require("build/withResults");
+var promiseOnly = require("helper/promiseOnly");
 
 function is(path) {
   return [".html", ".htm"].indexOf(extname(path).toLowerCase()) > -1;
@@ -36,4 +36,4 @@ async function read(blog, path) {
 
 // Called back with (err, html, stat, extras); without a callback it resolves
 // to [html, stat, extras]
-module.exports = { read: withResults(read), is: is, id: "html" };
+module.exports = { read: promiseOnly(read), is: is, id: "html" };
