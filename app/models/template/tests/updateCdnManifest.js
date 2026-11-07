@@ -8,10 +8,10 @@ const Blog = require("models/blog");
 const renderView = require("blog/render/view");
 
 const getAsync = client.get.bind(client);
-const getMetadataAsync = promisify(getMetadata).bind(getMetadata);
-const setViewAsync = promisify(setView).bind(setView);
+const getMetadataAsync = getMetadata;
+const setViewAsync = setView;
 const blogSetAsync = promisify(Blog.set).bind(Blog);
-const createTemplateAsync = promisify(createTemplate).bind(createTemplate);
+const createTemplateAsync = createTemplate;
 
 describe("updateCdnManifest", function () {
   require("./setup")({ createTemplate: true });
@@ -214,11 +214,7 @@ describe("updateCdnManifest", function () {
 
     await client.hSet(viewKey, "retrieve", JSON.stringify(invalidRetrieve));
 
-    await new Promise((resolve, reject) => {
-      require("../util/updateCdnManifest")(test.template.id, (err) =>
-        err ? reject(err) : resolve()
-      );
-    });
+    await require("../util/updateCdnManifest")(test.template.id);
 
     const metadata = await getMetadataAsync(test.template.id);
 
@@ -235,13 +231,13 @@ describe("updateCdnManifest", function () {
     const invalidTemplateID = "nonexistent:template";
 
     // This should not throw, but should handle gracefully
-    await new Promise((resolve, reject) => {
-      updateCdnManifest(invalidTemplateID, (err) => {
-        // Should error because template doesn't exist
-        expect(err).toBeDefined();
-        resolve();
-      });
-    });
+    try {
+      // Should error because template doesn't exist
+      await updateCdnManifest(invalidTemplateID);
+      fail("should have thrown");
+    } catch (err) {
+      expect(err).toBeDefined();
+    }
   });
 
   it("handles views that reference non-existent partials", async function () {
@@ -308,12 +304,7 @@ describe("updateCdnManifest", function () {
     ).toBeRejectedWith(new Error("View payload exceeds maximum size of 2 MB"));
 
     // Update manifest - should skip the large file since it was never stored
-    await new Promise((resolve, reject) => {
-      updateCdnManifest(test.template.id, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await updateCdnManifest(test.template.id);
 
     const metadata = await getMetadataAsync(test.template.id);
     // Large file should not be in manifest
@@ -329,9 +320,7 @@ describe("updateCdnManifest", function () {
     await createTemplateAsync(test.blog.id, templateName, {});
 
     // Get the template ID
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(
-      require("../index")
-    );
+    const getTemplateList = require("../index").getTemplateList;
     const templates = await getTemplateList(test.blog.id);
     const uninstalledTemplate = templates.find((t) => t.name === templateName);
 
@@ -347,12 +336,7 @@ describe("updateCdnManifest", function () {
     });
 
     // Call updateCdnManifest directly (should skip)
-    await new Promise((resolve, reject) => {
-      updateCdnManifest(uninstalledTemplate.id, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await updateCdnManifest(uninstalledTemplate.id);
 
     // Verify manifest is empty
     const metadata = await getMetadataAsync(uninstalledTemplate.id);
@@ -370,9 +354,7 @@ describe("updateCdnManifest", function () {
     const templateName = "template-cdn-compute";
     await createTemplateAsync(test.blog.id, templateName, {});
 
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(
-      require("../index")
-    );
+    const getTemplateList = require("../index").getTemplateList;
     const templates = await getTemplateList(test.blog.id);
     const newTemplate = templates.find(
       (t) => t.name === templateName && t.owner === test.blog.id
@@ -393,12 +375,7 @@ describe("updateCdnManifest", function () {
     });
 
     // Call updateCdnManifest (should compute)
-    await new Promise((resolve, reject) => {
-      updateCdnManifest(newTemplate.id, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await updateCdnManifest(newTemplate.id);
 
     // Verify manifest is populated
     const metadata = await getMetadataAsync(newTemplate.id);
@@ -413,9 +390,7 @@ describe("updateCdnManifest", function () {
     const templateName = "template-site-cdn";
     await createTemplateAsync("SITE", templateName, {});
 
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(
-      require("../index")
-    );
+    const getTemplateList = require("../index").getTemplateList;
     const siteTemplates = await getTemplateList("SITE");
     const siteTemplate = siteTemplates.find(
       (t) => t.name === templateName && t.owner === "SITE"
@@ -433,12 +408,7 @@ describe("updateCdnManifest", function () {
     });
 
     // Call updateCdnManifest (should compute even though not installed)
-    await new Promise((resolve, reject) => {
-      updateCdnManifest(siteTemplate.id, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await updateCdnManifest(siteTemplate.id);
 
     const metadata = await getMetadataAsync(siteTemplate.id);
     expect(metadata.cdn).toEqual({});
@@ -452,9 +422,7 @@ describe("updateCdnManifest", function () {
     const templateName = "template-cdn-cleanup";
     await createTemplateAsync(test.blog.id, templateName, {});
 
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(
-      require("../index")
-    );
+    const getTemplateList = require("../index").getTemplateList;
     const templates = await getTemplateList(test.blog.id);
     const template = templates.find((t) => t.name === templateName);
 
@@ -485,12 +453,7 @@ describe("updateCdnManifest", function () {
     await blogSetAsync(test.blog.id, { template: "" });
 
     // Call updateCdnManifest (should skip and clean up)
-    await new Promise((resolve, reject) => {
-      updateCdnManifest(template.id, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await updateCdnManifest(template.id);
 
     // Verify manifest is empty
     const metadata2 = await getMetadataAsync(template.id);
@@ -509,9 +472,7 @@ describe("updateCdnManifest", function () {
     const templateName = "template-cdn";
     await createTemplateAsync(test.blog.id, templateName, {});
 
-    const getTemplateList = promisify(require("../index").getTemplateList).bind(
-      require("../index")
-    );
+    const getTemplateList = require("../index").getTemplateList;
     const templates = await getTemplateList(test.blog.id);
     const template = templates.find((t) => t.name === templateName);
 
@@ -527,12 +488,7 @@ describe("updateCdnManifest", function () {
     });
 
     // Call updateCdnManifest (should skip, manifest is {})
-    await new Promise((resolve, reject) => {
-      updateCdnManifest(template.id, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await updateCdnManifest(template.id);
 
     const metadata1 = await getMetadataAsync(template.id);
     expect(metadata1.cdn).toEqual({});
@@ -541,12 +497,7 @@ describe("updateCdnManifest", function () {
     await blogSetAsync(test.blog.id, { template: template.id });
 
     // Call updateCdnManifest again (should compute now)
-    await new Promise((resolve, reject) => {
-      updateCdnManifest(template.id, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await updateCdnManifest(template.id);
 
     // Verify manifest is now populated
     const metadata2 = await getMetadataAsync(template.id);

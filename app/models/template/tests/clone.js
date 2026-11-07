@@ -1,11 +1,9 @@
 describe("template", function () {
   require("./setup")();
 
-  const getMetadata = require("../getMetadata");
-  const { promisify } = require("util");
-  const getMetadataAsync = promisify(getMetadata);
-  const setView = promisify(require("../setView"));
-  const create = promisify(require("../create"));
+  const getMetadataAsync = require("../getMetadata");
+  const setView = require("../setView");
+  const create = require("../create");
 
   it("keeps the favicon local when cloning within the same blog", async function () {
     const favicon = {
@@ -405,10 +403,9 @@ describe("template clone across blogs", function () {
   global.test.templates();
   global.test.blogs(2);
 
-  const { promisify } = require("util");
-  const create = promisify(require("../create"));
-  const clone = promisify(require("../clone"));
-  const getMetadataAsync = promisify(require("../getMetadata"));
+  const create = require("../create");
+  const clone = require("../clone");
+  const getMetadataAsync = require("../getMetadata");
 
   it("drops the favicon local so a copy never references another blog's assets", async function () {
     const [source, recipient] = this.blogs;

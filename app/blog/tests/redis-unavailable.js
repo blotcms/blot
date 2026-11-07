@@ -49,11 +49,9 @@ describe("when redis is unavailable", function () {
 
   it("responds 503, not a cacheable 400, when the template cannot be loaded", async function () {
     const Template = require("models/template");
-    spyOn(Template, "getMetadata").and.callFake(
-      function (templateID, callback) {
-        callback(new ClientOfflineError());
-      }
-    );
+    spyOn(Template, "getMetadata").and.callFake(async function () {
+      throw new ClientOfflineError();
+    });
 
     const res = await this.get("/");
 

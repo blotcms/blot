@@ -7,7 +7,7 @@ var NO_CLONE = "Please choose a template to clone.";
 var SUCCESS = "Created your template succesfully!";
 var SUCCESS_FROM_SHARED_TEMPLATE = "Added template to your blog succesfully!";
 
-module.exports = function (req, res, next) {
+module.exports = async function (req, res, next) {
   var template, name;
   var deduplicatedName;
   var deduplicatingCounter = 1;
@@ -64,15 +64,18 @@ module.exports = function (req, res, next) {
     cloneFrom: cloneFrom,
   };
 
-  Template.create(
-    req.blog.id,
-    name,
-    template,
-    function then(error, newTemplate) {
-      // If template name was 'example', deduplicated name
-      // will be first 'example 2' then 'example 3' etc...
-      // We preserve the original name to ensure that we
-      // don't produce 'example 2 3' or 'example 2 3 4'...
+  // If template name was 'example', deduplicated name
+  // will be first 'example 2' then 'example 3' etc...
+  // We preserve the original name to ensure that we
+  // don't produce 'example 2 3' or 'example 2 3 4'...
+  let newTemplate;
+  let templateName = name;
+
+  for (;;) {
+    try {
+      newTemplate = await Template.create(req.blog.id, templateName, template);
+      break;
+    } catch (error) {
       if (
         error &&
         error.code === "EEXISTS" &&
@@ -82,33 +85,31 @@ module.exports = function (req, res, next) {
         deduplicatedName = name + " " + deduplicatingCounter;
         template.name = deduplicatedName;
         template.slug = slugForName(req.blog.id, deduplicatedName);
-        return Template.create(req.blog.id, deduplicatedName, template, then);
+        templateName = deduplicatedName;
+        continue;
       }
 
-      if (error) {
-        return next(error);
-      }
-
-      if (req.body.openEditor) {
-        // we need to install this template, and then redirect to the editor
-        return Blog.set(req.blog.id, { template: newTemplate.id }, function () {
-          res.message(
-            "/sites/" +
-              req.blog.handle +
-              "/template/edit/" +
-              newTemplate.slug +
-              "/settings",
-            req.body.shared ? SUCCESS_FROM_SHARED_TEMPLATE : SUCCESS
-          );
-        });
-      }
-
-      res.message(
-        redirect,
-        req.body.shared
-          ? `Added template “${newTemplate.name}” to your templates`
-          : `Copied template “${newTemplate.name}”`
-      );
+      return next(error);
     }
+  }
+
+  if (req.body.openEditor) {
+    // we need to install this template, and then redirect to the editor
+    await Blog.set(req.blog.id, { template: newTemplate.id }).catch(() => {});
+    return res.message(
+      "/sites/" +
+        req.blog.handle +
+        "/template/edit/" +
+        newTemplate.slug +
+        "/settings",
+      req.body.shared ? SUCCESS_FROM_SHARED_TEMPLATE : SUCCESS
+    );
+  }
+
+  res.message(
+    redirect,
+    req.body.shared
+      ? `Added template “${newTemplate.name}” to your templates`
+      : `Copied template “${newTemplate.name}”`
   );
 };

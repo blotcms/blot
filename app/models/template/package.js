@@ -85,9 +85,14 @@ module.exports = {
       views = metadata.views;
     }
 
-    setMetadata(id, changes, function (err) {
-      callback(err, views);
-    });
+    setMetadata(id, changes).then(
+      function () {
+        callback(null, views);
+      },
+      function (err) {
+        callback(err, views);
+      }
+    );
   },
 };
 

@@ -33,8 +33,8 @@ const Template = require("models/template");
 
 const setEntry = (...args) => Entry.set(...args);
 const setBlog = promisify(Blog.set);
-const createTemplate = promisify(Template.create);
-const setView = promisify(Template.setView);
+const createTemplate = Template.create;
+const setView = Template.setView;
 
 const CACHE_STATS = [
   "blog/render/main",

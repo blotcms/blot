@@ -53,29 +53,33 @@ SourceCode.route("/create")
       return next(new Error("You cannot name a view package.json"));
     }
 
-    Template.getView(req.template.id, name, function (err, view) {
-      // We recieve an error when the view doesn't exist
-      // so don't exit in case of error here.
-      view = view || {};
+    // We recieve an error when the view doesn't exist
+    // so don't exit in case of error here.
+    Template.getView(req.template.id, name)
+      .catch(function () {})
+      .then(function (view) {
+        view = view || {};
 
-      let content = view.content || "";
-      let url = view.url;
+        let content = view.content || "";
+        let url = view.url;
 
-      // Determine the default URL for a new view:
-      // foo.html -> /foo
-      // foo.rss  -> /foo.rss
-      // .html    -> /.html
-      if (!url && name.endsWith(".html") && name.length > ".html".length) {
-        url = "/" + name.slice(0, -1 * ".html".length);
-      } else if (!url) {
-        url = "/" + name;
-      }
+        // Determine the default URL for a new view:
+        // foo.html -> /foo
+        // foo.rss  -> /foo.rss
+        // .html    -> /.html
+        if (!url && name.endsWith(".html") && name.length > ".html".length) {
+          url = "/" + name.slice(0, -1 * ".html".length);
+        } else if (!url) {
+          url = "/" + name;
+        }
 
-      Template.setView(req.template.id, { name, url, content }, function (err) {
-        if (err) return next(err);
-        res.redirect(res.locals.base + "/source-code/" + name + "/edit");
+        Template.setView(req.template.id, { name, url, content }).then(
+          function () {
+            res.redirect(res.locals.base + "/source-code/" + name + "/edit");
+          },
+          next
+        );
       });
-    });
   });
 
 // Rows for the source textarea, which the first paint shows until the editor
@@ -157,9 +161,7 @@ SourceCode.route("/:viewSlug/edit")
         if (err) return sendError(err);
         views = views || {};
 
-        Template.getMetadata(req.template.id, function (err, metadata) {
-          if (err) return sendError(err);
-
+        Template.getMetadata(req.template.id).then(function (metadata) {
           const templateForSync = metadata || req.template;
 
           saveViews(req.template.id, views).then(function () {
@@ -177,18 +179,17 @@ SourceCode.route("/:viewSlug/edit")
               sendError
             );
           }, sendError);
-        });
+        }, sendError);
       });
     } else {
-      Template.setView(req.template.id, view, function (err) {
-        if (err) return sendError(err);
+      Template.setView(req.template.id, view).then(function () {
         writeChangeToFolder(req.blog, req.template, view).then(function () {
           if (res.locals.templateForked) {
             res.set("X-Template-Forked", "1");
           }
           res.send("Saved changes!");
         }, sendError);
-      });
+      }, sendError);
     }
   });
 
@@ -325,9 +326,7 @@ SourceCode.route("/:viewSlug/configure")
     updates.locals = localsValue;
     updates.partials = partialsValue;
 
-    Template.setView(req.template.id, updates, function (err) {
-      if (err) return next(err);
-
+    Template.setView(req.template.id, updates).then(function () {
       writeChangeToFolder(req.blog, req.template, updates).then(function () {
         if (res.locals.templateForked) {
           res.set("X-Template-Forked", "1");
@@ -335,7 +334,7 @@ SourceCode.route("/:viewSlug/configure")
 
         res.send("Saved changes!");
       }, next);
-    });
+    }, next);
   });
 
 SourceCode.route("/:viewSlug/rename")
@@ -362,23 +361,24 @@ SourceCode.route("/:viewSlug/rename")
     var newName = view.name;
     var oldName = req.params.viewSlug;
 
-    Template.getView(req.template.id, newName, function (err, existingView) {
-      if (existingView && !err)
-        return next(new Error("A view called " + newName + " already exists"));
-
-      Template.setView(req.template.id, view, function (err) {
-        if (err) return next(err);
-
-        Template.dropView(req.template.id, oldName, function (err) {
-          if (err) return next(err);
-
-          res.message(
-            res.locals.base + "/source-code/" + newName + "/edit",
-            "Saved changes!"
+    // (a failed lookup is the same as no existing view)
+    Template.getView(req.template.id, newName)
+      .catch(function () {})
+      .then(function (existingView) {
+        if (existingView)
+          return next(
+            new Error("A view called " + newName + " already exists")
           );
-        });
+
+        Template.setView(req.template.id, view).then(function () {
+          Template.dropView(req.template.id, oldName).then(function () {
+            res.message(
+              res.locals.base + "/source-code/" + newName + "/edit",
+              "Saved changes!"
+            );
+          }, next);
+        }, next);
       });
-    });
   });
 
 SourceCode.route("/:viewSlug/delete")
@@ -388,10 +388,9 @@ SourceCode.route("/:viewSlug/delete")
     res.render("dashboard/template/source-code/delete");
   })
   .post(require("./save/fork-if-needed"), function (req, res, next) {
-    Template.dropView(req.template.id, req.view.name, function (err) {
-      if (err) return next(err);
+    Template.dropView(req.template.id, req.view.name).then(function () {
       res.redirect(res.locals.base + "/source-code");
-    });
+    }, next);
   });
 
 module.exports = SourceCode;

@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const url = require("url");
 const fetch = require("node-fetch");
 const eachView = require("../each/view");
@@ -10,10 +9,10 @@ const getView = require("models/template/getView");
 const config = require("../../config");
 
 // Promisify callback-based functions
-const setViewAsync = promisify(Template.setView);
-const getMetadataAsync = promisify(Template.getMetadata);
-const writeToFolderAsync = promisify(writeToFolder);
-const getViewAsync = promisify(getView);
+const setViewAsync = Template.setView;
+const getMetadataAsync = Template.getMetadata;
+const writeToFolderAsync = writeToFolder;
+const getViewAsync = getView;
 
 // Report structure
 const report = {
@@ -562,7 +561,7 @@ function logReport() {
  * This short-circuits the iteration when a specific blog is passed
  */
 async function processBlogViews(user, blog) {
-  const getTemplateListAsync = promisify(Template.getTemplateList);
+  const getTemplateListAsync = Template.getTemplateList;
 
   const templates = await getTemplateListAsync(blog.id);
 

@@ -5,7 +5,6 @@ const writeToFolder = require("models/template").writeToFolder;
 const Git = require("clients/git/git");
 const fs = require("fs-extra");
 const path = require("path");
-const { promisify } = require("util");
 
 async function setup(blogHandle) {
   try {
@@ -28,23 +27,13 @@ async function setup(blogHandle) {
     console.log("Creating template:", templateName);
 
     // Create template
-    const template = await new Promise((resolve, reject) => {
-      Template.create(blog.id, templateName, {}, (err, template) => {
-        if (err) return reject(err);
-        resolve(template);
-      });
-    });
+    const template = await Template.create(blog.id, templateName, {});
 
     console.log("Template created:", template.id);
 
     // Enable local editing (this triggers writeToFolder)
     console.log("Enabling local editing...");
-    await new Promise((resolve, reject) => {
-      Template.setMetadata(template.id, { localEditing: true }, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await Template.setMetadata(template.id, { localEditing: true });
 
     console.log("Local editing enabled, template written to folder");
 
@@ -96,7 +85,7 @@ async function setup(blogHandle) {
 
     // Now run writeToFolder again to trigger the bug (delete .git files)
     console.log("Running writeToFolder again to trigger bug...");
-    await promisify(writeToFolder)(blog.id, template.id);
+    await writeToFolder(blog.id, template.id);
 
     console.log("writeToFolder completed");
     console.log("");

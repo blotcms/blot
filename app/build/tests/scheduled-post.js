@@ -50,7 +50,7 @@ xdescribe("scheduled posts", function () {
     MINUTE * 2
   );
 
-  beforeEach(function (done) {
+  beforeEach(async function () {
     const templateName = "example";
 
     const view = {
@@ -58,22 +58,18 @@ xdescribe("scheduled posts", function () {
       content: `<html><head></head><body>{{#entries}}{{{html}}}{{/entries}}</body></html>`,
     };
 
-    Template.create(this.blog.id, templateName, {}, (err) => {
-      if (err) return done(err);
-      Template.getTemplateList(this.blog.id, (err, templates) => {
-        let templateId = templates.filter(
-          ({ name }) => name === templateName
-        )[0].id;
-        Template.setView(templateId, view, (err) => {
-          if (err) return done(err);
-          Blog.set(
-            this.blog.id,
-            { forceSSL: false, template: templateId },
-            done
-          );
-        });
-      });
-    });
+    await Template.create(this.blog.id, templateName, {});
+    const templates = await Template.getTemplateList(this.blog.id);
+    let templateId = templates.filter(({ name }) => name === templateName)[0]
+      .id;
+    await Template.setView(templateId, view);
+    await new Promise((resolve, reject) =>
+      Blog.set(
+        this.blog.id,
+        { forceSSL: false, template: templateId },
+        (err) => (err ? reject(err) : resolve())
+      )
+    );
   });
 
   // Create a webserver for testing remote files

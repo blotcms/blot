@@ -48,7 +48,7 @@ describe("date integration tests", function () {
     });
   });
 
-  function createTemplate(done) {
+  async function createTemplate() {
     const test = this;
     const templateName = "example";
 
@@ -57,25 +57,18 @@ describe("date integration tests", function () {
       content: `{{#all_entries}}{{#formatDate}}${resultFormat}{{/formatDate}}{{/all_entries}}`,
     };
 
-    Template.create(test.blog.id, templateName, {}, function (err) {
-      if (err) return done(err);
-      Template.getTemplateList(test.blog.id, function (err, templates) {
-        let templateId = templates.filter(
-          ({ name }) => name === templateName
-        )[0].id;
-        Template.setView(templateId, view, function (err) {
-          if (err) return done(err);
-          Blog.set(
-            test.blog.id,
-            { forceSSL: false, template: templateId },
-            function (err) {
-              if (err) return done(err);
-              done();
-            }
-          );
-        });
-      });
-    });
+    await Template.create(test.blog.id, templateName, {});
+    const templates = await Template.getTemplateList(test.blog.id);
+    let templateId = templates.filter(({ name }) => name === templateName)[0]
+      .id;
+    await Template.setView(templateId, view);
+    await new Promise((resolve, reject) =>
+      Blog.set(
+        test.blog.id,
+        { forceSSL: false, template: templateId },
+        (err) => (err ? reject(err) : resolve())
+      )
+    );
   }
 
   function createEntryWithDate(test, date, callback) {

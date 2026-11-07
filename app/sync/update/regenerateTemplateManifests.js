@@ -24,12 +24,7 @@ module.exports = promiseOnly(async function regenerateTemplateManifests(
     (templateID = await client.sPop(key.templateManifestsPending(blogID)))
   ) {
     try {
-      await new Promise(function (resolve, reject) {
-        updateCdnManifest(templateID, function (err) {
-          if (err) return reject(err);
-          resolve();
-        });
-      });
+      await updateCdnManifest(templateID);
 
       count++;
     } catch (err) {

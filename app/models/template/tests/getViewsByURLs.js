@@ -1,12 +1,10 @@
 describe("template", function () {
-  const { promisify } = require("util");
   const getViewsByURLs = require("models/template").getViewsByURLs;
 
   require("./setup")({ createTemplate: true });
 
   beforeEach(function () {
-    this.getViewsByURLs = (urls) =>
-      promisify(getViewsByURLs)(this.template.id, urls);
+    this.getViewsByURLs = (urls) => getViewsByURLs(this.template.id, urls);
   });
 
   it("gets views for many URLs at once", async function () {

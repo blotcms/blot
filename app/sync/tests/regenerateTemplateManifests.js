@@ -1,5 +1,4 @@
 describe("regenerateTemplateManifests", function () {
-  var { promisify } = require("util");
   var client = require("models/client");
   var key = require("models/template/key");
   var Template = require("models/template");
@@ -10,9 +9,9 @@ describe("regenerateTemplateManifests", function () {
   var run = (blogID, log) => regenerateTemplateManifests(blogID, { log });
 
   beforeEach(async function () {
-    await promisify(Template.create)(this.blog.id, "template", {});
+    await Template.create(this.blog.id, "template", {});
 
-    var templates = await promisify(Template.getTemplateList)(this.blog.id);
+    var templates = await Template.getTemplateList(this.blog.id);
 
     this.templateID = templates.filter(
       (t) => t.name === "template" && t.owner === this.blog.id

@@ -92,14 +92,13 @@ function finish(blogID, slug, callback) {
   function rebuildAndWatch() {
     rebuild(blogID, {}).then(function () {
       // rebuild skips /Templates, so build the folder's templates explicitly
-      Template.buildFromFolder(blogID, function (err) {
-        if (err) return callback(err);
+      Template.buildFromFolder(blogID).then(function () {
         if (!slug) return watch(blogID, callback);
         activate(blogID, slug, function (err) {
           if (err) return callback(err);
           watch(blogID, callback);
         });
-      });
+      }, callback);
     }, callback);
   }
 }
@@ -123,13 +122,18 @@ function watch(blogID, callback) {
 function activate(blogID, slug, callback) {
   var templateID = Template.makeID(blogID, slug);
 
-  Template.getMetadata(templateID, function (err, template) {
-    if (err || !template) {
-      return callback(new Error("Template " + templateID + " was not built"));
-    }
+  Template.getMetadata(templateID).then(
+    function (template) {
+      if (!template) {
+        return callback(new Error("Template " + templateID + " was not built"));
+      }
 
-    Blog.set(blogID, { template: templateID }, callback);
-  });
+      Blog.set(blogID, { template: templateID }, callback);
+    },
+    function () {
+      callback(new Error("Template " + templateID + " was not built"));
+    }
+  );
 }
 
 var command = process.argv[2];

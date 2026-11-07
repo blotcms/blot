@@ -15,9 +15,7 @@ var normalizeConverters = require("./util/converters").normalize;
 var updateCdnManifest = require("../template/util/updateCdnManifest");
 var forkSiteTemplate = require("../template/util/forkSiteTemplate");
 var serializeRedisHashValues = require("models/redisHashSerializer");
-var promisify = require("util").promisify;
 var withCallback = require("helper/withCallback");
-var updateCdnManifestAsync = promisify(updateCdnManifest);
 
 function Changes(latest, former) {
   var changes = {};
@@ -182,7 +180,7 @@ module.exports = withCallback(async function set(blogID, blog) {
 
   if (template && shouldUpdateManifest) {
     try {
-      await updateCdnManifestAsync(template);
+      await updateCdnManifest(template);
     } catch (updateError) {
       // for now, do nothing
       console.log(
@@ -212,14 +210,13 @@ module.exports = withCallback(async function set(blogID, blog) {
       // rebuildEntriesOnNewHosts; regenerating anyway raced with a
       // quick Blog.remove and recreated the template's metadata.
       if (former.handle && template && template.indexOf(blogID + ":") === 0)
-        updateCdnManifest(template, function (manifestErr) {
-          if (manifestErr)
-            console.log(
-              "Blog.set",
-              blogID,
-              "Error updating template CDN manifest",
-              manifestErr
-            );
+        updateCdnManifest(template).catch(function (manifestErr) {
+          console.log(
+            "Blog.set",
+            blogID,
+            "Error updating template CDN manifest",
+            manifestErr
+          );
         });
     });
   }

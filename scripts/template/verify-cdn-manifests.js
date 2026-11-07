@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const eachTemplate = require("../each/template");
 const flushCache = require("models/blog/set");
 
@@ -100,8 +99,7 @@ async function processTemplate(user, blog, template) {
   const existingString = stringifyManifest(existingManifest);
 
   try {
-    const updatedManifest =
-      (await promisify(updateCdnManifest)(template.id)) || {};
+    const updatedManifest = (await updateCdnManifest(template.id)) || {};
     const updatedString = stringifyManifest(updatedManifest);
 
     if (existingString !== updatedString) {

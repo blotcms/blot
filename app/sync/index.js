@@ -147,69 +147,74 @@ function start(blogID, callback) {
           }
 
           log("Building templates from folder");
-          buildFromFolder(blogID, async function (err) {
-            if (err) {
-              folder.status("Error building templates from folder");
-              log("Error building templates in folder");
-              console.log(err);
-            }
+          let buildError = null;
+          try {
+            await buildFromFolder(blogID);
+          } catch (err) {
+            buildError = err;
+          }
 
-            // Templates which link to files that changed in this sync have
-            // their CDN manifest regenerated once, now, rather than once per
-            // file (see update/rebuildDependents). The blog's cacheID is
-            // bumped below, as for any sync with changes.
-            log("Updating CDN manifests of templates");
-            try {
-              const updated = await regenerateTemplateManifests(blogID, {
-                log,
-              });
+          if (buildError) {
+            folder.status("Error building templates from folder");
+            log("Error building templates in folder");
+            console.log(buildError);
+          }
 
-              if (updated) changes = true;
-            } catch (manifestError) {
-              log(
-                "Error updating CDN manifests of templates",
-                manifestError.message
-              );
-            }
+          // Templates which link to files that changed in this sync have
+          // their CDN manifest regenerated once, now, rather than once per
+          // file (see update/rebuildDependents). The blog's cacheID is
+          // bumped below, as for any sync with changes.
+          log("Updating CDN manifests of templates");
+          try {
+            const updated = await regenerateTemplateManifests(blogID, {
+              log,
+            });
 
-            // We could do these next two things in parallel
-            // but it's a little bit of refactoring...
-            log("Releasing lock");
-            let releaseError = null;
-            try {
-              await release();
-              log("Finished sync");
-            } catch (err) {
-              // Redis unreachable or the lock was already lost. Never leave
-              // the caller's callback pending; surface the failure instead.
-              // The folder still changed, so the cacheID must still be bumped.
-              log("Failed to release lock", err.message);
-              releaseError = err;
-            }
-
-            if (!changes) {
-              return callback(syncError || releaseError);
-            }
-
-            // If Redis is unavailable the bump is retried in the background,
-            // and the preview reloaded again once it lands
-            log("Updating cacheID of blog");
-            Blog.bumpCacheID(
-              blogID,
-              function (err) {
-                if (err) {
-                  log("Error updating cacheID of blog");
-                }
-
-                previewReload.publish(blogID);
-
-                callback(syncError || releaseError);
-              },
-              function () {
-                previewReload.publish(blogID);
-              }
+            if (updated) changes = true;
+          } catch (manifestError) {
+            log(
+              "Error updating CDN manifests of templates",
+              manifestError.message
             );
-          });
+          }
+
+          // We could do these next two things in parallel
+          // but it's a little bit of refactoring...
+          log("Releasing lock");
+          let releaseError = null;
+          try {
+            await release();
+            log("Finished sync");
+          } catch (err) {
+            // Redis unreachable or the lock was already lost. Never leave
+            // the caller's callback pending; surface the failure instead.
+            // The folder still changed, so the cacheID must still be bumped.
+            log("Failed to release lock", err.message);
+            releaseError = err;
+          }
+
+          if (!changes) {
+            return callback(syncError || releaseError);
+          }
+
+          // If Redis is unavailable the bump is retried in the background,
+          // and the preview reloaded again once it lands
+          log("Updating cacheID of blog");
+          Blog.bumpCacheID(
+            blogID,
+            function (err) {
+              if (err) {
+                log("Error updating cacheID of blog");
+              }
+
+              previewReload.publish(blogID);
+
+              callback(syncError || releaseError);
+            },
+            function () {
+              previewReload.publish(blogID);
+            }
+          );
         });
     });
   });

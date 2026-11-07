@@ -5,13 +5,13 @@ var getMetadata = require("./getMetadata");
 var serialize = require("./util/serialize");
 var metadataModel = require("./metadataModel");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var injectLocals = require("./injectLocals");
 var updateCdnManifest = require("./util/updateCdnManifest");
 var cacheID = require("./util/cacheID");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 
-module.exports = withCallback(async function setMetadata(id, updates) {
+module.exports = promiseOnly(async function setMetadata(id, updates) {
   ensure(id, "string").and(updates, "object");
 
   var metadata;

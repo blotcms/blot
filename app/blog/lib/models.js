@@ -19,12 +19,7 @@ function getBlog(identifier) {
 }
 
 function getMetadata(templateID) {
-  return new Promise((resolve, reject) => {
-    Template.getMetadata(templateID, (err, metadata) => {
-      if (err) reject(err);
-      else resolve(metadata);
-    });
-  });
+  return Template.getMetadata(templateID);
 }
 
 function getFullView(blogID, templateID, viewName, options) {

@@ -2,27 +2,15 @@ const Blog = require("models/blog");
 const Template = require("models/template");
 const config = require("config");
 const readOnly = require("helper/readOnly");
-const { promisify } = require("util");
 const getBlogHealth = require("./get-blog-health");
 
-const getTemplateMetadata = promisify(Template.getMetadata);
-
-function getBlog(id) {
-  return new Promise((resolve, reject) => {
-    Blog.get({ id }, (err, blog) => {
-      if (err) return reject(err);
-      if (!blog) return resolve(null);
-      try {
-        resolve(Blog.extend(blog));
-      } catch (e) {
-        reject(e);
-      }
-    });
-  });
+async function getBlog(id) {
+  const blog = await Blog.get({ id });
+  return blog ? Blog.extend(blog) : null;
 }
 
 async function addTemplate(blog) {
-  const metadata = await getTemplateMetadata(blog.template).catch(() => null);
+  const metadata = await Template.getMetadata(blog.template).catch(() => null);
   if (!metadata) return;
   blog.template = metadata;
   blog.previewURL = `https://preview-of-${metadata.owner === blog.id ? "my-" : ""}${metadata.slug}-on-${blog.handle}.${config.host}?screenshot=true`;

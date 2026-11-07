@@ -27,21 +27,31 @@ describe("template", function () {
     expect(error && error.code).toEqual("ENOENT");
   });
 
-  xit("returns an error for a non-existent view", function (done) {
+  xit("returns an error for a non-existent view", async function () {
     var test = this;
-    getAllViews(test.template.id, "", function (err, savedView) {
-      expect(err instanceof Error).toBe(true);
-      expect(savedView).toBeFalsy();
-      done();
-    });
+    let error;
+    let savedView;
+    try {
+      savedView = await getAllViews(test.template.id, "");
+      fail("should have thrown");
+    } catch (err) {
+      error = err;
+    }
+    expect(error instanceof Error).toBe(true);
+    expect(savedView).toBeFalsy();
   });
 
-  xit("returns an error for a non-existent template", function (done) {
+  xit("returns an error for a non-existent template", async function () {
     var test = this;
-    getAllViews("", test.view.name, function (err, savedView) {
-      expect(err instanceof Error).toBe(true);
-      expect(savedView).toBeFalsy();
-      done();
-    });
+    let error;
+    let savedView;
+    try {
+      savedView = await getAllViews("", test.view.name);
+      fail("should have thrown");
+    } catch (err) {
+      error = err;
+    }
+    expect(error instanceof Error).toBe(true);
+    expect(savedView).toBeFalsy();
   });
 });

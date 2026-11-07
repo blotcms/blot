@@ -5,7 +5,7 @@ var setMetadata = require("./setMetadata");
 var getView = require("./getView");
 var makeID = require("./util/makeID");
 var setView = require("./setView");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var MAX_SIZE = 2.5 * 1000 * 1000; // 2.5mb
 var PACKAGE = "package.json";
@@ -19,7 +19,7 @@ const improveJSONErrorMessage = require("./util/improveJSONErrorMessage");
 const improveMustacheErrorMessage = require("./util/improveMustacheErrorMessage");
 
 // dir is the template's directory in the blog's folder, e.g. "/Templates/blog"
-module.exports = withCallback(async function readFromFolder(blogID, dir) {
+module.exports = promiseOnly(async function readFromFolder(blogID, dir) {
   // check the directory exists
   var entries = await folder.listNames(blogID, dir);
 

@@ -1,5 +1,5 @@
 var clone = require("./clone");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var ensure = require("helper/ensure");
 var makeSlug = require("helper/makeSlug");
 var makeID = require("./util/makeID");
@@ -10,7 +10,7 @@ var setMetadata = require("./setMetadata");
 
 // Associates a theme with a UID owner
 // and an existing theme to clone if possible
-module.exports = withCallback(async function create(owner, name, metadata) {
+module.exports = promiseOnly(async function create(owner, name, metadata) {
   ensure(owner, "string").and(metadata, "object").and(name, "string");
 
   name = name.slice(0, 100);

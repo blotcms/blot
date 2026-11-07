@@ -4,7 +4,7 @@ var client = require("models/client");
 var key = require("./key");
 var urlNormalizer = require("helper/urlNormalizer");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var extend = require("helper/extend");
 var viewModel = require("./viewModel");
 var getView = require("./getView");
@@ -20,7 +20,7 @@ var clfdate = require("helper/clfdate");
 var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
 const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 
-module.exports = withCallback(async function setView(templateID, updates) {
+module.exports = promiseOnly(async function setView(templateID, updates) {
   ensure(templateID, "string").and(updates, "object");
 
   if (updates.partials !== undefined && type(updates.partials) !== "object") {

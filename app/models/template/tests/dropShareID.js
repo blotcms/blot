@@ -5,22 +5,12 @@ describe("template", function () {
   var dropShareID = require("../index").dropShareID;
   var client = require("models/client");
 
-  it("dropShareID works", function (done) {
+  it("dropShareID works", async function () {
     var test = this;
-    createShareID(test.template.id, function (err, shareID) {
-      if (err) return done.fail(err);
-      expect(typeof shareID).toEqual("string");
-      dropShareID(shareID, function (dropErr) {
-        if (dropErr) return done.fail(dropErr);
-
-        client
-          .keys("*" + shareID + "*")
-          .then(function (result) {
-            expect(result).toEqual([]);
-            done();
-          })
-          .catch(done.fail);
-      });
-    });
+    const shareID = await createShareID(test.template.id);
+    expect(typeof shareID).toEqual("string");
+    await dropShareID(shareID);
+    const result = await client.keys("*" + shareID + "*");
+    expect(result).toEqual([]);
   });
 });

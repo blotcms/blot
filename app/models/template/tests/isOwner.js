@@ -3,20 +3,14 @@ describe("template", function () {
 
   var isOwner = require("../index").isOwner;
 
-  it("exposes an isOwner method which checks who owns a template", function (done) {
-    isOwner(this.blog.id, this.template.id, function (err, res) {
-      if (err) return done.fail(err);
-      expect(res).toBeTruthy();
-      done();
-    });
+  it("exposes an isOwner method which checks who owns a template", async function () {
+    var res = await isOwner(this.blog.id, this.template.id);
+    expect(res).toBeTruthy();
   });
 
-  it("exposes an isOwner method which checks who owns a template", function (done) {
-    isOwner(this.blog.id, "nonexistent:template", function (err, res) {
-      if (err) return done.fail(err);
-      expect(res).toBeFalsy();
-      done();
-    });
+  it("exposes an isOwner method which checks who owns a template", async function () {
+    var res = await isOwner(this.blog.id, "nonexistent:template");
+    expect(res).toBeFalsy();
   });
 
   it("returns a promise when called without a callback", async function () {

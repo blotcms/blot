@@ -5,26 +5,21 @@ describe("template", function () {
   const Blog = require("models/blog");
 
   const {
-    buildFromFolder: buildFromFolderCb,
-    writeToFolder: writeToFolderCb,
-    getMetadata: getMetadataCb,
-    setMetadata: setMetadataCb,
-    setView: setViewCb,
+    buildFromFolder,
+    writeToFolder,
+    getMetadata,
+    setMetadata,
+    setView,
     makeID,
   } = require("../index");
 
   const folderRenames = require("../folderRenames");
 
-  const buildFromFolder = promisify(buildFromFolderCb);
-  const writeToFolder = promisify(writeToFolderCb);
-  const getMetadata = promisify(getMetadataCb);
-  const setMetadata = promisify(setMetadataCb);
-  const setView = promisify(setViewCb);
   const getBlog = promisify(Blog.get);
   const setBlog = promisify(Blog.set);
   const getAllViews = require("../index").getAllViews;
-  const createShareID = promisify(require("../index").createShareID);
-  const getByShareID = promisify(require("../index").getByShareID);
+  const createShareID = require("../index").createShareID;
+  const getByShareID = require("../index").getByShareID;
 
   require("./setup")({ createTemplate: true });
 

@@ -40,11 +40,7 @@ const removeAssets = (blog, favicon) =>
   );
 
 const update = (blog, slug, locals) =>
-  new Promise((resolve, reject) =>
-    Template.update(blog.id, slug, { locals }, (err) =>
-      err ? reject(err) : resolve()
-    )
-  );
+  Template.update(blog.id, slug, { locals });
 
 const persistToFolder = (blog, template) =>
   writeChangeToFolder(blog, template, {});
