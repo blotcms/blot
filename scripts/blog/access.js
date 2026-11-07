@@ -12,9 +12,10 @@ if (require.main === module) {
 
 async function cli() {
   // A failed lookup is ignored: the argument is used as given
-  const blog = await new Promise((resolve) => {
-    require("../get/blog")(process.argv[2], (err, user, blog) => resolve(blog));
-  });
+  let blog;
+  try {
+    ({ blog } = await require("../get/blog")(process.argv[2]));
+  } catch (err) {}
 
   const url = await lookup((blog && blog.handle) || process.argv[2]);
   console.log(url);
@@ -46,13 +47,5 @@ async function lookup(handle) {
   });
 }
 
-// Callback API, kept for get/blog, get/user, info, overdue-subscription and
-// create, which pass a callback (or promisify this)
-function main(handle, callback) {
-  lookup(handle).then(
-    (url) => callback(null, url),
-    (err) => callback(err)
-  );
-}
-
-module.exports = main;
+// Resolves the one-time log-in link for a handle, email or user ID
+module.exports = lookup;

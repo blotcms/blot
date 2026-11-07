@@ -7,7 +7,6 @@ var { v4: uuid } = require("uuid");
 var debug = require("debug")("scripts:user:overdue-subscription");
 var access = require("../blog/access");
 var fetchSubscription = require("./fetch-subscription-from-stripe");
-var { promisify } = require("util");
 
 var customer = {
   card: "tok_mastercard",
@@ -28,7 +27,7 @@ if (require.main === module)
     async function (result) {
       if (!result.invoices) throw new Error("No invoice returned");
 
-      var url = await promisify(access)(result.email);
+      var url = await access(result.email);
       console.log(
         "Unpaid invoice found for " +
           result.email +

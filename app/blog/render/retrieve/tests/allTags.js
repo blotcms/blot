@@ -104,66 +104,47 @@ describe("all_tags cache", function () {
     };
   }
 
-  it("reuses cached tags for identical cacheIDs and path_prefix", function (done) {
+  it("reuses cached tags for identical cacheIDs and path_prefix", async function () {
     spyOn(Tags, "list").and.callFake(async function () {
       return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    allTags(req, { locals: {} }, function () {
-      allTags(req, { locals: {} }, function () {
-        expect(Tags.list).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await allTags(req, { locals: {} });
+    await allTags(req, { locals: {} });
+    expect(Tags.list).toHaveBeenCalledTimes(1);
   });
 
-  it("refetches when cacheID changes", function (done) {
+  it("refetches when cacheID changes", async function () {
     spyOn(Tags, "list").and.callFake(async function () {
       return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
-    allTags(
-      makeReq({ id: "blog-1", cacheID: 100 }),
-      { locals: {} },
-      function () {
-        allTags(
-          makeReq({ id: "blog-1", cacheID: 101 }),
-          { locals: {} },
-          function () {
-            expect(Tags.list).toHaveBeenCalledTimes(2);
-            done();
-          }
-        );
-      }
-    );
+    await allTags(makeReq({ id: "blog-1", cacheID: 100 }), { locals: {} });
+    await allTags(makeReq({ id: "blog-1", cacheID: 101 }), { locals: {} });
+    expect(Tags.list).toHaveBeenCalledTimes(2);
   });
 
-  it("keys the cache on path_prefix as well as cacheID", function (done) {
+  it("keys the cache on path_prefix as well as cacheID", async function () {
     spyOn(Tags, "list").and.callFake(async function () {
       return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
     const blog = { id: "blog-1", cacheID: 100 };
 
-    allTags(
+    await allTags(
       { ...makeReq(blog), template: { locals: { path_prefix: "/a/" } } },
-      { locals: {} },
-      function () {
-        allTags(
-          { ...makeReq(blog), template: { locals: { path_prefix: "/b/" } } },
-          { locals: {} },
-          function () {
-            expect(Tags.list).toHaveBeenCalledTimes(2);
-            done();
-          }
-        );
-      }
+      { locals: {} }
     );
+    await allTags(
+      { ...makeReq(blog), template: { locals: { path_prefix: "/b/" } } },
+      { locals: {} }
+    );
+    expect(Tags.list).toHaveBeenCalledTimes(2);
   });
 
-  it("does not confuse a numeric path_prefix (no filter) with the equivalent string (a real filter)", function (done) {
+  it("does not confuse a numeric path_prefix (no filter) with the equivalent string (a real filter)", async function () {
     // models/tags/list.js's normalizePathPrefix treats a non-string as "no
     // filter" but normalizes the string "1" into "/1" - a naive String()
     // cache key would turn both into the same "1" and let one view's tags
@@ -174,42 +155,34 @@ describe("all_tags cache", function () {
 
     const blog = { id: "blog-1", cacheID: 100 };
 
-    allTags(
+    await allTags(
       { ...makeReq(blog), template: { locals: { path_prefix: 1 } } },
-      { locals: {} },
-      function () {
-        allTags(
-          { ...makeReq(blog), template: { locals: { path_prefix: "1" } } },
-          { locals: {} },
-          function () {
-            expect(Tags.list).toHaveBeenCalledTimes(2);
-            expect(Tags.list.calls.argsFor(0)[1].path_prefix).toBe(1);
-            expect(Tags.list.calls.argsFor(1)[1].path_prefix).toBe("1");
-            done();
-          }
-        );
-      }
+      { locals: {} }
     );
+    await allTags(
+      { ...makeReq(blog), template: { locals: { path_prefix: "1" } } },
+      { locals: {} }
+    );
+    expect(Tags.list).toHaveBeenCalledTimes(2);
+    expect(Tags.list.calls.argsFor(0)[1].path_prefix).toBe(1);
+    expect(Tags.list.calls.argsFor(1)[1].path_prefix).toBe("1");
   });
 
-  it("returns isolated copies so caller mutations do not taint cache", function (done) {
+  it("returns isolated copies so caller mutations do not taint cache", async function () {
     spyOn(Tags, "list").and.callFake(async function () {
       return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    allTags(req, { locals: {} }, function (err, firstTags) {
-      firstTags[0].tag = "mutated";
+    const firstTags = await allTags(req, { locals: {} });
+    firstTags[0].tag = "mutated";
 
-      allTags(req, { locals: {} }, function (err, secondTags) {
-        expect(secondTags[0].tag).toBe("abc");
-        done();
-      });
-    });
+    const secondTags = await allTags(req, { locals: {} });
+    expect(secondTags[0].tag).toBe("abc");
   });
 
-  it("shares the cache with preview requests", function (done) {
+  it("shares the cache with preview requests", async function () {
     spyOn(Tags, "list").and.callFake(async function () {
       return [{ name: "abc", slug: "abc", entries: ["1"] }];
     });
@@ -217,15 +190,12 @@ describe("all_tags cache", function () {
     const req = makeReq({ id: "blog-1", cacheID: 100 });
     req.preview = true;
 
-    allTags(req, { locals: {} }, function () {
-      allTags(req, { locals: {} }, function () {
-        expect(Tags.list).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await allTags(req, { locals: {} });
+    await allTags(req, { locals: {} });
+    expect(Tags.list).toHaveBeenCalledTimes(1);
   });
 
-  it("restores all_tags_total_posts from the cache on a hit", function (done) {
+  it("restores all_tags_total_posts from the cache on a hit", async function () {
     spyOn(Tags, "list").and.callFake(async function () {
       return [
         { name: "abc", slug: "abc", entries: ["1", "2"] },
@@ -235,12 +205,9 @@ describe("all_tags cache", function () {
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    allTags(req, { locals: {} }, function () {
-      const secondRes = { locals: {} };
-      allTags(req, secondRes, function () {
-        expect(secondRes.locals.all_tags_total_posts).toBe(2);
-        done();
-      });
-    });
+    await allTags(req, { locals: {} });
+    const secondRes = { locals: {} };
+    await allTags(req, secondRes);
+    expect(secondRes.locals.all_tags_total_posts).toBe(2);
   });
 });

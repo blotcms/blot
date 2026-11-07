@@ -49,16 +49,6 @@ function buildPaymentMethod(pm, defaultId) {
   };
 }
 
-// Calls a Stripe method that takes a callback and resolves to its result.
-function call(method, ...args) {
-  return new Promise(function (resolve, reject) {
-    method(...args, function (err, result) {
-      if (err) return reject(err);
-      resolve(result);
-    });
-  });
-}
-
 // Generic "follow has_more with starting_after" pager shared by both the
 // modern PaymentMethods list and the legacy Cards list - both are paginated
 // the same way, so a customer with more than one page of either would
@@ -86,7 +76,7 @@ function listAllPaymentMethods(stripe, customerId) {
   return listAll(function (startingAfter) {
     var params = { customer: customerId, type: "card", limit: 100 };
     if (startingAfter) params.starting_after = startingAfter;
-    return call(stripe.paymentMethods.list.bind(stripe.paymentMethods), params);
+    return stripe.paymentMethods.list(params);
   });
 }
 
@@ -103,11 +93,7 @@ async function fetchLegacyCards(stripe, customerId, defaultSourceId) {
     cards = await listAll(function (startingAfter) {
       var params = { limit: 100 };
       if (startingAfter) params.starting_after = startingAfter;
-      return call(
-        stripe.customers.listCards.bind(stripe.customers),
-        customerId,
-        params
-      );
+      return stripe.customers.listCards(customerId, params);
     });
   } catch (err) {
     if (err && err.code === "resource_missing") return [];
@@ -138,8 +124,7 @@ async function fetchSubscriptionDefault(stripe, customerId, subscriptionId) {
   var subscription;
 
   try {
-    subscription = await call(
-      stripe.customers.retrieveSubscription.bind(stripe.customers),
+    subscription = await stripe.customers.retrieveSubscription(
       customerId,
       subscriptionId
     );
@@ -175,10 +160,7 @@ async function syncPaymentMethods(user) {
 
   var customerId = user.subscription.customer;
 
-  var customer = await call(
-    stripe.customers.retrieve.bind(stripe.customers),
-    customerId
-  );
+  var customer = await stripe.customers.retrieve(customerId);
 
   var subscriptionDefaultId = await fetchSubscriptionDefault(
     stripe,

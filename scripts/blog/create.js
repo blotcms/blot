@@ -3,7 +3,6 @@ var Blog = require("models/blog");
 var User = require("models/user");
 var validate = require("models/blog/validate/handle");
 var access = require("./access");
-var { promisify } = require("util");
 
 if (require.main === module) {
   main(process.argv[2], process.argv[3]).then(
@@ -53,7 +52,7 @@ async function main(email, handle) {
 
   await Blog.create(user.uid, { handle: handle });
 
-  const url = await promisify(access)(handle);
+  const url = await access(handle);
 
   console.log("Added new blog", handle, "to", email, ":");
   console.log(url);

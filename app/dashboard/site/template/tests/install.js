@@ -36,9 +36,7 @@ describe("install template route", function () {
   beforeEach(function () {
     spyOn(Blog, "set").and.callFake(async function (_blogID, _updates) {});
     spyOn(Template, "removeEnabledFromAllTemplates").and.callFake(
-      function (_blogID, callback) {
-        callback();
-      }
+      async function (_blogID) {}
     );
   });
 

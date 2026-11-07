@@ -13,25 +13,21 @@ describe("rgb", function () {
     };
   });
 
-  it("turns hex colors into an rgb string", function (done) {
+  it("turns hex colors into an rgb string", async function () {
     var result;
     var template = "{{#rgb}}#000{{/rgb}}";
 
-    rgb(this.request, {}, function (err, lambda) {
-      result = mustache.render(template, { rgb: lambda });
-      expect(result).toEqual("0, 0, 0");
-      done();
-    });
+    const lambda = await rgb(this.request, {});
+    result = mustache.render(template, { rgb: lambda });
+    expect(result).toEqual("0, 0, 0");
   });
 
-  it("turns rgba colors into an rgb string", function (done) {
+  it("turns rgba colors into an rgb string", async function () {
     var result;
     var template = "{{#rgb}}rgba(2,3,4,0.5){{/rgb}}";
 
-    rgb(this.request, {}, function (err, lambda) {
-      result = mustache.render(template, { rgb: lambda });
-      expect(result).toEqual("2, 3, 4");
-      done();
-    });
+    const lambda = await rgb(this.request, {});
+    result = mustache.render(template, { rgb: lambda });
+    expect(result).toEqual("2, 3, 4");
   });
 });

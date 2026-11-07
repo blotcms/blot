@@ -139,7 +139,7 @@ describe("archives cache", function () {
     };
   }
 
-  it("reuses the cached grouping for identical cacheIDs", function (done) {
+  it("reuses the cached grouping for identical cacheIDs", async function () {
     const { archives } = loadArchives();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -150,15 +150,12 @@ describe("archives cache", function () {
 
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
 
-    archives(req, { locals: {} }, function () {
-      archives(req, { locals: {} }, function () {
-        expect(Entries.getAll).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await archives(req, { locals: {} });
+    await archives(req, { locals: {} });
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it("yields to the event loop between the passes of a cold fill, but not on a hit", function (done) {
+  it("yields to the event loop between the passes of a cold fill, but not on a hit", async function () {
     const { archives } = loadArchives();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -170,19 +167,16 @@ describe("archives cache", function () {
 
     const req = makeReq({ id: "blog-yield", cacheID: 100, timeZone: "UTC" });
 
-    archives(req, { locals: {} }, function () {
-      // catalog clone, then before augmenting, then before sizing the result
-      expect(yields.calls.count()).toBeGreaterThanOrEqual(3);
-      yields.calls.reset();
+    await archives(req, { locals: {} });
+    // catalog clone, then before augmenting, then before sizing the result
+    expect(yields.calls.count()).toBeGreaterThanOrEqual(3);
+    yields.calls.reset();
 
-      archives(req, { locals: {} }, function () {
-        expect(yields).not.toHaveBeenCalled();
-        done();
-      });
-    });
+    await archives(req, { locals: {} });
+    expect(yields).not.toHaveBeenCalled();
   });
 
-  it("refetches when cacheID changes", function (done) {
+  it("refetches when cacheID changes", async function () {
     const { archives } = loadArchives();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -191,23 +185,16 @@ describe("archives cache", function () {
       ]);
     });
 
-    archives(
-      makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" }),
-      { locals: {} },
-      function () {
-        archives(
-          makeReq({ id: "blog-1", cacheID: 101, timeZone: "UTC" }),
-          { locals: {} },
-          function () {
-            expect(Entries.getAll).toHaveBeenCalledTimes(2);
-            done();
-          }
-        );
-      }
-    );
+    await archives(makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" }), {
+      locals: {},
+    });
+    await archives(makeReq({ id: "blog-1", cacheID: 101, timeZone: "UTC" }), {
+      locals: {},
+    });
+    expect(Entries.getAll).toHaveBeenCalledTimes(2);
   });
 
-  it("returns isolated copies so caller mutations do not taint cache", function (done) {
+  it("returns isolated copies so caller mutations do not taint cache", async function () {
     const { archives } = loadArchives();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -218,17 +205,14 @@ describe("archives cache", function () {
 
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
 
-    archives(req, { locals: {} }, function (err, firstYears) {
-      firstYears[0].months[0].entries[0].title = "Mutated";
+    const firstYears = await archives(req, { locals: {} });
+    firstYears[0].months[0].entries[0].title = "Mutated";
 
-      archives(req, { locals: {} }, function (err, secondYears) {
-        expect(secondYears[0].months[0].entries[0].title).toBe("Original");
-        done();
-      });
-    });
+    const secondYears = await archives(req, { locals: {} });
+    expect(secondYears[0].months[0].entries[0].title).toBe("Original");
   });
 
-  it("shares one getAll fetch with all_entries for the same request", function (done) {
+  it("shares one getAll fetch with all_entries for the same request", async function () {
     const { archives } = loadArchives();
     const allEntries = require("../all_entries");
 
@@ -240,15 +224,12 @@ describe("archives cache", function () {
 
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
 
-    archives(req, { locals: {} }, function () {
-      allEntries(req, { locals: {} }, function () {
-        expect(Entries.getAll).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await archives(req, { locals: {} });
+    await allEntries(req, { locals: {} });
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", function (done) {
+  it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", async function () {
     const { archives } = loadArchives();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -271,20 +252,17 @@ describe("archives cache", function () {
       archives: { fields: { title: true, html: true } },
     });
 
-    archives(titleOnlyReq, { locals: {} }, function (err, years) {
-      expect(years[0].months[0].entries[0].html).toBeUndefined();
+    const years = await archives(titleOnlyReq, { locals: {} });
+    expect(years[0].months[0].entries[0].html).toBeUndefined();
 
-      archives(withHtmlReq, { locals: {} }, function (err, years2) {
-        expect(years2[0].months[0].entries[0].html).toBe("<p>A body</p>");
-        // The title-only fill never held html, so this view can't be served
-        // from it and has to refetch.
-        expect(Entries.getAll).toHaveBeenCalledTimes(2);
-        done();
-      });
-    });
+    const years2 = await archives(withHtmlReq, { locals: {} });
+    expect(years2[0].months[0].entries[0].html).toBe("<p>A body</p>");
+    // The title-only fill never held html, so this view can't be served
+    // from it and has to refetch.
+    expect(Entries.getAll).toHaveBeenCalledTimes(2);
   });
 
-  it("serves a title-only view from a catalog cached with html, without leaking html", function (done) {
+  it("serves a title-only view from a catalog cached with html, without leaking html", async function () {
     const { archives } = loadArchives();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -307,16 +285,13 @@ describe("archives cache", function () {
       archives: { fields: { title: true, html: true } },
     });
 
-    archives(withHtmlReq, { locals: {} }, function (err, years) {
-      expect(years[0].months[0].entries[0].html).toBe("<p>A body</p>");
+    const years = await archives(withHtmlReq, { locals: {} });
+    expect(years[0].months[0].entries[0].html).toBe("<p>A body</p>");
 
-      archives(titleOnlyReq, { locals: {} }, function (err, years2) {
-        expect(years2[0].months[0].entries[0].title).toBe("A");
-        expect(years2[0].months[0].entries[0].html).toBeUndefined();
-        expect(Entries.getAll).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    const years2 = await archives(titleOnlyReq, { locals: {} });
+    expect(years2[0].months[0].entries[0].title).toBe("A");
+    expect(years2[0].months[0].entries[0].html).toBeUndefined();
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
   });
 
   it("shares one getAll fetch between all_entries and archives that reference different fields", async function () {
@@ -356,7 +331,7 @@ describe("archives cache", function () {
     expect(list[0].summary).toBeUndefined();
   });
 
-  it("shares the catalog, but not its own cache, with preview requests", function (done) {
+  it("shares the catalog, but not its own cache, with preview requests", async function () {
     const { archives } = loadArchives();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -368,15 +343,12 @@ describe("archives cache", function () {
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
     req.preview = true;
 
-    archives(req, { locals: {} }, function () {
-      archives(req, { locals: {} }, function () {
-        expect(Entries.getAll).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await archives(req, { locals: {} });
+    await archives(req, { locals: {} });
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it("does not cache an empty result, so a transient Redis failure isn't mistaken for an empty blog", function (done) {
+  it("does not cache an empty result, so a transient Redis failure isn't mistaken for an empty blog", async function () {
     const { archives } = loadArchives();
 
     // Entries.getAll resolves to [] on a failed zRange/mGet rather than
@@ -390,12 +362,9 @@ describe("archives cache", function () {
 
     const req = makeReq({ id: "blog-1", cacheID: 100, timeZone: "UTC" });
 
-    archives(req, { locals: {} }, function () {
-      archives(req, { locals: {} }, function () {
-        expect(Entries.getAll).toHaveBeenCalledTimes(2);
-        done();
-      });
-    });
+    await archives(req, { locals: {} });
+    await archives(req, { locals: {} });
+    expect(Entries.getAll).toHaveBeenCalledTimes(2);
   });
 });
 

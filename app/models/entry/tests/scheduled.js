@@ -165,12 +165,12 @@ describe("entry scheduled publication", function () {
     const Blog = require("models/blog");
     const bump = Blog.bumpCacheID;
     let failed = false;
-    spyOn(Blog, "bumpCacheID").and.callFake(function (blogID, callback) {
+    spyOn(Blog, "bumpCacheID").and.callFake(async function (blogID) {
       if (!failed) {
         failed = true;
-        return callback(new Error("boom"));
+        throw new Error("boom");
       }
-      return bump.call(Blog, blogID, callback);
+      return bump.call(Blog, blogID);
     });
 
     const retryMs = scheduled.RETRY_MS;

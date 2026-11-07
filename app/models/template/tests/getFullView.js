@@ -1,8 +1,7 @@
 describe("template", function () {
   require("./setup")({ createTemplate: true });
 
-  const { promisify } = require("util");
-  var getFullView = promisify(require("../index").getFullView);
+  var getFullView = require("../index").getFullView;
   var setView = require("../index").setView;
 
   // Saves the views in parallel, as the callback each() loop used to

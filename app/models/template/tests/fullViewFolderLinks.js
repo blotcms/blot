@@ -1,12 +1,11 @@
 describe("getFullView folder links", function () {
   require("./setup")({ createTemplate: true });
 
-  const { promisify } = require("util");
   const config = require("config");
   const Template = require("../index");
 
   const getView = Template.getView;
-  const getFullView = promisify(Template.getFullView);
+  const getFullView = Template.getFullView;
   const createTemplate = Template.create;
   const dropTemplate = Template.drop;
   const setView = Template.setView;

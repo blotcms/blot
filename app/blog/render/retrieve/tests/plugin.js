@@ -16,9 +16,7 @@ describe("plugin", function () {
   });
 
   function run(req) {
-    return new Promise((resolve, reject) => {
-      plugin(req, {}, (err, result) => (err ? reject(err) : resolve(result)));
-    });
+    return plugin(req, {});
   }
 
   it("returns css and js for an enabled, requested plugin", async function () {

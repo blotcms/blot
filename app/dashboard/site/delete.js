@@ -96,17 +96,11 @@ async function decreaseSubscription(req, res, next) {
   if (!quantity || !subscription) return next();
 
   try {
-    var updated = await new Promise(function (resolve, reject) {
-      stripe.customers.updateSubscription(
-        subscription.customer,
-        subscription.id,
-        { quantity: quantity, prorate: false },
-        function (err, updated) {
-          if (err) return reject(err);
-          resolve(updated);
-        }
-      );
-    });
+    var updated = await stripe.customers.updateSubscription(
+      subscription.customer,
+      subscription.id,
+      { quantity: quantity, prorate: false }
+    );
 
     if (!updated) throw new Error("No subscription");
 
