@@ -1354,3 +1354,4 @@ Self-hosting:
 ---
 
 Flaky specs (newest first; see "Flaky specs" in AGENTS.md). Remove an entry when its fix merges.
+- 7 Nov 2026, `app/models/template/tests/setMetadata.js` "template updates the cache ID of the blog which has the template installed after updating": `Expected 1794073210890 not to equal 1794073210890.` on #2657 (`5935a4c98`, Stripe callbacks in app/dashboard, which doesn't touch templates). Job: https://github.com/blotcms/blot/actions/runs/42397380146/job/128477568867. Investigate: `bumpCacheID` sets `cacheID` to `Date.now()`, so a bump in the same millisecond as the spec's `setBlog` leaves it unchanged. Make the bump strictly increase (e.g. `max(Date.now(), old + 1)`), or have the spec wait a tick first; `tests/drop.js` has the same pattern.
