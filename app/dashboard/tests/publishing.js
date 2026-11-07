@@ -1,5 +1,4 @@
 describe("publishing settings", function () {
-  const { promisify } = require("util");
   const Blog = require("models/blog");
 
   global.test.site({ login: true });
@@ -15,7 +14,7 @@ describe("publishing settings", function () {
       imageExif: "off",
     });
 
-    const blogAfterOff = await promisify(Blog.get)({ id: this.blog.id });
+    const blogAfterOff = await Blog.get({ id: this.blog.id });
 
     expect(blogAfterOff.imageExif).toBe("off");
     expect(blogAfterOff.isImageExifOff).toBe(true);
@@ -30,7 +29,7 @@ describe("publishing settings", function () {
       imageExif: "full",
     });
 
-    const blogAfterFull = await promisify(Blog.get)({ id: this.blog.id });
+    const blogAfterFull = await Blog.get({ id: this.blog.id });
     expect(blogAfterFull.imageExif).toBe("full");
     expect(blogAfterFull.isImageExifFull).toBe(true);
   });

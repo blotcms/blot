@@ -111,11 +111,10 @@ function watch(blogID, callback) {
   client
     .publish(LOCAL_CLIENT_CHANNEL, JSON.stringify({ blogID: blogID }))
     .then(function () {
-      Blog.get({ id: blogID }, function (err, blog) {
-        if (err) return callback(err);
+      Blog.get({ id: blogID }).then(function (blog) {
         console.log("url=https://" + blog.handle + "." + config.host);
         callback();
-      });
+      }, callback);
     }, callback);
 }
 

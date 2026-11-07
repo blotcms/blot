@@ -297,7 +297,7 @@ describe("sync cacheID", function () {
 
   // Render caches are keyed on cacheID, so skipping the bump leaves the
   // site serving stale pages until something else bumps it
-  it("bumps the cacheID even if releasing the lock fails", function (testDone) {
+  it("bumps the cacheID even if releasing the lock fails", async function () {
     const blogID = this.blog.id;
     const lock = folderLock.lock;
     const releaseError = new Error(
@@ -315,20 +315,18 @@ describe("sync cacheID", function () {
     });
     spyOn(Blog, "bumpCacheID").and.callThrough();
 
-    Blog.get({ id: blogID }, function (err, before) {
-      if (err) return testDone.fail(err);
+    const before = await Blog.get({ id: blogID });
 
+    await new Promise(function (resolve) {
       syncChange(blogID, function (err) {
         expect(err).toBe(releaseError);
         expect(Blog.bumpCacheID).toHaveBeenCalled();
-
-        Blog.get({ id: blogID }, function (err, after) {
-          if (err) return testDone.fail(err);
-          expect(after.cacheID).toBeGreaterThan(before.cacheID);
-          testDone();
-        });
+        resolve();
       });
     });
+
+    const after = await Blog.get({ id: blogID });
+    expect(after.cacheID).toBeGreaterThan(before.cacheID);
   });
 
   // Syncs a.txt with these contents

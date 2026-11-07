@@ -36,7 +36,7 @@ const BANNED_HANDLES = nsv(
   join(config.blot_directory, "app/models/blog/validate/banned.txt")
 );
 
-const getBlog = promisify(Blog.get);
+const getBlog = (by) => Blog.get(by);
 const setBlog = promisify(Blog.set);
 const createBlog = promisify(Blog.create);
 const createTemplate = Template.create;

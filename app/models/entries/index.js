@@ -26,8 +26,8 @@ module.exports = (function () {
   ];
 
   function resave(blogID, callback) {
-    Blog.get({ id: blogID }, function (err, blog) {
-      if (err || !blog) return callback(err || new Error("no blog"));
+    Blog.get({ id: blogID }).then(function (blog) {
+      if (!blog) return callback(new Error("no blog"));
 
       each(
         blogID,
@@ -51,7 +51,7 @@ module.exports = (function () {
         },
         callback
       );
-    });
+    }, callback);
   }
 
   function adjacentTo(blogID, entryID, callback) {

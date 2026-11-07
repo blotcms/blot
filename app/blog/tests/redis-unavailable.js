@@ -5,8 +5,8 @@ describe("when redis is unavailable", function () {
   require("./util/setup")();
 
   it("responds 503 with a generic error page when the blog cannot be looked up", async function () {
-    spyOn(Blog, "get").and.callFake(function (identifier, callback) {
-      callback(new ClientOfflineError());
+    spyOn(Blog, "get").and.callFake(async function () {
+      throw new ClientOfflineError();
     });
 
     const res = await this.get("/");

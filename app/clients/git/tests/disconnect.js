@@ -50,7 +50,7 @@ describe("git client disconnect", function () {
 
     expect(await inStore(this.blog.id)).toBe(false);
     expect(await folder.has(this.blog.id, "/.git")).toBe(false);
-    expect((await promisify(Blog.get)({ id: this.blog.id })).client).toBe("");
+    expect((await Blog.get({ id: this.blog.id })).client).toBe("");
   });
 
   it("removes the repository even if the blog folder is already gone", async function () {
@@ -97,7 +97,7 @@ describe("git client disconnect", function () {
   describe("when the blog is deleted", function () {
     var createRepo = require("clients/git/create");
     var removeBlog = promisify(Blog.remove);
-    var getBlog = promisify(Blog.get);
+    var getBlog = (by) => Blog.get(by);
 
     async function connectedBlog(context) {
       otherBlog = await promisify(Blog.create)(context.user.uid, {

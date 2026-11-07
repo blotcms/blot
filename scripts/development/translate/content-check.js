@@ -7,7 +7,6 @@
 // copy can be complete while entries have not been built yet. This checks the
 // database.
 
-const { promisify } = require("util");
 const moment = require("moment");
 
 const Blog = require("models/blog");
@@ -15,7 +14,7 @@ const Entries = require("models/entries");
 const Entry = require("models/entry");
 const Tags = require("models/tags");
 
-const getBlog = promisify(Blog.get);
+const getBlog = (by) => Blog.get(by);
 const getListIDs = (blogID, list, options) =>
   Entries.getListIDs(blogID, list, options);
 

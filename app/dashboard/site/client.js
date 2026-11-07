@@ -21,7 +21,7 @@ const RESYNC_REFUSALS = [
   "ICLOUD_FOLDER_MISSING",
   "ICLOUD_SETUP_INCOMPLETE",
 ];
-const getStatuses = promisify(Blog.getStatuses);
+const getStatuses = (...args) => Blog.getStatuses(...args);
 
 // So the breadcrumbs look like: Settings > Client
 client_routes.use(function (req, res, next) {

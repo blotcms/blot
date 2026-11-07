@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const Blog = require("models/blog");
 const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
@@ -15,7 +14,7 @@ const { classify } = require("./database/error");
 // and stamps lastSync, which would keep every blog eligible forever.
 const sync = require("./sync/sync");
 
-const getBlog = promisify(Blog.get);
+const getBlog = (by) => Blog.get(by);
 // getAllTotal, not getTotal - Fix()'s entry-ghosts (Entries.each) scans the
 // "all" list (drafts/pages/scheduled/deleted included), not just published
 // "entries", so getTotal would under-count the workload this field tracks.

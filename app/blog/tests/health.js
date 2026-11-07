@@ -21,8 +21,8 @@ describe("/health", function () {
   it("answers OK without looking anything up in redis", async function () {
     // The blog middleware looks up the request's host, so if /health came
     // after it a Redis outage would make every container unhealthy
-    spyOn(Blog, "get").and.callFake(function (identifier, callback) {
-      callback(new ClientOfflineError());
+    spyOn(Blog, "get").and.callFake(async function () {
+      throw new ClientOfflineError();
     });
 
     const res = await fetch(origin + "/health");

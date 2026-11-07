@@ -133,13 +133,7 @@ describe("upload template route", function () {
 
   const getTemplates = (blogID) => Template.getTemplateList(blogID);
 
-  const getBlog = (blogID) =>
-    new Promise((resolve, reject) => {
-      Blog.get({ id: blogID }, (err, blog) => {
-        if (err) return reject(err);
-        resolve(blog);
-      });
-    });
+  const getBlog = (blogID) => Blog.get({ id: blogID });
 
   it("creates a template from a dropped folder", async function () {
     const { req, paths } = await folderRequest(this.blog, {

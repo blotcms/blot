@@ -12,14 +12,12 @@
 // Where it does not, the source URL is still emitted as a best guess and the
 // caller drops the pair if it 404s.
 
-const { promisify } = require("util");
-
 const config = require("config");
 const Blog = require("models/blog");
 const Entries = require("models/entries");
 const Entry = require("models/entry");
 
-const getBlog = promisify(Blog.get);
+const getBlog = (by) => Blog.get(by);
 const getListIDs = (blogID, list, options) =>
   Entries.getListIDs(blogID, list, options);
 

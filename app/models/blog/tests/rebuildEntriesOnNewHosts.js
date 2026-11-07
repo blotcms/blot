@@ -8,12 +8,7 @@ describe("Blog.set rebuilds entries linking to a new handle or domain", function
 
   var getEntry = (blogID, path) => Entry.get(blogID, path);
 
-  var getBlog = (blogID) =>
-    new Promise((resolve, reject) =>
-      Blog.get({ id: blogID }, (err, blog) =>
-        err ? reject(err) : resolve(blog)
-      )
-    );
+  var getBlog = (blogID) => Blog.get({ id: blogID });
 
   var setBlog = (blogID, updates) =>
     new Promise((resolve, reject) =>

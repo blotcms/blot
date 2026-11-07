@@ -27,7 +27,7 @@ const client = require("models/client");
 const pathIndex = require("models/entries/pathIndex");
 
 const getEntry = (blogID, id) => Entry.get(blogID, id);
-const getBlog = promisify((id, cb) => Blog.get({ id }, cb));
+const getBlog = (id) => Blog.get({ id });
 const fixOnBlogID = promisify(fix);
 
 // Fix() reads whatever `.menu` is already on the blog object it's handed

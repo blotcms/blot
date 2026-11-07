@@ -86,14 +86,14 @@ describe("template", () => {
       partials: {},
     });
 
-    const before = await promisify(Blog.get)({ id: this.template.owner });
+    const before = await Blog.get({ id: this.template.owner });
     const templateBefore = await getMetadata(this.template.id);
     await setView(this.template.id, {
       name: "sc-partial.html",
       content: "{{> /pages/home.txt}}",
       partials: {},
     });
-    const after = await promisify(Blog.get)({ id: this.template.owner });
+    const after = await Blog.get({ id: this.template.owner });
     const templateAfter = await getMetadata(this.template.id);
 
     expect(after.cacheID).toEqual(before.cacheID);
@@ -370,23 +370,21 @@ describe("template", () => {
   it("updates the cache ID of the blog which has the template installed after setting a view", async function () {
     const test = this;
     await promisify(Blog.set)(test.blog.id, { template: test.template.id });
-    const initialCacheID = (await promisify(Blog.get)({ id: test.blog.id }))
-      .cacheID;
+    const initialCacheID = (await Blog.get({ id: test.blog.id })).cacheID;
     const view = { name: "cache-test.html", content: "changed" };
 
     await setView(test.template.id, view);
-    const blog = await promisify(Blog.get)({ id: test.template.owner });
+    const blog = await Blog.get({ id: test.template.owner });
 
     expect(blog.cacheID).not.toEqual(initialCacheID);
   });
 
   it("leaves the owner blog's cache ID alone when the template is not installed", async function () {
     const test = this;
-    const initialCacheID = (await promisify(Blog.get)({ id: test.blog.id }))
-      .cacheID;
+    const initialCacheID = (await Blog.get({ id: test.blog.id })).cacheID;
 
     await setView(test.template.id, { name: "cache-test.html", content: "a" });
-    const blog = await promisify(Blog.get)({ id: test.template.owner });
+    const blog = await Blog.get({ id: test.template.owner });
 
     expect(blog.cacheID).toEqual(initialCacheID);
   });

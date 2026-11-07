@@ -2,12 +2,11 @@ describe("preview of a template the blog hasn't installed", function () {
   require("./util/setup")();
 
   const config = require("config");
-  const { promisify } = require("util");
   const Template = require("models/template");
   const Blog = require("models/blog");
   const create = Template.create;
   const setView = Template.setView;
-  const getBlog = promisify(Blog.get);
+  const getBlog = (by) => Blog.get(by);
 
   it("shows a saved change without bumping the blog's cacheID", async function () {
     await create(this.blog.id, "other", {});

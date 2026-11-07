@@ -10,7 +10,7 @@ describe("template", function () {
   var key = require("../key");
   var generateCdnUrl = require("../util/generateCdnUrl");
 
-  var blogGet = promisify(Blog.get);
+  var blogGet = (by) => Blog.get(by);
   var blogSet = promisify(Blog.set);
 
   it("drops a template", async function () {

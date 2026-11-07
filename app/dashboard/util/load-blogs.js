@@ -9,33 +9,25 @@ module.exports = async function (req, res, next) {
   try {
     // Fetch and extend blogs along with their templates' metadata
     const blogs = await Promise.all(
-      req.user.blogs.map((blogID) => {
-        return new Promise((resolve, reject) => {
-          Blog.get({ id: blogID }, (err, blog) => {
-            if (err) return reject(err);
-            if (!blog) return resolve(null);
+      req.user.blogs.map(async (blogID) => {
+        let blog = await Blog.get({ id: blogID });
+        if (!blog) return null;
 
-            try {
-              blog = Blog.extend(blog);
-            } catch (e) {
-              return reject(e);
-            }
+        blog = Blog.extend(blog);
 
-            // Fetch template metadata
-            // (a failed lookup leaves the blog's template unextended)
-            Template.getMetadata(blog.template)
-              .catch(() => undefined)
-              .then((metadata) => {
-                if (metadata) {
-                  // Assign the metadata and construct the previewURL
-                  blog.template = metadata;
-                  blog.previewURL = `https://preview-of-${metadata.owner === blog.id ? "my-" : ""}${metadata.slug}-on-${blog.handle}.${config.host}?screenshot=true`;
-                }
+        // Fetch template metadata
+        // (a failed lookup leaves the blog's template unextended)
+        const metadata = await Template.getMetadata(blog.template).catch(
+          () => undefined
+        );
 
-                resolve(blog);
-              });
-          });
-        });
+        if (metadata) {
+          // Assign the metadata and construct the previewURL
+          blog.template = metadata;
+          blog.previewURL = `https://preview-of-${metadata.owner === blog.id ? "my-" : ""}${metadata.slug}-on-${blog.handle}.${config.host}?screenshot=true`;
+        }
+
+        return blog;
       })
     );
 
