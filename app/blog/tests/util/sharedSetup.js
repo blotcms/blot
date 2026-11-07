@@ -160,10 +160,16 @@ module.exports = function setup(options = {}) {
 
           await this.blog.remove(path);
 
-          folder.update(path, function (folderErr) {
-            if (folderErr) return callback(folderErr, reject);
-            callback(null, resolve);
-          });
+          folder
+            .update(path)
+            .then(
+              () => null,
+              (updateErr) => updateErr
+            )
+            .then(function (folderErr) {
+              if (folderErr) return callback(folderErr, reject);
+              callback(null, resolve);
+            });
         });
       });
     };
@@ -175,10 +181,16 @@ module.exports = function setup(options = {}) {
 
           await this.blog.write({ path, content });
 
-          folder.update(path, function (folderErr) {
-            if (folderErr) return callback(folderErr, reject);
-            callback(null, resolve);
-          });
+          folder
+            .update(path)
+            .then(
+              () => null,
+              (updateErr) => updateErr
+            )
+            .then(function (folderErr) {
+              if (folderErr) return callback(folderErr, reject);
+              callback(null, resolve);
+            });
         });
       });
     };
@@ -208,10 +220,16 @@ module.exports = function setup(options = {}) {
             });
           }
 
-          folder.update("/Templates/local", function (folderErr) {
-            if (folderErr) return callback(folderErr, reject);
-            callback(null, resolve);
-          });
+          folder
+            .update("/Templates/local")
+            .then(
+              () => null,
+              (updateErr) => updateErr
+            )
+            .then(function (folderErr) {
+              if (folderErr) return callback(folderErr, reject);
+              callback(null, resolve);
+            });
         });
       });
     };

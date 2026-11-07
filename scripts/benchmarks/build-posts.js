@@ -124,7 +124,7 @@ async function main() {
     new Promise((resolve, reject) => {
       sync(blog.id, async (err, folder, done) => {
         if (err) return reject(err);
-        const update = promisify(folder.update);
+        const update = folder.update;
         try {
           for (const path of paths) await update(path);
         } catch (e) {
