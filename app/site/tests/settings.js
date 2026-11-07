@@ -26,8 +26,8 @@ describe("Blot dashboard settings", function () {
     // go back to the dashboard
     await page.click('a[href="/sites/' + handle + '"]');
 
-    // the <title> of the page should be "New title - Blot"
-    expect(page.title).toEqual("New title - Blot");
+    // the <title> of the page should be "New title · Blot"
+    expect(page.title).toEqual("New title · Blot");
   });
 
   it("lets you sync the folder using local folder", async function () {

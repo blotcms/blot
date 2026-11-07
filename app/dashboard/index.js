@@ -107,6 +107,7 @@ dashboard.param("handle", require("dashboard/util/load-blog"));
 dashboard.use(trace("loaded blog"));
 
 dashboard.use(require("dashboard/util/breadcrumbs"));
+dashboard.use(require("dashboard/util/page-title"));
 
 dashboard.get("/support", (req, res) => {
   res.locals.title = "Support";
