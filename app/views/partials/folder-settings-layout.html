@@ -2,6 +2,9 @@
 <!-- A connected folder's sync pages: the client's settings in a card, the
      compact rows of .folder-sync-panel (folder/folder-sync.css) -->
 {{> message}}
+{{#isClientPage}}
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title folder-sync-heading"><img class="client-icon" alt="" width="24" height="24" src="{{#cdn}}/images/sync/{{blog.client}}.svg{{/cdn}}"> {{client.display_name}}</h1></div></header>
+{{/isClientPage}}
 <div class="folder-box--sync">
   <div class="folder-sync-panel">
     {{> body}}

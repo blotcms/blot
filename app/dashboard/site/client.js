@@ -27,6 +27,10 @@ client_routes.get(/.*/, function (req, res, next) {
     clients[req.blog.client] && clients[req.blog.client].resync
   );
   res.locals.isSyncing = syncSummary(req.blog).state === "syncing";
+  // The client's own page, headed with its logo and name; its subpages
+  // have headings of their own
+  res.locals.isClientPage =
+    req.path.replace(/\/$/, "") === "/" + req.blog.client;
   next();
 });
 
