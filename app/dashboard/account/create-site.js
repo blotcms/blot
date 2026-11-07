@@ -26,7 +26,10 @@ const ENDED =
 
 CreateBlog.use(function (req, res, next) {
   res.locals.breadcrumbs.forEach(function (link) {
-    if (link.label === "Account") link.label = "Sites";
+    if (link.label === "Account") {
+      link.label = "Sites";
+      link.url = "/sites";
+    }
   });
   // Creating a site belongs to Sites, not Account, in the sidebar
   res.locals.selected = {

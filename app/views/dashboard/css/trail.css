@@ -96,16 +96,31 @@
   color: var(--light-text-color);
 }
 
-/* Each part is kept short: the folders on the way end in an ellipsis, the
-   current page takes a middle one (js/truncate.js). The page's heading
-   shows its name in full. Its width is set rather than taken from its text,
-   so truncate.js can fit it. */
-.dashboard-trail li {
-  max-width: 10em;
+/* The parts share the line in proportion to their length (each link at
+   most 40%, .trail li above): the folders on the way end in an ellipsis
+   only when the line is full, and the current page takes what's left, with
+   a middle ellipsis (js/truncate.js). */
+.dashboard-trail li:last-child {
+  color: var(--medium-text-color);
 }
 
-.dashboard-trail li:last-child {
-  flex: 0 1 16em;
-  max-width: 16em;
-  color: var(--medium-text-color);
+/* On phones a trail of four or more collapses its middle to "…": the first
+   part, then the last two. The collapsed parts stay for screen readers. */
+@media (max-width: 600px) {
+  .dashboard-trail li:not(:first-child):not(:nth-last-child(-n + 2)) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .dashboard-trail li:first-child:nth-last-child(n + 4)::after {
+    flex: 0 0 auto;
+    padding-left: var(--space-2);
+    color: var(--secondary-text-color);
+    content: "\203A  \2026";
+    content: "\203A  \2026" / "";
+  }
 }
