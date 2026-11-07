@@ -40,6 +40,7 @@ Host cycle follow-ups, from the live cycle onto a 30 GB root on 6 Nov 2026 (#255
 - The Deploy workflow's `commit` input fails on a short hash ("could not resolve commit") although its description says short codes work: fetch enough history, or say full hash only.
 
 Serve blog folder files on the CDN straight from S3, as assets are (left over from #2258, closed once the B2 restore test passed)
+- Bunny's allowlist edge rule may still list `/html2canvas.min.js`, which #2661 removed (the route and file are gone). Harmless; drop it next time that rule is edited.
 - Today `cdn.blot.im/folder/v-<version>/<blogID>/<path>` reaches the origin, which reads the file through `storage/folder`. Every blog is on S3 now, so a Bunny edge rule could send `/folder/v-*` to the bucket instead, like `_image_cache` and `_thumbnails`.
 - Decide first: dotfiles (node 404s any path segment starting with `.`, S3 serves all but `.git`, so maybe Deny `.env`-style names too); directory URLs (node redirects to the trailing slash and serves `index.html`, S3 has only a zero-byte marker: check whether the build ever bakes a directory link); a missing object is a 403 from S3, not a 404; Content-Type comes from the object.
 - Watch #2258's performance gates (S3 requests, origin hits from the `[folder-asset]` log line) before and after.
