@@ -28,9 +28,9 @@ Follow-ups from the ESLint and Prettier setup (#2508)
 
 Host cycle follow-ups, from the live cycle onto a 30 GB root on 6 Nov 2026 (#2552)
 - Check the daily email of 7 Nov: the first offsite (B2) sync from the new host runs at 02:10 UTC. Overdue or failed means the `blot-b2-storage` profile or `/etc/blot/storage-offsite-bucket` did not reach it at `app`.
-- The final data-volume snapshot (tagged `purpose=final-before-removal`) is the last cost left from the volume: move it to the archive tier around 20 Nov, or delete it once S3 plus B2 have run for a while. The operator decides.
+- The final data-volume snapshot (tagged `purpose=final-before-removal`) is the last cost left from the volume: move it to the archive tier around 20 Nov, or delete it once S3 plus B2 have run for a while. The maintainer decides.
 - `launch.sh` connects with `StrictHostKeyChecking=no` and keeps no key: have it read the ED25519 fingerprint from `get-console-output`, check it, and write a known_hosts line for `<new>` (the README says how to do it by hand).
-- Time each step of `switch` inside the freeze. Writes were frozen 110 s live against 41 s in the drill, with no failed requests; probably ssh round trips through `ProxyJump` from the operator's Mac, unmeasured. Then decide whether to run the in-freeze steps from the new host instead.
+- Time each step of `switch` inside the freeze. Writes were frozen 110 s live against 41 s in the drill, with no failed requests; probably ssh round trips through `ProxyJump` from the maintainer's Mac, unmeasured. Then decide whether to run the in-freeze steps from the new host instead.
 - `cycle.sh` deploys the old host's image, so it could set `SKIP_BRANCH_CHECK=true` for `units.sh` itself instead of failing from a worktree.
 - The Deploy workflow's `commit` input fails on a short hash ("could not resolve commit") although its description says short codes work: fetch enough history, or say full hash only.
 
@@ -62,8 +62,6 @@ Unify this: Scattered config: about 101 environment variables, and 14 files read
 Fix this: Dev differs from prod: the test Redis is redis:alpine, unpinned (scripts/tests/invoke.sh:30), while CI and production run 6.2. Markdown goes through pandoc in production and through marked in development. The sandbox runs jailed in production and in-process in development.
 
 Remove customer info from TODO (and gmail links)
-
-Fix this: The agent instructions aren’t maintained. AGENTS.md has two near-identical sections, “Pull request review” and “Pull request reviews”. One calls you “operator”, the other “maintainer”. A careful reviewer reads this as rules piled up and never edited.
 
 Research then implement this if sound: Make the version the only invalidation. Put cacheID in the proxy cache key, and drop the purge RPCs, the pending-purge queue, the per-file purges during sync, and most of the LRUs. Old entries age out by eviction. This is cheap and removes a whole failure class. Full pre-rendering is the logical end point, but don’t go all the way: search, arbitrary query strings and very large catalogs make it a lazy-render-into-versioned-store design, not an SSG.
 - I wonder if we could store the cacheID against the host and then as the ssl cert was read, we could seed this info automatically?
@@ -148,8 +146,8 @@ Redis host follow-ups (from #2041, new host since 8 Oct):
 - Lock heartbeat: no overlapping EXTENDs
 - Remaining dropped write errors: await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
 - TLS handshakes were about a quarter of billed egress on 21 Oct (#2107): ECDSA certificates shrink each by about a third, and few TLS connections resume today, so look at session reuse and keep-alive (about 1.7 requests per connection). No `ssl_session_tickets` without a shared key (#2271)
-- restore.sh --offsite: have the host download from B2 with a short-lived presigned URL (aws s3 presign on the operator's machine, passed over stdin), so a restore doesn't depend on the operator's upload speed and the read key still stays off servers. Not tested yet
-- cycle.sh --drill hosts have no AWS credentials (no instance profile), so restoring an S3 backup onto one means copying keys onto it or using --offsite, which streams the dump through the operator's machine: on 3 Nov a 2 GB dump took about 30 minutes at 1.2 MB/s. Give drill hosts a read-only instance profile scoped to s3://blot-redis-backups (or reuse the presigned-URL idea above for S3 too), so the host fetches it directly in about a minute
+- restore.sh --offsite: have the host download from B2 with a short-lived presigned URL (aws s3 presign on the maintainer's machine, passed over stdin), so a restore doesn't depend on the maintainer's upload speed and the read key still stays off servers. Not tested yet
+- cycle.sh --drill hosts have no AWS credentials (no instance profile), so restoring an S3 backup onto one means copying keys onto it or using --offsite, which streams the dump through the maintainer's machine: on 3 Nov a 2 GB dump took about 30 minutes at 1.2 MB/s. Give drill hosts a read-only instance profile scoped to s3://blot-redis-backups (or reuse the presigned-URL idea above for S3 too), so the host fetches it directly in about a minute
 - Upgrade the Redis server from 6.2 to 8.4+ for native compare-and-set (SET ... IFEQ, DELEX), then drop Lua: helper/lock extend/release become plain commands; helper/alarm claim/renew/complete need per-id claim keys to go native; also the legacy scripts in sync/lock.js, models/user/set.js, helper/flushCachePending.js, clients/icloud/database.js
 
 Proxy container follow-ups (cut over 8 Oct 2026, #1941)

@@ -25,7 +25,7 @@ const requestResyncOnce = async (blogID, reason) => {
         Authorization,
         blogID,
       },
-      // The reason goes into the operator's resync report email
+      // The reason goes into the maintainer's resync report email
       body: JSON.stringify(
         reason ? { resyncRequested: true, reason } : { resyncRequested: true }
       ),

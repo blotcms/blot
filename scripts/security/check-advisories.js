@@ -16,7 +16,7 @@
 // fetched independently with a timeout; a failing one is reported as
 // "source unavailable" and the rest continue. Only public URLs are used
 // (plus the optional local npm/gh calls). See
-// the operator's local check-security-advisories skill.
+// the maintainer's local check-security-advisories skill.
 
 const path = require("path");
 const { execFile } = require("child_process");

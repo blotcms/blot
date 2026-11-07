@@ -1,9 +1,9 @@
 // Collects what an hourly sync-verification sweep found, per blog, so a client
-// can send the operator ONE digest email per sweep instead of one per problem.
+// can send the maintainer ONE digest email per sweep instead of one per problem.
 // Client-agnostic: the Dropbox, Google Drive and iCloud sweeps all use it.
 //
 // The digest exists to surface possible code bugs and sync-integrity problems
-// for the operator to resolve. It never reports what a user is free to do
+// for the maintainer to resolve. It never reports what a user is free to do
 // (deleting or unsharing their folder, revoking access, running out of
 // storage), and it reports an ongoing problem once, not every hour.
 //
@@ -79,7 +79,7 @@ const MAX_ERROR_MESSAGE_LENGTH = 300;
 // any time: revoking access, deleting or unsharing the folder, filling their
 // storage. They are not bugs, so a blog with one is left out of the sweep and
 // of the digest. TRANSFER_INCOMPLETE and SYNC_ERROR stay reportable: Blot
-// failing on its own is what the operator needs to see.
+// failing on its own is what the maintainer needs to see.
 const USER_SIDE_CODES = [
   health.CODES.REAUTH_REQUIRED,
   health.CODES.SOURCE_MISSING,

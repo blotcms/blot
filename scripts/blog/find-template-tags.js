@@ -103,7 +103,7 @@ function summarise(blog, user, files) {
   };
 }
 
-// The path is only printed, for the operator to cat, so this is the one place
+// The path is only printed, for the maintainer to cat, so this is the one place
 // which still names the file on the local disk.
 // Double-quoted for the shell, so escape the characters it treats specially.
 async function catCommand(blogID, path) {

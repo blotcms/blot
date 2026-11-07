@@ -5,7 +5,7 @@ const { spawnSync } = require("child_process");
 
 // restore.sh list, with ssh and aws stubbed to print a bucket listing. The
 // stubs log their arguments to calls.log. restore.sh is bash (it runs on an
-// operator's Mac) and the test image has none, so this is skipped there.
+// maintainer's Mac) and the test image has none, so this is skipped there.
 describe("restore.sh", function () {
   const SCRIPT = path.join(__dirname, "..", "restore.sh");
   const hasBash = spawnSync("bash", ["-c", "true"]).status === 0;

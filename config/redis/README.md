@@ -2,7 +2,7 @@
 
 Config as code and a few small scripts to build, load and check Blot's Redis
 (`redis6` 6.2.x on Amazon Linux 2023 arm64, RDB persistence, backups to S3).
-Everything runs from the operator's Mac over ssh; nothing here is used by the
+Everything runs from the maintainer's Mac over ssh; nothing here is used by the
 app. Part of blotcms/blot#2041.
 
 Production Redis runs on the one production host, together with both units
@@ -319,7 +319,7 @@ stops the local prune.
 - The key can only write. Create it with the CLI, because the console's "Write
   Only" key type also grants delete and lifecycle rights:
   `b2 key create --bucket <bucket> <name> writeFiles,listBuckets`.
-- A separate read key stays on the operator's machine, never on a server. It
+- A separate read key stays on the maintainer's machine, never on a server. It
   is what a recovery uses when AWS is unavailable. Create it like the write
   key, with read capabilities:
   `b2 key create --bucket <bucket> <name> listBuckets,listFiles,readFiles`.

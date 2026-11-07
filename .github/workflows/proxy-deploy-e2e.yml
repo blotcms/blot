@@ -306,7 +306,7 @@ jobs:
           grep -q "refusing to stop blot-blue" refuse.log
           [ "$(docker inspect -f '{{.Id}} {{.State.StartedAt}}' blot-blue)" = "$blue" ]
           [ "$(docker ps -a --format '{{.Names}}' | grep -Ec '^blot-(blue|green)(-previous)?$')" = 2 ]
-          # what the operator does (and the health cron does within a minute)
+          # what the maintainer does (and the health cron does within a minute)
           docker restart --time 40 blot-green >/dev/null
           for i in $(seq 1 60); do docker exec blot-green curl -fsS -o /dev/null --unix-socket /run/openresty/health.sock http://localhost/health && break; sleep 1; done
           bash proxy/deploy/blue-green.sh "$UNIT_A"

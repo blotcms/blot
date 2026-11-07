@@ -45,7 +45,7 @@ up() {
   fi
 
   if ! curl -ksf --max-time 5 https://local.blot/health >/dev/null; then
-    echo "https://local.blot is not up. Ask the operator to run 'npm start'." >&2
+    echo "https://local.blot is not up. Ask the maintainer to run 'npm start'." >&2
     exit 1
   fi
 

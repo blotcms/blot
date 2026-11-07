@@ -289,7 +289,7 @@ refused "<old> and <new> being one instance is refused"
 has "and says so" "$OUT" "same instance"
 STATUS=0
 OUT=$(W=$W PATH="$TMP/bin:$PATH" "$CYCLE" --drill replicate old new 2>&1 < /dev/null) || STATUS=$?
-refused "AWS_PROFILE and AWS_REGION are the operator's to set"
+refused "AWS_PROFILE and AWS_REGION are the maintainer's to set"
 
 echo "# the time window"
 for t in 0100 0159 0045 0500 0559 0445; do
@@ -755,7 +755,7 @@ refused "something that is not an instance ID is refused"
 echo True > "$W/protection"
 run "${FINISH[@]}" --old-instance i-0aaa --old-instance i-0bbb --yes finish old new
 refused "termination protection stops it"
-has "with the command for the operator" "$OUT" "--no-disable-api-termination"
+has "with the command for the maintainer" "$OUT" "--no-disable-api-termination"
 lacks "which it does not run" "$CALLS" "modify-instance-attribute"
 lacks "and it terminates nothing" "$CALLS" "terminate-instances"
 echo False > "$W/protection"

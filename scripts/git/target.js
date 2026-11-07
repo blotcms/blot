@@ -1,4 +1,4 @@
-// The command line of the git store's operator scripts (import-repo.js,
+// The command line of the git store's maintainer scripts (import-repo.js,
 // rewrite-repo.js): parsing, and the object store they act on. The target is
 // always explicit: a local directory (--dir) or an S3 bucket (--bucket, with
 // --prefix, --endpoint and --region). There is no default bucket.

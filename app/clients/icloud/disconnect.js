@@ -31,7 +31,7 @@ module.exports = promiseOnly(async function disconnect(blogID) {
       },
     };
 
-    // Structured event for deferred cleanup / operator follow-up.
+    // Structured event for deferred cleanup / maintainer follow-up.
     console.warn(
       "icloud-disconnect-remote-failed",
       JSON.stringify(remoteWarning)

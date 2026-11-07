@@ -2,14 +2,14 @@
 
 ## Default site and folder-operation shorthand
 
-- Unless the operator indicates another site, the default blog to edit is the dashboard site with handle `local`.
-- When the operator asks to “load in the `david` folder,” this means the complete folder-replacement task: resolve the `local` blog ID, copy the contents of `app/templates/folders/david/` into that blog’s source directory, `data/local-sources/<handle>/` (the Local client copies it into the blog's folder in the bucket), replacing the existing contents, then wait for the watcher/rebuild to finish and verify the rendered site. If another blog handle is specified, use that handle instead of `local`.
-- When the operator asks to “clear the folder,” remove everything inside the validated source directory `data/local-sources/<handle>/`, including hidden files and nested directories, but leave the source folder itself in place. Use `local` unless another blog handle is specified, then wait for the watcher/rebuild to finish and verify that the live site and Archives reflect the empty source.
+- Unless the maintainer indicates another site, the default blog to edit is the dashboard site with handle `local`.
+- When the maintainer asks to “load in the `david` folder,” this means the complete folder-replacement task: resolve the `local` blog ID, copy the contents of `app/templates/folders/david/` into that blog’s source directory, `data/local-sources/<handle>/` (the Local client copies it into the blog's folder in the bucket), replacing the existing contents, then wait for the watcher/rebuild to finish and verify the rendered site. If another blog handle is specified, use that handle instead of `local`.
+- When the maintainer asks to “clear the folder,” remove everything inside the validated source directory `data/local-sources/<handle>/`, including hidden files and nested directories, but leave the source folder itself in place. Use `local` unless another blog handle is specified, then wait for the watcher/rebuild to finish and verify that the live site and Archives reflect the empty source.
 - Treat the replacement as exact: include all source-folder contents, including hidden files, and clear only the validated destination folder. Confirm the source and destination paths before removing existing destination contents.
 
 ## Edit, fork, and preview
 
-When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use the operator's local `preview` skill (`~/.claude/skills/preview/SKILL.md`): read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not ask for `https://local.blot` or use it directly as the worktree preview. You must use host access to access the local server.
+When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use the maintainer's local `preview` skill (`~/.claude/skills/preview/SKILL.md`): read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not ask for `https://local.blot` or use it directly as the worktree preview. You must use host access to access the local server.
 
 ## Editing discipline
 

@@ -321,7 +321,7 @@ const resyncRecentSyncsOnStartup = async () => {
         continue;
       }
       // Runs on every restart, so only log what Fix() repaired - the
-      // hourly sweep is what reports repairs to the operator.
+      // hourly sweep is what reports repairs to the maintainer.
       const fixed = await fixBlog(blog);
       const repaired = syncReport.summarize(fixed.report);
       if (repaired) {

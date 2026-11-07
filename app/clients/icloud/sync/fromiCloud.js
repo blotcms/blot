@@ -213,7 +213,7 @@ module.exports = async (blogID, publish, update) => {
               summary.skipped += 1;
 
               // Deliberately not counted as a missed change: a file Blot
-              // can't sync anyway isn't worth an operator alert, and
+              // can't sync anyway isn't worth a maintainer alert, and
               // counting it would need shared counting and template changes.
               try {
                 let descendants = [];

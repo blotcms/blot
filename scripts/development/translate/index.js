@@ -16,7 +16,7 @@ const User = require("models/user");
 const Blog = require("models/blog");
 const Template = require("models/template");
 const client = require("models/client");
-// The Local client's source directory is where the operator and the scripts
+// The Local client's source directory is where the maintainer and the scripts
 // edit files; the client copies them into the blog's folder
 const sourceDirectory = require("clients/local/source").directory;
 const nsv = require("helper/nsv");
@@ -158,7 +158,7 @@ function fill(template, values) {
 }
 
 async function writeReadme(source, destination, values) {
-  // Never clobber: the agent and the operator both edit these, and a re-run
+  // Never clobber: the agent and the maintainer both edit these, and a re-run
   // must not throw that away.
   if (await fs.pathExists(destination)) return false;
 

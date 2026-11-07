@@ -172,7 +172,7 @@ Exported from `index.js`:
 2. POST `/disconnect` calls the iCloud client's `disconnect()` function.
 3. `disconnect()` attempts to notify macserver at `/disconnect` (best-effort).
 4. Locally deletes database entry and removes client assignment from blog.
-5. If macserver notification fails, a warning is logged for operator follow-up; local cleanup always succeeds.
+5. If macserver notification fails, a warning is logged for maintainer follow-up; local cleanup always succeeds.
 
 ## Integration Points
 
@@ -296,7 +296,7 @@ The macserver failure flow:
 3. The sync lock prevents continued attempts until the server recovers.
 
 Disconnection failures:
-1. If macserver disconnection fails, a warning is logged in a structured format for operator follow-up.
+1. If macserver disconnection fails, a warning is logged in a structured format for maintainer follow-up.
 2. The blog is always disconnected locally, even if the remote cleanup fails.
 
 ## Testing error states locally

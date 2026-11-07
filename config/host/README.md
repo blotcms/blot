@@ -94,7 +94,7 @@ Moving to a new host: see [Moving to a new host](#moving-to-a-new-host).
 Do not reboot the production host until there are several hosts sharing the
 load (planned). With one host a reboot is downtime: Redis and both units go
 down together. Kernel and other OS security updates that need a reboot wait for
-that, unless the operator decides otherwise for a specific critical advisory.
+that, unless the maintainer decides otherwise for a specific critical advisory.
 Updates that do not need a reboot can be applied as usual. A new host from the
 host cycle is how the OS gets refreshed in the meantime.
 

@@ -5,7 +5,7 @@ and get back a folder of Blot-compatible Markdown and image files.
 
 It is the companion to `scripts/development/translate`, which builds a *template*
 against a folder of content. The two are deliberately separate tools:
-this one produces content, that one produces a design. The operator moves the
+this one produces content, that one produces a design. The maintainer moves the
 output of this script into a site folder scaffolded by that one.
 
 **Scope**
@@ -14,10 +14,10 @@ output of this script into a site folder scaffolded by that one.
   using an AI agent (the Claude Code CLI) for extraction and editorial judgement.
 - **Out of scope: platform exports.** WordPress, Squarespace, Blogger and Are.na
   already have working importers in Blot's dashboard. If the source site is one of
-  those, the operator uses the dashboard importer and downloads the resulting ZIP —
+  those, the maintainer uses the dashboard importer and downloads the resulting ZIP —
   no new code needed. This script is for sites with **no export available**, which
   is exactly why the agent is worth the cost.
-- **Out of scope: the dashboard.** This is an operator-run script and will stay
+- **Out of scope: the dashboard.** This is a maintainer-run script and will stay
   one. An agent-driven importer running server-side, per user, against untrusted
   third-party HTML, with cost attached, is a different and much larger problem.
 - **Out of scope: templates.** The output is content only. It renders against
@@ -45,7 +45,7 @@ npm run dynamic-importer <url>
   D. Extract       agent turns records into `post` objects            (§5)
   E. Build         post objects → shared import waterfall → files     (§4)
   F. Verify        render in the scratch site; agent checks fidelity  (§6.4)
-  G. Hand off      operator copies the content into a translate site
+  G. Hand off      maintainer copies the content into a translate site
 ```
 
 The single most important design fact: **step E reuses Blot's existing import
@@ -577,7 +577,7 @@ and funnel each item through the same waterfall.
 existing source consumes a structured export or an API, never rendered HTML.
 
 **These four are out of scope as *features*, but they are the reference for how a
-source is built.** If the operator's target site is WordPress, Squarespace, Blogger
+source is built.** If the maintainer's target site is WordPress, Squarespace, Blogger
 or Are.na, the answer is Blot's dashboard importer, not this script (§0). Their
 value here is the shape: each produces `post` objects and hands them to the same
 waterfall, and `sources/wordpress/item/tidy.js` in particular is a catalogue of the
@@ -660,7 +660,7 @@ the whole point of routing through the pipeline.
    mode that would be hardest to notice. The warning at 1000 pages is the
    backstop against a crawler that has escaped its boundary (a calendar,
    a paginated tag index, an infinite filter permutation) — print it, keep going,
-   and let the operator interrupt. Consider also logging progress every N pages so
+   and let the maintainer interrupt. Consider also logging progress every N pages so
    a long crawl does not look hung.
 
    None of the existing importers rate-limit at all, because they consume
@@ -751,7 +751,7 @@ Flow:
 6. wait for the rebuild to settle — poll `blog.cacheID` until stable (§1.2).
 7. agent verifies conversion fidelity against the live source (§6.4); fixes
    class-wide problems; commits.
-8. print the folder path and the scratch site URL, and remind the operator that
+8. print the folder path and the scratch site URL, and remind the maintainer that
    the content is ready to copy into a `translate` site.
 
 ### 6.2 Invoking the Claude Code CLI
@@ -762,7 +762,7 @@ Summary:
 
 - `claude -p --output-format json --permission-mode acceptEdits`, run **on the
   host** (the container has no `claude` binary and no credentials).
-- `--session-id` on the first run, `--resume` on subsequent turns so operator
+- `--session-id` on the first run, `--resume` on subsequent turns so maintainer
   feedback lands in a session that remembers what it extracted.
 - **Blocking:** non-zero exit is fatal; plus an explicit `.verification/BLOCKED.txt`
   the agent writes when it cannot proceed, which the wrapper checks and surfaces as
@@ -829,7 +829,7 @@ Committing the raw crawl output first (§6.6) is what makes step 3 safe: the fix
 pass is a reviewable diff over known-original input, and a bad pass is a revert.
 
 `.verification/` holds the screenshots, the crawl records and the agent's notes.
-It is dot-named so macOS Finder's select-all excludes it when the operator zips or
+It is dot-named so macOS Finder's select-all excludes it when the maintainer zips or
 copies the content out — see the translate research §6.4 for the verified
 behaviour, which is identical here.
 
@@ -869,7 +869,7 @@ watcher, so git operations no longer trigger sync cycles (measured: 42 → 1 for
 Add a `.gitignore` excluding `.verification/` — the screenshots and crawl records
 are large and regenerated every run.
 
-History stays local; it is a working tool, not part of what the operator hands on.
+History stays local; it is a working tool, not part of what the maintainer hands on.
 
 ### 6.7 Forcing a rebuild if the watcher misses changes
 
@@ -896,7 +896,7 @@ also calls `sync/fix`.
 | Question | Decision | Where |
 |---|---|---|
 | Scope | Crawling only. Platform exports go through Blot's existing dashboard importers | §0 |
-| Dashboard feature? | **No** — operator script, permanently | §0 |
+| Dashboard feature? | **No** — maintainer script, permanently | §0 |
 | Output | A folder of content, plus a throwaway scratch site for inspection | §0 |
 | Dev account | `example@example.com` — a hardcoded literal, not config | §2.1 |
 | Starting the stack | No. Preflight against `/health` and abort | §1.5 |
@@ -932,7 +932,7 @@ also calls `sync/fix`.
 3. **How much cleaning Node should do before the agent sees the HTML** (§5.1).
    Too little wastes tokens on boilerplate; too much destroys content the agent
    needed. Start conservative.
-4. **What the handoff to `translate` looks like in practice** — the operator copies
+4. **What the handoff to `translate` looks like in practice** — the maintainer copies
    content out of this scratch folder into a translate-scaffolded one. Worth a
    printed one-liner (`cp -R` excluding `Templates/`, `.git`, `.verification/`),
    or a small helper, rather than leaving it to be worked out each time.

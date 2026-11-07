@@ -3,7 +3,7 @@
 // never loses an object: compaction keeps unreachable ones, and the sweep only
 // deletes packs no kept manifest names. So when a user scrubs something from
 // their history (a leaked secret, a file they must remove) and force pushes,
-// the old objects stay until this is run. It is an operator's tool
+// the old objects stay until this is run. It is a maintainer's tool
 // (scripts/git/rewrite-repo.js), never run on the push path.
 //
 //   const result = await rewriteRepo({ store, cache, lock });
@@ -440,7 +440,7 @@ const second = (ms) => (Number.isFinite(ms) ? Math.floor(ms / 1000) : Infinity);
 //
 // A clone or fetch still streaming an old pack fails part way, with an error
 // to its client, which tries again against the new manifest. That is the cost
-// of deleting now, and why purging is the operator's choice. Safe to run
+// of deleting now, and why purging is the maintainer's choice. Safe to run
 // again: what is gone is skipped.
 //
 // Resolves with { packs, bytes, spared, missing }: the packs deleted, their

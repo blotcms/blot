@@ -198,7 +198,7 @@ at sync/build time instead.
   `{blogID}/git/` are denied outside the AWS account. Asset
   keys are `{blogID}/{path}`, identical to the CDN path, which is what lets
   Bunny fetch them with no rewriting. `config/storage-bucket`
-  has the setup script and the operator steps.
+  has the setup script and the maintainer steps.
 - **S3 is the only store; local disk is only a staging area.** A tool which
   needs a local path (sharp, pandoc, puppeteer) writes to `path(blogID,
   relPath)`, a path under `{tmp}/storage-assets-staging/{blogID}/` on the

@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Read-only views of the production host, over `ssh blot`. Every subcommand runs a
 # fixed remote command that changes nothing, so this one script can be allowlisted
-# for agents while every other production command still needs the operator's OK.
+# for agents while every other production command still needs the maintainer's OK.
 # Arguments are validated here, and grep patterns travel over stdin rather than in
 # the remote command line, so no argument can add a command on the host. Filter the
 # output locally (grep, awk, node) rather than with remote pipes.
@@ -50,7 +50,7 @@ set -euo pipefail
 #   --rotated                      error-log only: include the rotated (and gzipped) files
 #
 # Writes nothing on the host. Anything else (scripts in a container, docker cp,
-# redis writes) is a normal production command and needs the operator's OK.
+# redis writes) is a normal production command and needs the maintainer's OK.
 
 LOG_DIRECTORY=/var/instance-ssd/logs
 UNITS="blue green"

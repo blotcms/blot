@@ -71,7 +71,7 @@ main checkout, gitignored with the raw `scan.json` and `templates.json`: the
 repo is public, so blog names and real sizes stay out of it. To refresh the
 profile, rerun an equivalent scan (a throwaway script from the scratchpad,
 copied into a production container and run read-only as uid 1000, asking the
-operator before every command; filter Redis keys by `TYPE` first), update
+maintainer before every command; filter Redis keys by `TYPE` first), update
 the findings there, and round the new shape into `profile.js`.
 
 ## What it measures

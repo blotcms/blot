@@ -61,7 +61,7 @@ const walk = async (blogID, publish, heldLock) => {
   }
 };
 
-// Event loop delay while one blog was validated, so the operator can watch
+// Event loop delay while one blog was validated, so the maintainer can watch
 // the impact on the shared Redis connection (and the macserver, via
 // duration) after it is switched on, and find which blog and phase block the
 // loop. Every blog is logged so quiet blogs are a baseline. entryCount is
