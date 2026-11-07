@@ -140,14 +140,14 @@
 /* The one row of an empty list (the folder, or a filter with nothing in
    it): its message is centred in the whole list area, however tall the box
    has grown. It takes no clicks, so the column headers it lies over still
-   sort and resize. */
-.directory-scroll {
-  display: flex;
-  flex-direction: column;
-}
+   sort and resize. The list area (.directory-scroll, positioned) fills the
+   box; the table keeps its own height, since a stretched table gives the
+   extra height to its header row. */
 
-.directory-list.empty {
-  flex: 1 0 auto;
+/* Rows are positioned (for their menus); the empty one mustn't be, or the
+   message would be placed against the row rather than the list area */
+.directory-list.empty tbody tr {
+  position: static;
 }
 
 .directory-list .directory-list__empty {
