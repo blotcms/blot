@@ -2,11 +2,11 @@ const key = require("./key");
 const client = require("models/client");
 const getMetadata = require("./getMetadata");
 const getView = require("./getView");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 const updateCdnManifest = require("./util/updateCdnManifest");
 const cacheID = require("./util/cacheID");
 
-module.exports = withCallback(async function dropView(templateID, viewName) {
+module.exports = promiseOnly(async function dropView(templateID, viewName) {
   const multi = client.multi();
 
   const metadata = await getMetadata(templateID);

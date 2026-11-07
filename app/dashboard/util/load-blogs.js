@@ -22,15 +22,18 @@ module.exports = async function (req, res, next) {
             }
 
             // Fetch template metadata
-            Template.getMetadata(blog.template, (err, metadata) => {
-              if (metadata) {
-                // Assign the metadata and construct the previewURL
-                blog.template = metadata;
-                blog.previewURL = `https://preview-of-${metadata.owner === blog.id ? "my-" : ""}${metadata.slug}-on-${blog.handle}.${config.host}?screenshot=true`;
-              }
+            // (a failed lookup leaves the blog's template unextended)
+            Template.getMetadata(blog.template)
+              .catch(() => undefined)
+              .then((metadata) => {
+                if (metadata) {
+                  // Assign the metadata and construct the previewURL
+                  blog.template = metadata;
+                  blog.previewURL = `https://preview-of-${metadata.owner === blog.id ? "my-" : ""}${metadata.slug}-on-${blog.handle}.${config.host}?screenshot=true`;
+                }
 
-              resolve(blog);
-            });
+                resolve(blog);
+              });
           });
         });
       })

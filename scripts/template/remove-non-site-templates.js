@@ -2,7 +2,6 @@ const config = require("config");
 const Blog = require("models/blog");
 const Template = require("models/template");
 const eachTemplate = require("../each/template");
-const { promisify } = require("util");
 
 const DEFAULT_TEMPLATE_ID = "SITE:blog";
 
@@ -89,7 +88,7 @@ async function dropTemplate(template) {
     template.slug || template.id.split(":").slice(1).join(":");
 
   try {
-    await promisify(Template.drop)(template.owner, templateName);
+    await Template.drop(template.owner, templateName);
   } catch (err) {
     console.error(`Error dropping template ${template.id}:`, err);
     return;

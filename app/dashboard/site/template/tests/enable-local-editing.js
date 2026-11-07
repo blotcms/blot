@@ -5,17 +5,11 @@ describe("enable local editing", function () {
   const enableLocalEditing = require("../save/enable-local-editing");
 
   function createTemplate(blogID) {
-    return new Promise((resolve, reject) =>
-      Template.create(blogID, "Local " + Date.now(), {}, (err, t) =>
-        err ? reject(err) : resolve(t)
-      )
-    );
+    return Template.create(blogID, "Local " + Date.now(), {});
   }
 
   function getMetadata(id) {
-    return new Promise((resolve, reject) =>
-      Template.getMetadata(id, (e, m) => (e ? reject(e) : resolve(m)))
-    );
+    return Template.getMetadata(id);
   }
 
   it("turns local editing off and passes on the error if the folder write fails", async function () {
@@ -43,13 +37,10 @@ describe("enable local editing", function () {
     const write = blogFolder.write;
     const failure = new Error("insufficient_space");
 
-    await new Promise((resolve, reject) =>
-      Template.setView(
-        template.id,
-        { name: "entry.html", content: "{{entry.html}}" },
-        (err) => (err ? reject(err) : resolve())
-      )
-    );
+    await Template.setView(template.id, {
+      name: "entry.html",
+      content: "{{entry.html}}",
+    });
 
     // package.json is written first and reaches the folder, then the view's
     // write fails

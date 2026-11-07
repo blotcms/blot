@@ -1,14 +1,13 @@
-const { promisify } = require("util");
-
 describe("template", function () {
   require("./setup")({ createTemplate: true });
 
-  const setMetadata = promisify(require("../index").setMetadata);
-  const getMetadata = promisify(require("../index").getMetadata);
+  const setMetadata = require("../index").setMetadata;
+  const getMetadata = require("../index").getMetadata;
+  const { promisify } = require("util");
   const getBlog = promisify(require("models/blog").get);
   const setBlog = promisify(require("models/blog").set);
 
-  it("returns a promise when given no callback, and calls back when given one", async function () {
+  it("returns a promise, and throws when given a callback", async function () {
     const direct = require("../index").setMetadata;
 
     expect(await direct(this.template.id, { description: "one" })).toBe(true);
@@ -17,14 +16,14 @@ describe("template", function () {
     ).toBeUndefined();
 
     const template = this.template;
-    const viaCallback = await new Promise(function (resolve, reject) {
-      direct(template.id, { description: "two" }, function (err, changes) {
-        if (err) return reject(err);
-        resolve(changes);
-      });
-    });
+    // The callback form is gone: passing one throws instead of calling back.
+    try {
+      await direct(template.id, { description: "two" }, function () {});
+      fail("should have thrown");
+    } catch (err) {
+      expect(err.message).toMatch(/no longer takes a callback/);
+    }
 
-    expect(viaCallback).toBe(true);
     await expectAsync(direct(template.id, null)).toBeRejected();
   });
 

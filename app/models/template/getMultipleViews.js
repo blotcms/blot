@@ -1,28 +1,21 @@
 var getView = require("./getView");
 
-module.exports = function getMultipleViews(templateName, viewNames, callback) {
-  var totalViews = viewNames.length,
-    views = {};
+// Resolves to the views by name. A view which can't be read is left out:
+// we don't care if one of the partials does not exist.
+module.exports = async function getMultipleViews(templateName, viewNames) {
+  var views = {};
 
-  if (!totalViews) onFinish();
+  await Promise.all(
+    viewNames.map(async function (viewName) {
+      try {
+        var view = await getView(templateName, viewName);
+        if (view && view.name) views[view.name] = view;
+      } catch (err) {
+        // TO DO collect missing partials or views and expose them to the
+        // caller. Right now nothing happens.
+      }
+    })
+  );
 
-  for (var i in viewNames) getView(templateName, viewNames[i], onGet);
-
-  function onGet(err, view) {
-    // TO DO collect missing
-    // partials or views and expose
-    // them to the callback. Right now
-    // nothing happens.
-    // if (err) console.log(err);
-    if (view && view.name) views[view.name] = view;
-    if (!--totalViews) onFinish();
-  }
-
-  function onFinish() {
-    // We don't pass errors
-    // since we don't care
-    // if one of the partials does
-    // not exist.
-    callback(null, views);
-  }
+  return views;
 };

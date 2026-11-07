@@ -2,9 +2,9 @@ var key = require("./key");
 var client = require("models/client");
 var deserialize = require("./util/deserialize");
 var metadataModel = require("./metadataModel");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
-module.exports = withCallback(async function getMetadata(id) {
+module.exports = promiseOnly(async function getMetadata(id) {
   var metadata = await client.hGetAll(key.metadata(id));
   var rawHasFields = metadata && Object.keys(metadata).length > 0;
 

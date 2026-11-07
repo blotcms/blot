@@ -4,10 +4,9 @@ describe("template", function () {
   var create = require("models/template/index").create;
   var getTemplateList = require("models/template/index").getTemplateList;
   var makeID = require("models/template/index").makeID;
-  var { each } = require("../../../../scripts/tests/util/callbacks");
 
-  it("creates a template", function (done) {
-    create(this.blog.id, "template", {}, done);
+  it("creates a template", async function () {
+    await create(this.blog.id, "template", {});
   });
 
   // writeToFolder names a template's on-disk directory after its stored slug
@@ -15,54 +14,45 @@ describe("template", function () {
   // caller-supplied slug resolves to a different id than the template's own,
   // a locally edited copy is read back from its folder as another template
   // and overwrites it. The stored slug must always round-trip to the id.
-  it("keeps the stored slug in step with the id", function (done) {
+  it("keeps the stored slug in step with the id", async function () {
     var blogID = this.blog.id;
 
     // A slug long enough that makeID's 30-character truncation shortens it,
     // deliberately unrelated to the name so the two cannot coincide.
-    create(
-      blogID,
-      "A perfectly ordinary name",
-      { slug: "a-deliberately-divergent-slug-that-is-really-quite-long" },
-      function (err, template) {
-        if (err) return done.fail(err);
+    const template = await create(blogID, "A perfectly ordinary name", {
+      slug: "a-deliberately-divergent-slug-that-is-really-quite-long",
+    });
 
-        expect(makeID(blogID, template.slug)).toEqual(template.id);
-        expect(template.slug).toEqual(
-          template.id.split(":").slice(1).join(":")
-        );
-        done();
-      }
-    );
+    expect(makeID(blogID, template.slug)).toEqual(template.id);
+    expect(template.slug).toEqual(template.id.split(":").slice(1).join(":"));
   });
 
   // A local template is named after its folder, so create() is handed the
   // folder name as the slug. That name need not be slug-shaped, but it must
   // still resolve to the template's id or every folder sync would treat it
   // as a different template.
-  it("leaves a folder-name slug which already resolves to the id untouched", function (done) {
+  it("leaves a folder-name slug which already resolves to the id untouched", async function () {
     var blogID = this.blog.id;
     var folderName = "My Local Theme";
 
-    create(
-      blogID,
-      folderName,
-      { slug: folderName, localEditing: true },
-      function (err, template) {
-        if (err) return done.fail(err);
+    const template = await create(blogID, folderName, {
+      slug: folderName,
+      localEditing: true,
+    });
 
-        expect(makeID(blogID, template.slug)).toEqual(template.id);
-        expect(template.slug).toEqual(folderName);
-        done();
-      }
-    );
+    expect(makeID(blogID, template.slug)).toEqual(template.id);
+    expect(template.slug).toEqual(folderName);
   });
 
-  it("passes an error to the callback if you try to create a template with no name", function (done) {
-    create(this.blog.id, null, null, function (err) {
-      expect(err).toEqual(jasmine.any(Error));
-      done();
-    });
+  it("passes an error to the callback if you try to create a template with no name", async function () {
+    let err;
+    try {
+      await create(this.blog.id, null, null);
+      fail("should have thrown");
+    } catch (e) {
+      err = e;
+    }
+    expect(err).toEqual(jasmine.any(Error));
   });
 
   it("returns a promise when given no callback", async function () {
@@ -74,67 +64,55 @@ describe("template", function () {
     );
   });
 
-  it("creates a template whose name contains a slash", function (done) {
+  it("creates a template whose name contains a slash", async function () {
     var test = this;
     var name = "template/folder";
-    create(test.blog.id, name, {}, function (err) {
-      if (err) return done.fail(err);
-      getTemplateList(test.blog.id, function (err, templates) {
-        if (err) return done.fail(err);
+    await create(test.blog.id, name, {});
+    const templates = await getTemplateList(test.blog.id);
 
-        expect(
-          templates.filter(function (template) {
-            return template.name === name;
-          }).length
-        ).toEqual(1);
-
-        done();
-      });
-    });
+    expect(
+      templates.filter(function (template) {
+        return template.name === name;
+      }).length
+    ).toEqual(1);
   });
 
-  it("creates multiple templates in parallel", function (done) {
+  it("creates multiple templates in parallel", async function () {
     var test = this;
     var templateNames = [];
 
     while (templateNames.length < 1000)
       templateNames.push(test.fake.random.uuid());
 
-    each(
-      templateNames,
-      function (templateName, next) {
-        create(test.blog.id, templateName, {}, next);
-      },
-      function (err) {
-        if (err) return done.fail(err);
-        getTemplateList(test.blog.id, function (err, templates) {
-          if (err) return done.fail(err);
-
-          expect(
-            templates.filter(function (template) {
-              return templateNames.indexOf(template.name) > -1;
-            }).length
-          ).toEqual(1000);
-
-          done();
-        });
-      }
+    await Promise.all(
+      templateNames.map((templateName) =>
+        create(test.blog.id, templateName, {})
+      )
     );
+    const templates = await getTemplateList(test.blog.id);
+
+    expect(
+      templates.filter(function (template) {
+        return templateNames.indexOf(template.name) > -1;
+      }).length
+    ).toEqual(1000);
   });
 
-  it("returns an error if you try to create a template which already exists", function (done) {
+  it("returns an error if you try to create a template which already exists", async function () {
     var name = "template";
     var test = this;
-    create(this.blog.id, name, {}, function (err) {
-      if (err) return done.fail(err);
-      create(test.blog.id, name, {}, function (err) {
-        expect(err instanceof Error).toEqual(true);
-        done();
-      });
-    });
+    await create(this.blog.id, name, {});
+    let err;
+    try {
+      await create(test.blog.id, name, {});
+      fail("should have thrown");
+    } catch (e) {
+      err = e;
+    }
+    expect(err instanceof Error).toEqual(true);
   });
 
-  it("creates a template from an existing template", function (done) {
+  it("creates a template from an existing template", async function () {
     var test = this;
     var blogID = test.blog.id;
     var original = "template";
@@ -142,41 +120,23 @@ describe("template", function () {
     var description = "A test template description";
     var originalTemplate, clonedTemplate;
 
-    create(
-      blogID,
-      original,
-      { locals: { description: description } },
-      function (err) {
-        if (err) return done.fail(err);
+    await create(blogID, original, {
+      locals: { description: description },
+    });
 
-        getTemplateList(test.blog.id, function (err, templates) {
-          originalTemplate = templates.filter(function (template) {
-            return template.name === original;
-          })[0];
+    let templates = await getTemplateList(test.blog.id);
+    originalTemplate = templates.filter(function (template) {
+      return template.name === original;
+    })[0];
 
-          create(
-            blogID,
-            cloned,
-            { cloneFrom: originalTemplate.id },
-            function (err) {
-              if (err) return done.fail(err);
+    await create(blogID, cloned, { cloneFrom: originalTemplate.id });
 
-              getTemplateList(test.blog.id, function (err, templates) {
-                if (err) return done.fail(err);
+    templates = await getTemplateList(test.blog.id);
+    clonedTemplate = templates.filter(function (template) {
+      return template.name === cloned;
+    })[0];
 
-                clonedTemplate = templates.filter(function (template) {
-                  return template.name === cloned;
-                })[0];
-
-                expect(originalTemplate.locals).toEqual(clonedTemplate.locals);
-
-                done();
-              });
-            }
-          );
-        });
-      }
-    );
+    expect(originalTemplate.locals).toEqual(clonedTemplate.locals);
   });
 
   // There is a bug with the clone function at the moment
@@ -184,16 +144,17 @@ describe("template", function () {
   // case of an attempt to clone a non-existent template.
   // if (err || !allViews)  where all views is {}
   // Fix this in future and enable the spec.
-  xit("returns an error if you try to clone a template that does not exist", function (done) {
-    create(
-      this.blog.id,
-      "template",
-      { cloneFrom: "nonexistent:template" },
-      function (err) {
-        console.log(err);
-        expect(err instanceof Error).toBe(true);
-        done();
-      }
-    );
+  xit("returns an error if you try to clone a template that does not exist", async function () {
+    let err;
+    try {
+      await create(this.blog.id, "template", {
+        cloneFrom: "nonexistent:template",
+      });
+      fail("should have thrown");
+    } catch (e) {
+      console.log(e);
+      err = e;
+    }
+    expect(err instanceof Error).toBe(true);
   });
 });

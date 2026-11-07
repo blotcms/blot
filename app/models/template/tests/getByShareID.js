@@ -4,17 +4,12 @@ describe("template", function () {
   var createShareID = require("../index").createShareID;
   var getByShareID = require("../index").getByShareID;
 
-  it("getByShareID works", function (done) {
+  it("getByShareID works", async function () {
     var test = this;
-    createShareID(test.template.id, function (err, shareID) {
-      if (err) return done.fail(err);
-      expect(typeof shareID).toEqual("string");
-      getByShareID(shareID, function (err, template) {
-        if (err) return done.fail(err);
-        expect(template.id).toEqual(test.template.id);
-        expect(template.shareID).toEqual(shareID);
-        done();
-      });
-    });
+    const shareID = await createShareID(test.template.id);
+    expect(typeof shareID).toEqual("string");
+    const template = await getByShareID(shareID);
+    expect(template.id).toEqual(test.template.id);
+    expect(template.shareID).toEqual(shareID);
   });
 });

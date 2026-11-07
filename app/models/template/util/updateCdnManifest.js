@@ -4,7 +4,7 @@ const client = require("models/client");
 const key = require("../key");
 const getMetadata = require("../getMetadata");
 const getView = require("../getView");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 const getAllViews = require("../getAllViews");
 const parseTemplate = require("../parseTemplate");
 const generateCdnUrl = require("./generateCdnUrl");
@@ -391,7 +391,7 @@ async function cleanupOldHash(templateID, target, oldHash) {
   }
 }
 
-module.exports = withCallback(async function updateCdnManifest(templateID) {
+module.exports = promiseOnly(async function updateCdnManifest(templateID) {
   ensure(templateID, "string");
 
   const metadata = await getMetadata(templateID);

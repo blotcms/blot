@@ -2,9 +2,9 @@ var key = require("./key");
 var client = require("models/client");
 var getByShareID = require("./getByShareID");
 var setMetadata = require("./setMetadata");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
-module.exports = withCallback(async function dropShareID(shareID) {
+module.exports = promiseOnly(async function dropShareID(shareID) {
   var template = await getByShareID(shareID);
 
   template.shareID = "";

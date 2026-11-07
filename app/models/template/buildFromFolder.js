@@ -3,7 +3,7 @@ var folder = require("storage/folder");
 var readFromFolder = require("./readFromFolder");
 var getTemplateList = require("./getTemplateList");
 var drop = require("./drop");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var folderRenames = require("./folderRenames");
 var renameLocalTemplate = require("./renameLocalTemplate");
 var makeID = require("./util/makeID");
@@ -15,7 +15,7 @@ var defaults = require("models/blog/defaults");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var clfdate = require("helper/clfdate");
 
-module.exports = withCallback(async function buildFromFolder(blogID) {
+module.exports = promiseOnly(async function buildFromFolder(blogID) {
   ensure(blogID, "string");
 
   var templateDirs = ["/templates", "/Templates"];

@@ -1,6 +1,5 @@
 var getView = require("./getView");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
 var getPartials = require("./getPartials");
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
@@ -19,8 +18,8 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
     .and(viewName, "string")
     .and(callback, "function");
 
-  getView(templateID, viewName, function (err, view) {
-    if (err || !view) return callback(err);
+  getView(templateID, viewName).then(function (view) {
+    if (!view) return callback(null);
 
     // View has:
     //
@@ -37,71 +36,68 @@ module.exports = function getFullView(blogID, templateID, viewName, callback) {
     folderLinkOptions(blogID, templateID, function (err, wrapOptions) {
       if (err) return callback(err);
 
-      withCallback(getPartials)(
+      getPartials(
         blogID,
         templateID,
         view.partials,
         partialContexts,
         "",
-        wrapOptions,
-        function (err, partialsResult) {
-          if (err) return callback(err);
+        wrapOptions
+      ).then(function (partialsResult) {
+        var allPartials = partialsResult.allPartials;
+        var retrieveFromPartials = partialsResult.retrieve;
 
-          var allPartials = partialsResult.allPartials;
-          var retrieveFromPartials = partialsResult.retrieve;
+        // allPartials (object) viewname : viewcontent
 
-          // allPartials (object) viewname : viewcontent
+        // Now we've fetched the partials we need to
+        // append the missing locals in the partials...
+        mergeRetrieve(view.retrieve, retrieveFromPartials);
 
-          // Now we've fetched the partials we need to
-          // append the missing locals in the partials...
-          mergeRetrieve(view.retrieve, retrieveFromPartials);
+        // Backstop: never let projection drop a heavy entry field that is
+        // referenced anywhere in the assembled view + partials bundle.
+        hardenProjectedRetrieve(view.retrieve, view.content, allPartials);
 
-          // Backstop: never let projection drop a heavy entry field that is
-          // referenced anywhere in the assembled view + partials bundle.
-          hardenProjectedRetrieve(view.retrieve, view.content, allPartials);
+        // Whether anything in the bundle can render entries' backlinks;
+        // when not, rendering skips resolving them (blog/render/load).
+        var usesBacklinks = referencedIdentifiers(
+          view.content,
+          allPartials
+        ).has("backlinks");
 
-          // Whether anything in the bundle can render entries' backlinks;
-          // when not, rendering skips resolving them (blog/render/load).
-          var usesBacklinks = referencedIdentifiers(
+        // The render source: on the blog's own template, literal links to
+        // files in its folder are wrapped in {{#cdn}} (see
+        // util/resolveFolderLinks), and the targets added to retrieve.cdn
+        // so the helper is loaded. view.content, which everything above
+        // analyses, is left as the author wrote it.
+        var source = view.content;
+
+        if (wrapOptions) {
+          var wrapped = wrapFolderLinks(
             view.content,
-            allPartials
-          ).has("backlinks");
+            Object.assign({ viewName: view.name }, wrapOptions)
+          );
 
-          // The render source: on the blog's own template, literal links to
-          // files in its folder are wrapped in {{#cdn}} (see
-          // util/resolveFolderLinks), and the targets added to retrieve.cdn
-          // so the helper is loaded. view.content, which everything above
-          // analyses, is left as the author wrote it.
-          var source = view.content;
+          source = wrapped.content;
 
-          if (wrapOptions) {
-            var wrapped = wrapFolderLinks(
-              view.content,
-              Object.assign({ viewName: view.name }, wrapOptions)
-            );
-
-            source = wrapped.content;
-
-            if (wrapped.targets.length)
-              view.retrieve = mergeRetrieve(view.retrieve, {
-                cdn: wrapped.targets,
-              });
-          }
-
-          var response = [
-            view.locals,
-            allPartials,
-            view.retrieve,
-            mime.lookup(view.name) || "text/html",
-            source,
-            usesBacklinks,
-          ];
-
-          return callback(null, response);
+          if (wrapped.targets.length)
+            view.retrieve = mergeRetrieve(view.retrieve, {
+              cdn: wrapped.targets,
+            });
         }
-      );
+
+        var response = [
+          view.locals,
+          allPartials,
+          view.retrieve,
+          mime.lookup(view.name) || "text/html",
+          source,
+          usesBacklinks,
+        ];
+
+        return callback(null, response);
+      }, callback);
     });
-  });
+  }, callback);
 };
 
 // Folder links are only wrapped when the blog rendering the view owns the

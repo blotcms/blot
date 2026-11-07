@@ -1,8 +1,8 @@
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var setView = require("./setView");
 
-module.exports = withCallback(async function setMultipleViews(name, views) {
+module.exports = promiseOnly(async function setMultipleViews(name, views) {
   ensure(name, "string").and(views, "object");
 
   var error;

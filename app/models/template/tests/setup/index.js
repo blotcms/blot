@@ -33,44 +33,20 @@ module.exports = function setup(options) {
 
   // Create a test template
   if (options.createTemplate) {
-    beforeEach(function (done) {
+    beforeEach(async function () {
       var test = this;
       var name = "template";
-      create(test.blog.id, name, {}, function (err) {
-        if (err) return done(err);
-        getTemplateList(test.blog.id, function (err, templates) {
-          test.template = templates.filter(function (template) {
-            return template.name === name && template.owner === test.blog.id;
-          })[0];
-          done();
-        });
-      });
+      await create(test.blog.id, name, {});
+      var templates = await getTemplateList(test.blog.id);
+      test.template = templates.filter(function (template) {
+        return template.name === name && template.owner === test.blog.id;
+      })[0];
     });
 
     beforeEach(function () {
-      this.setView = (view) => {
-        return new Promise((resolve, reject) => {
-          setView(this.template.id, view, (err) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve();
-            }
-          });
-        });
-      };
+      this.setView = (view) => setView(this.template.id, view);
 
-      this.dropView = (view) => {
-        return new Promise((resolve, reject) => {
-          dropView(this.template.id, view, (err) => {
-            if (err) {
-              reject(err);
-            } else {
-              resolve();
-            }
-          });
-        });
-      };
+      this.dropView = (view) => dropView(this.template.id, view);
 
       this.getViewByURL = (url) => getViewByURL(this.template.id, url);
     });
@@ -78,18 +54,15 @@ module.exports = function setup(options) {
 
   // Create a test view
   if (options.createView) {
-    beforeEach(function (done) {
+    beforeEach(async function () {
       var test = this;
       var view = {
         name: "index.html",
         url: "/index",
         content: "<h1>Index page</h1>",
       };
-      setView(test.template.id, view, function (err) {
-        if (err) return done(err);
-        test.view = view;
-        done();
-      });
+      await setView(test.template.id, view);
+      test.view = view;
     });
   }
 };

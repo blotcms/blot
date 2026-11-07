@@ -1,10 +1,8 @@
 describe("template", function () {
-  const { promisify } = require("util");
-
-  const writeToFolder = promisify(require("../index").writeToFolder);
-  const removeFromFolder = promisify(require("../index").removeFromFolder);
-  const setView = promisify(require("../index").setView);
-  const setMetadata = promisify(require("../index").setMetadata);
+  const writeToFolder = require("../index").writeToFolder;
+  const removeFromFolder = require("../index").removeFromFolder;
+  const setView = require("../index").setView;
+  const setMetadata = require("../index").setMetadata;
 
   const folder = require("storage/folder");
 

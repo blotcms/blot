@@ -11,32 +11,14 @@ describe("upload template image", function () {
 
   const ASSETS = "_template_assets";
   const update = (blog, slug, locals) =>
-    new Promise((resolve, reject) =>
-      Template.update(blog.id, slug, { locals }, (error) =>
-        error ? reject(error) : resolve()
-      )
-    );
-  const list = (blog) =>
-    new Promise((resolve, reject) =>
-      Template.getTemplateList(blog.id, (error, templates) =>
-        error ? reject(error) : resolve(templates)
-      )
-    );
+    Template.update(blog.id, slug, { locals });
+  const list = (blog) => Template.getTemplateList(blog.id);
 
-  beforeEach(function (done) {
+  beforeEach(async function () {
     const test = this;
-    Template.create(
-      test.blog.id,
-      "Image Test",
-      {
-        locals: { hero_image: {}, footer_image: {} },
-      },
-      function (error, template) {
-        if (error) return done.fail(error);
-        test.template = template;
-        done();
-      }
-    );
+    test.template = await Template.create(test.blog.id, "Image Test", {
+      locals: { hero_image: {}, footer_image: {} },
+    });
   });
 
   async function makeFile(directory, name, width = 240, height = 120) {
@@ -128,23 +110,17 @@ describe("upload template image", function () {
       ASSETS +
       "/" +
       decodeURIComponent(new URL(original.url).pathname.split("/").pop());
-    let sibling;
-    await new Promise((resolve, reject) =>
-      Template.create(
-        this.blog.id,
-        "Sibling image reference",
-        { locals: { shared_image: original } },
-        (error, template) => {
-          if (error) return reject(error);
-          sibling = template;
-          resolve();
-        }
-      )
+    const sibling = await Template.create(
+      this.blog.id,
+      "Sibling image reference",
+      {
+        locals: { shared_image: original },
+      }
     );
     const getMetadata = Template.getMetadata;
-    spyOn(Template, "getMetadata").and.callFake((id, callback) => {
-      if (id === sibling.id) return callback(new Error("metadata read failed"));
-      return getMetadata(id, callback);
+    spyOn(Template, "getMetadata").and.callFake(async (id) => {
+      if (id === sibling.id) throw new Error("metadata read failed");
+      return getMetadata(id);
     });
 
     await uploadImage.removeAssetsIfUnreferenced(
@@ -172,11 +148,7 @@ describe("upload template image", function () {
       .filter((value) => value && value.url)
       .map((value) => ({ ...value, thumbnails: { ...value.thumbnails } }));
 
-    await new Promise((resolve, reject) =>
-      Template.drop(this.blog.id, this.template.slug, (error) =>
-        error ? reject(error) : resolve()
-      )
-    );
+    await Template.drop(this.blog.id, this.template.slug);
     await uploadImage.removeTemplateAssetsIfUnreferenced(
       { blog: this.blog },
       imageLocals
@@ -189,14 +161,13 @@ describe("upload template image", function () {
     const file = await makeFile(this.tmp, "persistence-failure.png");
     const realUpdate = Template.update;
     let calls = 0;
-    spyOn(Template, "update").and.callFake((id, slug, updates, callback) => {
+    spyOn(Template, "update").and.callFake(async (id, slug, updates) => {
       calls += 1;
       if (calls === 1) {
-        return realUpdate(id, slug, updates, (error) =>
-          callback(error || new Error("manifest unavailable"))
-        );
+        await realUpdate(id, slug, updates);
+        throw new Error("manifest unavailable");
       }
-      return realUpdate(id, slug, updates, callback);
+      return realUpdate(id, slug, updates);
     });
     const req = {
       blog: this.blog,
@@ -227,14 +198,13 @@ describe("upload template image", function () {
     const file = await makeFile(this.tmp, "rollback-failure.png");
     const realUpdate = Template.update;
     let calls = 0;
-    spyOn(Template, "update").and.callFake((id, slug, updates, callback) => {
+    spyOn(Template, "update").and.callFake(async (id, slug, updates) => {
       calls += 1;
       if (calls === 1) {
-        return realUpdate(id, slug, updates, (error) =>
-          callback(error || new Error("manifest unavailable"))
-        );
+        await realUpdate(id, slug, updates);
+        throw new Error("manifest unavailable");
       }
-      callback(new Error("rollback unavailable"));
+      throw new Error("rollback unavailable");
     });
     const req = {
       blog: this.blog,

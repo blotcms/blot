@@ -5,11 +5,11 @@ describe("getFullView folder links", function () {
   const config = require("config");
   const Template = require("../index");
 
-  const getView = promisify(Template.getView);
+  const getView = Template.getView;
   const getFullView = promisify(Template.getFullView);
-  const createTemplate = promisify(Template.create);
-  const dropTemplate = promisify(Template.drop);
-  const setView = promisify(Template.setView);
+  const createTemplate = Template.create;
+  const dropTemplate = Template.drop;
+  const setView = Template.setView;
 
   const wrap = (path) => `{{#cdn}}${path}{{/cdn}}`;
 

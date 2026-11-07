@@ -4,23 +4,17 @@ describe("duplicate template route", function () {
   const Template = require("models/template");
   const duplicateTemplate = require("../save/duplicate-template");
 
-  beforeEach(function (done) {
+  beforeEach(async function () {
     const test = this;
     const name = "Original";
 
-    Template.create(test.blog.id, name, {}, function (err) {
-      if (err) return done.fail(err);
+    await Template.create(test.blog.id, name, {});
 
-      Template.getTemplateList(test.blog.id, function (err, templates) {
-        if (err) return done.fail(err);
+    const templates = await Template.getTemplateList(test.blog.id);
 
-        test.originalTemplate = templates.filter(function (template) {
-          return template.name === name;
-        })[0];
-
-        done();
-      });
-    });
+    test.originalTemplate = templates.filter(function (template) {
+      return template.name === name;
+    })[0];
   });
 
   describe("of a template whose name fills the id", function () {
@@ -28,22 +22,16 @@ describe("duplicate template route", function () {
     // name this long leaves no room for a counter
     const longName = "My extremely long template name for testing";
 
-    beforeEach(function (done) {
+    beforeEach(async function () {
       const test = this;
 
-      Template.create(test.blog.id, longName, {}, function (err) {
-        if (err) return done.fail(err);
+      await Template.create(test.blog.id, longName, {});
 
-        Template.getTemplateList(test.blog.id, function (err, templates) {
-          if (err) return done.fail(err);
+      const templates = await Template.getTemplateList(test.blog.id);
 
-          test.longTemplate = templates.filter(function (template) {
-            return template.name === longName;
-          })[0];
-
-          done();
-        });
-      });
+      test.longTemplate = templates.filter(function (template) {
+        return template.name === longName;
+      })[0];
     });
 
     it("still says it is a copy", async function () {
