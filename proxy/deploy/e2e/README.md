@@ -27,7 +27,8 @@ with the bare-metal stand-in this harness used to need.)
   `BLOT_HOST`, trusted in the runner's CA store so `curl`'s ordinary
   certificate validation (`https_status` in `proxy/deploy/common.sh`) passes.
 - `deploy-under-load.sh` - runs `blue-green.sh` for an image while a loop sends
-  a request every 50 ms and fails on any that is not a 200.
+  a request every 50 ms and fails on any that is not a 200 (a request answered
+  with an HTTP/2 GOAWAY that processed none of it is retried once, see below).
 - `setup.sh` - brings up Redis and the stub upstream
   (`proxy/e2e/stub-upstream.js`), and writes the `proxy.env` files the
   scenarios use.
@@ -121,6 +122,30 @@ expired after being moved, which the kernel counts as failed migrations.
 connections were reset before a response byte, per swap and in total, without
 failing on them. Run that way on a host, it tells how many requests a deploy
 there would lose.
+
+### A GOAWAY before the first request (HTTP/2)
+
+Even with the migration, about one swap in 50 reset one request of
+`deploy-under-load.sh` (`total=101 bad=2`: an `000` and a `curl-err`, curl exit
+55, "Failed sending HTTP request"). It is not the listener queue (the TLS
+handshake had finished) and not Node or the upstream: it is nginx closing an
+HTTP/2 connection that has not had a request processed yet. When a worker starts
+to quit (`openresty -s quit`, run by `docker stop` on the unit being replaced)
+nginx closes every HTTP/2 connection that is not processing a request, and a
+connection whose TLS handshake was still running then is closed as soon as it
+finishes (`ngx_http_v2_init`: `if (ngx_exiting)`). Both send `GOAWAY` with
+`NO_ERROR` and last stream 0, then close, so a request a client writes just after
+its handshake is never read. Measured (three parallel HTTP/2 loops and three
+HTTP/1.1 loops over 30 deploys): 11 of 6800 HTTP/2 requests failed, all curl 55
+with `received GOAWAY, error=0, last_stream=0`; none of 6835 HTTP/1.1 requests did.
+
+That GOAWAY means "I processed none of your streams, send them again" (RFC 9113
+section 6.8), which browsers do. curl does not, so `deploy-under-load.sh` repeats
+a request once when curl reports exactly that GOAWAY, and prints how many it
+repeated. An HTTP/2 client that does not retry loses a request that arrives in
+that window during a deploy; HTTP/1.1 connections still waiting for their first
+request are not closed by a quit. There is no nginx setting that keeps the
+GOAWAY from being sent.
 
 ### Running it
 
