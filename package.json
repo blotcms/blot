@@ -38,7 +38,6 @@
     "@aws-sdk/client-s3": "3.1136.0",
     "acme-client": "5.4.0",
     "archiver": "5.3.0",
-    "async": "2.6.4",
     "bcryptjs": "2.4.3",
     "body-parser": "1.20.9",
     "bottleneck": "2.19.5",

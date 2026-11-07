@@ -1,8 +1,8 @@
 var fs = require("fs-extra");
-var async = require("async");
 var parseXML = require("xml2js").parseString;
 var colors = require("colors/safe");
 var Item = require("./item");
+var withCallback = require("helper/withCallback");
 var helper = require("dashboard/site/import/helper");
 
 function main(sourceFile, outputDirectory, status, options, callback) {
@@ -60,27 +60,41 @@ function main(sourceFile, outputDirectory, status, options, callback) {
         // whether an entry needs a directory-backed post.txt representation.
         var write = helper.write.createWriter();
 
-        async.eachOfSeries(
+        withCallback(importItems)(
           items,
-          function (item, index, done) {
-            try {
-              require("../../lifecycle").check();
-            } catch (err) {
-              return done(err);
-            }
-            var current = Number(index) + 1;
-            var title = item.title[0].trim();
-
-            status("(" + current + "/" + totalItems + ") Processing " + title);
-            console.log(colors.dim(current + "/" + totalItems), title);
-            injectAttachedThumbnail(item, channel.item);
-            Item(item, outputDirectory, write, done);
-          },
+          channel,
+          totalItems,
+          outputDirectory,
+          status,
+          write,
           callback
         );
       }
     );
   });
+}
+
+async function importItems(
+  items,
+  channel,
+  totalItems,
+  outputDirectory,
+  status,
+  write
+) {
+  for (let index = 0; index < items.length; index++) {
+    var item = items[index];
+
+    require("../../lifecycle").check();
+
+    var current = Number(index) + 1;
+    var title = item.title[0].trim();
+
+    status("(" + current + "/" + totalItems + ") Processing " + title);
+    console.log(colors.dim(current + "/" + totalItems), title);
+    injectAttachedThumbnail(item, channel.item);
+    await Item.run(item, outputDirectory, write);
+  }
 }
 
 // This will find 'attached' thumbnails that are not part of the

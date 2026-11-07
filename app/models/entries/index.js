@@ -1,5 +1,4 @@
 var redis = require("models/client");
-var async = require("async");
 var ensure = require("helper/ensure");
 var withCallback = require("helper/withCallback");
 var Entry = require("../entry");
@@ -203,24 +202,28 @@ module.exports = (function () {
   function each(blogID, dothis, callback) {
     ensure(blogID, "string").and(dothis, "function").and(callback, "function");
 
-    redis
-      .zRange(listKey(blogID, "all"), 0, -1, { REV: true })
-      .then(function (ids) {
-        async.eachSeries(
-          ids,
-          function (id, next) {
-            // A failed read is the same as no entry
-            withCallback(Entry.get)(blogID, id, function (err, entry) {
-              if (!entry) return next();
-              dothis(entry, next);
-            });
-          },
-          callback
-        );
-      })
-      .catch(function (error) {
-        callback(error);
+    (async function () {
+      var ids = await redis.zRange(listKey(blogID, "all"), 0, -1, {
+        REV: true,
       });
+
+      // One entry at a time, in order
+      for (var id of ids) {
+        // A failed read is the same as no entry
+        var entry = await Entry.get(blogID, id).catch(function () {});
+
+        if (!entry) continue;
+
+        await new Promise(function (resolve, reject) {
+          dothis(entry, function (err) {
+            if (err) return reject(err);
+            resolve();
+          });
+        });
+      }
+    })().then(function () {
+      callback(null);
+    }, callback);
   }
 
   // Only whether each entry's key exists matters here, so it's checked with
@@ -237,125 +240,87 @@ module.exports = (function () {
   // ids first and checking each unique id once avoids that.
   var PRUNE_BATCH_SIZE = 100;
 
+  async function prune(blogID) {
+    var idsByList = {};
+    var uniqueIds = new Set();
+
+    for (var listName of lists) {
+      var ids = await redis.zRange(listKey(blogID, listName), 0, -1);
+
+      idsByList[listName] = ids || [];
+      (ids || []).forEach(function (id) {
+        uniqueIds.add(id);
+      });
+    }
+
+    var allIds = Array.from(uniqueIds);
+    var existing = {};
+    var batches = [];
+
+    for (var i = 0; i < allIds.length; i += PRUNE_BATCH_SIZE) {
+      batches.push(allIds.slice(i, i + PRUNE_BATCH_SIZE));
+    }
+
+    // Check the raw keys directly (rather than via Entry.get) so
+    // existence is tracked against the id we actually requested, not
+    // an id parsed back out of the entry's JSON - a corrupted entry's
+    // stored id can differ from its Redis key. It also lets a failed
+    // batch abort the whole prune instead of being treated as proof
+    // that every id in it is missing.
+    for (var batch of batches) {
+      var existsMulti = redis.multi();
+      batch.forEach(function (id) {
+        existsMulti.exists(entryKey(blogID, id));
+      });
+
+      var found = await existsMulti.exec();
+
+      (found || []).forEach(function (exists, i) {
+        var id = batch[i];
+
+        // entryKey normalizes the path, so a noncanonical id
+        // (eg. a trailing slash) maps to the same Redis key as
+        // its canonical form - a hit there proves the canonical
+        // entry exists, not that this exact list member does.
+        // Only trust the lookup for ids that are already
+        // canonical; anything else is a stale/duplicate member
+        // that should be pruned regardless.
+        if (exists && id === pathNormalizer(id)) {
+          existing[id] = true;
+        }
+      });
+
+      await new Promise(function (resolve) {
+        setImmediate(resolve);
+      });
+    }
+
+    // listName -> ids removed from that list, for callers (list-ghosts)
+    // that want to report/account for what was pruned.
+    var removed = {};
+
+    for (var name of lists) {
+      var missing = idsByList[name].filter(function (id) {
+        return !existing[id];
+      });
+
+      if (!missing.length) continue;
+
+      await redis.zRem(listKey(blogID, name), missing);
+      removed[name] = missing;
+    }
+
+    return removed;
+  }
+
   function pruneMissing(blogID, callback) {
     if (!callback) callback = function () {};
 
     ensure(blogID, "string").and(callback, "function");
 
-    var idsByList = {};
-    var uniqueIds = new Set();
-
-    async.series(
-      [
-        function collectListIds(next) {
-          async.eachSeries(
-            lists,
-            function (listName, nextList) {
-              var key = listKey(blogID, listName);
-
-              redis
-                .zRange(key, 0, -1)
-                .then(function (ids) {
-                  idsByList[listName] = ids || [];
-                  (ids || []).forEach(function (id) {
-                    uniqueIds.add(id);
-                  });
-                  nextList();
-                })
-                .catch(nextList);
-            },
-            next
-          );
-        },
-        function fetchEachIdOnce(next) {
-          var allIds = Array.from(uniqueIds);
-          var existing = {};
-          var batches = [];
-
-          for (var i = 0; i < allIds.length; i += PRUNE_BATCH_SIZE) {
-            batches.push(allIds.slice(i, i + PRUNE_BATCH_SIZE));
-          }
-
-          // Check the raw keys directly (rather than via Entry.get) so
-          // existence is tracked against the id we actually requested, not
-          // an id parsed back out of the entry's JSON - a corrupted entry's
-          // stored id can differ from its Redis key. It also lets a failed
-          // batch abort the whole prune instead of being treated as proof
-          // that every id in it is missing.
-          async.eachSeries(
-            batches,
-            function (batch, nextBatch) {
-              var keys = batch.map(function (id) {
-                return entryKey(blogID, id);
-              });
-
-              var existsMulti = redis.multi();
-              keys.forEach(function (key) {
-                existsMulti.exists(key);
-              });
-
-              existsMulti
-                .exec()
-                .then(function (found) {
-                  (found || []).forEach(function (exists, i) {
-                    var id = batch[i];
-
-                    // entryKey normalizes the path, so a noncanonical id
-                    // (eg. a trailing slash) maps to the same Redis key as
-                    // its canonical form - a hit there proves the canonical
-                    // entry exists, not that this exact list member does.
-                    // Only trust the lookup for ids that are already
-                    // canonical; anything else is a stale/duplicate member
-                    // that should be pruned regardless.
-                    if (exists && id === pathNormalizer(id)) {
-                      existing[id] = true;
-                    }
-                  });
-
-                  setImmediate(nextBatch);
-                })
-                .catch(nextBatch);
-            },
-            function (err) {
-              if (err) return next(err);
-              next(null, existing);
-            }
-          );
-        },
-      ],
-      function (err, results) {
-        if (err) return callback(err);
-
-        var existing = results[1];
-        // listName -> ids removed from that list, for callers (list-ghosts)
-        // that want to report/account for what was pruned.
-        var removed = {};
-
-        async.eachSeries(
-          lists,
-          function (listName, nextList) {
-            var key = listKey(blogID, listName);
-            var missing = idsByList[listName].filter(function (id) {
-              return !existing[id];
-            });
-
-            if (!missing.length) return nextList();
-
-            redis
-              .zRem(key, missing)
-              .then(function () {
-                removed[listName] = missing;
-                nextList();
-              })
-              .catch(nextList);
-          },
-          function (err) {
-            if (err) return callback(err);
-            callback(null, removed);
-          }
-        );
-      }
-    );
+    prune(blogID).then(function (removed) {
+      callback(null, removed);
+    }, callback);
   }
 
   var getCreated = withCallback(async function getCreated(blogID, after) {

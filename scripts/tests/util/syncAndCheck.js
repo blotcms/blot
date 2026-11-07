@@ -1,4 +1,4 @@
-const async = require("async");
+const { eachSeries } = require("./callbacks");
 const type = require("helper/type");
 const CheckEntry = require("./checkEntry");
 const sync = require("sync");
@@ -12,7 +12,7 @@ module.exports = function SyncAndCheck(blogID) {
     sync(blogID, (err, folder, syncDone) => {
       if (err) return callback(err);
 
-      async.eachSeries(
+      eachSeries(
         files,
         ({ path, content }, next) => {
           storage
@@ -21,7 +21,7 @@ module.exports = function SyncAndCheck(blogID) {
         },
         (err) => {
           if (err) return syncDone(err, callback);
-          async.eachSeries(entries, CheckEntry(blogID), (err) => {
+          eachSeries(entries, CheckEntry(blogID), (err) => {
             syncDone(err, callback);
           });
         }

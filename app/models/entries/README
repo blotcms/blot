@@ -258,12 +258,6 @@ The lex index is only updated incrementally by `_assign.js` when the ready flag 
 | `helper/ensure` | Runtime argument type validation |
 | `app/build/prepare/dateStamp` | Date stamp resolution used by `resave` |
 
-### External
-
-| Package | Role |
-|---------|------|
-| `async` | Serial iteration in `each` and `pruneMissing` |
-
 ---
 
 ## Integration Points

@@ -1,6 +1,6 @@
 module.exports = function () {
   const folder = require("storage/folder");
-  const async = require("async");
+  const eachLimit = require("helper/eachLimit");
   const build = require("build");
   const get = require("../get");
   const set = require("../set");
@@ -53,16 +53,9 @@ module.exports = function () {
     // from being hammered flat-out. Rejects on the first failure so a
     // spec that expects N indexed entries still sees N.
     this.setMany = async (entries, concurrency = 8) => {
-      await new Promise((resolve, reject) => {
-        async.eachLimit(
-          entries,
-          concurrency,
-          ({ path, contents }, next) => {
-            this.set(path, contents).then(() => next(), next);
-          },
-          (err) => (err ? reject(err) : resolve())
-        );
-      });
+      await eachLimit(entries, concurrency, ({ path, contents }) =>
+        this.set(path, contents)
+      );
     };
   });
 };

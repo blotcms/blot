@@ -52,6 +52,15 @@ module.exports = [
       ],
       // `try { ... } catch (e) {}` is the idiom for best-effort cleanup
       "no-empty": ["error", { allowEmptyCatch: true }],
+      // The async library is gone (#2559): use async/await
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "CallExpression[callee.name='require'][arguments.0.value='async']",
+          message: "Use async/await instead of the async library.",
+        },
+      ],
     },
   },
 

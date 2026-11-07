@@ -11,7 +11,6 @@ describe("git client authenticate", function () {
   var Git = require("./setup/git");
   var http = require("http");
   var url = require("url");
-  var async = require("async");
   var Blog = require("models/blog");
   var User = require("models/user");
   var createRepository = require("clients/git/create");
@@ -19,24 +18,14 @@ describe("git client authenticate", function () {
   var otherBlog;
   var otherUser;
 
-  afterEach(function (done) {
-    async.series(
-      [
-        function (next) {
-          if (!otherBlog) return next();
-          Blog.remove(otherBlog.id, next);
-        },
-        function (next) {
-          if (!otherUser) return next();
-          User.remove(otherUser.uid, next);
-        },
-      ],
-      function (err) {
-        otherBlog = null;
-        otherUser = null;
-        done(err);
-      }
-    );
+  afterEach(async function () {
+    try {
+      if (otherBlog) await Blog.remove(otherBlog.id);
+      if (otherUser) await User.remove(otherUser.uid);
+    } finally {
+      otherBlog = null;
+      otherUser = null;
+    }
   });
 
   function requestGitEndpoint(context, options, done) {
@@ -146,45 +135,33 @@ describe("git client authenticate", function () {
       });
   });
 
-  it("prevents a user with good credentials from accessing someone else's repo", function (done) {
+  it("prevents a user with good credentials from accessing someone else's repo", async function () {
     var repoUrl = this.repoUrl;
     var tmp = this.tmp;
 
-    async.waterfall(
-      [
-        function (next) {
-          User.hashPassword("other-users-password", next);
-        },
-        function (passwordHash, next) {
-          User.create("other-git-user@example.com", passwordHash, {}, {}, next);
-        },
-        function (user, next) {
-          otherUser = user;
-          Blog.create(user.uid, { handle: "othergitrepo" }, next);
-        },
-        function (blog, next) {
-          otherBlog = blog;
-          createRepository(blog, function (err) {
-            next(err);
-          });
-        },
-        function (next) {
-          repoUrl = url.parse(repoUrl);
-          repoUrl.pathname = repoUrl.pathname
-            .split(this.blog.handle)
-            .join(otherBlog.handle);
-          repoUrl = url.format(repoUrl);
-
-          Git(tmp).silent(true).clone(repoUrl, next);
-        }.bind(this),
-      ],
-      function (err) {
-        expect(err).not.toBe(null);
-        expect(err && err.message).toContain("401 Unauthorized");
-        expect(fs.readdirSync(tmp)).toEqual([]);
-        done();
-      }
+    var passwordHash = await User.hashPassword("other-users-password");
+    otherUser = await User.create(
+      "other-git-user@example.com",
+      passwordHash,
+      {},
+      {}
     );
+    otherBlog = await Blog.create(otherUser.uid, { handle: "othergitrepo" });
+    await createRepository(otherBlog);
+
+    repoUrl = url.parse(repoUrl);
+    repoUrl.pathname = repoUrl.pathname
+      .split(this.blog.handle)
+      .join(otherBlog.handle);
+    repoUrl = url.format(repoUrl);
+
+    var err = await new Promise(function (resolve) {
+      Git(tmp).silent(true).clone(repoUrl, resolve);
+    });
+
+    expect(err).not.toBe(null);
+    expect(err && err.message).toContain("401 Unauthorized");
+    expect(fs.readdirSync(tmp)).toEqual([]);
   });
 
   it("prevents a user with invalid credentials from accessing someone else's repo", function (done) {

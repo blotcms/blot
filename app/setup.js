@@ -6,8 +6,8 @@ const client = require("models/client");
 const documentation = require("./documentation/build");
 const templates = require("./templates");
 const folders = require("./templates/folders");
-const async = require("async");
 const clfdate = require("helper/clfdate");
+const withCallback = require("helper/withCallback");
 const scheduler = require("./scheduler");
 const logRedisCacheStats = require("./scheduler/redis-cache-stats");
 const logRenderCacheStats = require("./scheduler/render-cache-stats");
@@ -226,104 +226,91 @@ async function runPostListenTasks() {
   }
 }
 
-function main(callback) {
-  async.series(
-    [
-      function (callback) {
-        // Generated assets live only in the storage bucket: without one every
-        // build and upload would fail, so refuse to start
-        try {
-          assertStorageBucket();
-        } catch (err) {
-          return callback(err);
-        }
+// The boot sequence, one step after another. The first step to fail stops
+// the rest and the error goes to the callback, which app/index.js throws, so
+// a failed boot exits the process.
+const main = withCallback(async function main() {
+  // Generated assets live only in the storage bucket: without one every
+  // build and upload would fail, so refuse to start
+  assertStorageBucket();
 
-        callback();
-      },
+  await refreshFeatured();
 
-      async function () {
-        // The parent of a forked worker child has cleared it
-        if (config.worker_child) return;
+  log("Creating required directories");
+  await fs.ensureDir(config.log_directory);
+  await fs.ensureDir(config.tmp_directory);
+  log("Created required directories");
 
-        // In development, drop the cached copy so edits to the seed list show.
-        if (config.environment === "development") {
-          await fs.remove(
-            path.join(config.data_directory, "featured", "featured.json")
-          );
-          return;
-        }
+  await createSSLKey();
 
-        // Elsewhere keep the previously filtered featured.json rather than
-        // clearing it: the seed list is unfiltered, so sites that have since
-        // left Blot ('your domain is almost set up') would show until the
-        // filter finished. Re-filter from the seed in the background.
+  // The docker build stage for production runs this script ahead of time
+  if (config.environment !== "development") return;
+  // node-a builds and watches them for both processes
+  if (config.worker_child) return;
+  log("Building documentation assets");
+  await documentation({ watch: true });
+  log("Built documentation assets");
+});
 
-        log("Refreshing featured sites in the background");
-        require("documentation/featured/check")()
-          .then(() => log("Refreshed featured sites"))
-          .catch((err) => log("Error refreshing featured sites", err));
-      },
+async function refreshFeatured() {
+  // The parent of a forked worker child has cleared it
+  if (config.worker_child) return;
 
-      async function () {
-        log("Creating required directories");
-        await fs.ensureDir(config.log_directory);
-        await fs.ensureDir(config.tmp_directory);
-        log("Created required directories");
-      },
+  // In development, drop the cached copy so edits to the seed list show.
+  if (config.environment === "development") {
+    await fs.remove(
+      path.join(config.data_directory, "featured", "featured.json")
+    );
+    return;
+  }
 
-      function (callback) {
-        // Blot's SSL certificate system requires the existence
-        // of the domain key in redis. See config/nginx/auto-ssl.conf
-        // for more information about the specific implementation.
-        // Anyway, so that the homepage. We redirect the 'www' subdomain
-        // to the apex domain, but we need to generate a cert to do this.
-        // Typically, domain keys like domain:example.com store a blog's ID
-        // but since the homepage is not a blog, we just use a placeholder 'X'
-        log("Creating SSL key for redis");
-        (async function () {
-          let timer;
-          try {
-            await Promise.race([
-              client.mSetNX({
-                ["domain:" + config.host]: "X",
-                ["domain:www." + config.host]: "X",
-              }),
-              new Promise(function (resolve, reject) {
-                // By now models/redis has stopped the client queueing, so
-                // requests served from here on fail fast with a 503
-                timer = setTimeout(function () {
-                  reject(new Error("Timed out waiting for Redis"));
-                }, REDIS_BOOT_TIMEOUT_MS);
-              }),
-            ]);
-          } catch (err) {
-            console.error(
-              "Unable to set domain flag for host" +
-                config.host +
-                ". SSL may not work on site."
-            );
-            console.error(err);
-          } finally {
-            clearTimeout(timer);
-          }
+  // Elsewhere keep the previously filtered featured.json rather than
+  // clearing it: the seed list is unfiltered, so sites that have since
+  // left Blot ('your domain is almost set up') would show until the
+  // filter finished. Re-filter from the seed in the background.
 
-          log("Created SSL key for redis");
-          callback();
-        })();
-      },
+  log("Refreshing featured sites in the background");
+  require("documentation/featured/check")()
+    .then(() => log("Refreshed featured sites"))
+    .catch((err) => log("Error refreshing featured sites", err));
+}
 
-      async function () {
-        // The docker build stage for production runs this script ahead of time
-        if (config.environment !== "development") return;
-        // node-a builds and watches them for both processes
-        if (config.worker_child) return;
-        log("Building documentation assets");
-        await documentation({ watch: true });
-        log("Built documentation assets");
-      },
-    ],
-    callback
-  );
+async function createSSLKey() {
+  // Blot's SSL certificate system requires the existence
+  // of the domain key in redis. See config/nginx/auto-ssl.conf
+  // for more information about the specific implementation.
+  // Anyway, so that the homepage. We redirect the 'www' subdomain
+  // to the apex domain, but we need to generate a cert to do this.
+  // Typically, domain keys like domain:example.com store a blog's ID
+  // but since the homepage is not a blog, we just use a placeholder 'X'
+  log("Creating SSL key for redis");
+  let timer;
+  try {
+    await Promise.race([
+      client.mSetNX({
+        ["domain:" + config.host]: "X",
+        ["domain:www." + config.host]: "X",
+      }),
+      new Promise(function (resolve, reject) {
+        // By now models/redis has stopped the client queueing, so
+        // requests served from here on fail fast with a 503
+        timer = setTimeout(function () {
+          reject(new Error("Timed out waiting for Redis"));
+        }, REDIS_BOOT_TIMEOUT_MS);
+      }),
+    ]);
+  } catch (err) {
+    console.error(
+      "Unable to set domain flag for host" +
+        config.host +
+        ". SSL may not work on site."
+    );
+    console.error(err);
+  } finally {
+    clearTimeout(timer);
+  }
+
+  log("Created SSL key for redis");
 }
 
 main.runPostListenTasks = runPostListenTasks;

@@ -3,7 +3,6 @@ const SourceCode = new Express.Router();
 const Template = require("models/template");
 const formJSON = require("helper/formJSON");
 const extend = require("helper/extend");
-const async = require("async");
 const writeChangeToFolder = require("./save/writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
 
@@ -163,42 +162,24 @@ SourceCode.route("/:viewSlug/edit")
 
           const templateForSync = metadata || req.template;
 
-          async.eachSeries(
-            Object.keys(views),
-            function (name, next) {
-              Template.getView(req.template.id, name, function (err, view) {
-                // getView returns an error if the view does not exist
-                // We want to be able to create new views using local editing
-                // we so ignore this error, and create the view object as needed
-                view = view || {};
-                view.name = view.name || name;
-                for (var i in views[name]) view[i] = views[name][i];
-
-                view.url = view.url || "/" + view.name;
-
-                Template.setView(req.template.id, view, next);
-              });
-            },
-            function (err) {
-              if (err) return sendError(err);
-              writeChangeToFolder(
-                req.blog,
-                templateForSync,
-                view,
-                function (err) {
-                  if (err) return sendError(err);
-                  // package.json is metadata, not a view file. Publish after the
-                  // locals and any view metadata from it are stored so an
-                  // open preview tab reloads.
-                  previewReload.publish(req.blog.id);
-                  if (res.locals.templateForked) {
-                    res.set("X-Template-Forked", "1");
-                  }
-                  res.send("Saved changes!");
+          saveViews(req.template.id, views).then(function () {
+            writeChangeToFolder(
+              req.blog,
+              templateForSync,
+              view,
+              function (err) {
+                if (err) return sendError(err);
+                // package.json is metadata, not a view file. Publish after the
+                // locals and any view metadata from it are stored so an
+                // open preview tab reloads.
+                previewReload.publish(req.blog.id);
+                if (res.locals.templateForked) {
+                  res.set("X-Template-Forked", "1");
                 }
-              );
-            }
-          );
+                res.send("Saved changes!");
+              }
+            );
+          }, sendError);
         });
       });
     } else {
@@ -420,6 +401,29 @@ SourceCode.route("/:viewSlug/delete")
   });
 
 module.exports = SourceCode;
+
+// Saves each view from package.json, one after the other.
+async function saveViews(templateID, views) {
+  for (const name of Object.keys(views)) {
+    let view;
+
+    try {
+      view = await Template.getView(templateID, name);
+    } catch (e) {
+      // getView returns an error if the view does not exist
+      // We want to be able to create new views using local editing
+      // we so ignore this error, and create the view object as needed
+    }
+
+    view = view || {};
+    view.name = view.name || name;
+    for (var i in views[name]) view[i] = views[name][i];
+
+    view.url = view.url || "/" + view.name;
+
+    await Template.setView(templateID, view);
+  }
+}
 
 function isPlainObject(value) {
   return !!value && typeof value === "object" && !Array.isArray(value);

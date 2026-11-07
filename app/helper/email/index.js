@@ -1,5 +1,4 @@
 const fs = require("fs-extra");
-const async = require("async");
 const config = require("config");
 const ensure = require("helper/ensure");
 const extend = require("helper/extend");
@@ -7,6 +6,7 @@ const tempDir = require("helper/tempDir")();
 const Mustache = require("mustache");
 const { marked } = require("marked");
 const clfdate = require("helper/clfdate");
+const withCallback = require("helper/withCallback");
 
 const mailgunClient = (() => {
   if (config && config.mailgun && config.mailgun.key && config.mailgun.domain) {
@@ -118,119 +118,115 @@ var EMAIL_MODEL = {
   "h:Reply-To": "string",
 };
 
-function loadUser(uid, callback) {
-  if (!uid) return callback(null, {});
+async function loadUser(uid) {
+  if (!uid) return {};
 
   const User = require("models/user");
 
-  User.getById(uid, function (err, user) {
-    if (err || !user) {
-      return callback(err || new Error("No user with uid " + uid));
-    }
+  const user = await User.getById(uid);
 
-    user = User.extend(user);
+  if (!user) throw new Error("No user with uid " + uid);
 
-    callback(null, user);
-  });
+  return User.extend(user);
 }
 
+// The functions this builds are used fire-and-forget all over the app, with
+// or without a callback. They never throw and never return a promise: the
+// outcome goes to the callback (a no-op by default), so a failed send can't
+// become an unhandled rejection.
 function init(method) {
   ensure(method, "string");
   return function build(uid = "", locals = {}, callback = function () {}) {
-    loadUser(uid, function (err, user) {
-      if (err) return callback(err);
-
-      extend(locals).and(globals).and(user);
-
-      const adminMessage = adminDir + method + ".txt";
-      const userMessage = userDir + method + ".txt";
-
-      let emails = [];
-
-      if (fs.existsSync(adminMessage)) {
-        emails.push(send.bind(this, locals, adminMessage, ADMIN));
-      }
-
-      if (fs.existsSync(userMessage)) {
-        emails.push(send.bind(this, locals, userMessage, locals.email));
-      }
-
-      async.parallel(emails, callback);
-    });
+    deliver.call(this, method, uid, locals).then(function (results) {
+      callback(null, results);
+    }, callback);
   };
 }
 
-function send(locals, messageFile, to, callback) {
-  ensure(locals, "object")
-    .and(messageFile, "string")
-    .and(to, "string")
-    .and(callback, "function");
+async function deliver(method, uid, locals) {
+  const user = await loadUser(uid);
 
-  fs.readFile(messageFile, "utf-8", function (err, text) {
-    if (err) return callback(err);
+  extend(locals).and(globals).and(user);
 
-    var lines = text.split("\n");
-    var subject = Mustache.render(lines[0] || "", locals);
-    var message = lines.slice(2).join("\n") || "";
+  const adminMessage = adminDir + method + ".txt";
+  const userMessage = userDir + method + ".txt";
 
-    var html = marked.parse(Mustache.render(message, locals));
+  let emails = [];
 
-    var email = {
-      html: html,
-      subject: subject,
-      from: locals.from || FROM,
-      to: to,
-      "h:Reply-To": locals.replyTo || locals.from || FROM,
-    };
+  if (fs.existsSync(adminMessage)) {
+    emails.push(send.call(this, locals, adminMessage, ADMIN));
+  }
 
-    try {
-      ensure(email, EMAIL_MODEL);
-    } catch (e) {
-      return callback(e);
-    }
+  if (fs.existsSync(userMessage)) {
+    emails.push(send.call(this, locals, userMessage, locals.email));
+  }
 
-    if (config.environment === "development" && process.env.EMAIL !== "true") {
-      var previewPath = tempDir + Date.now() + ".html";
-      fs.outputFileSync(previewPath, email.html, "utf-8");
-      console.log(clfdate(), "Email: unsent in development environment:", {
-        ...email,
-        preview: previewPath,
-      });
-      return callback();
-    }
-
-    if (!hasMailgunClient) {
-      console.log(
-        clfdate(),
-        "Email: Mailgun client unavailable, skipping send for",
-        email.to,
-        '"' + email.subject + '"'
-      );
-      return callback();
-    }
-
-    mailgunClient.messages
-      .create(config.mailgun.domain, email)
-      .then(function (body) {
-        console.log(
-          clfdate(),
-          "Email: sent to",
-          email.to,
-          '"' + email.subject + '"',
-          "(" + (body && body.id) + ")"
-        );
-        callback();
-      })
-      .catch(function (err) {
-        console.log(
-          clfdate(),
-          "Email: error: Mailgun failed to send transactional email:",
-          err
-        );
-        callback(err);
-      });
-  });
+  return await Promise.all(emails);
 }
+
+const send = withCallback(async function send(locals, messageFile, to) {
+  ensure(locals, "object").and(messageFile, "string").and(to, "string");
+
+  const text = await fs.readFile(messageFile, "utf-8");
+
+  var lines = text.split("\n");
+  var subject = Mustache.render(lines[0] || "", locals);
+  var message = lines.slice(2).join("\n") || "";
+
+  var html = marked.parse(Mustache.render(message, locals));
+
+  var email = {
+    html: html,
+    subject: subject,
+    from: locals.from || FROM,
+    to: to,
+    "h:Reply-To": locals.replyTo || locals.from || FROM,
+  };
+
+  ensure(email, EMAIL_MODEL);
+
+  if (config.environment === "development" && process.env.EMAIL !== "true") {
+    var previewPath = tempDir + Date.now() + ".html";
+    fs.outputFileSync(previewPath, email.html, "utf-8");
+    console.log(clfdate(), "Email: unsent in development environment:", {
+      ...email,
+      preview: previewPath,
+    });
+    return;
+  }
+
+  if (!hasMailgunClient) {
+    console.log(
+      clfdate(),
+      "Email: Mailgun client unavailable, skipping send for",
+      email.to,
+      '"' + email.subject + '"'
+    );
+    return;
+  }
+
+  try {
+    const body = await mailgunClient.messages.create(
+      config.mailgun.domain,
+      email
+    );
+
+    console.log(
+      clfdate(),
+      "Email: sent to",
+      email.to,
+      '"' + email.subject + '"',
+      "(" + (body && body.id) + ")"
+    );
+  } catch (err) {
+    console.log(
+      clfdate(),
+      "Email: error: Mailgun failed to send transactional email:",
+      err
+    );
+    throw err;
+  }
+});
 
 var exports = {};
 

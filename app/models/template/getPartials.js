@@ -1,7 +1,5 @@
 var getView = require("./getView");
-var async = require("async");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
 var {
@@ -151,106 +149,87 @@ module.exports = async function getPartials(
     return merged;
   }
 
-  // fetchList recurses through nested partials with callbacks; only the
-  // outer call is wrapped, so the order of the lookups is unchanged.
-  return new Promise(function (resolve) {
-    fetchList(partials, function () {
-      resolve({ allPartials, retrieve });
-    });
-  });
+  // fetchList recurses through nested partials, one lookup at a time
+  await fetchList(partials);
 
-  function fetchList(partials, done) {
-    async.eachOfSeries(
-      partials,
-      function (value, partial, next) {
-        var nextCalled = false;
-        var finish = function () {
-          if (nextCalled) return;
-          nextCalled = true;
-          next();
-        };
-        var inheritedContexts =
-          contextMap[partial] && contextMap[partial].length
-            ? contextMap[partial]
-            : [""];
+  return { allPartials, retrieve };
 
-        // Don't fetch a partial if we've got it already.
-        // Partials which returned nothing are set as
-        // empty strings to prevent any infinities.
-        if (allPartials[partial] !== null && allPartials[partial] !== undefined)
-          return finish();
+  async function fetchList(partials) {
+    for (var partial of Object.keys(partials || {})) {
+      var inheritedContexts =
+        contextMap[partial] && contextMap[partial].length
+          ? contextMap[partial]
+          : [""];
 
-        // If the partial's name starts with a slash,
-        // it is a path to an entry.
-        if (partial.charAt(0) === "/") {
-          withCallback(Entry.getByPath)(blogID, partial, function (err, entry) {
-            // empty string and not undefined to
-            // prevent infinite fetches
-            allPartials[partial] = "";
+      // Don't fetch a partial if we've got it already.
+      // Partials which returned nothing are set as
+      // empty strings to prevent any infinities.
+      if (allPartials[partial] !== null && allPartials[partial] !== undefined)
+        continue;
 
-            if (!entry || !entry.html) {
-              return finish();
-            }
+      // If the partial's name starts with a slash,
+      // it is a path to an entry.
+      if (partial.charAt(0) === "/") {
+        // A failed read is the same as no entry
+        var entry = await Entry.getByPath(blogID, partial).catch(
+          function () {}
+        );
 
-            // Only allow access to entries which exist and are public
-            if (!entry.deleted && !entry.draft && !entry.scheduled) {
-              allPartials[partial] = entry.html;
-            }
+        // empty string and not undefined to
+        // prevent infinite fetches
+        allPartials[partial] = "";
 
-            finish();
-          });
-          return;
+        if (!entry || !entry.html) continue;
+
+        // Only allow access to entries which exist and are public
+        if (!entry.deleted && !entry.draft && !entry.scheduled) {
+          allPartials[partial] = entry.html;
         }
 
-        // If the partial's name doesn't start with a slash,
-        // it is the name of a tempalte view.
-        if (partial.charAt(0) !== "/") {
-          getView(templateID, partial, function (err, view) {
-            if (view) {
-              allPartials[partial] = renderSource(view);
+        continue;
+      }
 
-              inheritedContexts.forEach(function (contextPath) {
-                if (!contextPath) {
-                  mergeRetrieve(retrieve, view.retrieve || {});
-                } else {
-                  mergeRetrieve(
-                    retrieve,
-                    parseRetrieveInContext(view.content || "", contextPath)
-                  );
-                  // The contextual parse only sees the partial's visible
-                  // content. Its stored retrieve can also carry dependencies
-                  // that aren't context-bound - an explicit retrieve.latest_entry
-                  // for a local, includeDraft/filters, cdn targets. Those still
-                  // apply wherever the partial is embedded.
-                  mergeStoredDependencies(retrieve, view.retrieve);
-                }
-              });
+      // If the partial's name doesn't start with a slash,
+      // it is the name of a tempalte view. A failed read is the same
+      // as no view.
+      var view = await getView(templateID, partial).catch(function () {});
 
-              var nestedPartials = mergePartialContexts(
-                view.content,
-                inheritedContexts
-              );
+      if (!view) {
+        allPartials[partial] = "";
+        continue;
+      }
 
-              Object.keys(nestedPartials).forEach(function (nestedPartial) {
-                nestedPartials[nestedPartial].forEach(
-                  function (nestedContextPath) {
-                    addContext(nestedPartial, nestedContextPath);
-                  }
-                );
-              });
+      allPartials[partial] = renderSource(view);
 
-              fetchList(view.partials, finish);
-            } else {
-              allPartials[partial] = "";
-              finish();
-            }
-          });
-          return;
+      inheritedContexts.forEach(function (contextPath) {
+        if (!contextPath) {
+          mergeRetrieve(retrieve, view.retrieve || {});
+        } else {
+          mergeRetrieve(
+            retrieve,
+            parseRetrieveInContext(view.content || "", contextPath)
+          );
+          // The contextual parse only sees the partial's visible
+          // content. Its stored retrieve can also carry dependencies
+          // that aren't context-bound - an explicit retrieve.latest_entry
+          // for a local, includeDraft/filters, cdn targets. Those still
+          // apply wherever the partial is embedded.
+          mergeStoredDependencies(retrieve, view.retrieve);
         }
+      });
 
-        finish();
-      },
-      done
-    );
+      var nestedPartials = mergePartialContexts(
+        view.content,
+        inheritedContexts
+      );
+
+      Object.keys(nestedPartials).forEach(function (nestedPartial) {
+        nestedPartials[nestedPartial].forEach(function (nestedContextPath) {
+          addContext(nestedPartial, nestedContextPath);
+        });
+      });
+
+      await fetchList(view.partials);
+    }
   }
 };
