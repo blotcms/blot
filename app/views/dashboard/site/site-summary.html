@@ -1,0 +1,6 @@
+<!-- The site's title, domain and live template, each a link to change it -->
+<ul class="site-summary" aria-label="Site details">
+  <li><a class="site-summary__row" href="{{{base}}}/settings/title"><span class="site-summary__label">Title</span><span class="visually-hidden">: </span>{{#blog.title}}<span class="site-summary__value truncate">{{blog.title}}</span>{{/blog.title}}{{^blog.title}}<span class="site-summary__value site-summary__value--empty">No title</span>{{/blog.title}}<span class="visually-hidden">, </span><span class="site-summary__edit">Edit</span></a></li>
+  <li><a class="site-summary__row" href="{{{base}}}/settings/domain"><span class="site-summary__label">Domain</span><span class="visually-hidden">: </span><span class="site-summary__value truncate">{{blog.pretty.url}}</span><span class="visually-hidden">, </span><span class="site-summary__edit">Edit</span></a></li>
+  <li><a class="site-summary__row" href="{{{liveTemplate.url}}}"><span class="site-summary__label">Template</span><span class="visually-hidden">: </span><span class="site-summary__value truncate">{{liveTemplate.name}}</span><span class="visually-hidden">, </span><span class="site-summary__edit">Edit template</span></a></li>
+</ul>

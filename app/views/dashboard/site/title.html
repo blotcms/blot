@@ -1,13 +1,9 @@
 
 {{> message}}
+{{> settings-tabs}}
 
-<div class="dashboard-form-panel">
+<div class="dashboard-form-panel settings-page">
     <div class="dashboard-form-panel__body">
-<header class="page-header">
-  <div class="page-header__text">
-    <h1 class="page-header__title">Title</h1>
-  </div>
-</header>
 <form class="dashboard-form" method="POST">
     <div>
     <input type="hidden" name="_csrf" value="{{csrftoken}}" />

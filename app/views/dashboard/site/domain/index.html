@@ -1,13 +1,9 @@
 
 {{> message}}
+{{> settings-tabs}}
 
-<div class="dashboard-form-panel">
+<div class="dashboard-form-panel settings-page">
 <div class="dashboard-form-panel__body">
-<header class="page-header">
-  <div class="page-header__text">
-    <h1 class="page-header__title">Domain</h1>
-  </div>
-</header>
 <form class="dashboard-form" action="{{{domainBase}}}" method="POST">
 <div style="border:1px solid #eeeeec;border-radius: 5px;overflow: hidden;">
 <input type="hidden" name="_csrf" value="{{csrftoken}}" />

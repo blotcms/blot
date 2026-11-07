@@ -23,14 +23,23 @@
   border-bottom: 1px solid var(--border-color);
 }
 
+/* One row, scrolled sideways when the tabs outgrow it (Settings on a
+   phone), rather than a second row under the current tab's underline.
+   js/tabs.js scrolls the current tab into view. */
 .tabs__list {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 0 var(--space-1);
   max-width: none;
   margin: 0;
   padding: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
   list-style: none;
+}
+
+.tabs__list::-webkit-scrollbar {
+  display: none;
 }
 
 .tabs__list li {
@@ -41,6 +50,7 @@
 
 .tabs__link {
   display: block;
+  white-space: nowrap;
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-md);
   color: var(--medium-text-color);

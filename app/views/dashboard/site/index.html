@@ -26,6 +26,8 @@
 
       <div class="dashboard-main">
 
+        {{#isOverviewView}}{{> site-summary}}{{/isOverviewView}}
+        {{#isPostsView}}{{> site-summary}}{{/isPostsView}}
         {{#isFolderView}}
         <section id="site-dashboard-folder" class="site-dashboard-view-panel" aria-label="Site folder">
           {{> directory}}

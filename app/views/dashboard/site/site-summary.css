@@ -1,0 +1,72 @@
+/*
+  The overview's summary (site/site-summary.html): the site's title, domain
+  and live template, one compact row each, every row a link to change it.
+  Bordered like the folder box below it.
+*/
+
+/* No margin of its own: the page's column already spaces its blocks */
+.site-summary {
+  /* base.css caps lists at reading width */
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  list-style: none;
+}
+
+.site-summary li {
+  margin: 0;
+}
+
+.site-summary li + li {
+  border-top: 1px solid var(--border-color);
+}
+
+.site-summary__row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-2) var(--space-4);
+  color: var(--text-color);
+  font-size: var(--text-sm);
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.site-summary__row:hover {
+  background: var(--hover-background-color);
+}
+
+.site-summary__row:active {
+  background: var(--active-background-color);
+}
+
+.site-summary__row:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+.site-summary__label {
+  flex: 0 0 5.5em;
+  color: var(--medium-text-color);
+}
+
+.site-summary__value {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.site-summary__value--empty {
+  color: var(--light-text-color);
+}
+
+.site-summary__edit {
+  flex: 0 0 auto;
+  color: var(--accent-color);
+}
+
+.site-summary__row:hover .site-summary__edit {
+  color: var(--accent-hover-color);
+}

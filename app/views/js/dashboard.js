@@ -33,6 +33,7 @@ require("./site-settings-redirects.js");
 require("./dashboard-sidebar.js");
 require("./data-table.js");
 require("./details-dismiss.js");
+require("./tabs.js");
 require("../dashboard/template/js/template-overview.js");
 require("./template-screenshots.js");
 require("../dashboard/template/js/template-link-hints.js");

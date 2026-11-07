@@ -59,8 +59,6 @@ function getSidebarSelection(path) {
     path.startsWith("/sync/")
   )
     return "folder";
-  if (path.startsWith("/settings/title")) return "title";
-  if (path.startsWith("/settings/domain")) return "domain";
   if (path === "/settings" || path.startsWith("/settings/"))
     return "siteSettings";
   if (
@@ -79,8 +77,6 @@ function getSidebarSelection(path) {
 const sidebarLabels = {
   folder: "Folder",
   template: "Template",
-  title: "Title",
-  domain: "Domain",
   siteSettings: "Settings",
   import: "Import",
   export: "Export",
@@ -283,6 +279,7 @@ site.get(
   setView("folder"),
   require("./folder"),
   require("./load/posts"),
+  require("./load/live-template"),
   loadClient,
   renderDashboard
 );
@@ -326,6 +323,7 @@ site.get(
   Object.keys(postFilterLabels).map((filter) => "/" + filter),
   setView("posts"),
   require("./load/posts"),
+  require("./load/live-template"),
   loadClient,
   renderDashboard
 );
@@ -415,11 +413,11 @@ for (const page of ["title", "domain"]) {
   });
 }
 
-site.use("/settings/title", title);
-site.use("/settings/domain", domain);
-
 // The Settings page: one tab per group of settings, each its own page
+// Title and Domain are settings too, first since they're the most used
 const settingsTabs = [
+  ["title", "Title"],
+  ["domain", "Domain"],
   ["writing", "Writing"],
   ["images", "Images"],
   ["date", "Date & time"],
@@ -437,6 +435,9 @@ const settingsTab = (tab) => (req, res, next) => {
   next();
 };
 
+site.use("/settings/title", settingsTab("title"), title);
+site.use("/settings/domain", settingsTab("domain"), domain);
+
 const settingsRedirect = (to) => (req, res) => {
   const query = req.originalUrl.includes("?")
     ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
@@ -444,7 +445,8 @@ const settingsRedirect = (to) => (req, res) => {
   res.redirect(302, `${res.locals.base}/settings/${to}${query}`);
 };
 
-site.get("/settings", settingsRedirect("writing"));
+// The first tab
+site.get("/settings", settingsRedirect("title"));
 
 // Earlier versions of this page
 site.get("/settings/content", settingsRedirect("writing"));

@@ -179,6 +179,17 @@
 
 /* One link: transparent until hovered, then a grey pill. It leads to the
    client's page (or, with no folder, to connecting one). */
+/* "Folder", labelling the row as the overview's summary labels its rows
+   (site/site-summary.css): the same size and width, so the client lines up
+   under their values. Hidden from screen readers, which hear "Syncs with". */
+.folder-sync-label {
+  flex: 0 0 5.5em;
+  /* Back out the folder box's inset, which the summary card doesn't have */
+  margin-left: calc(var(--space-2) * -1);
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
+}
+
 .folder-sync {
   position: relative;
   min-width: 0;
