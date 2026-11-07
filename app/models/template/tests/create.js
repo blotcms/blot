@@ -4,7 +4,7 @@ describe("template", function () {
   var create = require("models/template/index").create;
   var getTemplateList = require("models/template/index").getTemplateList;
   var makeID = require("models/template/index").makeID;
-  var async = require("async");
+  var { each } = require("../../../../scripts/tests/util/callbacks");
 
   it("creates a template", function (done) {
     create(this.blog.id, "template", {}, done);
@@ -100,7 +100,7 @@ describe("template", function () {
     while (templateNames.length < 1000)
       templateNames.push(test.fake.random.uuid());
 
-    async.map(
+    each(
       templateNames,
       function (templateName, next) {
         create(test.blog.id, templateName, {}, next);

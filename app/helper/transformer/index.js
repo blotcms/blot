@@ -15,12 +15,40 @@ var assets = require("storage/assets");
 var resolve = require("path").resolve;
 var callbackify = require("util").callbackify;
 var resolveCaseInsensitive = callbackify(folder.resolveCaseInsensitive);
-var async = require("async");
 var withCallback = require("helper/withCallback");
 var he = require("he");
 var unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
 var decodeFolderPath =
   require("blog/render/replaceFolderLinks/shared").decodeFolderPath;
+
+// Tries each task (a function taking a callback) in turn until one doesn't
+// fail, then calls back with that task's results: its single result, or an
+// array when it passed several. If every task fails it calls back with the
+// last error. Tasks run one after another, never together.
+async function runTasks(tasks) {
+  var error = null;
+
+  for (var task of tasks) {
+    try {
+      return await new Promise(function (resolve, reject) {
+        task(function (err, ...args) {
+          if (err) return reject(err);
+          resolve(args.length <= 1 ? args[0] : args);
+        });
+      });
+    } catch (err) {
+      error = err;
+    }
+  }
+
+  if (error) throw error;
+}
+
+function tryEach(tasks, callback) {
+  runTasks(tasks).then(function (results) {
+    callback(null, results);
+  }, callback);
+}
 
 // Maps https://cdn.blot.im/blog_xyz/_image_cache/abc.jpg to
 // /_image_cache/abc.jpg to enable us to look up the file quickly
@@ -253,7 +281,7 @@ function Transformer(blogID, name) {
 
     // Will work down the list of paths. If one of the paths
     // works then it'll stop and return the result!
-    async.tryEach(tasks, function (err, results) {
+    tryEach(tasks, function (err, results) {
       if (err) return callback(err);
       debug(results);
       callback(null, results[0], results[1]);
@@ -327,7 +355,7 @@ function Transformer(blogID, name) {
         download(url, headers, next);
       });
 
-      async.tryEach(tasks, function (err, results) {
+      tryEach(tasks, function (err, results) {
         // Now we try and download the URL, passing in previously
         // stored headers if any. This module interprets 304
         // responses nicely.

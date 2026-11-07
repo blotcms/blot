@@ -1,8 +1,6 @@
-var async = require("async");
 var joinpath = require("path").join;
 var folder = require("storage/folder");
 var blogFolder = require("clients/folder");
-var callbackify = require("util").callbackify;
 var determineTemplateFolder = require("./determineTemplateFolder");
 var shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var getMetadata = require("./getMetadata");
@@ -11,113 +9,102 @@ var writeToFolder = require("./writeToFolder");
 
 var PACKAGE = "package.json";
 
+// Calls back (err, modifiedSlugs): when some packages couldn't be updated,
+// err is an aggregate error and modifiedSlugs still lists the ones that were.
 function removeEnabledFromAllTemplates(blogID, callback) {
-  determineTemplateFolder(blogID, function (err, folderName) {
-    if (err) return callback(err);
-    removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback);
-  });
+  run(blogID).then(function (result) {
+    callback(result.err, result.modifiedSlugs);
+  }, callback);
 }
 
-function removeEnabledFromAllTemplatesInFolder(blogID, folderName, callback) {
-  callbackify(folder.listNames)(blogID, folderName, function (err, listing) {
-    if (err) {
-      if (err.code === "ENOENT" || err.code === "ENOTDIR")
-        return callback(null, []);
-      return callback(err);
+async function run(blogID) {
+  var folderName = await determineTemplateFolder(blogID);
+  var listing;
+
+  try {
+    listing = await folder.listNames(blogID, folderName);
+  } catch (err) {
+    if (err.code === "ENOENT" || err.code === "ENOTDIR")
+      return { err: null, modifiedSlugs: [] };
+    throw err;
+  }
+
+  var errors = [];
+  var modifiedSlugs = [];
+
+  // Only directories hold templates (listings leave out symbolic links)
+  var entries = listing
+    .filter(function (entry) {
+      return entry.isDirectory;
+    })
+    .map(function (entry) {
+      return entry.name;
+    });
+
+  for (var entry of entries) {
+    if (!entry || entry[0] === "." || shouldIgnoreFile(entry)) continue;
+
+    var packagePath = joinpath(folderName, entry, PACKAGE);
+    var buffer;
+
+    try {
+      buffer = await folder.read(blogID, packagePath);
+    } catch (err) {
+      if (err.code !== "ENOENT") errors.push(err);
+      continue;
     }
 
-    var errors = [];
-    var modifiedSlugs = [];
+    var data;
 
-    // Only directories hold templates (listings leave out symbolic links)
-    var entries = listing
-      .filter(function (entry) {
-        return entry.isDirectory;
-      })
-      .map(function (entry) {
-        return entry.name;
-      });
+    try {
+      data = JSON.parse(buffer.toString("utf-8"));
+    } catch (parseErr) {
+      errors.push(parseErr);
+      continue;
+    }
 
-    async.eachSeries(
-      entries,
-      function (entry, next) {
-        if (!entry || entry[0] === "." || shouldIgnoreFile(entry)) {
-          return next();
-        }
+    if (!data || data.enabled !== true) continue;
 
-        var packagePath = joinpath(folderName, entry, PACKAGE);
+    data.enabled = false;
+    var updated = JSON.stringify(data, null, 2);
 
-        callbackify(folder.read)(blogID, packagePath, function (err, buffer) {
-          if (err) {
-            if (err.code === "ENOENT") return next();
-            errors.push(err);
-            return next();
-          }
+    // Through the client, so the provider gets the change too
+    try {
+      await blogFolder.write(blogID, packagePath, updated);
+    } catch (err) {
+      errors.push(err);
+      continue;
+    }
 
-          var data;
+    modifiedSlugs.push(entry);
 
-          try {
-            data = JSON.parse(buffer.toString("utf-8"));
-          } catch (parseErr) {
-            errors.push(parseErr);
-            return next();
-          }
+    // Check if this template is locally-edited and write it back to the folder
+    var templateID = makeID(blogID, entry);
+    var metadata = await getMetadata(templateID).catch(function () {});
 
-          if (!data || data.enabled !== true) return next();
+    if (!metadata || !metadata.localEditing) continue;
 
-          data.enabled = false;
-          var updated = JSON.stringify(data, null, 2);
+    try {
+      await writeToFolder(blogID, templateID);
+    } catch (writeErr) {
+      console.warn(
+        "Failed to write modified template to folder",
+        blogID,
+        templateID,
+        writeErr
+      );
+    }
+  }
 
-          // Through the client, so the provider gets the change too
-          callbackify(blogFolder.write)(
-            blogID,
-            packagePath,
-            updated,
-            function (err) {
-              if (err) {
-                errors.push(err);
-                return next();
-              }
-
-              modifiedSlugs.push(entry);
-
-              // Check if this template is locally-edited and write it back to the folder
-              var templateID = makeID(blogID, entry);
-              getMetadata(templateID, function (err, metadata) {
-                if (err || !metadata || !metadata.localEditing) {
-                  return next();
-                }
-
-                writeToFolder(blogID, templateID, function (writeErr) {
-                  if (writeErr) {
-                    console.warn(
-                      "Failed to write modified template to folder",
-                      blogID,
-                      templateID,
-                      writeErr
-                    );
-                  }
-                  next();
-                });
-              });
-            }
-          );
-        });
-      },
-      function (err) {
-        if (err) errors.push(err);
-        if (errors.length) {
-          var aggregate = new Error(
-            "Failed to update one or more template packages."
-          );
-          aggregate.errors = errors;
-          return callback(aggregate, modifiedSlugs);
-        }
-
-        callback(null, modifiedSlugs);
-      }
+  if (errors.length) {
+    var aggregate = new Error(
+      "Failed to update one or more template packages."
     );
-  });
+    aggregate.errors = errors;
+    return { err: aggregate, modifiedSlugs: modifiedSlugs };
+  }
+
+  return { err: null, modifiedSlugs: modifiedSlugs };
 }
 
 module.exports = removeEnabledFromAllTemplates;

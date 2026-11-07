@@ -1,7 +1,7 @@
 describe("sync multi-folder support", function () {
   var storage = require("storage/folder");
   var path = require("path");
-  var async = require("async");
+  var { series } = require("../../../scripts/tests/util/callbacks");
   var Entry = require("models/entry");
   var Entries = require("models/entries");
   var syncFolder = require("sync");
@@ -222,7 +222,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -251,7 +251,7 @@ describe("sync multi-folder support", function () {
                     syncFolder(blogID, function (err2, folder2, finish2) {
                       if (err2) return done.fail(err2);
 
-                      async.series(
+                      series(
                         [
                           function (next) {
                             folder2.update("/images/photo.md", next);
@@ -311,7 +311,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -389,7 +389,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -429,7 +429,7 @@ describe("sync multi-folder support", function () {
                     syncFolder(blogID, function (err2, folder2, finish2) {
                       if (err2) return done.fail(err2);
 
-                      async.series(
+                      series(
                         [
                           function (next) {
                             folder2.update("/gallery+/a.md", next);
@@ -480,7 +480,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -551,7 +551,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -625,7 +625,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -719,7 +719,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -764,7 +764,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -815,7 +815,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -857,7 +857,7 @@ describe("sync multi-folder support", function () {
                     syncFolder(blogID, function (err2, folder2, finish2) {
                       if (err2) return done.fail(err2);
 
-                      async.series(
+                      series(
                         [
                           function (next) {
                             folder2.update("/notes/multi+/a.md", next);
@@ -909,7 +909,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -951,7 +951,7 @@ describe("sync multi-folder support", function () {
                 syncFolder(blogID, function (err2, folder2, finish2) {
                   if (err2) return done.fail(err2);
 
-                  async.series(
+                  series(
                     [
                       function (next) {
                         folder2.update("/article.md+/a.md", next);
@@ -995,7 +995,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -1062,7 +1062,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -1134,7 +1134,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             after(
@@ -1238,7 +1238,7 @@ describe("sync multi-folder support", function () {
     syncFolder(blogID, function (err, folder, finish) {
       if (err) return done.fail(err);
 
-      async.series(
+      series(
         [
           function (next) {
             // A real source file at the folder post's published path + .html

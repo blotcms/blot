@@ -1,4 +1,14 @@
-var async = require("async");
+var eachLimit = require("helper/eachLimit");
+
+// Calls a spec util, which takes a callback and reads this from its context
+function callUtil(util, context) {
+  return new Promise(function (resolve, reject) {
+    util.call(context, function (err) {
+      if (err) return reject(err);
+      resolve();
+    });
+  });
+}
 
 module.exports = function registerGlobalTest() {
   global.test = {
@@ -64,7 +74,7 @@ module.exports = function registerGlobalTest() {
       beforeEach(require("./util/createUser"));
       if (!skipTeardown) afterEach(require("./util/removeUser"));
 
-      beforeEach(function (done) {
+      beforeEach(async function () {
         var context = this;
         context.blogs = new Array(total);
 
@@ -88,33 +98,27 @@ module.exports = function registerGlobalTest() {
         // throughput up while createBlog.js's retries absorb the CAS
         // contention that shows up at this concurrency. Any failure that
         // does slip through still fails setup loudly instead of silently.
-        async.timesLimit(
-          total,
+        await eachLimit(
+          Array.from({ length: total }, (_, index) => index),
           40,
-          function (index, next) {
+          async function (index) {
             var result = { user: context.user };
-            require("./util/createBlog").call(result, function (err) {
-              if (err) return next(err);
-              context.blogs[index] = result.blog;
-              next();
-            });
-          },
-          done
+            await callUtil(require("./util/createBlog"), result);
+            context.blogs[index] = result.blog;
+          }
         );
       });
 
       if (!skipTeardown) {
-        afterEach(function (done) {
+        afterEach(async function () {
           var context = this;
-          async.each(
-            this.blogs,
-            function (blog, next) {
-              require("./util/removeBlog").call(
-                { user: context.user, blog: blog },
-                next
-              );
-            },
-            done
+          await Promise.all(
+            this.blogs.map((blog) =>
+              callUtil(require("./util/removeBlog"), {
+                user: context.user,
+                blog: blog,
+              })
+            )
           );
         });
       }
