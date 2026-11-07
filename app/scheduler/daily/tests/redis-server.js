@@ -123,13 +123,13 @@ describe("scheduler/daily/redis-server", function () {
   const redis = async (options) => (await both(options)).redis;
   const server = async (options) => (await both(options)).server;
 
-  it("is two lines: Redis (memory with the days to a resize, last save, last backup) and the server (disk, RAM)", async function () {
+  it("is two lines: Redis (memory with the days to a resize, last save, last backup) and the server (root disk, memory)", async function () {
     const result = await both(withSnapshot);
 
     expect(result).toEqual({
       redis:
         "Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago",
-      server: "Server: disk 21% (19 GB free), RAM 75% available (12 GB)",
+      server: "Server: root disk 21% (19 GB free), memory 25% (12 GB free)",
     });
     expect(result.redis).not.toContain("\n");
     expect(result.server).not.toContain("\n");
@@ -221,14 +221,14 @@ describe("scheduler/daily/redis-server", function () {
     });
   });
 
-  describe("RAM", function () {
+  describe("memory", function () {
     const ram = (available) =>
       ` ram_total=${16 * GB} ram_avail=${available * GB}`;
     const disk = ` disk_root=${5 * GB}/${24 * GB}/${19 * GB}`;
 
-    it("shows the host's available RAM, after the disk", async function () {
+    it("shows the host's memory in use, after the disk", async function () {
       expect(await server()).toBe(
-        "Server: disk 21% (19 GB free), RAM 75% available (12 GB)"
+        "Server: root disk 21% (19 GB free), memory 25% (12 GB free)"
       );
     });
 
@@ -237,30 +237,30 @@ describe("scheduler/daily/redis-server", function () {
 
       expect(
         await server({ sample: sampleLine({ extra: extra(2.5) }) })
-      ).toEndWith(", RAM 16% available (2.5 GB)");
+      ).toEndWith(", memory 84% (2.5 GB free)");
       expect(
         await server({ sample: sampleLine({ extra: extra(2) }) })
-      ).toEndWith(", **RAM 13% available (2 GB)**");
+      ).toEndWith(", **memory 88% (2 GB free)**");
     });
 
     it("says when the host did not report it", async function () {
       expect(await server({ sample: sampleLine({ extra: disk }) })).toEndWith(
-        ", RAM not reported"
+        ", memory not reported"
       );
     });
 
     it("is left out with no sample or a stale one, which the disk part already says", async function () {
-      expect(await server({ sample: null })).not.toContain("RAM");
+      expect(await server({ sample: null })).not.toContain("memory");
       expect(
         await server({ sample: sampleLine({ age: 25 * MINUTE }) })
-      ).not.toContain("RAM");
+      ).not.toContain("memory");
     });
   });
 
   describe("disk", function () {
     it("shows only the root disk normally", async function () {
       const result = await server();
-      expect(result).toContain("disk 21% (19 GB free), RAM");
+      expect(result).toContain("root disk 21% (19 GB free), memory");
       expect(result).not.toContain("backup disk");
       expect(result).not.toContain("/backups");
     });
@@ -269,26 +269,26 @@ describe("scheduler/daily/redis-server", function () {
       // 80% of 24 GB is 19.2 GB: 14.2 GB to go at 0.1 GB a day
       const growing = historyLine([DAY, 4.9 * GB, "ip-10-0-0-1"]);
       expect(await server({ disk: growing })).toContain(
-        "disk 21% (resize in ~142 days, 19 GB free)"
+        "root disk 21% (resize in ~142 days, 19 GB free)"
       );
 
       const flat = historyLine([DAY, 5 * GB, "ip-10-0-0-1"]);
       expect(await server({ disk: flat })).toContain(
-        "disk 21% (stable, 19 GB free)"
+        "root disk 21% (stable, 19 GB free)"
       );
     });
 
     it("starts afresh on a different host", async function () {
       const replaced = historyLine([DAY, 1 * GB, "ip-10-0-0-9"]);
       expect(await server({ disk: replaced })).toContain(
-        "disk 21% (19 GB free)"
+        "root disk 21% (19 GB free)"
       );
     });
 
     it("says to resize now from 80% full", async function () {
       const extra = ` disk_root=${20 * GB}/${24 * GB}/${4 * GB}`;
       expect(await server({ sample: sampleLine({ extra }) })).toContain(
-        "disk 83% (**resize now**, 4 GB free)"
+        "root disk 83% (**resize now**, 4 GB free)"
       );
     });
 
@@ -300,7 +300,7 @@ describe("scheduler/daily/redis-server", function () {
 
       const full = ` disk_root=${5 * GB}/${24 * GB} disk_backups=${85 * GB}/${100 * GB}`;
       expect(await server({ sample: sampleLine({ extra: full }) })).toContain(
-        "disk 21% (19 GB free), **backup disk 85% full**, RAM"
+        "root disk 21% (19 GB free), **backup disk 85% full**, memory"
       );
     });
 
@@ -310,21 +310,21 @@ describe("scheduler/daily/redis-server", function () {
       const result = await server({ sample: sampleLine({ extra }) });
 
       expect(result).toContain(
-        "disk 23% (17 GB free), **backup disk 82% full**, RAM"
+        "root disk 23% (17 GB free), **backup disk 82% full**, memory"
       );
     });
 
     it("works out the disk from used and total for a sample without the available figure", async function () {
       const extra = ` disk_root=${5 * GB}/${24 * GB} disk_backups=${85 * GB}/${100 * GB}`;
       expect(await server({ sample: sampleLine({ extra }) })).toContain(
-        "disk 21% (19 GB free), **backup disk 85% full**, RAM"
+        "root disk 21% (19 GB free), **backup disk 85% full**, memory"
       );
     });
 
     it("says when /backups is not mounted", async function () {
       const extra = ` disk_root=${5 * GB}/${24 * GB}`;
       expect(await server({ sample: sampleLine({ extra }) })).toContain(
-        "disk 21% (19 GB free), **/backups not mounted**, RAM"
+        "root disk 21% (19 GB free), **/backups not mounted**, memory"
       );
     });
 
@@ -346,7 +346,7 @@ describe("scheduler/daily/redis-server", function () {
 
     it("copes with a sample from before the host reported disk", async function () {
       expect(await server({ sample: sampleLine({ extra: "" }) })).toContain(
-        "disk not reported"
+        "root disk not reported"
       );
     });
   });
@@ -385,9 +385,9 @@ describe("scheduler/daily/redis-server", function () {
     it("says overdue after two hours", async function () {
       expect(
         await redis({ backup: backupLine({ age: 3 * HOUR, kind: "daily" }) })
-      ).toEndWith("**last backup 3h ago, overdue**");
+      ).toEndWith("**backed up 3h ago, overdue**");
       expect(await redis({ backup: backupLine({ age: 3 * DAY }) })).toEndWith(
-        "**last backup 3d ago, overdue**"
+        "**backed up 3d ago, overdue**"
       );
     });
 
@@ -419,7 +419,7 @@ describe("scheduler/daily/redis-server", function () {
       ).toEndWith("offsite 2d ago");
       expect(
         await redis({ offsite: backupLine({ age: 3 * DAY, kind: "daily" }) })
-      ).toEndWith("**last offsite backup 3d ago, overdue**");
+      ).toEndWith("**offsite 3d ago, overdue**");
     });
 
     it("flags a value that cannot be read", async function () {
@@ -444,7 +444,7 @@ describe("scheduler/daily/redis-server", function () {
       expect(result.redis).toStartWith(
         "Redis: memory 27% (resize in ~58 days, 8 GB free)"
       );
-      expect(result.server).toStartWith("Server: disk 21% (19 GB free)");
+      expect(result.server).toStartWith("Server: root disk 21% (19 GB free)");
       expect(result.redis).not.toContain("\n");
       expect(result.server).not.toContain("\n");
     });
@@ -536,7 +536,7 @@ describe("scheduler/daily/redis-server", function () {
       Mustache.render(template, {
         render_time: "p50 10ms",
         redis: `Redis: memory 82% (**[resize now](${RESIZE_URL})**, 2 GB free), saved 3m ago`,
-        server: "Server: disk 21% (19 GB free), RAM 75% available (12 GB)",
+        server: "Server: root disk 21% (19 GB free), memory 25% (12 GB free)",
       })
     );
 
@@ -544,7 +544,7 @@ describe("scheduler/daily/redis-server", function () {
       `<p>Redis: memory 82% (<strong><a href="${RESIZE_URL}">resize now</a></strong>, 2 GB free), saved 3m ago</p>`
     );
     expect(html).toContain(
-      "<p>Server: disk 21% (19 GB free), RAM 75% available (12 GB)</p>"
+      "<p>Server: root disk 21% (19 GB free), memory 25% (12 GB free)</p>"
     );
   });
 });
