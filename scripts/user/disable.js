@@ -8,33 +8,6 @@ var getConfirmation = require("../util/getConfirmation");
 var moment = require("moment");
 var colors = require("colors/safe");
 
-// scripts/each/user is callback-based and stops at the first error. Runs fn
-// for each user in turn, and passes a rejection from fn on as the error.
-function forEachUser(fn) {
-  return new Promise(function (resolve, reject) {
-    each(
-      function (user, next) {
-        Promise.resolve()
-          .then(function () {
-            return fn(user);
-          })
-          .then(
-            function () {
-              next();
-            },
-            function (err) {
-              next(err);
-            }
-          );
-      },
-      function (err) {
-        if (err) return reject(err);
-        resolve();
-      }
-    );
-  });
-}
-
 async function getUser(identifier) {
   const { user } = await get(identifier);
   return user;
@@ -127,7 +100,7 @@ async function run() {
   } else {
     console.log("Searching for users to disable");
 
-    await forEachUser(async function (user) {
+    await each(async function (user) {
       if (user.isDisabled) return;
 
       // If the user doesn't have a Stripe subscription

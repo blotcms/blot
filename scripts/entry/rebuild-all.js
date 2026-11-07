@@ -363,7 +363,7 @@ async function main() {
   let err = null;
 
   try {
-    await eachBlog.promise(doThis, options);
+    await eachBlog(doThis, options);
   } catch (eachErr) {
     err = eachErr;
   }

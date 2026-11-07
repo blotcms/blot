@@ -32,7 +32,7 @@ async function copyRandomEntry(user, blog, entry) {
   }
 }
 
-each.promise(copyRandomEntry).then(
+each(copyRandomEntry).then(
   () => onComplete(),
   (err) => onComplete(err)
 );
