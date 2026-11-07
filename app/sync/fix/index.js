@@ -4,7 +4,7 @@ const listGhosts = require("./list-ghosts");
 const menuGhosts = require("./menu-ghosts");
 const tagGhosts = require("./tag-ghosts");
 const entriesPathIndex = require("./entries-path-index");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 const clfdate = require("helper/clfdate");
 
 // Each check below issues many small, sequential Redis round trips (e.g.
@@ -24,10 +24,10 @@ function getRunningChecks() {
   return Array.from(runningChecks.values());
 }
 
-// Runs the checks one after the other and settles with { error, report }:
-// it never rejects, because a check failing part way still leaves the
-// repairs made before that, and the callers want both.
-const run = withCallback(async function run(blog, status) {
+// Runs the checks one after the other and resolves with { error, report }:
+// a check failing part way still leaves the repairs made before that, and
+// the callers want both. Only a status function that throws rejects.
+async function run(blog, status) {
   const finalReport = {};
   const checks = [
     { name: "entry-ghosts", fn: entryGhosts },
@@ -96,42 +96,56 @@ const run = withCallback(async function run(blog, status) {
   // A check earlier in the series may have already failed - don't let
   // a successful cacheID bump on Blog.set mask that error.
   return { error: error || setError, report: finalReport };
-});
+}
 
-// Fix() only returns what it repaired: callback(err, finalReport), where
-// finalReport is { [checkName]: items[] }. It doesn't email. Callers decide
-// what to report - the hourly sweeps fold it into one digest per sweep (see
+// The report rides on the error as a property that isn't enumerable, so
+// logging the error prints what it did before.
+function withReport(err, report) {
+  if (err !== null && (typeof err === "object" || typeof err === "function")) {
+    Object.defineProperty(err, "report", {
+      value: report,
+      enumerable: false,
+      writable: true,
+      configurable: true,
+    });
+  }
+
+  return err;
+}
+
+// Fix() only returns what it repaired: it resolves with finalReport, which is
+// { [checkName]: items[] }. It doesn't email. Callers decide what to report -
+// the hourly sweeps fold it into one digest per sweep (see
 // clients/util/syncReport.js) rather than one email per repaired blog.
-// It keeps its callback, and has no promise form, because it calls back with
-// both an error and the report (withCallback would drop the report on error).
-module.exports = function (blog, options, callback) {
+// A check that fails part way rejects with that check's error, and the
+// repairs made before it are on the error as err.report.
+async function Fix(blog, options) {
   if (!blog) {
     throw new TypeError("Fix: Expected blog as first argument");
   }
 
-  if (typeof options === "function") {
-    callback = options;
-    options = {};
-  }
+  options = options || {};
 
-  if (typeof callback !== "function") {
-    throw new TypeError("Fix: Expected callback as second argument");
-  }
-
-  // Callers that don't pass a status (the legacy two-argument API used by
-  // startup/hourly validators) never published one before this progress
-  // work was added. Keep that silent instead of writing a real messenger's
-  // status to Blog.setStatus - a "(n/5) Checking ..." message with no
-  // terminal follow-up would otherwise leave the dashboard showing that
-  // blog as syncing forever.
+  // Callers that don't pass a status (the startup/hourly validators) never
+  // published one before this progress work was added. Keep that silent
+  // instead of writing a real messenger's status to Blog.setStatus - a
+  // "(n/5) Checking ..." message with no terminal follow-up would otherwise
+  // leave the dashboard showing that blog as syncing forever.
   const status = options.status || function () {};
 
-  run(blog, status, function (err, outcome) {
+  let outcome;
+
+  try {
+    outcome = await run(blog, status);
+  } catch (err) {
     // Only a check's status function throwing gets here
-    if (err) return callback(err, {});
+    throw withReport(err, {});
+  }
 
-    callback(outcome.error, outcome.report);
-  });
-};
+  if (outcome.error) throw withReport(outcome.error, outcome.report);
 
+  return outcome.report;
+}
+
+module.exports = promiseOnly(Fix);
 module.exports.getRunningChecks = getRunningChecks;

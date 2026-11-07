@@ -1,17 +1,17 @@
 ## Git Client
 
-The Git client enables Blot users to manage their blog using a Git repository as the source folder. This client bridges between user-managed Git repositories and Blot's blog synchronization system.
+The Git client enables Blot customers to manage their blog using a Git repository as the source folder. This client bridges between user-managed Git repositories and Blot's blog synchronization system.
 
 ## Overview
 
 The Git client's repositories are:
 
 1. **The repository in the git store** (storage layer): under `<blogID>/git/` in the storage bucket, keyed by blog ID (`store/`, see its README, and `served/`). It is the only copy of a blog's repository on Blot's side and the central authority for its content. Pushes arrive here, and so do Blot's own writes. A change of handle moves nothing.
-2. **User repository** (on user's computer): A clone where the user makes edits and pushes them.
+2. **Customer repository** (on customer's computer): A clone where the customer makes edits and pushes them.
 
 The blog folder (`storage/folder`, by blog ID) is written from the store by `served/materialize.js`; it has no repository of its own. Blogs made before #2259 PR 8 may still have a **live repository** in it (`.git`), which nothing reads or moves; disconnecting removes it, and PR 9 removes the rest.
 
-When a user pushes changes from their local repository, Blot automatically detects the change, syncs the blog folder, and processes modified files.
+When a customer pushes changes from their local repository, Blot automatically detects the change, syncs the blog folder, and processes modified files.
 
 ## File Inventory
 
@@ -48,17 +48,17 @@ When a user pushes changes from their local repository, Blot automatically detec
 
 - **`stuckProcesses.js`**: Lists git processes in the container that have run for more than two hours (`app/scheduler/sweep-git.js`, daily, emails if it finds any).
 
-- **`authenticate.js`**: HTTP Basic Auth middleware using http-auth. Validates user credentials (email and token) against the blog and user models before allowing access to the push endpoint.
+- **`authenticate.js`**: HTTP Basic Auth middleware using http-auth. Validates customer credentials (email and token) against the blog and customer models before allowing access to the push endpoint.
 
 - **`sync.js`**: Takes the sync's folder lock and hands the sync to `served/sync.js`, which brings the blog folder from the last applied commit (`blog:<id>:git:applied`) to master in the store and passes each changed path to Blot. With none recorded, or one the store does not have, it compares from the empty tree, which writes every file but removes none.
 
 - **`create.js`**: Repository initialization. Refuses a blog which already has a repository (`EEXIST`) or a `.git` directory in its folder, generates the authentication token, and sets the repository up in the store from the blog folder (`served/create.js`): the folder is listed and read through `storage/folder` alone (it is never git's work tree, and may have no copy on local disk), a `.gitignore` in it applies as `git add` would apply it, and one `git fast-import` makes one commit (`Add files`, or `Initial commit` for an empty folder) which is imported into the store. The commit is recorded as applied. If it fails it removes only the store copy it made.
 
-- **`write.js`**: Writes a file to the blog folder and commits it (through `repo.commit`). Used by Blot to persist preview files and other content changes. One commit per file.
+- **`write.js`**: Writes a file to the blog folder and commits it (through `repo.commit`). Used by Blot to persist preview files and other changes. One commit per file.
 
 - **`remove.js`**: Removes a file from the blog folder and commits the deletion (through `repo.commit`).
 
-- **`disconnect.js`**: Cleans up when a user disconnects the Git client. Removes the repository from the store (`repo.remove`), the status record, the live repository (the `.git` directory in the blog folder) if there is one, the applied commit and, with the owner's last git site, the token. It needs nothing from the blog folder. It also runs when a blog on git is deleted.
+- **`disconnect.js`**: Cleans up when a customer disconnects the Git client. Removes the repository from the store (`repo.remove`), the status record, the live repository (the `.git` directory in the blog folder) if there is one, the applied commit and, with the owner's last git site, the token. It needs nothing from the blog folder. It also runs when a blog on git is deleted.
 
 - **`database.js`**: Redis-based token and status storage. Handles token creation, validation, refresh, and deletion. Also manages creation status tracking (e.g., `createInProgress`, `createFailed`, `createComplete`) and the applied commit.
 
@@ -74,7 +74,7 @@ When a user pushes changes from their local repository, Blot automatically detec
 
 ### Tests
 
-The specs in `tests/` are the client's regression suite: what a user sees with a stock git client. `tests/setup/index.js` makes a test blog on the git client with its repository in the store (a memory object store per blog), a test server for the git routes and a clone (`tests/setup/client.js` for a real git client), and cleans up after each spec. The specs of the host side of the store are in `served/tests/`, and of the store itself in `store/tests/`.
+The specs in `tests/` are the client's regression suite: what a customer sees with a stock git client. `tests/setup/index.js` makes a test blog on the git client with its repository in the store (a memory object store per blog), a test server for the git routes and a clone (`tests/setup/client.js` for a real git client), and cleans up after each spec. The specs of the host side of the store are in `served/tests/`, and of the store itself in `store/tests/`.
 
 ## Public API
 
@@ -162,8 +162,8 @@ User Repository (User's Computer)
 
 ### Sync Flow
 
-1. User makes local edits and pushes via `git push origin master`
-2. Authentication middleware validates user credentials against the User and Blog models
+1. Customer makes local edits and pushes via `git push origin master`
+2. Authentication middleware validates customer credentials against the Customer and Blog models
 3. `served/receive.js` receives the push at `/end/<blogHandle>.git` (see above)
 4. Once the push passes its checks, and just before master moves, a follow-up sync is written to Redis (`followUpSync`'s alarm, due in 15 seconds). If that fails the push fails and nothing moves. Then master moves, the sync starts at once, and the client is told. A crash after that is picked up by the follow-up; a sync that finishes takes its follow-up back.
 5. `sync()` is called with the blog ID and handle
@@ -181,7 +181,7 @@ Symbolic links (including links within the blog) and submodules are not supporte
 
 ### Authentication Flow
 
-1. User attempts to push to `/end/<blogHandle>.git`
+1. Customer attempts to push to `/end/<blogHandle>.git`
 2. HTTP Basic Auth middleware extracts email and token from the request
 3. User model is queried by email
 4. Token is validated against the stored token in Redis (key: `user:<uid>:git:token`)
@@ -195,7 +195,7 @@ Symbolic links (including links within the blog) and submodules are not supporte
 ### Internal
 
 - `models/blog`: Blog model for querying and updating blog records
-- `models/user`: User model for email-based user lookup
+- `models/user`: User model for email-based customer lookup
 - `helper/clfdate`: CLF date formatting for logs
 - `helper/lock`: The ref lock
 - `sync`: Distributed lock manager for coordinating blog folder updates

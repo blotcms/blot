@@ -24,7 +24,7 @@ function reconnectStrategy(retries) {
 
 // BLOT_REDIS_SOCKET is explicit config, never auto-detected: when it is set
 // and the socket is missing the connection fails visibly, it does not quietly
-// use TCP to a Redis the operator did not mean. node-redis connects over IPC
+// use TCP to a Redis the maintainer did not mean. node-redis connects over IPC
 // when socket.path is present, so the url (which would merge a host and port
 // in) is left out. keepAliveInitialDelay is ignored on IPC; socketTimeout and
 // reconnectStrategy apply to any transport. Read per client, not at require

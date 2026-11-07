@@ -10,7 +10,7 @@
 # is not published yet, wait for it (up to UNIT_IMAGE_WAIT seconds, default 25
 # min, or 2 min for an explicit commit, as in deploy.yml: an older commit's
 # image should already exist, and may never have been built). Runs from the
-# operator's Mac or from .github/workflows/deploy.yml, over the `ssh blot`
+# maintainer's Mac or from .github/workflows/deploy.yml, over the `ssh blot`
 # alias (ec2-user from the Mac, deploy from the workflow). To deploy to another
 # host, set BLOT_DEPLOY_TARGET to an ssh alias or user@host (default: blot).
 #

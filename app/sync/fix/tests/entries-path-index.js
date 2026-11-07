@@ -31,9 +31,9 @@ describe("sync/fix/entries-path-index", function () {
       Promise.resolve("5"),
       Promise.resolve("3")
     );
-    spyOn(pathIndex, "backfillIndex").and.callFake(function (blogID, callback) {
+    spyOn(pathIndex, "backfillIndex").and.callFake(async function (blogID) {
       expect(blogID).toBe("blog-id");
-      callback(null, 5);
+      return 5;
     });
 
     const { err, report: changes } = await settle_fixEntriesPathIndex({
@@ -54,11 +54,9 @@ describe("sync/fix/entries-path-index", function () {
       Promise.resolve("5"),
       Promise.resolve("3")
     );
-    spyOn(pathIndex, "backfillIndex").and.callFake(
-      function (_blogID, callback) {
-        callback(backfillError);
-      }
-    );
+    spyOn(pathIndex, "backfillIndex").and.callFake(async function () {
+      throw backfillError;
+    });
 
     const { err, report: changes } = await settle_fixEntriesPathIndex({
       id: "blog-id",

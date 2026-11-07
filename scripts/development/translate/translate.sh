@@ -6,7 +6,7 @@ set -euo pipefail
 # Usage: npm run translate <url>
 #
 # This script does not acquire content. Provision a site, scaffold a template,
-# then wait for the operator to move content into the folder. See RESEARCH.md.
+# then wait for the maintainer to move content into the folder. See RESEARCH.md.
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../../../" && pwd)"
@@ -204,7 +204,7 @@ if [ -z "$BLOG_ID" ]; then
   die "Provisioning did not report a blog ID." "$PROVISION_OUTPUT"
 fi
 
-# The container reports its own path; the operator needs the host equivalent.
+# The container reports its own path; the maintainer needs the host equivalent.
 FOLDER="$ROOT/data/local-sources/$HANDLE"
 
 echo "[translate] Site:     $SITE_URL"
@@ -316,7 +316,7 @@ if [ -n "$WARNING" ]; then
   echo ""
 fi
 
-# Commit whatever has changed since the last run: content the operator supplied,
+# Commit whatever has changed since the last run: content the maintainer supplied,
 # and anything the agent edited in between. Keeping each round as its own commit
 # is what makes the agent's work reviewable, and a bad round a revert.
 if [ -d "$FOLDER/.git" ]; then

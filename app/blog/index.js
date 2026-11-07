@@ -6,6 +6,7 @@ const blog = express.Router();
 
 blog.use((req, res, next) => {
   req.log = req.log || console.log;
+  req.logNow = req.logNow || console.log;
   res.locals.partials = res.locals.partials || {};
   next();
 });

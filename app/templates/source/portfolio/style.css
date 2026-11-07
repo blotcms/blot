@@ -410,17 +410,20 @@ body.position-top label[for="toggle"] {
 
 
 
+/* Thumbnails fade in once loaded, over a placeholder in their final shape. */
 .pre-loaded {
-  visibility: hidden;
   opacity: 0;
-  will-change: opacity;
-  transition: opacity 0.3s, visibility 0.3s;
+  transition: opacity 0.3s;
 }
 
-.loaded {
-  visibility: visible;
+.pre-loaded.loaded {
   opacity: 1;
-  transition: opacity 0.3s, visibility 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pre-loaded {
+    transition: none;
+  }
 }
 
 
@@ -518,6 +521,10 @@ body.position-top label[for="toggle"] {
 
 .post i {
   display: block;
+}
+
+.post.photo i {
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05);
 }
 
 .post img {

@@ -2,7 +2,7 @@
 
 Config as code and a few small scripts to build, load and check Blot's Redis
 (`redis6` 6.2.x on Amazon Linux 2023 arm64, RDB persistence, backups to S3).
-Everything runs from the operator's Mac over ssh; nothing here is used by the
+Everything runs from the maintainer's Mac over ssh; nothing here is used by the
 app. Part of blotcms/blot#2041.
 
 Production Redis runs on the one production host, together with both units
@@ -319,7 +319,7 @@ stops the local prune.
 - The key can only write. Create it with the CLI, because the console's "Write
   Only" key type also grants delete and lifecycle rights:
   `b2 key create --bucket <bucket> <name> writeFiles,listBuckets`.
-- A separate read key stays on the operator's machine, never on a server. It
+- A separate read key stays on the maintainer's machine, never on a server. It
   is what a recovery uses when AWS is unavailable. Create it like the write
   key, with read capabilities:
   `b2 key create --bucket <bucket> <name> listBuckets,listFiles,readFiles`.
@@ -381,9 +381,10 @@ reserved; `disk_backups` is left out when
 The daily email (`app/scheduler/daily/redis-server.js`) has two lines from this
 and Redis itself:
 `Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago, offsite 9h ago`
-`Server: disk 21% (stable, 19 GB free), RAM 75% available (12 GB)`
-Memory is `used_memory` against `maxmemory`; disk is the root disk from the
-sample, and RAM the host's available memory. Each is `percent (trend, free space)`: the trend is when it would reach
+`Server: root disk 21% (stable, 19 GB free), memory 25% (12 GB free)`
+Redis's memory is `used_memory` against `maxmemory`; the root disk is from the
+sample, and the server's memory is the host's memory in use (all but
+`MemAvailable`). Redis memory and the disk are `percent (trend, free space)`: the trend is when it would reach
 its limit (80% of `maxmemory`, 80% of the disk) at the rate it grew over the
 last week, or "stable" if it is flat or over a year away, and left out until
 there is an earlier reading. The daily job keeps the last 8 daily readings in

@@ -1,4 +1,5 @@
 var ensure = require("helper/ensure");
+var promiseOnly = require("helper/promiseOnly");
 
 var MODEL = require("../model");
 
@@ -6,20 +7,17 @@ var validators = {
   email: require("./email"),
 };
 
-// Calls back (err, user, changes), so it stays callback-shaped.
-module.exports = function validate(user, updates, callback) {
-  ensure(user, MODEL).and(updates, "object").and(callback, "function");
+// async validate(user, updates) merges the updates into user and resolves
+// { user, changes }. It rejects with the first validation error.
+module.exports = promiseOnly(async function validate(user, updates) {
+  ensure(user, MODEL).and(updates, "object");
 
   var changes = [];
 
-  try {
-    ensure(updates, MODEL);
-  } catch (err) {
-    return callback(err);
-  }
+  ensure(updates, MODEL);
 
   // All the updates are validated at once, and the first error wins
-  Promise.all(
+  await Promise.all(
     Object.keys(updates).map(async function (name) {
       var value = updates[name];
 
@@ -38,19 +36,15 @@ module.exports = function validate(user, updates, callback) {
         changes.push(name);
       }
     })
-  ).then(function () {
-    // Added after users existed: records written before it get it here, on
-    // their next save, rather than through a backfill
-    if (user.paymentMethodsSyncedAt === undefined)
-      user.paymentMethodsSyncedAt = 0;
+  );
 
-    // Check user properties are correct type
-    try {
-      ensure(user, MODEL, true);
-    } catch (err) {
-      return callback(err);
-    }
+  // Added after users existed: records written before it get it here, on
+  // their next save, rather than through a backfill
+  if (user.paymentMethodsSyncedAt === undefined)
+    user.paymentMethodsSyncedAt = 0;
 
-    return callback(null, user, changes);
-  }, callback);
-};
+  // Check user properties are correct type
+  ensure(user, MODEL, true);
+
+  return { user: user, changes: changes };
+});

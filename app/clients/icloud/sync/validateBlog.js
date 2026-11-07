@@ -61,7 +61,7 @@ const walk = async (blogID, publish, heldLock) => {
   }
 };
 
-// Event loop delay while one blog was validated, so the operator can watch
+// Event loop delay while one blog was validated, so the maintainer can watch
 // the impact on the shared Redis connection (and the macserver, via
 // duration) after it is switched on, and find which blog and phase block the
 // loop. Every blog is logged so quiet blogs are a baseline. entryCount is
@@ -87,16 +87,15 @@ const logLag = (
 
 // Never rejects: resolves with Fix's error and report so the caller decides
 // what to report. Fix() can fail part way through and still return the
-// repairs it made before that, hence both.
-const fixBlog = (blog) =>
-  new Promise((resolve) => {
-    Fix(blog, (error, report) => {
-      if (error) {
-        console.error(clfdate(), "iCloud: Fix error for blog", blog.id, error);
-      }
-      resolve({ error, report });
-    });
-  });
+// repairs it made before that (err.report), hence both.
+const fixBlog = async (blog) => {
+  try {
+    return { error: null, report: await Fix(blog) };
+  } catch (error) {
+    console.error(clfdate(), "iCloud: Fix error for blog", blog.id, error);
+    return { error, report: error.report };
+  }
+};
 
 // Checks one blog against iCloud and records what it found in the report
 // (see clients/util/syncReport): walks the folder under the sync lock,

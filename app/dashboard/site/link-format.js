@@ -87,7 +87,8 @@ async function save(req, res) {
     });
 
     if (changes && changes.includes("permalink")) {
-      await resaveEntries(req.blog.id, () => {});
+      // Not awaited: the page does not wait on the resave, and its errors are ignored
+      resaveEntries(req.blog.id).catch(() => {});
     }
 
     res.message(back, "Saved changes to link format");

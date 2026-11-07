@@ -311,7 +311,7 @@ function logFolderAsset(req, served) {
       }
     }
 
-    req.log(
+    req.logNow(
       "[folder-asset]",
       `blog=${req.blog.id}`,
       `handle=${req.blog.handle}`,

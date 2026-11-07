@@ -28,12 +28,13 @@ On a new host run `deploy.sh` directly (see [Moving to a new host](#moving-to-a-
 | `scripts/unit-mem-log.sh`, `scripts/unit-mem-summary.sh` | `/usr/local/bin/` |
 | (written by `deploy.sh`) | `/etc/cron.d/blot-unit-mem` (runs `unit-mem-log.sh` every minute as root) |
 | `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` (enabled; started only if `/var/instance-ssd` is not mounted yet) |
-| `scripts/docker.service.d/10-instance-store.conf` | `/etc/systemd/system/docker.service.d/10-instance-store.conf` |
+| `scripts/docker.service.d/*.conf` | `/etc/systemd/system/docker.service.d/` (`10-instance-store.conf`, and `20-rsyslog.conf`: docker starts after rsyslog, whose socket the units log to) |
 | `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then creates any `logpath` in `jail.local` that is missing and restarts fail2ban) |
 | `scripts/fail2ban.service.d/10-instance-store.conf` | `/etc/systemd/system/fail2ban.service.d/10-instance-store.conf` |
 | (written by `deploy.sh`) | `X11Forwarding no` in `/etc/ssh/sshd_config`, and on Amazon Linux 2023 in `/etc/ssh/sshd_config.d/12-blot-x11.conf` |
 | `logrotate/*` | `/etc/logrotate.d/` |
-| `tmpfiles.d/blot.conf` | `/etc/tmpfiles.d/blot.conf` (creates `/run/blot`) |
+| `tmpfiles.d/blot.conf` | `/etc/tmpfiles.d/blot.conf` (creates `/run/blot` and `/run/blot-log`) |
+| `rsyslog/blot-app-log.conf` | `/etc/rsyslog.d/blot-app-log.conf` (checked with `rsyslogd -N1`; rsyslog restarts only if it changed): the units' output, from Docker's syslog log driver, to `/var/instance-ssd/logs/app.log`, which `logrotate/app-log` keeps for 14 days. Read it with `scripts/prod/read.sh app-log` |
 | `.bashrc` | `/home/ec2-user/.bashrc` (must print nothing to stdout in a non-interactive shell: scp is SFTP on Amazon Linux 2023) |
 
 The `nginx-*` fail2ban jails ban `http,https` over TCP and, with a second
@@ -93,7 +94,7 @@ Moving to a new host: see [Moving to a new host](#moving-to-a-new-host).
 Do not reboot the production host until there are several hosts sharing the
 load (planned). With one host a reboot is downtime: Redis and both units go
 down together. Kernel and other OS security updates that need a reboot wait for
-that, unless the operator decides otherwise for a specific critical advisory.
+that, unless the maintainer decides otherwise for a specific critical advisory.
 Updates that do not need a reboot can be applied as usual. A new host from the
 host cycle is how the OS gets refreshed in the meantime.
 

@@ -6,10 +6,12 @@
     <span class="thumbnail">
       <span class="container">
         {{#thumbnail.medium}}
+        <span class="frame" style="width:min(100%, 100% * {{thumbnail.large.width}} / {{thumbnail.large.height}});height:min(100%, 100% * {{thumbnail.large.height}} / {{thumbnail.large.width}})">
         <img
           class="pre-loaded"
           loading="lazy"
-          onload="this.className='loaded'"
+          onload="this.classList.add('loaded')"
+          onerror="this.classList.add('loaded')"
           alt="{{title}}"
           width="{{thumbnail.large.width}}"
           height="{{thumbnail.large.height}}"
@@ -62,6 +64,7 @@
             {{/is.thumbnail_size}}
           />
         </noscript>
+        </span>
         {{/thumbnail.medium}}
         {{^thumbnail.medium}}
         <span class="no-thumbnail-content">

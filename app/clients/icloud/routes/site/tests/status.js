@@ -132,10 +132,10 @@ describe("icloud status route", function () {
     mockModule(entriesPath, {
       getAllTotal: async () => 3,
     });
-    mockModule(fixPath, (blog, callback) => {
+    mockModule(fixPath, async (blog) => {
       fixes.push(blog.id);
       events.push("fix");
-      callback(null, {});
+      return {};
     });
     mockModule(getHealthPath, async () => ({ issues: [] }));
     mockModule(emailPath, {
@@ -241,9 +241,7 @@ describe("icloud status route", function () {
 
   it("emails when Fix() repaired something", async function () {
     mockWalk(async () => ({}));
-    mockModule(fixPath, (blog, callback) =>
-      callback(null, { "tag-ghosts": ["a"] })
-    );
+    mockModule(fixPath, async () => ({ "tag-ghosts": ["a"] }));
     const status = require(statusPath);
 
     await requestResync(status, "blog_a");
@@ -277,9 +275,9 @@ describe("icloud status route", function () {
 
   it("emails when Fix() failed", async function () {
     mockWalk(async () => ({}));
-    mockModule(fixPath, (blog, callback) =>
-      callback(new Error("fix exploded"), {})
-    );
+    mockModule(fixPath, async () => {
+      throw Object.assign(new Error("fix exploded"), { report: {} });
+    });
     spyOn(console, "error");
     const status = require(statusPath);
 
@@ -341,11 +339,15 @@ describe("icloud status route", function () {
     // the spin starves the event loop, so if anything on the way needs I/O
     // the spec hangs forever instead of hitting Jasmine's timeout.
     const fixStarted = new Promise((resolve) => {
-      mockModule(fixPath, (blog, callback) => {
-        fixes.push(blog.id);
-        finishFix = () => callback(null, {});
-        resolve();
-      });
+      mockModule(
+        fixPath,
+        (blog) =>
+          new Promise((done) => {
+            fixes.push(blog.id);
+            finishFix = () => done({});
+            resolve();
+          })
+      );
     });
     const status = require(statusPath);
 

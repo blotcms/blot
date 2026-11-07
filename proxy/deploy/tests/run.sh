@@ -187,7 +187,7 @@ chmod +x "$T"/bin/*
 export PATH="$T/bin:$PATH"
 
 export PROXY_ENV_FILE="$T/proxy.env" PROXY_DISK_CACHE_DIR="$T/disk-cache" PROXY_GLOBAL_STATIC_DIR="$T/static" PROXY_LOG_DIR="$T/logs" \
-  PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" \
+  PROXY_CERT_DIR="$T/certs" PROXY_DEPLOY_LOCK="$T/lock" PROXY_APP_LOG_SOCKET="$T/app.sock" \
   PROXY_DEPLOY_SLEEP=true PROXY_HEALTH_TIMEOUT=1 TMUX=fake # nap() is a no-op, so a refusal busy-waits out PROXY_HEALTH_TIMEOUT real seconds
 
 # Units (#2119): the images, and the settings blue-green.sh reads for one. The
@@ -580,6 +580,13 @@ check "both units run on the new image, blue was verified once, and the old airl
   'running_now blot-blue && running_now blot-green && ! running_now blot-blue-airlock && ! running_now blot-green-airlock && before "docker stop --time 40 blot-green" "docker rm -f blot-blue-airlock" && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(grep -c verify-container "$FAKE/calls")" = 1 ] && called "exec --user 1000:1000 -e HOME=/home/node blot-blue node /usr/src/app/scripts/deploy/verify-container/index.js $SHA_NEW"'
 check "a unit gets both env files (secrets.env first), its name, sockets, memory, heaps, release and mounts" \
   'called "create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536 --stop-timeout 40" && called "create .*--env-file $T/secrets.env --env-file $T/proxy.env -e BLOT_UNIT=blue -e PROXY_UNIT=blue -e PROXY_UPSTREAM_MODE=unit" && called "create .*-e BLOT_SOCKET=$T/run-blot/blue-a.sock -e BLOT_WORKER_SOCKET=$T/run-blot/blue-b.sock" && called "create .*--memory 3300m --cpus 4 --cpu-shares 2048" && called "create .*-e BLOT_RELEASE_ID=$SHA_NEW" && called "create .*-e NODE_OPTIONS=--max-old-space-size=1800 --report-on-fatalerror --report-directory=/usr/src/app/data/node-reports/blot-blue" && called "create .*-e BLOT_WORKER_MAX_OLD_SPACE_SIZE=750" && called "create .*bind-propagation=rslave" && called "create .*source=$T/tmp,target=$T/tmp" && called "create .*-e BLOT_TMP_DIRECTORY=$T/tmp"'
+check "without rsyslog's socket a unit logs to json-file, and says so" \
+  'called "create .*--name blot-blue .*--log-driver json-file --log-opt max-size=512m --log-opt max-file=4 --log-opt compress=true" && ! called "syslog" && mentions "logs to json-file only"'
+python3 -c 'import socket, sys; socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM).bind(sys.argv[1])' "$PROXY_APP_LOG_SOCKET"
+reset units; bluegreen
+check "with it a unit logs to app.log through rsyslog, tagged with its name and commit, and keeps docker logs" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue .*--log-driver syslog --log-opt syslog-address=unixgram://$PROXY_APP_LOG_SOCKET --log-opt tag=blot-blue/${SHA_NEW:0:7} --log-opt mode=non-blocking" && called "create .*--name blot-green .*tag=blot-green/${SHA_NEW:0:7}" && called "create .*--log-opt cache-max-size=512m --log-opt cache-max-file=4 --log-opt cache-compress=true" && ! called "json-file"'
+rm -f "$PROXY_APP_LOG_SOCKET"
 check "no port is published and the unit is on the host network, not blotnet" \
   '! called "create .* -p " && ! called "create .*blotnet" && called "create .*--network host"'
 check "without BLOT_SANDBOX a unit is given no browser and no proxy" \

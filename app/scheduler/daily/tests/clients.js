@@ -6,9 +6,9 @@ describe("scheduler/daily/clients buildRows", function () {
     const rows = buildRows(siteClients);
 
     expect(rows).toEqual([
-      { client: "dropbox", sites: 2, percentage: "50.0%" },
-      { client: "git", sites: 1, percentage: "25.0%" },
-      { client: "no client", sites: 1, percentage: "25.0%" },
+      { client: "dropbox", sites: 2, percentage: "50%" },
+      { client: "git", sites: 1, percentage: "25%" },
+      { client: "no client", sites: 1, percentage: "25%" },
     ]);
 
     const total = rows.reduce(function (sum, row) {
@@ -21,7 +21,7 @@ describe("scheduler/daily/clients buildRows", function () {
     const rows = buildRows(["no client", "no client"]);
 
     expect(rows).toEqual([
-      { client: "no client", sites: 2, percentage: "100.0%" },
+      { client: "no client", sites: 2, percentage: "100%" },
     ]);
   });
 

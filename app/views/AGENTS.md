@@ -21,14 +21,14 @@ These instructions apply to work on the brochure and its documentation views.
   ```
 
 - Open the URL printed by the command in the browser. It establishes the authenticated session and redirects to the dashboard.
-- If the container or `https://local.blot/` is unavailable, ask the operator to start the local development server before continuing.
+- If the container or `https://local.blot/` is unavailable, ask the maintainer to start the local development server before continuing.
 
 ## Local development and verification
 
 - Use `https://local.blot/` to verify rendered changes in the browser.
-- If `https://local.blot/` is offline or unreachable, stop and prompt the operator to run `npm start`. Do not silently substitute another server or continue browser verification against a different URL.
+- If `https://local.blot/` is offline or unreachable, stop and prompt the maintainer to run `npm start`. Do not silently substitute another server or continue browser verification against a different URL.
 - If a rendered check is needed, wait for the documentation watcher/server to reload before checking the page.
-- After edits, generally just look at the source diff unless you're making a complicated visual change. If the operator flags an issue, reload the relevant `https://local.blot/` page and verify the rendering.
+- After edits, generally just look at the source diff unless you're making a complicated visual change. If the maintainer flags an issue, reload the relevant `https://local.blot/` page and verify the rendering.
 - When useful, inspect the running containers with `docker ps`. The node container is currently named `blot-node-app-1`; its logs can be followed with `docker logs -f --tail 0 blot-node-app-1`.
 
 ## Editing guidance
@@ -37,7 +37,7 @@ These instructions apply to work on the brochure and its documentation views.
 
 - Preserve unrelated worktree changes; do not reset, discard, or overwrite them.
 - Only edit the source view in `app/views` rather than generated or cached output.
-- For simple documentation edits, the source diff is sufficient; use the local site to verify complicated visual changes or investigate an operator-reported issue.
+- For simple documentation edits, the source diff is sufficient; use the local site to verify complicated visual changes or investigate a maintainer-reported issue.
 
 ## Documentation writing conventions
 

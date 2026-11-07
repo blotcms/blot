@@ -15,6 +15,10 @@ module.exports = async function setupUser() {
     );
   }
 
+  // A log-in link for local development only. In production this account is
+  // the admin's, and the link would land in the logs.
+  if (config.environment !== "development") return { user };
+
   const token = await User.generateAccessToken({ uid: user.uid });
 
   const url = format({

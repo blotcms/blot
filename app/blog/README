@@ -94,7 +94,7 @@ Attaches `res.renderView(viewName, next, callback)` to the response. When called
 2. Merges view-level locals, query parameters, template locals, and blog locals into `res.locals`.
 3. Calls `render/retrieve/index.js` to fetch any named locals declared as required by the view.
 4. Calls `render/load/index.js` to augment every entry object found in `res.locals`.
-5. Calls `render/main.js` to execute the final `Mustache.render()` of the view and its partials. String values on `res.locals` (including entry HTML) are data, not templates: tags inside post content or other locals are left as-is.
+5. Calls `render/main.js` to execute the final `Mustache.render()` of the view and its partials. String values on `res.locals` (including entry HTML) are data, not templates: tags inside post text or other locals are left as-is.
 6. Swaps the `%%BLOT_CDN%%` token in the output for the real CDN origin. The output is not otherwise rewritten: links to files in the blog's folder were already turned into CDN URLs at build time (entries) or by the template's CDN manifest (views).
 7. Sends the output with appropriate `Content-Type` and `Last-Modified` headers. Sets a one-year `Cache-Control` for JS and CSS views when caching is enabled and the request is not a preview.
 
@@ -122,8 +122,8 @@ Caching: the template-independent reads are cached inside the models, per blog `
 | `asset` | `asset.js` | Single asset lookup by path. |
 | `avatar_url` | `avatar_url.js` | URL for the blog's avatar image. |
 | `cdn` | `cdn.js` | Lambda/string for CDN URL generation. Used as `{{#cdn}}/path{{/cdn}}` (section) or `{{cdn}}` (origin string). Skips CDN rewriting on preview subdomains. |
-| `encode_json` | `encode_json.js` | Lambda that JSON-encodes rendered content. |
-| `encode_uri_component` | `encode_uri_component.js` | Lambda that URI-encodes rendered content. |
+| `encode_json` | `encode_json.js` | Lambda that JSON-encodes rendered text. |
+| `encode_uri_component` | `encode_uri_component.js` | Lambda that URI-encodes rendered text. |
 | `encode_xml` | `encode_xml.js` | Lambda that sanitizes HTML for XML inclusion (RSS). Resolves relative URLs and strips `<script>` tags. |
 | `feed_url` | `feed_url.js` | The blog's RSS feed URL. |
 | `folder` | `folder.js` | Files in the blog's folder. |
@@ -161,7 +161,7 @@ After retrievers run, `render/load/index.js` walks all locals to find `Entry` in
 
 Rendered HTML and CSS are not scanned for links to files in the blog's folder. A request-time pass used to do that after every render; it was removed once the work moved earlier, and the directory name is kept for the helpers that remain here.
 
-- Entry content is baked at build time (`build/plugins/folderAssets`: attributes, plus `bakeHTML` for markup set by front matter). Entry metadata values are not baked, so templates can build URLs from them.
+- The entry HTML is baked at build time (`build/plugins/folderAssets`: attributes, plus `bakeHTML` for markup set by front matter). Entry metadata values are not baked, so templates can build URLs from them.
 - Literal links in a blog-owned template's views are wrapped in `{{#cdn}}` while the full view is assembled (`models/template/getFullView`, `models/template/util/resolveFolderLinks`), which the template's CDN manifest resolves to versioned folder URLs (see `app/models/template/README`). Inline `package.json` partials are wrapped when loaded (`models/template/getPartials.js`).
 - Template and view locals that are folder links (`"logo": "/img/a.png"`) are swapped for CDN URLs at render by `render/folderManifestUrl.js`, a pure in-memory lookup against the manifest. A literal `{{#asset}}` section looks the manifest up first (`render/retrieve/asset.js`).
 

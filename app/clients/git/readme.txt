@@ -20,7 +20,7 @@ Pitfalls
 How does it work?
 -----------------
 
-This is the structure of the repositories involved in updating the user's blog:
+This is the structure of the repositories involved in updating the customer's blog:
 
                Repository 1.
         bare repo in data folder
@@ -29,10 +29,10 @@ This is the structure of the repositories involved in updating the user's blog:
          |                       |
    Repository 2.           Repository 3. 
  Checked out repo       Checked out repo in 
-on user's computer      blog's source folder
+on customer's computer      blog's source folder
                            on Blot server
 
-The user works in repository 2. This is where they'll add new blog posts and update existing ones. When a user creates a draft post, Blot will write the preview file to Repo 3, then attempt to push to 'Master', i.e. Repo 1. The user then pulls from repo 1 to retrieve the preview file. 
+The customer works in repository 2. This is where they'll add new blog posts and update existing ones. When a customer creates a draft post, Blot will write the preview file to Repo 3, then attempt to push to 'Master', i.e. Repo 1. The customer then pulls from repo 1 to retrieve the preview file. 
 
 Recent research indicate it's possible to dynamically retrieve files from a bare repo using low-level git commands. So perhaps the additional Repo is not needed and will naturally incur a performance cost. 
 

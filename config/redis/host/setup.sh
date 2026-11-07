@@ -251,7 +251,7 @@ EOF
   systemctl enable --now crond
 
   say "SSH"
-  # ssh stays open to the internet so the operator can reach the host from a
+  # ssh stays open to the internet so the maintainer can reach the host from a
   # phone anywhere, so it is key-only. sshd uses the first value it reads for
   # each keyword and the distro's 50-redhat.conf is read in name order, hence
   # 10-. Reloaded, not restarted, so a live session survives; and only if

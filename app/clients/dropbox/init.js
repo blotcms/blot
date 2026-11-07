@@ -89,16 +89,15 @@ const logLag = (
 
 // Never rejects: resolves with Fix's error and report so the caller decides
 // what to report. Fix() can fail part way through and still return the
-// repairs it made before that, hence both.
-const fixBlog = (blog) =>
-  new Promise((resolve) => {
-    Fix(blog, (error, report) => {
-      if (error) {
-        console.error(clfdate(), "Dropbox: Fix error for blog", blog.id, error);
-      }
-      resolve({ error, report });
-    });
-  });
+// repairs it made before that (err.report), hence both.
+const fixBlog = async (blog) => {
+  try {
+    return { error: null, report: await Fix(blog) };
+  } catch (error) {
+    console.error(clfdate(), "Dropbox: Fix error for blog", blog.id, error);
+    return { error, report: error.report };
+  }
+};
 
 // Webhook syncs that arrive while we hold the lock give up waiting for it and
 // are dropped, so run a normal sync once we release it. It does not stamp
@@ -321,7 +320,7 @@ const resyncRecentSyncsOnStartup = async () => {
         continue;
       }
       // Runs on every restart, so only log what Fix() repaired - the
-      // hourly sweep is what reports repairs to the operator.
+      // hourly sweep is what reports repairs to the maintainer.
       const fixed = await fixBlog(blog);
       const repaired = syncReport.summarize(fixed.report);
       if (repaired) {

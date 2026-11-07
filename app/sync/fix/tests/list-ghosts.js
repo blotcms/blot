@@ -30,9 +30,7 @@ describe("sync/fix/list-ghosts", function () {
   }
 
   it("resolves missing entries without rejection and continues mismatch cleanup", async function () {
-    spyOn(Entries, "pruneMissing").and.callFake(function (_blogID, callback) {
-      callback(null);
-    });
+    spyOn(Entries, "pruneMissing").and.callFake(async function () {});
 
     spyOn(client, "zRange").and.callFake(function (key) {
       if (key === "blog:blog-id:entries") {
@@ -91,9 +89,7 @@ describe("sync/fix/list-ghosts", function () {
   });
 
   it("restores the stale key's raw value if re-saving the entry fails", async function () {
-    spyOn(Entries, "pruneMissing").and.callFake(function (_blogID, callback) {
-      callback(null);
-    });
+    spyOn(Entries, "pruneMissing").and.callFake(async function () {});
 
     spyOn(client, "zRange").and.callFake(function (key) {
       if (key === "blog:blog-id:entries") {
@@ -136,9 +132,7 @@ describe("sync/fix/list-ghosts", function () {
 
   it("propagates the re-save error when restoring the stale key also fails", async function () {
     spyOn(console, "error");
-    spyOn(Entries, "pruneMissing").and.callFake(function (_blogID, callback) {
-      callback(null);
-    });
+    spyOn(Entries, "pruneMissing").and.callFake(async function () {});
 
     spyOn(client, "zRange").and.callFake(function (key) {
       if (key === "blog:blog-id:entries") {
@@ -174,9 +168,7 @@ describe("sync/fix/list-ghosts", function () {
   });
 
   it("fetches an id shared by several lists from Redis only once", async function () {
-    spyOn(Entries, "pruneMissing").and.callFake(function (_blogID, callback) {
-      callback(null);
-    });
+    spyOn(Entries, "pruneMissing").and.callFake(async function () {});
 
     spyOn(client, "zRange").and.callFake(function (key) {
       if (key === "blog:blog-id:all" || key === "blog:blog-id:pages") {

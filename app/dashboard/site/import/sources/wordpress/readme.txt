@@ -1,7 +1,7 @@
 Importing from WordPress
 ------------------------
 
-Export the site's content as an XML file. WordPress documents how to retrieve
+Export the site's writing as an XML file. WordPress documents how to retrieve
 this file here:
 
 https://wordpress.com/support/export/

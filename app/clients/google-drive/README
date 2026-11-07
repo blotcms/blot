@@ -4,7 +4,7 @@ This module provides bidirectional file synchronization between Blot blogs and G
 
 ## Overview
 
-The Google Drive client avoids OAuth and instead uses service accounts: robot Google Drive accounts controlled by Blot. A user provides their Google Drive email address, creates a folder, and shares it with a Blot-managed service account. The service account then monitors and syncs that folder. This approach minimizes involvement with Google's authentication layers while providing automatic change detection via webhooks.
+The Google Drive client avoids OAuth and instead uses service accounts: robot Google Drive accounts controlled by Blot. A customer provides their Google Drive email address, creates a folder, and shares it with a Blot-managed service account. The service account then monitors and syncs that folder. This approach minimizes involvement with Google's authentication layers while providing automatic change detection via webhooks.
 
 ### Key Operational Points
 
@@ -39,7 +39,7 @@ The sync process is bidirectional but heavily weighted toward pulling changes fr
 2. **Polling Fallback**: A background process (`pollDriveActivity`) continuously queries the Drive Activity API as a secondary detection mechanism, respecting API rate limits.
 3. **Sync Execution**: When triggered, `sync(blogID)` acquires a sync lock, then recursively compares the remote folder tree with the local file system.
 4. **Reconciliation**: The sync process downloads missing or out-of-date files, creates missing directories, and removes local files that no longer exist remotely.
-5. **Hourly Verification**: At minute 30 (`validate.js`), blogs with a real sync in the last hour (`lastSync`, stamped by `sync/index.js`) get a plain walk under the folder lock, then `Fix()`. Anything the walk had to change was missed by the webhook and pollers, and is emailed to the operator in one digest (`GOOGLE_DRIVE_SYNC_ISSUE`) along with `Fix()` repairs, errors and stuck locks.
+5. **Hourly Verification**: At minute 30 (`validate.js`), blogs with a real sync in the last hour (`lastSync`, stamped by `sync/index.js`) get a plain walk under the folder lock, then `Fix()`. Anything the walk had to change was missed by the webhook and pollers, and is emailed to the maintainer in one digest (`GOOGLE_DRIVE_SYNC_ISSUE`) along with `Fix()` repairs, errors and stuck locks.
 
 The `write`, `remove`, and `disconnect` operations are explicit Blot-to-Drive synchronizations and do not trigger a full recursive sync.
 
@@ -56,12 +56,12 @@ The client uses Redis for persistence. All model state is stored under the prefi
 
 The setup process (`routes/setup.js`) is multi-phase:
 
-1. **User Input**: User provides their Google Drive email and selects/creates a folder to share with the service account.
+1. **Customer Input**: Customer provides their Google Drive email and selects/creates a folder to share with the service account.
 2. **Folder Discovery**: The client searches for an empty folder owned by that email and shared with the service account.
 3. **State Synchronization**: Once found, the client locks sync, uploads any local files to the folder, and stores the folder ID.
 4. **Timeout Protection**: If setup is not completed within 2 hours, the process aborts.
 
-The setup process can be interrupted if the user changes their email or cancels (`preparing: false`).
+The setup process can be interrupted if the customer changes their email or cancels (`preparing: false`).
 
 ## Dependencies
 
@@ -141,7 +141,7 @@ Helper functions:
 - `localState.js` — The state of the file Blot holds at a path, as the client's records keep it: storage/folder's `size` and `modified` (rounded to the millisecond, as `models/file` stores it) plus its SHA-1 when known. `unchanged()` checks a record against a listing entry; `stateOf()` gives a fresh one.
 - `contentFingerprint.js`, `localFingerprint.js` — The older record form, size and nanosecond mtime on disk, still honoured in records written before `localState.js` until they're replaced.
 - `md5Checksum.js` — Computes MD5 hash of a local file, or MD5 and SHA-1 in one read (`withSha1`).
-- `checkWeCanContinue.js` — Checks if a sync should proceed (used during setup to detect user cancellation or email changes).
+- `checkWeCanContinue.js` — Checks if a sync should proceed (used during setup to detect customer cancellation or email changes).
 
 ### `/routes`
 
@@ -162,9 +162,9 @@ HTML templates for user-facing pages:
 
 ## Sync and Authentication Flow
 
-### Initial Setup (User Perspective)
+### Initial Setup (Customer Perspective)
 
-1. User navigates to "Connect Google Drive" on their blog dashboard.
+1. Customer navigates to "Connect Google Drive" on their blog dashboard.
 2. Enters their Google Drive email address and submits.
 3. Shares a new empty folder in Google Drive with the service account email (e.g., `blot-drive-a@blot-prod.iam.gserviceaccount.com`).
 4. Blot waits for the folder share to be detected via the `changes.watch` webhook.
@@ -188,7 +188,7 @@ HTML templates for user-facing pages:
 - Recursively walks the remote folder tree.
 - For each remote file/folder:
   - If missing locally, downloads it or creates a directory.
-  - If present but out-of-date, verifies local content and downloads only when needed.
+  - If present but out-of-date, verifies the local file and downloads only when needed.
   - For Google Docs and other Google-app files (no MD5), change detection compares Drive's `modifiedTime` with the applied `modifiedTime` the client recorded after its last successful download of that file ID, not with the local file's mtime. The record is only trusted while the file is unchanged since that write (`util/localState.js`), so a local overwrite without a Drive edit is still re-downloaded. That lets the client work the same way once blog storage can't set an mtime (e.g. S3). Files synced before this change have no applied time yet and fall back to the local mtime, which older code set from Drive after each successful download; they converge the next time they're confirmed unchanged or re-downloaded. `sync/resetToDrive.js` applies the same rule in the push direction for `.gdoc` files, snapshotting the applied times before it resets the database.
   - For regular files with a remote MD5, a verified record pairs that MD5 with the state of the file Blot holds (#2258, "Content hash"): `{ path, checksum, size, modified, sha1 }`. The file is unchanged when its size and modified time, from the directory listing, equal the record's; if only the modified time moved (the same bytes written again, or a copy between backends that didn't keep it), its SHA-1 decides, which is free from the index. A match means no download and no read. Anything else falls back to `download()`, which compares the file's MD5 with Drive's before downloading, and records a fresh pair. A same-size rewrite that keeps the exact millisecond modified time goes unnoticed. `models/file` keeps `modified` rounded to the millisecond.
   - Records written before that hold `fingerprint`, the size and nanosecond mtime on disk (or the older five-field device:inode:size:mtime:ctime form). They can no longer match, since blog folders are in S3, so such a file is read once (one with an MD5) or exported again (a Google Doc) to record a fresh pair; `scripts/google-drive/backfill-applied-modified-times.js --apply` was run on disk before the move.
@@ -229,7 +229,7 @@ When a new blog is set up, `fetchStorageInfo.js` selects a service account based
 3. **Dotfiles Ignored**: Files and folders starting with `.` are never downloaded or synced to Drive.
 4. **No Selective Sync**: All files in the shared folder are synced; there is no option to exclude subdirectories.
 5. **Service Account Storage Quota**: Accounts created after April 15, 2025, do not receive the automatic 15 GB allocation; existing accounts retain theirs.
-6. **Setup Timeout**: If a user does not complete setup (share the folder) within 2 hours, the setup process aborts.
+6. **Setup Timeout**: If a customer does not complete setup (share the folder) within 2 hours, the setup process aborts.
 7. **Webhook Expiration**: Webhook channels expire after 24 hours and must be renewed. The client renews them every 10 minutes during `init()`.
 8. **Modtime Truncation**: Google Docs do not provide MD5 checksums, so only modification time (truncated to the second) is used for comparison — the client's recorded applied `modifiedTime` when available, otherwise the local file's mtime.
 
@@ -249,7 +249,7 @@ Run tests with your normal test runner; consult individual test files for setup 
 - **Sync Lock**: Integrates with `sync/establishSyncLock` to coordinate with other sync clients.
 - **Post-Sync Fix**: Calls `sync/fix` after sync completes to validate blog state.
 - **Webhooks**: Registers routes in the main Express app via `site_routes` and `dashboard_routes`.
-- **Service Account Selection**: Consulted by blog setup and write operations to choose where to store new content.
+- **Service Account Selection**: Consulted by blog setup and write operations to choose where to store new files.
 
 ## Testing error states locally
 

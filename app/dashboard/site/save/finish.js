@@ -43,7 +43,7 @@ async function saveAndFinish(req, res, next) {
   // We now need to save every entry so that
   // changes to permalink format take effect.
   if (changes.indexOf("permalink") > -1) {
-    resaveEntries(req.blog.id, function () {});
+    resaveEntries(req.blog.id).catch(function () {});
   }
 
   // We need to build all the blog's entries if the user

@@ -29,10 +29,8 @@ describe("sync/fix/entry-ghosts", function () {
   }
 
   it("does nothing when every entry resolves to its own path on disk", async function () {
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator({ id: "/foo.txt", path: "/foo.txt" }, function () {
-        callback();
-      });
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator({ id: "/foo.txt", path: "/foo.txt" });
     });
     spyOn(storage, "stat").and.callFake(async function () {
       return fileStat();
@@ -48,13 +46,8 @@ describe("sync/fix/entry-ghosts", function () {
   });
 
   it("skips deleted entries entirely", async function () {
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator(
-        { id: "/foo.txt", path: "/foo.txt", deleted: true },
-        function () {
-          callback();
-        }
-      );
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator({ id: "/foo.txt", path: "/foo.txt", deleted: true });
     });
     spyOn(storage, "stat");
     spyOn(Entry, "set");
@@ -71,10 +64,8 @@ describe("sync/fix/entry-ghosts", function () {
   it("corrects an entry's path when the file exists under a different case", async function () {
     var entry = { id: "/Foo.txt", path: "/Foo.txt" };
 
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator(entry, function () {
-        callback();
-      });
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator(entry);
     });
 
     spyOn(storage, "stat").and.callFake(async function (blogID, path) {
@@ -102,10 +93,8 @@ describe("sync/fix/entry-ghosts", function () {
   it("drops an entry when no file exists on disk for it", async function () {
     var entry = { id: "/missing.txt", path: "/missing.txt" };
 
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator(entry, function () {
-        callback();
-      });
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator(entry);
     });
 
     spyOn(storage, "stat").and.callFake(async function () {
@@ -130,10 +119,8 @@ describe("sync/fix/entry-ghosts", function () {
   it("drops by id rather than the stale path when an entry's id has since changed", async function () {
     var entry = { id: "/renamed.txt", path: "/old-path.txt" };
 
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator(entry, function () {
-        callback();
-      });
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator(entry);
     });
 
     spyOn(storage, "stat").and.callFake(async function () {
@@ -156,10 +143,8 @@ describe("sync/fix/entry-ghosts", function () {
       html: folderPostHTML("/Album +"),
     };
 
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator(entry, function () {
-        callback();
-      });
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator(entry);
     });
 
     spyOn(storage, "stat").and.callFake(async function (blogID, path) {
@@ -183,10 +168,8 @@ describe("sync/fix/entry-ghosts", function () {
       html: folderPostHTML("/Album +"),
     };
 
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator(entry, function () {
-        callback();
-      });
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator(entry);
     });
 
     spyOn(storage, "stat").and.callFake(async function () {
@@ -206,10 +189,8 @@ describe("sync/fix/entry-ghosts", function () {
   it("does not drop an entry when checking its file fails for another reason", async function () {
     var readError = Object.assign(new Error("EIO"), { code: "EIO" });
 
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator({ id: "/foo.txt", path: "/foo.txt" }, function (err) {
-        callback(err);
-      });
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator({ id: "/foo.txt", path: "/foo.txt" });
     });
     spyOn(storage, "stat").and.callFake(async function () {
       throw readError;
@@ -227,13 +208,12 @@ describe("sync/fix/entry-ghosts", function () {
   it("does not drop a folder post when checking its source folder fails for another reason", async function () {
     var readError = Object.assign(new Error("EIO"), { code: "EIO" });
 
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator(
-        { id: "/album", path: "/album", html: folderPostHTML("/Album +") },
-        function (err) {
-          callback(err);
-        }
-      );
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator({
+        id: "/album",
+        path: "/album",
+        html: folderPostHTML("/Album +"),
+      });
     });
     spyOn(storage, "stat").and.callFake(async function () {
       throw readError;
@@ -246,10 +226,8 @@ describe("sync/fix/entry-ghosts", function () {
   });
 
   it("keeps an entry whose file has become a symlink", async function () {
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      iterator({ id: "/foo.txt", path: "/foo.txt" }, function (err) {
-        callback(err);
-      });
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      await iterator({ id: "/foo.txt", path: "/foo.txt" });
     });
     spyOn(storage, "stat").and.callFake(async function () {
       throw Object.assign(new Error("Symbolic links are not supported"), {
@@ -269,8 +247,8 @@ describe("sync/fix/entry-ghosts", function () {
   it("propagates an error raised while iterating entries", async function () {
     var iterationError = new Error("redis exploded");
 
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      callback(iterationError);
+    spyOn(Entries, "each").and.callFake(async function () {
+      throw iterationError;
     });
     spyOn(Entry, "set");
     spyOn(Entry, "drop");
@@ -289,12 +267,8 @@ describe("sync/fix/entry-ghosts", function () {
       { id: "/b.txt", path: "/b.txt" },
     ];
 
-    spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
-      var i = 0;
-      (function next() {
-        if (i >= entries.length) return callback();
-        iterator(entries[i++], next);
-      })();
+    spyOn(Entries, "each").and.callFake(async function (blogID, iterator) {
+      for (var entry of entries) await iterator(entry);
     });
 
     spyOn(storage, "stat").and.callFake(async function () {

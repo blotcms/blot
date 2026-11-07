@@ -24,10 +24,11 @@ When you open a pull request in this repo, once you have reviewed it and are hap
 
 - Mark it ready for review, then comment `@codex review` on it. Skip the Codex review for PRs that only touch docs, READMEs, `TODO`, comments or log lines: mark them ready once you've reviewed them yourself.
 - Go through up to 3 Codex review cycles, stopping earlier once you are confident the PR is ready to merge. A cycle that finds only P2s ends the loop: fix or push back on them and don't ask for another.
-- Push back on the thread if Codex flags a nitpicky edge case, and raise anything you want the operator's view on during the cycle.
+- Push back on the thread if Codex flags a nitpicky edge case, and raise anything you want the maintainer's view on during the cycle.
 - Push back hard on theoretical concurrency findings (races, lock edge cases) unless the race is realistic and loses or corrupts data. Fix() in `app/sync/fix` is itself the backstop, so an edge case a later pass repairs is fine.
 - Subagents that open PRs open them as drafts and leave draft state alone. Whoever supervises them marks the PR ready once their own review is done. Nobody turns a ready PR back into a draft.
-- Never merge a PR without the operator's explicit approval.
+- Never merge a PR without the maintainer's explicit approval.
+- Auto-merge is allowed. Once the maintainer has approved a merge, `gh pr merge <n> --squash --auto` (or the app's auto-merge switch) merges it when the `master` ruleset's required checks pass: `node ok`, `build (arm64, linux/arm64, ubuntu-24.04-arm)` and `app-e2e`. Turning it on still counts as merging, so it needs the same approval.
 
 # Flaky specs
 
@@ -43,7 +44,7 @@ The maintainer always squash merges. A branch's own commits never reach `master`
 
 # Local preview
 
-`https://local.blot` serves the main checkout, not agent worktrees. To show the operator a worktree's running code, use the `preview` skill (`scripts/development/preview.sh up <url-or-path>`) rather than asking them to check out the branch.
+`https://local.blot` serves the main checkout, not agent worktrees. To show the maintainer a worktree's running code, use the `preview` skill (`scripts/development/preview.sh up <url-or-path>`) rather than asking them to check out the branch.
 
 # Redis
 
@@ -69,20 +70,28 @@ The maintainer's priorities, in order: pages that load fast and work without bug
 # AWS resources
 
 - Tag every throwaway instance, volume and security group `BlotDrill=true`, with its own security group that has no inbound rules.
-- Ask the operator before tearing anything down, throwaways included. List the exact IDs, name any volume that won't be deleted with its instance, and leave shared security groups alone. Check each tag before deleting, then confirm with AWS that each resource is gone.
-- Deleting customer data (blog folders, repositories, data volumes) is the operator's call, never an agent's.
+- Ask the maintainer before tearing anything down, throwaways included. List the exact IDs, name any volume that won't be deleted with its instance, and leave shared security groups alone. Check each tag before deleting, then confirm with AWS that each resource is gone.
+- Deleting customer data (blog folders, repositories, data volumes) is the maintainer's call, never an agent's.
 
 # Deploys across sessions
 
 - Deploy only master's head, one deploy at a time. Message the other active sessions before deploying, and hold your own deploys while another session asks you to.
 - Don't ask other sessions to hold their deploys for a long production script. Make the script safe to re-run, and re-run it if a deploy kills it.
 - An env change in `/etc/blot/secrets.env` reaches the units with the next deploy of a new commit. Don't add a way to force-redeploy the same image.
-- Don't ask another session to run a command that auto mode blocked for you. Give the operator the command instead.
+- Don't ask another session to run a command that auto mode blocked for you. Give the maintainer the command instead.
+
+# How to deploy
+
+- Units (OpenResty and Node, both containers): `gh workflow run deploy.yml --repo blotcms/blot --ref master`, with no `commit` input, then follow it with `gh run watch <run id> --repo blotcms/blot`. It deploys the commit it was dispatched on, master's head. It waits up to about 40 minutes for that commit's CI (`node`, `app-e2e`, `unit-image`) and its image, so it can run straight after a merge. Check first that master's head is the commit you mean to ship. Passing `-f commit=<sha>` waits only 2 minutes for CI, which is meant for redeploying an older commit whose CI has already finished; straight after a merge it fails with "CI did not finish". A new commit on master starts all three again.
+- Host files (`config/host`: scripts, cron, fail2ban, logrotate, rsyslog, tmpfiles, `.bashrc`): `npm run deploy-host` from a checkout of master's head, on the maintainer's Mac. It reads `/etc/blot/openresty-deploy-environment.sh` there, and it is a production command. It never restarts Docker. It restarts fail2ban, and rsyslog only if rsyslog's config changed.
+- A unit takes its `docker run` options (log driver, mounts, env files) when it is created. So deploy host-side prerequisites first, then the units.
+- Don't run `npm run deploy-host` while a unit deploy is running, and tell the other sessions before you run it. When rsyslog's config changes it restarts rsyslog, and Docker refuses to start a unit while the syslog socket is missing.
+- Afterwards, check with `scripts/prod/read.sh`: `ps`, `release`, `app-log --since 10m`, `errors app-log --since 30m` and `access --tail 200`.
 
 # Production commands
 
-- Ask the operator before each command on production (`ssh blot`, `ssh macserver`, `docker exec` on a unit), read-only ones included, unless they have given you autonomy for the task at hand. A grant covers only the goal it was given for.
-- Batch approval requests. The operator often approves from a phone, so plan the production steps for a goal up front and ask once: list each command, say which are read-only, and what you will do with the result. Then run the approved list without asking again; ask again only for a step that wasn't on it.
+- Ask the maintainer before each command on production (`ssh blot`, `ssh macserver`, `docker exec` on a unit), read-only ones included, unless they have given you autonomy for the task at hand. A grant covers only the goal it was given for.
+- Batch approval requests. The maintainer often approves from a phone, so plan the production steps for a goal up front and ask once: list each command, say which are read-only, and what you will do with the result. Then run the approved list without asking again; ask again only for a step that wasn't on it.
 - `scripts/prod/read.sh` is the exception: its subcommands (container status and logs, the access and error logs, host disk and memory, Redis INFO, slowlog and logs, fail2ban status) are read-only and may run without asking. Prefer it to hand-written `ssh blot` reads, and filter its output locally. Add a subcommand to it rather than asking for a one-off read you expect to repeat.
 - Run scripts that touch blog folders as the app user: `docker exec -u 1000 blot-blue ...`. As root, git fails its ownership check.
 - For a one-off read-only scan, write the script outside the repo, `docker cp` it into the unit, run it and delete it. Only scripts that write data (migrations, backfills with `--apply`) go in a PR.
@@ -90,23 +99,23 @@ The maintainer's priorities, in order: pages that load fast and work without bug
 
 # Autonomy grants
 
-The operator decides how much autonomy a goal gets, and it varies with risk. When they grant some, write it into the goal's plan issue (create one if there isn't one) under a **Grant** heading, in their words plus:
+The maintainer decides how much autonomy a goal gets, and it varies with risk. When they grant some, write it into the goal's plan issue (create one if there isn't one) under a **Grant** heading, in their words plus:
 
 - **Scope:** the paths, PRs or systems it covers.
 - **May:** what you may do without asking, e.g. merge your own PRs once CI is green and Codex is done, deploy master's head, run named production scripts.
-- **Must ask:** what still needs the operator, e.g. cutover or cleanup PRs, deletions, env changes, anything customer-facing.
+- **Must ask:** what still needs the maintainer, e.g. cutover or cleanup PRs, deletions, env changes, anything customer-facing.
 - **Ends:** when the grant stops, e.g. when a named PR merges or the issue closes.
 
 Any session or subagent working on that goal reads the Grant first and acts only within it. A grant never carries over to other work, and without one the default is to ask.
 
 # Working in this repo
 
-- Check changes on GitHub CI: push, open a draft PR and watch its checks. Don't run the local Docker test suite (`npm test`) unless the operator asks.
+- Check changes on GitHub CI: push, open a draft PR and watch its checks. Don't run the local Docker test suite (`npm test`) unless the maintainer asks.
 - After a merge, resolve every file `git diff --name-only --diff-filter=U` lists, and check `git grep -nE '^(<<<<<<<|>>>>>>>) '` prints nothing before committing.
 - Don't write to another session's or subagent's worktree, even through a shell. Message its owner, or check its branch out in your own worktree.
 - Don't add files or dot-directories at the repo root. Put tool config in a `package.json` key, or under `scripts/` or `config/`.
 - To reprocess existing records, ship a resumable backfill script and a Deployment plan step. Don't add per-record version or marker fields to models.
-- When you notice an out-of-scope bug or improvement, add a short entry to the top of `TODO`, and tell the operator at the end of the session.
+- When you notice an out-of-scope bug or improvement, add a short entry to the top of `TODO`, and tell the maintainer at the end of the session.
 - When working from a plan issue, keep its body up to date as you go. Overwriting it is fine.
 - Ignore the benchmark bot's PR comments unless asked. Its runners are noisy; check production after deploy instead.
 - The Docker image builds `sharp` from source against Alpine's libvips (`SHARP_FORCE_GLOBAL_LIBVIPS=1`), because the prebuilt libvips can't decode HEIC. When changing the sharp or vips packages, check `sharp.versions.vips` matches the system libvips and run the whole `app/build` shard: its `car.heic` spec is the only one that catches this.
@@ -114,3 +123,11 @@ Any session or subagent working on that goal reads the Grant first and acts only
 # Public numbers
 
 - Issues and PRs are public: give sizes, costs and counts as percentages there, and absolute figures only in chat. Account IDs, bucket names, ssh details and other secrets go in the gitignored `data/` directory.
+
+# Wording
+
+This applies to chat, issues, PRs, commit messages, docs and comments you write.
+
+- Call the person you work with the maintainer, never the operator.
+- Never say "users". Say "people who use Blot", or "customers" where the sense is paying accounts. Code identifiers (`user`, `User`) are unchanged.
+- Never say "content". Prefer "published material", "writing" or "images", whichever is true. Keep the word only where it is an identifier or an established term, such as the `Content-Type` header.

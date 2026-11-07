@@ -26,10 +26,10 @@ This client is fairly complicated. The complications mostly self imposed and par
     1. Dropbox prevents users from sharing app folders as of May 2018.
     2. Dropbox also does not let you choose where the folder is located (it must be in /Apps).
 
-* Allowing users to use the entire app folder for their first blog
+* Allowing customers to use the entire app folder for their first blog
   ----------------------------------------------------------------
 
-  Given that we will allow folks to use Dropbox's app folder feature, we need to work out how to let users manage one or multiple blogs from a single app folder. The obvious solution, used by a lot of Blot's competitors, is to create a subfolder for the blog. But when the user has one blog, I don't like the idea of the Blot directory containing a single subdirectory. So for their first blog, the folder looks like. Then when the user creates a second blog in the app folder, restructure the folder like so:
+  Given that we will allow folks to use Dropbox's app folder feature, we need to work out how to let customers manage one or multiple blogs from a single app folder. The obvious solution, used by a lot of Blot's competitors, is to create a subfolder for the blog. But when the customer has one blog, I don't like the idea of the Blot directory containing a single subdirectory. So for their first blog, the folder looks like. Then when the customer creates a second blog in the app folder, restructure the folder like so:
 
 Features
 --------
@@ -37,10 +37,10 @@ Features
 - This client needs to properly acquire and release a lock on the blog's folder when modifying the client. 
 - This client aqcuires then release the sync lock when it disconnects...
 - App folder permissions
-  - Can recover from the user deleting then restoring a folder inside the app folder
+  - Can recover from the customer deleting then restoring a folder inside the app folder
 - Full folder permissions
-  - Can recover from user moving blog folder
-  - Can recover from user removing then restoring blog folder
+  - Can recover from customer moving blog folder
+  - Can recover from customer removing then restoring blog folder
 
 Authentication routes
 ---------------------
@@ -49,7 +49,7 @@ If the blog does have an existing Dropbox account
 
   If the app and account have not changed, then save the new token and email address and sync.
 
-  If the account has changed offer user a choice to migrate files from existing account or reset folder state to empty and sync
+  If the account has changed offer customer a choice to migrate files from existing account or reset folder state to empty and sync
 
 If the blog does not have an existing Dropbox acccount connected to it
 
@@ -89,7 +89,7 @@ Errors from Dropbox
 
 // The purpose of this module is to
 // take an error which occurs during the
-// sync process, notify the user and me
+// sync process, notify the customer and me
 // if appropriate, then determine whether
 // it is worth attempting the sync again.
 

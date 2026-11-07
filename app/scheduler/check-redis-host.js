@@ -1,4 +1,4 @@
-// Warns the operator before Redis or the host it runs on hits a limit
+// Warns the maintainer before Redis or the host it runs on hits a limit
 // (blotcms/blot#2041, #2261):
 //
 // - The kernel's TCP memory count nearing tcp_mem[1], where TCP memory
@@ -99,7 +99,7 @@ const CONDITION_MIN_INTERVAL = HOUR;
 // pressure rise) is emailed at most once per this long for each type, the
 // first one immediately. Ones that happen meanwhile are merged and sent when
 // it ends. Errors that mean Redis refuses writes get a shorter wait, since
-// they are what an operator needs to hear about again.
+// they are what a maintainer needs to hear about again.
 const EVENT_COOLDOWN = {
   default: 6 * HOUR,
   "errors-critical": HOUR,

@@ -1144,7 +1144,7 @@ describe("git store rewrite", function () {
     });
   });
 
-  describe("the operator script", function () {
+  describe("the maintainer script", function () {
     const script = path.join(
       __dirname,
       "..",

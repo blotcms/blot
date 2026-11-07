@@ -22,7 +22,8 @@
       height="{{thumbnail.large.height}}"
       alt="{{title}}"
       class="pre-loaded"
-      onload="this.className+=' loaded';" />
+      onload="this.classList.add('loaded')"
+      onerror="this.classList.add('loaded')" />
     <noscript>  
     <img
       loading="lazy"

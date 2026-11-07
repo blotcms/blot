@@ -58,9 +58,9 @@ describe("scheduler/daily/revenue sites per customer", function () {
     ];
 
     const result = await collect();
-    expect(result.total_customers).toBe(3);
+    expect(result.total_customers).toBe("3");
     expect(result.total_active_blogs).toBe("5");
-    expect(result.sites_per_customer).toBe("1.67");
+    expect(result.sites_per_customer).toBe("1.7");
   });
 
   it("calculates before formatting site totals and renders the stat in the email", async function () {
@@ -72,11 +72,11 @@ describe("scheduler/daily/revenue sites per customer", function () {
     );
 
     expect(Mustache.render(template, result)).toContain(
-      "Sites: 2,001 sites, 2 customers, 1000.50 sites per customer"
+      "Sites: 2,001, 2 customers, 1000.5 per customer"
     );
   });
 
   it("reports zero when there are no customers", async function () {
-    expect((await collect()).sites_per_customer).toBe("0.00");
+    expect((await collect()).sites_per_customer).toBe("0.0");
   });
 });

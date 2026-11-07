@@ -1,8 +1,8 @@
 Daily update for {{{date}}}
 
-Sites: {{total_active_blogs}} sites, {{total_customers}} customers, {{sites_per_customer}} sites per customer
+Sites: {{total_active_blogs}}, {{total_customers}} customers, {{sites_per_customer}} per customer
 
-Revenue: {{annual_recurring_revenue}}, {{paypal_percentage}} through PayPal, {{annual_percentage}} pay annually
+Revenue: {{annual_recurring_revenue}}, {{paypal_percentage}} PayPal, {{annual_percentage}} annually
 
 Response time: {{render_time}}
 
@@ -16,7 +16,7 @@ Response time: {{render_time}}
 {{/storage}}
 Sync: {{sync_summary}}
 
-Newsletter subscribers: {{newsletter_subscribers}}
+Newsletter: {{newsletter_subscribers}} subscribers
 
 {{#new_customers.length}}
 New customers:

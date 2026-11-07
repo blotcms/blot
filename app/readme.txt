@@ -66,7 +66,7 @@ what is most important is that readers can access blogs.
 
 what is secondarily most important is that writers can publish files.
 
-some files will cause the syncer to crash. this is expected. this must not prevent other users from syncing. and must not take down the process which serves files.
+some files will cause the syncer to crash. this is expected. this must not prevent other customers from syncing. and must not take down the process which serves files.
 
 I must work out how to do hot reloads to prevent downtime during deployments.
 
@@ -123,18 +123,18 @@ clients should only need to keep the folder in
 
   blogs/{{ID}}/folder/
 
-in sync with the user's blog folder and nothing more
+in sync with the customer's blog folder and nothing more
 
 
 # Designing a blog
 
 Admittedly the hardest part about blogging is writing the blog post, not publishing it, but that shouldn’t stop us from trying to make publishing just a little bit easier.
 
-My central thesis is that blogging interfaces currently force a user to manually map the file representing the post into a format the platform can parse.
+My central thesis is that blogging interfaces currently force people to manually map the file representing the post into a format the platform can parse.
 
-The publish page is just that: add your post's content, use an awkward rich text editor to format the content with links and headings and lists etc... Declare your entry's title and date then press submit. Well, surely all this information is encoded in the file?
+The publish page is just that: add your post's text, use an awkward rich text editor to format the text with links and headings and lists etc... Declare your entry's title and date then press submit. Well, surely all this information is encoded in the file?
 
-Why not offload the responsibility of formatting to the blogging platform and let the user just create the file?
+Why not offload the responsibility of formatting to the blogging platform and let people just create the file?
 
 Central to my philosophy in designing blot is this assumption:
 interfaces which attempt to guess your desired result and misjudge 2% of the time are superior to theoretically pure interfaces which do not. This entails using heuristics. For instance, this is the pseudo code for how Blot generates a title from a file:
@@ -174,11 +174,11 @@ Once we put these components together we have a system for publishing, editing a
 
 ## Too rigid
 
-The internet is fucking awesome. JavaScript is awesome, HTML is fine, CSS is acceptable. Combined they give writers more creative freedom that poor old Gutenberg could conceive. They’re so powerful but lots of blogging systems are reluctant to allow their users to make full use of them. Ideally we’d have a product that wouldn’t restrict advanced users from making use of javascript and html, but wouldn’t intimidate new users with file extensions with which they're unfamiliar.
+The internet is fucking awesome. JavaScript is awesome, HTML is fine, CSS is acceptable. Combined they give writers more creative freedom that poor old Gutenberg could conceive. They’re so powerful but lots of blogging systems are reluctant to allow their customers to make full use of them. Ideally we’d have a product that wouldn’t restrict advanced customers from making use of javascript and html, but wouldn’t intimidate new customers with file extensions with which they're unfamiliar.
 
 To make this work each blog would need to be sandboxed to its own subdomain (or custom domain) to prevent any security issue, which is no big deal.
 
-Medium and Svbtle are great but what if I want to include an interactive graph or chart? Because they prevent their users from embedding javascript it’s impossible.
+Medium and Svbtle are great but what if I want to include an interactive graph or chart? Because they prevent people from embedding javascript it’s impossible.
 
 ## I want the pages to work in 15 years time
 
@@ -203,7 +203,7 @@ Own your writing
 
 Own your identity
 
-One of Blot's initial principles was unbranding. Nowhere on the user blog, not even in the HTML or CSS source, does any indication it is a Blot site appear. There's no tumblr-like log in bar, no subtle logo in the bottom corner. You're paying for the service so you can control how it looks.
+One of Blot's initial principles was unbranding. Nowhere on the customer blog, not even in the HTML or CSS source, does any indication it is a Blot site appear. There's no tumblr-like log in bar, no subtle logo in the bottom corner. You're paying for the service so you can control how it looks.
 
 The draw backs of Blot
 

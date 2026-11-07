@@ -2,7 +2,6 @@ const Entry = require("models/entry");
 const Entries = require("models/entries");
 const client = require("models/client");
 const entryKey = require("models/entry/key").entry;
-const { promisify } = require("util");
 const promiseOnly = require("helper/promiseOnly");
 
 var lists = ["all", "created", "entries", "drafts", "scheduled", "pages"];
@@ -21,12 +20,12 @@ var lists = ["all", "created", "entries", "drafts", "scheduled", "pages"];
 var BATCH_SIZE = 20;
 
 async function pruneMissing(blogID) {
-  var removed = await promisify(Entries.pruneMissing.bind(Entries))(blogID);
+  var removed = await Entries.pruneMissing(blogID);
   return removed || {};
 }
 
 function sweepExpiredDeleted(blogID) {
-  return promisify((next) => Entries.sweepExpiredDeleted(blogID, next))();
+  return Entries.sweepExpiredDeleted(blogID);
 }
 
 function deleteEntryKey(blogID, id) {

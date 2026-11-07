@@ -33,7 +33,7 @@
 # You have to say which world you are in: --drill needs every host tagged
 # BlotDrill=true and old hosts marked /etc/blot/drill, --production refuses
 # hosts with that tag. Nothing destructive has a default: the Elastic IP, the
-# bans file and everything finish touches are passed in. The operator sets
+# bans file and everything finish touches are passed in. The maintainer sets
 # AWS_PROFILE and AWS_REGION, and launch.sh's own settings: BLOT_HOST_KEY_NAME,
 # BLOT_HOST_SSH_KEY, BLOT_SSH_PORT and REDIS_MAXMEMORY (launch uses the key
 # too, for deploy.sh).
@@ -486,7 +486,7 @@ copy_backup_config() {
   [ "$MODE" = production ] || { echo "Drill: no backup credentials copied"; return 0; }
   local bucket
   # Not over working credentials: an old host on an instance profile has no key
-  # here to copy, so the operator's own key on the new host would be lost.
+  # here to copy, so the maintainer's own key on the new host would be lost.
   if on "$NEW" "aws sts get-caller-identity > /dev/null 2>&1"; then
     echo "$NEW's AWS credentials work: not copying $OLD_REDIS's over them"
     # backup.sh's daily offsite upload needs this profile, and only warns without it.
@@ -914,7 +914,7 @@ phase_finish() {
 # ---- restore -------------------------------------------------------------
 
 # Disaster recovery (#2261). The host is gone, and Redis and the units with it,
-# so nothing is read from an old host: the operator supplies the env files, the
+# so nothing is read from an old host: the maintainer supplies the env files, the
 # credentials and the commit (see the options at the top). Blog folders and git
 # repos are in S3 and need no restoring. Run it again after any failure; each
 # step looks at the new host and AWS to see what is done. Every step prints how
@@ -994,13 +994,13 @@ restore_redis() {
   act "$ROOT/config/redis/restore.sh" $flags "$NEW" "$REDIS_BACKUP"
 }
 
-# copy_env_files: the env files from the operator's machine, with the socket
+# copy_env_files: the env files from the maintainer's machine, with the socket
 # settings written into the new host's copy (the script app uses). Sets ENV_CHANGED.
 copy_env_files() {
   local tmp out
   tmp=$(umask 077; mktemp -d)
   cp "$SECRETS_FILE" "$tmp/secrets.env"; cp "$PROXY_FILE" "$tmp/proxy.env"
-  # tar -p would carry the operator's modes to the host.
+  # tar -p would carry the maintainer's modes to the host.
   chmod 600 "$tmp/secrets.env" "$tmp/proxy.env"
   out=$(COPYFILE_DISABLE=1 tar -C "$tmp" -cf - secrets.env proxy.env |
     pipe_to "$NEW" "sudo bash -c $(printf %q "$ENV_SCRIPT") cycle $SOCKET") || { rm -rf "$tmp"; die "could not install the env files on $NEW"; }

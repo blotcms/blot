@@ -1,6 +1,6 @@
 # build
 
-The `build` module is the core content processing pipeline for Blot. It accepts a blog object and a file path, reads the file from the blog's local directory, converts it to HTML, applies post-processing plugins, extracts metadata and derived properties, and returns a fully populated entry object ready to be saved to the data store.
+The `build` module is the core file processing pipeline for Blot. It accepts a blog object and a file path, reads the file from the blog's local directory, converts it to HTML, applies post-processing plugins, extracts metadata and derived properties, and returns a fully populated entry object ready to be saved to the data store.
 
 This module is invoked whenever a file in a blog's folder is created or changed. Its output is the entry object as it will appear to Blot's template renderer and data model.
 
@@ -42,7 +42,7 @@ An entry object with the following fields:
 | `summary` | string | A plain-text excerpt up to 150 characters, derived from body text. |
 | `teaser` | string | The HTML of the entry up to the first read-more break point, or the first three block elements. |
 | `teaserBody` | string | Same as `teaser` but derived from `body` (post title-extraction). |
-| `more` | boolean | `true` if there is content after the teaser break. |
+| `more` | boolean | `true` if there is text after the teaser break. |
 | `slug` | string | A URL-friendly slug derived from the title or metadata title. |
 | `tags` | string[] | Tags extracted from `[brackets]` in the file path and/or from metadata. |
 | `draft` | boolean | `true` if the entry is a draft (via path or metadata). |
@@ -51,8 +51,8 @@ An entry object with the following fields:
 | `permalink` | string | A custom permalink from metadata (`permalink`, `link`, or `url` keys). |
 | `dateStamp` | number | A UTC millisecond timestamp extracted from the path or metadata, adjusted for the blog's timezone. Absent if no date was found. |
 | `dateStampWasRemoved` | boolean | Set to `true` if a `dateStamp` was present before but is now absent. |
-| `updated` | number | UTC milliseconds. Only moves when the entry's source content actually changes (see below); otherwise it's carried forward from the previously stored entry. |
-| `contentHash` | string | A SHA-1 hash of the entry's source bytes (for a multi-file/folder post, a hash of each source file's path + hash). Used to detect real content changes independent of mtime. |
+| `updated` | number | UTC milliseconds. Only moves when the entry's source actually changes (see below); otherwise it's carried forward from the previously stored entry. |
+| `contentHash` | string | A SHA-1 hash of the entry's source bytes (for a multi-file/folder post, a hash of each source file's path + hash). Used to detect real changes independent of mtime. |
 | `size` | number | The file size in bytes from `stat.size`. |
 | `thumbnail` | object | Thumbnail variants generated from the first eligible image in the entry (or empty object). |
 | `dependencies` | string[] | Paths to other files in the blog folder that this entry references (e.g. images). |
@@ -122,7 +122,7 @@ build/
 │       ├── index.js       Orchestrates date extraction and timezone adjustment
 │       ├── fromMetadata.js Parses a date string using the blog's configured date format
 │       └── fromPath.js    Parses a date from path segments (e.g. /2024-01-15 Hello.txt)
-├── thumbnail/             Generates resized thumbnail images from entry content
+├── thumbnail/             Generates resized thumbnail images from the entry
 │   ├── index.js           Entry point; resolves candidate images and calls create
 │   ├── candidates.js      Identifies thumbnail candidates from metadata and HTML
 │   ├── create.js          Creates thumbnail variants from a given image path

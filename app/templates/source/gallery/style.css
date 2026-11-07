@@ -177,23 +177,45 @@ pre, code {
   position: relative;
 }
 
-.entry:hover img {opacity: 0.8}
+.entry:hover .frame {opacity: 0.8}
 
 .entry .full {position: absolute;top:0;left: 0;right: 0;bottom: 0;z-index: 1}
 
 .entry:before {content: "";display: block;padding-top: 100%;}
 
+/* The frame's inline width and height fit the image's aspect ratio inside the square cell. */
+.entry .frame {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: auto;
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05);
+}
+
 .entry img {
   position: absolute;
-  top: -1000px;
-  bottom: -1000px;
-  left: -1000px;
-  right: -1000px;
-  max-width: 100%;
-  max-height: 100%;
-  width: auto;
-  height: auto;
-  margin: auto;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Thumbnails fade in once loaded, over a placeholder in their final shape. */
+.pre-loaded {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.pre-loaded.loaded {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pre-loaded {
+    transition: none;
+  }
 }
 
 .entry .teaser {

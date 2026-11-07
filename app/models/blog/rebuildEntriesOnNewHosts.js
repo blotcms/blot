@@ -52,18 +52,12 @@ async function run(blogID, former) {
 
   const paths = [];
 
-  await new Promise((resolve, reject) =>
-    Entries.each(
-      blogID,
-      function (entry, next) {
-        if (!entry.deleted && mentionsHost(entry.html, newHosts))
-          paths.push(entry.path);
+  await Entries.each(blogID, async function (entry) {
+    if (!entry.deleted && mentionsHost(entry.html, newHosts))
+      paths.push(entry.path);
 
-        setImmediate(next);
-      },
-      (err) => (err ? reject(err) : resolve())
-    )
-  );
+    await new Promise((resolve) => setImmediate(resolve));
+  });
 
   if (!paths.length) return;
 

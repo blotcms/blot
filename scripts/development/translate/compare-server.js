@@ -1,5 +1,5 @@
 // Serve a comparison of the source site against the translated one, and take
-// the operator's feedback. Runs ON THE HOST.
+// the maintainer's feedback. Runs ON THE HOST.
 //
 //   node compare-server.js <verificationDir> [port]
 //

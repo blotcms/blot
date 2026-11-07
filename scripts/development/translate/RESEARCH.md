@@ -9,11 +9,11 @@ The script:
 1. Verifies the development server is already running, and aborts if it is not.
 2. Creates (or reuses) a site on the local development account.
 3. Configures it for local folder editing and scaffolds a locally-edited template.
-4. **Pauses for the operator to move content into the folder**, and verifies it
+4. **Pauses for the maintainer to move content into the folder**, and verifies it
    arrived.
 5. Invokes the Claude Code CLI to build the template against that content and the
-   design at `<url>`, iterating against screenshots with operator feedback.
-6. Leaves the folder ready for the operator to review and zip by hand, so it can be
+   design at `<url>`, iterating against screenshots with maintainer feedback.
+6. Leaves the folder ready for the maintainer to review and zip by hand, so it can be
    handed to a customer who drops it into their own site folder.
 
 **Content acquisition is explicitly not this script's problem.** Getting a site's
@@ -39,13 +39,13 @@ behaviour is stated and the discrepancy flagged.
 ### 0.1 The actual deliverable
 
 **The deliverable is the site folder itself — content plus template — sitting at
-`data/blogs/<blogID>/`.** The script does not archive it. The operator reviews the
+`data/blogs/<blogID>/`.** The script does not archive it. The maintainer reviews the
 result and zips the folder by hand when they are happy with it.
 
 ```
 data/blogs/<blogID>/
 ├── README                          ← handover notes (ignored by Blot, §6.5)
-├── 2024/03-12-a-post.txt           ← content, supplied by the operator
+├── 2024/03-12-a-post.txt           ← content, supplied by the maintainer
 ├── 2024/03-12-a-post/              ← (directory form when the post has assets)
 │   ├── post.txt
 │   └── _hero.jpg
@@ -68,7 +68,7 @@ installing the template, via the `"enabled": true` mechanism in §5.1.
 
 Because both `.git/` and `.verification/` are dot-directories, macOS Finder's
 select-all-then-compress excludes them automatically. That is deliberate (§6.4,
-§6.10): the operator's zip contains the site and nothing else, with nothing to
+§6.10): the maintainer's zip contains the site and nothing else, with nothing to
 remember.
 
 ### 0.2 Phases
@@ -78,9 +78,9 @@ remember.
 | A. Preflight | Confirm the dev server is up at `config.host`; abort with instructions if not | `/health` endpoints (§1.5) | reachability check |
 | B. Provision | Create or reuse the blog on the local dev account, set `client: "local"`, `forceSSL: false`, `git init` | `app/templates/folders/setupUser.js`, `setupBlogs.js`, `app/configure-local-blogs.js` | thin wrapper |
 | C. Template scaffold | `Template.create` → `setMetadata({localEditing:true})` → `writeToFolder` → ensure `"enabled": true` | `scripts/test/setup-restore-git-test.js` is a working example | the `enabled` injection (§5.1) |
-| D. Content handoff | Prompt the operator to move content in; **verify entries actually built** before continuing | — | the wait-and-verify gate (§3) |
+| D. Content handoff | Prompt the maintainer to move content in; **verify entries actually built** before continuing | — | the wait-and-verify gate (§3) |
 | E. Template authoring | Claude Code writes Mustache views + `package.json` + CSS into `Templates/<slug>/` | — | prompt design |
-| F. Verify & iterate | Screenshot both sides, compare in a local UI, take operator feedback, resume the agent | `app/helper/screenshot`, `scripts/development/open-folder-server.js` | comparison UI + feedback loop |
+| F. Verify & iterate | Screenshot both sides, compare in a local UI, take maintainer feedback, resume the agent | `app/helper/screenshot`, `scripts/development/open-folder-server.js` | comparison UI + feedback loop |
 
 The single biggest architectural fact: **the template is just files in
 `data/blogs/<blogID>/Templates/<slug>/`**. A chokidar watcher picks up every change
@@ -432,7 +432,7 @@ tells the agent what it is looking at.
 
 ### 3.1 How content gets into the folder
 
-Three routes, all the operator's choice, none of them this script's code:
+Three routes, all the maintainer's choice, none of them this script's code:
 
 | Source | Route |
 |---|---|
@@ -460,7 +460,7 @@ than counting IDs.
 
 A reasonable gate: at least one non-deleted entry exists, `blog.cacheID` has
 settled (§1.2), and no template errors are present in `metadata.errors`. Report
-what was found — "42 posts, 3 pages, 6 tags" — so the operator can spot a partial
+what was found — "42 posts, 3 pages, 6 tags" — so the maintainer can spot a partial
 copy before the agent spends a turn on it.
 
 ### 3.3 What the agent needs to know about the content
@@ -823,7 +823,7 @@ hydration happens for blog templates via `injectLocals.js` on every metadata sav
 
 ## 5. Keeping the folder portable
 
-The script no longer produces an archive — **the operator zips the folder by hand
+The script no longer produces an archive — **the maintainer zips the folder by hand
 after reviewing it** (§0.1). But two things must be true of the folder on disk for
 that manual zip to actually work in a customer's account, and both are easy to get
 wrong, so the script should handle them.
@@ -874,13 +874,13 @@ survive on disk rather than being injected at packaging time:
   through the dashboard (`app/dashboard/site/template/index.js:90`).
 
 Neither happens during a normal translate run, but both are plausible if the
-operator pokes at the dashboard mid-review. **Re-assert the flag as the last step
+maintainer pokes at the dashboard mid-review. **Re-assert the flag as the last step
 of every run**, after the agent has finished and before handing back to the
-operator, and mention it in the folder `README` so a human can restore it.
+maintainer, and mention it in the folder `README` so a human can restore it.
 
 ### 5.2 Portability: what must not end up in the folder
 
-The operator zips the folder manually, so this is partly guidance for them (via
+The maintainer zips the folder manually, so this is partly guidance for them (via
 the `README`) and partly a constraint on what the agent is allowed to create.
 
 | Item | Why | Action |
@@ -906,7 +906,7 @@ the folder into it, let it sync, and screenshot it.** If `enabled: true` is doin
 its job the second site renders identically to the first with zero configuration.
 `app/templates/folders/index.js` already demonstrates every piece — create blog,
 copy a source tree into `localPath(blogID, "/")`, `sync()` + `folder.update()` per
-changed path, `fix()`. Not required for a first version; the operator eyeballing
+changed path, `fix()`. Not required for a first version; the maintainer eyeballing
 the comparison UI covers the common case.
 
 ---
@@ -939,14 +939,14 @@ scripts/development/translate/
 ```
 
 No crawler, no importer, no packaging module: content arrives from elsewhere
-(§3.1) and the operator zips the reviewed folder by hand (§0.1). **No agent
+(§3.1) and the maintainer zips the reviewed folder by hand (§0.1). **No agent
 runner either** — the script prints a command rather than driving the CLI (§6.3).
 
 ```json
 "translate": "./scripts/development/translate/translate.sh"
 ```
 
-`translate.sh` — steps 5–8 form the operator loop:
+`translate.sh` — steps 5–8 form the maintainer loop:
 
 1. **preflight** — `docker ps` for `blot-node-app-1`, then
    `GET https://<host>/health`; abort with "run `npm start` in another window"
@@ -961,7 +961,7 @@ runner either** — the script prints a command rather than driving the CLI (§6
 4. **content gate** — print the folder path, wait, then verify entries actually
    built (§3.2). Skipped on a re-run where content is already present.
 5. `cd data/blogs/<blogID>` and exec `claude -p …` — `--session-id` on a first run,
-   `--resume` with the operator's feedback on subsequent turns (§6.3, §6.6.1).
+   `--resume` with the maintainer's feedback on subsequent turns (§6.3, §6.6.1).
    Non-zero exit or a `.verification/BLOCKED.txt` aborts the run.
 6. wait for the rebuild to settle — poll `blog.cacheID` until stable (§1.2)
 7. screenshot both sides into `.verification/` (host-side, §6.4); start the
@@ -1015,7 +1015,7 @@ sharpening.
 ### 6.3 Handing over to the Claude Code CLI
 
 **Decided after trying the alternative: the script does not run the agent. It
-prints the command for the operator to run in another window.**
+prints the command for the maintainer to run in another window.**
 
 The headless route was built and abandoned. Driving `claude -p` meant owning
 session-ID lifecycle, resume semantics, `PIPESTATUS` through a formatter pipe,
@@ -1026,7 +1026,7 @@ use"*, and the CLI refuses to start nested inside another Claude Code session.
 
 Running it interactively is also a better fit for the work:
 
-- the operator watches and can interject mid-task, which matters for a design job
+- the maintainer watches and can interject mid-task, which matters for a design job
   where "the nav is wrong" is faster said than inferred;
 - permission prompts behave normally, rather than needing a blanket
   `acceptEdits` while the agent processes untrusted third-party HTML;
@@ -1046,7 +1046,7 @@ credentials — so preflight checks it exists before provisioning anything.
 #### What the script gives up
 
 It no longer knows whether the agent did anything: no exit code, no blocked
-signal, no completion check. Acceptable, because the operator is watching. What
+signal, no completion check. Acceptable, because the maintainer is watching. What
 replaces it is the next run: it commits whatever changed, re-screenshots, and
 shows the comparison.
 
@@ -1068,7 +1068,7 @@ built. Kept because they are the map if it is ever wanted back:
 | `--append-system-prompt` | inject the Blot constraints without displacing the default system prompt |
 
 **Blocking and abort semantics** *(applied only to the abandoned headless
-route; with a printed command the operator sees the failure directly)*:
+route; with a printed command the maintainer sees the failure directly)*:
 
 1. **Process exit code.** `spawn`/`execFile` the binary and treat any non-zero
    exit as fatal. Do not swallow it — `translate.sh` should be `set -euo pipefail`
@@ -1079,7 +1079,7 @@ route; with a printed command the operator sees the failure directly)*:
    it to write `.verification/BLOCKED.txt` with a reason and stop. The Node
    wrapper checks for that file after the CLI returns and aborts with the reason
    as the error message. A `--json-schema` structured result would work too, but a
-   file is simpler and it is also visible to the human operator.
+   file is simpler and it is also visible to the human maintainer.
 3. **Wall-clock ceiling.** A timeout on the spawned process, so a loop that will
    not converge cannot run indefinitely. Spend ceilings are deliberately *not*
    imposed here — see "Local CLIs only" below.
@@ -1100,7 +1100,7 @@ fails there is no point starting the next.
 
 An adapter layer supporting `claude`, `codex` and `cursor-agent` was built and
 then taken out along with the headless invocation: with a printed command, the
-operator can run whichever agent they like without the script knowing about it.
+maintainer can run whichever agent they like without the script knowing about it.
 
 The findings are kept because they are what a future attempt would need.
 
@@ -1139,16 +1139,16 @@ and associative arrays.
 
 #### The transcript
 
-Not captured. The operator runs the agent in their own terminal, which is the
+Not captured. The maintainer runs the agent in their own terminal, which is the
 transcript, and the CLI keeps its own session history. A stream-JSON formatter
 was built for the headless route and removed with it.
 
 ### 6.4 The verification loop and the `.verification/` folder
 
 **Named `.verification/` — a dot-directory, deliberately.** The decisive reason is
-the operator's packaging workflow: macOS Finder hides dotfiles, so opening the site
+the maintainer's packaging workflow: macOS Finder hides dotfiles, so opening the site
 folder, pressing Cmd+A and choosing *Compress* silently excludes it. Since the
-operator zips by hand (§0.1), that removes the one manual step most likely to be
+maintainer zips by hand (§0.1), that removes the one manual step most likely to be
 forgotten. A `_verification/` name would show up in Finder and have to be deleted
 every time.
 
@@ -1157,7 +1157,7 @@ Verified it behaves correctly everywhere that matters:
 | Check | Result |
 |---|---|
 | Published as a post? | **No** — `isHidden()` returns `true` for `.verification/out.png` (it tests each path segment for a leading `_` or `.`), and `isPublic()` in `sync/update/set.js` catches any path containing `/.` |
-| Served over HTTP? | **Yes** — `app/blog/assets.js` sets `dotfiles: "allow"`, and `.verification` is not in `BLOCKED_PATTERNS` (`..`, `.php`, `/.git`, `\0`). So `https://<handle>.local.blot/.verification/input-homepage.png` still works for the operator |
+| Served over HTTP? | **Yes** — `app/blog/assets.js` sets `dotfiles: "allow"`, and `.verification` is not in `BLOCKED_PATTERNS` (`..`, `.php`, `/.git`, `\0`). So `https://<handle>.local.blot/.verification/input-homepage.png` still works for the maintainer |
 | Ignored by the folder watcher? | **No** — `shouldIgnoreFile(".verification/out.png")` is `false`, so writing a screenshot still triggers one sync. Harmless, but see the `cacheID` note below |
 | Hidden from Finder select-all? | **Yes** — which is the point |
 
@@ -1290,17 +1290,17 @@ serves as the brief for the *next* agent that edits the folder, which is the poi
 — the deliverable carries its own onboarding.
 
 
-### 6.6 Operator guidance: feedback and a comparison UI
+### 6.6 Maintainer guidance: feedback and a comparison UI
 
 Two mechanisms, both worth building, and they compose.
 
 #### 6.6.1 Typed feedback between agent turns
 
 `claude -p` returns after each invocation, so the natural shape is a loop the
-operator drives:
+maintainer drives:
 
 ```
-run agent → screenshots → show comparison → prompt operator
+run agent → screenshots → show comparison → prompt maintainer
    ↳ [Enter]  accept, move to packaging
    ↳ text     resume the session with that feedback, loop again
    ↳ q        abort without packaging
@@ -1379,12 +1379,12 @@ possible:
 - plain links that open each site in a real tab (always works, zero constraints);
 - a slider or opacity-blend between the two PNGs, which is far better than
   side-by-side for spotting layout drift;
-- a textarea that POSTs feedback back to the server, so the operator can type into
+- a textarea that POSTs feedback back to the server, so the maintainer can type into
   the browser instead of the terminal — the same string then goes to
   `claude --resume`.
 
 That last point makes the UI and the feedback loop one mechanism rather than two:
-the server holds the pending feedback, the shell loop reads it, and the operator
+the server holds the pending feedback, the shell loop reads it, and the maintainer
 never has to switch windows.
 
 
@@ -1399,7 +1399,7 @@ for guidance up front.**
    source URL, `blogID`, handle, template slug, the Claude `--session-id`, run
    count and timestamps. **Decided: `data/tmp/translate/<handle>.json`** via
    `helper/tempDir()` — where the importers already stage working state, and
-   safely outside the blog folder, so it can never end up in the operator's zip.
+   safely outside the blog folder, so it can never end up in the maintainer's zip.
 2. **Handle lookup.** `Blog.get({ handle })` — `app/templates/folders/setupBlogs.js`
    is the precedent: reuse the blog if it exists, throw if it is owned by another
    user, otherwise create. That alone makes provisioning idempotent even with no
@@ -1419,7 +1419,7 @@ translate <url>
   └─ verify → finalize (§5.1) → print folder path
 ```
 
-Asking for feedback *before* doing any work on a re-run is right: the operator
+Asking for feedback *before* doing any work on a re-run is right: the maintainer
 already knows what they disliked, and the agent should not spend a turn
 rediscovering it.
 
@@ -1431,7 +1431,7 @@ rediscovering it.
 - **Content is not touched on a re-run.** This is the big simplification from
   splitting acquisition out: there is no re-crawl, no output directory to clear,
   and none of the duplicate-or-wipe hazards that come with re-running an importer
-  into a populated folder. Content changes are the operator's business — they can
+  into a populated folder. Content changes are the maintainer's business — they can
   copy in an updated folder, or re-run `dynamic-importer` separately.
 - **Templates** — `writeToFolder` removes orphaned files and skips writes whose
   content is byte-identical, so it is naturally idempotent. `buildFromFolder`
@@ -1503,17 +1503,17 @@ release.
 good fit**, and the codebase already does something similar: `scripts/test/setup-restore-git-test.js`
 inits a git repo *inside a blog's template directory*. The value here is concrete:
 
-- every agent turn becomes a reviewable diff, so the operator can see exactly what
+- every agent turn becomes a reviewable diff, so the maintainer can see exactly what
   changed between iterations rather than inferring it from screenshots;
 - a bad iteration is `git revert`, not a re-run;
-- the content can be committed *as the operator supplied it*, before the agent
+- the content can be committed *as the maintainer supplied it*, before the agent
   touches anything, which cleanly separates "what arrived" from "what the agent
   changed" — valuable precisely because the agent is allowed to edit content
   (§3.3);
 - `git status` is a precise answer to "did the agent actually change anything".
 
 Suggested commit points: after provisioning, after the content gate (§3.2), after
-each agent turn, and after each operator-feedback round — with the feedback text as
+each agent turn, and after each maintainer-feedback round — with the feedback text as
 the commit message, which makes the log a record of the conversation.
 
 **Blot ignores `.git` as content**, so nothing gets published:
@@ -1525,9 +1525,9 @@ rather than an entry.
 **Decided: a plain `git init` in the blog folder, and the history stays local.**
 The repo is a working tool for the run — diffing agent turns, separating importer
 output from agent fixes, rolling back a bad iteration — not part of the handover.
-The customer receives the site; the provenance stays on the operator's machine.
+The customer receives the site; the provenance stays on the maintainer's machine.
 
-**This falls out of the packaging workflow for free.** The operator zips by opening
+**This falls out of the packaging workflow for free.** The maintainer zips by opening
 the folder in Finder, selecting all, and compressing. Finder hides dotfiles, so
 `.git` is excluded by the same mechanism that excludes `.verification/` (§6.4).
 Nothing to remember and nothing to clean up — the default behaviour is the correct
@@ -1555,7 +1555,7 @@ and `git init --separate-git-dir` is no longer needed as a workaround.
 
 - **Add a `.gitignore` excluding `.verification/`.** The screenshots are large
   PNGs at `deviceScaleFactor: 2`, regenerated every iteration; committing them
-  churns the repo for no benefit, since the operator compares them live rather
+  churns the repo for no benefit, since the maintainer compares them live rather
   than historically. A dotfile at the folder root is ignored as content by
   `isPublic` (any path containing `/.`), so it costs nothing.
 - **Blot never publishes or serves `.git`.** `shouldIgnoreFile` lists it in
@@ -1563,7 +1563,7 @@ and `git init --separate-git-dir` is no longer needed as a workaround.
   `/.git/HEAD`), and `/.git` is in `BLOCKED_PATTERNS` in `app/blog/assets.js`, so
   it 404s over HTTP. Harmless even in the unlikely case a repo does reach a live
   site.
-- **Commit messages are for the operator, not a customer** — optimise them for
+- **Commit messages are for the maintainer, not a customer** — optimise them for
   reviewing what changed between turns.
 
 Create the repo at provisioning time so the very first acquisition is committed
@@ -1581,18 +1581,18 @@ legible as a diff.
 |---|---|---|
 | Scope | Template only. Content acquisition lives in `dynamic-importer` or the dashboard importers | intro, §3.1 |
 | Dev account | `example@example.com` — a hardcoded literal, not config | §2.1 |
-| Starting the stack | No. Preflight against `/health` and abort telling the operator to run `npm start` | §1.5 |
-| Deliverable | The folder itself. **No zipping in the script** — the operator zips manually after review | §0.1, §5 |
+| Starting the stack | No. Preflight against `/health` and abort telling the maintainer to run `npm start` | §1.5 |
+| Deliverable | The folder itself. **No zipping in the script** — the maintainer zips manually after review | §0.1, §5 |
 | Customer install | `"enabled": true` in the template's `package.json`, written to disk and re-asserted at the end of every run | §5.1 |
-| Content handoff | Operator moves content in; the script **verifies entries built** rather than trusting a keypress | §3.2 |
+| Content handoff | Maintainer moves content in; the script **verifies entries built** rather than trusting a keypress | §3.2 |
 | Agent may edit content | Yes — some design mismatches are content problems, and git makes the edits reviewable | §3.3, §6.4 |
 | Template scaffold | Clone `SITE:blog` — take the working boilerplate, instruct the agent to treat it as structure, not as a look | §6.2 |
-| Invoking the agent | **The script does not.** It writes `.verification/brief.md` and prints `cd <folder> && claude --model sonnet "$(cat .verification/brief.md)"` for the operator to run in another window | §6.3 |
+| Invoking the agent | **The script does not.** It writes `.verification/brief.md` and prints `cd <folder> && claude --model sonnet "$(cat .verification/brief.md)"` for the maintainer to run in another window | §6.3 |
 | Agent and model | `claude`, `sonnet`. Presence checked at preflight; `TRANSLATE_MODEL` overrides | §6.3 |
 | Spend ceilings | Not imposed; cost stays with the credentials | §6.3 |
-| Agent transcript | Not captured — the operator's terminal is the transcript | §6.3 |
+| Agent transcript | Not captured — the maintainer's terminal is the transcript | §6.3 |
 | The loop | Re-running the script. It commits the round, re-screenshots, refreshes the comparison and folds in any feedback | §6.7 |
-| Verification folder | `.verification/` — dot-named so Finder select-all excludes it; still served over HTTP for the operator | §6.4 |
+| Verification folder | `.verification/` — dot-named so Finder select-all excludes it; still served over HTTP for the maintainer | §6.4 |
 | READMEs | Two, both named `README`, no extension, Markdown inside. Ignored at the folder root; becomes a `/readme` view in the template, which is accepted and matches seven shipped templates | §6.5 |
 | Comparison UI | Screenshot pairs + opacity-blend slider + open-in-tab links + feedback textarea, served on port 3021 | §6.6.2 |
 | Feedback channel | Both — browser textarea and terminal prompt, with the server holding pending feedback the shell loop reads | §6.6 |
@@ -1608,7 +1608,7 @@ legible as a diff.
 | 2 | Handle derivation | Deterministic from the URL: strip scheme, `www.` and TLD, lowercase, strip to alnum, numeric suffix on collision. Must be stable across runs or re-run detection breaks |
 | 3 | Rebuild wait | Poll `blog.cacheID` until it stops changing — it is bumped at the end of every sync. **Order matters:** `.verification/` is not ignored by the watcher, so writing screenshots itself bumps `cacheID`. Settle first, *then* screenshot |
 | 4 | Screenshot helper | Standalone host-side wrapper, copying the viewports (`1260×778` / `400×650`), `networkidle0` wait and retry/throttle behaviour from `app/helper/screenshot` rather than importing it — its `args.js` is tuned for Alpine |
-| 5 | Iteration cap | Agent inner loop capped around 5 rounds. The operator is the real stop condition; no spend ceiling is imposed by this script |
+| 5 | Iteration cap | Agent inner loop capped around 5 rounds. The maintainer is the real stop condition; no spend ceiling is imposed by this script |
 | 6 | Tool allowlist | `Read, Write, Edit, Glob, Grep, WebFetch, Bash(node:*)` — no unrestricted `Bash` |
 
 ### 7.3 Resolved externally
@@ -1635,11 +1635,11 @@ Nothing blocking remains. Both items below were resolved by taking a default
 rather than a deliberate choice — flag them if you disagree:
 
 1. **What "converged" means for the agent's inner loop** (§6.4) — taken as: the
-   agent declares itself done and the operator decides for real. Image diffing is
+   agent declares itself done and the maintainer decides for real. Image diffing is
    a weak proxy for design fidelity, and a human is in the loop anyway.
 2. **Whether the content gate should offer to run `dynamic-importer` for the
-   operator** (§3.1) — taken as: no, it only prints the routes and waits. Keeping
-   the two tools uncoupled was the point of splitting them, and the operator may
+   maintainer** (§3.1) — taken as: no, it only prints the routes and waits. Keeping
+   the two tools uncoupled was the point of splitting them, and the maintainer may
    well be using the dashboard importer or an existing folder instead.
 
 ### 7.5 Not a question — just must not be forgotten
@@ -1719,7 +1719,7 @@ app/blog/assets.js                           why /.verification/*.png is served
 node_modules/puppeteer (host, 24.1.1)        + ~/.cache/puppeteer/chrome
 ```
 
-**Operator UI / interaction / idempotency**
+**Maintainer UI / interaction / idempotency**
 ```
 scripts/development/open-folder-server.js    the local-http-server pattern, port 3020
 scripts/util/getConfirmation.js              readline prompt pattern

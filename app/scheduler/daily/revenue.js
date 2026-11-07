@@ -49,9 +49,9 @@ async function main() {
       (
         (paypal_annual_recurring_revenue / annual_recurring_revenue) *
         100
-      ).toFixed(1) + "%",
+      ).toFixed(0) + "%",
     annual_percentage:
-      ((annual_billed_revenue / annual_recurring_revenue) * 100).toFixed(1) +
+      ((annual_billed_revenue / annual_recurring_revenue) * 100).toFixed(0) +
       "%",
     annual_recurring_revenue: prettyPrice(
       Math.floor(annual_recurring_revenue / 100) * 100
@@ -59,11 +59,11 @@ async function main() {
     monthly_recurring_revenue: prettyPrice(
       Math.floor(Math.floor(annual_recurring_revenue / 12) / 100) * 100
     ),
-    total_customers,
+    total_customers: prettyNumber(total_customers),
     sites_per_customer: (total_customers
       ? total_active_blogs / total_customers
       : 0
-    ).toFixed(2),
+    ).toFixed(1),
     total_active_blogs: prettyNumber(total_active_blogs),
   };
 }

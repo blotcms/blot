@@ -680,17 +680,20 @@ hr {
 }
 
 
+/* Thumbnails fade in once loaded, over a placeholder in their final shape. */
 .pre-loaded {
-  visibility: hidden;
   opacity: 0;
-  will-change: opacity;
-  transition: opacity 0.3s, visibility 0.3s;
+  transition: opacity 0.3s;
 }
 
-.loaded {
-  visibility: visible;
+.pre-loaded.loaded {
   opacity: 1;
-  transition: opacity 0.3s, visibility 0.3s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pre-loaded {
+    transition: none;
+  }
 }
 
 /*
@@ -975,6 +978,25 @@ img.zoom-img {
     margin: 0 auto;
   }
 
+  /* The frame's inline width and height fit the image's aspect ratio inside the square cell. */
+  .posts .post .frame {
+    position: relative;
+    display: block;
+    flex-shrink: 0;
+    margin: 0 auto;
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05);
+  }
+
+  .posts .post .frame img {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+  }
+
   .posts .post.no-thumbnail .thumbnail:after {
     border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, .15);
   }
@@ -994,19 +1016,6 @@ img.zoom-img {
 
   .posts .post.no-thumbnail .date {
     display: block;
-  }
-
-  .posts .pre-loaded {
-    visibility: hidden;
-    opacity: 0;
-    will-change: opacity;
-    transition: opacity 0.3s, visibility 0.3s;
-  }
-
-  .posts .loaded {
-    visibility: visible;
-    opacity: 1;
-    transition: opacity 0.3s, visibility 0.3s;
   }
 
 .posts .post.no-thumbnail .no-thumbnail-content {

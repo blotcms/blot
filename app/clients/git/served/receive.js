@@ -49,7 +49,7 @@ const MASTER = "refs/heads/master";
 // indexed there, so a push needs about its own size again on top; half the
 // budget leaves room for the clones and fetches the cache serves meanwhile.
 // The limit is the smaller of this, MAX_PUSH and receive.maxInputSize, git's
-// limit in the Docker image (agreed with the operator, 3 Nov 2026: 512 MiB,
+// limit in the Docker image (agreed with the maintainer, 3 Nov 2026: 512 MiB,
 // and no larger cache for this). The host's one cache is far larger than the
 // 1 GiB each process had then, so MAX_PUSH keeps the limit where it was.
 const PUSH_CACHE_SHARE = 0.5;

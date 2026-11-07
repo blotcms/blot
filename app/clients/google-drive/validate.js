@@ -92,21 +92,20 @@ const logLag = (
 
 // Never rejects: resolves with Fix's error and report so the caller decides
 // what to report. Fix() can fail part way through and still return the
-// repairs it made before that, hence both.
-const fixBlog = (blog) =>
-  new Promise((resolve) => {
-    Fix(blog, (error, report) => {
-      if (error) {
-        console.error(
-          clfdate(),
-          "Google Drive: Fix error for blog",
-          blog.id,
-          error
-        );
-      }
-      resolve({ error, report });
-    });
-  });
+// repairs it made before that (err.report), hence both.
+const fixBlog = async (blog) => {
+  try {
+    return { error: null, report: await Fix(blog) };
+  } catch (error) {
+    console.error(
+      clfdate(),
+      "Google Drive: Fix error for blog",
+      blog.id,
+      error
+    );
+    return { error, report: error.report };
+  }
+};
 
 // Walks the blog's folder while holding its folder lock, so it can't race a
 // webhook sync. Resolves to sync's summary, false if the walk failed, or

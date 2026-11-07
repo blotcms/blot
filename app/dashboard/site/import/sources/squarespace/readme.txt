@@ -1,4 +1,4 @@
-Export the site's content from Squarespace by opening Import & export, selecting
+Export the site's writing and images from Squarespace by opening Import & export, selecting
 Export, choosing WordPress, and downloading the XML file.
 
 Open the site in Blot's dashboard, select Import, choose Squarespace, and upload

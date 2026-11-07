@@ -40,9 +40,9 @@ Defined in `model.js`. Every field is validated by `helper/ensure` before a writ
 | `permalink` | string | The resolved permalink string before deduplication. |
 | `title` | string | Plain-text title extracted from the entry. |
 | `titleTag` | string | The HTML element containing the title. |
-| `body` | string | HTML content of the entry excluding the title element. |
+| `body` | string | HTML of the entry excluding the title element. |
 | `summary` | string | Plain-text summary. |
-| `teaser` | string | HTML content before a `<!-- more -->` comment. |
+| `teaser` | string | HTML before a `<!-- more -->` comment. |
 | `teaserBody` | string | `teaser` excluding the title element. |
 | `more` | boolean | `true` when `teaser` differs from the full HTML. |
 | `html` | string | Full rendered HTML. |
@@ -146,7 +146,7 @@ Writes entry data and runs all side-effects. This is the primary write operation
 Marks an entry as deleted.
 
 - Calls `get` to load the current entry. If no entry exists, resolves immediately.
-- Constructs a sanitised object with `deleted: true` and all other content fields blanked.
+- Constructs a sanitised object with `deleted: true` and all other fields blanked.
 - Delegates to `set`, which handles TTL, list removal, dependency cleanup, and backlink removal.
 
 ### `search(blogID, query, [options])`

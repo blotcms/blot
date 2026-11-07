@@ -5,9 +5,9 @@
 Let's say you have to design around something created by the people who use your software, e.g. a photo, a blog post, a page title.
 
 
-## Respect what your users have created
+## Respect what people have created
 
-Have they uploaded an image? For god's sake don't crop it to preserve the integrity of your gorgeous grid design. Preserve the integrity of your user's creation above all!
+Have they uploaded an image? For god's sake don't crop it to preserve the integrity of your gorgeous grid design. Preserve the integrity of their creation above all!
 
 ## Don't think for too long
 

@@ -2,11 +2,11 @@
 
 ## Purpose
 
-The Dropbox client provides file synchronization between a user's Dropbox folder and their Blot blog on the Blot server. It monitors a designated folder in Dropbox using webhooks and keeps the local blog folder synchronized with changes made remotely. Conversely, it also pushes changes made to the blog (via Blot's editing interface) back to Dropbox. The client supports two permission modes: app folder (restricted to `/Apps/Blot/`) and full access to the user's entire Dropbox.
+The Dropbox client provides file synchronization between a customer's Dropbox folder and their Blot blog on the Blot server. It monitors a designated folder in Dropbox using webhooks and keeps the local blog folder synchronized with changes made remotely. Conversely, it also pushes changes made to the blog (via Blot's editing interface) back to Dropbox. The client supports two permission modes: app folder (restricted to `/Apps/Blot/`) and full access to the customer's entire Dropbox.
 
 ## Architecture Overview
 
-The Dropbox client operates using a webhook-based event notification system combined with Dropbox's cursor-based delta retrieval mechanism. When changes occur in a user's Dropbox folder, Dropbox sends a webhook notification to Blot. Blot then uses the saved cursor and Dropbox's `filesListFolderContinue` API to fetch only the changes that occurred since the last synchronization, rather than re-listing the entire folder.
+The Dropbox client operates using a webhook-based event notification system combined with Dropbox's cursor-based delta retrieval mechanism. When changes occur in a customer's Dropbox folder, Dropbox sends a webhook notification to Blot. Blot then uses the saved cursor and Dropbox's `filesListFolderContinue` API to fetch only the changes that occurred since the last synchronization, rather than re-listing the entire folder.
 
 ### Key Architectural Decisions
 
@@ -14,8 +14,8 @@ The Dropbox client operates using a webhook-based event notification system comb
 - **Cursor-based delta**: The sync only fetches changes since the last known state, keeping API calls minimal.
 - **Lock-based concurrency**: The sync module (`Sync` from `require("sync")`) ensures that only one synchronization runs at a time per blog to prevent race conditions when modifying the folder.
 - **Two permission modes**:
-  - **App folder** (restricted): Blot has access only to `/Apps/Blot/` in the user's Dropbox.
-  - **Full access**: Blot has access to any folder the user selects in their Dropbox.
+  - **App folder** (restricted): Blot has access only to `/Apps/Blot/` in the customer's Dropbox.
+  - **Full access**: Blot has access to any folder the customer selects in their Dropbox.
 - **Content hash comparison**: Before downloading files, the client compares content hashes to avoid unnecessary downloads.
 - **Case-sensitive path handling**: Blot normalizes case in file paths, since Dropbox is case-insensitive but the Blot server file system is case-sensitive.
 
@@ -52,7 +52,7 @@ The Dropbox client operates using a webhook-based event notification system comb
   - `POST /webhook`: Receives webhook notifications from Dropbox containing account IDs of accounts with changes. Initiates syncs for all blogs linked to those accounts.
 - **`routes/setup/index.js`**: Main setup logic orchestrating OAuth, account metadata retrieval, folder creation/configuration, and initial sync.
 - **`routes/setup/getAccount.js`**: Exchanges the OAuth authorization code for access and refresh tokens and retrieves account metadata (email, account_id, folder path).
-- **`routes/setup/createFolder.js`**: Creates (or designates) the blog folder in Dropbox. Handles migration logic when a user connects a second blog to an app folder that already has files.
+- **`routes/setup/createFolder.js`**: Creates (or designates) the blog folder in Dropbox. Handles migration logic when a customer connects a second blog to an app folder that already has files.
 
 ### Sync
 
@@ -246,7 +246,7 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
 - **Client model** (`require("models/client")`): Redis-backed pubsub for publishing sync status updates.
 - **Helper modules**:
   - `storage/folder`: Reads and writes the blog folder (listing, `stat` with `{ hash: true }` for the content hash, `write`, `remove`, `resolveCaseInsensitive`).
-  - `helper/email`: Sends error notifications to users and admins.
+  - `helper/email`: Sends error notifications to customers and admins.
   - `helper/ensure`: Runtime type validation.
 - **Configuration** (`config`): Reads Dropbox OAuth credentials and webhook configuration.
 
@@ -259,12 +259,12 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
 
 ## Synchronization Flow
 
-### Initial Setup (User Connects Blog to Dropbox)
+### Initial Setup (Customer Connects Blog to Dropbox)
 
-1. User clicks "Connect to Dropbox" on dashboard.
+1. Customer clicks "Connect to Dropbox" on dashboard.
 2. Dashboard route `GET /redirect` initiates OAuth flow by redirecting to Dropbox.
 3. Dropbox redirects back to `POST /authenticate` (via `site/routes.js`) with authorization code.
-4. Code is stored in session; user is sent to dashboard.
+4. Code is stored in session; customer is sent to dashboard.
 5. Setup function (in `routes/setup/index.js`) is called asynchronously:
    - `getAccount()`: Exchanges code for access/refresh tokens and retrieves account info.
    - `createFolder()`: Creates or designates the blog folder in Dropbox (handles migration for multiple blogs).
@@ -275,7 +275,7 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
 
 ### Ongoing Sync (Webhook-Triggered)
 
-1. User modifies a file in their Dropbox folder.
+1. Customer modifies a file in their Dropbox folder.
 2. Dropbox sends a webhook to `POST /webhook` containing the account ID.
 3. Blot looks up all blogs linked to that account.
 4. For each blog, `sync/index.js` is called (protected by lock to prevent concurrent syncs):
@@ -302,7 +302,7 @@ counterpart on Dropbox is deleted from Blot. The webhook-driven sync in
 reports, including deletions, starting from a cursor. Both are safe *once the
 initial transfer has actually finished*, but dangerous while it hasn't:
 running either against a folder Dropbox doesn't fully have yet would delete
-the local files that were never uploaded, permanently losing content that
+the local files that were never uploaded, permanently losing files that
 only ever existed on Blot. This previously happened silently whenever Dropbox
 ran out of storage space mid-transfer, and more generally whenever the
 initial transfer (`resetFromBlot()`, run once during setup) was interrupted
@@ -385,7 +385,7 @@ Specifically for running out of space, `resetFromBlot()` also:
    `classify()`/`isRetryable()` and stops the transfer immediately instead
    of logging and continuing (`rethrowIfDurable`). `util/retry.js` also
    never retries a durable error, since retrying can't succeed until the
-   user resolves it.
+   customer resolves it.
 3. On the pre-flight quota check specifically, persists `error_code: 507`
    (`util/constants.js`'s `INSUFFICIENT_SPACE_ERROR_CODE`) in addition to
    leaving `transfer_pending: true`, so the dashboard can show the more
@@ -423,14 +423,14 @@ the generic client-health messages described below instead; a `507` picked
 up from an ordinary sync (not the initial transfer) shows the plain
 "Storage full" message rather than the transfer-specific one.
 
-### Write from Blot (User Edits in Blot)
+### Write from Blot (Customer Edits in Blot)
 
 1. Blot's edit interface modifies an entry file.
 2. Calls `write(blogID, path, contents, callback)`.
 3. File is written locally to the blog folder.
 4. File is uploaded to Dropbox via `util/upload.js`.
 
-### Delete from Blot (User Removes Entry in Blot)
+### Delete from Blot (Customer Removes Entry in Blot)
 
 1. Blot's delete interface removes an entry.
 2. Calls `remove(blogID, path, callback)`.
@@ -462,7 +462,7 @@ A second Redis set (`clients:dropbox:{account_id}`) tracks which blogs are linke
 
 ## Error Handling
 
-Sync records only failures the user must act on, tagged with `error_source` so `getHealth` can tell a missing folder from a per-file 409:
+Sync records only failures the customer must act on, tagged with `error_source` so `getHealth` can tell a missing folder from a per-file 409:
 
 - **HTTP 0, 500, 504** (network errors): Logged, retried, not persisted.
 - **HTTP 429, 503** (rate limits): Logged, retried with backoff, not persisted.
@@ -491,8 +491,8 @@ Sync records only failures the user must act on, tagged with `error_source` so `
 
 ## Known Issues and Edge Cases
 
-- **Large folder migrations**: When a user connects a second blog to an app folder, all existing files must be moved into a subfolder. This requires user input to specify folder names.
-- **Folder moves**: If a user moves a blog folder within Dropbox after setup, the `folder_id` (which is immutable) is used to track the new location. However, if the folder is deleted and recreated, setup must occur again.
+- **Large folder migrations**: When a customer connects a second blog to an app folder, all existing files must be moved into a subfolder. This requires customer input to specify folder names.
+- **Folder moves**: If a customer moves a blog folder within Dropbox after setup, the `folder_id` (which is immutable) is used to track the new location. However, if the folder is deleted and recreated, setup must occur again.
 - **Missing parent directories**: If a file's parent directory does not exist on disk, the client attempts to resolve the case-sensitive path. If this fails, the file is still downloaded using the relative path from Dropbox.
 - **Long file names**: File names exceeding the OS's maximum path length are skipped (error code `ENAMETOOLONG`).
 

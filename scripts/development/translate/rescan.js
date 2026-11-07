@@ -2,7 +2,7 @@
 //
 //   docker exec blot-node-app-1 node scripts/development/translate/rescan <blogID>
 //
-// The folder watcher cannot be relied on for content the operator drops in:
+// The folder watcher cannot be relied on for content the maintainer drops in:
 // app/clients/local/setup.js starts chokidar with `ignoreInitial: true`, and
 // setup only runs after `sync/fix` completes, so anything copied in before the
 // watcher is listening is never seen. `sync/fix` does not help either — it only
@@ -64,7 +64,7 @@ async function rescanWithRetry(blogID) {
 
   for (let attempt = 1; attempt <= LOCK_ATTEMPTS; attempt++) {
     try {
-      // Content the operator dropped into the Local client's source directory
+      // Content the maintainer dropped into the Local client's source directory
       // reaches the folder first (the watcher ignores what it didn't see)
       await require("clients/local/setup").reconcileSource(blogID);
       return await rescanOnce(blogID);

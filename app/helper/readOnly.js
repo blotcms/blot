@@ -2,7 +2,7 @@ const client = require("models/client");
 const clfdate = require("helper/clfdate");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
-// An operator-set freeze on writes to blogs, for maintenance
+// A maintainer-set freeze on writes to blogs, for maintenance
 // that needs writes to stop for a few minutes (a host cycle's switch, for
 // example: config/host/cycle.sh). Turn it on and off with
 // scripts/read-only.js. While it is on:
@@ -13,7 +13,7 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 // - sync() waits before taking a folder lock (whenWritable), so background
 //   syncs pause rather than fail, and resume once the freeze lifts
 //
-// The key always carries a TTL, so a freeze whose operator went away (a
+// The key always carries a TTL, so a freeze whose maintainer went away (a
 // crashed script, a closed laptop) lifts on its own. If Redis is unreachable
 // the freeze counts as off: every write needs Redis anyway, and the
 // redis-unavailable handling already turns those requests away.

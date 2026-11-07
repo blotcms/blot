@@ -6,7 +6,7 @@
 # Run it after Redis on the host has synced (it only reads, so a read-only
 # replica is fine), and before the first deploy-units. Safe to re-run.
 #
-# From the operator's Mac (or cycle.sh) it sends itself to the host over ssh
+# From the maintainer's Mac (or cycle.sh) it sends itself to the host over ssh
 # and runs there with sudo. On the host, as root:
 #   wildcard-cert.sh --local
 #

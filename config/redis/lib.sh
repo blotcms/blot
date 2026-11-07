@@ -1,4 +1,4 @@
-# Helpers shared by the operator-side scripts (sourced, not run). They run on
+# Helpers shared by the maintainer-side scripts (sourced, not run). They run on
 # a Mac, so this has to work in bash 3.2.
 #
 # SSH_OPTS: extra ssh options as one string, e.g. SSH_OPTS="-i $HOME/key.pem -p 22"

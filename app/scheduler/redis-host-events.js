@@ -95,7 +95,7 @@ function parseSlowlog(reply) {
 
 // "EVAL return redis.call('get',KEYS[1]) 1", for an email: the command and its
 // first two arguments. This deliberately includes arguments that can be values
-// (e.g. SET key value), not just keys: the alert goes only to the operator
+// (e.g. SET key value), not just keys: the alert goes only to the maintainer
 // (REDIS_HOST_ALERT), who has full access to the data in Redis anyway, and
 // knowing which command and key was slow is the point. Truncated to
 // COMMAND_CHARS; only commands over SLOWLOG_ALERT_US are reported.

@@ -95,11 +95,15 @@ function load({
         done: async () => calls.released.push(blogID),
       };
     },
-    "sync/fix": (blog, callback) => {
+    "sync/fix": async (blog) => {
       calls.fixed.push(blog.id);
       calls.fixedBlogs.push(blog);
       const fix = fixes[blog.id] || {};
-      callback(fix.error || null, fix.report);
+      if (fix.error) {
+        fix.error.report = fix.report;
+        throw fix.error;
+      }
+      return fix.report;
     },
     "./getHealth": async (blogID) => {
       reads[blogID] = (reads[blogID] || 0) + 1;

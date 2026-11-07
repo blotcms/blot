@@ -39,7 +39,7 @@ at sync/build time instead.
   `copy`) plus `express.static()` for serving, with a few exceptions that
   assume a real filesystem: pandoc, sharp and exiftool take file paths;
   iCloud renames whole directory trees to resolve case
-  conflicts; the local client (development only, never for users) used to
+  conflicts; the local client (development only, never for customers) used to
   watch the folder with chokidar and now watches a source directory of its
   own. (Google Drive's fingerprint read `dev`, `ino`, `ctimeNs` and `mtimeNs`
   until its records moved to storage/folder's size, modified time and SHA-1.
@@ -66,7 +66,7 @@ at sync/build time instead.
   (`scripts/user/identify-overdue-users.js`, for disabled accounts) adds to
   the sum of the blog's asset object sizes.
 - The AWS SDK (`@aws-sdk/client-s3`) is used only by `app/storage/s3.js`.
-- Don't store bulk file content in Redis; Redis is
+- Don't store bulk file data in Redis; Redis is
   fine for small bounded metadata (locks, directory listings, cache
   entries).
 
@@ -89,7 +89,7 @@ at sync/build time instead.
   - `{blogID}/_thumbnails/...`, `{blogID}/_image_cache/...` etc.: the
     generated assets (`.assets`). Keys are identical to their public CDN paths
     (`cdn.blot.im/{blogID}/...`).
-  - `{blogID}/folder/{path}`: the blog's folder content (`.folder`, Phase 2).
+  - `{blogID}/folder/{path}`: the blog's folder files (`.folder`, Phase 2).
     It is public like the rest of `blog_*`, since the blog's own domain
     already serves these files; the exception is `.git` directories inside a
     folder, which the bucket policy denies to everyone outside the AWS
@@ -112,7 +112,7 @@ at sync/build time instead.
   public by design (except `.git` directories in a folder and
   `{blogID}/git/`, which the policy denies outside the AWS account): assets are
   served on the CDN, and a blog's folder is served at the blog's domain and
-  through the CDN's `/folder/v-:version` route. Folder content goes in the same bucket: a second, versioned bucket
+  through the CDN's `/folder/v-:version` route. Folder files go in the same bucket: a second, versioned bucket
   for folders (for a "restore deleted file" feature) was considered and
   turned down.
 - **Versioning: off**, bucket-wide. The B2 backup is the only history.
@@ -192,13 +192,13 @@ at sync/build time instead.
   per-blog file from disk. This replaces the earlier plan of keeping the app
   as Bunny's origin and warming Perma-Cache with a GET after each write.
 - **The bucket is public for `s3:GetObject` on `blog_*` keys only** — never
-  `ListBucket`, never write. A blog's folder content is under
+  `ListBucket`, never write. A blog's folder files are under
   `{blogID}/folder/`, public like the rest of `blog_*` because the blog's own
   domain already serves it; `.git` directories in a folder and
   `{blogID}/git/` are denied outside the AWS account. Asset
   keys are `{blogID}/{path}`, identical to the CDN path, which is what lets
   Bunny fetch them with no rewriting. `config/storage-bucket`
-  has the setup script and the operator steps.
+  has the setup script and the maintainer steps.
 - **S3 is the only store; local disk is only a staging area.** A tool which
   needs a local path (sharp, pandoc, puppeteer) writes to `path(blogID,
   relPath)`, a path under `{tmp}/storage-assets-staging/{blogID}/` on the
@@ -266,7 +266,7 @@ with `Last-Modified`.
   forwarding the time to the macserver.
 - The remaining `utimes` calls don't touch blog storage: the macserver
   sets them on the real iCloud Drive file, and the importer on its temp
-  output, which the user downloads as a zip.
+  output, which the customer downloads as a zip.
 
 Two fallbacks still read the local mtime. Clear both on local disk before
 the copy to S3:
@@ -292,7 +292,7 @@ hashes each source with `helper/transformer/hash` (SHA-1 of the file) and
 `contentHash` is a SHA-1 over `path:sha1|path:sha1`. See §7. Accepted
 trade-offs:
 
-- `updated` means when Blot received a change, not when the user saved it.
+- `updated` means when Blot received a change, not when the customer saved it.
 - Non-post files in folder listings show the migration date, once.
 
 **b. Sync clients need a staging pattern, not direct S3 calls.** Google
@@ -388,7 +388,7 @@ should consolidate into one storage-layer method, exposed explicitly
     would be bounded in size.
 - **Phase 2 — `.folder`** ([#2258](https://github.com/blotcms/blot/issues/2258)
   has the plan, the checklists and the performance gates). S3 becomes the
-  source of truth for folder content, under `{blogID}/folder/{path}` in the
+  source of truth for folder files, under `{blogID}/folder/{path}` in the
   same bucket (§3), outside the assets scope; blog deletion removes it
   separately from `removeAll`. Each phase ships on its own and is reversible.
   - Design in brief: every folder read and write goes through

@@ -1,6 +1,6 @@
 # sync
 
-The `sync` module is the entry point for all content processing in Blot. It provides an exclusive per-blog file-system lock and, within that lock, exposes a pipeline through which file changes are built into entries, stored in Redis, and reflected in the blog's public state.
+The `sync` module is the entry point for all file processing in Blot. It provides an exclusive per-blog file-system lock and, within that lock, exposes a pipeline through which file changes are built into entries, stored in Redis, and reflected in the blog's public state.
 
 Every sync client (Dropbox, Git, local) acquires the lock provided by this module before modifying a blog's folder or calling `folder.update`. This ensures that no two processes concurrently modify or process the same blog folder.
 
@@ -229,7 +229,7 @@ For each matched rename:
 
 ### `fix/index.js`
 
-`fix(blog, callback)` — runs five repair routines in series:
+`await fix(blog, [options])` — runs five repair routines in series:
 
 1. `entryGhosts` — resolves path case mismatches; drops entries whose files are missing.
 2. `tagGhosts` — prunes empty tags and stale tag-member IDs.
@@ -237,7 +237,7 @@ For each matched rename:
 4. `menuGhosts` — removes deleted/duplicate entries from `blog.menu`; updates stale labels, URLs, and metadata.
 5. `entriesPathIndex` — backfills the `entries:lex` sorted set if its count diverges from the `entries` sorted set.
 
-If any routine produced a non-empty report, bumps `blog.cacheID` to force cache invalidation. Returns `(err, finalReport)` where `finalReport` is an object keyed by function name.
+If any routine produced a non-empty report, bumps `blog.cacheID` to force cache invalidation. Resolves `finalReport`, an object keyed by function name. If a routine fails part way, it rejects with that error, and the repairs made before it are on the error as `err.report`. `options.status` receives "(n/5) Checking ..." messages.
 
 ## Sync Pipeline
 

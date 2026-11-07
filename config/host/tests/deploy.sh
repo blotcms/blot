@@ -3,8 +3,9 @@
 # host/setup.sh has run, the way a new host is built. ssh and scp are stubs that
 # reach the container; the container has no systemd, so systemctl, mountpoint,
 # mount, nvme and blkid are stubs too (systemctl start mount-instance-store runs
-# the real mount-instance-store.sh against them). Everything else is real: sshd,
-# fail2ban, logrotate, install, sed. host/setup.sh sets up Redis too, so this is
+# the real mount-instance-store.sh against them, and systemctl restart rsyslog
+# restarts the real rsyslogd). Everything else is real: sshd, fail2ban,
+# logrotate, rsyslog, install, sed. host/setup.sh sets up Redis too, so this is
 # a combined host: blot-instance-store.service (Redis's /backups) is started by
 # deploy.sh once the instance store is mounted.
 #
@@ -64,7 +65,14 @@ printf "#!/bin/bash\n[ \"\$1\" = -q ] && shift\ngrep -qx \"\$1\" /tmp/mounted 2>
 printf "#!/bin/bash\necho \"\${@: -1}\" >> /tmp/mounted\necho \"mount \$*\" >> /tmp/mount.log\n" > mount
 printf "#!/bin/bash\necho \"/dev/nvme1n1 SN Amazon EC2 NVMe Instance Storage 1\"\n" > nvme
 printf "#!/bin/bash\nexit 0\n" > blkid
-chmod +x sudo systemctl mountpoint mount nvme blkid'
+chmod +x sudo systemctl mountpoint mount nvme blkid
+cat >> systemctl <<"EOF"
+if [ "$*" = "restart rsyslog" ]; then
+  [ ! -f /run/rsyslogd.pid ] || { kill "$(cat /run/rsyslogd.pid)"; while [ -f /run/rsyslogd.pid ]; do sleep 0.1; done; }
+  # as systemd starts it: rsyslog.service has UMask=0066
+  (umask 0066; rsyslogd)
+fi
+EOF'
 
 echo "# A new host: no instance store mounted"
 # Skip mode writes no units; the real one exists on a host set up with systemd.
@@ -87,6 +95,16 @@ check "every logpath in jail.local exists" in_ct '
   echo "$paths" | tr "\n" " "
   [ -n "$paths" ] && for p in $paths; do [ -e "$p" ] || exit 1; done'
 check "the access log is owned by uid 1000" in_ct '[ "$(stat -c %u:%g /var/instance-ssd/logs/access.log)" = 1000:1000 ]'
+check "rsyslog runs with the app log config and listens on its socket" in_ct '
+  [ -f /etc/rsyslog.d/blot-app-log.conf ] && grep -qx "restart rsyslog" /tmp/systemctl.log && [ -S /run/blot-log/app.sock ]'
+check "a unit's line on the socket lands in app.log with its tag" in_ct '
+  logger -u /run/blot-log/app.sock -i -t blot-blue/abc1234 "[blue/node-a] hello from the unit"
+  for i in $(seq 20); do grep -q " blot-blue/abc1234 \[blue/node-a\] hello from the unit$" /var/instance-ssd/logs/app.log 2> /dev/null && exit 0; sleep 0.2; done
+  cat /var/instance-ssd/logs/app.log; exit 1'
+check "ec2-user, whom read.sh connects as, can read app.log" in_ct '
+  [ "$(stat -c %U /var/instance-ssd/logs/app.log)" = ec2-user ] && runuser -u ec2-user -- head -c 1 /var/instance-ssd/logs/app.log > /dev/null'
+check "docker starts after rsyslog at boot" in_ct 'grep -qx "After=rsyslog.service" /etc/systemd/system/docker.service.d/20-rsyslog.conf'
+check "app.log is rotated" in_ct 'logrotate --debug /etc/logrotate.d/app-log 2>&1 | grep -q "/var/instance-ssd/logs/app.log"'
 check "fail2ban accepts the deployed config" in_ct 'fail2ban-client -t'
 check "fail2ban was restarted" in_ct 'grep -qx "restart fail2ban" /tmp/systemctl.log'
 check "sshd -T reports x11forwarding no" in_ct 'sshd -T | grep -qx "x11forwarding no"'
@@ -140,6 +158,18 @@ echo "# Re-running on a live host: instance store mounted, files in place"
 in_ct 'rm /tmp/systemctl.log; chown 1234:1234 /var/instance-ssd/logs /var/instance-ssd/logs/access.log'
 check "deploy.sh runs again" deploy "$TMP/run2"
 check "the instance store unit is not started when mounted" in_ct '! grep -q "start mount-instance-store" /tmp/systemctl.log'
+check "rsyslog is not restarted when its config is unchanged" in_ct '! grep -q "restart rsyslog" /tmp/systemctl.log && [ -S /run/blot-log/app.sock ]'
+# A changed rsyslog config, with the deploy lock left by a unit deploy run as
+# another user (the deploy user from GitHub)
+in_ct 'rm -f /tmp/blot-proxy-deploy.lock; runuser -u ec2-user -- touch /tmp/blot-proxy-deploy.lock; echo "# older" >> /etc/rsyslog.d/blot-app-log.conf; rm /tmp/systemctl.log'
+check "deploy.sh restarts rsyslog for a changed config, with another user's deploy lock" deploy "$TMP/run2c"
+check "and did restart it, with the new config in place" in_ct 'grep -qx "restart rsyslog" /tmp/systemctl.log && ! grep -q "# older" /etc/rsyslog.d/blot-app-log.conf && [ -S /run/blot-log/app.sock ]'
+in_ct '(sleep 3; exit 0) & flock /tmp/blot-proxy-deploy.lock sleep 4 & sleep 1; echo "# older" >> /etc/rsyslog.d/blot-app-log.conf; rm /tmp/systemctl.log'
+check "and waits for a unit deploy holding the lock" deploy "$TMP/run2d"
+check "before restarting" in_ct 'grep -qx "restart rsyslog" /tmp/systemctl.log'
+in_ct 'chown root:root /var/instance-ssd/logs/app.log; chmod 600 /var/instance-ssd/logs/app.log'
+check "deploy.sh runs over an app.log rsyslog made root's" deploy "$TMP/run3"
+check "and gives it to ec2-user" in_ct '[ "$(stat -c %U:%G /var/instance-ssd/logs/app.log)" = ec2-user:ec2-user ] && runuser -u ec2-user -- head -c 1 /var/instance-ssd/logs/app.log > /dev/null'
 check "the Redis backup unit is not started when /backups is mounted" in_ct '! grep -q "start blot-instance-store" /tmp/systemctl.log'
 check "docker is never started, restarted or stopped" in_ct '! grep -E "(start|stop|restart).* docker" /tmp/systemctl.log'
 check "the existing log directory and access log keep their owner" in_ct '

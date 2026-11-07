@@ -2,12 +2,12 @@
 
 Companion to [RESEARCH.md](RESEARCH.md). Section references (§) point there.
 
-**Goal.** A development script that scaffolds a Blot site, waits for the operator
+**Goal.** A development script that scaffolds a Blot site, waits for the maintainer
 to supply content, then drives the Claude Code CLI to build a template reproducing
-the design at `<url>` — iterating against screenshots with operator feedback.
+the design at `<url>` — iterating against screenshots with maintainer feedback.
 
 **Not in scope.** Content acquisition (see `scripts/development/dynamic-importer`),
-zipping the result (the operator does it by hand), anything in the dashboard.
+zipping the result (the maintainer does it by hand), anything in the dashboard.
 
 **Sequencing principle.** Every milestone leaves something runnable and verifiable
 by hand. The agent does not appear until milestone E, by which point provisioning,
@@ -23,7 +23,7 @@ scaffolded site and the whole pipeline is exercisable before any crawler exists.
 **Status:** Milestones A–F complete. `npm run translate <url>` provisions a site,
 scaffolds a template cloned from `SITE:blog`, initialises a git repo, waits for
 content and verifies it built, commits each round, screenshots both sites, serves
-a comparison UI, and prints the `claude` command for the operator to run in
+a comparison UI, and prints the `claude` command for the maintainer to run in
 another window. Re-running is the loop. Next: milestone G (finalize and re-runs).
 
 Two findings worth carrying forward:
@@ -150,7 +150,7 @@ actually exist.*
 ### B3. Settle helper (§7.2 default 3) (done)
 
 ### B4. `rescan.js` — not in the original plan, but required (done)
-The watcher cannot be relied on for content the operator drops in.
+The watcher cannot be relied on for content the maintainer drops in.
 `app/clients/local/setup.js` starts chokidar with `ignoreInitial: true`, and only
 after `sync/fix` completes — so anything already in the folder when the watcher
 starts is invisible to it, permanently. `sync/fix` does not rescue this: it only
@@ -265,10 +265,10 @@ hand.*
 
 ### E3. Print the command, do not run the agent (done)
 **Simplified deliberately.** The script prepares the workspace and prints a
-command for the operator to run in another window. It does not drive the agent.
+command for the maintainer to run in another window. It does not drive the agent.
 
 Why this is better rather than merely easier: running `claude` interactively lets
-the operator watch and interject mid-task, which matters for a design job;
+the maintainer watch and interject mid-task, which matters for a design job;
 permission prompts behave normally instead of needing a blanket `acceptEdits`
 while the agent processes untrusted third-party HTML; session continuity becomes
 claude's problem (`claude --continue` in that folder); and the terminal is the
@@ -290,7 +290,7 @@ Code session.
   tells you to `cd` into, and the run's specifics are interpolated correctly.
 
 ### E4. Commit every round (done)
-- Each run commits whatever changed since the last one: content the operator
+- Each run commits whatever changed since the last one: content the maintainer
   supplied, and anything the agent edited in between.
 - First content commit is *"Add content as supplied"*; later ones *"Changes since
   last run"*. Nothing changed means no commit.
@@ -315,7 +315,7 @@ wanted back.
 
 **The trade, stated plainly:** the script no longer knows whether the agent did
 anything. No exit code, no blocked signal, no completion check. That is
-acceptable because the operator is watching it run.
+acceptable because the maintainer is watching it run.
 
 ---
 
@@ -338,7 +338,7 @@ npm run translate <url>     → commits the round, re-screenshots, refreshes the
 - **F3. Wire the loop** → it is the re-run.
 
 The only thing genuinely lost is an automatic stopping condition, which was
-always going to be the operator's judgement anyway.
+always going to be the maintainer's judgement anyway.
 
 ---
 
@@ -362,11 +362,11 @@ restarts.*
 
 ### G2. `state.js` and the re-run flow (§6.7)
 - Run state at `data/tmp/translate/<handle>.json` via `helper/tempDir()` — outside
-  the blog folder so it can never reach the operator's zip.
+  the blog folder so it can never reach the maintainer's zip.
 - Store: source URL, `blogID`, handle, template slug, `--session-id`, run count,
   timestamps.
 - On a re-run: print a summary, **skip the content gate**, and prompt for guidance
-  *before* doing any work — the operator already knows what they disliked.
+  *before* doing any work — the maintainer already knows what they disliked.
 - **Done when:** a second run on the same URL reuses the site and resumes the
   session.
 
@@ -396,7 +396,7 @@ restarts.*
 | Risk | Mitigation |
 |---|---|
 | Anchoring on the `SITE:blog` clone — output looks like Blot's default rather than the source | Explicit anti-anchoring instructions in E2; check for it during verification (§6.2) |
-| Source site blocks headless browsers or times out | C2 tolerates source failures; fall back to an operator-supplied screenshot |
-| Agent thrashes without converging | Inner-round cap and the operator stop condition (F3). Spend limits stay with the agent CLI's own account controls |
+| Source site blocks headless browsers or times out | C2 tolerates source failures; fall back to a maintainer-supplied screenshot |
+| Agent thrashes without converging | Inner-round cap and the maintainer stop condition (F3). Spend limits stay with the agent CLI's own account controls |
 | `"enabled": true` silently lost | Asserted last, every run (G1), and stated in the folder README so a human can restore it |
 | Prompt injection via crawled/rendered HTML | Scoped tool allowlist, `acceptEdits` rather than `bypassPermissions` (E3) |

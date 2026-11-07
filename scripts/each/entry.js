@@ -13,20 +13,9 @@ function eachEntry(doThis, options = {}) {
     var bar = options.p ? null : progress.push("Entry", null);
 
     try {
-      await new Promise((resolve, reject) => {
-        Entries.each(
-          blog.id,
-          function (entry, nextEntry) {
-            if (bar) bar.tick();
-            Promise.resolve()
-              .then(() => doThis(user, blog, entry))
-              .then(
-                () => nextEntry(),
-                (err) => nextEntry(err)
-              );
-          },
-          (err) => (err ? reject(err) : resolve())
-        );
+      await Entries.each(blog.id, async function (entry) {
+        if (bar) bar.tick();
+        await doThis(user, blog, entry);
       });
     } finally {
       if (bar) bar.pop();

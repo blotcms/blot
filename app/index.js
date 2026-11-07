@@ -1,5 +1,12 @@
 const fs = require("fs");
 const config = require("config");
+
+// One line per console call in app.log (helper/oneLineConsole), before
+// anything else logs
+if (config.environment === "production") {
+  require("helper/oneLineConsole").install();
+}
+
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const redis = require("models/client");

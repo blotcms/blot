@@ -7,7 +7,7 @@ const folder = require("storage/folder");
 const hashFile = require("helper/hashFile");
 const sync = require("sync");
 const { promisify } = require("util");
-const fix = promisify(require("sync/fix"));
+const fix = require("sync/fix");
 const lock = require("helper/lock");
 const syncReport = require("clients/util/syncReport");
 
@@ -185,7 +185,7 @@ async function build(options = {}) {
     console.log();
   });
 
-  console.log("Dashboard:\n" + url);
+  if (url) console.log("Dashboard:\n" + url);
 }
 
 // Like templates(), wait for the lock (retries with backoff, about 95s in
