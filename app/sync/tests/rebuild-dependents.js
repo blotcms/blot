@@ -8,10 +8,7 @@ describe("rebuild dependents cleanup", function () {
 
   const getEntry = (blogID, path) => Entry.get(blogID, path);
 
-  const rebuildDependentsOf = (blogID, path) =>
-    new Promise((resolve, reject) =>
-      rebuildDependents(blogID, path, (err) => (err ? reject(err) : resolve()))
-    );
+  const rebuildDependentsOf = (blogID, path) => rebuildDependents(blogID, path);
 
   it("drops dependents when the source file disappears", async function () {
     const imagePath = "/assets/image.png";
@@ -33,12 +30,7 @@ describe("rebuild dependents cleanup", function () {
 
     await this.blog.remove(postPath);
 
-    await new Promise((resolve, reject) => {
-      rebuildDependents(this.blog.id, imagePath, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await rebuildDependents(this.blog.id, imagePath);
 
     const entry = await Entry.get(this.blog.id, postPath);
     expect(entry).toBeDefined();
@@ -97,12 +89,7 @@ describe("rebuild dependents cleanup", function () {
     // Touching the referenced asset triggers a dependent rebuild. This must
     // rebuild the aggregate through /album+, not drop it because /album has
     // no file on disk.
-    await new Promise((resolve, reject) => {
-      rebuildDependents(this.blog.id, assetPath, (err) => {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await rebuildDependents(this.blog.id, assetPath);
 
     const rebuiltAlbum = await Entry.get(this.blog.id, "/album");
     expect(rebuiltAlbum).toBeDefined();

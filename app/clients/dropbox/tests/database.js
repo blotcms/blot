@@ -5,31 +5,28 @@ describe("dropbox database", function () {
   global.test.blog();
 
   describe("sets", function () {
-    it("a valid account", function (done) {
-      database.set(this.blog.id, fakeAccount(), done);
+    it("a valid account", async function () {
+      await database.set(this.blog.id, fakeAccount());
     });
   });
 
   describe("gets", function () {
-    beforeEach(function (done) {
-      database.set(this.blog.id, fakeAccount(), done);
+    beforeEach(async function () {
+      await database.set(this.blog.id, fakeAccount());
     });
 
-    it("a valid account", function (done) {
-      database.get(this.blog.id, function (err, account) {
-        if (err) return done.fail(err);
-        done();
-      });
+    it("a valid account", async function () {
+      await database.get(this.blog.id);
     });
   });
 
   describe("drops", function () {
-    beforeEach(function (done) {
-      database.set(this.blog.id, fakeAccount(), done);
+    beforeEach(async function () {
+      await database.set(this.blog.id, fakeAccount());
     });
 
-    it("a valid account", function (done) {
-      database.drop(this.blog.id, done);
+    it("a valid account", async function () {
+      await database.drop(this.blog.id);
     });
   });
 
@@ -52,79 +49,55 @@ describe("dropbox database", function () {
   });
 
   describe("error fields", function () {
-    it("defaults missing error_source and error_since", function (done) {
+    it("defaults missing error_source and error_since", async function () {
       var blogID = this.blog.id;
-      database.set(blogID, fakeAccount(), function (err) {
-        if (err) return done.fail(err);
-        database.get(blogID, function (err, account) {
-          if (err) return done.fail(err);
-          expect(account.error_code).toBe(0);
-          expect(account.error_source).toBe("");
-          expect(account.error_since).toBe(0);
-          done();
-        });
-      });
+      await database.set(blogID, fakeAccount());
+      const account = await database.get(blogID);
+      expect(account.error_code).toBe(0);
+      expect(account.error_source).toBe("");
+      expect(account.error_since).toBe(0);
     });
 
-    it("clears source and since when error_code is set to 0", function (done) {
+    it("clears source and since when error_code is set to 0", async function () {
       var blogID = this.blog.id;
-      database.set(
+      await database.set(
         blogID,
         fakeAccount({
           error_code: 401,
           error_source: "auth",
           error_since: 99,
-        }),
-        function (err) {
-          if (err) return done.fail(err);
-          database.set(blogID, { error_code: 0 }, function (err) {
-            if (err) return done.fail(err);
-            database.get(blogID, function (err, account) {
-              if (err) return done.fail(err);
-              expect(account.error_code).toBe(0);
-              expect(account.error_source).toBe("");
-              expect(account.error_since).toBe(0);
-              done();
-            });
-          });
-        }
+        })
       );
+      await database.set(blogID, { error_code: 0 });
+      const account = await database.get(blogID);
+      expect(account.error_code).toBe(0);
+      expect(account.error_source).toBe("");
+      expect(account.error_since).toBe(0);
     });
 
-    it("preserves error_since when the same error is recorded again", function (done) {
+    it("preserves error_since when the same error is recorded again", async function () {
       var blogID = this.blog.id;
-      var firstSince;
-      database.set(blogID, fakeAccount(), function (err) {
-        if (err) return done.fail(err);
-        database.setError(
-          blogID,
-          { persist: true, status: 401, source: "auth" },
-          function (err) {
-            if (err) return done.fail(err);
-            database.get(blogID, function (err, account) {
-              if (err) return done.fail(err);
-              firstSince = account.error_since;
-              expect(firstSince).toBeGreaterThan(0);
-              setTimeout(function () {
-                database.setError(
-                  blogID,
-                  { persist: true, status: 401, source: "auth" },
-                  function (err) {
-                    if (err) return done.fail(err);
-                    database.get(blogID, function (err, account) {
-                      if (err) return done.fail(err);
-                      expect(account.error_since).toBe(firstSince);
-                      expect(account.error_code).toBe(401);
-                      expect(account.error_source).toBe("auth");
-                      done();
-                    });
-                  }
-                );
-              }, 10);
-            });
-          }
-        );
+      await database.set(blogID, fakeAccount());
+      await database.setError(blogID, {
+        persist: true,
+        status: 401,
+        source: "auth",
       });
+      const first = await database.get(blogID);
+      var firstSince = first.error_since;
+      expect(firstSince).toBeGreaterThan(0);
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      await database.setError(blogID, {
+        persist: true,
+        status: 401,
+        source: "auth",
+      });
+      const account = await database.get(blogID);
+      expect(account.error_since).toBe(firstSince);
+      expect(account.error_code).toBe(401);
+      expect(account.error_source).toBe("auth");
     });
   });
 

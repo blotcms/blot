@@ -3,7 +3,7 @@ const database = require("./database");
 const health = require("../health");
 const { classify } = require("./error");
 const remoteDelete = require("./sync/util/remoteDelete");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 
 async function remove(blogID, path) {
   try {
@@ -21,4 +21,4 @@ async function remove(blogID, path) {
   }
 }
 
-module.exports = withCallback(remove);
+module.exports = promiseOnly(remove);

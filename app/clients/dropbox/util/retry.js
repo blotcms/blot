@@ -1,10 +1,9 @@
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 const isRetryable = require("./classifyError").isRetryable;
 
 // Wraps an async function so a failed call is tried again, up to
 // options.times attempts in all, waiting options.interval(attempt) ms
-// between them. The wrapped function still takes a trailing callback from
-// callers that pass one, and returns a promise for those that do not.
+// between them. The wrapped function returns a promise.
 function retry(fn, options) {
   options = options || {};
 
@@ -35,7 +34,7 @@ function retry(fn, options) {
       return isRetryable(err);
     };
 
-  return withCallback(async function (...args) {
+  return promiseOnly(async function (...args) {
     let attempt = 1;
 
     for (;;) {

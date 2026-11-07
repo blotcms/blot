@@ -877,12 +877,10 @@ describe("sync multi-folder support", function () {
                               function (dropped) {
                                 expect(dropped && !dropped.deleted).toBeFalsy();
 
-                                Entries.getListIDs(
-                                  blogID,
-                                  "entries",
-                                  {},
-                                  function (listErr, ids) {
-                                    if (listErr) return done.fail(listErr);
+                                after(
+                                  Entries.getListIDs(blogID, "entries", {}),
+                                  done.fail,
+                                  function (ids) {
                                     expect(ids).not.toContain("/notes/multi");
                                     done();
                                   }
@@ -1178,11 +1176,10 @@ describe("sync multi-folder support", function () {
               // The stale folder post is dropped rather than left published.
               expect(aggregate && aggregate.deleted).toBe(true);
 
-              IgnoredFiles.getStatus(
-                blogID,
-                "/album+/02.md",
-                function (err, reason) {
-                  if (err) return done.fail(err);
+              after(
+                IgnoredFiles.getStatus(blogID, "/album+/02.md"),
+                done.fail,
+                function (reason) {
                   expect(reason).toBe("TOO_LARGE");
 
                   syncFolder(blogID, function (err2, folder2, finish2) {
@@ -1205,11 +1202,13 @@ describe("sync multi-folder support", function () {
                                 expect(recovered.deleted).toBeFalsy();
                                 expect(recovered.html).toContain("Two again");
 
-                                IgnoredFiles.getStatus(
-                                  blogID,
-                                  "/album+/02.md",
-                                  function (err3, reason3) {
-                                    if (err3) return done.fail(err3);
+                                after(
+                                  IgnoredFiles.getStatus(
+                                    blogID,
+                                    "/album+/02.md"
+                                  ),
+                                  done.fail,
+                                  function (reason3) {
                                     // The recovered source is no longer hidden on
                                     // the dashboard.
                                     expect(reason3).toBeFalsy();

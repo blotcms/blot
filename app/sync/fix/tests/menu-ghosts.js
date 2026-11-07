@@ -2,8 +2,15 @@ describe("sync/fix/menu-ghosts", function () {
   var Entry = require("models/entry");
   var Blog = require("models/blog");
   var fixMenuGhosts = require("../menu-ghosts");
+  // Resolves to { err, report } instead of rejecting, so a spec can
+  // assert on either
+  const settle_fixMenuGhosts = (...args) =>
+    fixMenuGhosts(...args).then(
+      (report) => ({ err: null, report }),
+      (err) => ({ err, report: undefined })
+    );
 
-  it("does not touch the blog when the menu needs no changes", function (done) {
+  it("does not touch the blog when the menu needs no changes", async function () {
     var item = { id: "/foo", label: "Foo", url: "/foo", metadata: {} };
     var blog = { id: "blog-id", menu: [item] };
 
@@ -17,15 +24,13 @@ describe("sync/fix/menu-ghosts", function () {
     });
     spyOn(Blog, "set");
 
-    fixMenuGhosts(blog, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([]);
-      expect(Blog.set).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixMenuGhosts(blog);
+    expect(err).toBeNull();
+    expect(report).toEqual([]);
+    expect(Blog.set).not.toHaveBeenCalled();
   });
 
-  it("removes a menu item whose entry has been deleted", function (done) {
+  it("removes a menu item whose entry has been deleted", async function () {
     var item = { id: "/gone", label: "Gone", url: "/gone", metadata: {} };
     var blog = { id: "blog-id", menu: [item] };
 
@@ -41,15 +46,13 @@ describe("sync/fix/menu-ghosts", function () {
       expect(updates.menu).toEqual([]);
     });
 
-    fixMenuGhosts(blog, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([["Delete", item]]);
-      expect(Blog.set).toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixMenuGhosts(blog);
+    expect(err).toBeNull();
+    expect(report).toEqual([["Delete", item]]);
+    expect(Blog.set).toHaveBeenCalled();
   });
 
-  it("keeps a menu item whose id does not correspond to any entry", function (done) {
+  it("keeps a menu item whose id does not correspond to any entry", async function () {
     var item = {
       id: "https://example.com",
       label: "External",
@@ -62,15 +65,13 @@ describe("sync/fix/menu-ghosts", function () {
     });
     spyOn(Blog, "set");
 
-    fixMenuGhosts(blog, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([]);
-      expect(Blog.set).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixMenuGhosts(blog);
+    expect(err).toBeNull();
+    expect(report).toEqual([]);
+    expect(Blog.set).not.toHaveBeenCalled();
   });
 
-  it("updates a menu item's label, metadata and url to match its entry", function (done) {
+  it("updates a menu item's label, metadata and url to match its entry", async function () {
     var item = {
       id: "/foo",
       label: "Old label",
@@ -103,19 +104,17 @@ describe("sync/fix/menu-ghosts", function () {
       ]);
     });
 
-    fixMenuGhosts(blog, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([
-        ["Changed label of", item],
-        ["Changed metadata of", item],
-        ["Changed URL of", item],
-      ]);
-      expect(Blog.set).toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixMenuGhosts(blog);
+    expect(err).toBeNull();
+    expect(report).toEqual([
+      ["Changed label of", item],
+      ["Changed metadata of", item],
+      ["Changed URL of", item],
+    ]);
+    expect(Blog.set).toHaveBeenCalled();
   });
 
-  it("removes a menu item that duplicates an entry already kept in the menu", function (done) {
+  it("removes a menu item that duplicates an entry already kept in the menu", async function () {
     var first = { id: "/foo", label: "Foo", url: "/foo", metadata: {} };
     var second = { id: "/foo", label: "Foo (dupe)", url: "/foo", metadata: {} };
     var blog = { id: "blog-id", menu: [first, second] };
@@ -137,15 +136,13 @@ describe("sync/fix/menu-ghosts", function () {
       expect(updates.menu).toEqual([first]);
     });
 
-    fixMenuGhosts(blog, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([["Delete duplicate", second]]);
-      expect(Blog.set).toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixMenuGhosts(blog);
+    expect(err).toBeNull();
+    expect(report).toEqual([["Delete duplicate", second]]);
+    expect(Blog.set).toHaveBeenCalled();
   });
 
-  it("propagates an error from Blog.set", function (done) {
+  it("propagates an error from Blog.set", async function () {
     var setError = new Error("set exploded");
     var item = { id: "/gone", label: "Gone", url: "/gone", metadata: {} };
     var blog = { id: "blog-id", menu: [item] };
@@ -162,13 +159,11 @@ describe("sync/fix/menu-ghosts", function () {
       throw setError;
     });
 
-    fixMenuGhosts(blog, function (err) {
-      expect(err).toBe(setError);
-      done();
-    });
+    const { err } = await settle_fixMenuGhosts(blog);
+    expect(err).toBe(setError);
   });
 
-  it("keeps a menu item added by a concurrent sync after the menu was read", function (done) {
+  it("keeps a menu item added by a concurrent sync after the menu was read", async function () {
     var ghost = { id: "/gone", label: "Gone", url: "/gone", metadata: {} };
     var kept = { id: "/foo", label: "Foo", url: "/foo", metadata: {} };
     var added = { id: "/new", label: "New", url: "/new", metadata: {} };
@@ -192,15 +187,13 @@ describe("sync/fix/menu-ghosts", function () {
       expect(updates.menu).toEqual([kept, added]);
     });
 
-    fixMenuGhosts(blog, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([["Delete", ghost]]);
-      expect(Blog.set).toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixMenuGhosts(blog);
+    expect(err).toBeNull();
+    expect(report).toEqual([["Delete", ghost]]);
+    expect(Blog.set).toHaveBeenCalled();
   });
 
-  it("does not write when a concurrent change already removed the ghost", function (done) {
+  it("does not write when a concurrent change already removed the ghost", async function () {
     var ghost = { id: "/gone", label: "Gone", url: "/gone", metadata: {} };
     var blog = { id: "blog-id", menu: [ghost] };
 
@@ -212,14 +205,12 @@ describe("sync/fix/menu-ghosts", function () {
     });
     spyOn(Blog, "set");
 
-    fixMenuGhosts(blog, function (err) {
-      expect(err).toBeNull();
-      expect(Blog.set).not.toHaveBeenCalled();
-      done();
-    });
+    const { err } = await settle_fixMenuGhosts(blog);
+    expect(err).toBeNull();
+    expect(Blog.set).not.toHaveBeenCalled();
   });
 
-  it("removes a duplicate whose raw id differs but normalizes to the same entry", function (done) {
+  it("removes a duplicate whose raw id differs but normalizes to the same entry", async function () {
     var nfc = "/caf\u00e9.txt";
     var nfd = "/cafe\u0301.txt";
     var first = { id: nfc, label: "Cafe", url: "/cafe", metadata: {} };
@@ -245,15 +236,13 @@ describe("sync/fix/menu-ghosts", function () {
       expect(updates.menu).toEqual([first]);
     });
 
-    fixMenuGhosts(blog, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([["Delete duplicate", second]]);
-      expect(Blog.set).toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixMenuGhosts(blog);
+    expect(err).toBeNull();
+    expect(report).toEqual([["Delete duplicate", second]]);
+    expect(Blog.set).toHaveBeenCalled();
   });
 
-  it("keeps a normalized duplicate when a concurrent change removed the item it duplicates", function (done) {
+  it("keeps a normalized duplicate when a concurrent change removed the item it duplicates", async function () {
     var nfc = "/caf\u00e9.txt";
     var nfd = "/cafe\u0301.txt";
     var first = { id: nfc, label: "Cafe", url: "/cafe", metadata: {} };
@@ -276,11 +265,9 @@ describe("sync/fix/menu-ghosts", function () {
     });
     spyOn(Blog, "set");
 
-    fixMenuGhosts(blog, function (err) {
-      expect(err).toBeNull();
-      expect(Blog.set).not.toHaveBeenCalled();
-      done();
-    });
+    const { err } = await settle_fixMenuGhosts(blog);
+    expect(err).toBeNull();
+    expect(Blog.set).not.toHaveBeenCalled();
   });
 
   it("returns a promise when called without a callback", async function () {

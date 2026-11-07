@@ -274,8 +274,8 @@ describe("transformer", function () {
         });
     });
 
-    afterEach(function (done) {
-      this.ownHostTransformer.flush(done);
+    afterEach(async function () {
+      await this.ownHostTransformer.flush();
     });
 
     it("resolves a URL on the blog's own host from disk instead of fetching it", function (done) {

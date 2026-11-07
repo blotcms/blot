@@ -94,9 +94,7 @@ async function run(blogID, former) {
       if (!entry || entry.deleted) continue;
 
       try {
-        await new Promise((resolve, reject) =>
-          rebuildEntry(blog, entry, (err) => (err ? reject(err) : resolve()))
-        );
+        await rebuildEntry(blog, entry);
         rebuilt++;
       } catch (err) {
         log(blogID, "Error rebuilding", path, err);

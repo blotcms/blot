@@ -1,4 +1,4 @@
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var rebuildDependents = require("./rebuildDependents");
 var Ignore = require("./ignore");
 var Entry = require("models/entry");
@@ -228,7 +228,7 @@ async function buildAndSet(blog, path, multiInfo, state) {
   }
 }
 
-module.exports = withCallback(async function set(blog, path) {
+module.exports = promiseOnly(async function set(blog, path) {
   // if typeof blog is not object, return error
   if (typeof blog !== "object") {
     throw new Error("sync.set: blog must be an object");

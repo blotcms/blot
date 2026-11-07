@@ -18,9 +18,7 @@ describe("dropbox client", function () {
     var secondPath = this.fake.path(".txt");
     var secondContents = this.fake.file();
 
-    write(blog.id, path, contents, function (err) {
-      if (err) return done.fail(err);
-
+    write(blog.id, path, contents).then(function () {
       sync(blog, function (err) {
         if (err) return done.fail(err);
 
@@ -31,9 +29,7 @@ describe("dropbox client", function () {
             autorename: false,
           })
           .then(function () {
-            write(blog.id, secondPath, secondContents, function (err) {
-              if (err) return done.fail(err);
-
+            write(blog.id, secondPath, secondContents).then(function () {
               sync(blog, function (err) {
                 if (err) return done.fail(err);
 
@@ -47,12 +43,12 @@ describe("dropbox client", function () {
                   done();
                 }, done.fail);
               });
-            });
+            }, done.fail);
           })
           .catch(function (err) {
             done.fail(err);
           });
       });
-    });
+    }, done.fail);
   });
 });

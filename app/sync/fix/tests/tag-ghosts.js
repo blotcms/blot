@@ -4,6 +4,13 @@ describe("sync/fix/tag-ghosts", function () {
   var client = require("models/client");
   var entryKey = require("models/entry/key").entry;
   var fixTagGhosts = require("../tag-ghosts");
+  // Resolves to { err, report } instead of rejecting, so a spec can
+  // assert on either
+  const settle_fixTagGhosts = (...args) =>
+    fixTagGhosts(...args).then(
+      (report) => ({ err: null, report }),
+      (err) => ({ err, report: undefined })
+    );
 
   function fakeMulti() {
     return {
@@ -35,7 +42,7 @@ describe("sync/fix/tag-ghosts", function () {
     });
   }
 
-  it("propagates an error from Tags.list instead of silently reporting nothing", function (done) {
+  it("propagates an error from Tags.list instead of silently reporting nothing", async function () {
     var listError = new Error("tags.list exploded");
 
     spyOn(Tags, "list").and.callFake(async function (_blogID) {
@@ -44,15 +51,13 @@ describe("sync/fix/tag-ghosts", function () {
     spyOn(Tags, "get");
     spyOn(client, "multi");
 
-    fixTagGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBe(listError);
-      expect(report).toBeUndefined();
-      expect(Tags.get).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixTagGhosts({ id: "blog-id" });
+    expect(err).toBe(listError);
+    expect(report).toBeUndefined();
+    expect(Tags.get).not.toHaveBeenCalled();
   });
 
-  it("does nothing when every tag has entries that all match their stored id", function (done) {
+  it("does nothing when every tag has entries that all match their stored id", async function () {
     spyOn(Tags, "list").and.callFake(async function (_blogID) {
       return [{ slug: "chairs" }];
     });
@@ -62,15 +67,13 @@ describe("sync/fix/tag-ghosts", function () {
     stubMGet("blog-id", { "/chair": { id: "/chair" } });
     spyOn(client, "multi");
 
-    fixTagGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([]);
-      expect(client.multi).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixTagGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toEqual([]);
+    expect(client.multi).not.toHaveBeenCalled();
   });
 
-  it("deletes a tag with no entries", function (done) {
+  it("deletes a tag with no entries", async function () {
     spyOn(Tags, "list").and.callFake(async function (_blogID) {
       return [{ slug: "ghost-tag" }];
     });
@@ -82,22 +85,20 @@ describe("sync/fix/tag-ghosts", function () {
     var multi = fakeMulti();
     spyOn(client, "multi").and.returnValue(multi);
 
-    fixTagGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([["EMPTY TAG", { slug: "ghost-tag" }]]);
-      expect(client.mGet).not.toHaveBeenCalled();
-      expect(multi.sRem).toHaveBeenCalledWith(
-        Tags.key.all("blog-id"),
-        "ghost-tag"
-      );
-      expect(multi.del).toHaveBeenCalledWith(
-        Tags.key.sortedTag("blog-id", "ghost-tag")
-      );
-      done();
-    });
+    const { err, report } = await settle_fixTagGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toEqual([["EMPTY TAG", { slug: "ghost-tag" }]]);
+    expect(client.mGet).not.toHaveBeenCalled();
+    expect(multi.sRem).toHaveBeenCalledWith(
+      Tags.key.all("blog-id"),
+      "ghost-tag"
+    );
+    expect(multi.del).toHaveBeenCalledWith(
+      Tags.key.sortedTag("blog-id", "ghost-tag")
+    );
   });
 
-  it("removes an entry id from a tag when the entry no longer exists", function (done) {
+  it("removes an entry id from a tag when the entry no longer exists", async function () {
     spyOn(Tags, "list").and.callFake(async function (_blogID) {
       return [{ slug: "chairs" }];
     });
@@ -110,19 +111,17 @@ describe("sync/fix/tag-ghosts", function () {
     var multi = fakeMulti();
     spyOn(client, "multi").and.returnValue(multi);
 
-    fixTagGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([["MISSING", "/missing-entry"]]);
-      expect(Entry.get).not.toHaveBeenCalled();
-      expect(multi.zRem).toHaveBeenCalledWith(
-        Tags.key.sortedTag("blog-id", "chairs"),
-        "/missing-entry"
-      );
-      done();
-    });
+    const { err, report } = await settle_fixTagGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toEqual([["MISSING", "/missing-entry"]]);
+    expect(Entry.get).not.toHaveBeenCalled();
+    expect(multi.zRem).toHaveBeenCalledWith(
+      Tags.key.sortedTag("blog-id", "chairs"),
+      "/missing-entry"
+    );
   });
 
-  it("re-reads a missing entry for each tag, so one restored mid-run is kept", function (done) {
+  it("re-reads a missing entry for each tag, so one restored mid-run is kept", async function () {
     var stored = {};
 
     spyOn(Tags, "list").and.callFake(async function (_blogID) {
@@ -141,20 +140,18 @@ describe("sync/fix/tag-ghosts", function () {
     });
     spyOn(client, "multi").and.returnValue(multi);
 
-    fixTagGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([["MISSING", "/restored"]]);
-      expect(client.mGet.calls.count()).toBe(2);
-      expect(multi.zRem.calls.count()).toBe(1);
-      expect(multi.zRem).toHaveBeenCalledWith(
-        Tags.key.sortedTag("blog-id", "first"),
-        "/restored"
-      );
-      done();
-    });
+    const { err, report } = await settle_fixTagGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toEqual([["MISSING", "/restored"]]);
+    expect(client.mGet.calls.count()).toBe(2);
+    expect(multi.zRem.calls.count()).toBe(1);
+    expect(multi.zRem).toHaveBeenCalledWith(
+      Tags.key.sortedTag("blog-id", "first"),
+      "/restored"
+    );
   });
 
-  it("re-keys an entry stored under a stale id within a tag", function (done) {
+  it("re-keys an entry stored under a stale id within a tag", async function () {
     var entry = { id: "/new-path", dateStamp: 1234 };
 
     spyOn(Tags, "list").and.callFake(async function (_blogID) {
@@ -179,27 +176,25 @@ describe("sync/fix/tag-ghosts", function () {
     var multi = fakeMulti();
     spyOn(client, "multi").and.returnValue(multi);
 
-    fixTagGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([["MISMATCH", "/old-path", "/new-path"]]);
-      expect(multi.rename).toHaveBeenCalledWith(
-        Tags.key.entry("blog-id", "/old-path"),
-        Tags.key.entry("blog-id", "/new-path")
-      );
-      expect(multi.zRem).toHaveBeenCalledWith(
-        Tags.key.sortedTag("blog-id", "chairs"),
-        "/old-path"
-      );
-      expect(multi.zAdd).toHaveBeenCalledWith(
-        Tags.key.sortedTag("blog-id", "chairs"),
-        { score: 1234, value: "/new-path" }
-      );
-      expect(Entry.set).toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixTagGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toEqual([["MISMATCH", "/old-path", "/new-path"]]);
+    expect(multi.rename).toHaveBeenCalledWith(
+      Tags.key.entry("blog-id", "/old-path"),
+      Tags.key.entry("blog-id", "/new-path")
+    );
+    expect(multi.zRem).toHaveBeenCalledWith(
+      Tags.key.sortedTag("blog-id", "chairs"),
+      "/old-path"
+    );
+    expect(multi.zAdd).toHaveBeenCalledWith(
+      Tags.key.sortedTag("blog-id", "chairs"),
+      { score: 1234, value: "/new-path" }
+    );
+    expect(Entry.set).toHaveBeenCalled();
   });
 
-  it("propagates transaction rejections for empty-tag cleanup", function (done) {
+  it("propagates transaction rejections for empty-tag cleanup", async function () {
     var execError = new Error("exec exploded");
 
     spyOn(Tags, "list").and.callFake(async function (_blogID) {
@@ -220,17 +215,15 @@ describe("sync/fix/tag-ghosts", function () {
 
     spyOn(client, "multi").and.returnValue(multi);
 
-    fixTagGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBe(execError);
-      expect(report).toBeUndefined();
-      expect(client.multi).toHaveBeenCalled();
-      expect(multi.sRem).toHaveBeenCalled();
-      expect(multi.del).toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixTagGhosts({ id: "blog-id" });
+    expect(err).toBe(execError);
+    expect(report).toBeUndefined();
+    expect(client.multi).toHaveBeenCalled();
+    expect(multi.sRem).toHaveBeenCalled();
+    expect(multi.del).toHaveBeenCalled();
   });
 
-  it("fetches an entry referenced by several tags from Redis only once", function (done) {
+  it("fetches an entry referenced by several tags from Redis only once", async function () {
     spyOn(Tags, "list").and.callFake(async function (_blogID) {
       return [{ slug: "chairs" }, { slug: "furniture" }, { slug: "sale" }];
     });
@@ -241,16 +234,14 @@ describe("sync/fix/tag-ghosts", function () {
     stubMGet("blog-id", { "/chair": { id: "/chair" } });
     spyOn(client, "multi");
 
-    fixTagGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toEqual([]);
-      // One MGET batch call total for the whole run, not one per tag.
-      expect(client.mGet.calls.count()).toBe(1);
-      expect(client.mGet.calls.argsFor(0)[0]).toEqual([
-        entryKey("blog-id", "/chair"),
-      ]);
-      done();
-    });
+    const { err, report } = await settle_fixTagGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toEqual([]);
+    // One MGET batch call total for the whole run, not one per tag.
+    expect(client.mGet.calls.count()).toBe(1);
+    expect(client.mGet.calls.argsFor(0)[0]).toEqual([
+      entryKey("blog-id", "/chair"),
+    ]);
   });
 
   it("rejects when called without a callback and Tags.list fails", async function () {

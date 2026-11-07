@@ -199,12 +199,7 @@ describe("update", function () {
     const blogID = this.blog.id;
 
     const status = function () {
-      return new Promise(function (resolve, reject) {
-        IgnoredFiles.getStatus(blogID, entryPath, function (err, reason) {
-          if (err) return reject(err);
-          resolve(reason);
-        });
-      });
+      return IgnoredFiles.getStatus(blogID, entryPath);
     };
 
     await withSync(blogID, async function (syncFolder) {

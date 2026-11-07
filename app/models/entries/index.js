@@ -111,7 +111,7 @@ module.exports = (function () {
   // entry-ghosts) scan one Redis round trip at a time - includes drafts,
   // pages, scheduled and deleted entries that getTotal's "entries" list
   // excludes, so this is the count that actually predicts that workload.
-  var getAllTotal = withCallback(async function getAllTotal(blogID) {
+  var getAllTotal = promiseOnly(async function getAllTotal(blogID) {
     var allKey = listKey(blogID, "all");
 
     return await redis.zCard(allKey);
@@ -174,7 +174,7 @@ module.exports = (function () {
     }
   }
 
-  var getListIDs = withCallback(
+  var getListIDs = promiseOnly(
     async function getListIDs(blogID, listName, options) {
       ensure(blogID, "string").and(listName, "string").and(options, "object");
 

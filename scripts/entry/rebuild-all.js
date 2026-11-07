@@ -47,7 +47,6 @@ const rebuildEntry = require("sync/update/rebuildEntry");
 const folderPostSourceFolder = require("sync/update/folderPostSourceFolder");
 const eachBlog = require("../each/blog");
 const progress = require("../each/progress");
-const { promisify } = require("util");
 
 // Errors from build() meaning the source can no longer become an entry, the
 // same as rebuildDependents' NO_LONGER_VALID_ERRORS. Here the entry is left
@@ -187,7 +186,7 @@ async function rebuildEntries(blog, paths) {
         }
 
         try {
-          await promisify(rebuildEntry)(blog, entry);
+          await rebuildEntry(blog, entry);
           rebuilt++;
         } catch (err) {
           if (SOURCE_GONE.indexOf(err && err.code) > -1) {

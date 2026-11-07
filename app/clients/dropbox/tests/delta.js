@@ -114,7 +114,7 @@ describe("dropbox delta relative path normalization", function () {
   var Delta = require("../delta");
   var Path = require("path");
 
-  it("strips leading slash when the blog folder path is known", function (done) {
+  it("strips leading slash when the blog folder path is known", async function () {
     var entries = [
       {
         ".tag": "file",
@@ -135,17 +135,14 @@ describe("dropbox delta relative path normalization", function () {
 
     var delta = Delta(client, "folder-id", "blog-id");
 
-    delta(null, function (err, res) {
-      if (err) return done.fail(err);
+    const res = await delta(null);
 
-      expect(res.entries.length).toEqual(1);
-      expect(res.entries[0].relative_path).toEqual("root.txt");
-      expect(res.entries[0].relative_path[0]).not.toEqual("/");
-      done();
-    });
+    expect(res.entries.length).toEqual(1);
+    expect(res.entries[0].relative_path).toEqual("root.txt");
+    expect(res.entries[0].relative_path[0]).not.toEqual("/");
   });
 
-  it("handles folder metadata path case mismatches", function (done) {
+  it("handles folder metadata path case mismatches", async function () {
     var entries = [
       {
         ".tag": "file",
@@ -168,16 +165,13 @@ describe("dropbox delta relative path normalization", function () {
 
     var delta = Delta(client, "folder-id", "blog-id");
 
-    delta(null, function (err, res) {
-      if (err) return done.fail(err);
+    const res = await delta(null);
 
-      expect(res.entries.length).toEqual(1);
-      expect(res.entries[0].relative_path).toEqual("root.txt");
-      done();
-    });
+    expect(res.entries.length).toEqual(1);
+    expect(res.entries[0].relative_path).toEqual("root.txt");
   });
 
-  it("normalizes root-level entries to stay inside the blog folder", function (done) {
+  it("normalizes root-level entries to stay inside the blog folder", async function () {
     var entries = [
       {
         ".tag": "file",
@@ -195,16 +189,13 @@ describe("dropbox delta relative path normalization", function () {
 
     var delta = Delta(client, "", "blog-id");
 
-    delta(null, function (err, res) {
-      if (err) return done.fail(err);
+    const res = await delta(null);
 
-      expect(res.entries.length).toEqual(1);
-      expect(res.entries[0].relative_path).toEqual("root.txt");
+    expect(res.entries.length).toEqual(1);
+    expect(res.entries[0].relative_path).toEqual("root.txt");
 
-      var pathOnDisk = Path.join("/tmp/blog", res.entries[0].relative_path);
-      expect(pathOnDisk.indexOf("/tmp/blog")).toEqual(0);
-      done();
-    });
+    var pathOnDisk = Path.join("/tmp/blog", res.entries[0].relative_path);
+    expect(pathOnDisk.indexOf("/tmp/blog")).toEqual(0);
   });
 });
 
@@ -220,7 +211,7 @@ describe("dropbox delta case-only renames", function () {
 
   // The Dropbox folder holds only what is listed in dropboxEntries, as
   // both the delta and the listing which checks for the old name
-  function run(dropboxEntries) {
+  async function run(dropboxEntries) {
     var client = {
       filesListFolder: function () {
         return Promise.resolve({
@@ -236,16 +227,7 @@ describe("dropbox delta case-only renames", function () {
       },
     };
 
-    return new Promise(function (resolve, reject) {
-      Delta(
-        client,
-        "folder-id",
-        blogID
-      )(null, function (err, res) {
-        if (err) return reject(err);
-        resolve(res.entries);
-      });
-    });
+    return (await Delta(client, "folder-id", blogID)(null)).entries;
   }
 
   it("deletes the old name of a file renamed only in case", async function () {
@@ -337,11 +319,15 @@ function setupDelta(done) {
   );
 
   context.delta = function (callback) {
-    delta(context.account.cursor, function (err, res) {
-      if (err) return callback(err, res);
-      context.account.cursor = res.cursor;
-      callback(null, res);
-    });
+    delta(context.account.cursor).then(
+      function (res) {
+        context.account.cursor = res.cursor;
+        callback(null, res);
+      },
+      function (err) {
+        callback(err);
+      }
+    );
   };
 
   // Get to tabula rasa

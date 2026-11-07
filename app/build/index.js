@@ -165,12 +165,7 @@ async function buildWith(blog, path, multiInfo) {
   }
 
   debug("Blog:", blog.id, entryPath, " checking if draft");
-  var is_draft = await new Promise(function (resolve, reject) {
-    isDraft(blog.id, entryPath, function (err, is_draft) {
-      if (err) return reject(err);
-      resolve(is_draft);
-    });
-  });
+  var is_draft = await isDraft(blog.id, entryPath);
 
   debug("Blog:", blog.id, entryPath, " attempting to build html");
   var built = await builder(blog, buildArgument);

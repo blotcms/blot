@@ -8,11 +8,9 @@ describe("sync/update/drafts", function () {
     expect(await drafts.isPreview("blog-id", "/hello.preview.html")).toBe(true);
   });
 
-  it("isDraft still calls back (err, result)", function (done) {
-    drafts.isDraft("blog-id", "/[draft] hello.txt", function (err, isDraft) {
-      expect(err).toBeNull();
-      expect(isDraft).toBe(true);
-      done();
-    });
+  it("isDraft throws when passed a callback", function () {
+    expect(function () {
+      drafts.isDraft("blog-id", "/[draft] hello.txt", function () {});
+    }).toThrowError(/no longer takes a callback/);
   });
 });

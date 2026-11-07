@@ -3,6 +3,13 @@ describe("sync/fix/entry-ghosts", function () {
   var Entry = require("models/entry");
   var Entries = require("models/entries");
   var fixEntryGhosts = require("../entry-ghosts");
+  // Resolves to { err, report } instead of rejecting, so a spec can
+  // assert on either
+  const settle_fixEntryGhosts = (...args) =>
+    fixEntryGhosts(...args).then(
+      (report) => ({ err: null, report }),
+      (err) => ({ err, report: undefined })
+    );
 
   function missingError() {
     return new storage.NotFoundError();
@@ -21,7 +28,7 @@ describe("sync/fix/entry-ghosts", function () {
     );
   }
 
-  it("does nothing when every entry resolves to its own path on disk", function (done) {
+  it("does nothing when every entry resolves to its own path on disk", async function () {
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
       iterator({ id: "/foo.txt", path: "/foo.txt" }, function () {
         callback();
@@ -33,16 +40,14 @@ describe("sync/fix/entry-ghosts", function () {
     spyOn(Entry, "set");
     spyOn(Entry, "drop");
 
-    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toBeUndefined();
-      expect(Entry.set).not.toHaveBeenCalled();
-      expect(Entry.drop).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toBeUndefined();
+    expect(Entry.set).not.toHaveBeenCalled();
+    expect(Entry.drop).not.toHaveBeenCalled();
   });
 
-  it("skips deleted entries entirely", function (done) {
+  it("skips deleted entries entirely", async function () {
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
       iterator(
         { id: "/foo.txt", path: "/foo.txt", deleted: true },
@@ -55,17 +60,15 @@ describe("sync/fix/entry-ghosts", function () {
     spyOn(Entry, "set");
     spyOn(Entry, "drop");
 
-    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toBeUndefined();
-      expect(storage.stat).not.toHaveBeenCalled();
-      expect(Entry.set).not.toHaveBeenCalled();
-      expect(Entry.drop).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toBeUndefined();
+    expect(storage.stat).not.toHaveBeenCalled();
+    expect(Entry.set).not.toHaveBeenCalled();
+    expect(Entry.drop).not.toHaveBeenCalled();
   });
 
-  it("corrects an entry's path when the file exists under a different case", function (done) {
+  it("corrects an entry's path when the file exists under a different case", async function () {
     var entry = { id: "/Foo.txt", path: "/Foo.txt" };
 
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
@@ -87,18 +90,16 @@ describe("sync/fix/entry-ghosts", function () {
     });
     spyOn(Entry, "drop");
 
-    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(Entry.set).toHaveBeenCalled();
-      expect(Entry.drop).not.toHaveBeenCalled();
-      expect(report).toEqual([
-        ["CASE", { oldPath: "/Foo.txt", path: "/foo.txt" }],
-      ]);
-      done();
-    });
+    const { err, report } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(Entry.set).toHaveBeenCalled();
+    expect(Entry.drop).not.toHaveBeenCalled();
+    expect(report).toEqual([
+      ["CASE", { oldPath: "/Foo.txt", path: "/foo.txt" }],
+    ]);
   });
 
-  it("drops an entry when no file exists on disk for it", function (done) {
+  it("drops an entry when no file exists on disk for it", async function () {
     var entry = { id: "/missing.txt", path: "/missing.txt" };
 
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
@@ -117,18 +118,16 @@ describe("sync/fix/entry-ghosts", function () {
       expect(id).toBe("/missing.txt");
     });
 
-    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(Entry.set).not.toHaveBeenCalled();
-      expect(Entry.drop).toHaveBeenCalled();
-      expect(report).toEqual([
-        ["MISSING", { id: "/missing.txt", path: "/missing.txt" }],
-      ]);
-      done();
-    });
+    const { err, report } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(Entry.set).not.toHaveBeenCalled();
+    expect(Entry.drop).toHaveBeenCalled();
+    expect(report).toEqual([
+      ["MISSING", { id: "/missing.txt", path: "/missing.txt" }],
+    ]);
   });
 
-  it("drops by id rather than the stale path when an entry's id has since changed", function (done) {
+  it("drops by id rather than the stale path when an entry's id has since changed", async function () {
     var entry = { id: "/renamed.txt", path: "/old-path.txt" };
 
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
@@ -145,14 +144,12 @@ describe("sync/fix/entry-ghosts", function () {
       expect(id).toBe("/renamed.txt");
     });
 
-    fixEntryGhosts({ id: "blog-id" }, function (err) {
-      expect(err).toBeNull();
-      expect(Entry.drop).toHaveBeenCalled();
-      done();
-    });
+    const { err } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(Entry.drop).toHaveBeenCalled();
   });
 
-  it("treats a folder post as a ghost only when its '+' source folder is gone", function (done) {
+  it("treats a folder post as a ghost only when its '+' source folder is gone", async function () {
     var entry = {
       id: "/album",
       path: "/album",
@@ -172,16 +169,14 @@ describe("sync/fix/entry-ghosts", function () {
 
     spyOn(Entry, "drop");
 
-    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toBeUndefined();
-      expect(storage.stat.calls.count()).toBe(1);
-      expect(Entry.drop).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toBeUndefined();
+    expect(storage.stat.calls.count()).toBe(1);
+    expect(Entry.drop).not.toHaveBeenCalled();
   });
 
-  it("drops a folder post whose source folder no longer exists", function (done) {
+  it("drops a folder post whose source folder no longer exists", async function () {
     var entry = {
       id: "/album",
       path: "/album",
@@ -202,15 +197,13 @@ describe("sync/fix/entry-ghosts", function () {
       expect(id).toBe("/album");
     });
 
-    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(Entry.drop).toHaveBeenCalled();
-      expect(report).toEqual([["MISSING", { id: "/album", path: "/album" }]]);
-      done();
-    });
+    const { err, report } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(Entry.drop).toHaveBeenCalled();
+    expect(report).toEqual([["MISSING", { id: "/album", path: "/album" }]]);
   });
 
-  it("does not drop an entry when checking its file fails for another reason", function (done) {
+  it("does not drop an entry when checking its file fails for another reason", async function () {
     var readError = Object.assign(new Error("EIO"), { code: "EIO" });
 
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
@@ -224,16 +217,14 @@ describe("sync/fix/entry-ghosts", function () {
     spyOn(Entry, "set");
     spyOn(Entry, "drop");
 
-    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBe(readError);
-      expect(report).toBeUndefined();
-      expect(Entry.set).not.toHaveBeenCalled();
-      expect(Entry.drop).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBe(readError);
+    expect(report).toBeUndefined();
+    expect(Entry.set).not.toHaveBeenCalled();
+    expect(Entry.drop).not.toHaveBeenCalled();
   });
 
-  it("does not drop a folder post when checking its source folder fails for another reason", function (done) {
+  it("does not drop a folder post when checking its source folder fails for another reason", async function () {
     var readError = Object.assign(new Error("EIO"), { code: "EIO" });
 
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
@@ -249,14 +240,12 @@ describe("sync/fix/entry-ghosts", function () {
     });
     spyOn(Entry, "drop");
 
-    fixEntryGhosts({ id: "blog-id" }, function (err) {
-      expect(err).toBe(readError);
-      expect(Entry.drop).not.toHaveBeenCalled();
-      done();
-    });
+    const { err } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBe(readError);
+    expect(Entry.drop).not.toHaveBeenCalled();
   });
 
-  it("keeps an entry whose file has become a symlink", function (done) {
+  it("keeps an entry whose file has become a symlink", async function () {
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
       iterator({ id: "/foo.txt", path: "/foo.txt" }, function (err) {
         callback(err);
@@ -270,16 +259,14 @@ describe("sync/fix/entry-ghosts", function () {
     spyOn(Entry, "set");
     spyOn(Entry, "drop");
 
-    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBeNull();
-      expect(report).toBeUndefined();
-      expect(Entry.set).not.toHaveBeenCalled();
-      expect(Entry.drop).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBeNull();
+    expect(report).toBeUndefined();
+    expect(Entry.set).not.toHaveBeenCalled();
+    expect(Entry.drop).not.toHaveBeenCalled();
   });
 
-  it("propagates an error raised while iterating entries", function (done) {
+  it("propagates an error raised while iterating entries", async function () {
     var iterationError = new Error("redis exploded");
 
     spyOn(Entries, "each").and.callFake(function (blogID, iterator, callback) {
@@ -288,16 +275,14 @@ describe("sync/fix/entry-ghosts", function () {
     spyOn(Entry, "set");
     spyOn(Entry, "drop");
 
-    fixEntryGhosts({ id: "blog-id" }, function (err, report) {
-      expect(err).toBe(iterationError);
-      expect(report).toBeUndefined();
-      expect(Entry.set).not.toHaveBeenCalled();
-      expect(Entry.drop).not.toHaveBeenCalled();
-      done();
-    });
+    const { err, report } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBe(iterationError);
+    expect(report).toBeUndefined();
+    expect(Entry.set).not.toHaveBeenCalled();
+    expect(Entry.drop).not.toHaveBeenCalled();
   });
 
-  it("propagates an error from Entry.drop without dropping remaining ghosts", function (done) {
+  it("propagates an error from Entry.drop without dropping remaining ghosts", async function () {
     var dropError = new Error("drop exploded");
     var entries = [
       { id: "/a.txt", path: "/a.txt" },
@@ -322,10 +307,8 @@ describe("sync/fix/entry-ghosts", function () {
       throw dropError;
     });
 
-    fixEntryGhosts({ id: "blog-id" }, function (err) {
-      expect(err).toBe(dropError);
-      expect(dropCalls).toBe(1);
-      done();
-    });
+    const { err } = await settle_fixEntryGhosts({ id: "blog-id" });
+    expect(err).toBe(dropError);
+    expect(dropCalls).toBe(1);
   });
 });

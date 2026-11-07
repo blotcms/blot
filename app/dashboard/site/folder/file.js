@@ -37,12 +37,7 @@ module.exports = async function (blog, path) {
     const aggregatedLookupPath = multiInfo ? multiInfo.entryPath : null;
 
     Promise.all([
-      new Promise((resolve, reject) => {
-        IgnoredFiles.getStatus(blogID, path, function (err, ignored) {
-          if (err) return reject(err);
-          resolve(ignored);
-        });
-      }),
+      IgnoredFiles.getStatus(blogID, path),
       // A failed read is the same as no entry
       Entry.get(blogID, path).catch(() => undefined),
       !aggregatedLookupPath || aggregatedLookupPath === path

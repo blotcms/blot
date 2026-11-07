@@ -82,7 +82,7 @@ function load({
       measure: () => () => ({ durationMs: 0, maxLagMs: 0, p99LagMs: 0 }),
     },
     "models/entries": {
-      getAllTotal: (blogID, callback) => callback(null, 3),
+      getAllTotal: async () => 3,
     },
     "models/blog": {
       get: ({ id }, callback) => callback(null, blogs[id] || null),
