@@ -80,7 +80,7 @@ const sidebarLabels = {
   siteSettings: "Settings",
   import: "Import",
   export: "Export",
-  delete: "Delete",
+  delete: "Delete site",
 };
 
 // Every page has a title of its own: a page that doesn't set one (or sets

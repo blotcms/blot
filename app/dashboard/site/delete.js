@@ -59,7 +59,7 @@ Delete.route("/")
   // The first step: delete, or don't, with what it means
   .get(function (req, res) {
     res.locals.title = "Delete " + req.blog.pretty.label;
-    res.locals.breadcrumbs.add("Delete", "delete");
+    res.locals.breadcrumbs.add("Delete site", "delete");
     res.render("dashboard/site/delete");
   })
 
@@ -81,7 +81,7 @@ Delete.get(
     }
 
     res.locals.title = "Delete " + req.blog.pretty.label;
-    res.locals.breadcrumbs.add("Delete", "delete");
+    res.locals.breadcrumbs.add("Delete site", "delete");
     res.locals.breadcrumbs.add("Confirm", "confirm");
     res.render("dashboard/site/delete-confirm");
   }
