@@ -14,12 +14,7 @@ describe("entry.urlDeduplication", function () {
       "Link: conflict\nHello, conflict!"
     );
 
-    const builtEntry = await new Promise((resolve, reject) => {
-      build(this.blog, "/conflict.txt", function (err, entry) {
-        if (err) return reject(err);
-        resolve(entry);
-      });
-    });
+    const builtEntry = await build(this.blog, "/conflict.txt");
 
     const result = await setUrl(this.blog.id, builtEntry);
 
@@ -78,12 +73,7 @@ describe("entry.urlDeduplication", function () {
   it("publishes a folder post at its plus-stripped path", async function () {
     await folder.write(this.blog.id, "/album+/one.md", "Link: /album\n\n# One");
 
-    const builtEntry = await new Promise((resolve, reject) => {
-      build(this.blog, "/album+/one.md", function (err, entry) {
-        if (err) return reject(err);
-        resolve(entry);
-      });
-    });
+    const builtEntry = await build(this.blog, "/album+/one.md");
 
     expect(builtEntry.path).toEqual("/album");
 
@@ -99,12 +89,7 @@ describe("entry.urlDeduplication", function () {
       "Link: unique\nHello, unique!"
     );
 
-    const builtEntry = await new Promise((resolve, reject) => {
-      build(this.blog, "/unique.txt", function (err, entry) {
-        if (err) return reject(err);
-        resolve(entry);
-      });
-    });
+    const builtEntry = await build(this.blog, "/unique.txt");
 
     const result = await setUrl(this.blog.id, builtEntry);
 

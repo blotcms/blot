@@ -7,7 +7,6 @@ var debug = require("debug")("blot:templates");
 var Mustache = require("mustache");
 var fs = require("fs-extra");
 var Blog = require("models/blog");
-var withCallback = require("helper/withCallback");
 var _ = require("lodash");
 var chokidar = require("chokidar");
 var parseTemplate = require("models/template/parseTemplate");
@@ -902,7 +901,7 @@ async function applyForkPackageOverlay(templateID, overlay) {
   }
 }
 
-module.exports = withCallback(main);
+module.exports = main;
 
 // Last, so every const above is initialised before main() runs
 if (require.main === module) {

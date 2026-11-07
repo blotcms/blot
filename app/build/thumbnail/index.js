@@ -1,7 +1,6 @@
 var Candidates = require("./candidates");
 var Create = require("./create");
 var Transformer = require("helper/transformer");
-var withCallback = require("helper/withCallback");
 var STORE_PREFIX = "thumbnails";
 var debug = require("debug")("blot:entry:build:thumbnail");
 
@@ -23,16 +22,13 @@ async function thumbnail(blog, path, metadata, html) {
   // next build of the post skips its sandbox job. Only an image the job read
   // and refused is stored (err.invalid); a failure to read it or to run the
   // job is not, so it is tried again.
-  function createOrReject(path, done) {
-    Create(blog.id, path).then(
-      function (thumbnails) {
-        done(null, thumbnails);
-      },
-      function (err) {
-        if (err && err.invalid) return done(null, { rejected: err.message });
-        done(err);
-      }
-    );
+  async function createOrReject(path) {
+    try {
+      return await Create(blog.id, path);
+    } catch (err) {
+      if (err && err.invalid) return { rejected: err.message };
+      throw err;
+    }
   }
 
   // The first candidate which produces thumbnails wins
@@ -75,4 +71,4 @@ function lookup(store, candidate, create) {
   });
 }
 
-module.exports = withCallback(thumbnail);
+module.exports = thumbnail;

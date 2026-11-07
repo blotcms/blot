@@ -436,27 +436,26 @@ async function main() {
   );
 }
 
-function buildOnly(blog, entryPath, tag) {
-  return new Promise((resolve) => {
-    startPhase(`${tag} build ${entryPath}`);
-    build(blog, entryPath, function (err, entry) {
-      // Ended first, so stringifying entry for its JSON size below isn't
-      // charged to the phase's measured heap peak.
-      const result = endPhase({ error: errorMessage(err) });
-      if (entry) {
-        result.htmlKB = entry.html
-          ? instrument.round(entry.html.length / 1024)
-          : undefined;
-        result.entryJSONKB = instrument.round(
-          JSON.stringify(entry).length / 1024
-        );
-        console.log(
-          `[probe] ${result.label}: html ${result.htmlKB ?? "n/a"}KB entry ${result.entryJSONKB}KB`
-        );
-      }
-      resolve();
-    });
-  });
+async function buildOnly(blog, entryPath, tag) {
+  startPhase(`${tag} build ${entryPath}`);
+  let err, entry;
+  try {
+    entry = await build(blog, entryPath);
+  } catch (buildErr) {
+    err = buildErr;
+  }
+  // Ended first, so stringifying entry for its JSON size below isn't
+  // charged to the phase's measured heap peak.
+  const result = endPhase({ error: errorMessage(err) });
+  if (entry) {
+    result.htmlKB = entry.html
+      ? instrument.round(entry.html.length / 1024)
+      : undefined;
+    result.entryJSONKB = instrument.round(JSON.stringify(entry).length / 1024);
+    console.log(
+      `[probe] ${result.label}: html ${result.htmlKB ?? "n/a"}KB entry ${result.entryJSONKB}KB`
+    );
+  }
 }
 
 // Mirrors scripts/entry/rebuild.js: one sync per blog, every path updated

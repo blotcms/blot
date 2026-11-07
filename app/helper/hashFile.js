@@ -4,7 +4,6 @@
 const fs = require("fs");
 const stream = require("stream");
 const { pipeline } = require("stream/promises");
-const withCallback = require("helper/withCallback");
 const crypto = require("crypto");
 const BLOCK_SIZE = 4 * 1024 * 1024;
 
@@ -46,5 +45,4 @@ async function hashFile(path) {
   return hash;
 }
 
-// Supports callback-based and promise-based usage
-module.exports = withCallback(hashFile);
+module.exports = hashFile;

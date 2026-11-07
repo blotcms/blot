@@ -43,12 +43,12 @@ function sourcePathsFor(entry) {
     : [entry.path];
 }
 
-function hash(blog, entry) {
-  return new Promise((resolve) => {
-    hashEntrySource(blog, sourcePathsFor(entry), (err, contentHash) =>
-      resolve(err ? null : contentHash)
-    );
-  });
+async function hash(blog, entry) {
+  try {
+    return await hashEntrySource(blog, sourcePathsFor(entry));
+  } catch (err) {
+    return null;
+  }
 }
 
 function eachEntry(blogID, fn) {

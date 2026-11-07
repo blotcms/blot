@@ -26,13 +26,16 @@ describe("ignoredFiles", function () {
     expect(await IgnoredFiles.get(id)).toEqual({});
   });
 
-  it("still calls back", function (done) {
-    IgnoredFiles.add(this.blog.id, "/x", "TOO_LARGE", (err) => {
-      expect(err).toBe(null);
-      IgnoredFiles.getStatus(this.blog.id, "/x", (err, status) => {
-        expect(status).toEqual("TOO_LARGE");
-        done();
-      });
+  // The dashboard folder views and the sync specs still pass a callback
+  it("getStatus still calls back", async function () {
+    await IgnoredFiles.add(this.blog.id, "/x", "TOO_LARGE");
+
+    const status = await new Promise((resolve, reject) => {
+      IgnoredFiles.getStatus(this.blog.id, "/x", (err, status) =>
+        err ? reject(err) : resolve(status)
+      );
     });
+
+    expect(status).toEqual("TOO_LARGE");
   });
 });

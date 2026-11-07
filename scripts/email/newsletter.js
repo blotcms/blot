@@ -47,12 +47,7 @@ async function main(letter) {
   for (const email of emails) {
     console.log("Sending", email);
 
-    await new Promise(function (resolve, reject) {
-      send({ email: email }, emailPath, email, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await send({ email: email }, emailPath, email);
 
     console.log(". Email sent to", email);
     await client.sAdd("newsletter:letter:" + letter, email);

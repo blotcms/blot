@@ -136,16 +136,14 @@ module.exports = function setup(options) {
     // an image into thumbnails, or the function which
     // A downloaded image's size is its width, the length of the text it
     // stands for (see imageFor above).
-    this.transform = function (path, done) {
-      fs.readFile(path, function (err, contents) {
-        if (err) return done(err);
+    this.transform = async function (path) {
+      const contents = await fs.readFile(path);
 
-        if (contents.subarray(0, 8).equals(PNG_SIGNATURE)) {
-          return done(null, { size: contents.readUInt32BE(16) });
-        }
+      if (contents.subarray(0, 8).equals(PNG_SIGNATURE)) {
+        return { size: contents.readUInt32BE(16) };
+      }
 
-        done(null, { size: contents.length });
-      });
+      return { size: contents.length };
     };
 
     // This represents the cache of previous transformations

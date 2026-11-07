@@ -60,21 +60,16 @@ describe("templates rebuild subscription", function () {
     if (originalTemplates) require.cache[templatesPath] = originalTemplates;
   });
 
-  it("opens a templates:rebuild subscriber only when watching", function (done) {
+  it("opens a templates:rebuild subscriber only when watching", async function () {
     const templates = require("templates");
 
-    templates({ watch: false }, function (err) {
-      expect(err).toBeFalsy();
-      expect(redisSubscriber).not.toHaveBeenCalled();
+    await templates({ watch: false });
+    expect(redisSubscriber).not.toHaveBeenCalled();
 
-      templates({ watch: true }, function (err) {
-        expect(err).toBeFalsy();
-        expect(redisSubscriber).toHaveBeenCalledTimes(1);
-        expect(redisSubscriber.calls.mostRecent().args[0].channel).toBe(
-          "templates:rebuild"
-        );
-        done();
-      });
-    });
+    await templates({ watch: true });
+    expect(redisSubscriber).toHaveBeenCalledTimes(1);
+    expect(redisSubscriber.calls.mostRecent().args[0].channel).toBe(
+      "templates:rebuild"
+    );
   });
 });

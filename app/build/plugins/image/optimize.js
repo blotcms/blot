@@ -4,7 +4,6 @@ var join = require("path").join;
 var fs = require("fs-extra");
 var cache_folder_name = "_image_cache";
 var resize = require("./resize");
-var withCallback = require("helper/withCallback");
 var extname = require("path").extname;
 var basename = require("path").basename;
 var debug = require("debug")("blot:entry:build:plugins:image");
@@ -62,8 +61,8 @@ function truncateSlug(slug) {
 }
 
 module.exports = function (blogID, originalSrc) {
-  // helper/transformer calls this with (path, callback), so it is wrapped
-  return withCallback(async function (path) {
+  // helper/transformer calls this with a path and waits for the promise
+  return async function (path) {
     // Extnames can sometimes be uppercase, we want to ensure that
     // this will work on case-sensitive file systems so we lowercase it...
     var extension = extname(path).toLowerCase();
@@ -141,7 +140,7 @@ module.exports = function (blogID, originalSrc) {
 
       throw err;
     }
-  });
+  };
 };
 module.exports.filenameFromSrc = filenameFromSrc;
 module.exports.truncateSlug = truncateSlug;

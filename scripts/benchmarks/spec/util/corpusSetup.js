@@ -40,18 +40,20 @@ module.exports = function setupCorpusRender(manifestPath) {
 
   global.test.server(router);
 
-  beforeAll(function (done) {
-    const timer = setTimeout(() => {
-      done.fail(
-        new Error("templates({ watch: false }) did not finish in time")
-      );
-    }, 30 * 1000);
+  beforeAll(async function () {
+    let timer;
 
-    templates({ watch: false }, (err) => {
-      clearTimeout(timer);
-      if (err) return done.fail(err);
-      done();
+    const timeout = new Promise((resolve, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error("templates({ watch: false }) did not finish in time"));
+      }, 30 * 1000);
     });
+
+    try {
+      await Promise.race([templates({ watch: false }), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
   }, 35 * 1000);
 
   beforeEach(async function () {

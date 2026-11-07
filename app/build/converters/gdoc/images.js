@@ -101,23 +101,20 @@ async function processImages(blogID, docPath, $) {
         continue;
       }
 
-      const fetchImage = async (resolvedPath, done) => {
-        try {
-          const determinedExt = await determineExtension(resolvedPath);
+      const fetchImage = async (resolvedPath) => {
+        const determinedExt = await determineExtension(resolvedPath);
 
-          const computedFilename = `${filenameBase}.${determinedExt}`;
+        const computedFilename = `${filenameBase}.${determinedExt}`;
 
-          await assets.writeFrom(
-            blogID,
-            assetDir + "/" + computedFilename,
-            resolvedPath
-          );
-          done(null, {
-            output: "/_assets/" + docHash + "/" + computedFilename,
-          });
-        } catch (err) {
-          done(err);
-        }
+        await assets.writeFrom(
+          blogID,
+          assetDir + "/" + computedFilename,
+          resolvedPath
+        );
+
+        return {
+          output: "/_assets/" + docHash + "/" + computedFilename,
+        };
       };
 
       const { output } = await lookupWithTransformer(

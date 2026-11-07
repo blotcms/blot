@@ -31,12 +31,11 @@ describe("converter math normalization", function () {
   }
 
   function convertMarkdown(text) {
-    return new Promise((resolve, reject) => {
-      markdownConvert(blog, text, {}, (err, html) => {
-        if (err) return reject(err);
-        resolve(html);
-      });
-    });
+    return markdownConvert(blog, text, {});
+  }
+
+  function convertRtf(text) {
+    return rtfConvert(blog, text);
   }
 
   function convertDirect(converter, text) {
@@ -82,7 +81,7 @@ describe("converter math normalization", function () {
       inline: "{\\rtf1\\ansi Inline $\\\\frac\\{1\\}\\{2\\}$ math}",
       display: "{\\rtf1\\ansi $$\\\\frac\\{1\\}\\{2\\}$$}",
       convert(content) {
-        return convertDirect(rtfConvert, content);
+        return convertRtf(content);
       },
     },
     {
