@@ -361,10 +361,6 @@ a.dashboard-support__option:focus-visible {
   text-overflow: ellipsis;
 }
 
-.sites-sync.is-off .global-sync__icon {
-  display: none;
-}
-
 .sites-table__health {
   position: relative;
   z-index: 2;

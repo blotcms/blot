@@ -112,9 +112,10 @@
     center / 14px no-repeat;
 }
 
+/* No folder connected: the text alone */
 .global-sync.is-off .global-sync__icon,
 .sites-sync.is-off .global-sync__icon {
-  border: 1.5px solid var(--border-strong-color);
+  display: none;
 }
 
 /* Syncing: a spinning arc */
