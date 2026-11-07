@@ -117,11 +117,11 @@ async function processImages(blogID, docPath, $) {
         };
       };
 
-      const { output } = await lookupWithTransformer(
-        transformer,
-        src,
-        fetchImage
-      );
+      const found = await transformer.lookup(src, fetchImage);
+
+      if (!found) throw new Error("Image lookup failed for " + src);
+
+      const { output } = found;
 
       $(elem).attr("src", output);
     } catch {
@@ -141,18 +141,6 @@ async function processImages(blogID, docPath, $) {
 async function findCachedAsset(blogID, assetDir, filenameBase) {
   const files = await assets.list(blogID, assetDir);
   return files.find((file) => file.startsWith(`${filenameBase}.`));
-}
-
-function lookupWithTransformer(transformer, src, transform) {
-  return new Promise((resolve, reject) => {
-    transformer.lookup(src, transform, (err, result) => {
-      if (result) {
-        resolve(result);
-      } else {
-        reject(err || new Error("Image lookup failed for " + src));
-      }
-    });
-  });
 }
 
 async function determineExtension(path) {
