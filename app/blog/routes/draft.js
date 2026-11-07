@@ -54,23 +54,21 @@ async function renderDraft(req, res, next, filePath, callback) {
       settle();
     }
 
-    try {
-      res.renderView("entry.html", renderNext, function (_err, output) {
-        try {
-          drafts.injectScript(output, filePath, function (html, bodyHTML) {
-            try {
-              callback(html, bodyHTML);
-            } finally {
-              settle();
-            }
-          });
-        } catch (err) {
-          renderNext(err);
-        }
-      });
-    } catch (err) {
-      renderNext(err);
-    }
+    res.renderViewToString("entry.html").then(function (output) {
+      if (output === null) return renderNext();
+
+      try {
+        drafts.injectScript(output, filePath, function (html, bodyHTML) {
+          try {
+            callback(html, bodyHTML);
+          } finally {
+            settle();
+          }
+        });
+      } catch (err) {
+        renderNext(err);
+      }
+    }, renderNext);
   });
 }
 

@@ -149,41 +149,34 @@ describe("posts", function () {
     expect(text.trim()).toEqual("C A");
   });
 
-  it("filters posts by res.locals.tag", function (done) {
+  it("filters posts by res.locals.tag", async function () {
     const posts = require("blog/render/retrieve/posts");
 
-    this.write({
+    await this.write({
       path: "/a.txt",
       content: "Title: A\nTags: foo\n\nA",
-    })
-      .then(() =>
-        this.write({
-          path: "/b.txt",
-          content: "Title: B\nTags: bar\n\nB",
-        })
-      )
-      .then(() => {
-        const req = {
-          blog: { id: this.blog.id },
-          query: {},
-          params: {},
-          template: { locals: {} },
-          log: function () {},
-        };
+    });
+    await this.write({
+      path: "/b.txt",
+      content: "Title: B\nTags: bar\n\nB",
+    });
 
-        const res = {
-          locals: {
-            tag: "foo",
-          },
-        };
+    const req = {
+      blog: { id: this.blog.id },
+      query: {},
+      params: {},
+      template: { locals: {} },
+      log: function () {},
+    };
 
-        posts(req, res, function (err, entries) {
-          expect(err).toBeNull();
-          expect(entries.map((entry) => entry.title)).toEqual(["A"]);
-          done();
-        });
-      })
-      .catch(done.fail);
+    const res = {
+      locals: {
+        tag: "foo",
+      },
+    };
+
+    const entries = await posts(req, res);
+    expect(entries.map((entry) => entry.title)).toEqual(["A"]);
   });
 
   it("filters posts by tag and path_prefix", async function () {
@@ -311,7 +304,7 @@ describe("posts cache", function () {
     cachedTagged._clear();
   });
 
-  it("forwards raw, unnormalized pageNumber/pageSize to models/entries.getPage", function (done) {
+  it("forwards raw, unnormalized pageNumber/pageSize to models/entries.getPage", async function () {
     spyOn(entriesModel, "getPage").and.callFake(function (blogID, options) {
       // models/entries.getPage does its own validation (default page size 5,
       // max 100, and a 400 for a non-digit page). If posts.js pre-normalizes
@@ -325,7 +318,7 @@ describe("posts cache", function () {
       });
     });
 
-    posts(
+    await posts(
       {
         blog: { id: "blog-1", cacheID: 100 },
         query: { page: "not-a-number" },
@@ -333,16 +326,12 @@ describe("posts cache", function () {
         template: { locals: {} },
         log: function () {},
       },
-      { locals: {} },
-      function (err) {
-        expect(err).toBeNull();
-        expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
-        done();
-      }
+      { locals: {} }
     );
+    expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
   });
 
-  it("passes nested sort locals into getPage", function (done) {
+  it("passes nested sort locals into getPage", async function () {
     spyOn(entriesModel, "getPage").and.callFake(function (blogID, options) {
       expect(options.sortBy).toBe("id");
       expect(options.order).toBe("desc");
@@ -352,7 +341,7 @@ describe("posts cache", function () {
       });
     });
 
-    posts(
+    await posts(
       {
         blog: { id: "blog-1", cacheID: 100 },
         query: {},
@@ -360,16 +349,12 @@ describe("posts cache", function () {
         template: { locals: { sort: { by: "id", direction: "desc" } } },
         log: function () {},
       },
-      { locals: {} },
-      function (err) {
-        expect(err).toBeNull();
-        expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
-        done();
-      }
+      { locals: {} }
     );
+    expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
   });
 
-  it("forwards the resolved sort selection to Tags.tagged and orders the page", function (done) {
+  it("forwards the resolved sort selection to Tags.tagged and orders the page", async function () {
     let received;
     spyOn(Tags, "tagged").and.callFake(async function (blogID, tags, options) {
       received = { blogID, tags, options };
@@ -386,7 +371,7 @@ describe("posts cache", function () {
       ]);
     });
 
-    posts(
+    const entries = await posts(
       {
         blog: { id: "blog-1", cacheID: 100 },
         query: { tag: "foo" },
@@ -394,22 +379,18 @@ describe("posts cache", function () {
         template: { locals: { sort_by: "id", sort_order: "asc" } },
         log: function () {},
       },
-      { locals: {} },
-      function (err, entries) {
-        expect(err).toBeNull();
-        expect(received.options.sortBy).toBe("id");
-        expect(received.options.order).toBe("asc");
-        expect(entries.map((entry) => entry.id)).toEqual([
-          "a.txt",
-          "m.txt",
-          "z.txt",
-        ]);
-        done();
-      }
+      { locals: {} }
     );
+    expect(received.options.sortBy).toBe("id");
+    expect(received.options.order).toBe("asc");
+    expect(entries.map((entry) => entry.id)).toEqual([
+      "a.txt",
+      "m.txt",
+      "z.txt",
+    ]);
   });
 
-  it("reuses cached untagged responses for identical inputs", function (done) {
+  it("reuses cached untagged responses for identical inputs", async function () {
     spyOn(entriesModel, "getPage").and.callFake(function (blogID, options) {
       return Promise.resolve({
         entries: [{ id: "1", title: "A" }],
@@ -425,15 +406,12 @@ describe("posts cache", function () {
       log: function () {},
     };
 
-    posts(req, { locals: {} }, function () {
-      posts(req, { locals: {} }, function () {
-        expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await posts(req, { locals: {} });
+    await posts(req, { locals: {} });
+    expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
   });
 
-  it("reuses cached tagged responses for identical inputs", function (done) {
+  it("reuses cached tagged responses for identical inputs", async function () {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(
       async function (blogID, tags, options) {
         return { entryIDs: ["1", "2"], pagination: { page: 1, pages: 1 } };
@@ -455,16 +433,13 @@ describe("posts cache", function () {
       log: function () {},
     };
 
-    posts(req, { locals: {} }, function () {
-      posts(req, { locals: {} }, function () {
-        expect(taggedSpy).toHaveBeenCalledTimes(1);
-        expect(Entry.get).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await posts(req, { locals: {} });
+    await posts(req, { locals: {} });
+    expect(taggedSpy).toHaveBeenCalledTimes(1);
+    expect(Entry.get).toHaveBeenCalledTimes(1);
   });
 
-  it("returns isolated copies so caller mutations do not taint cache", function (done) {
+  it("returns isolated copies so caller mutations do not taint cache", async function () {
     spyOn(entriesModel, "getPage").and.callFake(function (blogID, options) {
       return Promise.resolve({
         entries: [{ title: "Original" }],
@@ -486,20 +461,15 @@ describe("posts cache", function () {
 
     const firstRes = { locals: {} };
 
-    posts(req, firstRes, function (err, firstEntries) {
-      expect(err).toBeNull();
-      firstEntries[0].title = "Mutated";
-      firstRes.locals.pagination.nested.total = -1;
+    const firstEntries = await posts(req, firstRes);
+    firstEntries[0].title = "Mutated";
+    firstRes.locals.pagination.nested.total = -1;
 
-      const secondRes = { locals: {} };
-      posts(req, secondRes, function (secondErr, secondEntries) {
-        expect(secondErr).toBeNull();
-        expect(secondEntries[0].title).toBe("Original");
-        expect(secondRes.locals.pagination.nested.total).toBe(10);
-        expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    const secondRes = { locals: {} };
+    const secondEntries = await posts(req, secondRes);
+    expect(secondEntries[0].title).toBe("Original");
+    expect(secondRes.locals.pagination.nested.total).toBe(10);
+    expect(entriesModel.getPage).toHaveBeenCalledTimes(1);
   });
 
   it("varies cache keys across invalidation and query dimensions", function () {
@@ -615,19 +585,16 @@ describe("posts cache", function () {
       });
     });
 
-    const result = await new Promise((resolve, reject) =>
-      posts(
-        {
-          blog: { id: "blog-1", cacheID: 100 },
-          query: {},
-          params: {},
-          template: { locals: {} },
-          retrieve: { posts: { fields: { title: true, html: true } } },
-          log: function () {},
-        },
-        { locals: {} },
-        (err, entries) => (err ? reject(err) : resolve(entries))
-      )
+    const result = await posts(
+      {
+        blog: { id: "blog-1", cacheID: 100 },
+        query: {},
+        params: {},
+        template: { locals: {} },
+        retrieve: { posts: { fields: { title: true, html: true } } },
+        log: function () {},
+      },
+      { locals: {} }
     );
 
     expect(result).toEqual([{ id: "1", title: "A", html: "<p>A</p>" }]);

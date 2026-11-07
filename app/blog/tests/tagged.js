@@ -49,21 +49,15 @@ describe("tags work on sites", function () {
       content: "Tags: Beta\n\nThree",
     });
 
-    const result = await new Promise((resolve, reject) => {
-      retrieveTagged(
-        {
-          blog: this.blog,
-          query: { tag: ["alpha", "beta"] },
-          params: {},
-          template: {},
-        },
-        { locals: {} },
-        (err, data) => {
-          if (err) return reject(err);
-          resolve(data);
-        }
-      );
-    });
+    const result = await retrieveTagged(
+      {
+        blog: this.blog,
+        query: { tag: ["alpha", "beta"] },
+        params: {},
+        template: {},
+      },
+      { locals: {} }
+    );
 
     expect(result.entryIDs).toEqual(["/second.txt"]);
     expect(result.tag).toBe("Alpha + Beta");
@@ -483,21 +477,15 @@ describe("tags work on sites", function () {
       content: "Title: Page B\nTags: Counted\n\nSecond",
     });
 
-    const result = await new Promise((resolve, reject) => {
-      retrieveTagged(
-        {
-          blog: this.blog,
-          query: { tag: "counted" },
-          params: { tag: "counted", page: "1" },
-          template: { locals: { page_size: 1 } },
-        },
-        { locals: {} },
-        (err, data) => {
-          if (err) return reject(err);
-          resolve(data);
-        }
-      );
-    });
+    const result = await retrieveTagged(
+      {
+        blog: this.blog,
+        query: { tag: "counted" },
+        params: { tag: "counted", page: "1" },
+        template: { locals: { page_size: 1 } },
+      },
+      { locals: {} }
+    );
 
     expect(result.total).toBe(2);
     expect(result.entryIDs.length).toBe(1);

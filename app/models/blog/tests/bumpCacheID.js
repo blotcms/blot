@@ -50,30 +50,22 @@ describe("Blog.bumpCacheID", function () {
   });
 
   it("bumps the cacheID", async function () {
-    const callback = jasmine.createSpy("callback");
-
-    bumpCacheID("blog_test", callback);
-    await flush();
+    await bumpCacheID("blog_test");
 
     expect(set).toHaveBeenCalledTimes(1);
     expect(set).toHaveBeenCalledWith("blog_test", {
       cacheID: jasmine.any(Number),
     });
-    expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith(null);
   });
 
-  it("retries while Redis is unavailable, without holding the callback", async function () {
-    const callback = jasmine.createSpy("callback");
+  it("retries while Redis is unavailable, rejecting after the first attempt", async function () {
     const onRetried = jasmine.createSpy("onRetried");
     const error = unavailable();
 
     replies = [error, unavailable()];
-    bumpCacheID("blog_test", callback, onRetried);
-    await flush();
-
-    expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith(error);
+    await expectAsync(bumpCacheID("blog_test", onRetried)).toBeRejectedWith(
+      error
+    );
     expect(set).toHaveBeenCalledTimes(1);
 
     jasmine.clock().tick(5 * 1000);
@@ -89,15 +81,13 @@ describe("Blog.bumpCacheID", function () {
     jasmine.clock().tick(60 * 1000);
     await flush();
     expect(set).toHaveBeenCalledTimes(3);
-    expect(callback).toHaveBeenCalledTimes(1);
   });
 
   it("gives up after about a minute", async function () {
     const onRetried = jasmine.createSpy("onRetried");
 
     replies = Array.from({ length: 100 }, unavailable);
-    bumpCacheID("blog_test", function () {}, onRetried);
-    await flush();
+    await bumpCacheID("blog_test", onRetried).catch(function () {});
 
     // Each retry is scheduled once the previous attempt has settled
     for (let i = 0; i < 60; i++) {
@@ -111,15 +101,10 @@ describe("Blog.bumpCacheID", function () {
   });
 
   it("does not retry other errors", async function () {
-    const callback = jasmine.createSpy("callback");
     const error = new Error("Something else went wrong");
 
     replies = [error];
-    bumpCacheID("blog_test", callback);
-    await flush();
-
-    expect(callback).toHaveBeenCalledTimes(1);
-    expect(callback).toHaveBeenCalledWith(error);
+    await expectAsync(bumpCacheID("blog_test")).toBeRejectedWith(error);
 
     jasmine.clock().tick(60 * 1000);
     await flush();
@@ -130,8 +115,7 @@ describe("Blog.bumpCacheID", function () {
     const onRetried = jasmine.createSpy("onRetried");
 
     replies = [unavailable(), new Error("Something else went wrong")];
-    bumpCacheID("blog_test", function () {}, onRetried);
-    await flush();
+    await bumpCacheID("blog_test", onRetried).catch(function () {});
 
     jasmine.clock().tick(60 * 1000);
     await flush();

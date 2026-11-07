@@ -324,7 +324,7 @@ describe("tagged block", function () {
     expect(body.trim()).toEqual("<ul><li>One</li></ul>");
   });
 
-  it("ignores non-string entry IDs when filtering by path_prefix", function (done) {
+  it("ignores non-string entry IDs when filtering by path_prefix", async function () {
     const tagged = require("blog/render/retrieve/tagged");
     const Tags = require("models/tags");
     const Entry = require("models/entry");
@@ -355,12 +355,9 @@ describe("tagged block", function () {
       locals: { path_prefix: "/blog/" },
     };
 
-    tagged(req, res, function (err, result) {
-      expect(err).toBeNull();
-      expect(result.entryIDs).toEqual(["/blog/one.txt"]);
-      expect(result.total).toBe(1);
-      done();
-    });
+    const result = await tagged(req, res);
+    expect(result.entryIDs).toEqual(["/blog/one.txt"]);
+    expect(result.total).toBe(1);
   });
 
   it("paginates tagged entries using filtered totals when path_prefix is set", async function () {
@@ -517,7 +514,7 @@ describe("tagged cache", function () {
     );
   }
 
-  it("reuses cached responses for identical inputs", function (done) {
+  it("reuses cached responses for identical inputs", async function () {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
       return {
         entryIDs: ["1", "2"],
@@ -537,18 +534,15 @@ describe("tagged cache", function () {
       ]);
     });
 
-    tagged(makeReq(), { locals: {} }, function () {
-      // A fresh req, so this second call only hits if the process LRU
-      // was populated.
-      tagged(makeReq(), { locals: {} }, function () {
-        expect(taggedSpy).toHaveBeenCalledTimes(1);
-        expect(Entry.get).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await tagged(makeReq(), { locals: {} });
+    // A fresh req, so this second call only hits if the process LRU
+    // was populated.
+    await tagged(makeReq(), { locals: {} });
+    expect(taggedSpy).toHaveBeenCalledTimes(1);
+    expect(Entry.get).toHaveBeenCalledTimes(1);
   });
 
-  it("refetches when cacheID changes", function (done) {
+  it("refetches when cacheID changes", async function () {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
       return {
         entryIDs: ["1"],
@@ -565,23 +559,16 @@ describe("tagged cache", function () {
       return Promise.resolve([{ id: "1", dateStamp: 1, title: "First" }]);
     });
 
-    tagged(
-      makeReq({ blog: { id: "blog-1", cacheID: 100 } }),
-      { locals: {} },
-      function () {
-        tagged(
-          makeReq({ blog: { id: "blog-1", cacheID: 101 } }),
-          { locals: {} },
-          function () {
-            expect(taggedSpy).toHaveBeenCalledTimes(2);
-            done();
-          }
-        );
-      }
-    );
+    await tagged(makeReq({ blog: { id: "blog-1", cacheID: 100 } }), {
+      locals: {},
+    });
+    await tagged(makeReq({ blog: { id: "blog-1", cacheID: 101 } }), {
+      locals: {},
+    });
+    expect(taggedSpy).toHaveBeenCalledTimes(2);
   });
 
-  it("returns isolated copies so caller mutations do not taint cache", function (done) {
+  it("returns isolated copies so caller mutations do not taint cache", async function () {
     spyOn(Tags, "tagged").and.callFake(async function () {
       return {
         entryIDs: ["1"],
@@ -598,18 +585,13 @@ describe("tagged cache", function () {
       return Promise.resolve([{ id: "1", title: "Original" }]);
     });
 
-    tagged(makeReq(), { locals: {} }, function (err, first) {
-      expect(err).toBeNull();
-      first.entries[0].title = "Mutated";
-      first.pagination.nested.total = -1;
+    const first = await tagged(makeReq(), { locals: {} });
+    first.entries[0].title = "Mutated";
+    first.pagination.nested.total = -1;
 
-      tagged(makeReq(), { locals: {} }, function (secondErr, second) {
-        expect(secondErr).toBeNull();
-        expect(second.entries[0].title).toBe("Original");
-        expect(second.pagination.nested.total).toBe(10);
-        done();
-      });
-    });
+    const second = await tagged(makeReq(), { locals: {} });
+    expect(second.entries[0].title).toBe("Original");
+    expect(second.pagination.nested.total).toBe(10);
   });
 
   it("varies cache keys across invalidation and query dimensions", function () {
@@ -698,7 +680,7 @@ describe("tagged cache", function () {
     expect(key(["html"])).not.toBe(key(undefined));
   });
 
-  it("keys tagged_page_size separately from page_size when they resolve to different limits", function (done) {
+  it("keys tagged_page_size separately from page_size when they resolve to different limits", async function () {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(
       async function (blogID, tags, options) {
         return {
@@ -717,25 +699,18 @@ describe("tagged cache", function () {
       return Promise.resolve([]);
     });
 
-    tagged(
-      makeReq({ template: { locals: { tagged_page_size: 5 } } }),
-      { locals: {} },
-      function () {
-        tagged(
-          makeReq({ template: { locals: { page_size: 10 } } }),
-          { locals: {} },
-          function () {
-            expect(taggedSpy).toHaveBeenCalledTimes(2);
-            expect(taggedSpy.calls.argsFor(0)[2].limit).toBe(5);
-            expect(taggedSpy.calls.argsFor(1)[2].limit).toBe(10);
-            done();
-          }
-        );
-      }
-    );
+    await tagged(makeReq({ template: { locals: { tagged_page_size: 5 } } }), {
+      locals: {},
+    });
+    await tagged(makeReq({ template: { locals: { page_size: 10 } } }), {
+      locals: {},
+    });
+    expect(taggedSpy).toHaveBeenCalledTimes(2);
+    expect(taggedSpy.calls.argsFor(0)[2].limit).toBe(5);
+    expect(taggedSpy.calls.argsFor(1)[2].limit).toBe(10);
   });
 
-  it("does not cache a hydration miss when IDs came back but Entry.get returned none", function (done) {
+  it("does not cache a hydration miss when IDs came back but Entry.get returned none", async function () {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
       return {
         entryIDs: ["1", "2"],
@@ -752,16 +727,13 @@ describe("tagged cache", function () {
       return Promise.resolve([]);
     });
 
-    tagged(makeReq(), { locals: {} }, function () {
-      tagged(makeReq(), { locals: {} }, function () {
-        expect(taggedSpy).toHaveBeenCalledTimes(2);
-        expect(Entry.get).toHaveBeenCalledTimes(2);
-        done();
-      });
-    });
+    await tagged(makeReq(), { locals: {} });
+    await tagged(makeReq(), { locals: {} });
+    expect(taggedSpy).toHaveBeenCalledTimes(2);
+    expect(Entry.get).toHaveBeenCalledTimes(2);
   });
 
-  it("still caches a genuinely empty tag (no matching entry IDs)", function (done) {
+  it("still caches a genuinely empty tag (no matching entry IDs)", async function () {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(async function () {
       return {
         entryIDs: [],
@@ -778,15 +750,12 @@ describe("tagged cache", function () {
       return Promise.resolve([]);
     });
 
-    tagged(makeReq(), { locals: {} }, function () {
-      tagged(makeReq(), { locals: {} }, function () {
-        expect(taggedSpy).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await tagged(makeReq(), { locals: {} });
+    await tagged(makeReq(), { locals: {} });
+    expect(taggedSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("does not reuse a cached multi-tag payload when the tag order differs", function (done) {
+  it("does not reuse a cached multi-tag payload when the tag order differs", async function () {
     const taggedSpy = spyOn(Tags, "tagged").and.callFake(
       async function (blogID, tags) {
         const list = Array.isArray(tags) ? tags : [tags];
@@ -806,24 +775,17 @@ describe("tagged cache", function () {
       return Promise.resolve([{ id: "1", title: "Shared" }]);
     });
 
-    tagged(
-      makeReq({ query: { tag: ["foo", "bar"] } }),
-      { locals: {} },
-      function (err, first) {
-        expect(first.tag).toBe("foo + bar");
-        expect(first.prettyTags).toEqual(["foo", "bar"]);
+    const first = await tagged(makeReq({ query: { tag: ["foo", "bar"] } }), {
+      locals: {},
+    });
+    expect(first.tag).toBe("foo + bar");
+    expect(first.prettyTags).toEqual(["foo", "bar"]);
 
-        tagged(
-          makeReq({ query: { tag: ["bar", "foo"] } }),
-          { locals: {} },
-          function (secondErr, second) {
-            expect(second.tag).toBe("bar + foo");
-            expect(second.prettyTags).toEqual(["bar", "foo"]);
-            expect(taggedSpy).toHaveBeenCalledTimes(2);
-            done();
-          }
-        );
-      }
-    );
+    const second = await tagged(makeReq({ query: { tag: ["bar", "foo"] } }), {
+      locals: {},
+    });
+    expect(second.tag).toBe("bar + foo");
+    expect(second.prettyTags).toEqual(["bar", "foo"]);
+    expect(taggedSpy).toHaveBeenCalledTimes(2);
   });
 });

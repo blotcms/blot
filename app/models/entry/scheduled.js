@@ -35,12 +35,7 @@ function setEntry(blogID, path) {
 
 function bumpCacheID(blogID) {
   var Blog = require("models/blog");
-  return new Promise(function (resolve, reject) {
-    Blog.bumpCacheID(blogID, function (err) {
-      if (err) reject(err);
-      else resolve();
-    });
-  });
+  return Blog.bumpCacheID(blogID);
 }
 
 var alarms = alarm(

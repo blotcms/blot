@@ -13,39 +13,33 @@ describe("encode_xml", function () {
     };
   });
 
-  it("replaces relative links with absolute URLs", function (done) {
+  it("replaces relative links with absolute URLs", async function () {
     var result;
     var html = '<a href="/foo"></a>';
     var template = "{{#encode_xml}}" + html + "{{/encode_xml}}";
 
-    encode_xml(this.request, {}, function (err, lambda) {
-      result = mustache.render(template, { encode_xml: lambda });
-      expect(result).toEqual('<a href="http://example.com/foo"></a>');
-      done();
-    });
+    const lambda = await encode_xml(this.request, {});
+    result = mustache.render(template, { encode_xml: lambda });
+    expect(result).toEqual('<a href="http://example.com/foo"></a>');
   });
 
-  it("removes invalid characters", function (done) {
+  it("removes invalid characters", async function () {
     var result;
     var html = "& foo &#xFF08;&#x4FBF;&#x5229;";
     var template = "{{#encode_xml}}" + html + "{{/encode_xml}}";
 
-    encode_xml(this.request, {}, function (err, lambda) {
-      result = mustache.render(template, { encode_xml: lambda });
-      expect(result).toEqual("&amp; foo （便利");
-      done();
-    });
+    const lambda = await encode_xml(this.request, {});
+    result = mustache.render(template, { encode_xml: lambda });
+    expect(result).toEqual("&amp; foo （便利");
   });
 
-  it("removes script tags", function (done) {
+  it("removes script tags", async function () {
     var result;
     var html = "<script>alert('foo');</script><p>Hey</p>";
     var template = "{{#encode_xml}}" + html + "{{/encode_xml}}";
 
-    encode_xml(this.request, {}, function (err, lambda) {
-      result = mustache.render(template, { encode_xml: lambda });
-      expect(result).toEqual("<p>Hey</p>");
-      done();
-    });
+    const lambda = await encode_xml(this.request, {});
+    result = mustache.render(template, { encode_xml: lambda });
+    expect(result).toEqual("<p>Hey</p>");
   });
 });
