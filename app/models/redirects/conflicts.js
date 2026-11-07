@@ -95,8 +95,7 @@ function blotRoute(path) {
   if (path === "/") return "the list of posts on your site";
   if (path === "/search") return "the search page on your site";
   if (path === "/random") return "a link to a random post on your site";
-  if (path === "/layout.css" || path === "/html2canvas.min.js")
-    return "a file it serves on every site";
+  if (path === "/layout.css") return "a file it serves on every site";
   if (path === "/verify/domain-setup") return "checking your domain's setup";
   if (path === "/verify/subscription-duration")
     return "checking your subscription";
