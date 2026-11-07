@@ -18,18 +18,7 @@ function getMetadata(templateID) {
 }
 
 function getFullView(blogID, templateID, viewName, options) {
-  return new Promise((resolve, reject) => {
-    Template.getFullView(
-      blogID,
-      templateID,
-      viewName,
-      options || {},
-      (err, response) => {
-        if (err) reject(err);
-        else resolve(response);
-      }
-    );
-  });
+  return Template.getFullView(blogID, templateID, viewName, options || {});
 }
 
 function searchEntries(blogID, query, options) {

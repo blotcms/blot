@@ -8,12 +8,7 @@ describe("folder", function () {
   require("blog/tests/util/setup")();
 
   function run(context, query) {
-    return new Promise((resolve, reject) => {
-      folder({ blog: context.blog, query: query || {} }, {}, (err, result) => {
-        if (err) return reject(err);
-        resolve(result);
-      });
-    });
+    return folder({ blog: context.blog, query: query || {} }, {});
   }
 
   it("lists files and directories at the root of the blog folder", async function () {

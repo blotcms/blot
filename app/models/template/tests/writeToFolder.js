@@ -3,7 +3,6 @@ var join = require("path").posix.join;
 require("clients");
 
 describe("template", function () {
-  var { promisify } = require("util");
   var writeToFolder = require("../index").writeToFolder;
   var setView = require("../index").setView;
   var setMetadata = require("../index").setMetadata;
@@ -96,9 +95,7 @@ describe("template", function () {
       package3
     );
 
-    var modifiedSlugs = await promisify(removeEnabledFromAllTemplates)(
-      test.blog.id
-    );
+    var modifiedSlugs = await removeEnabledFromAllTemplates(test.blog.id);
 
     // Templates with enabled: true should be disabled
     expect(
@@ -130,7 +127,7 @@ describe("template", function () {
       localEditing: false,
     });
 
-    await promisify(packageAPI.save)(this.template.id, packageMetadata);
+    await packageAPI.save(this.template.id, packageMetadata);
     await writeChangeToFolder(test.blog, staleTemplate, {
       name: "package.json",
     });

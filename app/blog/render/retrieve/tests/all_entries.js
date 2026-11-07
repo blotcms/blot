@@ -188,7 +188,7 @@ describe("all_entries cache", function () {
     };
   }
 
-  it("reuses cached entries for identical cacheIDs", function (done) {
+  it("reuses cached entries for identical cacheIDs", async function () {
     const allEntries = loadAllEntries();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -197,38 +197,24 @@ describe("all_entries cache", function () {
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    allEntries(req, { locals: {} }, function () {
-      allEntries(req, { locals: {} }, function () {
-        expect(Entries.getAll).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await allEntries(req, { locals: {} });
+    await allEntries(req, { locals: {} });
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it("refetches when cacheID changes", function (done) {
+  it("refetches when cacheID changes", async function () {
     const allEntries = loadAllEntries();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
       return Promise.resolve([{ id: "1", title: "A" }]);
     });
 
-    allEntries(
-      makeReq({ id: "blog-1", cacheID: 100 }),
-      { locals: {} },
-      function () {
-        allEntries(
-          makeReq({ id: "blog-1", cacheID: 101 }),
-          { locals: {} },
-          function () {
-            expect(Entries.getAll).toHaveBeenCalledTimes(2);
-            done();
-          }
-        );
-      }
-    );
+    await allEntries(makeReq({ id: "blog-1", cacheID: 100 }), { locals: {} });
+    await allEntries(makeReq({ id: "blog-1", cacheID: 101 }), { locals: {} });
+    expect(Entries.getAll).toHaveBeenCalledTimes(2);
   });
 
-  it("returns isolated copies so caller mutations do not taint cache", function (done) {
+  it("returns isolated copies so caller mutations do not taint cache", async function () {
     const allEntries = loadAllEntries();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -237,17 +223,14 @@ describe("all_entries cache", function () {
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    allEntries(req, { locals: {} }, function (err, first) {
-      first[0].title = "Mutated";
+    const first = await allEntries(req, { locals: {} });
+    first[0].title = "Mutated";
 
-      allEntries(req, { locals: {} }, function (err, second) {
-        expect(second[0].title).toBe("Original");
-        done();
-      });
-    });
+    const second = await allEntries(req, { locals: {} });
+    expect(second[0].title).toBe("Original");
   });
 
-  it("dedupes concurrent misses for the same cacheID into one getAll call", function (done) {
+  it("dedupes concurrent misses for the same cacheID into one getAll call", async function () {
     const allEntries = loadAllEntries();
 
     let resolveGetAll;
@@ -259,23 +242,17 @@ describe("all_entries cache", function () {
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    let doneCount = 0;
-    function onDone() {
-      doneCount++;
-      if (doneCount === 2) {
-        expect(Entries.getAll).toHaveBeenCalledTimes(1);
-        done();
-      }
-    }
-
-    allEntries(req, { locals: {} }, onDone);
-    allEntries(req, { locals: {} }, onDone);
+    const first = allEntries(req, { locals: {} });
+    const second = allEntries(req, { locals: {} });
 
     expect(Entries.getAll).toHaveBeenCalledTimes(1);
     resolveGetAll();
+
+    await Promise.all([first, second]);
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", function (done) {
+  it("stores separate entries per referenced field set so a stripped cache entry can't leak into a view that needs more", async function () {
     const allEntries = loadAllEntries();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -291,20 +268,17 @@ describe("all_entries cache", function () {
       all_entries: { fields: { title: true, html: true } },
     });
 
-    allEntries(titleOnlyReq, { locals: {} }, function (err, entries) {
-      expect(entries[0].html).toBeUndefined();
+    const entries = await allEntries(titleOnlyReq, { locals: {} });
+    expect(entries[0].html).toBeUndefined();
 
-      allEntries(withHtmlReq, { locals: {} }, function (err, entries2) {
-        expect(entries2[0].html).toBe("<p>A body</p>");
-        // The title-only fill never held html, so this view can't be served
-        // from it and has to refetch.
-        expect(Entries.getAll).toHaveBeenCalledTimes(2);
-        done();
-      });
-    });
+    const entries2 = await allEntries(withHtmlReq, { locals: {} });
+    expect(entries2[0].html).toBe("<p>A body</p>");
+    // The title-only fill never held html, so this view can't be served
+    // from it and has to refetch.
+    expect(Entries.getAll).toHaveBeenCalledTimes(2);
   });
 
-  it("serves a title-only view from a catalog cached with html, without leaking html", function (done) {
+  it("serves a title-only view from a catalog cached with html, without leaking html", async function () {
     const allEntries = loadAllEntries();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -320,19 +294,16 @@ describe("all_entries cache", function () {
       all_entries: { fields: { title: true, html: true } },
     });
 
-    allEntries(withHtmlReq, { locals: {} }, function (err, entries) {
-      expect(entries[0].html).toBe("<p>A body</p>");
+    const entries = await allEntries(withHtmlReq, { locals: {} });
+    expect(entries[0].html).toBe("<p>A body</p>");
 
-      allEntries(titleOnlyReq, { locals: {} }, function (err, entries2) {
-        expect(entries2[0].title).toBe("A");
-        expect(entries2[0].html).toBeUndefined();
-        expect(Entries.getAll).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    const entries2 = await allEntries(titleOnlyReq, { locals: {} });
+    expect(entries2[0].title).toBe("A");
+    expect(entries2[0].html).toBeUndefined();
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it("shares the catalog, but not its own cache, with preview requests", function (done) {
+  it("shares the catalog, but not its own cache, with preview requests", async function () {
     const allEntries = loadAllEntries();
 
     spyOn(Entries, "getAll").and.callFake(function (blogID, options) {
@@ -342,15 +313,12 @@ describe("all_entries cache", function () {
     const req = makeReq({ id: "blog-1", cacheID: 100 });
     req.preview = true;
 
-    allEntries(req, { locals: {} }, function () {
-      allEntries(req, { locals: {} }, function () {
-        expect(Entries.getAll).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await allEntries(req, { locals: {} });
+    await allEntries(req, { locals: {} });
+    expect(Entries.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it("does not cache an empty result, so a transient Redis failure isn't mistaken for an empty blog", function (done) {
+  it("does not cache an empty result, so a transient Redis failure isn't mistaken for an empty blog", async function () {
     const allEntries = loadAllEntries();
 
     // Entries.getAll resolves to [] on a failed zRange/mGet rather than
@@ -364,12 +332,9 @@ describe("all_entries cache", function () {
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    allEntries(req, { locals: {} }, function () {
-      allEntries(req, { locals: {} }, function () {
-        expect(Entries.getAll).toHaveBeenCalledTimes(2);
-        done();
-      });
-    });
+    await allEntries(req, { locals: {} });
+    await allEntries(req, { locals: {} });
+    expect(Entries.getAll).toHaveBeenCalledTimes(2);
   });
 });
 

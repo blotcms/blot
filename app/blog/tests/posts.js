@@ -56,18 +56,15 @@ describe("posts", function () {
       };
     }
 
-    it("does not fetch a page of entries when a tag is present", function (done) {
+    it("does not fetch a page of entries when a tag is present", async function () {
       spyOn(entriesModel, "getPage");
 
       const { req, res } = fakeReqRes({ req: { query: { tag: "design" } } });
 
-      postsRetrieve(req, res, function (err) {
-        // No entries with this tag exist, so we expect an empty result
-        // rather than an error, and the untagged code path must not run.
-        expect(err).toBeNull();
-        expect(entriesModel.getPage).not.toHaveBeenCalled();
-        done();
-      });
+      await postsRetrieve(req, res);
+      // No entries with this tag exist, so we expect an empty result
+      // rather than an error, and the untagged code path must not run.
+      expect(entriesModel.getPage).not.toHaveBeenCalled();
     });
 
     it("keeps tag order in the tagged cache key", function () {

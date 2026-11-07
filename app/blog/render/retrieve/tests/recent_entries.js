@@ -8,11 +8,7 @@ describe("recent_entries", function () {
   });
 
   function run(req) {
-    return new Promise((resolve, reject) => {
-      recentEntries(req, {}, (err, result) =>
-        err ? reject(err) : resolve(result)
-      );
-    });
+    return recentEntries(req, {});
   }
 
   it("fetches the full entry list when no field projection metadata is present", async function () {
@@ -71,11 +67,7 @@ describe("recent_entries cache", function () {
   });
 
   function run(req) {
-    return new Promise((resolve, reject) => {
-      recentEntries(req, {}, (err, result) =>
-        err ? reject(err) : resolve(result)
-      );
-    });
+    return recentEntries(req, {});
   }
 
   function makeReq(blog, retrieve) {
@@ -86,64 +78,52 @@ describe("recent_entries cache", function () {
     };
   }
 
-  it("reuses cached entries for identical cacheIDs", function (done) {
+  it("reuses cached entries for identical cacheIDs", async function () {
     spyOn(Entries, "getRecent").and.callFake(function () {
       return Promise.resolve([{ id: "1", title: "A" }]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    recentEntries(req, {}, function () {
-      recentEntries(req, {}, function () {
-        expect(Entries.getRecent).toHaveBeenCalledTimes(1);
-        done();
-      });
-    });
+    await recentEntries(req, {});
+    await recentEntries(req, {});
+    expect(Entries.getRecent).toHaveBeenCalledTimes(1);
   });
 
-  it("refetches when cacheID changes", function (done) {
+  it("refetches when cacheID changes", async function () {
     spyOn(Entries, "getRecent").and.callFake(function () {
       return Promise.resolve([{ id: "1", title: "A" }]);
     });
 
-    recentEntries(makeReq({ id: "blog-1", cacheID: 100 }), {}, function () {
-      recentEntries(makeReq({ id: "blog-1", cacheID: 101 }), {}, function () {
-        expect(Entries.getRecent).toHaveBeenCalledTimes(2);
-        done();
-      });
-    });
+    await recentEntries(makeReq({ id: "blog-1", cacheID: 100 }), {});
+    await recentEntries(makeReq({ id: "blog-1", cacheID: 101 }), {});
+    expect(Entries.getRecent).toHaveBeenCalledTimes(2);
   });
 
-  it("returns isolated copies so caller mutations do not taint cache", function (done) {
+  it("returns isolated copies so caller mutations do not taint cache", async function () {
     spyOn(Entries, "getRecent").and.callFake(function () {
       return Promise.resolve([{ id: "1", title: "Original" }]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    recentEntries(req, {}, function (err, first) {
-      first[0].title = "Mutated";
+    const first = await recentEntries(req, {});
+    first[0].title = "Mutated";
 
-      recentEntries(req, {}, function (err, second) {
-        expect(second[0].title).toBe("Original");
-        done();
-      });
-    });
+    const second = await recentEntries(req, {});
+    expect(second[0].title).toBe("Original");
   });
 
-  it("does not cache an empty result, so a transient Redis failure isn't mistaken for an empty blog", function (done) {
+  it("does not cache an empty result, so a transient Redis failure isn't mistaken for an empty blog", async function () {
     spyOn(Entries, "getRecent").and.callFake(function () {
       return Promise.resolve([]);
     });
 
     const req = makeReq({ id: "blog-1", cacheID: 100 });
 
-    recentEntries(req, {}, function () {
-      recentEntries(req, {}, function () {
-        expect(Entries.getRecent).toHaveBeenCalledTimes(2);
-        done();
-      });
-    });
+    await recentEntries(req, {});
+    await recentEntries(req, {});
+    expect(Entries.getRecent).toHaveBeenCalledTimes(2);
   });
 
   it("still projects heavy fields on a cache hit", async function () {
@@ -201,11 +181,7 @@ describe("recent_entries feed length", function () {
   const cachedRecent = require("models/entries/cachedRecent");
 
   function run(req) {
-    return new Promise((resolve, reject) => {
-      recentEntries(req, {}, (err, result) =>
-        err ? reject(err) : resolve(result)
-      );
-    });
+    return recentEntries(req, {});
   }
 
   function thirty() {

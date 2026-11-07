@@ -9,23 +9,17 @@ var writeToFolder = require("./writeToFolder");
 
 var PACKAGE = "package.json";
 
-// Calls back (err, modifiedSlugs): when some packages couldn't be updated,
-// err is an aggregate error and modifiedSlugs still lists the ones that were.
-function removeEnabledFromAllTemplates(blogID, callback) {
-  run(blogID).then(function (result) {
-    callback(result.err, result.modifiedSlugs);
-  }, callback);
-}
-
-async function run(blogID) {
+// Resolves with modifiedSlugs. When some packages couldn't be updated it
+// rejects with an aggregate error (err.errors), whose err.modifiedSlugs
+// still lists the ones that were.
+async function removeEnabledFromAllTemplates(blogID) {
   var folderName = await determineTemplateFolder(blogID);
   var listing;
 
   try {
     listing = await folder.listNames(blogID, folderName);
   } catch (err) {
-    if (err.code === "ENOENT" || err.code === "ENOTDIR")
-      return { err: null, modifiedSlugs: [] };
+    if (err.code === "ENOENT" || err.code === "ENOTDIR") return [];
     throw err;
   }
 
@@ -101,10 +95,11 @@ async function run(blogID) {
       "Failed to update one or more template packages."
     );
     aggregate.errors = errors;
-    return { err: aggregate, modifiedSlugs: modifiedSlugs };
+    aggregate.modifiedSlugs = modifiedSlugs;
+    throw aggregate;
   }
 
-  return { err: null, modifiedSlugs: modifiedSlugs };
+  return modifiedSlugs;
 }
 
 module.exports = removeEnabledFromAllTemplates;

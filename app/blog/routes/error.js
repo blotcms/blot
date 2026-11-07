@@ -98,12 +98,10 @@ module.exports = function register(blog) {
       status: err.status,
     };
 
-    res.renderView("error.html", next, function (err, output) {
-      if (err) return next(err);
-
+    res.renderViewToString("error.html").then(function (output) {
       res.status(status || 400);
       res.send(output);
-    });
+    }, next);
   });
 
   // There was an issue with renderView

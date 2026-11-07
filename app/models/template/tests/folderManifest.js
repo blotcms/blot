@@ -2,7 +2,6 @@ describe("updateCdnManifest folder files", function () {
   require("./setup")({ createTemplate: true });
 
   const crypto = require("crypto");
-  const { promisify } = require("util");
   const client = require("models/client");
   const Blog = require("models/blog");
   const Template = require("../index");
@@ -363,7 +362,7 @@ describe("updateCdnManifest folder files", function () {
       await this.write({ path: "/a.png", content: "one" });
       await this.setView({ name: "index.html", content: '<img src="/a.png">' });
 
-      const getFullView = promisify(Template.getFullView);
+      const getFullView = Template.getFullView;
       const response = await getFullView(
         "blog_somebodyelse",
         this.template.id,
