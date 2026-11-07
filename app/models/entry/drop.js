@@ -2,7 +2,6 @@ var ensure = require("helper/ensure");
 
 var set = require("./set");
 var get = require("./get");
-var withCallback = require("helper/withCallback");
 var isRedisUnavailableError =
   require("helper/redisUnavailable").isRedisUnavailableError;
 
@@ -67,4 +66,4 @@ async function drop(blogID, path) {
   return await set(blogID, path, sanitize(entry));
 }
 
-module.exports = withCallback(drop);
+module.exports = drop;

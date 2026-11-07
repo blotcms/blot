@@ -1,4 +1,3 @@
-var { promisify } = require("util");
 var withCallback = require("helper/withCallback");
 var Entry = require("models/entry");
 var build = require("build");
@@ -23,5 +22,5 @@ module.exports = withCallback(async function rebuildEntry(blog, entry) {
     delete updated.metadata._sourcePaths;
   }
 
-  return promisify(Entry.set)(blog.id, updated.path || entry.path, updated);
+  return Entry.set(blog.id, updated.path || entry.path, updated);
 });

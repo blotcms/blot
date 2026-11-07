@@ -97,7 +97,7 @@ List keys written by `_assign.js`:
 
 ## Public API
 
-`search` returns a promise when called without a callback (`helper/withCallback`, #2559). `get`, `getByPath` and `getByUrl` are async and take no callback; a callback-style caller uses `withCallback(Entry.get)(…, function (err, entry) {…})`.
+`set`, `drop`, `search`, `get`, `getByPath` and `getByUrl` are async functions that return a promise and take no callback (#2559).
 
 ### `async get(blogID, entryIDs)`
 
@@ -121,7 +121,7 @@ Looks up an entry by its public URL.
 - Resolves the URL to a path via the `blog:{blogID}:url:{url}` Redis key, then delegates to `get`.
 - Resolves to an `Entry` instance or `undefined` if the URL is not claimed. Rejects with the Redis error if the lookup or the read fails, so a caller that caches the result can tell a failed lookup from an unclaimed URL.
 
-### `set(blogID, path, updates, callback)`
+### `set(blogID, path, updates)`
 
 Writes entry data and runs all side-effects. This is the primary write operation.
 
@@ -141,15 +141,15 @@ Writes entry data and runs all side-effects. This is the primary write operation
 14. If a draft, publishes a Redis Pub/Sub notification.
 15. Computes and applies backlink changes to linked entries (recursive `set` calls, one per changed entry).
 
-### `drop(blogID, path, callback)`
+### `drop(blogID, path)`
 
 Marks an entry as deleted.
 
-- Calls `get` to load the current entry. If no entry exists, calls back immediately.
+- Calls `get` to load the current entry. If no entry exists, resolves immediately.
 - Constructs a sanitised object with `deleted: true` and all other content fields blanked.
 - Delegates to `set`, which handles TTL, list removal, dependency cleanup, and backlink removal.
 
-### `search(blogID, query, [options], callback)`
+### `search(blogID, query, [options])`
 
 Performs a case-insensitive substring search across a blog's entries.
 
@@ -160,7 +160,7 @@ Performs a case-insensitive substring search across a blog's entries.
 - For single-term queries, uses `String.includes`. For multi-term queries, all terms must be present.
 - Returns at most 25 results.
 - Enforces an 8-second timeout; returns partial results if the timeout is reached mid-scan.
-- Calls back with `(err, entries)`.
+- Resolves to the entries.
 
 ---
 

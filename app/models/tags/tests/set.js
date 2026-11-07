@@ -1,6 +1,5 @@
 describe("tags.set", function () {
-  const { promisify } = require("util");
-  const set = promisify(require("../set"));
+  const set = require("../set");
   const get = require("../get");
 
   // Create a test user and blog before each spec

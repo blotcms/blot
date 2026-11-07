@@ -1,14 +1,11 @@
 describe("errors", function () {
   const config = require("config");
   const { set } = require("models/redirects");
-  const promisify = require("util").promisify;
-
-  const setRedirects = promisify(set);
 
   require("./util/setup")();
 
   it("redirects when a redirect is set", async function () {
-    await setRedirects(this.blog.id, [{ from: "/redirect", to: "/" }]);
+    await set(this.blog.id, [{ from: "/redirect", to: "/" }]);
 
     const res = await this.get("/redirect", { redirect: "manual" });
     const body = await res.text();

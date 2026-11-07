@@ -2,7 +2,7 @@
 
 Manages per-blog URL redirect rules. Redirect rules are stored in Redis and evaluated at request time by the blog's error-handling middleware to issue HTTP 301 responses before a 404 is returned.
 
-`check`, `conflicts`, `drop`, `list` and `set` now return promises when called without a callback (#2559); `get` is `async get(blogID, from, input)` and always returns a promise.
+`check`, `conflicts`, `drop`, `get`, `list` and `set` are async functions that return a promise and take no callback (#2559).
 
 ## Role in the application
 
@@ -35,15 +35,15 @@ The sorted set preserves the order in which rules were defined, which determines
 
 ## Public API
 
-All callback-style functions follow the Node.js `(err, result)` convention. All functions validate their arguments via `helper/ensure` and throw on type mismatch.
+All functions return a promise, and reject on a Redis error. They validate their arguments via `helper/ensure` and reject on type mismatch.
 
-### `set(blogID, mappings, callback)`
+### `set(blogID, mappings)`
 
 Replaces all redirect rules for the given blog atomically. Executes as a single Redis `MULTI` transaction: deletes all existing keys, then writes the new set.
 
 - `blogID` — string
 - `mappings` — array of `{ from: string, to: string }` objects
-- `callback` — called with `(err)` on completion
+- resolves when the rules are written
 
 Rules are silently dropped if:
 - `from` or `to` is an empty string.
@@ -59,13 +59,13 @@ Fetches the redirect destination stored under `from` for the given blog. Returns
 
 When `from` is a non-regex value, `input` is ignored and the raw stored value is returned. When `from` is a regex and `input` is provided, the destination is produced by applying `input.replace(from, to)`.
 
-### `check(blogID, input, callback)`
+### `check(blogID, input)`
 
 Resolves the redirect destination for an arbitrary request URL.
 
 - `blogID` — string
 - `input` — string; the URL path of the incoming request
-- `callback` — called with `(err, redirect)` where `redirect` is the destination string or `undefined` if no rule matched
+- resolves to the destination string, or `undefined` if no rule matched
 
 Resolution order:
 
@@ -73,20 +73,20 @@ Resolution order:
 2. If no direct match, scans the sorted set with `zScan`, testing each member that is identified as a regex pattern against `input`.
 3. Returns `undefined` if no rule matches.
 
-### `list(blogID, callback)`
+### `list(blogID)`
 
 Returns all redirect rules for the blog in insertion order.
 
 - `blogID` — string
-- `callback` — called with `(err, redirects)` where `redirects` is an array of `{ from, to, index }` objects
+- resolves to an array of `{ from, to, index }` objects
 
-### `drop(blogID, from, callback)`
+### `drop(blogID, from)`
 
 Removes the redirect rule whose source path is `from`.
 
 - `blogID` — string
 - `from` — string
-- `callback` — called with `(err)`; errors are forwarded instead of thrown
+- resolves when the rule is removed
 
 ### `key`
 

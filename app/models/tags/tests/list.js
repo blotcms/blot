@@ -1,6 +1,5 @@
 describe("tags.list", function () {
-  const { promisify } = require("util");
-  const set = promisify(require("../set"));
+  const set = require("../set");
   const list = require("../list");
 
   // Create a test user and blog before each spec
@@ -103,9 +102,8 @@ describe("tags.list", function () {
   });
 });
 
-describe("tags.list without a callback", function () {
-  const { promisify } = require("util");
-  const set = promisify(require("../set"));
+describe("tags.list and tags.popular rejections", function () {
+  const set = require("../set");
   const list = require("../list");
   const popular = require("../popular");
 

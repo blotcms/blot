@@ -32,17 +32,10 @@ const allTagsCache = createRenderCache("allTags", {
   // Coalesce concurrent misses on the same key into one in-flight list call.
   fetchMethod: async (key, staleValue, { context }) => {
     const { blogID, pathPrefix } = context;
-    const tags = await new Promise((resolve, reject) => {
-      // Required here: models/tags requires this module (and specs spy on
-      // list)
-      require("models/tags").list(
-        blogID,
-        { path_prefix: pathPrefix },
-        (err, tags) => {
-          if (err) reject(err);
-          else resolve(tags);
-        }
-      );
+    // Required here: models/tags requires this module (and specs spy on
+    // list)
+    const tags = await require("models/tags").list(blogID, {
+      path_prefix: pathPrefix,
     });
     return prepareCacheValue(compactTags(tags));
   },

@@ -21,12 +21,7 @@ describe("entry.urlDeduplication", function () {
       });
     });
 
-    const result = await new Promise((resolve, reject) => {
-      setUrl(this.blog.id, builtEntry, function (err, urlResult) {
-        if (err) return reject(err);
-        resolve(urlResult);
-      });
-    });
+    const result = await setUrl(this.blog.id, builtEntry);
 
     expect(result.url).toEqual("/conflict-2");
     expect(result.conflictingEntryPath).toEqual("/original.txt");
@@ -92,12 +87,7 @@ describe("entry.urlDeduplication", function () {
 
     expect(builtEntry.path).toEqual("/album");
 
-    const result = await new Promise((resolve, reject) => {
-      setUrl(this.blog.id, builtEntry, function (err, urlResult) {
-        if (err) return reject(err);
-        resolve(urlResult);
-      });
-    });
+    const result = await setUrl(this.blog.id, builtEntry);
 
     expect(result.url).toEqual("/album");
   });
@@ -116,12 +106,7 @@ describe("entry.urlDeduplication", function () {
       });
     });
 
-    const result = await new Promise((resolve, reject) => {
-      setUrl(this.blog.id, builtEntry, function (err, urlResult) {
-        if (err) return reject(err);
-        resolve(urlResult);
-      });
-    });
+    const result = await setUrl(this.blog.id, builtEntry);
 
     expect(result.url).toEqual("/unique");
     expect(result.conflictingEntryPath).toBeNull();

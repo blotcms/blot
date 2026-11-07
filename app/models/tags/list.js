@@ -5,9 +5,8 @@ const {
   filterEntryIDsByPathPrefix,
 } = require("helper/pathPrefix");
 const key = require("./key");
-const withCallback = require("helper/withCallback");
 
-module.exports = withCallback(async function getAll(blogID, options) {
+module.exports = async function getAll(blogID, options) {
   ensure(blogID, "string");
 
   options = options || {};
@@ -76,4 +75,4 @@ module.exports = withCallback(async function getAll(blogID, options) {
   }
 
   return tags;
-});
+};

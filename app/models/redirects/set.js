@@ -3,11 +3,10 @@ var ensure = require("helper/ensure");
 var key = require("./key");
 var util = require("./util");
 var matches = util.matches;
-var withCallback = require("helper/withCallback");
 
 // var drop = require('./drop');
 
-module.exports = withCallback(async function set(blogID, mappings) {
+module.exports = async function set(blogID, mappings) {
   ensure(blogID, "string").and(mappings, "array");
 
   var redirects = key.redirects(blogID);
@@ -50,4 +49,4 @@ module.exports = withCallback(async function set(blogID, mappings) {
   });
 
   await multi.exec();
-});
+};

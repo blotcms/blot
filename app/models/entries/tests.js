@@ -57,30 +57,18 @@ describe("entries", function () {
       const path = "/ttl-entry.txt";
       const key = entryKey(blogID, path);
 
-      await new Promise((resolve, reject) => {
-        Entry.set(blogID, path, buildEntry(path), (err) =>
-          err ? reject(err) : resolve()
-        );
-      });
+      await Entry.set(blogID, path, buildEntry(path));
 
       const ttl = await redis.ttl(key);
       expect(ttl).toBe(-1);
 
-      await new Promise((resolve, reject) => {
-        Entry.set(blogID, path, { deleted: true }, (err) =>
-          err ? reject(err) : resolve()
-        );
-      });
+      await Entry.set(blogID, path, { deleted: true });
 
       const ttlAfterDelete = await redis.ttl(key);
       expect(ttlAfterDelete).toBeGreaterThan(0);
       expect(ttlAfterDelete).toBeLessThanOrEqual(24 * 60 * 60);
 
-      await new Promise((resolve, reject) => {
-        Entry.set(blogID, path, { deleted: false }, (err) =>
-          err ? reject(err) : resolve()
-        );
-      });
+      await Entry.set(blogID, path, { deleted: false });
 
       const ttlAfterRestore = await redis.ttl(key);
       expect(ttlAfterRestore).toBe(-1);
@@ -88,41 +76,30 @@ describe("entries", function () {
   });
 
   describe("scheduled rebuilds", function () {
-    it("clears the scheduled flag when the dateStamp is removed", function (done) {
+    it("clears the scheduled flag when the dateStamp is removed", async function () {
       const blogID = this.blog.id;
       const path = "/scheduled-entry.txt";
       const future = Date.now() + 24 * 60 * 60 * 1000;
 
       const initialEntry = buildEntry(path, { dateStamp: future });
 
-      Entry.set(blogID, path, initialEntry, function (err) {
-        if (err) return done.fail(err);
+      await Entry.set(blogID, path, initialEntry);
 
-        Entry.get(blogID, path)
-          .then(function (stored) {
-            expect(stored.scheduled).toBe(true);
+      const stored = await Entry.get(blogID, path);
+      expect(stored.scheduled).toBe(true);
 
-            const rebuild = Object.assign({}, stored, {
-              metadata: {},
-              dateStampWasRemoved: true,
-            });
-
-            delete rebuild.dateStamp;
-
-            Entry.set(blogID, path, rebuild, function (err) {
-              if (err) return done.fail(err);
-
-              Entry.get(blogID, path)
-                .then(function (updated) {
-                  expect(updated.scheduled).toBe(false);
-                  expect(updated.dateStamp).toBe(updated.created);
-                  done();
-                })
-                .catch(done.fail);
-            });
-          })
-          .catch(done.fail);
+      const rebuild = Object.assign({}, stored, {
+        metadata: {},
+        dateStampWasRemoved: true,
       });
+
+      delete rebuild.dateStamp;
+
+      await Entry.set(blogID, path, rebuild);
+
+      const updated = await Entry.get(blogID, path);
+      expect(updated.scheduled).toBe(false);
+      expect(updated.dateStamp).toBe(updated.created);
     });
   });
 
@@ -154,11 +131,7 @@ describe("entries", function () {
       }
 
       async function setEntry(updates) {
-        await new Promise((resolve, reject) => {
-          Entry.set(blogID, path, updates, (err) =>
-            err ? reject(err) : resolve()
-          );
-        });
+        await Entry.set(blogID, path, updates);
       }
 
       await setEntry(buildEntry(path));
@@ -246,11 +219,7 @@ describe("entries", function () {
     const DAY = 24 * 60 * 60 * 1000;
 
     function setEntry(blogID, path, updates) {
-      return new Promise((resolve, reject) => {
-        Entry.set(blogID, path, updates, (err) =>
-          err ? reject(err) : resolve()
-        );
-      });
+      return Entry.set(blogID, path, updates).then(() => {});
     }
 
     function sweep(blogID) {
@@ -361,11 +330,7 @@ describe("entries", function () {
       const ghostIDs = ["/ghost-entry-1", "/ghost-entry-2"];
       const listKey = `blog:${blogID}:entries`;
 
-      await new Promise((resolve, reject) => {
-        Entry.set(blogID, path, buildEntry(path), (err) =>
-          err ? reject(err) : resolve()
-        );
-      });
+      await Entry.set(blogID, path, buildEntry(path));
 
       await redis.zAdd(
         listKey,
@@ -723,11 +688,7 @@ describe("entries", function () {
   });
 
   it("getAll should resolve the entries, skinny by default", async function () {
-    await new Promise((resolve, reject) =>
-      Entry.set(this.blog.id, "/a.txt", buildEntry("/a.txt"), (err) =>
-        err ? reject(err) : resolve()
-      )
-    );
+    await Entry.set(this.blog.id, "/a.txt", buildEntry("/a.txt"));
 
     const entries = await Entries.getAll(this.blog.id);
 
@@ -768,14 +729,7 @@ describe("entries", function () {
         .zAdd(lexKey, { score: 0, value: "/Blog/existing.txt" })
         .exec();
 
-      await new Promise((resolve, reject) => {
-        Entry.set(
-          blogID,
-          "/Blog/new.txt",
-          buildEntry("/Blog/new.txt"),
-          (err) => (err ? reject(err) : resolve())
-        );
-      });
+      await Entry.set(blogID, "/Blog/new.txt", buildEntry("/Blog/new.txt"));
 
       const ids = await redis.zRange(lexKey, 0, -1);
       expect(ids).toContain("/Blog/existing.txt");
@@ -1126,9 +1080,8 @@ describe("entries", function () {
       });
 
       // Mock Entry.set
-      spyOn(Entry, "set").and.callFake((blogID, path, changes, callback) => {
+      spyOn(Entry, "set").and.callFake(async (blogID, path, changes) => {
         expect(changes).toEqual(jasmine.any(Object));
-        callback();
       });
 
       Entries.resave(this.blog.id, function (err) {

@@ -45,7 +45,9 @@ module.exports = (function () {
 
           // We now need to save every entry so that
           // changes to permalink format take effect.
-          Entry.set(blogID, entry.path, changes, nextEntry);
+          Entry.set(blogID, entry.path, changes).then(function () {
+            nextEntry();
+          }, nextEntry);
         },
         callback
       );

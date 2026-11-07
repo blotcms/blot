@@ -11,7 +11,6 @@ var Key = require("./key").url;
 var model = require("./model");
 var Blog = require("models/blog");
 var get = require("./get");
-var withCallback = require("helper/withCallback");
 var debug = require("debug")("blot:entry:set");
 
 var MIN_SUMMARY_SLUG_WORDS = 3;
@@ -261,5 +260,5 @@ async function setUrl(blogID, entry) {
   throw new Error("Could not find a permalink for " + entry.path);
 }
 
-module.exports = withCallback(setUrl);
+module.exports = setUrl;
 module.exports.Candidates = Candidates;
