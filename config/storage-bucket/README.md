@@ -380,10 +380,18 @@ SafeHop on.
      of them; those keep the plain 1-year header. Errors keep the 5 s of
      "cache error responses". Rollback: switch the rule off.
 
-  The README used to list a rule "Short cache for pending folder images"
-  (Override Cache Time 3600 s and Bypass Perma-Cache on `/folder/v-pending/*`),
-  but the pull zone had no such rule on 7 Nov 2026: a pending image that
-  arrives is cached at the edge for a year, and perma-cached.
+  9. "Short cache for pending folder images": Override Cache Time 60 s and
+     Bypass Perma-Cache on `*://cdn.blot.im/folder/v-pending/*` (and the same
+     for `cdn.blot.site` and `blot-cdn.b-cdn.net`). The build links an image
+     that hasn't synced yet there (`app/build/plugins/folderAssets`), and the
+     rebuild when it arrives moves the post to the image's content-versioned
+     URL, but feed readers and cached pages keep the pending one. Without
+     this rule the image it then serves would be cached for a year, and
+     perma-cached, so a replaced image would stay stale on those copies. The
+     override applies to the 404 before the image arrives too (instead of the
+     5 s of "cache error responses"), so it is 60 s, the minute Node asks for
+     that 404, rather than an hour. Recreated on 7 Nov 2026: the pull zone
+     had lost it.
 
 Large folder files and generated assets (`/_image_cache/`, `/_assets/`, ...)
 requested on a blog host answer with a 302 to this CDN (see
