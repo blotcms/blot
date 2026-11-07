@@ -20,13 +20,9 @@ console.log("Randomizing dates for all entries without date metadata...");
 console.log("Start date: " + limit.format());
 console.log("End date: " + end.format());
 
-function getBlog(identifier) {
-  return new Promise(function (resolve, reject) {
-    get(identifier, function (err, user, blog) {
-      if (err) return reject(err);
-      resolve(blog);
-    });
-  });
+async function getBlog(identifier) {
+  const { blog } = await get(identifier);
+  return blog;
 }
 
 function eachEntry(blogID, doThis) {

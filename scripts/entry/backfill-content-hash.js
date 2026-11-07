@@ -128,16 +128,14 @@ async function processBlog(blog) {
   }
 }
 
-function blogIDs() {
+async function blogIDs() {
   if (!identifier) return Blog.getAllIDs();
 
-  return new Promise((resolve, reject) =>
-    getBlog(identifier, (err, user, blog) =>
-      err || !blog
-        ? reject(err || new Error("No blog: " + identifier))
-        : resolve([blog.id])
-    )
-  );
+  const { blog } = await getBlog(identifier);
+
+  if (!blog) throw new Error("No blog: " + identifier);
+
+  return [blog.id];
 }
 
 async function main() {

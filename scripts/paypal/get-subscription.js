@@ -73,7 +73,7 @@ module.exports = main;
 if (require.main === module) {
   if (process.argv[2]) {
     (async () => {
-      const user = await promisify(get)(process.argv[2]);
+      const { user } = await get(process.argv[2]);
       console.log(await main(user));
     })().catch((err) => {
       console.error(err);

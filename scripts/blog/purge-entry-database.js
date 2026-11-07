@@ -77,11 +77,7 @@ async function main(blog) {
 }
 
 async function cli() {
-  const blog = await new Promise((resolve, reject) => {
-    getBlog(process.argv[2], (err, user, blog) =>
-      err ? reject(err) : resolve(blog)
-    );
-  });
+  const { blog } = await getBlog(process.argv[2]);
 
   try {
     await main(blog);

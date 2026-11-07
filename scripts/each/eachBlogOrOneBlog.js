@@ -18,11 +18,13 @@ module.exports = async function eachBlogOrOneBlog(processBlog, options = {}) {
   if (identifier) {
     // Process a single blog. getBlog owns identifier resolution, including
     // shortened IDs; in contrast, each/blog.js's -o option requires full IDs.
-    const blog = await new Promise((resolve) => {
-      getBlog(identifier, (err, _user, found) =>
-        resolve(err ? undefined : found)
-      );
-    });
+    let blog;
+
+    try {
+      ({ blog } = await getBlog(identifier));
+    } catch (err) {
+      // Reported as "No blog" below, as before
+    }
 
     if (!blog) throw new Error(`No blog: ${identifier}`);
 

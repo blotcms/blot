@@ -33,19 +33,22 @@ async function ignoreErrors(lookup) {
 }
 
 // Resolves { user, blog, entry }, all undefined when nothing matched
-function lookupEntry(identifier) {
-  return new Promise((resolve) =>
-    getEntry(identifier, (err, user, blog, entry) =>
-      resolve({ user, blog, entry })
-    )
-  );
+async function lookupEntry(identifier) {
+  try {
+    return await getEntry(identifier);
+  } catch (err) {
+    return { user: undefined, blog: undefined, entry: undefined };
+  }
 }
 
 // Resolves { user, blog }, both undefined when nothing matched
-function lookupBlog(identifier) {
-  return new Promise((resolve) =>
-    getBlog(identifier, (err, user, blog) => resolve({ user, blog }))
-  );
+async function lookupBlog(identifier) {
+  try {
+    const { user, blog } = await getBlog(identifier);
+    return { user, blog };
+  } catch (err) {
+    return { user: undefined, blog: undefined };
+  }
 }
 
 async function main() {
@@ -153,9 +156,7 @@ async function showUser(user) {
   console.log("Subscription: " + subscriptionMessage);
   console.log("Blogs: " + user.blogs);
   // An error from access was never checked here, so the url is just undefined
-  const url = await new Promise((resolve) =>
-    access(user.uid, (err, url) => resolve(url))
-  );
+  const url = await ignoreErrors(() => access(user.uid));
   console.log("Dashboard:", colors.yellow(url));
   console.log();
 }
