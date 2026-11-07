@@ -1,20 +1,19 @@
-describe("formJSON ", function () {
+describe("tempDir", function () {
   var tempDir = require("../tempDir");
   var fs = require("fs-extra");
-  var { promisify } = require("util");
 
-  it("works", async function () {
-    var isInTempDir = await promisify(tempDir)(__dirname);
-    expect(isInTempDir).toEqual(false);
+  it("returns the temporary directory", function () {
+    expect(tempDir()).toMatch(/\/$/);
   });
 
-  // tempDir reports a missing path with a plain string, not an Error, so this
-  // stays in callback form
-  it("works also", function (done) {
-    tempDir(__dirname + "/foo.jpg", function (err, isInTempDir) {
-      expect(isInTempDir).toEqual(undefined);
-      done();
-    });
+  it("reports a path outside the temporary directory", async function () {
+    expect(await tempDir.isInside(__dirname)).toEqual(false);
+  });
+
+  it("rejects a path that does not exist", async function () {
+    await expectAsync(
+      tempDir.isInside(__dirname + "/foo.jpg")
+    ).toBeRejectedWithError(/does not point to a file/);
   });
 
   it("checks a valid dir", async function () {
@@ -22,9 +21,7 @@ describe("formJSON ", function () {
 
     await fs.mkdir(validDir);
 
-    var isInTempDir = await promisify(tempDir)(validDir);
-
-    expect(isInTempDir).toEqual(true);
+    expect(await tempDir.isInside(validDir)).toEqual(true);
 
     await fs.rmdir(validDir);
   });
