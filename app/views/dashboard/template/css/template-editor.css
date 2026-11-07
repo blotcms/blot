@@ -418,38 +418,10 @@ h2.template-heading:not(:first-child) {
   color: var(--medium-text-color);
 }
 
-.template-overview__create {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  height: var(--control-height);
-  padding: 0 var(--space-4);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
-  color: var(--text-color);
-  font-size: var(--text-md);
-  font-weight: var(--weight-medium);
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background-color 150ms ease;
-}
-
+/* Create template is a small primary button (css/buttons.css); its plus */
 .template-overview__create svg {
   width: 14px;
   height: 14px;
-}
-
-.template-overview__create:hover {
-  background: var(--hover-background-color);
-}
-
-.template-overview__create:active {
-  background: var(--active-background-color);
-}
-
-.template-overview__create:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 2px;
 }
 
 .template-overview__empty,

@@ -104,11 +104,6 @@ html {
   margin: 0;
 }
 
-.account-dashboard__logout button.logout {
-  margin: 0;
-  top: 0;
-}
-
 .account-dashboard__details {
   overflow: hidden;
   border: 1px solid var(--border-color);
@@ -230,10 +225,6 @@ a.dashboard-support__option:focus-visible {
 
 .create-site-button {
   flex: 0 0 auto;
-  margin: 0;
-}
-
-.create-site-button button {
   margin: 0;
 }
 
@@ -860,54 +851,6 @@ body.is-resizing-dashboard-sidebar .dashboard-sidebar {
 
 .health-issue .center {
   color: var(--danger-color);
-}
-
-button.logout {
-  cursor: pointer;
-  background: none;
-  font-size: var(--text-base);
-  font-weight: var(--weight-regular);
-  border: none;
-  padding: var(--space-2) var(--space-3);
-  margin: 0 0 var(--space-5);
-  position: relative;
-  top:6px;
-  color: var(--medium-text-color);
-  border-radius: var(--radius-sm);
-  transition: background-color 150ms ease, color 150ms ease;
-}
-
-button.logout:hover {
-  background-color: var(--hover-background-color);
-  color: var(--accent-color);
-}
-
-button.logout:active {
-  background-color: var(--active-background-color);
-  color: var(--accent-active-color);
-}
-
-form.create-site-button button {
-  border: none;
-  cursor: pointer;
-  font-size: var(--text-md);
-  margin-top: var(--space-5);
-  display: inline-block;
-  border-radius: var(--radius-md);
-  background-color: var(--accent-color);
-  color: var(--background-color);
-  padding: var(--space-2) var(--space-3);
-  font-weight: var(--weight-semibold);
-  margin:0;
-  transition: background-color 150ms ease;
-}
-
-form.create-site-button button:hover {
-  background-color: var(--accent-hover-color);
-}
-
-form.create-site-button button:active {
-  background-color: var(--accent-active-color);
 }
 
 span.folder,
