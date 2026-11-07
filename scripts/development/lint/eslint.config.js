@@ -94,7 +94,7 @@ module.exports = [
       "app/clients/google-drive/serviceAccount/**/*.js",
       "app/clients/google-drive/sync/**/*.js",
       "app/clients/icloud/routes/site/middleware/**/*.js",
-      "app/clients/icloud/sync/util/**/*.js",
+      "app/clients/icloud/sync/**/*.js",
       "app/clients/icloud/util/**/*.js",
       "app/dashboard/account/util/**/*.js",
       "app/dashboard/site/save/**/*.js",
@@ -119,7 +119,16 @@ module.exports = [
       "app/models/user/create.js",
       "app/models/user/validate/**/*.js",
       "app/site/**/*.js",
-      "app/sync/update/preview/**/*.js",
+      // app/sync/index.js, establishSyncLock.js and messenger.js keep the
+      // sync(blogID, (err, folder, done) => ...) contract for now
+      "app/sync/fix/**/*.js",
+      "app/sync/hold.js",
+      "app/sync/lock-diagnostics-state.js",
+      "app/sync/lock-diagnostics.js",
+      "app/sync/lock.js",
+      "app/sync/rebuild.js",
+      "app/sync/renames.js",
+      "app/sync/update/**/*.js",
       "scripts/deploy/**/*.js",
       "scripts/development/lint/**/*.js",
       "scripts/folder-links/**/*.js",
@@ -134,6 +143,8 @@ module.exports = [
       // Scripts that run in the visitor's browser, where .catch((err) => ...)
       // is not a callback API of ours
       "app/build/plugins/*/public.js",
+      // isDraft and injectScript still take callbacks
+      "app/sync/update/drafts.js",
     ],
     plugins: { promise },
     rules: { "promise/prefer-await-to-callbacks": "error" },
