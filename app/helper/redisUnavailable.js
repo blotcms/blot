@@ -143,7 +143,8 @@ function redisUnavailableHandler(err, req, res, next) {
 
   res.status(503);
   res.set({ "Retry-After": "60", "Cache-Control": "no-store" });
-  res.sendFile(PAGE, function (sendErr) {
+  // dotfiles: Express 5 would refuse a path with a dot directory in it
+  res.sendFile(PAGE, { dotfiles: "allow" }, function (sendErr) {
     if (sendErr && !res.headersSent)
       res.type("text").send("Service unavailable");
   });

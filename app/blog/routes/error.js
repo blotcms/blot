@@ -8,6 +8,10 @@ const { checkRedirect } = require("../lib/models");
 
 const VIEW_DIR = path.resolve(__dirname + "/../../views");
 
+// Express 5 refuses an absolute path with a dot directory anywhere in it
+// (such as a checkout inside .claude/worktrees) unless told to allow them
+const ALLOW_DOTFILES = { dotfiles: "allow" };
+
 module.exports = function register(blog) {
   // Redirects
   blog.use(async function (req, res, next) {
@@ -68,9 +72,9 @@ module.exports = function register(blog) {
       res.status(404);
 
       if (req.hostname.endsWith(config.host)) {
-        res.sendFile(VIEW_DIR + "/error-no-blog.html");
+        res.sendFile(VIEW_DIR + "/error-no-blog.html", ALLOW_DOTFILES);
       } else {
-        res.sendFile(VIEW_DIR + "/error-almost-connected.html");
+        res.sendFile(VIEW_DIR + "/error-almost-connected.html", ALLOW_DOTFILES);
       }
 
       return;
@@ -106,6 +110,6 @@ module.exports = function register(blog) {
     if (res.headersSent) return res.end();
 
     res.status(400);
-    res.sendFile(VIEW_DIR + "/error-bad-render.html");
+    res.sendFile(VIEW_DIR + "/error-bad-render.html", ALLOW_DOTFILES);
   });
 };

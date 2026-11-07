@@ -37,6 +37,11 @@ site.disable("x-powered-by");
 // address NGINX appended. Keep this in sync with server.js.
 site.set("trust proxy", 1);
 
+// Express 5 parses query strings with the "simple" parser by default, which
+// leaves ?a[b]=c as the key "a[b]". Keep the "extended" parser (qs) Express 4
+// used: blog templates see req.query as request.query.
+site.set("query parser", "extended");
+
 // Register the engine we will use to
 // render the views.
 site.set("view engine", "html");

@@ -37,19 +37,27 @@ var DRAFT_DIRECTORY = "/drafts/";
 
 var cheerio = require("cheerio");
 
-var streamRoute = routePrefix + streamPrefix + "/*";
-var viewRoute = routePrefix + viewPrefix + "/*";
+// The routes end in an optional wildcard, which Express 5 needs named:
+// /draft/view/{*splat} matches /draft/view/ and everything below it
+var WILDCARD = "{*splat}";
+var streamRoute = routePrefix + streamPrefix + "/" + WILDCARD;
+var viewRoute = routePrefix + viewPrefix + "/" + WILDCARD;
 
 module.exports = (function () {
   function viewURL(handle, filePath) {
     return (
-      "http://" + handle + "." + config.host + viewRoute.slice(0, -2) + filePath
+      "http://" +
+      handle +
+      "." +
+      config.host +
+      viewRoute.slice(0, -(WILDCARD.length + 1)) +
+      filePath
     );
   }
 
   function getPath(url, routeName) {
     // matches the wildcard param, no trailing slash
-    var filePath = url.slice(routeName.length - 2);
+    var filePath = url.slice(routeName.length - (WILDCARD.length + 1));
 
     // Recode the path
     filePath = decodeURIComponent(filePath);
@@ -71,7 +79,8 @@ module.exports = (function () {
         try {
           scriptTag = Mustache.render(scriptTag, {
             streamURL:
-              streamRoute.slice(0, -1) + encodeURIComponent(filePath.slice(1)),
+              streamRoute.slice(0, -WILDCARD.length) +
+              encodeURIComponent(filePath.slice(1)),
           });
           $("head").append(scriptTag);
         } catch (e) {}

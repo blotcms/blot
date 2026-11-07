@@ -42,9 +42,11 @@ site.post(
 site.get("/", require("./load/scheduled"));
 
 // Load the files and folders inside a blog's folder
-site.get(["/", "/folder/:path(*)"], require("./folder"));
+const folderPaths = require("./folder/paths");
+
+site.get(["/", folderPaths.folder], require("./folder"));
 site.post("/folder/upload", require("./folder/upload"));
-site.post("/folder/remove/:path(*)", require("./folder/remove"));
+site.post(folderPaths.remove, require("./folder/remove"));
 
 site.get("/folder", (req, res) => {
   // redirect to client settings page
@@ -74,7 +76,7 @@ site.use("/settings/links", load.plugins, require("./link-format"));
 site.get("/status", sse);
 
 // allow the download of files directly
-site.use("/folder-download/:path(*)", require("./folder/download"));
+site.use(folderPaths.download, require("./folder/download"));
 
 site.get("/", require("dashboard/site/load/client"), (req, res) => {
   res.render("dashboard/site", {
