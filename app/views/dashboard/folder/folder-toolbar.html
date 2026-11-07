@@ -1,19 +1,6 @@
-<!-- The folder box's top row: "Folder", then where it syncs from, a pill
-     that shows or hides its sync settings (/sync/<client>, which renders the
-     settings above the files), then the filters and search -->
+<!-- The folder box's second row: the filters on the left, search on the
+     right -->
 <div class="folder-toolbar">
-  <span class="folder-toolbar__label">Folder</span>
-  {{#blog.client}}
-  {{#isSyncTab}}<a class="folder-sync-toggle is-open" href="{{{dashboardBase}}}" aria-current="page">{{/isSyncTab}}{{^isSyncTab}}<a class="folder-sync-toggle" href="{{{dashboardBase}}}/sync/{{blog.client}}">{{/isSyncTab}}
-    <img class="client-icon" alt="" width="14" height="14" src="{{#cdn}}/images/sync/{{blog.client}}.svg{{/cdn}}">
-    <span>Syncs from {{client.display_name}}</span>
-    {{#isSyncTab}}<span class="visually-hidden">, hide sync settings</span>{{/isSyncTab}}{{^isSyncTab}}<span class="visually-hidden">, show sync settings</span>{{/isSyncTab}}
-    <span class="folder-sync-toggle__chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg></span>
-  </a>
-  {{/blog.client}}
-  {{^blog.client}}
-  <a class="btn btn-primary btn-sm" href="{{{dashboardBase}}}/sync">Sync this folder</a>
-  {{/blog.client}}
   {{> folder-filters}}
   {{> site-dashboard-views}}
 </div>

@@ -1,0 +1,18 @@
+<!-- The folder box's first row, like a row of the summary card above it:
+     "Folder", where it syncs from, and a chevron. The whole row opens the
+     sync settings under it (/sync/<client>, the site's page with them open)
+     and closes them again. With no folder yet, a button to connect one. -->
+{{#blog.client}}
+{{#isSyncTab}}<a class="site-summary__row folder-source is-open" href="{{{dashboardBase}}}" aria-current="page">{{/isSyncTab}}{{^isSyncTab}}<a class="site-summary__row folder-source" href="{{{dashboardBase}}}/sync/{{blog.client}}">{{/isSyncTab}}
+  <span class="site-summary__label">Folder</span><span class="visually-hidden">: </span>
+  <span class="site-summary__value folder-source__value"><img class="client-icon" alt="" width="14" height="14" src="{{#cdn}}/images/sync/{{blog.client}}.svg{{/cdn}}"> {{client.display_name}}</span>
+  {{#isSyncTab}}<span class="visually-hidden">, hide sync settings</span>{{/isSyncTab}}{{^isSyncTab}}<span class="visually-hidden">, show sync settings</span>{{/isSyncTab}}
+  <span class="site-summary__chevron folder-source__chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="14" height="14"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+</a>
+{{/blog.client}}
+{{^blog.client}}
+<div class="site-summary__row folder-source folder-source--connect">
+  <span class="site-summary__label">Folder</span>
+  <span class="site-summary__value"><a class="btn btn-primary btn-sm" href="{{{dashboardBase}}}/sync">Sync this folder</a></span>
+</div>
+{{/blog.client}}

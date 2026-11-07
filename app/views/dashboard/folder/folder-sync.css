@@ -1,38 +1,43 @@
 /*
-  The top row of the overview's file box (folder/folder-toolbar.html):
-  "Folder", where it syncs from, then the filters and search.
+  The top of the overview's file box: two rows.
 
-  .folder-toolbar         the row
-  .folder-sync-toggle     "Syncs from Git", a pill that shows or hides the
-                          folder's sync settings: a link to /sync/<client>,
-                          which is the site's page with the settings open
-                          (.folder-sync-panel) above the files, and back
+  .folder-source          the first row (folder/folder-source.html), like a
+                          row of the summary card above: "Folder", where it
+                          syncs from, and a chevron. The whole row opens the
+                          sync settings under it (/sync/<client>, the
+                          site's page with .folder-sync-panel open) and
+                          closes them again
+  .folder-toolbar         the second row (folder/folder-toolbar.html): the
+                          filters on the left, search on the right
   .folder-filters         Files, Posts, Pages, Drafts, Scheduled: Files is
                           the folder itself and the others filter it to its
                           entries (their own pages); one is always selected
-  .folder-sync-issue      a problem with the folder, under the row
+  .folder-sync-issue      a problem with the folder, under the rows
                           (folder/folder-sync-issue.html)
 */
 
-/* No padding above: the folder box's own gives the same space as the
-   row's below. Its left edge lines up with the summary card's labels. */
+/* The filters start at the summary's labels' edge; search ends where the
+   table's last column does */
 .folder-toolbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2) var(--space-3);
-  padding: 0 calc(var(--space-1) + var(--space-2)) var(--space-2)
+  padding: var(--space-2) calc(var(--space-1) + var(--space-2)) var(--space-2)
     var(--space-4);
+}
+
+.folder-toolbar .site-dashboard-search {
+  margin-left: auto;
 }
 
 /* The filters (folder/folder-filters.html): one segmented control, like a
    Finder view switcher. The chosen segment is raised; the others are plain
-   text on the control's tray. Right-aligned beside the search box. */
+   text on the control's tray. On the left, search on the right. */
 .folder-filters {
   display: inline-flex;
   align-items: stretch;
   gap: 2px;
-  margin-left: auto;
   padding: 2px;
   border-radius: var(--radius-md);
   background: var(--surface-muted-color);
@@ -70,18 +75,12 @@
   outline-offset: 1px;
 }
 
-.folder-filters + .site-dashboard-search,
-.folder-filters-menu + .site-dashboard-search {
-  margin-left: 0;
-}
-
 /* On narrow screens the filters are a dropdown named after the current
-   choice (folder/folder-filters.html renders both), right-aligned on the
-   folder's row. The panel is a shared menu (css/menu.css). */
+   choice (folder/folder-filters.html renders both). The panel is a shared
+   menu (css/menu.css). */
 .folder-filters-menu {
   display: none;
   position: relative;
-  margin-left: auto;
 }
 
 .folder-filters-menu__trigger {
@@ -175,61 +174,41 @@
   box-shadow: 0 0 4px 1px var(--indicator-amber-glow);
 }
 
-/* "Folder", as the summary card above labels its rows: its size and width,
-   lined up under them */
-.folder-toolbar__label {
-  flex: 0 0 5.5em;
-  color: var(--medium-text-color);
-  font-size: var(--text-sm);
+/* The first row: a summary card row (site/site-summary.css) flush with the
+   box's top and sides, ruled off below. Tinted, its chevron turned, while
+   the sync settings are open under it. */
+.folder-source {
+  margin-top: calc(var(--space-2) * -1);
+  border-bottom: 1px solid var(--border-color);
+  border-radius: calc(var(--radius-lg) - 1px) calc(var(--radius-lg) - 1px) 0 0;
 }
 
-/* Where the folder syncs from: a small pill that shows or hides its sync
-   settings, with a chevron that turns when they're open */
-.folder-sync-toggle {
-  display: inline-flex;
-  flex: 0 0 auto;
-  align-items: center;
-  gap: var(--space-2);
-  min-height: 26px;
-  padding: 0 var(--space-2) 0 var(--space-3);
-  border-radius: var(--radius-pill);
-  background: var(--surface-muted-color);
-  color: var(--text-color);
-  font-size: var(--text-xs);
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background-color 150ms ease;
+/* Plain text like the summary's values, so the baselines line up; the
+   client's icon sits on the text */
+.folder-source__value .client-icon {
+  margin-right: var(--space-1);
+  vertical-align: -2px;
 }
 
-.folder-sync-toggle:hover,
-.folder-sync-toggle.is-open {
-  background: var(--surface-strong-color);
-}
-
-.folder-sync-toggle:active {
-  background: var(--border-strong-color);
-}
-
-.folder-sync-toggle:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 1px;
-}
-
-.folder-sync-toggle__chevron {
-  display: inline-flex;
-  color: var(--medium-text-color);
+.folder-source__chevron svg {
   transition: transform 150ms ease;
 }
 
-.folder-sync-toggle.is-open .folder-sync-toggle__chevron {
+.folder-source.is-open {
+  background: var(--surface-muted-color);
+}
+
+.folder-source.is-open .folder-source__chevron svg {
   transform: rotate(180deg);
 }
 
-/* On phones the row keeps the pill, the filters' dropdown and search */
-@media (max-width: 600px) {
-  .folder-toolbar__label {
-    display: none;
-  }
+/* No folder yet: the label, then the button in the value's place */
+.folder-source--connect {
+  align-items: center;
+}
+
+.folder-source--connect:hover {
+  background: none;
 }
 
 /* A sync subpage's box (resync, disconnect, ...): the row, then the page */
@@ -241,21 +220,22 @@
   background: var(--background-color);
 }
 
-/* The sync settings, open under the row and above the files: ruled off
-   above, and below by the table's header (its cells have their own top
-   border), so the two meet without a gap. Their rows run edge to edge like
-   the table's, at the summary card's size: a label column, then the
-   value. */
+/* The sync settings, open under the first row, which rules them off
+   above, and above the filters, ruled off below. Their rows run edge to
+   edge like the table's, at the summary card's size: a label column, then
+   the value. */
 .folder-sync-panel {
-  --folder-sync-inset: calc(var(--space-4) + var(--space-2));
+  /* The summary card's inset, so the labels share its left edge */
+  --folder-sync-inset: var(--space-4);
   padding: 0 var(--folder-sync-inset);
-  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   background: var(--surface-muted-color);
 }
 
 .folder-box--sync .folder-sync-panel {
   padding-top: var(--space-4);
   padding-bottom: var(--space-4);
+  border-bottom: 0;
 }
 
 .folder-sync-panel .line {
