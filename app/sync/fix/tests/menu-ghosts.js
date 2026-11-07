@@ -34,12 +34,11 @@ describe("sync/fix/menu-ghosts", function () {
     });
     // what is stored, before Fix() edits blog.menu in place
     var stored = JSON.parse(JSON.stringify(blog.menu));
-    spyOn(Blog, "get").and.callFake(function (by, callback) {
-      callback(null, { id: blog.id, menu: stored });
+    spyOn(Blog, "get").and.callFake(async function (by) {
+      return { id: blog.id, menu: stored };
     });
-    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+    spyOn(Blog, "set").and.callFake(async function (blogID, updates) {
       expect(updates.menu).toEqual([]);
-      callback(null);
     });
 
     fixMenuGhosts(blog, function (err, report) {
@@ -90,10 +89,10 @@ describe("sync/fix/menu-ghosts", function () {
     });
     // what is stored, before Fix() edits blog.menu in place
     var stored = JSON.parse(JSON.stringify(blog.menu));
-    spyOn(Blog, "get").and.callFake(function (by, callback) {
-      callback(null, { id: blog.id, menu: stored });
+    spyOn(Blog, "get").and.callFake(async function (by) {
+      return { id: blog.id, menu: stored };
     });
-    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+    spyOn(Blog, "set").and.callFake(async function (blogID, updates) {
       expect(updates.menu).toEqual([
         {
           id: "/foo",
@@ -102,7 +101,6 @@ describe("sync/fix/menu-ghosts", function () {
           metadata: { old: false },
         },
       ]);
-      callback(null);
     });
 
     fixMenuGhosts(blog, function (err, report) {
@@ -132,12 +130,11 @@ describe("sync/fix/menu-ghosts", function () {
     });
     // what is stored, before Fix() edits blog.menu in place
     var stored = JSON.parse(JSON.stringify(blog.menu));
-    spyOn(Blog, "get").and.callFake(function (by, callback) {
-      callback(null, { id: blog.id, menu: stored });
+    spyOn(Blog, "get").and.callFake(async function (by) {
+      return { id: blog.id, menu: stored };
     });
-    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+    spyOn(Blog, "set").and.callFake(async function (blogID, updates) {
       expect(updates.menu).toEqual([first]);
-      callback(null);
     });
 
     fixMenuGhosts(blog, function (err, report) {
@@ -158,11 +155,11 @@ describe("sync/fix/menu-ghosts", function () {
     });
     // what is stored, before Fix() edits blog.menu in place
     var stored = JSON.parse(JSON.stringify(blog.menu));
-    spyOn(Blog, "get").and.callFake(function (by, callback) {
-      callback(null, { id: blog.id, menu: stored });
+    spyOn(Blog, "get").and.callFake(async function (by) {
+      return { id: blog.id, menu: stored };
     });
-    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
-      callback(setError);
+    spyOn(Blog, "set").and.callFake(async function (blogID, updates) {
+      throw setError;
     });
 
     fixMenuGhosts(blog, function (err) {
@@ -188,12 +185,11 @@ describe("sync/fix/menu-ghosts", function () {
       });
     });
     // By the time the fix writes, the menu has gained an item
-    spyOn(Blog, "get").and.callFake(function (by, callback) {
-      callback(null, { id: blog.id, menu: [ghost, kept, added] });
+    spyOn(Blog, "get").and.callFake(async function (by) {
+      return { id: blog.id, menu: [ghost, kept, added] };
     });
-    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+    spyOn(Blog, "set").and.callFake(async function (blogID, updates) {
       expect(updates.menu).toEqual([kept, added]);
-      callback(null);
     });
 
     fixMenuGhosts(blog, function (err, report) {
@@ -211,8 +207,8 @@ describe("sync/fix/menu-ghosts", function () {
     spyOn(Entry, "get").and.callFake(function (blogID, id) {
       return Promise.resolve({ id: "/gone", deleted: true });
     });
-    spyOn(Blog, "get").and.callFake(function (by, callback) {
-      callback(null, { id: blog.id, menu: [] });
+    spyOn(Blog, "get").and.callFake(async function (by) {
+      return { id: blog.id, menu: [] };
     });
     spyOn(Blog, "set");
 
@@ -242,12 +238,11 @@ describe("sync/fix/menu-ghosts", function () {
         );
       });
     });
-    spyOn(Blog, "get").and.callFake(function (by, callback) {
-      callback(null, { id: blog.id, menu: stored });
+    spyOn(Blog, "get").and.callFake(async function (by) {
+      return { id: blog.id, menu: stored };
     });
-    spyOn(Blog, "set").and.callFake(function (blogID, updates, callback) {
+    spyOn(Blog, "set").and.callFake(async function (blogID, updates) {
       expect(updates.menu).toEqual([first]);
-      callback(null);
     });
 
     fixMenuGhosts(blog, function (err, report) {
@@ -276,8 +271,8 @@ describe("sync/fix/menu-ghosts", function () {
       });
     });
     // the kept item has been removed by the time we write
-    spyOn(Blog, "get").and.callFake(function (by, callback) {
-      callback(null, { id: blog.id, menu: [second] });
+    spyOn(Blog, "get").and.callFake(async function (by) {
+      return { id: blog.id, menu: [second] };
     });
     spyOn(Blog, "set");
 
@@ -286,5 +281,23 @@ describe("sync/fix/menu-ghosts", function () {
       expect(Blog.set).not.toHaveBeenCalled();
       done();
     });
+  });
+
+  it("returns a promise when called without a callback", async function () {
+    var item = { id: "/foo", label: "Foo", url: "/foo", metadata: {} };
+    var blog = { id: "blog-id", menu: [item] };
+
+    spyOn(Entry, "get").and.callFake(async function () {
+      return { id: "/foo", title: "Bar", url: "/foo", metadata: {} };
+    });
+    spyOn(Blog, "get").and.callFake(async function () {
+      return { id: blog.id, menu: [{ id: "/foo", label: "Foo" }] };
+    });
+    spyOn(Blog, "set").and.callFake(async function () {});
+
+    var report = await fixMenuGhosts(blog);
+
+    expect(report).toEqual([["Changed label of", item]]);
+    expect(Blog.set).toHaveBeenCalled();
   });
 });

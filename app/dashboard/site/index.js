@@ -331,9 +331,11 @@ site.get(
 );
 
 // Load the files and folders inside a blog's folder
-site.get("/folder/:path(*)", load.client, require("./folder"));
+const folderPaths = require("./folder/paths");
+
+site.get(folderPaths.folder, load.client, require("./folder"));
 site.post("/folder/upload", require("./folder/upload"));
-site.post("/folder/remove/:path(*)", require("./folder/remove"));
+site.post(folderPaths.remove, require("./folder/remove"));
 
 site.get("/folder", (req, res) => {
   // Keep the old root folder URL pointed at the combined Folder view.
@@ -375,7 +377,7 @@ site.get("/sync-status", (req, res) => {
 });
 
 // allow the download of files directly
-site.use("/folder-download/:path(*)", require("./folder/download"));
+site.use(folderPaths.download, require("./folder/download"));
 
 site.use("/settings", (req, res, next) => {
   res.locals.breadcrumbs.add("Settings", "settings");

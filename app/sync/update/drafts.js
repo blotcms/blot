@@ -10,7 +10,7 @@ var draftContainer = __dirname + "/preview/wrapper.html";
 
 var ensure = require("helper/ensure");
 var storage = require("storage/folder");
-var callbackify = require("util").callbackify;
+var withCallback = require("helper/withCallback");
 
 var routePrefix = "/draft";
 var viewPrefix = "/view";
@@ -37,19 +37,27 @@ var DRAFT_DIRECTORY = "/drafts/";
 
 var cheerio = require("cheerio");
 
-var streamRoute = routePrefix + streamPrefix + "/*";
-var viewRoute = routePrefix + viewPrefix + "/*";
+// The routes end in an optional wildcard, which Express 5 needs named:
+// /draft/view/{*splat} matches /draft/view/ and everything below it
+var WILDCARD = "{*splat}";
+var streamRoute = routePrefix + streamPrefix + "/" + WILDCARD;
+var viewRoute = routePrefix + viewPrefix + "/" + WILDCARD;
 
 module.exports = (function () {
   function viewURL(handle, filePath) {
     return (
-      "http://" + handle + "." + config.host + viewRoute.slice(0, -2) + filePath
+      "http://" +
+      handle +
+      "." +
+      config.host +
+      viewRoute.slice(0, -(WILDCARD.length + 1)) +
+      filePath
     );
   }
 
   function getPath(url, routeName) {
     // matches the wildcard param, no trailing slash
-    var filePath = url.slice(routeName.length - 2);
+    var filePath = url.slice(routeName.length - (WILDCARD.length + 1));
 
     // Recode the path
     filePath = decodeURIComponent(filePath);
@@ -71,7 +79,8 @@ module.exports = (function () {
         try {
           scriptTag = Mustache.render(scriptTag, {
             streamURL:
-              streamRoute.slice(0, -1) + encodeURIComponent(filePath.slice(1)),
+              streamRoute.slice(0, -WILDCARD.length) +
+              encodeURIComponent(filePath.slice(1)),
           });
           $("head").append(scriptTag);
         } catch (e) {}
@@ -81,27 +90,21 @@ module.exports = (function () {
     });
   }
 
-  function previewFile(handle, path, callback) {
-    ensure(handle, "string").and(path, "string").and(callback, "function");
+  async function previewFile(handle, path) {
+    ensure(handle, "string").and(path, "string");
 
-    fs.readFile(draftContainer, "utf-8", function (err, contents) {
-      if (err || !contents) return callback(err || "No contents");
+    var contents = await fs.readFile(draftContainer, "utf-8");
 
-      var draftURL = viewURL(handle, path);
+    if (!contents) throw "No contents";
 
-      var view = {
-        draftURL: draftURL,
-        title: basename(path).split("[draft]").join("").trim(),
-      };
+    var draftURL = viewURL(handle, path);
 
-      try {
-        contents = render(contents, view);
-      } catch (e) {
-        return callback(e);
-      }
+    var view = {
+      draftURL: draftURL,
+      title: basename(path).split("[draft]").join("").trim(),
+    };
 
-      return callback(err, contents);
-    });
+    return render(contents, view);
   }
 
   function previewPath(filePath) {
@@ -116,91 +119,47 @@ module.exports = (function () {
     return filePath;
   }
 
-  function isDraft(blog_id, path, callback) {
-    var err = null;
-    var is_draft = false;
+  async function isDraft(blog_id, path) {
     var name = basename(path) || "";
     var has_prefix = name.slice(0, DRAFT_PREFIX.length) === DRAFT_PREFIX;
     var is_outside_draft_directory =
       path.toLowerCase().indexOf(DRAFT_DIRECTORY) === -1;
 
-    if (has_prefix) {
-      is_draft = true;
-      // console.log(path, is_draft, 'is a draft because it has the draft prefix');
-      return callback(err, is_draft);
-    }
+    if (has_prefix) return true;
 
-    if (is_outside_draft_directory) {
-      is_draft = false;
-      // console.log(path, is_draft, 'is not a draft because it is outside draft directory');
-      return callback(err, is_draft);
-    }
+    if (is_outside_draft_directory) return false;
 
-    isPreview(blog_id, path, function (err, is_preview) {
-      if (err) return callback(err);
-
-      // if the file is inside a draft directory but not itself
-      // a preview file then it must be a draft.
-      if (is_preview) {
-        is_draft = false;
-      } else {
-        is_draft = true;
-      }
-
-      // console.log(path, is_draft, 'is draft?');
-      callback(err, is_draft);
-    });
+    // if the file is inside a draft directory but not itself
+    // a preview file then it must be a draft.
+    return !(await isPreview(blog_id, path));
   }
 
-  function isPreview(blog_id, path, callback) {
-    var err = null;
-    var is_preview = false;
+  async function isPreview(blog_id, path) {
     var name = basename(path) || "";
     var extension = extname(path) || "";
 
     // Preview files are always HTML
-    if (extension !== ".html") {
-      is_preview = false;
-      // console.log(path, is_preview, 'is not a preview file because it is not HTML');
-      return callback(err, is_preview);
-    }
+    if (extension !== ".html") return false;
 
     // Legacy preview files end in .preview.html
-    if (name.slice(-PREVIEW_APPENDIX.length) === PREVIEW_APPENDIX) {
-      is_preview = true;
-      // console.log(path, is_preview, 'is a preview file because it has the preview appendix');
-      return callback(err, is_preview);
-    }
+    if (name.slice(-PREVIEW_APPENDIX.length) === PREVIEW_APPENDIX) return true;
 
     // Legacy preview files might start with [preview]
-    if (name.slice(0, PREVIEW_PREFIX.length) === PREVIEW_PREFIX) {
-      is_preview = true;
-      // console.log(path, is_preview, 'is a preview file because it has the preview prefix');
-      return callback(err, is_preview);
-    }
+    if (name.slice(0, PREVIEW_PREFIX.length) === PREVIEW_PREFIX) return true;
 
-    callbackify(storage.read)(blog_id, path, function (err, buffer) {
-      if (err) return callback(err);
+    var buffer = await storage.read(blog_id, path);
+    var contents = buffer.toString("utf-8");
 
-      var contents = buffer.toString("utf-8");
-
-      if (contents.indexOf(PREVIEW_META_TAG) > -1) {
-        // console.log(path, is_preview, 'is a preview file because it contains the preview tag');
-        is_preview = true;
-      }
-
-      // console.log(path, is_preview, 'is a preview file?');
-      callback(err, is_preview);
-    });
+    return contents.indexOf(PREVIEW_META_TAG) > -1;
   }
 
   return {
     getPath: getPath,
     viewURL: viewURL,
     injectScript: injectScript,
-    isDraft: isDraft,
-    isPreview: isPreview,
-    previewFile: previewFile,
+    isDraft: withCallback(isDraft),
+    isPreview: withCallback(isPreview),
+    previewFile: withCallback(previewFile),
     previewPath: previewPath,
     streamRoute: streamRoute,
     viewRoute: viewRoute,

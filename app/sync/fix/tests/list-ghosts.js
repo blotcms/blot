@@ -55,10 +55,9 @@ describe("sync/fix/list-ghosts", function () {
       return Promise.resolve(undefined);
     });
 
-    spyOn(Entry, "set").and.callFake(function (_blogID, id, entry, callback) {
+    spyOn(Entry, "set").and.callFake(async function (_blogID, id, entry) {
       expect(id).toBe("moved-id");
       expect(entry.id).toBe("moved-id");
-      callback(null);
     });
 
     fixListGhosts({ id: "blog-id" }, function (err, report) {
@@ -118,8 +117,8 @@ describe("sync/fix/list-ghosts", function () {
     });
 
     var setEntryError = new Error("set entry failed");
-    spyOn(Entry, "set").and.callFake(function (_blogID, id, entry, callback) {
-      callback(setEntryError);
+    spyOn(Entry, "set").and.callFake(async function (_blogID, id, entry) {
+      throw setEntryError;
     });
 
     fixListGhosts({ id: "blog-id" }, function (err) {
@@ -166,8 +165,8 @@ describe("sync/fix/list-ghosts", function () {
     });
 
     var setEntryError = new Error("set entry failed");
-    spyOn(Entry, "set").and.callFake(function (_blogID, id, entry, callback) {
-      callback(setEntryError);
+    spyOn(Entry, "set").and.callFake(async function (_blogID, id, entry) {
+      throw setEntryError;
     });
 
     fixListGhosts({ id: "blog-id" }, function (err) {

@@ -1,4 +1,3 @@
-var async = require("async");
 var Entry = require("models/entry");
 var withCallback = require("helper/withCallback");
 var client = require("models/client");
@@ -28,7 +27,7 @@ var NO_LONGER_VALID_ERRORS = [
 // just changed or removed, and to mark any template which
 // links to it for a CDN manifest update at the end of the sync.
 
-module.exports = function (blogID, path, callback) {
+module.exports = withCallback(async function rebuildDependents(blogID, path) {
   const log = function () {
     console.log.apply(null, [
       clfdate(),
@@ -38,83 +37,53 @@ module.exports = function (blogID, path, callback) {
       ...arguments,
     ]);
   };
-  Blog.get({ id: blogID }, function (err, blog) {
-    if (err || !blog) return callback(err || new Error("No blog"));
-    (async function () {
-      try {
-        // Dependents are stored under a lowercased key so a file which
-        // arrives with different casing than the link that missed it still
-        // matches.
-        const dependent_paths = await client.sMembers(
-          dependentsKey(blogID, path)
-        );
 
-        async.eachSeries(
-          dependent_paths,
-          function (dependent_path, next) {
-            // A failed read is the same as no entry
-            withCallback(Entry.get)(
-              blogID,
-              dependent_path,
-              function (err, entry) {
-                if (!entry) {
-                  log("No entry for dependent_path:", dependent_path);
-                  return next();
-                }
+  const blog = await Blog.get({ id: blogID });
 
-                // Folder posts are rebuilt through their source folder, see
-                // rebuildEntry.
-                rebuildEntry(blog, entry, function (err) {
-                  if (err) {
-                    // The dependent's own source file is gone, usually deleted
-                    // in the same batch as this file. Dropping it below is the
-                    // whole fix, so don't report it as an error.
-                    if (isMissingFile(err)) {
-                      log("Dependent no longer exists:", dependent_path);
-                    } else {
-                      log(
-                        "Error rebuilding dependent_path:",
-                        dependent_path,
-                        err
-                      );
-                    }
+  if (!blog) throw new Error("No blog");
 
-                    if (shouldDropDependent(err)) {
-                      dropDependent(blogID, dependent_path, function (dropErr) {
-                        if (dropErr)
-                          log(
-                            "Error dropping invalid dependent:",
-                            dependent_path,
-                            dropErr
-                          );
-                        next();
-                      });
-                    } else {
-                      next();
-                    }
+  // Dependents are stored under a lowercased key so a file which
+  // arrives with different casing than the link that missed it still
+  // matches.
+  const dependent_paths = await client.sMembers(dependentsKey(blogID, path));
 
-                    return;
-                  }
+  for (const dependent_path of dependent_paths) {
+    // A failed read is the same as no entry
+    const entry = await Entry.get(blogID, dependent_path).catch(
+      () => undefined
+    );
 
-                  next();
-                });
-              }
-            );
-          },
-          function (err) {
-            if (err) return callback(err);
+    if (!entry) {
+      log("No entry for dependent_path:", dependent_path);
+      continue;
+    }
 
-            markTemplateDependents(blog.id, path, log).then(function () {
-              callback();
-            });
-          }
-        );
-      } catch (err) {
-        callback(err);
+    // Folder posts are rebuilt through their source folder, see
+    // rebuildEntry.
+    try {
+      await rebuildEntry(blog, entry);
+    } catch (err) {
+      // The dependent's own source file is gone, usually deleted
+      // in the same batch as this file. Dropping it below is the
+      // whole fix, so don't report it as an error.
+      if (isMissingFile(err)) {
+        log("Dependent no longer exists:", dependent_path);
+      } else {
+        log("Error rebuilding dependent_path:", dependent_path, err);
       }
-    })();
-  });
-};
+
+      if (shouldDropDependent(err)) {
+        try {
+          await dropDependent(blogID, dependent_path);
+        } catch (dropErr) {
+          log("Error dropping invalid dependent:", dependent_path, dropErr);
+        }
+      }
+    }
+  }
+
+  await markTemplateDependents(blog.id, path, log);
+});
 
 // Templates link to files in the blog's folder with {{#cdn}}. Their CDN
 // manifest holds each file's versioned URL, so when the file changes, appears
@@ -155,26 +124,22 @@ function shouldDropDependent(err) {
   return false;
 }
 
-function dropDependent(blogID, path, callback) {
+async function dropDependent(blogID, path) {
   // A failed read is the same as no entry
-  withCallback(Entry.get)(blogID, path, function (getErr, entry) {
-    if (!entry) return callback();
+  const entry = await Entry.get(blogID, path).catch(() => undefined);
 
-    Entry.drop(blogID, path, function (err) {
-      if (err) return callback(err);
+  if (!entry) return;
 
-      // Same guard as set.js: never remove a filesystem preview for a draft
-      // folder post outside /drafts/, where its path maps to a bare
-      // "/album.html" that could be the user's real sibling source file.
-      if (
-        entry.draft &&
-        !isHidden(path) &&
-        !isUnsafeFolderPostPreview(path, entry.html)
-      ) {
-        Preview.remove(blogID, path, callback);
-      } else {
-        callback();
-      }
-    });
-  });
+  await Entry.drop(blogID, path);
+
+  // Same guard as set.js: never remove a filesystem preview for a draft
+  // folder post outside /drafts/, where its path maps to a bare
+  // "/album.html" that could be the user's real sibling source file.
+  if (
+    entry.draft &&
+    !isHidden(path) &&
+    !isUnsafeFolderPostPreview(path, entry.html)
+  ) {
+    await Preview.remove(blogID, path);
+  }
 }

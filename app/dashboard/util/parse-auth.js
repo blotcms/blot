@@ -1,4 +1,4 @@
-const express = require("express");
+const bodyParser = require("body-parser");
 
 // Auth forms only contain a handful of short fields. Keep these requests
 // separate from the dashboard's larger parser, which is needed for uploads
@@ -12,7 +12,8 @@ function isAuthFormPath(path) {
   });
 }
 
-const parseAuth = express.urlencoded({
+// body-parser 1, as parse.js: req.body stays {} when there is no form body
+const parseAuth = bodyParser.urlencoded({
   extended: false,
   limit: "4kb",
   parameterLimit: 10,

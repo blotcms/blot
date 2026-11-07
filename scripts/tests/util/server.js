@@ -16,6 +16,7 @@ module.exports = function (router) {
     // Move the fetch function definition to a beforeEach hook
     // so it has access to the latest this.Cookie value
     const app = Express();
+    app.set("query parser", "extended"); // as app/server.js
 
     app.use((req, res, next) => {
       req.headers["host"] = req.headers["x-forwarded-host"];

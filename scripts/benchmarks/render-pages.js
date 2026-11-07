@@ -121,6 +121,7 @@ async function serve() {
     next();
   });
   app.set("trust proxy", true);
+  app.set("query parser", "extended"); // as app/server.js
   app.set("etag", false);
   app.use(require("blog"));
   return new Promise((resolve) => {

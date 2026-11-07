@@ -34,6 +34,11 @@ console.log(
 // req.ip is the address NGINX appended, which a client cannot spoof.
 server.set("trust proxy", 1);
 
+// Express 5 parses query strings with the "simple" parser by default, which
+// leaves ?a[b]=c as the key "a[b]". Keep the "extended" parser (qs) Express 4
+// used: blog templates see req.query as request.query.
+server.set("query parser", "extended");
+
 // Docker's HEALTHCHECK and the deploy script request localhost/health to see
 // whether the process is serving requests. This must come before the blog
 // middleware, which looks up the request's host in Redis (there is no blog

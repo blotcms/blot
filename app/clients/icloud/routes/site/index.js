@@ -1,4 +1,6 @@
 const express = require("express");
+// body-parser 1, which Express 4 shipped: req.body stays {} when not parsed
+const bodyParser = require("body-parser");
 const config = require("config"); // For accessing configuration values
 const email = require("helper/email");
 const notificationCap = require("../../util/notificationCap");
@@ -11,9 +13,9 @@ const site = new express.Router();
 
 site.use(require("./middleware/authorize"));
 
-site.use(express.json());
+site.use(bodyParser.json());
 
-site.use(express.raw({ type: "application/octet-stream", limit })); // For handling binary data
+site.use(bodyParser.raw({ type: "application/octet-stream", limit })); // For handling binary data
 
 // Ping endpoint
 // Shared across processes (the count is in Redis). It resets after a day,
