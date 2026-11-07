@@ -949,6 +949,35 @@ describe("git store manifest", function () {
         expect(store.stats.lists).toBe(1);
       });
 
+      for (const [what, hinted] of [
+        ["the hint", true],
+        ["a LIST, with no hint", false],
+      ]) {
+        it(
+          "walks past a damaged next manifest to a removal's tombstone after it, by " +
+            what,
+          async function () {
+            await other.put(manifestKey(4), Buffer.from("{ not json"));
+            const tombstone = { ...manifest.removed(chain[3]), seq: 5 };
+            await other.putIfAbsent(
+              manifestKey(5),
+              manifest.serialize(tombstone)
+            );
+            if (hinted) await hint(5);
+            else await store.delete(LATEST_KEY);
+            expect(await manifest.read(store, { clock })).toEqual(tombstone);
+          }
+        );
+      }
+
+      it("fails on a damaged next manifest that is the newest", async function () {
+        await other.put(manifestKey(4), Buffer.from("{ not json"));
+        await hint(4);
+        expect(await fails(manifest.read(store, { clock }))).toEqual(
+          jasmine.any(CorruptError)
+        );
+      });
+
       it("keeps only the manifest it returns, never one it fetched on the way", async function () {
         // The newest kept is what the next read asks after, so it must be one
         // the store showed to be the newest: a read that fails part way

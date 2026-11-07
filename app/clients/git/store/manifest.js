@@ -395,6 +395,11 @@ function newestKept(store) {
 // deletes in order, so a K + 1 missing now is not a hole the sweep left. So
 // what the walk fetches on the way is not kept; read() keeps the manifest it
 // returns, and swap() the one it created.
+//
+// A K + 1 that is there but damaged (not a manifest, or too large) is still
+// there, so the walk goes on past it: a removal puts a tombstone after a
+// damaged manifest (remove.js), and that is what must be found. Only if the
+// damaged one turns out to be the newest does read() fail on it.
 async function walkFromHint(store, now) {
   let keptSeq = newestKept(store);
   let after = null;
@@ -402,8 +407,9 @@ async function walkFromHint(store, now) {
     try {
       after = await load(store, keptSeq + 1, now, { keep: false });
     } catch (err) {
-      if (!(err instanceof NotFoundError)) throw err;
-      return { seq: keptSeq };
+      if (err instanceof NotFoundError) return { seq: keptSeq };
+      if (!(err instanceof CorruptError || err instanceof TooLargeError))
+        throw err;
     }
     keptSeq++;
   }
@@ -415,7 +421,10 @@ async function walkFromHint(store, now) {
 
   if (hint.seq === null) return null;
   if (keptSeq !== null && hint.seq <= keptSeq && !afterKept)
-    return { seq: keptSeq, loading: Promise.resolve({ found: after }) };
+    return {
+      seq: keptSeq,
+      loading: after ? Promise.resolve({ found: after }) : null,
+    };
 
   // A hint behind a seq known to be there is looked past
   let seq = keptSeq !== null && hint.seq <= keptSeq ? keptSeq + 1 : hint.seq;
