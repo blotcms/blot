@@ -120,18 +120,17 @@ Subscription.route("/billing-interval")
           return next(new Error("No subscription"));
         }
 
-        User.set(req.user.uid, { subscription: subscription }, function (err) {
-          if (err) {
-            return next(err);
-          }
-
-          email.BILLING_INTERVAL(req.user.uid);
-          res.message(
-            req.baseUrl,
-            "You are now billed once a " +
-              (subscription.plan.interval === "month" ? "month" : "year")
-          );
-        });
+        User.set(req.user.uid, { subscription: subscription }).then(
+          function () {
+            email.BILLING_INTERVAL(req.user.uid);
+            res.message(
+              req.baseUrl,
+              "You are now billed once a " +
+                (subscription.plan.interval === "month" ? "month" : "year")
+            );
+          },
+          next
+        );
       }
     );
   });
@@ -316,7 +315,9 @@ function cancelStripeSubscription(req, res, next) {
       if (!subscription) return next(new Error("No subscription"));
 
       req.cancelledStripe = true;
-      User.set(req.user.uid, { subscription: subscription }, next);
+      User.set(req.user.uid, { subscription: subscription }).then(function () {
+        next();
+      }, next);
     }
   );
 }
@@ -344,7 +345,12 @@ function recreateStripeSubscription(req, res, next) {
             return next(err || new Error("No subscription"));
           }
 
-          User.set(req.user.uid, { subscription: subscription }, next);
+          User.set(req.user.uid, { subscription: subscription }).then(
+            function () {
+              next();
+            },
+            next
+          );
         }
       );
     }
@@ -366,7 +372,12 @@ function createStripeSubscription(req, res, next) {
     function (err, customer) {
       if (err) return next(err);
 
-      User.set(req.user.uid, { subscription: customer.subscription }, next);
+      User.set(req.user.uid, { subscription: customer.subscription }).then(
+        function () {
+          next();
+        },
+        next
+      );
     }
   );
 }
@@ -386,11 +397,9 @@ function retrieveSubscription(req, res, next) {
 
       if (!subscription) return next(new Error("No subscription"));
 
-      User.set(req.user.uid, { subscription: subscription }, function (err) {
-        if (err) return next(err);
-
+      User.set(req.user.uid, { subscription: subscription }).then(function () {
         next();
-      });
+      }, next);
     }
   );
 }
@@ -410,7 +419,9 @@ function restartStripeSubscription(req, res, next) {
         return next(new Error("No subscription"));
       }
 
-      User.set(req.user.uid, { subscription: subscription }, next);
+      User.set(req.user.uid, { subscription: subscription }).then(function () {
+        next();
+      }, next);
     }
   );
 }

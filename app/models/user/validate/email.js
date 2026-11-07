@@ -1,9 +1,9 @@
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var getByEmail = require("../getByEmail");
 var { emailIsTooLong } = require("../auth-limits");
 
-module.exports = withCallback(async function validateEmail(user, email) {
+module.exports = promiseOnly(async function validateEmail(user, email) {
   ensure(user, "object").and(email, "string");
 
   // Normalize the email, case sensitivity confuses users

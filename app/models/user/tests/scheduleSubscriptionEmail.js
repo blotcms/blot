@@ -116,11 +116,7 @@ describe("scheduleSubscriptionEmail", function () {
     });
 
     function setUser(uid, updates) {
-      return new Promise(function (resolve, reject) {
-        User.set(uid, updates, function (err) {
-          err ? reject(err) : resolve();
-        });
-      });
+      return User.set(uid, updates);
     }
 
     function mine(spec) {

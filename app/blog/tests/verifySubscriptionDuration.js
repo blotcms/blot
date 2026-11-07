@@ -1,7 +1,6 @@
-const { promisify } = require("util");
 const User = require("models/user");
 
-const setUser = promisify(User.set);
+const setUser = User.set;
 
 describe("verify-subscription-duration", function () {
   require("./util/setup")();

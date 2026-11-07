@@ -22,16 +22,7 @@ Email.route("/")
         return next(new Error("Email address is too long"));
       }
 
-      const changes = await new Promise(function (resolve, reject) {
-        User.set(
-          req.user.uid,
-          { email: req.body.email },
-          function (err, changes) {
-            if (err) return reject(err);
-            resolve(changes);
-          }
-        );
-      });
+      const changes = await User.set(req.user.uid, { email: req.body.email });
 
       if (changes.length) {
         res.message("Saved your new email address");

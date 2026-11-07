@@ -14,11 +14,6 @@ async function deleteUserAccount(user) {
 }
 
 module.exports = async function processSubscriptionLifecycle() {
-  // These are still callback-only, so they are adapted here rather than when
-  // the file loads (the models require each other)
-  var disableUser = promisify(User.disable);
-  var overdueFor = promisify(removal.overdueFor);
-
   var disabled = 0;
   var deleted = 0;
   var usersToRemove = [];
@@ -70,7 +65,7 @@ module.exports = async function processSubscriptionLifecycle() {
 
         if (user.isDisabled) return;
 
-        await disableUser(user);
+        await User.disable(user);
 
         disabled += 1;
 
@@ -89,7 +84,7 @@ module.exports = async function processSubscriptionLifecycle() {
       );
 
       if (!user.isDisabled) {
-        await disableUser(user);
+        await User.disable(user);
         disabled += 1;
         // This user skipped disabled_grace (e.g. the job failed to reach
         // them during that window), so this is the first time they're
@@ -105,7 +100,7 @@ module.exports = async function processSubscriptionLifecycle() {
     if (!details.cancelled || !details.periodEnded) return;
 
     if (!user.isDisabled) {
-      await disableUser(user);
+      await User.disable(user);
       disabled += 1;
       // PayPal stays CANCELLED through the end of the paid period, so the
       // cancellation webhook does not close the account. Email when this
@@ -127,7 +122,7 @@ module.exports = async function processSubscriptionLifecycle() {
     var overdue;
 
     try {
-      overdue = await overdueFor(user);
+      overdue = await removal.overdueFor(user);
     } catch (err) {
       // A Stripe hiccup for one unpaid user shouldn't stop the whole job
       // (or the removal email); they'll be picked up on the next run.

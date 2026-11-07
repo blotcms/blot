@@ -33,13 +33,8 @@ function forEachUser(fn) {
   });
 }
 
-function setUserSubscription(uid, subscription) {
-  return new Promise(function (resolve, reject) {
-    User.set(uid, { subscription: subscription }, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+async function setUserSubscription(uid, subscription) {
+  await User.set(uid, { subscription: subscription });
 }
 
 async function main(user) {

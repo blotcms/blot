@@ -1,10 +1,10 @@
 var getById = require("./getById");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var client = require("models/client");
 var key = require("./key");
 
-module.exports = withCallback(async function remove(uid) {
+module.exports = promiseOnly(async function remove(uid) {
   ensure(uid, "string");
 
   var user = await getById(uid);

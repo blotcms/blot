@@ -28,8 +28,8 @@ async function main() {
   console.log("Subscription for ", from);
   console.log(oldSubscription);
 
-  await promisify(User.set)(newUser.uid, newSubscription);
-  await promisify(User.disable)(oldUser, oldSubscription);
+  await User.set(newUser.uid, newSubscription);
+  await User.disable(oldUser, oldSubscription);
 }
 
 main().then(

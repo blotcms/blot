@@ -56,7 +56,7 @@ async function main(user) {
     return;
   }
 
-  await promisify(User.set)(user.uid, { paypal });
+  await User.set(user.uid, { paypal });
   console.log(
     colors.green(
       "User:",

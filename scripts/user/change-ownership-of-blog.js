@@ -23,13 +23,8 @@ function findBlog(identifier) {
   });
 }
 
-function setBlogs(uid, blogs) {
-  return new Promise(function (resolve, reject) {
-    User.set(uid, { blogs: blogs }, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+async function setBlogs(uid, blogs) {
+  await User.set(uid, { blogs: blogs });
 }
 
 async function main() {

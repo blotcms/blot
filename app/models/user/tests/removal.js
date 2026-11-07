@@ -1,7 +1,6 @@
 describe("removal", function () {
   var removal = require("../removal");
   var subscriptionLifecycle = require("../subscriptionLifecycle");
-  var promisify = require("util").promisify;
 
   var ONE_MONTH_MS = subscriptionLifecycle.ONE_MONTH_MS;
   var now = Date.now();
@@ -105,7 +104,7 @@ describe("removal", function () {
         },
       };
 
-      var overdue = await promisify(removal.overdueFor)(user);
+      var overdue = await removal.overdueFor(user);
       expect(overdue.overdue).toBe(false);
     });
   });
