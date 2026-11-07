@@ -11,7 +11,6 @@ const fetch = require("node-fetch");
 const notifyAdminIfResyncFoundChanges = require("./notifyResyncFoundChanges");
 const syncReport = require("clients/util/syncReport");
 
-const { promisify } = require("util");
 const RESYNC_REFUSALS = [
   "DROPBOX_TRANSFER_INCOMPLETE",
   "GOOGLE_DRIVE_FOLDER_MISSING",
@@ -169,7 +168,7 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
       summary = await res.locals.client.resync(
         req.blog.id,
         folder.status,
-        promisify(folder.update)
+        folder.update
       );
     } catch (err) {
       console.log("ERROR:", err);

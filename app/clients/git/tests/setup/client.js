@@ -301,15 +301,23 @@ Client.prototype.read = function (file) {
   return fs.readFile(this.path(file));
 };
 
-// Stages everything (new, changed and removed files) and commits it
+// Stages everything (new, changed and removed files) and commits it. With
+// options.date (a Date) the commit is dated then, not now.
 Client.prototype.commit = async function (message, options) {
   options = options || {};
+
+  var env = {};
+
+  if (options.date) {
+    env.GIT_AUTHOR_DATE = env.GIT_COMMITTER_DATE = options.date.toISOString();
+  }
 
   await this.git(["add", "--all"]);
   await this.git(
     ["commit", "--quiet", "--message", message || "Commit"].concat(
       options.allowEmpty ? ["--allow-empty"] : []
-    )
+    ),
+    { env: env }
   );
 };
 

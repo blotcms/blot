@@ -24,10 +24,13 @@ describe("git client protocol", function () {
     await this.local.expectSynced();
   });
 
-  // Makes a number of (empty) commits one after the other
-  async function commitMany(client, prefix, total) {
+  // Makes a number of (empty) commits one after the other, dated an hour from
+  // now if future is true
+  async function commitMany(client, prefix, total, future) {
+    var date = future ? new Date(Date.now() + 60 * 60 * 1000) : undefined;
+
     for (var i = 0; i < total; i++) {
-      await client.commit(prefix + " " + i, { allowEmpty: true });
+      await client.commit(prefix + " " + i, { allowEmpty: true, date: date });
     }
   }
 
@@ -124,8 +127,13 @@ describe("git client protocol", function () {
       });
 
       // Many commits on each side which the other does not have, so that the
-      // client lists far more than a kilobyte of commits it has
-      await commitMany(other, "ours", 120);
+      // client lists far more than a kilobyte of commits it has. Git offers
+      // its commits newest first, so these are dated after the one they share
+      // with the server: when they and that one share a second, git offers it
+      // among its first few, the server has it, and the whole negotiation
+      // fits in one request which can come out under the 1024 bytes git
+      // gzips from.
+      await commitMany(other, "ours", 120, true);
       await commitMany(this.local, "theirs", 120);
       await this.local.push();
 

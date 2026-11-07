@@ -46,13 +46,12 @@ describe("update when Redis is unavailable", function () {
     });
   }
 
-  // Resolves to the error update passed to its callback, or undefined
+  // Resolves to the error update rejected with, or undefined
   function update(syncFolder, path) {
-    return new Promise(function (resolve) {
-      syncFolder.update(path, function (err) {
-        resolve(err);
-      });
-    });
+    return syncFolder.update(path).then(
+      () => undefined,
+      (err) => err
+    );
   }
 
   function checkEntry(check, spec) {

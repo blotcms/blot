@@ -6,7 +6,6 @@ const DIR = require("helper/rootDir") + "/app/templates/folders";
 const folder = require("storage/folder");
 const hashFile = require("helper/hashFile");
 const sync = require("sync");
-const { promisify } = require("util");
 const fix = require("sync/fix");
 const lock = require("helper/lock");
 const syncReport = require("clients/util/syncReport");
@@ -113,7 +112,7 @@ async function applyChanges(blog, changes) {
     sync(blog.id, async function (err, folder, done) {
       if (err) return reject(err);
 
-      const update = promisify(folder.update);
+      const update = folder.update;
 
       try {
         // Update only modified and added files

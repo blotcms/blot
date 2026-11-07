@@ -51,7 +51,7 @@ describe("dropbox setup abort subscriber", function () {
       exports: function (_blogID, worker) {
         const folder = {
           status: jasmine.createSpy("status"),
-          update: (path, callback) => callback && callback(),
+          update: async () => {},
         };
         const done = jasmine.createSpy("done").and.callFake(function (err, cb) {
           if (typeof cb === "function") cb(err);
@@ -121,7 +121,7 @@ describe("dropbox setup abort subscriber", function () {
       exports: function (_blogID, worker) {
         const folder = {
           status: jasmine.createSpy("status"),
-          update: (path, callback) => callback && callback(),
+          update: async () => {},
         };
         const done = jasmine.createSpy("done").and.callFake(function (err, cb) {
           if (typeof cb === "function") cb(err);

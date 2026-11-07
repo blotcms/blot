@@ -287,10 +287,9 @@ describe("sync cacheID", function () {
     sync(blogID, function (err, folder, done) {
       if (err) return callback(err);
       storage.write(blogID, "/a.txt", "Hello").then(function () {
-        folder.update("/a.txt", function (err) {
-          if (err) return callback(err);
+        folder.update("/a.txt").then(function () {
           done(null, callback);
-        });
+        }, callback);
       }, callback);
     });
   }
@@ -334,12 +333,11 @@ describe("sync cacheID", function () {
     sync(blogID, function (err, folder, done) {
       if (err) return callback(err);
       storage.write(blogID, "/a.txt", Buffer.from(contents)).then(function () {
-        folder.update("/a.txt", function (err, result) {
-          if (err) return callback(err);
+        folder.update("/a.txt").then(function (result) {
           done(null, function (err) {
             callback(err, result);
           });
-        });
+        }, callback);
       }, callback);
     });
   }
@@ -426,15 +424,36 @@ describe("sync cacheID", function () {
       storage
         .write(blogID, "/_public/style.css", Buffer.from("a{}"))
         .then(function () {
-          folder.update("/_public/style.css", function (err) {
-            if (err) return testDone.fail(err);
+          folder.update("/_public/style.css").then(function () {
             done(null, function (err) {
               if (err) return testDone.fail(err);
               expect(Blog.bumpCacheID).toHaveBeenCalled();
               testDone();
             });
-          });
+          }, testDone.fail);
         }, testDone.fail);
+    });
+  });
+
+  it("folder.update returns a promise and throws when given a callback", function (testDone) {
+    const blogID = this.blog.id;
+
+    sync(blogID, function (err, folder, done) {
+      if (err) return testDone.fail(err);
+
+      expect(function () {
+        folder.update("/a.txt", function () {});
+      }).toThrowError(TypeError, /no longer takes a callback/);
+
+      const pending = folder.update("/a.txt");
+      expect(typeof pending.then).toBe("function");
+
+      pending.then(function () {
+        done(null, function (err) {
+          if (err) return testDone.fail(err);
+          testDone();
+        });
+      }, testDone.fail);
     });
   });
 });

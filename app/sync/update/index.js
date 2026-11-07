@@ -1,4 +1,4 @@
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var storage = require("storage/folder");
 var clfdate = require("helper/clfdate");
 var drop = require("./drop");
@@ -38,8 +38,7 @@ function fingerprint(stat) {
 }
 
 module.exports = function (blog, log, status) {
-  // The re-syncs below call this one directly, not the exported function
-  // with its callback bridge.
+  // The re-syncs below call this one directly, not the guarded export.
   async function update(path) {
     // if typeof path is not string, return error
     if (typeof path !== "string") {
@@ -247,7 +246,7 @@ module.exports = function (blog, log, status) {
     return done(setError, setResult);
   }
 
-  return withCallback(update);
+  return promiseOnly(update);
 };
 
 // A path that has vanished from disk (ENOENT) needs to work out what to drop

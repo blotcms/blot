@@ -17,7 +17,11 @@ module.exports = function SyncAndCheck(blogID) {
         ({ path, content }, next) => {
           storage
             .write(blogID, path, content)
-            .then(() => folder.update(path, next), next);
+            .then(
+              () =>
+                folder.update(path).then((result) => next(null, result), next),
+              next
+            );
         },
         (err) => {
           if (err) return syncDone(err, callback);

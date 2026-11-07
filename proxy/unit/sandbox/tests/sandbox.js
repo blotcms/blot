@@ -1091,7 +1091,10 @@ function answer(text) {
     return process.stdout.write(size + "\\n" + "x".repeat(size));
   }
   const body = process.pid + " " + text.toUpperCase();
-  process.stdout.write(Buffer.byteLength(body) + "\\n" + body);
+  const reply = () => process.stdout.write(Buffer.byteLength(body) + "\\n" + body);
+  // "slow-..." answers after a pause, so requests sent together overlap
+  if (text.startsWith("slow-")) return setTimeout(reply, 500);
+  reply();
 }
 `;
   const fakeWorkerFile = path.join(
@@ -1149,11 +1152,11 @@ function answer(text) {
       { jobs: WORKER({ maxIdle: 1 }), script: fakeWorker, started },
       async (socket) => {
         const answers = await Promise.all(
-          ["a", "b", "c"].map((text) => ask(socket, text))
+          ["slow-a", "slow-b", "slow-c"].map((text) => ask(socket, text))
         );
         assert.deepStrictEqual(
           answers.map((a) => a.text),
-          ["A", "B", "C"]
+          ["SLOW-A", "SLOW-B", "SLOW-C"]
         );
         assert.strictEqual(new Set(answers.map((a) => a.pid)).size, 3);
         const after = await ask(socket, "d");
