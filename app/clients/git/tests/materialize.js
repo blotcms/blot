@@ -237,12 +237,13 @@ describe("git client: materialize", function () {
       var reader = createReader({ store: objects, cache: cache, manifest: current, scratch: cache });
       var before = process.memoryUsage().rss;
       var peak = before;
-      // Collect before each sample: dead chunks are not what is measured, and
-      // a file held whole is live, so it still counts
+      // A sample above the peak is collected and taken again: dead chunks are
+      // not what is measured, and a file held whole is live, so it still counts
       var timer = setInterval(function () {
+        if (process.memoryUsage().rss <= peak) return;
         global.gc();
         peak = Math.max(peak, process.memoryUsage().rss);
-      }, 10);
+      }, 5);
 
       return run({ blogID: blogID, reader: reader, from: from, to: to }).then(function () {
         clearInterval(timer);
