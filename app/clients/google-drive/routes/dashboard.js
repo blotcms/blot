@@ -3,7 +3,7 @@ const database = require("../database");
 const disconnect = require("../disconnect");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const requestServiceAccount = require("clients/google-drive/serviceAccount/request");
-const parseBody = require("body-parser").urlencoded({ extended: false });
+const parseBody = require("helper/bodyParser").urlencoded({ extended: false });
 const Blog = require("models/blog");
 
 const express = require("express");

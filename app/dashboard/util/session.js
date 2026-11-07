@@ -2,7 +2,7 @@ const config = require("config");
 const crypto = require("crypto");
 const session = require("express-session");
 const { RedisStore } = require("connect-redis");
-// connect-redis 9 uses node-redis' promise API (get/set/del with options),
+// connect-redis 10 (same code as 9) uses node-redis' promise API (get/set/del with options),
 // which the shared client has too. On the shared client session and user
 // reads are served from its client-side cache (models/redis-cache), so most
 // dashboard requests skip a round trip for each.

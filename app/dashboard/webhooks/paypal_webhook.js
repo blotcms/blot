@@ -1,6 +1,6 @@
 const express = require("express");
 const paypal = new express.Router();
-const parser = require("body-parser");
+const parser = require("helper/bodyParser");
 const User = require("models/user");
 const config = require("config");
 const clfdate = require("helper/clfdate");

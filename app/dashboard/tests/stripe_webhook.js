@@ -57,6 +57,46 @@ describe("Stripe subscription webhooks", function () {
     webhook._resetStripeClient();
   });
 
+  it("verifies the signature over the raw request body, as a Buffer", async function () {
+    const config = require("config");
+    const originalSecret = config.stripe.webhook_secret;
+    const seen = [];
+
+    config.stripe.webhook_secret = "whsec_test";
+    this.stripeClient.webhooks = {
+      constructEvent: jasmine
+        .createSpy("constructEvent")
+        .and.callFake((body, signature, secret) => {
+          seen.push({ body, signature, secret });
+          return { type: "ignored.event", data: { object: {} } };
+        }),
+    };
+
+    // Whitespace and key order a re-serialised body would lose
+    const raw = '{ "type":"ignored.event",  "data":{"object":{}} }';
+
+    try {
+      const response = await this.fetch("/", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "stripe-signature": "t=1,v1=abc",
+        },
+        body: raw,
+      });
+
+      expect(response.status).toBe(200);
+    } finally {
+      config.stripe.webhook_secret = originalSecret;
+    }
+
+    expect(seen.length).toBe(1);
+    expect(Buffer.isBuffer(seen[0].body)).toBe(true);
+    expect(seen[0].body.toString("utf8")).toBe(raw);
+    expect(seen[0].signature).toBe("t=1,v1=abc");
+    expect(seen[0].secret).toBe("whsec_test");
+  });
+
   it("preserves an independently disabled blog on an active subscription update", async function () {
     await setBlog(this.blog.id, { isDisabled: true });
     const event = {

@@ -4,7 +4,7 @@ const EventSource = require("eventsource");
 const fetch = require("node-fetch");
 const clfdate = require("helper/clfdate");
 const querystring = require("querystring");
-const bodyParser = require("body-parser");
+const bodyParser = require("helper/bodyParser");
 const client = require("models/client");
 const sse = require("helper/sse");
 

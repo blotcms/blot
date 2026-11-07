@@ -40,7 +40,7 @@ customer.subscription.deleted IF IS FINAL CHARGE ATTEMPT
 
 */
 
-var parser = require("body-parser");
+var parser = require("helper/bodyParser");
 var Express = require("express");
 var config = require("config");
 var email = require("helper/email");
