@@ -3,7 +3,7 @@ var insert_video_embeds =
 var debug = require("debug")("blot:importer:wordpress:tidy");
 var remove_inline_images = require("./remove_inline_images.js");
 
-module.exports = function (entry, callback) {
+module.exports = function (entry) {
   var html = entry.html;
 
   html = fix_missing_p_tags(html);
@@ -14,7 +14,7 @@ module.exports = function (entry, callback) {
 
   entry.html = html;
 
-  return callback(null, entry);
+  return entry;
 };
 
 function remove_caption(html) {

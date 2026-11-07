@@ -5,6 +5,14 @@ const { join } = require("path");
 const archiver = require("archiver");
 const lifecycle = require("./lifecycle");
 
+async function logFailure(message, promise) {
+  try {
+    await promise;
+  } catch (err) {
+    console.error(message, err);
+  }
+}
+
 module.exports = ({ blogID, label }) => {
   // Keep the existing label/timestamp parser compatible while avoiding same-tick collisions.
   const importID =
@@ -29,15 +37,14 @@ module.exports = ({ blogID, label }) => {
     statuses = statuses
       .catch(() => {})
       .then(() => fs.outputFile(join(importDirectory, "status.txt"), message));
-    statuses.catch((err) =>
-      console.error("Failed to write import status", err)
-    );
-    client
-      .publish(
+    logFailure("Failed to write import status", statuses);
+    logFailure(
+      "Failed to publish import status",
+      client.publish(
         "import:status:" + blogID,
         JSON.stringify({ status: message, importID })
       )
-      .catch((err) => console.error("Failed to publish import status", err));
+    );
     return statuses;
   }
 
@@ -87,7 +94,7 @@ module.exports = ({ blogID, label }) => {
   }
 
   // Own the complete worker lifetime, including its archive and cleanup. Async
-  // context carries cancellation into legacy callback-based asset pipelines.
+  // context carries cancellation into the asset pipelines.
   async function run(worker) {
     return state.run(async () => {
       try {

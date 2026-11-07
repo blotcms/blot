@@ -3,7 +3,7 @@ var join = require("path").join;
 var moment = require("moment");
 
 module.exports = function (output_directory) {
-  return function (entry, callback) {
+  return async function (entry) {
     var relative_path_without_extension;
     var slug = slugify(
       entry.slug ||
@@ -36,6 +36,6 @@ module.exports = function (output_directory) {
 
     entry.path = join(output_directory, relative_path_without_extension);
 
-    return callback(null, entry);
+    return entry;
   };
 };
