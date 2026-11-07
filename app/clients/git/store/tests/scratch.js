@@ -169,7 +169,7 @@ describe("git store reader scratch", function () {
     scratchConcurrency,
     store: given,
   } = {}) {
-    if (dir) fx.remove(dir);
+    if (dir) await teardown();
     dir = fx.tempDir();
     store = given || createMemoryStore();
     cache = createCache({ dir: path.join(dir, "cache"), maxBytes });
@@ -195,7 +195,11 @@ describe("git store reader scratch", function () {
     });
   }
 
-  function teardown() {
+  // The cache publishes its counts and walks its directory in the background
+  // (from the moment it is created, and after each reservation), so it is
+  // closed, which waits for that, before the directory it writes in is removed
+  async function teardown() {
+    if (cache) await cache.close();
     fx.remove(dir);
   }
 
@@ -318,7 +322,7 @@ describe("git store reader scratch", function () {
         await collect((await reader.stream(delta.oid)).data);
         counts.push(counter.requests());
         expect(reserved.length).toBe(0);
-        teardown();
+        await teardown();
       }
 
       expect(counts[0]).toBe(counts[1]);
