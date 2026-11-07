@@ -39,7 +39,7 @@
     "acme-client": "5.4.0",
     "archiver": "5.3.0",
     "bcryptjs": "2.4.3",
-    "body-parser": "1.20.9",
+    "body-parser": "2.4.0",
     "bottleneck": "2.19.5",
     "bplist-parser": "0.5.0",
     "cheerio": "1.2.0",

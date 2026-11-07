@@ -1,6 +1,6 @@
 const express = require("express");
-// body-parser 1, which Express 4 shipped: req.body stays {} when not parsed
-const bodyParser = require("body-parser");
+// helper/bodyParser keeps req.body as {} when not parsed
+const bodyParser = require("helper/bodyParser");
 const config = require("config"); // For accessing configuration values
 const email = require("helper/email");
 const notificationCap = require("../../util/notificationCap");
