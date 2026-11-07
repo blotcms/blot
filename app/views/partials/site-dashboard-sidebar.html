@@ -4,6 +4,12 @@
   <nav class="dashboard-sidebar__nav dashboard-sidebar__nav--desktop" aria-label="Site navigation">
 {{> site-dashboard-nav-links}}
   </nav>
+  <!-- The same help links as the Sites page's sidebar -->
+  <nav class="dashboard-sidebar__footer dashboard-sidebar__nav--desktop" aria-label="Help and examples">
+    <a class="dashboard-sidebar__footer-link" href="/how">Documentation</a>
+    <a class="dashboard-sidebar__footer-link" href="/questions">Questions</a>
+    <a class="dashboard-sidebar__footer-link" href="/examples">Examples</a>
+  </nav>
 
   <!-- Phones: the site block above (with the section name) and a Menu
        disclosure replace the sidebar -->
@@ -11,6 +17,11 @@
     <summary>Menu</summary>
     <nav class="dashboard-sidebar__menu-panel" aria-label="Site menu">
 {{> site-dashboard-nav-links}}
+      <div class="dashboard-sidebar__section">
+        <a class="dashboard-sidebar__link" href="/how">Documentation</a>
+        <a class="dashboard-sidebar__link" href="/questions">Questions</a>
+        <a class="dashboard-sidebar__link" href="/examples">Examples</a>
+      </div>
     </nav>
   </details>
   {{> dashboard-sidebar-resize-handle}}
