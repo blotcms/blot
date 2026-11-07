@@ -3,14 +3,13 @@ const Entry = require("models/entry");
 const moment = require("moment");
 // Adds moment().tz()
 require("moment-timezone");
-const { promisify } = require("util");
 const { LRUCache } = require("lru-cache");
 
 // The Posts page lists its filter a page at a time
 const POSTS_PER_PAGE = 50;
 const MAX_PAGE = 1000;
-const getListIDs = promisify(Entries.getListIDs);
-const getListTotal = promisify(Entries.getListTotal);
+const getListIDs = Entries.getListIDs;
+const getListTotal = Entries.getListTotal;
 // A failed read is the same as no entries
 const getEntries = (blogID, ids) => Entry.get(blogID, ids).catch(() => []);
 const collator = new Intl.Collator(undefined, {

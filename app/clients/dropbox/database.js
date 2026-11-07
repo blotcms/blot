@@ -2,7 +2,7 @@ var debug = require("debug")("blot:clients:dropbox:database");
 var redis = require("models/client");
 var Blog = require("models/blog");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var Model;
 
 function defaultFor(type) {
@@ -260,9 +260,9 @@ Model = {
 };
 
 module.exports = {
-  set: withCallback(setAccount),
-  setError: withCallback(setError),
-  drop: withCallback(dropAccount),
-  get: withCallback(getAccount),
-  listBlogs: withCallback(listAccountBlogs),
+  set: promiseOnly(setAccount),
+  setError: promiseOnly(setError),
+  drop: promiseOnly(dropAccount),
+  get: promiseOnly(getAccount),
+  listBlogs: promiseOnly(listAccountBlogs),
 };

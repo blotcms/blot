@@ -236,13 +236,10 @@ async function decorate(blog, dir, pageStats) {
         })
         .catch(() => resolve([]));
     }),
-    new Promise((resolve, reject) => {
-      const childPaths = pageNames.map((item) => path.join(dir, item));
-      IgnoredFiles.getStatuses(blog.id, childPaths, function (err, ignored) {
-        if (err) return reject(err);
-        resolve(ignored);
-      });
-    }),
+    IgnoredFiles.getStatuses(
+      blog.id,
+      pageNames.map((item) => path.join(dir, item))
+    ),
   ]);
 
   return pageStats.map((stat) => {

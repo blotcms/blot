@@ -1,6 +1,7 @@
 var redis = require("models/client");
 var ensure = require("helper/ensure");
 var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var Entry = require("../entry");
 var entryKey = require("../entry/key").entry;
 var pathNormalizer = require("helper/pathNormalizer");
@@ -116,7 +117,7 @@ module.exports = (function () {
   // entry-ghosts) scan one Redis round trip at a time - includes drafts,
   // pages, scheduled and deleted entries that getTotal's "entries" list
   // excludes, so this is the count that actually predicts that workload.
-  var getAllTotal = withCallback(async function getAllTotal(blogID) {
+  var getAllTotal = promiseOnly(async function getAllTotal(blogID) {
     var allKey = listKey(blogID, "all");
 
     return await redis.zCard(allKey);
@@ -179,7 +180,7 @@ module.exports = (function () {
     }
   }
 
-  var getListIDs = withCallback(
+  var getListIDs = promiseOnly(
     async function getListIDs(blogID, listName, options) {
       ensure(blogID, "string").and(listName, "string").and(options, "object");
 
@@ -868,13 +869,13 @@ module.exports = (function () {
     getCatalog: require("./catalog"),
     getCachedPage: require("./cachedPage"),
     getCachedRecent: require("./cachedRecent"),
-    getAllIDs: getAllIDs,
-    getTotal: getTotal,
+    getAllIDs: promiseOnly(getAllIDs),
+    getTotal: promiseOnly(getTotal),
     getAllTotal: getAllTotal,
     getRecent: getRecent,
-    lastUpdate: lastUpdate,
-    getCreated: getCreated,
-    getDeleted: getDeleted,
+    lastUpdate: promiseOnly(lastUpdate),
+    getCreated: promiseOnly(getCreated),
+    getDeleted: promiseOnly(getDeleted),
     random: random,
     // Note: validatePageSize is NOT exported - it's internal to the model
   };

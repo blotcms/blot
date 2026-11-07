@@ -10,7 +10,7 @@ var draftContainer = __dirname + "/preview/wrapper.html";
 
 var ensure = require("helper/ensure");
 var storage = require("storage/folder");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 var routePrefix = "/draft";
 var viewPrefix = "/view";
@@ -157,9 +157,9 @@ module.exports = (function () {
     getPath: getPath,
     viewURL: viewURL,
     injectScript: injectScript,
-    isDraft: withCallback(isDraft),
-    isPreview: withCallback(isPreview),
-    previewFile: withCallback(previewFile),
+    isDraft: promiseOnly(isDraft),
+    isPreview: promiseOnly(isPreview),
+    previewFile: promiseOnly(previewFile),
     previewPath: previewPath,
     streamRoute: streamRoute,
     viewRoute: viewRoute,

@@ -66,4 +66,6 @@ async function drop(blogID, path) {
   return await set(blogID, path, sanitize(entry));
 }
 
-module.exports = drop;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(drop);

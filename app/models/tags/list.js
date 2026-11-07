@@ -6,7 +6,7 @@ const {
 } = require("helper/pathPrefix");
 const key = require("./key");
 
-module.exports = async function getAll(blogID, options) {
+async function getAll(blogID, options) {
   ensure(blogID, "string");
 
   options = options || {};
@@ -75,4 +75,8 @@ module.exports = async function getAll(blogID, options) {
   }
 
   return tags;
-};
+}
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(getAll);

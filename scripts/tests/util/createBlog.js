@@ -2,7 +2,7 @@ var Blog = require("models/blog");
 var randomString = require("./randomString");
 const folder = require("storage/folder");
 const { promisify } = require("util");
-const rebuild = promisify(require("sync/rebuild"));
+const rebuild = require("sync/rebuild");
 const checkEntry = require("./checkEntry");
 
 // Blog.create() reads the owning user's `blogs` array, appends the new id,

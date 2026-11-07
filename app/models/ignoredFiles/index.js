@@ -2,7 +2,7 @@ module.exports = (function () {
   var redis = require("models/client"),
     normalize = require("helper/pathNormalizer"),
     ensure = require("helper/ensure"),
-    withCallback = require("helper/withCallback"),
+    promiseOnly = require("helper/promiseOnly"),
     REASONS = {
       TOO_LARGE: {
         message: "too large",
@@ -18,9 +18,7 @@ module.exports = (function () {
       },
     };
 
-  // These return promises. getStatus and getStatuses also take an optional
-  // callback (withCallback) while the dashboard folder views and the sync
-  // specs still pass one.
+  // These return promises.
 
   async function add(blogID, path, reason) {
     ensure(blogID, "string").and(path, "string").and(reason, "string");
@@ -78,7 +76,7 @@ module.exports = (function () {
   // trip, rather than transferring the entire ignored-files hash. Returns
   // an object mapping normalized path -> reason for the paths that are
   // ignored (paths that aren't ignored are omitted).
-  var getStatuses = withCallback(async function getStatuses(blogID, paths) {
+  var getStatuses = promiseOnly(async function getStatuses(blogID, paths) {
     ensure(blogID, "string").and(paths, "array");
 
     if (!paths.length) return {};
@@ -94,7 +92,7 @@ module.exports = (function () {
     return result;
   });
 
-  var getStatus = withCallback(async function getStatus(blogID, path) {
+  var getStatus = promiseOnly(async function getStatus(blogID, path) {
     ensure(blogID, "string").and(path, "string");
 
     path = normalize(path);
@@ -117,13 +115,13 @@ module.exports = (function () {
   }
 
   return {
-    add: add,
-    drop: drop,
-    get: get,
-    getArray: getArray,
+    add: promiseOnly(add),
+    drop: promiseOnly(drop),
+    get: promiseOnly(get),
+    getArray: promiseOnly(getArray),
     getStatus: getStatus,
     getStatuses: getStatuses,
-    isIt: isIt,
-    flush: flush,
+    isIt: promiseOnly(isIt),
+    flush: promiseOnly(flush),
   };
 })();

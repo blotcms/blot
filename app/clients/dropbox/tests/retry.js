@@ -15,14 +15,11 @@ describe("dropbox retry", function () {
     expect(await fn(1, 2)).toEqual(3);
   });
 
-  it("calls back once with the result", function (done) {
-    const fn = retry(async (a) => a * 2, options());
-
-    fn(21, function (err, result) {
-      expect(err).toBeNull();
-      expect(result).toEqual(42);
-      done();
-    });
+  it("throws when passed a callback", function () {
+    const fn = retry(async () => 1, options());
+    expect(function () {
+      fn(function () {});
+    }).toThrowError(/no longer takes a callback/);
   });
 
   it("tries again after a failure and uses the later success", async function () {
@@ -75,20 +72,5 @@ describe("dropbox retry", function () {
 
     expect(calls).toEqual(1);
     expect(error.status).toEqual(401);
-  });
-
-  it("calls back with the error once the attempts run out", function (done) {
-    const fn = retry(
-      async () => {
-        throw fail(500);
-      },
-      options({ times: 2 })
-    );
-
-    fn(function (err, result) {
-      expect(err.status).toEqual(500);
-      expect(result).toBeUndefined();
-      done();
-    });
   });
 });

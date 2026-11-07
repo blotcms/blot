@@ -17,7 +17,7 @@ const Blog = require("models/blog");
 const folder = require("storage/folder");
 const config = require("config");
 const buildTemplates = require("templates");
-const rebuild = promisify(require("sync/rebuild"));
+const rebuild = require("sync/rebuild");
 
 const email = process.argv[2];
 const handle = process.argv[3] || "e2eblog";

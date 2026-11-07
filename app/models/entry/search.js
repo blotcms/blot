@@ -63,7 +63,7 @@ function isFalsy(value) {
   return value === "false" || value === "no" || value === "0";
 }
 
-module.exports = async function search(blogID, query, options = {}) {
+async function search(blogID, query, options = {}) {
   options = options || {};
 
   ensure(blogID, "string").and(query, "string");
@@ -117,4 +117,8 @@ module.exports = async function search(blogID, query, options = {}) {
   await scanList("blog:" + blogID + ":pages");
 
   return sortEntries(results, options).slice(0, MAX_RESULTS);
-};
+}
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(search);

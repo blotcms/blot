@@ -1,6 +1,6 @@
 const exec = require("child_process").exec;
 const { promisify } = require("util");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 const prettySize = require("helper/prettySize");
 
 const execAsync = promisify(exec);
@@ -42,8 +42,7 @@ const main = async () => {
     .filter((disk) => disk.label);
 };
 
-// Still callable with a callback: sync/lock-diagnostics promisifies it
-module.exports = withCallback(main);
+module.exports = promiseOnly(main);
 
 if (require.main === module) {
   console.log("Checking free disk space...");

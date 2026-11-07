@@ -30,4 +30,6 @@ async function write(blogID, path, contents) {
   await folder.write(blogID, path, contents);
 }
 
-module.exports = write;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(write);

@@ -27,4 +27,6 @@ async function convert(blog, text) {
   return result;
 }
 
-module.exports = convert;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(convert);

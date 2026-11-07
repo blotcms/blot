@@ -1,3 +1,4 @@
+var promiseOnly = require("helper/promiseOnly");
 var extname = require("path").extname;
 var fs = require("fs-extra");
 var sandbox = require("sandbox");
@@ -12,7 +13,7 @@ var thumbnails = require("./config").THUMBNAILS;
 // made only for an image that passes, and an image that doesn't fails with
 // the reason, with err.invalid set.
 function make(animated) {
-  return async function main(path, outputDirectory) {
+  return promiseOnly(async function main(path, outputDirectory) {
     // We want to ensure that this will work on case-sensitive
     // file systems so we lowercase it. In the past we used the
     // original filename for the file in the resulting path but
@@ -77,7 +78,7 @@ function make(animated) {
     );
 
     return result;
-  };
+  });
 }
 
 module.exports = make(false);

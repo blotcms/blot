@@ -118,10 +118,20 @@ client_routes.post("/reset/rebuild", function (req, res) {
     const thumbnails = !!req.query.thumbnails;
     const imageCache = !!req.query.imageCache;
 
-    Rebuild(
-      req.blog.id,
-      { thumbnails, imageCache, status: folder.status, log: folder.log },
-      function (err) {
+    // The rest runs from the end of this chain, as it did from the callback:
+    // a throw is an unhandled rejection, which exits the process and so
+    // releases the folder lock.
+    Rebuild(req.blog.id, {
+      thumbnails,
+      imageCache,
+      status: folder.status,
+      log: folder.log,
+    })
+      .then(
+        () => null,
+        (err) => err
+      )
+      .then(function (err) {
         if (err) console.log(err);
         folder.status("Checking your site for issues");
         Fix(
@@ -138,8 +148,7 @@ client_routes.post("/reset/rebuild", function (req, res) {
             });
           }
         );
-      }
-    );
+      });
   });
 });
 

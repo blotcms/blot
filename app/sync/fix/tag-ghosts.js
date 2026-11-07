@@ -1,6 +1,6 @@
 var Tags = require("models/tags");
 var Entry = require("models/entry");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var client = require("models/client");
 var entryKey = require("models/entry/key").entry;
 
@@ -114,7 +114,7 @@ async function resolveEntryIDs(blogID, entryIDs, resolved) {
   }
 }
 
-module.exports = withCallback(async function main(blog) {
+module.exports = promiseOnly(async function main(blog) {
   const report = [];
   // id -> {id} for entries found, shared across every tag in this call.
   const resolved = new Map();

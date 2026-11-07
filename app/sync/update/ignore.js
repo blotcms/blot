@@ -1,10 +1,10 @@
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var ensure = require("helper/ensure");
 
 var Ignored = require("models/ignoredFiles");
 var Entry = require("models/entry");
 
-module.exports = withCallback(async function ignore(blogID, path, reason) {
+module.exports = promiseOnly(async function ignore(blogID, path, reason) {
   ensure(blogID, "string").and(path, "string").and(reason, "string");
 
   // Remove this file from the user's blog

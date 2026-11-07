@@ -46,7 +46,7 @@ async function rebuild(blogID) {
   // is held until the sync is released, and then reported
   let rebuildErr = null;
   try {
-    await promisify(Rebuild)(blogID, {
+    await Rebuild(blogID, {
       thumbnails: true,
       imageCache: true,
       status: folder.status,

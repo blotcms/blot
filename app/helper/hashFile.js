@@ -45,4 +45,6 @@ async function hashFile(path) {
   return hash;
 }
 
-module.exports = hashFile;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(hashFile);

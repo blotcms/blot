@@ -6,8 +6,8 @@ const { SOURCES } = require("../util/classifyError");
 describe("dropbox getHealth", function () {
   global.test.blog();
 
-  function save(changes, done) {
-    database.set(
+  async function save(changes) {
+    return database.set(
       this.blog.id,
       Object.assign(
         {
@@ -22,13 +22,12 @@ describe("dropbox getHealth", function () {
           cursor: "",
         },
         changes
-      ),
-      done
+      )
     );
   }
 
-  afterEach(function (done) {
-    database.drop(this.blog.id, done);
+  afterEach(async function () {
+    await database.drop(this.blog.id);
   });
 
   it("returns ok when there is no Dropbox account", async function () {
@@ -36,67 +35,39 @@ describe("dropbox getHealth", function () {
     expect(result).toEqual(health.ok());
   });
 
-  it("returns ok when error_code is 0", function (done) {
+  it("returns ok when error_code is 0", async function () {
     const blogID = this.blog.id;
-    save.call(this, { error_code: 0 }, async function (err) {
-      if (err) return done.fail(err);
-      try {
-        expect(await getHealth(blogID)).toEqual(health.ok());
-        done();
-      } catch (e) {
-        done.fail(e);
-      }
+    await save.call(this, { error_code: 0 });
+    expect(await getHealth(blogID)).toEqual(health.ok());
+  });
+
+  it("maps 401 to REAUTH_REQUIRED and keeps since", async function () {
+    const blogID = this.blog.id;
+    await save.call(this, {
+      error_code: 401,
+      error_source: SOURCES.AUTH,
+      error_since: 123,
+    });
+    const result = await getHealth(blogID);
+    expect(result.state).toBe(health.STATES.ERROR);
+    expect(result.issues[0]).toEqual({
+      code: health.CODES.REAUTH_REQUIRED,
+      message: health.ISSUES.REAUTH_REQUIRED.message,
+      since: 123,
     });
   });
 
-  it("maps 401 to REAUTH_REQUIRED and keeps since", function (done) {
+  it("does not surface a stale 500", async function () {
     const blogID = this.blog.id;
-    save.call(
-      this,
-      { error_code: 401, error_source: SOURCES.AUTH, error_since: 123 },
-      async function (err) {
-        if (err) return done.fail(err);
-        try {
-          const result = await getHealth(blogID);
-          expect(result.state).toBe(health.STATES.ERROR);
-          expect(result.issues[0]).toEqual({
-            code: health.CODES.REAUTH_REQUIRED,
-            message: health.ISSUES.REAUTH_REQUIRED.message,
-            since: 123,
-          });
-          done();
-        } catch (e) {
-          done.fail(e);
-        }
-      }
-    );
+    await save.call(this, { error_code: 500 });
+    expect(await getHealth(blogID)).toEqual(health.ok());
   });
 
-  it("does not surface a stale 500", function (done) {
+  it("maps 507 to QUOTA_EXCEEDED", async function () {
     const blogID = this.blog.id;
-    save.call(this, { error_code: 500 }, async function (err) {
-      if (err) return done.fail(err);
-      try {
-        expect(await getHealth(blogID)).toEqual(health.ok());
-        done();
-      } catch (e) {
-        done.fail(e);
-      }
-    });
-  });
-
-  it("maps 507 to QUOTA_EXCEEDED", function (done) {
-    const blogID = this.blog.id;
-    save.call(this, { error_code: 507 }, async function (err) {
-      if (err) return done.fail(err);
-      try {
-        const result = await getHealth(blogID);
-        expect(result.issues[0].code).toBe(health.CODES.QUOTA_EXCEEDED);
-        done();
-      } catch (e) {
-        done.fail(e);
-      }
-    });
+    await save.call(this, { error_code: 507 });
+    const result = await getHealth(blogID);
+    expect(result.issues[0].code).toBe(health.CODES.QUOTA_EXCEEDED);
   });
 
   // routes/dashboard.js's /redirect clears error_code to 0 before sending
@@ -106,72 +77,41 @@ describe("dropbox getHealth", function () {
   // fails - see the dropboxPriorError comments there. This mirrors that
   // restore and confirms getHealth reports the issue again afterwards
   // rather than the blog looking healthy after a cancelled reconnect.
-  it("reports the prior issue again once it's restored after a cancelled reconnect", function (done) {
+  it("reports the prior issue again once it's restored after a cancelled reconnect", async function () {
     const blogID = this.blog.id;
-    save.call(
-      this,
-      { error_code: 401, error_source: SOURCES.AUTH, error_since: 123 },
-      function (err) {
-        if (err) return done.fail(err);
+    await save.call(this, {
+      error_code: 401,
+      error_source: SOURCES.AUTH,
+      error_since: 123,
+    });
 
-        // /redirect's optimistic clear.
-        database.set(blogID, { error_code: 0 }, function (err) {
-          if (err) return done.fail(err);
+    // /redirect's optimistic clear.
+    await database.set(blogID, { error_code: 0 });
 
-          getHealth(blogID).then(function (result) {
-            expect(result).toEqual(health.ok());
+    expect(await getHealth(blogID)).toEqual(health.ok());
 
-            // /authenticate's restore, using the values captured before
-            // the clear above (as dropboxPriorError does in the session).
-            database.set(
-              blogID,
-              {
-                error_code: 401,
-                error_source: SOURCES.AUTH,
-                error_since: 123,
-              },
-              async function (err) {
-                if (err) return done.fail(err);
-                try {
-                  const restored = await getHealth(blogID);
-                  expect(restored.state).toBe(health.STATES.ERROR);
-                  expect(restored.issues[0]).toEqual({
-                    code: health.CODES.REAUTH_REQUIRED,
-                    message: health.ISSUES.REAUTH_REQUIRED.message,
-                    since: 123,
-                  });
-                  done();
-                } catch (e) {
-                  done.fail(e);
-                }
-              }
-            );
-          }, done.fail);
-        });
-      }
-    );
+    // /authenticate's restore, using the values captured before
+    // the clear above (as dropboxPriorError does in the session).
+    await database.set(blogID, {
+      error_code: 401,
+      error_source: SOURCES.AUTH,
+      error_since: 123,
+    });
+    const restored = await getHealth(blogID);
+    expect(restored.state).toBe(health.STATES.ERROR);
+    expect(restored.issues[0]).toEqual({
+      code: health.CODES.REAUTH_REQUIRED,
+      message: health.ISSUES.REAUTH_REQUIRED.message,
+      since: 123,
+    });
   });
 
-  it("reports REAUTH_REQUIRED after persistError records a 401", function (done) {
+  it("reports REAUTH_REQUIRED after persistError records a 401", async function () {
     const blogID = this.blog.id;
     const persistError = require("../util/persistError");
-    save.call(this, { error_code: 0 }, function (err) {
-      if (err) return done.fail(err);
-      persistError(
-        blogID,
-        { status: 401 },
-        SOURCES.APPLY,
-        async function (err) {
-          if (err) return done.fail(err);
-          try {
-            const result = await getHealth(blogID);
-            expect(result.issues[0].code).toBe(health.CODES.REAUTH_REQUIRED);
-            done();
-          } catch (e) {
-            done.fail(e);
-          }
-        }
-      );
-    });
+    await save.call(this, { error_code: 0 });
+    await persistError(blogID, { status: 401 }, SOURCES.APPLY);
+    const result = await getHealth(blogID);
+    expect(result.issues[0].code).toBe(health.CODES.REAUTH_REQUIRED);
   });
 });

@@ -158,4 +158,6 @@ function normalizeScanReply(reply) {
   return { cursor: "0", keys: [] };
 }
 
-module.exports = main;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(main);

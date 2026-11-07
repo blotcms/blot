@@ -24,7 +24,7 @@ var model = require("../entry/model");
 // lookup original tag against normalized tag
 
 // Resolves to { changed }
-module.exports = async function set(blogID, entry) {
+async function set(blogID, entry) {
   ensure(blogID, "string").and(entry, model);
 
   // Clone the list of tags
@@ -133,7 +133,7 @@ module.exports = async function set(blogID, entry) {
   return {
     changed: renamed || added.length > 0 || removed.length > 0,
   };
-};
+}
 
 // we need a better way to determine if we should ignore the entry (i.e. if has an underscore in its path)
 
@@ -149,3 +149,7 @@ function shouldHide(entry) {
     }).length
   );
 }
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(set);

@@ -13,9 +13,7 @@ describe("transformer", function () {
       function (err, firstResult) {
         if (err) return done.fail(err);
 
-        test.transformer.flush(function (err) {
-          if (err) return done.fail(err);
-
+        test.transformer.flush().then(function () {
           test.transformer.lookup(
             test.path,
             secondTransform,
@@ -29,7 +27,7 @@ describe("transformer", function () {
               done();
             }
           );
-        });
+        }, done.fail);
       }
     );
   });

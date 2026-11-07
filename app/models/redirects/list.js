@@ -3,7 +3,7 @@ var ensure = require("helper/ensure");
 var key = require("./key");
 var _ = require("lodash");
 
-module.exports = async function list(blogID) {
+async function list(blogID) {
   ensure(blogID, "string");
 
   var redirects = key.redirects(blogID);
@@ -33,4 +33,8 @@ module.exports = async function list(blogID) {
       index: i++,
     };
   });
-};
+}
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(list);

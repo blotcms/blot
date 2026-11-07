@@ -4,7 +4,7 @@ const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 
 // Used to write a file to the user's blog folder
 // contents is a Buffer or a string, as storage/folder's write takes
-module.exports = async function write(blogID, path, contents) {
+async function write(blogID, path, contents) {
   debug("Blog:", blogID, "Writing", path);
 
   if (shouldIgnoreFile(path)) {
@@ -12,4 +12,8 @@ module.exports = async function write(blogID, path, contents) {
   }
 
   await repo.commit(blogID, { path: path, contents: contents });
-};
+}
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(write);

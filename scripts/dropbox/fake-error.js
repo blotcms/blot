@@ -51,8 +51,8 @@ async function run(mode, blogID, flags) {
   process.env.BLOT_FAKE_DROPBOX_ERROR = mode;
 
   const database = require("clients/dropbox/database");
-  const get = promisify(database.get);
-  const set = promisify(database.set);
+  const get = (...args) => database.get(...args);
+  const set = (...args) => database.set(...args);
   const before = await get(blogID);
 
   if (!before) {

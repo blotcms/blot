@@ -35,10 +35,7 @@ describe("iCloud write and remove while the folder is missing", function () {
     await database.delete(this.blog.id);
   });
 
-  const run = (fn, ...args) =>
-    new Promise((resolve, reject) =>
-      fn(...args, (e) => (e ? reject(e) : resolve()))
-    );
+  const run = (fn, ...args) => fn(...args);
 
   it("tells the macserver when the folder is present", async function () {
     await database.store(this.blog.id, { setupComplete: true, error: null });

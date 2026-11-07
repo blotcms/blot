@@ -90,9 +90,7 @@ function finish(blogID, slug, callback) {
     }, callback);
 
   function rebuildAndWatch() {
-    rebuild(blogID, {}, function (err) {
-      if (err) return callback(err);
-
+    rebuild(blogID, {}).then(function () {
       // rebuild skips /Templates, so build the folder's templates explicitly
       Template.buildFromFolder(blogID, function (err) {
         if (err) return callback(err);
@@ -102,7 +100,7 @@ function finish(blogID, slug, callback) {
           watch(blogID, callback);
         });
       });
-    });
+    }, callback);
   }
 }
 

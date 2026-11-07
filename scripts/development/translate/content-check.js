@@ -16,7 +16,8 @@ const Entry = require("models/entry");
 const Tags = require("models/tags");
 
 const getBlog = promisify(Blog.get);
-const getListIDs = promisify(Entries.getListIDs);
+const getListIDs = (blogID, list, options) =>
+  Entries.getListIDs(blogID, list, options);
 
 const emit = (key, value) => console.log(`${key}=${value}`);
 

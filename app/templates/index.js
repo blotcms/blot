@@ -901,7 +901,9 @@ async function applyForkPackageOverlay(templateID, overlay) {
   }
 }
 
-module.exports = main;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(main);
 
 // Last, so every const above is initialised before main() runs
 if (require.main === module) {

@@ -1,10 +1,9 @@
 const ensure = require("helper/ensure");
 const Update = require("./update");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 const storage = require("storage/folder");
 const messenger = require("./messenger");
 const assets = require("storage/assets");
-const { promisify } = require("util");
 const Transformer = require("helper/transformer");
 const Blog = require("models/blog");
 const build = require("build");
@@ -53,7 +52,7 @@ async function walk(blogID) {
   return results;
 }
 
-module.exports = withCallback(async function main(blogID, options = {}) {
+module.exports = promiseOnly(async function main(blogID, options = {}) {
   ensure(blogID, "string").and(options, "object");
 
   const blog = await Blog.get({ id: blogID });
@@ -180,9 +179,8 @@ module.exports = withCallback(async function main(blogID, options = {}) {
 
 async function wipeCache({ blogID, label, directory }) {
   const store = new Transformer(blogID, label);
-  const flush = promisify(store.flush);
 
-  await flush();
+  await store.flush();
   // The writers recreate the directory when they next need it
   await assets.remove(blogID, directory);
 }
