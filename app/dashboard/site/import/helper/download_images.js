@@ -27,15 +27,6 @@ async function download(url, prefetched) {
   };
 }
 
-function directoryOf(post) {
-  return new Promise(function (resolve, reject) {
-    assetDirectory(post, function (err, directory) {
-      if (err) return reject(err);
-      resolve(directory);
-    });
-  });
-}
-
 async function download_thumbnail(post, prefetched) {
   if (!post || !post.metadata || !post.metadata.thumbnail) return;
 
@@ -55,7 +46,7 @@ async function download_thumbnail(post, prefetched) {
   if (!result.data) return null;
 
   var name = nameFrom(thumbnail, result.headers, result.format);
-  var directory = await directoryOf(post);
+  var directory = await assetDirectory(post);
 
   await fs.outputFile(directory + "/" + name, result.data);
 
@@ -100,7 +91,7 @@ async function downloadAll(post, scanned, prefetched) {
     var name = nameFrom(src, result.headers, result.format);
 
     try {
-      var directory = await directoryOf(post);
+      var directory = await assetDirectory(post);
       await fs.outputFile(directory + "/" + name, result.data);
     } catch (e) {
       continue;

@@ -3,14 +3,6 @@ var helper = require("dashboard/site/import/helper");
 var extract_entry = require("./extract_entry");
 var tidy = require("./tidy");
 
-// Runs one callback-style import step on the value, as a promise. The
-// first step has no value to take.
-function callStep(step, ...args) {
-  return new Promise((resolve, reject) =>
-    step(...args, (err, result) => (err ? reject(err) : resolve(result)))
-  );
-}
-
 async function processItem(item, output_directory, write = helper.write) {
   // Filter out items which should not become posts or pages
   if (
@@ -23,22 +15,22 @@ async function processItem(item, output_directory, write = helper.write) {
 
   try {
     lifecycle.check();
-    let entry = await callStep(extract_entry(item));
+    let entry = extract_entry(item);
 
     lifecycle.check();
-    entry = await callStep(tidy, entry);
+    entry = tidy(entry);
     lifecycle.check();
-    entry = await callStep(helper.determine_path(output_directory), entry);
+    entry = await helper.determine_path(output_directory)(entry);
     lifecycle.check();
     entry = await helper.download_pdfs(entry);
     lifecycle.check();
     entry = await helper.download_images(entry);
     lifecycle.check();
-    entry = await callStep(helper.convert_to_markdown, entry);
+    entry = await helper.convert_to_markdown(entry);
     lifecycle.check();
-    entry = await callStep(helper.insert_metadata, entry);
+    entry = await helper.insert_metadata(entry);
     lifecycle.check();
-    await callStep(write, entry);
+    await write(entry);
   } catch (err) {
     err.message = `Failed to import ${(item.title && item.title[0]) || "WordPress item"}: ${err.message}`;
     throw err;

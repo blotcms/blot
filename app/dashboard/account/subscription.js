@@ -101,37 +101,35 @@ Subscription.route("/billing-interval")
     });
   })
 
-  .post(function (req, res, next) {
-    stripe.customers.updateSubscription(
-      req.user.subscription.customer,
-      req.user.subscription.id,
-      {
-        quantity: req.user.subscription.quantity,
-        cancel_at_period_end: false,
-        proration_behavior: "create_prorations",
-        plan: req.new_plan_id,
-      },
-      function (err, subscription) {
-        if (err) {
-          return next(err);
-        }
+  .post(async function (req, res, next) {
+    let subscription;
 
-        if (!subscription) {
-          return next(new Error("No subscription"));
+    try {
+      subscription = await stripe.customers.updateSubscription(
+        req.user.subscription.customer,
+        req.user.subscription.id,
+        {
+          quantity: req.user.subscription.quantity,
+          cancel_at_period_end: false,
+          proration_behavior: "create_prorations",
+          plan: req.new_plan_id,
         }
+      );
 
-        User.set(req.user.uid, { subscription: subscription }).then(
-          function () {
-            email.BILLING_INTERVAL(req.user.uid);
-            res.message(
-              req.baseUrl,
-              "You are now billed once a " +
-                (subscription.plan.interval === "month" ? "month" : "year")
-            );
-          },
-          next
-        );
+      if (!subscription) {
+        return next(new Error("No subscription"));
       }
+
+      await User.set(req.user.uid, { subscription: subscription });
+    } catch (err) {
+      return next(err);
+    }
+
+    email.BILLING_INTERVAL(req.user.uid);
+    res.message(
+      req.baseUrl,
+      "You are now billed once a " +
+        (subscription.plan.interval === "month" ? "month" : "year")
     );
   });
 
@@ -302,128 +300,122 @@ async function cancelPaypalSubscription(req, res, next) {
   next();
 }
 
-function cancelStripeSubscription(req, res, next) {
+async function cancelStripeSubscription(req, res, next) {
   if (!req.user.subscription.customer) return next();
 
-  stripe.customers.cancelSubscription(
-    req.user.subscription.customer,
-    req.user.subscription.id,
-    { at_period_end: true },
-    function (err, subscription) {
-      if (err) return next(err);
+  try {
+    const subscription = await stripe.customers.cancelSubscription(
+      req.user.subscription.customer,
+      req.user.subscription.id,
+      { at_period_end: true }
+    );
 
-      if (!subscription) return next(new Error("No subscription"));
+    if (!subscription) return next(new Error("No subscription"));
 
-      req.cancelledStripe = true;
-      User.set(req.user.uid, { subscription: subscription }).then(function () {
-        next();
-      }, next);
-    }
-  );
+    req.cancelledStripe = true;
+    await User.set(req.user.uid, { subscription: subscription });
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
 // If the customer's subscription has expired it will
 // not be possible for them to restart it. Instead
 // we create a new one for them.
-function recreateStripeSubscription(req, res, next) {
-  stripe.customers.update(
-    req.user.subscription.customer,
-    {
+async function recreateStripeSubscription(req, res, next) {
+  try {
+    await stripe.customers.update(req.user.subscription.customer, {
       card: req.body.stripeToken,
-    },
-    function (err) {
-      if (err) return next(err);
+    });
 
-      stripe.customers.createSubscription(
-        req.user.subscription.customer,
-        {
-          plan: req.user.subscription.plan.id,
-          quantity: req.user.subscription.quantity || 1,
-        },
-        function (err, subscription) {
-          if (err || !subscription) {
-            return next(err || new Error("No subscription"));
-          }
+    const subscription = await stripe.customers.createSubscription(
+      req.user.subscription.customer,
+      {
+        plan: req.user.subscription.plan.id,
+        quantity: req.user.subscription.quantity || 1,
+      }
+    );
 
-          User.set(req.user.uid, { subscription: subscription }).then(
-            function () {
-              next();
-            },
-            next
-          );
-        }
-      );
-    }
-  );
+    if (!subscription) return next(new Error("No subscription"));
+
+    await User.set(req.user.uid, { subscription: subscription });
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
 // If I created a blog for the customer manually they will
 // not have a stripe subscription. In order to create new
 // blogs they will need one.
-function createStripeSubscription(req, res, next) {
-  stripe.customers.create(
-    {
+async function createStripeSubscription(req, res, next) {
+  try {
+    const customer = await stripe.customers.create({
       card: req.body.stripeToken,
       email: req.user.email,
       plan: config.stripe.plan,
       quantity: req.user.blogs.length,
       description: "Blot subscription",
-    },
-    function (err, customer) {
-      if (err) return next(err);
+    });
 
-      User.set(req.user.uid, { subscription: customer.subscription }).then(
-        function () {
-          next();
-        },
-        next
-      );
-    }
-  );
+    await User.set(req.user.uid, { subscription: customer.subscription });
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
-function retrieveSubscription(req, res, next) {
+async function retrieveSubscription(req, res, next) {
   if (!req.user.subscription.customer) return next();
 
-  stripe.customers.retrieveSubscription(
-    req.user.subscription.customer,
-    req.user.subscription.id,
-    function (err, subscription) {
-      if (err && err.code === "resource_missing") {
-        return res.redirect("/account/subscription/restart/pay");
-      }
+  let subscription;
 
-      if (err) return next(err);
-
-      if (!subscription) return next(new Error("No subscription"));
-
-      User.set(req.user.uid, { subscription: subscription }).then(function () {
-        next();
-      }, next);
+  try {
+    subscription = await stripe.customers.retrieveSubscription(
+      req.user.subscription.customer,
+      req.user.subscription.id
+    );
+  } catch (err) {
+    if (err && err.code === "resource_missing") {
+      return res.redirect("/account/subscription/restart/pay");
     }
-  );
+
+    return next(err);
+  }
+
+  if (!subscription) return next(new Error("No subscription"));
+
+  try {
+    await User.set(req.user.uid, { subscription: subscription });
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
-function restartStripeSubscription(req, res, next) {
+async function restartStripeSubscription(req, res, next) {
   if (!req.user.subscription.customer) return next();
-  stripe.customers.updateSubscription(
-    req.user.subscription.customer,
-    req.user.subscription.id,
-    {},
-    function (err, subscription) {
-      if (err) {
-        return next(err);
-      }
 
-      if (!subscription) {
-        return next(new Error("No subscription"));
-      }
+  try {
+    const subscription = await stripe.customers.updateSubscription(
+      req.user.subscription.customer,
+      req.user.subscription.id,
+      {}
+    );
 
-      User.set(req.user.uid, { subscription: subscription }).then(function () {
-        next();
-      }, next);
-    }
-  );
+    if (!subscription) return next(new Error("No subscription"));
+
+    await User.set(req.user.uid, { subscription: subscription });
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
 module.exports = Subscription;

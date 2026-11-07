@@ -35,16 +35,14 @@ describe("Stripe subscription webhooks", function () {
       customers: {
         retrieveSubscription: jasmine
           .createSpy("retrieveSubscription")
-          .and.callFake((customerId, subscriptionId, callback) =>
-            callback(null, {
-              id: subscriptionId,
-              customer: customerId,
-              status: "active",
-              plan: { amount: 700, interval: "month" },
-              quantity: 2,
-              cancel_at_period_end: false,
-            })
-          ),
+          .and.callFake(async (customerId, subscriptionId) => ({
+            id: subscriptionId,
+            customer: customerId,
+            status: "active",
+            plan: { amount: 700, interval: "month" },
+            quantity: 2,
+            cancel_at_period_end: false,
+          })),
       },
     };
 
@@ -137,11 +135,7 @@ describe("Stripe subscription webhooks", function () {
     expect(response.status).toBe(200);
     expect(
       this.stripeClient.customers.retrieveSubscription
-    ).toHaveBeenCalledWith(
-      this.customerId,
-      this.subscriptionId,
-      jasmine.any(Function)
-    );
+    ).toHaveBeenCalledWith(this.customerId, this.subscriptionId);
 
     await delay(100);
 
@@ -162,15 +156,14 @@ describe("Stripe subscription webhooks", function () {
 
     async function sendPastDueUpdate(test, cancelAtPeriodEnd) {
       test.stripeClient.customers.retrieveSubscription.and.callFake(
-        (customerId, subscriptionId, callback) =>
-          callback(null, {
-            id: subscriptionId,
-            customer: customerId,
-            status: "past_due",
-            plan: { amount: 500, interval: "month" },
-            quantity: 1,
-            cancel_at_period_end: cancelAtPeriodEnd,
-          })
+        async (customerId, subscriptionId) => ({
+          id: subscriptionId,
+          customer: customerId,
+          status: "past_due",
+          plan: { amount: 500, interval: "month" },
+          quantity: 1,
+          cancel_at_period_end: cancelAtPeriodEnd,
+        })
       );
 
       const response = await test.fetch("/", {
@@ -200,15 +193,14 @@ describe("Stripe subscription webhooks", function () {
 
   it("disables the account on deleted event", async function () {
     this.stripeClient.customers.retrieveSubscription.and.callFake(
-      (customerId, subscriptionId, callback) =>
-        callback(null, {
-          id: subscriptionId,
-          customer: customerId,
-          status: "canceled",
-          plan: { amount: 500, interval: "month" },
-          quantity: 1,
-          cancel_at_period_end: false,
-        })
+      async (customerId, subscriptionId) => ({
+        id: subscriptionId,
+        customer: customerId,
+        status: "canceled",
+        plan: { amount: 500, interval: "month" },
+        quantity: 1,
+        cancel_at_period_end: false,
+      })
     );
 
     const event = {
@@ -234,11 +226,7 @@ describe("Stripe subscription webhooks", function () {
     expect(response.status).toBe(200);
     expect(
       this.stripeClient.customers.retrieveSubscription
-    ).toHaveBeenCalledWith(
-      this.customerId,
-      this.subscriptionId,
-      jasmine.any(Function)
-    );
+    ).toHaveBeenCalledWith(this.customerId, this.subscriptionId);
 
     await delay(100);
 
@@ -263,16 +251,15 @@ describe("Stripe subscription webhooks", function () {
     });
 
     this.stripeClient.customers.retrieveSubscription.and.callFake(
-      (customerId, subscriptionId, callback) =>
-        callback(null, {
-          id: subscriptionId,
-          customer: customerId,
-          status: "active",
-          plan: { amount: 500, interval: "month" },
-          quantity: 1,
-          cancel_at_period_end: true,
-          current_period_end: Math.floor(Date.now() / 1000) - 10,
-        })
+      async (customerId, subscriptionId) => ({
+        id: subscriptionId,
+        customer: customerId,
+        status: "active",
+        plan: { amount: 500, interval: "month" },
+        quantity: 1,
+        cancel_at_period_end: true,
+        current_period_end: Math.floor(Date.now() / 1000) - 10,
+      })
     );
 
     const event = {
@@ -352,9 +339,9 @@ describe("Stripe subscription webhooks", function () {
   });
 
   it("returns 503 when subscription retrieval fails", async function () {
-    this.stripeClient.customers.retrieveSubscription.and.callFake(
-      (_, __, callback) => callback(new Error("nope"))
-    );
+    this.stripeClient.customers.retrieveSubscription.and.callFake(async () => {
+      throw new Error("nope");
+    });
 
     const event = {
       type: "customer.subscription.updated",

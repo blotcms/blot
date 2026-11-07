@@ -4,7 +4,6 @@ module.exports = {
   download_pdfs: require("./download_pdfs"),
   download_images: require("./download_images"),
   extract: require("./extract"),
-  for_each: require("./for_each"),
   insert_metadata: require("./insert_metadata"),
   insert_video_embeds: require("./insert_video_embeds"),
   normalize_identifier: require("./normalize_identifier"),

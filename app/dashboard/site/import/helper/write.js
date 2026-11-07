@@ -6,7 +6,7 @@ var MAX_NAME_LENGTH = 150;
 function createWriter() {
   var reserved = new Set();
 
-  return function write(post, callback) {
+  return async function write(post) {
     var basePath = allocate(post, reserved);
     var hasAssets = Boolean(
       post.asset_directory && fs.existsSync(post.asset_directory)
@@ -18,21 +18,13 @@ function createWriter() {
     post.path = basePath;
     post.content = post.content.trim();
 
-    moveAssets(post.asset_directory, basePath, function (err) {
-      if (err) return callback(err);
+    await moveAssets(post.asset_directory, basePath);
 
-      fs.outputFile(finalPath, post.content, function (err) {
-        if (err) return callback(err);
+    await fs.outputFile(finalPath, post.content);
 
-        var atime = Date.now();
-        var mtime =
-          post.updated || post.created || post.dateStamp || Date.now();
-        fs.utimes(finalPath, atime, mtime, function (err) {
-          if (err) return callback(err);
-          callback(null);
-        });
-      });
-    });
+    var atime = Date.now();
+    var mtime = post.updated || post.created || post.dateStamp || Date.now();
+    await fs.utimes(finalPath, atime, mtime);
   };
 }
 
@@ -61,49 +53,30 @@ function allocate(post, reserved) {
   }
 }
 
-function moveAssets(source, destination, callback) {
-  if (!source || !fs.existsSync(source)) return callback();
+async function moveAssets(source, destination) {
+  if (!source || !fs.existsSync(source)) return;
 
-  fs.ensureDir(destination, function (err) {
-    if (err) return callback(err);
-    fs.readdir(source, function (err, names) {
-      if (err) return callback(err);
-      var remaining = names.length;
-      var moveError;
-      var finished = false;
+  await fs.ensureDir(destination);
+  const names = await fs.readdir(source);
 
-      function finish(err) {
-        if (finished) return;
-        finished = true;
-        callback(err);
-      }
+  // Every move settles before the first error is thrown
+  const results = await Promise.allSettled(
+    names.map((name) =>
+      fs.move(path.join(source, name), path.join(destination, name))
+    )
+  );
+  const failed = results.find((result) => result.status === "rejected");
 
-      if (!remaining) return fs.remove(source, finish);
+  if (failed) throw failed.reason;
 
-      names.forEach(function (name) {
-        fs.move(
-          path.join(source, name),
-          path.join(destination, name),
-          function (moveErr) {
-            if (moveErr && !moveError) moveError = moveErr;
-
-            remaining -= 1;
-
-            if (remaining) return;
-            if (moveError) return finish(moveError);
-            fs.remove(source, finish);
-          }
-        );
-      });
-    });
-  });
+  await fs.remove(source);
 }
 
 // Retain the single-entry middleware API for callers outside the batch import.
 // Each standalone write gets its own allocation state; batch imports should use
 // createWriter() to share reservations across entries in the same import.
-function write(post, callback) {
-  return createWriter()(post, callback);
+async function write(post) {
+  return createWriter()(post);
 }
 
 module.exports = write;
