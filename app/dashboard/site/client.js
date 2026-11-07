@@ -185,10 +185,13 @@ client_routes.post("/reset/rebuild", function (req, res) {
       .then(function (err) {
         if (err) console.log(err);
         folder.status("Checking your site for issues");
-        Fix(
-          req.blog,
-          { status: folder.status, log: folder.log },
-          function (err, report) {
+        // A throw below is an unhandled rejection too
+        Fix(req.blog, { status: folder.status, log: folder.log })
+          .then(
+            (report) => ({ err: null, report }),
+            (err) => ({ err, report: err.report })
+          )
+          .then(function ({ err, report }) {
             if (err) console.log(err);
             // Fix() doesn't email; a rebuild only logs what it repaired.
             const repaired = syncReport.summarize(report);
@@ -197,8 +200,7 @@ client_routes.post("/reset/rebuild", function (req, res) {
             done(null, function (err) {
               if (err) console.log("Error releasing sync: ", err);
             });
-          }
-        );
+          });
       });
   });
 });
@@ -250,10 +252,14 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
     }
 
     folder.status("Checking your site for issues");
-    Fix(
-      req.blog,
-      { status: folder.status, log: folder.log },
-      function (err, report) {
+    // A throw below is an unhandled rejection, which exits the process and
+    // so releases the folder lock
+    Fix(req.blog, { status: folder.status, log: folder.log })
+      .then(
+        (report) => ({ err: null, report }),
+        (err) => ({ err, report: err.report })
+      )
+      .then(function ({ err, report }) {
         if (err) console.log(err);
         // After Fix() so its repairs go in the same email as the changes.
         notifyAdminIfResyncFoundChanges(
@@ -266,8 +272,7 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
         done(null, function (err) {
           if (err) console.log("Error releasing sync: ", err);
         });
-      }
-    );
+      });
   });
 });
 

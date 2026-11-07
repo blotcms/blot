@@ -121,11 +121,15 @@ describe("icloud init validateAllBlogs", function () {
     stub("folderLock", {
       heldSince: async (blogID) => behaviors[blogID].heldSince || null,
     });
-    stub("fix", function (blog, callback) {
+    stub("fix", async function (blog) {
       calls.fixed.push(blog.id);
       calls.fixedLoads[blog.id] = blog.load;
       const behavior = behaviors[blog.id];
-      callback(behavior.fixError || null, behavior.fixReport || {});
+      if (behavior.fixError) {
+        behavior.fixError.report = behavior.fixReport || {};
+        throw behavior.fixError;
+      }
+      return behavior.fixReport || {};
     });
     stub("getHealth", async function (blogID) {
       const health = require("clients/health");

@@ -85,13 +85,17 @@ async function setup(blogID) {
 
   if (!blog) return;
 
-  const { err, report } = await new Promise(function (resolve) {
-    Fix(blog, function (err, report) {
-      resolve({ err, report });
-    });
-  });
+  let err = null;
+  let report;
 
-  // Fix() can fail after repairing some checks, so log first.
+  try {
+    report = await Fix(blog);
+  } catch (e) {
+    err = e;
+    report = e.report;
+  }
+
+  // Fix() can fail after repairing some checks (err.report), so log first.
   const repaired = syncReport.summarize(report);
   if (repaired) console.log(prefix(), "Fix repaired", blogID, repaired);
   if (err) return;

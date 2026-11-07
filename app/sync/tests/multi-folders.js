@@ -516,25 +516,30 @@ describe("sync multi-folder support", function () {
                 // Fix() runs on every client startup / server restart. The
                 // folder post's aggregate lives at a "+"-stripped path with no
                 // file behind it, so entry-ghosts must not treat it as a ghost.
-                Fix(blog, function (fixErr) {
-                  if (fixErr) return done.fail(fixErr);
+                Fix(blog)
+                  .then(
+                    () => null,
+                    (fixErr) => fixErr
+                  )
+                  .then(function (fixErr) {
+                    if (fixErr) return done.fail(fixErr);
 
-                  after(
-                    Entry.get(blogID, "/essay"),
-                    done.fail,
-                    function (afterEntry) {
-                      expect(afterEntry).toBeDefined();
-                      expect(afterEntry.deleted).toBeFalsy();
-                      expect(afterEntry.html.indexOf("One")).toBeGreaterThan(
-                        -1
-                      );
-                      expect(afterEntry.html.indexOf("Two")).toBeGreaterThan(
-                        -1
-                      );
-                      done();
-                    }
-                  );
-                });
+                    after(
+                      Entry.get(blogID, "/essay"),
+                      done.fail,
+                      function (afterEntry) {
+                        expect(afterEntry).toBeDefined();
+                        expect(afterEntry.deleted).toBeFalsy();
+                        expect(afterEntry.html.indexOf("One")).toBeGreaterThan(
+                          -1
+                        );
+                        expect(afterEntry.html.indexOf("Two")).toBeGreaterThan(
+                          -1
+                        );
+                        done();
+                      }
+                    );
+                  });
               }
             );
           });
@@ -591,22 +596,27 @@ describe("sync multi-folder support", function () {
                   storage.remove(blogID, "/essay+"),
                   done.fail,
                   function () {
-                    Fix(blog, function (fixErr) {
-                      if (fixErr) return done.fail(fixErr);
+                    Fix(blog)
+                      .then(
+                        () => null,
+                        (fixErr) => fixErr
+                      )
+                      .then(function (fixErr) {
+                        if (fixErr) return done.fail(fixErr);
 
-                      after(
-                        Entry.get(blogID, "/essay"),
-                        done.fail,
-                        function (afterEntry) {
-                          if (afterEntry) {
-                            expect(afterEntry.deleted).toBe(true);
-                          } else {
-                            expect(afterEntry).toBeFalsy();
+                        after(
+                          Entry.get(blogID, "/essay"),
+                          done.fail,
+                          function (afterEntry) {
+                            if (afterEntry) {
+                              expect(afterEntry.deleted).toBe(true);
+                            } else {
+                              expect(afterEntry).toBeFalsy();
+                            }
+                            done();
                           }
-                          done();
-                        }
-                      );
-                    });
+                        );
+                      });
                   }
                 );
               }
@@ -682,22 +692,27 @@ describe("sync multi-folder support", function () {
                               }
 
                               // Fix() also treats a non-directory "+" path as a ghost.
-                              Fix(blog, function (fixErr) {
-                                if (fixErr) return done.fail(fixErr);
+                              Fix(blog)
+                                .then(
+                                  () => null,
+                                  (fixErr) => fixErr
+                                )
+                                .then(function (fixErr) {
+                                  if (fixErr) return done.fail(fixErr);
 
-                                after(
-                                  Entry.get(blogID, "/essay"),
-                                  done.fail,
-                                  function (afterFix) {
-                                    if (afterFix) {
-                                      expect(afterFix.deleted).toBe(true);
-                                    } else {
-                                      expect(afterFix).toBeFalsy();
+                                  after(
+                                    Entry.get(blogID, "/essay"),
+                                    done.fail,
+                                    function (afterFix) {
+                                      if (afterFix) {
+                                        expect(afterFix.deleted).toBe(true);
+                                      } else {
+                                        expect(afterFix).toBeFalsy();
+                                      }
+                                      done();
                                     }
-                                    done();
-                                  }
-                                );
-                              });
+                                  );
+                                });
                             }
                           );
                         });
