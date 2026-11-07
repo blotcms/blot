@@ -1,4 +1,3 @@
-var async = require("async");
 var basename = require("path").basename;
 var extname = require("path").extname;
 var parse = require("url").parse;
@@ -8,127 +7,123 @@ var mime = require("mime-types");
 var assetDirectory = require("./asset_directory");
 var boundedDownload = require("./download");
 var lifecycle = require("../lifecycle");
+var withCallback = require("helper/withCallback");
 
 // The jail re-encodes each image (app/sandbox/jobs/fetch.js), so what is
 // written is what libvips made of it and its format is known. One that isn't a
 // JPEG, PNG, GIF or WebP stays a remote link.
-function download(url, prefetched, callback) {
-  boundedDownload(url, { kind: "image", prefetched })
-    .then(({ data, format, headers }) => {
-      lifecycle.check();
-      return {
-        data,
-        format,
-        headers: {
-          contentType: headers.get("content-type"),
-          contentDisposition: headers.get("content-disposition"),
-        },
-      };
-    })
-    .then(
-      (result) => callback(null, result.data, result.format, result.headers),
-      callback
-    );
+async function download(url, prefetched) {
+  const { data, format, headers } = await boundedDownload(url, {
+    kind: "image",
+    prefetched,
+  });
+  lifecycle.check();
+  return {
+    data,
+    format,
+    headers: {
+      contentType: headers.get("content-type"),
+      contentDisposition: headers.get("content-disposition"),
+    },
+  };
 }
 
-function download_thumbnail(post, prefetched, callback) {
-  if (!post || !post.metadata || !post.metadata.thumbnail) return callback();
-
-  var thumbnail = post.metadata.thumbnail;
-
-  if (!thumbnail) return callback();
-
-  download(thumbnail, prefetched, function (err, data, format, headers) {
-    if (err || !data)
-      return callback(
-        lifecycle.current() && lifecycle.current().signal.aborted ? err : null
-      );
-
-    var name = nameFrom(thumbnail, headers, format);
-
+function directoryOf(post) {
+  return new Promise(function (resolve, reject) {
     assetDirectory(post, function (err, directory) {
-      if (err) return callback(err);
-
-      fs.outputFile(directory + "/" + name, data, function (err) {
-        if (err) return callback(err);
-        callback(null, name);
-      });
+      if (err) return reject(err);
+      resolve(directory);
     });
   });
 }
 
-module.exports = function download_images(post, callback) {
+async function download_thumbnail(post, prefetched) {
+  if (!post || !post.metadata || !post.metadata.thumbnail) return;
+
+  var thumbnail = post.metadata.thumbnail;
+
+  if (!thumbnail) return;
+
+  var result;
+
+  try {
+    result = await download(thumbnail, prefetched);
+  } catch (err) {
+    if (lifecycle.current() && lifecycle.current().signal.aborted) throw err;
+    return null;
+  }
+
+  if (!result.data) return null;
+
+  var name = nameFrom(thumbnail, result.headers, result.format);
+  var directory = await directoryOf(post);
+
+  await fs.outputFile(directory + "/" + name, result.data);
+
+  return name;
+}
+
+async function download_images(post) {
   // The post's images (each http(s) <img src> once) are found by the sandbox's
   // parse-html job, not by Node
-  htmlAssets.scan("images", post.html).then(function (scanned) {
-    // The post's images in one jail, where there are several
-    var urls = [post.metadata && post.metadata.thumbnail].concat(scanned.urls);
+  const scanned = await htmlAssets.scan("images", post.html);
 
-    boundedDownload
-      .prefetch(urls.filter(Boolean), { kind: "image" })
-      .then(function (prefetched) {
-        downloadAll(post, scanned, prefetched, callback);
-      }, callback);
-  }, callback);
-};
+  // The post's images in one jail, where there are several
+  var urls = [post.metadata && post.metadata.thumbnail].concat(scanned.urls);
 
-function downloadAll(post, scanned, prefetched, callback) {
+  const prefetched = await boundedDownload.prefetch(urls.filter(Boolean), {
+    kind: "image",
+  });
+
+  return downloadAll(post, scanned, prefetched);
+}
+
+async function downloadAll(post, scanned, prefetched) {
   var replacements = [];
 
   // The directory is created lazily only if a download succeeds.
-  download_thumbnail(post, prefetched, function (err, thumbnail) {
-    if (err) return callback(err);
+  var thumbnail = await download_thumbnail(post, prefetched);
 
-    if (thumbnail) post.metadata.thumbnail = thumbnail;
+  if (thumbnail) post.metadata.thumbnail = thumbnail;
 
-    async.eachSeries(
-      scanned.urls,
-      function (src, next) {
-        download(src, prefetched, function (err, data, format, headers) {
-          if (err || !data) {
-            return next(
-              lifecycle.current() && lifecycle.current().signal.aborted
-                ? err
-                : null
-            );
-          }
+  for (const src of scanned.urls) {
+    var result;
 
-          var name = nameFrom(src, headers, format);
+    try {
+      result = await download(src, prefetched);
+    } catch (err) {
+      if (lifecycle.current() && lifecycle.current().signal.aborted) throw err;
+      continue;
+    }
 
-          assetDirectory(post, function (err, directory) {
-            if (err) return next();
+    if (!result.data) continue;
 
-            fs.outputFile(directory + "/" + name, data, function (err) {
-              if (err) return next();
-              replacements.push([src, name]);
+    var name = nameFrom(src, result.headers, result.format);
 
-              next();
-            });
-          });
-        });
-      },
-      function (err) {
-        if (err) return callback(err);
+    try {
+      var directory = await directoryOf(post);
+      await fs.outputFile(directory + "/" + name, result.data);
+    } catch (e) {
+      continue;
+    }
 
-        // With nothing downloaded, the HTML is what the parser wrote back
-        if (!replacements.length) {
-          post.html = scanned.html;
-          return callback(null, post);
-        }
+    replacements.push([src, name]);
+  }
 
-        // Changes the src of each downloaded image, and the link around it
-        // if that went to the same URL. From the post's own HTML, so it is
-        // parsed and written once, as it was when Node did it.
-        htmlAssets.rewrite("images", post.html, replacements).then(function (
-          html
-        ) {
-          post.html = html;
-          callback(null, post);
-        }, callback);
-      }
-    );
-  });
+  // With nothing downloaded, the HTML is what the parser wrote back
+  if (!replacements.length) {
+    post.html = scanned.html;
+    return post;
+  }
+
+  // Changes the src of each downloaded image, and the link around it
+  // if that went to the same URL. From the post's own HTML, so it is
+  // parsed and written once, as it was when Node did it.
+  post.html = await htmlAssets.rewrite("images", post.html, replacements);
+  return post;
 }
+
+module.exports = withCallback(download_images);
 
 function nameFrom(src, headers, format) {
   var name =
