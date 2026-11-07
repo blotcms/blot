@@ -577,7 +577,7 @@ describe("Dashboard account deletion refunds", function () {
     );
   });
 
-  it("sends the refund email when a refund is issued", function (done) {
+  it("sends the refund email when a refund is issued", async function () {
     const refund = {
       issued: true,
       provider: "stripe",
@@ -586,26 +586,24 @@ describe("Dashboard account deletion refunds", function () {
       currency: "USD",
     };
 
-    spyOn(Email, "DELETED_FIRST_PERIOD").and.callFake((uid, locals, callback) =>
-      callback()
-    );
-    spyOn(Email, "DELETED").and.callFake((uid, locals, callback) => callback());
+    spyOn(Email, "DELETED_FIRST_PERIOD").and.returnValue(Promise.resolve());
+    spyOn(Email, "DELETED").and.returnValue(Promise.resolve());
 
     const req = {
       user: { uid: "user_123", email: "user@example.com" },
       refund,
     };
 
-    Delete.exports.email(req, {}, function (err) {
-      expect(err).toBeUndefined();
-      expect(Email.DELETED_FIRST_PERIOD).toHaveBeenCalledWith(
-        "",
-        jasmine.objectContaining({ refund, email: "user@example.com" }),
-        jasmine.any(Function)
-      );
-      expect(Email.DELETED).not.toHaveBeenCalled();
-      done();
+    const err = await new Promise(function (resolve) {
+      Delete.exports.email(req, {}, resolve);
     });
+
+    expect(err).toBeUndefined();
+    expect(Email.DELETED_FIRST_PERIOD).toHaveBeenCalledWith(
+      "",
+      jasmine.objectContaining({ refund, email: "user@example.com" })
+    );
+    expect(Email.DELETED).not.toHaveBeenCalled();
   });
 });
 

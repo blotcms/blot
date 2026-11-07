@@ -361,15 +361,13 @@ async function authenticate(req, res, next) {
 
   await Blog.set(req.blog.id, { client: "dropbox" });
 
-  setup(account, req.session, function (err) {
-    if (err) {
-      console.log("err setting up", err);
-      // The code Dropbox gave us didn't actually lead to a working
-      // account (expired/reused code, a Dropbox API error, etc). Put
-      // back whatever durable error was there before /redirect cleared
-      // it, for the same reason a cancelled authorization does above.
-      restorePriorError();
-    }
+  setup(account, req.session).catch(function (err) {
+    console.log("err setting up", err);
+    // The code Dropbox gave us didn't actually lead to a working
+    // account (expired/reused code, a Dropbox API error, etc). Put
+    // back whatever durable error was there before /redirect cleared
+    // it, for the same reason a cancelled authorization does above.
+    restorePriorError();
   });
 
   // req.session.dropbox above must actually reach the session store

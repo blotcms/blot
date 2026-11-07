@@ -20,7 +20,7 @@ async function main() {
   // Use the each/template helper to iterate over all non-SITE templates
   // (the helper already filters to only templates owned by blogs, not SITE)
   try {
-    await eachTemplateAsync(processTemplate);
+    await eachTemplate(processTemplate);
   } catch (err) {
     console.error("Fatal error:", err);
     process.exit(1);
@@ -31,29 +31,6 @@ async function main() {
   console.log(`Blogs updated: ${updatedBlogsCount}`);
   console.log("Done!");
   process.exit(0);
-}
-
-// Runs doThis(user, blog, template) for each template, one at a time, and
-// resolves once every template has been done. A rejection stops the run.
-function eachTemplateAsync(doThis) {
-  return new Promise(function (resolve, reject) {
-    eachTemplate(
-      function (user, blog, template, next) {
-        doThis(user, blog, template).then(
-          function () {
-            next();
-          },
-          function (err) {
-            next(err);
-          }
-        );
-      },
-      function (err) {
-        if (err) return reject(err);
-        resolve();
-      }
-    );
-  });
 }
 
 async function processTemplate(user, blog, template) {

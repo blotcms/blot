@@ -99,9 +99,8 @@ describe("scheduleSubscriptionEmail", function () {
         "UPCOMING_EXPIRY",
         "UPCOMING_MONTHLY_FIRST_RENEWAL",
       ].forEach(function (name) {
-        spyOn(email, name).and.callFake(function (uid, locals, callback) {
+        spyOn(email, name).and.callFake(async function (uid) {
           sends.push([name, uid]);
-          callback();
         });
       });
     });
@@ -173,8 +172,8 @@ describe("scheduleSubscriptionEmail", function () {
 
       await setUser(uid, { subscription: sub });
 
-      email.UPCOMING_RENEWAL.and.callFake(function (u, locals, callback) {
-        callback(new Error("mail is down"));
+      email.UPCOMING_RENEWAL.and.callFake(async function () {
+        throw new Error("mail is down");
       });
 
       var failed = false;
@@ -185,9 +184,7 @@ describe("scheduleSubscriptionEmail", function () {
       }
       expect(failed).toBe(true);
 
-      email.UPCOMING_RENEWAL.and.callFake(function (u, locals, callback) {
-        callback();
-      });
+      email.UPCOMING_RENEWAL.and.callFake(async function () {});
 
       expect(await subscriptionEmail.sendForUser(uid, now)).toBe(
         "UPCOMING_RENEWAL"

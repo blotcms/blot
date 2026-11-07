@@ -123,12 +123,13 @@ async function printResult(result) {
 }
 
 // Resolves to { user, blog }, or to undefined when the lookup fails
-function lookupBlog(identifier) {
-  return new Promise((resolve) => {
-    getBlog(identifier, (err, user, blog) =>
-      resolve(err ? undefined : { user, blog })
-    );
-  });
+async function lookupBlog(identifier) {
+  try {
+    const { user, blog } = await getBlog(identifier);
+    return { user, blog };
+  } catch (err) {
+    return undefined;
+  }
 }
 
 async function searchOne() {
@@ -159,56 +160,55 @@ async function searchOne() {
 }
 
 // each/blog.js supplies the sticky blog/entry progress display.
-function searchAll() {
+async function searchAll() {
   const results = [];
   let searched = 0;
 
-  eachBlog(
-    function (user, blog, next) {
-      scan(blog)
-        .then(async function (files) {
-          searched++;
-          if (!files.length) return;
+  // An error that stops the run was never reported here; the summary of what
+  // was searched up to that point is printed regardless
+  try {
+    await eachBlog(async function (user, blog) {
+      try {
+        const files = await scan(blog);
 
-          const result = summarise(blog, user, files);
-          results.push(result);
+        searched++;
+        if (!files.length) return;
 
-          // Report matches as they are found (kept off stdout for --json).
-          if (!asJSON) await printResult(result);
-        })
-        .catch(function (err) {
-          console.error("Error scanning blog " + blog.id + ": " + err.message);
-        })
-        .then(() => next());
-    },
-    async function () {
-      const totalFiles = results.reduce((n, r) => n + r.files.length, 0);
-      const summary = {
-        blogsSearched: searched,
-        blogsWithTags: results.length,
-        filesWithTags: totalFiles,
-      };
+        const result = summarise(blog, user, files);
+        results.push(result);
 
-      if (asJSON) {
-        console.log(JSON.stringify({ summary, blogs: results }, null, 2));
-        return process.exit();
+        // Report matches as they are found (kept off stdout for --json).
+        if (!asJSON) await printResult(result);
+      } catch (err) {
+        console.error("Error scanning blog " + blog.id + ": " + err.message);
       }
+    }, options);
+  } catch (err) {}
 
-      console.log("");
-      console.log("Searched " + searched + " blog(s)");
-      console.log(
-        totalFiles +
-          " file(s) with template tags across " +
-          results.length +
-          " blog(s)"
-      );
+  const totalFiles = results.reduce((n, r) => n + r.files.length, 0);
+  const summary = {
+    blogsSearched: searched,
+    blogsWithTags: results.length,
+    filesWithTags: totalFiles,
+  };
 
-      for (const result of results) await printResult(result);
+  if (asJSON) {
+    console.log(JSON.stringify({ summary, blogs: results }, null, 2));
+    return process.exit();
+  }
 
-      process.exit();
-    },
-    options
+  console.log("");
+  console.log("Searched " + searched + " blog(s)");
+  console.log(
+    totalFiles +
+      " file(s) with template tags across " +
+      results.length +
+      " blog(s)"
   );
+
+  for (const result of results) await printResult(result);
+
+  process.exit();
 }
 
 if (identifier) {

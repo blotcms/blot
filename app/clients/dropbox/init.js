@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const Blog = require("models/blog");
 const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
@@ -12,7 +11,7 @@ const { get: getDropboxAccount } = require("./database");
 const getHealth = require("./getHealth");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
-const sync = promisify(require("./sync"));
+const sync = require("./sync");
 const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
 const getAllIDs = () => Blog.getAllIDs();

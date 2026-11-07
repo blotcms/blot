@@ -7,33 +7,12 @@ var Sync = require("sync");
 // Dont write tests for this or you'll need to regenerate
 // an access token for Travis and it'll be annoying. Just
 // test it on the development server.
-module.exports = function disconnect(blogID) {
-  return new Promise(function (resolve, reject) {
-    // Settles once the sync engine's done has released the lock and called
-    // back.
-    function callback(err) {
-      if (err) return reject(err);
-      resolve();
-    }
-
-    // Make sure we don't create something unexpected
-    // by messing with a blog mid-sync. This might fail
-    // we need to surface a clear error message to the user.
-    Sync(blogID, function (err, folder, done) {
-      if (err) return callback(err);
-
-      // The sync engine's done is never awaited or returned: it releases the
-      // lock and calls back, and a rejection from the callback must stay
-      // unhandled (the process dies and the lock is released).
-      remove(blogID, folder).then(
-        function () {
-          done(null, callback);
-        },
-        function (err) {
-          done(err, callback);
-        }
-      );
-    });
+module.exports = async function disconnect(blogID) {
+  // Make sure we don't create something unexpected
+  // by messing with a blog mid-sync. This might fail
+  // we need to surface a clear error message to the user.
+  await Sync(blogID, function (folder) {
+    return remove(blogID, folder);
   });
 };
 

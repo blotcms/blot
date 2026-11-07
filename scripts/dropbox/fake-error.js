@@ -18,7 +18,6 @@
 // webhooks, dashboard actions and hourly validation hit it too.
 
 const fs = require("fs");
-const { promisify } = require("util");
 const { MODES, flagPath } = require("../development/fake-dropbox-errors");
 
 const [command, ...args] = process.argv.slice(2);
@@ -70,7 +69,7 @@ async function run(mode, blogID, flags) {
     } else {
       const Blog = require("models/blog");
       const blog = await Blog.get({ id: blogID });
-      await promisify(require("clients/dropbox/sync"))(blog);
+      await require("clients/dropbox/sync")(blog);
     }
     console.log("completed without throwing");
   } catch (err) {

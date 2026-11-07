@@ -123,12 +123,7 @@ news.post("/cancel", parse, async function (req, res, next) {
 
     await client.setEx(cancellationKey(guid), TTL, email);
 
-    await new Promise(function (resolve, reject) {
-      Email.NEWSLETTER_CANCELLATION_CONFIRMATION(null, locals, function (err) {
-        if (err) return reject(err);
-        return resolve();
-      });
-    });
+    await Email.NEWSLETTER_CANCELLATION_CONFIRMATION(null, locals);
 
     res.redirect("/news/cancel?email=" + email);
   } catch (err) {
@@ -150,9 +145,8 @@ news.get("/cancel/:guid", async function (req, res, next) {
     res.locals.email = email;
 
     if (removed) {
-      Email.NEWSLETTER_CANCELLATION_CONFIRMED(null, locals, function () {
-        // Email confirmation sent
-      });
+      // Not awaited: the email function logs a failed send
+      Email.NEWSLETTER_CANCELLATION_CONFIRMED(null, locals);
     }
 
     res.locals.title = "Cancelled";
@@ -182,9 +176,8 @@ news.get("/confirm/:guid", async function (req, res, next) {
     // link we send out a confirmation email, subsequent
     // clicks they just see the confirmation page.
     if (added) {
-      Email.NEWSLETTER_SUBSCRIPTION_CONFIRMED(null, locals, function () {
-        // Email confirmation sent
-      });
+      // Not awaited: the email function logs a failed send
+      Email.NEWSLETTER_SUBSCRIPTION_CONFIRMED(null, locals);
     }
 
     res.redirect(req.baseUrl + "/confirmed");
@@ -215,12 +208,7 @@ news.post("/sign-up", parse, async function (req, res, next) {
 
     await client.setEx(confirmationKey(guid), TTL, email);
 
-    await new Promise(function (resolve, reject) {
-      Email.NEWSLETTER_SUBSCRIPTION_CONFIRMATION(null, locals, function (err) {
-        if (err) return reject(err);
-        return resolve();
-      });
-    });
+    await Email.NEWSLETTER_SUBSCRIPTION_CONFIRMATION(null, locals);
 
     res.redirect("/news/sign-up?email=" + email);
   } catch (err) {

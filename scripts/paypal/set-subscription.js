@@ -1,6 +1,5 @@
 const config = require("config");
 const User = require("models/user");
-const { promisify } = require("util");
 
 async function main(uid, paypalId) {
   if (!uid) {
@@ -37,7 +36,7 @@ async function main(uid, paypalId) {
 const get = require("../get/user");
 
 (async () => {
-  const user = await promisify(get)(process.argv[2]);
+  const { user } = await get(process.argv[2]);
   if (!user) throw new Error("No user found");
   await main(user.uid, process.argv[3]);
   console.log(

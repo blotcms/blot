@@ -100,13 +100,8 @@ function getUser(uid) {
   return getById(uid);
 }
 
-function sendEmail(name, uid) {
-  return new Promise(function (resolve, reject) {
-    email[name](uid, {}, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+async function sendEmail(name, uid) {
+  await email[name](uid, {});
 }
 
 // Sends the user's warning email if they are due one and nobody has sent it

@@ -91,7 +91,7 @@ describe("icloud routes stamp lastSync", function () {
       walked.push(id);
       return {};
     });
-    stub("email", { ICLOUD_RESYNC_ISSUE: (_, locals, callback) => callback() });
+    stub("email", { ICLOUD_RESYNC_ISSUE: async () => {} });
     stub("blog", {
       get: async ({ id }) => ({ id, client: "icloud" }),
     });

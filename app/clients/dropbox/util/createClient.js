@@ -8,8 +8,8 @@ const config = require("config");
 
 // Resolves to { error, client, account } and never rejects, since the caller
 // sometimes needs the account even when there is an error with the client
-// (during disconnection, say).
-async function attempt(blogID) {
+// (during disconnection, say). client is null whenever there is an error.
+module.exports = async function createClient(blogID) {
   let account;
 
   try {
@@ -72,13 +72,4 @@ async function attempt(blogID) {
   }
 
   return { error: null, client, account };
-}
-
-// Calls back with (err, client, account): several results, so this keeps its
-// callback form (util/loadClient.js wraps it for callers that await).
-module.exports = function createClient(blogID, callback) {
-  attempt(blogID).then(function ({ error, client, account }) {
-    if (error) return callback(error, null, account);
-    callback(null, client, account);
-  });
 };

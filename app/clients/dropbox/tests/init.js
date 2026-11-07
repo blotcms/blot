@@ -441,11 +441,11 @@ describe("dropbox init", function () {
         }
         return behavior.fixReport || {};
       });
-      stub("sync", function (blog, options, callback) {
+      stub("sync", async function (blog, options) {
         // The catch-up sync must not stamp last_sync
         expect(options).toEqual({ stampLastSync: false });
         synced.push(blog.id);
-        callback(behaviors[blog.id].syncError || null);
+        if (behaviors[blog.id].syncError) throw behaviors[blog.id].syncError;
       });
       stub("getHealth", async function (blogID) {
         const health = require("clients/health");
@@ -471,9 +471,8 @@ describe("dropbox init", function () {
         },
       });
       stub("email", {
-        DROPBOX_SYNC_ISSUE: function (uid, locals, callback) {
+        DROPBOX_SYNC_ISSUE: async function (uid, locals) {
           sentEmails.push(locals);
-          callback();
         },
       });
       delete require.cache[paths.init];

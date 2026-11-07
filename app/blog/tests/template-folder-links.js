@@ -365,30 +365,16 @@ describe("folder links in templates", function () {
         client.sMembers(templateKey.templateManifestsPending(this.blog.id));
       let pendingDuringSync;
 
-      await new Promise((resolve, reject) => {
-        sync(this.blog.id, async (err, folder, done) => {
-          if (err) return done(err, reject);
+      await sync(this.blog.id, async (folder) => {
+        const files = { "/a.png": "one", "/b.png": "two", "/c.png": "three" };
 
-          const files = { "/a.png": "one", "/b.png": "two", "/c.png": "three" };
+        for (const path in files) {
+          await this.blog.write({ path, content: files[path] });
+          await folder.update(path);
+        }
 
-          for (const path in files) {
-            await this.blog.write({ path, content: files[path] });
-            await new Promise((next, fail) =>
-              folder
-                .update(path)
-                .then(
-                  () => null,
-                  (updateErr) => updateErr
-                )
-                .then((e) => (e ? fail(e) : next()))
-            );
-          }
-
-          // three files changed, one template waiting for one update
-          pendingDuringSync = await pending();
-
-          done(null, resolve);
-        });
+        // three files changed, one template waiting for one update
+        pendingDuringSync = await pending();
       });
 
       expect(pendingDuringSync.length).toBe(1);

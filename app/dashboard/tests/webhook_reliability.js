@@ -279,7 +279,9 @@ describe("payment webhook delivery reliability", function () {
         "CANCELLED_FIRST_PERIOD",
         "CLOSED",
         "ALREADY_CANCELLED",
-      ].forEach((name) => spyOn(email, name));
+      ].forEach((name) =>
+        spyOn(email, name).and.returnValue(Promise.resolve())
+      );
     });
     afterEach(function () {
       delete user.paypal;
@@ -288,11 +290,7 @@ describe("payment webhook delivery reliability", function () {
     it("sends the cancellation email on the first CANCELLED transition", async function () {
       await paypal.updateSubscription("I-TEST");
       expect(email.CANCELLED).toHaveBeenCalledTimes(1);
-      expect(email.CANCELLED).toHaveBeenCalledWith(
-        "test-user",
-        {},
-        jasmine.any(Function)
-      );
+      expect(email.CANCELLED).toHaveBeenCalledWith("test-user", {});
       expect(email.CANCELLED_FIRST_PERIOD).not.toHaveBeenCalled();
       expect(client.set).toHaveBeenCalledWith(
         "user:test-user:paypal_cancel_email:I-TEST",
@@ -306,8 +304,7 @@ describe("payment webhook delivery reliability", function () {
       expect(email.CANCELLED_FIRST_PERIOD).toHaveBeenCalledTimes(1);
       expect(email.CANCELLED_FIRST_PERIOD).toHaveBeenCalledWith(
         "test-user",
-        {},
-        jasmine.any(Function)
+        {}
       );
       expect(email.CANCELLED).not.toHaveBeenCalled();
     });
@@ -334,16 +331,14 @@ describe("payment webhook delivery reliability", function () {
         return Promise.resolve([]);
       };
       spyOn(client, "multi").and.returnValue(multi);
-      email.CANCELLED.and.callFake((uid, locals, cb) =>
-        cb(new Error("mailgun"))
-      );
+      email.CANCELLED.and.callFake(() => Promise.reject(new Error("mailgun")));
       await paypal.updateSubscription("I-TEST");
       await new Promise((r) => setImmediate(r));
       expect(multi.del).toHaveBeenCalledWith(K);
       expect(multi.set).toHaveBeenCalledWith(K + ":failed", "1", {
         EX: (90 * DAY) / 1000,
       });
-      email.CANCELLED.and.stub();
+      email.CANCELLED.and.returnValue(Promise.resolve());
       user.paypal = { status: "CANCELLED" };
       await paypal.updateSubscription("I-TEST");
       await paypal.updateSubscription("I-TEST");

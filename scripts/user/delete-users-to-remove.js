@@ -28,33 +28,6 @@ if (HELP_FLAG) {
   process.exit(0);
 }
 
-// scripts/each/user is callback-based and stops at the first error. Runs fn
-// for each user in turn, and passes a rejection from fn on as the error.
-function forEachUser(fn) {
-  return new Promise(function (resolve, reject) {
-    eachUser(
-      function (user, next) {
-        Promise.resolve()
-          .then(function () {
-            return fn(user);
-          })
-          .then(
-            function () {
-              next();
-            },
-            function (err) {
-              next(err);
-            }
-          );
-      },
-      function (err) {
-        if (err) return reject(err);
-        resolve();
-      }
-    );
-  });
-}
-
 function overdueFor(user) {
   return removal.overdueFor(user);
 }
@@ -157,7 +130,7 @@ async function collectCandidates() {
     candidates.push(candidate);
   }
 
-  await forEachUser(async function (user) {
+  await eachUser(async function (user) {
     var overdue;
 
     try {

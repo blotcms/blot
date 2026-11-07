@@ -195,8 +195,8 @@ const updateSubscription = async (subscriptionID) => {
           ? email.CANCELLED_FIRST_PERIOD
           : email.CANCELLED;
 
-        send(user.uid, {}, (sendErr) => {
-          if (!sendErr) return;
+        // Not awaited, so the webhook answers without waiting on Mailgun
+        send(user.uid, {}).catch((sendErr) => {
           console.log(prefix(), "cancellation email failed", sendErr);
           client
             .multi()

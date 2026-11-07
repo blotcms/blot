@@ -195,8 +195,10 @@ describe("google drive hotDocPoller", function () {
   it("does not evict a doc that was enqueued again after the poll read it", async function () {
     await poller.enqueue({ blogID, serviceAccountId, fileId, folderId });
     const stale = await poller.loadItem(id);
-    // Another process re-enqueues it after our snapshot
-    const refreshed = String(Date.now());
+    // Another process re-enqueues it after our snapshot. Not Date.now():
+    // on a fast run that is the same millisecond as the snapshot's
+    // lastSeen, so the poll could not tell the two apart.
+    const refreshed = String(stale.lastSeen + 1);
     await client.hSet(ITEM_PREFIX + id, "lastSeen", refreshed);
 
     expect(await poller.evictIfUnchanged(stale, "age")).toBe(false);

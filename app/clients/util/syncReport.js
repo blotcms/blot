@@ -432,21 +432,13 @@ async function send(report, sendEmail, logPrefix, options) {
       sendEmail = require("helper/email")[sendEmail];
     }
 
-    sent = await new Promise(function (resolve) {
-      sendEmail(null, view(report), function (err) {
-        if (err) {
-          console.error(
-            clfdate(),
-            logPrefix,
-            "Failed to send issue email",
-            err
-          );
-        } else {
-          console.log(clfdate(), logPrefix, "Sent sync issue report email");
-        }
-        resolve(!err);
-      });
-    });
+    try {
+      await sendEmail(null, view(report));
+      console.log(clfdate(), logPrefix, "Sent sync issue report email");
+    } catch (err) {
+      console.error(clfdate(), logPrefix, "Failed to send issue email", err);
+      sent = false;
+    }
   }
 
   if (previous) {

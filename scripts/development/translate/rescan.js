@@ -81,33 +81,23 @@ async function rescanWithRetry(blogID) {
 }
 
 function rescanOnce(blogID) {
-  return new Promise((resolve, reject) => {
-    sync(blogID, async function (err, folder, done) {
-      if (err) return reject(err);
+  return sync(blogID, async function (folder) {
+    const update = folder.update;
+    const paths = await walk(blogID);
+    let updated = 0;
+    let failed = 0;
 
-      const update = folder.update;
-      let paths = [];
-      let updated = 0;
-      let failed = 0;
-
+    for (const path of paths) {
       try {
-        paths = await walk(blogID);
-
-        for (const path of paths) {
-          try {
-            await update(path);
-            updated++;
-          } catch (e) {
-            // One unreadable or unconvertible file should not abandon the scan.
-            failed++;
-          }
-        }
+        await update(path);
+        updated++;
       } catch (e) {
-        return done(e, () => reject(e));
+        // One unreadable or unconvertible file should not abandon the scan.
+        failed++;
       }
+    }
 
-      done(null, () => resolve({ total: paths.length, updated, failed }));
-    });
+    return { total: paths.length, updated, failed };
   });
 }
 

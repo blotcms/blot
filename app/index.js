@@ -206,11 +206,12 @@ console.log(clfdate(), `Starting server env=${config.environment}`);
     // Worktree preview sidecars (scripts/development/preview.sh) and forked
     // workers (their parent emails when one dies: workerExitEmail) skip it
     if (!config.preview && !config.worker_child) {
-      serverStartEvent().then(
-        (event) =>
-          event &&
-          email.SERVER_START(null, { container: config.container, event })
-      );
+      // Not returned: SERVER_START logs its own failure, and a rejection
+      // here would reach the unhandledRejection listener and stop the server
+      serverStartEvent().then((event) => {
+        if (event)
+          email.SERVER_START(null, { container: config.container, event });
+      });
     }
   });
 

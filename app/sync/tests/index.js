@@ -1,47 +1,105 @@
 describe("sync", function () {
   var sync = require("../index");
+  var establishSyncLock = require("../establishSyncLock");
 
   // A lock held by a dead process is freed by TTL expiry (10s) rather than
   // by the OS, so poll until the next sync can acquire it.
-  function syncWhenFree(blogID, callback, deadline) {
-    deadline = deadline || Date.now() + 25 * 1000;
-    sync(blogID, function (err, folder, done) {
-      if (err && Date.now() < deadline) {
-        return setTimeout(function () {
-          syncWhenFree(blogID, callback, deadline);
-        }, 1000);
+  async function syncWhenFree(blogID) {
+    var deadline = Date.now() + 25 * 1000;
+
+    for (;;) {
+      try {
+        return await sync(blogID, async function () {});
+      } catch (err) {
+        if (Date.now() >= deadline) throw err;
+        await new Promise(function (resolve) {
+          setTimeout(resolve, 1000);
+        });
       }
-      callback(err, folder, done);
-    });
+    }
   }
 
   // Set up a test blog before each test
   global.test.blog();
 
-  it("acquires a lease for a blog", function (testDone) {
-    sync(this.blog.id, function (err, folder, done) {
-      if (err) return testDone.fail(err);
-
+  it("acquires a lease for a blog", async function () {
+    var result = await sync(this.blog.id, async function (folder) {
       expect(folder.update).toEqual(jasmine.any(Function));
-      expect(done).toEqual(jasmine.any(Function));
-
-      done(null, testDone);
+      expect(folder.status).toEqual(jasmine.any(Function));
+      return "result";
     });
+
+    expect(result).toEqual("result");
+  });
+
+  it("rethrows the error the function throws, after releasing the lock", async function () {
+    var blogID = this.blog.id;
+    var thrown = new Error("boom");
+
+    await expectAsync(
+      sync(blogID, async function () {
+        throw thrown;
+      })
+    ).toBeRejectedWith(thrown);
+
+    // The lock was released
+    await sync(blogID, async function () {});
+  });
+
+  it("rejects when the blog does not exist, without calling the function", async function () {
+    var called = false;
+    var err;
+
+    try {
+      await sync("blog_nonexistent" + Date.now(), async function () {
+        called = true;
+      });
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err && err.message).toMatch(/^Cannot sync blog /);
+    expect(called).toBe(false);
+  });
+
+  it("throws a TypeError without a function", function () {
+    var blogID = this.blog.id;
+
+    expect(function () {
+      sync(blogID);
+    }).toThrowError(TypeError);
+  });
+
+  it("establishSyncLock resolves the folder and an async done", async function () {
+    var blogID = this.blog.id;
+    var { folder, done } = await establishSyncLock(blogID);
+
+    expect(folder.update).toEqual(jasmine.any(Function));
+    await done(null);
+
+    var thrown = new Error("boom");
+    var lock = await establishSyncLock(blogID);
+    await expectAsync(lock.done(thrown)).toBeRejectedWith(thrown);
+
+    // The lock was released
+    await sync(blogID, async function () {});
   });
 
   it(
     "will only allow one sync at once",
-    function (testDone) {
+    async function () {
       var blog = this.blog;
+      var err;
 
-      sync(blog.id, function (err, folder, done) {
-        if (err) return testDone.fail(err);
-
-        sync(blog.id, function (err) {
-          expect(err.message).toContain("Failed to acquire folder lock");
-          done(null, testDone);
-        });
+      await sync(blog.id, async function () {
+        try {
+          await sync(blog.id, async function () {});
+        } catch (e) {
+          err = e;
+        }
       });
+
+      expect(err.message).toContain("Failed to acquire folder lock");
     },
     15 * 1000
   );
@@ -59,10 +117,9 @@ describe("sync", function () {
       // died (was killed)? We test this by trying to acquire a lock.
       child.on("close", function () {
         console.log("CLOSED CALLED! resyncing...");
-        syncWhenFree(blog.id, function (err, folder, done) {
-          if (err) return testDone.fail(err);
-          done(null, testDone);
-        });
+        syncWhenFree(blog.id).then(function () {
+          testDone();
+        }, testDone.fail);
       });
 
       console.log("Sending a message to child");
@@ -91,31 +148,19 @@ describe("sync", function () {
       // Did sync release the child's lock on the blog when the child
       // died (was killed)? We test this by trying to acquire a lock.
       child.on("close", function () {
-        syncWhenFree(blog.id, function (err, folder, done) {
-          if (err) return testDone.fail(err);
-          done(null, testDone);
-        });
+        syncWhenFree(blog.id).then(function () {
+          testDone();
+        }, testDone.fail);
       });
     },
     40 * 1000
   );
 
-  it("will allow you to sync, release and re-sync", function (testDone) {
+  it("will allow you to sync, release and re-sync", async function () {
     var blog = this.blog;
 
-    sync(blog.id, function (err, folder, done) {
-      if (err) return testDone.fail(err);
-
-      done(null, function (err) {
-        if (err) return testDone.fail(err);
-
-        sync(blog.id, function (err, folder, done) {
-          if (err) return testDone.fail(err);
-
-          done(null, testDone);
-        });
-      });
-    });
+    await sync(blog.id, async function () {});
+    await sync(blog.id, async function () {});
   });
 });
 
@@ -283,14 +328,10 @@ describe("sync cacheID", function () {
   global.test.blog();
 
   // Changes one file in the blog's folder, then finishes the sync
-  function syncChange(blogID, callback) {
-    sync(blogID, function (err, folder, done) {
-      if (err) return callback(err);
-      storage.write(blogID, "/a.txt", "Hello").then(function () {
-        folder.update("/a.txt").then(function () {
-          done(null, callback);
-        }, callback);
-      }, callback);
+  function syncChange(blogID) {
+    return sync(blogID, async function (folder) {
+      await storage.write(blogID, "/a.txt", "Hello");
+      await folder.update("/a.txt");
     });
   }
 
@@ -316,140 +357,98 @@ describe("sync cacheID", function () {
 
     const before = await Blog.get({ id: blogID });
 
-    await new Promise(function (resolve) {
-      syncChange(blogID, function (err) {
-        expect(err).toBe(releaseError);
-        expect(Blog.bumpCacheID).toHaveBeenCalled();
-        resolve();
-      });
-    });
+    await expectAsync(syncChange(blogID)).toBeRejectedWith(releaseError);
+    expect(Blog.bumpCacheID).toHaveBeenCalled();
 
     const after = await Blog.get({ id: blogID });
     expect(after.cacheID).toBeGreaterThan(before.cacheID);
   });
 
-  // Syncs a.txt with these contents
-  function syncContents(blogID, contents, callback) {
-    sync(blogID, function (err, folder, done) {
-      if (err) return callback(err);
-      storage.write(blogID, "/a.txt", Buffer.from(contents)).then(function () {
-        folder.update("/a.txt").then(function (result) {
-          done(null, function (err) {
-            callback(err, result);
-          });
-        }, callback);
-      }, callback);
+  // Syncs a.txt with these contents, resolving the update's result
+  function syncContents(blogID, contents) {
+    return sync(blogID, async function (folder) {
+      await storage.write(blogID, "/a.txt", Buffer.from(contents));
+      return folder.update("/a.txt");
     });
   }
 
   // A resync (a client reconnecting, say) sends every file again: when each
   // builds exactly the entry already stored, the blog's pages are unchanged
   // and purging them would only make the next visitors wait on a render
-  it("leaves the cacheID alone when a sync builds the same entry", function (testDone) {
+  it("leaves the cacheID alone when a sync builds the same entry", async function () {
     const blogID = this.blog.id;
 
-    syncContents(blogID, "Hello", function (err) {
-      if (err) return testDone.fail(err);
+    await syncContents(blogID, "Hello");
 
-      spyOn(Blog, "bumpCacheID").and.callThrough();
+    spyOn(Blog, "bumpCacheID").and.callThrough();
 
-      syncContents(blogID, "Hello", function (err, result) {
-        if (err) return testDone.fail(err);
-        expect(result).toEqual({ error: null, changed: false });
-        expect(Blog.bumpCacheID).not.toHaveBeenCalled();
-        testDone();
-      });
-    });
+    const result = await syncContents(blogID, "Hello");
+    expect(result).toEqual({ error: null, changed: false });
+    expect(Blog.bumpCacheID).not.toHaveBeenCalled();
   });
 
-  it("bumps the cacheID when a sync changes an entry", function (testDone) {
+  it("bumps the cacheID when a sync changes an entry", async function () {
     const blogID = this.blog.id;
 
-    syncContents(blogID, "Hello", function (err) {
-      if (err) return testDone.fail(err);
+    await syncContents(blogID, "Hello");
 
-      spyOn(Blog, "bumpCacheID").and.callThrough();
+    spyOn(Blog, "bumpCacheID").and.callThrough();
 
-      syncContents(blogID, "Hello, world", function (err, result) {
-        if (err) return testDone.fail(err);
-        expect(result.changed).not.toBe(false);
-        expect(Blog.bumpCacheID).toHaveBeenCalled();
-        testDone();
-      });
-    });
+    const result = await syncContents(blogID, "Hello, world");
+    expect(result.changed).not.toBe(false);
+    expect(Blog.bumpCacheID).toHaveBeenCalled();
   });
 
   // A file which changes while it builds is synced again. The first pass has
   // already stored the new entry, so the second finds it unchanged: the sync
   // must still purge and bump for the change the first pass stored.
-  it("bumps the cacheID when a file changed while it built", function (testDone) {
+  it("bumps the cacheID when a file changed while it built", async function () {
     const blogID = this.blog.id;
     const storage = require("storage/folder");
 
-    syncContents(blogID, "Hello", function (err) {
-      if (err) return testDone.fail(err);
+    await syncContents(blogID, "Hello");
 
-      spyOn(Blog, "bumpCacheID").and.callThrough();
+    spyOn(Blog, "bumpCacheID").and.callThrough();
 
-      // The second stat of the path (after the first pass built it) sees a
-      // different size, as if the file was written again meanwhile
-      const stat = storage.stat;
-      let calls = 0;
-      spyOn(storage, "stat").and.callFake(async function (id, path) {
-        const result = await stat.apply(storage, arguments);
-        if (path === "/a.txt" && ++calls === 2)
-          return Object.assign({}, result, { size: result.size + 1 });
-        return result;
-      });
-
-      syncContents(blogID, "Hello, world", function (err, result) {
-        if (err) return testDone.fail(err);
-        expect(calls).toBeGreaterThan(2);
-        expect(result.changed).not.toBe(false);
-        expect(Blog.bumpCacheID).toHaveBeenCalled();
-        testDone();
-      });
+    // The second stat of the path (after the first pass built it) sees a
+    // different size, as if the file was written again meanwhile
+    const stat = storage.stat;
+    let calls = 0;
+    spyOn(storage, "stat").and.callFake(async function (id, path) {
+      const result = await stat.apply(storage, arguments);
+      if (path === "/a.txt" && ++calls === 2)
+        return Object.assign({}, result, { size: result.size + 1 });
+      return result;
     });
+
+    const result = await syncContents(blogID, "Hello, world");
+    expect(calls).toBeGreaterThan(2);
+    expect(result.changed).not.toBe(false);
+    expect(Blog.bumpCacheID).toHaveBeenCalled();
   });
 
   // Not every file is an entry: a public file is served from the folder as
   // it is, so it must still purge the pages that cached it
-  it("bumps the cacheID when a sync updates a file which is not an entry", function (testDone) {
+  it("bumps the cacheID when a sync updates a file which is not an entry", async function () {
     const blogID = this.blog.id;
 
     spyOn(Blog, "bumpCacheID").and.callThrough();
 
-    sync(blogID, function (err, folder, done) {
-      if (err) return testDone.fail(err);
-      storage
-        .write(blogID, "/_public/style.css", Buffer.from("a{}"))
-        .then(function () {
-          folder.update("/_public/style.css").then(function () {
-            done(null, function (err) {
-              if (err) return testDone.fail(err);
-              expect(Blog.bumpCacheID).toHaveBeenCalled();
-              testDone();
-            });
-          }, testDone.fail);
-        }, testDone.fail);
+    await sync(blogID, async function (folder) {
+      await storage.write(blogID, "/_public/style.css", Buffer.from("a{}"));
+      await folder.update("/_public/style.css");
     });
+
+    expect(Blog.bumpCacheID).toHaveBeenCalled();
   });
 
-  it("folder.update returns a promise", function (testDone) {
+  it("folder.update returns a promise", async function () {
     const blogID = this.blog.id;
 
-    sync(blogID, function (err, folder, done) {
-      if (err) return testDone.fail(err);
-
+    await sync(blogID, async function (folder) {
       const pending = folder.update("/a.txt");
       expect(typeof pending.then).toBe("function");
-
-      pending.then(function () {
-        done(null, function (err) {
-          if (err) return testDone.fail(err);
-          testDone();
-        });
-      }, testDone.fail);
+      await pending;
     });
   });
 });

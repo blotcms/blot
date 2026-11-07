@@ -160,9 +160,8 @@ describe("icloud init validateAllBlogs", function () {
       },
     });
     stub("email", {
-      ICLOUD_SYNC_ISSUE: function (uid, locals, callback) {
+      ICLOUD_SYNC_ISSUE: async function (uid, locals) {
         sentEmails.push(locals);
-        callback();
       },
     });
     // In-memory stand-in for helper/lock: held keys reject with ELOCKED

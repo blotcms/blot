@@ -28,32 +28,28 @@ const notifyResyncRequested = notificationCap({
 // Longest macserver-supplied failure reason kept for the email.
 const MAX_REASON_LENGTH = 500;
 
-// Adapts the capped ICLOUD_RESYNC_ISSUE email to the (err, locals, callback)
-// shape syncReport.send expects, adding the macserver's reason: its own
+// Adapts the capped ICLOUD_RESYNC_ISSUE email to the (uid, locals) shape
+// syncReport.send expects, adding the macserver's reason: its own
 // description of what failed (eg. "upload for Posts/x.md failed after
-// retries"), which older macserver versions don't send.
-const resyncReportSender =
-  (blogID, reason) => async (err, locals, callback) => {
-    let result;
+// retries"), which older macserver versions don't send. It rejects if the
+// email fails to send, so syncReport logs the failure and won't remember the
+// issue as reported.
+const resyncReportSender = (blogID, reason) => async (uid, locals) => {
+  let delivery;
 
-    try {
-      result = await notifyResyncRequested(blogID, () =>
-        email.ICLOUD_RESYNC_ISSUE(
-          null,
-          Object.assign({}, locals, { reason }),
-          callback
-        )
-      );
-    } catch (e) {
-      // syncReport logs the failure and won't remember the issue as reported
-      return callback(e);
-    }
+  const result = await notifyResyncRequested(blogID, () => {
+    delivery = email.ICLOUD_RESYNC_ISSUE(
+      null,
+      Object.assign({}, locals, { reason })
+    );
+  });
 
-    if (result === "suppressed") {
-      console.log("Resync report suppressed", { blogID });
-      callback();
-    }
-  };
+  if (result === "suppressed") {
+    console.log("Resync report suppressed", { blogID });
+  }
+
+  await delivery;
+};
 
 module.exports = async function (req, res) {
   const blogID = req.header("blogID");

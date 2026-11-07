@@ -121,17 +121,9 @@ async function main() {
   const paths = [];
   for (let i = 0; i < FILES; i++) paths.push(`/Posts/post-${i}.md`);
   const resync = () =>
-    new Promise((resolve, reject) => {
-      sync(blog.id, async (err, folder, done) => {
-        if (err) return reject(err);
-        const update = folder.update;
-        try {
-          for (const path of paths) await update(path);
-        } catch (e) {
-          return done(e, () => reject(e));
-        }
-        done(null, (err) => (err ? reject(err) : resolve()));
-      });
+    sync(blog.id, async (folder) => {
+      const update = folder.update;
+      for (const path of paths) await update(path);
     });
 
   const log = console.log;

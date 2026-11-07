@@ -88,8 +88,12 @@ describe("dropbox sync when Redis is unavailable", function () {
     };
 
     require.cache[createClientPath] = {
-      exports: function (_blogID, callback) {
-        callback(null, client, Object.assign({}, store.account));
+      exports: async function () {
+        return {
+          error: null,
+          client,
+          account: Object.assign({}, store.account),
+        };
       },
     };
     require.cache[databasePath] = {
@@ -125,59 +129,79 @@ describe("dropbox sync when Redis is unavailable", function () {
       throw freeze();
     });
 
-    sync(blog, function (err) {
-      expect(isRedisUnavailableError(err)).toBe(true);
+    sync(blog)
+      .then(
+        () => null,
+        (err) => err
+      )
+      .then(function (err) {
+        expect(isRedisUnavailableError(err)).toBe(true);
 
-      // The file made it to the folder but not into the database, and the
-      // cursor was not moved past the change
-      folder.read(blog.id, path).then(function (buffer) {
-        expect(buffer.toString("utf-8")).toEqual(contents);
-        expect(store.account.cursor).toEqual("cursor-0");
-        expect(saved.some((values) => "cursor" in values)).toBe(false);
+        // The file made it to the folder but not into the database, and the
+        // cursor was not moved past the change
+        folder.read(blog.id, path).then(function (buffer) {
+          expect(buffer.toString("utf-8")).toEqual(contents);
+          expect(store.account.cursor).toEqual("cursor-0");
+          expect(saved.some((values) => "cursor" in values)).toBe(false);
 
-        Entry.get(blog.id, path).then(function (entry) {
-          expect(entry).toBeFalsy();
+          Entry.get(blog.id, path).then(function (entry) {
+            expect(entry).toBeFalsy();
 
-          // The freeze is over
-          Entry.set.and.callThrough();
+            // The freeze is over
+            Entry.set.and.callThrough();
 
-          sync(blog, function (err) {
-            if (err) return done.fail(err);
+            sync(blog)
+              .then(
+                () => null,
+                (err) => err
+              )
+              .then(function (err) {
+                if (err) return done.fail(err);
 
-            expect(store.account.cursor).toEqual("cursor-1");
+                expect(store.account.cursor).toEqual("cursor-1");
 
-            checkEntry({ path: path, deleted: false }, function (err) {
-              if (err) return done.fail(err);
-              done();
-            });
-          });
+                checkEntry({ path: path, deleted: false }, function (err) {
+                  if (err) return done.fail(err);
+                  done();
+                });
+              });
+          }, done.fail);
         }, done.fail);
-      }, done.fail);
-    });
+      });
   });
 
   it("stamps last_sync by default, but not for a catch-up sync", function (done) {
     const blog = this.blog;
 
-    sync(blog, function (err) {
-      if (err) return done.fail(err);
-
-      expect(store.account.last_sync).toBeGreaterThan(0);
-      expect(saved.some((values) => "last_sync" in values)).toBe(true);
-
-      store.account.last_sync = 12345;
-      store.account.cursor = "cursor-0";
-      saved.length = 0;
-
-      sync(blog, { stampLastSync: false }, function (err) {
+    sync(blog)
+      .then(
+        () => null,
+        (err) => err
+      )
+      .then(function (err) {
         if (err) return done.fail(err);
 
-        expect(store.account.cursor).toEqual("cursor-1");
-        expect(store.account.last_sync).toEqual(12345);
-        expect(saved.some((values) => "last_sync" in values)).toBe(false);
-        done();
+        expect(store.account.last_sync).toBeGreaterThan(0);
+        expect(saved.some((values) => "last_sync" in values)).toBe(true);
+
+        store.account.last_sync = 12345;
+        store.account.cursor = "cursor-0";
+        saved.length = 0;
+
+        sync(blog, { stampLastSync: false })
+          .then(
+            () => null,
+            (err) => err
+          )
+          .then(function (err) {
+            if (err) return done.fail(err);
+
+            expect(store.account.cursor).toEqual("cursor-1");
+            expect(store.account.last_sync).toEqual(12345);
+            expect(saved.some((values) => "last_sync" in values)).toBe(false);
+            done();
+          });
       });
-    });
   });
 
   it("still saves the cursor when update fails for another reason", function (done) {
@@ -188,11 +212,16 @@ describe("dropbox sync when Redis is unavailable", function () {
       throw new Error("this file is broken");
     });
 
-    sync(blog, function (err) {
-      if (err) return done.fail(err);
+    sync(blog)
+      .then(
+        () => null,
+        (err) => err
+      )
+      .then(function (err) {
+        if (err) return done.fail(err);
 
-      expect(store.account.cursor).toEqual("cursor-1");
-      done();
-    });
+        expect(store.account.cursor).toEqual("cursor-1");
+        done();
+      });
   });
 });

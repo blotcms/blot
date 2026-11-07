@@ -15,11 +15,7 @@ if (!(process.getuid && process.getuid() === 0))
   throw new Error("This script must be run as root");
 
 async function main() {
-  const blog = await new Promise((resolve, reject) => {
-    get(process.argv[2], (err, user, blog) =>
-      err ? reject(err) : resolve(blog)
-    );
-  });
+  const { blog } = await get(process.argv[2]);
 
   const domain = blog.domain;
 

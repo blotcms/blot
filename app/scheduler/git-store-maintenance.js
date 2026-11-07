@@ -101,12 +101,7 @@ async function job() {
   const email = require("helper/email");
 
   const { sent, skipped } = await module.exports.run({
-    sendEmail: (locals) =>
-      new Promise((resolve, reject) =>
-        email.GIT_STORE_ALERT(null, locals, (err) =>
-          err ? reject(err) : resolve()
-        )
-      ),
+    sendEmail: (locals) => email.GIT_STORE_ALERT(null, locals),
   });
 
   if (skipped)

@@ -22,28 +22,7 @@ describe("update when Redis is unavailable", function () {
 
   // Runs fn(syncFolder) while holding the blog's sync lock, then releases it
   function withSync(blogID, fn) {
-    return new Promise(function (resolve, reject) {
-      sync(blogID, function (err, syncFolder, done) {
-        if (err) return reject(err);
-
-        Promise.resolve()
-          .then(function () {
-            return fn(syncFolder);
-          })
-          .then(
-            function (value) {
-              done(null, function () {
-                resolve(value);
-              });
-            },
-            function (error) {
-              done(null, function () {
-                reject(error);
-              });
-            }
-          );
-      });
-    });
+    return sync(blogID, fn);
   }
 
   // Resolves to the error update rejected with, or undefined

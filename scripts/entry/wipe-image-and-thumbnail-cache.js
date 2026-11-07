@@ -17,11 +17,9 @@ if (require.main === module) {
 async function wipeCaches(url) {
   console.log("Looking up", url);
 
-  const { blog, entry } = await new Promise((resolve, reject) =>
-    get(url, (err, user, found, foundEntry) =>
-      err ? reject(err) : resolve({ blog: found, entry: foundEntry })
-    )
-  );
+  const { blog, entry } = await get(url);
+
+  if (!entry) throw new Error("No entry");
 
   console.log("Wiping thumbnails for", entry.path);
   await wipeThumbnails(blog, entry);
@@ -85,10 +83,4 @@ async function wipeThumbnails(blog, entry) {
   );
 }
 
-// Callback API, for scripts/entry/rebuild.js and other callers.
-module.exports = function main(url, callback) {
-  wipeCaches(url).then(
-    () => callback(null),
-    (err) => callback(err)
-  );
-};
+module.exports = wipeCaches;

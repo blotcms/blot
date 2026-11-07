@@ -73,9 +73,8 @@ function load({
     },
     "helper/clfdate": () => "",
     "helper/email": {
-      GOOGLE_DRIVE_SYNC_ISSUE(uid, locals, callback) {
+      async GOOGLE_DRIVE_SYNC_ISSUE(uid, locals) {
         calls.emails.push(locals);
-        callback(null);
       },
     },
     "helper/eventLoopMonitor": {

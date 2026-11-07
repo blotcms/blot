@@ -1,6 +1,5 @@
 describe("multiple blogs", function () {
   var sync = require("../index");
-  var { eachSeries } = require("../../../scripts/tests/util/callbacks");
 
   // Set up array of 20 test blogs before each test
   // and remove them afterwards
@@ -8,16 +7,19 @@ describe("multiple blogs", function () {
 
   // Locks held by a dead process expire after their TTL (10s) instead of
   // being freed by the OS, so retry until each one can be acquired.
-  function syncWhenFree(blogID, callback, deadline) {
-    deadline = deadline || Date.now() + 25 * 1000;
-    sync(blogID, function (err, folder, done) {
-      if (err && Date.now() < deadline) {
-        return setTimeout(function () {
-          syncWhenFree(blogID, callback, deadline);
-        }, 1000);
+  async function syncWhenFree(blogID) {
+    var deadline = Date.now() + 25 * 1000;
+
+    for (;;) {
+      try {
+        return await sync(blogID, async function () {});
+      } catch (err) {
+        if (Date.now() >= deadline) throw err;
+        await new Promise(function (resolve) {
+          setTimeout(resolve, 1000);
+        });
       }
-      callback(err, folder, done);
-    });
+    }
   }
 
   it(
@@ -43,18 +45,14 @@ describe("multiple blogs", function () {
 
       // Did sync release the child's lock on the blog when the child
       // died (was killed)? We test this by trying to acquire a lock.
-      child.on("close", function () {
-        eachSeries(
-          blogs,
-          function (blog, next) {
-            syncWhenFree(blog.id, function (err, folder, done) {
-              if (err) return testDone.fail(err);
+      child.on("close", async function () {
+        try {
+          for (const blog of blogs) await syncWhenFree(blog.id);
+        } catch (err) {
+          return testDone.fail(err);
+        }
 
-              done(null, next);
-            });
-          },
-          testDone
-        );
+        testDone();
       });
     },
     60 * 1000

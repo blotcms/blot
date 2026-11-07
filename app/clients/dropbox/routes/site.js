@@ -88,12 +88,7 @@ const followUps = followUpSync("dropbox", async function (blogID) {
   const blog = await Blog.get({ id: blogID });
   if (!blog) return;
 
-  await new Promise(function (resolve, reject) {
-    sync(blog, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+  await sync(blog);
 });
 
 // Syncs the blogs connected to each of the accounts. The accounts, and the

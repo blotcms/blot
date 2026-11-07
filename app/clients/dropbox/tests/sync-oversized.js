@@ -40,21 +40,20 @@ describe("dropbox sync/index with a file over the download size limit", function
 
   function run(content_hash, size) {
     require.cache[lockPath] = {
-      exports: function (_blogID, callback) {
-        callback(
-          null,
-          {
-            log: function () {},
-            status: function () {},
-            update: async () => {},
-          },
-          (err, cb) => cb(err)
-        );
+      exports: async function (_blogID, fn) {
+        return fn({
+          log: function () {},
+          status: function () {},
+          update: async () => {},
+        });
       },
     };
     require.cache[createClientPath] = {
-      exports: (_id, callback) =>
-        callback(null, {}, { folder_id: "", cursor: "old", error_code: 0 }),
+      exports: async () => ({
+        error: null,
+        client: {},
+        account: { folder_id: "", cursor: "old", error_code: 0 },
+      }),
     };
     require.cache[databasePath] = {
       exports: { set: async () => {} },
@@ -84,7 +83,7 @@ describe("dropbox sync/index with a file over the download size limit", function
     delete require.cache[syncPath];
     const sync = require("../sync");
     return new Promise((resolve, reject) =>
-      sync({ id: blogID }, (err) => (err ? reject(err) : resolve()))
+      sync({ id: blogID }).then(resolve, reject)
     );
   }
 

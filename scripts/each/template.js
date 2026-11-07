@@ -1,12 +1,11 @@
 var eachBlog = require("./blog");
 var Template = require("models/template");
-var ensure = require("helper/ensure");
-var { promisify } = require("util");
 var progress = require("./progress");
 
-// The promise core. doThis is (user, blog, template) and may return a promise.
+// Calls doThis(user, blog, template) for every template a blog owns. doThis
+// may be async; a rejection stops the run.
 function eachTemplate(doThis) {
-  return eachBlog.promise(async function (user, blog) {
+  return eachBlog(async function (user, blog) {
     var templates = await Template.getTemplateList(blog.id);
 
     var owned = (templates || []).filter(function (template) {
@@ -43,14 +42,5 @@ function eachTemplate(doThis) {
   });
 }
 
-// Callback API, for the scripts that still pass doThis(user, blog, template, next).
-module.exports = function (doThis, callback) {
-  ensure(doThis, "function");
-
-  eachTemplate(promisify(doThis)).then(
-    () => callback(null),
-    (err) => callback(err)
-  );
-};
-
+module.exports = eachTemplate;
 module.exports.promise = eachTemplate;

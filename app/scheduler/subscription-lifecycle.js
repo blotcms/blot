@@ -151,11 +151,7 @@ module.exports = async function processSubscriptionLifecycle() {
   }
 
   try {
-    await promisify(eachUser)(function (user, next) {
-      handleUser(user).then(function () {
-        next();
-      });
-    });
+    await eachUser(handleUser);
   } catch (err) {
     console.log(clfdate(), "Subscription lifecycle job failed", err);
     throw err;
@@ -171,7 +167,7 @@ module.exports = async function processSubscriptionLifecycle() {
   if (!usersToRemove.length) return;
 
   try {
-    await promisify(email.USERS_DUE_FOR_REMOVAL)("", {
+    await email.USERS_DUE_FOR_REMOVAL("", {
       users: usersToRemove,
       count: usersToRemove.length,
       singular: usersToRemove.length === 1,
