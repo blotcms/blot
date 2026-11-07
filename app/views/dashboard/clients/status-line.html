@@ -9,8 +9,13 @@
 </style>
 
 
-<!-- The page's heading, the client's logo and name, is in the layout
-     (partials/folder-settings-layout.html) -->
+<!-- The page's heading (Sync) is in the layout
+     (partials/folder-settings-layout.html); the first row names the client,
+     with the link to switch to another -->
+<div class="line">
+  <span class="label">Syncs with</span>
+  <span class="center folder-sync-client"><img class="client-icon" alt="" width="16" height="16" src="{{#cdn}}/images/sync/{{blog.client}}.svg{{/cdn}}"> {{client.display_name}} <a class="link" href="{{{dashboardBase}}}/sync/switch">Switch</a></span>
+</div>
 
 <!-- The tab above names the client; changing it is a button at the end
      (clients/disconnect-line.html) -->

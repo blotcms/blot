@@ -187,15 +187,14 @@
   box-shadow: 0 0 4px 1px var(--indicator-amber-glow);
 }
 
-/* The client's page's heading: its logo, then its name */
-.folder-sync-heading {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+/* The first row's client: its logo on the text, Switch beside it */
+.folder-sync-client .client-icon {
+  margin-right: var(--space-1);
+  vertical-align: -3px;
 }
 
-.folder-sync-heading .client-icon {
-  flex: 0 0 auto;
+.folder-sync-client .link {
+  margin-left: var(--space-3);
 }
 
 /* The sync pages: the client's settings in a card */
