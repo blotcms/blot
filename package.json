@@ -107,6 +107,7 @@
     "depcheck": "1.4.7",
     "dir-compare": "4.0.0",
     "eslint": "10.13.0",
+    "eslint-plugin-promise": "7.3.0",
     "faker": "4.1.0",
     "globals": "17.13.0",
     "jasmine": "3.3.1",
