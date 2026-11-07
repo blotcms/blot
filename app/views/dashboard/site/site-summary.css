@@ -1,6 +1,7 @@
 /*
   The overview's summary (site/site-summary.html): the site's title, domain
-  and live template, one compact row each, every row a link to change it.
+  and live template, one compact row each, every row a link to change it,
+  ending in a grey chevron.
   Bordered like the folder box below it.
 */
 
@@ -62,11 +63,19 @@
   color: var(--light-text-color);
 }
 
-.site-summary__edit {
+/* A grey chevron at the end of each row: the whole row is the link */
+.site-summary__chevron {
+  display: inline-flex;
   flex: 0 0 auto;
-  color: var(--accent-color);
+  align-self: center;
+  color: var(--light-text-color);
+  transition: color 150ms ease;
 }
 
-.site-summary__row:hover .site-summary__edit {
-  color: var(--accent-hover-color);
+.site-summary__chevron svg {
+  display: block;
+}
+
+.site-summary__row:hover .site-summary__chevron {
+  color: var(--medium-text-color);
 }
