@@ -32,7 +32,7 @@ const Entry = require("models/entry");
 const Template = require("models/template");
 
 const setEntry = (...args) => Entry.set(...args);
-const setBlog = promisify(Blog.set);
+const setBlog = (...args) => Blog.set(...args);
 const createTemplate = Template.create;
 const setView = Template.setView;
 

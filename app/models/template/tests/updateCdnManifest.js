@@ -1,4 +1,3 @@
-const { promisify } = require("util");
 const setView = require("../index").setView;
 const getMetadata = require("../index").getMetadata;
 const createTemplate = require("../index").create;
@@ -10,7 +9,7 @@ const renderView = require("blog/render/view");
 const getAsync = client.get.bind(client);
 const getMetadataAsync = getMetadata;
 const setViewAsync = setView;
-const blogSetAsync = promisify(Blog.set).bind(Blog);
+const blogSetAsync = (blogID, updates) => Blog.set(blogID, updates);
 const createTemplateAsync = createTemplate;
 
 describe("updateCdnManifest", function () {

@@ -45,11 +45,11 @@ describe("template", function () {
   });
 
   it("leaves the blog's cache alone when a sync reads an unchanged template", async function () {
-    var { promisify } = require("util");
     var read = readFromFolder;
     var getMetadata = require("../index").getMetadata;
     var getBlog = (by) => require("models/blog").get(by);
-    var setBlog = promisify(require("models/blog").set);
+    var setBlog = (blogID, updates) =>
+      require("models/blog").set(blogID, updates);
     var makeID = require("../util/makeID");
     var id = makeID(this.blog.id, this.blog.handle);
 

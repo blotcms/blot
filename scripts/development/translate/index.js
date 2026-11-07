@@ -37,8 +37,8 @@ const BANNED_HANDLES = nsv(
 );
 
 const getBlog = (by) => Blog.get(by);
-const setBlog = promisify(Blog.set);
-const createBlog = promisify(Blog.create);
+const setBlog = (...args) => Blog.set(...args);
+const createBlog = (...args) => Blog.create(...args);
 const createTemplate = Template.create;
 const setTemplateMetadata = Template.setMetadata;
 const writeTemplateToFolder = Template.writeToFolder;

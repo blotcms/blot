@@ -136,8 +136,7 @@ async function seed(shape) {
   const result = { user: context.user };
   await promisify(require("../tests/util/createBlog").bind(result))();
   const blog = result.blog;
-  if (args.template)
-    await promisify(Blog.set)(blog.id, { template: args.template });
+  if (args.template) await Blog.set(blog.id, { template: args.template });
 
   const entries = content.entries(shape, "render-pages");
   const log = console.log;

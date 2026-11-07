@@ -34,8 +34,7 @@ describe("date integration tests", function () {
   tests.forEach(({ timeZone, dateMetadata, result }) => {
     it(`renders ${dateMetadata} in ${timeZone} timezone`, function (done) {
       const test = this;
-      Blog.set(test.blog.id, { timeZone }, function (err) {
-        if (err) return done.fail(err);
+      Blog.set(test.blog.id, { timeZone }).then(function () {
         createEntryWithDate(test, dateMetadata, function (err) {
           if (err) return done.fail(err);
           checkDateOnBlog(test, function (err, date) {
@@ -44,7 +43,7 @@ describe("date integration tests", function () {
             done();
           });
         });
-      });
+      }, done.fail);
     });
   });
 
@@ -62,13 +61,7 @@ describe("date integration tests", function () {
     let templateId = templates.filter(({ name }) => name === templateName)[0]
       .id;
     await Template.setView(templateId, view);
-    await new Promise((resolve, reject) =>
-      Blog.set(
-        test.blog.id,
-        { forceSSL: false, template: templateId },
-        (err) => (err ? reject(err) : resolve())
-      )
-    );
+    await Blog.set(test.blog.id, { forceSSL: false, template: templateId });
   }
 
   function createEntryWithDate(test, date, callback) {

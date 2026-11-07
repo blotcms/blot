@@ -35,11 +35,15 @@ function done(err) {
 
 function freeHandle(base, attempt, callback) {
   var candidate = attempt ? base + attempt : base;
-  validate("", candidate, function (err, handle) {
-    if (!err) return callback(null, handle);
-    if (attempt >= 50) return callback(err);
-    freeHandle(base, attempt + 1, callback);
-  });
+  validate("", candidate).then(
+    function (handle) {
+      callback(null, handle);
+    },
+    function (err) {
+      if (attempt >= 50) return callback(err);
+      freeHandle(base, attempt + 1, callback);
+    }
+  );
 }
 
 function create(base, settings, callback) {
@@ -58,9 +62,7 @@ function create(base, settings, callback) {
       function (err, handle) {
         if (err) return callback(err);
 
-        Blog.create(user.uid, { handle: handle }, function (err, blog) {
-          if (err) return callback(err);
-
+        Blog.create(user.uid, { handle: handle }).then(function (blog) {
           // Production settings first, then the same overrides
           // app/configure-local-blogs.js gives local blogs
           var changes = Object.assign({}, settings, {
@@ -68,13 +70,12 @@ function create(base, settings, callback) {
             client: "local",
           });
 
-          Blog.set(blog.id, changes, function (err) {
-            if (err) return callback(err);
+          Blog.set(blog.id, changes).then(function () {
             console.log("blogID=" + blog.id);
             console.log("handle=" + blog.handle);
             callback();
-          });
-        });
+          }, callback);
+        }, callback);
       }
     );
   }, notFound);
@@ -127,7 +128,9 @@ function activate(blogID, slug, callback) {
         return callback(new Error("Template " + templateID + " was not built"));
       }
 
-      Blog.set(blogID, { template: templateID }, callback);
+      Blog.set(blogID, { template: templateID }).then(function (changes) {
+        callback(null, changes);
+      }, callback);
     },
     function () {
       callback(new Error("Template " + templateID + " was not built"));

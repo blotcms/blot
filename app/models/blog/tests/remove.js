@@ -12,10 +12,16 @@ describe("Blog.remove", function () {
     if (!this.blog) throw new Error("No blog");
   });
 
-  it("removes a blog", function (done) {
-    var test = this;
+  it("throws when given a callback", async function () {
+    // The callback form is gone: passing one throws instead of calling back.
+    try {
+      await remove(this.blog.id, function () {});
+      fail("should have thrown");
+    } catch (err) {
+      expect(err.message).toMatch(/no longer takes a callback/);
+    }
 
-    remove(test.blog.id, done);
+    await remove(this.blog.id);
   });
 
   it("removes a blog", async function () {

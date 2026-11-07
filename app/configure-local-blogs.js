@@ -13,28 +13,20 @@ async function establishTestUser() {
   return await User.create(email, passwordHash, {}, {});
 }
 
-function establishTestBlog(user) {
-  return new Promise((resolve, reject) => {
-    if (user.blogs.length > 0) return resolve(user);
+async function establishTestBlog(user) {
+  if (user.blogs.length > 0) return user;
 
-    Blog.create(user.uid, { handle: "example" }, (err, blog) => {
-      if (err) return reject(err);
-      user.blogs.push(blog.id);
-      resolve(user);
-    });
-  });
+  const blog = await Blog.create(user.uid, { handle: "example" });
+  user.blogs.push(blog.id);
+  return user;
 }
 
 const configureBlog = async (blogID) => {
   const blog = await Blog.get({ id: blogID });
   const client = !blog.client ? "local" : blog.client;
 
-  return new Promise((resolve, reject) => {
-    Blog.set(blogID, { forceSSL: false, client }, (err) => {
-      if (err) return reject(err);
-      resolve(blog);
-    });
-  });
+  await Blog.set(blogID, { forceSSL: false, client });
+  return blog;
 };
 
 function configureBlogs(user) {

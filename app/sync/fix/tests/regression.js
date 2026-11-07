@@ -589,7 +589,7 @@ describe("sync/fix regression (outcome-based)", function () {
         label: "Duplicate link",
       });
 
-      await promisify(Blog.set)(blog.id, {
+      await Blog.set(blog.id, {
         menu: blogBefore.menu.concat([duplicate]),
       });
 
@@ -625,7 +625,7 @@ describe("sync/fix regression (outcome-based)", function () {
             })
           : item
       );
-      await promisify(Blog.set)(blog.id, { menu });
+      await Blog.set(blog.id, { menu });
 
       const report = await fixAsync(blog);
 
@@ -698,7 +698,7 @@ describe("sync/fix regression (outcome-based)", function () {
       // link it by hand, as a user can from the dashboard.
       const built = await getEntry(blog.id, "/combo-ghost.txt");
       const blogBefore = await getBlog(blog.id);
-      await promisify(Blog.set)(blog.id, {
+      await Blog.set(blog.id, {
         menu: blogBefore.menu.concat([
           {
             id: built.id,
