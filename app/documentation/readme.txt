@@ -8,7 +8,7 @@ Structure of the site
   The entire ./views directory is served as a static folder.
   This was designed to make it convenient to edit the css files.
 
-Adding new content
+Adding new writing
 ------------------
 
   Make sure you update ./sitemap.js with any new and important URLs

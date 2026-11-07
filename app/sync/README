@@ -1,6 +1,6 @@
 # sync
 
-The `sync` module is the entry point for all content processing in Blot. It provides an exclusive per-blog file-system lock and, within that lock, exposes a pipeline through which file changes are built into entries, stored in Redis, and reflected in the blog's public state.
+The `sync` module is the entry point for all file processing in Blot. It provides an exclusive per-blog file-system lock and, within that lock, exposes a pipeline through which file changes are built into entries, stored in Redis, and reflected in the blog's public state.
 
 Every sync client (Dropbox, Git, local) acquires the lock provided by this module before modifying a blog's folder or calling `folder.update`. This ensures that no two processes concurrently modify or process the same blog folder.
 

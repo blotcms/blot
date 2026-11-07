@@ -6,7 +6,7 @@ machines, never for users.**
 ## Production status: not a production client
 
 This client is development-only. It is not, and should not become, a way
-for real users to sync a live blog folder. In practice its main use is
+for real customers to sync a live blog folder. In practice its main use is
 building the demo/fixture folders used by development and test scripts
 (e.g. `scripts/development/translate/index.js`) — it is probably not
 exercised in production at all.
@@ -22,7 +22,7 @@ to configure for a user-facing site, not just discouraged.
 Because it never runs against real user data or in a production
 environment, this module warrants a lighter security review bar than the
 real sync clients (Dropbox, Google Drive, iCloud, Git) — issues here can't
-expose or corrupt a real user's blog, only development/test fixtures.
+expose or corrupt a real customer's blog, only development/test fixtures.
 
 ## Purpose
 
@@ -79,7 +79,7 @@ Writes or overwrites a file in the blog's source folder on the server.
 
 - **blogID** (string): The blog identifier.
 - **path** (string): The file path within the blog folder (e.g., `"/posts/hello.md"`).
-- **contents** (string|Buffer): The file content to write.
+- **contents** (string|Buffer): The bytes of the file to write.
 - **Returns**: A promise.
 
 Returns an error if the path matches an ignored file pattern (see Dependencies section).
@@ -149,7 +149,7 @@ Removes files or directories from the source directory and through `storage/fold
 Sets the blog's `client` field to an empty string in the Blog model, causing the master process to stop watching the source on next server start. The source directory is left in place. Nothing needs repairing in S3, since every change went through `storage/folder`.
 
 ### routes.js
-Express router managing dashboard user interactions:
+Express router managing dashboard customer interactions:
 - Handles client selection by updating the Blog model
 - Provides UI templates for connection and disconnection workflows
 - Uses CSRF protection via request tokens

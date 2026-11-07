@@ -20,11 +20,11 @@ This module is the authoritative data layer for blog records in Blot. It defines
 
 | File | Description |
 |---|---|
-| `create.js` | Creates a new blog record, links it to its owner user, initializes the blog's folder on disk, and registers it in the global blog ID set in Redis. |
+| `create.js` | Creates a new blog record, links it to its owner customer, initializes the blog's folder on disk, and registers it in the global blog ID set in Redis. |
 | `get.js` | Retrieves a single blog by `id`, `handle`, or `domain`. Applies `imageExif` and `converters` defaults on the way out. |
 | `set.js` | Validates and persists updates to a blog record. Manages side effects: domain/handle key rotation, cache busting, template forking, and CDN manifest updates. |
 | `bumpCacheID.js` | Bumps `cacheID` through `set` so render caches miss. If Redis is unavailable it retries every 5s for up to a minute in the background; the callback still fires after the first attempt. |
-| `remove.js` | Deletes a blog fully: disconnects the sync client, removes the record from the owner's user document, wipes the blog folder from disk and its generated assets from the storage bucket, and deletes all associated Redis keys. |
+| `remove.js` | Deletes a blog fully: disconnects the sync client, removes the record from the owner's customer document, wipes the blog folder from disk and its generated assets from the storage bucket, and deletes all associated Redis keys. |
 | `extend.js` | Decorates an in-memory blog object with computed, template-facing properties: resolved URL, pretty URL, `feedURL`, `pages`, `locals`, and `imageExif`/converter boolean flags. Does not write to Redis. |
 
 ### Status log
@@ -125,7 +125,7 @@ Creates a new blog for the user identified by `uid`.
 Side effects:
 - Generates a new blog ID via `generateID`
 - Merges `info` with defaults and validates via `validate`
-- Adds the blog ID to the user's `blogs` array and sets `lastSession`
+- Adds the blog ID to the customer's `blogs` array and sets `lastSession`
 - Registers the blog ID in the global Redis set (`blogs`)
 - Persists the blog hash via `set`
 - Creates an empty directory at the blog's local path
@@ -254,7 +254,7 @@ The Redis key generator. Methods:
 | `models/user` | Used in `create` and `remove` to update the owner's blog list |
 | `helper/ensure` | Runtime type validation of all function arguments |
 | `helper/extend` | Merges objects; used in `create` to combine info and defaults |
-| `storage/folder` | Creates and removes a blog's content folder |
+| `storage/folder` | Creates and removes a blog's folder |
 | `helper/punycode` | Encodes/decodes internationalized domain names |
 | `helper/flushCache` | Clears reverse-proxy cache directories for specified hostnames |
 | `config` | Provides `config.host` and `config.reverse_proxies` |
@@ -269,7 +269,7 @@ The Redis key generator. Methods:
 
 - **`app/blog/middleware/vhosts.js`**: Calls `Blog.get({ handle })` or `Blog.get({ domain })` on every incoming HTTP request to identify which blog to serve.
 - **`app/sync/`**: Calls `Blog.setStatus` via `sync/messenger.js` to log sync progress. Calls `Blog.set` to update `client`, `status`, and other fields during sync operations.
-- **`app/dashboard/`**: Calls `Blog.set` when the user saves settings. Calls `Blog.get` and `Blog.extend` to populate dashboard views.
+- **`app/dashboard/`**: Calls `Blog.set` when the customer saves settings. Calls `Blog.get` and `Blog.extend` to populate dashboard views.
 - **`app/clients/`** (Dropbox, Google Drive, Git, iCloud, local): Call `Blog.get`, `Blog.set`, and `Blog.remove` when connecting, disconnecting, or renaming sync clients.
 - **`app/build/`**: Reads `blog.converters` (via `Blog.get` or passed context) to determine which file types to process.
 - **`app/models/entry/`**: Reads blog data to resolve permalink formats, time zones, and build context.

@@ -15,7 +15,7 @@ How to register a new client
 What are clients?
 -----------------
 
-Clients must be able to receive changes from the user's folder, and transmit changes to the user's folder.
+Clients must be able to receive changes from the customer's folder, and transmit changes to the customer's folder.
 
 Clients may expose endpoints for authentication, periodic updates (like a sync webhook from Dropbox or a git hook). They must expose certain methods that Blot can interact with in the abstract:
 
@@ -25,7 +25,7 @@ Abstract clients are used for:
 - removing preview files for deleted / published drafts
 - reading and writing local template files
 
-Switching between clients should be seamless. Disconnecting and reconnecting should have no effect. The user's blog should not visibly change until they make a modification to their folder through whichever client is currently connected. 
+Switching between clients should be seamless. Disconnecting and reconnecting should have no effect. The customer's blog should not visibly change until they make a modification to their folder through whichever client is currently connected. 
 
 
 Specification
@@ -34,10 +34,10 @@ Specification
 Clients must have the following properties and methods:
 
 - display_name: a string used on the dashboard e.g. 'Dropbox'
-- description: a string used on the dashboard, e.g. 'A service that makes all of a user’s files...',
+- description: a string used on the dashboard, e.g. 'A service that makes all of a customer’s files...',
 - disconnect: a function to disassociate a site with a dropbox account
-- remove: a function to remove a file in the user's dropbox folder
-- write: a function to write a file to the user's dropbox folder
+- remove: a function to remove a file in the customer's dropbox folder
+- write: a function to write a file to the customer's dropbox folder
 
 and may have the following methods:
 
@@ -48,11 +48,11 @@ and may have the following methods:
 Health
 ------
 
-getHealth reports whether a blog's sync needs the user's attention, as structured data rather than a status message:
+getHealth reports whether a blog's sync needs the customer's attention, as structured data rather than a status message:
 
   { state: "ok" | "syncing" | "error", issues: [{ code, message, since }] }
 
-Issue codes are shared between clients (see health.js): REAUTH_REQUIRED, SOURCE_MISSING, QUOTA_EXCEEDED and SYNC_ERROR. Only report conditions the user must act on. Transient failures that will be retried belong in the sync status log, not in health. Any issue a client reports must be cleared once the underlying problem is resolved.
+Issue codes are shared between clients (see health.js): REAUTH_REQUIRED, SOURCE_MISSING, QUOTA_EXCEEDED and SYNC_ERROR. Only report conditions the customer must act on. Transient failures that will be retried belong in the sync status log, not in health. Any issue a client reports must be cleared once the underlying problem is resolved.
 
 More abstractly: clients must be stateless. They must be able to run without issue in parallel and the server must be able to restart without issue. Blot's sync module exposes a distributed locking function that a client can use to determine whether it is safe to interact with the blog's folder.
 

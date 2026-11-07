@@ -19,7 +19,7 @@ the reader sees the entity literally:
 
 - **The subject.** It's plain text, so nothing decodes the entities. A
   subject of `{{event}}` with `Exited pid=153` arrived as `Exited pid&#x3D;153`.
-- **Code spans and code blocks.** `marked` escapes their content itself, so an
+- **Code spans and code blocks.** `marked` escapes what is inside them itself, so an
   entity Mustache produced is escaped a second time and shows up as `&#x3D;`.
 
 Use `{{{name}}}` in both. It's safe there: the subject is never parsed as HTML,

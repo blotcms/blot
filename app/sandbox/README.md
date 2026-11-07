@@ -411,7 +411,7 @@ bytes, and why:
   warm-ups read a status, a header, a string comparison or (the subscription
   duration, at most 4 KiB) `JSON.parse`; Are.na's channel listing is JSON.
 - **Out of scope, parsed in Node:** the importers' own parsing of an export the
-  user uploaded (WordPress WXR and Blogger's feed, `sources/*/parse.js`,
+  customer uploaded (WordPress WXR and Blogger's feed, `sources/*/parse.js`,
   `resolve_url`, `replace_embeds`, `remove_inline_images`); a blog's own files and
   entries at build time; the Google Drive document export; the documentation
   site's build, which fetches the maintainers' tool pages. The oEmbed embeds

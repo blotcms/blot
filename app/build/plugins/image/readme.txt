@@ -1,6 +1,6 @@
 # Better fluid images
 
-Fluid images are images of undeclared dimension which can adjust their size to fill the layout of the page. This means you can have an image which fills the user's viewport – no matter if the user is on a phone or a laptop.
+Fluid images are images of undeclared dimension which can adjust their size to fill the layout of the page. This means you can have an image which fills the customer's viewport – no matter if the customer is on a phone or a laptop.
 
 ## The problem
 
@@ -59,4 +59,4 @@ And it works as you’d hope? Ideally one wrapper would be better than two. What
 
 # Adding the image model
 
-Blot now caches image URLs against a content hash, and image dimensions against an image URL. This means that the modules which typically make network requests (like image-size) or even the update module, will never process the same image twice needlessly. This means instant avatar re-uploads. I really should verify the remote hash of the image each time to ensure the user doesn't make a remote change to the image. Perhaps a freeze options? Would be lovely to know that my post will NEVER change.
+Blot now caches image URLs against a content hash, and image dimensions against an image URL. This means that the modules which typically make network requests (like image-size) or even the update module, will never process the same image twice needlessly. This means instant avatar re-uploads. I really should verify the remote hash of the image each time to ensure the customer doesn't make a remote change to the image. Perhaps a freeze options? Would be lovely to know that my post will NEVER change.
