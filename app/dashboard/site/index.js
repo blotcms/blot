@@ -428,7 +428,7 @@ const settingsTabs = [
   ["title", "Title"],
   ["domain", "Domain"],
   ["posts", "Posts"],
-  ["urls", "URLs"],
+  ["redirects", "Redirects"],
   ["services", "Services"],
   ["export", "Export"],
   ["delete", "Delete site"],
@@ -458,23 +458,26 @@ const settingsRedirect = (to) => (req, res) => {
 // The first tab
 site.get("/settings", settingsRedirect("title"));
 
-// Earlier versions of these pages: Writing, Images and Links' features are
-// on Posts; the link format and Redirects on URLs; Integrations is Services
+// Earlier versions of these pages: Writing, Date and time, Images and Links
+// are sections of Posts; Integrations is Services. A URLs tab briefly held
+// the link format and redirects.
 site.get("/settings/content", settingsRedirect("posts"));
 site.get("/settings/writing", settingsRedirect("posts"));
 site.get("/settings/images", settingsRedirect("posts#image-features-heading"));
-site.get("/settings/links", settingsRedirect("urls"));
-site.get("/settings/redirects", settingsRedirect("urls#redirect-rows-heading"));
+site.get("/settings/links", settingsRedirect("posts#post-links-heading"));
+site.get("/settings/urls", settingsRedirect("redirects"));
 site.get("/settings/integrations", settingsRedirect("services"));
 site.get("/settings/embeds", settingsRedirect("services"));
 site.get("/settings/date", settingsRedirect("posts#date-heading"));
 
-// How Blot builds posts: formatting, dates, links in posts, images
+// How Blot builds posts: formatting, dates, their URLs, links in them,
+// images
 site.get(
   "/settings/posts",
   settingsTab("posts"),
   load.plugins,
   dateSettings.loadSettings,
+  linkFormat.loadFormats,
   (req, res) => {
     res.locals.publishImagesAsPostsChecked = req.blog.isImgConverterEnabled
       ? "checked"
@@ -491,21 +494,20 @@ site.get(
   }
 );
 
-// The site's addresses: its posts' link format, and redirects. The 404
-// log links here with ?create=<path> to prefill a redirect.
+// The 404 log links here with ?create=<path> to prefill a redirect
 site.get(
-  "/settings/urls",
-  settingsTab("urls"),
-  linkFormat.loadFormats,
+  "/settings/redirects",
+  settingsTab("redirects"),
   load.redirects,
   load.redirectWarnings,
   (req, res) => {
-    res.render("dashboard/site/settings/settings-urls");
+    res.render("dashboard/site/settings/settings-redirects");
   }
 );
-site.post("/settings/urls", linkFormat.save);
-// The link format's form posted here before
+
+// The link format, on Posts, saves here
 site.post("/settings/links", linkFormat.save);
+site.post("/settings/urls", linkFormat.save);
 
 site.get(
   "/settings/services",

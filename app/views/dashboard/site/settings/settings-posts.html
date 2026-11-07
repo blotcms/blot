@@ -1,7 +1,7 @@
 {{> message}}
 {{> settings-tabs}}
 
-<!-- How Blot builds posts: formatting, dates, links in posts, images -->
+<!-- How Blot builds posts: formatting, dates, their URLs, links in them, images -->
 <div class="dashboard-form-panel settings-page">
   <div class="dashboard-form-panel__body">
     <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="writing-heading">
@@ -37,6 +37,36 @@
       <noscript>
         <div class="buttons">
           <button type="submit">Save changes</button>
+        </div>
+      </noscript>
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{dashboardBase}}}/settings/links" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <h2 id="post-links-heading">Post links</h2>
+      <p class="setting-note">Choose the URL format Blot uses for your posts.</p>
+      {{#permalinkFormats}}
+      <label class="format">
+        <input type="radio" name="format" value="{{value}}" {{checked}}>
+        <b>{{name}}</b>
+        {{^custom}}<span class="format-example">{{example}}</span>{{/custom}}
+        {{#custom}}
+        <div class="format-custom" style="{{customStyle}}">
+          <input type="text" name="custom" value="{{blog.permalink.custom}}">
+        </div>
+        <div class="buttons" style="{{customStyle}}">
+          <button type="submit">Save changes</button>
+          <a href="{{{base}}}/settings/posts">Cancel</a>
+        </div>
+        {{/custom}}
+        <div class="clear"></div>
+      </label>
+      {{/permalinkFormats}}
+      <noscript>
+        <style>.format-custom { display: block !important; }</style>
+        <div class="buttons">
+          <button type="submit">Save changes</button>
+          <a href="{{{base}}}/settings/posts">Cancel</a>
         </div>
       </noscript>
     </form>

@@ -27,13 +27,15 @@ describe("dashboard site settings save", function () {
   // sub-page used to bounce the user out to the site homepage because the
   // form omitted the `redirect` field and save/finish.js fell back to a
   // router-relative req.path of "/".
-  ["settings/posts", "settings/urls", "settings/services"].forEach((page) => {
-    it(`keeps the redirect on /${page} pointed back at itself`, async function () {
-      const $ = await this.parse(`/sites/${this.blog.handle}/${page}`);
-      const redirect = $('input[name="redirect"]').attr("value");
-      expect(redirect).toBe(`/sites/${this.blog.handle}/${page}`);
-    }, 30000);
-  });
+  ["settings/posts", "settings/redirects", "settings/services"].forEach(
+    (page) => {
+      it(`keeps the redirect on /${page} pointed back at itself`, async function () {
+        const $ = await this.parse(`/sites/${this.blog.handle}/${page}`);
+        const redirect = $('input[name="redirect"]').attr("value");
+        expect(redirect).toBe(`/sites/${this.blog.handle}/${page}`);
+      }, 30000);
+    }
+  );
 
   it("does not redirect to the homepage when the form omits a redirect field", async function () {
     const res = await this.submit(`/sites/${this.blog.handle}/settings/posts`, {

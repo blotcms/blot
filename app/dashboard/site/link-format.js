@@ -21,7 +21,7 @@ var SAMPLE = function () {
   };
 };
 
-// The formats to choose from, each with an example, for the URLs tab
+// The formats to choose from, each with an example, for the Posts tab
 function loadFormats(req, res, next) {
   var sample, formats;
 
@@ -70,9 +70,9 @@ function loadFormats(req, res, next) {
   next();
 }
 
-// Saves the chosen format, then shows the URLs tab again
+// Saves the chosen format, then shows it on the Posts tab again
 async function save(req, res) {
-  const back = res.locals.base + "/settings/urls";
+  const back = res.locals.base + "/settings/posts";
   const format = req.body.format || "";
   const custom = req.body.custom || "";
   const isCustom = !format && !!custom;
