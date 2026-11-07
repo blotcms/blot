@@ -6,7 +6,7 @@
   .folder-filters         Files, Posts, Pages, Drafts, Scheduled: Files is
                           the folder itself and the others filter it to its
                           entries (their own pages); one is always selected
-  .folder-sync            "Syncs with [icon] Google Drive  Edit", one link
+  .folder-sync            "Folder  Google Drive  Edit", one link
                           (folder/folder-sync.html) to the client's page,
                           which has its options: activity, resync, change,
                           disconnect ("Sync this folder", in blue, with no
@@ -217,7 +217,8 @@
   border-radius: var(--radius-pill);
   color: inherit;
   cursor: pointer;
-  font-size: var(--text-md);
+  /* The summary card's size, so the client reads like its values */
+  font-size: var(--text-sm);
   text-decoration: none;
   transition: background-color 150ms ease;
 }
@@ -240,16 +241,7 @@
 }
 
 .folder-sync__client {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
   color: var(--text-color);
-  font-weight: var(--weight-medium);
-}
-
-.folder-sync__client .client-icon {
-  width: 16px;
-  height: 16px;
 }
 
 .folder-sync__edit {
