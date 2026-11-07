@@ -2,7 +2,6 @@ const Entry = require("models/entry");
 const Entries = require("models/entries");
 const client = require("models/client");
 const entryKey = require("models/entry/key").entry;
-const promiseOnly = require("helper/promiseOnly");
 
 var lists = ["all", "created", "entries", "drafts", "scheduled", "pages"];
 
@@ -181,4 +180,4 @@ async function main(blog) {
   return report;
 }
 
-module.exports = promiseOnly(main);
+module.exports = main;

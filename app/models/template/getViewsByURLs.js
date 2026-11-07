@@ -2,7 +2,6 @@ const key = require("./key");
 const client = require("models/client");
 const { parse } = require("url");
 const urlNormalizer = require("helper/urlNormalizer");
-const promiseOnly = require("helper/promiseOnly");
 const { matchViewPatterns, parseViewPatterns } = require("./viewURLPatterns");
 
 /**
@@ -17,7 +16,7 @@ const { matchViewPatterns, parseViewPatterns } = require("./viewURLPatterns");
  * @returns {Promise<Array>} viewNames, an array parallel to urls containing a
  *   view name or null.
  */
-module.exports = promiseOnly(async function getViewsByURLs(templateID, urls) {
+module.exports = async function getViewsByURLs(templateID, urls) {
   if (!templateID || typeof templateID !== "string") {
     throw new Error("Invalid templateID");
   }
@@ -62,4 +61,4 @@ module.exports = promiseOnly(async function getViewsByURLs(templateID, urls) {
   }
 
   return viewNames;
-});
+};

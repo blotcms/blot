@@ -14,6 +14,4 @@ async function write(blogID, path, contents) {
   await repo.commit(blogID, { path: path, contents: contents });
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(write);
+module.exports = write;

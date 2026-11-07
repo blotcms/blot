@@ -1,6 +1,5 @@
 var config = require("config");
 var createStripe = require("stripe");
-var promiseOnly = require("helper/promiseOnly");
 var set = require("./set");
 
 var stripeClient;
@@ -230,7 +229,7 @@ async function syncPaymentMethods(user) {
   return paymentMethods;
 }
 
-module.exports = promiseOnly(syncPaymentMethods);
+module.exports = syncPaymentMethods;
 
 module.exports.getClient = getStripeClient;
 

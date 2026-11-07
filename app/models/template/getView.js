@@ -2,9 +2,8 @@ var key = require("./key");
 var client = require("models/client");
 var deserialize = require("./util/deserialize");
 var viewModel = require("./viewModel");
-var promiseOnly = require("helper/promiseOnly");
 
-module.exports = promiseOnly(async function getView(templateID, viewID) {
+module.exports = async function getView(templateID, viewID) {
   var match;
 
   var view = await client.hGetAll(key.view(templateID, viewID));
@@ -28,4 +27,4 @@ module.exports = promiseOnly(async function getView(templateID, viewID) {
     throw new Error("No view: " + viewID);
 
   return deserialize(matchedView, viewModel);
-});
+};

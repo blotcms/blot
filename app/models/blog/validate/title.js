@@ -1,9 +1,8 @@
 var ensure = require("helper/ensure");
-var promiseOnly = require("helper/promiseOnly");
 
 var TOO_LONG = "Choose a title under 70 characters";
 
-module.exports = promiseOnly(async function validateTitle(blogID, title) {
+module.exports = async function validateTitle(blogID, title) {
   ensure(blogID, "string").and(title, "string");
 
   // Normalize to Unicode NFC
@@ -15,4 +14,4 @@ module.exports = promiseOnly(async function validateTitle(blogID, title) {
   if (title.length > 70) throw new Error(TOO_LONG);
 
   return title;
-});
+};

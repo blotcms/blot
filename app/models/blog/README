@@ -112,7 +112,7 @@ The blog schema is declared in `scheme.js`. Each field is classified along three
 
 All of the following are exported from `index.js`.
 
-`get`, `set`, `create`, `remove`, `getAllIDs`, `getHosts`, `getStatuses`, `setStatus` and `flushCache` return a promise and take no callback (#2559): passing one throws. `set` resolves to the list of changed fields and rejects with `validate`'s errors object (fields mapped to errors) or the error that stopped the save. `create` resolves to the new blog and rejects with `validate`'s errors object or the error that stopped the creation. `remove` resolves to the removed blog.
+`get`, `set`, `create`, `remove`, `getAllIDs`, `getHosts`, `getStatuses`, `setStatus` and `flushCache` return a promise and take no callback (#2559). `set` resolves to the list of changed fields and rejects with `validate`'s errors object (fields mapped to errors) or the error that stopped the save. `create` resolves to the new blog and rejects with `validate`'s errors object or the error that stopped the creation. `remove` resolves to the removed blog.
 
 ### `create(uid, info, callback)`
 

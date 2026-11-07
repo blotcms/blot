@@ -3,13 +3,12 @@ const config = require("config");
 const flush = require("helper/flushProxies");
 const debug = require("debug")("blot:blog:flushCache");
 const get = require("./get");
-const promiseOnly = require("helper/promiseOnly");
 
 // This empties the cache for a blog by emptying the cache
 // for its Blot subdomain and its custom domain, if one is set.
 // You can optionally pass the former state of the blog to ensure that the
 // cache directories for old domains and blot subdomains are flushed too.
-module.exports = promiseOnly(async function flushCache(blogID, former = {}) {
+module.exports = async function flushCache(blogID, former = {}) {
   const blogHosts = [];
   const affectedHosts = [];
 
@@ -50,4 +49,4 @@ module.exports = promiseOnly(async function flushCache(blogID, former = {}) {
   } else {
     debug("blog.flushCache: no cache directories to flush for blog", blogID);
   }
-});
+};

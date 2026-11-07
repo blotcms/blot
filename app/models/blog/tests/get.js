@@ -11,16 +11,6 @@ describe("Blog.get", function () {
     expect(await get({ id: "nonexistent-" + Date.now() })).toBeUndefined();
   });
 
-  it("throws when given a callback", async function () {
-    // The callback form is gone: passing one throws instead of calling back.
-    try {
-      await get({ id: this.blog.id }, function () {});
-      fail("should have thrown");
-    } catch (err) {
-      expect(err.message).toMatch(/no longer takes a callback/);
-    }
-  });
-
   it("falls back to safe image metadata defaults", async function () {
     await client.hDel(key.info(this.blog.id), "imageExif");
 

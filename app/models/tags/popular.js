@@ -82,6 +82,4 @@ async function getPopular(blogID, options) {
   return hydrated;
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(getPopular);
+module.exports = getPopular;

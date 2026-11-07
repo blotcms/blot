@@ -7,7 +7,6 @@ var Single = require("./single");
 var enabledConverters = require("./converters/enabled");
 var titlecase = require("helper/titlecase");
 var cheerio = require("cheerio");
-var promiseOnly = require("helper/promiseOnly");
 
 // Mirrors the traversal in prepare/title.js exactly: preferred tag order and
 // the "first three nodes at each nesting level" limit.
@@ -133,7 +132,7 @@ async function buildMultiple(blog, info) {
   return [html, metadata, stat, combinedDependencies, combinedExtras];
 }
 
-module.exports = promiseOnly(buildMultiple);
+module.exports = buildMultiple;
 
 async function collectConvertibleFiles(blog, folderPath) {
   const files = [];

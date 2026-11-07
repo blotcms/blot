@@ -2,11 +2,10 @@ const key = require("./key");
 const client = require("models/client");
 const getMetadata = require("./getMetadata");
 const getView = require("./getView");
-const promiseOnly = require("helper/promiseOnly");
 const updateCdnManifest = require("./util/updateCdnManifest");
 const cacheID = require("./util/cacheID");
 
-module.exports = promiseOnly(async function dropView(templateID, viewName) {
+module.exports = async function dropView(templateID, viewName) {
   const multi = client.multi();
 
   const metadata = await getMetadata(templateID);
@@ -27,4 +26,4 @@ module.exports = promiseOnly(async function dropView(templateID, viewName) {
   await updateCdnManifest(templateID);
 
   return "Deleted " + templateID;
-});
+};

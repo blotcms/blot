@@ -2,7 +2,6 @@ var joinpath = require("path").join;
 var sep = require("path").sep;
 var isOwner = require("./isOwner");
 var getAllViews = require("./getAllViews");
-var promiseOnly = require("helper/promiseOnly");
 var folder = require("storage/folder"); // reads only
 var blogFolder = require("clients/folder");
 var generatePackage = require("./package").generate;
@@ -149,4 +148,4 @@ function noTemplate(blogID, templateID) {
   return new Error("No template for " + blogID + " and " + templateID);
 }
 
-module.exports = promiseOnly(withFolderLock(writeToFolderUnlocked));
+module.exports = withFolderLock(writeToFolderUnlocked);

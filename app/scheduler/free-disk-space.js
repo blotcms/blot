@@ -1,6 +1,5 @@
 const exec = require("child_process").exec;
 const { promisify } = require("util");
-const promiseOnly = require("helper/promiseOnly");
 const prettySize = require("helper/prettySize");
 
 const execAsync = promisify(exec);
@@ -42,7 +41,7 @@ const main = async () => {
     .filter((disk) => disk.label);
 };
 
-module.exports = promiseOnly(main);
+module.exports = main;
 
 if (require.main === module) {
   console.log("Checking free disk space...");

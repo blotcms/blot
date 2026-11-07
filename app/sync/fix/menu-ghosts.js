@@ -1,4 +1,3 @@
-const promiseOnly = require("helper/promiseOnly");
 const Entry = require("models/entry");
 const Blog = require("models/blog");
 const _ = require("lodash");
@@ -116,4 +115,4 @@ async function main(blog) {
   return report;
 }
 
-module.exports = promiseOnly(main);
+module.exports = main;

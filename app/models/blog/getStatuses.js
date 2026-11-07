@@ -1,10 +1,9 @@
 const key = require("./key");
 const client = require("models/client");
 const ensure = require("helper/ensure");
-const promiseOnly = require("helper/promiseOnly");
 
 // Resolves to { statuses, next, previous }
-module.exports = promiseOnly(async function getStatuses(blogID, options = {}) {
+module.exports = async function getStatuses(blogID, options = {}) {
   ensure(blogID, "string").and(options, "object");
 
   // Fetch the first page by default
@@ -57,4 +56,4 @@ module.exports = promiseOnly(async function getStatuses(blogID, options = {}) {
   const previous = options.page > 1 ? options.page - 1 : null;
 
   return { statuses, next, previous };
-});
+};

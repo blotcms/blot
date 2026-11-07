@@ -12,18 +12,6 @@ describe("Blog.remove", function () {
     if (!this.blog) throw new Error("No blog");
   });
 
-  it("throws when given a callback", async function () {
-    // The callback form is gone: passing one throws instead of calling back.
-    try {
-      await remove(this.blog.id, function () {});
-      fail("should have thrown");
-    } catch (err) {
-      expect(err.message).toMatch(/no longer takes a callback/);
-    }
-
-    await remove(this.blog.id);
-  });
-
   it("removes a blog", async function () {
     await remove(this.blog.id);
 

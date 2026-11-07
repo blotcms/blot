@@ -1,4 +1,3 @@
-const promiseOnly = require("helper/promiseOnly");
 const isRetryable = require("./classifyError").isRetryable;
 
 // Wraps an async function so a failed call is tried again, up to
@@ -54,10 +53,7 @@ function retry(fn, options) {
     }
   };
 
-  // Names the guard's error after the wrapped function
-  Object.defineProperty(retried, "name", { value: fn.name || "retried" });
-
-  return promiseOnly(retried);
+  return retried;
 }
 
 // Exponential backoff

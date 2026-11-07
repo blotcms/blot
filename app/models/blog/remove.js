@@ -9,7 +9,6 @@ var templateKey = require("models/template/key");
 var BackupDomain = require("./util/backupDomain");
 var flushCache = require("./flushCache");
 var folderLock = require("sync/lock");
-var promiseOnly = require("helper/promiseOnly");
 
 var START_CURSOR = "0";
 var SCAN_SIZE = 1000;
@@ -21,7 +20,7 @@ function isValidBlogID(blogID) {
 
 // Resolves to the removed blog. Rejects with the error that stopped the
 // removal: an invalid id, no such blog, or a failed step.
-var remove = promiseOnly(async function remove(blogID) {
+var remove = async function remove(blogID) {
   if (!isValidBlogID(blogID)) throw new Error("Invalid blog id");
 
   var blog = await get({ id: blogID });
@@ -43,7 +42,7 @@ var remove = promiseOnly(async function remove(blogID) {
   await deleteKeys(blog);
 
   return blog;
-});
+};
 
 async function wipeFolders(blog) {
   if (!blog.id || typeof blog.id !== "string")

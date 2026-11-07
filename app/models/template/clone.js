@@ -1,14 +1,13 @@
 var ensure = require("helper/ensure");
 var extend = require("helper/extend");
 var getAllViews = require("./getAllViews");
-var promiseOnly = require("helper/promiseOnly");
 var setMultipleViews = require("./setMultipleViews");
 var getMetadata = require("./getMetadata");
 var setMetadata = require("./setMetadata");
 var updateCdnManifest = require("./util/updateCdnManifest");
 var cacheID = require("./util/cacheID");
 
-module.exports = promiseOnly(async function clone(fromID, toID, metadata) {
+module.exports = async function clone(fromID, toID, metadata) {
   ensure(fromID, "string").and(toID, "string").and(metadata, "object");
 
   var allViews;
@@ -88,4 +87,4 @@ module.exports = promiseOnly(async function clone(fromID, toID, metadata) {
   await cacheID.bumpBlogIfInstalled(metadata.owner, toID);
 
   return updateCdnManifest(toID);
-});
+};

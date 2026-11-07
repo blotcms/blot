@@ -1,5 +1,4 @@
 var ensure = require("helper/ensure");
-var promiseOnly = require("helper/promiseOnly");
 var validate = require("./validate");
 var client = require("models/client");
 var updateBillingEmail = require("./updateBillingEmail");
@@ -40,7 +39,7 @@ function indexes(user) {
   ];
 }
 
-module.exports = promiseOnly(async function save(uid, updates) {
+module.exports = async function save(uid, updates) {
   ensure(uid, "string").and(updates, "object");
 
   for (var attempt = 0; attempt < 20; attempt++) {
@@ -85,4 +84,4 @@ module.exports = promiseOnly(async function save(uid, updates) {
   var busy = new Error("User changed too frequently; please retry");
   busy.code = "EAGAIN";
   throw busy;
-});
+};

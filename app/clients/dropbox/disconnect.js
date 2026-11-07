@@ -3,12 +3,11 @@ var database = require("./database");
 var Blog = require("models/blog");
 var debug = require("debug")("blot:clients:dropbox");
 var Sync = require("sync");
-var promiseOnly = require("helper/promiseOnly");
 
 // Dont write tests for this or you'll need to regenerate
 // an access token for Travis and it'll be annoying. Just
 // test it on the development server.
-module.exports = promiseOnly(function disconnect(blogID) {
+module.exports = function disconnect(blogID) {
   return new Promise(function (resolve, reject) {
     // Settles once the sync engine's done has released the lock and called
     // back.
@@ -36,7 +35,7 @@ module.exports = promiseOnly(function disconnect(blogID) {
       );
     });
   });
-});
+};
 
 async function remove(blogID, folder) {
   debug("getting account info");

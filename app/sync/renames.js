@@ -1,5 +1,4 @@
 var Entries = require("models/entries");
-var promiseOnly = require("helper/promiseOnly");
 var Entry = require("models/entry");
 var Blog = require("models/blog");
 var clfdate = require("helper/clfdate");
@@ -7,7 +6,7 @@ var DateStamp = require("build/prepare/dateStamp");
 
 const { isDraft } = require("sync/update/drafts");
 
-module.exports = promiseOnly(async function renames(blogID) {
+module.exports = async function renames(blogID) {
   var RENAME_PERIOD = 1000 * 30; // 30 seconds
   var after = Date.now() - RENAME_PERIOD;
 
@@ -130,4 +129,4 @@ module.exports = promiseOnly(async function renames(blogID) {
     await Entry.set(blogID, createdEntry.path, updates);
     await Entry.set(blogID, deletedEntry.path, { guid: "" });
   }
-});
+};

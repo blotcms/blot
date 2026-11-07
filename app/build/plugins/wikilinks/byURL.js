@@ -17,6 +17,4 @@ async function byURL(blogID, href) {
   throw new Error("No entry found by URL with href: " + href);
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(byURL);
+module.exports = byURL;

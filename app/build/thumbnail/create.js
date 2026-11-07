@@ -61,6 +61,4 @@ async function create(blogID, path) {
   }
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(create);
+module.exports = create;

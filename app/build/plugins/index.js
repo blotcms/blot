@@ -314,11 +314,9 @@ function Timeout(name, onTimeout) {
   }, TIMEOUT);
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
 module.exports = {
-  convert: promiseOnly(convert),
-  load: promiseOnly(load),
+  convert: convert,
+  load: load,
   list: list,
   defaultList: defaultPlugins,
 };

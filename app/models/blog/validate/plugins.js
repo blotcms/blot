@@ -1,6 +1,4 @@
-var promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(async function validatePlugins(blogID, plugins) {
+module.exports = async function validatePlugins(blogID, plugins) {
   // For some reason (perhaps Disqus UI) we ran into an
   // issue where people's shortname included the Disqus
   // domain. This validator will strip the domain.
@@ -20,4 +18,4 @@ module.exports = promiseOnly(async function validatePlugins(blogID, plugins) {
   }
 
   return plugins;
-});
+};

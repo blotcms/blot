@@ -1,5 +1,4 @@
 const folder = require("storage/folder");
-const promiseOnly = require("helper/promiseOnly");
 const resolve = require("path").resolve;
 const dirname = require("path").dirname;
 
@@ -40,4 +39,4 @@ async function extractBibAndCSL(blog, path, metadata) {
 
 // Called back with (err, bib, csl); without a callback it resolves to
 // [bib, csl]
-module.exports = promiseOnly(extractBibAndCSL);
+module.exports = extractBibAndCSL;

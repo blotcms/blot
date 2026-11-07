@@ -1,7 +1,6 @@
 const time = require("helper/time");
 const pandoc = require("build/converters/pandoc");
 const debug = require("debug")("blot:converters:org");
-const promiseOnly = require("helper/promiseOnly");
 const cheerio = require("cheerio");
 const extractMetadata = require("build/metadata");
 const loosenDisplayMath = require("build/math/loosenDisplayMath");
@@ -65,4 +64,4 @@ async function convert(blog, text) {
 }
 
 // The katex specs call this with a callback
-module.exports = promiseOnly(convert);
+module.exports = convert;

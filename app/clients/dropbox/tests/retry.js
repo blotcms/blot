@@ -15,13 +15,6 @@ describe("dropbox retry", function () {
     expect(await fn(1, 2)).toEqual(3);
   });
 
-  it("throws when passed a callback", function () {
-    const fn = retry(async () => 1, options());
-    expect(function () {
-      fn(function () {});
-    }).toThrowError(/no longer takes a callback/);
-  });
-
   it("tries again after a failure and uses the later success", async function () {
     let calls = 0;
     const fn = retry(async () => {

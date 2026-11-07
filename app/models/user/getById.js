@@ -1,9 +1,8 @@
 var ensure = require("helper/ensure");
-var promiseOnly = require("helper/promiseOnly");
 var client = require("models/client");
 var key = require("./key");
 
-module.exports = promiseOnly(async function getById(uid) {
+module.exports = async function getById(uid) {
   ensure(uid, "string");
 
   var user = await client.get(key.user(uid));
@@ -18,4 +17,4 @@ module.exports = promiseOnly(async function getById(uid) {
   }
 
   return user;
-});
+};

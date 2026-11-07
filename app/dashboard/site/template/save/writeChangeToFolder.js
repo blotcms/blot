@@ -1,32 +1,29 @@
 const clfdate = require("helper/clfdate");
-const promiseOnly = require("helper/promiseOnly");
 const { getMetadata, writeToFolder } = require("models/template");
 
-module.exports = promiseOnly(
-  async function writeChangeToFolder(blog, template, view) {
-    console.log(
-      clfdate(),
-      "writeChangeToFolder",
-      blog.id,
-      template.id,
-      view.name
-    );
+module.exports = async function writeChangeToFolder(blog, template, view) {
+  console.log(
+    clfdate(),
+    "writeChangeToFolder",
+    blog.id,
+    template.id,
+    view.name
+  );
 
-    const ensureMetadata = async (metadata) => {
-      if (!metadata || !metadata.localEditing) {
-        console.log(clfdate(), "writeChangeToFolder", "No local editing");
-        return;
-      }
-
-      console.log(clfdate(), "writeChangeToFolder", "Writing to folder");
-      await writeToFolder(blog.id, metadata.id || template.id);
-    };
-
-    if (template && template.localEditing) {
-      return ensureMetadata(template);
+  const ensureMetadata = async (metadata) => {
+    if (!metadata || !metadata.localEditing) {
+      console.log(clfdate(), "writeChangeToFolder", "No local editing");
+      return;
     }
 
-    const metadata = await getMetadata(template.id);
-    return ensureMetadata(metadata || template);
+    console.log(clfdate(), "writeChangeToFolder", "Writing to folder");
+    await writeToFolder(blog.id, metadata.id || template.id);
+  };
+
+  if (template && template.localEditing) {
+    return ensureMetadata(template);
   }
-);
+
+  const metadata = await getMetadata(template.id);
+  return ensureMetadata(metadata || template);
+};

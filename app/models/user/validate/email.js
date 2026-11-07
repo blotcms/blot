@@ -1,9 +1,8 @@
 var ensure = require("helper/ensure");
-var promiseOnly = require("helper/promiseOnly");
 var getByEmail = require("../getByEmail");
 var { emailIsTooLong } = require("../auth-limits");
 
-module.exports = promiseOnly(async function validateEmail(user, email) {
+module.exports = async function validateEmail(user, email) {
   ensure(user, "object").and(email, "string");
 
   // Normalize the email, case sensitivity confuses users
@@ -27,4 +26,4 @@ module.exports = promiseOnly(async function validateEmail(user, email) {
 
   // this email is free!
   return email;
-});
+};

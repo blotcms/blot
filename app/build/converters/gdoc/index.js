@@ -7,7 +7,6 @@ const extend = require("helper/extend");
 const yaml = require("yaml");
 const postSourceSize = require("build/converters/post-source-size");
 const folderStat = require("build/converters/folderStat");
-const promiseOnly = require("helper/promiseOnly");
 
 const blockquotes = require("./blockquotes");
 const footnotes = require("./footnotes");
@@ -248,4 +247,4 @@ async function read(blog, path) {
 
 // Called back with (err, html, stat); without a callback it resolves to
 // [html, stat]
-module.exports = { read: promiseOnly(read), is: is, id: "gdoc" };
+module.exports = { read: read, is: is, id: "gdoc" };

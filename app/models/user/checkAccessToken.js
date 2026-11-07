@@ -1,4 +1,3 @@
-var promiseOnly = require("helper/promiseOnly");
 var client = require("models/client");
 var key = require("./key");
 
@@ -8,11 +7,11 @@ var key = require("./key");
 // (in the case of creating a new account) or it might
 // be an existing user's UID, in the case of the forgot
 // password flow.
-module.exports = promiseOnly(async function checkAccessToken(token) {
+module.exports = async function checkAccessToken(token) {
   // GETDEL is atomic, so only one concurrent caller can consume the token.
   var value = await client.getDel(key.accessToken(token));
 
   if (!value) throw new Error("Invalid access token");
 
   return value;
-});
+};

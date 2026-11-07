@@ -1,6 +1,5 @@
 var ensure = require("helper/ensure");
 var redis = require("models/client");
-var promiseOnly = require("helper/promiseOnly");
 
 function entriesKey(blogID) {
   return "blog:" + blogID + ":entries";
@@ -12,7 +11,7 @@ function lexKey(blogID) {
 
 // async backfillIndex(blogID) rebuilds the lex index from the entries list and
 // resolves how many ids it holds.
-var backfillIndex = promiseOnly(async function backfillIndex(blogID) {
+var backfillIndex = async function backfillIndex(blogID) {
   ensure(blogID, "string");
 
   var ids = await redis.zRange(entriesKey(blogID), 0, -1);
@@ -29,7 +28,7 @@ var backfillIndex = promiseOnly(async function backfillIndex(blogID) {
   await multi.exec();
 
   return ids ? ids.length : 0;
-});
+};
 
 module.exports = {
   lexKey: lexKey,

@@ -10,7 +10,6 @@ const {
 } = require("build/math/normalizeLiteralDollars");
 const postSourceSize = require("build/converters/post-source-size");
 const folderStat = require("build/converters/folderStat");
-const promiseOnly = require("helper/promiseOnly");
 
 async function read(blog, path) {
   const stat = await folderStat(blog.id, path);
@@ -27,7 +26,7 @@ async function read(blog, path) {
 }
 
 module.exports = {
-  read: promiseOnly(read),
+  read: read,
   is: function is(path) {
     return (
       [".txt", ".text", ".md", ".markdown"].indexOf(

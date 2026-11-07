@@ -35,6 +35,4 @@ async function list(blogID) {
   });
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(list);
+module.exports = list;
