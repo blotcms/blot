@@ -32,9 +32,7 @@ describe("daily update storage", function () {
     it("gives the size, objects and age of the last copy", function () {
       const text = storage.line(copyLine(), { now: NOW });
 
-      expect(text).toBe(
-        "Storage: 1.8 TB in 1,234,567 objects, offsite copied 9h ago"
-      );
+      expect(text).toBe("Storage: 1.8 TB (1,234,567 objects), offsite 9h ago");
       expect(text).not.toContain("**");
     });
 
@@ -43,7 +41,7 @@ describe("daily update storage", function () {
       const value = copyLine({ bytes, age: 0 });
 
       expect(storage.line(value, { history: [point(7, 88)], now: NOW })).toBe(
-        "Storage: 100 GB in 1,234,567 objects (+12 GB this week), offsite copied 0m ago"
+        "Storage: 100 GB (+12 GB this week, 1,234,567 objects), offsite 0m ago"
       );
       expect(
         storage.line(value, { history: [point(7, 104)], now: NOW })
@@ -78,10 +76,10 @@ describe("daily update storage", function () {
 
     it("flags the copy after two days", function () {
       expect(storage.line(copyLine({ age: 2 * DAY }), { now: NOW })).toBe(
-        "Storage: 1.8 TB in 1,234,567 objects, offsite copied 2d ago"
+        "Storage: 1.8 TB (1,234,567 objects), offsite 2d ago"
       );
       expect(storage.line(copyLine({ age: 3 * DAY }), { now: NOW })).toBe(
-        "Storage: 1.8 TB in 1,234,567 objects, **last offsite copy 3d ago, overdue**"
+        "Storage: 1.8 TB (1,234,567 objects), **offsite 3d ago, overdue**"
       );
     });
 
@@ -107,7 +105,7 @@ describe("daily update storage", function () {
       });
 
       expect((await run({ client, now: NOW - DAY })).storage).toBe(
-        "Storage: 90 GB in 1,234,567 objects, offsite copied 9h ago"
+        "Storage: 90 GB (1,234,567 objects), offsite 9h ago"
       );
       expect(JSON.parse(client.store.get(storage.HISTORY_KEY))).toEqual([
         { time: NOW - 9 * HOUR - DAY, used: 90 * GB },
@@ -115,7 +113,7 @@ describe("daily update storage", function () {
 
       client.store.set(STORAGE_OFFSITE_KEY, copyLine({ bytes: 93 * GB }));
       expect((await run({ client, now: NOW })).storage).toBe(
-        "Storage: 93 GB in 1,234,567 objects (+3 GB in 24h), offsite copied 9h ago"
+        "Storage: 93 GB (+3 GB in 24h, 1,234,567 objects), offsite 9h ago"
       );
       expect(JSON.parse(client.store.get(storage.HISTORY_KEY)).length).toBe(2);
 
@@ -156,9 +154,9 @@ describe("daily update storage", function () {
     expect(
       Mustache.render(template, {
         ...view,
-        storage: "Storage: 2 TB in 5 objects",
+        storage: "Storage: 2 TB (5 objects)",
       })
-    ).toContain("Server: y\n\nStorage: 2 TB in 5 objects\n\nSync:");
+    ).toContain("Server: y\n\nStorage: 2 TB (5 objects)\n\nSync:");
     expect(Mustache.render(template, view)).toContain("Server: y\n\nSync:");
   });
 });

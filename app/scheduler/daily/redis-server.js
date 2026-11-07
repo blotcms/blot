@@ -1,7 +1,7 @@
 // The Redis and Server lines of the daily email (blotcms/blot#2041):
 //
 //   Redis: memory 27% (resize in ~58 days, 8 GB free), saved 3m ago, backed up 30m ago, offsite 9h ago
-//   Server: disk 21% (stable, 19 GB free), RAM 75% available (12 GB)
+//   Server: root disk 21% (stable, 19 GB free), memory 25% (12 GB free)
 //
 // The storage bucket's line is daily/storage.js.
 //
@@ -38,8 +38,8 @@ const MEMORY_WARNING = 0.8;
 const RESIZE_URL =
   "https://github.com/blotcms/blot/blob/master/config/redis/README.md#increasing-the-redis-server-size";
 
-// The host's available RAM, as a fraction of its total, below which the line
-// calls it out (check-redis-host.js emails at HOST_MEMORY_ALERT).
+// The host's available memory, as a fraction of its total, below which the
+// line calls it out (check-redis-host.js emails at HOST_MEMORY_ALERT).
 const HOST_RAM_WARNING = 0.15;
 
 // The host samples every 5 minutes (see check-redis-host.js's STALE_MS).
@@ -144,10 +144,10 @@ function diskPart({ now, sample, diskHistory }) {
 
   const age = now - sample.time;
   if (age > SAMPLE_STALE_MS) return `sample ${compact(age)} old`;
-  if (!sample.diskRoot) return "disk not reported";
+  if (!sample.diskRoot) return "root disk not reported";
 
   let text =
-    "disk " +
+    "root disk " +
     trend.status({
       percent: percent(fullness(sample.diskRoot)),
       free: free(sample.diskRoot),
@@ -168,15 +168,16 @@ function diskPart({ now, sample, diskHistory }) {
   return text;
 }
 
-// Available RAM of the host that took the sample (the Redis host, which is the
-// app host too), not of the machine running this email.
+// Memory in use on the host that took the sample (the Redis host, which is the
+// app host too), not on the machine running this email. "In use" is everything
+// but MemAvailable, so it reads like the disk's percentage.
 function ramPart({ now, sample }) {
   if (!sample || now - sample.time > SAMPLE_STALE_MS) return null;
   if (!sample.ramTotal || sample.ramAvailable === null)
-    return "RAM not reported";
+    return "memory not reported";
 
   const fraction = sample.ramAvailable / sample.ramTotal;
-  const text = `RAM ${percent(fraction)} available (${size(sample.ramAvailable)})`;
+  const text = `memory ${percent(1 - fraction)} (${size(sample.ramAvailable)} free)`;
   return fraction < HOST_RAM_WARNING ? `**${text}**` : text;
 }
 
@@ -191,7 +192,7 @@ function backupPart({ now, backup }) {
 
   const age = now - backup.time;
   return age > BACKUP_OVERDUE_MS
-    ? `**last backup ${compact(age)} ago, overdue**`
+    ? `**backed up ${compact(age)} ago, overdue**`
     : `backed up ${compact(age)} ago`;
 }
 
@@ -202,7 +203,7 @@ function offsitePart({ now, offsite }) {
 
   const age = now - offsite.time;
   return age > OFFSITE_OVERDUE_MS
-    ? `**last offsite backup ${compact(age)} ago, overdue**`
+    ? `**offsite ${compact(age)} ago, overdue**`
     : `offsite ${compact(age)} ago`;
 }
 
