@@ -18,6 +18,11 @@ var updatePayPalSubscription =
 const randomChars = require("./util/randomChars");
 const handleFromTitle = require("./util/handleFromTitle");
 const validateTitle = require("models/blog/validate/title");
+const checkStripeSubscription = require("./util/stripeSubscription");
+
+const RESTART_PAY = "/sites/account/subscription/restart/pay";
+const ENDED =
+  "Your subscription has ended. Start it again to create a new site.";
 
 CreateBlog.use(function (req, res, next) {
   res.locals.breadcrumbs.forEach(function (link) {
@@ -105,6 +110,10 @@ CreateBlog.route("/")
   .post(requireTitle)
 
   .post(validateSubscription)
+
+  // Before asking for consent or billing anything, make sure Stripe still
+  // has the subscription the account says it has
+  .post(confirmSubscription)
 
   .post(function (req, res, next) {
     // For institutional accounts, we need to allow them to create
@@ -212,6 +221,39 @@ function validateSubscription(req, res, next) {
     "/sites/account/subscription/create",
     new Error("You need an active subscription to create a new blog")
   );
+}
+
+// A subscription stored as active can be gone from Stripe, when its
+// cancellation webhook was missed. Then the subscription and charge steps
+// would fail with Stripe's own error, so check first: carry on with another
+// active subscription if the customer has one, otherwise send them to start
+// it again. The stored state is left alone (only the webhooks and the nightly
+// subscription job change it), so no site goes offline because of this.
+async function confirmSubscription(req, res, next) {
+  if (canSkip(req.user) || !req.user.subscription.status) return next();
+
+  let result;
+
+  try {
+    result = await checkStripeSubscription(req.user);
+  } catch (err) {
+    return next(err);
+  }
+
+  if (result.state === "missing") {
+    return res.message(RESTART_PAY, new Error(ENDED));
+  }
+
+  if (result.state === "replaced") {
+    try {
+      await User.set(req.user.uid, { subscription: result.subscription });
+    } catch (err) {
+      return next(err);
+    }
+    req.user.subscription = result.subscription;
+  }
+
+  next();
 }
 
 function getUserById(uid) {
