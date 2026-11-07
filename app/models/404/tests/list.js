@@ -3,7 +3,7 @@ describe("404 list", function () {
 
   const { promisify } = require("util");
   const set = promisify(require("../set"));
-  const ignore = promisify(require("../ignore"));
+  const ignore = require("../ignore");
   const list = require("../list");
 
   function read(blogID, options) {
