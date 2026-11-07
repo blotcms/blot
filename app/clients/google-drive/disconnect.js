@@ -1,6 +1,5 @@
 const Blog = require("models/blog");
 const database = require("./database");
-const promiseOnly = require("helper/promiseOnly");
 
 async function disconnect(blogID) {
   // Capture the folderId before deleting the account record, otherwise
@@ -20,4 +19,4 @@ async function disconnect(blogID) {
   } catch (err) {}
 }
 
-module.exports = promiseOnly(disconnect);
+module.exports = disconnect;

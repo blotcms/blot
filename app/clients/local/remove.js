@@ -17,6 +17,4 @@ async function remove(blogID, path) {
   await folder.remove(blogID, path);
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(remove);
+module.exports = remove;

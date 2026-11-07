@@ -76,13 +76,6 @@ describe("sync/fix", function () {
     }
   });
 
-  it("throws when given a callback", function () {
-    var fix = require("../index");
-    expect(function () {
-      fix({ id: "blog-id" }, function () {});
-    }).toThrowError(TypeError, /no longer takes a callback/);
-  });
-
   it("keeps getRunningChecks", function () {
     var fix = require("../index");
     expect(typeof fix.getRunningChecks).toBe("function");

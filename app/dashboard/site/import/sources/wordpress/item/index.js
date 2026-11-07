@@ -2,7 +2,6 @@ const lifecycle = require("dashboard/site/import/lifecycle");
 var helper = require("dashboard/site/import/helper");
 var extract_entry = require("./extract_entry");
 var tidy = require("./tidy");
-var promiseOnly = require("helper/promiseOnly");
 
 // Runs one callback-style import step on the value, as a promise. The
 // first step has no value to take.
@@ -46,6 +45,6 @@ async function processItem(item, output_directory, write = helper.write) {
   }
 }
 
-module.exports = promiseOnly(processItem);
+module.exports = processItem;
 
 module.exports.run = processItem;

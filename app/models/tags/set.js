@@ -150,6 +150,4 @@ function shouldHide(entry) {
   );
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(set);
+module.exports = set;

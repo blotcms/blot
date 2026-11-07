@@ -5,7 +5,6 @@ var htmlAssets = require("./html_assets");
 var assetDirectory = require("./asset_directory");
 var download = require("./download");
 var lifecycle = require("../lifecycle");
-var promiseOnly = require("helper/promiseOnly");
 
 async function download_audio(post) {
   // The post's audio (each http(s) <audio src> once) is found by the sandbox's
@@ -82,4 +81,4 @@ function nameFrom(src) {
   return "_" + basename(parse(src).pathname);
 }
 
-module.exports = promiseOnly(download_audio);
+module.exports = download_audio;

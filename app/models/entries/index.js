@@ -1,6 +1,5 @@
 var redis = require("models/client");
 var ensure = require("helper/ensure");
-var promiseOnly = require("helper/promiseOnly");
 var Entry = require("../entry");
 var entryKey = require("../entry/key").entry;
 var pathNormalizer = require("helper/pathNormalizer");
@@ -114,11 +113,11 @@ module.exports = (function () {
   // entry-ghosts) scan one Redis round trip at a time - includes drafts,
   // pages, scheduled and deleted entries that getTotal's "entries" list
   // excludes, so this is the count that actually predicts that workload.
-  var getAllTotal = promiseOnly(async function getAllTotal(blogID) {
+  var getAllTotal = async function getAllTotal(blogID) {
     var allKey = listKey(blogID, "all");
 
     return await redis.zCard(allKey);
-  });
+  };
 
   // includes deleted entries
   async function getAllIDs(blogID) {
@@ -180,26 +179,24 @@ module.exports = (function () {
     return response;
   }
 
-  var getListIDs = promiseOnly(
-    async function getListIDs(blogID, listName, options) {
-      ensure(blogID, "string").and(listName, "string").and(options, "object");
+  var getListIDs = async function getListIDs(blogID, listName, options) {
+    ensure(blogID, "string").and(listName, "string").and(options, "object");
 
-      var list = listKey(blogID, listName);
+    var list = listKey(blogID, listName);
 
-      var start = 0;
-      var end = -1;
+    var start = 0;
+    var end = -1;
 
-      if (options.first) {
-        start = 0;
-        end = options.first - 1;
-      }
-
-      // Scheduled posts list the soonest first
-      return options.ascending
-        ? await redis.zRange(list, start, end)
-        : await redis.zRange(list, start, end, { REV: true });
+    if (options.first) {
+      start = 0;
+      end = options.first - 1;
     }
-  );
+
+    // Scheduled posts list the soonest first
+    return options.ascending
+      ? await redis.zRange(list, start, end)
+      : await redis.zRange(list, start, end, { REV: true });
+  };
 
   // includes deleted entries
   //
@@ -222,18 +219,6 @@ module.exports = (function () {
 
       await dothis(entry);
     }
-  }
-
-  // promiseOnly can't guard each: its last argument is always a function. A
-  // third argument is the old callback.
-  function eachOnly(blogID, dothis, ...rest) {
-    if (rest.length) {
-      throw new TypeError(
-        "each no longer takes a callback; pass an async function and await it (#2559)"
-      );
-    }
-
-    return each(blogID, dothis);
   }
 
   // Only whether each entry's key exists matters here, so it's checked with
@@ -394,7 +379,7 @@ module.exports = (function () {
 
   // async random(blogID) resolves a random published entry that has a url,
   // or undefined if there is none within MAX_ATTEMPTS tries or on a Redis error.
-  var random = promiseOnly(async function random(blogID) {
+  var random = async function random(blogID) {
     ensure(blogID, "string");
 
     var key = listKey(blogID, "entries");
@@ -421,7 +406,7 @@ module.exports = (function () {
 
       if (entry && entry.url) return entry;
     }
-  });
+  };
 
   function normalizeEntryID(entryID) {
     if (Array.isArray(entryID)) entryID = entryID[0];
@@ -827,12 +812,12 @@ module.exports = (function () {
   }
 
   return {
-    get: promiseOnly(get),
-    resave: promiseOnly(resave),
-    each: eachOnly,
-    pruneMissing: promiseOnly(pruneMissing),
+    get: get,
+    resave: resave,
+    each: each,
+    pruneMissing: pruneMissing,
     sweepExpiredDeleted: require("./sweepExpiredDeleted"),
-    adjacentTo: promiseOnly(adjacentTo),
+    adjacentTo: adjacentTo,
     getPage: getPage,
     getListIDs: getListIDs,
     getListTotal: getListTotal,
@@ -840,13 +825,13 @@ module.exports = (function () {
     getCatalog: require("./catalog"),
     getCachedPage: require("./cachedPage"),
     getCachedRecent: require("./cachedRecent"),
-    getAllIDs: promiseOnly(getAllIDs),
-    getTotal: promiseOnly(getTotal),
+    getAllIDs: getAllIDs,
+    getTotal: getTotal,
     getAllTotal: getAllTotal,
     getRecent: getRecent,
-    lastUpdate: promiseOnly(lastUpdate),
-    getCreated: promiseOnly(getCreated),
-    getDeleted: promiseOnly(getDeleted),
+    lastUpdate: lastUpdate,
+    getCreated: getCreated,
+    getDeleted: getDeleted,
     random: random,
     // Note: validatePageSize is NOT exported - it's internal to the model
   };

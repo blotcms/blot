@@ -1,4 +1,3 @@
-var promiseOnly = require("helper/promiseOnly");
 var client = require("models/client");
 var key = require("models/template/key");
 var updateCdnManifest = require("models/template/util/updateCdnManifest");
@@ -6,16 +5,13 @@ var updateCdnManifest = require("models/template/util/updateCdnManifest");
 // Regenerates the CDN manifest of each template that rebuildDependents marked
 // as pending during this sync, once each however many of its files changed.
 // Resolves to the number of templates updated. log is passed in an options
-// object, not as an argument, so that promiseOnly can tell a stray callback. Errors for a template are logged and the rest carry on.
+// object. Errors for a template are logged and the rest carry on.
 //
 // Templates are popped one at a time, so a crash mid-way leaves the rest
 // pending for the next sync (and loses at most the one in flight). A
 // template whose regeneration fails is put back once the rest are done, so
 // the next sync retries it rather than leaving its manifest stale.
-module.exports = promiseOnly(async function regenerateTemplateManifests(
-  blogID,
-  { log }
-) {
+module.exports = async function regenerateTemplateManifests(blogID, { log }) {
   var count = 0;
   var failed = [];
   var templateID;
@@ -38,4 +34,4 @@ module.exports = promiseOnly(async function regenerateTemplateManifests(
   }
 
   return count;
-});
+};

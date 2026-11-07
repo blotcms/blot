@@ -1,7 +1,6 @@
 var fs = require("fs-extra");
 var ensure = require("helper/ensure");
 var withLocalHeld = require("build/converters/folderStat").withLocalHeld;
-var promiseOnly = require("helper/promiseOnly");
 var extname = require("path").extname;
 var cheerio = require("cheerio");
 var Metadata = require("build/metadata");
@@ -173,4 +172,4 @@ async function writeMedia(blogID, assetDir, media) {
 
 // Called back with (err, html, stat); without a callback it resolves to
 // [html, stat]
-module.exports = { read: promiseOnly(read), is: is, id: "odt" };
+module.exports = { read: read, is: is, id: "odt" };

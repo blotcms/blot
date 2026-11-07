@@ -12,6 +12,4 @@ async function hash(path) {
   return digest;
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(hash);
+module.exports = hash;

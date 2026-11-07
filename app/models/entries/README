@@ -47,7 +47,7 @@ All functions are properties of the object exported by `index.js`. Require the m
 const Entries = require('models/entries');
 ```
 
-`getPage`, `getRecent`, `getTotal`, `getAllIDs`, `getCreated`, `getDeleted` and `lastUpdate` return promises and take no callback. `getAllTotal` and `getListIDs` return promises too, and passing a callback throws.
+`getPage`, `getRecent`, `getTotal`, `getAllIDs`, `getCreated`, `getDeleted` and `lastUpdate` return promises and take no callback. `getAllTotal` and `getListIDs` return promises too.
 
 ### `async getPage(blogID, options = {})`
 
@@ -87,7 +87,7 @@ Retrieves one or more named lists in a single call.
 
 - `options.lists` — array of list names (e.g. `["entries", "drafts", "scheduled"]`). Alternatively `options.list` (string) may be used for a single list.
 - `options.skinny` — defaults to `true`; when `true`, retrieves full entry objects via `Entry.get`. When `false`, returns raw entry IDs only.
-- Resolves to an object keyed by list name, each value being an array of entries or IDs. A callback throws (#2559).
+- Resolves to an object keyed by list name, each value being an array of entries or IDs.
 
 ### `async getAll(blogID, [options])`
 

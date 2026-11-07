@@ -2,7 +2,6 @@ const ensure = require("helper/ensure");
 const debug = require("debug")("blot:user:scheduleWelcomeEmail");
 const alarm = require("helper/alarm");
 const lock = require("helper/lock");
-const promiseOnly = require("helper/promiseOnly");
 const client = require("models/client");
 
 const email = require("helper/email");
@@ -109,7 +108,7 @@ async function schedule(uid) {
   debug(uid, "Scheduled welcome email for", scheduledTime);
 }
 
-const scheduleWelcomeEmail = promiseOnly(schedule);
+const scheduleWelcomeEmail = schedule;
 
 // Re-arms the alarm for recent users who haven't been sent the email and have
 // no alarm (e.g. the sign-up route's scheduling failed after the user was

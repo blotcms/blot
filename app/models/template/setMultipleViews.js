@@ -1,8 +1,7 @@
 var ensure = require("helper/ensure");
-var promiseOnly = require("helper/promiseOnly");
 var setView = require("./setView");
 
-module.exports = promiseOnly(async function setMultipleViews(name, views) {
+module.exports = async function setMultipleViews(name, views) {
   ensure(name, "string").and(views, "object");
 
   var error;
@@ -27,4 +26,4 @@ module.exports = promiseOnly(async function setMultipleViews(name, views) {
   await Promise.all(saves);
 
   if (error) throw error;
-});
+};

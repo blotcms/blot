@@ -2,13 +2,12 @@ var client = require("models/client");
 var ensure = require("helper/ensure");
 var key = require("./key");
 var serial = require("./serial");
-var promiseOnly = require("helper/promiseOnly");
 var applyImageExif = require("./util/imageExif").apply;
 var applyConverters = require("./util/converters").apply;
 var normalized = require("./util/normalized");
 
 // Resolves to the blog, or undefined when there is none
-module.exports = promiseOnly(async function get(by) {
+module.exports = async function get(by) {
   ensure(by, "object");
 
   var blogID;
@@ -39,4 +38,4 @@ module.exports = promiseOnly(async function get(by) {
   normalized.add(blog);
 
   return blog;
-});
+};

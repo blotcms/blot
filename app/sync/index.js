@@ -8,7 +8,6 @@ const previewReload = require("helper/publishPreviewReload");
 const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
 const readOnly = require("helper/readOnly");
 const logContext = require("helper/logContext");
-const promiseOnly = require("helper/promiseOnly");
 const {
   addPendingSync,
   removePendingSync,
@@ -94,7 +93,7 @@ async function start(blogID, callback) {
   // other outcome counts as a change. Each update is listed as pending for
   // lock-diagnostics until it settles.
   const folder = {
-    update: promiseOnly(async function update(path) {
+    update: async function update(path) {
       let result;
 
       addPendingUpdate(blogID, syncID, path);
@@ -110,7 +109,7 @@ async function start(blogID, callback) {
       removePendingUpdate(blogID, syncID, path);
       if (!result || result.changed !== false) changes = true;
       return result;
-    }),
+    },
     status,
     log,
   };

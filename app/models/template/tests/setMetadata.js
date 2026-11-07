@@ -7,7 +7,7 @@ describe("template", function () {
   const setBlog = (blogID, updates) =>
     require("models/blog").set(blogID, updates);
 
-  it("returns a promise, and throws when given a callback", async function () {
+  it("returns a promise", async function () {
     const direct = require("../index").setMetadata;
 
     expect(await direct(this.template.id, { description: "one" })).toBe(true);
@@ -15,16 +15,7 @@ describe("template", function () {
       await direct(this.template.id, { description: "one" })
     ).toBeUndefined();
 
-    const template = this.template;
-    // The callback form is gone: passing one throws instead of calling back.
-    try {
-      await direct(template.id, { description: "two" }, function () {});
-      fail("should have thrown");
-    } catch (err) {
-      expect(err.message).toMatch(/no longer takes a callback/);
-    }
-
-    await expectAsync(direct(template.id, null)).toBeRejected();
+    await expectAsync(direct(this.template.id, null)).toBeRejected();
   });
 
   it("sets a template's metadata", async function () {

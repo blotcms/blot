@@ -1,6 +1,5 @@
 var config = require("config");
 var createStripe = require("stripe");
-var promiseOnly = require("helper/promiseOnly");
 
 var stripe;
 
@@ -9,7 +8,7 @@ var stripe;
 // `open` (later invoices are drafts), so its creation time is the answer.
 // Resolves to epoch ms, or null if the user isn't unpaid or no open
 // invoice exists.
-module.exports = promiseOnly(async function overdueSince(user) {
+module.exports = async function overdueSince(user) {
   var subscription = user && user.subscription;
 
   if (!subscription || subscription.status !== "unpaid" || !subscription.id)
@@ -26,4 +25,4 @@ module.exports = promiseOnly(async function overdueSince(user) {
     });
 
   return oldest === null ? null : oldest * 1000;
-});
+};

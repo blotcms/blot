@@ -435,15 +435,11 @@ describe("sync cacheID", function () {
     });
   });
 
-  it("folder.update returns a promise and throws when given a callback", function (testDone) {
+  it("folder.update returns a promise", function (testDone) {
     const blogID = this.blog.id;
 
     sync(blogID, function (err, folder, done) {
       if (err) return testDone.fail(err);
-
-      expect(function () {
-        folder.update("/a.txt", function () {});
-      }).toThrowError(TypeError, /no longer takes a callback/);
 
       const pending = folder.update("/a.txt");
       expect(typeof pending.then).toBe("function");

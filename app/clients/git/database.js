@@ -139,28 +139,26 @@ async function removeApplied(blogID) {
   await client.del(appliedKey(blogID));
 }
 
-const promiseOnly = require("helper/promiseOnly");
+database.createToken = createToken;
+database.checkToken = checkToken;
+database.getToken = getToken;
 
-database.createToken = promiseOnly(createToken);
-database.checkToken = promiseOnly(checkToken);
-database.getToken = promiseOnly(getToken);
+database.flush = flush;
+database.refreshToken = refreshToken;
 
-database.flush = promiseOnly(flush);
-database.refreshToken = promiseOnly(refreshToken);
-
-database.setStatus = promiseOnly(setStatus);
-database.getStatus = promiseOnly(getStatus);
-database.removeStatus = promiseOnly(removeStatus);
-database.setCreating = promiseOnly(setCreating);
-database.isCreating = promiseOnly(isCreating);
-database.clearCreating = promiseOnly(clearCreating);
+database.setStatus = setStatus;
+database.getStatus = getStatus;
+database.removeStatus = removeStatus;
+database.setCreating = setCreating;
+database.isCreating = isCreating;
+database.clearCreating = clearCreating;
 database.creatingKey = creatingKey;
 database.CREATING_TTL_SECONDS = CREATING_TTL_SECONDS;
 
-database.getApplied = promiseOnly(getApplied);
-database.setApplied = promiseOnly(setApplied);
-database.setAppliedIfMissing = promiseOnly(setAppliedIfMissing);
-database.advanceApplied = promiseOnly(advanceApplied);
-database.removeApplied = promiseOnly(removeApplied);
+database.getApplied = getApplied;
+database.setApplied = setApplied;
+database.setAppliedIfMissing = setAppliedIfMissing;
+database.advanceApplied = advanceApplied;
+database.removeApplied = removeApplied;
 
 module.exports = database;

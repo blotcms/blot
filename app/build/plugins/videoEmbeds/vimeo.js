@@ -49,6 +49,4 @@ async function vimeo(href) {
   }
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(vimeo);
+module.exports = vimeo;

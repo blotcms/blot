@@ -63,9 +63,7 @@ async function create(blog) {
   });
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(create);
+module.exports = create;
 
 async function createRepository(blog, folder) {
   report(folder, "Creating token");

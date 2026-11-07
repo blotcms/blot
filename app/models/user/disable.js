@@ -1,9 +1,8 @@
 var ensure = require("helper/ensure");
-var promiseOnly = require("helper/promiseOnly");
 var setBlog = require("models/blog/set");
 var set = require("./set");
 
-module.exports = promiseOnly(async function disable(user, updates) {
+module.exports = async function disable(user, updates) {
   updates = updates || {};
 
   ensure(user, "object");
@@ -22,4 +21,4 @@ module.exports = promiseOnly(async function disable(user, updates) {
   );
 
   return await set(user.uid, updates);
-});
+};

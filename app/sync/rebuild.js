@@ -1,6 +1,5 @@
 const ensure = require("helper/ensure");
 const Update = require("./update");
-const promiseOnly = require("helper/promiseOnly");
 const storage = require("storage/folder");
 const messenger = require("./messenger");
 const assets = require("storage/assets");
@@ -52,7 +51,7 @@ async function walk(blogID) {
   return results;
 }
 
-module.exports = promiseOnly(async function main(blogID, options = {}) {
+module.exports = async function main(blogID, options = {}) {
   ensure(blogID, "string").and(options, "object");
 
   const blog = await Blog.get({ id: blogID });
@@ -178,7 +177,7 @@ module.exports = promiseOnly(async function main(blogID, options = {}) {
   // rebuild's fresh entries never invalidate that cache - see
   // https://github.com/blotcms/blot/issues/1844
   await Blog.set(blogID, { cacheID: Date.now() });
-});
+};
 
 async function wipeCache({ blogID, label, directory }) {
   const store = new Transformer(blogID, label);

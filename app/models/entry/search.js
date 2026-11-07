@@ -119,6 +119,4 @@ async function search(blogID, query, options = {}) {
   return sortEntries(results, options).slice(0, MAX_RESULTS);
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(search);
+module.exports = search;

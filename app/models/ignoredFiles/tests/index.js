@@ -25,12 +25,4 @@ describe("ignoredFiles", function () {
     await IgnoredFiles.flush(id);
     expect(await IgnoredFiles.get(id)).toEqual({});
   });
-
-  it("getStatus throws when passed a callback", function () {
-    expect(
-      function () {
-        IgnoredFiles.getStatus(this.blog.id, "/x", function () {});
-      }.bind(this)
-    ).toThrowError(/no longer takes a callback/);
-  });
 });

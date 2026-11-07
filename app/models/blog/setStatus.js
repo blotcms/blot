@@ -2,12 +2,11 @@ const key = require("./key");
 const client = require("models/client");
 const ensure = require("helper/ensure");
 const { TYPE } = require("./scheme");
-const promiseOnly = require("helper/promiseOnly");
 
 // We'll store only two thousand status log items
 const STATUS_LOG_MAX_LENGTH = 2000;
 
-module.exports = promiseOnly(async function setStatus(blogID, status) {
+module.exports = async function setStatus(blogID, status) {
   ensure(blogID, "string").and(status, "object");
 
   // Default values
@@ -25,4 +24,4 @@ module.exports = promiseOnly(async function setStatus(blogID, status) {
   multi.lTrim(key.status(blogID), 0, STATUS_LOG_MAX_LENGTH);
 
   await multi.exec();
-});
+};

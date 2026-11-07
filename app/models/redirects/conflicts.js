@@ -263,6 +263,4 @@ function decodeURIComponentSafely(url) {
   }
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(conflicts);
+module.exports = conflicts;

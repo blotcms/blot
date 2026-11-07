@@ -1,4 +1,3 @@
-var promiseOnly = require("helper/promiseOnly");
 var storage = require("storage/folder");
 var clfdate = require("helper/clfdate");
 var drop = require("./drop");
@@ -246,7 +245,7 @@ module.exports = function (blog, log, status) {
     return done(setError, setResult);
   }
 
-  return promiseOnly(update);
+  return update;
 };
 
 // A path that has vanished from disk (ENOENT) needs to work out what to drop

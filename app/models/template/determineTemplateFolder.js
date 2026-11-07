@@ -1,7 +1,6 @@
 var folder = require("storage/folder");
-var promiseOnly = require("helper/promiseOnly");
 
-module.exports = promiseOnly(async function determineTemplateFolder(blogID) {
+module.exports = async function determineTemplateFolder(blogID) {
   var listing;
 
   try {
@@ -35,4 +34,4 @@ module.exports = promiseOnly(async function determineTemplateFolder(blogID) {
   }
 
   return "Templates";
-});
+};

@@ -10,6 +10,4 @@ async function remove(blogID, path) {
   await repo.commit(blogID, { path: path, contents: null });
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(remove);
+module.exports = remove;

@@ -1,5 +1,4 @@
 var Entry = require("models/entry");
-var promiseOnly = require("helper/promiseOnly");
 var client = require("models/client");
 var Blog = require("models/blog");
 var dependentsKey = Entry.key.dependents;
@@ -27,7 +26,7 @@ var NO_LONGER_VALID_ERRORS = [
 // just changed or removed, and to mark any template which
 // links to it for a CDN manifest update at the end of the sync.
 
-module.exports = promiseOnly(async function rebuildDependents(blogID, path) {
+module.exports = async function rebuildDependents(blogID, path) {
   const log = function () {
     console.log.apply(null, [
       clfdate(),
@@ -83,7 +82,7 @@ module.exports = promiseOnly(async function rebuildDependents(blogID, path) {
   }
 
   await markTemplateDependents(blog.id, path, log);
-});
+};
 
 // Templates link to files in the blog's folder with {{#cdn}}. Their CDN
 // manifest holds each file's versioned URL, so when the file changes, appears

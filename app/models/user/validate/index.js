@@ -1,5 +1,4 @@
 var ensure = require("helper/ensure");
-var promiseOnly = require("helper/promiseOnly");
 
 var MODEL = require("../model");
 
@@ -9,7 +8,7 @@ var validators = {
 
 // async validate(user, updates) merges the updates into user and resolves
 // { user, changes }. It rejects with the first validation error.
-module.exports = promiseOnly(async function validate(user, updates) {
+module.exports = async function validate(user, updates) {
   ensure(user, MODEL).and(updates, "object");
 
   var changes = [];
@@ -47,4 +46,4 @@ module.exports = promiseOnly(async function validate(user, updates) {
   ensure(user, MODEL, true);
 
   return { user: user, changes: changes };
-});
+};

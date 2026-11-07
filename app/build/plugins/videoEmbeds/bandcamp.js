@@ -76,6 +76,4 @@ async function bandcamp(href) {
   }
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(bandcamp);
+module.exports = bandcamp;

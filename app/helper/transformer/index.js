@@ -15,7 +15,6 @@ var assets = require("storage/assets");
 var resolve = require("path").resolve;
 var callbackify = require("util").callbackify;
 var resolveCaseInsensitive = callbackify(folder.resolveCaseInsensitive);
-var promiseOnly = require("helper/promiseOnly");
 var he = require("he");
 var unwrapFolderLink = require("blog/render/replaceFolderLinks/unwrapFolderLink");
 var decodeFolderPath =
@@ -545,7 +544,7 @@ function Transformer(blogID, name) {
 
   return {
     lookup: lookup,
-    flush: promiseOnly(flush),
+    flush: flush,
   };
 }
 

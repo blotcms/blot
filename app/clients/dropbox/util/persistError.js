@@ -1,5 +1,4 @@
 const { classify } = require("./classifyError");
-const promiseOnly = require("helper/promiseOnly");
 
 // Persist a Dropbox error onto the blog's account row when it is
 // user-actionable. Transient failures are ignored so a previous durable
@@ -17,4 +16,4 @@ async function persistError(blogID, err, source) {
   return require("../database").setError(blogID, classified);
 }
 
-module.exports = promiseOnly(persistError);
+module.exports = persistError;

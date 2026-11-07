@@ -261,6 +261,4 @@ async function set(blogID, path, updates) {
   };
 }
 
-const promiseOnly = require("helper/promiseOnly");
-
-module.exports = promiseOnly(set);
+module.exports = set;
