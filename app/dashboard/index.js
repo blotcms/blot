@@ -149,7 +149,13 @@ dashboard.get("/", require("dashboard/util/load-blogs"), async (req, res) => {
       } catch (error) {}
 
       const datestamp = lastPublishedStatus && lastPublishedStatus.datestamp;
-      if (datestamp) {
+      if (!blog.client) {
+        // No folder to sync: the column says so, as the site's own status
+        // does, and the site sorts with those never synced
+        blog.lastPublished = "No folder connected";
+        blog.lastPublishedDatetime = "";
+        blog.lastPublishedTimestamp = null;
+      } else if (datestamp) {
         const publishedAt = moment(datestamp);
         blog.lastPublished = formatDashboardDate(datestamp, blog.timeZone);
         blog.lastPublishedDatetime = publishedAt.toISOString();

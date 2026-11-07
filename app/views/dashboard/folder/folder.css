@@ -495,13 +495,8 @@ div.folder-box.directory .folder-toolbar {
   padding-left: calc(var(--space-4) + var(--space-2));
 }
 
-div.folder-box.directory .directory-list th:first-child,
-div.folder-box.directory .directory-list td:first-child {
+div.folder-box.directory .directory-list th:first-child {
   padding-left: calc(var(--space-4) + var(--space-2));
-}
-
-div.folder-box.directory .directory-list td:last-child {
-  padding-right: calc(var(--space-2) + var(--space-2));
 }
 
 div.folder-box.directory .directory-list th:last-child {
@@ -512,19 +507,55 @@ div.folder-box.directory .directory-list th:last-child::after {
   right: calc(var(--space-4) + var(--space-2));
 }
 
-/* On phones the name is the only column, so it takes the right-hand
-   padding too */
-@media screen and (max-width: 480px) {
-  div.folder-box.directory .directory-list th:first-child,
-  div.folder-box.directory .directory-list td:first-child {
-    padding-right: calc(var(--space-2) + var(--space-2));
-  }
+/* The rows' stripes and hover stay inset from the box's edges, rounded as
+   on the Sites list: a transparent border on the end cells stands in for
+   the box's padding, and the background stops inside it. Its radius is the
+   stripe's plus the border, so the stripe's corners match. */
+div.folder-box.directory .directory-list td:first-child,
+div.folder-box.directory .directory-list td:last-child {
+  background-clip: padding-box;
 }
 
-/* Edge to edge, so square: rounded ends would leave notches at the box's
-   border */
-div.folder-box.directory .data-table tbody tr > td {
-  border-radius: 0;
+div.folder-box.directory .directory-list tbody tr:hover,
+div.folder-box.directory .directory-list tbody tr:active {
+  background-color: transparent;
+}
+
+div.folder-box.directory .directory-list td:first-child {
+  border-left: var(--space-2) solid transparent;
+  padding-left: var(--space-4);
+}
+
+div.folder-box.directory .directory-list td:last-child {
+  border-right: var(--space-2) solid transparent;
+  padding-right: var(--space-2);
+}
+
+div.folder-box.directory .directory-list tbody td:first-child {
+  border-radius: calc(var(--radius-lg) + var(--space-2)) 0 0
+    calc(var(--radius-lg) + var(--space-2));
+}
+
+div.folder-box.directory .directory-list tbody td:last-child {
+  border-radius: 0 calc(var(--radius-lg) + var(--space-2))
+    calc(var(--radius-lg) + var(--space-2)) 0;
+}
+
+/* On phones the name is the only column, so it takes the right-hand
+   inset and padding too */
+@media screen and (max-width: 480px) {
+  div.folder-box.directory .directory-list th:first-child {
+    padding-right: calc(var(--space-2) + var(--space-2));
+  }
+
+  div.folder-box.directory .directory-list td:first-child {
+    border-right: var(--space-2) solid transparent;
+    padding-right: var(--space-2);
+  }
+
+  div.folder-box.directory .directory-list tbody td:first-child {
+    border-radius: calc(var(--radius-lg) + var(--space-2));
+  }
 }
 
 /* On desktop it reaches down to just above the bottom of the window, so a
