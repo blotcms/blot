@@ -215,7 +215,8 @@ describe("git client: materialize", function () {
   // generation only V8's 64 MiB limit on external memory prompts one, so here
   // that much garbage piles up or not depending on the specs that ran first. A
   // 1 MiB semi-space collects the chunks every few MiB, whatever the size of
-  // the file. The store is a directory, which the child opens.
+  // the file, and the sampler collects before each sample, so the peak counts
+  // only what is still referenced. The store is a directory, which the child opens.
   var MEASURE_MEMORY = `
     var [materialize, store, directory, cacheDirectory, blogID, from, to, folderModule] = process.argv.slice(1);
     var { createCache, createReader, createFsStore, manifest } = require(store);
@@ -236,9 +237,12 @@ describe("git client: materialize", function () {
       var reader = createReader({ store: objects, cache: cache, manifest: current, scratch: cache });
       var before = process.memoryUsage().rss;
       var peak = before;
+      // Collect before each sample: dead chunks are not what is measured, and
+      // a file held whole is live, so it still counts
       var timer = setInterval(function () {
+        global.gc();
         peak = Math.max(peak, process.memoryUsage().rss);
-      }, 5);
+      }, 10);
 
       return run({ blogID: blogID, reader: reader, from: from, to: to }).then(function () {
         clearInterval(timer);
@@ -264,6 +268,7 @@ describe("git client: materialize", function () {
         process.execPath,
         [
           "--max-semi-space-size=1",
+          "--expose-gc",
           "-e",
           MEASURE_MEMORY,
           require.resolve("clients/git/served/materialize"),
