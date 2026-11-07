@@ -1,7 +1,6 @@
 // Resync Dropbox blogs by walking folder structure and performing a full reset
 // Usage: node scripts/dropbox/resync.js [blog-identifier]
 
-const { promisify } = require("util");
 const eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
 const resetToBlot = require("clients/dropbox/sync/reset-to-blot");
 const establishSyncLock = require("sync/establishSyncLock");
@@ -65,7 +64,7 @@ const processBlog = async (blog) => {
 
       await resetToBlot(blog.id, publish, folder.update);
       try {
-        await promisify(require("sync/fix"))(blog);
+        await require("sync/fix")(blog);
       } catch (err) {
         console.error(
           `WARN: Dropbox resync fix failed for ${blog.id}: ${formatError(err)}`

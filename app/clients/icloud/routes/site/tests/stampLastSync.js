@@ -96,7 +96,7 @@ describe("icloud routes stamp lastSync", function () {
       get: async ({ id }) => ({ id, client: "icloud" }),
     });
     stub("entries", { getAllTotal: async () => 0 });
-    stub("fix", (blog, callback) => callback(null, {}));
+    stub("fix", async () => ({}));
     stub("getHealth", async () => ({ issues: [] }));
     // Reload each route, and the walk and Fix() it runs, bound to the stubs
     // above

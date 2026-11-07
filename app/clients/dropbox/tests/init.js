@@ -436,10 +436,14 @@ describe("dropbox init", function () {
       stub("folderLock", {
         heldSince: async (blogID) => behaviors[blogID].heldSince || null,
       });
-      stub("fix", function (blog, callback) {
+      stub("fix", async function (blog) {
         const behavior = behaviors[blog.id];
         fixedLoads[blog.id] = blog.load;
-        callback(behavior.fixError || null, behavior.fixReport || {});
+        if (behavior.fixError) {
+          behavior.fixError.report = behavior.fixReport || {};
+          throw behavior.fixError;
+        }
+        return behavior.fixReport || {};
       });
       stub("sync", function (blog, options, callback) {
         // The catch-up sync must not stamp last_sync
