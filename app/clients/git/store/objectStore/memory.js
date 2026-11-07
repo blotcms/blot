@@ -97,20 +97,20 @@ function createMemoryStore({ now = Date.now } = {}) {
     return slice;
   }
 
-  // A 304 is a GET too, so it counts in `gets` as well as `notModified`. As
-  // on S3, the condition is answered before the size is looked at.
+  // A 304 and a 404 are GETs too, so both count in `gets`, and a 304 in
+  // `notModified` as well. As on S3, the condition is answered before the
+  // size is looked at.
   async function get(key, { maxBytes = Infinity, ifNoneMatch } = {}) {
+    stats.gets++;
     const object = find(key);
     const conditional = ifNoneMatch !== undefined;
     const etag = conditional ? etagOf(object) : null;
     if (conditional && ifNoneMatch && ifNoneMatch === etag) {
-      stats.gets++;
       stats.notModified++;
       return { notModified: true, etag };
     }
     if (object.length > maxBytes)
       throw new TooLargeError(key + " is larger than " + maxBytes);
-    stats.gets++;
     stats.bytesRead += object.length;
     return conditional
       ? { bytes: Buffer.from(object), etag }

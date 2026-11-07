@@ -1,6 +1,5 @@
 var User = require("models/user");
 var identifier = process.argv[2];
-var { promisify } = require("util");
 
 if (!identifier) throw "Please pass the user's email as an argument.";
 
@@ -9,7 +8,7 @@ async function main() {
 
   if (!user) throw new Error("No user");
 
-  await promisify(User.set)(user.uid, { passwordHash: "" });
+  await User.set(user.uid, { passwordHash: "" });
 }
 
 main().then(

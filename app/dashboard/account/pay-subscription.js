@@ -203,12 +203,7 @@ async function updateSubscription(req, res, next) {
     var previousSubscription = req.user.subscription || {};
     var previousStatus = previousSubscription.status;
 
-    await new Promise(function (resolve, reject) {
-      User.set(req.user.uid, { subscription: subscription }, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await User.set(req.user.uid, { subscription: subscription });
 
     // Send recovery email if subscription was recovered
     if (

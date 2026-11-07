@@ -34,9 +34,7 @@ describe("password setting authorization", function () {
     spyOn(User, "hashPassword").and.returnValue(
       Promise.resolve("hashed-password")
     );
-    spyOn(User, "set").and.callFake(function (uid, updates, callback) {
-      callback(null);
-    });
+    spyOn(User, "set").and.callFake(async () => undefined);
     spyOn(User, "checkAccessToken").and.returnValue(
       Promise.resolve("password-route-user")
     );
@@ -52,13 +50,9 @@ describe("password setting authorization", function () {
   it("allows a passwordless account to set its first password", async function () {
     expect((await request(false)).saved).toEqual("/sites");
     expect(User.checkAccessToken).not.toHaveBeenCalled();
-    expect(User.set).toHaveBeenCalledWith(
-      "password-route-user",
-      {
-        passwordHash: "hashed-password",
-      },
-      jasmine.any(Function)
-    );
+    expect(User.set).toHaveBeenCalledWith("password-route-user", {
+      passwordHash: "hashed-password",
+    });
   });
 
   it("allows a valid token for this account", async function () {

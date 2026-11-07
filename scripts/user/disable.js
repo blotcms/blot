@@ -118,12 +118,7 @@ async function main(user) {
     return;
   }
 
-  await new Promise(function (resolve, reject) {
-    User.disable(user, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+  await User.disable(user);
 
   console.log(colors.green("Disabled " + user.email));
 }

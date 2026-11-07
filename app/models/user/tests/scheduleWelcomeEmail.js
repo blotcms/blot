@@ -10,27 +10,15 @@ describe("user", function () {
   var DELAY = scheduleWelcomeEmail.WELCOME_EMAIL_DELAY_MS;
 
   function setUser(uid, updates) {
-    return new Promise(function (resolve, reject) {
-      User.set(uid, updates, function (err) {
-        err ? reject(err) : resolve();
-      });
-    });
+    return User.set(uid, updates);
   }
 
   function schedule(uid) {
-    return new Promise(function (resolve, reject) {
-      User.scheduleWelcomeEmail(uid, function (err) {
-        err ? reject(err) : resolve();
-      });
-    });
+    return User.scheduleWelcomeEmail(uid);
   }
 
   function getUser(uid) {
-    return new Promise(function (resolve, reject) {
-      User.getById(uid, function (err, user) {
-        err ? reject(err) : resolve(user);
-      });
-    });
+    return User.getById(uid);
   }
 
   function sentKey(uid) {

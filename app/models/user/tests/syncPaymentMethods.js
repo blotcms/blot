@@ -36,36 +36,23 @@ describe("user syncPaymentMethods", function () {
     syncPaymentMethods._resetStripeClient();
   });
 
-  it("returns an empty list and does not call Stripe for a user without a Stripe customer", function (done) {
-    syncPaymentMethods(this.user, function (err, paymentMethods) {
-      expect(err).toBeFalsy();
-      expect(paymentMethods).toEqual([]);
-      done();
-    });
+  it("returns an empty list and does not call Stripe for a user without a Stripe customer", async function () {
+    var paymentMethods = await syncPaymentMethods(this.user);
+    expect(paymentMethods).toEqual([]);
   });
 
   describe("with a Stripe customer", function () {
-    beforeEach(function (done) {
+    beforeEach(async function () {
       var test = this;
 
-      User.set(
-        this.user.uid,
-        {
-          subscription: { id: "sub_123", customer: "cus_123" },
-        },
-        function (err) {
-          if (err) return done.fail(err);
+      await User.set(this.user.uid, {
+        subscription: { id: "sub_123", customer: "cus_123" },
+      });
 
-          User.getById(test.user.uid, function (err, user) {
-            if (err) return done.fail(err);
-            test.user = user;
-            done();
-          });
-        }
-      );
+      test.user = await User.getById(test.user.uid);
     });
 
-    it("caches payment methods from Stripe, marking the customer's default", function (done) {
+    it("caches payment methods from Stripe, marking the customer's default", async function () {
       var stripeClient = baseStripeClient({
         customers: {
           retrieve: jasmine
@@ -111,34 +98,29 @@ describe("user syncPaymentMethods", function () {
 
       var test = this;
 
-      syncPaymentMethods(this.user, function (err, paymentMethods) {
-        if (err) return done.fail(err);
+      var paymentMethods = await syncPaymentMethods(this.user);
 
-        expect(paymentMethods.length).toBe(2);
-        expect(paymentMethods[0]).toEqual(
-          jasmine.objectContaining({
-            id: "pm_1",
-            brand: "visa",
-            isDefault: false,
-          })
-        );
-        expect(paymentMethods[1]).toEqual(
-          jasmine.objectContaining({
-            id: "pm_2",
-            brand: "mastercard",
-            isDefault: true,
-          })
-        );
+      expect(paymentMethods.length).toBe(2);
+      expect(paymentMethods[0]).toEqual(
+        jasmine.objectContaining({
+          id: "pm_1",
+          brand: "visa",
+          isDefault: false,
+        })
+      );
+      expect(paymentMethods[1]).toEqual(
+        jasmine.objectContaining({
+          id: "pm_2",
+          brand: "mastercard",
+          isDefault: true,
+        })
+      );
 
-        User.getById(test.user.uid, function (err, user) {
-          if (err) return done.fail(err);
-          expect(user.paymentMethods.length).toBe(2);
-          done();
-        });
-      });
+      var user = await User.getById(test.user.uid);
+      expect(user.paymentMethods.length).toBe(2);
     });
 
-    it("prefers the subscription-level default over the customer-level default", function (done) {
+    it("prefers the subscription-level default over the customer-level default", async function () {
       var stripeClient = baseStripeClient({
         customers: {
           retrieve: jasmine
@@ -187,24 +169,21 @@ describe("user syncPaymentMethods", function () {
 
       syncPaymentMethods._setStripeClient(stripeClient);
 
-      syncPaymentMethods(this.user, function (err, paymentMethods) {
-        if (err) return done.fail(err);
+      var paymentMethods = await syncPaymentMethods(this.user);
 
-        expect(
-          paymentMethods.find(function (pm) {
-            return pm.id === "pm_1";
-          }).isDefault
-        ).toBe(false);
-        expect(
-          paymentMethods.find(function (pm) {
-            return pm.id === "pm_2";
-          }).isDefault
-        ).toBe(true);
-        done();
-      });
+      expect(
+        paymentMethods.find(function (pm) {
+          return pm.id === "pm_1";
+        }).isDefault
+      ).toBe(false);
+      expect(
+        paymentMethods.find(function (pm) {
+          return pm.id === "pm_2";
+        }).isDefault
+      ).toBe(true);
     });
 
-    it("treats a missing subscription as having no override, falling back to the customer default", function (done) {
+    it("treats a missing subscription as having no override, falling back to the customer default", async function () {
       var stripeClient = baseStripeClient({
         customers: {
           retrieve: jasmine
@@ -246,14 +225,11 @@ describe("user syncPaymentMethods", function () {
 
       syncPaymentMethods._setStripeClient(stripeClient);
 
-      syncPaymentMethods(this.user, function (err, paymentMethods) {
-        if (err) return done.fail(err);
-        expect(paymentMethods[0].isDefault).toBe(true);
-        done();
-      });
+      var paymentMethods = await syncPaymentMethods(this.user);
+      expect(paymentMethods[0].isDefault).toBe(true);
     });
 
-    it("propagates a non-resource_missing error from the subscription fetch instead of silently falling back", function (done) {
+    it("propagates a non-resource_missing error from the subscription fetch instead of silently falling back", async function () {
       var stripeClient = baseStripeClient({
         customers: {
           retrieve: jasmine
@@ -275,14 +251,15 @@ describe("user syncPaymentMethods", function () {
 
       syncPaymentMethods._setStripeClient(stripeClient);
 
-      syncPaymentMethods(this.user, function (err, paymentMethods) {
+      try {
+        await syncPaymentMethods(this.user);
+        fail("expected rejection");
+      } catch (err) {
         expect(err).toBeTruthy();
-        expect(paymentMethods).toBeUndefined();
-        done();
-      });
+      }
     });
 
-    it("honors a subscription-level legacy default_source over the customer's default", function (done) {
+    it("honors a subscription-level legacy default_source over the customer's default", async function () {
       var stripeClient = baseStripeClient({
         customers: {
           retrieve: jasmine
@@ -330,24 +307,21 @@ describe("user syncPaymentMethods", function () {
 
       syncPaymentMethods._setStripeClient(stripeClient);
 
-      syncPaymentMethods(this.user, function (err, paymentMethods) {
-        if (err) return done.fail(err);
+      var paymentMethods = await syncPaymentMethods(this.user);
 
-        expect(
-          paymentMethods.find(function (pm) {
-            return pm.id === "card_subscription_default";
-          }).isDefault
-        ).toBe(true);
-        expect(
-          paymentMethods.find(function (pm) {
-            return pm.id === "card_customer_default";
-          }).isDefault
-        ).toBe(false);
-        done();
-      });
+      expect(
+        paymentMethods.find(function (pm) {
+          return pm.id === "card_subscription_default";
+        }).isDefault
+      ).toBe(true);
+      expect(
+        paymentMethods.find(function (pm) {
+          return pm.id === "card_customer_default";
+        }).isDefault
+      ).toBe(false);
     });
 
-    it("follows has_more to fetch every page of legacy cards", function (done) {
+    it("follows has_more to fetch every page of legacy cards", async function () {
       var pageOne = {
         data: [
           {
@@ -395,20 +369,17 @@ describe("user syncPaymentMethods", function () {
 
       syncPaymentMethods._setStripeClient(stripeClient);
 
-      syncPaymentMethods(this.user, function (err, paymentMethods) {
-        if (err) return done.fail(err);
+      var paymentMethods = await syncPaymentMethods(this.user);
 
-        expect(paymentMethods.length).toBe(2);
-        expect(
-          paymentMethods.map(function (pm) {
-            return pm.id;
-          })
-        ).toEqual(["card_1", "card_2"]);
-        done();
-      });
+      expect(paymentMethods.length).toBe(2);
+      expect(
+        paymentMethods.map(function (pm) {
+          return pm.id;
+        })
+      ).toEqual(["card_1", "card_2"]);
     });
 
-    it("follows has_more to fetch every page of payment methods", function (done) {
+    it("follows has_more to fetch every page of payment methods", async function () {
       var pageOne = {
         data: [
           {
@@ -460,20 +431,17 @@ describe("user syncPaymentMethods", function () {
 
       syncPaymentMethods._setStripeClient(stripeClient);
 
-      syncPaymentMethods(this.user, function (err, paymentMethods) {
-        if (err) return done.fail(err);
+      var paymentMethods = await syncPaymentMethods(this.user);
 
-        expect(paymentMethods.length).toBe(2);
-        expect(
-          paymentMethods.map(function (pm) {
-            return pm.id;
-          })
-        ).toEqual(["pm_1", "pm_2"]);
-        done();
-      });
+      expect(paymentMethods.length).toBe(2);
+      expect(
+        paymentMethods.map(function (pm) {
+          return pm.id;
+        })
+      ).toEqual(["pm_1", "pm_2"]);
     });
 
-    it("includes every legacy card, marking only the default source as default", function (done) {
+    it("includes every legacy card, marking only the default source as default", async function () {
       var stripeClient = baseStripeClient({
         customers: {
           retrieve: jasmine
@@ -512,28 +480,25 @@ describe("user syncPaymentMethods", function () {
 
       syncPaymentMethods._setStripeClient(stripeClient);
 
-      syncPaymentMethods(this.user, function (err, paymentMethods) {
-        if (err) return done.fail(err);
+      var paymentMethods = await syncPaymentMethods(this.user);
 
-        expect(paymentMethods.length).toBe(2);
-        expect(paymentMethods).toEqual(
-          jasmine.arrayContaining([
-            jasmine.objectContaining({
-              id: "card_legacy1",
-              brand: "visa",
-              isDefault: true,
-              isLegacy: true,
-            }),
-            jasmine.objectContaining({
-              id: "card_legacy2",
-              brand: "mastercard",
-              isDefault: false,
-              isLegacy: true,
-            }),
-          ])
-        );
-        done();
-      });
+      expect(paymentMethods.length).toBe(2);
+      expect(paymentMethods).toEqual(
+        jasmine.arrayContaining([
+          jasmine.objectContaining({
+            id: "card_legacy1",
+            brand: "visa",
+            isDefault: true,
+            isLegacy: true,
+          }),
+          jasmine.objectContaining({
+            id: "card_legacy2",
+            brand: "mastercard",
+            isDefault: false,
+            isLegacy: true,
+          }),
+        ])
+      );
     });
   });
 });

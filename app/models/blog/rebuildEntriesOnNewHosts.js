@@ -39,9 +39,7 @@ async function run(blogID, former) {
   // A brand new blog has no entries to rebuild.
   if (!former || !former.handle) return;
 
-  const blog = await new Promise((resolve, reject) =>
-    Blog.get({ id: blogID }, (err, blog) => (err ? reject(err) : resolve(blog)))
-  );
+  const blog = await Blog.get({ id: blogID });
 
   if (!blog || !blog.handle) return;
 

@@ -64,12 +64,7 @@ async function save(req, res, next) {
 
     if (!passwordHash) return next(new Error("Could not hash password"));
 
-    await new Promise(function (resolve, reject) {
-      User.set(req.user.uid, { passwordHash: passwordHash }, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await User.set(req.user.uid, { passwordHash: passwordHash });
 
     res.message("/sites", "Saved your new password");
   } catch (err) {

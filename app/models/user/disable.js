@@ -1,9 +1,9 @@
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var setBlog = require("models/blog/set");
 var set = require("./set");
 
-module.exports = withCallback(async function disable(user, updates) {
+module.exports = promiseOnly(async function disable(user, updates) {
   updates = updates || {};
 
   ensure(user, "object");

@@ -1,7 +1,6 @@
 var client = require("models/client");
 var config = require("config");
 var folder = require("storage/folder");
-var promisify = require("util").promisify;
 var assets = require("storage/assets");
 var get = require("./get");
 var set = require("./set");
@@ -144,8 +143,7 @@ async function updateUser(blog) {
 
   if (user.lastSession === blog.id) changes.lastSession = "";
 
-  // User.set has no promise form yet
-  await promisify(User.set)(blog.owner, changes);
+  await User.set(blog.owner, changes);
 }
 
 module.exports = remove;

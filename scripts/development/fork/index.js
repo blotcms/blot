@@ -43,14 +43,14 @@ function freeHandle(base, attempt, callback) {
 }
 
 function create(base, settings, callback) {
-  User.getByEmail(EMAIL, function (err, user) {
-    if (err || !user) {
-      return callback(
-        new Error(
-          EMAIL + " not found — start the local server first (npm start)"
-        )
-      );
-    }
+  function notFound() {
+    callback(
+      new Error(EMAIL + " not found — start the local server first (npm start)")
+    );
+  }
+
+  User.getByEmail(EMAIL).then(function (user) {
+    if (!user) return notFound();
 
     freeHandle(
       base.toLowerCase().replace(/[^a-z0-9]/g, ""),
@@ -77,7 +77,7 @@ function create(base, settings, callback) {
         });
       }
     );
-  });
+  }, notFound);
 }
 
 function finish(blogID, slug, callback) {
@@ -111,11 +111,10 @@ function watch(blogID, callback) {
   client
     .publish(LOCAL_CLIENT_CHANNEL, JSON.stringify({ blogID: blogID }))
     .then(function () {
-      Blog.get({ id: blogID }, function (err, blog) {
-        if (err) return callback(err);
+      Blog.get({ id: blogID }).then(function (blog) {
         console.log("url=https://" + blog.handle + "." + config.host);
         callback();
-      });
+      }, callback);
     }, callback);
 }
 

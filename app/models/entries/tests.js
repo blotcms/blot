@@ -1095,9 +1095,7 @@ describe("entries", function () {
       ];
 
       // Mock Blog.get
-      spyOn(Blog, "get").and.callFake((query, callback) => {
-        callback(null, blog);
-      });
+      spyOn(Blog, "get").and.callFake(async () => blog);
 
       // Add mock entries in Redis
       const key = `blog:${this.blog.id}:all`;
@@ -1126,8 +1124,8 @@ describe("entries", function () {
 
     it("should handle errors when fetching the blog", function (done) {
       // Mock Blog.get
-      spyOn(Blog, "get").and.callFake((query, callback) => {
-        callback(new Error("Blog not found"));
+      spyOn(Blog, "get").and.callFake(async () => {
+        throw new Error("Blog not found");
       });
 
       Entries.resave(this.blog.id, function (err) {

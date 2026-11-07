@@ -210,12 +210,7 @@ function validateSubscription(req, res, next) {
 }
 
 function getUserById(uid) {
-  return new Promise(function (resolve, reject) {
-    User.getById(uid, function (err, user) {
-      if (err) return reject(err);
-      resolve(user);
-    });
-  });
+  return User.getById(uid);
 }
 
 // The /inform-paypal page is shown precisely when the user has NOT yet paid
@@ -339,16 +334,18 @@ function updateSubscription(req, res, next) {
       quantity: req.user.blogs.length + 1,
       prorate: false,
     },
-    function (err, subscription) {
+    async function (err, subscription) {
       if (err) return next(err);
 
       if (!subscription) return next(new Error(ERR));
 
-      User.set(req.user.uid, { subscription: subscription }, function (err) {
-        if (err) return next(err);
+      try {
+        await User.set(req.user.uid, { subscription: subscription });
+      } catch (err) {
+        return next(err);
+      }
 
-        next();
-      });
+      next();
     }
   );
 }

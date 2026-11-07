@@ -66,7 +66,7 @@ describe("git client create", function () {
       server.close(resolve);
     });
 
-    var latest = await promisify(Blog.get)({ id: blog.id });
+    var latest = await Blog.get({ id: blog.id });
 
     expect(messages.length).toBe(1);
     expect(latest.client).not.toBe("git");

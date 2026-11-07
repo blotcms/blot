@@ -1,5 +1,4 @@
 describe("Blot sign up", function () {
-  const { promisify } = require("util");
   const User = require("models/user");
   const browser = require("./util/browser");
 
@@ -8,9 +7,9 @@ describe("Blot sign up", function () {
   const email = "sign-up-spec@example.com";
 
   afterEach(async function () {
-    const user = await promisify(User.getByEmail)(email);
+    const user = await User.getByEmail(email);
 
-    if (user) await promisify(User.remove)(user.uid);
+    if (user) await User.remove(user.uid);
   });
 
   it("works", async function () {
@@ -20,7 +19,7 @@ describe("Blot sign up", function () {
     // which a test can use. Accounts that were paid for elsewhere sign up
     // through a link with an access token instead, which skips only the
     // payment form and goes through the same account and site creation.
-    const token = await promisify(User.generateAccessToken)({ uid: "sign-up" });
+    const token = await User.generateAccessToken({ uid: "sign-up" });
 
     await page.goto("/sites/sign-up/paid/" + token);
     page.type("input[name=email]", email);

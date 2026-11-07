@@ -95,15 +95,12 @@ PaymentMethod.route("/")
       render(stored);
       // At most once a minute, so repeated views don't each call Stripe
       if (Date.now() - syncedAt < 60 * 1000) return;
-      return syncPaymentMethods(req.user, function (err) {
-        if (err) console.error("Failed to refresh payment methods", err);
+      return syncPaymentMethods(req.user).catch(function (err) {
+        console.error("Failed to refresh payment methods", err);
       });
     }
 
-    syncPaymentMethods(req.user, function (err, paymentMethods) {
-      if (err) return next(err);
-      render(paymentMethods);
-    });
+    syncPaymentMethods(req.user).then(render, next);
   })
 
   // Stripe.js has already tokenized the new card on the client (see
@@ -189,16 +186,12 @@ PaymentMethod.route("/")
               function (err, updatedSubscription) {
                 if (err) return next(err);
 
-                User.set(
-                  req.user.uid,
-                  { subscription: updatedSubscription },
-                  function (err) {
-                    if (err) return next(err);
-
-                    email.UPDATE_BILLING(req.user.uid);
-                    res.message(req.baseUrl, "Your payment method was added");
-                  }
-                );
+                User.set(req.user.uid, {
+                  subscription: updatedSubscription,
+                }).then(function () {
+                  email.UPDATE_BILLING(req.user.uid);
+                  res.message(req.baseUrl, "Your payment method was added");
+                }, next);
               }
             );
           }
@@ -212,9 +205,7 @@ PaymentMethod.route("/")
   .post(function (req, res, next) {
     var stripe = getStripeClient();
 
-    syncPaymentMethods(req.user, function (err, paymentMethods) {
-      if (err) return next(err);
-
+    syncPaymentMethods(req.user).then(function (paymentMethods) {
       var alreadyHasDefault = paymentMethods.some(function (pm) {
         return pm.isDefault && pm.id !== req.newPaymentMethodId;
       });
@@ -231,15 +222,13 @@ PaymentMethod.route("/")
         function (err) {
           if (err) return next(err);
 
-          syncPaymentMethods(req.user, function (err) {
-            if (err) return next(err);
-
+          syncPaymentMethods(req.user).then(function () {
             email.UPDATE_BILLING(req.user.uid);
             res.message(req.baseUrl, "Your payment method was added");
-          });
+          }, next);
         }
       );
-    });
+    }, next);
   });
 
 // Only this page loads Stripe.js, for the card form
@@ -274,11 +263,9 @@ PaymentMethod.route("/:id/default").post(function (req, res, next) {
       makeDefault(stripe, req.user, paymentMethod, function (err) {
         if (err) return next(err);
 
-        syncPaymentMethods(req.user, function (err) {
-          if (err) return next(err);
-
+        syncPaymentMethods(req.user).then(function () {
           res.message(req.baseUrl, "Updated your default payment method");
-        });
+        }, next);
       });
     }
   );
@@ -324,11 +311,9 @@ PaymentMethod.route("/:id/remove").post(function (req, res, next) {
       detach(function (err) {
         if (err) return next(err);
 
-        syncPaymentMethods(req.user, function (err) {
-          if (err) return next(err);
-
+        syncPaymentMethods(req.user).then(function () {
           res.message(req.baseUrl, "Removed your payment method");
-        });
+        }, next);
       });
     }
   );
@@ -338,15 +323,13 @@ PaymentMethod.route("/:id/remove").post(function (req, res, next) {
 // this user's own customer id - this stops one user from acting on another
 // user's payment method by guessing an id in the URL.
 function findOwnedPaymentMethod(user, id, callback) {
-  syncPaymentMethods(user, function (err, paymentMethods) {
-    if (err) return callback(err);
-
+  syncPaymentMethods(user).then(function (paymentMethods) {
     var match = paymentMethods.find(function (pm) {
       return pm.id === id;
     });
 
     callback(null, match || null, paymentMethods);
-  });
+  }, callback);
 }
 
 function makeDefault(stripe, user, paymentMethod, callback) {

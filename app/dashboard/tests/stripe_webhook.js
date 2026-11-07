@@ -4,10 +4,10 @@ const email = require("helper/email");
 const User = require("models/user");
 const webhook = require("dashboard/webhooks/stripe_webhook");
 
-const setUser = promisify(User.set);
+const setUser = User.set;
 const setBlog = promisify(Blog.set);
-const getUser = promisify(User.getById);
-const getBlog = promisify(Blog.get);
+const getUser = User.getById;
+const getBlog = (by) => Blog.get(by);
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

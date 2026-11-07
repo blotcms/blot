@@ -11,12 +11,14 @@ describe("Blog.get", function () {
     expect(await get({ id: "nonexistent-" + Date.now() })).toBeUndefined();
   });
 
-  it("calls back once with the blog", function (done) {
-    get({ id: this.blog.id }, (err, blog) => {
-      if (err) return done.fail(err);
-      expect(blog.id).toBe(this.blog.id);
-      done();
-    });
+  it("throws when given a callback", async function () {
+    // The callback form is gone: passing one throws instead of calling back.
+    try {
+      await get({ id: this.blog.id }, function () {});
+      fail("should have thrown");
+    } catch (err) {
+      expect(err.message).toMatch(/no longer takes a callback/);
+    }
   });
 
   it("falls back to safe image metadata defaults", async function () {

@@ -115,10 +115,9 @@ function folderLinkOptions(blogID, templateID, callback) {
   // Required here to avoid a dependency loop
   var Blog = require("models/blog");
 
-  Blog.get({ id: blogID }, function (err, blog) {
-    if (err) return callback(err);
+  Blog.get({ id: blogID }).then(function (blog) {
     if (!blog || !blog.handle) return callback(null, null);
 
     callback(null, { hosts: blogHosts(blog) });
-  });
+  }, callback);
 }

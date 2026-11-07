@@ -1,11 +1,11 @@
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var key = require("./key");
 var client = require("models/client");
 var validate = require("./validate");
 var generateId = require("./generateId");
 
-module.exports = withCallback(
+module.exports = promiseOnly(
   async function create(email, passwordHash, subscription, paypal) {
     ensure(email, "string")
       .and(passwordHash, "string")

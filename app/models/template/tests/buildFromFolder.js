@@ -15,7 +15,7 @@ describe("template", function () {
 
   const folderRenames = require("../folderRenames");
 
-  const getBlog = promisify(Blog.get);
+  const getBlog = (by) => Blog.get(by);
   const setBlog = promisify(Blog.set);
   const getAllViews = require("../index").getAllViews;
   const createShareID = require("../index").createShareID;

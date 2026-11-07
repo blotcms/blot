@@ -10,12 +10,7 @@ const User = require("models/user");
 // (and other runtime replacements) still take effect.
 
 function getBlog(identifier) {
-  return new Promise((resolve, reject) => {
-    Blog.get(identifier, (err, blog) => {
-      if (err) reject(err);
-      else resolve(blog);
-    });
-  });
+  return Blog.get(identifier);
 }
 
 function getMetadata(templateID) {
@@ -50,12 +45,7 @@ function checkRedirect(blogID, url) {
 }
 
 function getUserById(id) {
-  return new Promise((resolve, reject) => {
-    User.getById(id, (err, user) => {
-      if (err) reject(err);
-      else resolve(user);
-    });
-  });
+  return User.getById(id);
 }
 
 // Resolves to { entries, pagination }

@@ -1,10 +1,10 @@
 const key = require("./key");
 const client = require("models/client");
 const ensure = require("helper/ensure");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 
 // Resolves to { statuses, next, previous }
-module.exports = withCallback(async function getStatuses(blogID, options = {}) {
+module.exports = promiseOnly(async function getStatuses(blogID, options = {}) {
   ensure(blogID, "string").and(options, "object");
 
   // Fetch the first page by default

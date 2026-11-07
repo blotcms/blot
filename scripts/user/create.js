@@ -5,12 +5,7 @@ var config = require("config");
 async function createWithPassword(email, password, subscription, paypal) {
   var passwordHash = await User.hashPassword(password);
 
-  await new Promise(function (resolve, reject) {
-    User.create(email, passwordHash, subscription, paypal, function (err) {
-      if (err) return reject(err);
-      resolve();
-    });
-  });
+  await User.create(email, passwordHash, subscription, paypal);
 
   console.log("Created user", email);
   process.exit();

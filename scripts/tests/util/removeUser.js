@@ -16,11 +16,7 @@ module.exports = function (done) {
     done(err);
   }
 
-  User.remove(uid, function (err) {
-    if (err) {
-      return finish(err);
-    }
-
+  User.remove(uid).then(function () {
     finish();
-  });
+  }, finish);
 };

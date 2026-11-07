@@ -16,7 +16,7 @@ describe("updateCdnManifest folder files", function () {
   const dropTemplate = Template.drop;
   const createTemplate = Template.create;
   const blogSet = promisify(Blog.set);
-  const blogGet = promisify(Blog.get);
+  const blogGet = (by) => Blog.get(by);
 
   const version = (content) =>
     crypto.createHash("sha1").update(content).digest("hex").slice(0, 8);

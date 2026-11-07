@@ -6,20 +6,11 @@ const format = require("url").format;
 const email = "example@example.com";
 const password = "password";
 
-function establishTestUser() {
-  return new Promise((resolve, reject) => {
-    User.getByEmail(email, function (err, user) {
-      if (err) return reject(err);
-      if (user) return resolve(user);
-      User.hashPassword(password, function (err, passwordHash) {
-        if (err) return reject(err);
-        User.create(email, passwordHash, {}, {}, function (err, newUser) {
-          if (err) return reject(err);
-          resolve(newUser);
-        });
-      });
-    });
-  });
+async function establishTestUser() {
+  const user = await User.getByEmail(email);
+  if (user) return user;
+  const passwordHash = await User.hashPassword(password);
+  return await User.create(email, passwordHash, {}, {});
 }
 
 function establishTestBlog(user) {
@@ -34,17 +25,14 @@ function establishTestBlog(user) {
   });
 }
 
-const configureBlog = (blogID) => {
+const configureBlog = async (blogID) => {
+  const blog = await Blog.get({ id: blogID });
+  const client = !blog.client ? "local" : blog.client;
+
   return new Promise((resolve, reject) => {
-    Blog.get({ id: blogID }, (err, blog) => {
+    Blog.set(blogID, { forceSSL: false, client }, (err) => {
       if (err) return reject(err);
-
-      const client = !blog.client ? "local" : blog.client;
-
-      Blog.set(blogID, { forceSSL: false, client }, (err) => {
-        if (err) return reject(err);
-        resolve(blog);
-      });
+      resolve(blog);
     });
   });
 };
@@ -62,10 +50,10 @@ function configureBlogs(user) {
     };
 
     configureAllBlogs()
-      .then((blog) => {
-        User.generateAccessToken({ uid: user.uid }, (err, token) => {
-          if (err) return reject(err);
+      .then(async (blog) => {
+        const token = await User.generateAccessToken({ uid: user.uid });
 
+        {
           const url = format({
             protocol: "https",
             host: config.host,
@@ -96,7 +84,7 @@ function configureBlogs(user) {
           console.log();
 
           resolve(user);
-        });
+        }
       })
       .catch(reject);
   });

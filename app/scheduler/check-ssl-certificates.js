@@ -176,7 +176,7 @@ async function check(deps = {}) {
   const {
     now = Date.now(),
     client = require("models/client"),
-    getBlog = require("util").promisify(require("models/blog").get),
+    getBlog = (by) => require("models/blog").get(by),
   } = deps;
 
   const customers = await checkCustomerCerts({ now, client, getBlog });

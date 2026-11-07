@@ -171,12 +171,7 @@ async function decreaseSubscription(req, res, next) {
 
     if (!updated) throw new Error("No subscription");
 
-    await new Promise(function (resolve, reject) {
-      User.set(req.user.uid, { subscription: updated }, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
-    });
+    await User.set(req.user.uid, { subscription: updated });
   } catch (err) {
     return next(err);
   }

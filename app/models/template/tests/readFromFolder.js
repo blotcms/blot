@@ -48,7 +48,7 @@ describe("template", function () {
     var { promisify } = require("util");
     var read = readFromFolder;
     var getMetadata = require("../index").getMetadata;
-    var getBlog = promisify(require("models/blog").get);
+    var getBlog = (by) => require("models/blog").get(by);
     var setBlog = promisify(require("models/blog").set);
     var makeID = require("../util/makeID");
     var id = makeID(this.blog.id, this.blog.handle);

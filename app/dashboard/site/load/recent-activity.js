@@ -1,10 +1,9 @@
 const Blog = require("models/blog");
 const moment = require("moment");
 const Path = require("path");
-const { promisify } = require("util");
 const { LRUCache } = require("lru-cache");
 
-const getStatuses = promisify(Blog.getStatuses);
+const getStatuses = Blog.getStatuses;
 // Status messages look like "Syncing /path". The verbs are published by the
 // sync clients (search for progress.publish / folder.status in app/clients)
 // and the folder sync; if one is reworded, add it here or its files drop out of

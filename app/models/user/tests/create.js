@@ -1,8 +1,7 @@
 describe("user", function () {
   var User = require("models/user");
-  var promisify = require("util").promisify;
-  var create = promisify(User.create);
-  var remove = promisify(User.remove);
+  var create = User.create;
+  var remove = User.remove;
 
   it("creates and deletes a user", async function () {
     var email = "XXX@gmail.com";

@@ -17,11 +17,9 @@
 // scripts/tests/ci/check-folder-access.js fails if other code calls the
 // mutating methods of storage/folder directly.
 
-const { promisify } = require("util");
-
 // Required lazily: clients load models/blog, which loads clients, and tests
 // swap these modules out.
-const getBlog = promisify((id, cb) => require("models/blog").get({ id }, cb));
+const getBlog = (id) => require("models/blog").get({ id });
 
 async function resolve(blog) {
   if (blog && typeof blog === "object") {

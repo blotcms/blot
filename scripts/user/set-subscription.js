@@ -5,7 +5,6 @@ var config = require("config");
 var stripe = require("stripe")(config.stripe.secret);
 
 var User = require("models/user");
-var { promisify } = require("util");
 
 async function main() {
   var user;
@@ -34,7 +33,7 @@ async function main() {
 
   console.log(subscription);
 
-  await promisify(User.set)(user.uid, { subscription: subscription });
+  await User.set(user.uid, { subscription: subscription });
 }
 
 main().then(

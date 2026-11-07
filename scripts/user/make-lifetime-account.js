@@ -2,7 +2,6 @@ var from = process.argv[2];
 var config = require("config");
 var stripe = require("stripe")(config.stripe.secret);
 var User = require("models/user");
-var { promisify } = require("util");
 
 async function main() {
   var user;
@@ -28,7 +27,7 @@ async function main() {
     console.error(err);
   }
 
-  await promisify(User.set)(user.uid, { subscription: {} });
+  await User.set(user.uid, { subscription: {} });
 }
 
 main().then(

@@ -146,7 +146,7 @@ describe("dashboard subscription cancel", function () {
     spyOn(customers, "cancelSubscription").and.callFake(
       (customer, id, options, cb) => cb(null, cancelled)
     );
-    spyOn(User, "set").and.callFake((uid, updates, cb) => cb(null));
+    spyOn(User, "set").and.callFake(async () => undefined);
 
     const result = await post({
       uid: "uid",
@@ -169,7 +169,7 @@ describe("dashboard subscription cancel", function () {
     spyOn(customers, "cancelSubscription").and.callFake(
       (customer, id, options, cb) => cb(null, cancelled)
     );
-    spyOn(User, "set").and.callFake((uid, updates, cb) => cb(null));
+    spyOn(User, "set").and.callFake(async () => undefined);
 
     const result = await post({
       uid: "uid",
@@ -183,11 +183,7 @@ describe("dashboard subscription cancel", function () {
       { at_period_end: true },
       jasmine.any(Function)
     );
-    expect(User.set).toHaveBeenCalledWith(
-      "uid",
-      { subscription: cancelled },
-      jasmine.any(Function)
-    );
+    expect(User.set).toHaveBeenCalledWith("uid", { subscription: cancelled });
     expect(fetch).not.toHaveBeenCalled();
     expect(paypal.updateSubscription).not.toHaveBeenCalled();
     expect(email.CANCELLED).toHaveBeenCalledWith("uid");

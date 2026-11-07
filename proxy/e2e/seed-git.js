@@ -40,7 +40,7 @@ async function rename(blogID, newHandle) {
 }
 
 async function seed(email, handle) {
-  const user = await promisify(User.getByEmail)(email);
+  const user = await User.getByEmail(email);
   if (!user) throw new Error("no user found for " + email);
 
   const created = await new Promise((resolve, reject) => {
@@ -53,7 +53,7 @@ async function seed(email, handle) {
   // Same as the dashboard's create route: connect the client, then set the
   // repository up.
   await promisify(Blog.set)(created.id, { client: "git" });
-  const blog = await promisify(Blog.get)({ id: created.id });
+  const blog = await Blog.get({ id: created.id });
 
   const post =
     [

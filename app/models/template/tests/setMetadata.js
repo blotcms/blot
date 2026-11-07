@@ -4,7 +4,7 @@ describe("template", function () {
   const setMetadata = require("../index").setMetadata;
   const getMetadata = require("../index").getMetadata;
   const { promisify } = require("util");
-  const getBlog = promisify(require("models/blog").get);
+  const getBlog = (by) => require("models/blog").get(by);
   const setBlog = promisify(require("models/blog").set);
 
   it("returns a promise, and throws when given a callback", async function () {

@@ -196,18 +196,7 @@ passwordForm.post(async function (req, res, next) {
 
     const passwordHash = await User.hashPassword(password);
 
-    const user = await new Promise(function (resolve, reject) {
-      User.create(
-        email,
-        passwordHash,
-        subscription,
-        paypal,
-        function (err, user) {
-          if (err) return reject(err);
-          resolve(user);
-        }
-      );
-    });
+    const user = await User.create(email, passwordHash, subscription, paypal);
 
     // The user has changed their email since signing up
     // TODO: add logging
@@ -239,12 +228,7 @@ passwordForm.post(async function (req, res, next) {
     });
 
     // Scheduled in the background: the welcome email does not hold up sign up
-    new Promise(function (resolve, reject) {
-      User.scheduleWelcomeEmail(user.uid, function (err) {
-        if (err) return reject(err);
-        resolve();
-      });
-    }).catch(function (err) {
+    User.scheduleWelcomeEmail(user.uid).catch(function (err) {
       console.log(err);
     });
 

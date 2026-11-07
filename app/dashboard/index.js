@@ -6,9 +6,8 @@ const message = require("dashboard/util/message");
 const cookieParser = require("cookie-parser");
 const moment = require("moment");
 const syncSummary = require("dashboard/util/sync-summary");
-const { promisify } = require("util");
 const Blog = require("models/blog");
-const getStatuses = promisify(Blog.getStatuses);
+const getStatuses = Blog.getStatuses;
 const formatDashboardDate = require("dashboard/util/format-dashboard-date");
 
 // The latest status is stored on the blog itself; only read the status log

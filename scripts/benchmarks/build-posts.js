@@ -84,7 +84,7 @@ require.cache[flushCachePath].exports = function () {
 
 async function main() {
   const Blog = require("models/blog");
-  const getBlog = promisify(Blog.get);
+  const getBlog = (by) => Blog.get(by);
 
   await require("../tests/util/bucket")();
 

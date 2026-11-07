@@ -1,5 +1,5 @@
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 var validate = require("./validate");
 var client = require("models/client");
 var updateBillingEmail = require("./updateBillingEmail");
@@ -40,7 +40,7 @@ function indexes(user) {
   ];
 }
 
-module.exports = withCallback(async function save(uid, updates) {
+module.exports = promiseOnly(async function save(uid, updates) {
   ensure(uid, "string").and(updates, "object");
 
   for (var attempt = 0; attempt < 20; attempt++) {

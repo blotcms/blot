@@ -180,10 +180,9 @@ describe("git store: reads", function () {
   it("answers a warm advertisement with one request to the store", async function () {
     await this.local.writeAndPush("/a.txt", "A");
 
-    // The first reads the hint the push wrote, with the HEAD beside it (and
-    // the manifest, if this process has not got it); the second, within a
-    // few seconds, is the hint's GET alone, answered 304. Lines from before
-    // (the push's own setup) are left out.
+    // The first asks for the manifest after the one this process keeps (and
+    // reads the hint, if it keeps none); the second is that GET alone,
+    // answered 404. Lines from before (the push's own setup) are left out.
     var ctx = this;
     var earlier = lines(ctx, / op=advertise outcome=ok /).length;
 

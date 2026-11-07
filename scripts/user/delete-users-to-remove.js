@@ -56,12 +56,7 @@ function forEachUser(fn) {
 }
 
 function overdueFor(user) {
-  return new Promise(function (resolve, reject) {
-    removal.overdueFor(user, function (err, overdue) {
-      if (err) return reject(err);
-      resolve(overdue);
-    });
-  });
+  return removal.overdueFor(user);
 }
 
 // Runs one of the Delete steps (callback-style); rejects with its error
