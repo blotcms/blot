@@ -2,12 +2,12 @@ const key = require("./key");
 const client = require("models/client");
 const ensure = require("helper/ensure");
 const { TYPE } = require("./scheme");
-const withCallback = require("helper/withCallback");
+const promiseOnly = require("helper/promiseOnly");
 
 // We'll store only two thousand status log items
 const STATUS_LOG_MAX_LENGTH = 2000;
 
-module.exports = withCallback(async function setStatus(blogID, status) {
+module.exports = promiseOnly(async function setStatus(blogID, status) {
   ensure(blogID, "string").and(status, "object");
 
   // Default values

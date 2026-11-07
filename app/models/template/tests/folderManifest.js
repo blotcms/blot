@@ -15,7 +15,7 @@ describe("updateCdnManifest folder files", function () {
   const getMetadata = Template.getMetadata;
   const dropTemplate = Template.drop;
   const createTemplate = Template.create;
-  const blogSet = promisify(Blog.set);
+  const blogSet = (blogID, updates) => Blog.set(blogID, updates);
   const blogGet = (by) => Blog.get(by);
 
   const version = (content) =>

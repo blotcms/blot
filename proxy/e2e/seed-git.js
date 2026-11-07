@@ -20,11 +20,10 @@
 //
 // Only core modules and NODE_PATH-resolved app modules - the script is copied
 // to /tmp inside the container, so it cannot see the app's node_modules.
-const { promisify } = require("util");
 
 const User = require("models/user");
 const Blog = require("models/blog");
-const setBlog = promisify(require("models/blog/set"));
+const setBlog = require("models/blog/set");
 const folder = require("storage/folder");
 const config = require("config");
 const gitDatabase = require("clients/git/database");
@@ -43,16 +42,16 @@ async function seed(email, handle) {
   const user = await User.getByEmail(email);
   if (!user) throw new Error("no user found for " + email);
 
-  const created = await new Promise((resolve, reject) => {
-    Blog.create(user.uid, { handle }, (err, blog) => {
-      if (err) return reject(new Error(err.handle || JSON.stringify(err)));
-      resolve(blog);
-    });
-  });
+  let created;
+  try {
+    created = await Blog.create(user.uid, { handle });
+  } catch (err) {
+    throw new Error(err.handle || JSON.stringify(err), { cause: err });
+  }
 
   // Same as the dashboard's create route: connect the client, then set the
   // repository up.
-  await promisify(Blog.set)(created.id, { client: "git" });
+  await Blog.set(created.id, { client: "git" });
   const blog = await Blog.get({ id: created.id });
 
   const post =

@@ -7,10 +7,9 @@ const forkIfNeeded = require("./fork-if-needed");
 const cleanupFiles = require("./cleanup-files");
 const { createFavicon } = require("./upload-favicon");
 
-const setBlog = (id, updates) =>
-  new Promise((resolve, reject) => {
-    Blog.set(id, updates, (error) => (error ? reject(error) : resolve()));
-  });
+const setBlog = async (id, updates) => {
+  await Blog.set(id, updates);
+};
 
 const runAvatar = (req, res) =>
   new Promise((resolve, reject) => {

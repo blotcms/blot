@@ -17,10 +17,15 @@ module.exports = function bumpCacheID(blogID, callback, onRetried) {
   attempt(callback);
 
   function attempt(done) {
-    set(blogID, { cacheID: Date.now() }, function (err) {
-      if (err && isRedisUnavailableError(err)) retry(err);
-      done(err);
-    });
+    set(blogID, { cacheID: Date.now() }).then(
+      function () {
+        done(null);
+      },
+      function (err) {
+        if (err && isRedisUnavailableError(err)) retry(err);
+        done(err);
+      }
+    );
   }
 
   function retry(err) {

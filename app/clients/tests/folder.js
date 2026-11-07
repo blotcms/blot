@@ -2,7 +2,6 @@ const fs = require("fs-extra");
 const os = require("os");
 const { join } = require("path");
 const folder = require("storage/folder");
-const { promisify } = require("util");
 const clients = require("clients");
 const blogFolder = require("../folder");
 const Blog = require("models/blog");
@@ -10,9 +9,7 @@ const Blog = require("models/blog");
 describe("clients/folder", function () {
   global.test.blog();
 
-  const setClient = promisify((blogID, client, cb) =>
-    Blog.set(blogID, { client }, cb)
-  );
+  const setClient = (blogID, client) => Blog.set(blogID, { client });
 
   afterEach(function () {
     delete clients.routerSpecClient;

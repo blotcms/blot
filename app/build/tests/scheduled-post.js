@@ -63,13 +63,7 @@ xdescribe("scheduled posts", function () {
     let templateId = templates.filter(({ name }) => name === templateName)[0]
       .id;
     await Template.setView(templateId, view);
-    await new Promise((resolve, reject) =>
-      Blog.set(
-        this.blog.id,
-        { forceSSL: false, template: templateId },
-        (err) => (err ? reject(err) : resolve())
-      )
-    );
+    await Blog.set(this.blog.id, { forceSSL: false, template: templateId });
   });
 
   // Create a webserver for testing remote files

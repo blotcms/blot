@@ -3,7 +3,6 @@
 describe("git client: removing leftover live clones", function () {
   require("./setup")({ clone: false, client: true });
 
-  var util = require("util");
   var liveClones = require("clients/git/liveClones");
   var folder = require("./setup/folder");
 
@@ -103,9 +102,7 @@ describe("git client: removing leftover live clones", function () {
     expect((await check(this)).reason).toBe("no-clone");
 
     await plantClone(this, await this.local.head());
-    await util.promisify(require("models/blog").set)(this.blog.id, {
-      client: "",
-    });
+    await require("models/blog").set(this.blog.id, { client: "" });
 
     var result = await check(this, { apply: true });
 

@@ -189,26 +189,20 @@ Domain.route("/subdomain").get((req, res) => {
 });
 
 const updateDomain = (blogID, domain) => {
-  return new Promise((resolve, reject) => {
-    Blog.set(
-      blogID,
-      { domain, forceSSL: false, redirectSubdomain: !!domain },
-      (errors, changes) => {
-        if (errors) return reject(errors);
-        resolve(changes);
-      }
-    );
+  return Blog.set(blogID, {
+    domain,
+    forceSSL: false,
+    redirectSubdomain: !!domain,
   });
 };
 
-const updateHandle = (blogID, handle) => {
-  return new Promise((resolve, reject) => {
-    Blog.set(blogID, { handle }, (errors, changes) => {
-      if (errors && errors.handle) return reject(errors.handle);
-      if (errors) return reject(errors);
-      resolve(changes);
-    });
-  });
+const updateHandle = async (blogID, handle) => {
+  try {
+    return await Blog.set(blogID, { handle });
+  } catch (errors) {
+    if (errors && errors.handle) throw errors.handle;
+    throw errors;
+  }
 };
 
 // The first request for a domain can wait on its certificate being issued, so

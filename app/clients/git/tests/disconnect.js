@@ -12,11 +12,9 @@ describe("git client disconnect", function () {
   var repo = require("clients/git/repo");
   var folder = require("./setup/folder");
   var disconnect = require("clients/git/disconnect");
-  var promisify = require("util").promisify;
   var randomString = require("../../../../scripts/tests/util/randomString");
 
   var getToken = database.getToken;
-  var setBlog = promisify(Blog.set);
   var disconnectBlog = disconnect;
   var inStore = repo.exists;
 
@@ -25,19 +23,19 @@ describe("git client disconnect", function () {
   afterEach(async function () {
     if (!otherBlog) return;
 
-    await promisify(Blog.remove)(otherBlog.id);
+    await Blog.remove(otherBlog.id);
     otherBlog = null;
   });
 
   // The git token is account-wide, so a second site on the same account
   // is created and connected to git alongside this.blog.
   async function connectSecondBlog(context) {
-    otherBlog = await promisify(Blog.create)(context.user.uid, {
+    otherBlog = await Blog.create(context.user.uid, {
       handle: randomString(16),
     });
 
-    await setBlog(otherBlog.id, { client: "git" });
-    await setBlog(context.blog.id, { client: "git" });
+    await Blog.set(otherBlog.id, { client: "git" });
+    await Blog.set(context.blog.id, { client: "git" });
   }
 
   it("removes the repository, and a live clone in the blog folder", async function () {
@@ -62,7 +60,7 @@ describe("git client disconnect", function () {
   });
 
   it("removes the repository after a change of handle", async function () {
-    await setBlog(this.blog.id, { handle: randomString(16) });
+    await Blog.set(this.blog.id, { handle: randomString(16) });
 
     await disconnectBlog(this.blog.id);
 
@@ -96,15 +94,14 @@ describe("git client disconnect", function () {
 
   describe("when the blog is deleted", function () {
     var createRepo = require("clients/git/create");
-    var removeBlog = promisify(Blog.remove);
     var getBlog = (by) => Blog.get(by);
 
     async function connectedBlog(context) {
-      otherBlog = await promisify(Blog.create)(context.user.uid, {
+      otherBlog = await Blog.create(context.user.uid, {
         handle: randomString(16),
       });
 
-      await setBlog(otherBlog.id, { client: "git" });
+      await Blog.set(otherBlog.id, { client: "git" });
       await createRepo(await getBlog({ id: otherBlog.id }));
 
       expect(await inStore(otherBlog.id)).toBe(true);
@@ -116,7 +113,7 @@ describe("git client disconnect", function () {
       var blog = await connectedBlog(this);
 
       otherBlog = null;
-      await removeBlog(blog.id);
+      await Blog.remove(blog.id);
 
       expect(await inStore(blog.id)).toBe(false);
     });
@@ -127,7 +124,7 @@ describe("git client disconnect", function () {
       await require("storage/folder").removeAll(blog.id);
 
       otherBlog = null;
-      await removeBlog(blog.id);
+      await Blog.remove(blog.id);
 
       expect(await inStore(blog.id)).toBe(false);
     });

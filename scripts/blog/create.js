@@ -24,7 +24,7 @@ async function main(email, handle) {
     throw new Error("Pass handle for new blog as second argument");
   }
 
-  handle = await promisify(validate)("", handle);
+  handle = await validate("", handle);
 
   let user;
   try {

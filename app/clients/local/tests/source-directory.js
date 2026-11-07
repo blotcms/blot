@@ -7,7 +7,6 @@ describe("local client source directory", function () {
   const fs = require("fs-extra");
   const os = require("os");
   const { join } = require("path");
-  const { promisify } = require("util");
   const folder = require("storage/folder");
   const Blog = require("models/blog");
   const source = require("clients/local/source");
@@ -34,7 +33,7 @@ describe("local client source directory", function () {
     saved = process.env.BLOT_LOCAL_SOURCE_DIRECTORY;
     base = await fs.mkdtemp(join(os.tmpdir(), "local-client-"));
     process.env.BLOT_LOCAL_SOURCE_DIRECTORY = base;
-    await promisify(Blog.set)(this.blog.id, { client: "local" });
+    await Blog.set(this.blog.id, { client: "local" });
     dir = await source.directory(this.blog.id);
     spyOn(console, "log");
   });

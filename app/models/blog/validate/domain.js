@@ -11,10 +11,10 @@ var SUBDOMAIN =
 var TOO_LONG = "Please choose a domain shorter than 70 letters.";
 
 var config = require("config");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 // Resolves to the valid domain. Rejects with a message (a string) or an Error.
-module.exports = withCallback(async function validateDomain(blogID, domain) {
+module.exports = promiseOnly(async function validateDomain(blogID, domain) {
   var get = require("../get");
 
   try {
