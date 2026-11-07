@@ -454,7 +454,10 @@
     outline-offset: 2px;
   }
 
-  .site-dashboard.is-overview-view .site-dashboard-folder-layout {
+  /* The filter pages too, so the folder box doesn't move between Files and
+     Posts */
+  .site-dashboard.is-overview-view .site-dashboard-folder-layout,
+  .site-dashboard.is-posts-view .site-dashboard-folder-layout {
     row-gap: var(--space-5);
   }
 
