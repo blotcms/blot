@@ -131,34 +131,11 @@ async function processTemplate(user, blog, template) {
   }
 }
 
-// Runs doThis(user, blog, template) for each template, one at a time, and
-// resolves once every template has been done. A rejection stops the run.
-function eachTemplateAsync(doThis) {
-  return new Promise(function (resolve, reject) {
-    eachTemplate(
-      function (user, blog, template, next) {
-        doThis(user, blog, template).then(
-          function () {
-            next();
-          },
-          function (err) {
-            next(err);
-          }
-        );
-      },
-      function (err) {
-        if (err) return reject(err);
-        resolve();
-      }
-    );
-  });
-}
-
 async function main() {
   console.log("Starting CDN manifest verification for templates...");
 
   try {
-    await eachTemplateAsync(processTemplate);
+    await eachTemplate(processTemplate);
   } catch (err) {
     console.error("Completed with errors:", err);
   }

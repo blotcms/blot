@@ -2,7 +2,6 @@ const each = require("../each/user");
 const s3 = require("storage/s3");
 const File = require("models/file");
 const prettySize = require("helper/prettySize");
-const { promisify } = require("util");
 
 let rolling_total = 0;
 
@@ -27,43 +26,35 @@ async function folderBytes(blogID) {
 }
 
 async function main() {
-  await promisify(each)(function (user, next) {
+  await each(async function (user) {
     if (!user) {
       console.log("No user found, exiting.");
-      return next();
+      return;
     }
 
     if (
       user.isDisabled ||
       (user.subscription && user.subscription.status === "unpaid")
     ) {
-      (async function () {
-        let user_total = 0;
+      let user_total = 0;
 
-        for (const blogID of user.blogs) {
-          try {
-            const static_space_used_in_bytes = await bucketBytes(blogID);
-            const folder_space_used_in_bytes = await folderBytes(blogID);
+      for (const blogID of user.blogs) {
+        try {
+          const static_space_used_in_bytes = await bucketBytes(blogID);
+          const folder_space_used_in_bytes = await folderBytes(blogID);
 
-            const total_kilo_bytes =
-              (static_space_used_in_bytes + folder_space_used_in_bytes) / 1000;
+          const total_kilo_bytes =
+            (static_space_used_in_bytes + folder_space_used_in_bytes) / 1000;
 
-            rolling_total += total_kilo_bytes;
-            user_total += total_kilo_bytes;
-          } catch (e) {
-            console.log("error", e);
-          }
+          rolling_total += total_kilo_bytes;
+          user_total += total_kilo_bytes;
+        } catch (e) {
+          console.log("error", e);
         }
+      }
 
-        console.log(prettySize(user_total), user.email, user.blogs.join(","));
-      })().then(function () {
-        next();
-      }, next);
-
-      return;
+      console.log(prettySize(user_total), user.email, user.blogs.join(","));
     }
-
-    next();
   });
 
   console.log("Done!");

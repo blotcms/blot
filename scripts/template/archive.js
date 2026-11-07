@@ -32,22 +32,6 @@ ${fs
   );
 }
 
-// Runs doThis(user, blog) for each blog, one at a time, and resolves once
-// every blog has been done. A rejection stops the run, as an error did before.
-function eachBlogAsync(doThis) {
-  return new Promise(function (resolve, reject) {
-    eachBlog(
-      function (user, blog, next) {
-        doThis(user, blog).then(() => next(), next);
-      },
-      function (err) {
-        if (err) return reject(err);
-        resolve();
-      }
-    );
-  });
-}
-
 async function main(name) {
   var templateID = "SITE:" + name;
   var setTemplateMetadata = Template.setMetadata;
@@ -74,7 +58,7 @@ async function main(name) {
     "(" + templateID + "):"
   );
 
-  await eachBlogAsync(async function (user, blog) {
+  await eachBlog(async function (user, blog) {
     if (blog.template !== templateID) return;
 
     var cloneMetadata = await createCloneWithUniqueSlug(blog.id, name, {

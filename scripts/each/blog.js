@@ -2,11 +2,10 @@ var User = require("models/user");
 var Blog = require("models/blog");
 var eachLimit = require("helper/eachLimit");
 var type = require("helper/type");
-var ensure = require("helper/ensure");
-var { promisify } = require("util");
 var progress = require("./progress");
 
-// The promise core. doThis is (user, blog) and may return a promise.
+// Calls doThis(user, blog) for every blog with an owner. doThis may be async;
+// a rejection stops the run.
 async function eachBlog(doThis, options = {}) {
   // SMEMBERS order isn't stable, so sort to make -s/-e mean the same thing on every run.
   let blogIDs = await Blog.getAllIDs();
@@ -140,16 +139,5 @@ async function eachBlog(doThis, options = {}) {
   }
 }
 
-// Callback API, for the scripts that still pass doThis(user, blog, next).
-module.exports = function (doThis, allDone, options) {
-  options = options || {};
-
-  ensure(doThis, "function").and(allDone, "function").and(options, "object");
-
-  eachBlog(promisify(doThis), options).then(
-    () => allDone(null),
-    (err) => allDone(err)
-  );
-};
-
+module.exports = eachBlog;
 module.exports.promise = eachBlog;

@@ -1,8 +1,8 @@
 var User = require("models/user");
-var { promisify } = require("util");
 var progress = require("./progress");
 
-// The promise core. fn is (user) and may return a promise.
+// Calls fn(user) for every user in turn. fn may be async; a rejection stops
+// the run.
 async function eachUser(fn) {
   var uids = await User.getAllIds();
 
@@ -32,10 +32,4 @@ async function eachUser(fn) {
   }
 }
 
-// Callback API, for the scripts that still pass fn(user, next).
-module.exports = function (fn, callback) {
-  eachUser(promisify(fn)).then(
-    () => callback(null),
-    (err) => callback(err)
-  );
-};
+module.exports = eachUser;

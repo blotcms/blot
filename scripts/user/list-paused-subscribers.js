@@ -7,38 +7,32 @@
 
 var each = require("../each/user");
 var Blog = require("models/blog");
-var { promisify } = require("util");
 
 var found = [];
 
 async function main() {
-  await promisify(each)(function (user, next) {
-    if (!user.subscription || !user.subscription.pause_collection)
-      return next();
+  await each(async function (user) {
+    if (!user.subscription || !user.subscription.pause_collection) return;
 
-    (async function () {
-      var blogs = await Promise.all(
-        (user.blogs || []).map(async function (blogID) {
-          var blog = await Blog.get({ id: blogID });
-          return blog ? blog.domain || blog.handle : blogID + " (missing)";
-        })
-      );
+    var blogs = await Promise.all(
+      (user.blogs || []).map(async function (blogID) {
+        var blog = await Blog.get({ id: blogID });
+        return blog ? blog.domain || blog.handle : blogID + " (missing)";
+      })
+    );
 
-      found.push({
-        email: user.email,
-        uid: user.uid,
-        status: user.subscription.status,
-        resumesAt: user.subscription.pause_collection.resumes_at
-          ? new Date(
-              user.subscription.pause_collection.resumes_at * 1000
-            ).toISOString()
-          : "never",
-        isDisabled: user.isDisabled,
-        blogs: blogs.join(", ") || "none",
-      });
-    })().then(function () {
-      next();
-    }, next);
+    found.push({
+      email: user.email,
+      uid: user.uid,
+      status: user.subscription.status,
+      resumesAt: user.subscription.pause_collection.resumes_at
+        ? new Date(
+            user.subscription.pause_collection.resumes_at * 1000
+          ).toISOString()
+        : "never",
+      isDisabled: user.isDisabled,
+      blogs: blogs.join(", ") || "none",
+    });
   });
 
   found.forEach(function (u) {

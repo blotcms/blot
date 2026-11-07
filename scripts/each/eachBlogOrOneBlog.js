@@ -19,7 +19,6 @@ module.exports = async function eachBlogOrOneBlog(processBlog, options = {}) {
     // Process a single blog. getBlog owns identifier resolution, including
     // shortened IDs; in contrast, each/blog.js's -o option requires full IDs.
     let blog;
-
     try {
       ({ blog } = await getBlog(identifier));
     } catch (err) {
@@ -55,7 +54,7 @@ module.exports = async function eachBlogOrOneBlog(processBlog, options = {}) {
   }
 
   // A blog whose processing fails is logged, and the next one carries on.
-  await eachBlog.promise(async (_user, blog) => {
+  await eachBlog(async (_user, blog) => {
     try {
       await processBlog(blog);
     } catch (err) {

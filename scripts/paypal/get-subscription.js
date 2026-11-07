@@ -5,7 +5,6 @@ const getConfirmation = require("../util/getConfirmation");
 const colors = require("colors/safe");
 const User = require("models/user");
 const each = require("../each/user");
-const { promisify } = require("util");
 
 // Resolves null when the subscription was updated, and undefined when the
 // user has no matching subscription (the callback version passed the same
@@ -85,12 +84,7 @@ if (require.main === module) {
         "Fetch latest subscription information from PayPal for all users? (y/N)"
       );
       if (!ok) return process.exit();
-      await promisify(each)((user, next) => {
-        main(user).then(
-          () => next(),
-          (err) => next(err)
-        );
-      });
+      await each((user) => main(user));
       console.log("Done!");
       process.exit();
     })().catch((err) => {
