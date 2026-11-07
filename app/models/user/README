@@ -137,7 +137,7 @@ Defined in `key.js`:
 
 ## Public API
 
-All functions are exposed via `index.js`. These return a promise and no longer take a callback (a callback throws, #2559): `create`, `set`, `getById`, `getByEmail`, `getAllIds`, `getByCustomerId`, `getByPayPalSubscriptionId`, `remove`, `hashPassword`, `checkPassword`, `generateAccessToken`, `checkAccessToken`, `disable`, `enable`, `scheduleWelcomeEmail` and `syncPaymentMethods`. `validate` still calls back `callback(err, user, changes)`.
+All functions are exposed via `index.js`. These return a promise and no longer take a callback (a callback throws, #2559): `create`, `set`, `getById`, `getByEmail`, `getAllIds`, `getByCustomerId`, `getByPayPalSubscriptionId`, `remove`, `hashPassword`, `checkPassword`, `generateAccessToken`, `checkAccessToken`, `disable`, `enable`, `scheduleWelcomeEmail` and `syncPaymentMethods`. `validate` is async too and resolves `{ user, changes }`.
 
 ### `create(email, passwordHash, subscription, paypal)`
 
@@ -216,9 +216,9 @@ Daily scan (`lock.cron`, registered in the scheduler) that sends the Stripe rene
 
 Returns elapsed subscription time in milliseconds from the earliest known subscription start (Stripe or PayPal), or `null` if no subscription data is present.
 
-### `validate(user, updates, callback)`
+### `async validate(user, updates)`
 
-Validates and merges `updates` into `user`. Field types are checked against `model.js`. The email field receives additional uniqueness validation. Callback receives `(err, updatedUser, changesArray)`.
+Validates and merges `updates` into `user`. Field types are checked against `model.js`. The email field receives additional uniqueness validation. Resolves `{ user, changes }` (the updated user and an array of changed field names), or rejects with the first validation error. A callback throws (#2559).
 
 ---
 

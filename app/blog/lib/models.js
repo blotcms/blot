@@ -75,18 +75,13 @@ function lookupEntryByUrl(blogID, entryUrl) {
   );
 }
 
-function adjacentTo(blogID, entryID) {
-  return new Promise((resolve) => {
-    Entries.adjacentTo(blogID, entryID, (next, previous, index) => {
-      resolve({ next, previous, index });
-    });
-  });
+async function adjacentTo(blogID, entryID) {
+  const { next, previous, index } = await Entries.adjacentTo(blogID, entryID);
+  return { next, previous, index };
 }
 
 function randomEntry(blogID) {
-  return new Promise((resolve) => {
-    Entries.random(blogID, (entry) => resolve(entry));
-  });
+  return Entries.random(blogID);
 }
 
 // Resolves [] on a Redis failure. rejectOnOutage makes it reject on a Redis

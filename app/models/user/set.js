@@ -56,12 +56,7 @@ module.exports = promiseOnly(async function save(uid, updates) {
     }
     var former = JSON.parse(previous);
 
-    var result = await new Promise(function (resolve, reject) {
-      validate(user, updates, function (err, validated, changes) {
-        if (err) return reject(err);
-        resolve({ user: validated, changes: changes });
-      });
-    });
+    var result = await validate(user, updates);
 
     var status = await client.eval(commit, {
       keys: [key.user(uid)].concat(indexes(result.user), indexes(former)),

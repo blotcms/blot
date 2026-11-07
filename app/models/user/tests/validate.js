@@ -3,12 +3,7 @@ var key = require("../key");
 var validate = require("../validate/index");
 
 function validateUser(user, updates) {
-  return new Promise(function (resolve, reject) {
-    validate(user, updates, function (err, updatedUser, changes) {
-      if (err) return reject(err);
-      resolve({ user: updatedUser, changes: changes });
-    });
-  });
+  return validate(user, updates);
 }
 
 describe("user validate", function () {

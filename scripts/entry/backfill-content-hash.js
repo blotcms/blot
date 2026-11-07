@@ -52,13 +52,7 @@ async function hash(blog, entry) {
 }
 
 function eachEntry(blogID, fn) {
-  return new Promise((resolve, reject) => {
-    Entries.each(
-      blogID,
-      (entry, next) => fn(entry).then(() => next(), next),
-      (err) => (err ? reject(err) : resolve())
-    );
-  });
+  return Entries.each(blogID, fn);
 }
 
 async function backfill(blog) {

@@ -119,20 +119,8 @@ async function main(blog) {
     return done();
   }
 
-  // Entries.each is still callback-based: it takes the per-entry function
-  await new Promise(function (resolve, reject) {
-    Entries.each(
-      blog.id,
-      function (_entry, next) {
-        inspect(_entry).then(function () {
-          next();
-        }, next);
-      },
-      function (err) {
-        if (err) return reject(err);
-        resolve();
-      }
-    );
+  await Entries.each(blog.id, async function (_entry) {
+    await inspect(_entry);
   });
 
   if (!missing.length && !edit.length) return;

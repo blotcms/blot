@@ -208,17 +208,13 @@ describe("tags work on sites", function () {
   });
 
   it("keeps entries retrieval stable when tags change", async function () {
-    const fetchEntryIDs = () =>
-      new Promise((resolve, reject) => {
-        Entries.get(
-          this.blog.id,
-          { lists: ["entries"], skinny: true },
-          (err, lists) => {
-            if (err) return reject(err);
-            resolve(lists.entries.map((entry) => entry.id));
-          }
-        );
+    const fetchEntryIDs = async () => {
+      const lists = await Entries.get(this.blog.id, {
+        lists: ["entries"],
+        skinny: true,
       });
+      return lists.entries.map((entry) => entry.id);
+    };
 
     await this.publish({
       path: "/flux.txt",

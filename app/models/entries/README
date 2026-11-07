@@ -81,13 +81,13 @@ When there is only one page, `pagination` is set to `false` on the callback. The
 
 Each entry in the result has an `index` property: a 1-based ordinal reflecting the entry's position in the total ordered set (the earliest published entry has index 1, the most recently published has index equal to total entry count).
 
-### `get(blogID, options, callback)`
+### `async get(blogID, options)`
 
 Retrieves one or more named lists in a single call.
 
 - `options.lists` — array of list names (e.g. `["entries", "drafts", "scheduled"]`). Alternatively `options.list` (string) may be used for a single list.
 - `options.skinny` — defaults to `true`; when `true`, retrieves full entry objects via `Entry.get`. When `false`, returns raw entry IDs only.
-- `callback(err, response)` — `response` is an object keyed by list name, each value being an array of entries or IDs.
+- Resolves to an object keyed by list name, each value being an array of entries or IDs. A callback throws (#2559).
 
 ### `async getAll(blogID, [options])`
 
@@ -163,44 +163,44 @@ Returns entries added to the `deleted` list after a given Unix timestamp.
 - `after` — number (milliseconds since epoch).
 - `callback(err, entries)` — array of `Entry` instances.
 
-### `adjacentTo(blogID, entryID, callback)`
+### `async adjacentTo(blogID, entryID)`
 
 Finds the chronologically adjacent published entries around a given entry.
 
 - `entryID` — string; the ID of the entry to find neighbours for.
-- `callback(next, previous, rank)` — `next` and `previous` are `Entry` instances or `undefined` if the entry is at a boundary. `rank` is the 1-based position of the entry in the `entries` list.
+- Resolves `{ next, previous, index }` — `next` and `previous` are `Entry` instances or `undefined` if the entry is at a boundary. `index` is the 1-based position of the entry in the `entries` list. Resolves `{}` for an entry with no rank and on a Redis error (the caller renders without neighbours).
 
-### `each(blogID, dothis, callback)`
+### `async each(blogID, dothis)`
 
-Iterates over all entries (including deleted) in reverse-creation-date order, calling `dothis(entry, next)` for each one serially.
+Iterates over all entries (including deleted) in reverse-creation-date order, awaiting `dothis(entry)` for each one, one at a time.
 
-- `dothis(entry, next)` — called with a full `Entry` instance; call `next()` to continue.
-- `callback(err)` — called when iteration is complete.
+- `dothis(entry)` — async; called with a full `Entry` instance. If it throws, iteration stops and `each` rejects with that error.
+- Resolves when every entry is done.
 
-### `random(blogID, callback)`
+### `async random(blogID)`
 
 Returns a randomly selected published entry that has a public URL.
 
 - Calls `ZRANDMEMBER` on the `entries` list and verifies the result has a `url` field. Retries up to `random.MAX_ATTEMPTS` (10) times if the selected entry has no URL.
-- `callback(entry)` — an `Entry` instance, or `undefined` if no suitable entry was found within the attempt limit.
+- Resolves an `Entry` instance, or `undefined` if no suitable entry was found within the attempt limit (or on a Redis error).
 
 `random.MAX_ATTEMPTS` is exposed as a property on the function.
 
-### `resave(blogID, callback)`
+### `async resave(blogID)`
 
 Re-saves every entry in the blog (using the `all` list, which includes deleted entries) with an updated `dateStamp`.
 
 - Loads the blog record to resolve the current permalink configuration.
 - For each entry, calls `DateStamp(blog, entry.path, entry.metadata)` and calls `Entry.set` with the result.
 - Used when a blog's permalink format changes and all date stamps must be recomputed.
-- `callback(err)`.
+- Rejects with `no blog` if the blog is gone, or with the first error from `Entry.set`.
 
-### `pruneMissing(blogID, callback)`
+### `async pruneMissing(blogID)`
 
 Removes stale IDs from all managed sorted sets.
 
 - Iterates every list name, fetches its members from Redis, attempts to load them via `Entry.get`, and removes any ID for which no entry data exists.
-- `callback(err)`.
+- Resolves `{ listName: [removed ids] }`.
 
 ---
 
@@ -214,11 +214,11 @@ This file manages the `entries:lex` sorted set used by `getPage` when a `pathPre
 
 Returns the Redis key string for the lexicographic index: `blog:{blogID}:entries:lex`.
 
-#### `backfillIndex(blogID, callback)`
+#### `async backfillIndex(blogID)`
 
 Rebuilds the lex index from scratch by reading all members of `blog:{blogID}:entries` and writing them into `blog:{blogID}:entries:lex` with score 0 in a single `MULTI` transaction.
 
-- `callback(err, count)` — `count` is the number of entries written.
+- Resolves the number of entries written.
 
 The lex index is only updated incrementally by `_assign.js` when the ready flag is present. If the flag is absent, `_assign.js` skips updates and the index must be backfilled explicitly (e.g. by the `app/sync/fix/entries-path-index.js` repair script).
 
