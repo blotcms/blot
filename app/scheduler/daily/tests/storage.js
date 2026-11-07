@@ -45,10 +45,10 @@ describe("daily update storage", function () {
       );
       expect(
         storage.line(value, { history: [point(7, 104)], now: NOW })
-      ).toContain("(-4 GB this week)");
+      ).toContain("(-4 GB this week, ");
       expect(
         storage.line(value, { history: [point(7, 100)], now: NOW })
-      ).toContain("(no change this week)");
+      ).toContain("(no change this week, ");
     });
 
     it("says how long the growth covers when under a week", function () {
@@ -56,22 +56,24 @@ describe("daily update storage", function () {
 
       expect(
         storage.line(value, { history: [point(2, 94)], now: NOW })
-      ).toContain("(+6 GB in 2d)");
+      ).toContain("(+6 GB in 2d, ");
     });
 
     it("leaves the growth out with under a day of history, or only older readings", function () {
       const value = copyLine({ bytes: 100 * GB, age: 0 });
 
-      expect(storage.line(value, { history: [], now: NOW })).not.toContain("(");
+      expect(storage.line(value, { history: [], now: NOW })).toContain(
+        "GB (1,234,567 objects)"
+      );
       expect(
         storage.line(value, {
           history: [{ time: NOW - 5 * HOUR, used: 90 * GB }],
           now: NOW,
         })
-      ).not.toContain("(");
+      ).toContain("GB (1,234,567 objects)");
       expect(
         storage.line(value, { history: [point(20, 50)], now: NOW })
-      ).not.toContain("(");
+      ).toContain("GB (1,234,567 objects)");
     });
 
     it("flags the copy after two days", function () {

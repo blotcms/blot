@@ -240,7 +240,7 @@ describe("scheduler/daily/redis-server", function () {
       ).toEndWith(", memory 84% (2.5 GB free)");
       expect(
         await server({ sample: sampleLine({ extra: extra(2) }) })
-      ).toEndWith(", **memory 87% (2 GB free)**");
+      ).toEndWith(", **memory 88% (2 GB free)**");
     });
 
     it("says when the host did not report it", async function () {
