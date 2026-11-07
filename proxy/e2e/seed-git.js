@@ -65,11 +65,11 @@ async function seed(email, handle) {
 
   await folder.write(blog.id, "/seeded.txt", post);
 
-  // Resolves when the repository is complete (the callback create.js gives
-  // the sync lock's done).
-  await promisify(require("clients/git/create"))(blog);
+  // Resolves when the repository is complete (once the sync lock's done has
+  // called back)
+  await require("clients/git/create")(blog);
 
-  const token = await promisify(gitDatabase.getToken)(blog.owner);
+  const token = await gitDatabase.getToken(blog.owner);
   if (!token) throw new Error("no git token after create");
 
   console.log(

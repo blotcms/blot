@@ -8,12 +8,12 @@ describe("git client create without a live clone", function () {
   var Client = require("./setup/client");
   var repo = require("clients/git/repo");
   var database = require("clients/git/database");
-  var create = util.promisify(require("clients/git/create"));
+  var create = require("clients/git/create");
   var setClientToGit = util.promisify(require("./setup/setClientToGit"));
   var helpers = require("./setup/helpers");
   var folder = require("./setup/folder");
 
-  var inStore = util.promisify(repo.exists);
+  var inStore = repo.exists;
 
   // git in a clone, its output
   async function inClone(local, args) {
@@ -28,7 +28,7 @@ describe("git client create without a live clone", function () {
 
   // The clone URL of a blog whose repository is already set up
   async function setClientToGitUrl(ctx) {
-    var token = await util.promisify(database.getToken)(ctx.blog.owner);
+    var token = await database.getToken(ctx.blog.owner);
     return (
       "http://" +
       encodeURIComponent(ctx.user.email) +
@@ -78,7 +78,7 @@ describe("git client create without a live clone", function () {
   it("syncs a first push when no applied commit is recorded", async function () {
     var local = await connect(this);
 
-    await util.promisify(database.removeApplied)(this.blog.id);
+    await database.removeApplied(this.blog.id);
     await local.writeAndPush("/pushed.txt", "Pushed");
 
     expect(await helpers.blogFile(this, "/pushed.txt")).toEqual(
@@ -91,7 +91,7 @@ describe("git client create without a live clone", function () {
     await folder.write(this.blog.id, "/first.txt", "Hello");
     var local = await connect(this);
 
-    expect(await util.promisify(database.getApplied)(this.blog.id)).toBe(
+    expect(await database.getApplied(this.blog.id)).toBe(
       await local.remoteHead()
     );
   });

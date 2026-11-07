@@ -3,7 +3,6 @@ const { parse } = require("url");
 const config = require("config");
 const cheerio = require("cheerio");
 const querystring = require("querystring");
-const withCallback = require("helper/withCallback");
 const ERROR_MESSAGE = "Could not parse youtube video";
 
 async function youtube(href) {
@@ -57,4 +56,4 @@ async function youtube(href) {
   }
 }
 
-module.exports = withCallback(youtube);
+module.exports = youtube;

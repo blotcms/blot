@@ -53,7 +53,7 @@ describe("current behaviour that #2259 changes", function () {
     // folder, which `git add` in the live clone applied (here, text=auto
     // turned CRLF line endings into LF in the commit).
     it("commits the bytes it is given, ignoring text=auto", async function () {
-      var write = require("util").promisify(require("clients/git/write"));
+      var write = require("clients/git/write");
 
       await this.local.writeAndPush("/.gitattributes", "* text=auto\n");
       await write(this.blog.id, "/lines.txt", "one\r\ntwo\r\n");

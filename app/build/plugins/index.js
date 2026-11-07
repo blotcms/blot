@@ -7,7 +7,6 @@ var extend = require("helper/extend");
 var deCamelize = require("helper/deCamelize");
 var time = require("helper/time");
 var _ = require("lodash");
-var withCallback = require("helper/withCallback");
 var withResults = require("../withResults");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const { GLOBAL_STATIC_SUBDIRECTORIES } = require("blog/lib/staticPaths");
@@ -313,7 +312,7 @@ function Timeout(name, cb) {
 
 module.exports = {
   convert: withResults(convert),
-  load: withCallback(load),
+  load: load,
   list: list,
   defaultList: defaultPlugins,
 };

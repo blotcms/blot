@@ -20,12 +20,8 @@ describe("clients/folder", function () {
 
   function stubClient() {
     const client = {
-      write: jasmine
-        .createSpy("write")
-        .and.callFake((blogID, path, contents, cb) => cb(null)),
-      remove: jasmine
-        .createSpy("remove")
-        .and.callFake((blogID, path, cb) => cb(null)),
+      write: jasmine.createSpy("write").and.callFake(async () => {}),
+      remove: jasmine.createSpy("remove").and.callFake(async () => {}),
     };
     clients.routerSpecClient = client;
     return client;
@@ -107,9 +103,9 @@ describe("clients/folder", function () {
 
     it("rejects with the client's error", async function () {
       const client = stubClient();
-      client.write.and.callFake((blogID, path, contents, cb) =>
-        cb(new Error("client failed"))
-      );
+      client.write.and.callFake(async () => {
+        throw new Error("client failed");
+      });
       await setClient(this.blog.id, "routerSpecClient");
 
       let error;

@@ -19,7 +19,7 @@ function isMarkdownFile(path) {
   return [".txt", ".text", ".md", ".markdown"].indexOf(ext) > -1;
 }
 
-// byURL and byHeadingAnchor still take a callback, last, as (err, result)
+// byHeadingAnchor still takes a callback, last, as (err, result)
 function callbackLookup(lookup, ...args) {
   return new Promise((resolve, reject) =>
     lookup(...args, (err, result) => (err ? reject(err) : resolve(result)))
@@ -126,7 +126,7 @@ async function render($, { blogID, path }) {
       const lookups = [
         () => byPath(blogID, path, href, isLink),
         () => byFilename(blogID, path, href, isLink),
-        () => callbackLookup(byURL, blogID, href),
+        () => byURL(blogID, href),
         () => byTitle(titles, href),
         () => callbackLookup(byHeadingAnchor, $, href),
       ];

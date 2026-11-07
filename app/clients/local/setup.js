@@ -9,7 +9,6 @@ const clfdate = require("helper/clfdate");
 const source = require("./source");
 const { reconcile, seed } = require("./sync");
 const watch = require("./watch");
-const withCallback = require("helper/withCallback");
 const prefix = () => clfdate() + " Local folder client:";
 
 // Brings the blog's folder in line with its source directory, creating the
@@ -108,5 +107,5 @@ async function setup(blogID) {
   console.log(prefix(), "Setup complete", blogID);
 }
 
-module.exports = withCallback(setup);
+module.exports = setup;
 module.exports.reconcileSource = reconcileSource;

@@ -50,9 +50,7 @@ describe("git store: new-folder setup", function () {
     var master = await local.remoteHead();
 
     expect(current.refs["refs/heads/master"]).toBe(master);
-    expect(await util.promisify(database.getApplied)(this.blog.id)).toBe(
-      master
-    );
+    expect(await database.getApplied(this.blog.id)).toBe(master);
 
     expect((await local.read("/first.txt")).toString()).toBe("Hello");
     expect((await local.read("/Sub Folder/ünï côdé.txt")).toString()).toBe(
@@ -175,12 +173,10 @@ describe("git store: new-folder setup", function () {
     var local = await connect(this);
     var master = await local.remoteHead();
 
-    var again = await util
-      .promisify(require("clients/git/create"))(this.blog)
-      .then(
-        () => null,
-        (err) => err
-      );
+    var again = await require("clients/git/create")(this.blog).then(
+      () => null,
+      (err) => err
+    );
 
     expect(again && again.code).toBe("EEXIST");
     expect(

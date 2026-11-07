@@ -9,9 +9,9 @@ describe("git client dashboard: a setup in progress", function () {
   var client = require("models/client");
   var database = require("clients/git/database");
   var disconnect = promisify(require("clients/git/disconnect"));
-  var setStatus = promisify(database.setStatus);
-  var setCreating = promisify(database.setCreating);
-  var isCreating = promisify(database.isCreating);
+  var setStatus = database.setStatus;
+  var setCreating = database.setCreating;
+  var isCreating = database.isCreating;
 
   beforeEach(async function () {
     var blog = this.blog;
@@ -87,7 +87,7 @@ describe("git client dashboard: a setup in progress", function () {
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(database.CREATING_TTL_SECONDS);
 
-    await promisify(require("clients/git/create"))(this.blog);
+    await require("clients/git/create")(this.blog);
 
     expect(await isCreating(this.blog.id)).toBe(false);
     expect(await landing(this)).toBe("page");
@@ -100,7 +100,7 @@ describe("git client dashboard: a setup in progress", function () {
     await disconnect(this.blog.id);
 
     expect(await isCreating(this.blog.id)).toBe(false);
-    expect(await promisify(database.getStatus)(this.blog.owner)).toBe(null);
+    expect(await database.getStatus(this.blog.owner)).toBe(null);
     expect(await landing(this)).toBe("create");
   });
 });

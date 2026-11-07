@@ -8,7 +8,6 @@ describe("local client write and remove", function () {
   const write = require("clients/local/write");
   const remove = require("clients/local/remove");
   const source = require("clients/local/source");
-  const { promisify } = require("util");
 
   let base;
   let saved;
@@ -29,7 +28,7 @@ describe("local client write and remove", function () {
 
   describe("against storage/folder", function () {
     it("writes a file into the source directory and the blog folder, creating parents", async function () {
-      await promisify(write)(this.blog.id, "/posts/hello.txt", "Hello");
+      await write(this.blog.id, "/posts/hello.txt", "Hello");
       const contents = await folder.read(this.blog.id, "/posts/hello.txt");
       expect(contents.toString()).toBe("Hello");
       expect(await fs.readFile(join(dir, "posts", "hello.txt"), "utf8")).toBe(
@@ -57,7 +56,7 @@ describe("local client write and remove", function () {
     it("does not write an ignored name", async function () {
       let error;
       try {
-        await promisify(write)(this.blog.id, "/.DS_Store", "x");
+        await write(this.blog.id, "/.DS_Store", "x");
       } catch (err) {
         error = err;
       }
@@ -67,22 +66,22 @@ describe("local client write and remove", function () {
     });
 
     it("removes a file and a directory from both", async function () {
-      await promisify(write)(this.blog.id, "/a/b.txt", "b");
-      await promisify(remove)(this.blog.id, "/a/b.txt");
+      await write(this.blog.id, "/a/b.txt", "b");
+      await remove(this.blog.id, "/a/b.txt");
       expect(await folder.exists(this.blog.id, "/a/b.txt")).toBe(false);
       expect(await fs.pathExists(join(dir, "a", "b.txt"))).toBe(false);
-      await promisify(write)(this.blog.id, "/dir/c.txt", "c");
-      await promisify(remove)(this.blog.id, "/dir");
+      await write(this.blog.id, "/dir/c.txt", "c");
+      await remove(this.blog.id, "/dir");
       expect(await folder.exists(this.blog.id, "/dir")).toBe(false);
       expect(await fs.pathExists(join(dir, "dir"))).toBe(false);
     });
 
     it("treats removing a missing path as a no-op", async function () {
-      await promisify(remove)(this.blog.id, "/missing.txt");
+      await remove(this.blog.id, "/missing.txt");
     });
 
     it("will not write outside the source directory", async function () {
-      await promisify(write)(this.blog.id, "/../../escape.txt", "x");
+      await write(this.blog.id, "/../../escape.txt", "x");
       expect(await fs.pathExists(join(base, "escape.txt"))).toBe(false);
       expect(await fs.pathExists(join(dir, "escape.txt"))).toBe(true);
     });

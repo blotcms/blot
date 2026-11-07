@@ -2,7 +2,6 @@ const debug = require("debug")("blot:clients:local:remove");
 const fs = require("fs-extra");
 const folder = require("storage/folder");
 const source = require("./source");
-const withCallback = require("helper/withCallback");
 
 // Removes a file or folder from at a given path inside
 // the blog's source folder. Needed to remove preview files
@@ -18,4 +17,4 @@ async function remove(blogID, path) {
   await folder.remove(blogID, path);
 }
 
-module.exports = withCallback(remove);
+module.exports = remove;
