@@ -44,50 +44,6 @@
   }
 }
 
-/* The filters (folder/folder-filters.html): one segmented control, like a
-   Finder view switcher. The chosen segment is raised; the others are plain
-   text on the control's tray. On the right, beside search. */
-.folder-filters {
-  display: inline-flex;
-  align-items: stretch;
-  gap: 2px;
-  padding: 2px;
-  border-radius: var(--radius-md);
-  background: var(--surface-muted-color);
-}
-
-.folder-filters__item {
-  display: inline-flex;
-  align-items: center;
-  min-height: 26px;
-  padding: 0 var(--space-3);
-  border-radius: calc(var(--radius-md) - 2px);
-  color: var(--text-color);
-  font-size: var(--text-xs);
-  text-decoration: none;
-  white-space: nowrap;
-  transition: background-color 150ms ease, box-shadow 150ms ease;
-}
-
-.folder-filters__item:hover {
-  background: var(--surface-strong-color);
-}
-
-.folder-filters__item:active {
-  background: var(--border-strong-color);
-}
-
-.folder-filters__item.is-selected,
-.folder-filters__item.is-selected:hover {
-  background: var(--background-color);
-  box-shadow: var(--shadow-sm);
-}
-
-.folder-filters__item:focus-visible {
-  outline: 2px solid var(--accent-color);
-  outline-offset: 1px;
-}
-
 /* On narrow screens the filters are a dropdown named after the current
    choice (folder/folder-filters.html renders both). The panel is a shared
    menu (css/menu.css). */
@@ -146,7 +102,7 @@
 }
 
 @media (max-width: 600px) {
-  .folder-filters {
+  .folder-toolbar .folder-filters {
     display: none;
   }
 
@@ -174,17 +130,6 @@
     width: 220px;
     min-width: 120px;
   }
-}
-
-/* Scheduled shows an orange dot when anything is scheduled, so a post
-   scheduled by mistake is noticed */
-.folder-filters__dot {
-  width: 5px;
-  height: 5px;
-  margin-left: var(--space-2);
-  border-radius: 50%;
-  background: var(--indicator-amber);
-  box-shadow: 0 0 4px 1px var(--indicator-amber-glow);
 }
 
 /* The first row's client: its logo on the text, Switch beside it */

@@ -1,7 +1,13 @@
-{{#searchQuery}}
+<!-- The results in a box like the folder's: its top row is "Search" and
+     the search field, then the results as folder rows -->
 <div class="site-dashboard-search-results">
-  {{#searchResults.length}}
   <div class="folder-box directory">
+    <div class="folder-toolbar">
+      <span class="folder-toolbar__label">Search</span>
+      {{> site-dashboard-views}}
+    </div>
+    {{#searchQuery}}
+    {{#searchResults.length}}
     <div class="directory-scroll">
       <table class="data-table data-table--zebra directory-list">
         <thead>
@@ -35,11 +41,11 @@
         </tbody>
       </table>
     </div>
+    {{/searchResults.length}}
+    {{^searchResults.length}}<p class="site-dashboard-empty site-dashboard-search-results__empty">No matching entries.</p>{{/searchResults.length}}
+    {{/searchQuery}}
+    {{^searchQuery}}
+    <p class="site-dashboard-empty site-dashboard-search-results__empty">Enter a term to search your entries.</p>
+    {{/searchQuery}}
   </div>
-  {{/searchResults.length}}
-  {{^searchResults.length}}<p class="site-dashboard-empty">No matching entries.</p>{{/searchResults.length}}
 </div>
-{{/searchQuery}}
-{{^searchQuery}}
-<p class="site-dashboard-empty">Enter a term to search your entries.</p>
-{{/searchQuery}}

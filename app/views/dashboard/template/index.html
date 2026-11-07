@@ -6,15 +6,14 @@
   </header>
 
   <div class="template-overview__toolbar">
-    <div class="template-overview__filters" role="group" aria-label="Show templates">
-      <button type="button" class="site-dashboard-post-filter is-active" data-template-filter="all" aria-pressed="true">All</button>
-      <button type="button" class="site-dashboard-post-filter" data-template-filter="yours" aria-pressed="false">Yours</button>
-      <button type="button" class="site-dashboard-post-filter" data-template-filter="default" aria-pressed="false">Blot</button>
+    <div class="folder-filters template-overview__filters" role="group" aria-label="Show templates">
+      <button type="button" class="folder-filters__item is-active" data-template-filter="all" aria-pressed="true">All</button>
+      <button type="button" class="folder-filters__item" data-template-filter="yours" aria-pressed="false">Yours</button>
+      <button type="button" class="folder-filters__item" data-template-filter="default" aria-pressed="false">Blot</button>
     </div>
-    <label class="template-overview__search">
-      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.8" cy="6.8" r="4.8" fill="none" stroke="currentColor" stroke-width="1.5"></circle><path d="m10.4 10.4 4 4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"></path></svg>
+    <div class="site-dashboard-search template-overview__search">
       <input type="search" data-template-search placeholder="Search" aria-label="Search templates">
-    </label>
+    </div>
     <a class="btn btn-primary btn-sm template-overview__create" href="{{{dashboardBase}}}/template/new">
       <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v13M1.5 8h13" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"></path></svg>
       Create template

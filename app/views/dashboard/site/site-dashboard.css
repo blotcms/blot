@@ -72,91 +72,16 @@
     min-width: 0;
   }
 
-  /* Sized by width, not flex-basis: it sits in both row and column flex
-     containers, and in a column a basis would set its height */
-  .site-dashboard-search {
-    flex: 0 1 auto;
-    box-sizing: border-box;
-    width: 260px;
-    max-width: 100%;
-    min-width: 140px;
-    margin-left: auto;
-  }
-
-  /* Like the macOS Finder's search field, on white: a lightly bordered
-     field with a magnifier, and the system's soft blue ring when focused */
-  .site-dashboard-search input {
-    display: block;
-    box-sizing: border-box;
-    width: 100%;
-    min-width: 0;
-    height: 28px;
-    padding: 0 var(--space-2) 0 28px;
-    border: 1px solid rgba(0, 0, 0, 0.14);
-    border-radius: 7px;
-    background: var(--background-color)
-      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6.75' cy='6.75' r='4.75' fill='none' stroke='%236e6e73' stroke-width='1.5'/%3E%3Cpath d='m10.25 10.25 3.5 3.5' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")
-      no-repeat 9px center / 14px 14px;
-    color: var(--text-color);
-    font: inherit;
-    font-size: var(--text-md);
-    caret-color: var(--accent-color);
-    -webkit-appearance: none;
-    appearance: none;
-    transition: box-shadow 150ms ease;
-  }
-
-  .site-dashboard-search input::placeholder {
-    color: #a1a1a6;
-    opacity: 1;
-  }
-
-  .site-dashboard-search input:focus {
-    outline: none;
-    border-color: transparent;
-    box-shadow: 0 0 0 3px rgba(0, 103, 244, 0.45);
-  }
-
   /* Search results are folder rows (folder/directory.html's table), in a
      box only as tall as the results */
   .site-dashboard-search-results .folder-box.directory {
     min-height: 0;
   }
 
-  .site-dashboard-post-filter {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    min-height: 30px;
-    padding: 0 var(--space-3);
-    border: 0;
-    border-radius: var(--radius-pill);
-    background: var(--surface-muted-color);
-    color: var(--text-color);
-    font: inherit;
-    font-size: var(--text-xs);
-    cursor: pointer;
-    text-decoration: none;
-    transition: background-color 150ms ease, color 150ms ease;
-  }
-
-  .site-dashboard-post-filter:hover {
-    background: var(--surface-strong-color);
-  }
-
-  .site-dashboard-post-filter:active {
-    background: var(--border-strong-color);
-  }
-
-  .site-dashboard-post-filter.is-active,
-  .site-dashboard-post-filter.is-active:hover {
-    background: var(--text-color);
-    color: var(--background-color);
-  }
-
-  .site-dashboard-post-filter:focus-visible {
-    outline: 2px solid var(--accent-color);
-    outline-offset: 2px;
+  /* No results yet, or none: the message inside the box, under its row */
+  .site-dashboard-search-results__empty {
+    margin: 0;
+    padding: var(--space-4);
   }
 
   .site-dashboard-view-panel[hidden] {
@@ -461,9 +386,10 @@
     row-gap: var(--space-5);
   }
 
-  /* On the results page the box leads the card at full width */
+  /* On the results page it's in the results box's top row, the folder's
+     width */
   .site-dashboard.is-search-view .site-dashboard-search {
-    width: 100%;
-    margin: 0 0 var(--space-3);
+    width: 220px;
+    margin: 0;
   }
 

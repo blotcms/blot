@@ -354,8 +354,8 @@ h2.template-heading:not(:first-child) {
   margin: 0 auto;
 }
 
-/* The filter pills (the Posts pills, .site-dashboard-post-filter), search
-   and Create template, on one row */
+/* The filters and search (css/list-controls.css), then Create template,
+   on one row, search pushed right */
 .template-overview__toolbar {
   display: flex;
   flex-wrap: wrap;
@@ -364,58 +364,9 @@ h2.template-heading:not(:first-child) {
   margin: var(--space-5) 0;
 }
 
-.template-overview__filters {
-  display: flex;
-  gap: var(--space-2);
-}
-
-.template-overview__search {
-  display: flex;
-  box-sizing: border-box;
-  flex: 1 1 200px;
-  min-width: 0;
-  max-width: 320px;
-  height: var(--control-height);
-  align-items: center;
-  gap: var(--space-2);
+.template-overview__toolbar .template-overview__search {
+  width: 220px;
   margin-left: auto;
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-pill);
-  background: var(--background-color);
-  color: var(--medium-text-color);
-  transition: border-color 150ms ease;
-}
-
-.template-overview__search:hover {
-  border-color: var(--border-strong-color);
-}
-
-.template-overview__search:focus-within {
-  border-color: var(--accent-color);
-  box-shadow: 0 0 0 3px rgba(0, 102, 222, 0.25);
-}
-
-.template-overview__search svg {
-  width: 15px;
-  height: 15px;
-  flex: none;
-}
-
-.template-overview__search input {
-  width: 100%;
-  min-width: 0;
-  padding: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--text-color);
-  font: inherit;
-  font-size: var(--text-md);
-}
-
-.template-overview__search input::placeholder {
-  color: var(--medium-text-color);
 }
 
 /* Create template is a small primary button (css/buttons.css); its plus */
@@ -521,10 +472,9 @@ h2.template-heading:not(:first-child) {
 
 
 @media (max-width: 680px) {
-  .template-overview__search {
+  .template-overview__toolbar .template-overview__search {
     order: 3;
-    max-width: none;
-    flex-basis: 100%;
+    width: 100%;
     margin-left: 0;
   }
 
