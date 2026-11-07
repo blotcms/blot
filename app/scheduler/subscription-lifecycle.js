@@ -1,4 +1,3 @@
-var { promisify } = require("util");
 var clfdate = require("helper/clfdate");
 var User = require("models/user");
 var eachUser = require("../../scripts/each/user");
