@@ -315,7 +315,7 @@ function canSkip(user) {
   );
 }
 
-function updateSubscription(req, res, next) {
+async function updateSubscription(req, res, next) {
   // We dont need to do this for free users
   if (canSkip(req.user)) {
     return next();
@@ -329,30 +329,27 @@ function updateSubscription(req, res, next) {
     return next();
   }
 
-  stripe.customers.updateSubscription(
-    req.user.subscription.customer,
-    req.user.subscription.id,
-    {
-      quantity: req.user.blogs.length + 1,
-      prorate: false,
-    },
-    async function (err, subscription) {
-      if (err) return next(err);
-
-      if (!subscription) return next(new Error(ERR));
-
-      try {
-        await User.set(req.user.uid, { subscription: subscription });
-      } catch (err) {
-        return next(err);
+  try {
+    const subscription = await stripe.customers.updateSubscription(
+      req.user.subscription.customer,
+      req.user.subscription.id,
+      {
+        quantity: req.user.blogs.length + 1,
+        prorate: false,
       }
+    );
 
-      next();
-    }
-  );
+    if (!subscription) return next(new Error(ERR));
+
+    await User.set(req.user.uid, { subscription: subscription });
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
-function chargeForRemaining(req, res, next) {
+async function chargeForRemaining(req, res, next) {
   // We dont need to do this for free users
   if (!req.user.subscription.status) {
     return next();
@@ -371,21 +368,20 @@ function chargeForRemaining(req, res, next) {
   // Stripe won't charge less than $0.50, we'll just take the hit
   if (req.amount_due_now <= 50) return next();
 
-  stripe.charges.create(
-    {
+  try {
+    const charge = await stripe.charges.create({
       amount: req.amount_due_now,
       currency: "usd",
       customer: req.user.subscription.customer,
       description: "Charge for the remaining billing period",
-    },
-    function (err, charge) {
-      if (err) return next(err);
+    });
 
-      if (!charge) return next(new Error(BAD_CHARGE));
+    if (!charge) return next(new Error(BAD_CHARGE));
+  } catch (err) {
+    return next(err);
+  }
 
-      next();
-    }
-  );
+  next();
 }
 
 module.exports = CreateBlog;
