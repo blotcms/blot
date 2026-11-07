@@ -6,7 +6,7 @@ var matches = util.matches;
 
 // var drop = require('./drop');
 
-module.exports = async function set(blogID, mappings) {
+async function set(blogID, mappings) {
   ensure(blogID, "string").and(mappings, "array");
 
   var redirects = key.redirects(blogID);
@@ -49,4 +49,8 @@ module.exports = async function set(blogID, mappings) {
   });
 
   await multi.exec();
-};
+}
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(set);

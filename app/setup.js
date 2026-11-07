@@ -308,6 +308,7 @@ async function createSSLKey() {
   log("Created SSL key for redis");
 }
 
-main.runPostListenTasks = runPostListenTasks;
+const promiseOnly = require("helper/promiseOnly");
 
-module.exports = main;
+module.exports = promiseOnly(main);
+module.exports.runPostListenTasks = runPostListenTasks;

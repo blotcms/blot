@@ -260,5 +260,7 @@ async function setUrl(blogID, entry) {
   throw new Error("Could not find a permalink for " + entry.path);
 }
 
-module.exports = setUrl;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(setUrl);
 module.exports.Candidates = Candidates;

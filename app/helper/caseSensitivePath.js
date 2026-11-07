@@ -59,5 +59,7 @@ async function caseSensitivePath(cwd, path) {
   }
 }
 
-module.exports = caseSensitivePath;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(caseSensitivePath);
 module.exports.pick = pick;

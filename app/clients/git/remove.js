@@ -4,8 +4,12 @@ var repo = require("./repo");
 // This should probably copy the file to a
 // temporary location so the removal can be
 // rolled back if we encounter an error
-module.exports = async function remove(blogID, path) {
+async function remove(blogID, path) {
   debug("Blog:", blogID, "Removing", path);
 
   await repo.commit(blogID, { path: path, contents: null });
-};
+}
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(remove);

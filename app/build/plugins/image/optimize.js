@@ -1,3 +1,4 @@
+var promiseOnly = require("helper/promiseOnly");
 var assets = require("storage/assets");
 var { v4: uuid } = require("uuid");
 var join = require("path").join;
@@ -62,7 +63,7 @@ function truncateSlug(slug) {
 
 module.exports = function (blogID, originalSrc) {
   // helper/transformer calls this with a path and waits for the promise
-  return async function (path) {
+  return promiseOnly(async function optimizeImage(path) {
     // Extnames can sometimes be uppercase, we want to ensure that
     // this will work on case-sensitive file systems so we lowercase it...
     var extension = extname(path).toLowerCase();
@@ -140,7 +141,7 @@ module.exports = function (blogID, originalSrc) {
 
       throw err;
     }
-  };
+  });
 };
 module.exports.filenameFromSrc = filenameFromSrc;
 module.exports.truncateSlug = truncateSlug;

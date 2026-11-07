@@ -23,7 +23,7 @@ var MAX_PATHS_CHECKED_ON_DISK = 500;
 // Stands in for the blog's folder when joining candidate paths
 var FOLDER = "/folder";
 
-module.exports = async function conflicts(blog, redirects) {
+async function conflicts(blog, redirects) {
   ensure(blog, "object").and(redirects, "array");
 
   var paths = redirects.map(function (redirect) {
@@ -41,7 +41,7 @@ module.exports = async function conflicts(blog, redirects) {
   await checkFolder(blog.id, paths, results);
 
   return results;
-};
+}
 
 // Returns the path a request would need to use for this redirect to match,
 // or null when we can't say anything useful about it. Redirects.check tests
@@ -262,3 +262,7 @@ function decodeURIComponentSafely(url) {
     return url;
   }
 }
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(conflicts);

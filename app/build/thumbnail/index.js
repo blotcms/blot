@@ -71,4 +71,6 @@ function lookup(store, candidate, create) {
   });
 }
 
-module.exports = thumbnail;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(thumbnail);

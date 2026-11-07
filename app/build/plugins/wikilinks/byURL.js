@@ -1,6 +1,6 @@
 const urlNormalizer = require("helper/urlNormalizer");
 
-module.exports = async function byURL(blogID, href) {
+async function byURL(blogID, href) {
   const normalizedHref = urlNormalizer(href);
   const { getByUrl } = require("models/entry");
   let entry;
@@ -15,4 +15,8 @@ module.exports = async function byURL(blogID, href) {
   if (entry) return entry;
 
   throw new Error("No entry found by URL with href: " + href);
-};
+}
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(byURL);

@@ -56,4 +56,6 @@ async function youtube(href) {
   }
 }
 
-module.exports = youtube;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(youtube);

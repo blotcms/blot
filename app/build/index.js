@@ -319,6 +319,8 @@ async function buildWith(blog, path, multiInfo) {
   return entry;
 }
 
-module.exports = build;
-module.exports.hashEntrySource = hashEntrySource;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(build);
+module.exports.hashEntrySource = promiseOnly(hashEntrySource);
 module.exports.findMultiFolder = findMultiFolder;

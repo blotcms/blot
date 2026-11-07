@@ -3,7 +3,7 @@ const ensure = require("helper/ensure");
 const type = require("helper/type");
 const key = require("./key");
 
-module.exports = async function getPopular(blogID, options) {
+async function getPopular(blogID, options) {
   if (typeof options === "number") {
     options = { limit: options };
   }
@@ -80,4 +80,8 @@ module.exports = async function getPopular(blogID, options) {
   });
 
   return hydrated;
-};
+}
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(getPopular);

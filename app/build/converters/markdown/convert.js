@@ -77,7 +77,9 @@ async function convert(blog, text, options) {
   return result;
 }
 
-module.exports = convert;
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(convert);
 
 function safely(method, input) {
   try {

@@ -6,7 +6,7 @@ var util = require("./util");
 var is = util.is;
 var isRegex = util.isRegex;
 
-module.exports = async function check(blogID, input) {
+async function check(blogID, input) {
   ensure(blogID, "string").and(input, "string");
 
   var redirects = key.redirects(blogID);
@@ -42,4 +42,8 @@ module.exports = async function check(blogID, input) {
       return;
     }
   }
-};
+}
+
+const promiseOnly = require("helper/promiseOnly");
+
+module.exports = promiseOnly(check);
