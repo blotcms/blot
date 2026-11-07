@@ -525,12 +525,8 @@ describe("git store manifest", function () {
         let before = stats();
         const warm = await manifest.read(store, { clock });
         expect(warm.seq).toBe(1);
-        // The hint, and a HEAD for the next seq
-        expect(diff(before)).toEqual({
-          gets: 1,
-          bytesRead: jasmine.any(Number),
-          heads: 1,
-        });
+        // A GET for the next seq, which isn't there
+        expect(diff(before)).toEqual({ gets: 1 });
 
         // Its time is the read that last asked the store, not this one
         now += manifest.MAX_BASE_AGE - 11 * 60 * 60 * 1000 + 1;
@@ -546,11 +542,10 @@ describe("git store manifest", function () {
           )
         ).toEqual(jasmine.any(StaleManifestError));
 
-        // Past 12 hours it is checked with a HEAD, and counts from then (the
-        // hint is unchanged now, so it is a 304)
+        // Past 12 hours it is checked with a HEAD, and counts from then
         before = stats();
         const checked = await manifest.read(store, { clock });
-        expect(diff(before)).toEqual({ gets: 1, notModified: 1, heads: 2 });
+        expect(diff(before)).toEqual({ gets: 1, heads: 1 });
         now += manifest.MAX_BASE_AGE - 1;
         await manifest.swap({
           store,
@@ -726,14 +721,14 @@ describe("git store manifest", function () {
       expect(store.stats.lists).toBe(0);
     });
 
-    it("does not fetch a manifest again once it has it", async function () {
+    it("does not fetch a manifest again once it has it, and asks only for the next", async function () {
       await writeAll(3);
       await hint(3);
       await manifest.read(store);
       reset();
       expect(await manifest.read(store)).toEqual(chain[3]);
-      expect(store.stats.gets).toBe(1); // just the hint
-      expect(store.stats.heads).toBe(1);
+      expect(store.stats.gets).toBe(1); // seq 4, which isn't there
+      expect(store.stats.heads).toBe(0);
     });
 
     it("reads the manifest it just swapped in without fetching it", async function () {
@@ -742,6 +737,7 @@ describe("git store manifest", function () {
       reset();
       expect(await manifest.read(store)).toEqual(chain[1]);
       expect(store.stats.gets).toBe(1);
+      expect(store.stats.heads).toBe(0);
     });
 
     it("hands out a manifest which is its caller's to change", async function () {
@@ -832,8 +828,7 @@ describe("git store manifest", function () {
       expect(await manifest.read(store)).toEqual(manifest.empty());
     });
 
-    describe("an unchanged hint, for a read that only serves", function () {
-      const W = manifest.TRUST_UNCHANGED_HINT;
+    describe("a warm read, in another process than the writer", function () {
       let now;
       const clock = () => now;
       // Another process on the same bucket: it shares the objects, not this
@@ -842,7 +837,6 @@ describe("git store manifest", function () {
 
       const counts = () =>
         Object.fromEntries(Object.entries(store.stats).filter(([, v]) => v));
-      const serve = () => manifest.read(store, { clock, serving: true });
 
       beforeEach(async function () {
         now = 1e12;
@@ -856,43 +850,29 @@ describe("git store manifest", function () {
         reset();
       });
 
-      it("is one conditional GET, answered 304, with no HEAD, for a few seconds", async function () {
-        now += W;
-        expect(await serve()).toEqual(chain[3]);
-        expect(counts()).toEqual({ gets: 1, notModified: 1 });
+      it("is one GET, of the next seq, which isn't there", async function () {
+        now += 60 * 1000;
+        expect(await manifest.read(store, { clock })).toEqual(chain[3]);
+        expect(counts()).toEqual({ gets: 1 });
       });
 
-      it("is trusted for a few seconds from the store's own word, not from the last 304", async function () {
-        now += W / 2;
-        await serve();
-        now += W / 2 + 1;
-        reset();
-        // Past the window: the HEAD again, beside the GET, as before
-        expect(await serve()).toEqual(chain[3]);
-        expect(counts()).toEqual({ gets: 1, notModified: 1, heads: 1 });
-
-        // And that HEAD starts another window
-        now += W;
-        reset();
-        await serve();
-        expect(counts()).toEqual({ gets: 1, notModified: 1 });
-      });
-
-      it("is never trusted by a writer, which keeps the HEAD and so catches a hint that lags", async function () {
-        // A swap whose hint was lost
+      it("sees a swap whose hint was lost at once", async function () {
         await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
         now += 1;
-
+        reset();
         expect(await manifest.read(store, { clock })).toEqual(chain[4]);
-        expect(store.stats.heads).toBeGreaterThan(0);
-      });
+        // The new manifest, then the hint and the HEAD after it together
+        expect(counts()).toEqual({
+          gets: 2,
+          notModified: 1,
+          heads: 1,
+          bytesRead: jasmine.any(Number),
+        });
 
-      it("lags a swap whose hint was lost by at most a few seconds", async function () {
-        await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
-        now += W;
-        expect(await serve()).toEqual(chain[3]);
-        now += 1;
-        expect(await serve()).toEqual(chain[4]);
+        // And the next read asks for seq 5 alone
+        reset();
+        expect(await manifest.read(store, { clock })).toEqual(chain[4]);
+        expect(counts()).toEqual({ gets: 1 });
       });
 
       it("sees a swap whose hint landed at once", async function () {
@@ -903,30 +883,47 @@ describe("git store manifest", function () {
           next: chain[4],
         });
         now += 1;
-        reset();
-        expect(await serve()).toEqual(chain[4]);
-        // The changed hint, then the new manifest and the HEAD after it
-        expect(counts()).toEqual({
-          gets: 2,
-          heads: 1,
-          bytesRead: jasmine.any(Number),
-        });
-
-        // Which is then trusted in turn
-        reset();
-        expect(await serve()).toEqual(chain[4]);
-        expect(counts()).toEqual({ gets: 1, notModified: 1 });
+        expect(await manifest.read(store, { clock })).toEqual(chain[4]);
       });
 
-      it("sees a hint overtaken by an older one (concurrent swaps) by looking forward", async function () {
+      it("sees a swap whose hint has not landed yet, so a push need not wait for it", async function () {
+        const real = store.put;
+        let land;
+        spyOn(other, "put").and.callFake(async (key, body) => {
+          if (key === LATEST_KEY)
+            await new Promise((resolve) => (land = resolve));
+          return real(key, body);
+        });
+        await manifest.swap({
+          store: other,
+          lock,
+          base: chain[3],
+          next: chain[4],
+          waitForHint: false,
+        });
+        expect(JSON.parse(await store.get(LATEST_KEY))).toEqual({ seq: 3 });
+        expect(await manifest.read(store, { clock })).toEqual(chain[4]);
+        land();
+      });
+
+      it("looks past a hint behind what it has seen (concurrent swaps)", async function () {
         await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
         await other.putIfAbsent(manifestKey(5), manifest.serialize(chain[5]));
-        await hint(4);
         now += 1;
-        expect(await serve()).toEqual(chain[5]);
+        reset();
+        expect(await manifest.read(store, { clock })).toEqual(chain[5]);
+        expect(store.stats.lists).toBe(0);
       });
 
-      it("sees a removal's tombstone at once, and within a few seconds when its hint was lost", async function () {
+      it("follows a hint ahead of it", async function () {
+        await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
+        await other.putIfAbsent(manifestKey(5), manifest.serialize(chain[5]));
+        await hint(5);
+        now += 1;
+        expect(await manifest.read(store, { clock })).toEqual(chain[5]);
+      });
+
+      it("sees a removal's tombstone at once, even when its hint was lost", async function () {
         const tombstone = manifest.removed(chain[3]);
         await manifest.swap({
           store: other,
@@ -935,70 +932,86 @@ describe("git store manifest", function () {
           next: tombstone,
         });
         now += 1;
-        const seen = await serve();
+        const seen = await manifest.read(store, { clock });
         expect(seen).toEqual(tombstone);
         expect(manifest.isEmpty(seen)).toBe(true);
 
         const lost = manifest.removed(tombstone);
         await other.putIfAbsent(manifestKey(5), manifest.serialize(lost));
-        // A writer sees it at once
-        expect(await manifest.read(other, { clock })).toEqual(lost);
-        now += W + 1;
-        expect(await serve()).toEqual(lost);
+        expect(await manifest.read(store, { clock })).toEqual(lost);
       });
 
-      it("is not trusted after this process swaps until it has read its own hint back", async function () {
-        const mine = await manifest.read(store, { clock });
-        await manifest.swap({ store, lock, base: mine, next: chain[4], clock });
-        reset();
-        expect(await serve()).toEqual(chain[4]);
-        // The hint (changed) and the HEAD beside it, as before
-        expect(counts()).toEqual({
-          gets: 1,
-          heads: 1,
-          bytesRead: jasmine.any(Number),
-        });
-        reset();
-        expect(await serve()).toEqual(chain[4]);
-        expect(counts()).toEqual({ gets: 1, notModified: 1 });
-      });
-
-      it("lists when the hint is deleted", async function () {
+      it("lists when it is behind and the hint is deleted", async function () {
         await store.delete(LATEST_KEY);
         await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
         reset();
-        expect(await serve()).toEqual(chain[4]);
+        expect(await manifest.read(store, { clock })).toEqual(chain[4]);
         expect(store.stats.lists).toBe(1);
       });
 
-      it("times a manifest it trusted from the store's word, so a writer handed one is still refused in time", async function () {
-        now += W;
-        const served = await serve();
-        now += manifest.MAX_BASE_AGE - W + 1;
-        expect(
-          await fails(
-            manifest.swap({ store, lock, base: served, next: chain[4], clock })
-          )
-        ).toEqual(jasmine.any(StaleManifestError));
+      for (const [what, hinted] of [
+        ["the hint", true],
+        ["a LIST, with no hint", false],
+      ]) {
+        it(
+          "walks past a damaged next manifest to a removal's tombstone after it, by " +
+            what,
+          async function () {
+            await other.put(manifestKey(4), Buffer.from("{ not json"));
+            const tombstone = { ...manifest.removed(chain[3]), seq: 5 };
+            await other.putIfAbsent(
+              manifestKey(5),
+              manifest.serialize(tombstone)
+            );
+            if (hinted) await hint(5);
+            else await store.delete(LATEST_KEY);
+            expect(await manifest.read(store, { clock })).toEqual(tombstone);
+          }
+        );
+      }
+
+      it("fails on a damaged next manifest that is the newest", async function () {
+        await other.put(manifestKey(4), Buffer.from("{ not json"));
+        await hint(4);
+        expect(await fails(manifest.read(store, { clock }))).toEqual(
+          jasmine.any(CorruptError)
+        );
       });
 
-      it("works with a store which ignores the condition", async function () {
+      it("keeps only the manifest it returns, never one it fetched on the way", async function () {
+        // The newest kept is what the next read asks after, so it must be one
+        // the store showed to be the newest: a read that fails part way
+        // leaves it as it was
+        await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
+        await other.putIfAbsent(manifestKey(5), manifest.serialize(chain[5]));
+        spyOn(store, "head").and.callFake(async () => {
+          throw new Error("the store is down");
+        });
+        expect(await fails(manifest.read(store, { clock }))).toEqual(
+          jasmine.any(Error)
+        );
+        store.head.and.callThrough();
+
+        const asked = [];
+        const real = store.get;
+        spyOn(store, "get").and.callFake((key, options) => {
+          asked.push(key);
+          return real(key, options);
+        });
+        expect(await manifest.read(store, { clock })).toEqual(chain[5]);
+        expect(asked[0]).toBe(manifestKey(4));
+      });
+
+      it("works with a store which ignores the condition on the hint", async function () {
         const real = store.get;
         const plain = {
           ...store,
           get: (key, options) =>
             real(key, { maxBytes: options && options.maxBytes }),
         };
-        expect(await manifest.read(plain, { clock, serving: true })).toEqual(
-          chain[3]
-        );
-        expect(await manifest.read(plain, { clock, serving: true })).toEqual(
-          chain[3]
-        );
+        expect(await manifest.read(plain, { clock })).toEqual(chain[3]);
         await other.putIfAbsent(manifestKey(4), manifest.serialize(chain[4]));
-        expect(await manifest.read(plain, { clock, serving: true })).toEqual(
-          chain[4]
-        );
+        expect(await manifest.read(plain, { clock })).toEqual(chain[4]);
       });
     });
   });

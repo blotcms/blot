@@ -893,9 +893,11 @@ describe("git store compaction", function () {
     it("returns an unknown outcome when the swap cannot be read back, and the manifest says which", async function () {
       const before = await manifest.read(store);
       const key = manifestKey(before.seq + 1);
+      // Compaction's own read asks for that seq first (it isn't there yet);
+      // the read back after the create is the one that fails
       store
         .inject("putIfAbsent", { key, after: dropped() })
-        .inject("get", { key, before: dropped() });
+        .inject("get", { key, before: dropped(), skip: 1 });
 
       const result = await compact({ store, cache, lock });
       expect(result.outcome).toBe("unknown");
