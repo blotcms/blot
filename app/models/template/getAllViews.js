@@ -12,12 +12,7 @@ module.exports = async function getAllViews(name) {
   const viewNames = await client.sMembers(key.allViews(name));
   const metadata = await getMetadata(name);
 
-  const views = await new Promise(function (resolve, reject) {
-    getMultipleViews(name, viewNames, function (viewErr, views) {
-      if (viewErr) return reject(viewErr);
-      resolve(views);
-    });
-  });
+  const views = await getMultipleViews(name, viewNames);
 
   return { views, metadata };
 };

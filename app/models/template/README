@@ -168,7 +168,7 @@ getAllViews(name)
 Returns a promise (no callback form) resolving to `{ views, metadata }`, where `views` is an object of all views keyed by name. Rejects with `code: "ENOENT"` if the template has no metadata.
 
 ```js
-getMultipleViews(templateName, viewNames, callback)
+getMultipleViews(templateName, viewNames) // resolves to the views by name
 ```
 Fetches a named subset of views in parallel. Missing views are silently omitted.
 
