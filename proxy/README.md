@@ -51,7 +51,7 @@ serves any host:
 | `PROXY_RESOLVER` | build-time `OPENRESTY_RESOLVER`, else `8.8.8.8 ipv6=off` | DNS resolver (`127.0.0.11` on a user-defined Docker network) |
 | `PROXY_ACME_CA` | build-time `ACME_CA`, else Let's Encrypt production | ACME directory for custom-domain certificates. Leave it alone in production: the deploy scripts refuse anything else in `proxy.env` |
 | `PROXY_ACME_HOOK_SECRET` | unset: each instance generates its own (a warning is logged) | the secret dehydrated's hook calls carry to the `:8999` hook server. Set it to the same long random string on every instance: they share `:8999` (`reuseport`), so a call can reach either. Read by `init.conf` (never written into `nginx.conf`) |
-| `PROXY_UNIT` | `-` | `blue` or `green`: logged as the last field of every access log line (`unit=`). The deploy script sets it from the container name (`blot-blue` is `blue`) |
+| `PROXY_UNIT` | `-` | `blue` or `green`: logged near the end of every access log line (`unit=`, before the request method, `m=`). The deploy script sets it from the container name (`blot-blue` is `blue`) |
 | `PROXY_UPSTREAM_MODE` | `unit` | the only mode: this container runs its own two Node processes (the [unit image](#the-unit-image)), at the four addresses below |
 | `PROXY_UNIT_MAIN` | `unix:/run/blot/blue-a.sock` | this unit's main Node process (blogs, dashboard reads) |
 | `PROXY_UNIT_WORKER` | `unix:/run/blot/blue-b.sock` | this unit's worker child (`/clients`, webhooks, dashboard writes) |
