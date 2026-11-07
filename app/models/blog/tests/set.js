@@ -155,4 +155,14 @@ describe("Blog.set", function () {
     }
     expect(same).toBe(0);
   });
+
+  it("changes the cacheID when asked to set the value it already has", async function () {
+    const before = await get({ id: this.blog.id });
+
+    await set(this.blog.id, { cacheID: before.cacheID });
+
+    const after = await get({ id: this.blog.id });
+
+    expect(after.cacheID).toBeGreaterThan(before.cacheID);
+  });
 });
