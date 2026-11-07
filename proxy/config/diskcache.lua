@@ -389,14 +389,16 @@ function diskcache.fill(self)
         end
     end
 
-    -- HEAD has no body to store
-    if ngx.req.get_method() ~= "GET" then
+    local method = ngx.req.get_method()
+
+    if method ~= "GET" and method ~= "HEAD" then
         ngx.ctx.diskcache = { skip = true }
         return
     end
 
-    -- see reverse-proxy-fill.conf
-    if (ngx.var.http_if_none_match or ngx.var.http_if_modified_since)
+    -- see reverse-proxy-fill.conf: a HEAD is asked of Node as a GET there,
+    -- so its body can be stored as proxy_cache_convert_head did
+    if (method == "HEAD" or ngx.var.http_if_none_match or ngx.var.http_if_modified_since)
         and ngx.var.diskcache_conditional ~= "1"
     then
         return ngx.exec("@diskcache_fill_conditional")
@@ -619,6 +621,11 @@ function diskcache.header_filter(self)
         answer_range(fill)
     end
 
+    -- nginx sends no body to a 304 or a HEAD, so body_filter never sees it:
+    -- proxy_store's copy is the one published (diskcache:log). proxy_store
+    -- keeps 200s only, so a HEAD of a redirect or a 404 is not stored.
+    fill.from_store = fill.not_modified or ngx.req.get_method() == "HEAD"
+
     if fill.length and fill.length > LOCK_MAX_BYTES then
         self:release()
     end
@@ -674,12 +681,12 @@ function diskcache.log(self)
     end
 
     -- writes are buffered: the last of them can fail only here
-    if not fill.file:close() and not fill.not_modified then
+    if not fill.file:close() and not fill.from_store then
         fill.failed = true
     end
     fill.file = nil
 
-    if fill.not_modified then
+    if fill.from_store then
         -- proxy_store wrote the body, and only if it was whole: a 200 of the
         -- length Node announced
         os.remove(fill.tmp)

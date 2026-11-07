@@ -1,6 +1,6 @@
 var nsv = require("helper/nsv");
 var ensure = require("helper/ensure");
-var withCallback = require("helper/withCallback");
+var promiseOnly = require("helper/promiseOnly");
 
 var NO_HANDLE = "Please enter a username.";
 var BAD_CHARS = "Please use only letters and numbers for your username.";
@@ -13,7 +13,7 @@ var BANNED_NAMES = nsv(__dirname + "/banned.txt");
 var ONLY_ALPA_NUM = /^[a-zA-Z0-9]+$/;
 
 // Resolves to the valid handle. Rejects with an Error.
-module.exports = withCallback(async function validateHandle(blogID, handle) {
+module.exports = promiseOnly(async function validateHandle(blogID, handle) {
   var get = require("../get");
 
   ensure(blogID, "string").and(handle, "string");

@@ -946,13 +946,13 @@ section("6 HEAD", async () => {
   );
   const before = asked(A, p);
   const g1 = await get(A, host, p);
-  // disk cache: a HEAD is passed to Node as a HEAD and fills nothing (parity rule head-does-not-fill)
+  // a HEAD miss is asked of Node as a GET and fills the entry
   check(
-    "HEAD on a miss fills nothing: the following GET is a MISS with the whole body, Node asked again",
+    "HEAD on a miss fills the entry: the following GET is a HIT with the whole body, Node not asked again",
     g1.status === 200 &&
-      cache(g1) === "MISS" &&
+      cache(g1) === "HIT" &&
       g1.body.length === parseInt(h1.headers["content-length"], 10) &&
-      asked(A, p) === before + 1,
+      asked(A, p) === before,
     `${cache(g1)} len ${g1.body.length} cl ${h1.headers["content-length"]}`
   );
   const h2 = await get(A, host, p, { method: "HEAD" });
@@ -967,7 +967,7 @@ section("6 HEAD", async () => {
   const n404 = asked(A, "/p/status/404");
   const nf1 = await get(A, host, "/p/status/404", { method: "HEAD" });
   const nf2 = await get(A, host, "/p/status/404");
-  // disk cache: parity rule head-does-not-fill
+  // proxy_store keeps 200s only, so a HEAD of a 404 fills nothing
   check(
     "HEAD of a 404 is not cached: the GET after it is a MISS",
     nf1.status === 404 &&
@@ -1009,10 +1009,9 @@ section("6 HEAD", async () => {
   );
   const hp = await get(A, SITE, "/s6/head", { method: "HEAD", tls: true });
   const hg = await get(A, SITE, "/s6/head", { tls: true });
-  // disk cache: parity rule head-does-not-fill
   check(
-    "site: HEAD fills nothing, the GET after is a MISS",
-    hp.status === 200 && cache(hg) === "MISS",
+    "site: HEAD fills the entry, the GET after is a HIT",
+    hp.status === 200 && cache(hg) === "HIT",
     String(cache(hg))
   );
 });

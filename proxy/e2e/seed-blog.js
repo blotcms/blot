@@ -30,12 +30,12 @@ if (!email) {
   const user = await User.getByEmail(email);
   if (!user) throw new Error("no user found for " + email);
 
-  const blog = await new Promise((resolve, reject) => {
-    Blog.create(user.uid, { handle }, (err, blog) => {
-      if (err) return reject(new Error(err.handle || JSON.stringify(err)));
-      resolve(blog);
-    });
-  });
+  let blog;
+  try {
+    blog = await Blog.create(user.uid, { handle });
+  } catch (err) {
+    throw new Error(err.handle || JSON.stringify(err), { cause: err });
+  }
 
   // New blogs default to the global "SITE:blog" template (models/blog/
   // defaults.js). The app container usually builds the global templates on

@@ -643,16 +643,21 @@ async function redirectsAndErrors() {
     cacheStatus(hm)
   );
   check(
-    "HEAD miss is not stored",
-    !entry(A, hh, hp).meta,
+    "HEAD miss is stored, as proxy_cache_convert_head did",
+    entry(A, hh, hp).meta && !!entry(A, hh, hp).body,
     JSON.stringify(files(A, hh))
   );
   const g = await req(A, hh, hp);
   await settle();
   check(
-    "GET after a HEAD miss: MISS with the full body",
-    cacheStatus(g) === "MISS" && g.status === 200 && g.body.length > 500,
+    "GET after a HEAD miss: HIT with the full body",
+    cacheStatus(g) === "HIT" && g.status === 200 && g.body.length > 500,
     `${cacheStatus(g)} ${g.body.length}`
+  );
+  check(
+    "HEAD miss then GET: Node asked once",
+    nodeCount(A, hp) === 1,
+    nodeCount(A, hp)
   );
   const hhit = await req(A, hh, hp, { method: "HEAD" });
   check(

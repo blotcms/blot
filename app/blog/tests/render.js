@@ -128,4 +128,30 @@ describe("render", function () {
     expect(res.status).toEqual(200);
     expect(body.trim()).toEqual("Hello David FOOTER");
   });
+
+  it("asks browsers to revalidate pages, and bare CSS and JS URLs", async function () {
+    await this.template({
+      "entries.html": "Hello",
+      "style.css": "body { color: red }",
+    });
+
+    const page = await this.get("/");
+    expect(page.headers.get("cache-control")).toEqual("no-cache");
+    expect(page.headers.get("last-modified")).toBeTruthy();
+
+    const css = await this.get("/style.css");
+    expect(css.headers.get("cache-control")).toEqual("no-cache");
+  });
+
+  it("lets browsers keep CSS and JS at a versioned URL for a year", async function () {
+    await this.template({ "style.css": "body { color: red }" });
+
+    const res = await this.get("/style.css?cache=123&extension=.css");
+
+    expect(res.headers.get("cache-control")).toEqual(
+      require("config").cache
+        ? "public, max-age=31536000, immutable"
+        : "no-cache"
+    );
+  });
 });

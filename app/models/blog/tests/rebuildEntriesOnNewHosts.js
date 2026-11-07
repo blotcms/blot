@@ -10,10 +10,7 @@ describe("Blog.set rebuilds entries linking to a new handle or domain", function
 
   var getBlog = (blogID) => Blog.get({ id: blogID });
 
-  var setBlog = (blogID, updates) =>
-    new Promise((resolve, reject) =>
-      Blog.set(blogID, updates, (err) => (err ? reject(err) : resolve()))
-    );
+  var setBlog = (blogID, updates) => Blog.set(blogID, updates);
 
   // Blog.set rebuilds in the background, so wait for the result (within
   // the spec's own timeout, below).

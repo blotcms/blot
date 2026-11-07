@@ -10,12 +10,7 @@ describe("git client handle changes", function () {
   var setBlog = require("models/blog/set");
 
   function rename(blogID, handle) {
-    return new Promise(function (resolve, reject) {
-      setBlog(blogID, { handle: handle, client: "git" }, function (errors) {
-        if (errors) return reject(errors);
-        resolve();
-      });
-    });
+    return setBlog(blogID, { handle: handle, client: "git" });
   }
 
   // Resolves with the response's status and Location

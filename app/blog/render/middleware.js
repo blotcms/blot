@@ -47,7 +47,7 @@ const PREVIEW_SCRIPT = `<script>(function () {
   };
 })();</script>`;
 
-const cacheDuration = "public, max-age=31536000";
+const cacheDuration = "public, max-age=31536000, immutable";
 const JS = "text/javascript";
 const STYLE = "text/css";
 
@@ -242,10 +242,22 @@ module.exports = function attachRenderView(req, res, _next) {
         output = output.split("</body>").join(PREVIEW_SCRIPT + "</body>");
       }
 
-      // Only cache JavaScript and CSS if the request is not to a preview
-      // subdomain and Blot's caching is turned on.
-      if (CACHE && !req.preview && (viewType === STYLE || viewType === JS)) {
+      // Browsers keep JavaScript and CSS for a year only at a versioned URL:
+      // {{#asset}} adds ?cache={{cacheID}}, which changes whenever the blog
+      // does ({{#cdn}} links skip the blog's host altogether). Everything
+      // else, pages and feeds included, is revalidated on every use: without
+      // a Cache-Control, browsers would treat a page as fresh for a tenth of
+      // its Last-Modified age and hide new posts from returning readers. The
+      // ETag and Last-Modified make that a 304 from the proxy's cache.
+      if (
+        CACHE &&
+        !req.preview &&
+        req.query.cache &&
+        (viewType === STYLE || viewType === JS)
+      ) {
         res.header(CACHE_CONTROL, cacheDuration);
+      } else if (!res.get(CACHE_CONTROL)) {
+        res.header(CACHE_CONTROL, "no-cache");
       }
 
       try {

@@ -1,9 +1,7 @@
-const { promisify } = require("util");
-
 const Blog = require("models/blog");
-const setBlog = promisify(Blog.set);
+const setBlog = (...args) => Blog.set(...args);
 const getBlog = (by) => Blog.get(by);
-const createBlog = promisify(Blog.create);
+const createBlog = (...args) => Blog.create(...args);
 
 const config = require("./config");
 const basename = require("path").basename;

@@ -1459,6 +1459,29 @@ const INTENDED = [
       header(c.ra, "x-content-type-options").length > 0 &&
       header(c.rb, "x-content-type-options").length === 0,
   },
+  {
+    id: "head-fills",
+    class: "intended",
+    whole: true,
+    reason:
+      "A HEAD miss is asked of Node as a GET and stored, as proxy_cache_convert_head did, so later requests for the page (a HEAD, a GET after it, a HEAD with Node down) are HITs where the baseline went to Node.",
+    match: (c) =>
+      (c.spec.method === "HEAD" || c.spec.afterHead) &&
+      header(c.ra, "blot-cache")[0] !== "HIT" &&
+      header(c.rb, "blot-cache")[0] === "HIT",
+  },
+  {
+    id: "head-asked-as-get",
+    class: "harmless",
+    reason:
+      "A HEAD miss reaches Node as a GET, so a header that depends on the method differs: here Content-Length and Accept-Ranges, only because the stub echoes the method and answers ranges for GETs.",
+    match: (c, d) =>
+      c.spec.method === "HEAD" &&
+      d.kind === "header" &&
+      (d.name === "content-length" || d.name === "accept-ranges") &&
+      header(c.ra, "blot-cache")[0] === "MISS" &&
+      header(c.rb, "blot-cache")[0] === "MISS",
+  },
 ];
 
 // ---- the run ------------------------------------------------------------
@@ -1783,7 +1806,14 @@ function report(countDiffs) {
 // Node request counts that may differ, by path: a PR whose change makes Node
 // be asked a different number of times for some paths lists them here
 // (empty on master)
-let COUNT_EXPLAINED = new Set();
+let COUNT_EXPLAINED = new Set([
+  // head-fills: Node is asked once for a page first requested with HEAD
+  "/head.html",
+  "/head-after-get.html",
+  "/head-site.html",
+  "/first-head.html",
+  "/p/strong-etag",
+]);
 const COUNT_OK = (c) => COUNT_EXPLAINED.has(c.path);
 
 main().catch((e) => {

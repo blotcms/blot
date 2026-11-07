@@ -191,9 +191,7 @@ TemplateEditor.route("/:templateSlug/install")
 
     var updates = { template: templateID };
     log("Installing template", templateID);
-    Blog.set(req.blog.id, updates, function (err) {
-      if (err) return next(err);
-
+    Blog.set(req.blog.id, updates).then(function () {
       log("Installed template", templateID);
       log("Removing enabled from local templates");
 
@@ -211,7 +209,7 @@ TemplateEditor.route("/:templateSlug/install")
           "/sites/" + req.blog.handle + "/template/" + req.params.templateSlug
         );
       });
-    });
+    }, next);
   });
 
 function prepareTemplateUpdate(req, res, next) {
@@ -600,10 +598,9 @@ TemplateEditor.route("/:templateSlug/reset")
     // work out if this template is currently installed on this site
     Template.drop(req.blog.id, idSlug).then(function () {
       if (req.blog.template === req.template.id) {
-        Blog.set(req.blog.id, { template: "SITE:" + idSlug }, function (err) {
-          if (err) return next(err);
+        Blog.set(req.blog.id, { template: "SITE:" + idSlug }).then(function () {
           finishReset();
-        });
+        }, next);
       } else {
         finishReset();
       }
