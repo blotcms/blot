@@ -17,6 +17,7 @@ var updatePayPalSubscription =
 
 const randomChars = require("./util/randomChars");
 const handleFromTitle = require("./util/handleFromTitle");
+const validateTitle = require("models/blog/validate/title");
 
 CreateBlog.use(function (req, res, next) {
   res.locals.breadcrumbs.forEach(function (link) {
@@ -79,7 +80,7 @@ CreateBlog.route("/inform-paypal")
     });
   })
 
-  .post(requirePaidPayPalSeat, saveBlog, (req, res) => {
+  .post(requireTitle, requirePaidPayPalSeat, saveBlog, (req, res) => {
     res.message("/sites/" + req.blog.handle, "Created site");
   });
 
@@ -98,6 +99,10 @@ CreateBlog.route("/")
       first_site,
     });
   })
+
+  // Before anything is billed: a title the new site can't have would
+  // otherwise fail only after the subscription was raised or the card charged
+  .post(requireTitle)
 
   .post(validateSubscription)
 
@@ -244,6 +249,24 @@ async function requirePaidPayPalSeat(req, res, next) {
   if (paidQuantity > blogCount) return next();
 
   res.redirect(req.baseUrl + "/inform-paypal");
+}
+
+// The same checks Blog.create makes on a title: present, and under 70
+// characters once trimmed. "Untitled" (no_title) needs none.
+async function requireTitle(req, res, next) {
+  if (req.body.no_title) return next();
+
+  const title = typeof req.body.title === "string" ? req.body.title : "";
+
+  if (!title.trim()) return next(new Error("Please enter a title"));
+
+  try {
+    await validateTitle(req.user.uid, title);
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
 async function saveBlog(req, res, next) {
