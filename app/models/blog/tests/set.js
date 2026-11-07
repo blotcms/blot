@@ -144,18 +144,6 @@ describe("Blog.set", function () {
     expect(after.cacheID).toBeGreaterThanOrEqual(frozenNow);
   });
 
-  // TEMPORARY STRESS
-  it("STRESS every Date.now() cacheID set changes the cacheID", async function () {
-    let same = 0;
-    for (let n = 0; n < 1000; n++) {
-      const before = await get({ id: this.blog.id });
-      await set(this.blog.id, { cacheID: Date.now() });
-      const after = await get({ id: this.blog.id });
-      if (after.cacheID === before.cacheID) same++;
-    }
-    expect(same).toBe(0);
-  });
-
   it("changes the cacheID when asked to set the value it already has", async function () {
     const before = await get({ id: this.blog.id });
 
