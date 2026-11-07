@@ -20,7 +20,7 @@ app/blog/
 ├── sortOptions.js        Shared sort helpers (also imported by models/entry/search).
 ├── lib/                  Shared adapters and helpers for the async pipeline.
 │   ├── models.js         Promise adapters for Blog/Entry/Entries/Template/Tags APIs
-│   ├── asRetriever.js    Dual callback/promise wrapper for retrieve modules
+│   ├── asRetriever.js    Promise wrapper for retrieve modules
 │   ├── attachAdjacent.js Shared next/previous wiring for entry + draft
 │   ├── blogHosts.js      Host list for CDN link rewriting
 │   ├── loadPlugin.js     Promise wrapper around build/plugins.load
@@ -64,7 +64,7 @@ Requests pass through the following middleware in order, as assembled in `index.
 
 1. **`middleware/vhosts.js`** — Extracts a blog handle from a Blot subdomain or a custom domain from the `Host` header. Awaits `Blog.get()` to load the blog record. Applies redirects for `www` canonicalization, handle changes, subdomain-to-custom-domain redirects, and HTTP-to-HTTPS enforcement. Sets `req.blog`. Detects preview subdomains (e.g. `preview-of-diary-on-news.blot.im`) and sets `req.preview = true` and a preview `blog.template` when appropriate.
 
-2. **`render/middleware.js`** — Attaches async `res.renderView(viewName, next, callback)` to the response object. This function encapsulates the entire rendering pipeline (view fetch, local retrieval, Mustache rendering, CDN token swap). All subsequent route handlers call `res.renderView()` to produce output.
+2. **`render/middleware.js`** — Attaches async `res.renderView(viewName, next)` and `res.renderViewToString(viewName)` to the response object. This function encapsulates the entire rendering pipeline (view fetch, local retrieval, Mustache rendering, CDN token swap). All subsequent route handlers call `res.renderView()` to produce output.
 
 3. **`middleware/loadTemplate.js`** — Awaits `Template.getMetadata()` for `req.blog.template`. Attaches `req.template` with the template's `locals`, `id`, and `cdn` manifest. In preview mode, renders a template-error page if the template has parse errors.
 
@@ -88,7 +88,7 @@ The `render/` subdirectory implements the Mustache rendering engine used by `res
 
 ### `render/middleware.js`
 
-Attaches `res.renderView(viewName, next, callback)` to the response. When called:
+Attaches `res.renderView(viewName, next)` to the response: it renders the view and sends it, passing errors to `next`. `res.renderViewToString(viewName)` runs the same pipeline (steps 1 to 6) and returns a promise of the output string instead of sending it (the ?debug and ?json locals when asked), rejecting with what `renderView` would give `next`; the CDN manifest build, draft preview and error page use it. When called:
 
 1. Fetches the full view from `Template.getFullView()`, which caches it in-process (`models/template/fullViewCache.js`). The cache key includes `blogID`, `cacheID`, `templateID`, the template's own `cacheID`, and `viewName`. A changed `blog.cacheID` invalidates all cached views for that blog.
 2. Merges view-level locals, query parameters, template locals, and blog locals into `res.locals`.
@@ -106,7 +106,7 @@ Either `?debug=true` or `?json=true` returns the fully assembled render context 
 
 ### `render/retrieve/`
 
-Each file in this directory is a named retriever. The retrieve system (`render/retrieve/index.js`) accepts a map of local names that the view template declares it needs. It fetches matching retrievers in parallel via `Promise.all`. Retrievers are async or sync functions wrapped by `lib/asRetriever.js` so unit tests can still use `(req, res, callback)` while production awaits them.
+Each file in this directory is a named retriever. The retrieve system (`render/retrieve/index.js`) accepts a map of local names that the view template declares it needs. It fetches matching retrievers in parallel via `Promise.all`. Retrievers are async or sync functions wrapped by `lib/asRetriever.js` so calling one always returns a promise.
 
 Caching: the template-independent reads are cached inside the models, per blog `cacheID` (`Entries.getCatalog`, `Entries.getCachedPage`, `Entries.getCachedRecent`, `Tags.getCachedList`, `Tags.getCachedTagged`; see `models/README`), and the retrievers pass them the heavy entry fields (`html`, `body`, ...) the view renders, so the rest are never stored. Only `all_entries` and `archives` keep caches here, because what they store is already augmented for one template (`render/load/augmentedEntries.js`). `total_posts`, `latest_entry` and `popular_tags` are a few cheap Redis reads and aren't cached.
 

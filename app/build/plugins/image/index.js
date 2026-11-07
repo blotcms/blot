@@ -55,16 +55,11 @@ async function render($, { blogID }) {
   async function lookupSrc(src) {
     // Pass in the `pathname` component of the image src (no URL params or hash)
     // Also pass the original src so we can include the filename in the CDN URL
-    await new Promise(function (resolve) {
-      cache.lookup(src, optimize(blogID, src), function (err, info) {
-        if (err) {
-          debug(src, "Optimize failed with Error:", err);
-        } else {
-          infos[src] = info;
-        }
-        resolve();
-      });
-    });
+    try {
+      infos[src] = await cache.lookup(src, optimize(blogID, src));
+    } catch (err) {
+      debug(src, "Optimize failed with Error:", err);
+    }
   }
 
   // Works through srcs in order, with at most CONCURRENCY lookups in flight

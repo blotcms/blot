@@ -14,6 +14,21 @@ saving existing entries, since images don't need
 to be reuploaded each time!
 
 
+API
+---
+
+  const transformer = new Transformer(blogID, name);
+  const result = await transformer.lookup(src, transform);
+  await transformer.flush();
+
+lookup() resolves with the transform's result and rejects if src can't be
+read or the transform throws. transform(path) is an async function taking the
+path of a local file. download(url, headers) resolves with { path, headers },
+with a null path when the cached copy is still good. helper/tempDir() returns
+the temporary directory; await tempDir.isInside(path) reports whether a path
+is within it.
+
+
 Non-goal: concurrent lookup de-duplication
 ------------------------------------------
 

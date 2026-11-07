@@ -1,13 +1,9 @@
 const isActive = require("../is_active");
 
 describe("is_active", function () {
-  function getLambda(url) {
-    return new Promise((resolve, reject) => {
-      isActive({ url: url }, {}, (err, factory) => {
-        if (err) return reject(err);
-        resolve(factory());
-      });
-    });
+  async function getLambda(url) {
+    const factory = await isActive({ url: url }, {});
+    return factory();
   }
 
   it("marks the current page as active", async function () {

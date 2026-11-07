@@ -140,7 +140,7 @@ function verifyStripeEvent(req, res) {
 webhooks.post(
   "/",
   parser.raw({ type: "application/json" }),
-  function (req, res) {
+  async function (req, res) {
     var event = verifyStripeEvent(req, res);
 
     // verifyStripeEvent has already sent a response if it returned null.
@@ -179,28 +179,31 @@ webhooks.post(
         return res.sendStatus(500);
       }
 
-      return stripe.customers.retrieveSubscription(
-        event_data.customer,
-        event_data.id,
-        function (err, subscription) {
-          if (err || !subscription) {
-            console.error("Failed to retrieve Stripe subscription", err);
-            return res.sendStatus(503);
-          }
+      let subscription;
 
-          update_subscription(
-            event_data.customer,
-            subscription,
-            function (updateErr) {
-              if (updateErr) {
-                console.error("Failed to update subscription", updateErr);
-                return res.sendStatus(503);
-              }
-              return res.sendStatus(200);
-            }
-          );
-        }
-      );
+      try {
+        subscription = await stripe.customers.retrieveSubscription(
+          event_data.customer,
+          event_data.id
+        );
+      } catch (err) {
+        console.error("Failed to retrieve Stripe subscription", err);
+        return res.sendStatus(503);
+      }
+
+      if (!subscription) {
+        console.error("Failed to retrieve Stripe subscription");
+        return res.sendStatus(503);
+      }
+
+      try {
+        await update_subscription(event_data.customer, subscription);
+      } catch (updateErr) {
+        console.error("Failed to update subscription", updateErr);
+        return res.sendStatus(503);
+      }
+
+      return res.sendStatus(200);
     }
 
     // A customer's payment methods changed, either through this app or
@@ -225,98 +228,97 @@ webhooks.post(
 
       if (!customerId) return res.sendStatus(200);
 
-      return User.getByCustomerId(customerId).then(
-        function (user) {
-          // Not a Blot customer (or Radar touched a card on some other
-          // Stripe object entirely) - nothing for us to do.
-          if (!user) return res.sendStatus(200);
+      let user;
 
-          syncPaymentMethods(user).then(
-            function () {
-              return res.sendStatus(200);
-            },
-            function (err) {
-              console.error("Failed to sync payment methods", err);
-              return res.sendStatus(503);
-            }
-          );
-        },
-        function (err) {
-          console.error("Failed to look up user by customer id", err);
-          return res.sendStatus(503);
-        }
-      );
+      try {
+        user = await User.getByCustomerId(customerId);
+      } catch (err) {
+        console.error("Failed to look up user by customer id", err);
+        return res.sendStatus(503);
+      }
+
+      // Not a Blot customer (or Radar touched a card on some other
+      // Stripe object entirely) - nothing for us to do.
+      if (!user) return res.sendStatus(200);
+
+      try {
+        await syncPaymentMethods(user);
+      } catch (err) {
+        console.error("Failed to sync payment methods", err);
+        return res.sendStatus(503);
+      }
+
+      return res.sendStatus(200);
     }
 
     return res.sendStatus(200);
   }
 );
 
-function update_subscription(customer_id, subscription, callback) {
-  callback = callback || function () {};
+// Saves the Stripe subscription on its user, emails them about the change
+// and disables or re-enables their account if it calls for that. Resolves
+// to the model's changes.
+async function update_subscription(customer_id, subscription) {
+  if (!subscription) throw new Error(NO_SUBSCRIPTION);
 
-  if (!subscription) return callback(new Error(NO_SUBSCRIPTION));
+  var user = await User.getByCustomerId(customer_id);
 
-  User.getByCustomerId(customer_id).then(function (user) {
-    if (!user) return callback(new Error(NO_USER));
+  if (!user) throw new Error(NO_USER);
 
-    var previousSubscription = user.subscription || {};
-    var shouldDisable =
-      subscriptionLifecycle.shouldDisableFromStripeSubscription(subscription);
+  var previousSubscription = user.subscription || {};
+  var shouldDisable =
+    subscriptionLifecycle.shouldDisableFromStripeSubscription(subscription);
 
-    if (subscription.status === "canceled" && user.isDisabled)
-      email.ALREADY_CANCELLED(user.uid);
+  if (subscription.status === "canceled" && user.isDisabled)
+    email.ALREADY_CANCELLED(user.uid);
 
-    if (subscription.status === "canceled" && !user.isDisabled)
-      email.CLOSED(user.uid);
+  if (subscription.status === "canceled" && !user.isDisabled)
+    email.CLOSED(user.uid);
 
-    // A customer who has already cancelled still gets Stripe's retries of the
-    // unpaid renewal invoice, each of which can report past_due; they have
-    // been told their cancellation went through, so don't chase them.
-    if (
-      subscription.status === "past_due" &&
-      !subscription.pause_collection &&
-      !subscription.cancel_at_period_end
-    )
-      email.OVERDUE(user.uid);
+  // A customer who has already cancelled still gets Stripe's retries of the
+  // unpaid renewal invoice, each of which can report past_due; they have
+  // been told their cancellation went through, so don't chase them.
+  if (
+    subscription.status === "past_due" &&
+    !subscription.pause_collection &&
+    !subscription.cancel_at_period_end
+  )
+    email.OVERDUE(user.uid);
 
-    if (
-      subscription.status === "active" &&
-      (previousSubscription.status === "past_due" ||
-        previousSubscription.status === "unpaid")
-    )
-      email.RECOVERED(user.uid);
+  if (
+    subscription.status === "active" &&
+    (previousSubscription.status === "past_due" ||
+      previousSubscription.status === "unpaid")
+  )
+    email.RECOVERED(user.uid);
 
-    var updates = { subscription: subscription };
-    var handler = function () {
-      return User.set(user.uid, updates);
+  var updates = { subscription: subscription };
+  var handler = function () {
+    return User.set(user.uid, updates);
+  };
+
+  // Change blog availability only on an account transition: individual
+  // blogs can also be disabled deliberately by an administrator. The model
+  // saves the account flag last so failed transitions remain retryable.
+  // Never auto re-enable a subscription with collection paused - an admin
+  // paused it on purpose (see scripts/user/pause-account.js), and a
+  // reactivation-looking webhook shouldn't undo that.
+  if (shouldDisable && !user.isDisabled) {
+    handler = function () {
+      return User.disable(user, updates);
     };
+  } else if (
+    !shouldDisable &&
+    subscription.status === "active" &&
+    !subscription.pause_collection &&
+    user.isDisabled
+  ) {
+    handler = function () {
+      return User.enable(user, updates);
+    };
+  }
 
-    // Change blog availability only on an account transition: individual
-    // blogs can also be disabled deliberately by an administrator. The model
-    // saves the account flag last so failed transitions remain retryable.
-    // Never auto re-enable a subscription with collection paused - an admin
-    // paused it on purpose (see scripts/user/pause-account.js), and a
-    // reactivation-looking webhook shouldn't undo that.
-    if (shouldDisable && !user.isDisabled) {
-      handler = function () {
-        return User.disable(user, updates);
-      };
-    } else if (
-      !shouldDisable &&
-      subscription.status === "active" &&
-      !subscription.pause_collection &&
-      user.isDisabled
-    ) {
-      handler = function () {
-        return User.enable(user, updates);
-      };
-    }
-
-    handler().then(function (changes) {
-      callback(null, changes);
-    }, callback);
-  }, callback);
+  return await handler();
 }
 
 module.exports = webhooks;

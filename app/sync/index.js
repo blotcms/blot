@@ -189,23 +189,15 @@ async function acquire(blogID) {
       // If Redis is unavailable the bump is retried in the background,
       // and the preview reloaded again once it lands
       log("Updating cacheID of blog");
-      await new Promise(function (resolve) {
-        Blog.bumpCacheID(
-          blogID,
+      try {
+        await Blog.bumpCacheID(blogID, function () {
+          previewReload.publish(blogID);
+        });
+      } catch (err) {
+        log("Error updating cacheID of blog");
+      }
 
-          function (err) {
-            if (err) {
-              log("Error updating cacheID of blog");
-            }
-
-            previewReload.publish(blogID);
-            resolve();
-          },
-          function () {
-            previewReload.publish(blogID);
-          }
-        );
-      });
+      previewReload.publish(blogID);
     }
 
     if (syncError || releaseError) throw syncError || releaseError;

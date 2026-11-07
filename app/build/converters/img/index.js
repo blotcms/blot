@@ -77,11 +77,7 @@ async function read(blog, path) {
         const convertImage = async (sourcePath) =>
           writeConversion(sourcePath, convertedRelativePath);
 
-        const conversion = await lookupWithTransformer(
-          transformer,
-          path,
-          convertImage
-        );
+        const conversion = await transformer.lookup(path, convertImage);
 
         const conversionRelativePath =
           conversion?.relativePath || convertedRelativePath;
@@ -110,15 +106,6 @@ async function read(blog, path) {
   )}" title="${title}" alt="${title}" ${isRetina}/>`;
 
   return [contents, stat, extras];
-}
-
-function lookupWithTransformer(transformer, src, transform) {
-  return new Promise((resolve, reject) => {
-    transformer.lookup(src, transform, (err, result) => {
-      if (err) return reject(err);
-      resolve(result);
-    });
-  });
 }
 
 // Called back with (err, html, stat, extras); without a callback it resolves

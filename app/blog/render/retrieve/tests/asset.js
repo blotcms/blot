@@ -1,13 +1,9 @@
 const asset = require("../asset");
 
 describe("asset", function () {
-  function getLambda() {
-    return new Promise((resolve, reject) => {
-      asset({}, {}, (err, factory) => {
-        if (err) return reject(err);
-        resolve(factory());
-      });
-    });
+  async function getLambda() {
+    const factory = await asset({}, {});
+    return factory();
   }
 
   it("adds a leading slash and a cache-busting query string for files with an extension", async function () {
@@ -38,13 +34,9 @@ describe("asset", function () {
   describe("with a CDN manifest", function () {
     const BLOT_CDN_TOKEN = require("../../replaceFolderLinks/cdnToken");
 
-    function getLambdaFor(req) {
-      return new Promise((resolve, reject) => {
-        asset(req, {}, (err, factory) => {
-          if (err) return reject(err);
-          resolve(factory());
-        });
-      });
+    async function getLambdaFor(req) {
+      const factory = await asset(req, {});
+      return factory();
     }
 
     const request = (cdn) => ({

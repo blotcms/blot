@@ -13,40 +13,34 @@ describe("absolute_urls", function () {
     };
   });
 
-  it("replaces relative links with absolute URLs", function (done) {
+  it("replaces relative links with absolute URLs", async function () {
     var result;
     var html = '<a href="/foo"></a>';
     var template = "{{#absolute_urls}}" + html + "{{/absolute_urls}}";
 
-    absolute_urls(this.request, {}, function (err, lambda) {
-      result = mustache.render(template, { absolute_urls: lambda });
-      expect(result).toEqual('<a href="http://example.com/foo"></a>');
-      done();
-    });
+    const lambda = await absolute_urls(this.request, {});
+    result = mustache.render(template, { absolute_urls: lambda });
+    expect(result).toEqual('<a href="http://example.com/foo"></a>');
   });
 
-  it("replaces relative image sources with absolute sources", function (done) {
+  it("replaces relative image sources with absolute sources", async function () {
     var result;
     var html = '<img src="/bar.jpg">';
     var template = "{{#absolute_urls}}" + html + "{{/absolute_urls}}";
 
-    absolute_urls(this.request, {}, function (err, lambda) {
-      result = mustache.render(template, { absolute_urls: lambda });
-      expect(result).toEqual('<img src="http://example.com/bar.jpg">');
-      done();
-    });
+    const lambda = await absolute_urls(this.request, {});
+    result = mustache.render(template, { absolute_urls: lambda });
+    expect(result).toEqual('<img src="http://example.com/bar.jpg">');
   });
 
-  it("leaves fully qualified links and images as-is", function (done) {
+  it("leaves fully qualified links and images as-is", async function () {
     var result;
     var html =
       '<a href="http://example.com/foo"><img src="http://example.com/bar.jpg"></a>';
     var template = "{{#absolute_urls}}" + html + "{{/absolute_urls}}";
 
-    absolute_urls(this.request, {}, function (err, lambda) {
-      result = mustache.render(template, { absolute_urls: lambda });
-      expect(result).toEqual(html);
-      done();
-    });
+    const lambda = await absolute_urls(this.request, {});
+    result = mustache.render(template, { absolute_urls: lambda });
+    expect(result).toEqual(html);
   });
 });

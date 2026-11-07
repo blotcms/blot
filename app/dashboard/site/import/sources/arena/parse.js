@@ -67,28 +67,21 @@ function normalizeText(item) {
   return entry;
 }
 
-// Runs one callback-style import step (helper/*) on the entry, as a promise.
-function callStep(step, entry) {
-  return new Promise((resolve, reject) =>
-    step(entry, (err, result) => (err ? reject(err) : resolve(result)))
-  );
-}
-
 async function text(item, outputDirectory, write) {
   lifecycle.check();
   let entry = normalizeText(item);
   lifecycle.check();
-  entry = await callStep(helper.determine_path(outputDirectory), entry);
+  entry = await helper.determine_path(outputDirectory)(entry);
   lifecycle.check();
   entry = await helper.download_pdfs(entry);
   lifecycle.check();
   entry = await helper.download_images(entry);
   lifecycle.check();
-  entry = await callStep(helper.convert_to_markdown, entry);
+  entry = await helper.convert_to_markdown(entry);
   lifecycle.check();
-  entry = await callStep(helper.insert_metadata, entry);
+  entry = await helper.insert_metadata(entry);
   lifecycle.check();
-  await callStep(write, entry);
+  await write(entry);
 }
 
 async function link(item, outputDirectory) {

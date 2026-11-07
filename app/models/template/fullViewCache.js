@@ -7,14 +7,14 @@
 // to the template it has installed, so the template's is what keeps
 // previews of its other templates fresh.
 //
-// getFullView(blogID, templateID, viewName, [options], callback)
+// await getFullView(blogID, templateID, viewName, [options])
 //
 // options.blogCacheID / options.templateCacheID: the cacheIDs, when the
 // caller already has them (a render does). Each is read from Redis otherwise;
 // the client-side cache usually answers that locally.
 // options.log: req.log, told how the lookup was served (models/cache/fetchCached).
 //
-// Calls back with a copy the caller may change.
+// Resolves with a copy the caller may change.
 const { cloneDeep, prepareCacheValue } = require("models/cache/clone");
 const cacheStats = require("models/cache/stats");
 const fetchCached = require("models/cache/fetchCached");
@@ -39,13 +39,8 @@ const fullViewCache = createRenderCache("fullView", {
   // same blog/template/view.
   fetchMethod: async (cacheKey, staleValue, { context }) => {
     const { blogID, templateID, viewName } = context;
-    const response = await new Promise((resolve, reject) => {
-      // Looked up at call time so specs can spy on it
-      module.exports._build(blogID, templateID, viewName, (err, response) => {
-        if (err) reject(err);
-        else resolve(response);
-      });
-    });
+    // Looked up at call time so specs can spy on it
+    const response = await module.exports._build(blogID, templateID, viewName);
     return prepareCacheValue(response);
   },
 });
@@ -78,40 +73,31 @@ async function cacheIDs(blogID, templateID, options) {
   return { blogCacheID, templateCacheID };
 }
 
-function getFullView(blogID, templateID, viewName, options, callback) {
-  if (typeof options === "function") {
-    callback = options;
-    options = {};
-  }
+async function getFullView(blogID, templateID, viewName, options) {
   options = options || {};
 
-  (async function () {
-    const { blogCacheID, templateCacheID } = await cacheIDs(
-      blogID,
-      templateID,
-      options
-    );
-    const cacheKey = createCacheKey(
-      blogID,
-      blogCacheID,
-      templateID,
-      templateCacheID,
-      viewName
-    );
-    const prepared = await fetchCached(
-      fullViewCache,
-      "view",
-      options.log,
-      cacheKey,
-      {
-        context: { blogID, templateID, viewName },
-      }
-    );
-    return timeClone(fullViewCache, () => cloneDeep(prepared.payload));
-  })().then(
-    (response) => callback(null, response),
-    (err) => callback(err)
+  const { blogCacheID, templateCacheID } = await cacheIDs(
+    blogID,
+    templateID,
+    options
   );
+  const cacheKey = createCacheKey(
+    blogID,
+    blogCacheID,
+    templateID,
+    templateCacheID,
+    viewName
+  );
+  const prepared = await fetchCached(
+    fullViewCache,
+    "view",
+    options.log,
+    cacheKey,
+    {
+      context: { blogID, templateID, viewName },
+    }
+  );
+  return timeClone(fullViewCache, () => cloneDeep(prepared.payload));
 }
 
 module.exports = getFullView;
