@@ -91,11 +91,11 @@ Removes a file or directory from the blog's source folder.
 - **path** (string): The file or folder path within the blog folder.
 - **Returns**: A promise.
 
-### `disconnect(blogID, callback)`
+### `await disconnect(blogID)`
 Disconnects a blog from the local client by clearing the client field in the Blog model.
 
 - **blogID** (string): The blog identifier.
-- **callback** (function): Called with `(err)` on completion.
+- Resolves once the sync lock it takes is released; rejects as `sync()` does if the lock is held.
 
 After disconnection, the master process will no longer watch the blog's folder.
 

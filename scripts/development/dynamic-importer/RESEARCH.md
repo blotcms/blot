@@ -355,7 +355,7 @@ server restart re-establishes all watchers regardless.
 - **only in `config.environment === "development"`** starts a `chokidar` watcher on
   `localPath(blogID, "/")` with `ignoreInitial: true`
 - every event is pushed into an `async.queue`; each item runs
-  `Sync(blogID, (err, folder, done) => folder.update(path, …))`
+  `Sync(blogID, (folder) => folder.update(path))`
 - the watcher closes itself if `blog.client !== "local"`
 
 `Sync` (`app/sync/index.js`) takes the per-blog Redis lock (`app/sync/lock.js`),
@@ -879,12 +879,12 @@ rebuild is ever needed:
 
 ```js
 const sync = require("sync");
-sync(blogID, (err, folder, done) => {
-  folder.update("/path/that/changed", () => done(null, () => {}));
+await sync(blogID, async (folder) => {
+  await folder.update("/path/that/changed");
 });
 ```
 
-`app/templates/folders/index.js#applyChanges` is a promisified working version that
+`app/templates/folders/index.js#applyChanges` is a working version that
 also calls `sync/fix`.
 
 ---

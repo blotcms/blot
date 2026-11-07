@@ -78,12 +78,10 @@ module.exports = function setup(options) {
   });
 
   // Expose methods for creating fake files, paths, etc.
-  beforeEach(function (done) {
-    createClient(this.blog.id, (err, client) => {
-      if (err) return done(err);
-      this.client = client;
-      done();
-    });
+  beforeEach(async function () {
+    const { error, client } = await createClient(this.blog.id);
+    if (error) throw error;
+    this.client = client;
   });
 
   // Create a 'blog folder' for the tests to run against. Why

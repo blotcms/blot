@@ -20,46 +20,35 @@ const processBlog = async (blog) => {
 
   console.log("Starting sync for", blog.handle);
 
-  const { folder, done } = await new Promise((resolve, reject) => {
-    sync(blog.id, (err, folder, done) =>
-      err ? reject(err) : resolve({ folder, done })
-    );
-  });
-
-  // Reading the entry list is not checked: a failure ended the entry loop
-  // and still finished the sync, so it is ignored here too
-  let ids = [];
-  try {
-    ids = await Entries.getAllIDs(blog.id);
-  } catch (err) {}
-
-  for (const id of ids) {
-    const entry = await getEntry(blog.id, id);
-    if (!entry) continue;
-
-    if (!entry.id.endsWith(".webloc")) {
-      console.log("Skipping", entry.id, "not a webloc file");
-      continue;
-    }
-
-    if (entry.thumbnail.large) {
-      console.log("Skipping", entry.id, "already has a thumbnail");
-      continue;
-    }
-
-    console.log("Rebuilding", entry.id);
+  await sync(blog.id, async (folder) => {
+    // Reading the entry list is not checked: a failure ended the entry loop
+    // and still finished the sync, so it is ignored here too
+    let ids = [];
     try {
-      await folder.update(entry.id);
-    } catch (err) {
-      if (err) console.log(err);
-    }
-  }
+      ids = await Entries.getAllIDs(blog.id);
+    } catch (err) {}
 
-  await new Promise((resolve, reject) => {
-    done(null, (err) => {
-      if (err) return reject(err);
-      resolve();
-    });
+    for (const id of ids) {
+      const entry = await getEntry(blog.id, id);
+      if (!entry) continue;
+
+      if (!entry.id.endsWith(".webloc")) {
+        console.log("Skipping", entry.id, "not a webloc file");
+        continue;
+      }
+
+      if (entry.thumbnail.large) {
+        console.log("Skipping", entry.id, "already has a thumbnail");
+        continue;
+      }
+
+      console.log("Rebuilding", entry.id);
+      try {
+        await folder.update(entry.id);
+      } catch (err) {
+        if (err) console.log(err);
+      }
+    }
   });
 };
 

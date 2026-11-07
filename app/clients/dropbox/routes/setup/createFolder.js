@@ -137,73 +137,63 @@ async function checkAppFolder(account) {
   return { blogToMove, blogsInAppFolder };
 }
 
-function moveExistingFiles(client, otherBlog) {
-  return new Promise((resolve, reject) => {
-    // Get a lock on the blog
-    // we should add a way to retry this sync attempt
-    sync(otherBlog.id, async function (err, folder, done) {
-      if (err) return reject(err);
+async function moveExistingFiles(client, otherBlog) {
+  // Get a lock on the blog
+  // we should add a way to retry this sync attempt
+  await sync(otherBlog.id, async function () {
+    const { folder, folder_id } = await mkdir(client, otherBlog.title);
 
-      try {
-        const { folder, folder_id } = await mkdir(client, otherBlog.title);
+    let {
+      result: { entries },
+    } = await client.filesListFolder({
+      path: "",
+      include_deleted: false,
+      recursive: false,
+    });
 
-        let {
-          result: { entries },
-        } = await client.filesListFolder({
-          path: "",
-          include_deleted: false,
-          recursive: false,
-        });
+    entries = entries
+      .filter((entry) => entry.path_display !== folder)
+      .map(function (entry) {
+        return {
+          from_path: entry.path_display,
+          to_path: folder + entry.path_display,
+        };
+      });
 
-        entries = entries
-          .filter((entry) => entry.path_display !== folder)
-          .map(function (entry) {
-            return {
-              from_path: entry.path_display,
-              to_path: folder + entry.path_display,
-            };
-          });
+    if (entries.length === 0) {
+      await database.set(otherBlog.id, {
+        folder,
+        folder_id,
+        cursor: "",
+      });
+      return;
+    }
 
-        if (entries.length === 0) {
-          await database.set(otherBlog.id, {
-            folder,
-            folder_id,
-            cursor: "",
-          });
-          return done(null, resolve);
-        }
+    const {
+      result: { async_job_id },
+    } = await client.filesMoveBatch({
+      entries,
+      autorename: false,
+    });
 
-        const {
-          result: { async_job_id },
-        } = await client.filesMoveBatch({
-          entries,
-          autorename: false,
-        });
+    let tag;
 
-        let tag;
+    do {
+      const { result } = await client.filesMoveBatchCheck({ async_job_id });
 
-        do {
-          const { result } = await client.filesMoveBatchCheck({ async_job_id });
+      tag = result[".tag"];
 
-          tag = result[".tag"];
+      if (tag === "failed")
+        throw new Error("Failed to move files, please try again.");
 
-          if (tag === "failed")
-            throw new Error("Failed to move files, please try again.");
+      if (tag !== "complete" && tag !== "in_progress")
+        throw new Error("Unknown response " + JSON.stringify(result));
+    } while (tag === "in_progress");
 
-          if (tag !== "complete" && tag !== "in_progress")
-            throw new Error("Unknown response " + JSON.stringify(result));
-        } while (tag === "in_progress");
-
-        await database.set(otherBlog.id, {
-          folder,
-          folder_id,
-          cursor: "",
-        });
-      } catch (err) {
-        return done(err, reject);
-      }
-
-      done(null, resolve);
+    await database.set(otherBlog.id, {
+      folder,
+      folder_id,
+      cursor: "",
     });
   });
 }

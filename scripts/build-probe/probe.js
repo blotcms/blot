@@ -95,7 +95,7 @@ let options;
 let out;
 let phases;
 let snapshotTaken = false;
-let Blog, Entry, sync, build, folderPostSourceFolder, config;
+let Blog, Entry, establishSyncLock, build, folderPostSourceFolder, config;
 let redis, redisAtStart;
 
 // Steps inside a build, so a phase's heap peak can be pinned to the plugin
@@ -415,7 +415,7 @@ async function main() {
   // file for OPTIONS and checkOptions without the app.
   Blog = require("models/blog");
   Entry = require("models/entry");
-  sync = require("sync");
+  establishSyncLock = require("sync/establishSyncLock");
   build = require("build");
   folderPostSourceFolder = require("sync/update/folderPostSourceFolder");
   config = require("config");
@@ -489,35 +489,40 @@ async function buildOnly(blog, entryPath, tag) {
 // inside it, then the sync's completion step, each measured separately.
 // folder.update() never rejects for a build or save error; it logs it and
 // resolves { error } instead.
-function syncAndUpdate(blog, paths, tag) {
-  return new Promise((resolve, reject) => {
-    startPhase(`${tag} acquire lock`);
-    sync(blog.id, async function (err, folder, done) {
-      endPhase({ error: errorMessage(err) });
-      if (err) return reject(err);
+async function syncAndUpdate(blog, paths, tag) {
+  let lock;
 
-      for (const entryPath of paths) {
-        startPhase(`${tag} update ${entryPath}`);
-        const updateErr = await folder.update(entryPath).then(
-          (status) => status && status.error,
-          (err) => err
-        );
-        endPhase({ error: errorMessage(updateErr) });
-      }
+  startPhase(`${tag} acquire lock`);
+  try {
+    lock = await establishSyncLock(blog.id);
+  } catch (err) {
+    endPhase({ error: errorMessage(err) });
+    throw err;
+  }
+  endPhase({ error: errorMessage(null) });
 
-      startPhase(`${tag} finish sync`);
-      done(null, function (err) {
-        endPhase({ error: errorMessage(err) });
-        if (err) return reject(err);
-        if (!options.settle) return resolve();
-        startPhase(`${tag} settle ${options.settle}s`);
-        setTimeout(() => {
-          endPhase();
-          resolve();
-        }, options.settle * 1000);
-      });
-    });
-  });
+  for (const entryPath of paths) {
+    startPhase(`${tag} update ${entryPath}`);
+    const updateErr = await lock.folder.update(entryPath).then(
+      (status) => status && status.error,
+      (err) => err
+    );
+    endPhase({ error: errorMessage(updateErr) });
+  }
+
+  startPhase(`${tag} finish sync`);
+  try {
+    await lock.done(null);
+  } catch (err) {
+    endPhase({ error: errorMessage(err) });
+    throw err;
+  }
+  endPhase({ error: errorMessage(null) });
+
+  if (!options.settle) return;
+  startPhase(`${tag} settle ${options.settle}s`);
+  await new Promise((resolve) => setTimeout(resolve, options.settle * 1000));
+  endPhase();
 }
 
 // Each update and the sync's cacheID bump queue proxy cache purges without

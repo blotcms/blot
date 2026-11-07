@@ -36,10 +36,10 @@ describe("dropbox resetToBlot", function () {
   function load(remote, { delta, account = {}, revisions } = {}) {
     revisionCalls = [];
     require.cache[createClientPath] = {
-      exports: function (_blogID, callback) {
-        callback(
-          null,
-          {
+      exports: async function () {
+        return {
+          error: null,
+          client: {
             filesGetMetadata: async () => ({
               result: { path_display: "/Blog Folder" },
             }),
@@ -69,8 +69,8 @@ describe("dropbox resetToBlot", function () {
               };
             },
           },
-          account
-        );
+          account,
+        };
       },
     };
     require.cache[databasePath] = {
@@ -332,22 +332,19 @@ describe("dropbox resetToBlot", function () {
     // Dropbox does for a folder deleted after its parent was listed
     function vanish(path, summary) {
       const inner = require.cache[createClientPath].exports;
-      require.cache[createClientPath].exports = function (id, callback) {
-        inner(id, (err, client, ...rest) => {
-          const real = client.filesListFolder;
-          client.filesListFolder = async (args) => {
-            if (args.path === path)
-              throw Object.assign(
-                new Error("Response failed with a 409 code"),
-                {
-                  status: 409,
-                  error: { error_summary: summary },
-                }
-              );
-            return real(args);
-          };
-          callback(err, client, ...rest);
-        });
+      require.cache[createClientPath].exports = async function (id) {
+        const result = await inner(id);
+        const client = result.client;
+        const real = client.filesListFolder;
+        client.filesListFolder = async (args) => {
+          if (args.path === path)
+            throw Object.assign(new Error("Response failed with a 409 code"), {
+              status: 409,
+              error: { error_summary: summary },
+            });
+          return real(args);
+        };
+        return result;
       };
       delete require.cache[resetPath];
       return require("../sync/reset-to-blot");
@@ -497,21 +494,18 @@ describe("dropbox resetToBlot", function () {
     function failListFolder(failures) {
       const inner = require.cache[createClientPath].exports;
       const state = { calls: 0 };
-      require.cache[createClientPath].exports = function (id, callback) {
-        inner(id, (err, client, ...rest) => {
-          const real = client.filesListFolder;
-          client.filesListFolder = async (args) => {
-            if (++state.calls <= failures)
-              throw Object.assign(
-                new Error("Response failed with a 500 code"),
-                {
-                  status: 500,
-                }
-              );
-            return real(args);
-          };
-          callback(err, client, ...rest);
-        });
+      require.cache[createClientPath].exports = async function (id) {
+        const result = await inner(id);
+        const client = result.client;
+        const real = client.filesListFolder;
+        client.filesListFolder = async (args) => {
+          if (++state.calls <= failures)
+            throw Object.assign(new Error("Response failed with a 500 code"), {
+              status: 500,
+            });
+          return real(args);
+        };
+        return result;
       };
       delete require.cache[resetPath];
       state.resetToBlot = require("../sync/reset-to-blot");
@@ -805,19 +799,19 @@ describe("dropbox resetToBlot", function () {
   describe("refuses when the account's initial transfer hasn't finished", function () {
     function loadWithAccount(account) {
       require.cache[createClientPath] = {
-        exports: function (_blogID, callback) {
+        exports: async function () {
           const explode = () => {
             throw new Error("should not be called - the guard must run first");
           };
-          callback(
-            null,
-            {
+          return {
+            error: null,
+            client: {
               filesGetMetadata: explode,
               filesListFolderGetLatestCursor: explode,
               filesListFolder: explode,
             },
-            account
-          );
+            account,
+          };
         },
       };
       require.cache[databasePath] = {

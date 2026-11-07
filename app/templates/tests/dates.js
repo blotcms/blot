@@ -67,26 +67,12 @@ describe("date integration tests", function () {
   function createEntryWithDate(test, date, callback) {
     const path = "/test.txt";
     const contents = `Date: ${date}\n\n# Hello, world\n\nThis is a post.`;
-    sync(test.blog.id, function (err, folder, done) {
-      if (err) return callback(err);
-      storage.write(test.blog.id, path, contents).then(
-        function () {
-          folder
-            .update(path)
-            .then(
-              () => null,
-              (updateErr) => updateErr
-            )
-            .then(function (err) {
-              if (err) return callback(err);
-              done(null, callback);
-            });
-        },
-        function (err) {
-          done(err, callback);
-        }
-      );
-    });
+    sync(test.blog.id, async function (folder) {
+      await storage.write(test.blog.id, path, contents);
+      await folder.update(path);
+    }).then(function () {
+      callback(null);
+    }, callback);
   }
 
   async function checkDateOnBlog(test, callback) {

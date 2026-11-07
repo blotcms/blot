@@ -8,15 +8,15 @@ Every sync client (Dropbox, Git, local) acquires the lock provided by this modul
 
 ```
 sync/
-  index.js                  Primary export. Acquires the folder lock and yields the
-                            folder interface to the caller.
+  index.js                  Primary export. Acquires the folder lock and runs a function with the
+                            folder interface while it is held, then finishes the sync.
   rebuild.js                Full-folder rebuild: walks every file in the blog directory
                             and calls update on each path in series.
   renames.js                Post-sync rename detection. Correlates recently created and
                             deleted entries by file size and title to infer moves.
   messenger.js              Factory for the log/status/syncID triple attached to every
                             sync session.
-  establishSyncLock.js      Promise-based wrapper around index.js for async/await callers.
+  establishSyncLock.js      Re-exports index.js's establishSyncLock: the lock as { folder, done }.
   lock.js                   Redis mutex (SET NX PX + token + heartbeat) used as the
                             per-blog folder lock.
   lock-diagnostics.js       Gathers system-state diagnostics (disk, CPU, memory, Redis
@@ -94,20 +94,27 @@ sync/
 
 ## Public API
 
-### `sync(blogID, callback)`
+### `await sync(blogID, fn)`
 
 **File:** `index.js`
 
-Acquires the blog's Redis folder lock (`lock.js`), then calls `callback(err, folder, done)`.
+Acquires the blog's Redis folder lock (`lock.js`), runs `await fn(folder)`, then finishes the sync whether `fn` resolved or threw, and resolves to what `fn` resolved to.
 
-- `blogID` — string. Throws `TypeError` if not a string.
-- `callback(err, folder, done)` — called once the lock is acquired or on failure.
-  - `err` — non-null if the blog cannot be found, is disabled, or the lock could not be acquired.
-  - `folder.path` — absolute path to the blog's local folder (trailing slash stripped).
-  - `folder.update(path)` — processes a single path and returns a promise (it throws if given a callback). It resolves `{ error, changed }` (a per-file error is logged and returned as `error`) and rejects when Redis is unavailable or the path cannot be read (a symlink in its way, say). See `update/index.js`.
+```js
+const result = await sync(blogID, async function (folder) {
+  await folder.update(path);
+  return result;
+});
+```
+
+- `blogID` — string. Throws `TypeError` (synchronously) if not a string, or if `fn` is not a function.
+- Rejects without calling `fn` if the sync cannot start: `Cannot sync blog <id>` if the blog cannot be found or is disabled, `Failed to acquire folder lock` if another sync holds the lock. Callers match on these messages.
+- `fn(folder)` — runs while the lock is held:
+  - `folder.update(path)` — processes a single path and returns a promise. It resolves `{ error, changed }` (a per-file error is logged and returned as `error`) and rejects when Redis is unavailable or the path cannot be read (a symlink in its way, say). See `update/index.js`.
   - `folder.status(message)` — broadcasts a status message via Redis pub/sub.
   - `folder.log(...args)` — writes a prefixed log line to stdout.
-  - `done(syncError, callback)` — releases the lock. Must be called exactly once. Internally runs `renames`, `buildFromFolder` (templates), and bumps `blog.cacheID` when at least one `folder.update` was called.
+- Once `fn` settles, the sync is finished: status "Synced", `renames`, `buildFromFolder` (templates), CDN manifests, the lock released (also if one of those steps throws), then `blog.cacheID` bumped when a `folder.update` changed something. Then `sync` rejects with what `fn` threw, or else with the error releasing the lock (the cacheID is still bumped), or resolves to `fn`'s result.
+- `fn` and the finishing steps run in the sync's `helper/logContext`, so their log lines carry the blog and sync ID.
 
 **Lock configuration:**
 - Stale timeout: 10 seconds.
@@ -124,11 +131,11 @@ Walks every file in the blog's folder (one `storage/folder` `listNames` per dire
 - `options.thumbnails` — boolean. Flushes the thumbnail Transformer store and empties the `_thumbnails` static directory before rebuilding.
 - `options.imageCache` — boolean. Flushes the image-cache Transformer store and empties the `_image_cache` static directory before rebuilding.
 
-### `establishSyncLock(blogID)`
+### `await establishSyncLock(blogID)`
 
-**File:** `establishSyncLock.js`
+**File:** `establishSyncLock.js` (defined in `index.js`)
 
-Promise-based wrapper. Resolves to `{ folder, done }` where `folder.update` returns a promise, as it does from `sync`, and `done` is an async function. Used by async/await callers.
+For callers which finish the sync somewhere other than the function that took the lock: the lock is handed to another function, or the finishing step is timed on its own. Resolves to `{ folder, done }`, or rejects as `sync` does. `await done(err)` must be called exactly once: it finishes the sync as `sync` does, then rejects with `err` (or else with the error releasing the lock) or resolves. Prefer `sync(blogID, fn)`, which cannot leave the lock held, and whose `fn` runs in the sync's log context.
 
 ## Internal Modules
 
@@ -215,7 +222,7 @@ Called by `index.js` when the lock heartbeat finds the lock has been lost. Colle
 
 ### `renames.js`
 
-Called at the end of every sync, inside `done(...)`. Looks back 30 seconds to find entries created and entries deleted in that window.
+Called at the end of every sync, as it finishes. Looks back 30 seconds to find entries created and entries deleted in that window.
 
 Rename heuristic:
 1. Match a deleted entry with a created entry that has the same non-zero `size`. If exactly one match, treat it as a rename.
@@ -244,11 +251,11 @@ If any routine produced a non-empty report, bumps `blog.cacheID` to force cache 
 A complete sync session follows this sequence:
 
 ```
-sync(blogID, cb)
+await sync(blogID, fn)
   └─ Blog.get                        Verify blog exists and is not disabled
   └─ messenger(blog)                 Create log/status/syncID
   └─ folderLock.lock(blogID)        Acquire Redis folder lock
-  └─ callback(null, folder, done)    Yield control to caller
+  └─ await fn(folder)                Run the caller's function
        └─ await folder.update(path) [zero or more times]
             └─ fs.stat fingerprint (before)
             └─ fs.stat
@@ -262,12 +269,13 @@ sync(blogID, cb)
                       └─ Preview.write (if visible draft)
             └─ fs.stat fingerprint (after) → retry if changed
             └─ flushCache
-  └─ done(syncError, finalCallback)
+  └─ done(fn's error or null)       Finish the sync, however fn settled
        └─ renames(blogID)            Detect file moves by size/title correlation
        └─ buildFromFolder(blogID)    Rebuild templates from Templates/ folder
-       └─ lock.release
+       └─ regenerateTemplateManifests CDN manifests of templates whose files changed
+       └─ lock.release               Also if a step above throws
        └─ Blog.bumpCacheID           Only if folder.update was called at least once, even if release failed
-       └─ finalCallback(syncError)
+  └─ resolve fn's result, or reject with its error (else the release error)
 ```
 
 ## Integration Points

@@ -23,15 +23,14 @@ describe("sync/hold", function () {
     });
   }
 
-  function trySync(blogID) {
-    return new Promise(function (resolve) {
-      sync(blogID, function (err, folder, done) {
-        if (err) return resolve(err);
-        done(null, function () {
-          resolve(null);
-        });
-      });
-    });
+  async function trySync(blogID) {
+    try {
+      await sync(blogID, async function () {});
+    } catch (err) {
+      return err;
+    }
+
+    return null;
   }
 
   it("runs fn holding the lock, so a sync cannot take it, and releases it after", async function () {

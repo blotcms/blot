@@ -22,8 +22,8 @@ describe("dropbox createFolder moveExistingFiles", function () {
       id: syncPath,
       filename: syncPath,
       loaded: true,
-      exports: function (blogID, callback) {
-        callback(new Error("Failed to acquire folder lock"));
+      exports: async function () {
+        throw new Error("Failed to acquire folder lock");
       },
     };
 

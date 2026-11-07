@@ -171,7 +171,7 @@ User Repository (User's Computer)
 7. Sync reads master from the store's newest manifest
 8. `served/materialize.js` brings the blog folder from the last applied commit to it: the changed paths come from `store/treediff.js`; an exact rename is a `move()`; removals come next, then the directories they empty; then the writes, streamed from the store's packs (a small file whose bytes are already there is not written again). Files are the raw committed bytes, so `.gitattributes` rules do not apply. Only changed paths are touched, so drift elsewhere in the folder stays until a resync. A path with an empty, `.` or `..` component, a `.git` component (any case) or a name that is not UTF-8 is skipped, and a symbolic link in the way is replaced, never followed. Every change goes through `storage/folder`, so the folder may be on disk or in the bucket.
 9. For each modified file, `folder.update(path)` is called to process the change, in series. If Redis refuses one, the sync stops there.
-10. The commit is recorded as applied, the lock is released and callback is invoked
+10. The commit is recorded as applied, the lock is released and the promise `sync()` returned settles
 
 Symbolic links (including links within the blog) and submodules are not supported. Replace them with regular files before pushing. A push whose master adds any is refused with a message before the client is told "ok", and the materializer never writes one.
 

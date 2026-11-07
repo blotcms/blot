@@ -153,84 +153,43 @@ module.exports = function setup(options = {}) {
       });
     };
 
-    this.remove = (path) => {
-      return new Promise((resolve, reject) => {
-        sync(this.blog.id, async (err, folder, callback) => {
-          if (err) return callback(err, reject);
-
-          await this.blog.remove(path);
-
-          folder
-            .update(path)
-            .then(
-              () => null,
-              (updateErr) => updateErr
-            )
-            .then(function (folderErr) {
-              if (folderErr) return callback(folderErr, reject);
-              callback(null, resolve);
-            });
-        });
+    this.remove = async (path) => {
+      await sync(this.blog.id, async (folder) => {
+        await this.blog.remove(path);
+        await folder.update(path);
       });
     };
 
-    this.write = ({ path, content }) => {
-      return new Promise((resolve, reject) => {
-        sync(this.blog.id, async (err, folder, callback) => {
-          if (err) return callback(err, reject);
-
-          await this.blog.write({ path, content });
-
-          folder
-            .update(path)
-            .then(
-              () => null,
-              (updateErr) => updateErr
-            )
-            .then(function (folderErr) {
-              if (folderErr) return callback(folderErr, reject);
-              callback(null, resolve);
-            });
-        });
+    this.write = async ({ path, content }) => {
+      await sync(this.blog.id, async (folder) => {
+        await this.blog.write({ path, content });
+        await folder.update(path);
       });
     };
 
-    this.template = (views = {}, packageJSON = {}) => {
-      return new Promise((resolve, reject) => {
-        sync(this.blog.id, async (err, folder, callback) => {
-          if (err) return callback(err, reject);
+    this.template = async (views = {}, packageJSON = {}) => {
+      await sync(this.blog.id, async (folder) => {
+        await this.blog.remove("/Templates/local");
 
-          await this.blog.remove("/Templates/local");
+        await this.blog.write({
+          path: "/Templates/local/package.json",
+          content: JSON.stringify({
+            name: "local",
+            locals: {},
+            views: {},
+            enabled: true,
+            ...packageJSON,
+          }),
+        });
 
+        for (const viewPath in views) {
           await this.blog.write({
-            path: "/Templates/local/package.json",
-            content: JSON.stringify({
-              name: "local",
-              locals: {},
-              views: {},
-              enabled: true,
-              ...packageJSON,
-            }),
+            path: `/Templates/local/${viewPath}`,
+            content: views[viewPath],
           });
+        }
 
-          for (const viewPath in views) {
-            await this.blog.write({
-              path: `/Templates/local/${viewPath}`,
-              content: views[viewPath],
-            });
-          }
-
-          folder
-            .update("/Templates/local")
-            .then(
-              () => null,
-              (updateErr) => updateErr
-            )
-            .then(function (folderErr) {
-              if (folderErr) return callback(folderErr, reject);
-              callback(null, resolve);
-            });
-        });
+        await folder.update("/Templates/local");
       });
     };
 

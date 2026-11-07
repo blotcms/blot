@@ -25,42 +25,26 @@ async function create(blog) {
     );
   }
 
-  // Settles when the sync engine calls finish, after it has released the
-  // folder lock
-  await new Promise(function (resolve, reject) {
-    // A setup that cannot run (the folder is locked) leaves no mark behind
-    function finish(err) {
-      database
-        .clearCreating(blog.id)
-        .catch(function () {})
-        .then(function () {
-          if (err) return reject(err);
-          resolve();
-        });
-    }
-
-    sync(blog.id, async function (err, folder, done) {
-      if (err) return finish(err);
-
+  // The mark is cleared once the sync has released the folder lock. A setup
+  // that cannot run (the folder is locked) leaves no mark behind either.
+  try {
+    await sync(blog.id, async function (folder) {
       // Outside the try below, whose cleanup marks the setup failed: a
       // repository the blog already has is not this setup's
-      try {
-        await require("./served/create").assertEmpty(blog.id);
-      } catch (err) {
-        return done(err, finish);
-      }
+      await require("./served/create").assertEmpty(blog.id);
 
       try {
         await createRepository(blog, folder);
-        done(null, finish);
       } catch (err) {
         await database
           .setStatus(blog.owner, "createFailed")
           .catch(function () {});
-        done(err, finish);
+        throw err;
       }
     });
-  });
+  } finally {
+    await database.clearCreating(blog.id).catch(function () {});
+  }
 }
 
 module.exports = create;

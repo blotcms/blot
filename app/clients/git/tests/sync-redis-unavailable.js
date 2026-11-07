@@ -98,10 +98,9 @@ describe("Git sync when Redis is unavailable", function () {
 
     return new Promise((resolve) => {
       const sync = load("../sync", {
-        sync: (id, cb) =>
-          cb(
-            null,
-            {
+        sync: async (id, fn) => {
+          try {
+            return await fn({
               log(message) {
                 logs.push(message);
               },
@@ -114,12 +113,11 @@ describe("Git sync when Redis is unavailable", function () {
                 }
                 if (failing[path]) throw failing[path];
               },
-            },
-            (err, cb) => {
-              released++;
-              cb(err);
-            }
-          ),
+            });
+          } finally {
+            released++;
+          }
+        },
         "./served/sync": served,
       });
 

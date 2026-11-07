@@ -50,13 +50,13 @@ The Dropbox client operates using a webhook-based event notification system comb
   - `GET /authenticate`: Intermediate redirect handler for OAuth callbacks (resolves which blog to authenticate via cookie).
   - `GET /webhook`: Webhook challenge endpoint (Dropbox verifies webhook endpoint on setup).
   - `POST /webhook`: Receives webhook notifications from Dropbox containing account IDs of accounts with changes. Initiates syncs for all blogs linked to those accounts.
-- **`routes/setup/index.js`**: Main setup logic orchestrating OAuth, account metadata retrieval, folder creation/configuration, and initial sync.
+- **`routes/setup/index.js`**: Main setup logic orchestrating OAuth, account metadata retrieval, folder creation/configuration, and initial sync, inside the sync lock. `await setup(account, session)` rejects with "Dropbox setup aborted" if a disconnect aborts it.
 - **`routes/setup/getAccount.js`**: Exchanges the OAuth authorization code for access and refresh tokens and retrieves account metadata (email, account_id, folder path).
 - **`routes/setup/createFolder.js`**: Creates (or designates) the blog folder in Dropbox. Handles migration logic when a customer connects a second blog to an app folder that already has files.
 
 ### Sync
 
-- **`sync/index.js`**: Main sync entry point. Acquires the blog's sync lock, creates a Dropbox client, and orchestrates the delta retrieval and file application.
+- **`sync/index.js`**: Main sync entry point, `await sync(blog, [options])`. Acquires the blog's sync lock, creates a Dropbox client, and orchestrates the delta retrieval and file application.
   - Calls `Delta` to fetch changes.
   - Calls `Apply` (defined within the file) to apply deletions, create directories, and download files.
   - Updates Blot's Entry model for each change via `folder.update()`.
@@ -74,7 +74,7 @@ The Dropbox client operates using a webhook-based event notification system comb
   - `isDotfileOrDotfolder`: Alias for `shouldIgnoreFile()`, filters out dotfiles and dotfolders.
   - `INSUFFICIENT_SPACE_ERROR_CODE` / `isInsufficientSpaceError()`: The `507` account `error_code` sentinel for "ran out of Dropbox space", and a check for that error shape from the Dropbox SDK.
   - `transferIncomplete(account)`: True while the initial transfer to Dropbox hasn't finished - see "Handling an incomplete initial transfer" below.
-- **`util/createClient.js`**: Factory function that retrieves the Dropbox account from the database and instantiates a Dropbox SDK client. Handles token refresh if a refresh token is present.
+- **`util/createClient.js`**: `await createClient(blogID)` retrieves the Dropbox account from the database and instantiates a Dropbox SDK client. Handles token refresh if a refresh token is present. Resolves to `{ error, client, account }` and never rejects: the account comes with an error when the token could not be refreshed, which disconnecting needs. `util/loadClient.js` is the same, looked up when called.
 - **`util/download.js`**: Downloads a file from Dropbox and writes it into the blog folder with `storage/folder` (`download(client, source, blogID, path, callback)`). Does not set the local file's mtime; change detection elsewhere in the client relies on Dropbox's `content_hash`/size, not local mtimes.
 - **`util/upload.js`**: Uploads a file from disk to Dropbox. Omits `client_modified` so Dropbox stamps the file with its own server time, since Blot no longer keeps a settable local mtime to send.
 - **`util/retry.js`**: Wraps a function to retry on transient errors.
@@ -184,13 +184,13 @@ Returns a Promise of the client's current health for the dashboard (`{state, iss
   - Maps a durable `error_code` / `error_source` to `REAUTH_REQUIRED`, `SOURCE_MISSING`, or `QUOTA_EXCEEDED`.
   - Returns `{state: "ok", issues: []}` when there is no account, no error, or only a stale transient `error_code`.
 
-### `disconnect(blogID, callback)`
+### `await disconnect(blogID)`
 
-Disconnects a blog from Dropbox.
+Disconnects a blog from Dropbox, inside the blog's sync lock.
 
 - **Parameters**:
   - `blogID`: String identifier for the blog.
-  - `callback(err)`: Called when complete.
+- **Returns**: A promise, which resolves once the lock is released and rejects as `sync()` does if the lock is held.
 - **Behavior**:
   - Clears the blog's client type.
   - Removes Dropbox account credentials from the database.

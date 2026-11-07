@@ -108,34 +108,27 @@ async function loadFoldersToBuild(foldersDirectory) {
 }
 
 async function applyChanges(blog, changes) {
-  return new Promise((resolve, reject) => {
-    sync(blog.id, async function (err, folder, done) {
-      if (err) return reject(err);
+  await sync(blog.id, async function (folder) {
+    const update = folder.update;
 
-      const update = folder.update;
-
-      try {
-        // Update only modified and added files
-        const changedPaths = [
-          ...changes.modified,
-          ...changes.added,
-          ...changes.removed,
-        ];
-        for (const relativePath of changedPaths) {
-          await update(relativePath);
-        }
-
-        const repaired = syncReport.summarize(await fix(blog));
-        if (repaired) console.log("Fix repaired", blog.handle, repaired);
-        console.log("Built folder for blog", blog.handle);
-        done(null, resolve);
-      } catch (err) {
-        console.error("Error building folder for blog", blog.handle, err);
-        done(null, () => {
-          reject(err);
-        });
+    try {
+      // Update only modified and added files
+      const changedPaths = [
+        ...changes.modified,
+        ...changes.added,
+        ...changes.removed,
+      ];
+      for (const relativePath of changedPaths) {
+        await update(relativePath);
       }
-    });
+
+      const repaired = syncReport.summarize(await fix(blog));
+      if (repaired) console.log("Fix repaired", blog.handle, repaired);
+      console.log("Built folder for blog", blog.handle);
+    } catch (err) {
+      console.error("Error building folder for blog", blog.handle, err);
+      throw err;
+    }
   });
 }
 

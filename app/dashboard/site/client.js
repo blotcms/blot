@@ -150,13 +150,11 @@ client_routes
 // N.B. these reset POSTs run on green, the redirect target renders on blue;
 // see dashboard/site/index.js.
 client_routes.post("/reset/rebuild", function (req, res) {
-  Sync(req.blog.id, function (err, folder, done) {
-    if (err) {
-      return res.message(
-        res.locals.base + "/client/reset",
-        new Error("Failed to rebuild folder since it is syncing")
-      );
-    }
+  // Set once the sync has the lock, to tell its failure apart from a later one
+  let folder = null;
+
+  Sync(req.blog.id, async function (syncFolder) {
+    folder = syncFolder;
 
     res.message(
       res.locals.base + "/client/reset",
@@ -168,39 +166,41 @@ client_routes.post("/reset/rebuild", function (req, res) {
     const thumbnails = !!req.query.thumbnails;
     const imageCache = !!req.query.imageCache;
 
-    // The rest runs from the end of this chain, as it did from the callback:
-    // a throw is an unhandled rejection, which exits the process and so
-    // releases the folder lock.
-    Rebuild(req.blog.id, {
-      thumbnails,
-      imageCache,
-      status: folder.status,
-      log: folder.log,
-    })
-      .then(
-        () => null,
-        (err) => err
-      )
-      .then(function (err) {
-        if (err) console.log(err);
-        folder.status("Checking your site for issues");
-        // A throw below is an unhandled rejection too
-        Fix(req.blog, { status: folder.status, log: folder.log })
-          .then(
-            (report) => ({ err: null, report }),
-            (err) => ({ err, report: err.report })
-          )
-          .then(function ({ err, report }) {
-            if (err) console.log(err);
-            // Fix() doesn't email; a rebuild only logs what it repaired.
-            const repaired = syncReport.summarize(report);
-            if (repaired) console.log("Fix repaired", req.blog.id, repaired);
-            folder.status("Finished site rebuild");
-            done(null, function (err) {
-              if (err) console.log("Error releasing sync: ", err);
-            });
-          });
+    try {
+      await Rebuild(req.blog.id, {
+        thumbnails,
+        imageCache,
+        status: folder.status,
+        log: folder.log,
       });
+    } catch (err) {
+      console.log(err);
+    }
+
+    folder.status("Checking your site for issues");
+
+    let report;
+
+    try {
+      report = await Fix(req.blog, { status: folder.status, log: folder.log });
+    } catch (err) {
+      console.log(err);
+      report = err.report;
+    }
+
+    // Fix() doesn't email; a rebuild only logs what it repaired.
+    const repaired = syncReport.summarize(report);
+    if (repaired) console.log("Fix repaired", req.blog.id, repaired);
+    folder.status("Finished site rebuild");
+  }).catch(function (err) {
+    if (!folder) {
+      return res.message(
+        res.locals.base + "/client/reset",
+        new Error("Failed to rebuild folder since it is syncing")
+      );
+    }
+
+    console.log("Error releasing sync: ", err);
   });
 });
 
@@ -208,13 +208,12 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
   if (!res.locals.client.resync)
     return next(new Error("Cannot resync using your current client"));
 
-  Sync(req.blog.id, async function (err, folder, done) {
-    if (err) {
-      return res.message(
-        res.locals.base + "/client/reset",
-        new Error("Failed to resync folder since it is syncing")
-      );
-    }
+  // Set once the sync has the lock, to tell its failure apart from a later one
+  let folder = null;
+  let refusal = null;
+
+  Sync(req.blog.id, async function (syncFolder) {
+    folder = syncFolder;
 
     res.message(res.locals.base + "/client/reset", "Begin resync of your site");
 
@@ -239,40 +238,50 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
       // instead of falling through to Fix() and "Finished site rebuild"
       // below, which would make the refusal look like a successful resync.
       if (err && RESYNC_REFUSALS.includes(err.code)) {
-        // done() publishes "Synced" before calling back, so re-publish the
-        // refusal afterwards to make it the final status the user sees.
-        const refusal = err.message;
+        // The sync publishes "Synced" as it finishes, so the refusal is
+        // published again afterwards to make it the final status the user
+        // sees.
+        refusal = err.message;
         folder.status(refusal);
-        return done(null, function (err) {
-          if (err) console.log("Error releasing sync: ", err);
-          folder.status(refusal);
-        });
+        return;
       }
     }
 
     folder.status("Checking your site for issues");
-    // A throw below is an unhandled rejection, which exits the process and
-    // so releases the folder lock
-    Fix(req.blog, { status: folder.status, log: folder.log })
-      .then(
-        (report) => ({ err: null, report }),
-        (err) => ({ err, report: err.report })
-      )
-      .then(function ({ err, report }) {
-        if (err) console.log(err);
-        // After Fix() so its repairs go in the same email as the changes.
-        notifyAdminIfResyncFoundChanges(
-          req.blog,
-          res.locals.client,
-          summary,
-          report
+
+    let report;
+
+    try {
+      report = await Fix(req.blog, { status: folder.status, log: folder.log });
+    } catch (err) {
+      console.log(err);
+      report = err.report;
+    }
+
+    // After Fix() so its repairs go in the same email as the changes.
+    notifyAdminIfResyncFoundChanges(
+      req.blog,
+      res.locals.client,
+      summary,
+      report
+    );
+    folder.status("Finished site rebuild");
+  }).then(
+    function () {
+      if (refusal) folder.status(refusal);
+    },
+    function (err) {
+      if (!folder) {
+        return res.message(
+          res.locals.base + "/client/reset",
+          new Error("Failed to resync folder since it is syncing")
         );
-        folder.status("Finished site rebuild");
-        done(null, function (err) {
-          if (err) console.log("Error releasing sync: ", err);
-        });
-      });
-  });
+      }
+
+      console.log("Error releasing sync: ", err);
+      if (refusal) folder.status(refusal);
+    }
+  );
 });
 
 // Generic open folder route for all clients (development only)
