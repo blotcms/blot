@@ -3,7 +3,7 @@
 <header class="page-header">
   <div class="page-header__text">
     <h1 class="page-header__title">Flags</h1>
-    <p class="page-header__subtitle">Toggle experimental features for this site.</p>
+    <p class="page-header__subtitle">Experimental features, and settings almost every site leaves on, so they're not on the Settings tabs.</p>
   </div>
 </header>
 
@@ -22,6 +22,18 @@
   </div>
 </div>
 {{/flags}}
+
+<h2>Settings almost every site leaves on</h2>
+{{#plugins}}
+<div class="flag-row">
+  <label class="setting-check">
+    <input type="hidden" name="plugins.{{id}}.enabled" value="off" />
+    <input type="checkbox" name="plugins.{{id}}.enabled" {{checked}} />
+    <span>{{{description}}}</span>
+  </label>
+  <div class="setting-help-text"><code>{{id}}</code> (default: on)</div>
+</div>
+{{/plugins}}
 
 <div class="buttons" data-on-change>
   <button type="submit">Save flags</button>

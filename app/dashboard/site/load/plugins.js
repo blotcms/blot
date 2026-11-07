@@ -7,7 +7,21 @@ const deCamelize = require("helper/deCamelize");
 
 const { LRUCache } = require("lru-cache");
 
-const pluginsToHide = [];
+// Settings almost every site leaves on, which are listed on the hidden Flags
+// page (site/flags.js) instead of the Settings tabs. Hiding them changes
+// nothing about whether they're on: new sites still get every one of them.
+const pluginsOnFlagsPage = [
+  "codeHighlighting",
+  "katex",
+  "callouts",
+  "wikilinks",
+  "autoImage",
+  "bluesky",
+  "flickr",
+  "twitter",
+  "videoEmbeds",
+  "linkScreenshot",
+];
 
 // The categories depend only on the blog's plugin settings. Templates only
 // read them, so one copy can be shared between requests.
@@ -76,10 +90,17 @@ function loadCategories(blog) {
       plugin.clear = true;
     }
 
-    if (!pluginsToHide.includes(plugin.name)) {
+    if (!pluginsOnFlagsPage.includes(plugin.id)) {
       categories[name].plugins.push(plugin);
     }
   });
 
+  // A section whose settings all moved to the Flags page shows nothing
+  for (const name in categories) {
+    if (!categories[name].plugins.length) delete categories[name];
+  }
+
   return categories;
 }
+
+module.exports.pluginsOnFlagsPage = pluginsOnFlagsPage;

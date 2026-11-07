@@ -3,14 +3,6 @@
 
 <div class="dashboard-form-panel settings-page">
   <div class="dashboard-form-panel__body">
-    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="embeds">
-      <input type="hidden" name="_csrf" value="{{csrftoken}}">
-      <input type="hidden" name="redirect" value="{{{base}}}/settings/integrations">
-      <h2 id="embeds">Embeds</h2>
-      <p class="setting-note">Turn links to other sites into embeds.</p>
-      {{#categories.Embeds}}{{> plugin-row}}{{/categories.Embeds}}
-    </form>
-
     <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="services">
       <input type="hidden" name="_csrf" value="{{csrftoken}}">
       <input type="hidden" name="redirect" value="{{{base}}}/settings/integrations">

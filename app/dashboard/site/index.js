@@ -463,7 +463,7 @@ site.get("/settings", settingsRedirect("title"));
 
 // Earlier versions of this page
 site.get("/settings/content", settingsRedirect("writing"));
-site.get("/settings/embeds", settingsRedirect("integrations#embeds"));
+site.get("/settings/embeds", settingsRedirect("integrations"));
 site.get("/settings/services", settingsRedirect("integrations#services"));
 // The 404 log links to ?create=<path> to prefill a redirect
 site.get("/settings/urls", (req, res, next) =>
