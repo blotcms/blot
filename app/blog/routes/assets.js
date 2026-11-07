@@ -74,19 +74,6 @@ GLOBAL_STATIC_SUBDIRECTORIES.forEach((dir) => {
   );
 });
 
-assets.get("/html2canvas.min.js", async (req, res, next) => {
-  try {
-    await sendFile(GLOBAL_STATIC_DIR + "/html2canvas.min.js", {
-      req,
-      res,
-      maxAge: LARGEST_POSSIBLE_MAXAGE,
-      immutable: true,
-    });
-  } catch (err) {
-    next();
-  }
-});
-
 assets.get("/layout.css", async (req, res, next) => {
   try {
     await sendFile(GLOBAL_STATIC_DIR + "/layout.css", {

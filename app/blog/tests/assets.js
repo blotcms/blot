@@ -202,14 +202,6 @@ describe("asset middleware", function () {
       "utf-8"
     );
     expect(response).toEqual(expected);
-
-    const response1 = await this.text("/html2canvas.min.js");
-    const expected1 = await fs.readFile(
-      __dirname + "/../static/html2canvas.min.js",
-      "utf-8"
-    );
-
-    expect(response1).toEqual(expected1);
   });
 
   // This test ensures that the middleware will pass
