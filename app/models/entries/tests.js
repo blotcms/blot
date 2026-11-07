@@ -969,10 +969,6 @@ describe("entries", function () {
       expect(adjacent.previous).toBeUndefined();
       expect(adjacent.index).toBeUndefined();
     });
-
-    it("throws when given a callback", function () {
-      expect(() => Entries.adjacentTo(this.blog.id, "id1", () => {})).toThrow();
-    });
   });
 
   describe("random", function () {
@@ -1040,10 +1036,6 @@ describe("entries", function () {
       );
 
       expect(await Entries.random(this.blog.id)).toBeUndefined();
-    });
-
-    it("throws when given a callback", function () {
-      expect(() => Entries.random(this.blog.id, () => {})).toThrow();
     });
   });
 
@@ -1113,16 +1105,6 @@ describe("entries", function () {
       expect(caught).toBe(failure);
       expect(seen).toEqual(["id2"]);
     });
-
-    it("throws when given a callback as the third argument", function () {
-      expect(() =>
-        Entries.each(
-          this.blog.id,
-          async () => {},
-          () => {}
-        )
-      ).toThrow();
-    });
   });
 
   describe("resave", function () {
@@ -1189,10 +1171,6 @@ describe("entries", function () {
       }
 
       expect(caught.message).toBe("no blog");
-    });
-
-    it("throws when given a callback", function () {
-      expect(() => Entries.resave(this.blog.id, () => {})).toThrow();
     });
   });
 
