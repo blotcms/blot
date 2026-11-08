@@ -73,15 +73,16 @@ button.folder-filters__item {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 16px;
-  height: 16px;
+  min-width: 14px;
+  height: 14px;
   box-sizing: border-box;
   margin-left: var(--space-1);
-  padding: 0 var(--space-1);
+  padding: 0 3px;
   border-radius: var(--radius-pill);
   background: var(--surface-strong-color);
   color: var(--medium-text-color);
-  font-size: var(--text-xs);
+  /* Smaller than --text-xs: a badge, not text to read */
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
   line-height: 1;
 }
