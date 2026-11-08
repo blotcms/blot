@@ -1,3 +1,8 @@
+Prove memory of unit fits into cap
+
+Where possible sync clients create progress bars
+- e.g. when multiple downloads and builds start stacking!
+
 Noticed while fixing the flaky specs, 7 Nov 2026
 - `Blog.set(id, { cacheID: Date.now() })` is repeated in `app/models/template/util/cacheID.js`, `bumpCacheID.js`, `rebuildEntriesOnNewHosts.js`, `app/sync/rebuild.js`, `app/templates/index.js` (twice) and scripts. Since #2666 `Blog.set` bumps to `max(now, previous + 1)` whenever a cacheID is passed, so the value is only a request: give them one bump helper.
 - `Error forking template Error: No template: SITE:blog` and `Error updating template CDN manifest Error: No template: SITE:blog` are logged in the node CI logs of most runs, master included, without failing a spec (and `Error in renderView for style.css: Error: No template: blog_<id>:blog` in run 42395253798). Find which specs create blogs before the SITE templates are built, or whether a stale read is behind it.
