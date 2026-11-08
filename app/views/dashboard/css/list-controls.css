@@ -9,8 +9,8 @@
   .folder-filters__item       a segment: a link, or a button for a list
                               filtered in the page; chosen with .is-selected,
                               .is-active or aria-pressed="true"
-  .folder-filters__dot        an orange dot on a segment (Scheduled, when
-                              anything is scheduled)
+  .folder-filters__count      a small grey count on a segment (how many
+                              posts are scheduled; none shows nothing)
   .site-dashboard-search      the search field: a form or wrapper holding
                               an input, like the Finder's
 */
@@ -69,13 +69,21 @@ button.folder-filters__item {
   outline-offset: 1px;
 }
 
-.folder-filters__dot {
-  width: 5px;
-  height: 5px;
-  margin-left: var(--space-2);
-  border-radius: 50%;
-  background: var(--indicator-amber);
-  box-shadow: 0 0 4px 1px var(--indicator-amber-glow);
+.folder-filters__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  margin-left: var(--space-1);
+  padding: 0 var(--space-1);
+  border-radius: var(--radius-pill);
+  background: var(--surface-strong-color);
+  color: var(--medium-text-color);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
 }
 
 

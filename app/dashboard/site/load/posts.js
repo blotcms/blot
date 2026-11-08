@@ -219,7 +219,8 @@ module.exports = async function (req, res, next) {
           result.list.key +
           (sort ? "?sort=" + sort.key + "&order=" + sort.order : ""),
         // Scheduled posts stand out, so one scheduled by mistake is noticed
-        showDot: result.list.key === "scheduled" && result.total > 0,
+        // Scheduled says how many are waiting, and nothing when none are
+        showCount: result.list.key === "scheduled" && result.total > 0,
         filterTitle: result.list.filterTitle,
         linkLabel: result.list.filterTitle.toLowerCase(),
         title: result.list.title,
@@ -252,9 +253,10 @@ module.exports = async function (req, res, next) {
     res.locals.selectedFilterTitle = selectedGroup
       ? selectedGroup.filterTitle
       : "Files";
-    res.locals.hasScheduled = res.locals.postGroups.some(
-      (group) => group.showDot
-    );
+    // The dropdown's trigger carries Scheduled's count too, so it shows
+    // whichever filter is chosen
+    const scheduled = res.locals.postGroups.find((group) => group.showCount);
+    res.locals.scheduledCount = scheduled ? scheduled.count : 0;
 
     const activeGroup = res.locals.postGroups.find(function (group) {
       return group.isActive;

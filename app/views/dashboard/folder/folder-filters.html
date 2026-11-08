@@ -2,16 +2,16 @@
 <nav class="folder-filters" aria-label="Show">
   {{#filesFilter}}<a class="{{filterClass}}" href="{{{href}}}" aria-current="{{ariaCurrent}}">Files</a>{{/filesFilter}}
   {{#postGroups}}
-  <a class="{{filterClass}}" href="{{{href}}}" aria-current="{{ariaCurrent}}">{{filterTitle}}{{#showDot}}<span class="folder-filters__dot" aria-hidden="true"></span><span class="visually-hidden"> (has scheduled posts)</span>{{/showDot}}</a>
+  <a class="{{filterClass}}" href="{{{href}}}" aria-current="{{ariaCurrent}}">{{filterTitle}}{{#showCount}}<span class="folder-filters__count"><span class="visually-hidden">, </span>{{count}}</span>{{/showCount}}</a>
   {{/postGroups}}
 </nav>
 <!-- The same choices as a dropdown, which narrow screens show instead -->
 <details class="folder-filters-menu" data-dismissable>
-  <summary class="folder-filters-menu__trigger"><span class="visually-hidden">Show: </span>{{selectedFilterTitle}}{{#hasScheduled}}<span class="folder-filters__dot" aria-hidden="true"></span><span class="visually-hidden"> (has scheduled posts)</span>{{/hasScheduled}}<span class="folder-filters-menu__chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg></span></summary>
+  <summary class="folder-filters-menu__trigger"><span class="visually-hidden">Show: </span>{{selectedFilterTitle}}{{#scheduledCount}}<span class="folder-filters__count"><span class="visually-hidden">, scheduled: </span>{{scheduledCount}}</span>{{/scheduledCount}}<span class="folder-filters-menu__chevron" aria-hidden="true"><svg viewBox="0 0 16 16" width="12" height="12"><path d="m4 6 4 4 4-4" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"/></svg></span></summary>
   <nav class="menu folder-filters-menu__panel" aria-label="Show">
     {{#filesFilter}}<a class="menu__item" href="{{{href}}}" aria-current="{{ariaCurrent}}">Files</a>{{/filesFilter}}
     {{#postGroups}}
-    <a class="menu__item" href="{{{href}}}" aria-current="{{ariaCurrent}}">{{filterTitle}}{{#showDot}}<span class="folder-filters__dot" aria-hidden="true"></span><span class="visually-hidden"> (has scheduled posts)</span>{{/showDot}}</a>
+    <a class="menu__item" href="{{{href}}}" aria-current="{{ariaCurrent}}">{{filterTitle}}{{#showCount}}<span class="folder-filters__count"><span class="visually-hidden">, </span>{{count}}</span>{{/showCount}}</a>
     {{/postGroups}}
   </nav>
 </details>

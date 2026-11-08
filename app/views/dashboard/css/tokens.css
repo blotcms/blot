@@ -53,10 +53,6 @@
      your site" keeps 4.5:1 on the warm muted surface */
   --success-color: #027a00;
   --warning-color: var(--warning-text-color);
-  /* A small lit indicator (the Scheduled filter's dot): brighter than the
-     warning text, with a glow of the same colour */
-  --indicator-amber: #f5a524;
-  --indicator-amber-glow: rgba(245, 165, 36, 0.55);
   --overlay-color: rgba(0, 0, 0, 0.28);
 
   /* Interaction states for rows, list items and quiet controls: hover,
