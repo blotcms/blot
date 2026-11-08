@@ -10,9 +10,7 @@ const sse = require("helper/sse")({
 
 Import.use((req, res, next) => {
   res.locals.importBase = res.locals.base + "/import";
-  // A Settings tab, at its own URL (the proxy pins /import to one container)
-  res.locals.breadcrumbs.add("Settings", res.locals.base + "/settings");
-  res.locals.breadcrumbs.add("Import", res.locals.base + "/import");
+  res.locals.breadcrumbs.add("Import", "import");
   next();
 });
 

@@ -71,9 +71,7 @@ function getSidebarSelection(path) {
     path.startsWith("/template-folder")
   )
     return "template";
-  // Import is a Settings tab, at its own URL: the proxy pins /import to one
-  // container (proxy/config/blot-site.conf)
-  if (path === "/import" || path.startsWith("/import/")) return "siteSettings";
+  if (path === "/import" || path.startsWith("/import/")) return "import";
   return null;
 }
 
@@ -83,6 +81,7 @@ const sidebarLabels = {
   template: "Template",
   sync: "Sync",
   siteSettings: "Settings",
+  import: "Import",
 };
 
 site.use((req, res, next) => {
@@ -416,7 +415,6 @@ const settingsTabs = [
   ["posts", "Posts"],
   ["redirects", "Redirects"],
   ["services", "Services"],
-  ["import", "Import"],
   ["export", "Export"],
   ["delete", "Delete site"],
 ];
@@ -424,19 +422,15 @@ const settingsTabs = [
 const settingsTab = (tab) => (req, res, next) => {
   res.locals.settingsTabs = settingsTabs.map(([slug, label]) => ({
     label,
-    // Import keeps its own URL, which the proxy pins to one container
-    url:
-      slug === "import"
-        ? `${res.locals.base}/import`
-        : `${res.locals.base}/settings/${slug}`,
+    url: `${res.locals.base}/settings/${slug}`,
     current: slug === tab ? "page" : "",
   }));
   next();
 };
 
-// Import is a Settings tab but keeps its URL: the proxy pins /import to one
-// container, since an import's state is in that container's temp files
-site.use("/import", settingsTab("import"), require("./import"));
+// The proxy pins /import to one container, since an import's state is in
+// that container's temp files
+site.use("/import", require("./import"));
 site.use("/settings/export", settingsTab("export"), require("./export"));
 site.use("/settings/delete", settingsTab("delete"), require("./delete"));
 
