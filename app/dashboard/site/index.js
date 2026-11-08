@@ -42,7 +42,8 @@ site.post(
 
 function getSidebarSelection(path) {
   // The overview and everything it leads to (all files, a file or
-  // subfolder, posts, recent activity) are under Overview
+  // subfolder, posts, recent activity, the Title and Domain pages its
+  // summary card links to) are under Overview
   if (
     path === "/" ||
     path === "/files" ||
@@ -54,11 +55,12 @@ function getSidebarSelection(path) {
     path === "/pages" ||
     path === "/drafts" ||
     path === "/scheduled" ||
-    path.startsWith("/folder/")
+    path.startsWith("/folder/") ||
+    path === "/title" ||
+    path === "/domain" ||
+    path.startsWith("/domain/")
   )
     return "folder";
-  if (path === "/title") return "title";
-  if (path === "/domain" || path.startsWith("/domain/")) return "domain";
   // The folder's sync settings and their subpages
   if (path === "/sync" || path.startsWith("/sync/")) return "sync";
   if (path === "/settings" || path.startsWith("/settings/"))
@@ -78,8 +80,6 @@ function getSidebarSelection(path) {
 // What the phone navigation bar shows as the current section
 const sidebarLabels = {
   folder: "Overview",
-  title: "Title",
-  domain: "Domain",
   template: "Template",
   sync: "Sync",
   siteSettings: "Settings",
