@@ -1,5 +1,13 @@
 Prove memory of unit fits into cap
 
+Build add font ui
+
+Could we possibly consolidate storage assets and git s3?
+- Any opportunities for shared primitives?
+- These were written in parallel so there may be overlap
+
+Can we build templates in s3 with their own git repos? Forks as patches? Update application possible?
+
 Where possible sync clients create progress bars
 - e.g. when multiple downloads and builds start stacking!
 
@@ -1328,6 +1336,8 @@ Add email newsletter system
 - Tell [David](https://mail.google.com/mail/u/0/#inbox/FMfcgxwKkbrQKXjDGTFNmtHVwJXThsWR) 
 - Tell [Nash](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLtGhBWHnmtJMPGRhNDkLTMbCV)
 - Tell [Kyle](https://mail.google.com/mail/u/0/#inbox/FMfcgzGkXSSTDVMfMGZQxcmcmlBSBQrR)
+
+Add paid subscription system
 
 Create an API for Blot
 - Add webhooks and tell [Aurynn](https://mail.google.com/mail/u/0/#inbox/1554260da157b405) and [Shawn](https://twitter.com/soypunk)
