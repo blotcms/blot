@@ -14,6 +14,7 @@ var makeSlug = require("helper/makeSlug");
 var path = require("path");
 var IgnoredFiles = require("models/ignoredFiles");
 var folder = require("storage/folder");
+var postSourceSize = require("build/converters/post-source-size");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
 var isRedisUnavailableError =
@@ -41,6 +42,24 @@ function isPublic(path) {
 
 function isTemplate(path) {
   return pathNormalizer(path).toLowerCase().startsWith("/templates/");
+}
+
+// Flags a post source over its size limit (models/file/flags.js), with its
+// size and the limit. A failure is ignored, as the ignored record's is.
+async function flagTooLarge(blogID, sourcePath) {
+  try {
+    var stat = await folder.stat(blogID, sourcePath);
+
+    if (stat.isDirectory) return;
+
+    await folder.setFlags(blogID, sourcePath, "build", [
+      {
+        code: "POST_TOO_LARGE",
+        size: stat.size,
+        limit: postSourceSize.limitForPath(sourcePath).bytes,
+      },
+    ]);
+  } catch (err) {}
 }
 
 async function dropEntryAndPreview(blogID, targetPath) {
@@ -136,6 +155,7 @@ async function buildAndSet(blog, path, multiInfo, state) {
       // An oversized source inside a "+" folder aborts the whole
       // aggregate build, so drop the now-stale synthesized entry too.
       await Ignore(blog.id, path, TOO_LARGE);
+      await flagTooLarge(blog.id, path);
       return dropStaleAggregate(blog, multiInfo);
     }
 
@@ -199,6 +219,13 @@ async function buildAndSet(blog, path, multiInfo, state) {
   await Promise.all(
     [entry.path].concat(sourcePaths).map(function (ignoredPath) {
       return IgnoredFiles.drop(blog.id, ignoredPath).catch(noop);
+    })
+  );
+
+  // Likewise the build's flags on each of them (models/file/flags.js)
+  await Promise.all(
+    [entry.path].concat(sourcePaths).map(function (sourcePath) {
+      return folder.setFlags(blog.id, sourcePath, "build", []).catch(noop);
     })
   );
 
