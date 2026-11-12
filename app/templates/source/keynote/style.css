@@ -43,7 +43,12 @@ html,
 body {
   min-height: 100%;
   background: {{background_color}};
+}
+
+html {
   color-scheme: light;
+  /* Scrollbars take the page's own colours, with or without script. */
+  scrollbar-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.3) {{background_color}};
 }
 
 body {
@@ -113,7 +118,6 @@ hr {
 .date {
   {{#syntax_highlighter_font}}
   font-family: {{{stack}}};
-  font-size: {{{font_size}}}px;
   {{/syntax_highlighter_font}}
   display: inline-block;
   margin: 0.85em 0;
@@ -127,13 +131,14 @@ hr {
   position: relative;
   z-index: 2;
   display: flex;
-  align-items: flex-start;
+  align-items: baseline;
   flex-wrap: wrap;
-  gap: 0.45em 1.25em;
-  padding: 1.25em calc({{spacing}}em * 0.7) 2.5em;
+  /* The same space between the title and the first link as between the links. */
+  gap: 0.45em 1.15em;
+  /* Lines up with the archives grid below it. */
+  padding: var(--edge-y) var(--edge-x) 2.5em;
   margin-bottom: -1.5em;
-  font-size: 0.82em;
-  justify-content: space-between;
+  font-size: 0.9375em;
   /* The page colour fading to transparent, so content scrolls away softly beneath it. */
   background: linear-gradient(
     to bottom,
@@ -143,21 +148,19 @@ hr {
   );
   /* The fade overlaps the content below, so only the links themselves take clicks. */
   pointer-events: none;
+  transition: opacity 200ms ease;
 }
 
 #header a {
   pointer-events: auto;
 }
 
+/* The title and the links sit together on the left, all at one size. */
 #header .nav {
-  justify-content: flex-end;
-  margin-left: auto;
-  /* Draws the links in towards the right edge, past the room kept for the scrollbar. */
-  margin-right: -1em;
-}
-
-#title {
-  order: -1;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.25em 1.15em;
 }
 
 {{#sticky_navigation}}
@@ -167,35 +170,50 @@ hr {
 }
 {{/sticky_navigation}}
 
-#header .nav {
-  display: flex;
-  align-items: flex-start;
-  flex-wrap: wrap;
-  gap: 0.25em 1.15em;
-}
-
 #header .nav a {
   display: inline-block;
-  padding: 0.55em 0 0.15em;
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
+  padding: 0.15em 0;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+  text-underline-offset: 0.3em;
+  text-decoration-thickness: 1px;
   transition: color 160ms ease, opacity 160ms ease;
 }
 
-#header .nav a:hover {
+#header .nav a:hover,
+#header .nav a.active {
   color: {{text_color}};
   opacity: 1;
+}
+
+#header .nav a.active {
+  text-decoration-line: underline;
+}
+
+/* The title links home and the archives have search, so the menu's own Home and
+   Search links are left out. */
+#header .nav a[href="/"],
+#header .nav a[href="/search"] {
+  display: none;
 }
 
 #title {
   {{#font}}
   font-family: {{{stack}}};
   {{/font}}
+  order: -1;
   display: inline-flex;
   align-items: center;
   padding: 0.15em 0;
   color: {{text_color}};
-  font-size: 1.55em;
-  font-weight: 600;
+  font-size: 1em;
+  font-weight: normal;
+  text-underline-offset: 0.3em;
+  text-decoration-thickness: 1px;
+}
+
+/* On the homepage the title is the active link. */
+body[data-view="home"] #title {
+  text-decoration-line: underline;
 }
 
 .avatar {
@@ -221,16 +239,14 @@ hr {
 }
 
 html {
-  --placeholder: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.08);
+  /* The space from the screen's top and side edges to the header, and to the viewer's caption. */
+  --edge-x: max(1rem, 2vw);
+  --edge-y: 1.25rem;
   scrollbar-gutter: stable;
 }
 
 html.is-viewing {
   overflow: hidden;
-}
-
-#header {
-  transition: opacity 200ms ease;
 }
 
 html.is-viewing #header {
@@ -242,13 +258,22 @@ html.is-viewing.is-leaving #header {
   opacity: 1;
 }
 
-/* Home and entry pages: one rail of images filling the space under the header. */
-body[data-view="home"],
-body[data-view="entry"] {
+/* Home and entry pages: one rail of images filling the space under the header. An entry
+   page shows its text instead when it has no image, or when script is unavailable. */
+.js body[data-view="home"],
+.js.rail-mode body[data-view="entry"] {
   display: flex;
   flex-direction: column;
   height: 100dvh;
   overflow: hidden;
+}
+
+body[data-view="entry"] .rail-viewport {
+  display: none;
+}
+
+.js.rail-mode body[data-view="entry"] .rail-viewport {
+  display: block;
 }
 
 .rail-viewport {
@@ -256,6 +281,8 @@ body[data-view="entry"] {
   --slide-size: {{slide_size}};
   --item-width: min(86vw, max(calc(var(--slide-size) * 8vw), min(74vw, calc(var(--slide-size) * 115px))));
   --item-height: min(82cqh, 760px);
+  /* Room under each image for its title and a line of tags. */
+  --caption-height: 3.4em;
   --gap: clamp(3vw, calc(20.57px - 0.456vw), 6vw);
   --inline-padding: clamp(4.5vw, calc(24px + 0.5vw), 8vw);
   position: relative;
@@ -264,6 +291,9 @@ body[data-view="entry"] {
   overflow: hidden;
   overflow: clip;
   container-type: size;
+}
+
+.js .rail-viewport {
   cursor: grab;
   touch-action: pan-y;
   user-select: none;
@@ -293,15 +323,18 @@ body[data-view="entry"] {
 
 /* Slides are positioned by script; only those in view are shown. */
 .slide {
-  position: absolute;
-  top: 0;
-  left: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   width: var(--item-width);
   height: var(--item-height);
   margin: 0;
+}
+
+.js .slide {
+  position: absolute;
+  top: 0;
+  left: 0;
   visibility: hidden;
 }
 
@@ -331,7 +364,7 @@ body[data-view="entry"] {
 }
 
 .item {
-  width: min(100%, calc(var(--item-height) * var(--w, 1) / var(--h, 1)));
+  width: min(100%, calc((var(--item-height) - var(--caption-height)) * var(--w, 1) / var(--h, 1)));
   color: inherit;
   cursor: inherit;
 }
@@ -345,13 +378,6 @@ body[data-view="entry"] {
   opacity: 1;
 }
 
-.item::before {
-  position: absolute;
-  inset: 0;
-  background: var(--placeholder);
-  content: "";
-}
-
 .item img {
   position: relative;
   display: block;
@@ -359,11 +385,39 @@ body[data-view="entry"] {
   height: auto;
   max-width: none;
   aspect-ratio: var(--w, 1) / var(--h, 1);
-  background: var(--placeholder);
-  opacity: 0;
   pointer-events: none;
   -webkit-user-drag: none;
   transition: opacity 300ms ease;
+}
+
+.js .item img {
+  opacity: 0;
+}
+
+.slide-title,
+.slide-tags {
+  display: block;
+  overflow: hidden;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+  font-size: 0.8125em;
+  line-height: 1.4;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.slide-title {
+  padding-top: 0.75em;
+  transition: color 160ms ease;
+}
+
+@media (hover: hover) {
+  .rail-viewport:not(.is-dragging) .item:hover .slide-title {
+    color: {{text_color}};
+  }
+}
+
+.slide-tags {
+  font-style: italic;
 }
 
 .item img.is-loaded,
@@ -392,8 +446,54 @@ body[data-view="entry"] {
   outline: none;
 }
 
-/* Entry pages keep their text for search engines and anyone without script. */
-.js .contents {
+/* Without script the rail is a row of images that scrolls sideways, with links to the
+   newer and older pages below it. */
+html:not(.js) .rail-viewport {
+  height: min(78vh, 900px);
+}
+
+html:not(.js) .rail {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scroll-padding-inline: var(--inline-padding);
+}
+
+html:not(.js) .slide {
+  flex: 0 0 auto;
+  width: auto;
+  scroll-snap-align: start;
+}
+
+html:not(.js) .item {
+  width: calc((var(--item-height) - var(--caption-height)) * var(--w, 1) / var(--h, 1));
+  max-width: 86vw;
+}
+
+/* Script loads each rail image as its slide nears the screen; without script the
+   <noscript> copy shows instead. */
+html:not(.js) .item img[data-src] {
+  display: none;
+}
+
+.js .rail-pagination {
+  display: none;
+}
+
+.rail-pagination {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+}
+
+.rail-pagination a[rel="next"] {
+  margin-left: auto;
+}
+
+/* An entry in the viewer keeps its text on the page for search engines. */
+.js.rail-mode .contents {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -431,6 +531,27 @@ body[data-view="entry"] {
   margin-top: 0.3em;
 }
 
+.entry-nav {
+  display: flex;
+  justify-content: space-between;
+  gap: 1em;
+  margin: 2.5em 0;
+  font-size: 0.875em;
+}
+
+.entry-nav a {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+}
+
+.entry-nav a:hover {
+  color: {{text_color}};
+  opacity: 1;
+}
+
+.entry-nav a:not([href]) {
+  visibility: hidden;
+}
+
 .caption {
   {{#font}}
   font-family: {{{stack}}};
@@ -464,12 +585,83 @@ body[data-view="entry"] {
   height: 180px;
   color: {{text_color}};
   cursor: zoom-in;
-  transition: opacity 160ms ease, transform 160ms ease;
+  transition: opacity 160ms ease;
 }
 
-.list a.cell:hover {
-  transform: scale(1.04);
+/* An image sits in a box of fixed height with its title below. */
+.list a.cell:not(.card) {
+  flex-direction: column;
+  align-items: stretch;
+  height: auto;
+}
+
+.cell-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 180px;
+}
+
+.cell-title {
+  display: block;
+  overflow: hidden;
+  padding-top: 0.75em;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+  font-size: 0.8125em;
+  line-height: 1.4;
+  text-align: center;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: color 160ms ease;
+}
+
+.list a.card:hover {
   opacity: 0.75;
+}
+
+.list a.cell:hover .cell-title {
+  color: {{text_color}};
+}
+
+/* Posts without an image are listed as a card with their title. */
+.list a.card {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  gap: 0.4em;
+  padding: 1em;
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.16);
+  cursor: pointer;
+}
+
+.card-title,
+.card-summary {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+}
+
+.card-title {
+  font-weight: 600;
+  line-height: 1.3;
+  -webkit-line-clamp: 3;
+}
+
+.card-summary {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+  font-size: 0.85em;
+  line-height: 1.4;
+  -webkit-line-clamp: 4;
+}
+
+.card-date {
+  margin-top: auto;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.48);
+  font-size: 0.72em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 .cell img {
@@ -479,7 +671,6 @@ body[data-view="entry"] {
   height: auto;
   max-height: 180px;
   aspect-ratio: var(--w, 1) / var(--h, 1);
-  background: var(--placeholder);
   object-fit: contain;
   -webkit-user-drag: none;
 }
@@ -492,6 +683,171 @@ body[data-view="entry"] {
 .search-form {
   max-width: 20em;
   margin: 2em 2vw 0;
+}
+
+/* Archives and tag pages: the tags to filter by on the left, the search bar on the right. */
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75em 1.5em;
+  margin: 2em 2vw 0;
+}
+
+/* A faint rule under the tags, separating them from the grid. */
+.list-toolbar:has(.tag-navigation) {
+  margin-bottom: 0.5em;
+  padding-bottom: 2em;
+  border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.13);
+}
+
+.tags-expanded .list-toolbar {
+  align-items: flex-start;
+}
+
+/* The search bar sits on the right beside the tags, or on the left on its own. */
+.list-toolbar .search-form {
+  flex: 0 1 12em;
+  min-width: 7em;
+  margin: 0;
+}
+
+.tag-navigation + .search-form {
+  margin-left: auto;
+}
+
+/* Beside the tags, the search box is the same height and type size as a tag. */
+.list-toolbar .search-form input[type="search"] {
+  height: 28px;
+  padding: 4px 11px;
+  font-size: 12px;
+  line-height: 18px;
+}
+
+.tag-navigation {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+/* With script the row shows only the tags that fit whole, followed by a button that
+   opens the rest; script hides the others. */
+.js .tag-navigation {
+  overflow: hidden;
+}
+
+.js .tag-navigation ul {
+  min-width: 0;
+}
+
+.js.tags-expanded .tag-navigation ul {
+  flex-wrap: wrap;
+}
+
+.tag-navigation li {
+  flex: none;
+}
+
+.tag-navigation li.is-overflow {
+  display: none;
+}
+
+/* A long tag list squeezes the search box down to its minimum. */
+@media (min-width: 801px) {
+  .list-toolbar.tags-long .search-form {
+    flex-basis: 7em;
+  }
+}
+
+.tag-toggle {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  color: {{text_color}};
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.16);
+  cursor: pointer;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.tag-toggle:hover {
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.26);
+}
+
+.tag-toggle:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: 3px;
+}
+
+.tag-toggle svg {
+  display: block;
+  fill: currentColor;
+}
+
+.tag-toggle-close,
+.tags-expanded .tag-toggle-more {
+  display: none !important;
+}
+
+.tags-expanded .tag-toggle-close {
+  display: block !important;
+}
+
+.tag-navigation::-webkit-scrollbar {
+  display: none;
+}
+
+.tag-navigation ul {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: max-content;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag-navigation a {
+  display: block;
+  padding: 5px 9px;
+  white-space: nowrap;
+  border-radius: 999px;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.78);
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.16);
+  font-size: 12px;
+  line-height: 18px;
+  transition: background-color 180ms ease, color 180ms ease;
+}
+
+.tag-navigation a:hover {
+  color: {{text_color}};
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.26);
+  opacity: 1;
+}
+
+.tag-navigation a.active {
+  color: {{background_color}};
+  background: {{text_color}};
+}
+
+/* Search results aren't one of the tags, so no pill is selected there. */
+body[data-view="search"] .tag-navigation a.active {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.78);
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.16);
+}
+
+body[data-view="search"] .tag-navigation a.active:hover {
+  color: {{text_color}};
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.26);
+}
+
+.tag-navigation a:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: 3px;
 }
 
 .search-form input[type="search"] {
@@ -542,6 +898,18 @@ code {
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);
 }
 
+/* The number of posts, under the archives and tag pages. */
+.list-total {
+  margin: 0 2vw 4em;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.35);
+  font-size: 0.6875em;
+}
+
+/* With infinite scroll the count marks the end, so it waits until the last page is in. */
+.js .pagination:has(a.more[rel="next"]) ~ .list-total {
+  display: none;
+}
+
 .js .pagination.is-loading-more {
   visibility: hidden;
 }
@@ -552,12 +920,18 @@ code {
   --lightbox-close-duration: 200ms;
   --lightbox-open-easing: cubic-bezier(0.22, 1.1, 0.36, 1);
   --lightbox-close-easing: cubic-bezier(0.32, 0.72, 0, 1);
-  --lightbox-gutter: clamp(52px, 6vw, 88px);
-  --lightbox-top-gutter: 0px;
-  --lightbox-bottom-gutter: 0px;
+  /* The buttons sit as close to the screen's edges as the header's links: each 44px button
+     is inset so its icon lines up with the page margin, and the image takes the rest. */
+  --lightbox-button-inset: calc(var(--edge-x) - 10px);
+  --lightbox-gutter: calc(var(--lightbox-button-inset) + 48px);
+  /* The caption's band above the image, matched by one below it. Zoomed images cover both. */
+  --lightbox-top-gutter: calc(var(--edge-y) + 1.75rem + 0.75rem);
+  --lightbox-bottom-gutter: var(--lightbox-top-gutter);
   position: fixed;
   inset: 0;
-  width: 100%;
+  /* The whole window, including the strip kept for the page's scrollbar (measured by
+     script), so the right-hand buttons sit as far from the edge as the left-hand ones. */
+  width: calc(100% + var(--scrollbar-width, 0px));
   height: 100%;
   max-width: none;
   max-height: none;
@@ -567,6 +941,8 @@ code {
   border: 0;
   background: transparent;
   color: {{text_color}};
+  /* Zooming moves the image over the whole screen; the arrows and close button float above it. */
+  touch-action: none;
 }
 
 .lightbox[open] {
@@ -594,6 +970,7 @@ code {
 
 .lightbox.is-closing,
 .lightbox.is-closing::before,
+.lightbox.is-closing .lightbox-caption,
 .lightbox.is-closing .lightbox-close,
 .lightbox.is-closing .lightbox-step {
   transition-duration: var(--lightbox-close-duration);
@@ -652,15 +1029,6 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
-/* Zooming moves the image over the whole screen; the arrows and close button float above it. */
-.lightbox {
-  touch-action: none;
-}
-
-.lightbox-image {
-  transform-origin: center;
-}
-
 .lightbox-image.is-zoom-animating {
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -675,8 +1043,8 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
 .zoom-controls {
   position: absolute;
-  right: 12px;
-  bottom: 12px;
+  right: var(--lightbox-button-inset);
+  bottom: calc(var(--edge-y) - 10px);
   z-index: 2;
   display: flex;
   align-items: center;
@@ -696,12 +1064,6 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   pointer-events: auto;
 }
 
-.zoom-value {
-  min-width: 3.2em;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-}
-
 .zoom-button {
   display: grid;
   width: 36px;
@@ -715,7 +1077,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   background: transparent;
   opacity: 0.7;
   cursor: pointer;
-  transition: opacity 160ms ease;
+  transition: opacity 160ms ease, background-color 160ms ease;
 }
 
 .zoom-button:hover:not(:disabled) {
@@ -771,8 +1133,50 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   height: auto;
   max-width: none;
   aspect-ratio: var(--image-ratio, auto);
-  background: var(--placeholder);
   object-fit: contain;
+  transform-origin: center;
+}
+
+/* The entry's title and its place in the collection, top left. */
+.lightbox-caption {
+  position: absolute;
+  top: var(--edge-y);
+  left: var(--edge-x);
+  right: var(--lightbox-gutter);
+  z-index: 1;
+  margin: 0;
+  padding: 0.15em 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  overflow: hidden;
+  color: {{text_color}};
+  /* The header's type size, so the caption sits where the title does. */
+  font-size: 0.9375em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
+}
+
+.lightbox.is-revealed .lightbox-caption {
+  opacity: 1;
+}
+
+.lightbox.is-zoomed .lightbox-caption {
+  opacity: 0;
+}
+
+.lightbox-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lightbox-index {
+  flex: 0 0 auto;
+  opacity: 0.5;
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
 }
 
 .lightbox-close,
@@ -791,6 +1195,30 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 }
 
 /* Keyboard focus rings the icon as a circle (the buttons themselves are wider than tall). */
+/* Zoomed in, the image can sit under the controls, so each gets a backing like the zoom buttons. */
+.lightbox.is-zoomed.is-revealed .lightbox-close,
+.lightbox.is-zoomed.is-revealed .lightbox-step {
+  opacity: 1;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.7);
+}
+
+@media (hover: hover) {
+  .lightbox.is-zoomed.is-revealed .lightbox-close:hover,
+  .lightbox.is-zoomed.is-revealed .lightbox-step:hover {
+    color: {{text_color}};
+  }
+
+  .lightbox .lightbox-close:hover .lightbox-icon,
+  .lightbox .lightbox-step:hover .lightbox-icon,
+  .zoom-button:hover:not(:disabled) {
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
+  }
+}
+
+.lightbox.is-zoomed .lightbox-icon {
+  background: rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.6);
+}
+
 .lightbox-close:focus-visible,
 .lightbox-step:focus-visible {
   outline: none;
@@ -800,27 +1228,33 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 .lightbox-step:focus-visible .lightbox-icon {
   border-radius: 50%;
   outline: 2px solid {{text_color}};
-  outline-offset: 6px;
+  outline-offset: 0;
 }
 
+/* Each icon sits in a round backing, shown when zoomed in and on hover. */
 .lightbox-icon {
   display: block;
+  box-sizing: content-box;
   width: 24px;
   height: 24px;
+  padding: 6px;
+  border-radius: 999px;
   fill: currentColor;
+  transition: background-color 200ms ease;
 }
 
 .lightbox-close {
-  top: clamp(12px, calc(2.857vw + 2.858px), 20px);
-  right: 0;
-  width: var(--lightbox-gutter);
+  /* Centred on the caption's line. */
+  top: calc(var(--edge-y) + 0.85rem - 22px);
+  right: var(--lightbox-button-inset);
+  width: 44px;
   height: 44px;
   border-radius: 50%;
 }
 
 .lightbox-step {
   position: relative;
-  width: 100%;
+  width: 44px;
   height: 44px;
   border-radius: 50%;
 }
@@ -833,14 +1267,16 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   grid-column: 1;
   grid-row: 2;
   align-self: center;
-  justify-self: center;
+  justify-self: start;
+  margin-left: var(--lightbox-button-inset);
 }
 
 .lightbox-next {
   grid-column: 3;
   grid-row: 2;
   align-self: center;
-  justify-self: center;
+  justify-self: end;
+  margin-right: var(--lightbox-button-inset);
 }
 
 /* Touch screens swipe between images, so the arrows give way to a larger image and a
@@ -848,7 +1284,6 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 @media (pointer: coarse) {
   .lightbox {
     --lightbox-gutter: 0px;
-    --lightbox-top-gutter: 56px;
   }
 
   .lightbox .lightbox-step {
@@ -859,23 +1294,25 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
     clip-path: inset(50%);
   }
 
-  .lightbox .lightbox-close {
-    top: 6px;
-    width: 56px;
+  .lightbox-caption {
+    right: calc(var(--lightbox-button-inset) + 48px);
   }
 }
 
 @media (pointer: coarse) and (orientation: landscape) {
   .lightbox {
-    --lightbox-gutter: 56px;
-    --lightbox-top-gutter: 0px;
+    --lightbox-gutter: calc(var(--lightbox-button-inset) + 48px);
   }
 }
 
 @media screen and (max-width: 800px) {
+  html {
+    --edge-y: 1rem;
+  }
+
   #header {
-    gap: 0.5em 1em;
-    padding: 1em 1.25em 2em;
+    gap: 0.5em 0.8em;
+    padding: var(--edge-y) var(--edge-x) 2em;
     margin-bottom: -1em;
   }
 
@@ -889,8 +1326,6 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
   #title {
     flex: 0 0 100%;
-    order: -1;
-    font-size: 1.6em;
     overflow-wrap: anywhere;
   }
 
@@ -900,13 +1335,30 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
     padding: 0;
   }
 
+  .list-toolbar {
+    flex-wrap: wrap;
+    margin: 1.5em 1em 0;
+  }
+
+  .list-toolbar .search-form {
+    flex: 1 1 100%;
+    max-width: none;
+    order: -1;
+    margin-left: 0;
+  }
+
+  .list-total {
+    margin: 0 1em 3em;
+  }
+
   .list {
     grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
     margin: 1.5em 1em 3em;
     gap: 2em 4vw;
   }
 
-  .list a.cell {
+  .list a.cell,
+  .cell-image {
     height: 120px;
   }
 
@@ -924,6 +1376,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
   .lightbox .lightbox-close,
   .lightbox .lightbox-step,
+  .lightbox-caption,
   .zoom-controls,
   .lightbox-image.is-zoom-animating,
   .item img {

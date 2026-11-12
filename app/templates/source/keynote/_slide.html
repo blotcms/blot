@@ -1,6 +1,11 @@
-<li class="slide"{{#thumbnail.large}} style="--w: {{width}}; --h: {{height}}"{{/thumbnail.large}}{{^thumbnail.large}} hidden{{/thumbnail.large}}>
-  <a class="item" href="{{{url}}}" aria-label="{{title}}"{{#thumbnail.large}} data-preview="{{{url}}}" data-width="{{width}}" data-height="{{height}}"{{/thumbnail.large}}>
-    {{#thumbnail.large}}<img src="{{{url}}}" srcset="{{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w, {{{thumbnail.large.url}}} {{thumbnail.large.width}}w" sizes="min(86vw, max(calc({{slide_size}} * 8vw), min(74vw, calc({{slide_size}} * 115px))))" width="{{width}}" height="{{height}}" alt="{{title}}" decoding="async" draggable="false">{{/thumbnail.large}}
+{{#thumbnail.large.url}}
+<li class="slide" style="--w: {{thumbnail.large.width}}; --h: {{thumbnail.large.height}}">
+  <a class="item" href="{{{url}}}" aria-label="{{title}}" data-preview="{{{thumbnail.large.url}}}" data-width="{{thumbnail.large.width}}" data-height="{{thumbnail.large.height}}">
+    <img data-src="{{{thumbnail.large.url}}}" data-srcset="{{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w, {{{thumbnail.large.url}}} {{thumbnail.large.width}}w" sizes="min(86vw, max(calc({{slide_size}} * 8vw), min(74vw, calc({{slide_size}} * 115px))))" width="{{thumbnail.large.width}}" height="{{thumbnail.large.height}}" alt="{{title}}" decoding="async" draggable="false">
+    <noscript><img src="{{{thumbnail.large.url}}}" srcset="{{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w, {{{thumbnail.large.url}}} {{thumbnail.large.width}}w" sizes="(min-width: 800px) 50vw, 80vw" width="{{thumbnail.large.width}}" height="{{thumbnail.large.height}}" alt="{{title}}" loading="lazy" decoding="async"></noscript>
+    <span class="slide-title">{{title}}</span>
+    {{#tags.length}}<span class="slide-tags">{{#tags}}{{name}}{{^last}}, {{/last}}{{/tags}}</span>{{/tags.length}}
     <template class="entry-html">{{{html}}}</template>
   </a>
 </li>
+{{/thumbnail.large.url}}

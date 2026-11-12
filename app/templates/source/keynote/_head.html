@@ -21,7 +21,20 @@
   {{^favicon}}{{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/profile_image.thumbnails.square.url}}{{/favicon}}
   <link rel="preconnect" href="{{{cdn}}}" />
   <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
-  <script>document.documentElement.classList.add("js")</script>
+  <script>
+    (function (root) {
+      root.classList.add("js");
+      // The archives' tag list stays open across pages once someone opens it.
+      try {
+        if (localStorage.getItem("keynoteTagsExpanded") === "1") root.classList.add("tags-expanded");
+      } catch (e) {}
+      // Native controls and scrollbars follow the page colour.
+      var hex = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec("{{background_color}}");
+      if (hex && 0.2126 * parseInt(hex[1], 16) + 0.7152 * parseInt(hex[2], 16) + 0.0722 * parseInt(hex[3], 16) < 128) root.style.colorScheme = "dark";
+      {{#entry}}{{#thumbnail.large.url}}// An entry with an image opens in the viewer, over the rail.
+      root.classList.add("rail-mode");{{/thumbnail.large.url}}{{/entry}}
+    })(document.documentElement);
+  </script>
 
   {{#entry}}
   <link rel="prefetch" href="/">
@@ -37,14 +50,7 @@
   <meta property="og:image:height" content="{{height}}">
   {{/thumbnail.large}}
   {{^thumbnail.large}}
-  {{#profile_image.thumbnails.large}}
-  <meta property="og:image" content="{{{url}}}">
-  <meta property="og:image:width" content="{{width}}">
-  <meta property="og:image:height" content="{{height}}">
-  {{/profile_image.thumbnails.large}}
-  {{^profile_image.thumbnails.large.url}}
   {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
-  {{/profile_image.thumbnails.large.url}}
   {{/thumbnail.large}}
   <meta property="og:type" content="article">
   {{#thumbnail.large}}<meta name="twitter:card" content="summary_large_image">{{/thumbnail.large}}{{^thumbnail.large}}<meta name="twitter:card" content="summary">{{/thumbnail.large}}
@@ -52,12 +58,7 @@
   {{#summary}}<meta name="twitter:description" content="{{summary}}">{{/summary}}{{^summary}}<meta name="twitter:description" content="{{title}}">{{/summary}}
   {{#thumbnail.large}}<meta name="twitter:image" content="{{{url}}}">{{/thumbnail.large}}
   {{^thumbnail.large}}
-  {{#profile_image.thumbnails.large}}
-  <meta name="twitter:image" content="{{{url}}}">
-  {{/profile_image.thumbnails.large}}
-  {{^profile_image.thumbnails.large.url}}
   {{#avatar}}<meta name="twitter:image" content="{{{avatar}}}">{{/avatar}}
-  {{/profile_image.thumbnails.large.url}}
   {{/thumbnail.large}}
   <meta property="article:author" content="{{{siteURL}}}">
   <meta property="article:published_time" content="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">
@@ -75,13 +76,6 @@
   {{/url}}
   <meta property="og:title" content="{{> title}}">
   <meta property="og:description" content="{{> description}}">
-  {{#profile_image.thumbnails.large}}
-  <meta property="og:image" content="{{{url}}}">
-  <meta property="og:image:width" content="{{width}}">
-  <meta property="og:image:height" content="{{height}}">
-  {{/profile_image.thumbnails.large}}
-  {{^profile_image.thumbnails.large.url}}
   {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
-  {{/profile_image.thumbnails.large.url}}
   {{/entry}}
 </head>

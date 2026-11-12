@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html>
+<html lang="{{lang}}">
   {{> head}}
   <body data-view="tagged">
 
@@ -9,6 +9,8 @@
 
       <h1 class="visually-hidden">Posts tagged “{{tag}}”</h1>
 
+      {{> tag_filters}}
+
       <div class="list" data-grid>
         {{#entries}}
         {{> cell}}
@@ -17,11 +19,12 @@
 
       {{#pagination}}
       <div class="pagination">
-        {{#previous}}<a href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>{{/previous}}
-        Page {{current}} of {{total}}
-        {{#next}}<a class="more" rel="next" href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>{{/next}}
+        {{#previous}}<a class="collection-previous" href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>{{/previous}}
+        {{#next}}<a class="more collection-next" rel="next" href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>{{/next}}
       </div>
       {{/pagination}}
+
+      <p class="list-total" data-count="{{total}}">{{total}} items</p>
 
     </div>
 

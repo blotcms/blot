@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="{{lang}}">
   {{> head}}
   <body data-view="home">
     {{> header}}
 
-    <main class="rail-viewport" aria-label="Images">
+    <main class="rail-viewport" aria-label="Images" data-page="{{pagination.current}}" data-total="{{pagination.total}}">
       <div class="rail-layer">
         <ul class="rail" aria-label="Image rail">
           {{#posts}}
@@ -12,8 +12,10 @@
           {{/posts}}
         </ul>
       </div>
-      <p class="rail-empty">There are no images to show yet.</p>
+      <p class="rail-empty">There are no images to show yet. <a href="/archives">See all posts</a></p>
     </main>
+
+    {{> rail_pagination}}
 
     {{> lightbox}}
     {{> footer}}

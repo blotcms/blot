@@ -1,16 +1,16 @@
 <!DOCTYPE html>
-<html>
+<html lang="{{lang}}">
   {{> head}}
-  <body>
+  <body data-view="error">
 
     <div class="container">
 
       {{> header}}
 
-      <div class="list">
-      <h1>{{error.title}}</h1>
+      <div class="contents">
+        <h1>{{error.title}}</h1>
 
-      <p>Something has gone wrong. {{error.message}}</p>
+        <p>Something has gone wrong. {{error.message}}</p>
       </div>
 
     </div>

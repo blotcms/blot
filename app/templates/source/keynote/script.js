@@ -2,24 +2,306 @@
 
 (() => {
   const view = document.body.dataset.view;
+  const root = document.documentElement;
+  const mod = (value, length) => ((value % length) + length) % length;
+
+  // ---- Keep the collection an entry was opened from so its arrows stay within it ----
+  // The chronological next/previous hrefs are only ever replaced once we know better.
+
+  const COLLECTION_KEY = "keynoteCollection";
+  const DEPTH_KEY = "keynoteCollectionDepth";
+  const cacheID = "{{cacheID}}";
+  let closeURL = null;
+  let closeDepth = 0;
+
+  function pathOf(url) {
+    try {
+      const parsed = new URL(url, location.href);
+      return parsed.origin === location.origin ? parsed.pathname.replace(/\/+$/, "") || "/" : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // Close by walking back through the history entries pushed since the listing,
+  // so the browser restores the listing exactly as it was left.
+  function closeEntry() {
+    if (closeDepth && closeDepth < history.length) history.go(-closeDepth);
+    else location.href = closeURL || "/";
+  }
+
+  // Each entry page remembers how many history entries sit between it and the
+  // listing. A page opened from the listing is one deep, and one reached with an
+  // arrow is one deeper than the page it was left from. The depth is handed over
+  // through sessionStorage, and kept in history.state so back, forward and
+  // reload see the same value.
+  function handOverDepth(link, depth) {
+    try {
+      sessionStorage.setItem(DEPTH_KEY, JSON.stringify({ path: pathOf(link.href), depth }));
+    } catch (error) { /* storage can be unavailable */ }
+  }
+
+  function takeDepth() {
+    const saved = history.state?.closeDepth;
+    if (saved) return saved;
+    try {
+      const handed = JSON.parse(sessionStorage.getItem(DEPTH_KEY));
+      sessionStorage.removeItem(DEPTH_KEY);
+      return handed && handed.path === pathOf(location.href) ? handed.depth : 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  function parseListing(doc, url) {
+    const entries = [];
+    for (const link of doc.querySelectorAll("a.collection-entry")) {
+      const path = pathOf(link.href);
+      if (path && !entries.includes(path)) entries.push(path);
+    }
+    if (!entries.length) return null;
+    const pagination = (selector) => {
+      const link = doc.querySelector(selector);
+      return link?.getAttribute("href") ? link.href : null;
+    };
+    return {
+      url: url.split("#")[0],
+      entries,
+      next: pagination("a.collection-next"),
+      previous: pagination("a.collection-previous"),
+    };
+  }
+
+  function readCollection() {
+    try {
+      return JSON.parse(sessionStorage.getItem(COLLECTION_KEY));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeCollection(state) {
+    try {
+      sessionStorage.setItem(COLLECTION_KEY, JSON.stringify(state));
+    } catch (error) { /* storage can be unavailable */ }
+  }
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.("a.entry-next, a.entry-previous");
+    if (link && closeDepth) handOverDepth(link, closeDepth + 1);
+  }, true);
+
+  // Record the order shown by the listing before following one of its entries.
+  document.addEventListener("click", (event) => {
+    const entryLink = event.target.closest?.("a.collection-entry");
+    if (!entryLink) return;
+    handOverDepth(entryLink, 1);
+    const listing = parseListing(document, location.href);
+    if (listing) writeCollection({ cacheID, listings: [listing] });
+  }, true);
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.("a.entry-close");
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    closeEntry();
+  });
+
+  async function loadListing(url) {
+    const response = await fetch(url, { credentials: "same-origin", cache: "no-cache" });
+    if (!response.ok) throw new Error("Could not load collection page");
+    return parseListing(new DOMParser().parseFromString(await response.text(), "text/html"), response.url);
+  }
+
+  // Follow a listing's pagination links, up to hops pages, until it has the entry.
+  async function findEntry(url, path, direction, hops) {
+    const listing = await loadListing(url);
+    if (!listing || listing.entries.includes(path)) return listing;
+    return hops && listing[direction] ? findEntry(listing[direction], path, direction, hops - 1) : null;
+  }
+
+  function initializeCollectionNavigation() {
+    const state = readCollection();
+    // Only trust the collection when arriving from elsewhere on this site.
+    if (!state || !pathOf(document.referrer)) return;
+
+    closeDepth = takeDepth();
+    if (closeDepth) history.replaceState({ ...history.state, closeDepth }, "");
+
+    const path = pathOf(location.href);
+    let page = -1;
+    let index = -1;
+    for (let n = 0; n < state.listings.length && index < 0; n += 1) {
+      page = n;
+      index = state.listings[n].entries.indexOf(path);
+    }
+    if (index < 0) return;
+
+    // A publish changes cacheID and can push the entry onto a later page (or
+    // pull it earlier), so find it in the current listing before using the order.
+    if (state.cacheID !== cacheID) {
+      const { url, previous } = state.listings[page];
+      findEntry(url, path, "next", 3)
+        .then((found) => found || (previous && findEntry(previous, path, "previous", 1)))
+        .then((found) => {
+          if (!found) return;
+          const fresh = { cacheID, listings: [found] };
+          writeCollection(fresh);
+          followCollection(fresh, 0, found.entries.indexOf(path));
+        }, () => {});
+      return;
+    }
+    followCollection(state, page, index);
+  }
+
+  function followCollection(state, page, index) {
+    const listing = state.listings[page];
+    closeURL = listing.url;
+    for (const link of document.querySelectorAll("a.entry-close")) link.href = closeURL;
+
+    const edge = (loaded, step) => loaded.entries[step > 0 ? 0 : loaded.entries.length - 1];
+
+    // Resolves to the neighbour's path, null at the end of the collection, and
+    // rejects when unsure (so the chronological link stays).
+    async function neighbor(direction) {
+      // entry.next is the newer entry, so it sits earlier in the listing; the
+      // listing's own "next" page is the older one.
+      const step = direction === "next" ? -1 : 1;
+      const pageLink = listing[direction === "next" ? "previous" : "next"];
+      if (listing.entries[index + step]) return listing.entries[index + step];
+
+      const loaded = state.listings[page + step];
+      if (loaded) return edge(loaded, step);
+      // No link means the last page. Search is a single page of the model's
+      // capped results, which are the whole collection.
+      if (!pageLink) return null;
+
+      const fetched = await loadListing(pageLink);
+      if (!fetched) throw new Error("No entries on collection page");
+      if (step > 0) state.listings.push(fetched);
+      else state.listings.unshift(fetched);
+      writeCollection(state);
+      return edge(fetched, step);
+    }
+
+    for (const [selector, direction] of [["a.entry-previous", "previous"], ["a.entry-next", "next"]]) {
+      const links = document.querySelectorAll(selector);
+      if (!links.length) continue;
+      neighbor(direction).then((target) => {
+        for (const link of links) {
+          if (target) {
+            link.href = location.origin + target;
+          } else {
+            link.removeAttribute("href");
+            link.setAttribute("aria-disabled", "true");
+          }
+        }
+      }, () => {});
+    }
+  }
+
+  if (view === "entry") initializeCollectionNavigation();
+
+  // Left is the newer entry and right the older one, as on the rail.
+  function followEntryKey(event) {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    if (event.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
+    const selector = { ArrowLeft: "a.entry-next", ArrowRight: "a.entry-previous" }[event.key];
+    const link = selector && document.querySelector(selector);
+    if (link?.href) link.click();
+  }
+
+  for (const link of document.querySelectorAll(view === "search" ? "#header .nav a.active" : "#header .nav a.active, .tag-navigation a.active")) {
+    link.setAttribute("aria-current", "page");
+  }
+  if (view === "home") document.getElementById("title")?.setAttribute("aria-current", "page");
+  for (const total of document.querySelectorAll(".list-total[data-count='1']")) total.textContent = "1 item";
+
+  // ---- Tag filters: a row that ends in a button opening the full list, remembered across pages ----
+
+  const tagNavigation = document.querySelector(".tag-navigation");
+  const tagToggle = tagNavigation?.querySelector(".tag-toggle");
+  if (tagToggle) {
+    const TAGS_KEY = "keynoteTagsExpanded";
+    const tagList = tagNavigation.querySelector("ul");
+    const toggleItem = tagToggle.closest("li");
+    const toolbar = tagNavigation.closest(".list-toolbar");
+    const searchForm = toolbar?.querySelector(".search-form");
+    const pills = [...tagList.children].filter((item) => item !== toggleItem);
+    const expanded = () => root.classList.contains("tags-expanded");
+    const syncTags = () => {
+      for (const item of pills) item.classList.remove("is-overflow");
+      toggleItem.hidden = true;
+      const gap = parseFloat(getComputedStyle(tagList).columnGap) || 0;
+      const widths = pills.map((item) => item.offsetWidth);
+      const total = widths.reduce((sum, width) => sum + width, 0) + gap * (pills.length - 1);
+      // Squeeze the search box when the tags wouldn't fit beside it at its full width. Judged
+      // against that full width either way, so the decision doesn't flip once it is made.
+      if (searchForm) {
+        const fullSearch = 12 * parseFloat(getComputedStyle(searchForm).fontSize);
+        const fullRow = tagList.clientWidth + searchForm.offsetWidth - fullSearch;
+        toolbar.classList.toggle("tags-long", total > fullRow);
+      }
+      const available = tagList.clientWidth;
+      if (total > available) {
+        toggleItem.hidden = false;
+        if (!expanded()) {
+          // Keep whole pills that fit before the button; hide the rest.
+          const room = available - toggleItem.offsetWidth - gap;
+          let used = 0;
+          pills.forEach((item, index) => {
+            const width = widths[index] + (index ? gap : 0);
+            if (used + width > room) {
+              item.classList.add("is-overflow");
+              used = Infinity;
+            } else {
+              used += width;
+            }
+          });
+        }
+      }
+      tagToggle.setAttribute("aria-expanded", String(expanded()));
+      tagToggle.setAttribute("aria-label", expanded() ? "Show fewer tags" : "Show all tags");
+    };
+    tagToggle.addEventListener("click", () => {
+      root.classList.toggle("tags-expanded");
+      try {
+        localStorage.setItem(TAGS_KEY, expanded() ? "1" : "0");
+      } catch (error) { /* storage can be unavailable */ }
+      syncTags();
+    });
+    new ResizeObserver(syncTags).observe(tagNavigation);
+    syncTags();
+  }
+
   const lightbox = document.querySelector(".lightbox");
   if (!lightbox) return;
 
-  const root = document.documentElement;
+  // The strip kept for the page's scrollbar: the root reports the full window width, the body doesn't.
+  const measureScrollbar = () => root.style.setProperty("--scrollbar-width", `${Math.max(0, innerWidth - document.body.getBoundingClientRect().width)}px`);
+  measureScrollbar();
+  window.addEventListener("resize", measureScrollbar);
+
   const lightboxFrame = lightbox.querySelector(".lightbox-frame");
   const lightboxImage = lightbox.querySelector(".lightbox-image");
   const closeButton = lightbox.querySelector(".lightbox-close");
   const previousButton = lightbox.querySelector(".lightbox-previous");
   const nextButton = lightbox.querySelector(".lightbox-next");
+  const captionTitle = lightbox.querySelector(".lightbox-title");
+  const captionIndex = lightbox.querySelector(".lightbox-index");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   const SWIPE_THRESHOLD = 56;
   const WHEEL_GAP = 150; // ms of quiet that ends a wheel gesture
   const CONTEXT_KEY = "keynoteContext";
 
-  const mod = (value, length) => ((value % length) + length) % length;
   const isLoaded = (image) => image.complete && image.naturalWidth > 0;
   const absolute = (url) => new URL(url, document.baseURI).href;
+
+  // The address bar and the tab title follow the entry in the viewer.
+  const siteName = document.querySelector('meta[property="og:site_name"]')?.content || document.title;
+  let restingTitle = view === "entry" ? siteName : document.title;
+  const titleFor = (entry) => (entry.title ? `${entry.title} - ${siteName}` : siteName);
 
   // ---- Entries: one per image link, read from the page ----
 
@@ -60,12 +342,18 @@
   let closeAfterOpen = false;
   let closing = false;
   let closePending = false;
+  let closedByScript = false;
+  let leavingAddress = false; // a history move or navigation away is under way
+  let stepping = false;
   let lightboxGesture = null;
   let suppressLightboxClickUntil = 0;
   let wheelLockUntil = 0;
 
   const lightboxBusy = () => opening || closing || closePending;
   const viewerActive = () => lightbox.open || lightboxBusy();
+
+  // An entry from outside the rail (an older entry's own page) steps with its page links.
+  const entryLink = (direction) => document.querySelector(direction > 0 ? "a.entry-previous" : "a.entry-next");
 
   function setActive(index) {
     resetZoom();
@@ -80,11 +368,35 @@
     const source = controller.sourceImage(activeIndex);
     lightboxImage.src = source && isLoaded(source) && source.currentSrc ? source.currentSrc : entry.preview;
     lightboxImage.alt = entry.alt;
-    previousButton.disabled = !controller.wrap && activeIndex === 0;
-    nextButton.disabled = !controller.wrap && activeIndex === entries.length - 1 && !controller.hasMore?.();
+    if (entry.detached) {
+      previousButton.disabled = !entryLink(-1)?.href;
+      nextButton.disabled = !entryLink(1)?.href;
+    } else {
+      previousButton.disabled = !controller.wrap && activeIndex === 0;
+      nextButton.disabled = !controller.wrap && activeIndex === entries.length - 1 && !controller.hasMore?.();
+    }
     if (activeIndex >= entries.length - 4) controller.loadMore?.();
+    controller.prefetch?.(activeIndex);
+    updateCaption();
 
     upgradeChain(entry, token);
+  }
+
+  // The title, then its place in the collection as 05/52 once the whole collection is known.
+  function updateCaption() {
+    const entry = controller?.entries()[activeIndex];
+    if (!entry || !captionTitle) return;
+    captionTitle.textContent = entry.title;
+    const place = controller.position?.(activeIndex);
+    const pad = (number) => String(number).padStart(2, "0");
+    captionIndex.textContent = place ? `${pad(place.index)}/${pad(place.total)}` : "";
+  }
+
+  // The rail inserted `count` entries at `at`; keep the viewer on the same entry.
+  function entriesInserted(at, count, moved) {
+    if (moved && activeIndex === moved.from) activeIndex = moved.to;
+    else if (activeIndex >= at) activeIndex += count;
+    if (lightbox.open) updateCaption();
   }
 
   // Sharpen in steps: the large thumbnail, then the original. Each is fetched and decoded first
@@ -107,16 +419,36 @@
 
   function replaceAddress() {
     const entry = controller.entries()[activeIndex];
-    history.replaceState({ keynote: "open", pushed: Boolean(history.state?.pushed) }, "", entry.href);
+    history.replaceState({ ...history.state, keynote: "open" }, "", entry.href);
+    document.title = titleFor(entry);
   }
 
-  function step(direction) {
-    if (lightboxBusy()) return;
-    const entries = controller.entries();
-    const next = activeIndex + direction;
-    if (!controller.wrap && (next < 0 || next >= entries.length)) {
-      if (next >= entries.length) controller.loadMore?.();
+  async function step(direction) {
+    if (lightboxBusy() || stepping) return;
+    if (controller.entries()[activeIndex]?.detached) {
+      const link = entryLink(direction);
+      if (link?.href) link.click();
       return;
+    }
+    stepping = true;
+    try {
+      // The rail loads the neighbouring page first when the step would cross into it.
+      for (let guard = 0; guard < 50 && (await controller.ensure?.(activeIndex, direction)); guard += 1);
+      if (!controller.wrap && activeIndex + direction >= controller.entries().length && controller.hasMore?.()) {
+        await controller.loadMore();
+      }
+    } catch (error) {
+      /* a page that fails to load leaves the step to the entries already here */
+    } finally {
+      stepping = false;
+    }
+    if (!lightbox.open || lightboxBusy()) return;
+    const entries = controller.entries();
+    let next = activeIndex + direction;
+    if (!controller.wrap && (next < 0 || next >= entries.length)) return;
+    if (controller.wrap) {
+      next = mod(next, entries.length);
+      if (entries[next].detached && entries.length > 1) next = mod(next + direction, entries.length);
     }
     setActive(next);
     replaceAddress();
@@ -144,7 +476,7 @@
     const deltaX = event.clientX - gesture.startX;
     const deltaY = event.clientY - gesture.startY;
     if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) <= Math.abs(deltaY)) return;
-    step(deltaX < 0 ? 1 : -1);
+    void step(deltaX < 0 ? 1 : -1);
   }
 
   function reveal() {
@@ -155,7 +487,7 @@
       void requestClose();
       return;
     }
-    lightbox.classList.add("is-revealed");
+    if (lightbox.open) lightbox.classList.add("is-revealed");
   }
 
   // `animate` zooms from the entry's image on the page; without it the viewer simply appears.
@@ -166,6 +498,10 @@
     controller.pause();
     resetZoom();
     setActive(index);
+    // The counter needs the whole collection, so load the rest of it in the background.
+    controller.loadAll?.().then(() => {
+      if (lightbox.open) updateCaption();
+    }, () => {});
     const source = animate ? controller.sourceImage(activeIndex) : null;
     // An image still loading opens at once, as its placeholder.
     if (source && isLoaded(source)) await lightboxImage.decode().catch(() => {});
@@ -204,6 +540,29 @@
     });
   }
 
+  // Puts the page back as it was before the viewer opened. Safe to run more than once, so
+  // it also tidies up after the browser closes the dialog itself.
+  function cleanUpViewer() {
+    root.classList.remove("lightbox-transition-closing", "is-zooming", "is-leaving", "is-viewing");
+    for (const image of document.querySelectorAll(".is-transitioning")) {
+      image.classList.remove("is-transitioning");
+      image.style.removeProperty("view-transition-name");
+    }
+    lightbox.classList.remove("is-closing", "is-opening", "is-revealed");
+    if (lightbox.open) {
+      closedByScript = true;
+      lightbox.close();
+    }
+    resetZoom();
+    controller?.hideSource(activeIndex, false);
+    opening = false;
+    closeAfterOpen = false;
+    closing = false;
+    closePending = false;
+    lightboxGesture = null;
+    controller?.resume();
+  }
+
   async function close({ animate = true } = {}) {
     if (opening) {
       closeAfterOpen = true;
@@ -218,8 +577,7 @@
     const source = animate ? controller.sourceImage(activeIndex) : null;
     await Promise.all([source, lightboxImage].filter((image) => image && isLoaded(image)).map((image) => image.decode().catch(() => {})));
     if (!lightbox.open) {
-      root.classList.remove("is-leaving");
-      closePending = false;
+      cleanUpViewer();
       return;
     }
 
@@ -228,24 +586,10 @@
       lightbox.classList.remove("is-revealed", "is-opening");
       lightbox.classList.add("is-closing");
     };
-    const finish = () => {
-      root.classList.remove("lightbox-transition-closing", "is-zooming", "is-leaving");
-      if (source) {
-        source.classList.remove("is-transitioning");
-        source.style.removeProperty("view-transition-name");
-      }
-      lightbox.classList.remove("is-closing", "is-opening", "is-revealed");
-      lightbox.close();
-      resetZoom();
-      root.classList.remove("is-viewing");
-      closing = false;
-      closePending = false;
-      controller.resume();
-    };
 
     if (!source || reducedMotion.matches || !document.startViewTransition) {
       hide();
-      finish();
+      cleanUpViewer();
       return;
     }
     closing = true;
@@ -256,7 +600,7 @@
       source.style.viewTransitionName = "active-image";
       hide();
     });
-    transition.finished.then(finish, finish);
+    transition.finished.then(cleanUpViewer, cleanUpViewer);
   }
 
   // ---- Address and history: opening pushes the entry's address, Back closes ----
@@ -280,24 +624,42 @@
     rememberContext();
     const entry = controller.entries()[index];
     history.pushState({ keynote: "open", pushed: true }, "", entry.href);
+    document.title = titleFor(entry);
     void open(index);
   }
 
   // Close button, Escape, a click outside the image and so on.
   async function requestClose() {
     if (!lightbox.open && !opening) return;
+    if (leaveEntryAddress()) return;
+    await close();
+  }
+
+  // Moves the address from the entry back to where the viewer was opened from. Returns true
+  // when that is another history entry or page, which then closes the viewer itself.
+  function leaveEntryAddress() {
+    if (leavingAddress) return true;
     if (history.state?.keynote === "open" && history.state.pushed) {
+      leavingAddress = true;
       history.back(); // the popstate handler closes the viewer
-      return;
+      return true;
+    }
+    // Reached through a listing's links: walk back to the listing as it was left.
+    if (closeDepth && closeDepth < history.length) {
+      leavingAddress = true;
+      history.go(-closeDepth);
+      return true;
     }
     // Opened directly (or after a reload): go back to the listing it came from, or to the rail.
     const target = directTarget();
     if (target.navigate) {
+      leavingAddress = true;
       window.location.href = target.url;
-      return;
+      return true;
     }
     history.replaceState(null, "", target.url);
-    await close();
+    document.title = restingTitle;
+    return false;
   }
 
   function directTarget() {
@@ -313,13 +675,17 @@
   }
 
   window.addEventListener("popstate", (event) => {
+    leavingAddress = false;
+    if (!controller) return;
     const state = event.state;
     if (state?.keynote === "open") {
       const index = controller.entries().findIndex((entry) => entry.href === location.pathname);
+      if (index >= 0) document.title = titleFor(controller.entries()[index]);
       if (index >= 0 && !viewerActive()) void open(index);
       else if (index >= 0 && lightbox.open) setActive(index);
       return;
     }
+    document.title = restingTitle;
     if (lightbox.open || opening) void close();
   });
 
@@ -334,7 +700,6 @@
   const PAN_DAMPING = 40;
   const zoomOutButton = lightbox.querySelector(".zoom-out");
   const zoomInButton = lightbox.querySelector(".zoom-in");
-  const zoomValue = lightbox.querySelector(".zoom-value");
 
   let zoomLevel = 1;
   let panX = 0;
@@ -385,7 +750,6 @@
     const moved = zoomed() || panX || panY || pullScale !== 1;
     lightboxImage.style.transform = moved ? `translate3d(${panX}px, ${panY}px, 0) scale(${zoomLevel * pullScale})` : "";
     lightbox.classList.toggle("is-zoomed", zoomed());
-    zoomValue.value = `${Math.round(zoomLevel * 100)}%`;
     zoomOutButton.disabled = !zoomed();
     zoomInButton.disabled = zoomLevel >= MAX_ZOOM - 0.001;
   }
@@ -713,6 +1077,7 @@
     return true;
   }
 
+
   // ---- Viewer events ----
 
   closeButton.addEventListener("click", requestClose);
@@ -735,7 +1100,13 @@
     requestClose();
   });
   lightbox.addEventListener("close", () => {
-    lightboxGesture = null;
+    const byScript = closedByScript;
+    closedByScript = false;
+    if (lightbox.open) return; // opened again since
+    cleanUpViewer();
+    // The browser closed the dialog itself (it can ignore the cancel handler, for example
+    // on Escape before the page has had a click): put the address back as a close would.
+    if (!byScript && history.state?.keynote === "open") leaveEntryAddress();
   });
 
   window.addEventListener("keydown", (event) => {
@@ -746,54 +1117,90 @@
         void requestClose();
       } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         event.preventDefault();
-        step(event.key === "ArrowRight" ? 1 : -1);
+        void step(event.key === "ArrowRight" ? 1 : -1);
       }
       return;
     }
-    controller?.keydown?.(event);
+    if (controller) controller.keydown?.(event);
+    else if (view === "entry") followEntryKey(event);
   });
 
   // ---- Controllers ----
 
   function fadeImagesIn(images) {
     for (const img of images) {
+      if (!img) continue;
       if (isLoaded(img)) img.classList.add("is-loaded");
       else img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true });
     }
   }
 
-  // A rail of slides that drifts, drags, and wraps round as a ring. With few images the
-  // set is repeated so the ring always fills the screen.
+  // Rail images carry their sources in data attributes until their slide nears the screen.
+  function loadImage(img) {
+    if (!img?.dataset.src) return;
+    if (img.dataset.srcset) img.srcset = img.dataset.srcset;
+    img.src = img.dataset.src;
+    delete img.dataset.src;
+    delete img.dataset.srcset;
+  }
+
+  // A rail of slides that drifts, drags, and wraps round as a ring. It starts with one page
+  // of entries and loads the pages on either side as they come near: older pages to the
+  // right, and to the left the oldest pages, wrapping round from the newest. Once every page
+  // is in, the ring holds the whole blog; with few images the set is repeated so it always
+  // fills the screen.
   function createRail() {
     const viewport = document.querySelector(".rail-viewport");
-    const list = viewport.querySelector(".rail");
-    const sources = [...list.querySelectorAll(".slide:not([hidden])")];
-    if (!sources.length) return null;
+    const list = viewport?.querySelector(".rail");
+    const firstSlides = list ? [...list.querySelectorAll(".slide")] : [];
+    if (!firstSlides.length) return null;
 
     const DRIFT_SPEED = 8; // px per second
     const FRICTION = 4.2;
     const MAX_VELOCITY = 1100;
+    const RETRY_DELAY = 5000; // ms before a page that failed to load is tried again
 
-    const entries = sources.map((slot) => readEntry(slot.querySelector(".item")));
-    const entryIndexOf = new Map(entries.map((entry, index) => [entry.href, index]));
-    // The entry page also names the entry being shown, which may not be in the rail.
+    const startPage = Number(viewport.dataset.page) || 1;
+    let total = Number(viewport.dataset.total) || startPage;
+    let forwardPage = startPage; // the last page loaded to the right of the start
+    let backwardPage = startPage; // the last page loaded to the left of the start
+    let pagesLoaded = 1;
+    let loadingPage = null;
+    let retryAt = 0;
+    const complete = () => pagesLoaded >= total;
+    const wrapPage = (page) => mod(page - 1, total) + 1;
+
+    const makeSlot = (slot, clone = false, page = startPage) => ({
+      slot,
+      page,
+      img: slot.querySelector(".item img"),
+      link: slot.querySelector(".item"),
+      entryIndex: 0,
+      index: 0,
+      clone,
+      near: false,
+      onscreen: null,
+    });
+
+    // Slots are in ring order. Until every page is in there are no clones, so slot i shows
+    // entry i. `seam` is the slot where the pages to the right of the start meet those to
+    // the left; new pages go in there.
+    const slots = firstSlides.map((slot) => makeSlot(slot));
+    const entries = slots.map((item) => readEntry(item.link));
+    let seam = slots.length;
+
+    // The entry page also names the entry being shown, which may not be on the rail yet.
+    let extra = null;
     const current = document.querySelector(".current-entry .item[data-preview]");
     let currentIndex = -1;
     if (current) {
       const entry = readEntry(current);
-      currentIndex = entryIndexOf.has(entry.href) ? entryIndexOf.get(entry.href) : entries.push(entry) - 1;
+      currentIndex = entries.findIndex((candidate) => candidate.href === entry.href);
+      if (currentIndex < 0) {
+        extra = { ...entry, detached: true };
+        currentIndex = entries.push(extra) - 1;
+      }
     }
-
-    const slots = sources.map((slot, index) => ({
-      slot,
-      img: slot.querySelector("img"),
-      link: slot.querySelector(".item"),
-      entryIndex: index,
-      near: false,
-      onscreen: true,
-    }));
-    const count = entries.length - (current && currentIndex >= sources.length ? 1 : 0);
-    const railLength = () => slots.length;
 
     let x = 0;
     let velocity = 0;
@@ -811,17 +1218,33 @@
     let paused = false;
     let keyboardIndex = null;
 
+    function renumber() {
+      let original = 0;
+      slots.forEach((item, index) => {
+        item.index = index;
+        if (!item.clone) item.entryIndex = original++;
+      });
+    }
+    renumber();
+
+    // Where a slot's left edge sits on screen.
+    const slotLeft = (item) => mod(item.index * step - x + 2 * step, cycle) - 2 * step + padding;
+
     function render() {
       for (const item of slots) {
-        const left = mod(item.index * step - x + 2 * step, cycle) - 2 * step + padding;
+        const left = slotLeft(item);
         const near = left < viewWidth + step && left + itemWidth > -step;
         const onscreen = left < viewWidth && left + itemWidth > 0;
         if (near) item.slot.style.transform = `translate3d(${left}px, 0, 0)`;
         if (near !== item.near) {
           item.near = near;
           item.slot.classList.toggle("is-visible", near);
-          if (near) item.img.decode().catch(() => {});
-          else item.slot.style.transform = "";
+          if (near) {
+            loadImage(item.img);
+            item.img.decode().catch(() => {});
+          } else {
+            item.slot.style.transform = "";
+          }
         }
         if (onscreen === item.onscreen) continue;
         item.onscreen = onscreen;
@@ -859,57 +1282,53 @@
 
       x = mod(x, cycle);
       render();
+      maybeLoad();
       if (drag || glide || velocity || !reducedMotion.matches) frameId = requestAnimationFrame(frame);
     }
 
-    // Repeat the slides until the ring is longer than the screen.
+    function cloneSlot(original) {
+      const slot = original.slot.cloneNode(true);
+      slot.querySelector("template")?.remove();
+      slot.removeAttribute("id");
+      slot.setAttribute("aria-hidden", "true");
+      slot.classList.remove("is-visible");
+      slot.style.removeProperty("transform");
+      const link = slot.querySelector(".item");
+      link?.setAttribute("tabindex", "-1");
+      link?.classList.remove("is-zoomed");
+      list.append(slot);
+      const item = { ...makeSlot(slot, true, original.page), entryIndex: original.entryIndex };
+      fadeImagesIn([item.img]);
+      return item;
+    }
+
+    // Once every page is in, repeat the slides until the ring is longer than the screen,
+    // keeping it a whole number of repeats so entries line up when it wraps.
     function fill() {
+      if (!complete() || !step) return;
+      const originals = slots.filter((item) => !item.clone);
       const needed = Math.ceil((viewWidth + 4 * step) / step);
       let guard = 0;
-      while (slots.length < needed && guard < 200) {
+      while ((slots.length < needed || slots.length % originals.length !== 0) && guard < 400) {
         guard += 1;
-        const original = slots[slots.length % sources.length];
-        const slot = original.slot.cloneNode(true);
-        slot.querySelector("template")?.remove();
-        slot.removeAttribute("id");
-        slot.setAttribute("aria-hidden", "true");
-        slot.querySelector(".item")?.setAttribute("tabindex", "-1");
-        list.append(slot);
-        slots.push({
-          slot,
-          img: slot.querySelector("img"),
-          link: slot.querySelector(".item"),
-          entryIndex: original.entryIndex,
-          clone: true,
-          near: false,
-          onscreen: true,
-        });
+        slots.push(cloneSlot(originals[slots.length % originals.length]));
       }
-      // Keep the ring a whole number of repeats so entries line up when it wraps.
-      while (slots.length % sources.length !== 0 && guard < 400) {
-        guard += 1;
-        const original = slots[slots.length % sources.length];
-        const slot = original.slot.cloneNode(true);
-        slot.querySelector("template")?.remove();
-        slot.setAttribute("aria-hidden", "true");
-        list.append(slot);
-        slots.push({ slot, img: slot.querySelector("img"), link: slot.querySelector(".item"), entryIndex: original.entryIndex, clone: true, near: false, onscreen: true });
-      }
-      slots.forEach((item, index) => { item.index = index; });
+      renumber();
     }
 
     function measure() {
       const styles = getComputedStyle(list);
       const centerIndex = step ? (x + viewWidth / 2 - padding - itemWidth / 2) / step : null;
-      itemWidth = sources[0].offsetWidth;
+      itemWidth = slots[0].slot.offsetWidth;
       step = itemWidth + (parseFloat(styles.columnGap) || 0);
       padding = parseFloat(styles.paddingLeft) || 0;
       viewWidth = viewport.clientWidth;
       if (!step) return;
       fill();
-      cycle = step * railLength();
+      cycle = step * slots.length;
       if (centerIndex !== null) x = centerOffset(centerIndex);
       render();
+      maybeLoad();
       schedule();
     }
 
@@ -917,12 +1336,110 @@
       return index * step + padding + itemWidth / 2 - viewWidth / 2;
     }
 
+    // ---- Pages either side of the start ----
+
+    // Load the next page on whichever side the seam is near: within a screen and a half of
+    // the middle of the view.
+    function maybeLoad() {
+      if (complete() || loadingPage || !cycle || performance.now() < retryAt) return;
+      const reach = viewWidth * 1.5 + step * 2;
+      const seamX = seam * step + padding - (step - itemWidth) / 2;
+      const distance = mod(seamX - (x + viewWidth / 2) + cycle / 2, cycle) - cycle / 2;
+      if (Math.abs(distance) < reach) void loadPage(distance >= 0 ? "forward" : "backward");
+    }
+
+    function loadPage(direction) {
+      if (complete()) return Promise.resolve();
+      if (loadingPage) return loadingPage;
+      loadingPage = (async () => {
+        const page = direction === "forward" ? wrapPage(forwardPage + 1) : wrapPage(backwardPage - 1);
+        try {
+          const response = await fetch(`/page/${page}`, { credentials: "same-origin" });
+          if (!response.ok) throw new Error(`Could not load page ${page}`);
+          const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+          total = Number(doc.querySelector(".rail-viewport")?.dataset.total) || total;
+          if (complete()) return;
+          if (direction === "forward") forwardPage = page;
+          else backwardPage = page;
+          pagesLoaded += 1;
+          insertSlides([...doc.querySelectorAll(".rail .slide")], direction, page);
+        } catch (error) {
+          retryAt = performance.now() + RETRY_DELAY;
+        }
+      })().finally(() => {
+        loadingPage = null;
+        setTimeout(maybeLoad);
+      });
+      return loadingPage;
+    }
+
+    function insertSlides(elements, direction, page) {
+      // A publish can move entries between pages, so skip any already on the rail.
+      const known = new Set(entries.filter((entry) => !entry.detached).map((entry) => entry.href));
+      const added = [];
+      for (const element of elements) {
+        const link = element.querySelector(".item");
+        if (!link) continue;
+        const href = new URL(link.getAttribute("href"), document.baseURI).pathname;
+        if (known.has(href)) continue;
+        known.add(href);
+        // The fetched page was parsed without script, so its fallback images are real elements.
+        for (const fallback of element.querySelectorAll("noscript")) fallback.remove();
+        added.push(document.adoptNode(element));
+      }
+
+      if (!added.length) {
+        fill();
+        cycle = step * slots.length;
+        render();
+        return;
+      }
+
+      // Keep the slide nearest the middle of the screen where it is.
+      const anchor = cycle ? nearestSlot() : null;
+      const anchorLeft = anchor ? slotLeft(anchor) : 0;
+
+      const at = seam;
+      const before = slots[at]?.slot || null;
+      const items = added.map((element) => {
+        list.insertBefore(element, before);
+        return makeSlot(element, false, page);
+      });
+      const newEntries = items.map((item) => readEntry(item.link));
+      slots.splice(at, 0, ...items);
+
+      // The entry page's own entry turned up on the rail: use its place there.
+      let moved = null;
+      if (extra) {
+        const found = newEntries.findIndex((entry) => entry.href === extra.href);
+        if (found >= 0) {
+          moved = { from: entries.length - 1, to: at + found };
+          entries.pop();
+          extra = null;
+        }
+      }
+      entries.splice(at, 0, ...newEntries);
+      if (direction === "forward") seam += items.length;
+      if (keyboardIndex !== null && keyboardIndex >= at) keyboardIndex += items.length;
+      if (currentIndex >= 0) {
+        currentIndex = moved && currentIndex === moved.from ? moved.to : currentIndex + (currentIndex >= at ? items.length : 0);
+      }
+
+      renumber();
+      fadeImagesIn(items.map((item) => item.img));
+      fill();
+      cycle = step * slots.length;
+      if (anchor) x = mod(anchor.index * step - (anchorLeft - padding), cycle);
+      entriesInserted(at, items.length, moved);
+      render();
+    }
+
     // The slot showing an entry that is closest to being on screen.
     function slotFor(entryIndex) {
       let best = null;
       let bestFraction = -1;
       for (const item of slots) {
-        if (item.entryIndex !== entryIndex) continue;
+        if (item.entryIndex !== entryIndex || entries[entryIndex]?.detached) continue;
         const fraction = visibleFraction(item);
         if (fraction > bestFraction) {
           best = item;
@@ -933,7 +1450,7 @@
     }
 
     function visibleFraction(item) {
-      const left = mod(item.index * step - x + 2 * step, cycle) - 2 * step + padding;
+      const left = slotLeft(item);
       const overlap = Math.min(left + itemWidth, viewWidth) - Math.max(left, 0);
       return Math.max(overlap, 0) / itemWidth;
     }
@@ -1050,7 +1567,12 @@
       schedule();
     });
 
-    fadeImagesIn(sources.map((slot) => slot.querySelector("img")));
+    // The first slides on screen load straight away, the very first ahead of everything else.
+    slots.slice(0, 3).forEach((item, index) => {
+      if (index === 0) item.img.fetchPriority = "high";
+      loadImage(item.img);
+    });
+    fadeImagesIn(slots.map((item) => item.img));
 
     const rail = {
       wrap: true,
@@ -1078,6 +1600,39 @@
           render();
         }
       },
+      // Before the viewer steps from `index` across the seam, load the page that belongs
+      // there. Resolves true when a page came in, so the caller checks again.
+      async ensure(index, direction) {
+        if (complete() || entries[index]?.detached) return false;
+        const ring = slots.length;
+        const crossing = direction > 0 ? mod(index + 1, ring) === mod(seam, ring) : mod(index, ring) === mod(seam, ring);
+        if (!crossing) return false;
+        const before = pagesLoaded;
+        await loadPage(direction > 0 ? "forward" : "backward");
+        return pagesLoaded > before;
+      },
+      async loadAll() {
+        while (!complete()) {
+          const before = pagesLoaded;
+          await loadPage("forward");
+          if (pagesLoaded === before) return;
+        }
+      },
+      // An entry's place among all the images, newest first, once every page is in.
+      position(index) {
+        if (!complete() || entries[index]?.detached) return null;
+        const originals = slots.filter((item) => !item.clone);
+        const firstPage = Math.min(...originals.map((item) => item.page));
+        const first = originals.findIndex((item) => item.page === firstPage);
+        return { index: mod(index - first, originals.length) + 1, total: originals.length };
+      },
+      // Load ahead while the viewer is within a few entries of the seam.
+      prefetch(index) {
+        if (complete() || entries[index]?.detached) return;
+        const ring = slots.length;
+        if (mod(seam - 1 - index, ring) < 4) void loadPage("forward");
+        else if (mod(index - seam, ring) < 4) void loadPage("backward");
+      },
       keydown(event) {
         if (event.key === "Tab") {
           keyboardIndex = null;
@@ -1085,7 +1640,9 @@
           return;
         }
         if (paused || drag || event.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
-        if (keyboardIndex !== null && (event.key === "Enter" || event.key === " ")) {
+        // Enter opens the chosen slide only while focus is on the page or the rail itself.
+        const onRail = event.target === document.body || viewport.contains(event.target);
+        if (keyboardIndex !== null && onRail && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           openFromPage(slots[keyboardIndex].entryIndex);
           return;
@@ -1100,12 +1657,14 @@
         viewport.classList.add("is-keyboard-navigating");
         glideToSlot(slots[next]);
       },
+      get currentIndex() {
+        return currentIndex >= 0 ? currentIndex : null;
+      },
     };
 
     measure();
     new ResizeObserver(measure).observe(viewport);
 
-    rail.currentIndex = currentIndex >= 0 ? currentIndex : null;
     return rail;
   }
 
@@ -1114,38 +1673,43 @@
     const list = document.querySelector("[data-grid]");
     if (!list) return null;
     let more = document.querySelector("a.more[rel='next']");
-    let loading = false;
+    let loading = null;
 
-    const links = () => [...list.querySelectorAll("a.cell:not([hidden])")];
+    // Posts without an image are cards that link to their page; only images open the viewer.
+    const links = () => [...list.querySelectorAll("a.cell[data-preview]:not([hidden])")];
     let cache = [];
     const refresh = () => {
       cache = links().map(readEntry);
     };
     refresh();
 
-    async function loadMore() {
-      if (loading || !more) return;
-      loading = true;
+    function loadMore() {
+      if (!more) return Promise.resolve();
+      if (loading) return loading;
       const pagination = more.closest(".pagination");
       pagination?.classList.add("is-loading-more");
-      try {
-        const response = await fetch(more.href, { credentials: "same-origin" });
-        const doc = new DOMParser().parseFromString(await response.text(), "text/html");
-        const added = [...doc.querySelectorAll("[data-grid] a.cell")];
-        for (const cell of added) list.append(document.adoptNode(cell));
-        const next = doc.querySelector("a.more[rel='next']");
-        if (next) more.href = next.href;
-        else {
-          more.closest(".pagination")?.remove();
-          more = null;
+      loading = (async () => {
+        try {
+          const response = await fetch(more.href, { credentials: "same-origin" });
+          if (!response.ok) throw new Error(`Could not load ${more.href}`);
+          const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+          const added = [...doc.querySelectorAll("[data-grid] a.cell")];
+          for (const cell of added) list.append(document.adoptNode(cell));
+          const next = doc.querySelector("a.more[rel='next']");
+          if (next) more.href = next.href;
+          else {
+            more.closest(".pagination")?.remove();
+            more = null;
+          }
+          refresh();
+          observeSentinel();
+        } catch (error) {
+          /* the link stays, so the next scroll tries again */
         }
-        refresh();
-        observeSentinel();
-      } catch (error) {
         pagination?.classList.remove("is-loading-more");
-      }
-      pagination?.classList.remove("is-loading-more");
-      loading = false;
+        loading = null;
+      })();
+      return loading;
     }
 
     let observer = null;
@@ -1153,7 +1717,7 @@
       observer?.disconnect();
       if (!more) return;
       observer = new IntersectionObserver((records) => {
-        if (records.some((record) => record.isIntersecting)) loadMore();
+        if (records.some((record) => record.isIntersecting)) void loadMore();
       }, { rootMargin: "600px 0px" });
       observer.observe(more);
     }
@@ -1180,6 +1744,14 @@
       resume() {},
       hasMore: () => Boolean(more),
       loadMore,
+      async loadAll() {
+        while (more) {
+          const before = more.href;
+          await loadMore();
+          if (more && more.href === before) return;
+        }
+      },
+      position: (index) => (more ? null : { index: index + 1, total: cache.length }),
       settle(index) {
         const link = cache[index]?.link;
         if (!link) return;
@@ -1192,17 +1764,14 @@
 
   // ---- Start up ----
 
-  controller = view === "home" || view === "entry" ? createRail() : createGrid();
+  if (view === "home" || (view === "entry" && root.classList.contains("rail-mode"))) controller = createRail();
+  else if (view !== "entry") controller = createGrid();
 
-  if (view === "entry") {
+  if (view === "entry" && controller) {
     // The entry's own page: the viewer starts open, and closing returns to the rail.
-    if (!controller) {
-      // No rail to return to (the entry has no image); keep the plain page.
-      return;
-    }
     const index = controller.currentIndex ?? controller.entries().findIndex((entry) => entry.href === location.pathname);
     if (index >= 0) {
-      history.replaceState({ keynote: "open", pushed: false }, "", location.href);
+      history.replaceState({ ...history.state, keynote: "open", pushed: false }, "", location.href);
       void open(index, { animate: false });
     }
   }
