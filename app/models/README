@@ -90,7 +90,6 @@ Entities
 - **redirects** – Redirect rules per blog (check, list, set, drop).
 - **question** – Q&A / form submissions: create, get, list, search, tags, import/export.
 - **404** – Track 404s per blog; ignore/unignore paths, list.
-- **ignoredFiles** – Hash of paths Blot won’t process (e.g. too large, wrong type), with reason codes. See `REASONS` in the file.
 - **cache** – Not a model: the in-process LRU helpers the read caches are built from (`metrics.js` for `createRenderCache` and its counters, `fetchCached.js`, `clone.js`, `stats.js`, `uncacheable.js`). The template-independent render reads cache inside the model, so callers get the cache without knowing about it: `Entries.getCatalog`, `Entries.getCachedPage`, `Entries.getCachedRecent`, `Tags.getCachedList`, `Tags.getCachedTagged` and `Template.getFullView`. Code that writes back what it read (sync, `Fix()`, scripts) uses the uncached reads (`getAll`, `getPage`, `getRecent`, `list`, `get`). Only caches of values already augmented for one template stay in `blog/render/retrieve` (`all_entries`, `archives`). Every cache is keyed on the blog's `cacheID` (and a template's own `cacheID` for views), so a write is seen by every instance once it bumps that.
 
 
@@ -103,6 +102,6 @@ Require by path: `require('models/blog')`, `require('models/entry')`, `require('
 Adding or changing a model
 --------------------------
 
-1. Add a folder under `app/models` (or a single file like `ignoredFiles.js`).
+1. Add a folder under `app/models` (or a single file like `client.js`).
 2. Export an object of functions (or a single function). Models that use Redis should default to `models/client` and use the key module pattern.
 3. For new Redis keys, add them to the model’s `key.js` (or equivalent)

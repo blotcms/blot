@@ -31,11 +31,8 @@ sync/
     set.js                  Handles an existing file: classifies it as public, template,
                             preview, or post/page; builds and stores the entry; triggers
                             dependent rebuilds.
-    drop.js                 Handles a removed file: drops the entry and any ignored-file
-                            record; removes the draft preview file; triggers dependent
-                            rebuilds.
-    ignore.js               Records a path in the ignoredFiles model and drops any
-                            existing entry for that path.
+    drop.js                 Handles a removed file: drops the entry; removes the draft
+                            preview file; triggers dependent rebuilds.
     rebuildDependents.js    Rebuilds all entries that declared a dependency on the
                             changed path. Reads the dependency set from Redis and calls
                             build + Entry.set for each dependent.
@@ -157,7 +154,7 @@ Returns a closure `update(path)`, which returns a promise, bound to a `blog` obj
 
 Classifies the path and routes it:
 
-- **Public file** (path starts with `/public/`, contains `/_`, `/.`, or `.textbundle/assets/`): records it in the `ignoredFiles` model.
+- **Public file** (path starts with `/public/`, contains `/_`, `/.`, or `.textbundle/assets/`): drops any entry for the path. The dashboard works out from the path that it is not a post.
 - **Template file** (path starts with `/templates/`): no entry action taken.
 - **Preview file** (identified by `drafts.isPreview`): no entry action taken.
 - **Post/page**: calls `build(blog, path, ...)` then `Entry.set`. After setting, triggers `rebuildDependents` for wikilink slug and filename synthetic keys. If the entry is a visible draft, writes a preview file.
@@ -286,7 +283,6 @@ await sync(blogID, fn)
 | `models/entry` | `Entry.set` / `Entry.drop` — core entry persistence. |
 | `models/entries` | `getCreated` / `getDeleted` — used by `renames.js`. |
 | `models/template` | `buildFromFolder` — rebuilds templates at end of sync. |
-| `models/ignoredFiles` | Records paths excluded from entry processing. |
 | `models/client` (Redis) | Publishes `sync:status:{blogID}` messages; reads dependency sets. |
 | `build` | Converts a file at a path into an entry object. |
 | `storage/folder` | Reads and writes the blog's folder (`stat`, `exists`, `listNames`, `read`, `write`). Sync no longer touches the filesystem itself, except for `folder.path`, which is handed to the sync clients. |

@@ -167,13 +167,12 @@ describe("update", function () {
   });
 
   it("ignores oversized sources, removes their entries, and recovers after shrinking", async function () {
-    const IgnoredFiles = require("models/ignoredFiles");
     const limit = require("build/converters/post-source-size").MARKDOWN.bytes;
     const entryPath = "/size-limit.md";
     const blogID = this.blog.id;
 
-    const status = function () {
-      return IgnoredFiles.getStatus(blogID, entryPath);
+    const flags = async function () {
+      return (await folder.stat(blogID, entryPath)).flags;
     };
 
     await withSync(blogID, async function (syncFolder) {
@@ -183,8 +182,7 @@ describe("update", function () {
       await folder.write(blogID, entryPath, Buffer.alloc(limit + 1, 32));
       await update(syncFolder, entryPath);
 
-      expect(await status()).toBe("TOO_LARGE");
-      expect((await folder.stat(blogID, entryPath)).flags).toEqual([
+      expect(await flags()).toEqual([
         { code: "POST_TOO_LARGE", size: limit + 1, limit: limit },
       ]);
 
@@ -197,7 +195,7 @@ describe("update", function () {
       await folder.write(blogID, entryPath, "published again");
       await update(syncFolder, entryPath);
 
-      expect(await status()).toBeFalsy();
+      expect(await flags()).toBeUndefined();
       entry = await getEntry(blogID, entryPath);
       expect(entry).toBeTruthy();
       expect(entry.html).toContain("published again");
