@@ -167,13 +167,12 @@ describe("update", function () {
   });
 
   it("ignores oversized sources, removes their entries, and recovers after shrinking", async function () {
-    const IgnoredFiles = require("models/ignoredFiles");
     const limit = require("build/converters/post-source-size").MARKDOWN.bytes;
     const entryPath = "/size-limit.md";
     const blogID = this.blog.id;
 
-    const status = function () {
-      return IgnoredFiles.getStatus(blogID, entryPath);
+    const flags = async function () {
+      return (await folder.stat(blogID, entryPath)).flags;
     };
 
     await withSync(blogID, async function (syncFolder) {
@@ -183,8 +182,7 @@ describe("update", function () {
       await folder.write(blogID, entryPath, Buffer.alloc(limit + 1, 32));
       await update(syncFolder, entryPath);
 
-      expect(await status()).toBe("TOO_LARGE");
-      expect((await folder.stat(blogID, entryPath)).flags).toEqual([
+      expect(await flags()).toEqual([
         { code: "POST_TOO_LARGE", size: limit + 1, limit: limit },
       ]);
 
@@ -197,7 +195,7 @@ describe("update", function () {
       await folder.write(blogID, entryPath, "published again");
       await update(syncFolder, entryPath);
 
-      expect(await status()).toBeFalsy();
+      expect(await flags()).toBeUndefined();
       entry = await getEntry(blogID, entryPath);
       expect(entry).toBeTruthy();
       expect(entry.html).toContain("published again");
@@ -252,6 +250,131 @@ describe("update", function () {
 
       const entry = await getEntry(blogID, entryPath);
       expect(entry && !entry.deleted).toBeTruthy();
+    });
+  });
+
+  it("publishes a post whose front matter or date can't be read, and flags it", async function () {
+    const entryPath = "/flagged.md";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(
+        blogID,
+        entryPath,
+        "---\ntitle: [unclosed\n---\n\nHello"
+      );
+      await update(syncFolder, entryPath);
+
+      let flags = (await folder.stat(blogID, entryPath)).flags;
+      expect(flags.map((flag) => flag.code)).toEqual(["FRONT_MATTER_INVALID"]);
+      expect(typeof flags[0].error).toEqual("string");
+
+      const entry = await getEntry(blogID, entryPath);
+      expect(entry.html).toContain("unclosed");
+
+      await folder.write(blogID, entryPath, "Date: banana\n\nHello");
+      await update(syncFolder, entryPath);
+
+      flags = (await folder.stat(blogID, entryPath)).flags;
+      expect(flags).toEqual([{ code: "DATE_INVALID", value: "banana" }]);
+
+      await folder.write(blogID, entryPath, "Hello");
+      await update(syncFolder, entryPath);
+
+      expect((await folder.stat(blogID, entryPath)).flags).toBeUndefined();
+    });
+  });
+
+  it("keeps the flags of every source a build reports", async function () {
+    const entryPath = "/two-sources.md";
+    const blogID = this.blog.id;
+    const buildFlags = require("build/flags");
+    const collect = buildFlags.collect;
+
+    // The build's own DATE_INVALID, and an assets flag beside it
+    spyOn(buildFlags, "collect").and.callFake(async function (fn) {
+      const collected = await collect(fn);
+      collected.flags = collected.flags.concat([
+        { code: "EMBED_FAILED", targets: ["https://vimeo.com/1"] },
+      ]);
+      return collected;
+    });
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, entryPath, "Date: banana\n\nHello");
+      await update(syncFolder, entryPath);
+
+      const codes = (await folder.stat(blogID, entryPath)).flags
+        .map((flag) => flag.code)
+        .sort();
+      expect(codes).toEqual(["DATE_INVALID", "EMBED_FAILED"]);
+    });
+  });
+
+  it("flags broken references, and clears the flag when the file arrives", async function () {
+    const entryPath = "/refs.md";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(
+        blogID,
+        entryPath,
+        "![A](missing.png)\n\n[Doc](/files/missing.pdf)\n\n[[No Such Post]]"
+      );
+      await update(syncFolder, entryPath);
+
+      const codes = function (flags) {
+        return (flags || [])
+          .map(function (flag) {
+            return flag.code + " " + flag.targets.join(",");
+          })
+          .sort();
+      };
+
+      // Only the references: a missing image also gets a thumbnail flag
+      const references = async function () {
+        return codes(
+          ((await folder.stat(blogID, entryPath)).flags || []).filter(
+            (flag) => flag.code.indexOf("BROKEN_") === 0
+          )
+        );
+      };
+
+      expect(await references()).toEqual([
+        "BROKEN_FILE_LINK /files/missing.pdf",
+        "BROKEN_IMAGE /missing.png",
+        "BROKEN_WIKILINK No Such Post",
+      ]);
+
+      await folder.write(
+        blogID,
+        "/missing.png",
+        await require("fs-extra").readFile(
+          require("path").join(__dirname, "../../build/tests/small.jpg")
+        )
+      );
+      await update(syncFolder, "/missing.png");
+
+      expect(await references()).toEqual([
+        "BROKEN_FILE_LINK /files/missing.pdf",
+        "BROKEN_WIKILINK No Such Post",
+      ]);
+    });
+  });
+
+  it("flags an image embedded with a wikilink which is not in the folder", async function () {
+    const entryPath = "/embed.md";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, entryPath, "![[pic.png]]");
+      await update(syncFolder, entryPath);
+
+      const flags = (await folder.stat(blogID, entryPath)).flags || [];
+      const image = flags.find((flag) => flag.code === "BROKEN_IMAGE");
+
+      expect(image).toBeTruthy();
+      expect(image.targets.join(",")).toContain("pic.png");
     });
   });
 

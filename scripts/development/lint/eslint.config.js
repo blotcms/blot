@@ -134,7 +134,6 @@ module.exports = [
       "app/models/blog/validate/**/*.js",
       "app/models/entries/**/*.js",
       "app/models/file/**/*.js",
-      "app/models/ignoredFiles/**/*.js",
       "app/models/question/**/*.js",
       "app/models/redirects/**/*.js",
       "app/models/tags/**/*.js",

@@ -8,6 +8,7 @@ const byHeadingAnchor = require("./byHeadingAnchor");
 const { decode } = require("he");
 const makeSlug = require("helper/makeSlug");
 const debug = require("debug")("blot:entry:build:plugins:wikilinks");
+const { report } = require("build/flags");
 
 const basename = (path.posix || path).basename;
 
@@ -184,6 +185,16 @@ async function render($, { blogID, path }) {
         }
 
         cleanupWikilinkMarker($node, { removeClass: isMedia });
+
+        // folderAssets only checks a source which starts with "/", so a
+        // missing embed is reported here too; merge() keeps one of each
+        if (isLink)
+          report({ code: "BROKEN_WIKILINK", targets: [strippedHref] });
+        else
+          report({
+            code: node.name === "img" ? "BROKEN_IMAGE" : "BROKEN_FILE_LINK",
+            targets: [strippedHref],
+          });
 
         debug("Wikilink target not found for", href);
         return;

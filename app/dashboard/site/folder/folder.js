@@ -4,7 +4,6 @@ const folder = require("storage/folder");
 const Stat = require("./stat");
 const Entry = require("models/entry");
 const pathNormalize = require("helper/pathNormalizer");
-const IgnoredFiles = require("models/ignoredFiles");
 const postSourceSize = require("build/converters/post-source-size");
 const Build = require("build");
 
@@ -188,12 +187,12 @@ function invalidateStatCache(blog) {
   }
 }
 
-// Attach the post / ignored-file flags the template needs. Only the page
+// Attach the post and too-large badges the template needs. Only the page
 // being rendered is looked up in Redis, so this stays bounded.
 async function decorate(blog, dir, pageStats) {
   const pageNames = pageStats.map((stat) => stat.name);
 
-  const [entries, ignoredFiles] = await Promise.all([
+  const [entries] = await Promise.all([
     new Promise((resolve) => {
       // Resolve each listed item to the entry that decides whether it is
       // badged as published. A file inside a "+" folder shares the folder
@@ -261,15 +260,13 @@ async function decorate(blog, dir, pageStats) {
         })
         .catch(() => resolve([]));
     }),
-    IgnoredFiles.getStatuses(
-      blog.id,
-      pageNames.map((item) => path.join(dir, item))
-    ),
   ]);
 
   return pageStats.map((stat) => {
     stat.entry = entries.includes(stat.name);
-    stat.tooLarge = ignoredFiles[pathNormalize(stat.path)] === "TOO_LARGE";
+    stat.tooLarge = (stat.flags || []).some(
+      (flag) => flag.code === "POST_TOO_LARGE"
+    );
     if (stat.tooLarge) {
       // A previously published source that grew too large leaves a deleted
       // entry tombstone behind; don't show it as a live post.

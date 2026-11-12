@@ -3,6 +3,7 @@ const debug = require("debug")("blot:build:dateStamp");
 const fromPath = require("./fromPath");
 const fromMetadata = require("./fromMetadata");
 const type = require("helper/type");
+const { report } = require("build/flags");
 
 const moment = require("moment");
 require("moment-timezone");
@@ -56,6 +57,12 @@ module.exports = function (blog, path, metadata, previousCreated) {
         timeZone
       );
     }
+  }
+
+  // A date was given but couldn't be read: the entry falls back to the
+  // path's date or the file's, and the flag says so
+  if (metadataDate) {
+    report({ code: "DATE_INVALID", value: String(metadataDate) });
   }
 
   // The user didn't specify a valid
