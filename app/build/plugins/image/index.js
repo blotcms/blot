@@ -2,6 +2,8 @@ var Transformer = require("helper/transformer");
 var debug = require("debug")("blot:entry:build:plugins:image");
 var optimize = require("./optimize");
 var url = require("url");
+var isURL = require("helper/transformer/isURL");
+var { report } = require("build/flags");
 
 // Images looked up at once for one entry. Each lookup is a sandbox job (a
 // fresh jail, ~70ms before any work), so two at a time overlap their start-up.
@@ -55,10 +57,33 @@ async function render($, { blogID }) {
   async function lookupSrc(src) {
     // Pass in the `pathname` component of the image src (no URL params or hash)
     // Also pass the original src so we can include the filename in the CDN URL
+    var transform = optimize(blogID, src);
+
     try {
-      infos[src] = await cache.lookup(src, optimize(blogID, src));
+      infos[src] = await cache.lookup(src, async function () {
+        try {
+          return await transform.apply(this, arguments);
+        } catch (err) {
+          if (err && typeof err === "object") err.fromTransform = true;
+          throw err;
+        }
+      });
     } catch (err) {
       debug(src, "Optimize failed with Error:", err);
+
+      // An image which could not be found is left to folderAssets, which
+      // reports a broken image reference with its path as written
+      if (err && err.fromTransform) {
+        report({ code: "IMAGE_OPTIMIZE_FAILED", targets: [src] });
+      } else if (
+        isURL(src) &&
+        /could not be downloaded/.test(err && err.message)
+      ) {
+        report({
+          code: "REMOTE_IMAGE_FAILED",
+          targets: [{ url: src, error: "could not be downloaded" }],
+        });
+      }
     }
   }
 

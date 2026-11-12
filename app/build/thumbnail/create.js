@@ -16,7 +16,9 @@ async function create(blogID, path) {
   var timedOut = new Promise(function (resolve, reject) {
     timeout = setTimeout(function () {
       debug(blogID, "Timeout reached");
-      reject(new Error("Timeout"));
+      var err = new Error("Timeout");
+      err.timedOut = true;
+      reject(err);
     }, TIMEOUT);
   });
 

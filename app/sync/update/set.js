@@ -15,6 +15,8 @@ var path = require("path");
 var IgnoredFiles = require("models/ignoredFiles");
 var folder = require("storage/folder");
 var postSourceSize = require("build/converters/post-source-size");
+var buildFlags = require("build/flags");
+var FileFlags = require("models/file/flags");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
 var isRedisUnavailableError =
@@ -42,6 +44,21 @@ function isPublic(path) {
 
 function isTemplate(path) {
   return pathNormalizer(path).toLowerCase().startsWith("/templates/");
+}
+
+// Sets one source's flags on a file (models/file/flags.js). A failure is
+// ignored, as a failed clear of the ignored record is: flags are a report,
+// and must never fail a sync.
+async function setFlags(blogID, sourcePath, source, list) {
+  try {
+    await folder.setFlags(blogID, sourcePath, source, list);
+  } catch (err) {}
+}
+
+function fromSource(found, source) {
+  return (found || []).filter(function (flag) {
+    return FileFlags.sourceOf(flag.code) === source;
+  });
 }
 
 // Flags a post source over its size limit (models/file/flags.js), with its
@@ -130,10 +147,15 @@ async function buildAndSet(blog, path, multiInfo, state) {
     return dropEntryAndPreview(blog.id, path);
   }
 
+  var found;
+
   try {
-    entry = await build(blog, path);
+    ({ result: entry, flags: found } = await buildFlags.collect(() =>
+      build(blog, path)
+    ));
   } catch (err) {
     if (err && err.code === "WRONGTYPE") {
+      await setFlags(blog.id, path, "build", []);
       await Ignore(blog.id, path, WRONG_TYPE);
       return dropStaleAggregate(blog, multiInfo);
     }
@@ -175,6 +197,10 @@ async function buildAndSet(blog, path, multiInfo, state) {
     // real aggregate.
     if (err && ["ENOTDIR", "ENOENT"].indexOf(err.code) !== -1)
       return dropStaleAggregate(blog, multiInfo, err);
+
+    // The file can't be published: say why on the file itself
+    var failed = buildFlags.fromError(err);
+    if (failed && !multiInfo) await setFlags(blog.id, path, "build", [failed]);
 
     throw err;
   }
@@ -223,10 +249,23 @@ async function buildAndSet(blog, path, multiInfo, state) {
     })
   );
 
-  // Likewise the build's flags on each of them (models/file/flags.js)
+  // Likewise the build's flags on each of them (models/file/flags.js). A
+  // single file gets what this build found instead. A folder post's flags
+  // have no one file to go on, so they are dropped for now.
   await Promise.all(
     [entry.path].concat(sourcePaths).map(function (sourcePath) {
-      return folder.setFlags(blog.id, sourcePath, "build", []).catch(noop);
+      var own = !multiInfo && sourcePath === entry.path;
+
+      return Promise.all(
+        ["build", "assets", "references"].map(function (source) {
+          return setFlags(
+            blog.id,
+            sourcePath,
+            source,
+            own ? fromSource(found, source) : []
+          );
+        })
+      );
     })
   );
 

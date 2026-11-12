@@ -94,7 +94,7 @@ var CODES = {
   BUILD_DEFERRED: {
     source: "build",
     transient: true,
-    message: "could not be built yet and will be retried",
+    message: "could not be built because Blot was busy",
     detail: ["step"],
   },
   FRONT_MATTER_INVALID: {

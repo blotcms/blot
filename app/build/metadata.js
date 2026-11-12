@@ -1,6 +1,11 @@
 const debug = require("debug")("blot:build:metadata");
 const ensure = require("helper/ensure");
 const YAML = require("yaml");
+const { report } = require("./flags");
+
+function firstLine(message) {
+  return String(message || "").split("\n")[0];
+}
 
 const alphaNumericRegEx = /^([a-zA-Z0-9\-_ ]+)$/;
 
@@ -56,7 +61,15 @@ function Metadata(html) {
 
       return { html, metadata };
     } catch (e) {
-      // we need to surface this error with the YAML
+      // The front matter stays in the post, unparsed, so the person sees
+      // something is wrong; the flag says what. The YAML's lines are the
+      // file's: its first line is what follows the opening "---".
+      var position = e && e.linePos && e.linePos[0];
+      report({
+        code: "FRONT_MATTER_INVALID",
+        error: firstLine(e && e.message),
+        line: position ? position.line : undefined,
+      });
       return { html, metadata };
     }
   }

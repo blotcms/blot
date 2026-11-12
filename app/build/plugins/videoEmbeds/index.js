@@ -1,5 +1,6 @@
 var url = require("url");
 var eachEl = require("build/plugins/eachEl");
+var { report } = require("build/flags");
 
 var Players = {
   bandcamp: {
@@ -63,6 +64,9 @@ async function render($) {
     try {
       template = await module(href);
     } catch (err) {
+      // The link stays in the post, so it still works; the flag says the
+      // video wasn't embedded
+      report({ code: "EMBED_FAILED", targets: [href] });
       return;
     }
 

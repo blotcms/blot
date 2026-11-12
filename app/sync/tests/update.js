@@ -255,6 +255,38 @@ describe("update", function () {
     });
   });
 
+  it("publishes a post whose front matter or date can't be read, and flags it", async function () {
+    const entryPath = "/flagged.md";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(
+        blogID,
+        entryPath,
+        "---\ntitle: [unclosed\n---\n\nHello"
+      );
+      await update(syncFolder, entryPath);
+
+      let flags = (await folder.stat(blogID, entryPath)).flags;
+      expect(flags.map((flag) => flag.code)).toEqual(["FRONT_MATTER_INVALID"]);
+      expect(typeof flags[0].error).toEqual("string");
+
+      const entry = await getEntry(blogID, entryPath);
+      expect(entry.html).toContain("unclosed");
+
+      await folder.write(blogID, entryPath, "Date: banana\n\nHello");
+      await update(syncFolder, entryPath);
+
+      flags = (await folder.stat(blogID, entryPath)).flags;
+      expect(flags).toEqual([{ code: "DATE_INVALID", value: "banana" }]);
+
+      await folder.write(blogID, entryPath, "Hello");
+      await update(syncFolder, entryPath);
+
+      expect((await folder.stat(blogID, entryPath)).flags).toBeUndefined();
+    });
+  });
+
   it("drops the entry of a file which is gone", async function () {
     const entryPath = "/gone.txt";
     const blogID = this.blog.id;
