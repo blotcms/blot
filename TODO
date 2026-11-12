@@ -1,3 +1,13 @@
+Show file flags on the dashboard: the errors and warnings Blot now stores per file (#2673). Each code, with its message, its source and the detail it carries, is in the dictionary in `app/models/file/flags.js`. `storage/folder`'s `stat` and folder listings give a file's `flags`, plus `placeholder: true` for a placeholder, and `storage/folder.flagged(blogID)` walks every flagged file in a blog. Ideas: a badge and the message beside each flagged file in the folder viewer, the detail on its file page, and a list of every flagged file per site.
+
+Flag folder posts' sources: `app/sync/update/set.js` sets no build, assets or references flags for a `+` folder post, since the build has no one file to put them on. `app/build/multiple.js` now sets `err.sourcePath` on a failed source (#2677). Do the same for the flags each source's build reports, and set them on that source.
+
+Noticed while flagging the existing placeholders, 12 Nov 2026 (#2675). The resync failed for a few blogs, every time:
+- Two Dropbox blogs answer 401: their access was revoked, but they still count as connected. Find out whether the hourly validation and the dashboard tell the owner, and if not, mark the blog as needing to reconnect.
+- Three Dropbox blogs fail the whole resync on a 409 for one path (one was a `.url` file). See the Dropbox 409 entry below. A refused file should not stop the rest of a reset.
+- One Dropbox blog never finished its initial transfer, so its reset refuses to run. Find out how long it has been stuck and whether the owner was told.
+- One iCloud blog: the macserver's `/download` answers 500 for three files, every time. Check the macserver logs for why.
+
 Lift the file name length limit rather than trim names. The check behind it, `exceedsFilesystemPathLimits` in `app/clients/dropbox/util/constants.js`, dates from when blog folders lived on ext4: 255 bytes per name, 4096 per path. Folders are in S3 now:
 - Directory names and full paths no longer touch a local filesystem. S3's own limit is 1024 bytes for a key.
 - The one place that still does is the content cache on the instance SSD (`app/storage/folder/cache.js`). Its directory is a hash, but the file inside keeps the original basename, presumably so pandoc and sharp can see the extension. Shorten that local basename, keeping the extension, and a long name stops mattering.
