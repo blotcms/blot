@@ -1,3 +1,6 @@
+Image jobs run about 3.5x slower in production than on a recent Mac (12 Nov 2026, animated GIF thumbnails)
+- About 2.3x is the CPU (Graviton2, Neoverse-N1) and about 1.5x Alpine's libvips build, resizing above all. The allocator (mimalloc, jemalloc) is under 10%. A newer instance type would speed up every image job.
+
 Prove memory of unit fits into cap
 
 Build add font ui

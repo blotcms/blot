@@ -4,6 +4,7 @@ var TransformGIF = require("./transform-gif");
 var join = require("path").join;
 var assets = require("storage/assets");
 var extname = require("path").extname;
+// The thumbnail job's jail has the same limit (proxy/unit/sandbox/jail.js)
 var TIMEOUT = 20 * 1000; // 20s
 var debug = require("debug")("blot:entry:build:thumbnail:create");
 
