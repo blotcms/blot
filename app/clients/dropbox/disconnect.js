@@ -3,6 +3,7 @@ var database = require("./database");
 var Blog = require("models/blog");
 var debug = require("debug")("blot:clients:dropbox");
 var Sync = require("sync");
+var placeholders = require("clients/util/placeholders");
 
 // Dont write tests for this or you'll need to regenerate
 // an access token for Travis and it'll be annoying. Just
@@ -25,6 +26,9 @@ async function remove(blogID, folder) {
   if (error) debug("error createClient", error);
 
   folder.status("Disconnecting from Dropbox");
+
+  // Their bytes are only in Dropbox, which Blot can no longer reach
+  await placeholders.removeAtDisconnect(blogID, folder);
 
   debug("resetting client setting");
   await Blog.set(blogID, { client: "" });
