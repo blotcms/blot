@@ -140,6 +140,37 @@ describe("icloud fromiCloud sync", function () {
     expect(summary.placeholdersCreated).toBe(1);
   });
 
+  it("replaces a placeholder when the file in iCloud is now really empty", async () => {
+    const localFile = "/was-huge.mov";
+    await folder.writePlaceholder(blogID, localFile, {
+      code: "SYNC_TOO_LARGE",
+      size: 1000 * 1000 * 1000,
+      limit: 100,
+    });
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => [
+      { name: "was-huge.mov", size: 0, isDirectory: false },
+    ]);
+    mockModule(downloadPath, async (id, path) => {
+      await folder.write(id, path, "");
+    });
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({ setupComplete: true }),
+    });
+
+    await require(fromiCloudPath)(
+      blogID,
+      () => {},
+      async () => {}
+    );
+
+    expect(await folder.isPlaceholder(blogID, localFile)).toBe(false);
+    expect(await folder.exists(blogID, localFile)).toBe(true);
+  });
+
   describe("oversized remote files", () => {
     const remoteFile = {
       name: "huge.mov",

@@ -186,7 +186,11 @@ module.exports = async (blogID, publish, update) => {
         await walk(path, modifiedTime, walkedDirCreatedLive);
       } else {
         // We could compare modified time but this seems to bug out on some sites
-        const identicalOnRemote = existsLocally && existsLocally.size === size;
+        // A placeholder isn't identical to a file which is now really empty
+        const identicalOnRemote =
+          existsLocally &&
+          existsLocally.size === size &&
+          !(size === 0 && (await folder.isPlaceholder(blogID, path)));
 
         // An oversized remote file is represented locally by an empty file.
         // The size never matches the remote's, so without this check every

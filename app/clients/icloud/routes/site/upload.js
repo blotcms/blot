@@ -55,9 +55,12 @@ module.exports = async function (req, res) {
         return false;
       }
 
-      // An empty file is only a current placeholder if it is flagged as one
-      if (isPlaceholderUpload) {
-        return !!(await storage.stat(blogID, filePath)).placeholder;
+      // An empty file is only a current placeholder if it is flagged as one,
+      // and a placeholder is never current for a file's real bytes, even
+      // when the file is now really empty
+      const isPlaceholder = await storage.isPlaceholder(blogID, filePath);
+      if (isPlaceholderUpload || isPlaceholder) {
+        return isPlaceholderUpload && isPlaceholder;
       }
 
       const existingContents = await storage.read(blogID, filePath);

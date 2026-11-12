@@ -656,10 +656,12 @@ const excuseRecentChanges = async (client, changed, dropboxRoot, summary) => {
 // can't have the same bytes.
 const contentHash = async (blogID, path, size) => {
   try {
-    if (typeof size === "number") {
-      const stat = await storage.stat(blogID, path);
-      if (stat.isDirectory || stat.size !== size) return undefined;
-    }
+    const stat = await storage.stat(blogID, path);
+    if (stat.isDirectory) return undefined;
+    // A placeholder's bytes aren't the file's, so they never match Dropbox's,
+    // even when the file there is now really empty too
+    if (stat.placeholder) return undefined;
+    if (typeof size === "number" && stat.size !== size) return undefined;
     return (await storage.stat(blogID, path, { hash: true })).hash;
   } catch (e) {
     return undefined;
