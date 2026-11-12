@@ -25,7 +25,6 @@ async function collectKeys(blog) {
     `${blogPrefix}tags:entries-by-dateStamp:*`,
     `${blogPrefix}tags:entry:*`,
     `${blogPrefix}tags:name:*`,
-    `${blogPrefix}ignored_files`,
   ];
 
   const keys = new Set();

@@ -9,6 +9,7 @@ const {
   isReservedStaticPath,
 } = require("blog/lib/staticPaths");
 const blogHosts = require("blog/lib/blogHosts");
+const { report } = require("build/flags");
 const {
   hashFolderFile,
   folderUrl,
@@ -260,6 +261,14 @@ async function bakeValue(ctx, value, attr) {
 
   addDependency(ctx, path);
 
+  // Its arrival rebuilds the entry, which clears the flag
+  if (attr === "href" ? isLinkedFile(path) : isPendingImage(path)) {
+    report({
+      code: attr === "href" ? "BROKEN_FILE_LINK" : "BROKEN_IMAGE",
+      targets: [path],
+    });
+  }
+
   // A post often syncs before its images. Left on the blog's own domain,
   // each missing image is a request to the origin from the visitor's IP,
   // and an image-heavy page (or a feed reader's early copy) is a burst of
@@ -278,6 +287,17 @@ async function bakeValue(ctx, value, attr) {
   return wasBaked ? raw : null;
 }
 
+// Whether a link to a missing path is a link to a file in the blog's folder
+// which isn't there, rather than to a page or a route the blog serves
+// (/feed.rss, /style.css from the template). Only kinds of file a template
+// never serves count, in the places isPendingImage allows.
+const LINKED_FILE_EXT_REGEX =
+  /\.(avif|gif|jpe?g|png|svg|webp|heic|tiff?|pdf|docx?|xlsx?|pptx?|odt|rtf|epub|zip|mp3|m4a|wav|flac|ogg|mp4|m4v|mov|webm)$/i;
+
+function isLinkedFile(path) {
+  return LINKED_FILE_EXT_REGEX.test(path) && isFolderPath(path);
+}
+
 // Whether a missing file is baked as a pending CDN URL. Only a path in the
 // blog's folder: not a network-path reference to another host
 // (//example.org/a.jpg), a global static path (/katex/...) or a generated
@@ -286,8 +306,11 @@ async function bakeValue(ctx, value, attr) {
 // or a '..' the browser would have resolved against the page instead), so
 // those stay on the blog's domain.
 function isPendingImage(path) {
+  return PENDING_EXT_REGEX.test(path) && isFolderPath(path);
+}
+
+function isFolderPath(path) {
   return (
-    PENDING_EXT_REGEX.test(path) &&
     !path.startsWith("//") &&
     !isReservedStaticPath(path) &&
     !BLOG_STATIC_PATHS.some((dir) =>

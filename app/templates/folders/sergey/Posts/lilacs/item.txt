@@ -1,6 +1,6 @@
 Title: Lilacs
-Date: 1905
-Tags: Lilacs
+Date: 1905-12-06
+Tags: Flowers
 
 ![Lilacs](_Lilacs.jpg)
 

@@ -21,6 +21,11 @@ async function directory(blogID) {
   const blog = await require("models/blog").get({ id: blogID });
   if (!blog) throw new Error("No blog with ID " + blogID);
 
+  // A blog named like a demo folder is synced from that folder in the
+  // checkout, so edits there reach it (see templates/folders/local.js)
+  const demo = require("templates/folders/local").sourceFor(blog.handle);
+  if (demo) return demo;
+
   const name = String(blog.handle || blog.id);
   if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(name) || name.indexOf("..") !== -1) {
     throw new Error("Unsuitable name for a source directory: " + name);

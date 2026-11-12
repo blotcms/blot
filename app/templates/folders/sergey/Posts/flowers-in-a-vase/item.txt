@@ -1,6 +1,6 @@
 Title: Flowers in a vase
-Date: 1905
-Tags: Vases, Flowers
+Date: 1905-11-19
+Tags: Ornament, Flowers
 
 ![Flowers in a vase](_Flowers in a vase.jpg)
 

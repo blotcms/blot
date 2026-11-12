@@ -63,6 +63,10 @@ async function buildMultiple(blog, info) {
       built = await Single(blog, filePath);
     } catch (err) {
       debug("Blog:", blog.id, filePath, "error building", err);
+      // The folder post fails as a whole, so say which source failed: the
+      // caller flags that file, not the one whose change started the build.
+      if (err && typeof err === "object" && !err.sourcePath)
+        err.sourcePath = filePath;
       throw err;
     }
 

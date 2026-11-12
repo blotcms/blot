@@ -1,6 +1,7 @@
 // Render span.math.inline and span.math.display, the normalized internal representation for TeX emitted by converters, into KaTeX HTML.
 const katex = require("katex");
 const HARD_BREAK_SENTINEL = require("../../math/hardBreakSentinel");
+const { report } = require("build/flags");
 
 const SKIP_TAGS = ["script", "style", "code", "pre"];
 const BLOCK_BOUNDARY_TAGS = [
@@ -36,6 +37,13 @@ function renderTex(source, display) {
   try {
     return katex.renderToString(source.trim(), { displayMode: display });
   } catch (error) {
+    // The raw TeX stays in the post, so the person sees it failed; the
+    // flag says why
+    report({
+      code: "MATH_FAILED",
+      error: error && error.message,
+      targets: [original.trim()],
+    });
     const delimiter = display ? "$$" : "$";
     return delimiter + escapeHtml(original) + delimiter;
   }

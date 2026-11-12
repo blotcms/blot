@@ -1,5 +1,4 @@
 var Entry = require("models/entry");
-var Ignored = require("models/ignoredFiles");
 var Preview = require("./preview");
 var isDraft = require("./drafts").isDraft;
 var rebuildDependents = require("./rebuildDependents");
@@ -19,7 +18,6 @@ module.exports = async function drop(blogID, path) {
 
   // ORDER IS IMPORTANT
   // Rebuild must happen after we remove the file from disk
-  await Ignored.drop(blogID, path);
   await Entry.drop(blogID, path);
   await rebuildDependents(blogID, path);
 };

@@ -3,7 +3,6 @@ const path = require("path");
 const basename = path.basename;
 const extname = path.extname;
 const Entry = require("models/entry");
-const IgnoredFiles = require("models/ignoredFiles");
 const moment = require("moment");
 const converters = require("build/converters");
 const enabledConverters = require("build/converters/enabled");
@@ -37,14 +36,18 @@ module.exports = async function (blog, path) {
     const aggregatedLookupPath = multiInfo ? multiInfo.entryPath : null;
 
     Promise.all([
-      IgnoredFiles.getStatus(blogID, path),
+      // A failed read is the same as no flags
+      folder
+        .stat(blogID, path)
+        .then((stat) => stat.flags || [])
+        .catch(() => []),
       // A failed read is the same as no entry
       Entry.get(blogID, path).catch(() => undefined),
       !aggregatedLookupPath || aggregatedLookupPath === path
         ? null
         : Entry.get(blogID, aggregatedLookupPath).catch(() => undefined),
     ])
-      .then(async ([ignoredReason, ownEntry, aggregatedEntry]) => {
+      .then(async ([flags, ownEntry, aggregatedEntry]) => {
         const matchingConverter = converters.find((converter) => {
           return converter.is(path);
         });
@@ -66,17 +69,11 @@ module.exports = async function (blog, path) {
         let ignored = {};
 
         if (!entry) {
-          if (
-            ignoredReason &&
-            ignoredReason === "WRONG_TYPE" &&
-            matchingConverter &&
-            matchingConverter.id === "img" &&
-            !matchingConverterEnabled
-          ) {
-            ignored.imageConverterDisabled = true;
-          } else if (ignoredReason && ignoredReason === "WRONG_TYPE") {
-            ignored.wrongType = true;
-          } else if (path.toLowerCase().indexOf("/templates/") === 0) {
+          // Why the file is not a post. Only its size has to be stored: the
+          // rest follows from its path and the blog's converters.
+          const tooLarge = flags.some((flag) => flag.code === "POST_TOO_LARGE");
+
+          if (path.toLowerCase().indexOf("/templates/") === 0) {
             ignored.templateFile = true;
           } else if (
             path
@@ -89,7 +86,15 @@ module.exports = async function (blog, path) {
             ignored.underscorePath = true;
           } else if (basename(path)[0] === "_") {
             ignored.underscoreName = true;
-          } else if (ignoredReason && ignoredReason === "TOO_LARGE") {
+          } else if (
+            matchingConverter &&
+            matchingConverter.id === "img" &&
+            !matchingConverterEnabled
+          ) {
+            ignored.imageConverterDisabled = true;
+          } else if (!matchingConverterEnabled) {
+            ignored.wrongType = true;
+          } else if (tooLarge) {
             ignored.tooLarge = true;
             ignored.postSizeLimit = postSourceSize.limitForPath(path).label;
           } else {

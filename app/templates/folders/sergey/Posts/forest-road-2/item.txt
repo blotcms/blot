@@ -1,6 +1,6 @@
 Title: Forest road
-Date: 1905
-Tags: Trees, Dirt roads
+Date: 1905-11-21
+Tags: Transport, Trees
 
 ![Forest road](_Forest road.jpg)
 
