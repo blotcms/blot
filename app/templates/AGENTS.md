@@ -43,6 +43,12 @@ Show it with the responsive thumbnail technique below, written out in the templa
 
 Set `sizes` to the photo's rendered CSS width (px, not `em`/`rem`, which follow the browser's default size rather than the template's). The thumbnails are 160, 640 and 1200 pixels wide with nothing in between, so a photo up to about 80 CSS pixels wide gets the 160px file on a 2x screen; wider than that and the browser fetches the 640px one. Keep favicon fallbacks and microformats on `thumbnails.square`. The thumbnails are transparent WebP, so don't use them for social preview metadata.
 
+## Scrollbar room and edge alignment
+
+Keep a page from shifting sideways when a scrollbar appears or disappears (for example when a lightbox locks scrolling) with `html { scrollbar-gutter: stable; }`. Browsers that draw classic scrollbars then reserve that strip on the right at all times, even on a page that never scrolls, so anything aligned to the right edge sits a scrollbar's width further in than the left edge.
+
+To pull a right-aligned control (such as a header nav) back towards the edge, give it a small negative right margin of about a scrollbar's width, roughly `-1em` at the header's type size, with a short comment saying why. This is a deliberate trade: with overlay scrollbars, where no room is reserved, the links sit slightly closer to the edge than the title does on the left. Keynote's `#header .nav` does this.
+
 ## Responsive thumbnails
 
 Use `srcset` with width descriptors when a template displays a generated thumbnail at a size that can differ from the available thumbnail sizes. Include the small, medium, and large URLs with their actual pixel widths. Add a `sizes` value that describes the image's rendered CSS width so the browser can choose an appropriate candidate for the viewport and device pixel ratio. Keep a regular `src` as the fallback, and mirror the responsive attributes in a `<noscript>` image when that fallback is present.
