@@ -181,14 +181,20 @@ describe("icloud fromiCloud sync", function () {
       expect(updated).toEqual(["/huge.mov"]);
     });
 
-    it("leaves an existing empty placeholder alone", async () => {
+    it("leaves an existing empty placeholder in place, flagging it if it isn't", async () => {
       const localFile = join("/", remoteFile.name);
       await folder.write(blogID, localFile, "");
       const write = spyOn(folder, "write").and.callThrough();
+      const writePlaceholder = spyOn(
+        folder,
+        "writePlaceholder"
+      ).and.callThrough();
 
       const { summary, updated } = await run();
 
       expect(write).not.toHaveBeenCalled();
+      expect(writePlaceholder).not.toHaveBeenCalled();
+      expect((await folder.stat(blogID, localFile)).placeholder).toBe(true);
       expect(updated).toEqual([]);
       expect(summary.skipped).toBe(0);
       expect(summary.placeholdersCreated).toBe(0);
@@ -494,7 +500,7 @@ describe("icloud fromiCloud sync", function () {
       mockWalk([
         { name: "huge.mov", size: 1000 * 1000 * 1000, isDirectory: false },
       ]);
-      spyOn(folder, "write").and.callFake(async () => {
+      spyOn(folder, "writePlaceholder").and.callFake(async () => {
         throw new Error("disk full");
       });
 
