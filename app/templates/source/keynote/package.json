@@ -35,7 +35,8 @@
     "content_width": 800,
     "content_width_range": [480, 1200],
     "spacing": 4,
-    "spacing_range": [1, 8]
+    "spacing_range": [1, 8],
+    "demo_folder": "sergey"
   },
   "views": {
     "public": {
