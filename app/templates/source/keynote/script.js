@@ -13,6 +13,8 @@
   const cacheID = "{{cacheID}}";
   let closeURL = null;
   let closeDepth = 0;
+  let followingCollection = false; // this entry page was reached through a listing's order
+  let entryLinksChanged = () => {};
 
   function pathOf(url) {
     try {
@@ -155,6 +157,7 @@
   }
 
   function followCollection(state, page, index) {
+    followingCollection = true;
     const listing = state.listings[page];
     closeURL = listing.url;
     for (const link of document.querySelectorAll("a.entry-close")) link.href = closeURL;
@@ -196,6 +199,7 @@
             link.setAttribute("aria-disabled", "true");
           }
         }
+        entryLinksChanged();
       }, () => {});
     }
   }
@@ -355,6 +359,19 @@
   // An entry from outside the rail (an older entry's own page) steps with its page links.
   const entryLink = (direction) => document.querySelector(direction > 0 ? "a.entry-previous" : "a.entry-next");
 
+  // The viewer steps with the entry page's own links (rather than through the rail) for an
+  // entry from outside the rail, and for an entry page reached through a listing, whose links
+  // follow that listing's order. Once the viewer is reopened from the rail, the rail leads.
+  const stepsByEntryLinks = (entry) =>
+    Boolean(entry?.detached) || (followingCollection && view === "entry" && history.state?.keynote === "open" && !history.state.pushed);
+
+  entryLinksChanged = () => {
+    const entry = controller?.entries()[activeIndex];
+    if (!lightbox.open || !stepsByEntryLinks(entry)) return;
+    previousButton.disabled = !entryLink(-1)?.href;
+    nextButton.disabled = !entryLink(1)?.href;
+  };
+
   function setActive(index) {
     resetZoom();
     const entries = controller.entries();
@@ -368,7 +385,7 @@
     const source = controller.sourceImage(activeIndex);
     lightboxImage.src = source && isLoaded(source) && source.currentSrc ? source.currentSrc : entry.preview;
     lightboxImage.alt = entry.alt;
-    if (entry.detached) {
+    if (stepsByEntryLinks(entry)) {
       previousButton.disabled = !entryLink(-1)?.href;
       nextButton.disabled = !entryLink(1)?.href;
     } else {
@@ -425,7 +442,7 @@
 
   async function step(direction) {
     if (lightboxBusy() || stepping) return;
-    if (controller.entries()[activeIndex]?.detached) {
+    if (stepsByEntryLinks(controller.entries()[activeIndex])) {
       const link = entryLink(direction);
       if (link?.href) link.click();
       return;
