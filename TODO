@@ -1,3 +1,5 @@
+Dropbox: a file Dropbox refuses to download (restricted or flagged, a 409 "Conflict") is dropped with no placeholder and no log line: `app/clients/dropbox/sync/index.js` returns early in the download catch. Write a placeholder and log it, and record it with the file flags once they exist. The check (`statusCode === 409 && statusMessage === "Conflict"`) may also match other 409s; match the Dropbox error tag instead. Test file: `tests/files/will_flag_restricted_content.png`.
+
 Prove memory of unit fits into cap
 
 Build add font ui
