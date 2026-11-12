@@ -2,12 +2,13 @@
   "name": "Keynote",
   "popularity": 12,
   "locals": {
-    "page_size": 12,
+    "page_size": 30,
+    "page_size_range": [1, 100],
     "hide_dates": false,
     "date_display": "MMMM D, Y",
-    "background_color": "#ffffff",
-    "text_color": "#111111",
-    "link_color": "#111111",
+    "background_color": "#000000",
+    "text_color": "#ffffff",
+    "link_color": "#ffffff",
     "font": {
       "id": "system-sans",
       "font_size": 16,
@@ -28,9 +29,9 @@
       "right",
       "center"
     ],
-    "sticky_navigation": false,
-    "slide_width": 320,
-    "slide_width_range": [200, 560],
+    "sticky_navigation": true,
+    "slide_size": 5,
+    "slide_size_range": [1, 10],
     "content_width": 800,
     "content_width_range": [480, 1200],
     "spacing": 4,
@@ -45,12 +46,18 @@
     },
     "archives.html": {
       "url": "/archives",
+      "locals": {
+        "page_size": 100
+      },
       "partials": {
         "title": "Archives - {{{title}}}",
         "description": "All the entries posted on {{{title}}}"
       }
     },
     "tagged.html": {
+      "locals": {
+        "page_size": 100
+      },
       "partials": {
         "title": "Entries tagged {{{tag}}} from {{{title}}}",
         "description": "All of the entries posted on {{{title}}} tagged {{{tag}}}"

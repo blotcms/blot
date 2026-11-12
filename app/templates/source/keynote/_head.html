@@ -21,8 +21,10 @@
   {{^favicon}}{{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/profile_image.thumbnails.square.url}}{{/favicon}}
   <link rel="preconnect" href="{{{cdn}}}" />
   <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
+  <script>document.documentElement.classList.add("js")</script>
 
   {{#entry}}
+  <link rel="prefetch" href="/">
   {{#absoluteURL}}
   <link rel="canonical" href="{{{absoluteURL}}}">
   <meta property="og:url" content="{{{absoluteURL}}}">

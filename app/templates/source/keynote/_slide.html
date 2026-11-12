@@ -1,0 +1,6 @@
+<li class="slide"{{#thumbnail.large}} style="--w: {{width}}; --h: {{height}}"{{/thumbnail.large}}{{^thumbnail.large}} hidden{{/thumbnail.large}}>
+  <a class="item" href="{{{url}}}" aria-label="{{title}}"{{#thumbnail.large}} data-preview="{{{url}}}" data-width="{{width}}" data-height="{{height}}"{{/thumbnail.large}}>
+    {{#thumbnail.large}}<img src="{{{url}}}" srcset="{{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w, {{{thumbnail.large.url}}} {{thumbnail.large.width}}w" sizes="min(86vw, max(calc({{slide_size}} * 8vw), min(74vw, calc({{slide_size}} * 115px))))" width="{{width}}" height="{{height}}" alt="{{title}}" decoding="async" draggable="false">{{/thumbnail.large}}
+    <template class="entry-html">{{{html}}}</template>
+  </a>
+</li>

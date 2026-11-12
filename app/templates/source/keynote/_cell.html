@@ -1,0 +1,4 @@
+<a class="cell" href="{{{url}}}" aria-label="{{title}}"{{#thumbnail.large}} style="--w: {{width}}; --h: {{height}}" data-preview="{{{url}}}" data-width="{{width}}" data-height="{{height}}"{{/thumbnail.large}}{{^thumbnail.large}} hidden{{/thumbnail.large}}>
+  {{#thumbnail.large}}<img loading="lazy" src="{{{thumbnail.small.url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w" sizes="(min-width: 800px) 280px, 44vw" width="{{width}}" height="{{height}}" alt="" decoding="async" draggable="false">{{/thumbnail.large}}
+  <template class="entry-html">{{{html}}}</template>
+</a>
