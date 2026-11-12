@@ -667,6 +667,12 @@
       history.go(-closeDepth);
       return true;
     }
+    // Reached through a listing without history to walk back through (say, a new tab): load it.
+    if (closeURL) {
+      leavingAddress = true;
+      window.location.href = closeURL;
+      return true;
+    }
     // Opened directly (or after a reload): go back to the listing it came from, or to the rail.
     const target = directTarget();
     if (target.navigate) {
