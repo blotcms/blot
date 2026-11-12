@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html>
+<html lang="{{lang}}" data-scheme="{{#light_or_dark}}{{background_color}}{{/light_or_dark}}">
   {{> head}}
   <body data-view="entry">
 
     {{> header}}
 
-    <main class="rail-viewport" aria-label="Images">
+    <main class="rail-viewport" aria-label="Images" data-page="{{pagination.current}}" data-total="{{pagination.total}}" data-entries="{{#pagination}}{{total_entries}}{{/pagination}}{{^pagination}}{{total_posts}}{{/pagination}}">
       <div class="rail-layer">
         <ul class="rail" aria-label="Image rail">
           {{#posts}}
@@ -13,7 +13,6 @@
           {{/posts}}
         </ul>
       </div>
-      <p class="rail-empty">There are no images to show yet.</p>
     </main>
 
     {{#entry}}
@@ -21,11 +20,17 @@
       {{> slide}}
     </ul>
 
-    <div class="contents">
+    <article class="contents">
       {{> post}}
 
+      <nav class="entry-nav" aria-label="Posts">
+        {{^page}}<a class="entry-next" rel="prev" {{#next}}href="{{{url}}}"{{/next}}>&larr; Newer</a>{{/page}}
+        <a class="entry-close" href="/">Back</a>
+        {{^page}}<a class="entry-previous" rel="next" {{#previous}}href="{{{url}}}"{{/previous}}>Older &rarr;</a>{{/page}}
+      </nav>
+
       {{> pluginHTML}}
-    </div>
+    </article>
     {{/entry}}
 
     {{> lightbox}}

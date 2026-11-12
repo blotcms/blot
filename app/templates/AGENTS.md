@@ -47,7 +47,7 @@ Set `sizes` to the photo's rendered CSS width (px, not `em`/`rem`, which follow 
 
 Keep a page from shifting sideways when a scrollbar appears or disappears (for example when a lightbox locks scrolling) with `html { scrollbar-gutter: stable; }`. Browsers that draw classic scrollbars then reserve that strip on the right at all times, even on a page that never scrolls, so anything aligned to the right edge sits a scrollbar's width further in than the left edge.
 
-To pull a right-aligned control (such as a header nav) back towards the edge, give it a small negative right margin of about a scrollbar's width, roughly `-1em` at the header's type size, with a short comment saying why. This is a deliberate trade: with overlay scrollbars, where no room is reserved, the links sit slightly closer to the edge than the title does on the left. Keynote's `#header .nav` does this.
+To pull a right-aligned control (such as a header nav) back towards the edge, give it a small negative right margin of about a scrollbar's width, roughly `-1em` at the header's type size, with a short comment saying why. This is a deliberate trade: with overlay scrollbars, where no room is reserved, the links sit slightly closer to the edge than the title does on the left.
 
 ## Responsive thumbnails
 

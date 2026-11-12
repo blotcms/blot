@@ -4,6 +4,7 @@
   "locals": {
     "page_size": 30,
     "page_size_range": [1, 100],
+    "lang": "en",
     "hide_dates": false,
     "date_display": "MMMM D, Y",
     "background_color": "#000000",
@@ -22,7 +23,7 @@
       "font_size": 13
     },
     "profile_image": {},
-    "navigation_alignment": "justified",
+    "navigation_alignment": "left",
     "navigation_alignment_options": [
       "justified",
       "left",
@@ -30,10 +31,12 @@
       "center"
     ],
     "sticky_navigation": true,
+    "show_captions": true,
+    "drift": true,
     "slide_size": 5,
     "slide_size_range": [1, 10],
-    "content_width": 800,
-    "content_width_range": [480, 1200],
+    "content_width": 600,
+    "content_width_range": [400, 1200],
     "spacing": 4,
     "spacing_range": [1, 8],
     "demo_folder": "sergey"
@@ -41,8 +44,8 @@
   "views": {
     "public": {
       "partials": {
-        "title": "Index of {{{path}}}",
-        "description": "All the files and folders inside {{{path}}}"
+        "title": "Index of {{path}}",
+        "description": "All the files and folders inside {{path}}"
       }
     },
     "archives.html": {
@@ -51,8 +54,8 @@
         "page_size": 100
       },
       "partials": {
-        "title": "Archives - {{{title}}}",
-        "description": "All the entries posted on {{{title}}}"
+        "title": "Archives - {{title}}",
+        "description": "All the entries posted on {{title}}"
       }
     },
     "tagged.html": {
@@ -60,32 +63,32 @@
         "page_size": 100
       },
       "partials": {
-        "title": "Entries tagged {{{tag}}} from {{{title}}}",
-        "description": "All of the entries posted on {{{title}}} tagged {{{tag}}}"
+        "title": "{{tag}} - {{title}}",
+        "description": "All of the entries posted on {{title}} tagged {{tag}}"
       }
     },
     "entries.html": {
       "partials": {
-        "title": "{{{title}}}",
-        "description": "The latest entries posted on {{{title}}}"
+        "title": "{{title}}",
+        "description": "The latest entries posted on {{title}}"
       }
     },
     "error.html": {
       "partials": {
-        "title": "{{{error.title}}} - {{{title}}}",
-        "description": "Error on {{{title}}}"
+        "title": "{{error.title}} - {{title}}",
+        "description": "Error on {{title}}"
       }
     },
     "entry.html": {
       "partials": {
-        "title": "{{{entry.title}}} - {{{title}}}",
-        "description": "{{{entry.summary}}}"
+        "title": "{{entry.title}} - {{title}}",
+        "description": "{{entry.summary}}"
       }
     },
     "search.html": {
       "partials": {
-        "title": "Search - {{{title}}}",
-        "description": "Search all the entries posted on {{{title}}}"
+        "title": "Search - {{title}}",
+        "description": "Search all the entries posted on {{title}}"
       }
     }
   }
