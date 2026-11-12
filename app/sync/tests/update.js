@@ -313,6 +313,73 @@ describe("update", function () {
     });
   });
 
+  it("flags broken references, and clears the flag when the file arrives", async function () {
+    const entryPath = "/refs.md";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(
+        blogID,
+        entryPath,
+        "![A](missing.png)\n\n[Doc](/files/missing.pdf)\n\n[[No Such Post]]"
+      );
+      await update(syncFolder, entryPath);
+
+      const codes = function (flags) {
+        return (flags || [])
+          .map(function (flag) {
+            return flag.code + " " + flag.targets.join(",");
+          })
+          .sort();
+      };
+
+      // Only the references: a missing image also gets a thumbnail flag
+      const references = async function () {
+        return codes(
+          ((await folder.stat(blogID, entryPath)).flags || []).filter(
+            (flag) => flag.code.indexOf("BROKEN_") === 0
+          )
+        );
+      };
+
+      expect(await references()).toEqual([
+        "BROKEN_FILE_LINK /files/missing.pdf",
+        "BROKEN_IMAGE /missing.png",
+        "BROKEN_WIKILINK No Such Post",
+      ]);
+
+      await folder.write(
+        blogID,
+        "/missing.png",
+        await require("fs-extra").readFile(
+          require("path").join(__dirname, "../../build/tests/small.jpg")
+        )
+      );
+      await update(syncFolder, "/missing.png");
+
+      expect(await references()).toEqual([
+        "BROKEN_FILE_LINK /files/missing.pdf",
+        "BROKEN_WIKILINK No Such Post",
+      ]);
+    });
+  });
+
+  it("flags an image embedded with a wikilink which is not in the folder", async function () {
+    const entryPath = "/embed.md";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, entryPath, "![[pic.png]]");
+      await update(syncFolder, entryPath);
+
+      const flags = (await folder.stat(blogID, entryPath)).flags || [];
+      const image = flags.find((flag) => flag.code === "BROKEN_IMAGE");
+
+      expect(image).toBeTruthy();
+      expect(image.targets.join(",")).toContain("pic.png");
+    });
+  });
+
   it("drops the entry of a file which is gone", async function () {
     const entryPath = "/gone.txt";
     const blogID = this.blog.id;
