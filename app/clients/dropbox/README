@@ -471,8 +471,8 @@ Sync records only failures the customer must act on, tagged with `error_source` 
 - **HTTP 409 from delta** (`filesListFolder` / `filesGetMetadata` on the blog folder): Persisted as `SOURCE_MISSING`. A `reset` tag is recovered by clearing the cursor and listing from scratch — that is a rename/move, not a missing folder, and does not set `error_code`.
 - **HTTP 409 from apply / write / remove**: Per-file conflict or restricted content. Not persisted, not retried, not reported as a missing folder.
 - **HTTP 409 `path/not_found` / `path/not_folder` listing a subfolder during a resync**: The folder was deleted, moved or replaced by a file in Dropbox after its parent was listed. If Dropbox lists the folder as changed since the pre-walk cursor, the walk skips it (`summary.skipped`) and carries on, leaving the catch-up sync to apply the change. Otherwise the 409 is unexplained: it's counted as a failed path (`summary.failed`, so the hourly validation reports a walk error), and nothing is removed. Neither case retries.
-- **Unsupported files** (`.paper`): Placeholder files created; download skipped.
-- **Oversized files** (>100 MB): Placeholder files created; download skipped.
+- **Unsupported files** (`.paper`): a placeholder flagged `SYNC_UNSUPPORTED` is written (see `app/models/file/README`, Flags); download skipped.
+- **Oversized files** (>100 MB): a placeholder flagged `SYNC_TOO_LARGE` is written; download skipped. Placeholders are never uploaded back to Dropbox, but files which really are empty are.
 - **Case-only renames** (e.g., `foo` → `FOO`): Detected and injected as delete + create to maintain consistency on case-sensitive file systems.
 
 `getHealth` reads these fields and returns the shared `{state, issues}` shape. A successful sync, setup, or reset clears `error_code`, `error_source`, and `error_since`. Disconnect drops the account row.

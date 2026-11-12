@@ -66,7 +66,7 @@ module.exports = async (blogID, publish, options = {}) => {
   // reset db.folder state
   await reset();
 
-  let skippedEmpty = 0;
+  let skippedPlaceholders = 0;
 
   const walk = async (dir, dirId) => {
     if (!progress) publish("Checking", dir);
@@ -121,22 +121,43 @@ module.exports = async (blogID, publish, options = {}) => {
 
         await walk(path, pathId);
       } else {
-        // Blot writes an empty file where it could not download a file
-        // (oversized files, Google App files), so a placeholder is
-        // indistinguishable from a file that really is empty. Uploading it
-        // would put an empty file in Drive, or overwrite the real file
-        // already there, so we never upload empty files. The cost is that
-        // genuinely empty files do not carry over to Drive.
+        // An empty file may be a placeholder Blot wrote for a file it could
+        // not download (an oversized file or a Google App file). Its bytes
+        // aren't the file's, so it is never uploaded. A file which really is
+        // empty is uploaded, unless Drive already has a file there which
+        // isn't empty (a Google App file lists no size): an empty file never
+        // overwrites one.
         if (size === 0) {
-          console.log(
-            clfdate() +
-              " Google Drive: Skipping empty file (possible placeholder)",
-            blogID,
-            path
-          );
-          skippedEmpty += 1;
-          publishTransferStatus(progress, publish, "Skipping empty file", path);
-          continue;
+          if ((await folder.stat(blogID, path)).placeholder) {
+            console.log(
+              clfdate() + " Google Drive: Skipping placeholder",
+              blogID,
+              path
+            );
+            skippedPlaceholders += 1;
+            publishTransferStatus(
+              progress,
+              publish,
+              "Skipping placeholder",
+              path
+            );
+            continue;
+          }
+
+          if (
+            existsOnRemote &&
+            existsOnRemote.mimeType !== "application/vnd.google-apps.folder" &&
+            Number(existsOnRemote.size) !== 0
+          ) {
+            console.log(
+              clfdate() +
+                " Google Drive: Not overwriting a file on Drive with an empty one",
+              blogID,
+              path
+            );
+            publishTransferStatus(progress, publish, "Checking", path);
+            continue;
+          }
         }
 
         // These do not have a md5Checksum so we fall
@@ -192,13 +213,13 @@ module.exports = async (blogID, publish, options = {}) => {
 
   await walk("/", folderId);
 
-  if (skippedEmpty > 0) {
+  if (skippedPlaceholders > 0) {
     publish(
       "Skipped " +
-        skippedEmpty +
-        " empty file" +
-        (skippedEmpty === 1 ? "" : "s") +
-        " (possible placeholders for files Blot could not download)"
+        skippedPlaceholders +
+        " placeholder" +
+        (skippedPlaceholders === 1 ? "" : "s") +
+        " for files Blot could not download"
     );
   }
 };

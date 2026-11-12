@@ -1,5 +1,6 @@
 const establishSyncLock = require("sync/establishSyncLock");
 const storage = require("storage/folder");
+const config = require("config");
 const { handleSyncLockError } = require("../lock");
 const { handleRedisUnavailable } = require("../unavailable");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
@@ -54,6 +55,11 @@ module.exports = async function (req, res) {
         return false;
       }
 
+      // An empty file is only a current placeholder if it is flagged as one
+      if (isPlaceholderUpload) {
+        return !!(await storage.stat(blogID, filePath)).placeholder;
+      }
+
       const existingContents = await storage.read(blogID, filePath);
       return existingContents.equals(incomingContents);
     };
@@ -81,7 +87,11 @@ module.exports = async function (req, res) {
       if (isPlaceholderUpload) {
         folder.status("Saving placeholder " + filePath);
 
-        await storage.write(blogID, filePath, Buffer.alloc(0));
+        await storage.writePlaceholder(blogID, filePath, {
+          code: "SYNC_TOO_LARGE",
+          size: Number.isFinite(originalSize) ? originalSize : undefined,
+          limit: config.icloud.maxFileSize,
+        });
 
         await updateOrRollBack(blogID, folder, filePath);
         folder.status("Updated placeholder " + filePath);

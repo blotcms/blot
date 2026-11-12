@@ -414,7 +414,7 @@ async function resetFromBlotWithClient(
     failures.push(path);
   };
 
-  let skippedEmpty = 0;
+  let skippedPlaceholders = 0;
 
   const walk = async (dir) => {
     abortIfRequested(signal);
@@ -495,16 +495,28 @@ async function resetFromBlotWithClient(
         // Counted in the pre-walk — bump even when the file is already identical.
         publishTransferStatus(progress, publish, path);
 
-        // Blot writes an empty file where it could not download a file
-        // (oversized or unsupported ones), so a placeholder is
-        // indistinguishable from a file that really is empty. Uploading it
-        // would put an empty file in Dropbox, or overwrite the real file
-        // already there, so we never upload empty files. The cost is that
-        // genuinely empty files do not carry over to Dropbox.
+        // An empty file may be a placeholder Blot wrote for a file it could
+        // not download (oversized or unsupported). Its bytes aren't the
+        // file's, so it is never uploaded. A file which really is empty is
+        // uploaded, unless Dropbox already has a file there with bytes:
+        // an empty file never overwrites one.
         if (localSizes.get(path.toLowerCase()) === 0) {
-          log("Skipping empty file (possible placeholder)", blogID, path);
-          skippedEmpty += 1;
-          continue;
+          if (
+            (await storage.stat(blogID, localItem.path_display)).placeholder
+          ) {
+            log("Skipping placeholder", blogID, path);
+            skippedPlaceholders += 1;
+            continue;
+          }
+
+          if (
+            remoteCounterpart &&
+            !remoteCounterpart.is_directory &&
+            remoteCounterpart.size > 0
+          ) {
+            log("Not overwriting a file on Dropbox with an empty one", path);
+            continue;
+          }
         }
 
         if (remoteCounterpart && !identicalOnRemote) {
@@ -536,13 +548,13 @@ async function resetFromBlotWithClient(
 
   abortIfRequested(signal);
 
-  if (skippedEmpty > 0) {
+  if (skippedPlaceholders > 0) {
     publish(
       "Skipped " +
-        skippedEmpty +
-        " empty file" +
-        (skippedEmpty === 1 ? "" : "s") +
-        " (possible placeholders for files Blot could not download)"
+        skippedPlaceholders +
+        " placeholder" +
+        (skippedPlaceholders === 1 ? "" : "s") +
+        " for files Blot could not download"
     );
   }
 

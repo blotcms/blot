@@ -1,4 +1,4 @@
-describe("icloud toiCloud empty files", function () {
+describe("icloud toiCloud empty files and placeholders", function () {
   const toiCloudPath = require.resolve("../toiCloud");
   const modules = {
     checkWeCanContinue: require.resolve("../util/checkWeCanContinue"),
@@ -7,6 +7,7 @@ describe("icloud toiCloud empty files", function () {
     remoteDelete: require.resolve("../util/remoteDelete"),
     localReaddir: require.resolve("../util/localReaddir"),
     remoteReaddir: require.resolve("../util/remoteReaddir"),
+    folder: require.resolve("storage/folder"),
   };
   const originals = new Map();
   let uploads;
@@ -22,13 +23,17 @@ describe("icloud toiCloud empty files", function () {
     };
   }
 
-  function load(local, remote) {
+  function load(local, remote, placeholders = []) {
     mock(modules.checkWeCanContinue, () => async () => {});
     mock(modules.remoteUpload, async (_blogID, path) => uploads.push(path));
     mock(modules.remoteMkdir, async () => {});
     mock(modules.remoteDelete, async () => {});
     mock(modules.localReaddir, async () => local);
     mock(modules.remoteReaddir, async () => remote);
+    mock(modules.folder, {
+      stat: async (_blogID, path) =>
+        placeholders.includes(path) ? { placeholder: true } : {},
+    });
     delete require.cache[toiCloudPath];
     return require(toiCloudPath);
   }
@@ -48,33 +53,21 @@ describe("icloud toiCloud empty files", function () {
   });
 
   const local = [
-    { name: "empty.pdf", size: 0, isDirectory: false },
+    { name: "placeholder.pdf", size: 0, isDirectory: false },
+    { name: "empty.txt", size: 0, isDirectory: false },
     { name: "overwrites.pdf", size: 0, isDirectory: false },
     { name: "post.txt", size: 5, isDirectory: false },
   ];
   const remote = [{ name: "overwrites.pdf", size: 9000, isDirectory: false }];
 
-  it("skips empty files when skipEmptyFiles is set, leaving the remote file alone", async function () {
-    const toiCloud = load(local, remote);
+  it("skips placeholders, uploads empty files, and never overwrites a remote file with one", async function () {
+    const toiCloud = load(local, remote, ["/placeholder.pdf"]);
 
     await toiCloud("blog", (...args) => messages.push(args.join(" ")), null, {
       skipDeletions: true,
-      skipEmptyFiles: true,
     });
 
-    expect(uploads).toEqual(["/post.txt"]);
-    expect(messages.some((m) => /Skipped 2 empty files/.test(m))).toBe(true);
-  });
-
-  it("uploads empty files on an ordinary sync", async function () {
-    const toiCloud = load(local, remote);
-
-    await toiCloud("blog", () => {}, null, { skipDeletions: true });
-
-    expect(uploads.sort()).toEqual([
-      "/empty.pdf",
-      "/overwrites.pdf",
-      "/post.txt",
-    ]);
+    expect(uploads.sort()).toEqual(["/empty.txt", "/post.txt"]);
+    expect(messages.some((m) => /Skipped 1 placeholder /.test(m))).toBe(true);
   });
 });

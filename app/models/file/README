@@ -10,7 +10,7 @@ The metadata index of a blog's folder: a record for every file and every directo
 
 ## Records
 
-`{ type: "file" | "dir", size, modified, sha1 }`: size in bytes, modified in milliseconds since the epoch, sha1 the SHA-1 of the file's bytes in hex. A directory has size 0 and no hash. `sha1` is `""` when it isn't known, which only a rebuild without hashing produces.
+`{ type: "file" | "dir", size, modified, sha1, flags }`: size in bytes, modified in milliseconds since the epoch, sha1 the SHA-1 of the file's bytes in hex. A directory has size 0 and no hash. `sha1` is `""` when it isn't known, which only a rebuild without hashing produces. `flags` is there only for a file which has some (see Flags below).
 
 Paths are normalised with `helper/pathNormalizer`, exactly as entry keys are (`models/entry/key.js`): a leading slash, no trailing slash, no double slashes, NFC. The folder itself is `/`, always exists, and has no record of its own (`get` returns a directory with `modified` 0).
 
@@ -47,7 +47,7 @@ blog:X:file:paths          /Posts /Posts/a.txt /drafts /posts /posts/b.txt
 blog:X:file:totals         bytes -> 8, files -> 2
 ```
 
-The packing is the record type's first letter (`f` or `d`), then size, modified and sha1, separated by `|`. A name may contain `|`, but it is only ever a field, never part of a value. No name can contain `/`, so it separates the names in the lowercased lookup. An empty directory has no hash of its own; its record in its parent's hash is what makes it exist.
+The packing is the record type's first letter (`f` or `d`), then size, modified and sha1, separated by `|`, then, for a flagged file only, `|` and its flags as JSON (`f|0|1700000000000|da39a3ee...|[{"code":"SYNC_TOO_LARGE","size":200000000,"limit":100000000}]`). Everything after the fourth `|` is the JSON, which may hold a `|` of its own. Flags which fail to parse read as none. A name may contain `|`, but it is only ever a field, never part of a value. No name can contain `/`, so it separates the names in the lowercased lookup. An empty directory has no hash of its own; its record in its parent's hash is what makes it exist.
 
 Case-insensitive resolution looks each segment up in its directory's lowercased lookup. Names which differ only by case (`/Posts` and `/posts`) share one field, so neither hides the other: the exact name wins, otherwise the first in sorted order, by `helper/caseSensitivePath.pick` over the stored names. Each segment is resolved on its own, without going back to try a sibling, as on disk.
 
@@ -67,6 +67,19 @@ Memory: a names set holds each name once more, beside its field in the hash and 
 
 ---
 
+## Flags
+
+A flag records something that went wrong with a file which can't be worked out again from its path or the blog's settings: a placeholder written because the file couldn't be fetched, a failed build, a broken image reference. `flags.js` is the dictionary of codes. Each code has a source (the writer which sets it), a message for the person, the detail keys it may carry, and whether it marks a placeholder or is transient. Anything that follows from the path or settings (public, dot and underscore files, file types Blot doesn't build) is not stored.
+
+- A flag is `{ code, ...detail }`. Detail is capped at 20 targets, with `count` holding the full number, and 200 characters per string, so one file can't swell its directory's hash.
+- Writing a file replaces its record, so its flags go with its old bytes. A move keeps them.
+- Each source replaces all of its own flags each time it runs (`setFlags`) and leaves other sources' flags alone. With `{ sha1 }` it only flags bytes it saw.
+- Readers ignore codes they don't know, so units on either side of a deploy can share records. Writers refuse them.
+- A placeholder is an empty file with a flag whose code is marked `placeholder`. That is what tells it from a file which really is empty.
+- A rebuild keeps the flags of files whose size (and SHA-1, where both are known) is unchanged. If the index itself is lost, a resync brings sync flags back and the next build brings back build flags.
+
+---
+
 ## Functions
 
 All return promises.
@@ -80,10 +93,12 @@ All return promises.
 | `resolveCaseInsensitive(blogID, path)` | The stored spelling of path, or null |
 | `totals(blogID)` | `{ bytes, files }` |
 | `set(blogID, path, record)`, `setMany(blogID, [{ path, ...record }])` | Record paths, giving every ancestor without a record a directory record (S3 has implicit directories). Refuses a path below a file (ENOTDIR), a file over a directory (EISDIR) and a directory over a file (EEXIST) |
+| `setFlags(blogID, path, source, flags, { sha1 })` | Replace one source's flags on a file, keeping the rest of its record. With sha1, only if the record still has that hash. Resolves to false if there is no such file, or the hash differs |
+| `flagged(blogID, dir)` | Async iterator of `{ path, ...record }` for every flagged file below dir. Reads each directory's hash once, so it is for rebuilds and scripts |
 | `remove(blogID, path)` | Forget a file, or a directory and its whole subtree. Resolves to the removed record, or null |
 | `removeAll(blogID)` | Forget the whole folder |
 | `addMissingNames(blogID, { apply })` | Build the names set of every directory which lacks one (see above). Resolves to `{ dirs, missing, names }`; writes only with `apply`, and must run under the sync lock |
-| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a disk cannot) is skipped and listed in `skipped` as `{ path, type, code }` |
+| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a disk cannot) is skipped and listed in `skipped` as `{ path, type, code }`. Flags of unchanged files are carried over |
 
 Removing a directory goes through its subtree deepest first, a page at a time, so each file's size is still in its parent's hash when the totals are corrected. If it stops part way, what is left is consistent apart from a lowercased lookup which may still name a child already gone, until its directory goes too.
 
@@ -96,4 +111,5 @@ Removing a directory goes through its subtree deepest first, a page at a time, s
 | `index.js` | The functions above |
 | `key.js` | Key names, the path normalisation, and how a name is spelled in a names set |
 | `record.js` | Packs and parses records |
+| `flags.js` | The dictionary of flag codes, and how flags are capped and replaced |
 | `tests/` | Specs, against real Redis |

@@ -197,7 +197,18 @@ module.exports = async (blogID, publish, update) => {
           !existsLocally.isDirectory &&
           existsLocally.size === 0;
 
-        if (placeholderInPlace || identicalOnRemote) {
+        if (placeholderInPlace) {
+          progress.publishThrottled("Checking", path);
+
+          // One written before placeholders were flagged is flagged now, so
+          // it isn't taken for a file which really is empty
+          const placeholder = await folder.stat(blogID, path);
+          if (!placeholder.placeholder) {
+            await folder.setFlags(blogID, path, "sync", [
+              { code: "SYNC_TOO_LARGE", size: size, limit: maxFileSize },
+            ]);
+          }
+        } else if (identicalOnRemote) {
           progress.publishThrottled("Checking", path);
         } else {
           try {
@@ -223,11 +234,15 @@ module.exports = async (blogID, publish, update) => {
                   descendants = await localDescendants(blogID, path);
                   await folder.remove(blogID, path);
                 }
-                await folder.write(blogID, path, "");
+                await folder.writePlaceholder(blogID, path, {
+                  code: "SYNC_TOO_LARGE",
+                  size: size,
+                  limit: maxFileSize,
+                });
                 summary.placeholdersCreated += 1;
                 publish("Created placeholder for oversized file", path);
-                // Register it, as the /upload placeholder route does, so the
-                // entry is built (or rebuilt) from the empty file.
+                // Register it, as the /upload placeholder route does, so an
+                // entry built from the old bytes is dropped.
                 await update(path);
                 for (const descendant of descendants) await update(descendant);
               } catch (err) {

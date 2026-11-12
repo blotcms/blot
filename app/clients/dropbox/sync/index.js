@@ -316,7 +316,10 @@ function Apply(client, blogID, log, status) {
         status("Skipping unsupported file " + item.resolved_relative_path);
 
         try {
-          await storage.write(blogID, item.resolved_relative_path, "");
+          await storage.writePlaceholder(blogID, item.resolved_relative_path, {
+            code: "SYNC_UNSUPPORTED",
+            kind: Path.extname(pathForUnsupportedCheck).toLowerCase(),
+          });
         } catch (err) {
           log(
             item.resolved_relative_path,
@@ -356,7 +359,11 @@ function Apply(client, blogID, log, status) {
         }
 
         try {
-          await storage.write(blogID, item.resolved_relative_path, "");
+          await storage.writePlaceholder(blogID, item.resolved_relative_path, {
+            code: "SYNC_TOO_LARGE",
+            size: item.size,
+            limit: MAX_FILE_SIZE,
+          });
         } catch (err) {
           log(
             item.resolved_relative_path,

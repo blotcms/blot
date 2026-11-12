@@ -1,5 +1,5 @@
 const storage = require("storage/folder");
-const { join } = require("path");
+const { join, extname } = require("path");
 const clfdate = require("helper/clfdate");
 const download = require("../util/download");
 const {
@@ -430,7 +430,10 @@ const walk = async (
         );
         summary.skipped += 1;
         try {
-          await storage.write(blogID, pathOnBlot, "");
+          await storage.writePlaceholder(blogID, pathOnBlot, {
+            code: "SYNC_UNSUPPORTED",
+            kind: extname(pathOnDropbox).toLowerCase(),
+          });
           await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
@@ -459,7 +462,11 @@ const walk = async (
           continue;
         }
         try {
-          await storage.write(blogID, pathOnBlot, "");
+          await storage.writePlaceholder(blogID, pathOnBlot, {
+            code: "SYNC_TOO_LARGE",
+            size: remoteItem.size,
+            limit: MAX_FILE_SIZE,
+          });
           await updatePath(pathOnBlot);
         } catch (err) {
           publish("Failed to create placeholder", pathOnBlot, err.message);
