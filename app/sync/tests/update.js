@@ -313,6 +313,48 @@ describe("update", function () {
     });
   });
 
+  it("flags broken references, and clears the flag when the file arrives", async function () {
+    const entryPath = "/refs.md";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(
+        blogID,
+        entryPath,
+        "![A](missing.png)\n\n[Doc](/files/missing.pdf)\n\n[[No Such Post]]"
+      );
+      await update(syncFolder, entryPath);
+
+      const codes = function (flags) {
+        return (flags || [])
+          .map(function (flag) {
+            return flag.code + " " + flag.targets.join(",");
+          })
+          .sort();
+      };
+
+      expect(codes((await folder.stat(blogID, entryPath)).flags)).toEqual([
+        "BROKEN_FILE_LINK /files/missing.pdf",
+        "BROKEN_IMAGE /missing.png",
+        "BROKEN_WIKILINK No Such Post",
+      ]);
+
+      await folder.write(
+        blogID,
+        "/missing.png",
+        await require("fs-extra").readFile(
+          require("path").join(__dirname, "../../build/tests/small.jpg")
+        )
+      );
+      await update(syncFolder, "/missing.png");
+
+      expect(codes((await folder.stat(blogID, entryPath)).flags)).toEqual([
+        "BROKEN_FILE_LINK /files/missing.pdf",
+        "BROKEN_WIKILINK No Such Post",
+      ]);
+    });
+  });
+
   it("drops the entry of a file which is gone", async function () {
     const entryPath = "/gone.txt";
     const blogID = this.blog.id;
