@@ -4,7 +4,6 @@ const folder = require("storage/folder");
 const Stat = require("./stat");
 const Entry = require("models/entry");
 const pathNormalize = require("helper/pathNormalizer");
-const IgnoredFiles = require("models/ignoredFiles");
 const postSourceSize = require("build/converters/post-source-size");
 const Build = require("build");
 
@@ -119,6 +118,8 @@ function statEntry(blog, dir, name, entry) {
   // we don't want to turn '/' into '%2F' so we split on '/' and encode each part separately
   stat.url = stat.path.split("/").map(encodeURIComponent).join("/");
   stat.name = name;
+  // A flagged file's flags (models/file/flags.js), from the listing or stat
+  if (entry.flags) stat.flags = entry.flags;
 
   return stat;
 }
@@ -163,88 +164,85 @@ function invalidateStatCache(blog) {
   }
 }
 
-// Attach the post / ignored-file flags the template needs. Only the page
+const hasFlag = (stat, code) =>
+  !!stat.flags && stat.flags.some((flag) => flag.code === code);
+
+// Attach the post / too-large flags the template needs. Only the page
 // being rendered is looked up in Redis, so this stays bounded.
 async function decorate(blog, dir, pageStats) {
   const pageNames = pageStats.map((stat) => stat.name);
 
-  const [entries, ignoredFiles] = await Promise.all([
-    new Promise((resolve) => {
-      // Resolve each listed item to the entry that decides whether it is
-      // badged as published. A file inside a "+" folder shares the folder
-      // post's aggregate entry, so it is looked up under that path instead.
-      const lookups = pageNames.map((item) => {
-        const itemPath = pathNormalize(path.join(dir, item));
-        const multiInfo = findMultiFolder(itemPath);
-        const viaAggregate = !!(
-          multiInfo && pathNormalize(multiInfo.entryPath) !== itemPath
-        );
-        const lookupPath = viaAggregate ? multiInfo.entryPath : itemPath;
-        return {
-          itemPath,
-          viaAggregate,
-          folderPath: multiInfo ? pathNormalize(multiInfo.folderPath) : null,
-          lookupPath: pathNormalize(lookupPath),
-        };
-      });
-
-      // Every item in a "+" folder resolves to the same aggregate entry, so
-      // read each distinct path once. We only need the deleted flag and the
-      // generated HTML (to confirm a file is one of the folder post's
-      // sources rather than an unsupported sibling).
-      const uniquePaths = Array.from(
-        new Set(lookups.map((lookup) => lookup.lookupPath))
+  const entries = await new Promise((resolve) => {
+    // Resolve each listed item to the entry that decides whether it is
+    // badged as published. A file inside a "+" folder shares the folder
+    // post's aggregate entry, so it is looked up under that path instead.
+    const lookups = pageNames.map((item) => {
+      const itemPath = pathNormalize(path.join(dir, item));
+      const multiInfo = findMultiFolder(itemPath);
+      const viaAggregate = !!(
+        multiInfo && pathNormalize(multiInfo.entryPath) !== itemPath
       );
+      const lookupPath = viaAggregate ? multiInfo.entryPath : itemPath;
+      return {
+        itemPath,
+        viaAggregate,
+        folderPath: multiInfo ? pathNormalize(multiInfo.folderPath) : null,
+        lookupPath: pathNormalize(lookupPath),
+      };
+    });
 
-      Promise.all(
-        uniquePaths.map((entryPath) =>
-          // A failed read is the same as no entry
-          Entry.get(blog.id, entryPath).then(
-            (entry) => entry || null,
-            () => null
-          )
+    // Every item in a "+" folder resolves to the same aggregate entry, so
+    // read each distinct path once. We only need the deleted flag and the
+    // generated HTML (to confirm a file is one of the folder post's
+    // sources rather than an unsupported sibling).
+    const uniquePaths = Array.from(
+      new Set(lookups.map((lookup) => lookup.lookupPath))
+    );
+
+    Promise.all(
+      uniquePaths.map((entryPath) =>
+        // A failed read is the same as no entry
+        Entry.get(blog.id, entryPath).then(
+          (entry) => entry || null,
+          () => null
         )
       )
-        .then((fetched) => {
-          const byPath = new Map();
-          uniquePaths.forEach((entryPath, index) => {
-            byPath.set(entryPath, fetched[index]);
-          });
+    )
+      .then((fetched) => {
+        const byPath = new Map();
+        uniquePaths.forEach((entryPath, index) => {
+          byPath.set(entryPath, fetched[index]);
+        });
 
-          resolve(
-            pageNames.filter((_, index) => {
-              const lookup = lookups[index];
-              const entry = byPath.get(lookup.lookupPath);
+        resolve(
+          pageNames.filter((_, index) => {
+            const lookup = lookups[index];
+            const entry = byPath.get(lookup.lookupPath);
 
-              if (!entry || entry.deleted === true) return false;
+            if (!entry || entry.deleted === true) return false;
 
-              // A file inside a "+" folder resolves to the shared aggregate
-              // entry. Only badge it as published if it is actually the "+"
-              // folder itself or one of the folder post's source files -
-              // not an unsupported sibling like archive.zip.
-              if (lookup.viaAggregate) {
-                if (lookup.itemPath === lookup.folderPath) return true;
-                return (
-                  folderPostSourcePaths(entry.html).indexOf(lookup.itemPath) !==
-                  -1
-                );
-              }
+            // A file inside a "+" folder resolves to the shared aggregate
+            // entry. Only badge it as published if it is actually the "+"
+            // folder itself or one of the folder post's source files -
+            // not an unsupported sibling like archive.zip.
+            if (lookup.viaAggregate) {
+              if (lookup.itemPath === lookup.folderPath) return true;
+              return (
+                folderPostSourcePaths(entry.html).indexOf(lookup.itemPath) !==
+                -1
+              );
+            }
 
-              return true;
-            })
-          );
-        })
-        .catch(() => resolve([]));
-    }),
-    IgnoredFiles.getStatuses(
-      blog.id,
-      pageNames.map((item) => path.join(dir, item))
-    ),
-  ]);
+            return true;
+          })
+        );
+      })
+      .catch(() => resolve([]));
+  });
 
   return pageStats.map((stat) => {
     stat.entry = entries.includes(stat.name);
-    stat.tooLarge = ignoredFiles[pathNormalize(stat.path)] === "TOO_LARGE";
+    stat.tooLarge = hasFlag(stat, "POST_TOO_LARGE");
     if (stat.tooLarge) {
       // A previously published source that grew too large leaves a deleted
       // entry tombstone behind; don't show it as a live post.
