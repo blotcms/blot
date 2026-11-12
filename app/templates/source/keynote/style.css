@@ -153,16 +153,63 @@ hr {
   transition: opacity 200ms ease;
 }
 
-#header a {
+#header a,
+#header .nav-toggle-button {
   pointer-events: auto;
 }
 
-/* The title and the links sit together on the left, all at one size. */
+/* The title and the links, all at one size, placed by the "navigation alignment" setting. */
 #header .nav {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.25em 1.15em;
+}
+
+{{#is.navigation_alignment.justified}}
+#header .nav {
+  justify-content: flex-end;
+  margin-left: auto;
+}
+{{/is.navigation_alignment.justified}}
+{{#is.navigation_alignment.right}}
+#header,
+#header .nav {
+  justify-content: flex-end;
+}
+{{/is.navigation_alignment.right}}
+{{#is.navigation_alignment.center}}
+#header,
+#header .nav {
+  justify-content: center;
+}
+{{/is.navigation_alignment.center}}
+
+/* On narrow screens the links fold away behind a menu button: a checkbox and its label, so
+   the menu opens without script. Wider screens never show the button. */
+.nav-toggle-button {
+  display: none;
+}
+
+/* The tag filters' "more" icon, which becomes their close icon while the menu is open. */
+.nav-toggle-button svg {
+  display: block;
+  fill: currentColor;
+}
+
+.nav-toggle-close,
+.nav-toggle:checked ~ .nav-toggle-button .nav-toggle-more {
+  display: none !important;
+}
+
+.nav-toggle:checked ~ .nav-toggle-button .nav-toggle-close {
+  display: block !important;
+}
+
+.nav-toggle:focus-visible ~ .nav-toggle-button {
+  outline: 2px solid {{text_color}};
+  outline-offset: -6px;
+  border-radius: 999px;
 }
 
 {{#sticky_navigation}}
@@ -1402,9 +1449,89 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
     margin-bottom: -1em;
   }
 
-  #header .nav {
-    gap: 0.15em 0.8em;
+  #header {
+    flex-wrap: nowrap;
+    align-items: center;
   }
+
+  .nav-toggle-button {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: 44px;
+    height: 44px;
+    /* The icon's edge lines up with the page margin. */
+    margin: -0.75em -14px -0.75em 0;
+    color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+    cursor: pointer;
+  }
+
+  .nav-toggle-button:hover,
+  .nav-toggle:checked ~ .nav-toggle-button {
+    color: {{text_color}};
+  }
+
+  /* The links open as a panel over the page, just under the title. */
+  #header .nav {
+    position: absolute;
+    top: calc(100% - 2em);
+    right: 0;
+    left: 0;
+    display: none;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    margin: 0;
+    padding: 0.4em var(--edge-x) 0.9em;
+    border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
+    background: {{background_color}};
+  }
+
+  #header .nav-toggle:checked ~ .nav {
+    display: flex;
+  }
+
+  /* No button when the menu has nothing but the hidden Home and Search links. */
+  #header:not(:has(.nav a:not([href="/"], [href="/search"]))) .nav-toggle-button {
+    display: none;
+  }
+
+  {{#is.navigation_alignment.right}}
+  #header .nav {
+    align-items: flex-end;
+  }
+
+  .nav-toggle-button {
+    order: -2;
+    margin: -0.75em 0 -0.75em -14px;
+  }
+
+  #title {
+    justify-content: flex-end;
+    text-align: right;
+  }
+  {{/is.navigation_alignment.right}}
+
+  {{#is.navigation_alignment.center}}
+  #header .nav {
+    align-items: center;
+  }
+
+  /* A space as wide as the button balances it on the left, so the title stays centred. */
+  #header::before {
+    flex: none;
+    order: -2;
+    width: 44px;
+    margin-left: -14px;
+    content: "";
+  }
+
+  #title {
+    justify-content: center;
+    text-align: center;
+  }
+  {{/is.navigation_alignment.center}}
 
   /* Tighter rows and gaps here, so the tap areas reach less far. */
   #title::after,
@@ -1417,7 +1544,8 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   }
 
   #title {
-    flex: 0 0 100%;
+    flex: 1 1 auto;
+    min-width: 0;
     overflow-wrap: anywhere;
   }
 
