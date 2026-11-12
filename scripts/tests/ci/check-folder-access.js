@@ -78,6 +78,10 @@ const MUTATION_ALLOWED_PREFIXES = [
   // Shared by the Dropbox and iCloud initial transfers, which call it on the
   // blog's folder while they hold its sync lock.
   "app/clients/util/resolveCaseConflicts.js",
+  // Removes a blog's placeholders when its client disconnects, under the
+  // sync lock: they exist only in Blot's copy, so there is no provider to
+  // tell.
+  "app/clients/util/placeholders.js",
   "app/clients/folder.js", // the router
   // Syncs Blot's own demo blogs, which have no client.
   "app/templates/folders/",

@@ -32,6 +32,7 @@ const dictionary = {
   is: require("./is"),
   is_active: is_active,
   latest_entry: latest_entry,
+  light_or_dark: require("./light_or_dark"),
   plugin: require("./plugin"),
   popular_tags: require("./popular_tags"),
   posts: require("./posts"),

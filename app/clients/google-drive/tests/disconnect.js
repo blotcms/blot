@@ -21,6 +21,7 @@ describe("Drive disconnect", function () {
   it("resets the folder's verified-content cache and cursor, scoped to the blog", async function () {
     let resetArgs = null;
     const disconnect = load({
+      "clients/util/placeholders": { removeAtDisconnect: async () => [] },
       "models/blog": {
         set(blogID, data, callback) {
           callback();
@@ -54,6 +55,7 @@ describe("Drive disconnect", function () {
   it("does not try to reset a folder when the blog had none", async function () {
     let folderCalled = false;
     const disconnect = load({
+      "clients/util/placeholders": { removeAtDisconnect: async () => [] },
       "models/blog": {
         set(blogID, data, callback) {
           callback();
