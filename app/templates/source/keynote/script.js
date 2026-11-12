@@ -1229,7 +1229,8 @@
 
     const DRIFT_SPEED = 8; // px per second
     const drift = {{#drift}}true{{/drift}}{{^drift}}false{{/drift}}; // the "drift" setting
-    const drifting = () => drift && !reducedMotion.matches;
+    // No drift while the tab is hidden, so a background tab does no work at all.
+    const drifting = () => drift && !reducedMotion.matches && !document.hidden;
     const FRICTION = 4.2;
     const MAX_VELOCITY = 1100;
     const RETRY_DELAY = 5000; // ms before a page that failed to load is tried again
@@ -1663,6 +1664,12 @@
         velocity = 0;
       }
       schedule();
+    });
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) return schedule();
+      cancelAnimationFrame(frameId);
+      frameId = 0;
     });
 
     // The first slides on screen load straight away, the very first ahead of everything else.
