@@ -11,6 +11,8 @@ const config = require("config");
 const fetch = require("node-fetch");
 const notifyAdminIfResyncFoundChanges = require("./notifyResyncFoundChanges");
 const syncReport = require("clients/util/syncReport");
+const storage = require("storage/folder");
+const fileFlags = require("models/file/flags");
 
 const RESYNC_REFUSALS = [
   "DROPBOX_TRANSFER_INCOMPLETE",
@@ -343,6 +345,41 @@ client_routes.use("/:client", function (req, res, next) {
   res.locals.effectiveClient = req.params.client;
 
   load.client(req, res, next);
+});
+
+// The disconnect page lists the placeholders: the empty files a client wrote
+// where it couldn't download a file. Disconnecting removes them, since only
+// that client can fetch their bytes. The listing reads the folder's whole
+// index, so it runs on this page only, and a failure just leaves it out.
+const PLACEHOLDERS_SHOWN = 20;
+
+client_routes.get("/:client/disconnect", async (req, res, next) => {
+  try {
+    const found = [];
+    for await (const file of storage.flagged(req.blog.id)) {
+      if (!file.placeholder) continue;
+      const flag = (file.flags || []).find(
+        (flag) => fileFlags.CODES[flag.code]?.placeholder
+      );
+      const code = flag && fileFlags.CODES[flag.code];
+      found.push({
+        path: file.path,
+        reason: code ? code.message : "couldn't be downloaded",
+      });
+    }
+    if (found.length) {
+      found.sort((a, b) => a.path.localeCompare(b.path));
+      res.locals.placeholders = {
+        count: found.length,
+        one: found.length === 1,
+        shown: found.slice(0, PLACEHOLDERS_SHOWN),
+        more: Math.max(0, found.length - PLACEHOLDERS_SHOWN),
+      };
+    }
+  } catch (err) {
+    console.error("Could not list placeholders", req.blog.id, err.message);
+  }
+  next();
 });
 
 for (let client_name in clients) {

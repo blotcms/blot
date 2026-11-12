@@ -260,3 +260,30 @@
 .folder-sync-issue .btn-row {
   margin: 0;
 }
+
+/* The placeholders a disconnect removes (clients/disconnect-placeholders.html) */
+.disconnect-placeholders__list {
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--medium-text-color);
+}
+
+.disconnect-placeholders__list li {
+  padding: var(--space-1) 0;
+  overflow-wrap: anywhere;
+}
+
+.disconnect-placeholders__list code {
+  color: var(--text-color);
+}
+
+.disconnect-placeholders__more {
+  font-size: var(--text-sm);
+  color: var(--medium-text-color);
+}
