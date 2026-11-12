@@ -436,7 +436,7 @@
     }
     hint.textContent = window.matchMedia("(pointer: coarse)").matches
       ? "Swipe for the next image · pinch to zoom"
-      : "← → for the next image · scroll to zoom";
+      : "← → for the next image · + − or scroll to zoom";
     hint.hidden = false;
     const dismiss = () => {
       hint.classList.add("is-leaving");
@@ -1145,6 +1145,21 @@
     return true;
   }
 
+  // While zoomed in, the arrow keys move around the image instead of stepping to the next one.
+  const PAN_KEYS = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+  function panKey(event) {
+    const direction = PAN_KEYS[event.key];
+    if (!zoomed() || !direction) return false;
+    event.preventDefault();
+    stopPan();
+    const bounds = panBounds();
+    panX = clampValue(panX + direction[0] * lightbox.clientWidth * 0.2, bounds.lowX, bounds.highX);
+    panY = clampValue(panY + direction[1] * lightbox.clientHeight * 0.2, bounds.lowY, bounds.highY);
+    animateZoom();
+    renderZoom();
+    return true;
+  }
+
 
   // ---- Viewer events ----
 
@@ -1183,6 +1198,7 @@
       // Escape closes (through the dialog's cancel event). Modified arrows are the browser's,
       // for example Alt+Left for Back.
       if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (panKey(event)) return;
       if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         event.preventDefault();
         void step(event.key === "ArrowRight" ? 1 : -1);

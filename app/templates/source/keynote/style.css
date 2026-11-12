@@ -1118,7 +1118,9 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   transition: opacity 200ms ease, visibility 0s linear 200ms;
 }
 
-.lightbox.is-zoomed.is-revealed .zoom-controls {
+.lightbox.is-zoomed.is-revealed .zoom-controls,
+/* Someone moving through the buttons with the keyboard can reach zoom before zooming. */
+.lightbox.is-revealed:has(:focus-visible) .zoom-controls {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
