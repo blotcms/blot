@@ -12,6 +12,7 @@ const { SOURCES, classify } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
 const resolveCaseConflicts = require("../../util/resolveCaseConflicts");
 const loadClient = require("../util/loadClient");
+
 const createClient = async (blogID) => {
   const { error, client, account } = await loadClient(blogID);
   if (error) throw error;
@@ -501,9 +502,7 @@ async function resetFromBlotWithClient(
         // uploaded, unless Dropbox already has a file there with bytes:
         // an empty file never overwrites one.
         if (localSizes.get(path.toLowerCase()) === 0) {
-          if (
-            (await storage.stat(blogID, localItem.path_display)).placeholder
-          ) {
+          if (await storage.isPlaceholder(blogID, localItem.path_display)) {
             log("Skipping placeholder", blogID, path);
             skippedPlaceholders += 1;
             continue;

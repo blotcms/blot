@@ -39,8 +39,7 @@ describe("google drive resetToDrive empty files and placeholders", function () {
     };
     mock(paths.storage, {
       createReadStream: () => "stream",
-      stat: async (_blogID, path) =>
-        placeholders.includes(path) ? { placeholder: true } : {},
+      isPlaceholder: async (_blogID, path) => placeholders.includes(path),
     });
     mock(paths.database, {
       blog: {

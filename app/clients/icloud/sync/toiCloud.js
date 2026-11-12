@@ -9,6 +9,7 @@ const remoteReaddir = require("./util/remoteReaddir");
 const folder = require("storage/folder");
 
 const config = require("config");
+
 const maxFileSize = config.icloud.maxFileSize; // Maximum file size for iCloud uploads in bytes
 
 const prefix = () => `${clfdate()} iCloud Sync to iCloud:`;
@@ -92,7 +93,7 @@ module.exports = async (
         // unless iCloud already has a file there with bytes: an empty file
         // never overwrites one.
         if (size === 0) {
-          if ((await folder.stat(blogID, path)).placeholder) {
+          if (await folder.isPlaceholder(blogID, path)) {
             console.log(prefix(), "Skipping placeholder", blogID, path);
             skippedPlaceholders += 1;
             continue;

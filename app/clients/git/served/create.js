@@ -147,19 +147,18 @@ function quote(file) {
 
 // The files of the folder to add, as relative paths ("a/b.txt")
 //
-// Empty files are left out. Blot writes an empty file where it could not
-// download one (an oversized or unsupported file), so a placeholder can't be
-// told from a file that really is empty; committing it would make the empty
-// file the repository's copy. The cost is that genuinely empty files do not
-// carry over to the new repository.
+// Placeholders are left out: Blot wrote them for files it could not download
+// (oversized or unsupported ones), so their bytes aren't the file's, and
+// committing one would make the empty file the repository's copy. A file
+// which really is empty is added.
 async function candidates(blogID) {
   const files = [];
   for await (const file of storage.walk(blogID, "/")) {
     if (shouldIgnoreFile(file)) continue;
 
-    if ((await storage.stat(blogID, file)).size === 0) {
+    if (await storage.isPlaceholder(blogID, file)) {
       console.log(
-        clfdate() + " Git: create: skipping empty file (possible placeholder)",
+        clfdate() + " Git: create: skipping placeholder",
         blogID,
         file
       );

@@ -60,6 +60,10 @@ module.exports = {
   // builds can tell it from a file which really is empty.
   writePlaceholder: delegate("writePlaceholder"),
 
+  // Resolves to whether the file at path is a placeholder. A missing path is
+  // not one.
+  isPlaceholder: delegate("isPlaceholder"),
+
   // (blogID, path, source, flags, { sha1 }): replaces one source's flags on
   // a file without touching its bytes. With sha1, only while the file still
   // has those bytes. Resolves to false if there was no such file to flag.

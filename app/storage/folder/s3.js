@@ -935,6 +935,12 @@ async function writePlaceholder(blogID, relPath, flag) {
   return write(blogID, relPath, Buffer.alloc(0), { flags: [normalized] });
 }
 
+// Whether the file at path is a placeholder. Nothing there is not one.
+async function isPlaceholder(blogID, relPath) {
+  var found = await File.get(blogID, locate(blogID, relPath));
+  return File.flags.isPlaceholder(found);
+}
+
 // Replaces one source's flags on a file, without touching its bytes. With
 // { sha1 }, only while the file still has those bytes. Resolves to whether
 // the file was there to flag.
@@ -1144,6 +1150,7 @@ module.exports = {
   serve,
   write,
   writePlaceholder,
+  isPlaceholder,
   setFlags,
   flagged,
   writeFrom,

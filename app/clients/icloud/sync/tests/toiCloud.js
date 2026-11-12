@@ -31,8 +31,7 @@ describe("icloud toiCloud empty files and placeholders", function () {
     mock(modules.localReaddir, async () => local);
     mock(modules.remoteReaddir, async () => remote);
     mock(modules.folder, {
-      stat: async (_blogID, path) =>
-        placeholders.includes(path) ? { placeholder: true } : {},
+      isPlaceholder: async (_blogID, path) => placeholders.includes(path),
     });
     delete require.cache[toiCloudPath];
     return require(toiCloudPath);

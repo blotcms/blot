@@ -21,14 +21,6 @@ var isRedisUnavailableError =
 
 var basename = (path.posix || path).basename;
 
-async function isPlaceholder(blogID, path) {
-  try {
-    return !!(await folder.stat(blogID, path)).placeholder;
-  } catch (err) {
-    if (err.code === "ENOENT") return false;
-    throw err;
-  }
-}
 var noop = () => {};
 
 function isPublic(path) {
@@ -114,7 +106,8 @@ async function buildAndSet(blog, path, multiInfo, state) {
 
   // A placeholder's bytes aren't the file's (Blot couldn't fetch it), so it
   // is not a post: building it would publish an empty one
-  if (!multiInfo && (await isPlaceholder(blog.id, path))) {
+  if (!multiInfo && (await folder.isPlaceholder(blog.id, path))) {
+    await IgnoredFiles.drop(blog.id, path).catch(noop);
     return dropEntryAndPreview(blog.id, path);
   }
 

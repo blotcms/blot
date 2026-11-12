@@ -128,7 +128,7 @@ module.exports = async (blogID, publish, options = {}) => {
         // isn't empty (a Google App file lists no size): an empty file never
         // overwrites one.
         if (size === 0) {
-          if ((await folder.stat(blogID, path)).placeholder) {
+          if (await folder.isPlaceholder(blogID, path)) {
             console.log(
               clfdate() + " Google Drive: Skipping placeholder",
               blogID,
