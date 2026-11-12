@@ -27,6 +27,15 @@ describe("parseTemplate", function () {
     });
   });
 
+  it("retrieves light_or_dark and the local passed to it", function () {
+    var template = `{{#light_or_dark}}{{background_color}}{{/light_or_dark}}`;
+    var result = parseTemplate(template);
+    expect(result).toEqual({
+      partials: {},
+      retrieve: { light_or_dark: true, background_color: true },
+    });
+  });
+
   it("includes locals that cannot be retrieved from a template", function () {
     var template = `{{xyz}}`; // not on the whitelist of variables
     var result = parseTemplate(template);

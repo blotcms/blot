@@ -558,6 +558,17 @@
       example: |
         color:rgba({{#rgb}}#FF00FF{{/rgb}},0.5);
 
+    - name: light_or_dark
+      type: function
+      description: |
+        Returns `light` or `dark` for a passed color, so a template can adjust its contrast, or set the CSS `color-scheme`, to suit whichever background the blog uses. A color is dark when its perceived brightness is below half; transparency is ignored. A value that isn't a color returns nothing.
+      example: |
+        <html data-scheme="{{#light_or_dark}}{{background_color}}{{/light_or_dark}}">
+
+        html { color-scheme: {{#light_or_dark}}{{background_color}}{{/light_or_dark}}; }
+        [data-scheme="light"] .tag { background: rgba(0, 0, 0, 0.06); }
+        [data-scheme="dark"] .tag { background: rgba(255, 255, 255, 0.16); }
+
     - name: cdn
       type: function
       description: |
