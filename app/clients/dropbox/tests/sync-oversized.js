@@ -104,9 +104,15 @@ describe("dropbox sync/index with a file over the download size limit", function
     await storage.write(blogID, "/big.txt", "something else");
     await run("not-the-local-hash", 14);
     expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
+    expect((await storage.stat(blogID, "/big.txt")).flags).toEqual([
+      { code: "SYNC_TOO_LARGE", size: 14, limit: 4 },
+    ]);
 
     await storage.remove(blogID, "/big.txt");
     await run("not-the-local-hash", 14);
     expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
+    expect((await storage.stat(blogID, "/big.txt")).flags).toEqual([
+      { code: "SYNC_TOO_LARGE", size: 14, limit: 4 },
+    ]);
   });
 });

@@ -54,6 +54,27 @@ describe("models/file", function () {
       expect(await File.get(this.blog.id, "posts/a.txt/")).toEqual(file(5));
     });
 
+    it("keeps a file's flags, even when their JSON holds a pipe", async function () {
+      var record = Object.assign(file(5), {
+        flags: [{ code: "BUILD_FAILED", error: "a | b" }],
+      });
+
+      await File.set(this.blog.id, "/a.md", record);
+
+      expect(await File.get(this.blog.id, "/a.md")).toEqual(record);
+    });
+
+    it("reads a record whose flags can't be parsed as having none", async function () {
+      await File.set(this.blog.id, "/a.md", file(5));
+      await client.hSet(
+        File.key.dir(this.blog.id, "/"),
+        "a.md",
+        "f|5|" + MODIFIED + "|" + SHA1 + "|{broken"
+      );
+
+      expect(await File.get(this.blog.id, "/a.md")).toEqual(file(5));
+    });
+
     it("normalises names to NFC, as entry keys are", async function () {
       await File.set(this.blog.id, "/Café.txt", file(1));
 

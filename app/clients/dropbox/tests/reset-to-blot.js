@@ -270,6 +270,9 @@ describe("dropbox resetToBlot", function () {
         async () => {}
       );
       expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
+      expect((await storage.stat(blogID, "/big.txt")).flags).toEqual([
+        { code: "SYNC_TOO_LARGE", size: 14, limit: 4 },
+      ]);
 
       await storage.remove(blogID, "/big.txt");
       resetToBlot = load({ "/": [oversized("not-the-local-hash", 14)] });
@@ -279,6 +282,9 @@ describe("dropbox resetToBlot", function () {
         async () => {}
       );
       expect((await storage.read(blogID, "/big.txt")).toString()).toEqual("");
+      expect((await storage.stat(blogID, "/big.txt")).flags).toEqual([
+        { code: "SYNC_TOO_LARGE", size: 14, limit: 4 },
+      ]);
     });
   });
 

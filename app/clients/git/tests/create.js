@@ -138,14 +138,23 @@ describe("git client create", function () {
     expect(fs.readdirSync(clonedDir + "/Sub Folder")).toEqual(["second.txt"]);
   });
 
-  // Blot cannot tell a placeholder (an empty file standing in for a file it
-  // could not download) from a file that really is empty, so neither is added.
-  it("does not add empty files to the repository", async function () {
+  // A placeholder is an empty file standing in for a file Blot could not
+  // download, so it isn't added. A file which really is empty is.
+  it("adds empty files to the repository, but not placeholders", async function () {
     var blog = this.blog;
     var clonedDir = this.tmp + "/" + this.blog.handle;
 
     await folder.write(blog.id, "/post.txt", "Hello");
-    await folder.write(blog.id, "/placeholder.pdf", "");
+    await folder.write(blog.id, "/empty.txt", "");
+    await require("storage/folder").writePlaceholder(
+      blog.id,
+      "/placeholder.pdf",
+      {
+        code: "SYNC_TOO_LARGE",
+        size: 200000000,
+        limit: 100000000,
+      }
+    );
 
     var repoUrl = await promisify(setClientToGit)(
       this.user,
@@ -154,7 +163,11 @@ describe("git client create", function () {
     );
     await Git(this.tmp).silent(true).clone(repoUrl);
 
-    expect(fs.readdirSync(clonedDir).sort()).toEqual([".git", "post.txt"]);
+    expect(fs.readdirSync(clonedDir).sort()).toEqual([
+      ".git",
+      "empty.txt",
+      "post.txt",
+    ]);
     // The placeholder stays in the blog folder
     expect(await folder.has(blog.id, "/placeholder.pdf")).toBe(true);
   });

@@ -713,6 +713,148 @@ describe("storage/folder", function () {
       });
     });
 
+    describe("placeholders and flags", function () {
+      var TOO_LARGE = { code: "SYNC_TOO_LARGE", size: 200, limit: 100 };
+
+      it("writes an empty placeholder which stat reports as one", async function () {
+        await folder.writePlaceholder(this.blog.id, "/big.mov", TOO_LARGE);
+
+        var stat = await folder.stat(this.blog.id, "/big.mov");
+
+        expect(stat.size).toEqual(0);
+        expect(stat.placeholder).toBe(true);
+        expect(stat.flags).toEqual([TOO_LARGE]);
+        expect(
+          (await folder.read(this.blog.id, "/big.mov")).toString()
+        ).toEqual("");
+      });
+
+      it("tells a placeholder from a file which really is empty", async function () {
+        await folder.write(this.blog.id, "/empty.txt", "");
+
+        var stat = await folder.stat(this.blog.id, "/empty.txt");
+
+        expect(stat.placeholder).toBeUndefined();
+        expect(stat.flags).toBeUndefined();
+      });
+
+      it("refuses a code which isn't a placeholder's, or isn't known", async function () {
+        var notPlaceholder = await rejection(
+          folder.writePlaceholder(this.blog.id, "/a.txt", {
+            code: "SYNC_FAILED",
+          })
+        );
+        var unknown = await rejection(
+          folder.writePlaceholder(this.blog.id, "/a.txt", { code: "NOPE" })
+        );
+
+        expect(notPlaceholder instanceof Error).toBe(true);
+        expect(unknown instanceof Error).toBe(true);
+        expect(await folder.exists(this.blog.id, "/a.txt")).toBe(false);
+      });
+
+      it("drops a file's flags when its bytes are replaced", async function () {
+        await folder.writePlaceholder(this.blog.id, "/big.mov", TOO_LARGE);
+        await folder.write(this.blog.id, "/big.mov", "real bytes");
+
+        var stat = await folder.stat(this.blog.id, "/big.mov");
+
+        expect(stat.placeholder).toBeUndefined();
+        expect(stat.flags).toBeUndefined();
+      });
+
+      it("keeps a file's flags when it moves", async function () {
+        await folder.writePlaceholder(this.blog.id, "/big.mov", TOO_LARGE);
+        await folder.move(this.blog.id, "/big.mov", "/videos/big.mov");
+
+        expect(
+          (await folder.stat(this.blog.id, "/videos/big.mov")).placeholder
+        ).toBe(true);
+      });
+
+      it("replaces only one source's flags", async function () {
+        await folder.write(this.blog.id, "/a.md", "# Hi");
+        await folder.setFlags(this.blog.id, "/a.md", "build", [
+          { code: "BUILD_FAILED", error: "bad" },
+        ]);
+        await folder.setFlags(this.blog.id, "/a.md", "references", [
+          { code: "BROKEN_IMAGE", targets: ["/x.png"] },
+        ]);
+        await folder.setFlags(this.blog.id, "/a.md", "build", []);
+
+        expect((await folder.stat(this.blog.id, "/a.md")).flags).toEqual([
+          { code: "BROKEN_IMAGE", targets: ["/x.png"] },
+        ]);
+      });
+
+      it("doesn't flag bytes it never saw", async function () {
+        await folder.write(this.blog.id, "/a.md", "# Hi");
+
+        var flagged = await folder.setFlags(
+          this.blog.id,
+          "/a.md",
+          "build",
+          [{ code: "BUILD_FAILED" }],
+          { sha1: "0".repeat(40) }
+        );
+
+        expect(flagged).toBe(false);
+        expect(
+          await folder.setFlags(this.blog.id, "/none.md", "build", [])
+        ).toBe(false);
+        expect(
+          (await folder.stat(this.blog.id, "/a.md")).flags
+        ).toBeUndefined();
+      });
+
+      it("caps a flag's detail", async function () {
+        var targets = [];
+        for (var i = 0; i < 30; i++) targets.push("/missing-" + i + ".png");
+
+        await folder.write(this.blog.id, "/a.md", "# Hi");
+        await folder.setFlags(this.blog.id, "/a.md", "references", [
+          { code: "BROKEN_IMAGE", targets: targets, ignored: "not detail" },
+        ]);
+        await folder.setFlags(this.blog.id, "/a.md", "build", [
+          { code: "BUILD_FAILED", error: "x".repeat(500) },
+        ]);
+
+        var flags = (await folder.stat(this.blog.id, "/a.md")).flags;
+
+        expect(flags[0]).toEqual({
+          code: "BROKEN_IMAGE",
+          targets: targets.slice(0, 20),
+          count: 30,
+        });
+        expect(flags[1].error.length).toEqual(200);
+      });
+
+      it("lists the folder's flagged files", async function () {
+        await folder.writePlaceholder(this.blog.id, "/a/big.mov", TOO_LARGE);
+        await folder.write(this.blog.id, "/b.md", "# Hi");
+        await folder.write(this.blog.id, "/c.txt", "");
+        await folder.setFlags(this.blog.id, "/b.md", "build", [
+          { code: "BUILD_FAILED" },
+        ]);
+
+        var found = [];
+        for await (var file of folder.flagged(this.blog.id)) found.push(file);
+
+        found.sort(function (a, b) {
+          return a.path < b.path ? -1 : 1;
+        });
+
+        expect(
+          found.map(function (file) {
+            return [file.path, file.placeholder];
+          })
+        ).toEqual([
+          ["/a/big.mov", true],
+          ["/b.md", false],
+        ]);
+      });
+    });
+
     describe("list", function () {
       it("lists a directory sorted by name with stats", async function () {
         await folder.write(this.blog.id, "/b.txt", "bb");
@@ -1791,6 +1933,27 @@ describe("storage/folder", function () {
         expect((await File.get(this.blog.id, "/a/b.txt")).sha1).toEqual(
           record.sha1
         );
+      });
+
+      it("keeps the flags of files whose bytes are unchanged", async function () {
+        await folder.writePlaceholder(this.blog.id, "/big.mov", {
+          code: "SYNC_TOO_LARGE",
+          size: 200,
+          limit: 100,
+        });
+        await folder.write(this.blog.id, "/a.md", "# Hi");
+        await folder.setFlags(this.blog.id, "/a.md", "build", [
+          { code: "BUILD_FAILED" },
+        ]);
+
+        await backend.rebuildIndex(this.blog.id);
+
+        expect((await folder.stat(this.blog.id, "/big.mov")).placeholder).toBe(
+          true
+        );
+        expect((await folder.stat(this.blog.id, "/a.md")).flags).toEqual([
+          { code: "BUILD_FAILED" },
+        ]);
       });
 
       it("keeps apart downloads of same-named files when there are no hashes", async function () {

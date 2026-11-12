@@ -47,9 +47,32 @@ module.exports = {
   //   dotfiles   "allow" (default) or "ignore" to treat dotfiles as missing
   serve: delegate("serve"),
 
-  // data is a Buffer, a string or a readable stream. Parent directories are
-  // created, and a file already at path is replaced.
+  // (blogID, path, data, options): data is a Buffer, a string or a readable
+  // stream. Parent directories are created, and a file already at path is
+  // replaced.
+  // { flags } gives the new file flags (models/file/flags.js); otherwise it
+  // has none, since a write replaces whatever described the old bytes.
   write: delegate("write"),
+
+  // Writes an empty placeholder for a file which could not be fetched, with
+  // the flag saying why: { code, ...detail }, a code marked placeholder in
+  // models/file/flags.js. stat then reports placeholder: true, so resets and
+  // builds can tell it from a file which really is empty.
+  writePlaceholder: delegate("writePlaceholder"),
+
+  // Resolves to whether the file at path is a placeholder. A missing path is
+  // not one.
+  isPlaceholder: delegate("isPlaceholder"),
+
+  // (blogID, path, source, flags, { sha1 }): replaces one source's flags on
+  // a file without touching its bytes. With sha1, only while the file still
+  // has those bytes. Resolves to false if there was no such file to flag.
+  setFlags: delegate("setFlags"),
+
+  // An async iterator of { path, size, modified, flags, placeholder } for
+  // every flagged file in the folder. It reads the whole index, so it is for
+  // scripts and disconnects, not requests.
+  flagged: delegate("flagged"),
 
   // Copies (or, with { move: true }, moves) a local file in, replacing any
   // file already at path. The source is the caller's own, never a blog path.
@@ -94,7 +117,8 @@ module.exports = {
   // { hash: true }: Dropbox's content_hash (helper/hashFile), which costs a
   // download, so only callers which need it ask. With { sha1: true } a file
   // also gets sha1, the SHA-1 of its bytes in hex (as entries' contentHash
-  // uses), from the index at no cost.
+  // uses), from the index at no cost. A flagged file also has flags, and
+  // placeholder: true if it is a placeholder (see writePlaceholder).
   stat: delegate("stat"),
 
   // Resolves to a boolean

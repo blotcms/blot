@@ -140,6 +140,37 @@ describe("icloud fromiCloud sync", function () {
     expect(summary.placeholdersCreated).toBe(1);
   });
 
+  it("replaces a placeholder when the file in iCloud is now really empty", async () => {
+    const localFile = "/was-huge.mov";
+    await folder.writePlaceholder(blogID, localFile, {
+      code: "SYNC_TOO_LARGE",
+      size: 1000 * 1000 * 1000,
+      limit: 100,
+    });
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => [
+      { name: "was-huge.mov", size: 0, isDirectory: false },
+    ]);
+    mockModule(downloadPath, async (id, path) => {
+      await folder.write(id, path, "");
+    });
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({ setupComplete: true }),
+    });
+
+    await require(fromiCloudPath)(
+      blogID,
+      () => {},
+      async () => {}
+    );
+
+    expect(await folder.isPlaceholder(blogID, localFile)).toBe(false);
+    expect(await folder.exists(blogID, localFile)).toBe(true);
+  });
+
   describe("oversized remote files", () => {
     const remoteFile = {
       name: "huge.mov",
@@ -181,14 +212,20 @@ describe("icloud fromiCloud sync", function () {
       expect(updated).toEqual(["/huge.mov"]);
     });
 
-    it("leaves an existing empty placeholder alone", async () => {
+    it("leaves an existing empty placeholder in place, flagging it if it isn't", async () => {
       const localFile = join("/", remoteFile.name);
       await folder.write(blogID, localFile, "");
       const write = spyOn(folder, "write").and.callThrough();
+      const writePlaceholder = spyOn(
+        folder,
+        "writePlaceholder"
+      ).and.callThrough();
 
       const { summary, updated } = await run();
 
       expect(write).not.toHaveBeenCalled();
+      expect(writePlaceholder).not.toHaveBeenCalled();
+      expect((await folder.stat(blogID, localFile)).placeholder).toBe(true);
       expect(updated).toEqual([]);
       expect(summary.skipped).toBe(0);
       expect(summary.placeholdersCreated).toBe(0);
@@ -494,7 +531,7 @@ describe("icloud fromiCloud sync", function () {
       mockWalk([
         { name: "huge.mov", size: 1000 * 1000 * 1000, isDirectory: false },
       ]);
-      spyOn(folder, "write").and.callFake(async () => {
+      spyOn(folder, "writePlaceholder").and.callFake(async () => {
         throw new Error("disk full");
       });
 

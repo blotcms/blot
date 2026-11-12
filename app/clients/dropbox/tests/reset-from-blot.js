@@ -309,8 +309,13 @@ describe("dropbox resetFromBlot", function () {
     expect(contents.sort()).toEqual(["one", "two"]);
   });
 
-  it("does not upload empty files, which may be placeholders, or overwrite a remote file with one", async function () {
-    await storage.write(blogID, "/placeholder.pdf", Buffer.from(""));
+  it("skips placeholders, uploads empty files, and never overwrites a remote file with one", async function () {
+    await storage.writePlaceholder(blogID, "/placeholder.pdf", {
+      code: "SYNC_TOO_LARGE",
+      size: 200000000,
+      limit: 100000000,
+    });
+    await storage.write(blogID, "/overwrites.pdf", Buffer.from(""));
     await storage.write(blogID, "/new-empty.txt", Buffer.from(""));
     await storage.write(blogID, "/a.txt", Buffer.from("hello"));
 
@@ -324,8 +329,8 @@ describe("dropbox resetFromBlot", function () {
         "/": [
           {
             ".tag": "file",
-            name: "placeholder.pdf",
-            path_display: "/placeholder.pdf",
+            name: "overwrites.pdf",
+            path_display: "/overwrites.pdf",
             content_hash: "real-content-hash",
             size: 5000,
             server_modified: "2026-01-01T00:00:00Z",
@@ -339,8 +344,10 @@ describe("dropbox resetFromBlot", function () {
       aborted: false,
     });
 
-    expect(uploadCalls).toEqual(["/a.txt"]);
-    expect(messages.some((m) => /Skipped 2 empty files/.test(m))).toEqual(true);
+    expect(uploadCalls.sort()).toEqual(["/a.txt", "/new-empty.txt"]);
+    expect(messages.some((m) => /Skipped 1 placeholder /.test(m))).toEqual(
+      true
+    );
     expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(
       true
     );

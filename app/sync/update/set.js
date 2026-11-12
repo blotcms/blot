@@ -13,12 +13,14 @@ var pathNormalizer = require("helper/pathNormalizer");
 var makeSlug = require("helper/makeSlug");
 var path = require("path");
 var IgnoredFiles = require("models/ignoredFiles");
+var folder = require("storage/folder");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
 var isRedisUnavailableError =
   require("helper/redisUnavailable").isRedisUnavailableError;
 
 var basename = (path.posix || path).basename;
+
 var noop = () => {};
 
 function isPublic(path) {
@@ -101,6 +103,13 @@ async function dropStaleAggregate(blog, multiInfo, finalErr) {
 // already there (see Entry.set's changed), so nothing derived from it differs
 async function buildAndSet(blog, path, multiInfo, state) {
   var entry;
+
+  // A placeholder's bytes aren't the file's (Blot couldn't fetch it), so it
+  // is not a post: building it would publish an empty one
+  if (!multiInfo && (await folder.isPlaceholder(blog.id, path))) {
+    await IgnoredFiles.drop(blog.id, path).catch(noop);
+    return dropEntryAndPreview(blog.id, path);
+  }
 
   try {
     entry = await build(blog, path);
