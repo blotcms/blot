@@ -189,6 +189,20 @@ hr {
   text-decoration-line: underline;
 }
 
+/* A larger, invisible tap area around the title and each link (about 44px tall). The
+   horizontal reach stays inside the gap between links so neighbours never overlap. */
+#title,
+#header .nav a {
+  position: relative;
+}
+
+#title::after,
+#header .nav a::after {
+  position: absolute;
+  inset: -0.7em -0.5em;
+  content: "";
+}
+
 /* The title links home and the archives have search, so the menu's own Home and
    Search links are left out. */
 #header .nav a[href="/"],
@@ -910,6 +924,11 @@ code {
   display: none;
 }
 
+/* Infinite scroll keeps adding pages, so the page number would go stale. */
+.js .page-count {
+  display: none;
+}
+
 .js .pagination.is-loading-more {
   visibility: hidden;
 }
@@ -1055,13 +1074,39 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   background: rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.6);
   font-size: 0.8em;
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 200ms ease;
+  /* Hidden from focus too until zoomed; visibility waits for the fade out. */
+  transition: opacity 200ms ease, visibility 0s linear 200ms;
 }
 
 .lightbox.is-zoomed.is-revealed .zoom-controls {
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
+  transition: opacity 200ms ease, visibility 0s;
+}
+
+/* A one-off line on how to move and zoom, the first time the viewer opens. */
+.lightbox-hint {
+  position: absolute;
+  bottom: var(--edge-y);
+  left: 50%;
+  z-index: 1;
+  margin: 0;
+  padding: 0.35em 0.9em;
+  border-radius: 999px;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.8);
+  background: rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.6);
+  font-size: 0.8125em;
+  white-space: nowrap;
+  transform: translateX(-50%);
+  pointer-events: none;
+  transition: opacity 400ms ease;
+}
+
+.lightbox-hint.is-leaving {
+  opacity: 0;
 }
 
 .zoom-button {
@@ -1320,6 +1365,12 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
     gap: 0.15em 0.8em;
   }
 
+  /* Tighter rows and gaps here, so the tap areas reach less far. */
+  #title::after,
+  #header .nav a::after {
+    inset: -0.25em -0.4em;
+  }
+
   #header .nav a {
     padding: 0.4em 0;
   }
@@ -1377,9 +1428,30 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   .lightbox .lightbox-close,
   .lightbox .lightbox-step,
   .lightbox-caption,
+  .lightbox-hint,
+  .list a.cell,
+  .cell-title,
+  .slide-title,
+  .tag-navigation a,
+  .tag-toggle,
+  #header .nav a,
   .zoom-controls,
   .lightbox-image.is-zoom-animating,
   .item img {
     transition: none;
   }
 }
+
+/* The "show captions" setting: off hides titles and tags under images and in the viewer. */
+{{^show_captions}}
+.slide-title,
+.slide-tags,
+.cell-title,
+.lightbox-caption {
+  display: none;
+}
+
+.rail-viewport {
+  --caption-height: 0px;
+}
+{{/show_captions}}

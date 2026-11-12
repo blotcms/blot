@@ -31,6 +31,8 @@
       "center"
     ],
     "sticky_navigation": true,
+    "show_captions": true,
+    "drift": true,
     "slide_size": 5,
     "slide_size_range": [1, 10],
     "content_width": 800,

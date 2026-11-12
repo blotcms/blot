@@ -399,6 +399,28 @@
     upgradeChain(entry, token);
   }
 
+  // The first time someone opens the viewer, a short line says how to move and zoom.
+  const hint = lightbox.querySelector(".lightbox-hint");
+  const HINT_KEY = "keynoteViewerHint";
+  function showHint() {
+    if (!hint) return;
+    try {
+      if (localStorage.getItem(HINT_KEY)) return;
+      localStorage.setItem(HINT_KEY, "1");
+    } catch (error) {
+      return;
+    }
+    hint.textContent = window.matchMedia("(pointer: coarse)").matches
+      ? "Swipe for the next image · pinch to zoom"
+      : "← → for the next image · scroll to zoom";
+    hint.hidden = false;
+    const dismiss = () => {
+      hint.classList.add("is-leaving");
+      setTimeout(() => { hint.hidden = true; }, 400);
+    };
+    setTimeout(dismiss, 4000);
+  }
+
   // The title, then its place in the collection as 05/52 once the whole collection is known.
   function updateCaption() {
     const entry = controller?.entries()[activeIndex];
@@ -515,6 +537,7 @@
     controller.pause();
     resetZoom();
     setActive(index);
+    showHint();
     // The counter needs the whole collection, so load the rest of it in the background.
     controller.loadAll?.().then(() => {
       if (lightbox.open) updateCaption();
@@ -1135,10 +1158,10 @@
   window.addEventListener("keydown", (event) => {
     if (lightbox.open) {
       if (zoomKey(event)) return;
-      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
-        event.preventDefault();
-        void requestClose();
-      } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      // Escape closes (through the dialog's cancel event). Modified arrows are the browser's,
+      // for example Alt+Left for Back.
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         event.preventDefault();
         void step(event.key === "ArrowRight" ? 1 : -1);
       }
@@ -1179,6 +1202,8 @@
     if (!firstSlides.length) return null;
 
     const DRIFT_SPEED = 8; // px per second
+    const drift = {{#drift}}true{{/drift}}{{^drift}}false{{/drift}}; // the "drift" setting
+    const drifting = () => drift && !reducedMotion.matches;
     const FRICTION = 4.2;
     const MAX_VELOCITY = 1100;
     const RETRY_DELAY = 5000; // ms before a page that failed to load is tried again
@@ -1300,13 +1325,13 @@
         } else {
           velocity = 0;
         }
-        if (now >= holdUntil && !reducedMotion.matches) x += DRIFT_SPEED * dt;
+        if (now >= holdUntil && drifting()) x += DRIFT_SPEED * dt;
       }
 
       x = mod(x, cycle);
       render();
       maybeLoad();
-      if (drag || glide || velocity || !reducedMotion.matches) frameId = requestAnimationFrame(frame);
+      if (drag || glide || velocity || drifting()) frameId = requestAnimationFrame(frame);
     }
 
     function cloneSlot(original) {
@@ -1657,6 +1682,7 @@
         else if (mod(index - seam, ring) < 4) void loadPage("backward");
       },
       keydown(event) {
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
         if (event.key === "Tab") {
           keyboardIndex = null;
           viewport.classList.remove("is-keyboard-navigating");
