@@ -48,8 +48,10 @@ const BUSY_IS_BACKPRESSURE = new Set(["fetch-image", "fetch", "screenshot"]);
 
 // Jobs whose timeout is the input's: a pandoc worker killed for taking too long
 // on one document (build/converters/pandoc.js fails that document), as pandoc's
-// own timeout was when each document had a jail
-const TIMEOUT_IS_THE_INPUT = new Set(["pandoc"]);
+// own timeout was when each document had a jail, and a thumbnail of an image
+// too slow to make (the build moves on to the post's next image). A job killed
+// at its memory limit is SANDBOX_KILLED, which is still emailed.
+const TIMEOUT_IS_THE_INPUT = new Set(["pandoc", "thumbnail"]);
 const busyCounts = new Map();
 
 const counts = new Map();

@@ -25,6 +25,8 @@ const MAX_QUEUED = 32;
 const MAX_HEADER_BYTES = 4096;
 // nsjail enforces the job's time limit itself; this is for when it doesn't
 const KILL_GRACE_MS = 2000;
+// How early nsjail's time limit can land: it counts whole seconds
+const TIME_LIMIT_EARLY_MS = 1000;
 const DRAIN_MS = 10 * 1000;
 // A paused socket can't tell us its client left, and the client gives up by
 // now, so a request that has waited this long gets no jail
@@ -243,10 +245,13 @@ function createBroker(options = {}) {
       let error = failure;
       // nsjail exits 128 + the signal when the job inside it was killed, as the
       // kernel does at the jail's memory limit, so that is killed too, not a
-      // job that failed on its input
+      // job that failed on its input. nsjail's own time limit kills the same
+      // way (SIGKILL, or SIGXCPU from --rlimit_cpu), and it counts in whole
+      // seconds, so up to a second before timeSeconds is the time limit.
       if (!error && code !== 0) {
         error = signal || code > 128 ? "killed" : "failed";
-        if (ms >= job.timeSeconds * 1000) error = "timeout";
+        if (ms >= job.timeSeconds * 1000 - TIME_LIMIT_EARLY_MS)
+          error = "timeout";
       }
       if (error) {
         log(

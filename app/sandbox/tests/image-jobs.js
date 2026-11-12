@@ -2,6 +2,7 @@ describe("sandbox image jobs", function () {
   const sharp = require("sharp");
   const config = require("config");
   const sandbox = require("../");
+  const { BUDGET } = require("../jobs/thumbnail");
 
   let socket;
 
@@ -117,6 +118,101 @@ describe("sandbox image jobs", function () {
       expect(meta.thumbnails[0].width).toBeLessThanOrEqual(50);
     });
 
+    describe("animated", function () {
+      // A bar moving across a 200x100 GIF, so no two frames are alike
+      async function animation(frames) {
+        const width = 200;
+        const height = 100;
+        const pages = [];
+        for (let i = 0; i < frames; i++) {
+          pages.push(
+            await sharp({
+              create: { width, height, channels: 3, background: "#369" },
+            })
+              .composite([
+                {
+                  input: {
+                    create: {
+                      width: 20,
+                      height,
+                      channels: 3,
+                      background: "#fc0",
+                    },
+                  },
+                  left: i * 18,
+                  top: 0,
+                },
+              ])
+              .raw()
+              .toBuffer()
+          );
+        }
+        return sharp(Buffer.concat(pages), {
+          raw: {
+            width,
+            height: height * frames,
+            channels: 3,
+            pageHeight: height,
+          },
+        })
+          .gif({ delay: new Array(frames).fill(50), loop: 0 })
+          .toBuffer();
+      }
+
+      const sizes = [
+        { size: 50, crop: false },
+        { size: 400, crop: false },
+        { size: 40, crop: true },
+      ];
+
+      it("keeps every frame within its budget, and a GIF its own size as it is", async function () {
+        const input = await animation(10);
+        const { meta, outputs } = await sandbox.run(
+          "thumbnail",
+          { extension: ".gif", animated: true, sizes },
+          input
+        );
+
+        // heights are one frame's, not every frame's
+        expect(meta.thumbnails).toEqual([
+          { width: 50, height: 25, format: "gif" },
+          { width: 200, height: 100, format: "gif" },
+          { width: 40, height: 40, format: "gif" },
+        ]);
+        expect(meta.firstFrame).toBeUndefined();
+        expect(outputs[1].equals(input)).toBe(true);
+        for (const output of [outputs[0], outputs[2]])
+          expect((await sharp(output).metadata()).pages).toEqual(10);
+      });
+
+      it("makes the first frame of one past its budget", async function () {
+        const input = await animation(10);
+        // 50x25 and 40x40 for 10 frames is 28,500 pixels
+        const { meta, outputs } = await sandbox.run(
+          "thumbnail",
+          { extension: ".gif", animated: true, sizes, budget: 28000 },
+          input
+        );
+
+        expect(meta.firstFrame).toBe(true);
+        expect(meta.thumbnails).toEqual([
+          { width: 50, height: 25, format: "gif" },
+          { width: 200, height: 100, format: "gif" },
+          { width: 40, height: 40, format: "gif" },
+        ]);
+        for (const output of outputs)
+          expect((await sharp(output).metadata()).pages).toEqual(1);
+
+        // just within it, every frame
+        const within = await sandbox.run(
+          "thumbnail",
+          { extension: ".gif", animated: true, sizes, budget: 28500 },
+          input
+        );
+        expect(within.meta.firstFrame).toBeUndefined();
+      });
+    });
+
     describe("with accept", function () {
       const accept = {
         formats: ["png", "jpeg", "gif"],
@@ -220,6 +316,10 @@ describe("sandbox image jobs", function () {
         { ...valid, accept: { formats: ["png"], minWidth: -1, minHeight: 1 } },
         { ...valid, accept: { formats: ["png"], minWidth: 1, minHeight: 1.5 } },
         { ...valid, accept: { formats: ["png"], minWidth: 1 } },
+        { ...valid, budget: 0 },
+        { ...valid, budget: 1.5 },
+        { ...valid, budget: "1000" },
+        { ...valid, budget: BUDGET + 1 },
       ];
       for (const args of bad) {
         expect(

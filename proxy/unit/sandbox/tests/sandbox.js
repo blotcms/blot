@@ -124,8 +124,11 @@ describe("sandbox broker and jail", function () {
     }
     assert.strictEqual(jail.JOBS.unzip.timeSeconds, 30);
     assert.strictEqual(jail.JOBS.unzip.maxOutputBytes, 60 * 1024 * 1024);
+    // as long as the build waits for a thumbnail (app/build/thumbnail/create.js)
+    assert.strictEqual(jail.JOBS.thumbnail.timeSeconds, 20);
     for (const name of ["thumbnail", "resize", "to-png"]) {
-      assert.strictEqual(jail.JOBS[name].timeSeconds, 60);
+      if (name !== "thumbnail")
+        assert.strictEqual(jail.JOBS[name].timeSeconds, 60);
       assert.strictEqual(jail.JOBS[name].maxOutputBytes, 64 * 1024 * 1024);
     }
     assert.strictEqual(jail.JOBS.exif.timeSeconds, 30);
@@ -688,6 +691,46 @@ describe("sandbox broker and jail", function () {
         assert.deepStrictEqual((await request(socket, job, "x")).header, {
           ok: false,
           error: "timeout",
+        });
+      }
+    );
+  });
+
+  test("broker: a jail killed within a second of its time limit is timeout, not killed", async () => {
+    // nsjail counts its time limit in whole seconds, so it can kill the job up
+    // to a second early, exiting 137 like a job killed at its memory limit
+    await withBroker(
+      {
+        script: "cat > /dev/null; sleep 1.2; exit 137",
+        jobs: JOBS({ timeSeconds: 2 }),
+      },
+      async (socket) => {
+        assert.deepStrictEqual((await request(socket, job, "x")).header, {
+          ok: false,
+          error: "timeout",
+        });
+      }
+    );
+    // and SIGXCPU, from --rlimit_cpu at the same limit
+    await withBroker(
+      {
+        script: "cat > /dev/null; sleep 1.2; exit 152",
+        jobs: JOBS({ timeSeconds: 2 }),
+      },
+      async (socket) => {
+        assert.deepStrictEqual((await request(socket, job, "x")).header, {
+          ok: false,
+          error: "timeout",
+        });
+      }
+    );
+    // killed well before it, as at the memory limit, it stays killed
+    await withBroker(
+      { script: "cat > /dev/null; exit 137", jobs: JOBS({ timeSeconds: 2 }) },
+      async (socket) => {
+        assert.deepStrictEqual((await request(socket, job, "x")).header, {
+          ok: false,
+          error: "killed",
         });
       }
     );
