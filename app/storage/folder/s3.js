@@ -984,13 +984,20 @@ async function entriesOf(blogID, path, relDir) {
 
 function toEntry(entry) {
   var isDirectory = entry.type === "dir";
-
-  return {
+  var result = {
     name: entry.name,
     isDirectory: isDirectory,
     size: isDirectory ? 0 : entry.size,
     modified: entry.modified,
   };
+
+  // As stat: only a flagged file has these keys
+  if (entry.flags) {
+    result.flags = entry.flags;
+    if (File.flags.isPlaceholder(entry)) result.placeholder = true;
+  }
+
+  return result;
 }
 
 // One page from the index, which keeps each directory's names in order, so

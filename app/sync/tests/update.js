@@ -184,6 +184,9 @@ describe("update", function () {
       await update(syncFolder, entryPath);
 
       expect(await status()).toBe("TOO_LARGE");
+      expect((await folder.stat(blogID, entryPath)).flags).toEqual([
+        { code: "POST_TOO_LARGE", size: limit + 1, limit: limit },
+      ]);
 
       let entry = await getEntry(blogID, entryPath);
       // Entry.drop leaves a deleted tombstone rather than removing
@@ -198,6 +201,57 @@ describe("update", function () {
       entry = await getEntry(blogID, entryPath);
       expect(entry).toBeTruthy();
       expect(entry.html).toContain("published again");
+    });
+  });
+
+  it("flags the oversized source of a folder post, not the file that changed", async function () {
+    const limit = require("build/converters/post-source-size").MARKDOWN.bytes;
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, "/album+/big.md", Buffer.alloc(limit + 1, 32));
+      await folder.write(blogID, "/album+/small.md", "small");
+      await update(syncFolder, "/album+/small.md");
+
+      expect((await folder.stat(blogID, "/album+/big.md")).flags).toEqual([
+        { code: "POST_TOO_LARGE", size: limit + 1, limit: limit },
+      ]);
+      expect(
+        (await folder.stat(blogID, "/album+/small.md")).flags
+      ).toBeUndefined();
+    });
+  });
+
+  it("doesn't publish a placeholder, and drops an entry built from the file", async function () {
+    const entryPath = "/huge.txt";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, entryPath, "Title: Was small");
+      await update(syncFolder, entryPath);
+
+      await folder.writePlaceholder(blogID, entryPath, {
+        code: "SYNC_TOO_LARGE",
+        size: 200000000,
+        limit: 100000000,
+      });
+      await update(syncFolder, entryPath);
+
+      const entry = await getEntry(blogID, entryPath);
+      expect(entry && !entry.deleted).toBeFalsy();
+    });
+  });
+
+  it("publishes a file which really is empty", async function () {
+    const entryPath = "/empty.txt";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, entryPath, "");
+      await update(syncFolder, entryPath);
+
+      const entry = await getEntry(blogID, entryPath);
+      expect(entry && !entry.deleted).toBeTruthy();
     });
   });
 
