@@ -638,7 +638,7 @@ html:not(.js) .item img[data-src] {
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
   font-size: 0.8125em;
   line-height: 1.4;
-  text-align: center;
+  text-align: left;
   white-space: nowrap;
   text-overflow: ellipsis;
   transition: color 160ms ease;

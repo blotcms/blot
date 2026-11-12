@@ -1326,7 +1326,7 @@
         }
         if (onscreen === item.onscreen) continue;
         item.onscreen = onscreen;
-        item.slot.inert = !onscreen || item.clone;
+        item.slot.inert = !onscreen; // clones stay clickable; aria-hidden and tabindex keep them out of the tab order
       }
     }
 
