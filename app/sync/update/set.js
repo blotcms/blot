@@ -155,7 +155,8 @@ async function buildAndSet(blog, path, multiInfo, state) {
       // An oversized source inside a "+" folder aborts the whole
       // aggregate build, so drop the now-stale synthesized entry too.
       await Ignore(blog.id, path, TOO_LARGE);
-      await flagTooLarge(blog.id, path);
+      // In a "+" folder the oversized source may not be the file that changed
+      await flagTooLarge(blog.id, err.sourcePath || path);
       return dropStaleAggregate(blog, multiInfo);
     }
 

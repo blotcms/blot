@@ -204,6 +204,24 @@ describe("update", function () {
     });
   });
 
+  it("flags the oversized source of a folder post, not the file that changed", async function () {
+    const limit = require("build/converters/post-source-size").MARKDOWN.bytes;
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, "/album+/big.md", Buffer.alloc(limit + 1, 32));
+      await folder.write(blogID, "/album+/small.md", "small");
+      await update(syncFolder, "/album+/small.md");
+
+      expect((await folder.stat(blogID, "/album+/big.md")).flags).toEqual([
+        { code: "POST_TOO_LARGE", size: limit + 1, limit: limit },
+      ]);
+      expect(
+        (await folder.stat(blogID, "/album+/small.md")).flags
+      ).toBeUndefined();
+    });
+  });
+
   it("doesn't publish a placeholder, and drops an entry built from the file", async function () {
     const entryPath = "/huge.txt";
     const blogID = this.blog.id;
