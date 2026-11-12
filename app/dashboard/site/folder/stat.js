@@ -14,6 +14,9 @@ const format = (stat, timeZone) => {
   result.directory = stat.isDirectory;
   result.file = !stat.isDirectory;
 
+  // What went wrong with the file, if anything (models/file/flags.js)
+  if (stat.flags) result.flags = stat.flags;
+
   return result;
 };
 

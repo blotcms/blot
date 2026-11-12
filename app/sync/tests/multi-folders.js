@@ -501,8 +501,10 @@ describe("sync multi-folder support", function () {
 
   it("drops the aggregate when a source exceeds the size limit and recovers after shrinking", async function () {
     var limit = require("build/converters/post-source-size").MARKDOWN.bytes;
-    var IgnoredFiles = require("models/ignoredFiles");
     var blogID = this.blog.id;
+    var flagsOf = async function (path) {
+      return (await storage.stat(blogID, path)).flags;
+    };
 
     await writeAndSync(blogID, [
       ["/album+/01.md", "# One"],
@@ -515,8 +517,9 @@ describe("sync multi-folder support", function () {
     // The stale folder post is dropped rather than left published.
     expect(aggregate && aggregate.deleted).toBe(true);
 
-    var reason = await IgnoredFiles.getStatus(blogID, "/album+/02.md");
-    expect(reason).toBe("TOO_LARGE");
+    expect(await flagsOf("/album+/02.md")).toEqual([
+      { code: "POST_TOO_LARGE", size: limit + 1, limit: limit },
+    ]);
 
     await writeAndSync(blogID, [["/album+/02.md", "# Two again"]]);
 
@@ -526,8 +529,7 @@ describe("sync multi-folder support", function () {
     expect(recovered.html).toContain("Two again");
 
     // The recovered source is no longer hidden on the dashboard.
-    var reason3 = await IgnoredFiles.getStatus(blogID, "/album+/02.md");
-    expect(reason3).toBeFalsy();
+    expect(await flagsOf("/album+/02.md")).toBeUndefined();
   });
 
   it("does not overwrite a sibling file when a draft folder post writes its preview", async function () {

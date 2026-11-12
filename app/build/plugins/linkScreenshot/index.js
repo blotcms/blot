@@ -3,6 +3,7 @@ const assets = require("storage/assets");
 const clfdate = require("helper/clfdate");
 const { v4: uuid } = require("uuid");
 const { is } = require("build/converters/webloc");
+const { report } = require("build/flags");
 const SCREENSHOT_DIR = "_bookmark_screenshots";
 const SCREENSHOT_WIDTH = 1200;
 const SCREENSHOT_HEIGHT = 1200;
@@ -53,6 +54,7 @@ async function render($, { blogID, path }) {
       { width: SCREENSHOT_WIDTH, height: SCREENSHOT_HEIGHT, untrusted: true }
     );
   } catch (err) {
+    report({ code: "SCREENSHOT_FAILED", target: href });
     return;
   }
 

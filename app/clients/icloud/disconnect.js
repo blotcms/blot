@@ -1,5 +1,6 @@
 const Blog = require("models/blog");
 const database = require("./database");
+const placeholders = require("clients/util/placeholders");
 const fetch = require("./util/rateLimitedFetchWithRetriesAndTimeout");
 const config = require("config");
 
@@ -39,6 +40,10 @@ module.exports = async function disconnect(blogID) {
 
   // Phase B (authoritative local): always disconnect locally.
   await database.delete(blogID);
+
+  // Their bytes are only in iCloud, which Blot can no longer reach
+  await placeholders.removeAtDisconnect(blogID);
+
   await Blog.set(blogID, { client: "" });
 
   return remoteWarning;

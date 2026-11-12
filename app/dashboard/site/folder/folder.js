@@ -118,8 +118,6 @@ function statEntry(blog, dir, name, entry) {
   // we don't want to turn '/' into '%2F' so we split on '/' and encode each part separately
   stat.url = stat.path.split("/").map(encodeURIComponent).join("/");
   stat.name = name;
-  // A flagged file's flags (models/file/flags.js), from the listing or stat
-  if (entry.flags) stat.flags = entry.flags;
 
   return stat;
 }

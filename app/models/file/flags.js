@@ -16,7 +16,7 @@
 // Readers ignore a code they don't know, so units on either side of a
 // deploy can share records. Writers refuse one, which catches typos.
 
-var SOURCES = ["sync", "upload", "build", "assets", "references", "links"];
+var SOURCES = ["sync", "upload", "build", "assets", "references"];
 
 var CODES = {
   // Getting the file into Blot's folder
@@ -94,7 +94,7 @@ var CODES = {
   BUILD_DEFERRED: {
     source: "build",
     transient: true,
-    message: "could not be built yet and will be retried",
+    message: "could not be built because Blot was busy",
     detail: ["step"],
   },
   FRONT_MATTER_INVALID: {
@@ -162,13 +162,6 @@ var CODES = {
   REMOTE_IMAGE_FAILED: {
     source: "references",
     message: "shows images from other sites which could not be fetched",
-    detail: ["targets"],
-  },
-
-  // Checked on a schedule, apart from the build
-  BROKEN_EXTERNAL_LINK: {
-    source: "links",
-    message: "links to pages on other sites which could not be reached",
     detail: ["targets"],
   },
 };

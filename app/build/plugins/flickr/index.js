@@ -13,6 +13,13 @@ https://www.flickr.com/services/oembed/
 const each = require("../eachEl");
 const Url = require("url");
 const fetch = require("node-fetch");
+var { report } = require("build/flags");
+
+// The link stays in the post, so it still works; the flag says it wasn't
+// embedded
+function failed(href) {
+  report({ code: "EMBED_FAILED", targets: [href] });
+}
 
 async function render($) {
   await each($, "a", async (el) => {
@@ -49,12 +56,16 @@ async function render($) {
       const res = await fetch(oembedUrl);
       const data = await res.json();
 
-      if (!data || typeof data.html !== "string") return;
+      if (!data || typeof data.html !== "string") {
+        failed(href);
+        return;
+      }
 
       var html = data.html;
 
       $(el).replaceWith(html);
     } catch (e) {
+      failed(href);
       return;
     }
   });

@@ -1,19 +1,18 @@
 var rebuildDependents = require("./rebuildDependents");
-var Ignore = require("./ignore");
 var Entry = require("models/entry");
 var Preview = require("./preview");
 var isPreview = require("./drafts").isPreview;
 var isDraft = require("./drafts").isDraft;
-var WRONG_TYPE = "WRONG_TYPE";
 var TOO_LARGE = "TOO_LARGE";
-var PUBLIC_FILE = "PUBLIC_FILE";
 var isHidden = require("build/prepare/isHidden");
 var build = require("build");
 var pathNormalizer = require("helper/pathNormalizer");
 var makeSlug = require("helper/makeSlug");
 var path = require("path");
-var IgnoredFiles = require("models/ignoredFiles");
 var folder = require("storage/folder");
+var postSourceSize = require("build/converters/post-source-size");
+var buildFlags = require("build/flags");
+var storeBuildFlags = require("./storeBuildFlags");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
 var isRedisUnavailableError =
@@ -41,6 +40,33 @@ function isPublic(path) {
 
 function isTemplate(path) {
   return pathNormalizer(path).toLowerCase().startsWith("/templates/");
+}
+
+// Sets one source's flags on a file (models/file/flags.js). A failure is
+// ignored, as a failed clear of the ignored record is: flags are a report,
+// and must never fail a sync.
+async function setFlags(blogID, sourcePath, source, list) {
+  try {
+    await folder.setFlags(blogID, sourcePath, source, list);
+  } catch (err) {}
+}
+
+// Flags a post source over its size limit (models/file/flags.js), with its
+// size and the limit. A failure is ignored, as the ignored record's is.
+async function flagTooLarge(blogID, sourcePath) {
+  try {
+    var stat = await folder.stat(blogID, sourcePath);
+
+    if (stat.isDirectory) return;
+
+    await folder.setFlags(blogID, sourcePath, "build", [
+      {
+        code: "POST_TOO_LARGE",
+        size: stat.size,
+        limit: postSourceSize.limitForPath(sourcePath).bytes,
+      },
+    ]);
+  } catch (err) {}
 }
 
 async function dropEntryAndPreview(blogID, targetPath) {
@@ -107,15 +133,19 @@ async function buildAndSet(blog, path, multiInfo, state) {
   // A placeholder's bytes aren't the file's (Blot couldn't fetch it), so it
   // is not a post: building it would publish an empty one
   if (!multiInfo && (await folder.isPlaceholder(blog.id, path))) {
-    await IgnoredFiles.drop(blog.id, path).catch(noop);
     return dropEntryAndPreview(blog.id, path);
   }
 
+  var found;
+
   try {
-    entry = await build(blog, path);
+    ({ result: entry, flags: found } = await buildFlags.collect(() =>
+      build(blog, path)
+    ));
   } catch (err) {
     if (err && err.code === "WRONGTYPE") {
-      await Ignore(blog.id, path, WRONG_TYPE);
+      await setFlags(blog.id, path, "build", []);
+      await Entry.drop(blog.id, path);
       return dropStaleAggregate(blog, multiInfo);
     }
 
@@ -135,7 +165,9 @@ async function buildAndSet(blog, path, multiInfo, state) {
 
       // An oversized source inside a "+" folder aborts the whole
       // aggregate build, so drop the now-stale synthesized entry too.
-      await Ignore(blog.id, path, TOO_LARGE);
+      await Entry.drop(blog.id, path);
+      // In a "+" folder the oversized source may not be the file that changed
+      await flagTooLarge(blog.id, err.sourcePath || path);
       return dropStaleAggregate(blog, multiInfo);
     }
 
@@ -154,6 +186,10 @@ async function buildAndSet(blog, path, multiInfo, state) {
     // real aggregate.
     if (err && ["ENOTDIR", "ENOENT"].indexOf(err.code) !== -1)
       return dropStaleAggregate(blog, multiInfo, err);
+
+    // The file can't be published: say why on the file itself
+    var failed = buildFlags.fromError(err);
+    if (failed && !multiInfo) await setFlags(blog.id, path, "build", [failed]);
 
     throw err;
   }
@@ -188,17 +224,16 @@ async function buildAndSet(blog, path, multiInfo, state) {
   state.unchanged =
     !!result && result.changed === false && !dropTargets.length && !entry.draft;
 
-  // A successful rebuild means any previous "ignored" record for
-  // this path (wrong type, too large, …) is stale. Errors are
-  // swallowed so a failed clear can't fail the sync, but we wait
-  // for it so callers never observe the stale record after the
-  // sync finishes. For a folder post the same applies to each
-  // source file that is now part of the aggregate again (e.g. one
-  // shrunk back under the size limit), otherwise the dashboard
-  // keeps hiding its badge.
+  // A successful build clears the build's flags (models/file/flags.js) on
+  // the entry's path and, for a folder post, on each of its sources, so one
+  // shrunk back under the size limit loses POST_TOO_LARGE. A single file
+  // gets what this build found instead. A folder post's flags
+  // have no one file to go on, so they are dropped for now.
   await Promise.all(
-    [entry.path].concat(sourcePaths).map(function (ignoredPath) {
-      return IgnoredFiles.drop(blog.id, ignoredPath).catch(noop);
+    [entry.path].concat(sourcePaths).map(function (sourcePath) {
+      var own = !multiInfo && sourcePath === entry.path;
+
+      return storeBuildFlags(blog.id, sourcePath, own ? found : []);
     })
   );
 
@@ -261,7 +296,7 @@ module.exports = async function set(blog, path) {
     // whose name begins with an underscore. It should
     // therefore not be a blog post.
     ignoring = true;
-    await Ignore(blog.id, path, PUBLIC_FILE);
+    await Entry.drop(blog.id, path);
   } else if (!isTemplate(path) && !is_preview) {
     // This file should become a blog post or page!
     await buildAndSet(blog, path, multiInfo, state);

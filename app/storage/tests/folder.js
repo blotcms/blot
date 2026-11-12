@@ -829,6 +829,18 @@ describe("storage/folder", function () {
         expect(flags[1].error.length).toEqual(200);
       });
 
+      it("gives a flagged file's flags in a listing", async function () {
+        await folder.writePlaceholder(this.blog.id, "/big.mov", TOO_LARGE);
+        await folder.write(this.blog.id, "/a.txt", "a");
+
+        var entries = (await folder.list(this.blog.id, "/")).entries;
+
+        expect(entries[0].name).toEqual("a.txt");
+        expect(entries[0].flags).toBeUndefined();
+        expect(entries[1].flags).toEqual([TOO_LARGE]);
+        expect(entries[1].placeholder).toBe(true);
+      });
+
       it("lists the folder's flagged files", async function () {
         await folder.writePlaceholder(this.blog.id, "/a/big.mov", TOO_LARGE);
         await folder.write(this.blog.id, "/b.md", "# Hi");
