@@ -50,10 +50,13 @@ const JOBS = {
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 1 * MiB,
   },
+  // The build waits 20s for a post's thumbnail (app/build/thumbnail/create.js)
+  // and then moves on, so a jail that runs longer makes nothing anyone uses.
+  // The broker can't tell the client has gone (see the README's Protocol).
   thumbnail: {
     command: node("thumbnail"),
     memoryBytes: 512 * MiB,
-    timeSeconds: 60,
+    timeSeconds: 20,
     maxInputBytes: 256 * MiB,
     maxOutputBytes: 64 * MiB,
   },

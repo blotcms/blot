@@ -1,4 +1,5 @@
 const folder = require("storage/folder");
+const { extname } = require("path");
 const { v4: uuid } = require("uuid");
 const clfdate = require("helper/clfdate");
 const retry = require("./retry");
@@ -55,7 +56,10 @@ async function download(client, source, blogID, destination) {
         "skipping download because file extension is unsupported",
         metadataPath
       );
-      await folder.write(blogID, destination, "");
+      await folder.writePlaceholder(blogID, destination, {
+        code: "SYNC_UNSUPPORTED",
+        kind: extname(metadataPath).toLowerCase(),
+      });
       return;
     }
 
@@ -67,7 +71,11 @@ async function download(client, source, blogID, destination) {
         ">",
         MAX_FILE_SIZE
       );
-      await folder.write(blogID, destination, "");
+      await folder.writePlaceholder(blogID, destination, {
+        code: "SYNC_TOO_LARGE",
+        size: metadata.size,
+        limit: MAX_FILE_SIZE,
+      });
       return;
     }
 

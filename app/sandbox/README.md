@@ -30,6 +30,14 @@ starts `SANDBOX_`, and it never falls back to in-process.
 - `thumbnail` the thumbnail sizes of one image, static or animated; one output per size.
   With `accept` (formats and minimum sizes) it first checks the image can be a
   thumbnail and makes none if not, so a candidate costs one jail, not two.
+  An animated image costs every frame of every size, mostly in GIF encoding
+  (about 5M pixels a second in a production jail, on Graviton2 and Alpine's
+  libvips). So its thumbnails may encode at most 50M pixels, every frame of
+  every size counted, about 10s; past that they are of the first frame
+  (`meta.firstFrame`). A GIF size that comes out the GIF's own size (up to
+  8 MiB) is its bytes as they are, and the other sizes are made largest first,
+  each from the smallest already made that covers it. The jail has 20s, as long
+  as the build waits (`build/thumbnail/create.js`).
 - `resize` shrinks an image to fit inside a square, in its own format.
 - `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG.
 - `exif` exiftool on stdin, reduced to the fields asked for. It spawns
@@ -433,7 +441,12 @@ way round: their short queues fill by design when builds have many remote
 images and when an import is big, so that is logged with a count (`sandbox: job
 fetch-image busy`, `sandbox: job fetch busy`) rather than emailed. A fetch that
 is killed, times out (the job, not a URL), can't reach the broker or answers
-nonsense is emailed like any job's. At most one
+nonsense is emailed like any job's. A `pandoc` or `thumbnail` job that times
+out is the input's doing (a slow document, a slow image), so it is logged
+(`sandbox: job thumbnail timed out`), not emailed; killed at its memory limit,
+it is emailed. nsjail counts its time limit in whole seconds and exits 137 at
+it, as at the memory limit, so the broker calls a jail killed within a second
+of its `timeSeconds` a timeout. At most one
 email per process every ten minutes, with counts for what happened in between.
 
 ## Why

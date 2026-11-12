@@ -186,7 +186,11 @@ module.exports = async (blogID, publish, update) => {
         await walk(path, modifiedTime, walkedDirCreatedLive);
       } else {
         // We could compare modified time but this seems to bug out on some sites
-        const identicalOnRemote = existsLocally && existsLocally.size === size;
+        // A placeholder isn't identical to a file which is now really empty
+        const identicalOnRemote =
+          existsLocally &&
+          existsLocally.size === size &&
+          !(size === 0 && (await folder.isPlaceholder(blogID, path)));
 
         // An oversized remote file is represented locally by an empty file.
         // The size never matches the remote's, so without this check every
@@ -197,7 +201,18 @@ module.exports = async (blogID, publish, update) => {
           !existsLocally.isDirectory &&
           existsLocally.size === 0;
 
-        if (placeholderInPlace || identicalOnRemote) {
+        if (placeholderInPlace) {
+          progress.publishThrottled("Checking", path);
+
+          // One written before placeholders were flagged is flagged now, so
+          // it isn't taken for a file which really is empty
+          const placeholder = await folder.stat(blogID, path);
+          if (!placeholder.placeholder) {
+            await folder.setFlags(blogID, path, "sync", [
+              { code: "SYNC_TOO_LARGE", size: size, limit: maxFileSize },
+            ]);
+          }
+        } else if (identicalOnRemote) {
           progress.publishThrottled("Checking", path);
         } else {
           try {
@@ -223,11 +238,15 @@ module.exports = async (blogID, publish, update) => {
                   descendants = await localDescendants(blogID, path);
                   await folder.remove(blogID, path);
                 }
-                await folder.write(blogID, path, "");
+                await folder.writePlaceholder(blogID, path, {
+                  code: "SYNC_TOO_LARGE",
+                  size: size,
+                  limit: maxFileSize,
+                });
                 summary.placeholdersCreated += 1;
                 publish("Created placeholder for oversized file", path);
-                // Register it, as the /upload placeholder route does, so the
-                // entry is built (or rebuilt) from the empty file.
+                // Register it, as the /upload placeholder route does, so an
+                // entry built from the old bytes is dropped.
                 await update(path);
                 for (const descendant of descendants) await update(descendant);
               } catch (err) {

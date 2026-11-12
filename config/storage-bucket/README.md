@@ -362,7 +362,7 @@ SafeHop on.
      allowlist mirrors `app/cdn/index.js` plus the top level of
      `app/blog/static`: `/`, `/health`, `/favicon.ico`, `/robots.txt`,
      `/fonts/`, `/icons/`, `/katex/`, `/plugins/`, `/syntax-highlighter/`,
-     `/html2canvas.min.js`, `/layout.css`, `/documentation/v-`, `/folder/v-`,
+     `/layout.css`, `/documentation/v-`, `/folder/v-`,
      `/template/`, `/blog_`. **A new top-level path on the CDN must be added
      to this rule or Bunny will 403 it.** Bunny allows 5 patterns per
      condition, so the allowlist is split over several "match none"

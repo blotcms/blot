@@ -3,6 +3,7 @@ var ensure = require("helper/ensure");
 var caseSensitivePath = require("helper/caseSensitivePath");
 var key = require("./key");
 var { pack, parse } = require("./record");
+var flags = require("./flags");
 
 // The metadata index of a blog's folder: a record for every file and every
 // directory (type, size, modified, SHA-1), so listing, walking, stat and case
@@ -489,9 +490,65 @@ async function setMany(blogID, items) {
   await multi.exec();
 }
 
-// Records one path: record is { type, size, modified, sha1 }
+// Records one path: record is { type, size, modified, sha1, flags }
 function set(blogID, path, record) {
   return setMany(blogID, [Object.assign({}, record, { path: path })]);
+}
+
+// Replaces one source's flags on a file's record (flags.js), leaving its
+// bytes' fields and other sources' flags as they are. With { sha1 }, only if
+// the record still describes those bytes, so a writer which read the file
+// earlier can't flag newer bytes it never saw. Resolves to true if the
+// record was changed, false if there is no such file or its sha1 differs.
+// A read then a write, safe under the sync lock like every other write here.
+async function setFlags(blogID, path, source, list, options) {
+  check(blogID);
+  path = normalize(path);
+
+  if (path === "/") return false;
+
+  var dirKey = key.dir(blogID, parentOf(path));
+  var found = parse(await client.hGet(dirKey, nameOf(path)));
+
+  if (!found || found.type !== "file") return false;
+
+  var sha1 = options && options.sha1;
+
+  if (sha1 && found.sha1 && found.sha1 !== sha1) return false;
+
+  var next = flags.replace(found.flags, source, list);
+
+  if (JSON.stringify(next) === JSON.stringify(found.flags || [])) return true;
+
+  found.flags = next;
+
+  await client.hSet(dirKey, nameOf(path), pack(found));
+
+  return true;
+}
+
+// An async iterator of { path, ...record } for every file below dir which
+// has flags. Reads each directory's hash once, so it costs a pass over the
+// whole subtree: for rebuilds and scripts, not for requests.
+async function* flagged(blogID, dir) {
+  check(blogID);
+
+  var pending = [normalize(dir)];
+
+  while (pending.length) {
+    var current = pending.shift();
+
+    for (var entry of await scan(blogID, current)) {
+      var path = child(current, entry.name);
+
+      if (entry.type === "dir") pending.push(path);
+      else if (entry.flags && entry.flags.length) {
+        var found = Object.assign({ path: path }, entry);
+        delete found.name;
+        yield found;
+      }
+    }
+  }
 }
 
 // Forgets everything below a directory, deepest first, a page at a time, so
@@ -721,9 +778,29 @@ async function rebuild(blogID, records) {
     batch = [];
   }
 
+  // A listing knows nothing of flags, so the flags of a file whose bytes are
+  // unchanged (the same size, and the same SHA-1 where both are known) are
+  // carried over to its new record
+  var kept = new Map();
+
+  for await (var previous of flagged(blogID, "/"))
+    kept.set(previous.path, previous);
+
   await removeAll(blogID);
 
   for await (var record of records) {
+    var before = kept.get(normalize(record.path));
+
+    if (
+      before &&
+      record.type === "file" &&
+      !record.flags &&
+      Number(record.size) === before.size &&
+      (!record.sha1 || !before.sha1 || record.sha1 === before.sha1)
+    ) {
+      record = Object.assign({}, record, { flags: before.flags });
+    }
+
     batch.push(record);
 
     if (batch.length >= 500) await flush();
@@ -742,6 +819,7 @@ async function rebuild(blogID, records) {
 
 module.exports = {
   key,
+  flags,
   normalize,
   get,
   list,
@@ -752,6 +830,8 @@ module.exports = {
   totals,
   set,
   setMany,
+  setFlags,
+  flagged,
   remove,
   removeAll,
   rebuild,

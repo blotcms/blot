@@ -1,3 +1,27 @@
+Lift the file name length limit rather than trim names. The check behind it, `exceedsFilesystemPathLimits` in `app/clients/dropbox/util/constants.js`, dates from when blog folders lived on ext4: 255 bytes per name, 4096 per path. Folders are in S3 now:
+- Directory names and full paths no longer touch a local filesystem. S3's own limit is 1024 bytes for a key.
+- The one place that still does is the content cache on the instance SSD (`app/storage/folder/cache.js`). Its directory is a hash, but the file inside keeps the original basename, presumably so pandoc and sharp can see the extension. Shorten that local basename, keeping the extension, and a long name stops mattering.
+
+Unescaped tag in tag-page titles: when `/tagged/<tag>` matches no entries, `app/blog/render/listingViews.js` sets `res.locals.tag` to the raw `req.params.tag`, and 18 of the 21 templates put it into the title and description partials with `{{{tag}}}` (in `package.json`), which their heads render inside `<title>` and `content="..."` attributes. So a crafted link to any blog runs a stranger's script on that blog's domain. Not urgent: blog pages set no cookies and the dashboard session cookie is host-only on blot.im, so it reaches no account; it amounts to phishing or defacement on someone else's domain. Fix: escape the tag (or don't fall back to the raw param) in `listingViews.js`, switch the partials to `{{tag}}`, and add a spec for a tag URL containing markup.
+
+Dropbox: a file Dropbox refuses to download (restricted or flagged, a 409 "Conflict") is dropped with no placeholder and no log line: `app/clients/dropbox/sync/index.js` returns early in the download catch. Write a placeholder and log it, and record it with the file flags once they exist. The check (`statusCode === 409 && statusMessage === "Conflict"`) may also match other 409s; match the Dropbox error tag instead. Test file: `tests/files/will_flag_restricted_content.png`.
+
+Image jobs run about 3.5x slower in production than on a recent Mac (12 Nov 2026, animated GIF thumbnails)
+- About 2.3x is the CPU (Graviton2, Neoverse-N1) and about 1.5x Alpine's libvips build, resizing above all. The allocator (mimalloc, jemalloc) is under 10%. A newer instance type would speed up every image job.
+
+Prove memory of unit fits into cap
+
+Build add font ui
+
+Could we possibly consolidate storage assets and git s3?
+- Any opportunities for shared primitives?
+- These were written in parallel so there may be overlap
+
+Can we build templates in s3 with their own git repos? Forks as patches? Update application possible?
+
+Where possible sync clients create progress bars
+- e.g. when multiple downloads and builds start stacking!
+
 Noticed while fixing the flaky specs, 7 Nov 2026
 - `Blog.set(id, { cacheID: Date.now() })` is repeated in `app/models/template/util/cacheID.js`, `bumpCacheID.js`, `rebuildEntriesOnNewHosts.js`, `app/sync/rebuild.js`, `app/templates/index.js` (twice) and scripts. Since #2666 `Blog.set` bumps to `max(now, previous + 1)` whenever a cacheID is passed, so the value is only a request: give them one bump helper.
 - `Error forking template Error: No template: SITE:blog` and `Error updating template CDN manifest Error: No template: SITE:blog` are logged in the node CI logs of most runs, master included, without failing a spec (and `Error in renderView for style.css: Error: No template: blog_<id>:blog` in run 42395253798). Find which specs create blogs before the SITE templates are built, or whether a stale read is behind it.
@@ -40,6 +64,7 @@ Host cycle follow-ups, from the live cycle onto a 30 GB root on 6 Nov 2026 (#255
 - The Deploy workflow's `commit` input fails on a short hash ("could not resolve commit") although its description says short codes work: fetch enough history, or say full hash only.
 
 Serve blog folder files on the CDN straight from S3, as assets are (left over from #2258, closed once the B2 restore test passed)
+- Bunny's allowlist edge rule may still list `/html2canvas.min.js`, which #2661 removed (the route and file are gone). Harmless; drop it next time that rule is edited.
 - Today `cdn.blot.im/folder/v-<version>/<blogID>/<path>` reaches the origin, which reads the file through `storage/folder`. Every blog is on S3 now, so a Bunny edge rule could send `/folder/v-*` to the bucket instead, like `_image_cache` and `_thumbnails`.
 - Decide first: dotfiles (node 404s any path segment starting with `.`, S3 serves all but `.git`, so maybe Deny `.env`-style names too); directory URLs (node redirects to the trailing slash and serves `index.html`, S3 has only a zero-byte marker: check whether the build ever bakes a directory link); a missing object is a 403 from S3, not a 404; Content-Type comes from the object.
 - Watch #2258's performance gates (S3 requests, origin hits from the `[folder-asset]` log line) before and after.
@@ -274,7 +299,8 @@ Add email warnings if no sync from client for more than x hours
 
 Internationalize the dashboard and brochure site with a standard catalog-based i18n library (e.g. i18next), locale-aware formatting, and a translation workflow. For user templates, build a small compile step that turns localized source/catalogs into ordinary Mustache views, keeping templates portable and easy to extend with languages. Start with major European languages plus Chinese and Japanese; decide Simplified/Traditional Chinese scope and phase brochure content by priority.
 
-Overdue sites should have their data exported, archived in s3 (download link in email) for up to a year after closure.
+Overdue and cancelled (i.e. non deleted) sites under X GB should have their data exported, archived in s3 (download link in email) for up to a year after closure.
+- Make node scripts/user/delete-users-to-remove.js -fast happen automatically
 
 Add macserver deploy to github actions
 - Consider making the deploy via github much safer – how?
@@ -1323,6 +1349,8 @@ Add email newsletter system
 - Tell [Nash](https://mail.google.com/mail/u/0/#inbox/FMfcgxwLtGhBWHnmtJMPGRhNDkLTMbCV)
 - Tell [Kyle](https://mail.google.com/mail/u/0/#inbox/FMfcgzGkXSSTDVMfMGZQxcmcmlBSBQrR)
 
+Add paid subscription system
+
 Create an API for Blot
 - Add webhooks and tell [Aurynn](https://mail.google.com/mail/u/0/#inbox/1554260da157b405) and [Shawn](https://twitter.com/soypunk)
 - Use it to build a minimal blot cli sync client run from the command line (could background itself?!)
@@ -1357,4 +1385,3 @@ Self-hosting:
 Flaky specs (newest first; see "Flaky specs" in AGENTS.md). Remove an entry when its fix merges.
 - 6 Nov 2026, `app/clients/git/store/tests/cache.js` "git store cache shared by processes keeps to the budget with child processes writing at once, and one walk at a time evicting": `Expected false to be true.` (line 406, `every((r) => r.maxSeen <= cap * 1.1)`), on a dashboard-only PR (#2262, merge-2260-2166, 6cc4374d2). Run: https://github.com/blotcms/blot/actions/runs/42223676845/job/127912328807. Investigate: on a loaded runner a child can see the directory above 110% of the cap before the one walk at a time evicts; check whether the margin should scale with the number of concurrent writers, or whether maxSeen samples between a write landing and its walk starting.
 - 7 Nov 2026, CI test setup (no spec): node.yml test 3's lanes `app/clients/git` 1/2 and `app/helper` 1/2 died before running a spec, right after "Setting up CDN on cdn.localhost", with `TimeoutError: @smithy/node-http-handler - the request socket did not establish a connection ... within 5000 ms`. Branch claude/flaky-welcome-email-claim, 4f9c3a361 (#2664); passed on re-run. Job: https://github.com/blotcms/blot/actions/runs/42399824750/job/128484988122. Investigate: the local S3 endpoint the CDN setup calls may not be ready when a lane starts; wait for it, or retry the setup call.
-- 7 Nov 2026, `app/models/template/tests/setMetadata.js` "template updates the cache ID of the blog which has the template installed after updating": `Expected 1794073210890 not to equal 1794073210890.` on #2657 (`5935a4c98`, Stripe callbacks in app/dashboard, which doesn't touch templates). Job: https://github.com/blotcms/blot/actions/runs/42397380146/job/128477568867. Investigate: `bumpCacheID` sets `cacheID` to `Date.now()`, so a bump in the same millisecond as the spec's `setBlog` leaves it unchanged. Make the bump strictly increase (e.g. `max(Date.now(), old + 1)`), or have the spec wait a tick first; `tests/drop.js` has the same pattern.

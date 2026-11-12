@@ -316,7 +316,10 @@ function Apply(client, blogID, log, status) {
         status("Skipping unsupported file " + item.resolved_relative_path);
 
         try {
-          await storage.write(blogID, item.resolved_relative_path, "");
+          await storage.writePlaceholder(blogID, item.resolved_relative_path, {
+            code: "SYNC_UNSUPPORTED",
+            kind: Path.extname(pathForUnsupportedCheck).toLowerCase(),
+          });
         } catch (err) {
           log(
             item.resolved_relative_path,
@@ -356,7 +359,11 @@ function Apply(client, blogID, log, status) {
         }
 
         try {
-          await storage.write(blogID, item.resolved_relative_path, "");
+          await storage.writePlaceholder(blogID, item.resolved_relative_path, {
+            code: "SYNC_TOO_LARGE",
+            size: item.size,
+            limit: MAX_FILE_SIZE,
+          });
         } catch (err) {
           log(
             item.resolved_relative_path,
@@ -468,10 +475,12 @@ function Apply(client, blogID, log, status) {
 // files of different sizes can't have the same bytes.
 async function contentHash(blogID, path, size) {
   try {
-    if (typeof size === "number") {
-      const stat = await storage.stat(blogID, path);
-      if (stat.isDirectory || stat.size !== size) return undefined;
-    }
+    const stat = await storage.stat(blogID, path);
+    if (stat.isDirectory) return undefined;
+    // A placeholder's bytes aren't the file's, so they never match Dropbox's,
+    // even when the file there is now really empty too
+    if (stat.placeholder) return undefined;
+    if (typeof size === "number" && stat.size !== size) return undefined;
     return (await storage.stat(blogID, path, { hash: true })).hash;
   } catch (err) {
     return undefined;

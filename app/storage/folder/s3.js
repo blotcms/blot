@@ -213,13 +213,16 @@ async function keepParent(blogID, path) {
 }
 
 // Resolves to the record written
-async function record(blogID, path, uploaded, modified) {
+async function record(blogID, path, uploaded, modified, flags) {
   var written = {
     type: "file",
     size: uploaded.size,
     modified: modified,
     sha1: uploaded.sha1,
   };
+
+  // A write replaces the record, so the old bytes' flags go with them
+  if (flags && flags.length) written.flags = flags;
 
   await File.set(blogID, path, written);
 
@@ -502,7 +505,9 @@ function sendCached(res, local, found, options, key) {
   });
 }
 
-async function write(blogID, relPath, data) {
+async function write(blogID, relPath, data, options) {
+  var flags = ((options && options.flags) || []).map(File.flags.normalize);
+
   // The stream can fail during the awaits below, before pipeline listens for
   // it, and an "error" with no listener would take down the process
   if (data instanceof Readable) data.on("error", noop);
@@ -520,7 +525,8 @@ async function write(blogID, relPath, data) {
       blogID,
       path,
       await s3.putBuffer(objectKey(blogID, path), body),
-      Date.now()
+      Date.now(),
+      flags
     );
 
     return writeThrough(blogID, path, written, async () =>
@@ -543,7 +549,7 @@ async function write(blogID, relPath, data) {
     await pipeline(data, fs.createWriteStream(spool));
 
     var uploaded = await s3.uploadFile(objectKey(blogID, path), spool);
-    var recorded = await record(blogID, path, uploaded, Date.now());
+    var recorded = await record(blogID, path, uploaded, Date.now(), flags);
 
     await writeThrough(blogID, path, recorded, async () =>
       fs.createReadStream(spool)
@@ -892,6 +898,12 @@ async function stat(blogID, relPath, options) {
     modified: found.modified,
   };
 
+  // Only a flagged file has these keys (models/file/flags.js)
+  if (found.flags) {
+    result.flags = found.flags;
+    if (File.flags.isPlaceholder(found)) result.placeholder = true;
+  }
+
   // Dropbox's content_hash is not in the index (its SHA-1 is), so this costs
   // a download until the Dropbox client keeps its own { sha1, content_hash }
   // pairs (#2258, "Content hash")
@@ -906,6 +918,49 @@ async function stat(blogID, relPath, options) {
   }
 
   return result;
+}
+
+// An empty stand-in for a file Blot could not fetch, flagged with why
+// (flag's code must be a placeholder code), so nothing mistakes it for a
+// file which really is empty
+async function writePlaceholder(blogID, relPath, flag) {
+  var normalized = File.flags.normalize(flag);
+
+  if (!File.flags.CODES[normalized.code].placeholder) {
+    throw new Error(
+      "storage/folder: " + normalized.code + " is not a placeholder code"
+    );
+  }
+
+  return write(blogID, relPath, Buffer.alloc(0), { flags: [normalized] });
+}
+
+// Whether the file at path is a placeholder. Nothing there is not one.
+async function isPlaceholder(blogID, relPath) {
+  var found = await File.get(blogID, locate(blogID, relPath));
+  return File.flags.isPlaceholder(found);
+}
+
+// Replaces one source's flags on a file, without touching its bytes. With
+// { sha1 }, only while the file still has those bytes. Resolves to whether
+// the file was there to flag.
+async function setFlags(blogID, relPath, source, flags, options) {
+  return File.setFlags(blogID, locate(blogID, relPath), source, flags, options);
+}
+
+// An async iterator of { path, size, modified, flags, placeholder } for
+// every flagged file in the folder, for scripts and disconnects: it reads
+// the whole index
+async function* flagged(blogID) {
+  for await (var found of File.flagged(blogID, "/")) {
+    yield {
+      path: found.path,
+      size: found.size,
+      modified: found.modified,
+      flags: found.flags,
+      placeholder: File.flags.isPlaceholder(found),
+    };
+  }
 }
 
 async function exists(blogID, relPath) {
@@ -1094,6 +1149,10 @@ module.exports = {
   createReadStream,
   serve,
   write,
+  writePlaceholder,
+  isPlaceholder,
+  setFlags,
+  flagged,
   writeFrom,
   path,
   commit,

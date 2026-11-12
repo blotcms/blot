@@ -2,7 +2,16 @@
 {{{font.styles}}}
 {{{syntax_highlighter_font.styles}}}
 {{{syntax_highlighter.styles}}}
-/* Highlight.js supplies the palette; this template controls code layout and type. */
+
+@view-transition {
+  navigation: auto;
+}
+
+/* The zoom between a thumbnail and the viewer keeps the page itself out of the cross-fade. */
+html.is-zooming {
+  view-transition-name: none;
+}
+
 pre code.hljs {
   display: block;
   overflow: auto;
@@ -11,11 +20,12 @@ pre code.hljs {
   white-space: pre-wrap;
   word-wrap: break-word;
 }
+
 code.hljs {
   margin: 0;
   padding: 0;
 }
-/* The repeated class gives this template reset priority over theme token styles. */
+
 pre code.hljs.hljs,
 pre code.hljs.hljs * {
   font-weight: inherit;
@@ -23,14 +33,15 @@ pre code.hljs.hljs * {
   opacity: 1;
   text-decoration: inherit;
 }
+
 pre code.hljs.hljs * {
   display: inline;
   width: auto;
 }
 
-
 html,
 body {
+  min-height: 100%;
   background: {{background_color}};
   color-scheme: light;
 }
@@ -47,192 +58,875 @@ body {
   background: {{background_color}};
 }
 
-/* Fill the viewport below the header; paint a background so screenshots are opaque. */
-body:has(.gallery) {
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-  overflow: hidden;
+img {
+  max-width: 100%;
+  height: auto;
 }
 
-.gallery {
-  overflow-x: scroll;
-  overflow-y: hidden !important;
-  white-space: nowrap;
-  flex: 1 1 auto;
-  min-width: 0;
-  min-height: 0;
-  padding: 0 {{spacing}}em;
-  background: {{background_color}};
+a {
+  color: {{link_color}};
+  text-decoration: none;
 }
 
-.gallery .entry {
-  display: inline-block;
-  vertical-align: top;
-  width: {{slide_width}}px;
-  box-sizing: border-box;
-  white-space: normal;
+a:hover {
+  opacity: 0.68;
 }
 
-img {max-width: 100%;height: auto;}
-
-.clear {width: 100%;display: block;clear: both;}
-
-h1, h2, h3, h4, h5, h6 {
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
   {{#font}}
   font-family: {{{stack}}};
   {{/font}}
   color: {{text_color}};
   font-size: 1em;
-  margin: 26px 0
+  margin: 1.5em 0 0.75em;
 }
 
 h1 {
-  font-size: 20px;
-  line-height: 1.3;
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  line-height: 1.15;
 }
-
-a {color: {{link_color}};text-decoration: none;}
-
-blockquote {color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);margin-left: 52px}
 
 p,
 li,
 blockquote,
-figcaption {orphans: 2; widows: 2;}
+figcaption {
+  orphans: 2;
+  widows: 2;
+}
 
-hr {width: 100%;border: none;border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15)}
+blockquote {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.65);
+  margin-left: 2em;
+}
+
+hr {
+  width: 100%;
+  border: none;
+  border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
+}
 
 .date {
   {{#syntax_highlighter_font}}
   font-family: {{{stack}}};
   font-size: {{{font_size}}}px;
   {{/syntax_highlighter_font}}
-  margin:1em 0;
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.45);
+  display: inline-block;
+  margin: 0.85em 0;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.48);
+  font-size: 0.78em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
 #header {
+  position: relative;
+  z-index: 2;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   flex-wrap: wrap;
-  flex: 0 0 auto;
-  gap: 0.5em 1em;
-  padding: {{spacing}}em;
-  font-size: 0.875em;
-  background: {{background_color}};
+  gap: 0.45em 1.25em;
+  padding: 1.25em calc({{spacing}}em * 0.7) 2.5em;
+  margin-bottom: -1.5em;
+  font-size: 0.82em;
+  justify-content: space-between;
+  /* The page colour fading to transparent, so content scrolls away softly beneath it. */
+  background: linear-gradient(
+    to bottom,
+    {{background_color}} 0%,
+    rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.85) 38%,
+    rgba({{#rgb}}{{background_color}}{{/rgb}}, 0) 100%
+  );
+  /* The fade overlaps the content below, so only the links themselves take clicks. */
+  pointer-events: none;
 }
 
-{{#is.navigation_alignment.justified}}
-#header {justify-content: space-between;}
-{{/is.navigation_alignment.justified}}
-{{#is.navigation_alignment.left}}
-#header {justify-content: flex-start;}
-{{/is.navigation_alignment.left}}
-{{#is.navigation_alignment.right}}
-#header {justify-content: flex-end;}
-{{/is.navigation_alignment.right}}
-{{#is.navigation_alignment.center}}
-#header {justify-content: center;}
-{{/is.navigation_alignment.center}}
+#header a {
+  pointer-events: auto;
+}
+
+#header .nav {
+  justify-content: flex-end;
+  margin-left: auto;
+  /* Draws the links in towards the right edge, past the room kept for the scrollbar. */
+  margin-right: -1em;
+}
+
+#title {
+  order: -1;
+}
 
 {{#sticky_navigation}}
 #header {
   position: sticky;
   top: 0;
-  z-index: 2;
 }
 {{/sticky_navigation}}
 
-#header a {padding: 0.5em;margin: 0 0.5em;border: 1px solid transparent}
-#header a:hover {border-color: {{link_color}}}
+#header .nav {
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.25em 1.15em;
+}
+
+#header .nav a {
+  display: inline-block;
+  padding: 0.55em 0 0.15em;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
+  transition: color 160ms ease, opacity 160ms ease;
+}
+
+#header .nav a:hover {
+  color: {{text_color}};
+  opacity: 1;
+}
 
 #title {
   {{#font}}
   font-family: {{{stack}}};
   {{/font}}
-  font-size: 1.875em;
-  position: relative;
-  padding: 0.25em
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15em 0;
+  color: {{text_color}};
+  font-size: 1.55em;
+  font-weight: 600;
 }
 
 .avatar {
-  width:36px;
+  width: 36px;
   {{#roundAvatar}}{{^profile_image.mask}}
-  border-radius:50%;
+  border-radius: 50%;
   {{/profile_image.mask}}{{/roundAvatar}}
   vertical-align: middle;
-  margin-right: 0.75em;
+  margin-right: 0.65em;
 }
 
-.entry {font-size:0.875em;padding: 1em;color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55)}
-.entry h1:first-of-type {margin-top: 0.3em;color: {{text_color}}}
-
-.contents {margin: 0 {{spacing}}em 0 calc({{spacing}}em * 2);max-width: {{content_width}}px}
-
-.list {
-  margin: 0 {{spacing}}em {{spacing}}em calc({{spacing}}em * 2);
-  max-width: {{content_width}}px;
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
-.list a {border-bottom: 1px solid {{link_color}}}
+[hidden] {
+  display: none !important;
+}
+
+html {
+  --placeholder: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.08);
+  scrollbar-gutter: stable;
+}
+
+html.is-viewing {
+  overflow: hidden;
+}
+
+#header {
+  transition: opacity 200ms ease;
+}
+
+html.is-viewing #header {
+  opacity: 0;
+  pointer-events: none;
+}
+
+html.is-viewing.is-leaving #header {
+  opacity: 1;
+}
+
+/* Home and entry pages: one rail of images filling the space under the header. */
+body[data-view="home"],
+body[data-view="entry"] {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.rail-viewport {
+  /* One whole number sets the slide size: 1 is small, 10 nearly fills the screen. */
+  --slide-size: {{slide_size}};
+  --item-width: min(86vw, max(calc(var(--slide-size) * 8vw), min(74vw, calc(var(--slide-size) * 115px))));
+  --item-height: min(82cqh, 760px);
+  --gap: clamp(3vw, calc(20.57px - 0.456vw), 6vw);
+  --inline-padding: clamp(4.5vw, calc(24px + 0.5vw), 8vw);
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  overflow: clip;
+  container-type: size;
+  cursor: grab;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.rail-viewport.is-dragging {
+  cursor: grabbing;
+}
+
+.rail-layer {
+  position: absolute;
+  top: calc((100% - var(--item-height)) / 2);
+  left: 0;
+  width: 100%;
+  height: var(--item-height);
+}
+
+.rail {
+  position: relative;
+  height: 100%;
+  margin: 0;
+  padding: 0 var(--inline-padding);
+  column-gap: var(--gap);
+  list-style: none;
+}
+
+/* Slides are positioned by script; only those in view are shown. */
+.slide {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--item-width);
+  height: var(--item-height);
+  margin: 0;
+  visibility: hidden;
+}
+
+.slide.is-visible {
+  visibility: visible;
+  will-change: transform;
+}
+
+.rail-empty {
+  display: none;
+  margin: 0;
+  padding: 2em {{spacing}}em;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);
+  text-align: center;
+}
+
+.rail-viewport:not(:has(.slide:not([hidden]))) .rail-empty {
+  display: block;
+}
+
+/* An image link is exactly the picture: as wide as the slide, or narrower when a tall
+   image would otherwise exceed the slide height. --w and --h are the image's size. */
+.item,
+.cell {
+  position: relative;
+  display: block;
+}
+
+.item {
+  width: min(100%, calc(var(--item-height) * var(--w, 1) / var(--h, 1)));
+  color: inherit;
+  cursor: inherit;
+}
+
+.rail-viewport:not(.is-dragging) .item:hover {
+  cursor: zoom-in;
+}
+
+.item:hover,
+.cell:hover {
+  opacity: 1;
+}
+
+.item::before {
+  position: absolute;
+  inset: 0;
+  background: var(--placeholder);
+  content: "";
+}
+
+.item img {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: none;
+  aspect-ratio: var(--w, 1) / var(--h, 1);
+  background: var(--placeholder);
+  opacity: 0;
+  pointer-events: none;
+  -webkit-user-drag: none;
+  transition: opacity 300ms ease;
+}
+
+.item img.is-loaded,
+.item img.is-transitioning,
+.cell img.is-transitioning {
+  opacity: 1;
+}
+
+.item img.is-transitioning,
+.cell img.is-transitioning {
+  transition: none;
+}
+
+.item.is-zoomed,
+.cell.is-zoomed {
+  visibility: hidden;
+}
+
+.item:focus-visible,
+.cell:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: 4px;
+}
+
+.rail-viewport.is-keyboard-navigating .item:focus-visible {
+  outline: none;
+}
+
+/* Entry pages keep their text for search engines and anyone without script. */
+.js .contents {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
+
+.clear {
+  display: block;
+  clear: both;
+  width: 100%;
+}
+
+.container {
+  min-height: 100vh;
+}
+
+.contents {
+  width: min(calc(100% - {{spacing}}em * 2), {{content_width}}px);
+  margin: 0 auto 4em;
+  padding: 0 0.5em;
+  box-sizing: border-box;
+}
+
+.contents .entry img {
+  display: block;
+  max-height: 72vh;
+  width: auto;
+  max-width: 100%;
+  margin: 0 0 1em;
+  object-fit: contain;
+}
+
+.contents .entry h1:first-of-type {
+  margin-top: 0.3em;
+}
 
 .caption {
   {{#font}}
   font-family: {{{stack}}};
   {{/font}}
-  font-size: 0.875em;
-  line-height: 1.4333;
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.5);
   display: block;
-  margin: 0 0 13px 0
+  margin: 0 0 1em;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);
+  font-size: 0.875em;
+  line-height: 1.45;
 }
 
-.contents a {border-bottom: 1px solid {{link_color}}}
-.margin a {font-weight: normal;}
+.videoContainer {
+  margin: 1em 0;
+}
 
-.videoContainer {margin: 1em 0}
+/* Archives, tags and search results: a grid of small images. */
+.list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 3em 3vw;
+  width: auto;
+  margin: 2em 2vw 4em;
+  box-sizing: border-box;
+}
+
+.list a.cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  height: 180px;
+  color: {{text_color}};
+  cursor: zoom-in;
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+.list a.cell:hover {
+  transform: scale(1.04);
+  opacity: 0.75;
+}
+
+.cell img {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  height: auto;
+  max-height: 180px;
+  aspect-ratio: var(--w, 1) / var(--h, 1);
+  background: var(--placeholder);
+  object-fit: contain;
+  -webkit-user-drag: none;
+}
+
+.no-results {
+  margin: 2em 2vw 0;
+}
+
+/* The search bar, shared by the archives and search pages: quiet, and submitted with Enter. */
+.search-form {
+  max-width: 20em;
+  margin: 2em 2vw 0;
+}
+
+.search-form input[type="search"] {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45em 1em;
+  border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.16);
+  border-radius: 999px;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  color: {{text_color}};
+  background: transparent;
+  font: inherit;
+  font-size: 0.875em;
+  transition: border-color 160ms ease;
+}
+
+.search-form input[type="search"]::placeholder {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
+}
+
+.search-form input[type="search"]:hover {
+  border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.32);
+}
+
+.search-form input[type="search"]:focus-visible {
+  border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.7);
+}
 
 pre {
   overflow-x: auto;
   padding: 0.7em 1em;
 }
 
-pre, code {
+pre,
+code {
   {{#syntax_highlighter_font}}
   font-family: {{{stack}}};
   font-size: {{{font_size}}}px;
   {{/syntax_highlighter_font}}
 }
 
-.pagination {margin: 2em 0;color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55)}
+.pagination {
+  grid-column: 1 / -1;
+  margin: 2em 2vw;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);
+}
+
+.js .pagination.is-loading-more {
+  visibility: hidden;
+}
+
+/* The viewer: the image zooms up from where it was, over the page colour. */
+.lightbox {
+  --lightbox-open-duration: 320ms;
+  --lightbox-close-duration: 200ms;
+  --lightbox-open-easing: cubic-bezier(0.22, 1.1, 0.36, 1);
+  --lightbox-close-easing: cubic-bezier(0.32, 0.72, 0, 1);
+  --lightbox-gutter: clamp(52px, 6vw, 88px);
+  --lightbox-top-gutter: 0px;
+  --lightbox-bottom-gutter: 0px;
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: {{text_color}};
+}
+
+.lightbox[open] {
+  display: grid;
+  grid-template-columns: var(--lightbox-gutter) minmax(0, 1fr) var(--lightbox-gutter);
+  grid-template-rows: var(--lightbox-top-gutter) minmax(0, 1fr) var(--lightbox-bottom-gutter);
+  align-items: stretch;
+  justify-items: stretch;
+}
+
+/* Fade a full-screen layer's opacity instead of repainting a background colour. */
+.lightbox::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background: {{background_color}};
+  content: "";
+  opacity: 0;
+  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
+}
+
+.lightbox.is-revealed::before {
+  opacity: 1;
+}
+
+.lightbox.is-closing,
+.lightbox.is-closing::before,
+.lightbox.is-closing .lightbox-close,
+.lightbox.is-closing .lightbox-step {
+  transition-duration: var(--lightbox-close-duration);
+  transition-timing-function: var(--lightbox-close-easing);
+}
+
+.lightbox::backdrop {
+  background: transparent;
+}
+
+.lightbox .lightbox-close,
+.lightbox .lightbox-step {
+  opacity: 0;
+  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing), background-color 160ms ease;
+}
+
+.lightbox.is-revealed .lightbox-close,
+.lightbox.is-revealed .lightbox-step {
+  opacity: 0.5;
+}
+
+@media (hover: hover) {
+  .lightbox.is-revealed .lightbox-close:hover,
+  .lightbox.is-revealed .lightbox-step:hover {
+    opacity: 1;
+  }
+}
+
+.lightbox:not(.is-revealed) .lightbox-close,
+.lightbox:not(.is-revealed) .lightbox-step,
+.lightbox.is-opening .lightbox-close,
+.lightbox.is-opening .lightbox-step {
+  pointer-events: none;
+}
+
+.lightbox[open] .lightbox-image {
+  view-transition-name: active-image;
+}
+
+.lightbox.is-closing .lightbox-image {
+  visibility: hidden;
+  view-transition-name: none;
+}
+
+html::view-transition-group(active-image),
+html::view-transition-old(active-image),
+html::view-transition-new(active-image) {
+  animation-duration: 320ms;
+  animation-timing-function: cubic-bezier(0.22, 1.1, 0.36, 1);
+}
+
+html.lightbox-transition-closing::view-transition-group(active-image),
+html.lightbox-transition-closing::view-transition-old(active-image),
+html.lightbox-transition-closing::view-transition-new(active-image) {
+  animation-duration: 200ms;
+  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Zooming moves the image over the whole screen; the arrows and close button float above it. */
+.lightbox {
+  touch-action: none;
+}
+
+.lightbox-image {
+  transform-origin: center;
+}
+
+.lightbox-image.is-zoom-animating {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.lightbox.is-zoomed .lightbox-image {
+  cursor: grab;
+}
+
+.lightbox.is-panning .lightbox-image {
+  cursor: grabbing;
+}
+
+.zoom-controls {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.15em;
+  padding: 0 0.35em;
+  border-radius: 999px;
+  color: {{text_color}};
+  background: rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.6);
+  font-size: 0.8em;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.lightbox.is-zoomed.is-revealed .zoom-controls {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.zoom-value {
+  min-width: 3.2em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.zoom-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  outline: none;
+  color: inherit;
+  background: transparent;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: opacity 160ms ease;
+}
+
+.zoom-button:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.zoom-button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.zoom-button:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: -2px;
+}
+
+.zoom-button svg {
+  display: block;
+  fill: currentColor;
+}
+
+@media (pointer: coarse) {
+  .zoom-button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.lightbox-frame:focus {
+  outline: none;
+}
+
+.lightbox-frame {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Sized from the declared dimensions so the preview and original fit identically. */
+.lightbox-image {
+  display: block;
+  width: min(100%, var(--image-width, 100%), calc((100dvh - var(--lightbox-top-gutter) - var(--lightbox-bottom-gutter)) * var(--image-ratio, 1)));
+  height: auto;
+  max-width: none;
+  aspect-ratio: var(--image-ratio, auto);
+  background: var(--placeholder);
+  object-fit: contain;
+}
+
+.lightbox-close,
+.lightbox-step {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  color: {{text_color}};
+  cursor: pointer;
+}
+
+/* Keyboard focus rings the icon as a circle (the buttons themselves are wider than tall). */
+.lightbox-close:focus-visible,
+.lightbox-step:focus-visible {
+  outline: none;
+}
+
+.lightbox-close:focus-visible .lightbox-icon,
+.lightbox-step:focus-visible .lightbox-icon {
+  border-radius: 50%;
+  outline: 2px solid {{text_color}};
+  outline-offset: 6px;
+}
+
+.lightbox-icon {
+  display: block;
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+
+.lightbox-close {
+  top: clamp(12px, calc(2.857vw + 2.858px), 20px);
+  right: 0;
+  width: var(--lightbox-gutter);
+  height: 44px;
+  border-radius: 50%;
+}
+
+.lightbox-step {
+  position: relative;
+  width: 100%;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.lightbox-step:disabled {
+  visibility: hidden;
+}
+
+.lightbox-previous {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: center;
+  justify-self: center;
+}
+
+.lightbox-next {
+  grid-column: 3;
+  grid-row: 2;
+  align-self: center;
+  justify-self: center;
+}
+
+/* Touch screens swipe between images, so the arrows give way to a larger image and a
+   top bar for the close button. The arrows stay reachable for assistive technology. */
+@media (pointer: coarse) {
+  .lightbox {
+    --lightbox-gutter: 0px;
+    --lightbox-top-gutter: 56px;
+  }
+
+  .lightbox .lightbox-step {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .lightbox .lightbox-close {
+    top: 6px;
+    width: 56px;
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) {
+  .lightbox {
+    --lightbox-gutter: 56px;
+    --lightbox-top-gutter: 0px;
+  }
+}
 
 @media screen and (max-width: 800px) {
   #header {
-    padding: 1.25em 1.25em 1em;
-    row-gap: 0.4em;
+    gap: 0.5em 1em;
+    padding: 1em 1.25em 2em;
+    margin-bottom: -1em;
   }
 
-  #header a {
-    margin: 0 0.35em 0 0;
-    padding: 0.4em 0.5em;
+  #header .nav {
+    gap: 0.15em 0.8em;
   }
 
-  #header #title {
+  #header .nav a {
+    padding: 0.4em 0;
+  }
+
+  #title {
     flex: 0 0 100%;
     order: -1;
-    margin: 0;
-    padding: 0.15em 0;
-    font-size: 26px;
+    font-size: 1.6em;
     overflow-wrap: anywhere;
   }
 
-  .gallery {
-    padding: 0 1.25em;
+  .contents {
+    width: auto;
+    margin: 0 1em 3em;
+    padding: 0;
   }
 
-  .contents,
   .list {
-    margin: 0 1.25em 2em;
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    margin: 1.5em 1em 3em;
+    gap: 2em 4vw;
+  }
+
+  .list a.cell {
+    height: 120px;
+  }
+
+  .cell img {
+    max-height: 120px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightbox,
+  .lightbox::before {
+    --lightbox-open-duration: 0s;
+    --lightbox-close-duration: 0s;
+  }
+
+  .lightbox .lightbox-close,
+  .lightbox .lightbox-step,
+  .zoom-controls,
+  .lightbox-image.is-zoom-animating,
+  .item img {
+    transition: none;
   }
 }

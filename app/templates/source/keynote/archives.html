@@ -1,29 +1,33 @@
 <!DOCTYPE html>
 <html>
   {{> head}}
-  <body>
-
+  <body data-view="archives">
 
     <div class="container">
 
       {{> header}}
 
+      <h1 class="visually-hidden">Archives</h1>
 
-      <div class="list">
+      {{> searchbar}}
 
-      <span class="pull-left">
-        All posts
-      </span>
-
-      <p>
-      {{#all_entries}}
-      <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
-      {{/all_entries}}
-    </p>
-
+      <div class="list" data-grid>
+        {{#posts}}
+        {{> cell}}
+        {{/posts}}
       </div>
 
-   </div>
-   {{> footer}}
+      {{#pagination}}
+      <div class="pagination">
+        {{#previous}}<a href="/archives?page={{previous}}">&larr; Previous</a>{{/previous}}
+        Page {{current}} of {{total}}
+        {{#next}}<a class="more" rel="next" href="/archives?page={{next}}">Next &rarr;</a>{{/next}}
+      </div>
+      {{/pagination}}
+
+    </div>
+
+    {{> lightbox}}
+    {{> footer}}
   </body>
 </html>

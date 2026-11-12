@@ -36,7 +36,7 @@ const isExportSizeLimitError = (err) => {
   );
 };
 
-const ensurePlaceholder = async (blogID, path) => {
+const ensurePlaceholder = async (blogID, path, flag) => {
   // The caller (sync.js) records the remote modifiedTime in the client's
   // own database once this resolves, so Blot knows not to re-fetch this
   // placeholder every sync. We no longer need the local file's mtime to
@@ -50,7 +50,13 @@ const ensurePlaceholder = async (blogID, path) => {
   if (stat && stat.isDirectory) {
     throw new Error("Cannot make a placeholder over a directory: " + path);
   }
-  if (!stat) await folder.write(blogID, path, "");
+  if (!stat) return folder.writePlaceholder(blogID, path, flag);
+
+  // An empty file written before placeholders were flagged: flag it, so it
+  // isn't taken for a file which really is empty. A file with bytes (an
+  // earlier export of a Doc which has since grown too large) is kept.
+  if (stat.size === 0 && !stat.placeholder)
+    await folder.setFlags(blogID, path, "sync", [flag]);
 };
 
 // storage/folder's stat of a file in the blog's folder, or null if there is
@@ -293,7 +299,7 @@ module.exports = async (
       }
     }
 
-    await ensurePlaceholder(blogID, path);
+    await ensurePlaceholder(blogID, path, { code: "SYNC_EXPORT_TOO_LARGE" });
     debug("   created empty file at:", colors.green(path));
     return "placeholder";
   };
@@ -342,7 +348,10 @@ module.exports = async (
       mimeType.startsWith("application/vnd.google-apps.") &&
       mimeType !== "application/vnd.google-apps.document"
     ) {
-      await ensurePlaceholder(blogID, path);
+      await ensurePlaceholder(blogID, path, {
+        code: "SYNC_UNSUPPORTED",
+        kind: mimeType,
+      });
       debug(
         "SKIP download of file because it is a Google App file type",
         mimeType

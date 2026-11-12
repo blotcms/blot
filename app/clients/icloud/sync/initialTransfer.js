@@ -40,7 +40,6 @@ module.exports = async function initialTransfer(blogID, options = {}) {
     folder.status("Transferring files to iCloud");
     await syncToiCloud(blogID, folder.status, folder.update, {
       skipDeletions: true,
-      skipEmptyFiles: true,
     });
 
     // we run the sync again to verify the transfer succeeded
@@ -52,7 +51,6 @@ module.exports = async function initialTransfer(blogID, options = {}) {
         await syncToiCloud(blogID, folder.status, folder.update, {
           skipDeletions: true,
           abortOnError: true,
-          skipEmptyFiles: true,
         });
         break;
       } catch (error) {

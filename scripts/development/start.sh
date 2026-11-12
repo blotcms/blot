@@ -127,7 +127,8 @@ docker builder prune -f --filter until=168h >/dev/null 2>&1 || true
 # minutes the first time; after that the build is cached. image.sh passes the
 # versions in config/versions.env as build args.
 echo "[start] Building the OpenResty runtime image"
-(cd "$DIR" && bash proxy/build/image.sh blot-proxy-runtime -q --target runtime) >/dev/null
+# Shows its progress: a first build compiles OpenResty, which takes a while
+(cd "$DIR" && bash proxy/build/image.sh blot-proxy-runtime --target runtime)
 
 # Agentation's hooks for the proxy; empty until it fills them
 mkdir -p "$DIR/scripts/development/agentation/generated/openresty" \

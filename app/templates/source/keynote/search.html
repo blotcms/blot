@@ -1,45 +1,29 @@
 <!DOCTYPE html>
 <html>
   {{> head}}
-  <body>
+  <body data-view="search">
 
     <div class="container">
 
       {{> header}}
 
-      <div class="list">
+      {{> searchbar}}
 
-      <span class="pull-left">
-        Search
-      </span>
-
-      <form>
-        <input placeholder="Search for an entry..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" /><input type="submit" value="Go"/>
-      </form>
-
-
-      <br>
-
-
-      <br>
-
-
-
-        {{#query}}
-          {{^entries}}
-          <p>Sorry, no results for “{{query}}”</p>
-          {{/entries}}
-        {{/query}}
-
+      <div class="list" data-grid>
         {{#entries}}
-          <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
+        {{> cell}}
         {{/entries}}
-
       </div>
 
-
+      {{#query}}
+      {{^entries}}
+      <p class="no-results">Sorry, no results for “{{query}}”</p>
+      {{/entries}}
+      {{/query}}
 
     </div>
+
+    {{> lightbox}}
     {{> footer}}
   </body>
 </html>

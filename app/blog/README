@@ -227,7 +227,7 @@ Global static directories served with a one-year `Cache-Control` header (from `l
 - `/plugins` — Plugin static assets.
 - `/syntax-highlighter` — Syntax highlighting assets.
 
-Additional global files: `/html2canvas.min.js`, `/layout.css`.
+Additional global file: `/layout.css`.
 
 Blog-specific static paths served from the storage bucket (`storage/assets`, key `{blogID}/{path}`):
 - `/_assets` — Processed entry assets.
@@ -266,7 +266,6 @@ The `static/` directory contains global assets served to all blogs under paths s
 
 - `static/fonts/` — Web font files (eot, otf, ttf, woff) organized by font family. `index.js` and `build.js` are tooling for listing and regenerating font metadata.
 - `static/syntax-highlighter/` — Syntax highlighting assets.
-- `static/html2canvas.min.js` — Client-side HTML-to-canvas library served at `/html2canvas.min.js`.
 
 ## Dependencies
 

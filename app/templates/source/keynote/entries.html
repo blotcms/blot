@@ -1,17 +1,21 @@
 <!DOCTYPE html>
 <html>
   {{> head}}
-  <body>
+  <body data-view="home">
     {{> header}}
 
-    <div class="gallery">
+    <main class="rail-viewport" aria-label="Images">
+      <div class="rail-layer">
+        <ul class="rail" aria-label="Image rail">
+          {{#posts}}
+          {{> slide}}
+          {{/posts}}
+        </ul>
+      </div>
+      <p class="rail-empty">There are no images to show yet.</p>
+    </main>
 
-    {{#posts}}
-      {{> post}}
-    {{/posts}}
-
-    </div>
-
-   {{> footer}}
+    {{> lightbox}}
+    {{> footer}}
   </body>
 </html>
