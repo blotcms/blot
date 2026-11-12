@@ -19,6 +19,34 @@ describe("template engine", function () {
     );
   });
 
+  it("light_or_dark reads a template's background colour as dark", async function () {
+    await this.template(
+      {
+        "entries.html":
+          '<html data-scheme="{{#light_or_dark}}{{background_color}}{{/light_or_dark}}">',
+      },
+      { locals: { background_color: "#111111" } }
+    );
+
+    const res = await this.get(`/`);
+
+    expect((await res.text()).trim()).toEqual('<html data-scheme="dark">');
+  });
+
+  it("light_or_dark reads a template's background colour as light", async function () {
+    await this.template(
+      {
+        "style.css":
+          "html { color-scheme: {{#light_or_dark}}{{background_color}}{{/light_or_dark}}; }",
+      },
+      { locals: { background_color: "#fafafa" } }
+    );
+
+    const res = await this.get(`/style.css`);
+
+    expect((await res.text()).trim()).toEqual("html { color-scheme: light; }");
+  });
+
   it("renders a list of posts with a given tag", async function () {
     await this.write({ path: "/[Foo]/first.txt", content: "Foo" });
     await this.write({ path: "/[Foo]/second.txt", content: "Bar" });
