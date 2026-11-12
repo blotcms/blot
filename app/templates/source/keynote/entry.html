@@ -5,7 +5,7 @@
 
     {{> header}}
 
-    <main class="rail-viewport" aria-label="Images" data-page="{{pagination.current}}" data-total="{{pagination.total}}">
+    <main class="rail-viewport" aria-label="Images" data-page="{{pagination.current}}" data-total="{{pagination.total}}" data-entries="{{#pagination}}{{total_entries}}{{/pagination}}{{^pagination}}{{total_posts}}{{/pagination}}">
       <div class="rail-layer">
         <ul class="rail" aria-label="Image rail">
           {{#posts}}

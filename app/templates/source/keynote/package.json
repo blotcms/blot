@@ -43,8 +43,8 @@
   "views": {
     "public": {
       "partials": {
-        "title": "Index of {{{path}}}",
-        "description": "All the files and folders inside {{{path}}}"
+        "title": "Index of {{path}}",
+        "description": "All the files and folders inside {{path}}"
       }
     },
     "archives.html": {
@@ -53,8 +53,8 @@
         "page_size": 100
       },
       "partials": {
-        "title": "Archives - {{{title}}}",
-        "description": "All the entries posted on {{{title}}}"
+        "title": "Archives - {{title}}",
+        "description": "All the entries posted on {{title}}"
       }
     },
     "tagged.html": {
@@ -62,32 +62,32 @@
         "page_size": 100
       },
       "partials": {
-        "title": "{{tag}} - {{{title}}}",
-        "description": "All of the entries posted on {{{title}}} tagged {{tag}}"
+        "title": "{{tag}} - {{title}}",
+        "description": "All of the entries posted on {{title}} tagged {{tag}}"
       }
     },
     "entries.html": {
       "partials": {
-        "title": "{{{title}}}",
-        "description": "The latest entries posted on {{{title}}}"
+        "title": "{{title}}",
+        "description": "The latest entries posted on {{title}}"
       }
     },
     "error.html": {
       "partials": {
-        "title": "{{{error.title}}} - {{{title}}}",
-        "description": "Error on {{{title}}}"
+        "title": "{{error.title}} - {{title}}",
+        "description": "Error on {{title}}"
       }
     },
     "entry.html": {
       "partials": {
-        "title": "{{{entry.title}}} - {{{title}}}",
-        "description": "{{{entry.summary}}}"
+        "title": "{{entry.title}} - {{title}}",
+        "description": "{{entry.summary}}"
       }
     },
     "search.html": {
       "partials": {
-        "title": "Search - {{{title}}}",
-        "description": "Search all the entries posted on {{{title}}}"
+        "title": "Search - {{title}}",
+        "description": "Search all the entries posted on {{title}}"
       }
     }
   }

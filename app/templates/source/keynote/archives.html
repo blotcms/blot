@@ -11,7 +11,7 @@
 
       {{> tag_filters}}
 
-      <div class="list" data-grid>
+      <div class="list" data-grid data-page="{{pagination.current}}" data-page-size="{{pagination.page_size}}" data-entries="{{pagination.total_entries}}">
         {{#posts}}
         {{> cell}}
         {{/posts}}

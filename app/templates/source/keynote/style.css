@@ -371,6 +371,11 @@ body[data-view="entry"] .rail-viewport {
   display: block;
 }
 
+/* Script is still looking through later pages for images. */
+.rail-viewport.is-loading .rail-empty {
+  display: none !important;
+}
+
 /* An image link is exactly the picture: as wide as the slide, or narrower when a tall
    image would otherwise exceed the slide height. --w and --h are the image's size. */
 .item,
@@ -542,6 +547,13 @@ html:not(.js) .item img[data-src] {
   max-width: 100%;
   margin: 0 0 1em;
   object-fit: contain;
+}
+
+/* Links in a post's text are underlined, since their colour can match the text's. */
+.contents .entry a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
 }
 
 .contents .entry h1:first-of-type {

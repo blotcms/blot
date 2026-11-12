@@ -14,6 +14,7 @@
   let closeURL = null;
   let closeDepth = 0;
   let followingCollection = false; // this entry page was reached through a listing's order
+  let collectionPlace = null; // the entry's place in that listing, for the viewer's counter
   let entryLinksChanged = () => {};
 
   function pathOf(url) {
@@ -66,11 +67,21 @@
       const link = doc.querySelector(selector);
       return link?.getAttribute("href") ? link.href : null;
     };
+    const next = pagination("a.collection-next");
+    const previous = pagination("a.collection-previous");
+    // Where the listing starts among all its posts, and how many there are, from the grid's
+    // pagination. A listing with no pages (search) is the whole collection.
+    const grid = doc.querySelector("[data-grid]");
+    const pageNumber = Number(grid?.dataset.page) || 1;
+    const pageSize = Number(grid?.dataset.pageSize) || 0;
+    const total = Number(grid?.dataset.entries) || (!next && !previous ? entries.length : 0);
     return {
       url: url.split("#")[0],
       entries,
-      next: pagination("a.collection-next"),
-      previous: pagination("a.collection-previous"),
+      next,
+      previous,
+      offset: pageSize ? (pageNumber - 1) * pageSize : 0,
+      total,
     };
   }
 
@@ -159,6 +170,8 @@
   function followCollection(state, page, index) {
     followingCollection = true;
     const listing = state.listings[page];
+    collectionPlace = listing.total ? { index: (listing.offset || 0) + index + 1, total: listing.total } : null;
+    entryLinksChanged();
     closeURL = listing.url;
     for (const link of document.querySelectorAll("a.entry-close")) link.href = closeURL;
 
@@ -324,17 +337,27 @@
       width,
       height,
       fullWidth: Number(original?.getAttribute("width")) || width,
+      // The post's place among all posts, counting up from the oldest.
+      index: Number(link.dataset.index) || 0,
     };
   }
 
+  // Remembers the last few full-size images decoded, so stepping back and forth is instant
+  // without holding on to every image seen.
+  const LOADED_LIMIT = 6;
   const loadedImages = new Map();
   function preloadImage(url) {
-    if (!loadedImages.has(url)) {
+    let ready = loadedImages.get(url);
+    if (ready) {
+      loadedImages.delete(url);
+    } else {
       const image = new Image();
       image.src = url;
-      loadedImages.set(url, image.decode().then(() => true, () => false));
+      ready = image.decode().then(() => true, () => false);
     }
-    return loadedImages.get(url);
+    loadedImages.set(url, ready);
+    while (loadedImages.size > LOADED_LIMIT) loadedImages.delete(loadedImages.keys().next().value);
+    return ready;
   }
 
   // ---- The viewer: one lightbox for whichever collection is on the page ----
@@ -370,6 +393,7 @@
     if (!lightbox.open || !stepsByEntryLinks(entry)) return;
     previousButton.disabled = !entryLink(-1)?.href;
     nextButton.disabled = !entryLink(1)?.href;
+    updateCaption();
   };
 
   function setActive(index) {
@@ -421,12 +445,14 @@
     setTimeout(dismiss, 4000);
   }
 
-  // The title, then its place in the collection as 05/52 once the whole collection is known.
+  // The title, then its place among the posts as 05/52, worked out from each post's index and
+  // the page's post count, so nothing extra has to load.
   function updateCaption() {
     const entry = controller?.entries()[activeIndex];
     if (!entry || !captionTitle) return;
     captionTitle.textContent = entry.title;
-    const place = controller.position?.(activeIndex);
+    // Reached through a listing, the arrows follow it, and so does the counter.
+    const place = stepsByEntryLinks(entry) && collectionPlace ? collectionPlace : controller.position?.(activeIndex);
     const pad = (number) => String(number).padStart(2, "0");
     captionIndex.textContent = place ? `${pad(place.index)}/${pad(place.total)}` : "";
   }
@@ -538,10 +564,6 @@
     resetZoom();
     setActive(index);
     showHint();
-    // The counter needs the whole collection, so load the rest of it in the background.
-    controller.loadAll?.().then(() => {
-      if (lightbox.open) updateCaption();
-    }, () => {});
     const source = animate ? controller.sourceImage(activeIndex) : null;
     // An image still loading opens at once, as its placeholder.
     if (source && isLoaded(source)) await lightboxImage.decode().catch(() => {});
@@ -1198,8 +1220,12 @@
   function createRail() {
     const viewport = document.querySelector(".rail-viewport");
     const list = viewport?.querySelector(".rail");
-    const firstSlides = list ? [...list.querySelectorAll(".slide")] : [];
-    if (!firstSlides.length) return null;
+    if (!list) return null;
+    const firstSlides = [...list.querySelectorAll(".slide")];
+    const current = document.querySelector(".current-entry .item[data-preview]");
+    // With no images on this page there may still be some on later ones, or the entry page's
+    // own image: start empty and load pages until there are slides.
+    if (!firstSlides.length && !current && !(Number(viewport.dataset.total) > 1)) return null;
 
     const DRIFT_SPEED = 8; // px per second
     const drift = {{#drift}}true{{/drift}}{{^drift}}false{{/drift}}; // the "drift" setting
@@ -1207,6 +1233,7 @@
     const FRICTION = 4.2;
     const MAX_VELOCITY = 1100;
     const RETRY_DELAY = 5000; // ms before a page that failed to load is tried again
+    const EMPTY_PAGE_LIMIT = 5; // pages to look through for an image before giving up
 
     const startPage = Number(viewport.dataset.page) || 1;
     let total = Number(viewport.dataset.total) || startPage;
@@ -1216,6 +1243,7 @@
     let loadingPage = null;
     let retryAt = 0;
     const complete = () => pagesLoaded >= total;
+    const totalEntries = Number(viewport.dataset.entries) || 0;
     const wrapPage = (page) => mod(page - 1, total) + 1;
 
     const makeSlot = (slot, clone = false, page = startPage) => ({
@@ -1236,10 +1264,11 @@
     const slots = firstSlides.map((slot) => makeSlot(slot));
     const entries = slots.map((item) => readEntry(item.link));
     let seam = slots.length;
+    const searching = () => !slots.length && !complete() && pagesLoaded < EMPTY_PAGE_LIMIT;
+    const showLoading = () => viewport.classList.toggle("is-loading", searching());
 
     // The entry page also names the entry being shown, which may not be on the rail yet.
     let extra = null;
-    const current = document.querySelector(".current-entry .item[data-preview]");
     let currentIndex = -1;
     if (current) {
       const entry = readEntry(current);
@@ -1355,6 +1384,7 @@
     function fill() {
       if (!complete() || !step) return;
       const originals = slots.filter((item) => !item.clone);
+      if (!originals.length) return;
       const needed = Math.ceil((viewWidth + 4 * step) / step);
       let guard = 0;
       while ((slots.length < needed || slots.length % originals.length !== 0) && guard < 400) {
@@ -1367,7 +1397,7 @@
     function measure() {
       const styles = getComputedStyle(list);
       const centerIndex = step ? (x + viewWidth / 2 - padding - itemWidth / 2) / step : null;
-      itemWidth = slots[0].slot.offsetWidth;
+      itemWidth = slots[0]?.slot.offsetWidth ?? probeWidth();
       step = itemWidth + (parseFloat(styles.columnGap) || 0);
       padding = parseFloat(styles.paddingLeft) || 0;
       viewWidth = viewport.clientWidth;
@@ -1380,6 +1410,17 @@
       schedule();
     }
 
+    // An empty rail measures a stand-in slide.
+    function probeWidth() {
+      const probe = document.createElement("li");
+      probe.className = "slide";
+      probe.setAttribute("aria-hidden", "true");
+      list.append(probe);
+      const width = probe.offsetWidth;
+      probe.remove();
+      return width;
+    }
+
     function centerOffset(index) {
       return index * step + padding + itemWidth / 2 - viewWidth / 2;
     }
@@ -1389,7 +1430,13 @@
     // Load the next page on whichever side the seam is near: within a screen and a half of
     // the middle of the view.
     function maybeLoad() {
-      if (complete() || loadingPage || !cycle || performance.now() < retryAt) return;
+      showLoading();
+      if (complete() || loadingPage || performance.now() < retryAt) return;
+      if (!slots.length) {
+        if (searching()) void loadPage("forward");
+        return;
+      }
+      if (!cycle) return;
       const reach = viewWidth * 1.5 + step * 2;
       const seamX = seam * step + padding - (step - itemWidth) / 2;
       const distance = mod(seamX - (x + viewWidth / 2) + cycle / 2, cycle) - cycle / 2;
@@ -1413,6 +1460,8 @@
           insertSlides([...doc.querySelectorAll(".rail .slide")], direction, page);
         } catch (error) {
           retryAt = performance.now() + RETRY_DELAY;
+          // Try again then even if nothing moves the rail in the meantime.
+          setTimeout(maybeLoad, RETRY_DELAY);
         }
       })().finally(() => {
         loadingPage = null;
@@ -1480,6 +1529,7 @@
       if (anchor) x = mod(anchor.index * step - (anchorLeft - padding), cycle);
       entriesInserted(at, items.length, moved);
       render();
+      schedule();
     }
 
     // The slot showing an entry that is closest to being on screen.
@@ -1659,20 +1709,11 @@
         await loadPage(direction > 0 ? "forward" : "backward");
         return pagesLoaded > before;
       },
-      async loadAll() {
-        while (!complete()) {
-          const before = pagesLoaded;
-          await loadPage("forward");
-          if (pagesLoaded === before) return;
-        }
-      },
-      // An entry's place among all the images, newest first, once every page is in.
+      // An entry's place among all posts, newest first.
       position(index) {
-        if (!complete() || entries[index]?.detached) return null;
-        const originals = slots.filter((item) => !item.clone);
-        const firstPage = Math.min(...originals.map((item) => item.page));
-        const first = originals.findIndex((item) => item.page === firstPage);
-        return { index: mod(index - first, originals.length) + 1, total: originals.length };
+        const entry = entries[index];
+        if (!totalEntries || !entry?.index) return null;
+        return { index: totalEntries - entry.index + 1, total: totalEntries };
       },
       // Load ahead while the viewer is within a few entries of the seam.
       prefetch(index) {
@@ -1753,7 +1794,8 @@
           refresh();
           observeSentinel();
         } catch (error) {
-          /* the link stays, so the next scroll tries again */
+          // The link stays; look again shortly, since the sentinel may already be in view.
+          setTimeout(observeSentinel, 5000);
         }
         pagination?.classList.remove("is-loading-more");
         loading = null;
@@ -1793,14 +1835,16 @@
       resume() {},
       hasMore: () => Boolean(more),
       loadMore,
-      async loadAll() {
-        while (more) {
-          const before = more.href;
-          await loadMore();
-          if (more && more.href === before) return;
-        }
+      // An image's place among all the listing's posts (cards included), from the grid's
+      // pagination; without pages, the listing is everything.
+      position(index) {
+        const all = [...list.querySelectorAll("a.cell")];
+        const at = all.indexOf(cache[index]?.link);
+        const total = Number(list.dataset.entries) || (more ? 0 : all.length);
+        if (at < 0 || !total) return null;
+        const offset = (Number(list.dataset.page) - 1 || 0) * (Number(list.dataset.pageSize) || 0);
+        return { index: offset + at + 1, total };
       },
-      position: (index) => (more ? null : { index: index + 1, total: cache.length }),
       settle(index) {
         const link = cache[index]?.link;
         if (!link) return;
@@ -1815,6 +1859,9 @@
 
   if (view === "home" || (view === "entry" && root.classList.contains("rail-mode"))) controller = createRail();
   else if (view !== "entry") controller = createGrid();
+
+  // No rail could be made, so let the entry page show its text instead.
+  if (view === "entry" && !controller) root.classList.remove("rail-mode");
 
   if (view === "entry" && controller) {
     // The entry's own page: the viewer starts open, and closing returns to the rail.
