@@ -186,9 +186,15 @@ async function render($, { blogID, path }) {
 
         cleanupWikilinkMarker($node, { removeClass: isMedia });
 
-        // A missing embed's image is reported by folderAssets, with its path
+        // folderAssets only checks a source which starts with "/", so a
+        // missing embed is reported here too; merge() keeps one of each
         if (isLink)
           report({ code: "BROKEN_WIKILINK", targets: [strippedHref] });
+        else
+          report({
+            code: node.name === "img" ? "BROKEN_IMAGE" : "BROKEN_FILE_LINK",
+            targets: [strippedHref],
+          });
 
         debug("Wikilink target not found for", href);
         return;

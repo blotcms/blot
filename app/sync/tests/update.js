@@ -333,7 +333,16 @@ describe("update", function () {
           .sort();
       };
 
-      expect(codes((await folder.stat(blogID, entryPath)).flags)).toEqual([
+      // Only the references: a missing image also gets a thumbnail flag
+      const references = async function () {
+        return codes(
+          ((await folder.stat(blogID, entryPath)).flags || []).filter(
+            (flag) => flag.code.indexOf("BROKEN_") === 0
+          )
+        );
+      };
+
+      expect(await references()).toEqual([
         "BROKEN_FILE_LINK /files/missing.pdf",
         "BROKEN_IMAGE /missing.png",
         "BROKEN_WIKILINK No Such Post",
@@ -348,10 +357,26 @@ describe("update", function () {
       );
       await update(syncFolder, "/missing.png");
 
-      expect(codes((await folder.stat(blogID, entryPath)).flags)).toEqual([
+      expect(await references()).toEqual([
         "BROKEN_FILE_LINK /files/missing.pdf",
         "BROKEN_WIKILINK No Such Post",
       ]);
+    });
+  });
+
+  it("flags an image embedded with a wikilink which is not in the folder", async function () {
+    const entryPath = "/embed.md";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, entryPath, "![[pic.png]]");
+      await update(syncFolder, entryPath);
+
+      const flags = (await folder.stat(blogID, entryPath)).flags || [];
+      const image = flags.find((flag) => flag.code === "BROKEN_IMAGE");
+
+      expect(image).toBeTruthy();
+      expect(image.targets.join(",")).toContain("pic.png");
     });
   });
 

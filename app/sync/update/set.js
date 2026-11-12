@@ -16,7 +16,7 @@ var IgnoredFiles = require("models/ignoredFiles");
 var folder = require("storage/folder");
 var postSourceSize = require("build/converters/post-source-size");
 var buildFlags = require("build/flags");
-var FileFlags = require("models/file/flags");
+var storeBuildFlags = require("./storeBuildFlags");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
 var isRedisUnavailableError =
@@ -53,12 +53,6 @@ async function setFlags(blogID, sourcePath, source, list) {
   try {
     await folder.setFlags(blogID, sourcePath, source, list);
   } catch (err) {}
-}
-
-function fromSource(found, source) {
-  return (found || []).filter(function (flag) {
-    return FileFlags.sourceOf(flag.code) === source;
-  });
 }
 
 // Flags a post source over its size limit (models/file/flags.js), with its
@@ -249,19 +243,6 @@ async function buildAndSet(blog, path, multiInfo, state) {
     })
   );
 
-  // One source at a time: each setFlags reads the file's whole record and
-  // writes it back, so two at once would lose one's flags
-  async function setSources(sourcePath, own) {
-    for (var source of ["build", "assets", "references"]) {
-      await setFlags(
-        blog.id,
-        sourcePath,
-        source,
-        own ? fromSource(found, source) : []
-      );
-    }
-  }
-
   // Likewise the build's flags on each of them (models/file/flags.js). A
   // single file gets what this build found instead. A folder post's flags
   // have no one file to go on, so they are dropped for now.
@@ -269,7 +250,7 @@ async function buildAndSet(blog, path, multiInfo, state) {
     [entry.path].concat(sourcePaths).map(function (sourcePath) {
       var own = !multiInfo && sourcePath === entry.path;
 
-      return setSources(sourcePath, own);
+      return storeBuildFlags(blog.id, sourcePath, own ? found : []);
     })
   );
 

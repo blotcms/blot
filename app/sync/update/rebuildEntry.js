@@ -1,5 +1,7 @@
 var Entry = require("models/entry");
 var build = require("build");
+var buildFlags = require("build/flags");
+var storeBuildFlags = require("./storeBuildFlags");
 var folderPostSource = require("./folderPostSourceFolder");
 
 // Rebuilds an existing entry from its source file and stores the result,
@@ -15,7 +17,14 @@ module.exports = async function rebuildEntry(blog, entry) {
   var folderSource = folderPostSource(entry);
   var buildPath = folderSource || entry.path;
 
-  var updated = await build(blog, buildPath);
+  var { result: updated, flags } = await buildFlags.collect(() =>
+    build(blog, buildPath)
+  );
+
+  // What the build found replaces the file's build flags, so a rebuild for
+  // an image which has arrived clears its BROKEN_IMAGE. A folder post's
+  // flags have no one file to go on (see set.js).
+  if (!folderSource) await storeBuildFlags(blog.id, entry.path, flags);
 
   if (folderSource && updated.metadata && updated.metadata._sourcePaths) {
     delete updated.metadata._sourcePaths;
