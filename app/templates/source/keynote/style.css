@@ -627,7 +627,7 @@ html:not(.js) .item img[data-src] {
 .cell-image {
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   height: 180px;
 }
 
@@ -701,6 +701,7 @@ html:not(.js) .item img[data-src] {
   max-height: 180px;
   aspect-ratio: var(--w, 1) / var(--h, 1);
   object-fit: contain;
+  object-position: left center;
   -webkit-user-drag: none;
 }
 
