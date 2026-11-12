@@ -1,6 +1,10 @@
 describe("scripts/storage/flag-placeholders", function () {
   var folder = require("storage/folder");
-  var { unflaggedEmpty } = require("../flag-placeholders");
+  var {
+    unflaggedEmpty,
+    incompleteReason,
+    SKIPPED,
+  } = require("../flag-placeholders");
 
   global.test.blog();
 
@@ -18,5 +22,15 @@ describe("scripts/storage/flag-placeholders", function () {
       "/empty.txt",
       "/posts/old-placeholder.pdf",
     ]);
+  });
+
+  it("only trusts a resync which revisited every file", function () {
+    expect(incompleteReason({ failed: 0 })).toBeNull();
+    expect(
+      incompleteReason({ failed: 1, firstError: "macserver down" })
+    ).toEqual("1 file failed (macserver down)");
+    expect(incompleteReason(false)).toContain("did not finish");
+    expect(incompleteReason(undefined)).toContain("did not finish");
+    expect(incompleteReason(SKIPPED)).toContain("setup");
   });
 });

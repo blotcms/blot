@@ -25,6 +25,9 @@ const establishSyncLock = require("sync/establishSyncLock");
 
 const CLIENTS = ["dropbox", "google-drive", "icloud"];
 
+// What resync resolves to for an iCloud blog whose setup isn't complete
+const SKIPPED = "skipped";
+
 function usage(message) {
   if (message) console.error(message + "\n");
 
@@ -88,20 +91,38 @@ async function resync(blog, publish, update) {
   if (blog.client === "icloud") {
     const account = await require("clients/icloud/database").get(blog.id);
 
-    if (!account || account.setupComplete !== true) return;
+    if (!account || account.setupComplete !== true) return SKIPPED;
 
     return require("clients/icloud/sync/fromiCloud")(blog.id, publish, update);
   }
 }
 
+// Resolves to the resync's summary, SKIPPED, or a falsy value if the resync
+// did not finish walking the folder
 async function refetch(blog) {
   const { folder, done } = await establishSyncLock(blog.id);
 
   try {
-    await resync(blog, folder.status, folder.update);
+    return await resync(blog, folder.status, folder.update);
   } finally {
     await done();
   }
+}
+
+// Why a resync's result doesn't show every file was revisited, or null
+function incompleteReason(summary) {
+  if (summary === SKIPPED) return "setup is not complete";
+  if (!summary) return "the resync did not finish walking the folder";
+  if (summary.failed > 0) {
+    return (
+      summary.failed +
+      " file" +
+      (summary.failed === 1 ? "" : "s") +
+      " failed" +
+      (summary.firstError ? " (" + summary.firstError + ")" : "")
+    );
+  }
+  return null;
 }
 
 async function main() {
@@ -137,8 +158,10 @@ async function main() {
       continue;
     }
 
+    let summary;
+
     try {
-      await refetch(blog);
+      summary = await refetch(blog);
     } catch (err) {
       if (err && err.code === "ELOCKED") skipped.push(blogID);
       else failed.push(blogID + " " + ((err && err.message) || err));
@@ -146,6 +169,16 @@ async function main() {
     }
 
     const after = await unflaggedEmpty(blogID);
+    const reason = incompleteReason(summary);
+
+    // Only a resync which revisited every file shows that what is left
+    // really is empty. Otherwise the blog is listed to retry.
+    if (reason) {
+      failed.push(
+        blogID + " " + reason + ", " + after.length + " unflagged empty left"
+      );
+      continue;
+    }
 
     totals.after += after.length;
 
@@ -168,14 +201,17 @@ async function main() {
   );
 
   if (skipped.length) console.log("Skipped, locked: " + skipped.join(" "));
-  if (failed.length) console.log("Failed:\n" + failed.join("\n"));
+  if (failed.length) {
+    process.exitCode = 1;
+    console.log("Incomplete, retry with --blog:\n" + failed.join("\n"));
+  }
   if (!options.apply) console.log("Dry run: pass --apply to resync them");
 }
 
 if (require.main === module) {
   main().then(
     function () {
-      process.exit(0);
+      process.exit(process.exitCode || 0);
     },
     function (err) {
       console.error(err);
@@ -184,4 +220,4 @@ if (require.main === module) {
   );
 }
 
-module.exports = { unflaggedEmpty };
+module.exports = { unflaggedEmpty, incompleteReason, SKIPPED };
