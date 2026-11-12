@@ -9,6 +9,15 @@ var { report } = require("build/flags");
 // fresh jail, ~70ms before any work), so two at a time overlap their start-up.
 var CONCURRENCY = 2;
 
+// What went wrong fetching a remote image. The downloader's error for an
+// HTTP failure is just the status, e.g. "404".
+function describeDownloadError(err) {
+  var message = String((err && err.message) || "");
+
+  if (/^\d{3}$/.test(message)) return "HTTP " + message;
+  return message || "could not be downloaded";
+}
+
 async function render($, { blogID }) {
   var cache = new Transformer(blogID, "image-cache");
 
@@ -77,11 +86,12 @@ async function render($, { blogID }) {
         report({ code: "IMAGE_OPTIMIZE_FAILED", targets: [src] });
       } else if (
         isURL(src) &&
-        /could not be downloaded/.test(err && err.message)
+        err &&
+        (err.fromDownload || /could not be downloaded/.test(err.message))
       ) {
         report({
           code: "REMOTE_IMAGE_FAILED",
-          targets: [{ url: src, error: "could not be downloaded" }],
+          targets: [{ url: src, error: describeDownloadError(err) }],
         });
       }
     }

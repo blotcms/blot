@@ -287,6 +287,32 @@ describe("update", function () {
     });
   });
 
+  it("keeps the flags of every source a build reports", async function () {
+    const entryPath = "/two-sources.md";
+    const blogID = this.blog.id;
+    const buildFlags = require("build/flags");
+    const collect = buildFlags.collect;
+
+    // The build's own DATE_INVALID, and an assets flag beside it
+    spyOn(buildFlags, "collect").and.callFake(async function (fn) {
+      const collected = await collect(fn);
+      collected.flags = collected.flags.concat([
+        { code: "EMBED_FAILED", targets: ["https://vimeo.com/1"] },
+      ]);
+      return collected;
+    });
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, entryPath, "Date: banana\n\nHello");
+      await update(syncFolder, entryPath);
+
+      const codes = (await folder.stat(blogID, entryPath)).flags
+        .map((flag) => flag.code)
+        .sort();
+      expect(codes).toEqual(["DATE_INVALID", "EMBED_FAILED"]);
+    });
+  });
+
   it("drops the entry of a file which is gone", async function () {
     const entryPath = "/gone.txt";
     const blogID = this.blog.id;

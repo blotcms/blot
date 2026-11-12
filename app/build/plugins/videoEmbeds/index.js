@@ -1,4 +1,5 @@
 var url = require("url");
+var querystring = require("querystring");
 var eachEl = require("build/plugins/eachEl");
 var { report } = require("build/flags");
 
@@ -9,14 +10,23 @@ var Players = {
     // /.bandcamp.com$/ also matched notbandcamp.com / evil-bandcamp.com.
     // bandcamp.js re-checks this before it fetches anything.
     regex: /^([a-z0-9-]+\.)*bandcamp\.com$/i,
+    // An album or track, not an artist's page
+    embeddable: (parsed) => /\/(album|track)/i.test(parsed.pathname || ""),
   },
   youtube: {
     module: require("./youtube"),
     regex: /((^|^m.|^www.)youtube.com$)|(^youtu.be$)/m,
+    // A video, not a channel, playlist or the home page
+    embeddable: (parsed) =>
+      parsed.hostname === "youtu.be"
+        ? (parsed.pathname || "").length > 1
+        : !!querystring.parse(parsed.query || "").v,
   },
   vimeo: {
     module: require("./vimeo"),
     regex: /(^|^www.)vimeo.com$/m,
+    // A video's numeric id, not a person's or channel's page
+    embeddable: (parsed) => /\/\d+(\/|$)/.test(parsed.pathname || ""),
   },
 };
 
@@ -30,13 +40,15 @@ async function render($) {
   await eachEl($, "a", async function (el) {
     var href = $(el).attr("href");
     var hostname;
+    var parsed;
 
     // Only replace links where URL
     // matches link text exactly
     if (href !== $(el).text()) return;
 
     try {
-      hostname = url.parse(href).hostname;
+      parsed = url.parse(href);
+      hostname = parsed.hostname;
     } catch (e) {
       return;
     }
@@ -45,16 +57,16 @@ async function render($) {
 
     // See if we have a method for
     // retrieving a video from this host
-    var module;
+    var player;
 
     Object.values(Players).forEach((site) => {
       var test = hostname.match(site.regex);
       if (test != null && test.length > 0) {
-        module = site.module;
+        player = site;
       }
     });
 
-    if (!module) return;
+    if (!player) return;
 
     // fetchPlayer is a method unique to each
     // video streaming site which takes the URL
@@ -62,11 +74,13 @@ async function render($) {
     var template;
 
     try {
-      template = await module(href);
+      template = await player.module(href);
     } catch (err) {
       // The link stays in the post, so it still works; the flag says the
-      // video wasn't embedded
-      report({ code: "EMBED_FAILED", targets: [href] });
+      // video wasn't embedded. A link to a channel or an artist's page was
+      // never one to embed, so it is not flagged.
+      if (player.embeddable(parsed))
+        report({ code: "EMBED_FAILED", targets: [href] });
       return;
     }
 

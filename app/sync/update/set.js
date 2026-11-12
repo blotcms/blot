@@ -249,6 +249,19 @@ async function buildAndSet(blog, path, multiInfo, state) {
     })
   );
 
+  // One source at a time: each setFlags reads the file's whole record and
+  // writes it back, so two at once would lose one's flags
+  async function setSources(sourcePath, own) {
+    for (var source of ["build", "assets", "references"]) {
+      await setFlags(
+        blog.id,
+        sourcePath,
+        source,
+        own ? fromSource(found, source) : []
+      );
+    }
+  }
+
   // Likewise the build's flags on each of them (models/file/flags.js). A
   // single file gets what this build found instead. A folder post's flags
   // have no one file to go on, so they are dropped for now.
@@ -256,16 +269,7 @@ async function buildAndSet(blog, path, multiInfo, state) {
     [entry.path].concat(sourcePaths).map(function (sourcePath) {
       var own = !multiInfo && sourcePath === entry.path;
 
-      return Promise.all(
-        ["build", "assets", "references"].map(function (source) {
-          return setFlags(
-            blog.id,
-            sourcePath,
-            source,
-            own ? fromSource(found, source) : []
-          );
-        })
-      );
+      return setSources(sourcePath, own);
     })
   );
 

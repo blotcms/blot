@@ -79,4 +79,24 @@ describe("video-embed plugin", function () {
     await videoEmbed.render($, {});
     expect($("iframe").length).toEqual(4);
   });
+  it("flags a video it could not embed, but not a link to a channel or an artist", async function () {
+    const { collect } = require("build/flags");
+    const links = [
+      "https://www.youtube.com/@example",
+      "https://www.youtube.com/playlist?list=PL123",
+      "https://example.bandcamp.com/music",
+      "https://vimeo.com/someone",
+      "https://vimeo.com/12345",
+    ];
+    const $ = cheerio.load(
+      links.map((href) => `<a href="${href}">${href}</a>`).join("\n")
+    );
+
+    const { flags } = await collect(() => videoEmbed.render($, {}));
+
+    expect(flags).toEqual([
+      { code: "EMBED_FAILED", targets: ["https://vimeo.com/12345"] },
+    ]);
+    expect($("a").length).toEqual(links.length);
+  });
 });
