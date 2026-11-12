@@ -35,8 +35,8 @@
     "drift": true,
     "slide_size": 5,
     "slide_size_range": [1, 10],
-    "content_width": 800,
-    "content_width_range": [480, 1200],
+    "content_width": 600,
+    "content_width_range": [400, 1200],
     "spacing": 4,
     "spacing_range": [1, 8]
   },

@@ -92,8 +92,9 @@ h6 {
 }
 
 h1 {
-  font-size: clamp(1.5rem, 3vw, 2.25rem);
-  line-height: 1.15;
+  font-size: 1.25em;
+  font-weight: normal;
+  line-height: 1.25;
 }
 
 p,
@@ -525,10 +526,11 @@ html:not(.js) .item img[data-src] {
   min-height: 100vh;
 }
 
+/* Text pages start at the same left edge as the header. */
 .contents {
-  width: min(calc(100% - {{spacing}}em * 2), {{content_width}}px);
-  margin: 0 auto 4em;
-  padding: 0 0.5em;
+  width: min(calc(100% - var(--edge-x) * 2), {{content_width}}px);
+  margin: 3em var(--edge-x) 4em;
+  padding: 0;
   box-sizing: border-box;
 }
 
@@ -1382,8 +1384,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
   .contents {
     width: auto;
-    margin: 0 1em 3em;
-    padding: 0;
+    margin: 2em var(--edge-x) 3em;
   }
 
   .list-toolbar {

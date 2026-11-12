@@ -31,8 +31,9 @@
       // Native controls and scrollbars follow the page colour.
       var hex = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec("{{background_color}}");
       if (hex && 0.2126 * parseInt(hex[1], 16) + 0.7152 * parseInt(hex[2], 16) + 0.0722 * parseInt(hex[3], 16) < 128) root.style.colorScheme = "dark";
-      {{#entry}}{{#thumbnail.large.url}}// An entry with an image opens in the viewer, over the rail.
-      root.classList.add("rail-mode");{{/thumbnail.large.url}}{{/entry}}
+      {{#entry}}{{^page}}{{#thumbnail.large.url}}// A post with an image opens in the viewer, over the rail. Standalone pages
+      // (About and the like) always show as text, with the header.
+      root.classList.add("rail-mode");{{/thumbnail.large.url}}{{/page}}{{/entry}}
     })(document.documentElement);
   </script>
 
