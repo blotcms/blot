@@ -914,10 +914,7 @@ Extend ignore files feature (currently files starting with _ or folders starting
 - could ignore all '.jpg' say, or all 'index.html' files, etc.
 - Can we add a 'folder rules' section to create ignore globs, multi post globs, etc.
 arbritrary paths and keep clean URLS (no underscores). Sitewide .blotignore file?
-- does rebuild update ignored files list too?
 - handle new pathNormalizer behaviour
-- 'ignoredFilesKey'
-- add 'ignored ghosts' check to sync/fix
 - Add `Ignore: yes` metadata to trigger the ignored file behaviour
 
 Think about how to purge the old versions of files cached by bunny's permacache
