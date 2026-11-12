@@ -45,8 +45,9 @@ body {
   background: {{background_color}};
 }
 
+/* Native controls and scrollbars follow the page colour. */
 html {
-  color-scheme: light;
+  color-scheme: {{#light_or_dark}}{{background_color}}{{/light_or_dark}};
   /* Scrollbars take the page's own colours, with or without script. */
   scrollbar-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.3) {{background_color}};
 }
@@ -859,6 +860,29 @@ body[data-view="search"] .tag-navigation a.active {
 body[data-view="search"] .tag-navigation a.active:hover {
   color: {{text_color}};
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.26);
+}
+
+[data-scheme="light"] body[data-view="search"] .tag-navigation a.active {
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.07);
+}
+
+[data-scheme="light"] body[data-view="search"] .tag-navigation a.active:hover {
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
+}
+
+/* On a light page the same tint reads much darker, so the pills use a lighter one. */
+[data-scheme="light"] .tag-navigation a,
+[data-scheme="light"] .tag-toggle {
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.07);
+}
+
+[data-scheme="light"] .tag-navigation a:hover,
+[data-scheme="light"] .tag-toggle:hover {
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
+}
+
+[data-scheme="light"] .tag-navigation a.active {
+  background: {{text_color}};
 }
 
 .tag-navigation a:focus-visible {
