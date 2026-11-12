@@ -280,6 +280,21 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           identical = isGoogleAppFile
             ? isModifiedTimeCurrent
             : existsLocally?.size === size && isModifiedTimeCurrent;
+
+          // An empty local copy of a Google App file is a placeholder, and
+          // one written before placeholders were flagged goes through
+          // download() once more, which flags it (or exports the Doc, if it
+          // now can), so it isn't taken for a file which really is empty
+          if (
+            identical &&
+            isGoogleAppFile &&
+            existsLocally &&
+            !existsLocally.isDirectory &&
+            existsLocally.size === 0 &&
+            !(await folder.isPlaceholder(blogID, path))
+          ) {
+            identical = false;
+          }
         } else {
           // Drive's md5Checksum is the one Blot verified the file at this
           // path against, and the file is unchanged since: no download and
