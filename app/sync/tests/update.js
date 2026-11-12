@@ -255,6 +255,64 @@ describe("update", function () {
     });
   });
 
+  it("publishes a post whose front matter or date can't be read, and flags it", async function () {
+    const entryPath = "/flagged.md";
+    const blogID = this.blog.id;
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(
+        blogID,
+        entryPath,
+        "---\ntitle: [unclosed\n---\n\nHello"
+      );
+      await update(syncFolder, entryPath);
+
+      let flags = (await folder.stat(blogID, entryPath)).flags;
+      expect(flags.map((flag) => flag.code)).toEqual(["FRONT_MATTER_INVALID"]);
+      expect(typeof flags[0].error).toEqual("string");
+
+      const entry = await getEntry(blogID, entryPath);
+      expect(entry.html).toContain("unclosed");
+
+      await folder.write(blogID, entryPath, "Date: banana\n\nHello");
+      await update(syncFolder, entryPath);
+
+      flags = (await folder.stat(blogID, entryPath)).flags;
+      expect(flags).toEqual([{ code: "DATE_INVALID", value: "banana" }]);
+
+      await folder.write(blogID, entryPath, "Hello");
+      await update(syncFolder, entryPath);
+
+      expect((await folder.stat(blogID, entryPath)).flags).toBeUndefined();
+    });
+  });
+
+  it("keeps the flags of every source a build reports", async function () {
+    const entryPath = "/two-sources.md";
+    const blogID = this.blog.id;
+    const buildFlags = require("build/flags");
+    const collect = buildFlags.collect;
+
+    // The build's own DATE_INVALID, and an assets flag beside it
+    spyOn(buildFlags, "collect").and.callFake(async function (fn) {
+      const collected = await collect(fn);
+      collected.flags = collected.flags.concat([
+        { code: "EMBED_FAILED", targets: ["https://vimeo.com/1"] },
+      ]);
+      return collected;
+    });
+
+    await withSync(blogID, async function (syncFolder) {
+      await folder.write(blogID, entryPath, "Date: banana\n\nHello");
+      await update(syncFolder, entryPath);
+
+      const codes = (await folder.stat(blogID, entryPath)).flags
+        .map((flag) => flag.code)
+        .sort();
+      expect(codes).toEqual(["DATE_INVALID", "EMBED_FAILED"]);
+    });
+  });
+
   it("drops the entry of a file which is gone", async function () {
     const entryPath = "/gone.txt";
     const blogID = this.blog.id;

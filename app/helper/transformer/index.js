@@ -331,6 +331,8 @@ function Transformer(blogID, name) {
       downloaded = await tryEach(tasks);
     } catch (err) {
       if (result) return result;
+      // So the image plugin can tell a failed download from a failed resize
+      if (err && typeof err === "object") err.fromDownload = true;
       throw err;
     }
 

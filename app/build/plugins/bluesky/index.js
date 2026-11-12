@@ -24,6 +24,13 @@ You can learn more about oEmbed at https://oembed.com. Bluesky is a registered p
 const each = require("../eachEl");
 const Url = require("url");
 const fetch = require("node-fetch");
+var { report } = require("build/flags");
+
+// The link stays in the post, so it still works; the flag says it wasn't
+// embedded
+function failed(href) {
+  report({ code: "EMBED_FAILED", targets: [href] });
+}
 
 async function render($) {
   await each($, "a", async (el) => {
@@ -60,12 +67,16 @@ async function render($) {
       const res = await fetch(oembedUrl);
       const data = await res.json();
 
-      if (!data || !data.html) return;
+      if (!data || !data.html) {
+        failed(href);
+        return;
+      }
 
       var html = data.html;
 
       $(el).replaceWith(html);
     } catch (e) {
+      failed(href);
       return;
     }
   });

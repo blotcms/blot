@@ -3,6 +3,7 @@ var Create = require("./create");
 var Transformer = require("helper/transformer");
 var STORE_PREFIX = "thumbnails";
 var debug = require("debug")("blot:entry:build:thumbnail");
+var { report } = require("build/flags");
 
 async function thumbnail(blog, path, metadata, html) {
   var store, candidates;
@@ -33,9 +34,14 @@ async function thumbnail(blog, path, metadata, html) {
 
   // The first candidate which produces thumbnails wins
   var thumbnails = null;
+  var problem = null;
+
+  function failed(candidate, err, rejected) {
+    if (!problem) problem = { candidate, err, rejected };
+  }
 
   for (var candidate of candidates) {
-    var found = await lookup(store, candidate, createOrReject);
+    var found = await lookup(store, candidate, createOrReject, failed);
 
     // We don't care if a candidate produces an error
     // we just keep going on down the list...
@@ -47,23 +53,38 @@ async function thumbnail(blog, path, metadata, html) {
 
   debug(blog.id, "final thumbnails", thumbnails);
 
+  // The post has images but none made a thumbnail: say why, for the first
+  if (!thumbnails && problem) {
+    report(
+      problem.err && problem.err.timedOut
+        ? { code: "THUMBNAIL_TIMEOUT", target: problem.candidate }
+        : {
+            code: "THUMBNAIL_FAILED",
+            target: problem.candidate,
+            error: problem.rejected || (problem.err && problem.err.message),
+          }
+    );
+  }
+
   return thumbnails;
 }
 
 // Looks up the thumbnails for one candidate. Resolves to undefined if there
 // aren't any, whether the candidate was rejected or failed.
-async function lookup(store, candidate, create) {
+async function lookup(store, candidate, create, failed) {
   var thumbnails;
 
   try {
     thumbnails = await store.lookup(candidate, create);
   } catch (err) {
     debug(candidate, err);
+    failed(candidate, err);
     return undefined;
   }
 
   if (thumbnails && thumbnails.rejected !== undefined) {
     debug(candidate, "rejected:", thumbnails.rejected);
+    failed(candidate, null, thumbnails.rejected);
     return undefined;
   }
 
