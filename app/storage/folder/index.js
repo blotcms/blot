@@ -126,6 +126,7 @@ module.exports = {
 
   // One page of a directory, sorted by name:
   //   { entries: [{ name, isDirectory, size, modified }], cursor }
+  // A flagged file's entry also has flags and placeholder, as stat's does.
   // cursor is opaque: pass it back for the next page; null means that was the
   // last. Options: { cursor, limit } (limit defaults to 1000).
   list: delegate("list"),
