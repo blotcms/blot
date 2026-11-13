@@ -139,7 +139,11 @@
     if (!state || !pathOf(document.referrer)) return;
 
     closeDepth = takeDepth();
-    if (closeDepth) history.replaceState({ ...history.state, closeDepth }, "");
+    if (closeDepth) {
+      history.replaceState({ ...history.state, closeDepth }, "");
+      // Without script, or from elsewhere, the link goes home and says so; here it goes back.
+      for (const link of document.querySelectorAll("a.entry-close")) link.textContent = "Back";
+    }
 
     const path = pathOf(location.href);
     let page = -1;
@@ -173,7 +177,10 @@
     collectionPlace = listing.total ? { index: (listing.offset || 0) + index + 1, total: listing.total } : null;
     entryLinksChanged();
     closeURL = listing.url;
-    for (const link of document.querySelectorAll("a.entry-close")) link.href = closeURL;
+    for (const link of document.querySelectorAll("a.entry-close")) {
+      link.href = closeURL;
+      link.textContent = "Back";
+    }
 
     const edge = (loaded, step) => loaded.entries[step > 0 ? 0 : loaded.entries.length - 1];
 
@@ -278,7 +285,6 @@
         }
       }
       tagToggle.setAttribute("aria-expanded", String(expanded()));
-      tagToggle.setAttribute("aria-label", expanded() ? "Show fewer tags" : "Show all tags");
     };
     tagToggle.addEventListener("click", () => {
       root.classList.toggle("tags-expanded");
@@ -330,8 +336,9 @@
     return {
       link,
       href: new URL(link.getAttribute("href"), document.baseURI).pathname,
-      title: link.getAttribute("aria-label") || "",
-      alt: original?.getAttribute("alt") || link.getAttribute("aria-label") || "",
+      title: link.dataset.title || "",
+      alt: original?.getAttribute("alt") || link.dataset.title || "",
+      date: link.dataset.date || "",
       preview: link.dataset.preview,
       full: original?.getAttribute("src") ? absolute(original.getAttribute("src")) : link.dataset.preview,
       width,
@@ -419,6 +426,8 @@
     if (activeIndex >= entries.length - 4) controller.loadMore?.();
     controller.prefetch?.(activeIndex);
     updateCaption();
+    announce(entry);
+    fillInfo(entry);
 
     upgradeChain(entry, token);
   }
@@ -447,15 +456,63 @@
 
   // The title, then its place among the posts as 05/52, worked out from each post's index and
   // the page's post count, so nothing extra has to load.
+  // Reached through a listing, the arrows follow it, and so does the counter.
+  const placeOf = (entry) => (stepsByEntryLinks(entry) && collectionPlace ? collectionPlace : controller.position?.(activeIndex));
+
   function updateCaption() {
     const entry = controller?.entries()[activeIndex];
     if (!entry || !captionTitle) return;
     captionTitle.textContent = entry.title;
-    // Reached through a listing, the arrows follow it, and so does the counter.
-    const place = stepsByEntryLinks(entry) && collectionPlace ? collectionPlace : controller.position?.(activeIndex);
+    const place = placeOf(entry);
     const pad = (number) => String(number).padStart(2, "0");
     captionIndex.textContent = place ? `${pad(place.index)}/${pad(place.total)}` : "";
   }
+
+  // Screen readers hear each image once, as "Title, 5 of 52", whether or not captions show.
+  const announcer = lightbox.querySelector(".lightbox-announce");
+  function announce(entry) {
+    if (!announcer) return;
+    const place = placeOf(entry);
+    announcer.textContent = place ? `${entry.title}, ${place.index} of ${place.total}` : entry.title;
+  }
+
+  // ---- Post text: an Info button shows the text and date that come with the image ----
+
+  const infoButton = lightbox.querySelector(".lightbox-info-button");
+  const infoPanel = lightbox.querySelector(".lightbox-info");
+  const infoBody = infoPanel?.querySelector(".lightbox-info-body");
+  const infoDate = infoPanel?.querySelector(".lightbox-info-date");
+  const infoOpen = () => Boolean(infoPanel && !infoPanel.hidden);
+
+  function setInfo(open) {
+    if (!infoPanel) return;
+    infoPanel.hidden = !open;
+    infoButton.setAttribute("aria-expanded", String(open));
+  }
+
+  function fillInfo(entry) {
+    if (!infoPanel) return;
+    const body = entry.link.querySelector("template.entry-html")?.content.cloneNode(true);
+    if (body) {
+      for (const script of body.querySelectorAll("script")) script.remove();
+      // The picture is already on screen, and so is the title: leave both out, with
+      // anything that only held them.
+      const picture = body.querySelector("img");
+      const heading = [...body.querySelectorAll("h1, h2, h3, p")].find((node) => node.textContent.trim() === entry.title);
+      for (const node of [picture, heading]) {
+        let target = node;
+        while (target?.parentNode && target.parentNode !== body && target.parentNode.childElementCount === 1 && !target.parentNode.textContent.trim()) target = target.parentNode;
+        target?.remove();
+      }
+    }
+    const hasText = Boolean(body && (body.textContent.trim() || body.querySelector("img, video, iframe")));
+    infoBody.replaceChildren(...(hasText ? [body] : []));
+    infoDate.textContent = entry.date;
+    infoButton.hidden = !hasText && !entry.date;
+    if (infoButton.hidden) setInfo(false);
+  }
+
+  infoButton?.addEventListener("click", () => setInfo(!infoOpen()));
 
   // The rail inserted `count` entries at `at`; keep the viewer on the same entry.
   function entriesInserted(at, count, moved) {
@@ -548,8 +605,10 @@
     opening = false;
     lightbox.classList.remove("is-opening");
     if (closeAfterOpen) {
+      // The close was asked for during the opening zoom, and the address has already been
+      // dealt with (Back, or requestClose), so only the viewer itself is left to close.
       closeAfterOpen = false;
-      void requestClose();
+      void close();
       return;
     }
     if (lightbox.open) lightbox.classList.add("is-revealed");
@@ -562,6 +621,7 @@
     closeAfterOpen = false;
     controller.pause();
     resetZoom();
+    setInfo(false);
     setActive(index);
     showHint();
     const source = animate ? controller.sourceImage(activeIndex) : null;
@@ -605,7 +665,7 @@
   // Puts the page back as it was before the viewer opened. Safe to run more than once, so
   // it also tidies up after the browser closes the dialog itself.
   function cleanUpViewer() {
-    root.classList.remove("lightbox-transition-closing", "is-zooming", "is-leaving", "is-viewing");
+    root.classList.remove("lightbox-transition-closing", "is-zooming", "is-leaving", "is-viewing", "is-deep-open");
     for (const image of document.querySelectorAll(".is-transitioning")) {
       image.classList.remove("is-transitioning");
       image.style.removeProperty("view-transition-name");
@@ -632,6 +692,7 @@
     }
     if (!lightbox.open || closePending) return;
     closePending = true;
+    root.classList.remove("is-deep-open");
     // Bring the header back as the viewer starts to leave, not once it has gone.
     root.classList.add("is-leaving");
     // An image mostly still on screen zooms back to where it was; otherwise the page brings it in first.
@@ -718,6 +779,8 @@
       window.location.href = closeURL;
       return true;
     }
+    // Elsewhere the viewer was opened over the page without moving the address.
+    if (view !== "entry") return false;
     // Opened directly (or after a reload): go back to the listing it came from, or to the rail.
     const target = directTarget();
     if (target.navigate) {
@@ -911,6 +974,7 @@
   }
 
   function onLightboxWheel(event) {
+    if (event.target.closest?.(".lightbox-info")) return; // the post text scrolls
     wheelLockUntil = performance.now() + WHEEL_GAP;
     event.preventDefault();
     if (lightboxBusy() || pulledClosed) return;
@@ -1180,6 +1244,11 @@
   lightbox.addEventListener("wheel", onLightboxWheel, { passive: false });
   lightbox.addEventListener("cancel", (event) => {
     event.preventDefault();
+    if (infoOpen()) {
+      setInfo(false);
+      infoButton.focus();
+      return;
+    }
     requestClose();
   });
   lightbox.addEventListener("close", () => {
@@ -1808,6 +1877,8 @@
           const doc = new DOMParser().parseFromString(await response.text(), "text/html");
           const added = [...doc.querySelectorAll("[data-grid] a.cell")];
           for (const cell of added) list.append(document.adoptNode(cell));
+          const status = document.querySelector(".list-status");
+          if (status && added.length) status.textContent = `${added.length} more ${added.length === 1 ? "post" : "posts"} loaded`;
           const next = doc.querySelector("a.more[rel='next']");
           if (next) more.href = next.href;
           else {
@@ -1884,7 +1955,12 @@
   else if (view !== "entry") controller = createGrid();
 
   // No rail could be made, so let the entry page show its text instead.
-  if (view === "entry" && !controller) root.classList.remove("rail-mode");
+  if (view === "entry" && !controller) root.classList.remove("rail-mode", "is-deep-open");
+
+  // In rail mode the post's text is clipped out of sight, so keep focus out of it too. The
+  // viewer's Info button shows it instead.
+  const clippedText = view === "entry" && controller ? document.querySelector(".contents") : null;
+  if (clippedText) clippedText.inert = true;
 
   if (view === "entry" && controller) {
     // The entry's own page: the viewer starts open, and closing returns to the rail.
@@ -1892,6 +1968,8 @@
     if (index >= 0) {
       history.replaceState({ ...history.state, keynote: "open", pushed: false }, "", location.href);
       void open(index, { animate: false });
+    } else {
+      root.classList.remove("is-deep-open");
     }
   }
 })();

@@ -3,9 +3,8 @@
   {{> head}}
   <body data-view="home">
     {{> header}}
-    <h1 class="visually-hidden">{{title}}</h1>
-
-    <main class="rail-viewport" aria-label="Images" data-page="{{pagination.current}}" data-total="{{pagination.total}}" data-entries="{{#pagination}}{{total_entries}}{{/pagination}}{{^pagination}}{{total_posts}}{{/pagination}}">
+    <main class="rail-viewport" id="main" data-page="{{pagination.current}}" data-total="{{pagination.total}}" data-entries="{{#pagination}}{{total_entries}}{{/pagination}}{{^pagination}}{{total_posts}}{{/pagination}}">
+      <h1 class="visually-hidden">{{title}}</h1>
       <div class="rail-layer">
         <ul class="rail" aria-label="Image rail">
           {{#posts}}

@@ -145,7 +145,8 @@ hr {
   background: linear-gradient(
     to bottom,
     {{background_color}} 0%,
-    rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.85) 38%,
+    {{background_color}} 45%,
+    rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.8) 65%,
     rgba({{#rgb}}{{background_color}}{{/rgb}}, 0) 100%
   );
   /* The fade overlaps the content below, so only the links themselves take clicks. */
@@ -301,6 +302,25 @@ body[data-view="home"] #title {
   display: none !important;
 }
 
+/* Hidden until reached with Tab. */
+.skip-link {
+  position: fixed;
+  top: 0.5rem;
+  left: var(--edge-x);
+  z-index: 10;
+  padding: 0.5em 0.9em;
+  border-radius: 999px;
+  color: {{background_color}};
+  background: {{text_color}};
+  font-size: 0.875em;
+  text-decoration: none;
+  transform: translateY(-200%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
 html {
   /* The space from the screen's top and side edges to the header, and to the viewer's caption. */
   --edge-x: max(1rem, 2vw);
@@ -333,6 +353,19 @@ html.is-viewing.is-leaving #header {
 
 body[data-view="entry"] .rail-viewport {
   display: none;
+}
+
+.js.rail-mode body[data-view="entry"] .entry-main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* An image post's page opens straight into the viewer: the rail waits underneath, unseen,
+   so its captions don't show through while the viewer fades in. */
+.is-deep-open .rail-layer {
+  visibility: hidden;
 }
 
 .js.rail-mode body[data-view="entry"] .rail-viewport {
@@ -379,7 +412,8 @@ body[data-view="entry"] .rail-viewport {
   position: relative;
   height: 100%;
   margin: 0;
-  padding: 0 var(--inline-padding);
+  /* At rest, the first image starts on the page's shared left edge. */
+  padding: 0 var(--edge-x);
   column-gap: var(--gap);
   list-style: none;
 }
@@ -388,7 +422,8 @@ body[data-view="entry"] .rail-viewport {
 .slide {
   display: flex;
   align-items: center;
-  justify-content: center;
+  /* Each image starts at its slot's left edge, so the edges line up at a steady pace. */
+  justify-content: flex-start;
   width: var(--item-width);
   height: var(--item-height);
   margin: 0;
@@ -597,7 +632,8 @@ html:not(.js) .item img[data-src] {
 }
 
 /* Links in a post's text are underlined, since their colour can match the text's. */
-.contents .entry a {
+.contents .entry a,
+body[data-view="error"] .contents a {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
@@ -1077,6 +1113,7 @@ code {
 .lightbox.is-closing::before,
 .lightbox.is-closing .lightbox-caption,
 .lightbox.is-closing .lightbox-close,
+.lightbox.is-closing .lightbox-info-button,
 .lightbox.is-closing .lightbox-step {
   transition-duration: var(--lightbox-close-duration);
   transition-timing-function: var(--lightbox-close-easing);
@@ -1087,26 +1124,31 @@ code {
 }
 
 .lightbox .lightbox-close,
+.lightbox .lightbox-info-button,
 .lightbox .lightbox-step {
   opacity: 0;
   transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing), background-color 160ms ease;
 }
 
 .lightbox.is-revealed .lightbox-close,
-.lightbox.is-revealed .lightbox-step {
-  opacity: 0.5;
+.lightbox.is-revealed .lightbox-step,
+.lightbox.is-revealed .lightbox-info-button {
+  opacity: 0.65;
 }
 
 @media (hover: hover) {
   .lightbox.is-revealed .lightbox-close:hover,
-  .lightbox.is-revealed .lightbox-step:hover {
+  .lightbox.is-revealed .lightbox-step:hover,
+  .lightbox.is-revealed .lightbox-info-button:hover {
     opacity: 1;
   }
 }
 
 .lightbox:not(.is-revealed) .lightbox-close,
+.lightbox:not(.is-revealed) .lightbox-info-button,
 .lightbox:not(.is-revealed) .lightbox-step,
 .lightbox.is-opening .lightbox-close,
+.lightbox.is-opening .lightbox-info-button,
 .lightbox.is-opening .lightbox-step {
   pointer-events: none;
 }
@@ -1313,6 +1355,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 }
 
 .lightbox-close,
+.lightbox-info-button,
 .lightbox-step {
   position: absolute;
   z-index: 1;
@@ -1330,6 +1373,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 /* Keyboard focus rings the icon as a circle (the buttons themselves are wider than tall). */
 /* Zoomed in, the image can sit under the controls, so each gets a backing like the zoom buttons. */
 .lightbox.is-zoomed.is-revealed .lightbox-close,
+.lightbox.is-zoomed.is-revealed .lightbox-info-button,
 .lightbox.is-zoomed.is-revealed .lightbox-step {
   opacity: 1;
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.7);
@@ -1337,11 +1381,13 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
 @media (hover: hover) {
   .lightbox.is-zoomed.is-revealed .lightbox-close:hover,
+  .lightbox.is-zoomed.is-revealed .lightbox-info-button:hover,
   .lightbox.is-zoomed.is-revealed .lightbox-step:hover {
     color: {{text_color}};
   }
 
   .lightbox .lightbox-close:hover .lightbox-icon,
+  .lightbox .lightbox-info-button:hover .lightbox-icon,
   .lightbox .lightbox-step:hover .lightbox-icon,
   .zoom-button:hover:not(:disabled) {
     background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
@@ -1353,11 +1399,13 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 }
 
 .lightbox-close:focus-visible,
+.lightbox-info-button:focus-visible,
 .lightbox-step:focus-visible {
   outline: none;
 }
 
 .lightbox-close:focus-visible .lightbox-icon,
+.lightbox-info-button:focus-visible .lightbox-icon,
 .lightbox-step:focus-visible .lightbox-icon {
   border-radius: 50%;
   outline: 2px solid {{text_color}};
@@ -1374,6 +1422,61 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   border-radius: 999px;
   fill: currentColor;
   transition: background-color 200ms ease;
+}
+
+.lightbox-info-button {
+  top: calc(var(--edge-y) + 0.85rem - 22px);
+  right: calc(var(--lightbox-button-inset) + 44px);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.lightbox.is-revealed .lightbox-info-button[aria-expanded="true"] {
+  opacity: 1;
+}
+
+/* The post's text and date, over the image's right side. */
+.lightbox-info {
+  position: absolute;
+  top: calc(var(--edge-y) + 0.85rem + 28px);
+  right: var(--edge-x);
+  z-index: 3;
+  box-sizing: border-box;
+  width: min(24rem, calc(100% - var(--edge-x) * 2));
+  max-height: calc(100% - var(--edge-y) * 2 - 0.85rem - 56px);
+  overflow: auto;
+  padding: 1em 1.2em;
+  border-radius: 12px;
+  color: {{text_color}};
+  background: rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.94);
+  font-size: 0.875em;
+  line-height: 1.55;
+}
+
+.lightbox-info-body > :first-child {
+  margin-top: 0;
+}
+
+.lightbox-info-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.lightbox-info-body a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.lightbox-info-date {
+  margin: 0.75em 0 0;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+}
+
+.lightbox-info-date:empty {
+  display: none;
 }
 
 .lightbox-close {
@@ -1559,6 +1662,10 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
     margin: 1.5em 1em 0;
   }
 
+  .no-results {
+    margin: 1.5em 1em 0;
+  }
+
   .list-toolbar .search-form {
     flex: 1 1 100%;
     max-width: none;
@@ -1594,6 +1701,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   }
 
   .lightbox .lightbox-close,
+  .lightbox .lightbox-info-button,
   .lightbox .lightbox-step,
   .lightbox-caption,
   .lightbox-hint,
@@ -1612,11 +1720,21 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
 /* The "show captions" setting: off hides titles and tags under images and in the viewer. */
 {{^show_captions}}
-.slide-title,
-.slide-tags,
-.cell-title,
 .lightbox-caption {
   display: none;
+}
+
+/* Titles stay for screen readers, as the links' names. */
+.slide-title,
+.slide-tags,
+.cell-title {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .rail-viewport {

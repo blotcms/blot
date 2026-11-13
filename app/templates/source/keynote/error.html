@@ -7,11 +7,13 @@
 
       {{> header}}
 
-      <div class="contents">
+      <main class="contents" id="main">
         <h1>{{error.title}}</h1>
 
         <p>Something has gone wrong. {{error.message}}</p>
-      </div>
+
+        <p><a href="/">Go to the homepage</a> or <a href="/archives">see all posts</a>.</p>
+      </main>
 
     </div>
     {{> footer}}
