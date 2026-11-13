@@ -2,7 +2,7 @@
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/../../.." && pwd)"
-export BLOT_HOST="${BLOT_HOST:-local.blot}"
+export BLOT_HOST="${BLOT_HOST:-blot.localhost}"
 # The compose files take their versions from config/versions.env
 set -a; . "$ROOT/config/versions.env"; set +a
 BASE=(-f "$ROOT/scripts/development/docker-compose.yml")

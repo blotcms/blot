@@ -24,6 +24,6 @@ npm start
 
 The nvm commands read the version from config/versions.env, which also holds every other version Blot is built with. If you use another Node version manager, select that Node.js version before running npm start.
 
-The dashboard is https://local.blot and the example site is https://example.local.blot. For the full setup, see:
+The dashboard is https://blot.localhost and the example site is https://example.blot.localhost. For the full setup, see:
 
 https://blot.im/developers/guides/run-blot-locally

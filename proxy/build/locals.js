@@ -125,7 +125,7 @@ function container({ env = process.env, config }) {
     log_to_stdout: env.LOG_TO_STDOUT !== "false",
 
     // Local development (scripts/development/unit/start.sh) sets
-    // LOCAL_DEVELOPMENT=true for the few things only local.blot needs, all in
+    // LOCAL_DEVELOPMENT=true for the few things only blot.localhost needs, all in
     // development*.conf: routing for the worktree preview slots, the storage
     // bucket behind the CDN host, no rate limits for private addresses and
     // the include hooks Agentation fills. Production renders none of it.

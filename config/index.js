@@ -103,7 +103,7 @@ module.exports = {
     // the development server needs to know the production
     // server's host. This let's us use the same code
     relay_host: "webhooks.blot.im",
-    development_host: "local.blot",
+    development_host: "blot.localhost",
   },
 
   cache: process.env.BLOT_CACHE === "true",
