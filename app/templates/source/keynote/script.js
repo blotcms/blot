@@ -505,7 +505,7 @@
         target?.remove();
       }
     }
-    const hasText = Boolean(body && (body.textContent.trim() || body.querySelector("img, video, iframe")));
+    const hasText = Boolean(body && (body.textContent.trim() || body.querySelector("img, video, audio, iframe")));
     infoBody.replaceChildren(...(hasText ? [body] : []));
     infoDate.textContent = entry.date;
     infoButton.hidden = !hasText && !entry.date;
@@ -1139,7 +1139,7 @@
   }
 
   lightbox.addEventListener("pointerdown", (event) => {
-    if (event.target.closest("button, .zoom-controls") || lightboxBusy()) return;
+    if (event.target.closest("button, .zoom-controls, .lightbox-info") || lightboxBusy()) return;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, time: event.timeStamp });
     if (pointers.size === 2) beginPinch();
     else if (pointers.size === 1 && zoomed() && event.button === 0) beginPan(event);

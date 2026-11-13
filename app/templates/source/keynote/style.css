@@ -389,8 +389,10 @@ body[data-view="entry"] .rail-viewport {
 }
 
 /* An image post's page opens straight into the viewer: the rail waits underneath, unseen,
-   so its captions don't show through while the viewer fades in. */
-.is-deep-open .rail-layer {
+   so its captions don't show through while the viewer fades in. The slides on screen are
+   made visible one by one, so they are hidden here too. */
+.is-deep-open .rail-layer,
+.is-deep-open .slide.is-visible {
   visibility: hidden;
 }
 
