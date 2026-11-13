@@ -1240,8 +1240,6 @@ code {
   --lightbox-bottom-gutter: var(--lightbox-top-gutter);
   position: fixed;
   inset: 0;
-  /* The details gutter is padding, inside the window's width rather than added to it. */
-  box-sizing: border-box;
   /* The whole window, including the strip kept for the page's scrollbar (measured by
      script), so the right-hand buttons sit as far from the edge as the left-hand ones. */
   width: calc(100% + var(--scrollbar-width, 0px));
@@ -1305,19 +1303,14 @@ code {
 
 .lightbox.is-revealed .lightbox-close,
 .lightbox.is-revealed .lightbox-step,
-.lightbox.is-revealed .lightbox-info-button .lightbox-icon {
-  opacity: 0.65;
-}
-
-/* The caption sits in the Info button at full strength; only the dots are dimmed. */
 .lightbox.is-revealed .lightbox-info-button {
-  opacity: 1;
+  opacity: 0.65;
 }
 
 @media (hover: hover) {
   .lightbox.is-revealed .lightbox-close:hover,
   .lightbox.is-revealed .lightbox-step:hover,
-  .lightbox.is-revealed .lightbox-info-button:hover .lightbox-icon {
+  .lightbox.is-revealed .lightbox-info-button:hover {
     opacity: 1;
   }
 }
@@ -1469,26 +1462,13 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   transform-origin: center;
 }
 
-/* The entry's title, its place in the collection and the Info toggle, top left. */
-.lightbox-bar {
-  position: absolute;
-  /* Centred on the caption's line, like the close button. */
-  top: calc(var(--edge-y) + 0.85rem - 22px);
-  left: var(--edge-x);
-  right: calc(var(--lightbox-button-inset) + 48px);
-  z-index: 2;
-  display: flex;
-  align-items: center;
-  min-width: 0;
-  pointer-events: none;
-}
-
-.lightbox-bar > * {
-  pointer-events: auto;
-}
-
+/* The entry's title and its place in the collection, top left. */
 .lightbox-caption {
-  min-width: 0;
+  position: absolute;
+  top: var(--edge-y);
+  left: var(--edge-x);
+  right: var(--lightbox-gutter);
+  z-index: 1;
   margin: 0;
   padding: 0.15em 0;
   display: flex;
@@ -1594,31 +1574,13 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   transition: background-color 200ms ease;
 }
 
-/* The caption, then three dots in an outlined pill, filled in while the details show. */
-.lightbox .lightbox-info-button {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 0.6em;
-  min-width: 0;
-  max-width: 100%;
-  width: auto;
+/* Bottom right, which is the gutter's foot once it opens, so it never moves: three dots in
+   an outlined pill, filled in while the details show. */
+.lightbox-info-button {
+  bottom: calc(var(--edge-y) - 10px);
+  right: var(--lightbox-button-inset);
   height: 44px;
-  font: inherit;
-  text-align: left;
-}
-
-.lightbox-info-button:disabled {
-  cursor: default;
-}
-
-.lightbox-info-button:disabled .lightbox-icon {
-  display: none;
-}
-
-.lightbox-info-button .lightbox-icon {
-  flex: 0 0 auto;
-  transition: opacity 160ms ease, background-color 200ms ease;
+  padding: 0 4px;
 }
 
 .lightbox-info-button .lightbox-icon {
@@ -1628,7 +1590,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.35);
 }
 
-.lightbox.is-revealed .lightbox-info-button[aria-expanded="true"] .lightbox-icon {
+.lightbox.is-revealed .lightbox-info-button[aria-expanded="true"] {
   opacity: 1;
 }
 
@@ -1641,18 +1603,18 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   border-radius: 999px;
 }
 
-/* The post's text, date, tags and EXIF, in a gutter down the left, under the caption. */
+/* The post's text, date, tags and EXIF, in a gutter down the right. */
 .lightbox-info {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
+  position: relative;
   z-index: 1;
+  grid-column: 3;
+  grid-row: 1 / -1;
   box-sizing: border-box;
-  width: var(--lightbox-info-width);
+  min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: calc(var(--edge-y) + 0.85rem + 22px + 1.25rem) 1.5rem var(--edge-y) var(--edge-x);
+  /* Below the row of arrows and buttons along its top. */
+  padding: calc(var(--edge-y) + 0.85rem + 22px + 1.25rem) var(--edge-x) calc(var(--edge-y) + 44px + 1rem) 1.5rem;
   color: {{text_color}};
   background: {{background_color}};
   background-image: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04));
@@ -1762,51 +1724,85 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   margin-right: var(--lightbox-button-inset);
 }
 
-/* With the details open, the image gives up the left of the screen to them, and the
-   caption heads the gutter. The arrows and close button stay where they were. */
+/* With the details open, the image gives up the right of the screen to them, and the
+   arrows move to the gutter's top left, on the close button's line. */
 .lightbox.has-info {
   --lightbox-info-width: clamp(16rem, 28vw, 24rem);
 }
 
 .lightbox.has-info[open] {
-  padding-left: var(--lightbox-info-width);
+  grid-template-columns: var(--edge-x) minmax(0, 1fr) var(--lightbox-info-width);
 }
 
-.lightbox.has-info .lightbox-bar {
-  right: auto;
-  max-width: calc(var(--lightbox-info-width) - var(--edge-x) - 1rem);
+.lightbox.has-info .lightbox-caption {
+  right: calc(var(--lightbox-info-width) + 1rem);
 }
 
-.lightbox.has-info .zoom-controls {
-  left: calc(var(--lightbox-info-width) + var(--lightbox-button-inset));
+.lightbox.has-info .lightbox-close,
+.lightbox.has-info .lightbox-info-button,
+.lightbox.has-info .lightbox-step {
+  z-index: 2;
+}
+
+.lightbox.has-info .lightbox-step {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: start;
+  justify-self: start;
+  margin: calc(var(--edge-y) + 0.85rem - 22px) 0 0 calc(1.5rem - 10px);
+}
+
+.lightbox.has-info .lightbox-next {
+  margin-left: calc(1.5rem - 10px + 44px);
+}
+
+/* Side by side, a missing arrow stays in place, faded, rather than leaving a gap. */
+.lightbox.has-info .lightbox-step:disabled {
+  visibility: visible;
+  cursor: default;
+}
+
+.lightbox.has-info.is-revealed .lightbox-step:disabled {
+  opacity: 0.3;
+}
+
+.lightbox.has-info .lightbox-step:disabled .lightbox-icon {
+  background: transparent;
 }
 
 /* Too narrow for a gutter: the details take the bottom of the screen instead. */
 @media (max-width: 700px) {
   .lightbox.has-info {
     --lightbox-bottom-gutter: 40dvh;
+    --lightbox-info-width: 0px;
   }
 
   .lightbox.has-info[open] {
-    padding-left: 0;
+    grid-template-columns: var(--lightbox-gutter) minmax(0, 1fr) var(--lightbox-gutter);
   }
 
   .lightbox-info {
-    top: auto;
-    right: 0;
-    width: auto;
-    height: 40dvh;
-    padding-top: 1rem;
-    padding-right: var(--edge-x);
+    grid-column: 1 / -1;
+    grid-row: 3;
+    padding-top: calc(44px + 1rem);
+    padding-left: var(--edge-x);
   }
 
-  .lightbox.has-info .lightbox-bar {
-    right: calc(var(--lightbox-button-inset) + 48px);
-    max-width: none;
+  .lightbox.has-info .lightbox-step {
+    grid-column: 1;
+    grid-row: 3;
+    margin: 0.5rem 0 0 var(--lightbox-button-inset);
+  }
+
+  .lightbox.has-info .lightbox-next {
+    margin-left: calc(var(--lightbox-button-inset) + 44px);
+  }
+
+  .lightbox.has-info .lightbox-caption {
+    right: var(--lightbox-gutter);
   }
 
   .lightbox.has-info .zoom-controls {
-    left: var(--lightbox-button-inset);
     bottom: calc(40dvh + 0.5rem);
   }
 }
@@ -1824,6 +1820,10 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
     height: 1px;
     overflow: hidden;
     clip-path: inset(50%);
+  }
+
+  .lightbox-caption {
+    right: calc(var(--lightbox-button-inset) + 48px);
   }
 }
 
