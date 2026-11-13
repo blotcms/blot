@@ -460,12 +460,27 @@
   const infoPanel = lightbox.querySelector(".lightbox-info");
   const infoBody = infoPanel?.querySelector(".lightbox-info-body");
   const infoDetails = infoPanel?.querySelector(".lightbox-info-details");
-  const infoOpen = () => Boolean(infoPanel && !infoPanel.hidden);
+  // One setting for every image, kept between visits: open, the details fill a gutter on the
+  // right of each image in turn, until it's closed again.
+  const INFO_KEY = "keynote:info";
+  let infoWanted = false;
+  try {
+    infoWanted = localStorage.getItem(INFO_KEY) === "1";
+  } catch {}
 
   function setInfo(open) {
+    infoWanted = open;
+    try {
+      localStorage.setItem(INFO_KEY, open ? "1" : "0");
+    } catch {}
+    showInfo();
+  }
+
+  function showInfo() {
     if (!infoPanel) return;
-    infoPanel.hidden = !open;
-    infoButton.setAttribute("aria-expanded", String(open));
+    infoPanel.hidden = !infoWanted;
+    lightbox.classList.toggle("has-info", infoWanted);
+    infoButton.setAttribute("aria-expanded", String(infoWanted));
   }
 
   function fillInfo(entry) {
@@ -496,11 +511,12 @@
     }
     const hasDetails = Boolean(list?.querySelector("dt"));
     infoDetails.replaceChildren(...(hasDetails ? [list] : []));
-    infoButton.hidden = !hasText && !hasDetails;
-    if (infoButton.hidden) setInfo(false);
+    // With the gutter open, the button stays to close it, even beside a post with no details.
+    infoButton.hidden = !hasText && !hasDetails && !infoWanted;
+    showInfo();
   }
 
-  infoButton?.addEventListener("click", () => setInfo(!infoOpen()));
+  infoButton?.addEventListener("click", () => setInfo(!infoWanted));
 
   // The rail inserted `count` entries at `at`; keep the viewer on the same entry.
   function entriesInserted(at, count, moved) {
@@ -609,7 +625,6 @@
     closeAfterOpen = false;
     controller.pause();
     resetZoom();
-    setInfo(false);
     setActive(index);
     const source = animate ? controller.sourceImage(activeIndex) : null;
     // An image still loading opens at once, as its placeholder.
@@ -1231,11 +1246,6 @@
   lightbox.addEventListener("wheel", onLightboxWheel, { passive: false });
   lightbox.addEventListener("cancel", (event) => {
     event.preventDefault();
-    if (infoOpen()) {
-      setInfo(false);
-      infoButton.focus();
-      return;
-    }
     requestClose();
   });
   lightbox.addEventListener("close", () => {
