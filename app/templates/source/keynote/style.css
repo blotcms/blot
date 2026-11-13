@@ -1245,28 +1245,6 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   transition: opacity 200ms ease, visibility 0s;
 }
 
-/* A one-off line on how to move and zoom, the first time the viewer opens. */
-.lightbox-hint {
-  position: absolute;
-  bottom: var(--edge-y);
-  left: 50%;
-  z-index: 1;
-  margin: 0;
-  padding: 0.35em 0.9em;
-  border-radius: 999px;
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.8);
-  background: rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.6);
-  font-size: 0.8125em;
-  white-space: nowrap;
-  transform: translateX(-50%);
-  pointer-events: none;
-  transition: opacity 400ms ease;
-}
-
-.lightbox-hint.is-leaving {
-  opacity: 0;
-}
-
 .zoom-button {
   display: grid;
   width: 36px;
@@ -1731,7 +1709,6 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   .lightbox .lightbox-info-button,
   .lightbox .lightbox-step,
   .lightbox-caption,
-  .lightbox-hint,
   .list a.cell,
   .cell-title,
   .slide-title,

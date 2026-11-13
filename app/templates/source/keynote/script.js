@@ -432,28 +432,6 @@
     upgradeChain(entry, token);
   }
 
-  // The first time someone opens the viewer, a short line says how to move and zoom.
-  const hint = lightbox.querySelector(".lightbox-hint");
-  const HINT_KEY = "keynoteViewerHint";
-  function showHint() {
-    if (!hint) return;
-    try {
-      if (localStorage.getItem(HINT_KEY)) return;
-      localStorage.setItem(HINT_KEY, "1");
-    } catch (error) {
-      return;
-    }
-    hint.textContent = window.matchMedia("(pointer: coarse)").matches
-      ? "Swipe for the next image · pinch to zoom"
-      : "← → for the next image · + − or scroll to zoom";
-    hint.hidden = false;
-    const dismiss = () => {
-      hint.classList.add("is-leaving");
-      setTimeout(() => { hint.hidden = true; }, 400);
-    };
-    setTimeout(dismiss, 4000);
-  }
-
   // The title, then its place among the posts as 05/52, worked out from each post's index and
   // the page's post count, so nothing extra has to load.
   // Reached through a listing, the arrows follow it, and so does the counter.
@@ -623,7 +601,6 @@
     resetZoom();
     setInfo(false);
     setActive(index);
-    showHint();
     const source = animate ? controller.sourceImage(activeIndex) : null;
     // An image still loading opens at once, as its placeholder.
     if (source && isLoaded(source)) await lightboxImage.decode().catch(() => {});
