@@ -377,6 +377,26 @@ html.is-viewing.is-leaving #header {
   opacity: 1;
 }
 
+/* An entry's own page opens straight into the viewer, so its header stays hidden from the
+   first paint rather than showing until the script has run. The details gutter's tint is
+   laid out ahead of time too, when it was left open. */
+html.is-deep-open #header {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (min-width: 701px) {
+  html.is-deep-open.info-open:not(.is-viewing) body::after {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: var(--lightbox-info-width);
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
+    content: "";
+  }
+}
+
 /* Home and entry pages: one rail of images filling the space under the header. An entry
    page shows its text instead when it has no image, or when script is unavailable. */
 .js body[data-view="home"],
@@ -1614,8 +1634,8 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Between the row of arrows along the top and the index and Info pill along the foot. */
-  padding: calc(var(--edge-y) + 0.85rem + 22px) var(--edge-x) calc(var(--edge-y) + 34px) 1.5rem;
+  /* Below the row of arrows along the top; the text runs down behind the index and Info pill. */
+  padding: calc(var(--edge-y) + 0.85rem + 22px) var(--edge-x) 0 1.5rem;
   color: {{text_color}};
   /* Translucent and blurred, so a zoomed image still shows through the gutter. */
   background: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04)), rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.72);
@@ -1631,18 +1651,28 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   display: none;
 }
 
-/* Long details scroll here, fading out at the top and bottom rather than running under the
-   buttons. The padding keeps the fades clear of the text until it scrolls. */
+/* Long details scroll here, without a scrollbar, fading out under the arrows at the top and
+   behind the index and Info pill at the foot. The padding keeps the text clear of both fades
+   until it scrolls. */
 .lightbox-info-scroll {
+  --fade-end: calc(var(--edge-y) + 6px);
+  --fade-start: calc(var(--edge-y) + 50px);
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 1.25rem 0;
-  mask-image: linear-gradient(transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
+  scrollbar-width: none;
+  padding: 1.25rem 0 calc(var(--fade-start) + 1rem);
+  mask-image: linear-gradient(transparent, #000 1.25rem, #000 calc(100% - var(--fade-start)), transparent calc(100% - var(--fade-end)));
 }
 
-.lightbox.is-revealed .lightbox-info {
+.lightbox-info-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* After the opening zoom has finished, so the image lands before the details come in. */
+.lightbox.is-revealed:not(.is-opening) .lightbox-info,
+.lightbox.is-revealed:not(.is-opening) .lightbox-info-index {
   opacity: 1;
 }
 
@@ -1677,6 +1707,8 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   padding: 0 0 calc(var(--edge-y) - 10px) 1.5rem;
   font-size: 0.9375em;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
 }
 
 .lightbox.has-info .lightbox-info-index {
@@ -1780,7 +1812,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
 /* With the details open, the image gives up the right of the screen to them, and the
    arrows move to the gutter's top left, on the close button's line. */
-.lightbox.has-info {
+html {
   --lightbox-info-width: clamp(16rem, 28vw, 24rem);
 }
 

@@ -32,6 +32,11 @@
       // (About and the like) always show as text, with the header.
       // It opens straight into the viewer, so the rail stays hidden until it closes.
       root.classList.add("rail-mode", "is-deep-open");{{/thumbnail.large.url}}{{/page}}{{/entry}}
+      // The viewer's details gutter is one setting for every image, so the page can lay
+      // it out before the script that opens the viewer has run.
+      try {
+        if (localStorage.getItem("keynote:info") === "1") root.classList.add("info-open");
+      } catch (e) {}
     })(document.documentElement);
   </script>
 

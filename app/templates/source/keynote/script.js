@@ -135,8 +135,11 @@
 
   function initializeCollectionNavigation() {
     const state = readCollection();
-    // Only trust the collection when arriving from elsewhere on this site.
-    if (!state || !pathOf(document.referrer)) return;
+    // Only trust the collection when arriving from elsewhere on this site. A reload keeps the
+    // referrer and session storage, but starts afresh on the rail: following the listing would
+    // turn each step into a page load.
+    const reloaded = performance.getEntriesByType?.("navigation")[0]?.type === "reload";
+    if (!state || !pathOf(document.referrer) || reloaded) return;
 
     closeDepth = takeDepth();
     if (closeDepth) {
@@ -483,6 +486,7 @@
     if (!infoPanel) return;
     infoPanel.hidden = !infoWanted;
     lightbox.classList.toggle("has-info", infoWanted);
+    root.classList.toggle("info-open", infoWanted);
     infoButton.setAttribute("aria-expanded", String(infoWanted));
   }
 
