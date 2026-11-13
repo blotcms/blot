@@ -302,11 +302,6 @@
   const lightbox = document.querySelector(".lightbox");
   if (!lightbox) return;
 
-  // The strip kept for the page's scrollbar: the root reports the full window width, the body doesn't.
-  const measureScrollbar = () => root.style.setProperty("--scrollbar-width", `${Math.max(0, innerWidth - document.body.getBoundingClientRect().width)}px`);
-  measureScrollbar();
-  window.addEventListener("resize", measureScrollbar);
-
   const lightboxFrame = lightbox.querySelector(".lightbox-frame");
   const lightboxImage = lightbox.querySelector(".lightbox-image");
   const closeButton = lightbox.querySelector(".lightbox-close");

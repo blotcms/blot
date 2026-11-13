@@ -1266,9 +1266,9 @@ code {
   --lightbox-bottom-gutter: var(--lightbox-top-gutter);
   position: fixed;
   inset: 0;
-  /* The whole window, including the strip kept for the page's scrollbar (measured by
-     script), so the right-hand buttons sit as far from the edge as the left-hand ones. */
-  width: calc(100% + var(--scrollbar-width, 0px));
+  /* Not the strip kept for the page's scrollbar: browsers clip the viewer there, which
+     cut off the right-hand buttons and pushed the image off centre. */
+  width: 100%;
   height: 100%;
   max-width: none;
   max-height: none;
@@ -1602,8 +1602,8 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   transition: background-color 200ms ease;
 }
 
-/* Bottom right, which is the gutter's foot once it opens, so it never moves. Its round
-   backing stays filled in while the details show. */
+/* Bottom right, which is the gutter's foot once it opens, so it never moves. It shows in
+   the text colour while the details show, and grey like the other buttons otherwise. */
 .lightbox-info-button {
   bottom: calc(var(--edge-y) - 10px);
   right: var(--lightbox-button-inset);
@@ -1616,8 +1616,8 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   opacity: 1;
 }
 
-.lightbox-info-button[aria-expanded="true"] .lightbox-icon {
-  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.2);
+.lightbox.is-zoomed.is-revealed .lightbox-info-button[aria-expanded="true"] {
+  color: {{text_color}};
 }
 
 /* The post's text, date, tags and EXIF, in a gutter down the right. */
@@ -1780,6 +1780,8 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
   border-radius: 10px;
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
+  /* The same grey as the date. */
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
   font-size: 0.875em;
   line-height: 1.45;
 }
@@ -1806,7 +1808,6 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   padding: 0.6em 1em 0.7em;
   border-top: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
   list-style: none;
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.75);
   font-size: 0.9em;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
