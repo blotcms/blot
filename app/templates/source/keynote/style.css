@@ -671,6 +671,41 @@ body[data-view="error"] .contents a {
   margin-top: 0.3em;
 }
 
+/* Footnotes: a small raised number in the text, and the notes set small at the end. */
+.contents .entry .footnote-ref,
+.contents .entry .footnote-back {
+  text-decoration: none;
+}
+
+.contents .entry .footnote-back {
+  margin-left: 0.25em;
+}
+
+.contents .entry sup {
+  font-size: 0.7em;
+  line-height: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.contents .footnotes {
+  margin-top: 3em;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.65);
+  font-size: 0.8125em;
+}
+
+.contents .footnotes hr {
+  margin: 0 0 1.5em;
+}
+
+.contents .footnotes ol {
+  margin: 0;
+  padding-left: 1.5em;
+}
+
+.contents .footnotes li::marker {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Blot's layout tags ({|<} and the rest) in a post's text. The text column sits on the left,
    so the free space is to its right: right margin notes hang there and wide blocks reach into
    it, once the screen has room. Otherwise they stay in the column, as in layout.css. */
