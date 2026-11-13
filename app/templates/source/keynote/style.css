@@ -1747,6 +1747,11 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   margin-top: 1.25em;
 }
 
+/* Set apart from the pills above it: its own smaller type would otherwise shrink the gap. */
+.lightbox-info .lightbox-info-details > .entry-date {
+  margin-top: 1.75em;
+}
+
 .entry-date {
   margin: 0;
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
