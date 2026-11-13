@@ -1110,9 +1110,7 @@ body[data-view="error"] .contents a {
   list-style: none;
 }
 
-/* The archives' tag pills, also used for the tags in the viewer's details. */
-.tag-navigation a,
-.entry-tags a {
+.tag-navigation a {
   display: block;
   padding: 5px 9px;
   white-space: nowrap;
@@ -1124,8 +1122,7 @@ body[data-view="error"] .contents a {
   transition: background-color 180ms ease, color 180ms ease;
 }
 
-.tag-navigation a:hover,
-.entry-tags a:hover {
+.tag-navigation a:hover {
   color: {{text_color}};
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.26);
   opacity: 1;
@@ -1157,13 +1154,11 @@ body[data-view="search"] .tag-navigation a.active:hover {
 
 /* On a light page the same tint reads much darker, so the pills use a lighter one. */
 [data-scheme="light"] .tag-navigation a,
-[data-scheme="light"] .entry-tags a,
 [data-scheme="light"] .tag-toggle {
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.07);
 }
 
 [data-scheme="light"] .tag-navigation a:hover,
-[data-scheme="light"] .entry-tags a:hover,
 [data-scheme="light"] .tag-toggle:hover {
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
 }
@@ -1172,8 +1167,7 @@ body[data-view="search"] .tag-navigation a.active:hover {
   background: {{text_color}};
 }
 
-.tag-navigation a:focus-visible,
-.entry-tags a:focus-visible {
+.tag-navigation a:focus-visible {
   outline: 2px solid {{text_color}};
   outline-offset: 3px;
 }
@@ -1786,24 +1780,6 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 0.2em;
-}
-
-/* The post's tags, above the table, as the archives' tag pills. */
-.entry-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin: 0 0 1em;
-  padding: 0;
-  list-style: none;
-}
-
-.entry-tags + .entry-details {
-  margin-top: 0;
-}
-
-.lightbox-info-body:not(:empty) + .lightbox-info-details .entry-tags {
-  margin-top: 1.25em;
 }
 
 .lightbox-close {
