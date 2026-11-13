@@ -671,6 +671,99 @@ body[data-view="error"] .contents a {
   margin-top: 0.3em;
 }
 
+/* Blot's layout tags ({|<} and the rest) in a post's text. The text column sits on the left,
+   so the free space is to its right: right margin notes hang there and wide blocks reach into
+   it, once the screen has room. Otherwise they stay in the column, as in layout.css. */
+.contents .entry {
+  position: relative;
+}
+
+.contents .entry::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+.contents .wide,
+.contents .margin,
+.contents .inside,
+.contents .column {
+  box-sizing: border-box;
+}
+
+.contents .margin,
+.contents .inside {
+  width: 33%;
+  margin-bottom: 1em;
+}
+
+.contents .margin.left,
+.contents .inside.left {
+  float: left;
+  margin-right: 1.5em;
+}
+
+.contents .margin.right,
+.contents .inside.right {
+  float: right;
+  margin-left: 1.5em;
+}
+
+.contents .column {
+  float: left;
+  margin-right: 3%;
+}
+
+.contents .column.two {
+  width: 48.5%;
+}
+
+.contents .column.three {
+  width: 31.333%;
+}
+
+.contents .column.four {
+  width: 22.75%;
+}
+
+.contents .column.two:nth-child(2n),
+.contents .column.three:nth-child(3n),
+.contents .column.four:nth-child(4n) {
+  margin-right: 0;
+}
+
+.contents .margin > :first-child,
+.contents .inside > :first-child,
+.contents .column > :first-child {
+  margin-top: 0;
+}
+
+.contents .entry :is(.margin, .inside, .column) img {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  margin-bottom: 0.5em;
+}
+
+/* Margin notes are set small, like a caption. */
+.contents .margin {
+  font-size: 0.8125em;
+}
+
+@media screen and (min-width: calc({{content_width}}px + 30rem)) {
+  .contents .entry .margin.right {
+    position: absolute;
+    left: calc(100% + 3rem);
+    width: 13rem;
+    margin: 0;
+    float: none;
+  }
+
+  .contents .wide {
+    width: min(150%, calc(100vw - var(--edge-x) * 2 - 1rem));
+  }
+}
+
 .entry-nav {
   display: flex;
   justify-content: space-between;
