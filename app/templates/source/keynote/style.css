@@ -1793,11 +1793,13 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  /* The pills' own padding stands in for the row's, so the text lines up with its label. */
-  padding: calc(0.45em - 5px) 0;
 }
 
+/* Smaller than the archives' pills, so each fits within a line of the details. */
 .entry-details .entry-tags a {
+  padding: 1px 7px;
+  font-size: 0.8em;
+  line-height: 1.45;
   text-decoration: none;
 }
 
