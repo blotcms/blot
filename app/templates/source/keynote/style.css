@@ -1633,6 +1633,23 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
 }
 
+/* The caption moves into the gutter while it's open, wrapping rather than cut short. */
+.lightbox.has-info .lightbox-caption {
+  visibility: hidden;
+}
+
+.lightbox-info-caption {
+  margin: 0 0 1.25em;
+  /* The caption's own size, against the gutter's smaller text. */
+  font-size: calc(0.9375em / 0.875);
+  line-height: 1.35;
+}
+
+.lightbox-info-caption .lightbox-index {
+  margin-left: 0.4em;
+  white-space: nowrap;
+}
+
 .lightbox-info-body > :first-child {
   margin-top: 0;
 }

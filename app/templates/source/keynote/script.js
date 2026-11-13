@@ -309,8 +309,9 @@
   const closeButton = lightbox.querySelector(".lightbox-close");
   const previousButton = lightbox.querySelector(".lightbox-previous");
   const nextButton = lightbox.querySelector(".lightbox-next");
-  const captionTitle = lightbox.querySelector(".lightbox-title");
-  const captionIndex = lightbox.querySelector(".lightbox-index");
+  // The caption over the image, and its copy at the top of the details gutter.
+  const captionTitles = lightbox.querySelectorAll(".lightbox-title");
+  const captionIndexes = lightbox.querySelectorAll(".lightbox-index");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   const SWIPE_THRESHOLD = 56;
@@ -438,12 +439,13 @@
 
   function updateCaption() {
     const entry = controller?.entries()[activeIndex];
-    if (!entry || !captionTitle) return;
-    captionTitle.textContent = entry.title;
+    if (!entry || !captionTitles.length) return;
+    for (const title of captionTitles) title.textContent = entry.title;
     const place = placeOf(entry);
     // The index takes as many digits as the total: 3/4, 05/52, 005/120.
     const width = place ? String(place.total).length : 0;
-    captionIndex.textContent = place ? `${String(place.index).padStart(width, "0")}/${place.total}` : "";
+    const index = place ? `${String(place.index).padStart(width, "0")}/${place.total}` : "";
+    for (const node of captionIndexes) node.textContent = index;
   }
 
   // Screen readers hear each image once, as "Title, 5 of 52", whether or not captions show.
