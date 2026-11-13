@@ -368,6 +368,18 @@ html.is-viewing {
   overflow: hidden;
 }
 
+/* The viewer takes the whole window, so the strip kept for the page's scrollbar goes while
+   it's open and the page is padded by as much (measured by script) so it doesn't reflow
+   underneath. An entry's own page opens straight into the viewer, so it never has the strip. */
+html.is-viewing,
+html.is-deep-open {
+  scrollbar-gutter: auto;
+}
+
+html.is-viewing:not(.is-deep-open) {
+  padding-right: var(--scrollbar-width, 0px);
+}
+
 html.is-viewing #header {
   opacity: 0;
   pointer-events: none;
@@ -1266,8 +1278,6 @@ code {
   --lightbox-bottom-gutter: var(--lightbox-top-gutter);
   position: fixed;
   inset: 0;
-  /* Not the strip kept for the page's scrollbar: browsers clip the viewer there, which
-     cut off the right-hand buttons and pushed the image off centre. */
   width: 100%;
   height: 100%;
   max-width: none;

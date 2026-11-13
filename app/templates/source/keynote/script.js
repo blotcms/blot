@@ -302,6 +302,15 @@
   const lightbox = document.querySelector(".lightbox");
   if (!lightbox) return;
 
+  // The strip kept for the page's scrollbar, which the page is padded by while the viewer
+  // is open. It can only be measured while the strip is there.
+  const measureScrollbar = () => {
+    if (root.classList.contains("is-viewing") || root.classList.contains("is-deep-open")) return;
+    root.style.setProperty("--scrollbar-width", `${Math.max(0, innerWidth - root.getBoundingClientRect().width)}px`);
+  };
+  measureScrollbar();
+  window.addEventListener("resize", measureScrollbar);
+
   const lightboxFrame = lightbox.querySelector(".lightbox-frame");
   const lightboxImage = lightbox.querySelector(".lightbox-image");
   const closeButton = lightbox.querySelector(".lightbox-close");
@@ -695,6 +704,7 @@
     closePending = false;
     lightboxGesture = null;
     controller?.resume();
+    measureScrollbar();
   }
 
   async function close({ animate = true } = {}) {
