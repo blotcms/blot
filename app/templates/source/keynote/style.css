@@ -1670,10 +1670,18 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   display: none;
 }
 
-/* After the opening zoom has finished, so the image lands before the details come in. */
-.lightbox.is-revealed:not(.is-opening) .lightbox-info,
-.lightbox.is-revealed:not(.is-opening) .lightbox-info-index {
+/* Late in the opening zoom and quickly, so the details arrive as the image lands. */
+.lightbox.is-revealed .lightbox-info,
+.lightbox.is-revealed .lightbox-info-index {
   opacity: 1;
+  transition: opacity 140ms ease-out 180ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lightbox.is-revealed .lightbox-info,
+  .lightbox.is-revealed .lightbox-info-index {
+    transition: none;
+  }
 }
 
 .lightbox-info-body:empty + .lightbox-info-details:empty::before {
