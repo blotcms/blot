@@ -509,18 +509,25 @@
     infoBody.replaceChildren(...(hasText ? [body] : []));
     const details = entry.link.querySelector("template.entry-details")?.content.cloneNode(true);
     const list = details?.querySelector(".entry-details");
-    for (const camera of list?.querySelectorAll(".entry-camera") || []) {
+    // The photo's camera, lens and exposure, as a card under the table.
+    const exif = details?.querySelector(".entry-exif");
+    const camera = exif?.querySelector(".entry-camera");
+    if (camera) {
       // Most cameras repeat the make in the model ("Canon" and "Canon EOS R5"), so show it once.
       const make = camera.querySelector(".entry-camera-make");
       const model = camera.querySelector(".entry-camera-model");
       if (make && model && model.textContent.trim().toLowerCase().startsWith(make.textContent.trim().toLowerCase())) make.remove();
-      if (!camera.querySelector("dd").textContent.trim()) camera.remove();
+      if (!camera.textContent.trim()) camera.remove();
     }
+    const exposure = exif?.querySelector(".entry-exposure");
+    if (exposure && !exposure.querySelector("li")) exposure.remove();
+    const hasExif = Boolean(exif?.querySelector("p, li"));
     // The photo's own description reads as prose under the title, not as a row of the table.
     const description = details?.querySelector(".entry-description");
     infoDescription?.replaceChildren(...(description ? [description] : []));
-    const hasDetails = Boolean(list?.querySelector("dt") || description);
-    infoDetails.replaceChildren(...(hasDetails ? [list] : []));
+    const hasTable = Boolean(list?.querySelector("dt"));
+    const hasDetails = hasTable || hasExif || Boolean(description);
+    infoDetails.replaceChildren(...[hasTable ? list : null, hasExif ? exif : null].filter(Boolean));
     // With the gutter open, the button stays to close it, even beside a post with no details.
     infoButton.hidden = !hasText && !hasDetails && !infoWanted;
     showInfo();

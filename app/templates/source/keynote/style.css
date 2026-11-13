@@ -1782,6 +1782,57 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   text-underline-offset: 0.2em;
 }
 
+/* The camera, lens and exposure, set like a camera's own info card: the exposure along the
+   foot, under a rule, and a camera icon in the corner. */
+.entry-exif {
+  position: relative;
+  margin: 1.25em 0 0;
+  padding: 0.75em 1em 0;
+  border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
+  border-radius: 10px;
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
+}
+
+.lightbox-info-details > .entry-exif:first-child {
+  margin-top: 0;
+}
+
+.lightbox-info-body:not(:empty) + .lightbox-info-details > .entry-exif:first-child {
+  margin-top: 1.25em;
+}
+
+.entry-exif p {
+  margin: 0;
+  padding-right: 1.75em;
+  overflow-wrap: anywhere;
+}
+
+.entry-exif-icon {
+  position: absolute;
+  top: 0.95em;
+  right: 1em;
+  fill: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
+}
+
+.entry-exposure {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25em 1em;
+  margin: 0.75em -1em 0;
+  padding: 0.6em 1em 0.7em;
+  border-top: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
+  list-style: none;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.75);
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.entry-exif p:last-of-type:not(:has(+ .entry-exposure)) {
+  padding-bottom: 0.75em;
+}
+
 .lightbox-close {
   /* Centred on the caption's line. */
   top: calc(var(--edge-y) + 0.85rem - 22px);
