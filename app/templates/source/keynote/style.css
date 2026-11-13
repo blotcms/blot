@@ -1110,7 +1110,9 @@ body[data-view="error"] .contents a {
   list-style: none;
 }
 
-.tag-navigation a {
+/* The archives' tag pills, also used for the tags in the viewer's details. */
+.tag-navigation a,
+.entry-tags a {
   display: block;
   padding: 5px 9px;
   white-space: nowrap;
@@ -1122,7 +1124,8 @@ body[data-view="error"] .contents a {
   transition: background-color 180ms ease, color 180ms ease;
 }
 
-.tag-navigation a:hover {
+.tag-navigation a:hover,
+.entry-tags a:hover {
   color: {{text_color}};
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.26);
   opacity: 1;
@@ -1154,11 +1157,13 @@ body[data-view="search"] .tag-navigation a.active:hover {
 
 /* On a light page the same tint reads much darker, so the pills use a lighter one. */
 [data-scheme="light"] .tag-navigation a,
+[data-scheme="light"] .entry-tags a,
 [data-scheme="light"] .tag-toggle {
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.07);
 }
 
 [data-scheme="light"] .tag-navigation a:hover,
+[data-scheme="light"] .entry-tags a:hover,
 [data-scheme="light"] .tag-toggle:hover {
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
 }
@@ -1167,7 +1172,8 @@ body[data-view="search"] .tag-navigation a.active:hover {
   background: {{text_color}};
 }
 
-.tag-navigation a:focus-visible {
+.tag-navigation a:focus-visible,
+.entry-tags a:focus-visible {
   outline: 2px solid {{text_color}};
   outline-offset: 3px;
 }
@@ -1732,64 +1738,43 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   text-underline-offset: 0.2em;
 }
 
-/* The date, tags and EXIF under the post's text: a label column and a value column. */
-.entry-details {
-  display: grid;
-  grid-template-columns: max-content minmax(0, 1fr);
-  column-gap: 1em;
-  margin: 1.25em 0 0;
+/* Under the post's text: the date, the camera card and the tags, each apart. */
+.lightbox-info .lightbox-info-details > * + * {
+  margin-top: 1em;
 }
 
-.entry-details dt,
-.entry-details dd {
-  padding: 0.45em 0;
-  border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
+.lightbox-info-body:not(:empty) + .lightbox-info-details {
+  margin-top: 1.25em;
 }
 
-.lightbox-info-body:empty + .lightbox-info-details .entry-details {
-  margin-top: 0;
-}
-
-.entry-details > div {
-  display: contents;
-}
-
-.entry-details dt {
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
-}
-
-.entry-details dd {
+.entry-date {
   margin: 0;
-  overflow-wrap: anywhere;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+  font-size: 0.857em;
   font-variant-numeric: tabular-nums;
 }
 
-.entry-details a {
-  color: inherit;
-  text-decoration: underline;
-  text-decoration-thickness: 1px;
-  text-underline-offset: 0.2em;
+/* The post's tags, as the archives' tag pills. */
+.entry-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 /* The camera, lens and exposure, set like a camera's own info card: the exposure along the
    foot, under a rule, and a camera icon in the corner. */
 .entry-exif {
   position: relative;
-  margin: 1.25em 0 0;
+  margin: 0;
   padding: 0.75em 1em 0;
   border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
   border-radius: 10px;
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
   font-size: 0.875em;
   line-height: 1.45;
-}
-
-.lightbox-info-details > .entry-exif:first-child {
-  margin-top: 0;
-}
-
-.lightbox-info-body:not(:empty) + .lightbox-info-details > .entry-exif:first-child {
-  margin-top: 1.25em;
 }
 
 .entry-exif p {

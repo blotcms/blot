@@ -506,8 +506,7 @@
     const hasText = Boolean(body && (body.textContent.trim() || body.querySelector("img, video, audio, iframe")));
     infoBody.replaceChildren(...(hasText ? [body] : []));
     const details = entry.link.querySelector("template.entry-details")?.content.cloneNode(true);
-    const list = details?.querySelector(".entry-details");
-    // The photo's camera, lens and exposure, as a card under the table.
+    // The photo's camera, lens and exposure, as a card.
     const exif = details?.querySelector(".entry-exif");
     const camera = exif?.querySelector(".entry-camera");
     if (camera) {
@@ -520,12 +519,13 @@
     const exposure = exif?.querySelector(".entry-exposure");
     if (exposure && !exposure.querySelector("li")) exposure.remove();
     const hasExif = Boolean(exif?.querySelector("p, li"));
-    // The photo's own description reads as prose under the title, not as a row of the table.
+    // The photo's own description reads as prose under the title.
     const description = details?.querySelector(".entry-description");
     infoDescription?.replaceChildren(...(description ? [description] : []));
-    const hasTable = Boolean(list?.querySelector("dt"));
-    const hasDetails = hasTable || hasExif || Boolean(description);
-    infoDetails.replaceChildren(...[hasTable ? list : null, hasExif ? exif : null].filter(Boolean));
+    // Then the date, the camera card and the tags, as the archives' pills.
+    const parts = [details?.querySelector(".entry-date"), hasExif ? exif : null, details?.querySelector(".entry-tags")].filter(Boolean);
+    infoDetails.replaceChildren(...parts);
+    const hasDetails = parts.length > 0 || Boolean(description);
     // With the gutter open, the button stays to close it, even beside a post with no details.
     infoButton.hidden = !hasText && !hasDetails && !infoWanted;
     showInfo();
