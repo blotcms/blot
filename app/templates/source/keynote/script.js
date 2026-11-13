@@ -871,16 +871,30 @@
     };
   }
 
-  // How far the zoomed image may be moved: its edges stay on or beyond the screen's edges.
+  // The part of the screen the image has: all of it, less the details gutter while that's
+  // open, down the right or, on narrow screens, along the bottom.
+  function stageSize() {
+    let width = lightbox.clientWidth;
+    let height = lightbox.clientHeight;
+    if (infoPanel && !infoPanel.hidden) {
+      const panel = infoPanel.getBoundingClientRect();
+      if (panel.top > 1) height = Math.min(height, panel.top);
+      else width = Math.min(width, panel.left);
+    }
+    return { width, height };
+  }
+
+  // How far the zoomed image may be moved: its edges stay on or beyond the stage's edges.
   function panBounds(level = zoomLevel) {
     const center = baseCenter();
+    const stage = stageSize();
     const axis = (middle, size, view) => {
       const low = view - middle - size / 2;
       const high = size / 2 - middle;
       return low > high ? [view / 2 - middle, view / 2 - middle] : [low, high];
     };
-    const [lowX, highX] = axis(center.x, lightboxImage.offsetWidth * level, lightbox.clientWidth);
-    const [lowY, highY] = axis(center.y, lightboxImage.offsetHeight * level, lightbox.clientHeight);
+    const [lowX, highX] = axis(center.x, lightboxImage.offsetWidth * level, stage.width);
+    const [lowY, highY] = axis(center.y, lightboxImage.offsetHeight * level, stage.height);
     return { lowX, highX, lowY, highY };
   }
 
@@ -960,7 +974,10 @@
     renderZoom();
   }
 
-  const screenCenter = () => ({ x: lightbox.clientWidth / 2, y: lightbox.clientHeight / 2 });
+  const screenCenter = () => {
+    const stage = stageSize();
+    return { x: stage.width / 2, y: stage.height / 2 };
+  };
 
   // Scrolling at 100% pulls the image smaller; far enough closes the viewer, otherwise it springs back.
   function pullToClose(distance) {
