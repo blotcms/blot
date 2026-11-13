@@ -1604,13 +1604,6 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   border-radius: 50%;
 }
 
-/* A 16px icon, in the same 36px round backing as the others' 24px ones. */
-.lightbox-info-button .lightbox-icon {
-  width: 16px;
-  height: 16px;
-  padding: 10px;
-}
-
 .lightbox.is-revealed .lightbox-info-button[aria-expanded="true"] {
   opacity: 1;
 }
