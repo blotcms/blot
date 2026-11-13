@@ -442,8 +442,9 @@
     if (!entry || !captionTitle) return;
     captionTitle.textContent = entry.title;
     const place = placeOf(entry);
-    const pad = (number) => String(number).padStart(2, "0");
-    captionIndex.textContent = place ? `${pad(place.index)}/${pad(place.total)}` : "";
+    // The index takes as many digits as the total: 3/4, 05/52, 005/120.
+    const width = place ? String(place.total).length : 0;
+    captionIndex.textContent = place ? `${String(place.index).padStart(width, "0")}/${place.total}` : "";
   }
 
   // Screen readers hear each image once, as "Title, 5 of 52", whether or not captions show.
