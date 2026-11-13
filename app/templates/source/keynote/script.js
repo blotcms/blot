@@ -519,8 +519,11 @@
     // The photo's own description reads as prose under the title, not as a row of the table.
     const description = details?.querySelector(".entry-description");
     infoDescription?.replaceChildren(...(description ? [description] : []));
-    const hasDetails = Boolean(list?.querySelector("dt") || description);
-    infoDetails.replaceChildren(...(hasDetails ? [list] : []));
+    // The tags sit above the table, as the archives' pills.
+    const tags = details?.querySelector(".entry-tags");
+    const hasTable = Boolean(list?.querySelector("dt"));
+    const hasDetails = Boolean(hasTable || description || tags);
+    infoDetails.replaceChildren(...[tags, hasTable ? list : null].filter(Boolean));
     // With the gutter open, the button stays to close it, even beside a post with no details.
     infoButton.hidden = !hasText && !hasDetails && !infoWanted;
     showInfo();

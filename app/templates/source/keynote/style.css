@@ -1788,19 +1788,22 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   text-underline-offset: 0.2em;
 }
 
-.entry-details .entry-tags {
+/* The post's tags, above the table, as the archives' tag pills. */
+.entry-tags {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
   gap: 4px;
+  margin: 0 0 1em;
+  padding: 0;
+  list-style: none;
 }
 
-/* Smaller than the archives' pills, so each fits within a line of the details. */
-.entry-details .entry-tags a {
-  padding: 1px 7px;
-  font-size: 0.8em;
-  line-height: 1.45;
-  text-decoration: none;
+.entry-tags + .entry-details {
+  margin-top: 0;
+}
+
+.lightbox-info-body:not(:empty) + .lightbox-info-details .entry-tags {
+  margin-top: 1.25em;
 }
 
 .lightbox-close {

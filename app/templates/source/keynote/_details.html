@@ -1,7 +1,7 @@
 {{#exif}}{{#ImageDescription}}<p class="entry-description">{{ImageDescription}}</p>{{/ImageDescription}}{{/exif}}
+{{#tags.length}}<ul class="entry-tags" aria-label="Tags">{{#tags}}<li><a href="/tagged/{{slug}}">{{name}}</a></li>{{/tags}}</ul>{{/tags.length}}
 <dl class="entry-details">
   {{^hide_dates}}{{#date}}<div><dt>Date</dt><dd>{{date}}</dd></div>{{/date}}{{/hide_dates}}
-  {{#tags.length}}<div><dt>Tags</dt><dd class="entry-tags">{{#tags}}<a href="/tagged/{{slug}}">{{name}}</a>{{/tags}}</dd></div>{{/tags.length}}
   {{#exif}}
   <div class="entry-camera"><dt>Camera</dt><dd><span class="entry-camera-make">{{Make}}</span> <span class="entry-camera-model">{{Model}}</span></dd></div>
   {{#LensModel}}<div><dt>Lens</dt><dd>{{#LensMake}}{{LensMake}} {{/LensMake}}{{LensModel}}</dd></div>{{/LensModel}}
