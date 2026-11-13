@@ -1611,10 +1611,11 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   grid-row: 1 / -1;
   box-sizing: border-box;
   min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  /* Below the row of arrows and buttons along its top. */
-  padding: calc(var(--edge-y) + 0.85rem + 22px + 1.25rem) var(--edge-x) calc(var(--edge-y) + 44px + 1rem) 1.5rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Between the row of arrows along the top and the index and Info pill along the foot. */
+  padding: calc(var(--edge-y) + 0.85rem + 22px) var(--edge-x) calc(var(--edge-y) + 34px) 1.5rem;
   color: {{text_color}};
   background: {{background_color}};
   background-image: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04));
@@ -1622,6 +1623,21 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   line-height: 1.55;
   opacity: 0;
   transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
+}
+
+.lightbox-info[hidden] {
+  display: none;
+}
+
+/* Long details scroll here, fading out at the top and bottom rather than running under the
+   buttons. The padding keeps the fades clear of the text until it scrolls. */
+.lightbox-info-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 1.25rem 0;
+  mask-image: linear-gradient(transparent, #000 1.25rem, #000 calc(100% - 1.25rem), transparent);
 }
 
 .lightbox.is-revealed .lightbox-info {
@@ -1645,9 +1661,24 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   line-height: 1.35;
 }
 
-.lightbox-info-caption .lightbox-index {
-  margin-left: 0.4em;
-  white-space: nowrap;
+/* The index, at the gutter's foot on the Info pill's line, below the scrolling details. */
+.lightbox-info-index {
+  position: absolute;
+  bottom: 0;
+  left: calc(100% - var(--lightbox-info-width));
+  right: 0;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  height: 44px;
+  margin: 0;
+  padding: 0 0 calc(var(--edge-y) - 10px) 1.5rem;
+  font-size: 0.9375em;
+  pointer-events: none;
+}
+
+.lightbox.has-info .lightbox-info-index {
+  display: flex;
 }
 
 .entry-description {
@@ -1762,7 +1793,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 .lightbox.has-info .lightbox-close,
 .lightbox.has-info .lightbox-info-button,
 .lightbox.has-info .lightbox-step {
-  z-index: 2;
+  z-index: 3;
 }
 
 .lightbox.has-info .lightbox-step {
@@ -1802,10 +1833,15 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
     grid-template-columns: var(--lightbox-gutter) minmax(0, 1fr) var(--lightbox-gutter);
   }
 
+  .lightbox-info-index {
+    left: 0;
+    padding-left: var(--edge-x);
+  }
+
   .lightbox-info {
     grid-column: 1 / -1;
     grid-row: 3;
-    padding-top: calc(44px + 1rem);
+    padding-top: calc(44px - 0.25rem);
     padding-left: var(--edge-x);
   }
 
