@@ -522,8 +522,8 @@
     // The photo's own description reads as prose under the title.
     const description = details?.querySelector(".entry-description");
     infoDescription?.replaceChildren(...(description ? [description] : []));
-    // Then the date, the camera card and the tags, as the archives' pills.
-    const parts = [details?.querySelector(".entry-date"), hasExif ? exif : null, details?.querySelector(".entry-tags")].filter(Boolean);
+    // Then the camera card, the tags as the archives' pills, and the date.
+    const parts = [hasExif ? exif : null, details?.querySelector(".entry-tags"), details?.querySelector(".entry-date")].filter(Boolean);
     infoDetails.replaceChildren(...parts);
     const hasDetails = parts.length > 0 || Boolean(description);
     // With the gutter open, the button stays to close it, even beside a post with no details.

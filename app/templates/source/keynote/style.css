@@ -1738,7 +1738,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   text-underline-offset: 0.2em;
 }
 
-/* Under the post's text: the date, the camera card and the tags, each apart. */
+/* Under the post's text: the camera card, the tags and the date, each apart. */
 .lightbox-info .lightbox-info-details > * + * {
   margin-top: 1em;
 }
