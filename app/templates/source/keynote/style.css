@@ -137,9 +137,11 @@ hr {
   flex-wrap: wrap;
   /* The same space between the title and the first link as between the links. */
   gap: 0.45em 1.15em;
+  /* How far the header reaches over the page below it, for the fade to sit on. */
+  --header-tail: 1.5em;
   /* Lines up with the archives grid below it. */
-  padding: var(--edge-y) var(--edge-x) 2.5em;
-  margin-bottom: -1.5em;
+  padding: var(--edge-y) var(--edge-x) calc(1em + var(--header-tail));
+  margin-bottom: calc(-1 * var(--header-tail));
   font-size: 0.9375em;
   /* The page colour fading to transparent, so content scrolls away softly beneath it. */
   background: linear-gradient(
@@ -213,12 +215,36 @@ hr {
   border-radius: 999px;
 }
 
-{{#sticky_navigation}}
+/* The "navigation style" setting. Gradient, solid and transparent headers stay at the top
+   as the page scrolls; the "scrolls away" header scrolls off with the page. Solid and
+   scrolls-away headers don't reach over the page, so nothing below sits under them. The
+   !important keeps the narrow-screen tail below from bringing the reach back. */
+{{^is.navigation_style.scrolls_away}}
 #header {
   position: sticky;
   top: 0;
 }
-{{/sticky_navigation}}
+{{/is.navigation_style.scrolls_away}}
+
+{{#is.navigation_style.solid}}
+#header {
+  --header-tail: 0px !important;
+  background: {{background_color}};
+}
+{{/is.navigation_style.solid}}
+
+{{#is.navigation_style.scrolls_away}}
+#header {
+  --header-tail: 0px !important;
+  background: {{background_color}};
+}
+{{/is.navigation_style.scrolls_away}}
+
+{{#is.navigation_style.transparent}}
+#header {
+  background: none;
+}
+{{/is.navigation_style.transparent}}
 
 #header .nav a {
   display: inline-block;
@@ -1548,8 +1574,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
   #header {
     gap: 0.5em 0.8em;
-    padding: var(--edge-y) var(--edge-x) 2em;
-    margin-bottom: -1em;
+    --header-tail: 1em;
   }
 
   #header {
@@ -1578,7 +1603,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   /* The links open as a panel over the page, just under the title. */
   #header .nav {
     position: absolute;
-    top: calc(100% - 2em);
+    top: calc(100% - 1em - var(--header-tail));
     right: 0;
     left: 0;
     display: none;

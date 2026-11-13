@@ -30,7 +30,13 @@
       "right",
       "center"
     ],
-    "sticky_navigation": true,
+    "navigation_style": "gradient",
+    "navigation_style_options": [
+      "gradient",
+      "solid",
+      "transparent",
+      "scrolls_away"
+    ],
     "show_captions": true,
     "drift": true,
     "slide_size": 5,
