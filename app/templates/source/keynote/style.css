@@ -1791,6 +1791,8 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
   border-radius: 10px;
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
+  font-size: 0.875em;
+  line-height: 1.45;
 }
 
 .lightbox-info-details > .entry-exif:first-child {
