@@ -1650,6 +1650,10 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   white-space: nowrap;
 }
 
+.entry-description {
+  margin: 0 0 1.25em;
+}
+
 .lightbox-info-body > :first-child {
   margin-top: 0;
 }

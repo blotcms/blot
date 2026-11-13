@@ -462,6 +462,7 @@
   const infoPanel = lightbox.querySelector(".lightbox-info");
   const infoBody = infoPanel?.querySelector(".lightbox-info-body");
   const infoDetails = infoPanel?.querySelector(".lightbox-info-details");
+  const infoDescription = infoPanel?.querySelector(".lightbox-info-description");
   // One setting for every image, kept between visits: open, the details fill a gutter on the
   // right of each image in turn, until it's closed again.
   const INFO_KEY = "keynote:info";
@@ -511,7 +512,10 @@
       if (make && model && model.textContent.trim().toLowerCase().startsWith(make.textContent.trim().toLowerCase())) make.remove();
       if (!camera.querySelector("dd").textContent.trim()) camera.remove();
     }
-    const hasDetails = Boolean(list?.querySelector("dt"));
+    // The photo's own description reads as prose under the title, not as a row of the table.
+    const description = details?.querySelector(".entry-description");
+    infoDescription?.replaceChildren(...(description ? [description] : []));
+    const hasDetails = Boolean(list?.querySelector("dt") || description);
     infoDetails.replaceChildren(...(hasDetails ? [list] : []));
     // With the gutter open, the button stays to close it, even beside a post with no details.
     infoButton.hidden = !hasText && !hasDetails && !infoWanted;
