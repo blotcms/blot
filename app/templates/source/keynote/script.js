@@ -511,8 +511,9 @@
     }
     const hasDetails = Boolean(list?.querySelector("dt"));
     infoDetails.replaceChildren(...(hasDetails ? [list] : []));
-    // With the gutter open, the button stays to close it, even beside a post with no details.
-    infoButton.hidden = !hasText && !hasDetails && !infoWanted;
+    // The caption stays either way; a post with nothing to show only loses the dots, unless
+    // the gutter is open and they're needed to close it.
+    infoButton.disabled = !hasText && !hasDetails && !infoWanted;
     showInfo();
   }
 
