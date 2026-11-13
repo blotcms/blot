@@ -6,6 +6,7 @@
     <span class="slide-title">{{title}}</span>
     {{#tags.length}}<span class="slide-tags">{{#tags}}{{name}}{{^last}}, {{/last}}{{/tags}}</span>{{/tags.length}}
     <template class="entry-html">{{{html}}}</template>
+    <template class="entry-details">{{> details}}</template>
   </a>
 </li>
 {{/thumbnail.large.url}}

@@ -1,0 +1,15 @@
+<dl class="entry-details">
+  {{^hide_dates}}{{#date}}<div><dt>Published</dt><dd>{{date}}</dd></div>{{/date}}{{/hide_dates}}
+  {{#tags.length}}<div><dt>Tags</dt><dd>{{#tags}}<a href="/tagged/{{slug}}">{{name}}</a>{{^last}}, {{/last}}{{/tags}}</dd></div>{{/tags.length}}
+  {{#exif}}
+  <div class="entry-camera"><dt>Camera</dt><dd><span class="entry-camera-make">{{Make}}</span> <span class="entry-camera-model">{{Model}}</span></dd></div>
+  {{#LensModel}}<div><dt>Lens</dt><dd>{{#LensMake}}{{LensMake}} {{/LensMake}}{{LensModel}}</dd></div>{{/LensModel}}
+  {{#FocalLength}}<div><dt>Focal length</dt><dd>{{FocalLength}} mm</dd></div>{{/FocalLength}}
+  {{#ExposureTime}}<div><dt>Shutter</dt><dd>{{ExposureTime}} s</dd></div>{{/ExposureTime}}
+  {{#FNumber}}<div><dt>Aperture</dt><dd>ƒ/{{FNumber}}</dd></div>{{/FNumber}}
+  {{#ISO}}<div><dt>ISO</dt><dd>{{ISO}}</dd></div>{{/ISO}}
+  {{#Flash}}<div><dt>Flash</dt><dd>{{Flash}}</dd></div>{{/Flash}}
+  {{#ImageDescription}}<div><dt>Description</dt><dd>{{ImageDescription}}</dd></div>{{/ImageDescription}}
+  {{#GPSPosition}}<div><dt>Location</dt><dd>{{GPSPosition}}</dd></div>{{/GPSPosition}}
+  {{/exif}}
+</dl>

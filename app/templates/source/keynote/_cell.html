@@ -3,6 +3,7 @@
   <span class="cell-image"><img loading="lazy" src="{{{thumbnail.small.url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w, {{{thumbnail.large.url}}} {{thumbnail.large.width}}w" sizes="(min-width: 800px) 280px, 44vw" width="{{thumbnail.large.width}}" height="{{thumbnail.large.height}}" alt="" decoding="async" draggable="false"></span>
   <span class="cell-title">{{title}}</span>
   <template class="entry-html">{{{html}}}</template>
+  <template class="entry-details">{{> details}}</template>
 </a>
 {{/thumbnail.large.url}}
 {{^thumbnail.large.url}}

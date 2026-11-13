@@ -1618,13 +1618,37 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   text-underline-offset: 0.2em;
 }
 
-.lightbox-info-date {
-  margin: 0.75em 0 0;
+/* The date, tags and EXIF under the post's text: a label column and a value column. */
+.entry-details {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.25em 1em;
+  margin: 1em 0 0;
+}
+
+.lightbox-info-body:empty + .lightbox-info-details .entry-details {
+  margin-top: 0;
+}
+
+.entry-details > div {
+  display: contents;
+}
+
+.entry-details dt {
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
 }
 
-.lightbox-info-date:empty {
-  display: none;
+.entry-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-details a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
 }
 
 .lightbox-close {

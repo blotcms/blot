@@ -454,12 +454,12 @@
     announcer.textContent = place ? `${entry.title}, ${place.index} of ${place.total}` : entry.title;
   }
 
-  // ---- Post text: an Info button shows the text and date that come with the image ----
+  // ---- Post details: an Info button shows the post's text, then its date, tags and the photo's EXIF ----
 
   const infoButton = lightbox.querySelector(".lightbox-info-button");
   const infoPanel = lightbox.querySelector(".lightbox-info");
   const infoBody = infoPanel?.querySelector(".lightbox-info-body");
-  const infoDate = infoPanel?.querySelector(".lightbox-info-date");
+  const infoDetails = infoPanel?.querySelector(".lightbox-info-details");
   const infoOpen = () => Boolean(infoPanel && !infoPanel.hidden);
 
   function setInfo(open) {
@@ -476,7 +476,7 @@
       // The picture is already on screen, and so is the title: leave both out, with
       // anything that only held them.
       const picture = body.querySelector("img");
-      const heading = [...body.querySelectorAll("h1, h2, h3, p")].find((node) => node.textContent.trim() === entry.title);
+      const heading = [...body.querySelectorAll("h1, h2, h3, p, .caption")].find((node) => node.textContent.trim() === entry.title);
       for (const node of [picture, heading]) {
         let target = node;
         while (target?.parentNode && target.parentNode !== body && target.parentNode.childElementCount === 1 && !target.parentNode.textContent.trim()) target = target.parentNode;
@@ -485,8 +485,18 @@
     }
     const hasText = Boolean(body && (body.textContent.trim() || body.querySelector("img, video, audio, iframe")));
     infoBody.replaceChildren(...(hasText ? [body] : []));
-    infoDate.textContent = entry.date;
-    infoButton.hidden = !hasText && !entry.date;
+    const details = entry.link.querySelector("template.entry-details")?.content.cloneNode(true);
+    const list = details?.querySelector(".entry-details");
+    for (const camera of list?.querySelectorAll(".entry-camera") || []) {
+      // Most cameras repeat the make in the model ("Canon" and "Canon EOS R5"), so show it once.
+      const make = camera.querySelector(".entry-camera-make");
+      const model = camera.querySelector(".entry-camera-model");
+      if (make && model && model.textContent.trim().toLowerCase().startsWith(make.textContent.trim().toLowerCase())) make.remove();
+      if (!camera.querySelector("dd").textContent.trim()) camera.remove();
+    }
+    const hasDetails = Boolean(list?.querySelector("dt"));
+    infoDetails.replaceChildren(...(hasDetails ? [list] : []));
+    infoButton.hidden = !hasText && !hasDetails;
     if (infoButton.hidden) setInfo(false);
   }
 
