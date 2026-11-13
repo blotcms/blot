@@ -1407,8 +1407,10 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 }
 
 .lightbox.is-zoomed.is-revealed .zoom-controls,
-/* Someone moving through the buttons with the keyboard can reach zoom before zooming. */
-.lightbox.is-revealed:has(:focus-visible) .zoom-controls {
+/* Someone moving through the buttons with the keyboard can reach zoom before zooming. Only
+   a button counts: the viewer focuses its image frame on opening, which iOS Safari treats
+   as :focus-visible, and a tap that moved focus off it would hide the buttons mid-tap. */
+.lightbox.is-revealed:has(button:focus-visible) .zoom-controls {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
