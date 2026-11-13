@@ -435,7 +435,7 @@
     upgradeChain(entry, token);
   }
 
-  // The title, then its place among the posts as 05/52, worked out from each post's index and
+  // The title, then its place among the posts as "5 of 52", worked out from each post's index and
   // the page's post count, so nothing extra has to load.
   // Reached through a listing, the arrows follow it, and so does the counter.
   const placeOf = (entry) => (stepsByEntryLinks(entry) && collectionPlace ? collectionPlace : controller.position?.(activeIndex));
@@ -445,9 +445,7 @@
     if (!entry || !captionTitles.length) return;
     for (const title of captionTitles) title.textContent = entry.title;
     const place = placeOf(entry);
-    // The index takes as many digits as the total: 3/4, 05/52, 005/120.
-    const width = place ? String(place.total).length : 0;
-    const index = place ? `${String(place.index).padStart(width, "0")}/${place.total}` : "";
+    const index = place ? `${place.index} of ${place.total}` : "";
     for (const node of captionIndexes) node.textContent = index;
   }
 

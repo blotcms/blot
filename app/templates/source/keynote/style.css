@@ -1220,7 +1220,7 @@ code {
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);
 }
 
-/* The number of posts as N/N, under the archives, tag and search pages, set like the
+/* The number of posts as "N of N", under the archives, tag and search pages, set like the
    viewer's counter (.lightbox-index): 0.8 of the caption's 0.9375em, at half strength. */
 .list-total {
   margin: 0 2vw 4em;
