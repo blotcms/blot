@@ -1,0 +1,51 @@
+<!-- The results in a box like the folder's: its top row is "Search" and
+     the search field, then the results as folder rows -->
+<div class="site-dashboard-search-results">
+  <div class="folder-box directory">
+    <div class="folder-toolbar">
+      <span class="folder-toolbar__label">Search</span>
+      {{> site-dashboard-views}}
+    </div>
+    {{#searchQuery}}
+    {{#searchResults.length}}
+    <div class="directory-scroll">
+      <table class="data-table data-table--zebra directory-list">
+        <thead>
+          <tr>
+            <th scope="col" style="width:62%">Name</th>
+            <th scope="col" style="width:12%">Size</th>
+            <th scope="col" style="width:26%">Date modified</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{#searchResults}}
+          <tr class="directory-row">
+            <td>
+              <div class="directory-row__name-cell">
+                <a href="{{{base}}}/folder/{{{urlPath}}}" class="directory-row__link cover entry" title="{{path}}">
+                  <span class="icon-file-check" aria-hidden="true"></span>
+                  <span class="truncate">{{name}}</span>
+                </a>
+              </div>
+            </td>
+            <td>
+              <a href="{{{base}}}/folder/{{{urlPath}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
+              {{size}}
+            </td>
+            <td class="directory-row__modified-cell">
+              <a href="{{{base}}}/folder/{{{urlPath}}}" class="directory-row__link cover" aria-hidden="true" tabindex="-1"></a>
+              {{modified}}
+            </td>
+          </tr>
+          {{/searchResults}}
+        </tbody>
+      </table>
+    </div>
+    {{/searchResults.length}}
+    {{^searchResults.length}}<p class="site-dashboard-empty site-dashboard-search-results__empty">No matching entries.</p>{{/searchResults.length}}
+    {{/searchQuery}}
+    {{^searchQuery}}
+    <p class="site-dashboard-empty site-dashboard-search-results__empty">Enter a term to search your entries.</p>
+    {{/searchQuery}}
+  </div>
+</div>

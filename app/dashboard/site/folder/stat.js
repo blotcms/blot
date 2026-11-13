@@ -1,21 +1,13 @@
-const moment = require("moment");
 const folder = require("storage/folder");
-
-require("moment-timezone");
+const formatDashboardDate = require("dashboard/util/format-dashboard-date");
 
 // Formats a stat of storage/folder (modified is in milliseconds) for display
 const format = (stat, timeZone) => {
   const mtime = new Date(stat.modified);
   const result = {};
 
-  result.modified = moment.utc(mtime).tz(timeZone).calendar(null, {
-    sameDay: "[Today], h:mm A",
-    lastDay: "[Yesterday], h:mm A",
-    lastWeek: "LL, h:mm A",
-    sameElse: "LL, h:mm A",
-  });
+  result.modified = formatDashboardDate(mtime, timeZone);
 
-  result.updated = moment.utc(mtime).from(moment.utc());
   result.unix = mtime.getTime();
   result.bytes = stat.size;
   result.size = humanFileSize(stat.size);

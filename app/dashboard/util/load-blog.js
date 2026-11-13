@@ -1,4 +1,3 @@
-const moment = require("moment");
 const config = require("config");
 const Blog = require("models/blog");
 const logContext = require("helper/logContext");
@@ -38,8 +37,6 @@ async function loadBlog(req, res, next, handle) {
     if (blog.status && blog.status.message !== "Synced") {
       blog.status.state = "syncing";
     }
-
-    blog.updated = moment(blog.cacheID).fromNow();
   } catch (e) {
     return next(e);
   }

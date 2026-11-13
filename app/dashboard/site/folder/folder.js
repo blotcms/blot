@@ -55,7 +55,6 @@ const DEFAULT_PAGE_SIZE = 100;
 // being shown. We sweep the whole folder and cache the result so the
 // follow-up infinite-scroll page fetches don't re-list it. The cache is
 // bounded so a few huge folders can't pin unbounded memory.
-const STAT_SWEEP_CONCURRENCY = 32;
 const STAT_CACHE_LIMIT = 8;
 const statCache = new Map(); // "blogID_cacheID_dir" -> Promise<stat[]>
 
@@ -89,31 +88,25 @@ function byDisplayName(a, b) {
   });
 }
 
-// Small promise pool: run fn over items, at most `limit` in flight.
-async function mapWithLimit(items, limit, fn) {
-  const results = new Array(items.length);
-  let cursor = 0;
-
-  async function worker() {
-    while (cursor < items.length) {
-      const index = cursor++;
-      results[index] = await fn(items[index], index);
-    }
-  }
-
-  const size = Math.max(1, Math.min(limit, items.length));
-  await Promise.all(Array.from({ length: size }, worker));
-  return results;
-}
-
-// Dotfiles and previews are not shown, and the rest is in display order
+// Dotfiles and previews are not shown, and the rest is in display order:
+// folders above files, as Finder lists them
 function visible(entries) {
   return entries
     .filter(
       (item) =>
         !item.name.startsWith(".") && !item.name.endsWith(".preview.html")
     )
-    .sort((a, b) => byDisplayName(a.name, b.name));
+    .sort(
+      (a, b) =>
+        !!b.isDirectory - !!a.isDirectory || byDisplayName(a.name, b.name)
+    );
+}
+
+// Z to A by name, keeping folders above files
+function reverseNames(entries) {
+  const folders = entries.filter((entry) => entry.isDirectory);
+  const files = entries.filter((entry) => !entry.isDirectory);
+  return folders.reverse().concat(files.reverse());
 }
 
 // entry is a listing's entry or a stat of storage/folder, which both carry
@@ -127,24 +120,6 @@ function statEntry(blog, dir, name, entry) {
   stat.name = name;
 
   return stat;
-}
-
-// Stats one name, or resolves null if it is gone
-async function statName(blog, dir, name) {
-  try {
-    return statEntry(
-      blog,
-      dir,
-      name,
-      await folder.stat(blog.id, path.join(dir, name))
-    );
-  } catch (err) {
-    // The file was removed between the listing and the stat (common while a
-    // large folder is still syncing), or is now a symlink. Skip it rather
-    // than failing the listing.
-    if (err && (err.code === "ENOENT" || err.code === "ELOOP")) return null;
-    throw err;
-  }
 }
 
 // Stat every entry once, cached per folder. Used for date / size sorts,
@@ -187,86 +162,85 @@ function invalidateStatCache(blog) {
   }
 }
 
-// Attach the post and too-large badges the template needs. Only the page
+const hasFlag = (stat, code) =>
+  !!stat.flags && stat.flags.some((flag) => flag.code === code);
+
+// Attach the post / too-large flags the template needs. Only the page
 // being rendered is looked up in Redis, so this stays bounded.
 async function decorate(blog, dir, pageStats) {
   const pageNames = pageStats.map((stat) => stat.name);
 
-  const [entries] = await Promise.all([
-    new Promise((resolve) => {
-      // Resolve each listed item to the entry that decides whether it is
-      // badged as published. A file inside a "+" folder shares the folder
-      // post's aggregate entry, so it is looked up under that path instead.
-      const lookups = pageNames.map((item) => {
-        const itemPath = pathNormalize(path.join(dir, item));
-        const multiInfo = findMultiFolder(itemPath);
-        const viaAggregate = !!(
-          multiInfo && pathNormalize(multiInfo.entryPath) !== itemPath
-        );
-        const lookupPath = viaAggregate ? multiInfo.entryPath : itemPath;
-        return {
-          itemPath,
-          viaAggregate,
-          folderPath: multiInfo ? pathNormalize(multiInfo.folderPath) : null,
-          lookupPath: pathNormalize(lookupPath),
-        };
-      });
-
-      // Every item in a "+" folder resolves to the same aggregate entry, so
-      // read each distinct path once. We only need the deleted flag and the
-      // generated HTML (to confirm a file is one of the folder post's
-      // sources rather than an unsupported sibling).
-      const uniquePaths = Array.from(
-        new Set(lookups.map((lookup) => lookup.lookupPath))
+  const entries = await new Promise((resolve) => {
+    // Resolve each listed item to the entry that decides whether it is
+    // badged as published. A file inside a "+" folder shares the folder
+    // post's aggregate entry, so it is looked up under that path instead.
+    const lookups = pageNames.map((item) => {
+      const itemPath = pathNormalize(path.join(dir, item));
+      const multiInfo = findMultiFolder(itemPath);
+      const viaAggregate = !!(
+        multiInfo && pathNormalize(multiInfo.entryPath) !== itemPath
       );
+      const lookupPath = viaAggregate ? multiInfo.entryPath : itemPath;
+      return {
+        itemPath,
+        viaAggregate,
+        folderPath: multiInfo ? pathNormalize(multiInfo.folderPath) : null,
+        lookupPath: pathNormalize(lookupPath),
+      };
+    });
 
-      Promise.all(
-        uniquePaths.map((entryPath) =>
-          // A failed read is the same as no entry
-          Entry.get(blog.id, entryPath).then(
-            (entry) => entry || null,
-            () => null
-          )
+    // Every item in a "+" folder resolves to the same aggregate entry, so
+    // read each distinct path once. We only need the deleted flag and the
+    // generated HTML (to confirm a file is one of the folder post's
+    // sources rather than an unsupported sibling).
+    const uniquePaths = Array.from(
+      new Set(lookups.map((lookup) => lookup.lookupPath))
+    );
+
+    Promise.all(
+      uniquePaths.map((entryPath) =>
+        // A failed read is the same as no entry
+        Entry.get(blog.id, entryPath).then(
+          (entry) => entry || null,
+          () => null
         )
       )
-        .then((fetched) => {
-          const byPath = new Map();
-          uniquePaths.forEach((entryPath, index) => {
-            byPath.set(entryPath, fetched[index]);
-          });
+    )
+      .then((fetched) => {
+        const byPath = new Map();
+        uniquePaths.forEach((entryPath, index) => {
+          byPath.set(entryPath, fetched[index]);
+        });
 
-          resolve(
-            pageNames.filter((_, index) => {
-              const lookup = lookups[index];
-              const entry = byPath.get(lookup.lookupPath);
+        resolve(
+          pageNames.filter((_, index) => {
+            const lookup = lookups[index];
+            const entry = byPath.get(lookup.lookupPath);
 
-              if (!entry || entry.deleted === true) return false;
+            if (!entry || entry.deleted === true) return false;
 
-              // A file inside a "+" folder resolves to the shared aggregate
-              // entry. Only badge it as published if it is actually the "+"
-              // folder itself or one of the folder post's source files -
-              // not an unsupported sibling like archive.zip.
-              if (lookup.viaAggregate) {
-                if (lookup.itemPath === lookup.folderPath) return true;
-                return (
-                  folderPostSourcePaths(entry.html).indexOf(lookup.itemPath) !==
-                  -1
-                );
-              }
+            // A file inside a "+" folder resolves to the shared aggregate
+            // entry. Only badge it as published if it is actually the "+"
+            // folder itself or one of the folder post's source files -
+            // not an unsupported sibling like archive.zip.
+            if (lookup.viaAggregate) {
+              if (lookup.itemPath === lookup.folderPath) return true;
+              return (
+                folderPostSourcePaths(entry.html).indexOf(lookup.itemPath) !==
+                -1
+              );
+            }
 
-              return true;
-            })
-          );
-        })
-        .catch(() => resolve([]));
-    }),
-  ]);
+            return true;
+          })
+        );
+      })
+      .catch(() => resolve([]));
+  });
 
   return pageStats.map((stat) => {
     stat.entry = entries.includes(stat.name);
-    stat.tooLarge = (stat.flags || []).some(
-      (flag) => flag.code === "POST_TOO_LARGE"
-    );
+    stat.tooLarge = hasFlag(stat, "POST_TOO_LARGE");
     if (stat.tooLarge) {
       // A previously published source that grew too large leaves a deleted
       // entry tombstone behind; don't show it as a live post.
@@ -299,39 +273,18 @@ async function getContents(blog, dir, options = {}) {
   let hasNext;
 
   if (sort === "name") {
-    const names = visible(await folder.listNames(blog.id, dir)).map(
-      (entry) => entry.name
-    );
-    const ordered = descending ? names.slice().reverse() : names;
+    // A listing carries each entry's size and modified time, so the page is
+    // built from it without a second read per file
+    const entries = visible(await folder.listAll(blog.id, dir));
+    const ordered = descending ? reverseNames(entries) : entries;
     total = ordered.length;
     page = clampPage(options.page, total, pageSize);
     startIndex = (page - 1) * pageSize;
 
-    // Walk forward from startIndex collecting up to pageSize entries that
-    // still exist. Files vanish between the listing and the stat while a
-    // folder is syncing; skipping them without pulling the next name forward
-    // would leave the page short and the running count adrift.
-    const collected = [];
-    let cursor = startIndex;
-
-    while (collected.length < pageSize && cursor < ordered.length) {
-      const batch = ordered.slice(
-        cursor,
-        cursor + (pageSize - collected.length)
-      );
-      cursor += batch.length;
-
-      const batchStats = await mapWithLimit(
-        batch,
-        STAT_SWEEP_CONCURRENCY,
-        (name) => statName(blog, dir, name)
-      );
-
-      for (const stat of batchStats) if (stat !== null) collected.push(stat);
-    }
-
-    pageStats = collected;
-    hasNext = cursor < ordered.length;
+    pageStats = ordered
+      .slice(startIndex, startIndex + pageSize)
+      .map((entry) => statEntry(blog, dir, entry.name, entry));
+    hasNext = startIndex + pageSize < total;
   } else {
     // Date / size sort: needs a stat for every entry, so sweep (and cache)
     // the whole folder, then order and slice.

@@ -8,7 +8,7 @@ These instructions apply to work on the brochure and its documentation views.
 - The brochure and documentation templates, partials, stylesheets, scripts, and assets are in `app/views/**`.
 - The brochure homepage is `app/views/index.html` and is served at `https://local.blot/`.
 - The documentation router serves static files from the views directory and renders extensionless paths as matching views.
-- CSS source files live in `app/views/css/` and alongside their partials in `app/views/partials/`; `app/documentation/build/css.js` collects and minifies them into the generated `documentation.min.css` bundle.
+- CSS source files live in `app/views/css/` and alongside their partials in `app/views/partials/`; `app/documentation/build/css.js` collects and minifies them into the generated `documentation.min.css` bundle. `css/base.css` (tokens, reset, typography and the rules dashboard pages share) also goes into `dashboard.min.css`; see `app/views/dashboard/AGENTS.md`.
 - Client-side documentation JavaScript is bundled and minified with esbuild from `app/views/js/documentation.js` by `app/documentation/build/js.js`, producing the generated `documentation.min.js`; edit the source modules under `app/views/js/` instead.
 
 ## Dashboard login
@@ -32,6 +32,8 @@ These instructions apply to work on the brochure and its documentation views.
 - When useful, inspect the running containers with `docker ps`. The node container is currently named `blot-node-app-1`; its logs can be followed with `docker logs -f --tail 0 blot-node-app-1`.
 
 ## Editing guidance
+
+- Avoid Mustache section tags ({{#...}} and {{^...}}) inside HTML attributes. They can be parsed as unclosed sections by this app's Mustache renderer. Compute conditional attribute values in route locals and interpolate a plain value, or wrap the whole element in a section.
 
 - Preserve unrelated worktree changes; do not reset, discard, or overwrite them.
 - Only edit the source view in `app/views` rather than generated or cached output.

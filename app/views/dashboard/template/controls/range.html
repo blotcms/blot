@@ -1,19 +1,7 @@
-<form class="number-input" id="locals.{{key}}.form" method="post" style="display: flex;align-items: center;">
+<form class="number-input" id="locals.{{key}}.form" method="post">
 	<input type="hidden" name="_csrf" value="{{csrftoken}}" />
-	<label for="locals.{{key}}" style="flex-grow:1;">{{label}}:</label>
+	<label class="template-setting-label" for="locals.{{key}}">{{label}}:</label>
 
-	<input
-		type="number"
-		class="number-stepper__input"
-		data-number-stepper
-		data-number-stepper-label="{{label}}"
-		id="locals.{{key}}"
-		name="locals.{{key}}"
-		value="{{value}}"
-		min="{{min}}"
-		max="{{max}}"
-		step="1"
-		inputmode="numeric"
-	/>
+	{{> number-stepper}}
 
 </form>

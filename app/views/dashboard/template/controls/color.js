@@ -6,8 +6,9 @@ const handleAjaxSaveResponse = ajax.handleAjaxSaveResponse;
 
 Array.from(document.querySelectorAll("form.color-picker")).forEach((form) => {
   // Simple example, see optional options for more configuration.
+  const button = form.querySelector(".color-picker-popup");
   const pickr = Pickr.create({
-    el: form.querySelector(".color-picker-popup"),
+    el: button,
     theme: "monolith", // or 'monolith', or 'nano'
     default: form.querySelector("input.value").value,
     useAsButton: true,
@@ -32,6 +33,10 @@ Array.from(document.querySelectorAll("form.color-picker")).forEach((form) => {
     },
   });
 
+  // Pickr names its button "toggle color picker dialog"; the setting's own
+  // label (aria-labelledby) is the name
+  button.removeAttribute("aria-label");
+
   // Choosing a palette writes the new value into the hidden input. Pickr
   // keeps the color it was created with unless told, and saving from that
   // stale picker would put the previous color back.
@@ -42,7 +47,12 @@ Array.from(document.querySelectorAll("form.color-picker")).forEach((form) => {
 
   pickr
     .on("show", () => form.classList.add("is-open"))
-    .on("hide", () => form.classList.remove("is-open"))
+    .on("hide", () => {
+      form.classList.remove("is-open");
+      // Escape or Save from inside the dialog returns focus to its button
+      const app = pickr.getRoot().app;
+      if (app.contains(document.activeElement)) button.focus();
+    })
     .on("save", (color, instance) => {
       form.querySelector("input.value").value = color.toHEXA().toString();
       form.dispatchEvent(

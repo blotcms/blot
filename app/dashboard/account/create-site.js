@@ -17,11 +17,27 @@ var updatePayPalSubscription =
 
 const randomChars = require("./util/randomChars");
 const handleFromTitle = require("./util/handleFromTitle");
+const validateTitle = require("models/blog/validate/title");
+const checkStripeSubscription = require("./util/stripeSubscription");
+
+const RESTART_PAY = "/sites/account/subscription/restart/pay";
+const ENDED =
+  "Your subscription has ended. Start it again to create a new site.";
 
 CreateBlog.use(function (req, res, next) {
   res.locals.breadcrumbs.forEach(function (link) {
-    if (link.label === "Account") link.label = "Sites";
+    if (link.label === "Account") {
+      link.label = "Sites";
+      link.url = "/sites";
+    }
   });
+  // Creating a site belongs to Sites, not Account, in the sidebar
+  res.locals.selected = {
+    ...res.locals.selected,
+    sites: "is-active",
+    account: "",
+  };
+  res.locals.ariaCurrent = { sites: "page", account: "", support: "" };
   next();
 });
 
@@ -72,15 +88,13 @@ CreateBlog.route("/inform-paypal")
     });
   })
 
-  .post(requirePaidPayPalSeat, saveBlog, (req, res) => {
+  .post(requireTitle, requirePaidPayPalSeat, saveBlog, (req, res) => {
     res.message("/sites/" + req.blog.handle, "Created site");
   });
 
 CreateBlog.route("/")
 
   .get(function (req, res) {
-    res.locals.blog = {};
-
     const first_site = req.user.blogs.length === 0;
 
     // remove breadcrumbs for first site
@@ -94,7 +108,15 @@ CreateBlog.route("/")
     });
   })
 
+  // Before anything is billed: a title the new site can't have would
+  // otherwise fail only after the subscription was raised or the card charged
+  .post(requireTitle)
+
   .post(validateSubscription)
+
+  // Before asking for consent or billing anything, make sure Stripe still
+  // has the subscription the account says it has
+  .post(confirmSubscription)
 
   .post(function (req, res, next) {
     // For institutional accounts, we need to allow them to create
@@ -137,7 +159,7 @@ CreateBlog.route("/")
     // For the first site, we immediately redirect to the client
     // setup page so they can sync their folder
     if (req.user.blogs.length === 0) {
-      res.redirect("/sites/" + req.blog.handle + "/client");
+      res.redirect("/sites/" + req.blog.handle + "/sync");
     } else {
       res.message("/sites/" + req.blog.handle, "Created site");
     }
@@ -204,6 +226,39 @@ function validateSubscription(req, res, next) {
   );
 }
 
+// A subscription stored as active can be gone from Stripe, when its
+// cancellation webhook was missed. Then the subscription and charge steps
+// would fail with Stripe's own error, so check first: carry on with another
+// active subscription if the customer has one, otherwise send them to start
+// it again. The stored state is left alone (only the webhooks and the nightly
+// subscription job change it), so no site goes offline because of this.
+async function confirmSubscription(req, res, next) {
+  if (canSkip(req.user) || !req.user.subscription.status) return next();
+
+  let result;
+
+  try {
+    result = await checkStripeSubscription(req.user);
+  } catch (err) {
+    return next(err);
+  }
+
+  if (result.state === "missing") {
+    return res.message(RESTART_PAY, new Error(ENDED));
+  }
+
+  if (result.state === "replaced") {
+    try {
+      await User.set(req.user.uid, { subscription: result.subscription });
+    } catch (err) {
+      return next(err);
+    }
+    req.user.subscription = result.subscription;
+  }
+
+  next();
+}
+
 function getUserById(uid) {
   return User.getById(uid);
 }
@@ -239,6 +294,24 @@ async function requirePaidPayPalSeat(req, res, next) {
   if (paidQuantity > blogCount) return next();
 
   res.redirect(req.baseUrl + "/inform-paypal");
+}
+
+// The same checks Blog.create makes on a title: present, and under 70
+// characters once trimmed. "Untitled" (no_title) needs none.
+async function requireTitle(req, res, next) {
+  if (req.body.no_title) return next();
+
+  const title = typeof req.body.title === "string" ? req.body.title : "";
+
+  if (!title.trim()) return next(new Error("Please enter a title"));
+
+  try {
+    await validateTitle(req.user.uid, title);
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
 }
 
 async function saveBlog(req, res, next) {

@@ -1,17 +1,17 @@
 :root {
-  --highlighter-filter-font-size: 12px;
-  --highlighter-filter-padding: 0.15em 0.5em;
-  --highlighter-filter-border-radius: 10px;
-  --highlighter-filter-color: #666;
-  --highlighter-option-bg: #fafafa;
-  --highlighter-option-hover-bg: #fff;
-  --highlighter-option-padding: 0.333em 0.5em;
+  --highlighter-filter-font-size: var(--text-xs);
+  --highlighter-filter-padding: var(--space-0) var(--space-2);
+  --highlighter-filter-border-radius: var(--radius-lg);
+  --highlighter-filter-color: var(--secondary-text-color);
+  --highlighter-option-bg: var(--background-color);
+  --highlighter-option-hover-bg: var(--hover-background-color);
+  --highlighter-option-padding: var(--space-1) var(--space-2);
 }
 
 .options {
   display: none;
-  margin: 0.5em;
-  border: 1px solid #aaa;
+  margin: var(--space-2);
+  border: 1px solid var(--border-strong-color);
   width: 300px;
   user-select: none;
 }
@@ -34,14 +34,25 @@
   margin: 0;
   padding: var(--highlighter-option-padding);
   border: none;
-  border-top: 1px solid var(--light-border-color);
+  border-top: 1px solid var(--template-editor-divider-color);
   border-radius: 0;
   outline: none;
   background: var(--highlighter-option-bg);
   text-align: left;
   cursor: pointer;
+  transition: background-color 150ms ease;
 }
 
 .options button:hover {
   background: var(--highlighter-option-hover-bg);
+}
+
+.options button:active {
+  background: var(--active-background-color);
+}
+
+.options button:focus-visible {
+  background: var(--highlighter-option-hover-bg);
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
 }

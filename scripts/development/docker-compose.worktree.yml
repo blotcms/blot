@@ -15,6 +15,11 @@ services:
       - BLOT_HOST=${SLOT}-local.blot
       # Talk to Redis directly (no toxiproxy latency)
       - BLOT_REDIS_HOST=redis
+      # Screenshots of this slot's preview hosts go through the main stack's
+      # proxy, which routes them here (this container runs no proxy). So do
+      # the main stack's hosts: posts built there link images to
+      # cdn.local.blot, which resolves to this container's own 127.0.0.1
+      - BLOT_SCREENSHOT_HOST_RULES=MAP *.${SLOT}-local.blot node-app, MAP *.local.blot node-app
       # Only tags log lines
       - CONTAINER_NAME=blot-container-${SLOT}
       # Survives nodemon restarts, so each one recompiles only what changed

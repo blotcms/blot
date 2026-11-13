@@ -1,6 +1,4 @@
-require("./template-editor.js");
 require("./template-editor-preview-iframe.js");
-require("./template-link-hints.js");
 
 require("../controls/number-stepper.js");
 require("../controls/color.js");

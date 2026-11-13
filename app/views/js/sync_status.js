@@ -83,6 +83,14 @@ function renderSyncStatusMessage(message) {
 
   var parsed = parseSyncStatusMessage(message);
   var visibleMessage = shortenSyncingFilename(parsed.text);
+  var dashboardStatus = statusContainer.closest(".site-dashboard-status");
+  var syncSource =
+    dashboardStatus && dashboardStatus.getAttribute("data-sync-source");
+
+  if (syncSource && parsed.text === "Synced") {
+    visibleMessage = "Synced from " + syncSource;
+  }
+
   var progressBar = q(".sync-status-progress-bar");
   var progressLabel = q(".sync-status-progress-label");
   // Folder footer stays a single compact status line. Drive/iCloud syncs still
@@ -165,6 +173,61 @@ function runLoad() {
   });
 }
 
+// Replacing .live-updates would destroy a focused row link or an open row
+// menu's trigger, so hold the latest HTML until focus has left the container
+// and no menu is open, then apply it.
+var pendingLiveHTML = null;
+var pendingLiveTimer = null;
+
+function liveUpdatesBusy(node) {
+  return (
+    node.contains(document.activeElement) ||
+    !!node.querySelector('[aria-expanded="true"]')
+  );
+}
+
+function swapLiveUpdates(node, html) {
+  if (liveUpdatesBusy(node)) {
+    pendingLiveHTML = html;
+    if (!pendingLiveTimer) {
+      pendingLiveTimer = setInterval(function () {
+        var current = q(".live-updates");
+        if (!current || pendingLiveHTML === null) {
+          clearInterval(pendingLiveTimer);
+          pendingLiveTimer = null;
+          return;
+        }
+        if (liveUpdatesBusy(current)) return;
+        clearInterval(pendingLiveTimer);
+        pendingLiveTimer = null;
+        var latest = pendingLiveHTML;
+        pendingLiveHTML = null;
+        if (current.innerHTML !== latest) swapLiveUpdates(current, latest);
+      }, 300);
+    }
+    return;
+  }
+
+  pendingLiveHTML = null;
+  node.innerHTML = html;
+
+  try {
+    window.sortTable();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    window.initCopyButtons();
+  } catch (e) {
+    console.error(e);
+  }
+  try {
+    renderSyncStatusMessage();
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 function loadFolder(callback) {
   var xhr = new XMLHttpRequest();
   var messagesAtStart = messageCount;
@@ -197,23 +260,9 @@ function loadFolder(callback) {
           var newState = newNode.innerHTML;
 
           if (newState !== currentState) {
-            currentNode.innerHTML = newState;
-
-            try {
-              window.sortTable();
-            } catch (e) {
-              console.error(e);
-            }
-            try {
-              window.initCopyButtons();
-            } catch (e) {
-              console.error(e);
-            }
-            try {
-              renderSyncStatusMessage();
-            } catch (e) {
-              console.error(e);
-            }
+            swapLiveUpdates(currentNode, newState);
+          } else {
+            pendingLiveHTML = null;
           }
         }
 
@@ -289,7 +338,10 @@ function loadFolder(callback) {
 }
 
 function attachSSE() {
-  var statusContainer = q(".sync-status");
+  // Pages with live parts but no status line of their own (the overview)
+  // stream through the page's sync status at the top right
+  var statusContainer =
+    q(".sync-status") || (q(".live-updates") && q(".global-sync"));
   if (!statusContainer) return;
 
   renderSyncStatusMessage();
@@ -302,6 +354,8 @@ function attachSSE() {
 
   if (evtSource) evtSource.close();
   evtSource = new ReconnectingEventSource(syncStatusURL);
+  // js/global-sync.js listens rather than opening a second stream
+  window.__blotSyncStream = true;
 
   // A message published while the stream was down is lost (the server sends
   // no state on connect), so load again whenever it re-opens after a drop.
@@ -318,6 +372,10 @@ function attachSSE() {
   evtSource.onmessage = function (event) {
     var message = event.data || "";
     messageCount++;
+
+    document.dispatchEvent(
+      new CustomEvent("blot:sync-status", { detail: message })
+    );
 
     renderSyncStatusMessage(message);
 

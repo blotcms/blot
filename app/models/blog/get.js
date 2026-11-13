@@ -4,6 +4,7 @@ var key = require("./key");
 var serial = require("./serial");
 var applyImageExif = require("./util/imageExif").apply;
 var applyConverters = require("./util/converters").apply;
+var normalized = require("./util/normalized");
 
 // Resolves to the blog, or undefined when there is none
 module.exports = async function get(by) {
@@ -34,6 +35,7 @@ module.exports = async function get(by) {
   blog = serial.de(blog);
   applyImageExif(blog);
   applyConverters(blog);
+  normalized.add(blog);
 
   return blog;
 };

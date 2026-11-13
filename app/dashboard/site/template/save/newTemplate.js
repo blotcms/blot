@@ -7,7 +7,7 @@ var NO_CLONE = "Please choose a template to clone.";
 var SUCCESS = "Created your template succesfully!";
 var SUCCESS_FROM_SHARED_TEMPLATE = "Added template to your blog succesfully!";
 
-module.exports = function (req, res, next) {
+module.exports = async function (req, res, next) {
   var template, name;
   var deduplicatedName;
   var deduplicatingCounter = 1;
@@ -42,68 +42,74 @@ module.exports = function (req, res, next) {
   // derives from the name — otherwise a locally edited copy can be read back
   // from its folder as the template it was cloned from. Derive it rather than
   // building one which the 30-character truncation might shorten differently.
+  // A copy may start from one of Blot's templates, one of this blog's own,
+  // or another blog's template reached through its share link - never from
+  // any template ID the form names
+  const cloneFrom = req.body.cloneFrom;
+  if (
+    cloneFrom &&
+    !(
+      (typeof cloneFrom === "string" &&
+        (cloneFrom.startsWith("SITE:") ||
+          cloneFrom.startsWith(req.blog.id + ":"))) ||
+      cloneFrom === req.sharedTemplateID
+    )
+  ) {
+    return next(new Error("You can't copy that template"));
+  }
+
   template = {
     name: name,
     slug: slugForName(req.blog.id, name),
-    cloneFrom: req.body.cloneFrom,
+    cloneFrom: cloneFrom,
   };
 
-  function create(templateName, then) {
-    Template.create(req.blog.id, templateName, template).then(
-      function (newTemplate) {
-        then(null, newTemplate);
-      },
-      function (error) {
-        then(error);
+  // If template name was 'example', deduplicated name
+  // will be first 'example 2' then 'example 3' etc...
+  // We preserve the original name to ensure that we
+  // don't produce 'example 2 3' or 'example 2 3 4'...
+  let newTemplate;
+  let templateName = name;
+
+  for (;;) {
+    try {
+      newTemplate = await Template.create(req.blog.id, templateName, template);
+      break;
+    } catch (error) {
+      if (
+        error &&
+        error.code === "EEXISTS" &&
+        deduplicatingCounter < MAX_DEDUPLICATION_ATTEMPTS
+      ) {
+        deduplicatingCounter++;
+        deduplicatedName = name + " " + deduplicatingCounter;
+        template.name = deduplicatedName;
+        template.slug = slugForName(req.blog.id, deduplicatedName);
+        templateName = deduplicatedName;
+        continue;
       }
+
+      return next(error);
+    }
+  }
+
+  if (req.body.openEditor) {
+    // we need to install this template, and then redirect to the editor
+    await Blog.set(req.blog.id, { template: newTemplate.id }).catch(() => {});
+    return res.message(
+      "/sites/" +
+        req.blog.handle +
+        "/template/edit/" +
+        newTemplate.slug +
+        "/settings",
+      req.body.shared ? SUCCESS_FROM_SHARED_TEMPLATE : SUCCESS
     );
   }
 
-  create(name, function then(error, newTemplate) {
-    // If template name was 'example', deduplicated name
-    // will be first 'example 2' then 'example 3' etc...
-    // We preserve the original name to ensure that we
-    // don't produce 'example 2 3' or 'example 2 3 4'...
-    if (
-      error &&
-      error.code === "EEXISTS" &&
-      deduplicatingCounter < MAX_DEDUPLICATION_ATTEMPTS
-    ) {
-      deduplicatingCounter++;
-      deduplicatedName = name + " " + deduplicatingCounter;
-      template.name = deduplicatedName;
-      template.slug = slugForName(req.blog.id, deduplicatedName);
-      return create(deduplicatedName, then);
-    }
-
-    if (error) {
-      return next(error);
-    }
-
-    if (req.body.openEditor) {
-      // we need to install this template, and then redirect to the editor
-      // A failed install is ignored, as it was: the template was still added
-      const redirectToEditor = function () {
-        res.message(
-          "/sites/" +
-            req.blog.handle +
-            "/template/edit/" +
-            newTemplate.slug +
-            "/settings",
-          req.body.shared ? SUCCESS_FROM_SHARED_TEMPLATE : SUCCESS
-        );
-      };
-      return Blog.set(req.blog.id, { template: newTemplate.id }).then(
-        redirectToEditor,
-        redirectToEditor
-      );
-    }
-
-    res.message(
-      redirect,
-      req.body.shared
-        ? `Added template <b>${newTemplate.name}</b> to your templates`
-        : `Duplicated template <b>${newTemplate.name}</b>`
-    );
-  });
+  res.message(
+    redirect,
+    req.body.shared
+      ? `Added template “${newTemplate.name}” to your templates`
+      : `Copied template “${newTemplate.name}”`
+  );
 };

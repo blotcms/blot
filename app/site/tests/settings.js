@@ -14,9 +14,9 @@ describe("Blot dashboard settings", function () {
     const handle = this.blog.handle;
 
     await page.goto("/sites");
-    await page.click('a[href^="/sites/"]');
+    await page.click('a[href="/sites/' + handle + '"]');
 
-    // click on the title settings link
+    // click on the Title row of the site's summary
     await page.click('a[href="/sites/' + handle + '/title"]');
 
     // enter a new title and submit the form
@@ -26,20 +26,17 @@ describe("Blot dashboard settings", function () {
     // go back to the dashboard
     await page.click('a[href="/sites/' + handle + '"]');
 
-    // the <title> of the page should be "New title - Blot"
-    expect(page.title).toEqual("New title - Blot");
+    // the <title> of the page should be "New title · Blot"
+    expect(page.title).toEqual("New title · Blot");
   });
 
   it("lets you sync the folder using local folder", async function () {
     const page = browser(this);
     const handle = this.blog.handle;
 
-    // go to the site overview page
-    await page.goto("/sites");
-    await page.click('a[href="/sites/' + handle + '"]');
-
-    // go to the client settings page
-    await page.click('a[href^="/sites/' + handle + '/client"]');
+    // go to the client settings page (the overview only links to it once a
+    // client is connected)
+    await page.goto("/sites/" + handle + "/sync");
 
     // click on the button for the local folder client
     await page.click("button[name=client][value=local]");
@@ -47,12 +44,10 @@ describe("Blot dashboard settings", function () {
     // go to the site overview page
     await page.click('a[href="/sites/' + handle + '"]');
 
-    // verify the client link now says 'Local folder'
-    const client = page.$(
-      'a[href^="/sites/' + handle + '/client"] span.center'
-    );
+    // verify the overview now says it syncs with Local
+    const client = page.$(".folder-sync__client");
 
-    expect(client.text().replace(/\s+/g, " ").trim()).toMatch(/^Local folder/);
+    expect(client.text().trim()).toEqual("Local");
 
     // add some files to the blog's folder
     await folder.write(this.blog.id, "/test.txt", "test");

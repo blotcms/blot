@@ -7,20 +7,29 @@
 .line {
   display: flex;
   flex-wrap: wrap;
-  padding: 0.667em 1em;
-  line-height: 1.4;
+  padding: var(--space-3) var(--space-4);
+  line-height: var(--leading-normal);
   border-bottom: 1px solid var(--border-color);
   background-color: var(--background-color);
-  transition: background-color 0.2s;
+  transition: background-color 150ms ease, color 150ms ease;
 }
 
+/* A line that is a plain notice, not a row of a list */
+.line--flat {
+  border-bottom: 0;
+}
 
 a.line:hover {
-  background: var(--light-background-color);
+  background-color: var(--hover-background-color);
 }
 
 a.line:active {
-  background: var(--medium-background-color)
+  background-color: var(--active-background-color);
+}
+
+a.line:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
 }
 
 a:hover .link,
@@ -31,17 +40,28 @@ a.line:hover .right {
 .link,
 .right {
   color: var(--accent-color);
+  transition: color 150ms ease;
+}
+
+a:hover .link,
+a.line:hover .right {
+  color: var(--accent-hover-color);
+}
+
+a:active .link,
+a.line:active .right {
+  color: var(--accent-active-color);
 }
 
 :not(.label) + .link {
-  font-size: 14px;
-  margin-left: 12px;
+  font-size: var(--text-md);
+  margin-left: var(--space-3);
 }
 
 .right {
   text-decoration: underline;
   flex-shrink: 0;
-  padding-left: 12px;
+  padding-left: var(--space-3);
 }
 
 
@@ -49,7 +69,7 @@ a.line:hover .right {
   color: var(--medium-text-color);
   display: inline-block;
   flex-basis: 100%;
-  font-size: 14px;
+  font-size: var(--text-md);
   box-sizing: border-box;
   flex-shrink: 0;
   position: relative;  
@@ -68,7 +88,7 @@ flex-basis: 100%;
 
 .center b {
   color: var(--text-color);
-  font-weight: 500
+  font-weight: var(--weight-medium)
 }
 
 .center {
@@ -76,12 +96,12 @@ flex-basis: 100%;
 }
 
 .tablet {
-  border-radius: 18px;
-  padding: 0 8px;
-  line-height: 1.4;
+  border-radius: var(--radius-pill);
+  padding: 0 var(--space-2);
+  line-height: var(--leading-normal);
   border: 1px solid var(--border-color);
   display: inline-block;
-  font-size: 16px;
+  font-size: var(--text-sm);
 }
 
 .tablet:empty {display: none;}

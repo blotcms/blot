@@ -389,7 +389,7 @@ dashboard.get("/disconnect", function (req, res) {
 
 dashboard.post("/disconnect", async function (req, res, next) {
   if (!req.blog.client) {
-    return res.redirect(res.locals.dashboardBase + "/client");
+    return res.redirect(res.locals.dashboardBase + "/sync");
   }
 
   client

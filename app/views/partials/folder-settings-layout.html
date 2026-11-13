@@ -1,0 +1,20 @@
+{{#blog.client}}
+<!-- A connected folder's sync pages: the client's settings in a card, the
+     compact rows of .folder-sync-panel (folder/folder-sync.css) -->
+{{> message}}
+{{#isClientPage}}
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">Sync</h1></div></header>
+{{/isClientPage}}
+<div class="folder-box--sync">
+  <div class="folder-sync-panel">
+    {{> body}}
+  </div>
+</div>
+{{/blog.client}}
+{{^blog.client}}
+<div class="dashboard-form-panel">
+  <div class="dashboard-form-panel__body">
+    {{> body}}
+  </div>
+</div>
+{{/blog.client}}

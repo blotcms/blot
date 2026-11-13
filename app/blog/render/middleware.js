@@ -97,6 +97,20 @@ module.exports = function attachRenderView(req, res, _next) {
       let output = built.output;
       const viewType = built.viewType;
 
+      // Expose the rendered HTML source in the template editor's Output tab.
+      // This is limited to preview hosts and returns plain text so the HTML
+      // is displayed as source instead of being executed by the browser.
+      if (
+        req.preview &&
+        req.query &&
+        req.query.output === "true" &&
+        viewType === "text/html"
+      ) {
+        res.set("Cache-Control", "no-cache");
+        res.type("text/plain");
+        return res.send(output);
+      }
+
       // We need to persist the page shown on the preview inside the
       // template editor. To do this, we send the page viewed to the
       // parent window (i.e. the page which embeds the preview in an

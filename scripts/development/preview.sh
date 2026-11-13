@@ -83,6 +83,10 @@ up() {
     sleep 2
   done
 
+  # A recreated sidecar gets a new IP, which the main proxy only looks up when
+  # it (re)loads its config; until then the slot's host answers 502
+  docker exec blot-node-app-1 openresty -s reload >/dev/null 2>&1 || true
+
   # The slot block is proxy/config/development.conf, rendered by the main
   # stack's node-app from the main checkout (an older main stack ran it in a
   # separate nginx container). Without it, <slot>-local.blot shows "no site here".

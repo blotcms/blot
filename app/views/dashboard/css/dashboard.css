@@ -1,6 +1,17 @@
 .dashboard-form h2 {
-    font-size: 15px;
+    font-size: var(--text-md);
     color: var(--medium-text-color);
-    padding-bottom: 11px;
+    padding-bottom: var(--space-3);
     border-bottom: 1px solid var(--border-color);
+}
+
+/* Section headings across the dashboard: small grey labels above a group of
+   settings. --heading-font-size and --heading-color are set in
+   template/css/template-editor.css. */
+h2 {
+  margin: 0;
+  font-size: var(--heading-font-size);
+  font-weight: var(--weight-regular);
+  color: var(--heading-color);
+  border-bottom: none;
 }

@@ -1,0 +1,12 @@
+<header class="page-header page-header--tabs">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Settings</h1>
+  </div>
+</header>
+<nav class="tabs" aria-label="Settings sections">
+  <ul class="tabs__list">
+    {{#settingsTabs}}
+    <li><a class="tabs__link" href="{{{url}}}" aria-current="{{current}}">{{label}}</a></li>
+    {{/settingsTabs}}
+  </ul>
+</nav>

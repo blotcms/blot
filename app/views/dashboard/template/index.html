@@ -1,11 +1,32 @@
-<br>
-<h1>Your templates</h1>
-<div class="template-grid">
-  {{#yourTemplates}} {{> template-grid-link}} {{/yourTemplates}}
-  {{> template-grid-new-link}}
-</div>
+<div class="template-overview" data-template-browser>
+  <header class="page-header">
+    <div class="page-header__text">
+      <h1 class="page-header__title">Template</h1>
+    </div>
+  </header>
 
-<h1>Default templates</h1>
-<div class="template-grid">
-  {{#blotTemplates}} {{> template-grid-link}} {{/blotTemplates}}
+  <div class="template-overview__toolbar">
+    <div class="folder-filters template-overview__filters" role="group" aria-label="Show templates">
+      <button type="button" class="folder-filters__item is-active" data-template-filter="all" aria-pressed="true">All</button>
+      <button type="button" class="folder-filters__item" data-template-filter="yours" aria-pressed="false">Yours</button>
+      <button type="button" class="folder-filters__item" data-template-filter="default" aria-pressed="false">Blot</button>
+    </div>
+    <div class="site-dashboard-search template-overview__search">
+      <input type="search" data-template-search placeholder="Search" aria-label="Search templates">
+    </div>
+    <a class="btn btn-primary btn-sm template-overview__create" href="{{{dashboardBase}}}/template/new">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5v13M1.5 8h13" fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="1.5"></path></svg>
+      Create template
+    </a>
+  </div>
+
+  {{^currentTemplate}}
+  <p class="template-overview__empty">Your site does not have a live template yet. Choose one below to get started.</p>
+  {{/currentTemplate}}
+  <p class="template-overview__no-results" data-template-no-results role="status"></p>
+  <ul class="clients templates template-overview__grid">
+    {{#currentTemplate}}{{> template-overview-card}}{{/currentTemplate}}
+    {{#customTemplates}}{{> template-overview-card}}{{/customTemplates}}
+    {{#defaultTemplates}}{{> template-overview-card}}{{/defaultTemplates}}
+  </ul>
 </div>

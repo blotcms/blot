@@ -17,18 +17,17 @@ module.exports = async function getTemplateList(blogID) {
   var siteTemplates = results[0] || [];
   var blogTemplates = results[1] || [];
   var templateIDs = siteTemplates.concat(blogTemplates);
-  var response = [];
 
-  // One template at a time, as before. A template whose metadata can't be
-  // read is skipped, not an error.
-  for (var id of templateIDs) {
-    try {
-      var info = await getMetadata(id);
-      if (info) response.push(info);
-    } catch (err) {
-      // skipped
-    }
-  }
+  // Every template's metadata is read at once rather than one after another,
+  // keeping the order of the IDs. A template whose metadata can't be read is
+  // skipped, not an error.
+  var metadata = await Promise.all(
+    templateIDs.map(function (id) {
+      return getMetadata(id).catch(function () {
+        return null;
+      });
+    })
+  );
 
-  return response;
+  return metadata.filter(Boolean);
 };

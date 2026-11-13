@@ -1,7 +1,5 @@
-{{> close-button}}
-
 <div style="padding: 11px 20px;border-bottom: 1px solid #eeeeec;">
-<label>Domain</label><br>
+<label for="customDomain">Domain</label><br>
 
 	{{! We use blog.pretty.domain instead of blog.domain so we can render punycode domains like exāmple.com nicely. When saved, we convert back to ascii on the server. }}
 	<input autofocus type="text" id="customDomain" placeholder="example.com" style="background-color: var(--background-color);width: 100%;" name="domain" value="{{customDomain}}" />
@@ -10,6 +8,6 @@
 		<button type="submit" onclick="this.form.submit(); this.disabled=true">
 			Save changes
 		</button>
-		<a href="{{{base}}}/domain">Cancel</a>
+		<a href="{{{domainBase}}}">Cancel</a>
 	</div>
 </div>

@@ -1,0 +1,155 @@
+{{> message}}
+{{> settings-tabs}}
+
+<!-- How Blot builds posts: formatting, dates, their URLs, links in them, images -->
+<div class="dashboard-form-panel settings-page">
+  <div class="dashboard-form-panel__body">
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="writing-heading">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/posts">
+      <h2 id="writing-heading">Writing and formatting</h2>
+      <p class="setting-note">Choose how Blot formats the posts in your folder.</p>
+      {{#categories.Headings}}{{> plugin-row}}{{/categories.Headings}}
+      {{#categories.Codemath}}{{> plugin-row}}{{/categories.Codemath}}
+      {{#categories.Typography}}{{> plugin-row}}{{/categories.Typography}}
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="date-heading" data-autosave>
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/posts">
+      <h2 id="date-heading">Date and time</h2>
+      <p>
+        <label>
+          In what order do you write your dates?<br>
+          <select class="select-spaced" name="dateFormat">
+            {{#dateFormats}}<option value="{{value}}" {{selected}}>{{date}}</option>{{/dateFormats}}
+          </select>
+        </label>
+      </p>
+      <p>
+        <label>
+          Your timezone<br>
+          <select class="select-spaced" name="timeZone">
+            {{#timeZones}}<option value="{{value}}" {{selected}}>{{value}} ({{time}})</option>{{/timeZones}}
+          </select>
+        </label>
+      </p>
+      <noscript>
+        <div class="buttons">
+          <button type="submit">Save changes</button>
+        </div>
+      </noscript>
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{dashboardBase}}}/settings/links" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <h2 id="post-links-heading">Post links</h2>
+      <p class="setting-note">Choose the URL format Blot uses for your posts.</p>
+      {{#permalinkFormats}}
+      <label class="format">
+        <input type="radio" name="format" value="{{value}}" {{checked}}>
+        <b>{{name}}</b>
+        {{^custom}}<span class="format-example">{{example}}</span>{{/custom}}
+        {{#custom}}
+        <div class="format-custom" style="{{customStyle}}">
+          <input type="text" name="custom" value="{{blog.permalink.custom}}">
+        </div>
+        <div class="buttons" style="{{customStyle}}">
+          <button type="submit">Save changes</button>
+          <a href="{{{base}}}/settings/posts">Cancel</a>
+        </div>
+        {{/custom}}
+        <div class="clear"></div>
+      </label>
+      {{/permalinkFormats}}
+      <noscript>
+        <style>.format-custom { display: block !important; }</style>
+        <div class="buttons">
+          <button type="submit">Save changes</button>
+          <a href="{{{base}}}/settings/posts">Cancel</a>
+        </div>
+      </noscript>
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/posts">
+      <h2>Link features</h2>
+      {{#categories.Links}}{{> plugin-row}}{{/categories.Links}}
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="image-features-heading">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/posts">
+      <h2 id="image-features-heading">Image features</h2>
+      {{#categories.Images}}{{> plugin-row}}{{/categories.Images}}
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="publish-images-heading">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/posts">
+      <h2 id="publish-images-heading">Publish images as posts</h2>
+      <section class="setting-block" id="image-publishing">
+        <div class="line plugins">
+          <span class="center">
+            <div class="plugin {{{imageConverterPluginClass}}}">
+              <label class="setting-check">
+                <span>
+                  <input name="converters.img" type="hidden" value="off">
+                  <input name="converters.img" type="checkbox" {{{publishImagesAsPostsChecked}}}>
+                  &nbsp;
+                </span>
+                <span class="setting-check__text"><p>Publish image files as posts</p></span>
+              </label>
+              <p class="setting-help">When enabled, image files in your folder become posts. Disable this to skip publishing image files.</p>
+            </div>
+          </span>
+        </div>
+      </section>
+    </form>
+
+    <form method="post" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data" aria-labelledby="image-metadata-heading" data-autosave>
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <input type="hidden" name="redirect" value="{{{base}}}/settings/posts">
+      <h2 id="image-metadata-heading">Image metadata</h2>
+      <section class="setting-block" id="image-metadata">
+        <div class="option-group">
+          <label class="option">
+            <input type="radio" name="imageExif" value="off" {{{imageExifOffChecked}}}>
+            <span><span class="option-title">Off</span><span class="option-description">Strip all metadata before publishing.</span></span>
+          </label>
+          <label class="option">
+            <input type="radio" name="imageExif" value="basic" {{{imageExifBasicChecked}}}>
+            <span><span class="option-title">Basic</span><span class="option-description">Keep camera settings and capture details, but remove locations and contact information.</span></span>
+          </label>
+          <label class="option">
+            <input type="radio" name="imageExif" value="full" {{{imageExifFullChecked}}}>
+            <span><span class="option-title">Full</span><span class="option-description">Publish the complete EXIF record for each image, including location data.</span></span>
+          </label>
+        </div>
+      </section>
+      <noscript>
+        <div class="buttons">
+          <button type="submit">Save changes</button>
+        </div>
+      </noscript>
+    </form>
+
+  </div>
+</div>
+
+<style>
+  #image-publishing { margin: 0 0 var(--space-6); }
+  #image-publishing .plugin { margin: 0; }
+  #image-publishing .setting-help { margin: var(--space-1) 0 0 2.75em; color: var(--medium-text-color); font-size: var(--text-md); line-height: var(--leading-normal); }
+  #image-metadata { margin: 0 0 var(--space-6); background: var(--background-color); }
+  #image-metadata .option-group { display: grid; gap: var(--space-3); margin-top: var(--space-4); }
+  #image-metadata .option { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--border-color); border-radius: var(--radius-md); background: var(--surface-color); cursor: pointer; transition: background-color 150ms ease; }
+  #image-metadata .option:hover { background: var(--hover-background-color); }
+  #image-metadata .option:active { background: var(--active-background-color); }
+  #image-metadata .option:focus-within { outline: 2px solid var(--accent-color); outline-offset: 2px; }
+  #image-metadata .option { box-sizing: border-box; min-width: 0; }
+  #image-metadata .option input[type="radio"] { flex: 0 0 auto; width: auto; margin-top: var(--space-0); }
+  #image-metadata .option-title { display: block; color: var(--text-color); font-weight: var(--weight-semibold); }
+  #image-metadata .option-description { display: block; color: var(--secondary-text-color); font-size: var(--text-md); line-height: var(--leading-normal); }
+</style>

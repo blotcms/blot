@@ -282,9 +282,9 @@ module.exports = function (options = {}) {
       expect(this.cookies["connect.sid"]).toBeDefined();
       expect(location).toEqual("/sites");
 
-      // Check that we are logged in by requesting /sites and checking the response
-      // for the user's email address
-      const dashboard = await this.fetch("/sites", {
+      // Check that we are logged in by requesting the account email page and
+      // checking the response for the user's email address
+      const dashboard = await this.fetch("/sites/account/email", {
         redirect: "manual",
       });
 

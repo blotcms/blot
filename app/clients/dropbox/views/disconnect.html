@@ -3,7 +3,9 @@
 
   <input type="hidden" name="_csrf" value="{{csrftoken}}">
 
-<p>If you disconnect <strong>Dropbox</strong>, your site and folder on Blot will stay the same. Blot won’t access your Dropbox folder, and changes on Dropbox won’t affect your site.</p>  
+<p>If you disconnect <strong>Dropbox</strong>, your site and folder on Blot will stay the same. Blot won’t access your Dropbox folder, and changes on Dropbox won’t affect your site.</p>
+
+  {{> disconnect-placeholders}}  
   <div class="buttons">
     <button type="submit">Disconnect Dropbox</button>  
     <a href="{{{base}}}">Cancel</a>

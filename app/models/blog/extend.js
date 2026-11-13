@@ -4,6 +4,7 @@ var protocol = "https";
 var punycode = require("helper/punycode");
 var imageExif = require("./util/imageExif");
 var converters = require("./util/converters");
+var normalized = require("./util/normalized");
 
 module.exports = function extend(blog) {
   var pages = [];
@@ -16,8 +17,11 @@ module.exports = function extend(blog) {
   // is it bad to extend the blog object here?
   blog.pretty = {};
 
-  imageExif.apply(blog);
-  converters.apply(blog);
+  // Blog.get has already done this for its blogs
+  if (!normalized.has(blog)) {
+    imageExif.apply(blog);
+    converters.apply(blog);
+  }
 
   if (blog.dateFormat) blog["is" + blog.dateFormat] = "selected";
 

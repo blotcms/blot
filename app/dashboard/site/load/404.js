@@ -1,9 +1,20 @@
 var fourOhFour = require("models/404");
 var List = fourOhFour.list;
 
+var MAX_SHOWN = 100;
+
+// A visitor's request path, encoded for the Add redirect link's query string
+// (the view escapes it for HTML; this keeps "&" or "#" in a path intact)
+function withCreateParam(item) {
+  return { ...item, createParam: encodeURIComponent(item.url) };
+}
+
 module.exports = async function (req, res, next) {
   try {
-    var { list, ignored } = await List(req.blog.id);
+    // The raw list is every path; the page formats only the latest 100
+    var options = req.query.raw ? {} : { limit: MAX_SHOWN };
+
+    var { list, ignored, totals } = await List(req.blog.id, options);
 
     var has_ignored;
 
@@ -15,7 +26,7 @@ module.exports = async function (req, res, next) {
       return res.send(list.join("\n"));
     }
 
-    if (ignored.length) {
+    if (totals.ignored) {
       has_ignored = true;
     }
 
@@ -23,9 +34,12 @@ module.exports = async function (req, res, next) {
       ignored = [];
     }
 
-    res.locals.list = list;
+    // Most recent first, the latest 100 of each
+    res.locals.total = totals.list.toLocaleString("en-US");
+    res.locals.shown = list.length.toLocaleString("en-US");
+    res.locals.list = list.map(withCreateParam);
     res.locals.has_ignored = has_ignored;
-    res.locals.ignored = ignored;
+    res.locals.ignored = ignored.map(withCreateParam);
 
     next();
   } catch (err) {

@@ -105,6 +105,10 @@ module.exports = (function () {
     return await redis.zCard(entriesKey);
   }
 
+  async function getListTotal(blogID, listName) {
+    return await redis.zCard(listKey(blogID, listName));
+  }
+
   // Count of the "all" list, the same set Fix()'s each()-based checks (e.g.
   // entry-ghosts) scan one Redis round trip at a time - includes drafts,
   // pages, scheduled and deleted entries that getTotal's "entries" list
@@ -188,7 +192,10 @@ module.exports = (function () {
       end = options.first - 1;
     }
 
-    return await redis.zRange(list, start, end, { REV: true });
+    // Scheduled posts list the soonest first
+    return options.ascending
+      ? await redis.zRange(list, start, end)
+      : await redis.zRange(list, start, end, { REV: true });
   };
 
   // includes deleted entries
@@ -813,6 +820,7 @@ module.exports = (function () {
     adjacentTo: adjacentTo,
     getPage: getPage,
     getListIDs: getListIDs,
+    getListTotal: getListTotal,
     getAll: getAll,
     getCatalog: require("./catalog"),
     getCachedPage: require("./cachedPage"),

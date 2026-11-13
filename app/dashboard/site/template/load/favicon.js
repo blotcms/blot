@@ -1,4 +1,10 @@
 const Template = require("models/template");
+const { LRUCache } = require("lru-cache");
+
+// Whether a template's views use a favicon only changes when a view does,
+// which bumps the template's cacheID (stored in Redis, so blue and green
+// agree). Saves reading every view on each editor page.
+const supported = new LRUCache({ max: 5000 });
 
 const hasFaviconLocal = (value) => {
   if (!value || typeof value !== "object") return false;
@@ -26,12 +32,23 @@ module.exports = async function loadFavicon(req, res, next) {
       return next();
     }
 
+    const key = req.template.id + ":" + req.template.cacheID;
+
+    if (req.template.cacheID && supported.has(key)) {
+      res.locals.favicon_supported = supported.get(key);
+      return next();
+    }
+
     const result = await Template.getAllViews(req.template.id);
 
     res.locals.favicon_supported = templateSupportsFavicon(
       req.template,
       result.views
     );
+
+    if (req.template.cacheID) {
+      supported.set(key, res.locals.favicon_supported);
+    }
 
     next();
   } catch (err) {

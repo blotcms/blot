@@ -88,6 +88,14 @@ function createFontPicker() {
     }
   };
 
+  // The current font is marked pressed
+  const highlightSelection = (id) => {
+    optionButtons.forEach((button) => {
+      const current = !!id && button.dataset.fontOptionId === id;
+      button.setAttribute("aria-pressed", current ? "true" : "false");
+    });
+  };
+
   const position = (anchor) => {
     if (!anchor) return;
 
@@ -157,7 +165,7 @@ function createFontPicker() {
     activeContext = context;
     container.hidden = false;
     container.setAttribute("aria-hidden", "false");
-    // highlightSelection(context.currentValue);
+    highlightSelection(context.currentValue);
 
     requestAnimationFrame(() => {
       position(context.anchor);
@@ -193,11 +201,16 @@ function createFontPicker() {
         html: button.innerHTML.trim(),
       };
 
+      const anchor = activeContext.anchor;
+      const hadFocus = container.contains(document.activeElement);
+
       if (activeContext.onSelect) {
         activeContext.onSelect(option);
       }
 
       hide();
+      // Keyboard users picked this option from inside the list
+      if (hadFocus && anchor) anchor.focus();
     });
   });
 
@@ -217,9 +230,30 @@ function createFontPicker() {
 
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") {
+      const anchor = activeContext && activeContext.anchor;
+      const hadFocus = container.contains(document.activeElement);
       hide();
+      if (hadFocus && anchor) anchor.focus();
     }
   });
+
+  // Leaving the list by keyboard (Tab out) closes it, like leaving the trigger
+  container.addEventListener("focusout", (event) => {
+    const next = event.relatedTarget;
+    if (!activeContext || !next) return;
+    if (container.contains(next)) return;
+    if (activeContext.anchor && activeContext.anchor.contains(next)) return;
+    scheduleHide();
+  });
+
+  // The list is at the end of the page, so a keyboard user opening it from
+  // its trigger is moved into it.
+  const focusFirst = () => {
+    const first = optionButtons.find(
+      (button) => button.style.display !== "none"
+    );
+    if (first) first.focus();
+  };
 
   const reposition = () => {
     if (activeContext) {
@@ -235,6 +269,7 @@ function createFontPicker() {
     hide,
     scheduleHide,
     cancelHide,
+    focusFirst,
   };
 }
 

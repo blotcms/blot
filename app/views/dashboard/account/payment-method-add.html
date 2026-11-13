@@ -1,0 +1,29 @@
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">{{title}}</h1></div></header>
+
+{{> message}}
+
+<form
+  method="POST"
+  action="{{paymentMethodsUrl}}"
+  class="account"
+  id="payment-form"
+  data-stripe-key="{{stripe_key}}"
+  style="max-width: 400px">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+
+  {{> card-form}}
+
+  <div class="buttons">
+    <button type="submit">Add payment method</button>
+    <a href="{{paymentMethodsUrl}}">Cancel</a>
+  </div>
+</form>
+
+<p class="payment-methods-disclaimer">
+  Your card details are never stored on Blot's servers &mdash; we only keep
+  the card's brand and last 4 digits so we can show you your payment methods.
+  Everything else is stored securely by Stripe, who process the charge for
+  your subscription.
+</p>
+
+{{> powered-by-stripe}}

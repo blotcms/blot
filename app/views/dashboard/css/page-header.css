@@ -1,0 +1,87 @@
+/*
+  Page headers: the title at the top of a dashboard page.
+
+  <header class="page-header">
+    <a class="page-header__back" href="…">Overview</a>     optional
+    <div class="page-header__text">
+      <h1 class="page-header__title">Sites</h1>
+      <p class="page-header__subtitle">…</p>                optional
+    </div>
+    <div class="page-header__actions">…buttons…</div>       optional
+  </header>
+
+  .page-header--no-rule   no rule below, for content with its own top border
+                          (the sites table)
+*/
+
+.page-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  margin: 0 0 var(--space-5);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.page-header__back {
+  display: inline-flex;
+  flex: 1 1 100%;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--secondary-text-color);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.page-header__back::before {
+  content: "‹";
+  font-size: var(--text-lg);
+  line-height: 1;
+}
+
+.page-header__back:hover {
+  color: var(--accent-color);
+}
+
+.page-header__text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* (.page-header too, to outrank base.css's h1:first-child line-height of
+   1) */
+.page-header .page-header__title,
+.page-header__title {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--text-color);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+  overflow-wrap: anywhere;
+}
+
+.page-header__subtitle {
+  margin: var(--space-1) 0 0;
+  color: var(--medium-text-color);
+  font-size: var(--text-md);
+}
+
+/* One title line high, so a page's buttons never move its heading */
+.page-header__actions {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  height: calc(var(--text-2xl) * var(--leading-tight));
+  gap: var(--space-2);
+}
+
+.page-header--no-rule {
+  margin-bottom: var(--space-3);
+  padding-bottom: 0;
+  border-bottom: 0;
+}

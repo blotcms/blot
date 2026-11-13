@@ -39,6 +39,14 @@ module.exports = (key, locals, map) => {
       isRange: true,
       min,
       max,
+      stepper: {
+        id: `locals.${key}`,
+        label,
+        ariaLabel: label,
+        value: locals[key],
+        min,
+        max,
+      },
     };
   }
 

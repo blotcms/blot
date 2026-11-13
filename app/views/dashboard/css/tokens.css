@@ -1,0 +1,91 @@
+/*
+  Design tokens for the dashboard. Use these rather than raw values, so
+  spacing, type, colour and shape can be tuned in one place.
+
+  The base palette (--text-color, --border-color, --accent-color, ...) is
+  defined in css/base.css and shared with the documentation pages; the
+  tokens below build on it.
+*/
+
+:root {
+  /* Spacing: a 4px grid */
+  --space-0: 2px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Type scale */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-md: 14px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+
+  --weight-regular: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+
+  /* Colour, by role */
+  --surface-color: var(--background-color);
+  --surface-muted-color: #f7f7f5;
+  --surface-strong-color: #ececea;
+  --border-strong-color: #d5d5d3;
+  --secondary-text-color: #666;
+  --muted-text-color: var(--medium-text-color);
+  --link-color: var(--accent-color);
+  --accent-hover-color: #1a75e5;
+  --accent-soft-color: #e8f1fd;
+  --accent-soft-hover-color: #d8e7fb;
+  --accent-active-color: #0058c2;
+  --danger-color: var(--error-text-color);
+  --danger-hover-color: #a81f02;
+  /* A little darker than base.css's green, so small text such as "Live on
+     your site" keeps 4.5:1 on the warm muted surface */
+  --success-color: #027a00;
+  --warning-color: var(--warning-text-color);
+  --overlay-color: rgba(0, 0, 0, 0.28);
+
+  /* Interaction states for rows, list items and quiet controls: hover,
+     pressed, and the selected/current item */
+  --hover-background-color: var(--surface-muted-color);
+  --active-background-color: var(--surface-strong-color);
+  --selected-background-color: var(--surface-strong-color);
+  --form-control-disabled: var(--surface-muted-color);
+  /* base.css's light background is a cool blue-grey, shared with the
+     documentation; in the dashboard it's the warm muted surface, like
+     every other tint here (template cards, code, form panels) */
+  --light-background-color: var(--surface-muted-color);
+
+  /* The width of a form's single-line fields and selects, on every page */
+  --form-max-width: 30rem;
+
+  /* Shape */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 999px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.11);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+  --box-shadow: var(--shadow-md);
+
+  /* Motion */
+  --transition-fast: 0.1s ease;
+  --transition: 0.2s ease;
+
+  /* Controls */
+  --control-height: 36px;
+  --control-height-lg: 40px;
+}

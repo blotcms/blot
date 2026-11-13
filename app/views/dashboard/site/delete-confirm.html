@@ -1,0 +1,31 @@
+{{> message}}
+
+{{> settings-tabs}}
+
+<div class="dashboard-form-panel settings-page site-delete">
+  <div class="dashboard-form-panel__body">
+  <h2>Delete {{blog.pretty.label}}?</h2>
+<form method="POST" action="{{{base}}}/settings/delete/confirm" class="dashboard-form">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+
+  <p>Deleting this site removes, for good:</p>
+  <ul class="site-delete__list">
+    {{#deleteSummary}}
+    <li>{{text}}</li>
+    {{/deleteSummary}}
+  </ul>
+  {{#reduction}}<p>Your next bill will go down by {{reduction}}.</p>{{/reduction}}
+
+  <p class="setting-note">The files in your own folder stay where they are. To keep a copy of everything Blot has, download an export first.</p>
+  <p><a class="btn" href="{{{base}}}/settings/export/download" target="_blank" rel="noopener">Download export</a></p>
+
+  <label for="delete-password">Enter your password to delete this site</label>
+  <input id="delete-password" autofocus type="password" name="password" autocomplete="current-password" />
+
+  <div class="btn-row">
+    <button type="submit" class="btn btn-danger">Delete site</button>
+    <a class="btn" href="{{{base}}}">Do not delete</a>
+  </div>
+</form>
+  </div>
+</div>

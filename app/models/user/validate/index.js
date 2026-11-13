@@ -37,6 +37,11 @@ module.exports = async function validate(user, updates) {
     })
   );
 
+  // Added after users existed: records written before it get it here, on
+  // their next save, rather than through a backfill
+  if (user.paymentMethodsSyncedAt === undefined)
+    user.paymentMethodsSyncedAt = 0;
+
   // Check user properties are correct type
   ensure(user, MODEL, true);
 
