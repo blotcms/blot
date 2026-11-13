@@ -121,7 +121,7 @@ if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$CONTAINER"; then
 fi
 
 # Read the effective host from inside the container rather than guessing. The
-# defaults disagree: start.sh sets BLOT_HOST=local.blot, while config/index.js
+# defaults disagree: start.sh sets BLOT_HOST=blot.localhost, while config/index.js
 # falls back to "localhost" when the variable is absent.
 if ! BLOT_HOST="$(docker exec "$CONTAINER" node -e 'process.stdout.write(require("config").host)' 2>/dev/null)"; then
   die "Could not read the server's configuration." "$NOT_RUNNING"
@@ -357,7 +357,7 @@ if ! docker exec "$CONTAINER" \
   die "Could not work out which pages to screenshot."
 fi
 
-# Screenshots run on the host: the container resolves *.local.blot to itself and
+# Screenshots run on the host: the container resolves *.blot.localhost to itself and
 # cannot reach the site (verified — connection refused).
 echo "[translate] Taking screenshots"
 CAPTURE_OUTPUT="$(node "$DIR/capture.js" "$TARGETS_FILE" "$VERIFICATION" 2>&1 || true)"

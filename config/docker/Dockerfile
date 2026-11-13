@@ -380,7 +380,7 @@ CMD ["/usr/local/bin/unit-supervisor"]
 
 ## Stage 8 (dev-unit; local development only)
 # What scripts/development/docker-compose.yml runs as node-app: the `dev` image
-# plus the unit's OpenResty, so local.blot is served by the production proxy
+# plus the unit's OpenResty, so blot.localhost is served by the production proxy
 # config. Source, proxy/ included, is bind mounted as for `dev`;
 # scripts/development/unit/start.sh renders the config from proxy/config and
 # runs the supervisor from proxy/unit, so editing either needs only a restart.

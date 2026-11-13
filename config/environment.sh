@@ -23,7 +23,7 @@ export BLOT_USER=
 
 # Project Node.js LTS version. This file is copied to the host, so it can't read
 # config/versions.env; scripts/security/check-versions.js checks the two match.
-export BLOT_NODE_VERSION=24.22.1
+export BLOT_NODE_VERSION=24.22.3
 
 # result of which pandoc
 export BLOT_PANDOC_PATH=

@@ -67,7 +67,7 @@ to every other importer in the codebase.
 - `redis` — 6.2.12-alpine, port 6379 exposed to the host.
 - `toxiproxy` — injects Redis latency once the app reports readiness (disabled
   during startup and during nodemon restarts). `BLOT_USE_TOXIPROXY=false` opts out.
-- `nginx` (openresty) — ports 80/443, terminates TLS for `local.blot`.
+- `nginx` (openresty) — ports 80/443, terminates TLS for `blot.localhost`.
 
 `start.sh` also runs `node scripts/development/open-folder-server.js` **on the host**
 (port 3020) so the dashboard's "open folder" button can `open -R` a real Finder path.
@@ -150,13 +150,13 @@ Code CLI on the host.
 | Key | Dev value |
 |---|---|
 | `environment` | `development` (unless `NODE_ENV=production`) |
-| `host` | `process.env.BLOT_HOST` — `start.sh` defaults it to `local.blot` |
+| `host` | `process.env.BLOT_HOST` — `start.sh` defaults it to `blot.localhost` |
 | `protocol` | `https://` |
-| `cdn.origin` | `https://cdn.local.blot` |
+| `cdn.origin` | `https://cdn.blot.localhost` |
 | `blog_folder_dir` | `<repo>/data/blogs` |
 | `tmp_directory` | `<repo>/data/tmp` |
 
-Site URL is therefore `https://<handle>.local.blot`.
+Site URL is therefore `https://<handle>.blot.localhost`.
 
 ### 1.5 Preflight — the server must already be running
 
@@ -180,9 +180,9 @@ routing → the `config.host` value the rest of the script will build URLs from.
 **Local DNS and TLS on this machine** (verified):
 
 - `/etc/resolver/blot` contains `nameserver 127.0.0.1`, so a local resolver maps
-  `*.blot` — including wildcard subdomains such as `<handle>.local.blot` and
-  `preview-of-x-on-y.local.blot` — to `127.0.0.1`. There is **no** `/etc/hosts`
-  entry for `local.blot`; do not look for one.
+  `*.blot` — including wildcard subdomains such as `<handle>.blot.localhost` and
+  `preview-of-x-on-y.blot.localhost` — to `127.0.0.1`. There is **no** `/etc/hosts`
+  entry for `blot.localhost`; do not look for one.
 - `scripts/development/setup-certs.sh` generates a wildcard cert for `$BLOT_HOST` and
   `*.$BLOT_HOST` with `mkcert` into `data/ssl/`, and `mkcert -install` trusts it.
   It exits early if `data/ssl/certs/wildcard.crt` and `.../private/wildcard.key`
@@ -205,10 +205,10 @@ being down, and shouldn't produce a misleading error.
    an explicit check gives a better error than a downstream crash.
 
 Note the `BLOT_HOST` resolution order the script must mirror: `start.sh` defaults
-it to `local.blot` and passes it into compose, while `config/index.js` defaults to
+it to `blot.localhost` and passes it into compose, while `config/index.js` defaults to
 `localhost` when the variable is absent. A script running on the **host** without
 `BLOT_HOST` set would compute `localhost` and check the wrong URL. Read
-`BLOT_HOST` from the environment with a `local.blot` default (matching
+`BLOT_HOST` from the environment with a `blot.localhost` default (matching
 `start.sh`), or read the effective value out of the container:
 
 ```bash

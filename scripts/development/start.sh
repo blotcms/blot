@@ -12,7 +12,7 @@ fi
 
 # Resolve repo paths
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd ../../ && pwd)"
-: "${BLOT_HOST:=local.blot}"
+: "${BLOT_HOST:=blot.localhost}"
 
 # Versions for the compose file's build args and images (config/versions.env)
 set -a; . "$DIR/config/versions.env"; set +a

@@ -117,8 +117,8 @@ These are hard constraints of the platform, not preferences:
 
 This template will be handed to someone else and used on their site. So:
 
-- Never hardcode a hostname, a CDN address, or a site ID. Not `local.blot`, not
-  `cdn.local.blot`, not the blog's ID.
+- Never hardcode a hostname, a CDN address, or a site ID. Not `blot.localhost`, not
+  `cdn.blot.localhost`, not the blog's ID.
 - Template assets: `{{#cdn}}/style.css{{/cdn}}`.
 - Folder assets: ordinary relative paths.
 - `{{{cdn}}}` on its own gives the CDN origin, for `preconnect`.

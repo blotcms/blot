@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-BLOT_HOST=${1:-local.blot}
+BLOT_HOST=${1:-blot.localhost}
 
 # project root = two levels up from this script
 PROJ_ROOT="$(cd "$(dirname "$0")/../.."; pwd)"
@@ -13,15 +13,16 @@ mkdir -p "$CERT_DIR/certs"
 mkdir -p "$CERT_DIR/private"
 
 # Worktree preview hosts (scripts/development/preview.sh)
-PREVIEW_HOSTS=(a-local.blot b-local.blot c-local.blot d-local.blot e-local.blot)
+PREVIEW_HOSTS=()
+for slot in a b c d e; do PREVIEW_HOSTS+=("$slot-$BLOT_HOST"); done
 PREVIEW_SANS=()
 for h in "${PREVIEW_HOSTS[@]}"; do PREVIEW_SANS+=("$h" "*.$h"); done
 
-# skip if both files exist, are non-empty, and cover the preview hosts
+# skip if both files exist, are non-empty, and cover this host and its preview hosts
 if [[ -s "$CRT" && -s "$KEY" ]]; then
   if command -v openssl >/dev/null 2>&1 &&
-    ! openssl x509 -in "$CRT" -noout -text | grep -q "DNS:\*\.e-local\.blot"; then
-    echo "[start] Existing dev certificate lacks worktree preview hosts; regenerating"
+    ! openssl x509 -in "$CRT" -noout -text | grep -qF "DNS:*.e-$BLOT_HOST"; then
+    echo "[start] Existing dev certificate doesn't cover $BLOT_HOST and its preview hosts; regenerating"
   else
     echo "[start] Existing dev certificates found"
     exit 0

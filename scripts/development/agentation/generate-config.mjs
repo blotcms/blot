@@ -3,7 +3,7 @@ import { copyFile, mkdir, writeFile } from "node:fs/promises";
 // The proxy's include hooks (proxy/config/development.conf): maps at http
 // level, locations in each public server, response rewriting in each proxied
 // location. node-app mounts generated/openresty at /etc/openresty/development.
-const host = process.env.BLOT_HOST || "local.blot";
+const host = process.env.BLOT_HOST || "blot.localhost";
 if (!/^[a-z0-9]+(?:[.-][a-z0-9]+)*$/.test(host)) {
   throw new Error("BLOT_HOST must be a lowercase local hostname without a scheme or port");
 }

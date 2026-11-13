@@ -1,6 +1,6 @@
 # Worktree previews
 
-The Docker stack bind-mounts the **main checkout**, so `https://local.blot`
+The Docker stack bind-mounts the **main checkout**, so `https://blot.localhost`
 never shows a worktree's code. `preview.sh` runs a worktree in its own Node
 container instead, so it can be opened in the browser without checking the
 branch out in the main tree.
@@ -13,34 +13,34 @@ scripts/development/preview.sh ls     # who holds which slot
 
 `up` prints a one-time dashboard **Login** URL (generated with `scripts/blog/access.js`
 inside the sidecar) and a **Work** URL: the page you pass, as a path
-(`/sites/local`) or a `local.blot` URL, rewritten to the slot host
-(`https://preview-of-blog-on-local.local.blot/` becomes
-`https://preview-of-blog-on-local.a-local.blot/`). Agents should always pass
+(`/sites/local`) or a `blot.localhost` URL, rewritten to the slot host
+(`https://preview-of-blog-on-local.blot.localhost/` becomes
+`https://preview-of-blog-on-local.a-blot.localhost/`). Agents should always pass
 the page they are working on (a docs page, a template preview, …).
 
 Requires `npm start` to be running. Refuses to run in the main checkout.
 
 ## How it works
 
-Five fixed sibling hosts, `a-local.blot` … `e-local.blot`. Each claimed slot is
+Five fixed sibling hosts, `a-blot.localhost` … `e-blot.localhost`. Each claimed slot is
 one extra container, `blot-node-<slot>`, with this worktree's `app`, `config`,
 `scripts` and `tests` mounted (nodemon reloads on edit). The main stack's
 proxy (OpenResty in `node-app`), Redis and `data/` are shared with it. Sidecars
 are plain Node: requests to a slot skip the proxy's cache and routing.
 
-`BLOT_HOST=<slot>-local.blot` is all the app needs: dashboard
-(`https://a-local.blot`), CDN, blogs (`https://example.a-local.blot`) and
+`BLOT_HOST=<slot>-blot.localhost` is all the app needs: dashboard
+(`https://a-blot.localhost`), CDN, blogs (`https://example.a-blot.localhost`) and
 `preview-of-…` hosts are all derived from `config.host`.
 
-Sibling hosts rather than `*.wt.local.blot`: `*.local.blot` does not cover
-`example.x.local.blot` (two labels), and nested names would need nested
-wildcard certs. `a-local.blot` has the same shape as `local.blot`, so one
+Sibling hosts rather than `*.wt.blot.localhost`: `*.blot.localhost` does not cover
+`example.x.blot.localhost` (two labels), and nested names would need nested
+wildcard certs. `a-blot.localhost` has the same shape as `blot.localhost`, so one
 wildcard per slot works. dnsmasq already answers everything under `.blot`.
 
-- **TLS:** `scripts/development/setup-certs.sh` adds `a-local.blot`/`*.a-local.blot` …
+- **TLS:** `scripts/development/setup-certs.sh` adds `a-blot.localhost`/`*.a-blot.localhost` …
   to the mkcert cert and regenerates an existing cert that lacks them.
 - **Proxy:** one regex `server` block in `proxy/config/development.conf`
-  (rendered only for local development) sends `[a-e]-local.blot` (and
+  (rendered only for local development) sends `[a-e]-blot.localhost` (and
   subdomains) to `blot-node-<slot>:8080`. It uses a variable `proxy_pass` with
   Docker's resolver, so OpenResty boots with no sidecars and a free slot
   returns 502. Nothing reloads on claim.
@@ -59,7 +59,7 @@ wildcard per slot works. dnsmasq already answers everything under `.blot`.
 
 Sidecars share the live dev database, so:
 
-- Dashboard/template-editor writes from a slot change data `local.blot` also
+- Dashboard/template-editor writes from a slot change data `blot.localhost` also
   sees.
 - Do not use a slot to test Redis-schema changes.
 - `BLOT_PREVIEW=true` skips the scheduler and sync client `init()`, so
@@ -68,10 +68,10 @@ Sidecars share the live dev database, so:
 - Every process builds SITE templates and slots watch them, so
   edits under `app/templates/source` rebuild on the slot. Templates live in
   the shared dev Redis: a slot's startup build overwrites every template with
-  this worktree's copy, and its rebuilds show on `local.blot` and other slots
+  this worktree's copy, and its rebuilds show on `blot.localhost` and other slots
   too. Last writer wins; expect one agent to edit one template.
 - Native-module or `package.json` changes need a rebuilt `blot` image.
-- Cloud Agent VMs already have their own `local.blot`.
+- Cloud Agent VMs already have their own `blot.localhost`.
 - At most five concurrent previews.
 - Memory: the Docker VM is small (~2 GB here). A running sidecar (up to 768m)
   on top of the main stack can push it into OOM; during testing the main
@@ -82,9 +82,9 @@ Unverified: whether anything cached in shared Redis embeds `config.host`
 
 ## Alternatives considered
 
-- **Nested `*.wt.local.blot`.** Needs nested wildcard certs and regex server names.
+- **Nested `*.wt.blot.localhost`.** Needs nested wildcard certs and regex server names.
 - **Branch-named hosts.** Unbounded cert SANs / server names.
 - **Auto-start per worktree.** Wastes RAM; most agents never need HTTP.
 - **Full compose clone per worktree.** Empty data, port clashes.
-- **Path-based (`local.blot/__wt/…`).** Fights `vhost(config.host, site)`.
+- **Path-based (`blot.localhost/__wt/…`).** Fights `vhost(config.host, site)`.
 - **Bind-mount worktree over the main container.** One at a time.

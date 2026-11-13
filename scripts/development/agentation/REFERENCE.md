@@ -35,7 +35,7 @@ reenable it on an already-running stack. The standalone tool does not start or
 reconfigure the application's dependencies. `down` and `mcp` do not check Codex
 registration, so shutdown works without Codex and the adapter avoids recursion.
 
-Use the same `BLOT_HOST` as the normal stack (default `local.blot`). The optional
+Use the same `BLOT_HOST` as the normal stack (default `blot.localhost`). The optional
 `AGENTATION_PORT` changes only the loopback HTTP port, e.g.:
 
 ```sh
@@ -85,7 +85,7 @@ with `agentation_resolve`. See the repository's preview skill for source tracing
 
 ## Routing and state
 
-The hooks add to the normal proxy config rather than replacing it. Only `BLOT_HOST`, its subdomains and `a-local.blot` through `e-local.blot` (and
+The hooks add to the normal proxy config rather than replacing it. Only `BLOT_HOST`, its subdomains and `a-blot.localhost` through `e-blot.localhost` (and
 their subdomains) receive the toolbar. CDN hosts and unrelated hosts are excluded.
 HTML must contain a closing `</body>`; JSON, feeds and other content types are
 unchanged. While Agentation is on, proxied and cached locations ignore the

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Runs this git worktree in its own Node container on a-local.blot … e-local.blot,
+# Runs this git worktree in its own Node container on a-blot.localhost … e-blot.localhost,
 # sharing the main stack's proxy, Redis and data/. See worktrees.md.
 #
 #   scripts/development/preview.sh up [url-or-path]
 #                                         claim a slot (or reuse this worktree's) and print
 #                                         a dashboard login URL plus a direct URL to the
 #                                         work; give it the page being worked on, as a
-#                                         path (/sites/local) or a local.blot URL
+#                                         path (/sites/local) or a blot.localhost URL
 #   scripts/development/preview.sh down   release this worktree's slot
 #   scripts/development/preview.sh ls     show which worktree holds each slot
 
@@ -40,12 +40,12 @@ slot_of_this_worktree() {
 up() {
   local target="${1:-}"
   if [ "$WORKTREE_ROOT" = "$MAIN_ROOT" ]; then
-    echo "This is the main checkout; it is already served at https://local.blot" >&2
+    echo "This is the main checkout; it is already served at https://blot.localhost" >&2
     exit 1
   fi
 
-  if ! curl -ksf --max-time 5 https://local.blot/health >/dev/null; then
-    echo "https://local.blot is not up. Ask the maintainer to run 'npm start'." >&2
+  if ! curl -ksf --max-time 5 https://blot.localhost/health >/dev/null; then
+    echo "https://blot.localhost is not up. Ask the maintainer to run 'npm start'." >&2
     exit 1
   fi
 
@@ -76,7 +76,7 @@ up() {
 
   compose "$slot" up -d
 
-  local host="$slot-local.blot" i
+  local host="$slot-blot.localhost" i
   for i in $(seq 1 60); do
     # Ask the sidecar itself: until the proxy routes the slot, $host would hit the main stack
     if docker exec "blot-node-$slot" node -e "fetch('http://localhost:8080/health').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))" 2>/dev/null; then break; fi
@@ -85,7 +85,7 @@ up() {
 
   # The slot block is proxy/config/development.conf, rendered by the main
   # stack's node-app from the main checkout (an older main stack ran it in a
-  # separate nginx container). Without it, <slot>-local.blot shows "no site here".
+  # separate nginx container). Without it, <slot>-blot.localhost shows "no site here".
   if ! docker exec blot-node-app-1 grep -q preview_upstream /usr/local/openresty/nginx/conf/nginx.conf 2>/dev/null &&
     ! docker exec blot-nginx-1 grep -q preview_upstream /etc/nginx/nginx.conf 2>/dev/null; then
     echo "WARNING: the running proxy has no preview routing, so https://$host will not reach this sidecar." >&2
@@ -98,7 +98,7 @@ up() {
 
   case "$target" in
     "") work="" ;;
-    http*) work="$(echo "$target" | sed -E "s#^(https?://[^/]*)local\.blot#\1$host#")" ;;
+    http*) work="$(echo "$target" | sed -E "s#^(https?://[^/]*)blot\.localhost#\1$host#")" ;;
     /*) work="https://$host$target" ;;
     *) work="https://$host/$target" ;;
   esac
@@ -127,7 +127,7 @@ ls_slots() {
   local slot path any=0
   for slot in "${SLOTS[@]}"; do
     path="$(docker inspect -f '{{index .Config.Labels "blot.worktree"}}' "blot-node-$slot" 2>/dev/null)" || continue
-    echo "$slot  https://$slot-local.blot  $path"
+    echo "$slot  https://$slot-blot.localhost  $path"
     any=1
   done
   [ "$any" = 1 ] || echo "No previews running"

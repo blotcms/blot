@@ -12,7 +12,7 @@ services:
     env_file:
       - ${MAIN_ROOT}/.env
     environment:
-      - BLOT_HOST=${SLOT}-local.blot
+      - BLOT_HOST=${SLOT}-blot.localhost
       # Talk to Redis directly (no toxiproxy latency)
       - BLOT_REDIS_HOST=redis
       # Only tags log lines

@@ -97,7 +97,7 @@ on any change under `proxy/` (plus `package.json` and
 
 ## Local development
 
-`npm start` (`scripts/development/start.sh`) serves `local.blot` with this
+`npm start` (`scripts/development/start.sh`) serves `blot.localhost` with this
 config. The stack's `node-app` is a unit (`config/docker/Dockerfile`'s `dev-unit`
 target: the `dev` image plus OpenResty from this Dockerfile's `runtime` stage,
 tagged `blot-proxy-runtime`), running node-a under nodemon and the node-b it
@@ -110,7 +110,7 @@ OpenResty's logs are in the container, under `/var/log/openresty`.
 
 `LOCAL_DEVELOPMENT=true` renders the `development*.conf` partials, which
 production never does: routing for the worktree preview slots
-(`a-local.blot`, ... `e-local.blot`, see `scripts/development/worktrees.md`),
+(`a-blot.localhost`, ... `e-blot.localhost`, see `scripts/development/worktrees.md`),
 MinIO standing in for Bunny on the CDN host's `blog_*` paths, no rate limits
 for private addresses, and include hooks under `/etc/openresty/development`
 that Agentation fills. The rest differs from production only in its runtime
