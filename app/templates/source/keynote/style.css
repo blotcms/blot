@@ -1594,20 +1594,21 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   transition: background-color 200ms ease;
 }
 
-/* Bottom right, which is the gutter's foot once it opens, so it never moves: three dots in
-   an outlined pill, filled in while the details show. */
+/* Bottom right, which is the gutter's foot once it opens, so it never moves. Its round
+   backing stays filled in while the details show. */
 .lightbox-info-button {
   bottom: calc(var(--edge-y) - 10px);
   right: var(--lightbox-button-inset);
+  width: 44px;
   height: 44px;
-  padding: 0 4px;
+  border-radius: 50%;
 }
 
+/* A 16px icon, in the same 36px round backing as the others' 24px ones. */
 .lightbox-info-button .lightbox-icon {
-  width: 20px;
-  height: 20px;
-  padding: 0 7px;
-  border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.35);
+  width: 16px;
+  height: 16px;
+  padding: 10px;
 }
 
 .lightbox.is-revealed .lightbox-info-button[aria-expanded="true"] {
@@ -1615,12 +1616,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 }
 
 .lightbox-info-button[aria-expanded="true"] .lightbox-icon {
-  border-color: transparent;
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.2);
-}
-
-.lightbox-info-button:focus-visible .lightbox-icon {
-  border-radius: 999px;
 }
 
 /* The post's text, date, tags and EXIF, in a gutter down the right. */
