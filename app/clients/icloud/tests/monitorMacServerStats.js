@@ -91,6 +91,15 @@ describe("icloud monitorMacServerStats", function () {
     expect(sent).toEqual(["disk-limit"]);
   });
 
+  it("treats a full disk and an exhausted quota as low, not as the server down", async function () {
+    const { check } = require("../util/monitorMacServerStats");
+    response = { disk_bytes_available: 0, icloud_bytes_available: 0 };
+
+    await check();
+
+    expect(sent).toEqual(["disk-limit", "quota-limit"]);
+  });
+
   it("emails the warning tier and the quota tier independently", async function () {
     const { check } = require("../util/monitorMacServerStats");
     response = {

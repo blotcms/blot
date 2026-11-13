@@ -49,7 +49,8 @@ const check = async () => {
 
     stats = JSON.parse(body.toString());
 
-    if (!stats || !stats.disk_bytes_available) {
+    // a full disk reports 0, which is a reading, not a missing one
+    if (!stats || typeof stats.disk_bytes_available !== "number") {
       throw new Error("No stats returned");
     }
 
@@ -58,7 +59,7 @@ const check = async () => {
     // The macserver answers with a null iCloud quota when its own quota lookup
     // failed (e.g. a CloudKit network blip). It is up, so that is not an
     // outage: skip the quota checks until the next minute.
-    if (stats.icloud_bytes_available) {
+    if (typeof stats.icloud_bytes_available === "number") {
       stats.icloud_available_human = prettySize(
         stats.icloud_bytes_available / 1000
       );
@@ -96,7 +97,7 @@ const check = async () => {
       }
     }
 
-    if (!stats.icloud_bytes_available) {
+    if (typeof stats.icloud_bytes_available !== "number") {
       console.log(clfdate(), "Mac server could not report iCloud quota");
     } else if (stats.icloud_bytes_available < ICLOUD_SPACE_LIMIT) {
       console.log(clfdate(), "iCloud drive space is low");

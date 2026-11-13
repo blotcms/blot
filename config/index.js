@@ -396,9 +396,11 @@ module.exports = {
     email: process.env.BLOT_ICLOUD_EMAIL,
     // The maximum file size to sync with iCloud
     maxFileSize: 1e8, // 100MB
-    // The thresholds for sending warning emails
-    diskSpaceWarning: 4e9, // 4GB
-    diskSpaceLimit: 1e9, // 1GB
+    // The thresholds for sending warning emails. The macserver's root disk
+    // can lose several GB at once (a crash dump was 6.5 GB), so the warning
+    // band is wide enough that one jump can't skip it.
+    diskSpaceWarning: 25e9, // 25GB
+    diskSpaceLimit: 10e9, // 10GB
     iCloudSpaceWarning: 2e9, // 2GB
     iCloudSpaceLimit: 1e9, // 1GB
   },
