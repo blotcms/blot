@@ -1794,12 +1794,13 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
 .entry-exif-icon {
   position: absolute;
-  top: 0.95em;
+  /* Centred on the camera's line. */
+  top: 0.75em;
   right: 1em;
-  /* Lucide's camera, drawn as a line. */
+  /* Lucide's camera, drawn as a 1px line whatever the icon's size. */
   fill: none;
   stroke: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
-  stroke-width: 1.5;
+  stroke-width: 1px;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
