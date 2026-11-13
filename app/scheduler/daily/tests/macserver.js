@@ -64,6 +64,12 @@ describe("daily update macserver", function () {
       expect(text).toMatch(/^macserver: \*\*root disk [^*]+\*\*, \*\*iCloud /);
     });
 
+    it("treats an exhausted iCloud quota as low, not unknown", function () {
+      expect(
+        macserver.line(stats({ icloud_bytes_available: 0 }), { now: NOW })
+      ).toContain("**iCloud 0 Bytes free**");
+    });
+
     it("copes with a macserver that reports no disk size or quota", function () {
       expect(
         macserver.line(

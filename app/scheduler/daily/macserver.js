@@ -40,8 +40,8 @@ function diskPart(stats, { history, now }) {
 function icloudPart(stats) {
   const free = stats.icloud_bytes_available;
 
-  // null when the macserver's own quota lookup failed
-  if (!(free > 0)) return "iCloud quota unknown";
+  // null when the macserver's own quota lookup failed; 0 is a real reading
+  if (typeof free !== "number" || !(free >= 0)) return "iCloud quota unknown";
   return bold(
     `iCloud ${size(free)} free`,
     free < config.icloud.iCloudSpaceWarning
@@ -112,7 +112,7 @@ async function main(deps = {}) {
 
   try {
     stats = await (deps.fetchStats || fetchStats)();
-    if (!stats || !(stats.disk_bytes_available > 0))
+    if (!stats || !(stats.disk_bytes_available >= 0))
       throw new Error("no disk space in its stats");
   } catch (err) {
     const reason = String((err && err.message) || err)
