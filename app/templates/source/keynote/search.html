@@ -7,6 +7,10 @@
 
       {{> header}}
 
+      <main id="main">
+
+      <h1 class="visually-hidden">{{#query}}Search results for “{{query}}”{{/query}}{{^query}}Search{{/query}}</h1>
+
       {{> tag_filters}}
 
       <div class="list" data-grid>
@@ -15,11 +19,22 @@
         {{/entries}}
       </div>
 
+      {{^query}}
+      <p class="no-results">Type a word in the search box to find posts, or choose a tag.</p>
+      {{/query}}
+
       {{#query}}
       {{^entries}}
       <p class="no-results">Sorry, no results for “{{query}}”</p>
       {{/entries}}
       {{/query}}
+
+      {{#entries.length}}
+      <p class="list-total">{{entries.length}} of {{entries.length}}</p>
+      {{/entries.length}}
+
+      <p class="visually-hidden list-status" aria-live="polite"></p>
+      </main>
 
     </div>
 

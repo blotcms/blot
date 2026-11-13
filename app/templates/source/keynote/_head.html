@@ -30,12 +30,17 @@
       } catch (e) {}
       {{#entry}}{{^page}}{{#thumbnail.large.url}}// A post with an image opens in the viewer, over the rail. Standalone pages
       // (About and the like) always show as text, with the header.
-      root.classList.add("rail-mode");{{/thumbnail.large.url}}{{/page}}{{/entry}}
+      // It opens straight into the viewer, so the rail stays hidden until it closes.
+      root.classList.add("rail-mode", "is-deep-open");{{/thumbnail.large.url}}{{/page}}{{/entry}}
+      // The viewer's details gutter is one setting for every image, so the page can lay
+      // it out before the script that opens the viewer has run.
+      try {
+        if (localStorage.getItem("keynote:info") === "1") root.classList.add("info-open");
+      } catch (e) {}
     })(document.documentElement);
   </script>
 
   {{#entry}}
-  <link rel="prefetch" href="/">
   {{#absoluteURL}}
   <link rel="canonical" href="{{{absoluteURL}}}">
   <meta property="og:url" content="{{{absoluteURL}}}">

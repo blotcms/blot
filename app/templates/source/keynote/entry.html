@@ -5,7 +5,9 @@
 
     {{> header}}
 
-    <main class="rail-viewport" aria-label="Images" data-page="{{pagination.current}}" data-total="{{pagination.total}}" data-entries="{{#pagination}}{{total_entries}}{{/pagination}}{{^pagination}}{{total_posts}}{{/pagination}}">
+    <main class="entry-main" id="main">
+    {{^entry.page}}{{#entry.thumbnail.large.url}}
+    <div class="rail-viewport" data-page="{{pagination.current}}" data-total="{{pagination.total}}" data-entries="{{#pagination}}{{total_entries}}{{/pagination}}{{^pagination}}{{total_posts}}{{/pagination}}">
       <div class="rail-layer">
         <ul class="rail" aria-label="Image rail">
           {{#posts}}
@@ -13,25 +15,29 @@
           {{/posts}}
         </ul>
       </div>
-    </main>
+    </div>
+    {{/entry.thumbnail.large.url}}{{/entry.page}}
 
     {{#entry}}
+    {{^page}}
     <ul class="current-entry" hidden>
       {{> slide}}
     </ul>
+    {{/page}}
 
     <article class="contents">
       {{> post}}
 
       <nav class="entry-nav" aria-label="Posts">
         {{^page}}<a class="entry-next" rel="prev" {{#next}}href="{{{url}}}"{{/next}}>&larr; Newer</a>{{/page}}
-        <a class="entry-close" href="/">Back</a>
+        <a class="entry-close" href="/">Home</a>
         {{^page}}<a class="entry-previous" rel="next" {{#previous}}href="{{{url}}}"{{/previous}}>Older &rarr;</a>{{/page}}
       </nav>
 
       {{> pluginHTML}}
     </article>
     {{/entry}}
+    </main>
 
     {{> lightbox}}
     {{> footer}}

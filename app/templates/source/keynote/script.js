@@ -135,11 +135,18 @@
 
   function initializeCollectionNavigation() {
     const state = readCollection();
-    // Only trust the collection when arriving from elsewhere on this site.
-    if (!state || !pathOf(document.referrer)) return;
+    // Only trust the collection when arriving from elsewhere on this site. A reload keeps the
+    // referrer and session storage, but starts afresh on the rail: following the listing would
+    // turn each step into a page load.
+    const reloaded = performance.getEntriesByType?.("navigation")[0]?.type === "reload";
+    if (!state || !pathOf(document.referrer) || reloaded) return;
 
     closeDepth = takeDepth();
-    if (closeDepth) history.replaceState({ ...history.state, closeDepth }, "");
+    if (closeDepth) {
+      history.replaceState({ ...history.state, closeDepth }, "");
+      // Without script, or from elsewhere, the link goes home and says so; here it goes back.
+      for (const link of document.querySelectorAll("a.entry-close")) link.textContent = "Back";
+    }
 
     const path = pathOf(location.href);
     let page = -1;
@@ -173,7 +180,10 @@
     collectionPlace = listing.total ? { index: (listing.offset || 0) + index + 1, total: listing.total } : null;
     entryLinksChanged();
     closeURL = listing.url;
-    for (const link of document.querySelectorAll("a.entry-close")) link.href = closeURL;
+    for (const link of document.querySelectorAll("a.entry-close")) {
+      link.href = closeURL;
+      link.textContent = "Back";
+    }
 
     const edge = (loaded, step) => loaded.entries[step > 0 ? 0 : loaded.entries.length - 1];
 
@@ -232,7 +242,6 @@
     link.setAttribute("aria-current", "page");
   }
   if (view === "home") document.getElementById("title")?.setAttribute("aria-current", "page");
-  for (const total of document.querySelectorAll(".list-total[data-count='1']")) total.textContent = "1 item";
 
   // ---- Tag filters: a row that ends in a button opening the full list, remembered across pages ----
 
@@ -278,7 +287,6 @@
         }
       }
       tagToggle.setAttribute("aria-expanded", String(expanded()));
-      tagToggle.setAttribute("aria-label", expanded() ? "Show fewer tags" : "Show all tags");
     };
     tagToggle.addEventListener("click", () => {
       root.classList.toggle("tags-expanded");
@@ -294,8 +302,12 @@
   const lightbox = document.querySelector(".lightbox");
   if (!lightbox) return;
 
-  // The strip kept for the page's scrollbar: the root reports the full window width, the body doesn't.
-  const measureScrollbar = () => root.style.setProperty("--scrollbar-width", `${Math.max(0, innerWidth - document.body.getBoundingClientRect().width)}px`);
+  // The strip kept for the page's scrollbar, which the page is padded by while the viewer
+  // is open. It can only be measured while the strip is there.
+  const measureScrollbar = () => {
+    if (root.classList.contains("is-viewing") || root.classList.contains("is-deep-open")) return;
+    root.style.setProperty("--scrollbar-width", `${Math.max(0, innerWidth - root.getBoundingClientRect().width)}px`);
+  };
   measureScrollbar();
   window.addEventListener("resize", measureScrollbar);
 
@@ -304,8 +316,9 @@
   const closeButton = lightbox.querySelector(".lightbox-close");
   const previousButton = lightbox.querySelector(".lightbox-previous");
   const nextButton = lightbox.querySelector(".lightbox-next");
-  const captionTitle = lightbox.querySelector(".lightbox-title");
-  const captionIndex = lightbox.querySelector(".lightbox-index");
+  // The caption over the image, and its copy at the top of the details gutter.
+  const captionTitles = lightbox.querySelectorAll(".lightbox-title");
+  const captionIndexes = lightbox.querySelectorAll(".lightbox-index");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   const SWIPE_THRESHOLD = 56;
@@ -330,8 +343,9 @@
     return {
       link,
       href: new URL(link.getAttribute("href"), document.baseURI).pathname,
-      title: link.getAttribute("aria-label") || "",
-      alt: original?.getAttribute("alt") || link.getAttribute("aria-label") || "",
+      title: link.dataset.title || "",
+      alt: original?.getAttribute("alt") || link.dataset.title || "",
+      date: link.dataset.date || "",
       preview: link.dataset.preview,
       full: original?.getAttribute("src") ? absolute(original.getAttribute("src")) : link.dataset.preview,
       width,
@@ -419,43 +433,109 @@
     if (activeIndex >= entries.length - 4) controller.loadMore?.();
     controller.prefetch?.(activeIndex);
     updateCaption();
+    announce(entry);
+    fillInfo(entry);
 
     upgradeChain(entry, token);
   }
 
-  // The first time someone opens the viewer, a short line says how to move and zoom.
-  const hint = lightbox.querySelector(".lightbox-hint");
-  const HINT_KEY = "keynoteViewerHint";
-  function showHint() {
-    if (!hint) return;
-    try {
-      if (localStorage.getItem(HINT_KEY)) return;
-      localStorage.setItem(HINT_KEY, "1");
-    } catch (error) {
-      return;
-    }
-    hint.textContent = window.matchMedia("(pointer: coarse)").matches
-      ? "Swipe for the next image · pinch to zoom"
-      : "← → for the next image · + − or scroll to zoom";
-    hint.hidden = false;
-    const dismiss = () => {
-      hint.classList.add("is-leaving");
-      setTimeout(() => { hint.hidden = true; }, 400);
-    };
-    setTimeout(dismiss, 4000);
-  }
-
-  // The title, then its place among the posts as 05/52, worked out from each post's index and
+  // The title, then its place among the posts as "5 of 52", worked out from each post's index and
   // the page's post count, so nothing extra has to load.
+  // Reached through a listing, the arrows follow it, and so does the counter.
+  const placeOf = (entry) => (stepsByEntryLinks(entry) && collectionPlace ? collectionPlace : controller.position?.(activeIndex));
+
   function updateCaption() {
     const entry = controller?.entries()[activeIndex];
-    if (!entry || !captionTitle) return;
-    captionTitle.textContent = entry.title;
-    // Reached through a listing, the arrows follow it, and so does the counter.
-    const place = stepsByEntryLinks(entry) && collectionPlace ? collectionPlace : controller.position?.(activeIndex);
-    const pad = (number) => String(number).padStart(2, "0");
-    captionIndex.textContent = place ? `${pad(place.index)}/${pad(place.total)}` : "";
+    if (!entry || !captionTitles.length) return;
+    for (const title of captionTitles) title.textContent = entry.title;
+    const place = placeOf(entry);
+    const index = place ? `${place.index} of ${place.total}` : "";
+    for (const node of captionIndexes) node.textContent = index;
   }
+
+  // Screen readers hear each image once, as "Title, 5 of 52", whether or not captions show.
+  const announcer = lightbox.querySelector(".lightbox-announce");
+  function announce(entry) {
+    if (!announcer) return;
+    const place = placeOf(entry);
+    announcer.textContent = place ? `${entry.title}, ${place.index} of ${place.total}` : entry.title;
+  }
+
+  // ---- Post details: an Info button shows the post's text, then its date, tags and the photo's EXIF ----
+
+  const infoButton = lightbox.querySelector(".lightbox-info-button");
+  const infoPanel = lightbox.querySelector(".lightbox-info");
+  const infoBody = infoPanel?.querySelector(".lightbox-info-body");
+  const infoDetails = infoPanel?.querySelector(".lightbox-info-details");
+  const infoDescription = infoPanel?.querySelector(".lightbox-info-description");
+  // One setting for every image, kept between visits: open, the details fill a gutter on the
+  // right of each image in turn, until it's closed again.
+  const INFO_KEY = "keynote:info";
+  let infoWanted = false;
+  try {
+    infoWanted = localStorage.getItem(INFO_KEY) === "1";
+  } catch {}
+
+  function setInfo(open) {
+    infoWanted = open;
+    try {
+      localStorage.setItem(INFO_KEY, open ? "1" : "0");
+    } catch {}
+    showInfo();
+  }
+
+  function showInfo() {
+    if (!infoPanel) return;
+    infoPanel.hidden = !infoWanted;
+    lightbox.classList.toggle("has-info", infoWanted);
+    root.classList.toggle("info-open", infoWanted);
+    infoButton.setAttribute("aria-expanded", String(infoWanted));
+  }
+
+  function fillInfo(entry) {
+    if (!infoPanel) return;
+    const body = entry.link.querySelector("template.entry-html")?.content.cloneNode(true);
+    if (body) {
+      for (const script of body.querySelectorAll("script")) script.remove();
+      // The picture is already on screen, and so is the title: leave both out, with
+      // anything that only held them.
+      const picture = body.querySelector("img");
+      const heading = [...body.querySelectorAll("h1, h2, h3, p, .caption")].find((node) => node.textContent.trim() === entry.title);
+      for (const node of [picture, heading]) {
+        let target = node;
+        while (target?.parentNode && target.parentNode !== body && target.parentNode.childElementCount === 1 && !target.parentNode.textContent.trim()) target = target.parentNode;
+        target?.remove();
+      }
+    }
+    const hasText = Boolean(body && (body.textContent.trim() || body.querySelector("img, video, audio, iframe")));
+    infoBody.replaceChildren(...(hasText ? [body] : []));
+    const details = entry.link.querySelector("template.entry-details")?.content.cloneNode(true);
+    // The photo's camera, lens and exposure, as a card.
+    const exif = details?.querySelector(".entry-exif");
+    const camera = exif?.querySelector(".entry-camera");
+    if (camera) {
+      // Most cameras repeat the make in the model ("Canon" and "Canon EOS R5"), so show it once.
+      const make = camera.querySelector(".entry-camera-make");
+      const model = camera.querySelector(".entry-camera-model");
+      if (make && model && model.textContent.trim().toLowerCase().startsWith(make.textContent.trim().toLowerCase())) make.remove();
+      if (!camera.textContent.trim()) camera.remove();
+    }
+    const exposure = exif?.querySelector(".entry-exposure");
+    if (exposure && !exposure.querySelector("li")) exposure.remove();
+    const hasExif = Boolean(exif?.querySelector("p, li"));
+    // The photo's own description reads as prose under the title.
+    const description = details?.querySelector(".entry-description");
+    infoDescription?.replaceChildren(...(description ? [description] : []));
+    // Then the camera card, the tags as the archives' pills, and the date.
+    const parts = [hasExif ? exif : null, details?.querySelector(".entry-tags"), details?.querySelector(".entry-date")].filter(Boolean);
+    infoDetails.replaceChildren(...parts);
+    const hasDetails = parts.length > 0 || Boolean(description);
+    // With the gutter open, the button stays to close it, even beside a post with no details.
+    infoButton.hidden = !hasText && !hasDetails && !infoWanted;
+    showInfo();
+  }
+
+  infoButton?.addEventListener("click", () => setInfo(!infoWanted));
 
   // The rail inserted `count` entries at `at`; keep the viewer on the same entry.
   function entriesInserted(at, count, moved) {
@@ -548,8 +628,10 @@
     opening = false;
     lightbox.classList.remove("is-opening");
     if (closeAfterOpen) {
+      // The close was asked for during the opening zoom, and the address has already been
+      // dealt with (Back, or requestClose), so only the viewer itself is left to close.
       closeAfterOpen = false;
-      void requestClose();
+      void close();
       return;
     }
     if (lightbox.open) lightbox.classList.add("is-revealed");
@@ -563,7 +645,6 @@
     controller.pause();
     resetZoom();
     setActive(index);
-    showHint();
     const source = animate ? controller.sourceImage(activeIndex) : null;
     // An image still loading opens at once, as its placeholder.
     if (source && isLoaded(source)) await lightboxImage.decode().catch(() => {});
@@ -605,7 +686,7 @@
   // Puts the page back as it was before the viewer opened. Safe to run more than once, so
   // it also tidies up after the browser closes the dialog itself.
   function cleanUpViewer() {
-    root.classList.remove("lightbox-transition-closing", "is-zooming", "is-leaving", "is-viewing");
+    root.classList.remove("lightbox-transition-closing", "is-zooming", "is-leaving", "is-viewing", "is-deep-open");
     for (const image of document.querySelectorAll(".is-transitioning")) {
       image.classList.remove("is-transitioning");
       image.style.removeProperty("view-transition-name");
@@ -623,6 +704,7 @@
     closePending = false;
     lightboxGesture = null;
     controller?.resume();
+    measureScrollbar();
   }
 
   async function close({ animate = true } = {}) {
@@ -632,6 +714,7 @@
     }
     if (!lightbox.open || closePending) return;
     closePending = true;
+    root.classList.remove("is-deep-open");
     // Bring the header back as the viewer starts to leave, not once it has gone.
     root.classList.add("is-leaving");
     // An image mostly still on screen zooms back to where it was; otherwise the page brings it in first.
@@ -718,6 +801,8 @@
       window.location.href = closeURL;
       return true;
     }
+    // Elsewhere the viewer was opened over the page without moving the address.
+    if (view !== "entry") return false;
     // Opened directly (or after a reload): go back to the listing it came from, or to the rail.
     const target = directTarget();
     if (target.navigate) {
@@ -800,16 +885,30 @@
     };
   }
 
-  // How far the zoomed image may be moved: its edges stay on or beyond the screen's edges.
+  // The part of the screen the image has: all of it, less the details gutter while that's
+  // open, down the right or, on narrow screens, along the bottom.
+  function stageSize() {
+    let width = lightbox.clientWidth;
+    let height = lightbox.clientHeight;
+    if (infoPanel && !infoPanel.hidden) {
+      const panel = infoPanel.getBoundingClientRect();
+      if (panel.top > 1) height = Math.min(height, panel.top);
+      else width = Math.min(width, panel.left);
+    }
+    return { width, height };
+  }
+
+  // How far the zoomed image may be moved: its edges stay on or beyond the stage's edges.
   function panBounds(level = zoomLevel) {
     const center = baseCenter();
+    const stage = stageSize();
     const axis = (middle, size, view) => {
       const low = view - middle - size / 2;
       const high = size / 2 - middle;
       return low > high ? [view / 2 - middle, view / 2 - middle] : [low, high];
     };
-    const [lowX, highX] = axis(center.x, lightboxImage.offsetWidth * level, lightbox.clientWidth);
-    const [lowY, highY] = axis(center.y, lightboxImage.offsetHeight * level, lightbox.clientHeight);
+    const [lowX, highX] = axis(center.x, lightboxImage.offsetWidth * level, stage.width);
+    const [lowY, highY] = axis(center.y, lightboxImage.offsetHeight * level, stage.height);
     return { lowX, highX, lowY, highY };
   }
 
@@ -889,7 +988,10 @@
     renderZoom();
   }
 
-  const screenCenter = () => ({ x: lightbox.clientWidth / 2, y: lightbox.clientHeight / 2 });
+  const screenCenter = () => {
+    const stage = stageSize();
+    return { x: stage.width / 2, y: stage.height / 2 };
+  };
 
   // Scrolling at 100% pulls the image smaller; far enough closes the viewer, otherwise it springs back.
   function pullToClose(distance) {
@@ -911,6 +1013,7 @@
   }
 
   function onLightboxWheel(event) {
+    if (event.target.closest?.(".lightbox-info")) return; // the post text scrolls
     wheelLockUntil = performance.now() + WHEEL_GAP;
     event.preventDefault();
     if (lightboxBusy() || pulledClosed) return;
@@ -1075,7 +1178,7 @@
   }
 
   lightbox.addEventListener("pointerdown", (event) => {
-    if (event.target.closest("button, .zoom-controls") || lightboxBusy()) return;
+    if (event.target.closest("button, .zoom-controls, .lightbox-info") || lightboxBusy()) return;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, time: event.timeStamp });
     if (pointers.size === 2) beginPinch();
     else if (pointers.size === 1 && zoomed() && event.button === 0) beginPan(event);
@@ -1808,6 +1911,8 @@
           const doc = new DOMParser().parseFromString(await response.text(), "text/html");
           const added = [...doc.querySelectorAll("[data-grid] a.cell")];
           for (const cell of added) list.append(document.adoptNode(cell));
+          const status = document.querySelector(".list-status");
+          if (status && added.length) status.textContent = `${added.length} more ${added.length === 1 ? "post" : "posts"} loaded`;
           const next = doc.querySelector("a.more[rel='next']");
           if (next) more.href = next.href;
           else {
@@ -1884,7 +1989,12 @@
   else if (view !== "entry") controller = createGrid();
 
   // No rail could be made, so let the entry page show its text instead.
-  if (view === "entry" && !controller) root.classList.remove("rail-mode");
+  if (view === "entry" && !controller) root.classList.remove("rail-mode", "is-deep-open");
+
+  // In rail mode the post's text is clipped out of sight, so keep focus out of it too. The
+  // viewer's Info button shows it instead.
+  const clippedText = view === "entry" && controller ? document.querySelector(".contents") : null;
+  if (clippedText) clippedText.inert = true;
 
   if (view === "entry" && controller) {
     // The entry's own page: the viewer starts open, and closing returns to the rail.
@@ -1892,6 +2002,8 @@
     if (index >= 0) {
       history.replaceState({ ...history.state, keynote: "open", pushed: false }, "", location.href);
       void open(index, { animate: false });
+    } else {
+      root.classList.remove("is-deep-open");
     }
   }
 })();

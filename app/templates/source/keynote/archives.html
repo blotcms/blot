@@ -7,6 +7,8 @@
 
       {{> header}}
 
+      <main id="main">
+
       <h1 class="visually-hidden">Archives</h1>
 
       {{> tag_filters}}
@@ -18,14 +20,17 @@
       </div>
 
       {{#pagination}}
-      <div class="pagination">
+      <nav class="pagination" aria-label="Pages">
         {{#previous}}<a class="collection-previous" href="/archives?page={{previous}}">&larr; Previous</a>{{/previous}}
         <span class="page-count">Page {{current}} of {{total}}</span>
         {{#next}}<a class="more collection-next" rel="next" href="/archives?page={{next}}">Next &rarr;</a>{{/next}}
-      </div>
+      </nav>
       {{/pagination}}
 
-      <p class="list-total" data-count="{{total_posts}}">{{total_posts}} items</p>
+      <p class="list-total">{{total_posts}} of {{total_posts}}</p>
+
+      <p class="visually-hidden list-status" aria-live="polite"></p>
+      </main>
 
     </div>
 
