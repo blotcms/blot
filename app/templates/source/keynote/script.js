@@ -239,7 +239,6 @@
     link.setAttribute("aria-current", "page");
   }
   if (view === "home") document.getElementById("title")?.setAttribute("aria-current", "page");
-  for (const total of document.querySelectorAll(".list-total[data-count='1']")) total.textContent = "1 item";
 
   // ---- Tag filters: a row that ends in a button opening the full list, remembered across pages ----
 

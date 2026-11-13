@@ -1062,15 +1062,19 @@ code {
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);
 }
 
-/* The number of posts, under the archives and tag pages. */
+/* The number of posts as N/N, under the archives, tag and search pages, set like the
+   viewer's counter (.lightbox-index): 0.8 of the caption's 0.9375em, at half strength. */
 .list-total {
   margin: 0 2vw 4em;
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.35);
-  font-size: 0.6875em;
+  color: {{text_color}};
+  opacity: 0.5;
+  font-size: 0.75em;
+  font-variant-numeric: tabular-nums;
 }
 
-/* With infinite scroll the count marks the end, so it waits until the last page is in. */
-.js .pagination:has(a.more[rel="next"]) ~ .list-total {
+/* The count marks the end, so it waits for the last page: the last page of links without
+   script, or the last page infinite scroll brings in. */
+.pagination:has(a.more[rel="next"]) ~ .list-total {
   display: none;
 }
 

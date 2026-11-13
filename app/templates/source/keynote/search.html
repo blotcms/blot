@@ -29,6 +29,10 @@
       {{/entries}}
       {{/query}}
 
+      {{#entries.length}}
+      <p class="list-total"><span aria-hidden="true">{{entries.length}}/{{entries.length}}</span><span class="visually-hidden">{{entries.length}} of {{entries.length}}</span></p>
+      {{/entries.length}}
+
       <p class="visually-hidden list-status" aria-live="polite"></p>
       </main>
 
