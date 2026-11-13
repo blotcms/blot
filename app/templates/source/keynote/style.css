@@ -1796,7 +1796,12 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   position: absolute;
   top: 0.95em;
   right: 1em;
-  fill: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
+  /* Lucide's camera, drawn as a line. */
+  fill: none;
+  stroke: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .entry-exposure {
