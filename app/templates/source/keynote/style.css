@@ -1617,8 +1617,10 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   /* Between the row of arrows along the top and the index and Info pill along the foot. */
   padding: calc(var(--edge-y) + 0.85rem + 22px) var(--edge-x) calc(var(--edge-y) + 34px) 1.5rem;
   color: {{text_color}};
-  background: {{background_color}};
-  background-image: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04));
+  /* Translucent and blurred, so a zoomed image still shows through the gutter. */
+  background: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04)), rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.72);
+  -webkit-backdrop-filter: blur(24px);
+  backdrop-filter: blur(24px);
   font-size: 0.875em;
   line-height: 1.55;
   opacity: 0;
