@@ -304,7 +304,6 @@ Heading Here
       expect(entry.exif.ImageDescription).toEqual(
         'See <a href="/target" class="wikilink">Target</a> and <a href="/target" class="wikilink">the target</a>'
       );
-      expect(entry.caption).toEqual(entry.exif.ImageDescription);
       expect(entry.dependencies).toContain("/Target.txt");
     });
 

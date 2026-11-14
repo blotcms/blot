@@ -175,74 +175,64 @@ describe("build", function () {
     });
   });
 
-  it("uses an image's photo caption as its caption and summary", async function () {
-    var path = "/photos.jpg";
+  describe("an image's caption", function () {
+    var fixtures = require("path").join(__dirname, "../converters/img/tests");
 
-    await folder.writeFrom(
-      this.blog.id,
-      path,
-      require("path").join(
-        __dirname,
-        "../converters/img/tests/captions/photos.jpg"
-      )
-    );
+    async function build(test, name, fixture) {
+      var path = "/" + name;
+      await folder.writeFrom(test.blog.id, path, fixtures + fixture);
+      test.blog.plugins.imageCaption.enabled = true;
+      return buildEntry(test.blog, path);
+    }
 
-    this.blog.imageExif = "basic";
-    this.blog.plugins.imageCaption.enabled = true;
+    it("is its EXIF ImageDescription", async function () {
+      this.blog.imageExif = "basic";
 
-    var entry = await buildEntry(this.blog, path);
-    var caption =
-      'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a>';
+      var entry = await build(
+        this,
+        "Sunset.jpg",
+        "/descriptions/described.jpg"
+      );
+      var caption =
+        'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a><br>IMG_2041_final_v2';
 
-    expect(entry.caption).toEqual(caption);
-    expect(entry.summary).toEqual("Sunset at Point Reyes, by Ann");
-    expect(entry.title).toEqual("photos");
-    expect(entry.html).toContain(
-      '<span class="caption">' + caption + "</span>"
-    );
-    expect(entry.html).not.toContain('<span class="caption">photos</span>');
-    expect(entry.html).toContain('alt="photos"');
-    expect(entry.exif.ImageDescription).toEqual(caption);
-  });
+      expect(entry.exif.ImageDescription).toEqual(caption);
+      expect(entry.html).toContain(
+        '<span class="caption">' + caption + "</span>"
+      );
+      expect(entry.html).not.toContain('<span class="caption">Sunset</span>');
+      expect(entry.html).toContain('alt="Sunset"');
+    });
 
-  it("leaves the caption out when EXIF is off", async function () {
-    var path = "/photos.jpg";
+    it("is its title when EXIF is off", async function () {
+      this.blog.imageExif = "off";
 
-    await folder.writeFrom(
-      this.blog.id,
-      path,
-      require("path").join(
-        __dirname,
-        "../converters/img/tests/captions/photos.jpg"
-      )
-    );
+      var entry = await build(
+        this,
+        "Sunset.jpg",
+        "/descriptions/described.jpg"
+      );
 
-    this.blog.imageExif = "off";
-    this.blog.plugins.imageCaption.enabled = true;
+      expect(entry.html).toContain('<span class="caption">Sunset</span>');
+      expect(entry.html).not.toContain("Point Reyes");
+    });
 
-    var entry = await buildEntry(this.blog, path);
+    it("is its title when a camera wrote the description", async function () {
+      this.blog.imageExif = "basic";
 
-    expect(entry.caption).toEqual("");
-    expect(entry.summary).toEqual("");
-    expect(entry.html).toContain('<span class="caption">photos</span>');
-  });
+      var entry = await build(this, "Camera.jpg", "/captions/camera.jpg");
 
-  it("captions an image without a photo caption with its title", async function () {
-    var path = "/gps.jpg";
+      expect(entry.exif.ImageDescription).toEqual("OLYMPUS DIGITAL CAMERA");
+      expect(entry.html).toContain('<span class="caption">Camera</span>');
+    });
 
-    await folder.writeFrom(
-      this.blog.id,
-      path,
-      require("path").join(__dirname, "../converters/img/tests/gps.jpg")
-    );
+    it("is its title when the description is blank", async function () {
+      this.blog.imageExif = "basic";
 
-    this.blog.plugins.imageCaption.enabled = true;
+      var entry = await build(this, "gps.jpg", "/gps.jpg");
 
-    var entry = await buildEntry(this.blog, path);
-
-    expect(entry.caption).toEqual("");
-    expect(entry.summary).toEqual("");
-    expect(entry.html).toContain('<span class="caption">gps</span>');
+      expect(entry.html).toContain('<span class="caption">gps</span>');
+    });
   });
 
   it("handles images with accents and spaces in their filename", async function () {

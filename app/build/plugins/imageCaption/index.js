@@ -1,6 +1,6 @@
-// options.caption is the caption from the photo of an image file (see
-// build/converters/img/markdown.js), rendered HTML which replaces the
-// filename-derived title the converter gives the image
+// options.caption is the HTML of an image file's EXIF ImageDescription (see
+// build/single.js), which replaces the filename-derived title the converter
+// gives the image
 async function render($, options = {}) {
   $("img").each(function () {
     var altText =

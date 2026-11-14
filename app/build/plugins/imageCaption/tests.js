@@ -14,7 +14,7 @@ describe("imageCaption plugin", function () {
     expect(output).toContain('<span class="caption">A title</span>');
   });
 
-  it("uses the photo's caption of an image file over its title", async () => {
+  it("uses the caption it is given over the image's title", async () => {
     const html = '<img src="/IMG_2041.jpg" title="IMG 2041" alt="IMG 2041">';
     const caption = 'Sunset by <a href="https://ann.example">Ann</a>';
     const output = await runTest(html, { caption });

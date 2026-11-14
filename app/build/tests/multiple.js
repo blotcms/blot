@@ -54,14 +54,14 @@ describe("build multiple", function () {
     expect(entry.dependencies).toEqual(["/album+/cover.jpg"]);
   });
 
-  it("leaves the photo's caption out of a folder post", async function () {
+  it("keeps the filename caption for an image in a folder post", async function () {
     var root = "/photos+";
 
     await folder.write(this.blog.id, path.join(root, "notes.md"), "Notes");
     await folder.writeFrom(
       this.blog.id,
-      path.join(root, "photos.jpg"),
-      path.join(__dirname, "../converters/img/tests/captions/photos.jpg")
+      path.join(root, "Sunset.jpg"),
+      path.join(__dirname, "../converters/img/tests/descriptions/described.jpg")
     );
 
     this.blog.imageExif = "basic";
@@ -69,8 +69,7 @@ describe("build multiple", function () {
 
     var entry = await this.buildEntry("/photos+");
 
-    expect(entry.caption).toEqual("");
-    expect(entry.html).toContain('<span class="caption">photos</span>');
+    expect(entry.html).toContain('<span class="caption">Sunset</span>');
     expect(entry.html).not.toContain("Point Reyes</strong>");
   });
 

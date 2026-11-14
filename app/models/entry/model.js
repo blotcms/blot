@@ -31,5 +31,4 @@ module.exports = {
   contentHash: "string", // hash of the entry's source bytes, used to detect real content changes
   metadata: "object",
   exif: "object",
-  caption: "string", // inline HTML of an image post's photo caption, or ""
 };

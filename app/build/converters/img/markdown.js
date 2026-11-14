@@ -1,11 +1,10 @@
 // A photo's EXIF ImageDescription, rendered as inline Markdown for
-// entry.exif.ImageDescription, and its caption (MWG:Description) for
-// entry.caption
+// entry.exif.ImageDescription
 
 const { Marked } = require("marked");
 
 // Written by cameras into EXIF ImageDescription, not by a person.
-// entry.exif.ImageDescription keeps them; a caption leaves them out.
+// entry.exif.ImageDescription keeps them, but they are not used as a caption.
 const CAMERA_DEFAULTS = [
   "OLYMPUS DIGITAL CAMERA",
   "SONY DSC",
@@ -96,12 +95,10 @@ function render(description) {
   return markdown.parseInline(text);
 }
 
-// Like render, but null for a camera's default description
-function caption(description) {
+// Whether a description is one a camera wrote by default
+function isCameraDefault(description) {
   const text = clean(description);
-  if (!text || CAMERA_DEFAULTS.includes(text.toUpperCase())) return null;
-
-  return render(text);
+  return !!text && CAMERA_DEFAULTS.includes(text.toUpperCase());
 }
 
-module.exports = { clean, render, caption };
+module.exports = { clean, render, isCameraDefault };

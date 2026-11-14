@@ -25,11 +25,6 @@ const FULL_WHITELIST = [
   "GPSAltitude",
 ];
 
-// The photo's caption, from EXIF ImageDescription, IPTC Caption-Abstract or
-// XMP dc:description, reconciled by the Metadata Working Group's rules. Like
-// the rest of the photo's metadata it is read only when the EXIF setting is on.
-const DESCRIPTION = "MWG:Description";
-
 // exiftool runs in the sandbox's exif job, which returns just these fields.
 // Any failure, sandbox or exiftool, is null.
 function execExifTool(filePath, fields) {
@@ -39,28 +34,27 @@ function execExifTool(filePath, fields) {
   );
 }
 
-// Resolves to { exif, caption }: exif holds the fields the blog's EXIF
-// setting allows, caption the photo's caption as inline HTML, or null when it
-// has none or only a camera's default. Both are empty when EXIF is off.
-// Never rejects.
-async function readMetadata(filePath, mode = "off") {
-  const empty = { exif: {}, caption: null };
+async function parseExif(filePath, mode = "off") {
+  if (mode === "off") return {};
 
-  if (mode !== "basic" && mode !== "full") return empty;
-  if (!filePath || typeof filePath !== "string") return empty;
+  if (!filePath || typeof filePath !== "string") return {};
   try {
     const stat = await fs.stat(filePath).catch(() => null);
-    if (!stat || !stat.isFile() || stat.size === 0) return empty;
-
-    const whitelist = mode === "full" ? FULL_WHITELIST : BASIC_WHITELIST;
-    const raw =
-      (await execExifTool(filePath, [...whitelist, DESCRIPTION])) || {};
+    if (!stat || !stat.isFile() || stat.size === 0) return {};
+    const raw = await execExifTool(
+      filePath,
+      mode === "full" ? FULL_WHITELIST : BASIC_WHITELIST
+    );
 
     const result = {};
 
-    whitelist.forEach((key) => {
-      if (Object.prototype.hasOwnProperty.call(raw, key))
+    Object.keys(raw || {}).forEach((key) => {
+      if (
+        (mode === "full" && FULL_WHITELIST.includes(key)) ||
+        (mode === "basic" && BASIC_WHITELIST.includes(key))
+      ) {
         result[key] = raw[key];
+      }
     });
 
     // map FocalLength '50.0 mm' to '50'
@@ -78,18 +72,12 @@ async function readMetadata(filePath, mode = "off") {
     const description = markdown.render(result.ImageDescription);
     if (description) result.ImageDescription = description;
 
-    return { exif: result, caption: markdown.caption(raw[DESCRIPTION]) };
+    return result;
   } catch {
-    return empty;
+    return {};
   }
-}
-
-// Resolves to the fields the EXIF setting allows. Never rejects.
-async function parseExif(filePath, mode = "off") {
-  return (await readMetadata(filePath, mode)).exif;
 }
 
 module.exports = {
   parseExif,
-  readMetadata,
 };

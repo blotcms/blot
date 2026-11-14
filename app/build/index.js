@@ -286,8 +286,6 @@ async function buildWith(blog, path, multiInfo) {
     size: typeof stat.size === "number" ? stat.size : 0,
     dependencies: dependencies,
     exif: (extras && extras.exif) || {},
-    // Only a post made from one image file has a caption (see single.js)
-    caption: (extras && extras.caption) || "",
     dateStamp: DateStamp(blog, entryPath, metadata, previousCreated),
     contentHash: contentHash,
     updated: contentUnchanged ? existingEntry.updated : mtimeUpdated,

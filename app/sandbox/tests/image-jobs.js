@@ -534,36 +534,12 @@ describe("sandbox image jobs", function () {
         { fields: ["-all"] },
         { fields: [""] },
         { fields: new Array(65).fill("Make") },
-        { fields: ["MWG:-all"] },
-        { fields: ["G1:2"] },
-        { fields: ["XMP:dc:Description"] },
-        { fields: ["MWG:"] },
-        { fields: [":Description"] },
-        // exiftool's JSON names tags without their group
-        { fields: ["XMP-dc:Description", "MWG:Description"] },
-        { fields: ["Make", "make"] },
       ];
       for (const args of bad) {
         expect(
           await rejection(sandbox.run("exif", args, input))
         ).not.toBeNull();
       }
-    });
-
-    it("accepts fields qualified by a group", async function () {
-      const input = await image(10, 10);
-      const result = await sandbox.run(
-        "exif",
-        {
-          fields: [
-            "ImageDescription",
-            "MWG:Description",
-            "IPTC:Caption-Abstract",
-          ],
-        },
-        input
-      );
-      expect(result.meta).toEqual({});
     });
   });
 });

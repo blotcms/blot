@@ -67,8 +67,8 @@ var prerenderers = loaded.prerenderers;
 
 // Takes a string and based on the user's
 // plugins converts it into an HTML string. Resolves to
-// [html, dependencies]. extra.caption is the rendered caption
-// of an image file's photo, for the Caption plugin.
+// [html, dependencies]. extra.caption is the caption of a post made from
+// an image file, for the Caption plugin.
 async function convert(blog, path, contents, extra = {}) {
   ensure(contents, "string").and(path, "string").and(blog, "object");
 
