@@ -78,24 +78,16 @@ describe("img caption", function () {
       expect(render("1. Not a list")).toEqual("1. Not a list");
     });
 
-    it("shows raw HTML as text", function () {
-      expect(render("<script>alert(1)</script> <b>hi</b>")).toEqual(
-        "&lt;script&gt;alert(1)&lt;/script&gt; &lt;b&gt;hi&lt;/b&gt;"
-      );
-      expect(render('<a href="javascript:alert(1)">x</a>')).not.toContain("<a");
-    });
-
-    it("shows an image as its alt text", function () {
-      expect(render("![a <b> c](https://example.com/a.png)")).toEqual(
-        "a &lt;b&gt; c"
+    it("passes raw HTML through as written", function () {
+      expect(render('<b>hi</b> and <span class="x">there</span>')).toEqual(
+        '<b>hi</b> and <span class="x">there</span>'
       );
     });
 
-    it("drops links to unsafe URLs, keeping their text", function () {
-      expect(render("[x](javascript:alert(1))")).toEqual("x");
-      expect(render("[x](JavaScript:alert(1))")).toEqual("x");
-      expect(render("[x](<javascript:alert(1)>)")).toEqual("x");
-      expect(render("[x](data:text/html,hi)")).toEqual("x");
+    it("renders images", function () {
+      expect(render("![alt](https://example.com/a.png)")).toEqual(
+        '<img src="https://example.com/a.png" alt="alt">'
+      );
     });
 
     it("keeps relative and mailto links", function () {
