@@ -91,6 +91,12 @@ Update these: Stale dependencies:
 - moment, debug@3, async@2, node-fetch@2.
 - You have a skill that checks Node, nginx and the OS for advisories, but nothing checks npm packages. The checking points at the wrong place.
 
+Upgrade Pandoc past 3.6.1, set aside 14 Nov 2026 (#2689, closed; branch `pandoc-3.14` holds the work). Every release after 3.7.0.2 has a paragraph bug with `+lists_without_preceding_blankline`, which Blot always enables:
+- 3.9.0.1 to 3.14 (at least): bare text in a raw HTML block gets its own `<p>`, so `<p>\ntext\n</p>` becomes `<p><p>text</p></p>` and a `</a>` on its own line becomes `<p></a></p>`. Browsers add stray empty paragraphs, which break flex and grid layouts. Caused by upstream commit ef6b669e25, the fix for jgm/pandoc#11534. Not reported upstream yet: report it with a minimal repro (`printf 'para\n<p>\nHello\n</p>\n' | pandoc -f markdown+lists_without_preceding_blankline`), then upgrade to the release that fixes it.
+- 3.8 to 3.9: the last paragraph of a fenced div (`::: info` ... `:::`) loses its `<p>`.
+- The branch's second commit adapts Blot to 3.9+. The Lua worker's `highlight_style` is now `highlight_method` (the old name throws), `--no-highlight` is now `--syntax-highlighting=none`, and wikilinks are marked `class="wikilink"` instead of `title="wikilink"`. It also updates the snapshots: trimmed display math, Chicago 18th-edition citations, odt image units and literal broken display math.
+- Also decide whether docx and odt equations should become MathML, the default since 3.11. Blot sets no math method for them.
+
 Fix this: 879 console.log calls in non-test app code, and no structured logging. Several of your skills exist mainly to grep and rebuild meaning from free-text logs ([STATS], [SLOW-FILL], [folder-asset]). Structured logs plus a metrics backend would make most of them unnecessary.
 
 Fix this: Weak input validation. The blog schema only type-checks client as string. In app/dashboard/site/client.js, POST /switch disconnects the current client, then saves req.body.client without checking it names a real client. Later, clients[req.blog.client].disconnect hits undefined. It’s minor, but it’s the kind of thing a reviewer finds in five minutes and generalises from.
