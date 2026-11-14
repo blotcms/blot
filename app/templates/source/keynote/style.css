@@ -570,7 +570,8 @@ body[data-view="entry"] .rail-viewport {
   transition: opacity 300ms ease;
 }
 
-.js .item img {
+.js .item img,
+.js .cell img {
   opacity: 0;
 }
 
@@ -601,6 +602,7 @@ body[data-view="entry"] .rail-viewport {
 }
 
 .item img.is-loaded,
+.cell img.is-loaded,
 .item img.is-transitioning,
 .cell img.is-transitioning {
   opacity: 1;
@@ -983,6 +985,7 @@ body[data-view="error"] .contents a {
 
 .cell img {
   display: block;
+  transition: opacity 300ms ease;
   width: auto;
   max-width: 100%;
   height: auto;
@@ -1403,6 +1406,12 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+/* A new image still loading, so the last one doesn't stand in for it. */
+.lightbox-image.is-pending {
+  opacity: 0;
+  transition: none;
+}
+
 .lightbox-image.is-zoom-animating {
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -1521,6 +1530,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 /* Sized from the declared dimensions so the preview and original fit identically. */
 .lightbox-image {
   display: block;
+  transition: opacity 160ms ease;
   width: min(100%, var(--image-width, 100%), calc((100dvh - var(--lightbox-top-gutter) - var(--lightbox-bottom-gutter)) * var(--image-ratio, 1)));
   height: auto;
   max-width: none;
@@ -2357,7 +2367,8 @@ html {
   #header .nav a,
   .zoom-controls,
   .lightbox-image.is-zoom-animating,
-  .item img {
+  .item img,
+  .cell img {
     transition: none;
   }
 }

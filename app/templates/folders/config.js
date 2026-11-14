@@ -1,7 +1,7 @@
 module.exports = {
   bees: {
     title: "Bees",
-    template: "SITE:studio",
+    template: "SITE:keynote",
     menu: [
       { url: "/", label: "Home", id: "home" },
       { url: "/archives", label: "Archives", id: "archives" },

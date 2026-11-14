@@ -5,6 +5,40 @@
   const root = document.documentElement;
   const mod = (value, length) => ((value % length) + length) % length;
 
+  // ---- Images fade in once decoded: the rail's slides and the grid's cells, wherever they
+  // are and however late they arrive. One already loaded when the script runs shows at once.
+
+  const FADING_IMAGES = ".item img, .cell img";
+
+  function revealImages(images) {
+    for (const img of images) {
+      if (img?.complete && img.naturalWidth > 0) img.classList.add("is-loaded");
+    }
+  }
+
+  // `load` fires before a large image is decoded, so fading from there would spend the fade
+  // on an image that isn't painting yet.
+  document.addEventListener(
+    "load",
+    (event) => {
+      const img = event.target;
+      if (!img.matches?.(FADING_IMAGES) || img.classList.contains("is-loaded")) return;
+      // Never left invisible: if decoding stalls, it shows anyway.
+      const stall = new Promise((resolve) => setTimeout(resolve, 300));
+      Promise.race([img.decode().catch(() => {}), stall]).then(() => img.classList.add("is-loaded"));
+    },
+    true
+  );
+  // A broken image shows rather than staying invisible.
+  document.addEventListener(
+    "error",
+    (event) => {
+      if (event.target.matches?.(FADING_IMAGES)) event.target.classList.add("is-loaded");
+    },
+    true
+  );
+  revealImages(document.querySelectorAll(FADING_IMAGES));
+
   // ---- Keep the collection an entry was opened from so its arrows stay within it ----
   // The chronological next/previous hrefs are only ever replaced once we know better.
 
@@ -437,6 +471,17 @@
     const source = controller.sourceImage(activeIndex);
     lightboxImage.src = source && isLoaded(source) && source.currentSrc ? source.currentSrc : entry.preview;
     lightboxImage.alt = entry.alt;
+    // Until a new image that isn't cached arrives, the browser keeps painting the old one. Hide
+    // it instead, and fade the new one in once it's here.
+    const pending = !lightboxImage.complete;
+    lightboxImage.classList.toggle("is-pending", pending);
+    if (pending) {
+      const shown = () => {
+        if (token === imageToken) lightboxImage.classList.remove("is-pending");
+      };
+      lightboxImage.addEventListener("load", shown, { once: true });
+      lightboxImage.addEventListener("error", shown, { once: true });
+    }
     if (stepsByEntryLinks(entry)) {
       previousButton.disabled = !entryLink(-1)?.href;
       nextButton.disabled = !entryLink(1)?.href;
@@ -1507,13 +1552,8 @@
 
   // ---- Controllers ----
 
-  function fadeImagesIn(images) {
-    for (const img of images) {
-      if (!img) continue;
-      if (isLoaded(img)) img.classList.add("is-loaded");
-      else img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true });
-    }
-  }
+  // Clones of a slide carry an image that's already loaded, so it shows at once.
+  const fadeImagesIn = revealImages;
 
   // Rail images carry their sources in data attributes until their slide nears the screen.
   function loadImage(img) {
@@ -1890,7 +1930,7 @@
       viewport.classList.remove("is-keyboard-navigating");
       glide = null;
       velocity = 0;
-      drag = { id: event.pointerId, startX: event.clientX, lastX: event.clientX, moved: false, samples: [{ x: event.clientX, time: event.timeStamp }] };
+      drag = { id: event.pointerId, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false, samples: [{ x: event.clientX, time: event.timeStamp }] };
       viewport.classList.add("is-dragging");
       viewport.addEventListener("pointermove", pointerMove);
       viewport.addEventListener("pointerup", pointerEnd);
@@ -1905,6 +1945,7 @@
       if (!drag || event.pointerId !== drag.id) return;
       x -= event.clientX - drag.lastX;
       drag.lastX = event.clientX;
+      drag.lastY = event.clientY;
       if (Math.abs(event.clientX - drag.startX) > 5) drag.moved = true;
       drag.samples.push({ x: event.clientX, time: event.timeStamp });
       while (drag.samples.length > 2 && event.timeStamp - drag.samples[0].time > 100) drag.samples.shift();
@@ -1922,7 +1963,12 @@
       viewport.removeEventListener("lostpointercapture", pointerEnd);
       if (gesture.moved) suppressClickUntil = performance.now() + 350;
       velocity = 0;
-      if (gesture.moved && event.type === "pointerup" && !reducedMotion.matches) {
+      // A flick carries on however the drag ends. iOS Safari can end a touch drag with
+      // lostpointercapture or pointercancel rather than pointerup; only a cancel because the
+      // page took over a mostly vertical scroll stops the rail dead.
+      const scrolledAway =
+        event.type === "pointercancel" && Math.abs(gesture.lastY - gesture.startY) > Math.abs(gesture.lastX - gesture.startX);
+      if (gesture.moved && !scrolledAway && !reducedMotion.matches) {
         const first = gesture.samples[0];
         const last = gesture.samples.at(-1);
         const seconds = Math.max((last.time - first.time) / 1000, 0.001);
