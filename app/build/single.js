@@ -7,9 +7,11 @@ var enabledConverters = require("./converters/enabled");
 var cheerio = require("cheerio");
 var wikilinks = require("./plugins/wikilinks");
 var bakeHTML = require("./plugins/folderAssets").bakeHTML;
+var isCameraDefault = require("./converters/img/markdown").isCameraDefault;
 
 // Resolves to [html, metadata, stat, dependencies, extras].
-async function single(blog, path) {
+// options.inFolderPost is set for each file of a folder post (multiple.js).
+async function single(blog, path, options = {}) {
   ensure(blog, "object").and(path, "string");
 
   // No two converters take the same file extension
@@ -55,18 +57,34 @@ async function single(blog, path) {
   metadata = parsed.metadata;
   html = parsed.html;
 
+  // A post made from one image file is captioned with its description,
+  // unless a camera wrote it. The images of a folder post keep their
+  // filename captions. Checked before baking, which could change the text.
+  var exif = extras && extras.exif;
+  var captioned =
+    !options.inFolderPost &&
+    !!exif &&
+    typeof exif.ImageDescription === "string" &&
+    !!exif.ImageDescription.trim() &&
+    !isCameraDefault(exif.ImageDescription, exif);
+
+  // Baked before the plugins run, since the Caption plugin puts it into
+  // the post's HTML
+  var descriptionDependencies = await description(blog, path, extras);
+  var caption = captioned ? exif.ImageDescription : undefined;
+
   debug("Blog:", blog.id, path, "running through plugins");
 
   // We pass the contents to the plugins for
   // this blog. The resulting HTML is now ready.
-  var [pluginHTML, newDependencies] = await Plugins(blog, path, html);
+  var [pluginHTML, newDependencies] = await Plugins(blog, path, html, {
+    caption: caption,
+  });
 
   debug("Blog:", blog.id, path, "finished plugins");
 
   html = fixMustache(pluginHTML);
-  newDependencies = newDependencies.concat(
-    await description(blog, path, extras)
-  );
+  newDependencies = newDependencies.concat(descriptionDependencies);
   dependencies = Array.from(new Set(dependencies.concat(newDependencies)));
 
   return [html, metadata, stat, dependencies, extras];
