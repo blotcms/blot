@@ -34,11 +34,11 @@ describe("daily update macserver", function () {
   });
 
   describe("line", function () {
-    it("gives the root disk, the iCloud quota and the sites", function () {
+    it("gives the root disk and the iCloud quota", function () {
       const text = macserver.line(stats(), { now: NOW });
 
       expect(text).toBe(
-        "Mac server: root disk 25% (150 GB free), iCloud 5 GB free, 139 sites"
+        "Mac server: root disk 25% (150 GB free), iCloud 5 GB free"
       );
       expect(text).not.toContain("**");
     });
@@ -77,9 +77,7 @@ describe("daily update macserver", function () {
           stats({ disk_bytes_total: undefined, icloud_bytes_available: null }),
           { now: NOW }
         )
-      ).toBe(
-        "Mac server: root disk 150 GB free, iCloud quota unknown, 139 sites"
-      );
+      ).toBe("Mac server: root disk 150 GB free, iCloud quota unknown");
     });
   });
 
@@ -98,9 +96,9 @@ describe("daily update macserver", function () {
         ...overrides,
       });
 
-    it("join the line after iCloud, before the sites", function () {
+    it("join the line after iCloud", function () {
       expect(macserver.line(reported(), { now: NOW })).toBe(
-        "Mac server: root disk 25% (150 GB free), iCloud 5 GB free, memory 63% (6 GB free), CPU 195% (192% over 26h), 139 sites"
+        "Mac server: root disk 25% (150 GB free), iCloud 5 GB free, memory 63% (6 GB free), CPU 195% (192% over 26h)"
       );
     });
 
@@ -168,7 +166,7 @@ describe("daily update macserver", function () {
       });
 
       expect(res.macserver).toBe(
-        "Mac server: root disk 25% (150 GB free), iCloud 5 GB free, 139 sites"
+        "Mac server: root disk 25% (150 GB free), iCloud 5 GB free"
       );
     });
   });

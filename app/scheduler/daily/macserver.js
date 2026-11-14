@@ -1,7 +1,9 @@
 // The iCloud macserver's line of the daily email, in the style of the Server
 // line (daily/redis-server.js):
 //
-//   Mac server: root disk 25% (stable, 151 GB free), iCloud 5 GB free, memory 61% (6 GB free), CPU 195% (192% over 26h), 139 sites
+//   Mac server: root disk 25% (stable, 151 GB free), iCloud 5 GB free, memory 61% (6 GB free), CPU 195% (192% over 26h)
+//
+// The site count is the Sync line's iCloud figure, so it is left out here.
 //
 // It reads the macserver's /stats, as clients/icloud/util/monitorMacServerStats.js
 // does every minute. The disk trend comes from the last week of daily readings
@@ -91,9 +93,6 @@ function line(stats, { history = [], now = Date.now() } = {}) {
     memoryPart(stats),
     cpuPart(stats),
   ];
-
-  if (stats.blogs_connected >= 0)
-    parts.push(`${stats.blogs_connected.toLocaleString("en-US")} sites`);
 
   return PREFIX + parts.filter(Boolean).join(", ");
 }
