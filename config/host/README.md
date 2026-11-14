@@ -31,6 +31,7 @@ On a new host run `deploy.sh` directly (see [Moving to a new host](#moving-to-a-
 | `scripts/docker.service.d/*.conf` | `/etc/systemd/system/docker.service.d/` (`10-instance-store.conf`, and `20-rsyslog.conf`: docker starts after rsyslog, whose socket the units log to) |
 | `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then creates any `logpath` in `jail.local` that is missing and restarts fail2ban) |
 | `scripts/fail2ban.service.d/10-instance-store.conf` | `/etc/systemd/system/fail2ban.service.d/10-instance-store.conf` |
+| `scripts/fstrim.service.d/10-instance-store.conf` | `/etc/systemd/system/fstrim.service.d/10-instance-store.conf` (the stock weekly `fstrim.timer`, enabled by Amazon Linux's preset, trims only filesystems in `/etc/fstab`; this adds `/var/instance-ssd`. Its runs are in `journalctl -u fstrim`) |
 | (written by `deploy.sh`) | `X11Forwarding no` in `/etc/ssh/sshd_config`, and on Amazon Linux 2023 in `/etc/ssh/sshd_config.d/12-blot-x11.conf` |
 | `logrotate/*` | `/etc/logrotate.d/` |
 | `tmpfiles.d/blot.conf` | `/etc/tmpfiles.d/blot.conf` (creates `/run/blot` and `/run/blot-log`) |
@@ -487,6 +488,8 @@ come back with `--bans-file`.
   `/var/instance-ssd/disk-cache` for the proxy's disk cache (both uid 1000), and
   `/var/instance-ssd/logs` (uid 1000, as the proxy container writes it) if it is
   missing, since a stop/start of the instance wipes the disk.
+  It is mounted outside `/etc/fstab`, so the weekly `fstrim.timer` trims it
+  only through the `fstrim.service.d` drop-in.
 - The storage bucket's daily offsite copy to Backblaze B2
   ([`config/storage-bucket/README.md`](../storage-bucket/README.md), "Offsite
   backup and restore"). `host/setup.sh` installs `rclone` (from the Amazon
