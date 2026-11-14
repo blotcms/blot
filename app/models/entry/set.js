@@ -88,6 +88,7 @@ async function set(blogID, path, updates) {
   if (!entry.metadata || typeof entry.metadata !== "object")
     entry.metadata = {};
   if (!entry.exif || typeof entry.exif !== "object") entry.exif = {};
+  if (typeof entry.caption !== "string") entry.caption = "";
   if (typeof entry.contentHash !== "string") entry.contentHash = "";
 
   entry.scheduled = entry.dateStamp > Date.now();

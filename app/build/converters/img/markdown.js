@@ -1,7 +1,17 @@
 // A photo's EXIF ImageDescription, rendered as inline Markdown for
-// entry.exif.ImageDescription
+// entry.exif.ImageDescription, and its caption (MWG:Description) for
+// entry.caption
 
 const { Marked } = require("marked");
+
+// Written by cameras into EXIF ImageDescription, not by a person.
+// entry.exif.ImageDescription keeps them; a caption leaves them out.
+const CAMERA_DEFAULTS = [
+  "OLYMPUS DIGITAL CAMERA",
+  "SONY DSC",
+  "EXIF_JPEG_PICTURE",
+  "JENOPTIK DIGITAL CAMERA",
+];
 
 // Longer than any description a person writes, short enough to stay cheap
 const MAX_LENGTH = 4096;
@@ -86,4 +96,12 @@ function render(description) {
   return markdown.parseInline(text);
 }
 
-module.exports = { clean, render };
+// Like render, but null for a camera's default description
+function caption(description) {
+  const text = clean(description);
+  if (!text || CAMERA_DEFAULTS.includes(text.toUpperCase())) return null;
+
+  return render(text);
+}
+
+module.exports = { clean, render, caption };

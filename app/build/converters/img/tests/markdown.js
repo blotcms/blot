@@ -1,4 +1,4 @@
-const { clean, render } = require("../markdown");
+const { clean, render, caption } = require("../markdown");
 
 describe("img ImageDescription Markdown", function () {
   describe("clean", function () {
@@ -140,6 +140,29 @@ describe("img ImageDescription Markdown", function () {
       expect(render("Café & “quotes” 日本")).toEqual(
         "Café &amp; “quotes” 日本"
       );
+    });
+  });
+
+  describe("caption", function () {
+    it("drops the descriptions cameras write", function () {
+      expect(caption("OLYMPUS DIGITAL CAMERA")).toBeNull();
+      expect(caption("OLYMPUS DIGITAL CAMERA         ")).toBeNull();
+      expect(caption("  SONY DSC  ")).toBeNull();
+      expect(caption("Exif_JPEG_PICTURE")).toBeNull();
+      expect(caption("JENOPTIK DIGITAL CAMERA")).toBeNull();
+    });
+
+    it("returns null for missing and blank descriptions", function () {
+      expect(caption(undefined)).toBeNull();
+      expect(caption("                               ")).toBeNull();
+    });
+
+    it("keeps a caption which mentions a camera", function () {
+      expect(caption("Shot on a SONY DSC")).toEqual("Shot on a SONY DSC");
+    });
+
+    it("renders inline Markdown", function () {
+      expect(caption("By **Ann**")).toEqual("By <strong>Ann</strong>");
     });
   });
 });

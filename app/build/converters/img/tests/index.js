@@ -139,11 +139,80 @@ describe("img converter", function () {
     const [err, , , extras] = await readAll(test.blog, path);
     if (err) throw err;
 
+    const html =
+      'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a><br>IMG_2041_final_v2';
+
     expect(extras).toEqual({
-      exif: {
-        ImageDescription:
-          'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a><br>IMG_2041_final_v2',
-      },
+      exif: { ImageDescription: html },
+      caption: html,
+    });
+  });
+
+  describe("captions", function () {
+    // Written with exiftool into copies of blast@2x.jpg and photo.heic
+    const SUNSET_HTML =
+      'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a>';
+
+    async function readCaptioned(test, name) {
+      const path = "/" + name;
+      await folder.writeFrom(
+        test.blog.id,
+        path,
+        __dirname + "/captions/" + name
+      );
+      return readAll(test.blog, path);
+    }
+
+    it("renders the caption of a JPEG from Apple Photos", async function () {
+      this.blog.imageExif = "basic";
+
+      const [err, html, , extras] = await readCaptioned(this, "photos.jpg");
+      if (err) throw err;
+
+      expect(extras).toEqual({
+        exif: { ImageDescription: SUNSET_HTML },
+        caption: SUNSET_HTML,
+      });
+
+      // alt and title stay the filename's title, never the caption
+      expect(html).toEqual(
+        '<img src="/photos.jpg" title="photos" alt="photos" />'
+      );
+    });
+
+    it("reads a caption written only to XMP, as in HEIC exports", async function () {
+      this.blog.imageExif = "basic";
+
+      const [err, , , extras] = await readCaptioned(this, "photos.heic");
+      if (err) throw err;
+
+      expect(extras).toEqual({
+        caption: "IMG_2041_final_v2<br>second line",
+      });
+    });
+
+    it("reads no caption when EXIF is off", async function () {
+      this.blog.imageExif = "off";
+
+      const [err, , , extras] = await readCaptioned(this, "photos.jpg");
+      if (err) throw err;
+
+      expect(extras).toBeUndefined();
+    });
+
+    it("ignores a camera's default description", async function () {
+      this.blog.imageExif = "basic";
+
+      const [err, , , extras] = await readCaptioned(this, "camera.jpg");
+      if (err) throw err;
+
+      // entry.exif keeps it as written
+      expect(extras).toEqual({
+        exif: {
+          Make: "OLYMPUS",
+          ImageDescription: "OLYMPUS DIGITAL CAMERA",
+        },
+      });
     });
   });
 

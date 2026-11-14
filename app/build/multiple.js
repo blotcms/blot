@@ -60,7 +60,7 @@ async function buildMultiple(blog, info) {
     let built;
 
     try {
-      built = await Single(blog, filePath);
+      built = await Single(blog, filePath, { inFolderPost: true });
     } catch (err) {
       debug("Blog:", blog.id, filePath, "error building", err);
       // The folder post fails as a whole, so say which source failed: the

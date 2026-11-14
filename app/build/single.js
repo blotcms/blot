@@ -9,7 +9,8 @@ var wikilinks = require("./plugins/wikilinks");
 var bakeHTML = require("./plugins/folderAssets").bakeHTML;
 
 // Resolves to [html, metadata, stat, dependencies, extras].
-async function single(blog, path) {
+// options.inFolderPost is set for each file of a folder post (multiple.js).
+async function single(blog, path, options = {}) {
   ensure(blog, "object").and(path, "string");
 
   // No two converters take the same file extension
@@ -55,18 +56,45 @@ async function single(blog, path) {
   metadata = parsed.metadata;
   html = parsed.html;
 
+  // A photo's caption is only for a post made from one image file. The
+  // images of a folder post keep the captions they had.
+  if (extras && extras.caption && options.inFolderPost) {
+    extras = Object.assign({}, extras);
+    delete extras.caption;
+  }
+
+  // The caption is baked before the plugins run, since the Caption plugin
+  // puts it into the post's HTML
+  var captionDependencies = [];
+  if (extras && extras.caption) {
+    var bakedCaption = await bake(blog, path, extras.caption);
+    if (bakedCaption) {
+      extras.caption = bakedCaption.html;
+      captionDependencies = bakedCaption.dependencies;
+    }
+  }
+
   debug("Blog:", blog.id, path, "running through plugins");
 
   // We pass the contents to the plugins for
   // this blog. The resulting HTML is now ready.
-  var [pluginHTML, newDependencies] = await Plugins(blog, path, html);
+  var [pluginHTML, newDependencies] = await Plugins(blog, path, html, {
+    caption: extras && extras.caption,
+  });
 
   debug("Blog:", blog.id, path, "finished plugins");
 
   html = fixMustache(pluginHTML);
-  newDependencies = newDependencies.concat(
-    await description(blog, path, extras)
-  );
+  newDependencies = newDependencies.concat(captionDependencies);
+
+  var description = extras && extras.exif && extras.exif.ImageDescription;
+  if (typeof description === "string" && description) {
+    var bakedDescription = await bake(blog, path, description);
+    if (bakedDescription) {
+      extras.exif.ImageDescription = bakedDescription.html;
+      newDependencies = newDependencies.concat(bakedDescription.dependencies);
+    }
+  }
   dependencies = Array.from(new Set(dependencies.concat(newDependencies)));
 
   return [html, metadata, stat, dependencies, extras];
@@ -74,16 +102,13 @@ async function single(blog, path) {
 
 module.exports = single;
 
-// An image's ImageDescription is Markdown (converters/img/markdown.js) kept
-// in extras.exif, outside the HTML the plugins see. It goes through the
-// same steps as a post's body, in the same order: relative links resolved
-// against the image's path, wikilinks (when that plugin is enabled), and
-// folder files baked into CDN URLs. Resolves to the dependencies they add.
-async function description(blog, path, extras) {
-  var html = extras && extras.exif && extras.exif.ImageDescription;
-
-  if (typeof html !== "string" || !html) return [];
-
+// An image's ImageDescription and caption are Markdown rendered to HTML
+// (converters/img/markdown.js), kept in extras outside the HTML the plugins
+// see. Each goes through the same steps as a post's body, in the same order:
+// relative links resolved against the image's path, wikilinks (when that
+// plugin is enabled), and folder files baked into CDN URLs. Resolves to
+// { html, dependencies }, or null when a step fails.
+async function bake(blog, path, html) {
   var newDependencies = [];
 
   try {
@@ -112,12 +137,14 @@ async function description(blog, path, extras) {
       path: path,
     });
 
-    extras.exif.ImageDescription = baked.html;
-    return newDependencies.concat(baked.dependencies);
+    return {
+      html: baked.html,
+      dependencies: newDependencies.concat(baked.dependencies),
+    };
   } catch (err) {
-    // Like a plugin that fails, the description is left as it is
+    // Like a plugin that fails, the HTML is left as it is
     debug("Blog:", blog.id, path, "description error", err);
-    return [];
+    return null;
   }
 }
 
