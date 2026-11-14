@@ -1,0 +1,31 @@
+# About
+
+This site is a collection of skies. Each image is a square detail crop of the sky from a painting, cropped to the clouds, light and colour with the rest of the painting left out. Each image is named for its painting, and its description gives the artist and the museum that holds it.
+
+## How the crops are made
+
+Each crop starts as a high-resolution photograph of a painting from a museum's collection. A square of sky is cut out of it and the rest is left behind. Here is the [[Twilight in the Wilderness]] crop beside the whole painting, with a box around the part that became the crop.
+
+<figure style="margin: 2rem 0;">
+<div style="display: flex; flex-wrap: wrap; gap: 1rem; align-items: flex-start;">
+<div style="position: relative; flex: 2 1 22rem;">
+<img src="_twilight-painting.jpg" alt="Twilight in the Wilderness by Frederic Edwin Church" style="display: block; width: 100%; height: auto; visibility: visible; opacity: 1;">
+<div aria-hidden="true" style="position: absolute; left: 13.6713%; top: 0; margin-top: 7.7675%; width: 19.5491%; aspect-ratio: 1 / 1; box-sizing: border-box; border: 3px solid #fff; outline: 1px solid #000;"></div>
+</div>
+<div style="flex: 1 1 12rem;">
+<img src="_twilight-crop.jpg" alt="" style="display: block; width: 100%; height: auto; visibility: visible; opacity: 1;">
+</div>
+</div>
+<figcaption style="margin-top: 0.5rem;">Frederic Edwin Church, <em>Twilight in the Wilderness</em>, The Cleveland Museum of Art. The box marks the crop zone; the square on the right is the crop.</figcaption>
+</figure>
+
+## Museums
+
+The paintings come from the collections of these museums, whose images of their paintings made the crops possible:
+
+- [Rijksmuseum](https://www.rijksmuseum.nl/), Amsterdam
+- [The Metropolitan Museum of Art](https://www.metmuseum.org/), New York
+- [J. Paul Getty Museum](https://www.getty.edu/museum/), Los Angeles
+- [The Cleveland Museum of Art](https://www.clevelandart.org/)
+- [National Gallery of Art](https://www.nga.gov/), Washington
+- [Yale Center for British Art](https://britishart.yale.edu/), New Haven
