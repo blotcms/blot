@@ -236,6 +236,22 @@ hr {
 }
 {{/is.navigation_style.scrolls_away}}
 
+/* Safari on iOS draws the page under the status bar, above where a sticky header sits, so
+   the header's colour reaches up over that strip too. */
+{{^is.navigation_style.scrolls_away}}
+{{^is.navigation_style.transparent}}
+#header::after {
+  position: absolute;
+  right: 0;
+  bottom: 100%;
+  left: 0;
+  height: 100vh;
+  background: {{background_color}};
+  content: "";
+}
+{{/is.navigation_style.transparent}}
+{{/is.navigation_style.scrolls_away}}
+
 {{#is.navigation_style.solid}}
 #header {
   --header-tail: 0px !important;
@@ -2093,8 +2109,13 @@ html {
 
 /* Too narrow for a gutter: the details take the bottom of the screen instead. */
 @media (max-width: 700px) {
+  .lightbox {
+    /* Most of the screen stays with the image. */
+    --lightbox-info-height: 32dvh;
+  }
+
   .lightbox.has-info {
-    --lightbox-bottom-gutter: 40dvh;
+    --lightbox-bottom-gutter: var(--lightbox-info-height);
     --lightbox-info-width: 0px;
   }
 
@@ -2129,14 +2150,14 @@ html {
   }
 
   .lightbox.has-info .zoom-controls {
-    bottom: calc(40dvh + 0.5rem);
+    bottom: calc(var(--lightbox-info-height) + 0.5rem);
   }
 
   /* The viewer scrolls like a page: the details run on below the image at full length, and
      scrolling moves the image up out of the way. Zoomed in, it stops, so pinches and pans
      have the image. The close button and the index stay put. */
   .lightbox.has-info[open]:not(.is-zoomed) {
-    grid-template-rows: var(--lightbox-top-gutter) calc(100% - var(--lightbox-top-gutter) - 40dvh) auto;
+    grid-template-rows: var(--lightbox-top-gutter) calc(100% - var(--lightbox-top-gutter) - var(--lightbox-info-height)) auto;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -2149,7 +2170,7 @@ html {
   }
 
   .lightbox.has-info:not(.is-zoomed) .lightbox-info {
-    min-height: 40dvh;
+    min-height: var(--lightbox-info-height);
     overflow: visible;
   }
 
@@ -2167,6 +2188,13 @@ html {
   .lightbox.has-info:not(.is-zoomed) .lightbox-info-index {
     position: fixed;
     background: linear-gradient(rgba({{#rgb}}{{background_color}}{{/rgb}}, 0), rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.85) 50%);
+  }
+
+  /* Touch screens hide the arrows, so the text needn't clear them. */
+  @media (pointer: coarse) {
+    .lightbox-info {
+      padding-top: 0;
+    }
   }
 }
 
@@ -2216,10 +2244,10 @@ html {
     flex: none;
     align-items: center;
     justify-content: center;
-    width: 44px;
-    height: 44px;
-    /* The icon's edge lines up with the page margin. */
-    margin: -0.75em -14px -0.75em 0;
+    /* A generous tap area; the icon's edge still lines up with the page margin. */
+    width: 56px;
+    height: 56px;
+    margin: -20px -20px -20px 0;
     color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
     cursor: pointer;
   }
@@ -2229,20 +2257,31 @@ html {
     color: {{text_color}};
   }
 
-  /* The links open as a panel over the page, just under the title. */
+  /* The links open over the whole screen, under the title and the close button, and the
+     page behind stays still. */
   #header .nav {
-    position: absolute;
-    top: calc(100% - 1em - var(--header-tail));
-    right: 0;
-    left: 0;
+    position: fixed;
+    inset: 0;
     display: none;
     flex-direction: column;
     align-items: flex-start;
     gap: 0;
     margin: 0;
-    padding: 0.4em var(--edge-x) 0.9em;
-    border-bottom: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
+    padding: calc(var(--edge-y) + 3em) var(--edge-x) calc(var(--edge-y) + 2em);
+    overflow-y: auto;
+    overscroll-behavior: contain;
     background: {{background_color}};
+    pointer-events: auto;
+  }
+
+  #title,
+  .nav-toggle-button {
+    position: relative;
+    z-index: 1;
+  }
+
+  html:has(.nav-toggle:checked) {
+    overflow: hidden;
   }
 
   #header .nav-toggle:checked ~ .nav {
@@ -2261,7 +2300,7 @@ html {
 
   .nav-toggle-button {
     order: -2;
-    margin: -0.75em 0 -0.75em -14px;
+    margin: -20px 0 -20px -20px;
   }
 
   #title {
@@ -2279,8 +2318,8 @@ html {
   #header::before {
     flex: none;
     order: -2;
-    width: 44px;
-    margin-left: -14px;
+    width: 56px;
+    margin-left: -20px;
     content: "";
   }
 
