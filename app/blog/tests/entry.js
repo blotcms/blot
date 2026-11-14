@@ -53,6 +53,40 @@ describe("entry", function () {
     expect(body).toContain("Hello, A!");
   });
 
+  it("answers ?format=json with the post's title, summary and thumbnails", async function () {
+    await this.write({
+      path: "/a.txt",
+      content: "Link: a\nTags: x, y\n\n# Hello\n\nA short post.",
+    });
+
+    const res = await this.get("/a?format=json", { redirect: "manual" });
+    const json = await res.json();
+
+    expect(res.status).toEqual(200);
+    expect(res.headers.get("content-type")).toContain("application/json");
+    expect(json.title).toEqual("Hello");
+    expect(json.url).toEqual("/a");
+    expect(json.summary).toContain("A short post.");
+    expect(json.tags).toEqual(["x", "y"]);
+    expect(json.description).toEqual("");
+  });
+
+  it("keeps ?format=json when it redirects an old URL", async function () {
+    await this.write({ path: "/a.txt", content: "Link: a\nHello, A!" });
+    await this.write({ path: "/a.txt", content: "Link: b\nHello, A!" });
+
+    const res = await this.get("/a?format=json", { redirect: "manual" });
+
+    expect(res.status).toEqual(302);
+    expect(res.headers.get("location")).toEqual("/b?format=json");
+  });
+
+  it("answers ?format=json with a 404 for a draft or a missing post", async function () {
+    const res = await this.get("/missing?format=json", { redirect: "manual" });
+
+    expect(res.status).toEqual(404);
+  });
+
   it("redirects to the source file for a post with ?source=true", async function () {
     await this.write({ path: "/a.txt", content: "Link: a\nHello, A!" });
 
