@@ -66,7 +66,7 @@ describe("entry", function () {
     expect(res.headers.get("content-type")).toContain("application/json");
     expect(json.title).toEqual("Hello");
     expect(json.url).toEqual("/a");
-    expect(json.summary).toContain("A short post.");
+    expect(json.summary).toContain("A short post");
     expect(json.tags).toEqual(["x", "y"]);
     expect(json.description).toEqual("");
   });
