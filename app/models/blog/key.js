@@ -5,7 +5,8 @@ module.exports = {
     return "handle:" + handle;
   },
 
-  // String which stores the JSON object containing the blog's data
+  // Hash which stores the blog's data, one field per property, with object
+  // and array properties JSON-encoded (see serial.js)
   // method accepts the ID of a blog as a String
   info: function (blogID) {
     return "blog:" + blogID + ":info";
