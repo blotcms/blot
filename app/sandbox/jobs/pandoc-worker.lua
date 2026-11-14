@@ -145,7 +145,7 @@ local function convert(options, document, files)
     html = pandoc.write(doc, "html5", {
       columns = 72,
       wrap_text = "auto",
-      highlight_style = false,
+      highlight_method = "none",
       html_math_method = "katex",
       email_obfuscation = "none",
     })
@@ -174,7 +174,7 @@ local function convert(options, document, files)
     html = pandoc.write(doc, "html5", {
       columns = 1000,
       wrap_text = "auto",
-      highlight_style = false,
+      highlight_method = "none",
       html_math_method = options.katex and "katex" or "plain",
       email_obfuscation = "none",
     })

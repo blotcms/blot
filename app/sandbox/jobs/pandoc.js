@@ -132,7 +132,7 @@ function markdownArgs({ katex, callouts }, citations) {
     "--columns",
     "1000",
     // we use our own highlighting library (hljs) later
-    "--no-highlight",
+    "--syntax-highlighting=none",
     "--email-obfuscation=none",
   ];
 
@@ -168,7 +168,7 @@ function pandocArgs(options, dir, files) {
       from,
       "-t",
       "html5",
-      "--no-highlight",
+      "--syntax-highlighting=none",
       // Keep this aligned with the other pandoc converters. The RTF reader
       // does not create Math nodes from dollar-delimited TeX, so the rtf
       // converter normalizes its literal output while the TeX is still there.

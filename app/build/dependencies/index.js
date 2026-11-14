@@ -66,7 +66,8 @@ function serializePath(path) {
 // page.html) resolves directly to that file, the same as it
 // would for an <img src>; it is not resolved against that post's
 // permalink. For anything already tagged as a wikilink
-// (title="wikilink") - emitted directly from [[...]] syntax by the
+// (class="wikilink", or title="wikilink" before Pandoc 3.9) - emitted
+// directly from [[...]] syntax by the
 // markdown converter - we still track the resolved guess as a
 // dependency, but don't rewrite the attribute: the wikilinks
 // plugin, which runs after this module, resolves those from their
@@ -144,7 +145,8 @@ function dependencies(path, html, metadata) {
   // links to any local file.
   $("link[href], a[href], [src]").each(function () {
     var $el = $(this);
-    var isWikilink = $el.attr("title") === "wikilink";
+    var isWikilink =
+      $el.hasClass("wikilink") || $el.attr("title") === "wikilink";
     var suffix;
 
     if ($el.attr("href")) attribute = "href";
@@ -241,7 +243,7 @@ function dependencies(path, html, metadata) {
     }
 
     // Wikilinks ([[Note]] / ![[Image]]) are rendered directly to
-    // <a title="wikilink"> / <img title="wikilink"> by the markdown
+    // <a class="wikilink"> / <img class="wikilink"> by the markdown
     // converter, using the raw, unresolved target text. We still
     // track the resolved guess as a dependency, so the post rebuilds
     // automatically if a matching file later appears - but we must

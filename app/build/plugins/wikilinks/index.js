@@ -44,9 +44,11 @@ async function render($, { blogID, path }) {
     }
   };
 
-  const legacyWikilinks = $("[title='wikilink']");
+  // Pandoc marks [[...]] with class="wikilink" (with title="wikilink"
+  // before 3.9)
+  const pandocWikilinks = $(".wikilink, [title='wikilink']");
 
-  legacyWikilinks.each(function (_, node) {
+  pandocWikilinks.each(function (_, node) {
     const $node = $(node);
     const isLink = node && node.name === "a";
     const isMedia = !isLink && $node.attr("src") !== undefined;
