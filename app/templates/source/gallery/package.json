@@ -35,7 +35,7 @@
     "thumbnail_size_range": [60, 160],
     "spacing": 2,
     "spacing_range": [0, 5],
-    "demo_folder": "bjorn"
+    "demo_folder": "sky"
   },
   "views": {
     "archives.html": {

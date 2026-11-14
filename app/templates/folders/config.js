@@ -1,7 +1,7 @@
 module.exports = {
-  bjorn: {
-    title: "Björn Allard",
-    template: "SITE:portfolio",
+  bees: {
+    title: "Bees",
+    template: "SITE:studio",
   },
   clara: {
     title: "Clara Xiao",
@@ -38,9 +38,9 @@ module.exports = {
     title: "Sergey Prokudin-Gorsky",
     template: "SITE:album",
   },
-  thoughtforms: {
-    title: "Thought-forms",
-    template: "SITE:studio",
+  sky: {
+    title: "Skies",
+    template: "SITE:gallery",
   },
   hypertext: {
     title: "Richard Waller",
