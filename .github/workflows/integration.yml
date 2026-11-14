@@ -84,6 +84,12 @@ env:
   # deploy generates still fetch by default (see proxy/build/index.js).
   FETCH_CDN_IPS: "false"
 
+# Read-only token: these jobs only build and test, and pull the proxy
+# image cache from ghcr.io.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   proxy-behaviour:
     runs-on: ubuntu-24.04-arm
