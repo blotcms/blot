@@ -1,6 +1,10 @@
-async function render($) {
+// options.caption is the caption from the photo of an image file (see
+// build/converters/img/caption.js), rendered HTML which replaces the
+// filename-derived title the converter gives the image
+async function render($, options = {}) {
   $("img").each(function () {
-    var altText = $(this).attr("title") || $(this).attr("alt");
+    var altText =
+      options.caption || $(this).attr("title") || $(this).attr("alt");
 
     if (!altText) return;
 

@@ -7,6 +7,7 @@ const hash = require("helper/hash");
 const sandbox = require("sandbox");
 const assets = require("storage/assets");
 const exif = require("./exif");
+const caption = require("./caption");
 const Transformer = require("helper/transformer");
 
 const EXTENSIONS_TO_CONVERT = [
@@ -46,8 +47,8 @@ async function read(blog, path) {
 
   const { stat } = await withLocalHeld(blog.id, path, async (localPath) => {
     // exiftool and the conversion are separate jails reading the same
-    // file, so they run side by side (parseExif never rejects)
-    const exifPromise = exif.parseExif(localPath, blog.imageExif);
+    // file, so they run side by side (readMetadata never rejects)
+    const metadataPromise = exif.readMetadata(localPath, blog.imageExif);
 
     const convert = async () => {
       if (EXTENSIONS_TO_CONVERT.includes(extname(path).toLowerCase())) {
@@ -93,11 +94,15 @@ async function read(blog, path) {
     try {
       await convert();
     } finally {
-      const parsedExif = await exifPromise;
+      const metadata = await metadataPromise;
+      const captionHTML = caption.render(metadata.description);
 
-      extras = Object.keys(parsedExif).length
-        ? { exif: parsedExif }
-        : undefined;
+      extras = {};
+      if (Object.keys(metadata.exif).length) extras.exif = metadata.exif;
+      // The Caption plugin shows it under the image, and it becomes the
+      // post's summary (build/single.js, build/prepare)
+      if (captionHTML) extras.caption = captionHTML;
+      if (!Object.keys(extras).length) extras = undefined;
     }
   });
 

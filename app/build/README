@@ -57,6 +57,7 @@ An entry object with the following fields:
 | `thumbnail` | object | Thumbnail variants generated from the first eligible image in the entry (or empty object). |
 | `dependencies` | string[] | Paths to other files in the blog folder that this entry references (e.g. images). |
 | `exif` | object | Sanitized EXIF metadata, populated for image files; empty object otherwise. |
+| `caption` | string | An image file's photo caption (`MWG:Description`), rendered as sanitised inline Markdown; `""` otherwise. Also the entry's summary, and the Caption plugin's caption. |
 | `internalLinks` | string[] | All `href` values in the HTML that begin with `/`. |
 | `deleted` | boolean | Always `false` at build time. |
 

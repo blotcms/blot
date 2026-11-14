@@ -286,6 +286,9 @@ async function buildWith(blog, path, multiInfo) {
     size: typeof stat.size === "number" ? stat.size : 0,
     dependencies: dependencies,
     exif: (extras && extras.exif) || {},
+    // A folder post's extras are merged from each of its files, so a folder
+    // post has no caption of its own
+    caption: (!multiInfo && extras && extras.caption) || "",
     dateStamp: DateStamp(blog, entryPath, metadata, previousCreated),
     contentHash: contentHash,
     updated: contentUnchanged ? existingEntry.updated : mtimeUpdated,

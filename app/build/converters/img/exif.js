@@ -24,6 +24,11 @@ const FULL_WHITELIST = [
   "GPSAltitude",
 ];
 
+// The photo's caption, from EXIF ImageDescription, IPTC Caption-Abstract or
+// XMP dc:description, reconciled by the Metadata Working Group's rules. It is
+// read whatever the EXIF setting, which is about camera details and location.
+const DESCRIPTION = "MWG:Description";
+
 // exiftool runs in the sandbox's exif job, which returns just these fields.
 // Any failure, sandbox or exiftool, is null.
 function execExifTool(filePath, fields) {
@@ -33,27 +38,31 @@ function execExifTool(filePath, fields) {
   );
 }
 
-async function parseExif(filePath, mode = "off") {
-  if (mode === "off") return {};
+// Resolves to { exif, description }: exif holds the fields the blog's EXIF
+// setting allows ({} when off), description is the photo's raw description or
+// undefined. Never rejects.
+async function readMetadata(filePath, mode = "off") {
+  const empty = { exif: {}, description: undefined };
 
-  if (!filePath || typeof filePath !== "string") return {};
+  if (!filePath || typeof filePath !== "string") return empty;
   try {
     const stat = await fs.stat(filePath).catch(() => null);
-    if (!stat || !stat.isFile() || stat.size === 0) return {};
-    const raw = await execExifTool(
-      filePath,
-      mode === "full" ? FULL_WHITELIST : BASIC_WHITELIST
-    );
+    if (!stat || !stat.isFile() || stat.size === 0) return empty;
+
+    const whitelist =
+      mode === "full"
+        ? FULL_WHITELIST
+        : mode === "basic"
+          ? BASIC_WHITELIST
+          : [];
+    const raw =
+      (await execExifTool(filePath, [...whitelist, DESCRIPTION])) || {};
 
     const result = {};
 
-    Object.keys(raw || {}).forEach((key) => {
-      if (
-        (mode === "full" && FULL_WHITELIST.includes(key)) ||
-        (mode === "basic" && BASIC_WHITELIST.includes(key))
-      ) {
+    whitelist.forEach((key) => {
+      if (Object.prototype.hasOwnProperty.call(raw, key))
         result[key] = raw[key];
-      }
     });
 
     // map FocalLength '50.0 mm' to '50'
@@ -67,12 +76,22 @@ async function parseExif(filePath, mode = "off") {
       }
     }
 
-    return result;
+    const description =
+      typeof raw[DESCRIPTION] === "string" ? raw[DESCRIPTION] : undefined;
+
+    return { exif: result, description };
   } catch {
-    return {};
+    return empty;
   }
+}
+
+// Resolves to the fields the EXIF setting allows. Never rejects.
+async function parseExif(filePath, mode = "off") {
+  if (mode === "off") return {};
+  return (await readMetadata(filePath, mode)).exif;
 }
 
 module.exports = {
   parseExif,
+  readMetadata,
 };

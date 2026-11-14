@@ -56,7 +56,9 @@ async function single(blog, path) {
 
   // We pass the contents to the plugins for
   // this blog. The resulting HTML is now ready.
-  var [pluginHTML, newDependencies] = await Plugins(blog, path, html);
+  var [pluginHTML, newDependencies] = await Plugins(blog, path, html, {
+    caption: extras && extras.caption,
+  });
 
   debug("Blog:", blog.id, path, "finished plugins");
 

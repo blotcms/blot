@@ -67,8 +67,9 @@ var prerenderers = loaded.prerenderers;
 
 // Takes a string and based on the user's
 // plugins converts it into an HTML string. Resolves to
-// [html, dependencies].
-async function convert(blog, path, contents) {
+// [html, dependencies]. extra.caption is the rendered caption
+// of an image file's photo, for the Caption plugin.
+async function convert(blog, path, contents, extra = {}) {
   ensure(contents, "string").and(path, "string").and(blog, "object");
 
   var enabled = Enabled(blog.plugins);
@@ -86,6 +87,8 @@ async function convert(blog, path, contents) {
     path: path,
     baseURL: "https://" + blog.handle + "." + config.host,
   };
+
+  if (extra.caption) globalOptions.caption = extra.caption;
 
   for (const plugin of prerenderers) {
     const id = plugin.id;

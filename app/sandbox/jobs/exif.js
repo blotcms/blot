@@ -1,6 +1,7 @@
-// Reads an image's EXIF with exiftool, from stdin, in the jail or in-process
-// (see ../index.js). Args: { fields: ["Make", ...] }. meta is the first object
-// of exiftool's JSON, reduced to those fields and to plain values, or null.
+// Reads an image's metadata with exiftool, from stdin, in the jail or
+// in-process (see ../index.js). Args: { fields: ["Make", "MWG:Description"] }:
+// tag names, each optionally qualified by a group. MWG's composite tags are
+// on (-use MWG). meta maps each field asked for to its plain value, or is null.
 // Throws if exiftool fails.
 
 const fs = require("fs");
@@ -12,6 +13,12 @@ const MAX_STDOUT = 1024 * 1024;
 const MAX_VALUE = 64 * 1024;
 const MAX_FIELDS = 64;
 
+// An optional group ("XMP-dc", "MWG") and a tag name ("Caption-Abstract"),
+// both starting with a letter. Every field is passed to exiftool with a group,
+// "All" when it has none, so that no field can be read as an exiftool option.
+const FIELD =
+  /^(?:([A-Za-z][A-Za-z0-9-]{0,31}):)?([A-Za-z][A-Za-z0-9-]{0,63})$/;
+
 function command() {
   // The jail has no /bin and no env, so exiftool's #! line can't be used
   if (process.env.EXIFTOOL_PATH) return [process.env.EXIFTOOL_PATH, []];
@@ -21,11 +28,15 @@ function command() {
   return ["exiftool", []];
 }
 
-function exiftool(input) {
+function exiftool(tags, input) {
   return new Promise((resolve, reject) => {
     const [file, prefix] = command();
     // A pipe for stderr too: "ignore" opens /dev/null, which the jail doesn't have
-    const child = spawn(file, prefix.concat(["-j", "-"]), { stdio: "pipe" });
+    const child = spawn(
+      file,
+      prefix.concat(["-j", "-use", "MWG", ...tags, "-"]),
+      { stdio: "pipe" }
+    );
     child.stderr.resume();
     const chunks = [];
     let size = 0;
@@ -61,19 +72,29 @@ async function run(args, input) {
     !Array.isArray(fields) ||
     !fields.length ||
     fields.length > MAX_FIELDS ||
-    !fields.every((f) => typeof f === "string" && /^[A-Za-z0-9]{1,64}$/.test(f))
+    !fields.every((f) => typeof f === "string" && FIELD.test(f))
   ) {
     throw new Error("invalid fields");
   }
 
-  const parsed = JSON.parse(await exiftool(input));
+  // exiftool's JSON keys are tag names without their group, so two fields
+  // with the same name couldn't be told apart
+  const names = fields.map((f) => FIELD.exec(f)[2]);
+  if (new Set(names.map((n) => n.toLowerCase())).size !== names.length) {
+    throw new Error("invalid fields");
+  }
+
+  const tags = fields.map(
+    (f, i) => `-${FIELD.exec(f)[1] || "All"}:${names[i]}`
+  );
+  const parsed = JSON.parse(await exiftool(tags, input));
   const raw = Array.isArray(parsed) && parsed.length ? parsed[0] : null;
   if (!raw || typeof raw !== "object") return { meta: null, outputs: [] };
 
   const meta = {};
-  for (const field of fields) {
-    if (!Object.prototype.hasOwnProperty.call(raw, field)) continue;
-    const value = raw[field];
+  for (const [i, field] of fields.entries()) {
+    if (!Object.prototype.hasOwnProperty.call(raw, names[i])) continue;
+    const value = raw[names[i]];
     if (typeof value === "string") meta[field] = value.slice(0, MAX_VALUE);
     else if (typeof value === "number" || typeof value === "boolean")
       meta[field] = value;
