@@ -404,9 +404,16 @@ html.is-deep-open #header {
     right: 0;
     bottom: 0;
     width: var(--lightbox-info-width);
-    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
+    background: var(--glass);
     content: "";
   }
+}
+
+/* An entry's own page: the viewer appears at once, so nothing in it fades in after the image. */
+.lightbox.is-instant,
+.lightbox.is-instant *,
+.lightbox.is-instant::backdrop {
+  transition: none !important;
 }
 
 /* Home and entry pages: one rail of images filling the space under the header. An entry
@@ -1122,9 +1129,8 @@ body[data-view="error"] .contents a {
   list-style: none;
 }
 
-/* The archives' tag pills, also used for the tags in the viewer's details. */
-.tag-navigation a,
-.entry-tags a {
+/* The archives' tag pills. */
+.tag-navigation a {
   display: block;
   padding: 5px 9px;
   white-space: nowrap;
@@ -1136,8 +1142,7 @@ body[data-view="error"] .contents a {
   transition: background-color 180ms ease, color 180ms ease;
 }
 
-.tag-navigation a:hover,
-.entry-tags a:hover {
+.tag-navigation a:hover {
   color: {{text_color}};
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.26);
   opacity: 1;
@@ -1169,13 +1174,11 @@ body[data-view="search"] .tag-navigation a.active:hover {
 
 /* On a light page the same tint reads much darker, so the pills use a lighter one. */
 [data-scheme="light"] .tag-navigation a,
-[data-scheme="light"] .entry-tags a,
 [data-scheme="light"] .tag-toggle {
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.07);
 }
 
 [data-scheme="light"] .tag-navigation a:hover,
-[data-scheme="light"] .entry-tags a:hover,
 [data-scheme="light"] .tag-toggle:hover {
   background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
 }
@@ -1184,8 +1187,7 @@ body[data-view="search"] .tag-navigation a.active:hover {
   background: {{text_color}};
 }
 
-.tag-navigation a:focus-visible,
-.entry-tags a:focus-visible {
+.tag-navigation a:focus-visible {
   outline: 2px solid {{text_color}};
   outline-offset: 3px;
 }
@@ -1387,6 +1389,11 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* With the details open, a click zooms in on the place clicked. */
+.lightbox.has-info:not(.is-zoomed) .lightbox-image {
+  cursor: zoom-in;
+}
+
 .lightbox.is-zoomed .lightbox-image {
   cursor: grab;
 }
@@ -1407,7 +1414,9 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   padding: 0 0.35em;
   border-radius: 999px;
   color: {{text_color}};
-  background: rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.6);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   font-size: 0.8em;
   opacity: 0;
   visibility: hidden;
@@ -1459,6 +1468,8 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
 .zoom-button svg {
   display: block;
+  width: 13px;
+  height: 13px;
   fill: currentColor;
 }
 
@@ -1583,7 +1594,46 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 }
 
 .lightbox.is-zoomed .lightbox-icon {
-  background: rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.6);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+@media (hover: hover) {
+  .lightbox.is-zoomed .lightbox-close:hover .lightbox-icon,
+  .lightbox.is-zoomed .lightbox-info-button:hover .lightbox-icon,
+  .lightbox.is-zoomed .lightbox-step:hover .lightbox-icon {
+    background: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15)), var(--glass);
+  }
+}
+
+/* Buttons that sit on the details gutter already have its glass behind them. */
+.lightbox.is-zoomed.has-info .lightbox-step .lightbox-icon,
+.lightbox.is-zoomed.has-info .lightbox-info-button .lightbox-icon {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: transparent;
+}
+
+@media (min-width: 701px) {
+  .lightbox.is-zoomed.has-info .lightbox-close .lightbox-icon {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: transparent;
+  }
+}
+
+@media (hover: hover) {
+  .lightbox.is-zoomed.has-info .lightbox-step:hover .lightbox-icon,
+  .lightbox.is-zoomed.has-info .lightbox-info-button:hover .lightbox-icon {
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
+  }
+}
+
+@media (hover: hover) and (min-width: 701px) {
+  .lightbox.is-zoomed.has-info .lightbox-close:hover .lightbox-icon {
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
+  }
 }
 
 .lightbox-close:focus-visible,
@@ -1644,10 +1694,9 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   /* Below the row of arrows along the top; the text runs down behind the index and Info pill. */
   padding: calc(var(--edge-y) + 0.85rem + 22px) var(--edge-x) 0 1.5rem;
   color: {{text_color}};
-  /* Translucent and blurred, so a zoomed image still shows through the gutter. */
-  background: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04)), rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.72);
-  -webkit-backdrop-filter: blur(24px);
-  backdrop-filter: blur(24px);
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
   font-size: 0.875em;
   line-height: 1.55;
   opacity: 0;
@@ -1663,14 +1712,30 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
    until it scrolls. */
 .lightbox-info-scroll {
   --fade-end: calc(var(--edge-y) + 6px);
-  --fade-start: calc(var(--edge-y) + 50px);
+  --fade-start: calc(var(--edge-y) + 40px);
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
-  padding: 1.25rem 0 calc(var(--fade-start) + 1rem);
+  padding: 1.25rem 0 var(--fade-start);
   mask-image: linear-gradient(transparent, #000 1.25rem, #000 calc(100% - var(--fade-start)), transparent calc(100% - var(--fade-end)));
+}
+
+/* A column, so the details can fill what the text leaves and set the camera card at the foot. */
+.lightbox-info-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.lightbox-info-scroll > * {
+  flex-shrink: 0;
+}
+
+.lightbox-info-details {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .lightbox-info-scroll::-webkit-scrollbar {
@@ -1691,7 +1756,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   }
 }
 
-.lightbox-info-body:empty + .lightbox-info-details:empty::before {
+.lightbox-info-tags:empty ~ .lightbox-info-link:empty ~ .lightbox-info-body:empty + .lightbox-info-details:empty::before {
   content: "No details";
   color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
 }
@@ -1706,6 +1771,50 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   /* The caption's own size, against the gutter's smaller text. */
   font-size: calc(0.9375em / 0.875);
   line-height: 1.35;
+}
+
+/* The tags sit right under the title, as the rail's caption sets its second line. */
+.lightbox-info-caption:has(+ .lightbox-info-tags:not(:empty)) {
+  margin-bottom: 0.15em;
+}
+
+.lightbox-info-tags:not(:empty) {
+  margin-bottom: 1.25em;
+}
+
+/* A bookmark's way to the site it saved, as a pill under the title. */
+.lightbox-info-link:not(:empty) {
+  margin-bottom: 1.25em;
+}
+
+.bookmark-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  color: {{text_color}};
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
+  text-decoration: none;
+  line-height: 18px;
+  transition: background-color 180ms ease;
+}
+
+.bookmark-button:hover {
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.22);
+}
+
+.bookmark-button:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: 3px;
+}
+
+.bookmark-button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 /* The index, at the gutter's foot on the Info pill's line, below the scrolling details. */
@@ -1730,8 +1839,17 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   display: flex;
 }
 
+/* In the date's grey, under the title and tags. The photo's caption may carry links. */
 .entry-description {
   margin: 0 0 1.25em;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+}
+
+.entry-description a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
 }
 
 .lightbox-info-body > :first-child {
@@ -1750,7 +1868,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   text-underline-offset: 0.2em;
 }
 
-/* Under the post's text: the camera card, the tags and the date, each apart. */
+/* Under the post's text: the date, then the camera card. */
 .lightbox-info .lightbox-info-details > * + * {
   margin-top: 1em;
 }
@@ -1759,9 +1877,13 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   margin-top: 1.25em;
 }
 
-/* Set apart from the pills above it: its own smaller type would otherwise shrink the gap. */
-.lightbox-info .lightbox-info-details > .entry-date {
-  margin-top: 1.75em;
+/* The camera card sits at the gutter's foot, or under the rest when they fill it. */
+.lightbox-info .lightbox-info-details > .entry-exif {
+  margin-top: auto;
+}
+
+.lightbox-info .lightbox-info-details > :has(+ .entry-exif) {
+  margin-bottom: 1.75em;
 }
 
 .entry-date {
@@ -1771,14 +1893,33 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   font-variant-numeric: tabular-nums;
 }
 
-/* The post's tags, as the archives' tag pills. */
+/* The post's tags, in italics and separated by commas, at the caption's size. */
 .entry-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
   margin: 0;
   padding: 0;
   list-style: none;
+  font-size: calc(0.9375em / 0.875);
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.entry-tags li {
+  display: inline;
+}
+
+.entry-tags li + li::before {
+  content: ", ";
+}
+
+.entry-tags a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.entry-tags a:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
 }
 
 /* The camera, lens and exposure, set like a camera's own info card: the exposure along the
@@ -1873,6 +2014,13 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
    arrows move to the gutter's top left, on the close button's line. */
 html {
   --lightbox-info-width: clamp(16rem, 28vw, 24rem);
+}
+
+/* The details gutter's glass: translucent and blurred, so a zoomed image shows through. The
+   controls floating over the image use it too. */
+html {
+  --glass: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04)), rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.72);
+  --glass-blur: blur(24px);
 }
 
 .lightbox.has-info[open] {
@@ -2182,3 +2330,100 @@ html {
   --caption-height: 0px;
 }
 {{/show_captions}}
+
+/* A preview of the post a link leads to, shown on hover: its photo and title, or its title
+   and description, on the details gutter's glass, with an arrow pointing at the link. */
+.link-card {
+  position: fixed;
+  z-index: 1000;
+  width: min(320px, calc(100vw - 24px));
+  border-radius: 12px;
+  color: {{text_color}};
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: 0 0 0 1px rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14), 0 12px 32px rgba(0, 0, 0, 0.35);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 140ms ease, transform 140ms ease, visibility 0s linear 140ms;
+}
+
+.link-card.is-above {
+  transform: translateY(-4px);
+}
+
+.link-card.is-shown {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: none;
+  transition: opacity 140ms ease, transform 140ms ease, visibility 0s;
+}
+
+/* The arrow: a small square turned on its corner, on the card's edge nearest the link. */
+.link-card::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: calc(var(--arrow-x, 28px) - 6px);
+  width: 12px;
+  height: 12px;
+  background: rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.9);
+  box-shadow: -1px -1px 0 rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
+  transform: rotate(45deg);
+}
+
+.link-card.is-above::before {
+  top: auto;
+  bottom: -6px;
+  box-shadow: 1px 1px 0 rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
+}
+
+.link-card-inner {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border-radius: inherit;
+  color: inherit;
+  text-decoration: none;
+}
+
+.link-card-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 220px;
+  object-fit: cover;
+}
+
+.link-card-text {
+  display: -webkit-box;
+  margin: 0;
+  padding: 0.6em 0.95em 0.7em;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+  font-size: 0.875em;
+}
+
+.link-card-text strong {
+  color: {{text_color}};
+  font-weight: 600;
+}
+
+/* With a photo, the title alone sits under it. */
+.link-card.has-image .link-card-text {
+  padding: 0.55em 0.95em 0.6em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link-card,
+  .link-card.is-above {
+    transform: none;
+  }
+}
