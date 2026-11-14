@@ -4,7 +4,8 @@ import { removeLimiterForBlogID } from "../limiters.js";
 import { forgetBlog } from "../pushedFiles.js";
 import { unwatch } from "../watcher/index.js";
 import clfdate from "../util/clfdate.js";
-import trashFolder from "../util/trashFolder.js";
+import leaveFolder from "../util/leaveFolder.js";
+import finderLimiter from "../util/finderLimiter.js";
 
 export default async (req, res) => {
   const blogID = req.header("blogID");
@@ -27,13 +28,17 @@ export default async (req, res) => {
   console.log(clfdate(), `Received disconnect request for blogID: ${blogID}`);
 
   // Stop syncing the blog, then take its shared folder off this Mac. Never
-  // remove it recursively: that deletes the owner's files (util/trashFolder.js)
+  // remove it recursively: that deletes the owner's files (util/leaveFolder.js)
   removeLimiterForBlogID(blogID);
   forgetBlog(blogID);
 
   try {
     await unwatch(blogID);
-    await trashFolder(join(iCloudDriveDirectory, blogID));
+    await finderLimiter.schedule(() =>
+      leaveFolder(join(iCloudDriveDirectory, blogID), {
+        root: iCloudDriveDirectory,
+      })
+    );
   } catch (error) {
     console.error(clfdate(), `Failed to disconnect blogID ${blogID}:`, error);
     return res.status(500).send(error.message);
