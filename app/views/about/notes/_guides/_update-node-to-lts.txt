@@ -4,7 +4,7 @@ Blot uses the [Node.js LTS](https://nodejs.org/en/about/previous-releases) relea
 
 ## In the repository
 
-Edit `NODE_VERSION` and `NODE_BASE` (the same version with the image's multi-architecture index digest) in `config/versions.env`. Everything else reads that file: the Dockerfiles take it as build arguments, the GitHub Actions workflows load it with `.github/actions/versions`, and the development and test scripts source it. `scripts/security/check-versions.js` fails if `NODE_BASE` doesn't match `NODE_VERSION` or if a version is repeated elsewhere. The one exception is `BLOT_NODE_VERSION` in `config/environment.sh`, a template copied to hosts, which the checker requires to match.
+Edit `NODE_VERSION` and `NODE_BASE` (the same version with the image's multi-architecture index digest) in `config/versions.env`. Everything else reads that file: the Dockerfiles take it as build arguments, the GitHub Actions workflows load it with `.github/actions/versions`, and the development and test scripts source it. `scripts/security/check-versions.js` fails if `NODE_BASE` doesn't match `NODE_VERSION` or if a version is repeated elsewhere.
 
 Commit and push to a branch, open a pull request, and wait for GitHub's builds and tests to pass.
 
@@ -26,5 +26,3 @@ Restart development with `npm start` so Docker Compose rebuilds the app and Agen
 The app runs in Docker. Merge only after GitHub checks pass, then use the normal app deployment process to publish and deploy the image built with the new Node version.
 
 The iCloud macserver runs directly on macOS and manages its Node version separately. Its runtime, package requirements and PM2 deployment setup are outside this upgrade.
-
-For any legacy host using `BLOT_NODE_VERSION` outside Docker, update `/etc/blot/environment.sh`, install the matching Node version with nvm, reinstall dependencies under it and restart that host's service.
