@@ -142,11 +142,13 @@
     if (!state || !pathOf(document.referrer) || reloaded) return;
 
     closeDepth = takeDepth();
-    if (closeDepth) {
-      history.replaceState({ ...history.state, closeDepth }, "");
-      // Without script, or from elsewhere, the link goes home and says so; here it goes back.
-      for (const link of document.querySelectorAll("a.entry-close")) link.textContent = "Back";
-    }
+    // Only a page reached from the listing, or by stepping through it, follows its order. Any
+    // other link (a hover card, a link in a post) arrives with no depth: following the stored
+    // order there would turn every step into a page load.
+    if (!closeDepth) return;
+    history.replaceState({ ...history.state, closeDepth }, "");
+    // Without script, or from elsewhere, the link goes home and says so; here it goes back.
+    for (const link of document.querySelectorAll("a.entry-close")) link.textContent = "Back";
 
     const path = pathOf(location.href);
     let page = -1;
@@ -335,8 +337,17 @@
 
   // ---- Entries: one per image link, read from the page ----
 
+  // The post's HTML rides along escaped in an attribute rather than in a <template>, whose
+  // images some browsers' preload scanners fetch: a page of full-size originals nobody sees.
+  // It is parsed into an inert fragment only when wanted.
+  function entryHTML(link) {
+    const template = document.createElement("template");
+    template.innerHTML = link.dataset.html || "";
+    return template.content;
+  }
+
   function readEntry(link) {
-    const html = link.querySelector("template.entry-html")?.content;
+    const html = entryHTML(link);
     const original = html?.querySelector("img");
     const width = Number(link.dataset.width) || 1;
     const height = Number(link.dataset.height) || 1;
@@ -377,6 +388,9 @@
   // ---- The viewer: one lightbox for whichever collection is on the page ----
 
   let controller = null; // the rail or the grid that supplies entries
+  // Set once the link preview card exists. The card follows a link under the pointer, but the
+  // viewer can swap that link out (a step, a close) without the pointer moving: no pointerout.
+  let hideLinkCard = () => {};
   let activeIndex = 0;
   let imageToken = 0;
   let opening = false;
@@ -468,13 +482,19 @@
   const infoBody = infoPanel?.querySelector(".lightbox-info-body");
   const infoDetails = infoPanel?.querySelector(".lightbox-info-details");
   const infoDescription = infoPanel?.querySelector(".lightbox-info-description");
+  const infoTags = infoPanel?.querySelector(".lightbox-info-tags");
+  const infoLink = infoPanel?.querySelector(".lightbox-info-link");
   // One setting for every image, kept between visits: open, the details fill a gutter on the
   // right of each image in turn, until it's closed again.
   const INFO_KEY = "keynote:info";
-  let infoWanted = false;
-  try {
-    infoWanted = localStorage.getItem(INFO_KEY) === "1";
-  } catch {}
+  // The "always show post details" setting keeps the gutter open, with no button to close it.
+  const infoAlways = {{#always_show_post_details}}true{{/always_show_post_details}}{{^always_show_post_details}}false{{/always_show_post_details}};
+  let infoWanted = infoAlways;
+  if (!infoAlways) {
+    try {
+      infoWanted = localStorage.getItem(INFO_KEY) === "1";
+    } catch {}
+  }
 
   function setInfo(open) {
     infoWanted = open;
@@ -493,15 +513,27 @@
   }
 
   function fillInfo(entry) {
+    hideLinkCard();
     if (!infoPanel) return;
-    const body = entry.link.querySelector("template.entry-html")?.content.cloneNode(true);
+    const body = entry.link.dataset.html ? entryHTML(entry.link) : null;
+    // A bookmark's screenshot is on screen; its link becomes a button to the site.
+    const bookmark = body?.querySelector("a.bookmark[href]");
+    const bookmarkURL = bookmark ? safeURL(bookmark.getAttribute("href")) : null;
+    if (bookmark) (bookmark.closest(".bookmark-container") || bookmark).remove();
+    infoLink?.replaceChildren(...(bookmarkURL ? [bookmarkButton(bookmarkURL)] : []));
+    // A folder post joins several files, each in its own section.
+    const folderPost = body?.querySelector(".multi-file-post");
+    const pictureCount = body ? body.querySelectorAll("img").length : 0;
     if (body) {
       for (const script of body.querySelectorAll("script")) script.remove();
       // The picture is already on screen, and so is the title: leave both out, with
-      // anything that only held them.
-      const picture = body.querySelector("img");
+      // anything that only held them. The picture's caption goes with it, and so does a
+      // folder post's whole section for that file.
+      const picture = bookmark ? null : body.querySelector("img");
+      const caption = picture?.nextElementSibling?.matches(".caption") ? picture.nextElementSibling : null;
+      const section = picture?.closest(".multi-file-entry");
       const heading = [...body.querySelectorAll("h1, h2, h3, p, .caption")].find((node) => node.textContent.trim() === entry.title);
-      for (const node of [picture, heading]) {
+      for (const node of [section || picture, caption, heading]) {
         let target = node;
         while (target?.parentNode && target.parentNode !== body && target.parentNode.childElementCount === 1 && !target.parentNode.textContent.trim()) target = target.parentNode;
         target?.remove();
@@ -522,17 +554,44 @@
     }
     const exposure = exif?.querySelector(".entry-exposure");
     if (exposure && !exposure.querySelector("li")) exposure.remove();
-    const hasExif = Boolean(exif?.querySelector("p, li"));
+    // A folder post of several photos merges their details, so the description and camera
+    // card would belong to its last photo, not the one on screen: leave them out.
+    const mixedPhotos = Boolean(folderPost) && pictureCount > 1;
+    const hasExif = !mixedPhotos && Boolean(exif?.querySelector("p, li"));
     // The photo's own description reads as prose under the title.
-    const description = details?.querySelector(".entry-description");
+    const description = mixedPhotos ? null : details?.querySelector(".entry-description");
     infoDescription?.replaceChildren(...(description ? [description] : []));
-    // Then the camera card, the tags as the archives' pills, and the date.
-    const parts = [hasExif ? exif : null, details?.querySelector(".entry-tags"), details?.querySelector(".entry-date")].filter(Boolean);
+    // The tags go straight under the title, like the rail's caption.
+    const tags = details?.querySelector(".entry-tags");
+    infoTags?.replaceChildren(...(tags ? [tags] : []));
+    // Then the date, and the camera card at the foot.
+    const parts = [details?.querySelector(".entry-date"), hasExif ? exif : null].filter(Boolean);
     infoDetails.replaceChildren(...parts);
-    const hasDetails = parts.length > 0 || Boolean(description);
+    const hasDetails = parts.length > 0 || Boolean(description) || Boolean(tags) || Boolean(bookmarkURL);
     // With the gutter open, the button stays to close it, even beside a post with no details.
-    infoButton.hidden = !hasText && !hasDetails && !infoWanted;
+    infoButton.hidden = infoAlways || (!hasText && !hasDetails && !infoWanted);
     showInfo();
+  }
+
+  // Only a web address may become the bookmark's button.
+  function safeURL(href) {
+    try {
+      const url = new URL(href, document.baseURI);
+      return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function bookmarkButton(url) {
+    const link = document.createElement("a");
+    link.className = "bookmark-button";
+    link.href = url.href;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = `Visit ${url.hostname.replace(/^www\./, "")}`;
+    link.insertAdjacentHTML("beforeend", '<svg aria-hidden="true" focusable="false" width="14" height="14" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9" /></svg>');
+    return link;
   }
 
   infoButton?.addEventListener("click", () => setInfo(!infoWanted));
@@ -660,8 +719,12 @@
     };
 
     if (!source || reducedMotion.matches || !document.startViewTransition) {
+      // Appearing without the zoom (an entry's own page), the details and controls are there
+      // from the first frame rather than fading in after the image.
+      if (!animate) lightbox.classList.add("is-instant");
       show();
       reveal();
+      if (!animate) requestAnimationFrame(() => requestAnimationFrame(() => lightbox.classList.remove("is-instant")));
       return;
     }
     root.classList.add("is-zooming");
@@ -846,7 +909,7 @@
 
   const MAX_ZOOM = 2;
   const ZOOM_STEP = 0.5;
-  const WHEEL_STEP_DISTANCE = 60; // wheel travel that counts as one zoom step
+  const WHEEL_ZOOM_RATE = Math.log(1.25) / 100; // a wheel notch, about 100px, zooms 25%
   const EXIT_PULL_LIMIT = 230; // wheel travel at 100% that closes the viewer
   const PAN_FRICTION = 4.2;
   const PAN_STIFFNESS = 420;
@@ -861,9 +924,8 @@
   let exitTimer = 0;
   let animateTimer = 0;
   let pulledClosed = false;
-  let wheelTotal = 0;
   let wheelStamp = 0;
-  let stepLockUntil = 0;
+  let wheelTrackpad = false; // whether the current wheel gesture is a trackpad's two-finger scroll
   let calmUntil = 0;
   let panDrag = null;
   let panMotion = null;
@@ -983,7 +1045,6 @@
     panY = 0;
     pointers.clear();
     pinch = null;
-    wheelTotal = 0;
     pulledClosed = false;
     renderZoom();
   }
@@ -1027,22 +1088,34 @@
       setZoom(zoomLevel * Math.exp(-deltaY * 0.01), pivot, { animate: false });
       return;
     }
-    if (Math.abs(deltaY) <= Math.abs(deltaX)) return;
-    if (now - wheelStamp > 200) wheelTotal = 0;
-    wheelStamp = now;
-    wheelTotal += deltaY;
-    if (now < stepLockUntil) return;
-    if (wheelTotal >= WHEEL_STEP_DISTANCE) {
-      wheelTotal = 0;
-      stepLockUntil = now + 200;
-      setZoom(zoomLevel + ZOOM_STEP, pivot);
-    } else if (wheelTotal <= -WHEEL_STEP_DISTANCE && zoomed()) {
-      wheelTotal = 0;
-      stepLockUntil = now + 200;
-      setZoom(zoomLevel - ZOOM_STEP, pivot);
-    } else if (deltaY < 0 && !zoomed() && now > calmUntil) {
-      pullToClose(-deltaY);
+    // A trackpad's two-finger scroll and a mouse wheel send the same events. Within one
+    // gesture, any sideways movement, or a step that isn't a multiple of a wheel notch's
+    // 120, gives the trackpad away.
+    if (now - wheelStamp > 200) {
+      wheelTrackpad = false;
     }
+    wheelStamp = now;
+    if (!wheelTrackpad && event.deltaMode === 0) {
+      const notch = event.wheelDeltaY;
+      wheelTrackpad = event.deltaX !== 0 || (Boolean(notch) && notch % 120 !== 0);
+    }
+    // Zoomed in, the trackpad pans the image, as it would scroll a page.
+    if (wheelTrackpad && zoomed()) {
+      stopPan();
+      const bounds = panBounds();
+      panX = clampValue(panX - deltaX, bounds.lowX, bounds.highX);
+      panY = clampValue(panY - deltaY, bounds.lowY, bounds.highY);
+      renderZoom();
+      return;
+    }
+    if (Math.abs(deltaY) <= Math.abs(deltaX)) return;
+    if (deltaY < 0 && !zoomed()) {
+      if (now > calmUntil) pullToClose(-deltaY);
+      return;
+    }
+    // The wheel zooms continuously: a mouse's notches glide into each other, a trackpad's
+    // small steps follow the fingers.
+    setZoom(zoomLevel * Math.exp(deltaY * WHEEL_ZOOM_RATE), pivot, { animate: !wheelTrackpad });
   }
 
   // Panning: drag the enlarged image; it coasts and stretches a little past its edges.
@@ -1069,6 +1142,7 @@
       startPanY: panY,
       bounds,
       moved: false,
+      onImage: event.target === lightboxImage,
       samples: [{ x: event.clientX, y: event.clientY, time: event.timeStamp }],
     };
     lightbox.setPointerCapture(event.pointerId);
@@ -1138,7 +1212,9 @@
     const gesture = panDrag;
     panDrag = null;
     lightbox.classList.remove("is-panning");
-    if (gesture.moved) suppressLightboxClickUntil = performance.now() + 350;
+    // The capture sends the click to the viewer itself, which would read it as a click on the
+    // backdrop and close: a press on the image, or a drag, isn't one.
+    if (gesture.moved || gesture.onImage) suppressLightboxClickUntil = performance.now() + 350;
     let velocityX = 0;
     let velocityY = 0;
     if (event.type === "pointerup") {
@@ -1229,9 +1305,26 @@
   lightbox.addEventListener("pointerup", releasePointer);
   lightbox.addEventListener("pointercancel", releasePointer);
 
-  lightboxImage.addEventListener("dblclick", (event) => {
-    // A touch double-tap has already been handled from its pointer events.
-    if (lightboxBusy() || performance.now() - lastDoubleTapAt < 600) return;
+  // With the details open, a click on the image zooms in on the place clicked. The swipe
+  // captures the pointer on the frame, so the click arrives there: check it hit the image.
+  let clickZoomAt = 0;
+  const overImage = (event) => {
+    const box = lightboxImage.getBoundingClientRect();
+    return event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+  };
+  lightboxFrame.addEventListener("click", (event) => {
+    if (!lightbox.classList.contains("has-info") || zoomed() || lightboxBusy() || !overImage(event)) return;
+    if (event.detail > 1 || performance.now() < suppressLightboxClickUntil) return;
+    clickZoomAt = performance.now();
+    setZoom(MAX_ZOOM, { x: event.clientX, y: event.clientY });
+  });
+
+  // Pointer capture sends the double-click to the frame or the viewer, so check it hit the image.
+  lightbox.addEventListener("dblclick", (event) => {
+    if (!overImage(event) || event.target.closest("button, .zoom-controls, .lightbox-info")) return;
+    // A touch double-tap has already been handled from its pointer events, and the
+    // click before this one may already have zoomed in.
+    if (lightboxBusy() || performance.now() - lastDoubleTapAt < 600 || performance.now() - clickZoomAt < 600) return;
     setZoom(zoomed() ? 1 : MAX_ZOOM, { x: event.clientX, y: event.clientY });
   });
 
@@ -1286,6 +1379,7 @@
     requestClose();
   });
   lightbox.addEventListener("close", () => {
+    hideLinkCard();
     const byScript = closedByScript;
     closedByScript = false;
     if (lightbox.open) return; // opened again since
@@ -1995,6 +2089,207 @@
   // viewer's Info button shows it instead.
   const clippedText = view === "entry" && controller ? document.querySelector(".contents") : null;
   if (clippedText) clippedText.inert = true;
+
+  // ---- Link previews: hovering a link to another post shows a card with its photo and title,
+  // or its title and description when it has no photo, from the post's JSON (?format=json) ----
+
+  const previewCard = (() => {
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return null;
+    const SHOW_DELAY = 350;
+    const HIDE_DELAY = 200;
+    const previews = new Map(); // path → Promise of a preview, or null for no card
+    let card = null;
+    let current = null; // the link the card is for
+    let showTimer = 0;
+    let hideTimer = 0;
+
+    function eligible(link) {
+      // The rail and the grid are already pictures of the posts they link to.
+      if (!link || link.closest(".link-card, .rail, .collection-entry, .current-entry")) return null;
+      let url;
+      try {
+        url = new URL(link.getAttribute("href"), location.href);
+      } catch {
+        return null;
+      }
+      if (url.origin !== location.origin || url.pathname === location.pathname) return null;
+      // Files, feeds and listings have no post behind them.
+      if (/\.[a-z0-9]{1,5}$/i.test(url.pathname) || /^\/(tagged|page|search|archives)(\/|$)/.test(url.pathname) || url.pathname === "/") return null;
+      return url;
+    }
+
+    const textOf = (html) => new DOMParser().parseFromString(html || "", "text/html").body.textContent.replace(/\s+/g, " ").trim();
+
+    function load(url) {
+      const key = url.pathname;
+      if (!previews.has(key)) {
+        previews.set(
+          key,
+          fetch(`${url.pathname}?format=json`, { credentials: "same-origin", headers: { Accept: "application/json" } })
+            .then(async (response) => {
+              if (!response.ok || !response.headers.get("content-type")?.includes("json")) return null;
+              const post = await response.json();
+              const image = post.thumbnail?.medium || post.thumbnail?.large || null;
+              // The photo's description may be Markdown rendered to HTML: the card takes its words.
+              const description = textOf(post.description) || textOf(post.summary);
+              if (!post.title || (!image && (!description || description === post.title))) return null;
+              return { title: post.title, href: post.url || url.pathname, image, description: image ? "" : description };
+            })
+            .catch(() => null)
+        );
+      }
+      return previews.get(key);
+    }
+
+    function build() {
+      card = document.createElement("div");
+      card.className = "link-card";
+      card.addEventListener("pointerenter", () => clearTimeout(hideTimer));
+      card.addEventListener("pointerleave", scheduleHide);
+      return card;
+    }
+
+    function fill(preview) {
+      const link = document.createElement("a");
+      link.className = "link-card-inner";
+      link.href = preview.href;
+      link.tabIndex = -1;
+      link.setAttribute("aria-hidden", "true");
+      if (preview.image) {
+        const img = document.createElement("img");
+        img.className = "link-card-image";
+        img.src = preview.image.url;
+        img.alt = "";
+        img.decoding = "async";
+        if (preview.image.width && preview.image.height) {
+          img.width = preview.image.width;
+          img.height = preview.image.height;
+        }
+        link.append(img);
+      }
+      const text = document.createElement("p");
+      text.className = "link-card-text";
+      const title = document.createElement("strong");
+      title.textContent = preview.title;
+      text.append(title);
+      if (preview.description) text.append(" ", preview.description);
+      link.append(text);
+      card.replaceChildren(link);
+      card.classList.toggle("has-image", Boolean(preview.image));
+    }
+
+    // Below the link, or above it when there's more room there, with the arrow on the link.
+    function place(link) {
+      const box = [...link.getClientRects()].find((rect) => rect.width) || link.getBoundingClientRect();
+      const margin = 12;
+      const width = card.offsetWidth;
+      const height = card.offsetHeight;
+      const below = innerHeight - box.bottom >= height + margin || box.top < height + margin;
+      const anchor = box.left + Math.min(box.width / 2, 28);
+      const left = Math.min(Math.max(margin, anchor - 28), innerWidth - width - margin);
+      card.style.left = `${left}px`;
+      card.style.top = `${below ? box.bottom + 10 : box.top - height - 10}px`;
+      card.style.setProperty("--arrow-x", `${Math.min(Math.max(16, anchor - left), width - 16)}px`);
+      card.classList.toggle("is-above", !below);
+    }
+
+    async function show(link, url) {
+      const preview = await load(url);
+      if (current !== link || !preview || !link.isConnected) return;
+      if (!card) build();
+      fill(preview);
+      card.classList.remove("is-shown");
+      // Inside the viewer the card has to be in the dialog to sit above it.
+      const host = link.closest("dialog") || document.body;
+      if (card.parentNode !== host) host.append(card);
+      const image = card.querySelector("img");
+      if (image && !image.complete) await Promise.race([image.decode().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 400))]);
+      if (current !== link || !link.isConnected) return;
+      place(link);
+      card.classList.add("is-shown");
+    }
+
+    function hide() {
+      current = null;
+      card?.classList.remove("is-shown");
+    }
+
+    function scheduleHide() {
+      clearTimeout(showTimer);
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(hide, HIDE_DELAY);
+    }
+
+    function enter(link) {
+      if (!link || link === current || card?.contains(link)) return;
+      const url = eligible(link);
+      if (!url) return;
+      clearTimeout(showTimer);
+      clearTimeout(hideTimer);
+      if (current) hide();
+      current = link;
+      void load(url); // start fetching while the pointer rests
+      showTimer = setTimeout(() => show(link, url), SHOW_DELAY);
+    }
+
+    document.addEventListener("pointerover", (event) => {
+      if (event.pointerType === "mouse") enter(event.target.closest?.("a[href]"));
+    });
+    document.addEventListener("pointerout", (event) => {
+      const link = event.target.closest?.("a[href]");
+      if (link && link === current && !link.contains(event.relatedTarget)) scheduleHide();
+    });
+    // Keyboard focus shows the card too, and moving on hides it.
+    document.addEventListener("focusin", (event) => {
+      const link = event.target.closest?.("a[href]");
+      if (link?.matches(":focus-visible")) enter(link);
+    });
+    document.addEventListener("focusout", (event) => {
+      if (event.target === current) scheduleHide();
+    });
+
+    function dismiss() {
+      clearTimeout(showTimer);
+      clearTimeout(hideTimer);
+      if (current) hide();
+    }
+
+    // Scrolling, the wheel, a click or a key (the arrows stepping the viewer) moves on from the link.
+    for (const type of ["scroll", "wheel", "pointerdown", "keydown"]) {
+      document.addEventListener(type, (event) => {
+        if (!card?.contains(event.target)) dismiss();
+      }, { capture: true, passive: true });
+    }
+    // So does anything that changes the page around a still pointer.
+    for (const type of ["popstate", "resize", "blur"]) window.addEventListener(type, dismiss);
+    document.addEventListener("visibilitychange", dismiss);
+
+    return { hide: dismiss };
+  })();
+  if (previewCard) hideLinkCard = previewCard.hide;
+
+  // A link to another post from inside the viewer (the card, the description, the post's text)
+  // moves the viewer to that post when it's among those already loaded, as the arrows would.
+  // Otherwise the link is followed, and the post's own page opens straight into the viewer.
+  lightbox?.addEventListener("click", (event) => {
+    const link = event.target.closest?.("a[href]");
+    if (!link || !lightbox.open || event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || (link.target && link.target !== "_self")) return;
+    if (!controller) return;
+    let url;
+    try {
+      url = new URL(link.getAttribute("href"), location.href);
+    } catch {
+      return;
+    }
+    if (url.origin !== location.origin) return;
+    const index = controller.entries().findIndex((entry) => entry.href === url.pathname && !entry.detached);
+    if (index < 0 || index === activeIndex) return;
+    event.preventDefault();
+    previewCard?.hide();
+    setActive(index);
+    replaceAddress();
+  });
 
   if (view === "entry" && controller) {
     // The entry's own page: the viewer starts open, and closing returns to the rail.

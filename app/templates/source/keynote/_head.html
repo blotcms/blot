@@ -34,9 +34,9 @@
       root.classList.add("rail-mode", "is-deep-open");{{/thumbnail.large.url}}{{/page}}{{/entry}}
       // The viewer's details gutter is one setting for every image, so the page can lay
       // it out before the script that opens the viewer has run.
-      try {
+      {{#always_show_post_details}}root.classList.add("info-open");{{/always_show_post_details}}{{^always_show_post_details}}try {
         if (localStorage.getItem("keynote:info") === "1") root.classList.add("info-open");
-      } catch (e) {}
+      } catch (e) {}{{/always_show_post_details}}
     })(document.documentElement);
   </script>
 
