@@ -1240,13 +1240,8 @@
   }
 
   function startPanMotion(velocityX, velocityY) {
+    // Momentum follows the finger, so it stays on with reduced motion.
     const bounds = panBounds();
-    if (reducedMotion.matches) {
-      panX = clampValue(panX, bounds.lowX, bounds.highX);
-      panY = clampValue(panY, bounds.lowY, bounds.highY);
-      renderZoom();
-      return;
-    }
     panMotion = {
       x: { pos: panX, v: velocityX, low: bounds.lowX, high: bounds.highX },
       y: { pos: panY, v: velocityY, low: bounds.lowY, high: bounds.highY },
@@ -1965,10 +1960,11 @@
       velocity = 0;
       // A flick carries on however the drag ends. iOS Safari can end a touch drag with
       // lostpointercapture or pointercancel rather than pointerup; only a cancel because the
-      // page took over a mostly vertical scroll stops the rail dead.
+      // page took over a mostly vertical scroll stops the rail dead. Momentum follows the
+      // finger, so it stays on with reduced motion, like native scrolling does.
       const scrolledAway =
         event.type === "pointercancel" && Math.abs(gesture.lastY - gesture.startY) > Math.abs(gesture.lastX - gesture.startX);
-      if (gesture.moved && !scrolledAway && !reducedMotion.matches) {
+      if (gesture.moved && !scrolledAway) {
         const first = gesture.samples[0];
         const last = gesture.samples.at(-1);
         const seconds = Math.max((last.time - first.time) / 1000, 0.001);
@@ -2017,10 +2013,7 @@
     }, true);
 
     reducedMotion.addEventListener("change", () => {
-      if (reducedMotion.matches) {
-        glide = null;
-        velocity = 0;
-      }
+      if (reducedMotion.matches) glide = null;
       schedule();
     });
 
