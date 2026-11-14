@@ -38,15 +38,16 @@ describe("daily update macserver", function () {
       const text = macserver.line(stats(), { now: NOW });
 
       expect(text).toBe(
-        "macserver: root disk 25% (150 GB free), iCloud 5 GB free, 139 sites"
+        "Mac server: root disk 25% (150 GB free), iCloud 5 GB free, 139 sites"
       );
       expect(text).not.toContain("**");
     });
 
-    it("projects the disk's growth to a full disk", function () {
+    it("projects the disk's growth to the disk warning", function () {
+      // 50 GiB used, 1 GiB a day: 127 days to the 25 GB (25e9 bytes) warning
       expect(
         macserver.line(stats(), { history: [point(7, 43)], now: NOW })
-      ).toContain("root disk 25% (full in ~150 days, 150 GB free)");
+      ).toContain("root disk 25% (resize in ~127 days, 150 GB free)");
       expect(
         macserver.line(stats(), { history: [point(7, 50)], now: NOW })
       ).toContain("root disk 25% (stable, 150 GB free)");
@@ -61,7 +62,7 @@ describe("daily update macserver", function () {
         { now: NOW }
       );
 
-      expect(text).toMatch(/^macserver: \*\*root disk [^*]+\*\*, \*\*iCloud /);
+      expect(text).toMatch(/^Mac server: \*\*root disk [^*]+\*\*, \*\*iCloud /);
     });
 
     it("treats an exhausted iCloud quota as low, not unknown", function () {
@@ -77,43 +78,52 @@ describe("daily update macserver", function () {
           { now: NOW }
         )
       ).toBe(
-        "macserver: root disk 150 GB free, iCloud quota unknown, 139 sites"
+        "Mac server: root disk 150 GB free, iCloud quota unknown, 139 sites"
       );
     });
   });
 
-  describe("processLine", function () {
+  describe("memory and CPU", function () {
     const reported = (overrides = {}) =>
       stats({
-        cpu_percent: 152,
-        cpu_percent_average: 160,
+        cpu_percent: 195,
+        cpu_percent_average: 192,
         cpu_count: 4,
-        load_average: 4.83,
-        memory_rss_bytes: 280 * 1024 * 1024,
-        host_memory_free_bytes: 4.72 * GB,
-        host_memory_total_bytes: 8 * GB,
-        uptime_seconds: 7 * 24 * 60 * 60,
+        load_average: 3.04,
+        memory_rss_bytes: 298 * 1024 * 1024,
+        host_memory_free_bytes: 0.01 * GB,
+        host_memory_available_bytes: 6 * GB,
+        host_memory_total_bytes: 16 * GB,
+        uptime_seconds: 26 * 60 * 60,
         ...overrides,
       });
 
-    it("gives the process's CPU and memory and the host's load and memory", function () {
-      expect(macserver.processLine(reported())).toBe(
-        "macserver process: CPU 152% (160% over 7d), memory 280 MB; host load 4.8 on 4 cores, memory 59% free"
+    it("join the line after iCloud, before the sites", function () {
+      expect(macserver.line(reported(), { now: NOW })).toBe(
+        "Mac server: root disk 25% (150 GB free), iCloud 5 GB free, memory 63% (6 GB free), CPU 195% (192% over 26h), 139 sites"
       );
     });
 
-    it("is left out by a macserver that doesn't report them", function () {
-      expect(macserver.processLine(stats())).toBe(null);
+    it("bolds memory under 15% available", function () {
+      expect(
+        macserver.line(reported({ host_memory_available_bytes: 2 * GB }), {
+          now: NOW,
+        })
+      ).toContain("**memory 88% (2 GB free)**");
     });
 
-    it("is part of the view", async function () {
-      const res = await macserver({
-        fetchStats: async () => reported(),
-        client: fakeRedis(),
-        now: NOW,
-      });
+    it("leave memory out when only the kernel's free pages are reported", function () {
+      const text = macserver.line(
+        reported({ host_memory_available_bytes: undefined }),
+        { now: NOW }
+      );
 
-      expect(res.macserver_process).toContain("CPU 152%");
+      expect(text).not.toContain("memory");
+      expect(text).toContain("iCloud 5 GB free, CPU 195%");
+    });
+
+    it("are left out by a macserver that doesn't report them", function () {
+      expect(macserver.line(stats(), { now: NOW })).not.toMatch(/memory|CPU/);
     });
   });
 
@@ -142,7 +152,7 @@ describe("daily update macserver", function () {
       });
 
       expect(res.macserver).toBe(
-        "macserver: **unreachable** (HTTP error: 502 - Bad Gateway)"
+        "Mac server: **unreachable** (HTTP error: 502 - Bad Gateway)"
       );
     });
 
@@ -158,7 +168,7 @@ describe("daily update macserver", function () {
       });
 
       expect(res.macserver).toBe(
-        "macserver: root disk 25% (150 GB free), iCloud 5 GB free, 139 sites"
+        "Mac server: root disk 25% (150 GB free), iCloud 5 GB free, 139 sites"
       );
     });
   });
