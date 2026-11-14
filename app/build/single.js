@@ -57,21 +57,21 @@ async function single(blog, path, options = {}) {
   metadata = parsed.metadata;
   html = parsed.html;
 
+  // A post made from one image file is captioned with its description,
+  // unless a camera wrote it. The images of a folder post keep their
+  // filename captions. Checked before baking, which could change the text.
+  var exif = extras && extras.exif;
+  var captioned =
+    !options.inFolderPost &&
+    !!exif &&
+    typeof exif.ImageDescription === "string" &&
+    !!exif.ImageDescription.trim() &&
+    !isCameraDefault(exif.ImageDescription, exif);
+
   // Baked before the plugins run, since the Caption plugin puts it into
   // the post's HTML
   var descriptionDependencies = await description(blog, path, extras);
-
-  // A post made from one image file is captioned with its description,
-  // unless a camera wrote it. The images of a folder post keep their
-  // filename captions.
-  var caption = extras && extras.exif && extras.exif.ImageDescription;
-  if (
-    options.inFolderPost ||
-    typeof caption !== "string" ||
-    !caption.trim() ||
-    isCameraDefault(caption)
-  )
-    caption = undefined;
+  var caption = captioned ? exif.ImageDescription : undefined;
 
   debug("Blog:", blog.id, path, "running through plugins");
 
