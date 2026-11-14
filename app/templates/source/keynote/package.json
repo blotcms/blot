@@ -46,7 +46,7 @@
     "content_width_range": [400, 1200],
     "spacing": 4,
     "spacing_range": [1, 8],
-    "demo_folder": "sergey"
+    "demo_folder": "bees"
   },
   "views": {
     "public": {

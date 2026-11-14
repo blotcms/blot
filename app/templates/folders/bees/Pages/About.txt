@@ -1,0 +1,100 @@
+# About
+
+{|<} ![Flag of the United States Geological Survey](https://upload.wikimedia.org/wikipedia/commons/0/01/Flag_of_the_United_States_Geological_Survey.svg)
+
+This is a selection of my favorite bees from the thousands of wonderful photographs made by the USGS Bee Inventory and Monitoring Lab, led by Sam Droege. There are around 20,000 known species of bee, and most of them are small and solitary.
+
+The photographs are in the public domain. Most of the bees are from the United States, but a few come from Chile ([[Bombus dahlbomii]]), Costa Rica ([[Exaerete smaragdina]]), Guyana ([[Exaerete frontalis]]), Cuba ([[Mesoplia azurea]]), the Dominican Republic ([[Xylocopa mordax]]), Brazil ([[Caupolicana gaullei]]), Kenya ([[Hylaeus sp.]]), Iran ([[Tarsalia persica]]) and Australia ([[Paracolletes sp.]]).
+
+## Finding and catching bees
+
+Bees are nearly ubiquitous, but a few places in any landscape concentrate them. In North America, good places are usually where the flowers are concentrated or unusual. If you are unfamiliar with an area, start with:
+
+- road, stream and river crossings
+- power line and railroad rights-of-way
+- sand and gravel operations
+- open sandy areas and wetlands
+- weedy lots and roadsides in developed areas
+
+In this collection, [[Macropis ciliata]] came from power-line corridors, [[Triepeolus distinctus]] from a sand pit and [[Augochloropsis sumptuosa]] from the sandhills of North Carolina. Put out bee bowl traps in the morning and return mid-day to the promising sites you spotted.[^manual]
+
+Most bees are caught with a net:
+
+- Watch for movement rather than shape, since the eye picks up a bee's flight long before it can tell a bee from a fly, and swing fast and follow through.
+- Stand four to eight feet back from a patch of flowers, and go for the quick, restless foragers first.
+- Bees flying low and erratically over bare soil are often nest parasites: slap the whole net down over them and lift the bag.
+- To take a bee out, snap the net so it drops to the bottom and bring a jar in to meet it.
+
+Bees almost never sting in a net unless they're squeezed.[^catching]
+
+{<>} ![Two collectors walking through dry grassland during a native bee survey, one carrying an insect net](_Collecting bees with a net.jpg)
+
+## Why the bees are killed
+
+Most insects, bees among them, can only be named under a microscope, and sometimes only by dissecting them, so they can't be identified alive. Their numbers are vast and they breed quickly, so collecting barely touches a population: losing habitat is what threatens them. The specimens are kept, and researchers return to them to describe new species and check old names, much as collected birds made it possible to name a bird by sight today. For most insects that knowledge is still being gathered.[^killing]
+
+## Preparing bees for photography
+
+Photographs stacked from many exposures show every hair, so they also show every speck of dust, matted tuft and clump of pollen. See [[Osmia calla]], an early result of the lab's cleaning, [[Hylaeus sp.]], which was cleaned up in Photoshop because it was very dirty, and the orange pollen on [[Triepeolus sp. 101]]. The lab cleans each specimen before photographing it:
+
+1. Soften the bee overnight in a damp container.
+2. Shake it hard, still on its pin, in very hot water with a drop of washing-up liquid.
+3. Rinse it, then dip it for a few seconds in acetone.
+4. Dry it with a narrow jet of compressed air that lifts the hair without shredding the wings, and tease out stubborn tufts with a fine pin or brush.
+
+Hair matted by nectar may not recover. Photographed straight away, the bee's eyes are darker too.[^photography]
+
+{<>} ![Wing of a female carpenter bee, Xylocopa, from Thailand](_Xylocopa wing, Thailand.jpg)
+
+## How the photographs were made
+
+The lab's descriptions give the same setup for most of its photographs:
+
+- Camera: Canon EOS 5D Mark II
+- Lens: 65mm Canon MP-E 1–5× macro
+- Stackshot sled: moves the camera in small steps, so each exposure is sharp at a different depth
+- Lighting: twin macro flash inside a styrofoam cooler
+- Settings: f/5, ISO 100, 1/200 second
+- Software: Zerene Stacker, which combines the exposures into one sharp picture
+- Retouching: burn tool on shadows at 50% opacity, to clean up halos that bleed into the black background from brightly colored parts of the bee
+
+## Reading the names
+
+Each photograph is named for its bee, genus first and then species:
+
+- *sp.* means the species has not been determined, as in [[Paracolletes sp.]]
+- *cf.* means "compare": the bee resembles the named species but has not been confirmed as it, as in [[Edwyniana cf. flavicornis]]
+- [[Triepeolus sp. 101]] is one of a few undescribed *Triepeolus* species that carry a working number instead of a name
+- A third name, as in [[Perdita albihirta geraeae]], is a subspecies
+
+## Credits
+
+Most photographs are credited to the lab's team. The people named in the descriptions are listed below.
+
+### Photographers
+
+Brooke Alexander, Wayne Boo, Cole Cheng, Anders Croft, Glory DeHaemer, Brooke Goggins, Kelly Graninger, Erick Hernandez, Dejen Mengis, Joaquin Mogollon, Philip Moore, Amber Reese, Amanda Robinson and Grace Schilling. Elizabeth Garcia and Dejen Mengis did the Photoshop work on some of the photographs.
+
+### Researchers
+
+The people and groups behind the surveys and studies that the bees came from:
+
+- Laurence Packer (York University) and the Packer Lab: specimens from Chile, Australia and Kenya.
+- Claire Kremen's laboratory: fire studies in Yosemite National Park and a hedgerow study in Yolo County, California.
+- David Wagner: a study of bees on power-line corridors, with specimens collected in New England by Michael Veit.
+- Gene Scarpulla: a bee project on Plummer's Island, Maryland.
+- Heather Campbell: a survey of the sandhills of North Carolina.
+- Philip Moore: a survey of the pollinators of Ruth's golden aster in Polk County, Tennessee.
+- Justin DeVault and his colleagues at AllStar Ecology: a bumble bee survey in West Virginia.
+- Molly Rightmyer, who revised the genus *Triepeolus*, and Kim Huntzinger, who identified a bee from Zion National Park, where the park's staff caught the bees.
+- Francisco Posada and the USDA National Honey Bee Lab in Beltsville, Maryland: honey bee specimens.
+
+Other specimens came from Laura Russo, Brianne Du Clos, Tim McMahon, Sara Prado, Don Harvey, Tracy Zarillo, Morgan Lowry, K. Moredock, MaLisa Spring, Ellison Orcutt and Mimi Jenkins.
+
+[^manual]: Sam Droege and others, *The Very Handy Manual: How to Catch and Identify Bees and Manage a Collection*, USGS Bee Inventory and Monitoring Lab, Patuxent Wildlife Research Center, Beltsville, Maryland. Last revised September 2015.
+
+[^killing]: Greg R. Pohl, “Why We Kill Bugs: The Case for Collecting Insects”, *Newsletter of the Biological Survey of Canada (Terrestrial Arthropods)* 28, no. 1, pages 10–17.
+
+[^catching]: Droege and others, *The Very Handy Manual*, pages 3–6.
+
+[^photography]: Droege and others, *The Very Handy Manual*, page 36.

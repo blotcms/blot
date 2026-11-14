@@ -1,7 +1,13 @@
 module.exports = {
-  bjorn: {
-    title: "Björn Allard",
-    template: "SITE:portfolio",
+  bees: {
+    title: "Bees",
+    template: "SITE:studio",
+    menu: [
+      { url: "/", label: "Home", id: "home" },
+      { url: "/archives", label: "Archives", id: "archives" },
+      { url: "/search", label: "Search", id: "search" },
+      { url: "/about", label: "About", id: "/Pages/About.txt" },
+    ],
   },
   clara: {
     title: "Clara Xiao",
@@ -38,9 +44,15 @@ module.exports = {
     title: "Sergey Prokudin-Gorsky",
     template: "SITE:album",
   },
-  thoughtforms: {
-    title: "Thought-forms",
-    template: "SITE:studio",
+  sky: {
+    title: "Skies",
+    template: "SITE:gallery",
+    menu: [
+      { url: "/", label: "Home", id: "home" },
+      { url: "/archives", label: "Archives", id: "archives" },
+      { url: "/search", label: "Search", id: "search" },
+      { url: "/about", label: "About", id: "/Pages/About.txt" },
+    ],
   },
   hypertext: {
     title: "Richard Waller",
