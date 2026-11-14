@@ -5,10 +5,11 @@ const root = require("helper/rootDir");
 const fs = require("fs-extra");
 const demoFolders = require("./demoFolders");
 const IMAGE_DIRECTORY = root + "/app/views/images/examples";
-// Template gallery previews use a fixed 1060x780 viewport; this is independent
+// Template gallery previews use a fixed 1280x942 viewport, the 1060:780 shape
+// the brochure CSS expects (aspect-ratio: 2120 / 1560); this is independent
 // of entry thumbnail sizing or OG image dimensions.
-const TEMPLATE_SCREENSHOT_WIDTH = 1060;
-const TEMPLATE_SCREENSHOT_HEIGHT = 780;
+const TEMPLATE_SCREENSHOT_WIDTH = 1280;
+const TEMPLATE_SCREENSHOT_HEIGHT = 942;
 
 // These previews are served by a local server we start ourselves, so there is
 // nothing to be polite to: take several at once and drop the pacing that
