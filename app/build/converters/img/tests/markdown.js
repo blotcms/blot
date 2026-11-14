@@ -85,6 +85,36 @@ describe("img ImageDescription Markdown", function () {
       );
     });
 
+    it("turns wikilinks into the markup the wikilinks plugin resolves", function () {
+      expect(render("See [[Target]] and [[Target|the target]]")).toEqual(
+        'See <a href="Target" title="wikilink">Target</a> and <a href="Target" title="wikilink">the target</a>'
+      );
+      expect(render("**[[Target]]**")).toEqual(
+        '<strong><a href="Target" title="wikilink">Target</a></strong>'
+      );
+      expect(render("[[ /Sub/Target.txt | text ]]")).toEqual(
+        '<a href="/Sub/Target.txt" title="wikilink">text</a>'
+      );
+    });
+
+    it("turns embedded wikilinks into images", function () {
+      expect(render("![[photo.jpg|A photo]]")).toEqual(
+        '<img src="photo.jpg" title="wikilink" alt="A photo">'
+      );
+    });
+
+    it("escapes a wikilink's target and text", function () {
+      expect(render('[[Ann & "co" <x>]]')).toEqual(
+        '<a href="Ann &amp; &quot;co&quot; &lt;x&gt;" title="wikilink">Ann &amp; &quot;co&quot; &lt;x&gt;</a>'
+      );
+    });
+
+    it("leaves incomplete wikilinks as written", function () {
+      expect(render("[[]]")).toEqual("[[]]");
+      expect(render("[[open")).toEqual("[[open");
+      expect(render("[[across\nlines]]")).toEqual("[[across<br>lines]]");
+    });
+
     it("renders images", function () {
       expect(render("![alt](https://example.com/a.png)")).toEqual(
         '<img src="https://example.com/a.png" alt="alt">'

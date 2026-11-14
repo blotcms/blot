@@ -4,6 +4,8 @@ var Dependencies = require("./dependencies");
 var Plugins = require("./plugins").convert;
 var ensure = require("helper/ensure");
 var enabledConverters = require("./converters/enabled");
+var cheerio = require("cheerio");
+var wikilinks = require("./plugins/wikilinks");
 
 // Resolves to [html, metadata, stat, dependencies, extras].
 async function single(blog, path) {
@@ -61,12 +63,43 @@ async function single(blog, path) {
   debug("Blog:", blog.id, path, "finished plugins");
 
   html = fixMustache(pluginHTML);
+  newDependencies = newDependencies.concat(
+    await descriptionWikilinks(blog, path, extras)
+  );
   dependencies = Array.from(new Set(dependencies.concat(newDependencies)));
 
   return [html, metadata, stat, dependencies, extras];
 }
 
 module.exports = single;
+
+// An image's ImageDescription is Markdown (converters/img/markdown.js) kept
+// in extras.exif, outside the HTML the plugins see, so its wikilinks are
+// resolved here. Resolves to the dependencies they add.
+async function descriptionWikilinks(blog, path, extras) {
+  var description = extras && extras.exif && extras.exif.ImageDescription;
+
+  if (typeof description !== "string" || description.indexOf("wikilink") < 0)
+    return [];
+
+  if (
+    !blog.plugins ||
+    !blog.plugins.wikilinks ||
+    !blog.plugins.wikilinks.enabled
+  )
+    return [];
+
+  try {
+    var $ = cheerio.load(description, { decodeEntities: false }, false);
+    var result = await wikilinks.render($, { blogID: blog.id, path: path });
+    extras.exif.ImageDescription = $.html();
+    return (result && result.newDependencies) || [];
+  } catch (err) {
+    // Like a plugin that fails, the description is left as it is
+    debug("Blog:", blog.id, path, "description wikilinks error", err);
+    return [];
+  }
+}
 
 function fixMustache(str) {
   return str.split("{{&gt;").join("{{>");
