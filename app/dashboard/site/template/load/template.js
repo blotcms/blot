@@ -117,9 +117,11 @@ module.exports = async function (req, res, next) {
 
     req.template = res.locals.template = hydrated;
 
-    res.locals.base = `${req.protocol}://${req.hostname}${
-      req.baseUrl
-    }/${encodeURIComponent(req.params.templateSlug)}`;
+    // Relative, and built from the encoded slug: the Host header and the
+    // decoded param both end up unescaped in attributes ({{{base}}})
+    res.locals.base = `${req.baseUrl}/${encodeURIComponent(
+      req.params.templateSlug
+    )}`;
     // used to filter messages sent from the iframe which contains a preview of the
     // template in the template editor, such that we only save the pages which are
     // part of the template.
