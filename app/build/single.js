@@ -6,7 +6,8 @@ var ensure = require("helper/ensure");
 var enabledConverters = require("./converters/enabled");
 
 // Resolves to [html, metadata, stat, dependencies, extras].
-async function single(blog, path) {
+// options.inFolderPost is set for each file of a folder post (multiple.js).
+async function single(blog, path, options = {}) {
   ensure(blog, "object").and(path, "string");
 
   // No two converters take the same file extension
@@ -56,6 +57,13 @@ async function single(blog, path) {
 
   // We pass the contents to the plugins for
   // this blog. The resulting HTML is now ready.
+  // A photo's caption is only for a post made from one image file. The
+  // images of a folder post keep the captions they had.
+  if (extras && extras.caption && options.inFolderPost) {
+    extras = Object.assign({}, extras);
+    delete extras.caption;
+  }
+
   var [pluginHTML, newDependencies] = await Plugins(blog, path, html, {
     caption: extras && extras.caption,
   });

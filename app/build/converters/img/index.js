@@ -100,7 +100,8 @@ async function read(blog, path) {
       extras = {};
       if (Object.keys(metadata.exif).length) extras.exif = metadata.exif;
       // The Caption plugin shows it under the image, and it becomes the
-      // post's summary (build/single.js, build/prepare)
+      // post's summary (build/single.js, build/prepare). Folder posts
+      // leave it out.
       if (captionHTML) extras.caption = captionHTML;
       if (!Object.keys(extras).length) extras = undefined;
     }

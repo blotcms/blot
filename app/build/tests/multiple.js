@@ -54,6 +54,25 @@ describe("build multiple", function () {
     expect(entry.dependencies).toEqual(["/album+/cover.jpg"]);
   });
 
+  it("leaves the photo's caption out of a folder post", async function () {
+    var root = "/photos+";
+
+    await folder.write(this.blog.id, path.join(root, "notes.md"), "Notes");
+    await folder.writeFrom(
+      this.blog.id,
+      path.join(root, "photos.jpg"),
+      path.join(__dirname, "../converters/img/tests/captions/photos.jpg")
+    );
+
+    this.blog.plugins.imageCaption.enabled = true;
+
+    var entry = await this.buildEntry("/photos+");
+
+    expect(entry.caption).toEqual("");
+    expect(entry.html).toContain('<span class="caption">photos</span>');
+    expect(entry.html).not.toContain("Point Reyes</strong>");
+  });
+
   it("builds the aggregated entry when a child file is targeted", async function () {
     var root = "/note+";
 
