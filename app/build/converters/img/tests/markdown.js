@@ -79,6 +79,12 @@ describe("img ImageDescription Markdown", function () {
       );
     });
 
+    it("leaves raw HTML which spans lines as written", function () {
+      expect(render('<a\nhref="/about">About</a>\nnext')).toEqual(
+        '<a\nhref="/about">About</a><br>next'
+      );
+    });
+
     it("renders images", function () {
       expect(render("![alt](https://example.com/a.png)")).toEqual(
         '<img src="https://example.com/a.png" alt="alt">'

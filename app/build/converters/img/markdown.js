@@ -10,6 +10,16 @@ const MAX_LENGTH = 4096;
 // the rest of a post, raw HTML in a description is passed through as written.
 const markdown = new Marked({ gfm: false, breaks: false, async: false });
 
+// A line break in the text becomes <br>. Raw HTML, which can span lines,
+// is left as written.
+markdown.use({
+  renderer: {
+    text(text) {
+      return text.replace(/\n/g, "<br>");
+    },
+  },
+});
+
 // Returns the description as written, trimmed, or null when it is missing
 // or blank.
 function clean(description) {
@@ -34,10 +44,7 @@ function render(description) {
   const text = clean(description);
   if (!text) return null;
 
-  return markdown
-    .parseInline(text)
-    .replace(/<br>\n/g, "<br>")
-    .replace(/\n/g, "<br>");
+  return markdown.parseInline(text);
 }
 
 module.exports = { clean, render };
