@@ -315,29 +315,29 @@ async function checkNginxAndOpenresty() {
   }
 
   if (pins.openresty) {
-    await source("OpenResty tags (GitHub)", async () => {
-      const tags = await (
-        await get(
-          "https://api.github.com/repos/openresty/openresty/tags?per_page=30",
-          { accept: "application/vnd.github+json" }
-        )
-      ).json();
-      const vers = tags
-        .map((t) => t.name.replace(/^v/, ""))
-        .filter((v) => /^\d+\.\d+\.\d+\.\d+$/.test(v))
-        .sort((a, b) => cmp(b, a));
-      if (!vers.length) throw new Error("no tags");
+    await source("OpenResty releases (openresty.org)", async () => {
+      const html = await (
+        await get("https://openresty.org/en/download.html")
+      ).text();
+      const vers = [
+        ...new Set(
+          [...html.matchAll(/openresty-(\d+\.\d+\.\d+\.\d+)\.tar\.gz/g)].map(
+            (m) => m[1]
+          )
+        ),
+      ].sort((a, b) => cmp(b, a));
+      if (!vers.length) throw new Error("no releases listed");
       if (cmp(vers[0], pins.openresty) > 0) {
         add(
           "watch",
           "OpenResty: pinned " +
             pins.openresty +
-            ", newest tag " +
+            ", newest release " +
             vers[0] +
             " (read release notes for security fixes)"
         );
       } else {
-        add("ok", "OpenResty " + pins.openresty + " is the newest tag");
+        add("ok", "OpenResty " + pins.openresty + " is the newest release");
       }
     });
   }
