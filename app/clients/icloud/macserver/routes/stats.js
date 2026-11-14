@@ -5,6 +5,7 @@ import { statfs as statfsSync } from "fs";
 import { iCloudDriveDirectory } from "../config.js";
 import clfdate from "../util/clfdate.js";
 import processStats from "../util/processStats.js";
+import availableMemory from "../util/availableMemory.js";
 
 const statfs = promisify(statfsSync);
 
@@ -39,6 +40,15 @@ export default async (req, res) => {
     Object.assign(result, processStats());
   } catch (error) {
     console.error(clfdate(), `Error getting CPU and memory: ${error}`);
+  }
+
+  try {
+    if (result.host_memory_total_bytes > 0)
+      result.host_memory_available_bytes = await availableMemory(
+        result.host_memory_total_bytes
+      );
+  } catch (error) {
+    console.error(clfdate(), `Error getting available memory: ${error}`);
   }
 
   try {
