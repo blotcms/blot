@@ -514,6 +514,7 @@
 
   function fillInfo(entry) {
     hideLinkCard();
+    lightbox.scrollTop = 0; // each post starts with its image in full view
     if (!infoPanel) return;
     const body = entry.link.dataset.html ? entryHTML(entry.link) : null;
     // A bookmark's screenshot is on screen; its link becomes a button to the site.
@@ -931,6 +932,9 @@
   let panMotion = null;
   let panFrame = 0;
   let pinch = null;
+  let dragX = 0; // a drag down to close moves the image with the finger
+  let dragY = 0;
+  let dragDown = null;
   let lastTap = null;
   let lastDoubleTapAt = 0;
   const pointers = new Map();
@@ -938,6 +942,8 @@
   const zoomed = () => zoomLevel > 1.001;
   const clampValue = (value, low, high) => Math.min(high, Math.max(low, value));
   const pullAmount = (distance) => (160 * distance) / (distance + 160);
+  // How far a drag down to close has gone, from 0 to 1 at 60% of the screen's height.
+  const dragProgress = () => (dragY > 0 ? Math.min(1, dragY / (lightbox.clientHeight * 0.6)) : 0);
 
   // Where the image's centre sits on screen with no zoom or pan applied.
   function baseCenter() {
@@ -976,8 +982,13 @@
 
   function renderZoom() {
     const pullScale = reducedMotion.matches ? 1 : 1 - pullAmount(exitPull) / 500;
-    const moved = zoomed() || panX || panY || pullScale !== 1;
-    lightboxImage.style.transform = moved ? `translate3d(${panX}px, ${panY}px, 0) scale(${zoomLevel * pullScale})` : "";
+    const drag = dragProgress();
+    const dragScale = 1 - drag * 0.3;
+    const moved = zoomed() || panX || panY || dragX || dragY || pullScale !== 1;
+    lightboxImage.style.transform = moved ? `translate3d(${panX + dragX}px, ${panY + dragY}px, 0) scale(${zoomLevel * pullScale * dragScale})` : "";
+    lightbox.style.setProperty("--drag", drag.toFixed(3));
+    // Zoomed in, the image has the whole screen, so the details scrolled up out of the way come back.
+    if (zoomed() && lightbox.scrollTop) lightbox.scrollTop = 0;
     lightbox.classList.toggle("is-zoomed", zoomed());
     zoomOutButton.disabled = !zoomed();
     zoomInButton.disabled = zoomLevel >= MAX_ZOOM - 0.001;
@@ -1046,6 +1057,10 @@
     pointers.clear();
     pinch = null;
     pulledClosed = false;
+    dragDown = null;
+    dragX = 0;
+    dragY = 0;
+    lightbox.classList.remove("is-dragging-down");
     renderZoom();
   }
 
@@ -1304,6 +1319,90 @@
   }
   lightbox.addEventListener("pointerup", releasePointer);
   lightbox.addEventListener("pointercancel", releasePointer);
+
+  // On touch screens, dragging the image down closes the viewer, as in a photo app: the image
+  // follows the finger and shrinks, the page shows through, and letting go far enough or with
+  // a flick closes it; otherwise it springs back. With the details open on a phone the viewer
+  // scrolls, so the drag only takes over when it is already at the top.
+  const DRAG_CLOSE_DISTANCE = 110;
+  const DRAG_CLOSE_SPEED = 0.6; // px per ms
+
+  function springBackDrag() {
+    dragDown = null;
+    if (!dragX && !dragY) return;
+    dragX = 0;
+    dragY = 0;
+    animateZoom();
+    lightbox.classList.remove("is-dragging-down");
+    renderZoom();
+  }
+
+  lightbox.addEventListener(
+    "touchstart",
+    (event) => {
+      dragDown = null;
+      if (event.touches.length !== 1 || zoomed() || lightboxBusy() || pulledClosed) return;
+      if (event.target.closest("button, a, .zoom-controls, .lightbox-info")) return;
+      const touch = event.touches[0];
+      dragDown = { startX: touch.clientX, startY: touch.clientY, active: false, samples: [] };
+    },
+    { passive: true }
+  );
+
+  lightbox.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!dragDown) return;
+      if (event.touches.length !== 1 || zoomed()) {
+        springBackDrag();
+        return;
+      }
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - dragDown.startX;
+      const deltaY = touch.clientY - dragDown.startY;
+      if (!dragDown.active) {
+        if (Math.hypot(deltaX, deltaY) < 8) return;
+        // Mostly downwards, with nothing above to scroll back to: a drag to close.
+        if (deltaY <= 0 || Math.abs(deltaY) < Math.abs(deltaX) * 1.2 || lightbox.scrollTop > 0) {
+          dragDown = null;
+          return;
+        }
+        dragDown.active = true;
+        lightboxGesture = null; // not a swipe to the next image
+        suppressLightboxClickUntil = Number.POSITIVE_INFINITY;
+        lightbox.classList.add("is-dragging-down");
+      }
+      event.preventDefault();
+      dragX = deltaX;
+      dragY = deltaY;
+      dragDown.samples.push({ y: touch.clientY, time: event.timeStamp });
+      while (dragDown.samples.length > 2 && event.timeStamp - dragDown.samples[0].time > 100) dragDown.samples.shift();
+      renderZoom();
+    },
+    { passive: false }
+  );
+
+  const endDragDown = (event) => {
+    if (!dragDown) return;
+    const gesture = dragDown;
+    if (!gesture.active) {
+      dragDown = null;
+      return;
+    }
+    suppressLightboxClickUntil = performance.now() + 350;
+    const first = gesture.samples[0];
+    const last = gesture.samples[gesture.samples.length - 1];
+    const speed = first && last && last.time > first.time ? (last.y - first.y) / (last.time - first.time) : 0;
+    if (event.type === "touchend" && (dragY > DRAG_CLOSE_DISTANCE || (speed > DRAG_CLOSE_SPEED && dragY > 30))) {
+      dragDown = null;
+      pulledClosed = true;
+      void requestClose(); // closes from where the finger left the image
+      return;
+    }
+    springBackDrag();
+  };
+  lightbox.addEventListener("touchend", endDragDown);
+  lightbox.addEventListener("touchcancel", endDragDown);
 
   // With the details open, a click on the image zooms in on the place clicked. The swipe
   // captures the pointer on the frame, so the click arrives there: check it hit the image.

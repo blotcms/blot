@@ -1302,9 +1302,10 @@ code {
   justify-items: stretch;
 }
 
-/* Fade a full-screen layer's opacity instead of repainting a background colour. */
+/* Fade a full-screen layer's opacity instead of repainting a background colour. Fixed, so
+   it stays put when the viewer scrolls on a phone. */
 .lightbox::before {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: -1;
   background: {{background_color}};
@@ -1315,6 +1316,23 @@ code {
 
 .lightbox.is-revealed::before {
   opacity: 1;
+}
+
+/* Dragging the image down to close lets the page show through, and the controls fade
+   first. Letting go springs them back, or the close carries on from here. */
+.lightbox.is-dragging-down.is-revealed::before {
+  opacity: calc(1 - var(--drag, 0));
+  transition: none;
+}
+
+.lightbox.is-dragging-down.is-revealed :is(.lightbox-caption, .lightbox-info, .lightbox-info-index) {
+  opacity: max(0, 1 - var(--drag, 0) * 3);
+  transition: none;
+}
+
+.lightbox.is-dragging-down.is-revealed :is(.lightbox-close, .lightbox-info-button, .lightbox-step) {
+  opacity: max(0, 0.65 - var(--drag, 0) * 2);
+  transition: none;
 }
 
 .lightbox.is-closing,
@@ -2102,6 +2120,43 @@ html {
 
   .lightbox.has-info .zoom-controls {
     bottom: calc(40dvh + 0.5rem);
+  }
+
+  /* The viewer scrolls like a page: the details run on below the image at full length, and
+     scrolling moves the image up out of the way. Zoomed in, it stops, so pinches and pans
+     have the image. The close button and the index stay put. */
+  .lightbox.has-info[open]:not(.is-zoomed) {
+    grid-template-rows: var(--lightbox-top-gutter) calc(100% - var(--lightbox-top-gutter) - 40dvh) auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    touch-action: pan-y;
+  }
+
+  .lightbox.has-info[open]:not(.is-zoomed)::-webkit-scrollbar {
+    display: none;
+  }
+
+  .lightbox.has-info:not(.is-zoomed) .lightbox-info {
+    min-height: 40dvh;
+    overflow: visible;
+  }
+
+  .lightbox.has-info:not(.is-zoomed) .lightbox-info-scroll {
+    flex: 1 0 auto;
+    overflow: visible;
+    padding-bottom: calc(44px + var(--edge-y));
+    mask-image: none;
+  }
+
+  .lightbox.has-info:not(.is-zoomed) :is(.lightbox-close, .lightbox-info-button) {
+    position: fixed;
+  }
+
+  .lightbox.has-info:not(.is-zoomed) .lightbox-info-index {
+    position: fixed;
+    background: linear-gradient(rgba({{#rgb}}{{background_color}}{{/rgb}}, 0), rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.85) 50%);
   }
 }
 
