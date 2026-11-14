@@ -189,7 +189,10 @@ TemplateEditor.route("/:templateSlug/install")
 
       function redirect() {
         res.redirect(
-          "/sites/" + req.blog.handle + "/template/" + req.params.templateSlug
+          "/sites/" +
+            req.blog.handle +
+            "/template/" +
+            encodeURIComponent(req.params.templateSlug)
         );
       }
     }, next);

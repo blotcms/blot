@@ -63,7 +63,10 @@ server.get("/clients/google-drive/authenticate", (req, res) => {
 // This is sent by Dropbox to verify a webhook when first added
 server.get("/clients/dropbox/webhook", (req, res, next) => {
   if (!req.query || !req.query.challenge) return next();
-  res.send(req.query.challenge);
+  // Echo as plain text so the challenge can't be rendered as HTML
+  res.set("Content-Type", "text/plain");
+  res.set("X-Content-Type-Options", "nosniff");
+  res.send(String(req.query.challenge));
 });
 
 server.use(
