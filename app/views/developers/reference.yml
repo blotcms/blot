@@ -300,6 +300,13 @@
           - GPSAltitude
           - GPSPosition
 
+    - name: caption
+      type: string
+      description: |
+        For a post made from an image file, the photo's caption (its description in EXIF, IPTC or XMP, as Apple Photos and Lightroom write it), as HTML. The caption may use inline Markdown: bold, italic, links and code. It is read only when the EXIF setting is `basic` or `full`, and is empty when the photo has none or only the default description some cameras write ("SONY DSC"). `exif.ImageDescription` holds the EXIF description, including a camera's default.
+      example: |
+        {{#entry.caption}}<p>{{{entry.caption}}}</p>{{/entry.caption}}
+
     - name: name
       type: string
       description: The file’s name, preserving the case where possible.

@@ -1,9 +1,9 @@
 const cheerio = require("cheerio");
 const { render } = require("./index.js");
 
-const runTest = async (html) => {
+const runTest = async (html, options = {}) => {
   const $ = cheerio.load(html);
-  await render($, {});
+  await render($, options);
   return $.html();
 };
 
@@ -12,6 +12,16 @@ describe("imageCaption plugin", function () {
     const html = '<img src="a.jpg" title="A title">';
     const output = await runTest(html);
     expect(output).toContain('<span class="caption">A title</span>');
+  });
+
+  it("uses the photo's caption of an image file over its title", async () => {
+    const html = '<img src="/IMG_2041.jpg" title="IMG 2041" alt="IMG 2041">';
+    const caption = 'Sunset by <a href="https://ann.example">Ann</a>';
+    const output = await runTest(html, { caption });
+    expect(output).toContain('<span class="caption">' + caption + "</span>");
+    expect(output).not.toContain('<span class="caption">IMG 2041</span>');
+    // alt stays the title
+    expect(output).toContain('alt="IMG 2041"');
   });
 
   it("adds a caption from the alt attribute when there is no title", async () => {

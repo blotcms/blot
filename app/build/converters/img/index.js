@@ -46,8 +46,8 @@ async function read(blog, path) {
 
   const { stat } = await withLocalHeld(blog.id, path, async (localPath) => {
     // exiftool and the conversion are separate jails reading the same
-    // file, so they run side by side (parseExif never rejects)
-    const exifPromise = exif.parseExif(localPath, blog.imageExif);
+    // file, so they run side by side (readMetadata never rejects)
+    const metadataPromise = exif.readMetadata(localPath, blog.imageExif);
 
     const convert = async () => {
       if (EXTENSIONS_TO_CONVERT.includes(extname(path).toLowerCase())) {
@@ -93,11 +93,15 @@ async function read(blog, path) {
     try {
       await convert();
     } finally {
-      const parsedExif = await exifPromise;
+      const metadata = await metadataPromise;
 
-      extras = Object.keys(parsedExif).length
-        ? { exif: parsedExif }
-        : undefined;
+      extras = {};
+      if (Object.keys(metadata.exif).length) extras.exif = metadata.exif;
+      // The Caption plugin shows it under the image in place of the
+      // filename, and it becomes the post's summary (build/single.js,
+      // build/prepare). Folder posts leave it out.
+      if (metadata.caption) extras.caption = metadata.caption;
+      if (!Object.keys(extras).length) extras = undefined;
     }
   });
 

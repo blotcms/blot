@@ -49,6 +49,8 @@ describe("folderAssets plugin", function () {
       expect(description).toContain('alt="Detail"');
       expect(description).toContain('href="/photos/missing.pdf"');
       expect(description).toContain('href="https://example.com"');
+      // The caption is baked the same way
+      expect(entry.caption).toEqual(description);
 
       expect(entry.dependencies).toContain("/photos/original.zip");
       expect(entry.dependencies).toContain("/photos/detail.jpg");

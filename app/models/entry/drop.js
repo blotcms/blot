@@ -44,6 +44,7 @@ function sanitize(entry) {
     updated: updated,
     metadata: {},
     exif: {},
+    caption: "",
   };
 }
 
