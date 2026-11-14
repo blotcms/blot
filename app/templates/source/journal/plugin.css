@@ -13,7 +13,31 @@
 .katex {font-size: 1.2em}
 
 /* IMAGE CAPTION */
-.caption {display: block;}
+.caption,
+figcaption {
+  display: block;
+  max-width: 36em;
+  margin-top: 0.35em;
+  /* Padding, not margin: a margin would collapse into the paragraph's */
+  padding-bottom: 0.6em;
+  font-size: 0.8em;
+  font-style: italic;
+  line-height: 1.45;
+  color: {{text_color}};
+  color: color-mix(in srgb, {{text_color}} 80%, transparent);
+  text-wrap: pretty;
+}
+
+/* Upright text inside an italic caption, e.g. a title in *stars* */
+.caption em,
+.caption i,
+figcaption em,
+figcaption i {font-style: normal;}
+
+.caption a,
+figcaption a {color: inherit;}
+
+figure {margin: 1.4rem 0;}
 
 /* TWITTER PLUGIN */
 blockquote.twitter-tweet {padding: 2em;}

@@ -1,19 +1,19 @@
 <a class="dim pv4 db lh-copy no-underline" href="{{{url}}}">
   <span class="db fr w-two-thirds">
-    <span class="db thumbnail-frame" style="max-height:23.4375rem;overflow:hidden">
+    <span class="db thumbnail-frame">
       {{#thumbnail.large}}
-      <img style="width:100%;vertical-align:bottom" src="{{{url}}}">
+      <img style="width:100%;height:auto;vertical-align:bottom" src="{{{url}}}">
       {{/thumbnail.large}}
       {{^thumbnail.large}}
       {{#thumbnail.medium}}
-      <img style="width:100%;vertical-align:bottom" src="{{{url}}}">
+      <img style="width:100%;height:auto;vertical-align:bottom" src="{{{url}}}">
       {{/thumbnail.medium}}
       {{/thumbnail.large}}
     </span>
   </span>
 
   <span class="db fl w-third">
-    <span class="mr4 fw9 black-80 db lh-title f3 mb3 tracked-tight">{{title}}</span>
+    <span class="cap-trim mr4 fw9 black-80 db lh-title f3 mb3 tracked-tight">{{title}}</span>
     {{#summary}}
     <span class="mr4 black-50 f6 lh-copy db" style="text-overflow:ellipsis;max-height:9.1875rem;overflow:hidden">{{summary}}</span>
     {{/summary}}

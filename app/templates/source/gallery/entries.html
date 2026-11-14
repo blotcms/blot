@@ -5,25 +5,15 @@
 
     {{> header}}
 
-    {{#posts}}
-      {{> item}}
-    {{/posts}}
+    <ul class="catalog" data-grid data-page="{{pagination.current}}" data-page-size="{{pagination.page_size}}" data-entries="{{pagination.total_entries}}">
+      {{#posts}}
+        {{> card}}
+      {{/posts}}
+    </ul>
 
-    <div class="clear"></div>
+    {{> pagination}}
 
-    {{#pagination}}
-    <div class="pagination">
-      {{#previous}}
-        <a href="/page/{{previous}}"><strong>← Previous</strong></a>
-      {{/previous}}
-      Page {{current}} of {{total}}
-      {{#next}}
-        <a href="/page/{{next}}"><strong>Next →</strong></a>
-      {{/next}}
-    </div>
-
-    {{/pagination}}
-
+    {{> lightbox}}
     {{> footer}}
   </body>
 </html>

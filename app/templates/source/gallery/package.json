@@ -22,17 +22,6 @@
       "font_size": 13
     },
     "profile_image": {},
-    "sticky_navigation": false,
-    "navigation_alignment": "justified",
-    "navigation_alignment_options": [
-      "justified",
-      "left",
-      "right",
-      "center"
-    ],
-    "show_tags_in_navigation": true,
-    "thumbnail_size": 120,
-    "thumbnail_size_range": [60, 160],
     "spacing": 2,
     "spacing_range": [0, 5],
     "demo_folder": "sky"

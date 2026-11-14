@@ -188,7 +188,7 @@ hr {
 
 ul.task-list { list-style-type: none; }
 
-.caption, blockquote {color: {{text_color}}}
+blockquote {color: {{text_color}}}
 
 blockquote {font-style: ;margin:21px 40px;}
 

@@ -10,15 +10,57 @@
 }
 
 a.footnote-back {background: none;margin-left: 0.33em;position: relative;top: 0.06em}
-ol.footnotes {padding: 0;font-size: 10px;color: #333}
-hr.footnote-seperator {margin: 4em 0 1em;width: 8em;}
+/* Notes at the end of a post: smaller and indented from the text */
+.footnotes,
+ol.footnotes {
+  margin-top: 3em;
+  margin-bottom: 2em;
+  font-size: 85%;
+  line-height: 1.5;
+}
+
+.footnotes ol {margin: 0;}
+
+.footnotes ol,
+ol.footnotes {padding-left: 2.5em;}
+
+.footnotes li {padding-left: 0.25em;}
+.footnotes li p {margin: 0 0 0.6em;}
+.footnotes li::marker {font-variant-numeric: tabular-nums;}
+.footnotes hr,
+hr.footnote-seperator {margin: 0 0 1.25em;}
+
+/* RULES */
+hr {
+  height: 0;
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--border-color);
+}
 
 
 /* MATHS */
 .katex {font-size: 1.2em}
 
-/* IMAGE CAPTION */
-.caption {display: block;}
+/* IMAGE CAPTION: same type and color as the post date label (.date-header span) */
+.caption,
+figcaption {
+  display: block;
+  margin-top: 0.5em;
+  /* Padding, not margin: a margin would collapse into the paragraph's */
+  padding-bottom: 0.6em;
+  font-size: 80%;
+  font-weight: normal;
+  line-height: 1.45;
+  color: var(--sidebar-link-color);
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+  text-wrap: pretty;
+}
+
+.caption a,
+figcaption a {color: inherit;}
 
 /* TWITTER PLUGIN */
 blockquote.twitter-tweet {padding: 2em;}
