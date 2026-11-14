@@ -2,17 +2,16 @@ import exec from "../exec.js";
 import { join } from "path";
 import { homedir } from "os";
 import fs from "fs-extra";
-import Bottleneck from "bottleneck";
 import status from "../httpClient/status.js";
 import { iCloudDriveDirectory } from "../config.js";
 import clfdate from "../util/clfdate.js";
-import trashFolder from "../util/trashFolder.js";
+import leaveFolder from "../util/leaveFolder.js";
+import finderLimiter from "../util/finderLimiter.js";
 
-// Only one setup can run at a time otherwise the apple script
-// might not work correctly or accept the wrong sharing link
-const setupLimiter = new Bottleneck({
-  maxConcurrent: 1,
-});
+// Only one setup can run at a time otherwise the apple script might not work
+// correctly or accept the wrong sharing link, and none while leaveFolder drives
+// Finder for a disconnect
+const setupLimiter = finderLimiter;
 
 // What the dashboard shows for each way accepting the sharing link can fail
 const SETUP_ERRORS = {
@@ -325,14 +324,15 @@ async function setupFolder(blogID, sharingLink) {
 
       // If there is already a folder with the blogID (an earlier share of a
       // reconnected blog), take it off this Mac without deleting the earlier
-      // share's files for its owner (util/trashFolder.js)
+      // share's files for its owner (util/leaveFolder.js). Setup already holds
+      // finderLimiter
       if (await fs.pathExists(newPath)) {
         const existing = (await fs.readdir(newPath)).length;
         console.error(
           clfdate(),
           `Replacing existing folder for ${blogID} (${existing} entries), share: ${await shareInfo(newPath)}`
         );
-        await trashFolder(newPath);
+        await leaveFolder(newPath, { root: iCloudDriveDirectory });
       }
 
       // Rename the folder
