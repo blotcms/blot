@@ -1,6 +1,14 @@
 var fs = require("fs-extra");
-var DataURI = require("datauri");
+var path = require("path");
 var CleanCSS = require("clean-css");
+
+const MIME_TYPES = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+};
 
 module.exports = async function () {
   var images = await fs.readdir(__dirname + "/images");
@@ -14,7 +22,10 @@ module.exports = async function () {
 
   for (const name of images) {
     if (css.indexOf(name) === -1) continue;
-    const datauri = await DataURI(__dirname + "/images/" + name);
+    const type = MIME_TYPES[path.extname(name).toLowerCase()];
+    if (!type) throw new Error("No MIME type for " + name);
+    const data = await fs.readFile(__dirname + "/images/" + name, "base64");
+    const datauri = "data:" + type + ";base64," + data;
 
     css = css.split(name).join(datauri);
   }
