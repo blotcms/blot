@@ -87,6 +87,7 @@ describe("img converter", function () {
 
     expect(extras).toEqual({
       exif: {
+        ImageDescription: "                               ",
         Make: "NIKON",
         Model: "COOLPIX P6000",
         ExposureTime: "1/178",
@@ -110,6 +111,7 @@ describe("img converter", function () {
 
     expect(extras).toEqual({
       exif: {
+        ImageDescription: "                               ",
         Make: "NIKON",
         Model: "COOLPIX P6000",
         ExposureTime: "1/178",

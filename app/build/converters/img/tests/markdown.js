@@ -11,17 +11,12 @@ describe("img ImageDescription Markdown", function () {
       expect(clean("\u0000\u0000")).toBeNull();
     });
 
-    it("drops the descriptions cameras write", function () {
-      expect(clean("OLYMPUS DIGITAL CAMERA")).toBeNull();
-      expect(clean("OLYMPUS DIGITAL CAMERA         ")).toBeNull();
-      expect(clean("SONY DSC")).toBeNull();
-      expect(clean("  SONY DSC  ")).toBeNull();
-      expect(clean("Exif_JPEG_PICTURE")).toBeNull();
-      expect(clean("JENOPTIK DIGITAL CAMERA")).toBeNull();
-    });
-
-    it("keeps a caption which mentions a camera", function () {
-      expect(clean("Shot on a SONY DSC")).toEqual("Shot on a SONY DSC");
+    it("keeps the descriptions cameras write", function () {
+      expect(clean("  SONY DSC  ")).toEqual("SONY DSC");
+      expect(render("OLYMPUS DIGITAL CAMERA")).toEqual(
+        "OLYMPUS DIGITAL CAMERA"
+      );
+      expect(render("Exif_JPEG_PICTURE")).toEqual("Exif_JPEG_PICTURE");
     });
 
     it("trims padding and normalises line endings", function () {
@@ -34,7 +29,7 @@ describe("img ImageDescription Markdown", function () {
   describe("render", function () {
     it("returns null when there is no caption", function () {
       expect(render(undefined)).toBeNull();
-      expect(render("SONY DSC")).toBeNull();
+      expect(render("   ")).toBeNull();
     });
 
     it("renders bold, italic, code and links", function () {

@@ -68,13 +68,9 @@ async function parseExif(filePath, mode = "off") {
       }
     }
 
-    // Rendered as inline Markdown. A camera's default description, or a
-    // blank one, is left out.
-    if ("ImageDescription" in result) {
-      const description = markdown.render(result.ImageDescription);
-      if (description) result.ImageDescription = description;
-      else delete result.ImageDescription;
-    }
+    // Rendered as inline Markdown. A blank description is left as it is.
+    const description = markdown.render(result.ImageDescription);
+    if (description) result.ImageDescription = description;
 
     return result;
   } catch {

@@ -3,23 +3,15 @@
 
 const { Marked } = require("marked");
 
-// Written by cameras into EXIF ImageDescription, not by a person
-const CAMERA_DEFAULTS = [
-  "OLYMPUS DIGITAL CAMERA",
-  "SONY DSC",
-  "EXIF_JPEG_PICTURE",
-  "JENOPTIK DIGITAL CAMERA",
-];
-
-// Longer than any caption a person writes, short enough to stay cheap
+// Longer than any description a person writes, short enough to stay cheap
 const MAX_LENGTH = 4096;
 
 // CommonMark, without GitHub's extensions (bare URLs, strikethrough). Like
-// the rest of a post, raw HTML in a caption is passed through as written.
+// the rest of a post, raw HTML in a description is passed through as written.
 const markdown = new Marked({ gfm: false, breaks: false, async: false });
 
-// Returns the caption as written, or null for a missing, blank or camera
-// default description.
+// Returns the description as written, trimmed, or null when it is missing
+// or blank.
 function clean(description) {
   if (typeof description !== "string") return null;
 
@@ -32,15 +24,14 @@ function clean(description) {
     .trim();
 
   if (!text) return null;
-  if (CAMERA_DEFAULTS.includes(text.toUpperCase())) return null;
 
   return text;
 }
 
 // Inline Markdown to HTML: bold, italic, links and code. Block syntax
 // (headings, lists, quotes) stays as written, and a line break becomes <br>.
-function render(caption) {
-  const text = clean(caption);
+function render(description) {
+  const text = clean(description);
   if (!text) return null;
 
   return markdown

@@ -164,6 +164,7 @@ describe("build", function () {
     var entry = await buildEntry(this.blog, path);
 
     expect(entry.exif).toEqual({
+      ImageDescription: "                               ",
       Make: "NIKON",
       Model: "COOLPIX P6000",
       ExposureTime: "1/178",
