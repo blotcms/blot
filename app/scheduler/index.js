@@ -23,6 +23,7 @@ const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
 const pruneTmp = require("./prune-tmp");
 const gitStoreMaintenance = require("./git-store-maintenance");
+const sweepICloudOrphans = require("clients/icloud/sweepOrphans");
 
 // If a disk has less than 2GB of space, we should notify the admin.
 const MINIMUM_DISK_SPACE_IN_K = 2 * 1024 * 1024;
@@ -215,6 +216,29 @@ module.exports = function () {
       console.log(clfdate(), "Re-armed", scheduled, "welcome email alarms");
     }
   );
+
+  // Remove macserver blog folders no connected blog owns (failed disconnects,
+  // deleted blogs). Hosts without a macserver (development) skip it.
+  if (config.icloud.server_address) {
+    console.log(clfdate(), "Scheduled daily iCloud orphan folder sweep");
+    lock.cron("icloud-orphan-sweep", { hour: 5, minute: 0 }, async function () {
+      try {
+        const result = await sweepICloudOrphans({ apply: true });
+        console.log(
+          clfdate(),
+          "iCloud orphan sweep:",
+          result.folders,
+          "folders,",
+          result.removed.length,
+          "removed,",
+          result.failed.length,
+          "failed" + (result.refused ? ", " + result.refused : "")
+        );
+      } catch (err) {
+        console.error(clfdate(), "iCloud orphan sweep failed", err);
+      }
+    });
+  }
 
   console.log(clfdate(), "Scheduled daily check of storage disk usage");
   // Checks one host's disk: scope "host" once BLOT_HOST_ID is set and there is
