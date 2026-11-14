@@ -6,9 +6,9 @@
     "hide_dates": false,
     "date_display": "dddd, MMMM D, YYYY",
     "author": "",
-    "background_color": "#FFF7ED",
-    "text_color": "#431407",
-    "accent_color": "#9A3412",
+    "background_color": "#F9F9F9",
+    "text_color": "#000000",
+    "accent_color": "#2B2B2B",
     "header_layout": "block",
     "header_layout_options": [
       "block",
