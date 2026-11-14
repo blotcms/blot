@@ -6,9 +6,7 @@
 //   - a Dockerfile gives one of the file's keys a default (they take build args);
 //   - a tracked file repeats a value instead of reading it, such as
 //     node:<NODE_VERSION>, node-version: <NODE_VERSION> or the minio image;
-//   - .github/actions/versions doesn't declare an output for every key;
-//   - BLOT_NODE_VERSION in config/environment.sh, a template copied to hosts
-//     that can't read the file, differs from NODE_VERSION.
+//   - .github/actions/versions doesn't declare an output for every key.
 // Run by CI (unit-image.yml) and by check-advisories.js.
 
 const fs = require("fs");
@@ -19,7 +17,7 @@ const { parse } = require("../versions");
 const ROOT = path.resolve(__dirname, "..", "..");
 
 // Not scanned for repeated values: dependencies and lockfiles, vendored
-// templates and fonts, history (TODO), and the two files that hold the values.
+// templates and fonts, history (TODO), and the file that holds the values.
 const SKIP = [
   "**/node_modules/**",
   "**/package-lock.json",
@@ -29,7 +27,6 @@ const SKIP = [
   "TODO",
   "**/CHANGELOG*",
   "config/versions.env",
-  "config/environment.sh",
   "scripts/security/check-versions.js",
 ];
 
@@ -132,20 +129,6 @@ function problems() {
     if (!new RegExp("^  " + key + ":$", "m").test(action))
       out.push(".github/actions/versions/action.yml: no output for " + key);
   }
-
-  // The host template can't read the file, so it must match
-  const env = fs.readFileSync(
-    path.join(ROOT, "config", "environment.sh"),
-    "utf8"
-  );
-  const host = env.match(/^export BLOT_NODE_VERSION=(\S+)/m);
-  if (!host || host[1] !== v.NODE_VERSION)
-    out.push(
-      "config/environment.sh: BLOT_NODE_VERSION is " +
-        (host ? host[1] : "missing") +
-        ", NODE_VERSION is " +
-        v.NODE_VERSION
-    );
 
   return out;
 }

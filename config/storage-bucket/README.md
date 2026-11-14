@@ -292,7 +292,7 @@ aws iam create-access-key --user-name blot-storage-app-<bucket>
 ## Configure the app
 
 Add these to the app host's environment file (the one passed to the containers
-with `--env-file`; see `config/environment.sh` for the full list), then deploy:
+with `--env-file`; see `config/secrets.env.example` for the full list), then deploy:
 
 | Variable | Value |
 | --- | --- |
