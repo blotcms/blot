@@ -6,6 +6,7 @@ var ensure = require("helper/ensure");
 var enabledConverters = require("./converters/enabled");
 var cheerio = require("cheerio");
 var wikilinks = require("./plugins/wikilinks");
+var bakeHTML = require("./plugins/folderAssets").bakeHTML;
 
 // Resolves to [html, metadata, stat, dependencies, extras].
 async function single(blog, path) {
@@ -64,7 +65,7 @@ async function single(blog, path) {
 
   html = fixMustache(pluginHTML);
   newDependencies = newDependencies.concat(
-    await descriptionWikilinks(blog, path, extras)
+    await description(blog, path, extras)
   );
   dependencies = Array.from(new Set(dependencies.concat(newDependencies)));
 
@@ -74,29 +75,48 @@ async function single(blog, path) {
 module.exports = single;
 
 // An image's ImageDescription is Markdown (converters/img/markdown.js) kept
-// in extras.exif, outside the HTML the plugins see, so its wikilinks are
-// resolved here. Resolves to the dependencies they add.
-async function descriptionWikilinks(blog, path, extras) {
-  var description = extras && extras.exif && extras.exif.ImageDescription;
+// in extras.exif, outside the HTML the plugins see. It goes through the
+// same steps as a post's body, in the same order: relative links resolved
+// against the image's path, wikilinks (when that plugin is enabled), and
+// folder files baked into CDN URLs. Resolves to the dependencies they add.
+async function description(blog, path, extras) {
+  var html = extras && extras.exif && extras.exif.ImageDescription;
 
-  if (typeof description !== "string" || description.indexOf("wikilink") < 0)
-    return [];
+  if (typeof html !== "string" || !html) return [];
 
-  if (
-    !blog.plugins ||
-    !blog.plugins.wikilinks ||
-    !blog.plugins.wikilinks.enabled
-  )
-    return [];
+  var newDependencies = [];
 
   try {
-    var $ = cheerio.load(description, { decodeEntities: false }, false);
-    var result = await wikilinks.render($, { blogID: blog.id, path: path });
-    extras.exif.ImageDescription = $.html();
-    return (result && result.newDependencies) || [];
+    var parsed = Dependencies(path, html, {});
+    html = parsed.html;
+    newDependencies = newDependencies.concat(parsed.dependencies);
+
+    if (
+      html.indexOf("wikilink") > -1 &&
+      blog.plugins &&
+      blog.plugins.wikilinks &&
+      blog.plugins.wikilinks.enabled
+    ) {
+      var $ = cheerio.load(html, { decodeEntities: false }, false);
+      var result = await wikilinks.render($, { blogID: blog.id, path: path });
+      html = $.html();
+      newDependencies = newDependencies.concat(
+        (result && result.newDependencies) || []
+      );
+    }
+
+    var baked = await bakeHTML(html, {
+      blogID: blog.id,
+      handle: blog.handle,
+      domain: blog.domain,
+      path: path,
+    });
+
+    extras.exif.ImageDescription = baked.html;
+    return newDependencies.concat(baked.dependencies);
   } catch (err) {
     // Like a plugin that fails, the description is left as it is
-    debug("Blog:", blog.id, path, "description wikilinks error", err);
+    debug("Blog:", blog.id, path, "description error", err);
     return [];
   }
 }
