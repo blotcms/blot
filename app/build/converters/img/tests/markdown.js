@@ -1,6 +1,6 @@
-const { clean, render } = require("../caption");
+const { clean, render } = require("../markdown");
 
-describe("img caption", function () {
+describe("img ImageDescription Markdown", function () {
   describe("clean", function () {
     it("returns null for missing and blank descriptions", function () {
       expect(clean(undefined)).toBeNull();

@@ -2,6 +2,7 @@
 
 const fs = require("node:fs/promises");
 const sandbox = require("sandbox");
+const markdown = require("./markdown");
 
 const BASIC_WHITELIST = [
   "Make",
@@ -24,11 +25,6 @@ const FULL_WHITELIST = [
   "GPSAltitude",
 ];
 
-// The photo's caption, from EXIF ImageDescription, IPTC Caption-Abstract or
-// XMP dc:description, reconciled by the Metadata Working Group's rules. It is
-// read whatever the EXIF setting, which is about camera details and location.
-const DESCRIPTION = "MWG:Description";
-
 // exiftool runs in the sandbox's exif job, which returns just these fields.
 // Any failure, sandbox or exiftool, is null.
 function execExifTool(filePath, fields) {
@@ -38,31 +34,27 @@ function execExifTool(filePath, fields) {
   );
 }
 
-// Resolves to { exif, description }: exif holds the fields the blog's EXIF
-// setting allows ({} when off), description is the photo's raw description or
-// undefined. Never rejects.
-async function readMetadata(filePath, mode = "off") {
-  const empty = { exif: {}, description: undefined };
+async function parseExif(filePath, mode = "off") {
+  if (mode === "off") return {};
 
-  if (!filePath || typeof filePath !== "string") return empty;
+  if (!filePath || typeof filePath !== "string") return {};
   try {
     const stat = await fs.stat(filePath).catch(() => null);
-    if (!stat || !stat.isFile() || stat.size === 0) return empty;
-
-    const whitelist =
-      mode === "full"
-        ? FULL_WHITELIST
-        : mode === "basic"
-          ? BASIC_WHITELIST
-          : [];
-    const raw =
-      (await execExifTool(filePath, [...whitelist, DESCRIPTION])) || {};
+    if (!stat || !stat.isFile() || stat.size === 0) return {};
+    const raw = await execExifTool(
+      filePath,
+      mode === "full" ? FULL_WHITELIST : BASIC_WHITELIST
+    );
 
     const result = {};
 
-    whitelist.forEach((key) => {
-      if (Object.prototype.hasOwnProperty.call(raw, key))
+    Object.keys(raw || {}).forEach((key) => {
+      if (
+        (mode === "full" && FULL_WHITELIST.includes(key)) ||
+        (mode === "basic" && BASIC_WHITELIST.includes(key))
+      ) {
         result[key] = raw[key];
+      }
     });
 
     // map FocalLength '50.0 mm' to '50'
@@ -76,22 +68,20 @@ async function readMetadata(filePath, mode = "off") {
       }
     }
 
-    const description =
-      typeof raw[DESCRIPTION] === "string" ? raw[DESCRIPTION] : undefined;
+    // Rendered as inline Markdown. A camera's default description, or a
+    // blank one, is left out.
+    if ("ImageDescription" in result) {
+      const description = markdown.render(result.ImageDescription);
+      if (description) result.ImageDescription = description;
+      else delete result.ImageDescription;
+    }
 
-    return { exif: result, description };
+    return result;
   } catch {
-    return empty;
+    return {};
   }
-}
-
-// Resolves to the fields the EXIF setting allows. Never rejects.
-async function parseExif(filePath, mode = "off") {
-  if (mode === "off") return {};
-  return (await readMetadata(filePath, mode)).exif;
 }
 
 module.exports = {
   parseExif,
-  readMetadata,
 };

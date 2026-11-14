@@ -87,7 +87,6 @@ describe("img converter", function () {
 
     expect(extras).toEqual({
       exif: {
-        ImageDescription: "                               ",
         Make: "NIKON",
         Model: "COOLPIX P6000",
         ExposureTime: "1/178",
@@ -111,7 +110,6 @@ describe("img converter", function () {
 
     expect(extras).toEqual({
       exif: {
-        ImageDescription: "                               ",
         Make: "NIKON",
         Model: "COOLPIX P6000",
         ExposureTime: "1/178",
@@ -126,76 +124,24 @@ describe("img converter", function () {
     });
   });
 
-  describe("captions", function () {
-    // Written with exiftool into copies of blast@2x.jpg and photo.heic
-    const SUNSET = "Sunset at **Point Reyes**, by [Ann](https://ann.example)";
-    const SUNSET_HTML =
-      'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a>';
+  it("renders ImageDescription as inline Markdown", async function () {
+    const test = this;
+    const path = "/described.jpg";
 
-    async function readCaptioned(test, name) {
-      const path = "/" + name;
-      await folder.writeFrom(
-        test.blog.id,
-        path,
-        __dirname + "/captions/" + name
-      );
-      return readAll(test.blog, path);
-    }
+    await folder.writeFrom(
+      test.blog.id,
+      path,
+      __dirname + "/descriptions/described.jpg"
+    );
 
-    it("renders the caption of a JPEG from Apple Photos", async function () {
-      const [err, html, , extras] = await readCaptioned(this, "photos.jpg");
-      if (err) throw err;
+    const [err, , , extras] = await readAll(test.blog, path);
+    if (err) throw err;
 
-      expect(extras).toEqual({
-        // The raw description, for templates which already print it
-        exif: { ImageDescription: SUNSET },
-        caption: SUNSET_HTML,
-      });
-
-      // alt and title stay the filename's title, never the caption
-      expect(html).toEqual(
-        '<img src="/photos.jpg" title="photos" alt="photos" />'
-      );
-    });
-
-    it("reads a caption written only to XMP, as in HEIC exports", async function () {
-      const [err, , , extras] = await readCaptioned(this, "photos.heic");
-      if (err) throw err;
-
-      expect(extras).toEqual({
-        caption: "IMG_2041_final_v2<br>second line",
-      });
-    });
-
-    it("reads the caption when EXIF is off", async function () {
-      this.blog.imageExif = "off";
-
-      const [err, , , extras] = await readCaptioned(this, "photos.jpg");
-      if (err) throw err;
-
-      expect(extras).toEqual({ caption: SUNSET_HTML });
-    });
-
-    it("ignores a camera's default description", async function () {
-      const [err, , , extras] = await readCaptioned(this, "camera.jpg");
-      if (err) throw err;
-
-      expect(extras).toEqual({
-        exif: {
-          Make: "OLYMPUS",
-          ImageDescription: "OLYMPUS DIGITAL CAMERA         ",
-        },
-      });
-    });
-
-    it("ignores a blank description", async function () {
-      const path = "/gps.jpg";
-      await folder.writeFrom(this.blog.id, path, __dirname + path);
-      this.blog.imageExif = "off";
-
-      const [err, , , extras] = await readAll(this.blog, path);
-      if (err) throw err;
-      expect(extras).toBeUndefined();
+    expect(extras).toEqual({
+      exif: {
+        ImageDescription:
+          'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a><br>IMG_2041_final_v2',
+      },
     });
   });
 

@@ -164,7 +164,6 @@ describe("build", function () {
     var entry = await buildEntry(this.blog, path);
 
     expect(entry.exif).toEqual({
-      ImageDescription: "                               ",
       Make: "NIKON",
       Model: "COOLPIX P6000",
       ExposureTime: "1/178",
@@ -173,56 +172,6 @@ describe("build", function () {
       Flash: "Off, Did not fire",
       FocalLength: 6,
     });
-  });
-
-  it("uses an image's photo caption as its caption and summary", async function () {
-    var path = "/photos.jpg";
-
-    await folder.writeFrom(
-      this.blog.id,
-      path,
-      require("path").join(
-        __dirname,
-        "../converters/img/tests/captions/photos.jpg"
-      )
-    );
-
-    this.blog.plugins.imageCaption.enabled = true;
-
-    var entry = await buildEntry(this.blog, path);
-    var caption =
-      'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a>';
-
-    expect(entry.caption).toEqual(caption);
-    expect(entry.summary).toEqual("Sunset at Point Reyes, by Ann");
-    expect(entry.title).toEqual("photos");
-    expect(entry.html).toContain(
-      '<span class="caption">' + caption + "</span>"
-    );
-    expect(entry.html).not.toContain('<span class="caption">photos</span>');
-    expect(entry.html).toContain('alt="photos"');
-    // The raw description stays as written
-    expect(entry.exif.ImageDescription).toEqual(
-      "Sunset at **Point Reyes**, by [Ann](https://ann.example)"
-    );
-  });
-
-  it("captions an image without a photo caption with its title", async function () {
-    var path = "/gps.jpg";
-
-    await folder.writeFrom(
-      this.blog.id,
-      path,
-      require("path").join(__dirname, "../converters/img/tests/gps.jpg")
-    );
-
-    this.blog.plugins.imageCaption.enabled = true;
-
-    var entry = await buildEntry(this.blog, path);
-
-    expect(entry.caption).toEqual("");
-    expect(entry.summary).toEqual("");
-    expect(entry.html).toContain('<span class="caption">gps</span>');
   });
 
   it("handles images with accents and spaces in their filename", async function () {

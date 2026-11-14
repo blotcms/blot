@@ -1,5 +1,5 @@
-// A photo's caption, from exiftool's MWG:Description, turned into the inline
-// HTML shown under an image post. build/prepare makes its summary from it.
+// A photo's EXIF ImageDescription, rendered as inline Markdown for
+// entry.exif.ImageDescription
 
 const { Marked } = require("marked");
 

@@ -151,20 +151,7 @@ function Prepare(entry, options = {}) {
           { decodeEntities: false, withDomLvl1: false },
           false
         );
-  // An image post has no text of its own, so its summary is the photo's
-  // caption (entry.caption, rendered HTML), without the title check: the
-  // title comes from the filename, and a caption can start with the same words
-  if (entry.caption) {
-    var $caption = cheerio.load(
-      entry.caption,
-      { decodeEntities: false, withDomLvl1: false },
-      false
-    );
-    $caption("br").replaceWith(" ");
-    entry.summary = Summary($caption, "");
-  } else {
-    entry.summary = Summary($summary, title || "");
-  }
+  entry.summary = Summary($summary, title || "");
   debug(entry.path, "Generated  summary");
 
   debug(entry.path, "Generating internal links");
