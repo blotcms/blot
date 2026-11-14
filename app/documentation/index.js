@@ -100,7 +100,15 @@ documentation.get("/templates", (req, res) => {
   res.render("templates/index");
 });
 
+// Route params and paths become view names, which res.render resolves on
+// disk. The proxy passes '../' through and Express decodes %2F in params.
+const SAFE_VIEW_NAME = /^[\w-]+$/;
+const isSafeViewPath = (view) =>
+  !view.includes("\\") &&
+  view.split("/").every((part) => part !== ".." && part !== ".");
+
 documentation.get("/templates/for-:type", (req, res, next) => {
+  if (!SAFE_VIEW_NAME.test(req.params.type)) return next();
   res.locals.hidebreadcrumbs = true;
   const view = `templates/for-${req.params.type}/index`;
   res.render(view, (err, html) => {
@@ -138,6 +146,7 @@ documentation.get("/templates/search/:query", async (req, res, next) => {
 });
 
 documentation.get("/templates/:template", (req, res, next) => {
+  if (!SAFE_VIEW_NAME.test(req.params.template)) return next();
   res.locals.layout = "partials/layout-full-screen";
   res.locals.host = config.host;
   const view = `templates/${req.params.template}/index`;
@@ -178,7 +187,7 @@ documentation.use(function (req, res, next) {
 documentation.use(function (req, res, next) {
   const view = trimLeadingAndTrailingSlash(req.path) || "index";
 
-  if (require("path").extname(view)) {
+  if (require("path").extname(view) || !isSafeViewPath(view)) {
     return next();
   }
 

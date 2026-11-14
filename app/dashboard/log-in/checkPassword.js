@@ -2,12 +2,13 @@ var User = require("models/user");
 var LogInError = require("./logInError");
 var authenticate = require("./authenticate");
 var { passwordIsTooLong } = require("models/user/auth-limits");
+var safeThen = require("./safeThen");
 
 module.exports = async function checkPassword(req, res, next) {
   try {
     var user = req.user;
     var password = req.body && req.body.password;
-    var then = req.query.then || req.body.then || "/sites";
+    var then = safeThen(req.query.then || req.body.then);
 
     if (password === "") {
       return next(new LogInError("NOPASSWORD"));

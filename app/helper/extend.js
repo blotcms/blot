@@ -19,6 +19,10 @@ function softMerge(a, b) {
   ensure(a, "object").and(b, "object");
 
   for (var i in b) {
+    // b can come from parsed JSON (template packages, form posts), where
+    // these keys would let a merge write into Object.prototype
+    if (i === "__proto__" || i === "constructor" || i === "prototype") continue;
+
     var aType = type(a[i]);
     var bType = type(b[i]);
 
