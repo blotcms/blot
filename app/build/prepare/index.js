@@ -155,8 +155,9 @@ function Prepare(entry, options = {}) {
   // caption (entry.caption, rendered HTML), without the title check: the
   // title comes from the filename, and a caption can start with the same words
   if (entry.caption) {
+    // In a <p>, since Summary reads the text of top-level elements only
     var $caption = cheerio.load(
-      entry.caption,
+      "<p>" + entry.caption + "</p>",
       { decodeEntities: false, withDomLvl1: false },
       false
     );
