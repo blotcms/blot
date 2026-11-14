@@ -8,7 +8,7 @@
 // PNG per png size, in order; meta is null.
 
 const sharp = require("sharp");
-const toIco = require("to-ico");
+const toIco = require("./ico");
 const { normalizeShape, applyShape } = require("./image-mask");
 
 sharp.cache(false);
@@ -50,8 +50,7 @@ async function run(args, input) {
 
   // rotate() with no argument bakes in the EXIF orientation before we crop,
   // so the extraction rectangle lines up with what the user saw. ensureAlpha()
-  // guarantees 4-channel input: to-ico@1.1.5 mis-encodes 24-bit PNGs (e.g. a
-  // straight RGB JPEG upload) into a malformed ICO otherwise.
+  // makes every ICO entry a 32-bit PNG, as its directory entry says.
   const source = sharp(input, { pages: 1, limitInputPixels: MAX_PIXELS })
     .rotate()
     .ensureAlpha()
@@ -70,7 +69,7 @@ async function run(args, input) {
 
   const icoParts = [];
   for (const size of ico) icoParts.push(await render(size));
-  const outputs = [await toIco(icoParts)];
+  const outputs = [toIco(icoParts)];
   for (const size of png) outputs.push(await render(size));
   return { meta: null, outputs };
 }
