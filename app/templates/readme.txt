@@ -342,11 +342,11 @@ remaining_entries:
 {{#pagination}}
 
   {{#next}}
-    <a href="{{{url}}}">Next page</a>
+    <a href="/page/{{next}}">Next page</a>
   {{/next}}
 
   {{#previous}}
-    <a href="{{{url}}}">Previous page</a>
+    <a href="/page/{{previous}}">Previous page</a>
   {{/previous}}
 
 {{/pagination}}

@@ -202,7 +202,7 @@ Comments (Disqus plugin) are suppressed when entry metadata sets `Comments: No`,
 
 ### `routes/entries.js`
 
-Calls `models/entries.getPage()` with options derived from `req.template.locals` (`sort_by`, `sort_order`, `page_size`, `path_prefix`) and from `req.params.page` or `req.query.page`. Sets `res.locals.entries` and `res.locals.pagination` (documented in templates with snake_case fields such as `page_size` and `total_entries`; camelCase aliases still resolve for backwards compatibility). Renders `entries.html`.
+Calls `models/entries.getPage()` with options derived from `req.template.locals` (`sort_by`, `sort_order`, `page_size`, `path_prefix`) and from `req.params.page` or `req.query.page`. Sets `res.locals.entries` and `res.locals.pagination` (documented in templates with snake_case fields such as `page_size` and `total_entries`). Renders `entries.html`.
 
 ### `routes/view.js`
 
