@@ -83,6 +83,12 @@ echo "mount-instance-store / docker.service ordering installed."
 # does not exist (the Amazon Linux 2 app host) or /backups is already mounted.
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "if [ -e /etc/systemd/system/blot-instance-store.service ] && ! mountpoint -q /backups; then sudo systemctl start blot-instance-store.service || echo \"WARNING: /backups is not mounted; see journalctl -u blot-instance-store\"; fi"
 
+# Trim the instance store weekly with the stock fstrim.timer, which otherwise
+# trims only filesystems in /etc/fstab (see the drop-in). daemon-reload only:
+# the timer starts the service, and nothing here runs it.
+echo "Installing the fstrim.service.d drop-in on $PUBLIC_IP"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/fstrim.service.d && sudo cp /home/ec2-user/scripts/fstrim.service.d/10-instance-store.conf /etc/systemd/system/fstrim.service.d/10-instance-store.conf && sudo systemctl daemon-reload"
+
 # Remove the legacy mount-data-disk unit: its script was never part of this
 # directory and no longer exists on the host, so the unit only fails at boot.
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "if [ -f /etc/systemd/system/mount-data-disk.service ]; then sudo systemctl disable mount-data-disk.service || true; sudo rm -f /etc/systemd/system/mount-data-disk.service; fi"
