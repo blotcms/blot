@@ -88,6 +88,17 @@ function cancellationKey(guid) {
   return "newsletter:cancel:" + guid;
 }
 
+// Anyone can ask us to email any address from these forms, so each
+// address gets at most one email of each kind per EMAIL_COOLDOWN seconds.
+// A throttled request looks the same as a sent one.
+var EMAIL_COOLDOWN = 60 * 60; // 1 hour in seconds
+
+async function mayEmail(kind, email) {
+  var key = "newsletter:throttle:" + kind + ":" + email;
+  var set = await client.set(key, "1", { NX: true, EX: EMAIL_COOLDOWN });
+  return set === "OK";
+}
+
 function confirmationLink(guid) {
   return "https://" + config.host + "/news/confirm/" + guid;
 }
@@ -121,11 +132,12 @@ news.post("/cancel", parse, async function (req, res, next) {
     var isSubscribed = !!stat;
     if (!isSubscribed) throw new Error("No subscription found");
 
-    await client.setEx(cancellationKey(guid), TTL, email);
+    if (await mayEmail("cancel", email)) {
+      await client.setEx(cancellationKey(guid), TTL, email);
+      await Email.NEWSLETTER_CANCELLATION_CONFIRMATION(null, locals);
+    }
 
-    await Email.NEWSLETTER_CANCELLATION_CONFIRMATION(null, locals);
-
-    res.redirect("/news/cancel?email=" + email);
+    res.redirect("/news/cancel?email=" + encodeURIComponent(email));
   } catch (err) {
     next(err);
   }
@@ -206,11 +218,12 @@ news.post("/sign-up", parse, async function (req, res, next) {
     confirm = confirmationLink(guid);
     locals = { email: email, confirm: confirm };
 
-    await client.setEx(confirmationKey(guid), TTL, email);
+    if (await mayEmail("sign-up", email)) {
+      await client.setEx(confirmationKey(guid), TTL, email);
+      await Email.NEWSLETTER_SUBSCRIPTION_CONFIRMATION(null, locals);
+    }
 
-    await Email.NEWSLETTER_SUBSCRIPTION_CONFIRMATION(null, locals);
-
-    res.redirect("/news/sign-up?email=" + email);
+    res.redirect("/news/sign-up?email=" + encodeURIComponent(email));
   } catch (err) {
     next(err);
   }
