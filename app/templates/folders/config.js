@@ -2,6 +2,12 @@ module.exports = {
   bees: {
     title: "Bees",
     template: "SITE:studio",
+    menu: [
+      { url: "/", label: "Home", id: "home" },
+      { url: "/archives", label: "Archives", id: "archives" },
+      { url: "/search", label: "Search", id: "search" },
+      { url: "/about", label: "About", id: "/Pages/About.txt" },
+    ],
   },
   clara: {
     title: "Clara Xiao",
@@ -41,6 +47,12 @@ module.exports = {
   sky: {
     title: "Skies",
     template: "SITE:gallery",
+    menu: [
+      { url: "/", label: "Home", id: "home" },
+      { url: "/archives", label: "Archives", id: "archives" },
+      { url: "/search", label: "Search", id: "search" },
+      { url: "/about", label: "About", id: "/Pages/About.txt" },
+    ],
   },
   hypertext: {
     title: "Richard Waller",
