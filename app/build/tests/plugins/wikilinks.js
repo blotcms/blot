@@ -277,6 +277,48 @@ Heading Here
     });
   });
 
+  describe("in an image's EXIF ImageDescription", function () {
+    const image = require("path").join(
+      __dirname,
+      "../../converters/img/tests/descriptions/wikilink.jpg"
+    );
+
+    beforeEach(async function () {
+      await this.blog.write({
+        path: "/Target.txt",
+        content: "Link: target\n\n# Target\n\nThe linked file.",
+      });
+      await require("storage/folder").writeFrom(
+        this.blog.id,
+        "/Photo.jpg",
+        image
+      );
+      await this.blog.rebuild();
+    });
+
+    it("resolves wikilinks when the plugin is enabled", async function () {
+      this.blog.plugins.wikilinks = { enabled: true, options: {} };
+
+      const entry = await require("build")(this.blog, "/Photo.jpg");
+
+      expect(entry.exif.ImageDescription).toEqual(
+        'See <a href="/target" class="wikilink">Target</a> and <a href="/target" class="wikilink">the target</a>'
+      );
+      expect(entry.dependencies).toContain("/Target.txt");
+    });
+
+    it("leaves wikilinks unresolved when the plugin is disabled", async function () {
+      this.blog.plugins.wikilinks = { enabled: false, options: {} };
+
+      const entry = await require("build")(this.blog, "/Photo.jpg");
+
+      expect(entry.exif.ImageDescription).toEqual(
+        'See <a href="Target" title="wikilink">Target</a> and <a href="Target" title="wikilink">the target</a>'
+      );
+      expect(entry.dependencies).not.toContain("/Target.txt");
+    });
+  });
+
   it("will support media embedding", async function () {
     await this.blog.write({
       path: "/_Image.png",

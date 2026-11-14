@@ -26,6 +26,67 @@ describe("folderAssets plugin", function () {
     expect(entry.html).toMatch(tokenRegex("/photo\\.jpg"));
   });
 
+  describe("in an image's EXIF ImageDescription", function () {
+    // Its description is "[Original](original.zip), ![Detail](detail.jpg),
+    // [Missing](missing.pdf) and [Elsewhere](https://example.com)"
+    var image = require("path").join(
+      __dirname,
+      "../../../converters/img/tests/descriptions/relative.jpg"
+    );
+
+    beforeEach(async function () {
+      await folder.writeFrom(this.blog.id, "/photos/Sunset.jpg", image);
+      await folder.write(this.blog.id, "/photos/original.zip", "zip data");
+      await folder.write(this.blog.id, "/photos/detail.jpg", "fake image data");
+    });
+
+    it("resolves relative links against the image's folder and bakes them", async function () {
+      var entry = await buildEntry(this.blog, "/photos/Sunset.jpg");
+      var description = entry.exif.ImageDescription;
+
+      expect(description).toMatch(tokenRegex("/photos/original\\.zip"));
+      expect(description).toMatch(tokenRegex("/photos/detail\\.jpg"));
+      expect(description).toContain('alt="Detail"');
+      expect(description).toContain('href="/photos/missing.pdf"');
+      expect(description).toContain('href="https://example.com"');
+
+      expect(entry.dependencies).toContain("/photos/original.zip");
+      expect(entry.dependencies).toContain("/photos/detail.jpg");
+    });
+
+    it("bakes a new version when a linked file changes", async function () {
+      var first = await buildEntry(this.blog, "/photos/Sunset.jpg");
+
+      await folder.write(this.blog.id, "/photos/detail.jpg", "new image data");
+
+      var second = await buildEntry(this.blog, "/photos/Sunset.jpg");
+
+      expect(second.exif.ImageDescription).toMatch(
+        tokenRegex("/photos/detail\\.jpg")
+      );
+      expect(second.exif.ImageDescription).not.toEqual(
+        first.exif.ImageDescription
+      );
+    });
+
+    it("leaves a description without links as it was", async function () {
+      await folder.writeFrom(
+        this.blog.id,
+        "/photos/Plain.jpg",
+        require("path").join(
+          __dirname,
+          "../../../converters/img/tests/descriptions/described.jpg"
+        )
+      );
+
+      var entry = await buildEntry(this.blog, "/photos/Plain.jpg");
+
+      expect(entry.exif.ImageDescription).toEqual(
+        'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a><br>IMG_2041_final_v2'
+      );
+    });
+  });
+
   it("leaves non-matching/ENOENT links untouched", async function () {
     var path = "/Hello.txt";
     var contents = "[Missing](missing.pdf)";

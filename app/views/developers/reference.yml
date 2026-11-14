@@ -277,7 +277,7 @@
     - name: exif
       type: object
       description: |
-        Sanitized EXIF metadata populated for image-based entries when EXIF preservation is enabled. Configure this in your dashboard at **Settings → Images → Image metadata (EXIF)**. Default mode for new sites is `basic`. Use `off` to disable EXIF, `basic` for a privacy-preserving subset, or `full` to expose all parsed keys (including GPS fields).
+        Sanitized EXIF metadata populated for image-based entries when EXIF preservation is enabled. Configure this in your dashboard at **Settings → Images → Image metadata (EXIF)**. Default mode for new sites is `basic`. Use `off` to disable EXIF, `basic` for a privacy-preserving subset, or `full` to expose all parsed keys (including GPS fields). `ImageDescription` is rendered as inline Markdown (bold, italic, links and code), so print it with triple braces: `{{{ImageDescription}}}`.
       example: |
         {{#entry.exif}}
         {{Make}} {{Model}} — {{ExposureTime}}s at ƒ/{{FNumber}}, ISO {{ISO}}

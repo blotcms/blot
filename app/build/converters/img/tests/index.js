@@ -126,6 +126,27 @@ describe("img converter", function () {
     });
   });
 
+  it("renders ImageDescription as inline Markdown", async function () {
+    const test = this;
+    const path = "/described.jpg";
+
+    await folder.writeFrom(
+      test.blog.id,
+      path,
+      __dirname + "/descriptions/described.jpg"
+    );
+
+    const [err, , , extras] = await readAll(test.blog, path);
+    if (err) throw err;
+
+    expect(extras).toEqual({
+      exif: {
+        ImageDescription:
+          'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a><br>IMG_2041_final_v2',
+      },
+    });
+  });
+
   it("reuses cached conversions on repeat builds", async function () {
     const test = this;
     const relativePath = "/land.avif";
