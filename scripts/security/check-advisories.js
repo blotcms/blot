@@ -10,7 +10,7 @@
 //   --days N       ALAS look-back window (default 2)
 //   --json         machine-readable output
 //   --npm          also run `npm audit --omit=dev` in the repo root
-//   --dependabot   also summarise open Dependabot alerts via `gh api`
+//   --dependabot   also list open Dependabot alerts via `gh api`
 //   --code-scanning  also list open CodeQL alerts and the age of master's
 //                  last scan via `gh api`
 //
@@ -482,30 +482,40 @@ async function checkNpm() {
   });
 }
 
+// Lists each open alert, so the brief can say which are new since the last
+// run. Critical goes under ACTION NEEDED, everything else under WATCH.
 async function checkDependabot() {
   await source("Dependabot alerts (gh)", async () => {
-    const out = JSON.parse(
+    const alerts = JSON.parse(
       await run("gh", [
         "api",
         "repos/{owner}/{repo}/dependabot/alerts?state=open&per_page=100",
       ])
     );
-    const count = (s) =>
-      out.filter(
-        (a) => a.security_advisory && a.security_advisory.severity === s
-      ).length;
-    const crit = count("critical"),
-      high = count("high");
-    add(
-      crit ? "action" : high ? "watch" : "ok",
-      "Dependabot open alerts: critical " +
-        crit +
-        ", high " +
-        high +
-        " (of " +
-        out.length +
-        " open)"
-    );
+    for (const a of alerts) {
+      const sev = (a.security_advisory && a.security_advisory.severity) || "?";
+      const dep = a.dependency || {};
+      const fix =
+        a.security_vulnerability &&
+        a.security_vulnerability.first_patched_version;
+      add(
+        sev === "critical" ? "action" : "watch",
+        "Dependabot alert #" +
+          a.number +
+          " (" +
+          sev +
+          "): " +
+          ((dep.package && dep.package.name) || "?") +
+          " in " +
+          (dep.manifest_path || "?") +
+          (dep.scope === "development" ? " (dev)" : "") +
+          ", fixed in " +
+          ((fix && fix.identifier) || "no release yet") +
+          " " +
+          a.html_url
+      );
+    }
+    if (!alerts.length) add("ok", "Dependabot: no open alerts");
   });
 }
 
