@@ -7,6 +7,14 @@ describe("cdn/permaCache", function () {
   const folder = require("storage/folder");
   const contentVersion = require("helper/contentVersion");
   const permaCache = require("cdn/permaCache");
+  const client = require("models/client");
+  const crypto = require("crypto");
+  const fs = require("fs-extra");
+  const templateKey = require("models/template/key");
+  const documentationURL = require("documentation/tools/cdn-url-helper");
+  const { GLOBAL_STATIC_DIR } = require("blog/lib/staticPaths");
+
+  const noGenerated = () => (async function* () {})();
 
   const ROOT = "__bcdn_perma_cache__/";
   const BASE = ROOT + "pullzone__" + config.bunny.pull_zone + "__1/";
@@ -25,7 +33,9 @@ describe("cdn/permaCache", function () {
       ],
     };
 
-    for (const path of paths) {
+    for (const spec of paths) {
+      const path = typeof spec === "string" ? spec : spec.path;
+      const file = typeof spec === "string" ? {} : spec.file || {};
       const segments = path.slice(1).split("/");
       let dir = BASE;
 
@@ -38,7 +48,7 @@ describe("cdn/permaCache", function () {
         dir += name + "/";
       });
 
-      dirs[dir] = [{ name: "___file___", isDirectory: false }];
+      dirs[dir] = [{ name: "___file___", isDirectory: false, ...file }];
     }
 
     removed = [];
@@ -52,6 +62,10 @@ describe("cdn/permaCache", function () {
     const stat = await folder.stat(blogID, path, { sha1: true });
     return contentVersion.fromFolderRecord(stat);
   }
+
+  afterEach(async function () {
+    await client.del(permaCache.STATE);
+  });
 
   async function report(options = {}) {
     const lines = [];
@@ -95,9 +109,9 @@ describe("cdn/permaCache", function () {
       `/${id}/folder/a.txt`,
       `/${id}/v-${current}/a.txt`,
     ]);
-    spyOn(assets, "walk").and.callFake(() => (async function* () {})());
+    spyOn(assets, "walkEntries").and.callFake(noGenerated);
 
-    const { lines, totals } = await report({ blogID: id });
+    const { lines, totals } = await report({ only: id });
 
     expect(totals.stale).toBe(4);
     expect(lines).toContain(`${id} replaced: /${id}/folder/v-deadbeef/a.txt`);
@@ -113,13 +127,13 @@ describe("cdn/permaCache", function () {
     const id = this.blog.id;
 
     zone([`/${id}/_thumbnails/a/small.jpg`, `/${id}/_thumbnails/b/small.jpg`]);
-    spyOn(assets, "walk").and.callFake(() =>
+    spyOn(assets, "walkEntries").and.callFake(() =>
       (async function* () {
-        yield "_thumbnails/a/small.jpg";
+        yield { relPath: "_thumbnails/a/small.jpg", modified: new Date() };
       })()
     );
 
-    const { lines, totals } = await report({ blogID: id });
+    const { lines, totals } = await report({ only: id });
 
     expect(totals.stale).toBe(1);
     expect(lines).toContain(
@@ -132,15 +146,149 @@ describe("cdn/permaCache", function () {
 
     zone([`/${gone}/_thumbnails/a/small.jpg`, `/${gone}/folder/v-1/a.txt`]);
 
-    let { totals } = await report({ blogID: gone });
+    let { totals } = await report({ only: gone });
 
     expect(totals.deletedBlogs).toBe(1);
-    expect(totals.deletedBlogURLs).toBe(2);
     expect(removed).toEqual([]);
 
-    await report({ blogID: gone, apply: true });
+    await report({ only: gone, apply: true });
 
     expect(removed).toEqual([BASE + gone + "/"]);
+  });
+
+  it("purges an _assets file rewritten since Perma-Cache copied it", async function () {
+    const id = this.blog.id;
+
+    zone([
+      {
+        path: `/${id}/_assets/doc/media/image1.png`,
+        file: { lastChanged: "2026-01-01T00:00:00.000" },
+      },
+      {
+        path: `/${id}/_assets/doc/media/image2.png`,
+        file: { lastChanged: "2026-03-01T00:00:00.000" },
+      },
+    ]);
+    spyOn(assets, "walkEntries").and.callFake(() =>
+      (async function* () {
+        const modified = new Date("2026-02-01T00:00:00Z");
+        yield { relPath: "_assets/doc/media/image1.png", modified };
+        yield { relPath: "_assets/doc/media/image2.png", modified };
+      })()
+    );
+
+    const { lines, totals } = await report({ only: id });
+
+    expect(totals.stale).toBe(1);
+    expect(lines).toContain(
+      `${id} generated file changed: /${id}/_assets/doc/media/image1.png`
+    );
+  });
+
+  it("deletes the storage copies of old documentation versions", async function () {
+    zone([
+      "/documentation/v-current1/documentation.min.css",
+      "/documentation/v-old00001/documentation.min.css",
+    ]);
+    spyOn(documentationURL, "versionOf").and.returnValue("current1");
+
+    const { lines, totals } = await report({
+      only: "documentation",
+      apply: true,
+    });
+
+    expect(totals.stale).toBe(1);
+    expect(lines).toContain(
+      "documentation old documentation version: /documentation/v-old00001/documentation.min.css"
+    );
+    expect(removed).toEqual([
+      BASE + "documentation/v-old00001/___documentation.min.css___/",
+    ]);
+  });
+
+  it("deletes the storage copies of template outputs gone from Redis", async function () {
+    const live = "ab" + "cd" + "0".repeat(28);
+    const dead = "ab" + "cd" + "1".repeat(28);
+
+    await client.set(templateKey.renderedOutput(live), "body{}");
+
+    try {
+      zone([
+        `/template/ab/cd/${live.slice(4)}/style.css`,
+        `/template/ab/cd/${dead.slice(4)}/style.css`,
+      ]);
+
+      const { totals } = await report({ only: "template", apply: true });
+
+      expect(totals.stale).toBe(1);
+      expect(removed).toEqual([
+        BASE + `template/ab/cd/${dead.slice(4)}/___style.css___/`,
+      ]);
+    } finally {
+      await client.del(templateKey.renderedOutput(live));
+    }
+  });
+
+  it("finds static files whose bytes changed or which are gone", async function () {
+    const name = fs
+      .readdirSync(GLOBAL_STATIC_DIR + "/icons")
+      .find((entry) =>
+        fs.statSync(GLOBAL_STATIC_DIR + "/icons/" + entry).isFile()
+      );
+    const current = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(GLOBAL_STATIC_DIR + "/icons/" + name))
+      .digest("hex")
+      .toUpperCase();
+
+    zone([
+      { path: "/icons/" + name, file: { checksum: current } },
+      { path: "/icons/sub/" + name, file: { checksum: current } },
+      { path: "/icons/gone.svg", file: { checksum: "AB" } },
+    ]);
+
+    const { lines, totals } = await report({ only: "icons" });
+
+    expect(totals.stale).toBe(2);
+    expect(lines).toContain("icons static file gone: /icons/gone.svg");
+    expect(lines).toContain(`icons static file gone: /icons/sub/${name}`);
+  });
+
+  it("deletes anything else at the top level", async function () {
+    zone(["/folder/v-1/blog_1/a.txt", "/health"]);
+
+    const { totals } = await report({ apply: true });
+
+    expect(totals.stale).toBe(2);
+    expect(removed.sort()).toEqual([BASE + "___health___/", BASE + "folder/"]);
+  });
+
+  it("resumes a run from its cursor and waits a week after it finishes", async function () {
+    zone(["/a-dir/x", "/b-dir/x"]);
+
+    let time = 1000;
+    const now = () => time;
+
+    await client.hSet(permaCache.STATE, { startedAt: "1", cursor: "a-dir" });
+
+    const totals = await permaCache.step(null, { now });
+
+    expect(totals.stale).toBe(1);
+    expect(removed).toEqual([BASE + "b-dir/"]);
+
+    const state = await client.hGetAll(permaCache.STATE);
+
+    expect(state.startedAt).toBeUndefined();
+    expect(state.cursor).toBeUndefined();
+    expect(state.finishedAt).toBe("1000");
+
+    expect(await permaCache.step(null, { now })).toBe(null);
+
+    time += 7 * 24 * 60 * 60 * 1000 + 1;
+    removed.length = 0;
+
+    expect((await permaCache.step(null, { now })).stale).toBe(2);
+    expect(removed.sort()).toEqual([BASE + "a-dir/", BASE + "b-dir/"]);
   });
 
   it("deletes nothing when too many blogs look deleted", async function () {

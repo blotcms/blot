@@ -69,8 +69,10 @@ async function request(method, path) {
   });
 }
 
-// The entries of a directory: [{ name, isDirectory, size, lastChanged }], or
-// [] if it doesn't exist. dir ends with "/" ("" for the zone's root).
+// The entries of a directory: [{ name, isDirectory, size, lastChanged,
+// dateCreated, checksum }], or [] if it doesn't exist. dir ends with "/" (""
+// for the zone's root). checksum is a file's SHA-256, upper-case hex, when
+// Bunny has one; the dates are ISO strings in UTC without a zone suffix.
 async function list(dir) {
   const res = await request("GET", dir);
 
@@ -85,6 +87,8 @@ async function list(dir) {
     isDirectory: !!entry.IsDirectory,
     size: entry.Length,
     lastChanged: entry.LastChanged,
+    dateCreated: entry.DateCreated,
+    checksum: entry.Checksum || null,
   }));
 }
 

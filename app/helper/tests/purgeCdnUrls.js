@@ -215,7 +215,30 @@ describe("purgeCdnUrls", function () {
       jasmine.objectContaining({
         method: "POST",
         headers: { AccessKey: "test-secret" },
+        timeout: 60000,
       })
     );
+  });
+
+  it("logs nothing for a success when quiet", async function () {
+    fetchSpy.and.returnValue(
+      Promise.resolve({ status: 200, headers: { get: () => null } })
+    );
+
+    expect(
+      await purgeCdnUrls(["https://example.com/test"], { quiet: true })
+    ).toBe(true);
+    expect(console.log).not.toHaveBeenCalled();
+  });
+
+  it("is false if any purge fails", async function () {
+    fetchSpy.and.returnValues(
+      Promise.resolve({ status: 200, headers: { get: () => null } }),
+      Promise.resolve({ status: 500, headers: { get: () => null } })
+    );
+
+    expect(
+      await purgeCdnUrls(["https://example.com/one", "https://example.com/two"])
+    ).toBe(false);
   });
 });
