@@ -84,9 +84,6 @@ services:
       # production's wildcard certificate
       - ../../data/ssl/certs/wildcard.crt:/etc/ssl/private/letsencrypt-domain.pem:ro
       - ../../data/ssl/private/wildcard.key:/etc/ssl/private/letsencrypt-domain.key:ro
-      # Filled by agentation/run.sh; see proxy/config/development.conf
-      - ./agentation/generated/openresty:/etc/openresty/development:ro
-      - ./agentation/generated/dist:/srv/agentation:ro
     healthcheck:
       test: ["CMD", "sh", "/usr/src/app/proxy/unit/healthcheck.sh"]
       interval: 10s

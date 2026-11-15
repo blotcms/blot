@@ -127,8 +127,8 @@ function container({ env = process.env, config }) {
     // Local development (scripts/development/unit/start.sh) sets
     // LOCAL_DEVELOPMENT=true for the few things only blot.localhost needs, all in
     // development*.conf: routing for the worktree preview slots, the storage
-    // bucket behind the CDN host, no rate limits for private addresses and
-    // the include hooks Agentation fills. Production renders none of it.
+    // bucket behind the CDN host and no rate limits for private addresses.
+    // Production renders none of it.
     development: env.LOCAL_DEVELOPMENT === "true",
   };
 }
