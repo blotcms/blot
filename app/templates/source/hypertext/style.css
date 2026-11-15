@@ -60,7 +60,6 @@ pre code.hljs.hljs * {
   --dark-border-color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
   --link-color: {{link_color}};
   --padding: calc({{spacing}} * 1.4rem);
-  --navigation-height: 3em;
   --sidebar-width: {{navigation_width}}px;
   --main-width: {{content_width}}px;
 }
@@ -333,10 +332,6 @@ main {
   }
 
 
-  .control-label:last-child {
-    visibility: visible
-  }
-  
     .control-label:first-child {
     visibility: visible
   }
@@ -408,55 +403,6 @@ main {
 }
 
 
-
-.nav-container {
-  display: flex;
-  flex-wrap: wrap;
-  height: var(--navigation-height);
-  border-bottom: 1px solid var(--border-color);
-  overflow: hidden;
-  position: relative;
-  z-index: 2;
-}
-
-#nav-toggle {
-  display: none;
-}
-
-/* When checkbox is checked, expand the navigation */
-#nav-toggle:checked ~ .nav-container {
-  height: auto; /* Remove height restriction */
-}
-
-#nav-toggle:checked ~ .popup-cover {
-  opacity: 1;
-  z-index: 1;
-}
-
-#nav-toggle:checked ~ .nav-container .nav-links {
-  flex-direction: column; /* Stack links vertically */
-  width: 100%;
-  align-items: flex-start;
-}
-
-/* When checkbox is checked, expand the navigation */
-#nav-toggle:checked ~ .nav-container {
-  border-radius: 0 0 12px 12px;
-  padding-bottom: 16px;
-}
-
-.nav-container form {
-  flex-grow: 1;
-  margin-right: 2em;
-}
-
-.nav-container form  input {
-  width: 100%;
-  padding: 0.5em;
-  margin: 0.5em 0;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-}
 
 .navigation {
   display: flex;
@@ -924,34 +870,6 @@ kbd {
   color: var(--light-text-color);
 }
 
-.search-submit {
-  flex-shrink: 0;
-  padding: 0.75rem 1rem;
-  margin: 0.25rem;
-  border: none;
-  background-color: var(--link-color);
-  color: var(--background-color);
-  border-radius: 3px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: opacity 0.2s ease, background-color 0.2s ease;
-  line-height: 1;
-}
-
-.search-submit:hover {
-  opacity: 0.9;
-}
-
-.search-submit:active {
-  opacity: 0.8;
-}
-
-.search-submit svg {
-  display: block;
-}
-
 @media (max-width: 768px) {
   .search-form {
     margin: 1.5rem 0;
@@ -964,15 +882,6 @@ kbd {
   
   .search-icon {
     left: 10px;
-    width: 14px;
-    height: 14px;
-  }
-  
-  .search-submit {
-    padding: 0.625rem 0.875rem;
-  }
-  
-  .search-submit svg {
     width: 14px;
     height: 14px;
   }
