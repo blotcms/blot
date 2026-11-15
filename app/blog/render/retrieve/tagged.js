@@ -55,6 +55,13 @@ async function tagged(req, res) {
   // A page past the last one is a 404 (page 1 never is)
   assertPageInRange(res, payload.pagination);
 
+  // /tagged/:tag for a tag with no posts is a 404 too, but the template's own
+  // tagged.html still renders it, so the page looks just as it did. Only on
+  // that route: a template's other views can list a tag with no posts yet.
+  if (req.tagPage && !payload.total && !(res.locals && res.locals.error)) {
+    res.status(404);
+  }
+
   // A copy with next_url and previous_url, which depend on the request
   const pagination = paginationURLs(req, payload.pagination);
 
