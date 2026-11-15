@@ -317,7 +317,11 @@ same access without that exposure. See `app/storage/README` §3.
 ### Current pull zone (as of 15 Nov 2026)
 
 Pull zone `blot-cdn`, hostnames `cdn.blot.im` and the system hostname
-`blot-cdn.b-cdn.net` (SSL on, Force SSL off). High-volume tier, SafeHop on.
+`blot-cdn.b-cdn.net` (SSL on, Force SSL off). `cdn.blot.im` is a CNAME to
+`blot-cdn.b-cdn.net` at Blot's DNS host (Bunny DNS isn't used), with a
+certificate Bunny issues itself (HTTP-01). High Volume tier, no routing
+filters (EEA-only and EU-only off), WebSockets off. SafeHop on, with origin
+retries "Do not retry", connect timeout 10 s and response timeout 60 s.
 `cdn.blot.site` was removed on 15 Nov 2026, hostname and rule patterns both:
 Blot no longer owns the domain.
 
@@ -338,6 +342,15 @@ Blot no longer owns the domain.
   and while updating.
 - **Perma-Cache** on, storage zone `blot-cdn-storage`. It serves any object it
   already holds without asking the origin.
+  The storage zone exists only for this: Edge (SSD) tier, main region
+  Frankfurt, replicated to New York and Seattle (replication regions can't be
+  removed once added), "rewrite 404 to 200" off, S3 compatibility off. Its
+  files sit under `__bcdn_perma_cache__/pullzone__blot-cdn__<id>/`, one
+  directory per request-path segment (`blog_<id>/_image_cache/...`,
+  `folder/v-<ver>/blog_<id>/...`). Purge single objects with the exact-URL
+  purge at dash.bunny.net/purge, which also deletes the Perma-Cache copy;
+  wildcard and tag purges don't reach Perma-Cache, and the pull zone's own
+  "Purge Cache" empties the whole edge cache.
 - **Request coalescing** on, 30 s lock timeout.
 - **Headers:** "Add CORS headers" on for `eot, ttf, woff, woff2, css, otf, js,
   mjs` (added whatever the origin, and the only CORS headers on a Perma-Cache
@@ -347,6 +360,17 @@ Blot no longer owns the domain.
 - **Optimizer** off and no token authentication or URL signing (everything on
   the CDN is public by design), so Bunny requests the origin with the plain
   path.
+- **Security.** Block POST requests on (Bunny answers 405); block root path
+  access off; no referrer or IP lists; no country redirects or blocks
+  (Traffic Manager); no network limits (all 0); AWS S3 authentication off;
+  Bunny Shield never set up. TLS security level "Legacy", with TLS 1.0 and
+  1.1 still accepted.
+- **Logging** on, IPs anonymised ("Drop IP", replaced by 0.0.0.0), no log
+  forwarding, no permanent log storage. Bunny keeps raw logs for 3 days.
+- **Error pages.** Whitelabel on, StatusPage widget off, custom error page on,
+  with the HTML in [`bunny-error-page.html`](bunny-error-page.html) ("Blot is
+  offline", linking to support email and status.blot.im). Bunny shows it when
+  the origin fails.
 - **Edge rules**, in the dashboard's order. Saving an edited rule moves it to
   the end of the list, so refer to rules by name, not number. Only the
   origin-changing rules depend on order (see the test rules below).
@@ -407,6 +431,37 @@ Blot no longer owns the domain.
     5 s of "cache error responses"), so it is 60 s, the minute Node asks for
     that 404, rather than an hour. Recreated on 7 Nov 2026: the pull zone
     had lost it.
+
+### Rebuilding the pull zone from scratch
+
+Everything Bunny holds for Blot is configuration plus caches, so a lost
+account costs only setup time and a cold cache: the bucket and the app host
+hold every object. In a new account:
+
+1. Create the storage zone (Edge SSD, main region Frankfurt, replicate to New
+   York and Seattle), named `blot-cdn-storage`.
+2. Create the pull zone `blot-cdn`, origin type Origin URL, with the origin,
+   Host header and toggles under "Origin" above. The system hostname is
+   derived from the zone name, so keep `blot-cdn` or change the CNAME to
+   match.
+3. Add the hostname `cdn.blot.im`, point its CNAME at the new
+   `<zone>.b-cdn.net`, and enable SSL once DNS resolves.
+4. Set pricing tier, SafeHop, caching, Perma-Cache (with the storage zone),
+   request coalescing, the CORS header list, security, logging and the error
+   page, all as listed above.
+5. Recreate the edge rules in the order above, leaving out the TEST rules
+   (and the `X-Blot-Origin` condition on the bucket rule) unless #2695 is
+   still being tested. Read each form back before saving: a new rule's
+   top-level condition defaults to "Match any".
+6. Check, as in the procedure below: a generated image through
+   `cdn.blot.im` returns 200 with `x-amz-request-id`, a folder file and a
+   font return 200 from the app, `/health` is not cached, `/.env` is 403,
+   a POST is 405, and `v-pending` gets `max-age=60`.
+
+The app links only `cdn.` plus its host (`BLOT_CDN` in `config/index.js`), so
+it needs no code change. It does call Bunny's API to purge URLs: put the new
+account's API key in `BUNNY_API_SECRET` in `/etc/blot/secrets.env` (see
+`config/secrets.env.example`), which reaches the units with the next deploy.
 
 Large folder files and generated assets (`/_image_cache/`, `/_assets/`, ...)
 requested on a blog host answer with a 302 to this CDN (see
