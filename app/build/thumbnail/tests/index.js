@@ -11,6 +11,30 @@ describe("thumbnail", function () {
   var sharp = require("sharp");
   var assets = require("storage/assets");
 
+  it("makes a cached result's thumbnails again once their files are gone", async function () {
+    var thumbnail = require("../index");
+    var imagePath = "/portrait.jpg";
+    var html = '<img src="' + imagePath + '">';
+
+    await folder.writeFrom(
+      this.blog.id,
+      imagePath,
+      __dirname + "/images/" + imagePath
+    );
+
+    var first = await thumbnail(this.blog, "/post.txt", {}, html);
+
+    for (var size of Object.keys(first))
+      await assets.remove(this.blog.id, first[size].path);
+
+    var second = await thumbnail(this.blog, "/post.txt", {}, html);
+
+    // The same image's directory, made again
+    expect(second.small.path).toBe(first.small.path);
+    for (var name of Object.keys(second))
+      expect(await assets.exists(this.blog.id, second[name].path)).toBe(true);
+  });
+
   it("creates thumbnails", async function () {
     var thumbnail = require("../index");
     var metadata = {};

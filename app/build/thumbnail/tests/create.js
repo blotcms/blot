@@ -67,4 +67,39 @@ describe("create", function () {
       }
     );
   });
+
+  describe("directories", function () {
+    var images = __dirname + "/images/";
+
+    it("names the directory for the image, so the same image gets the same one", async function () {
+      var first = await create(this.blog.id, images + "portrait.jpg");
+      var second = await create(this.blog.id, images + "portrait.jpg");
+
+      expect(first.small.path).toMatch(
+        /^\/_thumbnails\/[a-f0-9]{32}\/small\.jpg$/
+      );
+      expect(second.small.path).toBe(first.small.path);
+    });
+
+    it("gives another image another directory", async function () {
+      var a = await create(this.blog.id, images + "portrait.jpg");
+      var b = await create(this.blog.id, images + "p3.jpg");
+
+      expect(b.small.path).not.toBe(a.small.path);
+    });
+
+    it("makes an image's thumbnails once for two builds at a time", async function () {
+      var sandbox = require("sandbox");
+      var run = spyOn(sandbox, "run").and.callThrough();
+
+      var [a, b] = await Promise.all([
+        create(this.blog.id, images + "portrait.jpg"),
+        create(this.blog.id, images + "portrait.jpg"),
+      ]);
+
+      expect(run).toHaveBeenCalledTimes(1);
+      expect(b).toEqual(a);
+      expect(await assets.exists(this.blog.id, a.small.path)).toBe(true);
+    });
+  });
 });

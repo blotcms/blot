@@ -1,4 +1,6 @@
-var { v4: uuid } = require("uuid");
+var crypto = require("crypto");
+var hashFile = require("helper/transformer/hash");
+var THUMBNAILS = require("./config").THUMBNAILS;
 var Transform = require("./transform");
 var TransformGIF = require("./transform-gif");
 var join = require("path").join;
@@ -7,6 +9,31 @@ var extname = require("path").extname;
 // The thumbnail job's jail has the same limit (proxy/unit/sandbox/jail.js)
 var TIMEOUT = 20 * 1000; // 20s
 var debug = require("debug")("blot:entry:build:thumbnail:create");
+
+// Bump to give every thumbnail a new directory, and so a new URL, after a
+// change to how they're made that the sizes below don't show (quality, a
+// sharp upgrade): the CDN and browsers keep these files for a year.
+var VERSION = "1";
+
+// An image's thumbnails live in a directory named for its bytes and how
+// they're made, so a build that makes them again (a second build of the same
+// image at once, a job that outlived the build's wait, a lost cache entry)
+// writes the same files to the same place, rather than leaving another
+// directory behind.
+async function directoryFor(path) {
+  var name = crypto
+    .createHash("sha256")
+    .update(VERSION + "\n" + JSON.stringify(THUMBNAILS) + "\n")
+    .update(await hashFile(path))
+    .digest("hex")
+    .slice(0, 32);
+
+  return "/" + join("_thumbnails", name);
+}
+
+// Thumbnails being made in this process, by blog and directory: a second build of the
+// same image waits for the first rather than writing the same files under it
+var making = new Map();
 
 async function create(blogID, path) {
   var timeout;
@@ -23,7 +50,32 @@ async function create(blogID, path) {
   });
 
   var work = (async function () {
-    var outputDirectory = "/" + join("_thumbnails", uuid());
+    var outputDirectory = await directoryFor(path);
+    var key = blogID + outputDirectory;
+
+    if (making.has(key)) return making.get(key);
+
+    var made = make(outputDirectory);
+    making.set(key, made);
+
+    try {
+      return await made;
+    } finally {
+      making.delete(key);
+    }
+  })();
+
+  // If the timeout wins, the work's own failure is not reported
+  work.catch(function () {});
+  timedOut.catch(function () {});
+
+  try {
+    return await Promise.race([work, timedOut]);
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  async function make(outputDirectory) {
     var fullPathToOutputDirectory = assets.path(blogID, outputDirectory);
     var extension = extname(path).toLowerCase();
 
@@ -51,16 +103,6 @@ async function create(blogID, path) {
 
     debug(blogID, "Done", thumbnails);
     return thumbnails;
-  })();
-
-  // If the timeout wins, the work's own failure is not reported
-  work.catch(function () {});
-  timedOut.catch(function () {});
-
-  try {
-    return await Promise.race([work, timedOut]);
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
