@@ -100,7 +100,10 @@ describe("folder", function () {
         "|{{#folder}}{{#contents}}[{{name}}]{{/contents}}{{/folder}}",
     });
 
-    expect(await this.text("/")).toContain("[a.txt][sub]|[a.txt][sub]");
+    // The root also holds the test blog's Templates folder
+    const [legacy, current] = (await this.text("/")).split("|");
+    expect(legacy).toContain("[a.txt][sub]");
+    expect(legacy).toEqual(current);
     expect(await this.text("/?path=/sub")).toContain("[b.txt]|[b.txt]");
   });
 
