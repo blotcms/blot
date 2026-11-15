@@ -610,6 +610,7 @@ async function step(signal, options = {}) {
     await client.hDel(STATE, "totals");
     state.startedAt = String(now());
     state.cursor = "";
+    delete state.totals;
   }
 
   const base = await root();
