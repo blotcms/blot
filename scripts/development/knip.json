@@ -4,10 +4,8 @@
     "node-gyp",
     "eslint",
     "prettier",
-    "nyc",
     "nodemon",
-    "fontkit",
-    "text-to-svg"
+    "http-auth"
   ],
   "entry": [
     "scripts/**/*.js",

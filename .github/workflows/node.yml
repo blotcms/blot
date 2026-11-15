@@ -146,7 +146,10 @@ jobs:
 
       - name: Find unused dependencies
         if: always()
-        run: npx knip --config scripts/development/knip.json --dependencies
+        # Unused (dev)dependencies only, as depcheck checked. node-addon-api and
+        # node-gyp build sharp; http-auth is required by app/clients/git, which
+        # is loaded by name
+        run: npx knip --config scripts/development/knip.json --include dependencies,devDependencies
 
       - name: Find unused files
         if: always()
