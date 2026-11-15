@@ -44,12 +44,9 @@ async function middleware(req, res, next) {
       next();
     }
   } catch (err) {
-    if (err && err.code === "ENOENT" && req.params.path) {
-      res.locals.folder = { directory: true, contents: [] };
-      res.render("dashboard/folder");
-    } else {
-      next(err);
-    }
+    // A path that isn't in the folder rejects with storage.NotFoundError,
+    // which carries status 404, so the dashboard's error handler answers 404
+    next(err);
   }
 }
 

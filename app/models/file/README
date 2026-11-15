@@ -2,7 +2,7 @@
 
 The metadata index of a blog's folder: a record for every file and every directory in it, so the S3 backend of `storage/folder` can stat, list, walk and resolve case without asking S3. It is a sibling of `models/entry`, and a file and its entry join on the same path string. See [#2258](https://github.com/blotcms/blot/issues/2258) ("Metadata index (Redis): `models/file`").
 
-- `storage/folder`'s S3 backend (`app/storage/folder/s3.js`) is its only writer. Nothing else calls the write functions. The local-disk backend, which every blog still uses, does not touch it.
+- `storage/folder`'s S3 backend (`app/storage/folder/s3.js`) is its only writer. Nothing else calls the write functions. It is the only backend of `storage/folder`, so every blog's folder has an index.
 - It is derived from S3: the backend writes to S3 first and to the index after, so a crash leaves the index behind S3, never ahead. It can be rebuilt from a full listing at any time (`rebuild`, and `scripts/storage/rebuild-file-index.js`).
 - Writes read what they need, then apply everything in one `multi()`/`exec()`. That is only safe because each blog has one writer at a time, the sync lock (`app/sync/lock.js`). No Lua and no `WATCH`.
 
@@ -49,13 +49,13 @@ blog:X:file:totals         bytes -> 8, files -> 2
 
 The packing is the record type's first letter (`f` or `d`), then size, modified and sha1, separated by `|`, then, for a flagged file only, `|` and its flags as JSON (`f|0|1700000000000|da39a3ee...|[{"code":"SYNC_TOO_LARGE","size":200000000,"limit":100000000}]`). Everything after the fourth `|` is the JSON, which may hold a `|` of its own. Flags which fail to parse read as none. A name may contain `|`, but it is only ever a field, never part of a value. No name can contain `/`, so it separates the names in the lowercased lookup. An empty directory has no hash of its own; its record in its parent's hash is what makes it exist.
 
-Case-insensitive resolution looks each segment up in its directory's lowercased lookup. Names which differ only by case (`/Posts` and `/posts`) share one field, so neither hides the other: the exact name wins, otherwise the first in sorted order, by `helper/caseSensitivePath.pick` over the stored names. Each segment is resolved on its own, without going back to try a sibling, as on disk.
+Case-insensitive resolution looks each segment up in its directory's lowercased lookup. Names which differ only by case (`/Posts` and `/posts`) share one field, so neither hides the other: the exact name wins, otherwise the first in sorted order, by `helper/caseSensitivePath.pick` over the stored names. Each segment is resolved on its own, without going back to try a sibling, as a file system does.
 
 Subtree queries use the bounds `[/dir/` and `(/dir0` (`0` is the character after `/`), so `/dir b` and `/dir0` stay out.
 
 ### Paging a directory
 
-Listings sort by name in UTF-16 code-unit order, as JavaScript compares strings and the local backend sorts, so `storage/folder`'s cursor is just the last name of a page. `list` reads a page with `ZRANGEBYLEX` on the names set, from just after that name, one more than the limit to tell whether another page follows, then `HMGET`s the page's records from the hash: a page costs the same however large the directory. A cursor need not name an entry still there.
+Listings sort by name in UTF-16 code-unit order, as JavaScript compares strings, so `storage/folder`'s cursor is just the last name of a page. `list` reads a page with `ZRANGEBYLEX` on the names set, from just after that name, one more than the limit to tell whether another page follows, then `HMGET`s the page's records from the hash: a page costs the same however large the directory. A cursor need not name an entry still there.
 
 `ZRANGEBYLEX` compares UTF-8 bytes, which is code point order. That differs from code-unit order only for characters from U+E000 to U+FFFF against characters beyond U+FFFF, so a member spells those with U+10FFFF in front (and U+10FFFF itself as U+10FFFF, NUL), which puts them in code-unit order (`key.member`, `key.nameOf`). Every other name is its own member.
 
@@ -98,7 +98,7 @@ All return promises.
 | `remove(blogID, path)` | Forget a file, or a directory and its whole subtree. Resolves to the removed record, or null |
 | `removeAll(blogID)` | Forget the whole folder |
 | `addMissingNames(blogID, { apply })` | Build the names set of every directory which lacks one (see above). Resolves to `{ dirs, missing, names }`; writes only with `apply`, and must run under the sync lock |
-| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a disk cannot) is skipped and listed in `skipped` as `{ path, type, code }`. Flags of unchanged files are carried over |
+| `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a file system cannot) is skipped and listed in `skipped` as `{ path, type, code }`. Flags of unchanged files are carried over |
 
 Removing a directory goes through its subtree deepest first, a page at a time, so each file's size is still in its parent's hash when the totals are corrected. If it stops part way, what is left is consistent apart from a lowercased lookup which may still name a child already gone, until its directory goes too.
 
