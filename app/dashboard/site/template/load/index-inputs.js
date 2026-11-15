@@ -38,6 +38,9 @@ module.exports = function (req, res, next) {
     // allow companion range/options keys to turn it into a generic control.
     .filter((key) => !key.endsWith("_image"))
 
+    // `folder_root` has its own folder picker (load/folder-input.js)
+    .filter((key) => key !== "folder_root")
+
     // If the template uses the thumbnails per row
     // option then hide the page size option
     .filter((key) =>
