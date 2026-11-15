@@ -107,55 +107,28 @@ describe("template", function () {
     );
   });
 
-  it("purges CDN URLs from metadata manifest entries when dropping a template", async function () {
+  it("queues purges of the CDN URLs in its manifest when dropping a template", async function () {
     var test = this;
     var manifest = {
       "assets/style.css": "d1e2f3a4b5c6d7e8",
       "partials/footer.html": "e1f2a3b4c5d6e7f8",
     };
     var metadataKey = key.metadata(test.template.id);
-    var purgePath = require.resolve("helper/purgeCdnUrls");
-    var dropPath = require.resolve("../drop");
-    var originalPurgeModule = require.cache[purgePath];
-    var originalDropModule = require.cache[dropPath];
-    var purgeSpy = jasmine
-      .createSpy("purgeCdnUrls")
-      .and.returnValue(Promise.resolve());
+    var purgeSpy = spyOn(require("cdn/purgeQueue"), "add").and.returnValue(
+      Promise.resolve(true)
+    );
 
-    require.cache[purgePath] = {
-      id: purgePath,
-      filename: purgePath,
-      loaded: true,
-      exports: purgeSpy,
-    };
-    delete require.cache[dropPath];
-    var dropWithPurgeStub = require("../drop");
+    await client.hSet(metadataKey, "cdn", JSON.stringify(manifest));
+    const rawCdn = await client.hGet(metadataKey, "cdn");
+    expect(JSON.parse(rawCdn)).toEqual(manifest);
 
-    try {
-      await client.hSet(metadataKey, "cdn", JSON.stringify(manifest));
-      const rawCdn = await client.hGet(metadataKey, "cdn");
-      expect(JSON.parse(rawCdn)).toEqual(manifest);
+    await drop(test.blog.id, test.template.name);
 
-      await dropWithPurgeStub(test.blog.id, test.template.name);
-
-      var expectedUrls = Object.keys(manifest).map(function (target) {
-        return generateCdnUrl(target, manifest[target]);
-      });
-      expect(purgeSpy).toHaveBeenCalledTimes(1);
-      expect(purgeSpy).toHaveBeenCalledWith(expectedUrls);
-    } finally {
-      if (originalPurgeModule) {
-        require.cache[purgePath] = originalPurgeModule;
-      } else {
-        delete require.cache[purgePath];
-      }
-
-      if (originalDropModule) {
-        require.cache[dropPath] = originalDropModule;
-      } else {
-        delete require.cache[dropPath];
-      }
-    }
+    var expectedUrls = Object.keys(manifest).map(function (target) {
+      return generateCdnUrl(target, manifest[target]);
+    });
+    expect(purgeSpy).toHaveBeenCalledTimes(1);
+    expect(purgeSpy).toHaveBeenCalledWith(expectedUrls);
   });
 
   it("still drops when metadata.cdn is missing or malformed", async function () {

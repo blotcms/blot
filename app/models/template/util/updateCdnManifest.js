@@ -8,7 +8,7 @@ const getAllViews = require("../getAllViews");
 const parseTemplate = require("../parseTemplate");
 const generateCdnUrl = require("./generateCdnUrl");
 const { minifyCSS, minifyJS } = require("helper/minify");
-const purgeCdnUrls = require("helper/purgeCdnUrls");
+const purgeQueue = require("cdn/purgeQueue");
 const path = require("path");
 const fs = require("fs-extra");
 const pathNormalizer = require("helper/pathNormalizer");
@@ -380,11 +380,10 @@ async function cleanupOldHash(templateID, target, oldHash) {
 
     if (!deleted) return;
 
-    // Background purge CDN URL from Bunny in background (not important)
-    // if it fails, worst case we pay to store a stale file. the url used
-    // on the site changes over to the new version so no worries.
-    const oldUrl = generateCdnUrl(target, oldHash);
-    purgeCdnUrls([oldUrl]);
+    // Purged in the background (cdn/purgeQueue). Nothing links the old URL
+    // any more, so if the purge fails the cost is only a stale copy, which
+    // the Perma-Cache sweep removes.
+    await purgeQueue.add([generateCdnUrl(target, oldHash)]);
   } catch (err) {
     console.error(`Error cleaning up old hash for ${target}:`, err);
   }

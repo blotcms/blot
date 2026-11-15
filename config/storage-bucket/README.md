@@ -358,18 +358,29 @@ Blot no longer owns the domain.
   waits for every edge (`async=false`), about 7 s, so `helper/purgeCdnUrls`
   runs 16 at once, with a 60 s timeout; Bunny's `async=true` purges answer at
   once, but a wildcard one was seen not to reach the edge minutes later
-  (15 Nov 2026). `app/cdn/permaCache.js` purges:
+  (15 Nov 2026).
+
+  Nothing that publishes, builds or deletes waits for Bunny: it adds the
+  URLs to the Redis set `cdn:purge-queue`, and a worker on whichever process
+  holds the `cdn:purge-queue:lease` lock purges them in the background,
+  usually within a minute (`app/cdn/purgeQueue.js`). An entry stays queued
+  until its purge succeeds, so a deploy doesn't lose it; one that fails 10
+  times (counted in the hash `cdn:purge-queue:failures`) is dropped and left
+  to the sweep. Queued:
   - **a folder file's old URL** when a write replaces its bytes, or a remove
     or move takes it away (`storage/folder/s3.js`; the old version comes from
     the index record, so nothing is read), in both forms: the edge still
     caches the form used before #2695, which the rule "No Perma-Cache for old
-    folder URLs" keeps out of Perma-Cache. Not awaited: a write never waits
-    for Bunny;
-  - **a deleted blog**: one wildcard purge of `cdn.blot.im/<blogID>/*`, which
-    clears the edges, then its directory, which clears Perma-Cache; the
-    directory is kept for the sweep to retry if the purge fails
-    (`models/blog/remove.js`, after the removal resolves);
-  - **everything else, in the background sweep.** It runs on whichever
+    folder URLs" keeps out of Perma-Cache;
+  - **a deleted blog**, as `cdn.blot.im/<blogID>/*`: one wildcard purge,
+    which clears the edges, then its directory, which clears Perma-Cache; the
+    directory is kept for a retry if the purge fails (`models/blog/remove.js`);
+  - **a template's old CSS and JS URLs** when a change gives them a new hash
+    or the template is dropped (`models/template`), and the dashboard and
+    documentation bundles on a boot of a new release (`app/setup.js`).
+
+  `app/cdn/permaCache.js` removes **everything else, in the background
+  sweep.** It runs on whichever
     process holds the `perma-cache:sweep:lease` lock, starts a week after
     the last run finished, and keeps its progress in the Redis hash
     `perma-cache:sweep` (`startedAt`, `cursor`, `totals`, `finishedAt`,

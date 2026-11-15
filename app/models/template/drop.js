@@ -5,7 +5,7 @@ var key = require("./key");
 var makeID = require("./util/makeID");
 var cacheID = require("./util/cacheID");
 var generateCdnUrl = require("./util/generateCdnUrl");
-var purgeCdnUrls = require("helper/purgeCdnUrls");
+var purgeQueue = require("cdn/purgeQueue");
 
 module.exports = async function drop(owner, templateName) {
   var templateID = makeID(owner, templateName);
@@ -82,14 +82,8 @@ module.exports = async function drop(owner, templateName) {
 
   const ownerID = metadata && metadata.owner ? metadata.owner : owner;
 
-  if (purgeUrls.length) {
-    purgeCdnUrls(purgeUrls).catch(function (purgeErr) {
-      console.error(
-        "Error purging CDN URLs while dropping template:",
-        purgeErr
-      );
-    });
-  }
+  // Purged in the background (cdn/purgeQueue)
+  await purgeQueue.add(purgeUrls);
 
   await cacheID.bumpBlogIfInstalled(ownerID, templateID);
 

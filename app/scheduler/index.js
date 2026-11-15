@@ -22,6 +22,7 @@ const checkRedisHost = require("./check-redis-host");
 const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
 const permaCache = require("cdn/permaCache");
+const purgeQueue = require("cdn/purgeQueue");
 const pruneTmp = require("./prune-tmp");
 const gitStoreMaintenance = require("./git-store-maintenance");
 const sweepICloudOrphans = require("clients/icloud/sweepOrphans");
@@ -442,13 +443,15 @@ module.exports = function () {
 
   // Bunny's Perma-Cache keeps every CDN response until its exact URL is
   // purged, so a folder file's old versions, a deleted blog's files and a
-  // changed static file stay public there. Writes, removes and blog deletion
-  // purge as they go; this sweep removes whatever they missed, a week after
-  // its last run finished, on whichever process holds its lease, resuming
-  // where it left off after a deploy (cdn/permaCache). Production only: it
-  // needs the Bunny API key.
+  // changed static file stay public there. Writes, removes, template changes
+  // and blog deletion queue their purges, which a worker drains in the
+  // background (cdn/purgeQueue). The sweep removes whatever they missed, a
+  // week after its last run finished, resuming where it left off after a
+  // deploy (cdn/permaCache). Each runs on whichever process holds its lease.
+  // Production only: they need the Bunny API key.
   if (config.environment === "production" && config.bunny.secret) {
-    console.log(clfdate(), "Started the background Perma-Cache sweep");
+    console.log(clfdate(), "Started the background CDN purges and sweep");
+    purgeQueue.start();
     permaCache.start();
   }
 
