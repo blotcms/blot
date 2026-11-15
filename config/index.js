@@ -256,6 +256,10 @@ module.exports = {
 
   bunny: {
     secret: process.env.BUNNY_API_SECRET,
+    // The pull zone serving cdn.blot.im, and the storage zone holding its
+    // Perma-Cache (config/storage-bucket/README.md), for cdn/permaCache
+    pull_zone: "blot-cdn",
+    perma_cache_zone: "blot-cdn-storage",
   },
 
   session: {

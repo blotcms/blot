@@ -351,6 +351,33 @@ Blot no longer owns the domain.
   purge at dash.bunny.net/purge, which also deletes the Perma-Cache copy;
   wildcard and tag purges don't reach Perma-Cache, and the pull zone's own
   "Purge Cache" empties the whole edge cache.
+
+  The leaf of each URL is a directory `___<name>___` holding the response,
+  `___file___`. **Whatever Blot stops publishing stays public there** until
+  its exact URL is purged, so `app/cdn/permaCache.js` purges:
+  - **a folder file's old URL** when a write replaces its bytes, or a remove
+    or move takes it away (`storage/folder/s3.js`; the old version comes from
+    the index record, so nothing is read), in both forms: the edge still
+    caches the form used before #2695, which the rule "No Perma-Cache for old
+    folder URLs" keeps out of Perma-Cache;
+  - **a deleted blog's URLs**, all of them, listed from the storage zone,
+    then its directory, which is kept for the next sweep to retry if any
+    purge fails (`models/blog/remove.js`, after the removal resolves);
+  - **everything they missed, weekly** (scheduler, Sundays 04:15, under a
+    lock): for each `blog_*` directory, a deleted blog's whole directory,
+    and an existing blog's folder files at other than their current version,
+    generated files gone from the bucket, and anything else at its top
+    level. It stops without deleting anything if more than 50 blogs look
+    deleted at once. Purging a URL that is still current costs only a
+    refetch from the bucket.
+
+  The Storage API's password comes from the account API, with
+  `BUNNY_API_SECRET`. By hand, report-only unless `--apply`:
+  `docker exec -u 1000 blot-blue node scripts/storage/perma-cache-sweep.js [--blog <id>] [--apply]`.
+  `--wipe-old-folder-form --apply` deletes the top-level `folder/`
+  directory: every URL in the form used before
+  [#2695](https://github.com/blotcms/blot/issues/2695), which refills from the
+  app on demand.
 - **Request coalescing** on, 30 s lock timeout.
 - **Headers:** "Add CORS headers" on for `eot, ttf, woff, woff2, css, otf, js,
   mjs` (added whatever the origin, and the only CORS headers on a Perma-Cache
@@ -406,6 +433,12 @@ Blot no longer owns the domain.
     for pending folder images", "Storage bucket for generated assets" and
     "Folder files from the bucket", in that order; the last two and CORS are
     described below.
+  - "No Perma-Cache for old folder URLs": Bypass Perma-Cache on
+    `*://cdn.blot.im/folder/v-*` (and the same for `blot-cdn.b-cdn.net`),
+    added 15 Nov 2026. Links built before #2695 still use that form and the
+    app still serves it, but Perma-Cache groups it by version rather than by
+    blog, so nothing could find its stale copies there; the edge caches it,
+    and a folder file's change purges that URL too (`app/cdn/permaCache.js`).
   - "Immutable browser cache": Browser Cache Header (Cache-Control) Override
     to `public, max-age=31536000, immutable`, when all of: the URL is on one
     of the two hostnames (`*://cdn.blot.im/*`, `*://blot-cdn.b-cdn.net/*`),

@@ -190,4 +190,30 @@ describe("contentVersion", function () {
       );
     });
   });
+
+  describe("fromFolderRecord", function () {
+    it("is the content hash's first 8 characters, as fromFolder makes it", async function () {
+      const crypto = require("crypto");
+      const sha1 = crypto.createHash("sha1").update("hello").digest("hex");
+
+      expect(
+        contentVersion.fromFolderRecord({ size: 5, modified: 1, sha1 })
+      ).toBe(sha1.slice(0, 8));
+    });
+
+    it("is the size and mtime token above the content hash's size cap", function () {
+      const size = 6 * 1024 * 1024;
+
+      expect(
+        contentVersion.fromFolderRecord({ size, modified: 123, sha1: "ab" })
+      ).toBe(contentVersion.fromFolderStat({ size, modified: 123 }));
+    });
+
+    it("is null without a sha1 for a small file", function () {
+      expect(contentVersion.fromFolderRecord({ size: 5, modified: 1 })).toBe(
+        null
+      );
+      expect(contentVersion.fromFolderRecord(null)).toBe(null);
+    });
+  });
 });
