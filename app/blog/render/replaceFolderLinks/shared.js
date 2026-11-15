@@ -81,9 +81,12 @@ const encodeFolderPath = (path) =>
 // the file's key in the storage bucket ({blogID}/folder/{path}) with the
 // version inserted, so Bunny can fetch it from the bucket by dropping that
 // segment (see "Folder files from the bucket" in
-// config/storage-bucket/README.md). path is the decoded path in the folder.
+// config/storage-bucket/README.md). path is the decoded path in the folder,
+// put in NFC as storage/folder keys objects (helper/pathNormalizer): a link
+// written in NFD finds the file through a stat, but S3 matches keys byte for
+// byte.
 const folderCdnPath = (blogID, version, path) =>
-  `/${blogID}/folder/v-${version}${encodeFolderPath(path)}`;
+  `/${blogID}/folder/v-${version}${encodeFolderPath(path.normalize("NFC"))}`;
 
 // The same, for a path relative to the blog folder, given its storage/folder
 // stat. Used by the routes which redirect large files to the CDN.

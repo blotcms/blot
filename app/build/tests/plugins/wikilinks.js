@@ -465,7 +465,7 @@ Heading Here
     // app/build/plugins/folderAssets bakes it into a %%BLOT_CDN%%-prefixed,
     // versioned URL at build time rather than leaving the raw path.
     expect(entry.html).toMatch(
-      /<embed src="%%BLOT_CDN%%\/folder\/v-[a-f0-9]{8}\/[^"]*\/Assets\/document\.pdf"/
+      /<embed src="%%BLOT_CDN%%\/[^/"]+\/folder\/v-[a-f0-9]{8}\/Assets\/document\.pdf"/
     );
     expect(entry.html).not.toContain('title="wikilink"');
   });
@@ -808,7 +808,7 @@ Heading Here
     // app/build/plugins/folderAssets bakes it into a %%BLOT_CDN%%-prefixed,
     // versioned URL at build time rather than leaving the raw path.
     const html = (actual) =>
-      /^<p><img src="%%BLOT_CDN%%\/folder\/v-[a-f0-9]{8}\/[^"]*\/_Images\/Image\.jpg" title="Image\.jpg" alt="Image\.jpg"><span class="caption">Image\.jpg<\/span><\/p>$/.test(
+      /^<p><img src="%%BLOT_CDN%%\/[^/"]+\/folder\/v-[a-f0-9]{8}\/_Images\/Image\.jpg" title="Image\.jpg" alt="Image\.jpg"><span class="caption">Image\.jpg<\/span><\/p>$/.test(
         actual
       );
 
@@ -838,7 +838,7 @@ Heading Here
     // app/build/plugins/folderAssets bakes it into a %%BLOT_CDN%%-prefixed,
     // versioned URL at build time rather than leaving the raw path.
     const html = (actual) =>
-      /^<p><img src="%%BLOT_CDN%%\/folder\/v-[a-f0-9]{8}\/[^"]*\/Files\/Pic\.png" title="Caption text" alt="Caption text"><span class="caption">Caption text<\/span><\/p>$/.test(
+      /^<p><img src="%%BLOT_CDN%%\/[^/"]+\/folder\/v-[a-f0-9]{8}\/Files\/Pic\.png" title="Caption text" alt="Caption text"><span class="caption">Caption text<\/span><\/p>$/.test(
         actual
       );
 

@@ -156,9 +156,7 @@ describe("build-time baked folder links", function () {
 
     const stored = await (await this.get("/encoded?json=true")).json();
 
-    expect(stored.entry.html).toMatch(
-      /\/folder\/v-[a-f0-9]{8}\/[^"]*\/my%20pic\.jpg/
-    );
+    expect(stored.entry.html).toMatch(/\/folder\/v-[a-f0-9]{8}\/my%20pic\.jpg/);
     expect(stored.entry.html).not.toContain("v-pending");
   });
 

@@ -140,7 +140,6 @@ describe("blog asset folder routes", function () {
           "/%E0%A4%A",
           "/%00",
           "/..%2f..%2fetc/passwd",
-          "/folder/%2e%2e/%2e%2e/file.txt",
           "/%EF%BC%8F..%EF%BC%8Fetc",
         ]) {
           const res = await fetch(cdnURL(suffix));
@@ -148,10 +147,13 @@ describe("blog asset folder routes", function () {
           expect(await res.text()).toBe("Not Found");
         }
 
-        // fetch resolves %2e%2e itself, so this leaves the folder route
-        expect((await fetch(cdnURL("/%2e%2e/%2e%2e/etc/passwd"))).status).toBe(
-          404
-        );
+        // fetch resolves %2e%2e itself, so these can leave the folder route
+        for (const suffix of [
+          "/%2e%2e/%2e%2e/etc/passwd",
+          "/folder/%2e%2e/%2e%2e/file.txt",
+        ]) {
+          expect((await fetch(cdnURL(suffix))).status).toBe(404);
+        }
       });
 
       it("ignores dotfiles", async function () {

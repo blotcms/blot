@@ -19,8 +19,10 @@ module.exports = function unwrapFolderLink(value, blogID) {
   if (value.indexOf(prefix) === 0) {
     const rest = value.slice(prefix.length);
     const versionEnd = rest.indexOf("/");
+    const path = versionEnd === -1 ? "" : rest.slice(versionEnd);
 
-    return versionEnd === -1 ? null : rest.slice(versionEnd);
+    // A file is always named after the version: "/" alone is no link
+    return path.length > 1 ? path : null;
   }
 
   if (value.indexOf(OLD_PREFIX) !== 0) return null;

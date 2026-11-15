@@ -9,9 +9,11 @@ describe("folderAssets plugin", function () {
 
   var buildEntry = (blog, path) => build(blog, path);
 
+  var escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   var tokenRegex = (path) =>
     new RegExp(
-      `${BLOT_CDN_TOKEN.replace(/%/g, "\\%")}/[^/"]+/folder/v-[a-f0-9]{8}[^"]*${path}`
+      `${escapeRegex(BLOT_CDN_TOKEN)}/[^/"]+/folder/v-[a-f0-9]{8}[^"]*${path}`
     );
 
   it("bakes a relative folder link into a %%BLOT_CDN%%-prefixed, versioned URL at build time", async function () {
@@ -225,13 +227,17 @@ describe("folderAssets plugin", function () {
 
     var entry = await buildEntry(blog, "/Hello.txt");
 
-    var links = entry.html.match(/\/folder\/v-[a-f0-9]{8}\/[^"]*/g);
+    var links = entry.html.match(/\/[^/"]+\/folder\/v-[a-f0-9]{8}\/[^"]*/g);
 
     expect(links.length).toEqual(3);
-    expect(links[0]).toMatch(new RegExp("/" + blog.id + "/pics/a\\.png$"));
+    expect(links[0]).toMatch(
+      new RegExp("^/" + blog.id + "/folder/v-[a-f0-9]{8}/pics/a\\.png$")
+    );
     // Which of the two folders is first in the directory's listing
     expect(links[1]).toMatch(/\/(Pics|pics)\/a\.png$/);
-    expect(links[2]).toMatch(new RegExp("/" + blog.id + "/pics/b\\.png$"));
+    expect(links[2]).toMatch(
+      new RegExp("^/" + blog.id + "/folder/v-[a-f0-9]{8}/pics/b\\.png$")
+    );
     expect(entry.dependencies).toContain("/pics/b.png");
   });
 
