@@ -114,7 +114,9 @@ describe("folder_root control", function () {
 
   it("shows the control without an error when storage fails", async function () {
     spyOn(console, "log");
-    folder.resolveCaseInsensitive.and.rejectWith(new Error("S3 is down"));
+    folder.resolveCaseInsensitive.and.callFake(async () => {
+      throw new Error("S3 is down");
+    });
 
     expect((await load({ folder_root: "/Posts" })).error).toBe(null);
   });
@@ -256,13 +258,13 @@ describe("folder_root control", function () {
     });
 
     it("lists the root without a lookup", async function () {
-      folder.list.and.resolveTo({
+      folder.list.and.callFake(async () => ({
         entries: [
           { name: "Posts", isDirectory: true },
           { name: "a.txt", isDirectory: false },
         ],
         cursor: null,
-      });
+      }));
 
       const { res } = await list({});
 
