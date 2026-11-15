@@ -9,13 +9,13 @@
   {{#menu}}
   {{#isPage}}
   <url>
-    <loc>{{siteURL}}{{url}}</loc>
+    <loc>{{{absoluteURL}}}</loc>
   </url>
   {{/isPage}}
   {{/menu}}
   {{#all_entries}}
   <url>
-    <loc>{{siteURL}}{{url}}</loc>
+    <loc>{{{absoluteURL}}}</loc>
   </url>
   {{/all_entries}}
 </urlset>
