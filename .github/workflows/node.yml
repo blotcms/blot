@@ -65,6 +65,7 @@ env:
     - proxy
     - scripts/deploy
     - scripts/storage
+    - scripts/template
 
   # The nightly run, and a manual one. It slows the specs down too much for
   # every push; see also the node-ok job.

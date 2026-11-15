@@ -62,6 +62,31 @@ describe("applyUserRetrieveOptions", function () {
     ).toEqual({ cdn: ["a.js", "b.js"] });
   });
 
+  it("drops a stored request when asked with an explicit false", function () {
+    expect(
+      applyUserRetrieveOptions(
+        { folder_legacy: true },
+        { folder: false },
+        {
+          folder: true,
+          posts: true,
+        }
+      )
+    ).toEqual({ folder_legacy: true, posts: true });
+  });
+
+  it("keeps a request the content still makes, even when asked to drop it", function () {
+    expect(
+      applyUserRetrieveOptions(
+        { folder: true },
+        { folder: false },
+        {
+          folder: true,
+        }
+      )
+    ).toEqual({ folder: true });
+  });
+
   it("is idempotent: re-applying its own output changes nothing", function () {
     var parseTemplate = require("../parseTemplate");
     var content =
