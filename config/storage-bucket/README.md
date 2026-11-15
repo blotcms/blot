@@ -353,31 +353,62 @@ Blot no longer owns the domain.
   "Purge Cache" empties the whole edge cache.
 
   The leaf of each URL is a directory `___<name>___` holding the response,
-  `___file___`. **Whatever Blot stops publishing stays public there** until
-  its exact URL is purged, so `app/cdn/permaCache.js` purges:
+  `___file___`. **Whatever Blot stops publishing, or publishes different
+  bytes at, stays public there** until its exact URL is purged. Each purge
+  waits for every edge (`async=false`), about 7 s, so `helper/purgeCdnUrls`
+  runs 16 at once, with a 60 s timeout; Bunny's `async=true` purges answer at
+  once, but a wildcard one was seen not to reach the edge minutes later
+  (15 Nov 2026). `app/cdn/permaCache.js` purges:
   - **a folder file's old URL** when a write replaces its bytes, or a remove
     or move takes it away (`storage/folder/s3.js`; the old version comes from
     the index record, so nothing is read), in both forms: the edge still
     caches the form used before #2695, which the rule "No Perma-Cache for old
-    folder URLs" keeps out of Perma-Cache;
-  - **a deleted blog's URLs**, all of them, listed from the storage zone,
-    then its directory, which is kept for the next sweep to retry if any
-    purge fails (`models/blog/remove.js`, after the removal resolves);
-  - **everything they missed, weekly** (scheduler, Sundays 04:15, under a
-    lock): for each `blog_*` directory, a deleted blog's whole directory,
-    and an existing blog's folder files at other than their current version,
-    generated files gone from the bucket, and anything else at its top
-    level. It stops without deleting anything if more than 50 blogs look
-    deleted at once. Purging a URL that is still current costs only a
-    refetch from the bucket.
+    folder URLs" keeps out of Perma-Cache. Not awaited: a write never waits
+    for Bunny;
+  - **a deleted blog**: one wildcard purge of `cdn.blot.im/<blogID>/*`, which
+    clears the edges, then its directory, which clears Perma-Cache; the
+    directory is kept for the sweep to retry if the purge fails
+    (`models/blog/remove.js`, after the removal resolves);
+  - **everything else, in the background sweep.** It runs on whichever
+    process holds the `perma-cache:sweep:lease` lock, starts a week after
+    the last run finished, and keeps its progress in the Redis hash
+    `perma-cache:sweep` (`startedAt`, `cursor`, `totals`, `finishedAt`,
+    `error`): it sweeps the top-level directories in name order, eight at a
+    time, and saves the name below which all are done, so after a deploy the
+    next holder resumes there. A run takes a few hours. Per directory:
+
+    | Directory | Stale when | Then |
+    | --- | --- | --- |
+    | `blog_*`, blog gone from Redis | always | wildcard purge, delete the directory |
+    | `blog_*/folder/` | not at the file's current version, or the file is gone | purge |
+    | `blog_*/_*` | gone from the bucket; under `_assets` (rewritten in place by a document's conversion), also changed in the bucket since Perma-Cache copied it | purge |
+    | `documentation/` | not at the file's current hash (`documentation/tools/cdn-url-helper`) | delete the storage copy |
+    | `template/` | the hash's rendered output gone from Redis | delete the storage copy |
+    | `fonts/`, `icons/`, `katex/`, `plugins/`, `syntax-highlighter/` | Bunny's SHA-256 of any copy differs from the file in this release, or the file is gone | purge, and delete the URL's directory |
+    | anything else | always | delete it |
+
+    A URL cached with a query string the pull zone varies by (the fonts'
+    `?version=`) is a separate file in the URL's directory,
+    `___file___variation___<hash>`, which a purge of the plain URL may not
+    reach; so a stale static file's whole directory is deleted, and its
+    current variations refill.
+
+    A copy nothing links any more and that the origin would answer
+    correctly is only deleted from storage, one call, without a purge. The
+    sweep stops without deleting anything if more than 50 blogs look deleted
+    at once, records the error in the hash and waits for the next week.
 
   The Storage API's password comes from the account API, with
-  `BUNNY_API_SECRET`. By hand, report-only unless `--apply`:
-  `docker exec -u 1000 blot-blue node scripts/storage/perma-cache-sweep.js [--blog <id>] [--apply]`.
-  `--wipe-old-folder-form --apply` deletes the top-level `folder/`
-  directory: every URL in the form used before
-  [#2695](https://github.com/blotcms/blot/issues/2695), which refills from the
-  app on demand.
+  `BUNNY_API_SECRET`. By hand, in one go, report-only unless `--apply`:
+  `docker exec -u 1000 blot-blue node scripts/storage/perma-cache-sweep.js [--only <blogID or directory>] [--apply]`.
+  The progress of the background sweep:
+  `redis6-cli HGETALL perma-cache:sweep` on the host.
+
+  One-off cleanup, 15 Nov 2026: the storage zone shrank by about two
+  thirds, after deleting the old-form `folder/` tree, every deleted blog and
+  every top-level directory that isn't a blog (`documentation/` alone held
+  about 5% of the zone, mostly old versions), and purging existing blogs'
+  stale URLs.
 - **Request coalescing** on, 30 s lock timeout.
 - **Headers:** "Add CORS headers" on for `eot, ttf, woff, woff2, css, otf, js,
   mjs` (added whatever the origin, and the only CORS headers on a Perma-Cache

@@ -441,23 +441,15 @@ module.exports = function () {
   });
 
   // Bunny's Perma-Cache keeps every CDN response until its exact URL is
-  // purged, so a folder file's old versions and a deleted blog's files stay
-  // public there. Writes, removes and blog deletion purge as they go; this
-  // weekly pass removes whatever they missed (cdn/permaCache). Production
-  // only: it needs the Bunny API key.
+  // purged, so a folder file's old versions, a deleted blog's files and a
+  // changed static file stay public there. Writes, removes and blog deletion
+  // purge as they go; this sweep removes whatever they missed, a week after
+  // its last run finished, on whichever process holds its lease, resuming
+  // where it left off after a deploy (cdn/permaCache). Production only: it
+  // needs the Bunny API key.
   if (config.environment === "production" && config.bunny.secret) {
-    console.log(clfdate(), "Scheduled weekly Perma-Cache sweep");
-    lock.cron("sweep-perma-cache", "15 4 * * 0", async function () {
-      try {
-        const totals = await permaCache.sweep({
-          apply: true,
-          log: function () {},
-        });
-        console.log(clfdate(), "Perma-Cache sweep:", JSON.stringify(totals));
-      } catch (err) {
-        console.log(clfdate(), "Error: Perma-Cache sweep", err);
-      }
-    });
+    console.log(clfdate(), "Started the background Perma-Cache sweep");
+    permaCache.start();
   }
 
   // config.tmp_directory is on the host's instance store and shared by every

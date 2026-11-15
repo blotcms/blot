@@ -46,10 +46,11 @@ var remove = async function remove(blogID) {
   return blog;
 };
 
-// Everything the CDN's Perma-Cache holds for the blog, its generated files
-// and folder files, is purged URL by URL, which takes a while (about four a
-// second), so it runs on after the removal resolves. The weekly Perma-Cache
-// sweep removes what's left of any blog this misses.
+// Everything the CDN holds for the blog, its generated files and folder
+// files: a wildcard purge clears the edges, then its Perma-Cache directory is
+// deleted. The purge waits for every edge, so it runs on after the removal
+// resolves, and nothing waits for it. The background Perma-Cache sweep
+// removes what's left of any blog this misses.
 async function purgeCdn(blog) {
   if (config.environment !== "production" || !config.bunny.secret) return;
 

@@ -2,10 +2,17 @@ const config = require("config");
 const fetch = require("node-fetch");
 const Bottleneck = require("bottleneck");
 
+// Each purge waits for Bunny to reach every edge (async=false), about 7 s,
+// so they run several at a time: started at most 20 a second, 16 in flight.
+// Bunny's "async" purges answer at once, but a wildcard one was seen not to
+// reach the edge minutes later, so they aren't used.
 const limiter = new Bottleneck({
-  maxConcurrent: 1,
-  minTime: 250,
+  maxConcurrent: 16,
+  minTime: 50,
 });
+
+// A purge Bunny never answers would hold its slot, and the caller, forever
+const TIMEOUT_MS = 60 * 1000;
 
 const MAX_RETRIES = 3;
 const BASE_RETRY_DELAY_MS = 300;
@@ -47,7 +54,7 @@ function getBackoffDelayMs(attempt) {
   return Math.min(MAX_RETRY_DELAY_MS, exponentialDelay + jitter);
 }
 
-async function purgeUrlWithRetries(urlToPurge) {
+async function purgeUrlWithRetries(urlToPurge, quiet) {
   const totalAttempts = MAX_RETRIES + 1;
 
   for (let attempt = 1; attempt <= totalAttempts; attempt++) {
@@ -56,12 +63,14 @@ async function purgeUrlWithRetries(urlToPurge) {
       const res = await fetch(url, {
         method: "POST",
         headers: { AccessKey: config.bunny.secret },
+        timeout: TIMEOUT_MS,
       });
 
       if (res.status === 200) {
-        console.log(
-          `Purged Bunny CDN: ${urlToPurge} (attempt ${attempt}/${totalAttempts})`
-        );
+        if (!quiet)
+          console.log(
+            `Purged Bunny CDN: ${urlToPurge} (attempt ${attempt}/${totalAttempts})`
+          );
         return true;
       }
 
@@ -89,11 +98,13 @@ async function purgeUrlWithRetries(urlToPurge) {
 }
 
 /**
- * Purge URLs from Bunny CDN cache
+ * Purge URLs from Bunny CDN cache, several at a time. A URL ending in "*" is
+ * a wildcard purge, which reaches the edges but not Perma-Cache.
  * @param {string[]} urls - Array of URLs to purge (will be encoded internally)
+ * @param {{ quiet?: boolean }} [options] - quiet: don't log each success
  * @returns {Promise<boolean>} false if any purge failed
  */
-async function purgeCdnUrls(urls) {
+async function purgeCdnUrls(urls, options = {}) {
   if (config.environment !== "production") {
     return true;
   }
@@ -106,19 +117,20 @@ async function purgeCdnUrls(urls) {
     return true;
   }
 
-  let ok = true;
+  const results = await Promise.all(
+    urls.map(async (urlToPurge) => {
+      try {
+        return await limiter.schedule(() =>
+          purgeUrlWithRetries(urlToPurge, options.quiet)
+        );
+      } catch (err) {
+        console.error(`Error purging Bunny CDN: ${urlToPurge}`, err);
+        return false;
+      }
+    })
+  );
 
-  for (const urlToPurge of urls) {
-    try {
-      if (!(await limiter.schedule(() => purgeUrlWithRetries(urlToPurge))))
-        ok = false;
-    } catch (err) {
-      ok = false;
-      console.error(`Error purging Bunny CDN: ${urlToPurge}`, err);
-    }
-  }
-
-  return ok;
+  return results.every(Boolean);
 }
 
 module.exports = purgeCdnUrls;
