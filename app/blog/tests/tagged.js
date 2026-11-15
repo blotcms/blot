@@ -170,7 +170,7 @@ describe("tags work on sites", function () {
     expect(lowerParsed.titles).toEqual(["mixed two", "mixed one"]);
   });
 
-  it("returns an empty list for unknown tags", async function () {
+  it("renders tagged.html with a 404 for unknown tags", async function () {
     await this.template({
       "tagged.html": "Total: {{total}}\n{{#entries}}{{title}}\n{{/entries}}",
     });
@@ -178,7 +178,7 @@ describe("tags work on sites", function () {
     const res = await this.get(`/tagged/does-not-exist`);
     const lines = (await res.text()).trim().split(/\n+/).filter(Boolean);
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
     expect(lines[0]).toBe("Total: 0");
     expect(lines.length).toBe(1);
   });
@@ -196,7 +196,7 @@ describe("tags work on sites", function () {
     const res = await this.get(`/tagged/multi%2520word`);
     const lines = (await res.text()).trim().split(/\n+/).filter(Boolean);
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
     expect(lines[0]).toBe("Total: 0");
     expect(lines.length).toBe(1);
   });
