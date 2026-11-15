@@ -29,8 +29,11 @@ describe("storage/sweepGenerated", function () {
     const old = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
     const recent = new Date();
 
-    spyOn(Entries, "getAllIDs").and.resolveTo(["/used.txt", "/gone.txt"]);
-    spyOn(Entry, "get").and.resolveTo([
+    spyOn(Entries, "getAllIDs").and.callFake(async () => [
+      "/used.txt",
+      "/gone.txt",
+    ]);
+    spyOn(Entry, "get").and.callFake(async () => [
       { html: `<img src="/_image_cache/used/a.jpg">` },
       { deleted: true, html: `<img src="/_image_cache/gone/a.jpg">` },
     ]);
@@ -67,8 +70,10 @@ describe("storage/sweepGenerated", function () {
   });
 
   it("fails a blog's report when a read fails, rather than undercounting", async function () {
-    spyOn(Entries, "getAllIDs").and.resolveTo(["/a.txt"]);
-    spyOn(Entry, "get").and.rejectWith(new Error("Redis went away"));
+    spyOn(Entries, "getAllIDs").and.callFake(async () => ["/a.txt"]);
+    spyOn(Entry, "get").and.callFake(async () => {
+      throw new Error("Redis went away");
+    });
 
     const err = await sweep.report(this.blog.id).catch((err) => err);
 
