@@ -235,6 +235,7 @@ TemplateEditor.route("/:templateSlug")
   .all(require("./load/presets"))
   .all(require("./load/url-inputs"))
   .all(require("./load/image-inputs"))
+  .get(require("./load/folder-input"))
   .all(require("./load/favicon"))
   .all(require("./load/index-inputs"))
   .all(require("./load/sort-input"))
@@ -244,6 +245,7 @@ TemplateEditor.route("/:templateSlug")
     require("./save/fork-if-needed"),
     prepareTemplateUpdate,
     require("./save/layout-inputs"),
+    require("./save/folder-root"),
     persistTemplateUpdate
   )
   .get(function (req, res) {
@@ -262,6 +264,10 @@ TemplateEditor.route("/:templateSlug/uploads/:key")
     res.render("dashboard/template/controls/upload-form");
   })
   .post(require("./save/fork-if-needed"), require("./save/upload-local"));
+
+// The directories of the blog's folder, one level at a time, for the folder
+// picker
+TemplateEditor.get("/:templateSlug/folders", require("./load/folder-list"));
 
 TemplateEditor.route("/:templateSlug/images/:key")
   .get(

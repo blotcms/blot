@@ -1,0 +1,19 @@
+<form method="post" class="folder-input" data-folder-input data-folders-url="{{{base}}}/folders">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+  <label for="locals.{{key}}">{{label}}:</label>
+  <input
+    type="text"
+    id="locals.{{key}}"
+    name="locals.{{key}}"
+    value="{{value}}"
+    placeholder="{{placeholder}}"
+    list="locals.{{key}}.options"
+    autocomplete="off"
+    autocapitalize="off"
+    spellcheck="false"
+    aria-describedby="locals.{{key}}.error"
+    {{#error}}aria-invalid="true"{{/error}}
+  />
+  <datalist id="locals.{{key}}.options"></datalist>
+  <p class="folder-input__error" id="locals.{{key}}.error" role="alert"{{^error}} hidden{{/error}}>{{error}}</p>
+</form>
