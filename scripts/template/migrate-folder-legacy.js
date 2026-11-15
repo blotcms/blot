@@ -490,7 +490,7 @@ async function verifyView(templateID, item) {
     throw new Error(item.view.name + " does not retrieve " + TO);
 }
 
-function describe(change) {
+function formatChange(change) {
   const where = [];
   if (change.partial) where.push("partial " + change.partial);
   if (change.inside && change.inside.length)
@@ -513,17 +513,19 @@ function printPlan(plan, apply) {
       ? "view " + item.view.name
       : "view " + item.view.name + " (stored retrieve only)";
     console.log("    " + label);
-    item.changes.forEach((change) => console.log(describe(change)));
+    item.changes.forEach((change) => console.log(formatChange(change)));
   }
 
   for (const file of plan.files) {
     console.log("    folder file " + file.path);
-    file.changes.forEach((change) => console.log(describe(change)));
+    file.changes.forEach((change) => console.log(formatChange(change)));
   }
 
   if (plan.packageFile) {
     console.log("    folder file " + plan.packageFile.path);
-    plan.packageFile.changes.forEach((change) => console.log(describe(change)));
+    plan.packageFile.changes.forEach((change) =>
+      console.log(formatChange(change))
+    );
   }
 
   plan.problems.forEach((problem) => console.log("    PROBLEM " + problem));
