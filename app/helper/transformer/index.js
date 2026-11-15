@@ -115,13 +115,26 @@ function Transformer(blogID, name) {
   // image cache's optimize(), which mints a uuid per call - can therefore
   // leave an orphaned artifact. Accepted trade-off, not a bug; see
   // readme.txt.
-  async function lookup(src, transform) {
+  //
+  // options.isValid(result), if given, is asked whether a cached result can
+  // still be used, e.g. that the files it names are still stored. If not, the
+  // source is transformed again and the new result replaces it.
+  async function lookup(src, transform, options) {
     if (type(src) !== "string") {
       throw new Error("Transformer: src is not a string");
     }
 
     if (type(transform) !== "function") {
       throw new Error("Transformer: transformer is not a function");
+    }
+
+    // Carried on the transform, which every from* function below is passed
+    if (options && options.isValid && !transform.isValid) {
+      var original = transform;
+      transform = function (path) {
+        return original(path);
+      };
+      transform.isValid = options.isValid;
     }
 
     src = resolveCDNPath(src);
@@ -309,6 +322,12 @@ function Transformer(blogID, name) {
     var headers = stored.headers;
     var result = stored.result;
 
+    // Download it again, rather than accept a "not modified"
+    if (result && !(await stillValid(transform, result))) {
+      result = null;
+      headers = null;
+    }
+
     // Right now ampersands in URL queries are escaped
     // which isn't ideal and breaks the thumbnail generator.
     // So we try the URL with unescaped ampersands first.
@@ -382,7 +401,8 @@ function Transformer(blogID, name) {
 
     // Leave early, please pass hash so that
     // from URL doesn't have to compute it again
-    if (existing) return { result: existing, hash: hash };
+    if (existing && (await stillValid(transform, existing)))
+      return { result: existing, hash: hash };
 
     debug(path, "transforming new file");
 
@@ -479,6 +499,19 @@ function Transformer(blogID, name) {
     lookup: lookup,
     flush: flush,
   };
+}
+
+// Whether a cached result may be used (see lookup's options.isValid). If the
+// check itself fails, it is: a stored result is better than none.
+async function stillValid(transform, result) {
+  if (typeof transform.isValid !== "function") return true;
+
+  try {
+    return !!(await transform.isValid(result));
+  } catch (err) {
+    debug("isValid failed, using the cached result", err);
+    return true;
+  }
 }
 
 function missing(src) {

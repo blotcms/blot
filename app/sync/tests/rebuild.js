@@ -80,7 +80,16 @@ describe("rebuild", function () {
     const rebuiltEntry = await this.blog.check({ path });
 
     expect(rebuiltEntry.html).toEqual(entry.html);
-    expect(entry.thumbnail).not.toEqual(rebuiltEntry.thumbnail);
+    // Made again, from the same image, into the directory named for it
+    // (build/thumbnail/create), after the rebuild removed them all
+    expect(rebuiltEntry.thumbnail).toEqual(entry.thumbnail);
+    for (const size of Object.keys(rebuiltEntry.thumbnail))
+      expect(
+        await require("storage/assets").exists(
+          this.blog.id,
+          rebuiltEntry.thumbnail[size].path
+        )
+      ).toBe(true);
 
     done();
   });

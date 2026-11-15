@@ -4,6 +4,7 @@ var Transformer = require("helper/transformer");
 var STORE_PREFIX = "thumbnails";
 var debug = require("debug")("blot:entry:build:thumbnail");
 var { report } = require("build/flags");
+var assets = require("storage/assets");
 
 async function thumbnail(blog, path, metadata, html) {
   var store, candidates;
@@ -32,6 +33,19 @@ async function thumbnail(blog, path, metadata, html) {
     }
   }
 
+  // A cached result names files in the bucket, which may since have gone
+  // (removed, or never uploaded): if so, they're made again rather than
+  // linked. One file stands for the set, since they're uploaded together.
+  async function isValid(result) {
+    if (!result || result.rejected !== undefined) return true;
+
+    var first = Object.keys(result)[0];
+
+    if (!first || !result[first] || !result[first].path) return true;
+
+    return assets.exists(blog.id, result[first].path);
+  }
+
   // The first candidate which produces thumbnails wins
   var thumbnails = null;
   var problem = null;
@@ -41,7 +55,7 @@ async function thumbnail(blog, path, metadata, html) {
   }
 
   for (var candidate of candidates) {
-    var found = await lookup(store, candidate, createOrReject, failed);
+    var found = await lookup(store, candidate, createOrReject, isValid, failed);
 
     // We don't care if a candidate produces an error
     // we just keep going on down the list...
@@ -71,11 +85,11 @@ async function thumbnail(blog, path, metadata, html) {
 
 // Looks up the thumbnails for one candidate. Resolves to undefined if there
 // aren't any, whether the candidate was rejected or failed.
-async function lookup(store, candidate, create, failed) {
+async function lookup(store, candidate, create, isValid, failed) {
   var thumbnails;
 
   try {
-    thumbnails = await store.lookup(candidate, create);
+    thumbnails = await store.lookup(candidate, create, { isValid });
   } catch (err) {
     debug(candidate, err);
     failed(candidate, err);
