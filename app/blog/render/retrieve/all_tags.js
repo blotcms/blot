@@ -1,5 +1,6 @@
 const Tags = require("models/tags");
 const asRetriever = require("../../lib/asRetriever");
+const tagSlug = require("./helpers/tagSlug");
 
 // Every tag, from Tags.getCachedList, which caches the list per blog cacheID
 // and path prefix (previews share it: nothing in it depends on the
@@ -37,6 +38,7 @@ async function allTags(req, res) {
     tag.entries.forEach((id) => {
       set[id] = true;
     });
+    if (tag.slug) tag.slug = tagSlug(tag.slug);
     return tag;
   });
 

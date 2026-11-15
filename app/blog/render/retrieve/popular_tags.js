@@ -1,5 +1,6 @@
 const { popularTags: getPopularTags } = require("../../lib/models");
 const asRetriever = require("../../lib/asRetriever");
+const tagSlug = require("./helpers/tagSlug");
 
 // A ZRANGE and a GET per tag (the client-side cache usually answers those
 // locally), so not worth a cache
@@ -15,7 +16,7 @@ async function popularTags(req, res) {
     tag: tag.name, // for backward compatibility
     entries: tag.entries,
     total: tag.count,
-    slug: tag.slug, // stored slugs are already percent-encoded
+    slug: tagSlug(tag.slug),
   }));
 }
 
