@@ -9,8 +9,19 @@
 //   rendering it after every entry.
 //
 // Call it on the copy that will be rendered: a cache that clones the array
-// drops the property.
-module.exports = function listPagination(entries, pagination) {
+// drops the property, and so does helper/extend, which rebuilds arrays when
+// render/middleware.js merges the retrieved locals (carryListPagination puts
+// it back).
+function setListPagination(entries, pagination) {
+  Object.defineProperty(entries, "pagination", {
+    value: pagination,
+    enumerable: false,
+    writable: true,
+    configurable: true,
+  });
+}
+
+function listPagination(entries, pagination) {
   if (!Array.isArray(entries)) return entries;
 
   const last = entries.length - 1;
@@ -20,12 +31,28 @@ module.exports = function listPagination(entries, pagination) {
       entry.pagination = i === last ? pagination : null;
   });
 
-  Object.defineProperty(entries, "pagination", {
-    value: pagination,
-    enumerable: false,
-    writable: true,
-    configurable: true,
-  });
+  setListPagination(entries, pagination);
 
   return entries;
-};
+}
+
+// After merging retrieved locals into res.locals, give each merged array the
+// pagination its retrieved array carried.
+function carryListPagination(locals, retrieved) {
+  if (!locals || !retrieved) return;
+
+  for (const name of Object.keys(retrieved)) {
+    const from = retrieved[name];
+    const to = locals[name];
+    if (
+      Array.isArray(from) &&
+      Array.isArray(to) &&
+      to !== from &&
+      Object.prototype.hasOwnProperty.call(from, "pagination")
+    )
+      setListPagination(to, from.pagination);
+  }
+}
+
+module.exports = listPagination;
+module.exports.carryListPagination = carryListPagination;

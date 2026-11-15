@@ -3,6 +3,7 @@ const loadView = require("./load");
 const finalRender = require("./main");
 const retrieve = require("./retrieve");
 const listingViews = require("./listingViews");
+const { carryListPagination } = require("./retrieve/helpers/listPagination");
 const { getFullView } = require("../lib/models");
 
 const ensure = require("helper/ensure");
@@ -233,6 +234,8 @@ module.exports = function attachRenderView(req, res, _next) {
 
     const foundLocals = await retrieve(req, res, missingLocals);
     extend(res.locals).and(foundLocals);
+    // extend rebuilds arrays, dropping posts.pagination
+    carryListPagination(res.locals, foundLocals);
     listingViews.aliasLocals(name, req, res, foundLocals);
 
     try {
