@@ -115,45 +115,9 @@ function urlOf(path) {
 }
 
 // Required when used: replaceFolderLinks/shared requires helper/contentVersion,
-// which requires storage/folder, whose writes call purgeFolderFile below
+// which requires storage/folder
 function shared() {
   return require("blog/render/replaceFolderLinks/shared");
-}
-
-// Purges a folder file's URL once a write replaces it or a remove or move
-// takes it away, given its index record from before. Best effort: the
-// sweep removes whatever this misses.
-function purgeFolderFile(blogID, path, record) {
-  if (!record || record.type !== "file") return;
-
-  const version = contentVersion.fromFolderRecord(record);
-
-  if (!version) return;
-
-  const { folderCdnPath, encodeFolderPath } = shared();
-
-  // Not awaited: a write shouldn't wait for Bunny. purgeCdnUrls logs failures.
-  // The form links used before #2695, /folder/v-<version>/<blogID><path>, is
-  // still served (by the app, for posts not rebuilt since) and cached at the
-  // edge, so it is purged too. Perma-Cache doesn't keep it: its edge rule
-  // bypasses Perma-Cache.
-  purgeQuietly([
-    config.cdn.origin + folderCdnPath(blogID, version, path),
-    config.cdn.origin +
-      "/folder/v-" +
-      version +
-      "/" +
-      blogID +
-      encodeFolderPath(path.normalize("NFC")),
-  ]);
-}
-
-async function purgeQuietly(urls) {
-  try {
-    await purgeCdnUrls(urls);
-  } catch (err) {
-    console.error("permaCache: purging", urls, err);
-  }
 }
 
 async function blogExists(blogID) {
@@ -676,7 +640,6 @@ function start() {
 module.exports = {
   root,
   cachedBelow,
-  purgeFolderFile,
   removeBlog: async (blogID) => removeBlog(await root(), blogID),
   sweep,
   step,

@@ -9,7 +9,7 @@ var templateKey = require("models/template/key");
 var BackupDomain = require("./util/backupDomain");
 var flushCache = require("./flushCache");
 var folderLock = require("sync/lock");
-var permaCache = require("cdn/permaCache");
+var purgeQueue = require("cdn/purgeQueue");
 
 var START_CURSOR = "0";
 var SCAN_SIZE = 1000;
@@ -41,30 +41,10 @@ var remove = async function remove(blogID) {
   await updateUser(blog);
   await wipeFolders(blog);
   await deleteKeys(blog);
-  purgeCdn(blog);
+  await purgeQueue.blog(blog.id);
 
   return blog;
 };
-
-// Everything the CDN holds for the blog, its generated files and folder
-// files: a wildcard purge clears the edges, then its Perma-Cache directory is
-// deleted. The purge waits for every edge, so it runs on after the removal
-// resolves, and nothing waits for it. The background Perma-Cache sweep
-// removes what's left of any blog this misses.
-async function purgeCdn(blog) {
-  if (config.environment !== "production" || !config.bunny.secret) return;
-
-  try {
-    await permaCache.removeBlog(blog.id);
-  } catch (err) {
-    console.error(
-      "Blog",
-      blog.id,
-      "removed, but purging its CDN copies failed",
-      err
-    );
-  }
-}
 
 async function wipeFolders(blog) {
   if (!blog.id || typeof blog.id !== "string")
