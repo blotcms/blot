@@ -200,6 +200,8 @@ module.exports = function attachRenderView(req, res, _next) {
     const missingLocals = response[2];
     const viewType = response[3];
     const view = response[4];
+    // The view's URL patterns, which pagination URLs are built from
+    req.viewURLPatterns = response[6] || [];
     // Only an explicit false skips resolving backlinks, and not for
     // ?debug and ?json, which dump every local, backlinks included.
     req.usesBacklinks =
