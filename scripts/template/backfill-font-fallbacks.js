@@ -17,7 +17,7 @@
 // write. Usage: node scripts/template/backfill-font-fallbacks.js [--apply]
 
 const eachTemplate = require("../each/template");
-const flushCache = require("models/blog/set");
+const bumpCacheID = require("models/blog/bumpCacheID");
 const Template = require("models/template");
 const updateCdnManifest = require("models/template/util/updateCdnManifest");
 const { stackWithFallback } = require("blog/static/fonts/fallback");
@@ -58,7 +58,7 @@ async function processTemplate(template, blog) {
     console.log(`Rebuilt ${template.id}`);
 
     if (blog && template.id === blog.template) {
-      await flushCache(blog.id, { cacheID: Date.now() });
+      await bumpCacheID(blog.id);
     }
   } catch (err) {
     totals.failed++;
