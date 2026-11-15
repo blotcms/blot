@@ -27,8 +27,23 @@ const FALLBACKS = {
 
 const TRAILING_GENERIC = /(^|,)\s*(serif|sans-serif|monospace|system-ui)\s*$/i;
 
+// Stored font locals often carry only the id and stack (injectLocals copies
+// the stack from the registry but not the tags), so take the tags from the
+// registry when the local has none.
+let registryTags;
+function tagsFor(font) {
+  if (Array.isArray(font.tags) && font.tags.length) return font.tags;
+  if (!registryTags) {
+    registryTags = new Map();
+    for (const entry of require("./index.json")) {
+      if (entry && entry.id) registryTags.set(entry.id, entry.tags || []);
+    }
+  }
+  return registryTags.get(font.id) || [];
+}
+
 function kind(font) {
-  const tags = font.tags || [];
+  const tags = tagsFor(font);
   if (tags.includes("mono") || /(^|-)mono$/.test(font.id || "")) return "mono";
   if (tags.includes("serif")) return "serif";
   return "sans";
@@ -41,7 +56,7 @@ function kind(font) {
 function stackWithFallback(font) {
   const stack = font && typeof font.stack === "string" ? font.stack.trim() : "";
   if (!stack) return stack;
-  if ((font.tags || []).includes("other")) return stack;
+  if (tagsFor(font).includes("other")) return stack;
   if (/(^|,)\s*(cursive|fantasy)\s*(,|$)/i.test(stack)) return stack;
 
   const style = kind(font);

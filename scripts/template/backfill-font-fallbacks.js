@@ -10,8 +10,9 @@
 //
 // Safe to re-run: a manifest rebuild of an unchanged template changes
 // nothing, and templates that need no change are skipped. To resume, run it
-// again; templates already rebuilt report as unchanged. For a blog whose
-// installed template changed, the blog's cacheID is bumped so pages relink.
+// again; templates already rebuilt report as unchanged. The cacheID of each
+// blog whose installed template needs the fallback is bumped on every run,
+// changed or not, so pages relink even after an interrupted run.
 //
 // Dry run by default (lists the templates it would rebuild). Pass --apply to
 // write. Usage: node scripts/template/backfill-font-fallbacks.js [--apply]
@@ -52,11 +53,15 @@ async function processTemplate(template, blog) {
     const before = JSON.stringify(template.cdn || {});
     const after = JSON.stringify((await updateCdnManifest(template.id)) || {});
 
-    if (before === after) return;
+    if (before !== after) {
+      totals.changed++;
+      console.log(`Rebuilt ${template.id}`);
+    }
 
-    totals.changed++;
-    console.log(`Rebuilt ${template.id}`);
-
+    // Bump even when this run found the manifest unchanged: a run interrupted
+    // between the rebuild and the bump (or a failed bump) leaves cached pages
+    // linking the old stylesheet, which the rebuild removed. A spare bump
+    // costs one re-render of the site's pages.
     if (blog && template.id === blog.template) {
       await bumpCacheID(blog.id);
     }
