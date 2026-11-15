@@ -935,13 +935,68 @@ describe("storage/folder", function () {
         expect(names(second)).toEqual(["bb", "c"]);
       });
 
-      it("sorts names with non-ASCII and control characters", async function () {
-        for (var name of ["é", "z", "a b", "\tx", "日本"])
+      it("sorts names naturally, ignoring case, accents and control characters", async function () {
+        for (var name of [
+          "é",
+          "z",
+          "a b",
+          "\tx",
+          "日本",
+          "IMG_10",
+          "img_2",
+          "B",
+        ])
           await folder.write(this.blog.id, "/d/" + name, "x");
 
         var page = await folder.list(this.blog.id, "/d");
 
-        expect(names(page)).toEqual(["\tx", "a b", "z", "é", "日本"]);
+        expect(names(page)).toEqual([
+          "a b",
+          "B",
+          "é",
+          "img_2",
+          "IMG_10",
+          "\tx",
+          "z",
+          "日本",
+        ]);
+      });
+
+      it("pages by position, without hidden names, either way round", async function () {
+        for (var name of ["f10", "f9", "f1", ".hidden", "x.preview.html", "F2"])
+          await folder.write(this.blog.id, "/d/" + name, "x");
+
+        var page = await folder.listPage(this.blog.id, "/d", {
+          offset: 1,
+          limit: 2,
+        });
+
+        expect(names(page)).toEqual(["F2", "f9"]);
+        expect(page.total).toEqual(4);
+
+        var last = await folder.listPage(this.blog.id, "/d", {
+          offset: 0,
+          limit: 3,
+          order: "desc",
+        });
+
+        expect(names(last)).toEqual(["f10", "f9", "F2"]);
+        expect(
+          names(
+            await folder.listPage(this.blog.id, "/d", {
+              offset: 3,
+              limit: 3,
+              order: "desc",
+            })
+          )
+        ).toEqual(["f1"]);
+        expect(
+          names(await folder.listPage(this.blog.id, "/d", { offset: 4 }))
+        ).toEqual([]);
+        expect(page.entries[0].isDirectory).toBe(false);
+        expect(
+          (await rejection(folder.listPage(this.blog.id, "/nope"))).code
+        ).toEqual("ENOENT");
       });
 
       it("rejects a missing directory with ENOENT, a bad cursor and a bad limit", async function () {

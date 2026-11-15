@@ -443,14 +443,15 @@ const allEntries = await store.folder.listAll(path); // buffers everything; for 
 ```
 
 The listing comes from the Redis index, one directory at a time
-(a page is a `ZRANGEBYLEX` of the directory's names set, see
+(a page is a `ZRANGEBYLEX` of the directory's natural-order sorted set, see
 `app/models/file/README`), not from `ListObjectsV2`. `.listAll()` is for callers like `buildFromFolder`'s directory scan
 or the quota-reconciliation script that genuinely need everything; the
 `folder` template local — the one place a huge directory has actually
 caused problems — should call `.list()` directly, never `.listAll()`.
 
-`.list()` is sorted by name (UTF-16 code-unit order), and
-its cursor is the last name of the previous page.
+`.list()` is in natural name order, as a file browser shows a folder, and
+its cursor is the last name of the previous page. `.listPage()` gives a page
+of the visible entries by position, with their total.
 
 ## 7. Open questions
 
