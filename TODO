@@ -1,3 +1,5 @@
+- `scripts/template/migrate-folder-legacy.js` runs out of memory without blog handles: it reads every file of every locally edited template on every blog (images included) before checking whether the template uses `folder`. Plan folder files only for templates with a view to change, before step 12 of #2693 reuses it. (15 Nov 2026)
+
 Security notes from the CodeQL triage, 15 Nov 2026 (#2707). None was flagged by CodeQL and none is urgent:
 - `/questions/ask` (`app/documentation/questions/index.js`) emails the maintainer on each post, with only the proxy's per-IP limit in front of it. Add a per-address or per-IP throttle like the newsletter's (`app/documentation/news.js`).
 - Dashboard forms redirect to `req.body.redirect` unchecked (`app/dashboard/util/message.js` and the template save routes). CSRF protection keeps another site from posting it, but run it through `app/dashboard/log-in/safeThen.js` so it can only be a same-site path.
