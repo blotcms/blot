@@ -433,6 +433,12 @@ Blot no longer owns the domain.
     for pending folder images", "Storage bucket for generated assets" and
     "Folder files from the bucket", in that order; the last two and CORS are
     described below.
+  - "No Perma-Cache for old folder URLs": Bypass Perma-Cache on
+    `*://cdn.blot.im/folder/v-*` (and the same for `blot-cdn.b-cdn.net`),
+    added 15 Nov 2026. Links built before #2695 still use that form and the
+    app still serves it, but Perma-Cache groups it by version rather than by
+    blog, so nothing could find its stale copies there; the edge caches it,
+    and a folder file's change purges that URL too (`app/cdn/permaCache.js`).
   - "Immutable browser cache": Browser Cache Header (Cache-Control) Override
     to `public, max-age=31536000, immutable`, when all of: the URL is on one
     of the two hostnames (`*://cdn.blot.im/*`, `*://blot-cdn.b-cdn.net/*`),
