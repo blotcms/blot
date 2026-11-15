@@ -163,8 +163,10 @@ async function searchForExtension(blogID, path) {
 
   const entries = await folder.listNames(blogID, correctDir);
 
+  // A folder is never an entry, so a folder called post/ must not shadow
+  // post.md
   const match = pickName(
-    entries.map((entry) => entry.name),
+    entries.filter((entry) => !entry.isDirectory).map((entry) => entry.name),
     base
   );
 

@@ -11,8 +11,13 @@ describe("wikilinks byPath: extensionless links", function () {
 
   // Resolve "/Posts/<base>" against a directory which lists these names,
   // in the order given and then reversed. Both must give the same answer.
+  // A name ending in / is a folder.
   async function resolve(names, base) {
-    listing = names.map((name) => ({ name }));
+    listing = names.map((name) =>
+      name.endsWith("/")
+        ? { name: name.slice(0, -1), isDirectory: true }
+        : { name, isDirectory: false }
+    );
     const forward = await searchForExtension("blog", "/Posts/" + base);
 
     listing = [...listing].reverse();
@@ -26,6 +31,10 @@ describe("wikilinks byPath: extensionless links", function () {
     expect(await resolve(["post-two.md", "post.md"], "post")).toBe(
       "/Posts/post.md"
     );
+  });
+
+  it("ignores a folder with the link's name", async function () {
+    expect(await resolve(["post/", "post.md"], "post")).toBe("/Posts/post.md");
   });
 
   it("prefers an exact match to a normalized one", async function () {
