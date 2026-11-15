@@ -101,8 +101,10 @@ async function blogExists(blogID) {
   return (await client.exists(blogKey.info(blogID))) === 1;
 }
 
-// The current version of a folder file, or null if it isn't a file now
-async function currentVersion(blogID, path) {
+// The versions a folder file is linked at now: its content version, as the
+// build and templates link it, and its size and mtime token, as the blog's
+// large-file redirect does (blog/routes/assets.js). Empty if it isn't a file.
+async function currentVersions(blogID, path) {
   const folder = require("storage/folder");
   let stat;
 
@@ -110,17 +112,20 @@ async function currentVersion(blogID, path) {
     stat = await folder.stat(blogID, path, { sha1: true });
   } catch (err) {
     if (err && (err.code === "ENOENT" || err.name === "NotFoundError"))
-      return null;
+      return [];
     throw err;
   }
 
-  if (stat.isDirectory) return null;
+  if (stat.isDirectory) return [];
 
-  return contentVersion.fromFolderRecord({
-    size: stat.size,
-    modified: stat.modified,
-    sha1: stat.sha1,
-  });
+  return [
+    contentVersion.fromFolderRecord({
+      size: stat.size,
+      modified: stat.modified,
+      sha1: stat.sha1,
+    }),
+    contentVersion.fromFolderStat(stat),
+  ];
 }
 
 // The stale URLs Perma-Cache holds for an existing blog:
@@ -150,13 +155,13 @@ async function* staleForBlog(base, blogID) {
         if (!match) {
           yield { ...item, reason: "unversioned" };
         } else if (match[1] !== "pending") {
-          const current = await currentVersion(
+          const current = await currentVersions(
             blogID,
             decodeFolderPath(match[2]).normalize("NFC")
           );
 
-          if (current !== match[1])
-            yield { ...item, reason: current ? "replaced" : "removed" };
+          if (!current.includes(match[1]))
+            yield { ...item, reason: current.length ? "replaced" : "removed" };
         }
       }
     } else if (entry.name.startsWith("_")) {

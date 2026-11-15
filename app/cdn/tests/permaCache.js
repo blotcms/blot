@@ -81,9 +81,13 @@ describe("cdn/permaCache", function () {
     await folder.write(id, "/my pic.jpg", "pic");
     const current = await versionOf(id, "/a.txt");
     const pic = await versionOf(id, "/my pic.jpg");
+    const redirected = contentVersion.fromFolderStat(
+      await folder.stat(id, "/a.txt")
+    );
 
     zone([
       `/${id}/folder/v-${current}/a.txt`,
+      `/${id}/folder/v-${redirected}/a.txt`,
       `/${id}/folder/v-deadbeef/a.txt`,
       `/${id}/folder/v-${pic}/my%20pic.jpg`,
       `/${id}/folder/v-${current}/gone.txt`,
