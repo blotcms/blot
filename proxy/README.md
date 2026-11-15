@@ -111,9 +111,8 @@ OpenResty's logs are in the container, under `/var/log/openresty`.
 `LOCAL_DEVELOPMENT=true` renders the `development*.conf` partials, which
 production never does: routing for the worktree preview slots
 (`a-blot.localhost`, ... `e-blot.localhost`, see `scripts/development/worktrees.md`),
-MinIO standing in for Bunny on the CDN host's `blog_*` paths, no rate limits
-for private addresses, and include hooks under `/etc/openresty/development`
-that Agentation fills. The rest differs from production only in its runtime
+MinIO standing in for Bunny on the CDN host's `blog_*` paths, and no rate
+limits for private addresses. The rest differs from production only in its runtime
 settings: one unit, so the other unit's sockets are absent; blogs and
 dashboard reads go through toxiproxy for latency, with node-a's own socket as
 the backup; and the mkcert certificate stands in for the wildcard one.

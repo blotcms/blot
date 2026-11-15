@@ -20,7 +20,6 @@ set -a; . "$DIR/config/versions.env"; set +a
 # Files
 SETUP="$DIR/scripts/development/setup-certs.sh"
 COMPOSE_FILE="$DIR/scripts/development/docker-compose.yml"
-AGENTATION="$DIR/scripts/development/agentation/run.sh"
 FOLDER_SERVER="$DIR/scripts/development/open-folder-server.js"
 TOXIPROXY_SETUP="$DIR/scripts/development/setup-toxiproxy.sh"
 TOXIPROXY_ENABLE="$DIR/scripts/development/enable-toxiproxy-latency.sh"
@@ -54,7 +53,6 @@ run_with_timeout() {
 FOLDER_PID=""
 LOGS_PID=""
 STACK_STARTED=0
-AGENTATION_ATTEMPTED=0
 SHUTTING_DOWN=0
 cleanup() {
   (( SHUTTING_DOWN )) && return
@@ -70,10 +68,6 @@ cleanup() {
     if compose ps --services | grep -q '^redis$'; then
       run_with_timeout 5 compose exec -T redis redis-cli SAVE >/dev/null 2>&1 || true
     fi
-    if [ "$AGENTATION_ATTEMPTED" -eq 1 ]; then
-      echo "[start] Stopping Agentation"
-      BLOT_HOST="$BLOT_HOST" bash "$AGENTATION" down || true
-    fi
     # Also remove any remaining project orphans; named volumes are retained.
     compose down --remove-orphans --timeout 0 || true
   fi
@@ -87,10 +81,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-
-# Fail before TLS setup, background processes or Docker changes.
-echo "[start] Checking Agentation MCP registration"
-bash "$AGENTATION" check
 
 echo "[start] Running setup"
 bash "$SETUP" "$BLOT_HOST"
@@ -130,10 +120,6 @@ echo "[start] Building the OpenResty runtime image"
 # Shows its progress: a first build compiles OpenResty, which takes a while
 (cd "$DIR" && bash proxy/build/image.sh blot-proxy-runtime --target runtime)
 
-# Agentation's hooks for the proxy; empty until it fills them
-mkdir -p "$DIR/scripts/development/agentation/generated/openresty" \
-  "$DIR/scripts/development/agentation/generated/dist"
-
 STACK_STARTED=1
 compose up --build -d
 
@@ -143,11 +129,6 @@ if [ "${BLOT_USE_TOXIPROXY:-true}" = "true" ]; then
   # Keep startup fast until node-app reports capabilities.
   bash "$TOXIPROXY_DISABLE" >/dev/null 2>&1 || true
 fi
-
-echo "[start] Starting Agentation"
-# Include partial setup in error cleanup.
-AGENTATION_ATTEMPTED=1
-BLOT_HOST="$BLOT_HOST" bash "$AGENTATION" up
 
 # start logs in background to avoid 'exit status 130' noise on Ctrl-C
 if [ "${BLOT_USE_TOXIPROXY:-true}" = "true" ]; then
