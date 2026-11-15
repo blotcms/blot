@@ -235,8 +235,6 @@ Harden app against S3 being unavailable (generated assets and blog folders)
 
 Implement folder storage limits (include generated files in this amount?). #2258's Redis index keeps the per-blog byte totals to enforce them from.
 
-Bump katex to >= 0.18.2 (low, prototype pollution Dependabot alert).
-
 Sandbox follow-ups (#2257):
 - Hardening: a seccomp filter for OpenResty, like Node's (proxy/unit/supervisor.sh, proxy/unit/sandbox/node-filter.js): its workers parse hostile requests and it is the one unit process left unfiltered.
 - Hardening: a CI job that runs the real jail (nsjail, pasta, the seccomp profile and a cgroup) against the unit image. Today the jail is only exercised by the deploy's verify-container checks on the host.
