@@ -37,7 +37,6 @@ async function allTags(req, res) {
     tag.entries.forEach((id) => {
       set[id] = true;
     });
-    if (tag.slug) tag.slug = encodeURIComponent(tag.slug);
     return tag;
   });
 

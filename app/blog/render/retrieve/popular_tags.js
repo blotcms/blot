@@ -15,7 +15,7 @@ async function popularTags(req, res) {
     tag: tag.name, // for backward compatibility
     entries: tag.entries,
     total: tag.count,
-    slug: encodeURIComponent(tag.slug),
+    slug: tag.slug, // stored slugs are already percent-encoded
   }));
 }
 

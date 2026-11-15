@@ -86,7 +86,7 @@ module.exports = async function augment(
     tags.push({
       name: tag,
       tag: tag,
-      slug: encodeURIComponent(slug),
+      slug, // normalize() already percent-encodes
       first: i === 0,
       last: i === totalTags - 1,
     });
