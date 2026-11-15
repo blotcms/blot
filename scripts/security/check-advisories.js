@@ -486,12 +486,15 @@ async function checkNpm() {
 // run. Critical goes under ACTION NEEDED, everything else under WATCH.
 async function checkDependabot() {
   await source("Dependabot alerts (gh)", async () => {
+    // --slurp wraps the pages in one array, so flatten them
     const alerts = JSON.parse(
       await run("gh", [
         "api",
+        "--paginate",
+        "--slurp",
         "repos/{owner}/{repo}/dependabot/alerts?state=open&per_page=100",
       ])
-    );
+    ).flat();
     for (const a of alerts) {
       const sev = (a.security_advisory && a.security_advisory.severity) || "?";
       const dep = a.dependency || {};
@@ -524,12 +527,15 @@ async function checkDependabot() {
 // the list empty, hence the check on the age of master's last analysis.
 async function checkCodeScanning() {
   await source("Code scanning alerts (gh)", async () => {
+    // --slurp wraps the pages in one array, so flatten them
     const alerts = JSON.parse(
       await run("gh", [
         "api",
+        "--paginate",
+        "--slurp",
         "repos/{owner}/{repo}/code-scanning/alerts?state=open&per_page=100",
       ])
-    );
+    ).flat();
     const serious = (a) =>
       ["critical", "high"].includes(a.rule && a.rule.security_severity_level);
     for (const a of alerts) {
