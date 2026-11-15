@@ -1,4 +1,14 @@
 {
+  "ignoreDependencies": [
+    "node-addon-api",
+    "node-gyp",
+    "eslint",
+    "prettier",
+    "nyc",
+    "nodemon",
+    "fontkit",
+    "text-to-svg"
+  ],
   "entry": [
     "scripts/**/*.js",
     "**/tests/**/*.js",
