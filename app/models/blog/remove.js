@@ -9,6 +9,7 @@ var templateKey = require("models/template/key");
 var BackupDomain = require("./util/backupDomain");
 var flushCache = require("./flushCache");
 var folderLock = require("sync/lock");
+var permaCache = require("cdn/permaCache");
 
 var START_CURSOR = "0";
 var SCAN_SIZE = 1000;
@@ -40,9 +41,29 @@ var remove = async function remove(blogID) {
   await updateUser(blog);
   await wipeFolders(blog);
   await deleteKeys(blog);
+  purgeCdn(blog);
 
   return blog;
 };
+
+// Everything the CDN's Perma-Cache holds for the blog, its generated files
+// and folder files, is purged URL by URL, which takes a while (about four a
+// second), so it runs on after the removal resolves. The weekly Perma-Cache
+// sweep removes what's left of any blog this misses.
+async function purgeCdn(blog) {
+  if (config.environment !== "production" || !config.bunny.secret) return;
+
+  try {
+    await permaCache.removeBlog(blog.id);
+  } catch (err) {
+    console.error(
+      "Blog",
+      blog.id,
+      "removed, but purging its CDN copies failed",
+      err
+    );
+  }
+}
 
 async function wipeFolders(blog) {
   if (!blog.id || typeof blog.id !== "string")

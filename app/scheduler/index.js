@@ -21,6 +21,7 @@ const renewWildcardSSL = require("./renew-wildcard-ssl");
 const checkRedisHost = require("./check-redis-host");
 const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
+const permaCache = require("cdn/permaCache");
 const pruneTmp = require("./prune-tmp");
 const gitStoreMaintenance = require("./git-store-maintenance");
 const sweepICloudOrphans = require("clients/icloud/sweepOrphans");
@@ -438,6 +439,26 @@ module.exports = function () {
       console.log(clfdate(), "Error: Checking for stuck git processes", err);
     }
   });
+
+  // Bunny's Perma-Cache keeps every CDN response until its exact URL is
+  // purged, so a folder file's old versions and a deleted blog's files stay
+  // public there. Writes, removes and blog deletion purge as they go; this
+  // weekly pass removes whatever they missed (cdn/permaCache). Production
+  // only: it needs the Bunny API key.
+  if (config.environment === "production" && config.bunny.secret) {
+    console.log(clfdate(), "Scheduled weekly Perma-Cache sweep");
+    lock.cron("sweep-perma-cache", "15 4 * * 0", async function () {
+      try {
+        const totals = await permaCache.sweep({
+          apply: true,
+          log: function () {},
+        });
+        console.log(clfdate(), "Perma-Cache sweep:", JSON.stringify(totals));
+      } catch (err) {
+        console.log(clfdate(), "Error: Perma-Cache sweep", err);
+      }
+    });
+  }
 
   // config.tmp_directory is on the host's instance store and shared by every
   // container, so it is pruned once a day by whichever container wins the

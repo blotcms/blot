@@ -73,6 +73,22 @@ module.exports.fromStat = statToken;
 module.exports.fromFolderStat = (stat) =>
   statToken({ size: stat.size, mtimeMs: stat.modified });
 
+// The token a folder file's URL was built with, from its storage/folder
+// index record ({ size, modified, sha1 }), without reading the file: the
+// index's sha1 is the SHA-1 of the content, which is what fromFolder hashes.
+// null when the record has no sha1 (an index rebuilt without hashing) and
+// the file is small enough that the token is a content hash.
+module.exports.fromFolderRecord = function fromFolderRecord(record) {
+  if (!record || typeof record.size !== "number") return null;
+
+  if (record.size > MAX_CONTENT_HASH_SIZE)
+    return statToken({ size: record.size, mtimeMs: record.modified });
+
+  return typeof record.sha1 === "string" && record.sha1.length >= 8
+    ? record.sha1.slice(0, 8)
+    : null;
+};
+
 function statToken(stat) {
   return crypto
     .createHash("sha1")

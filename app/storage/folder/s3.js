@@ -212,8 +212,20 @@ async function keepParent(blogID, path) {
     await writeMarker(blogID, parent);
 }
 
+// Once a file's bytes are replaced or gone, the CDN URL they were linked at
+// is purged, so Perma-Cache doesn't keep them public (cdn/permaCache).
+// Required when used, since cdn/permaCache requires this module.
+function purgeCdnCopy(blogID, path, previous) {
+  try {
+    require("cdn/permaCache").purgeFolderFile(blogID, path, previous);
+  } catch (err) {
+    console.error("storage/folder: purging the CDN copy of", path, err);
+  }
+}
+
 // Resolves to the record written
 async function record(blogID, path, uploaded, modified, flags) {
+  var previous = await File.get(blogID, path);
   var written = {
     type: "file",
     size: uploaded.size,
@@ -225,6 +237,9 @@ async function record(blogID, path, uploaded, modified, flags) {
   if (flags && flags.length) written.flags = flags;
 
   await File.set(blogID, path, written);
+
+  if (previous && previous.type === "file" && previous.sha1 !== written.sha1)
+    purgeCdnCopy(blogID, path, previous);
 
   return written;
 }
@@ -720,12 +735,15 @@ async function mkdir(blogID, relPath) {
 
 // Deletes from S3 everything at and below path, whatever the index says, so
 // nothing it missed is left behind, then forgets it in the index
+// A directory's files are left to the weekly Perma-Cache sweep.
 async function removePath(blogID, path, found) {
   if (found && found.type === "file")
     await s3.deleteKeys([objectKey(blogID, path)]);
   else await s3.remove(objectKey(blogID, path));
 
   await File.remove(blogID, path);
+
+  if (found && found.type === "file") purgeCdnCopy(blogID, path, found);
 }
 
 async function removeOne(blogID, relPath, onlyDirectory) {
@@ -829,6 +847,7 @@ async function move(blogID, from, to) {
     await s3.deleteKeys([objectKey(blogID, source)]);
     await File.remove(blogID, source);
     await keepParent(blogID, source);
+    purgeCdnCopy(blogID, source, found);
     return;
   }
 
@@ -866,6 +885,10 @@ async function move(blogID, from, to) {
   await File.set(blogID, destination, found);
 
   for await (var batch of recordsBelow(blogID, source)) {
+    batch.forEach(function (item) {
+      if (item.record) purgeCdnCopy(blogID, item.path, item.record);
+    });
+
     await File.setMany(
       blogID,
       batch
