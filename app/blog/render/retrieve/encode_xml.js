@@ -39,7 +39,9 @@ module.exports = asRetriever(function (req, res) {
         console.log(e);
       }
 
-      return xml || text;
+      // The output always sits inside a CDATA section in the feed, so
+      // split any "]]>" across two sections to stop it ending early.
+      return (xml || text).replace(/\]\]>/g, "]]]]><![CDATA[>");
     };
   };
 });
