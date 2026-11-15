@@ -232,6 +232,28 @@ describe("scripts/template/migrate-folder-legacy", function () {
       expect(untouched.content).toEqual("{{#folder_name}}{{/folder_name}}");
     });
 
+    it("moves a stored folder dependency for a listing in an inline partial", async function () {
+      await Template.setView(this.template.id, {
+        name: "list.html",
+        content: "{{> listing}}",
+        partials: {
+          listing: "{{#folder}}{{#contents}}{{name}}{{/contents}}{{/folder}}",
+        },
+        retrieve: { folder: true },
+      });
+
+      const result = await migrateTemplate(this.blog, await listing(this), {
+        apply: true,
+      });
+
+      expect(result.failures).toEqual([]);
+
+      const after = await Template.getView(this.template.id, "list.html");
+      expect(after.partials.listing).toContain("{{#folder_legacy}}");
+      expect(after.retrieve.folder).toBeUndefined();
+      expect(after.retrieve.folder_legacy).toBeDefined();
+    });
+
     it("changes nothing in a dry run, and nothing on a second run", async function () {
       const original = "{{#folder}}{{name}}{{/folder}}";
 

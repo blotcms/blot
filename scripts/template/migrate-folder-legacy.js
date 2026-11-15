@@ -465,6 +465,13 @@ async function replaceView(templateID, item) {
     retrieve: Object.assign({}, old.retrieve, { [FROM]: false }),
   };
 
+  // A stored `folder` may be the view's only route to a listing in an inline
+  // partial, which setView doesn't parse, so it moves to `folder_legacy`
+  if (old.retrieve && old.retrieve[FROM] !== undefined) {
+    if (updates.retrieve[TO] === undefined)
+      updates.retrieve[TO] = old.retrieve[FROM];
+  }
+
   if (Array.isArray(old.urlPatterns) && old.urlPatterns.length)
     updates.url = old.urlPatterns;
   else if (old.url) updates.url = old.url;
@@ -473,7 +480,7 @@ async function replaceView(templateID, item) {
 }
 
 // Reads a saved view back: it must retrieve no `folder`, and `folder_legacy`
-// when its own content now names it
+// when its content or partials now name it, or it stored `folder` before
 async function verifyView(templateID, item) {
   const { Template } = models();
   const saved = await Template.getView(templateID, item.view.name);
@@ -481,9 +488,10 @@ async function verifyView(templateID, item) {
   if (retrievesFolder(saved.retrieve))
     throw new Error(item.view.name + " still retrieves " + FROM);
 
-  const contentNamesLegacy = item.changes.some((change) => !change.partial);
+  const needsLegacy =
+    item.changes.length > 0 || retrievesFolder(item.view.retrieve);
 
-  if (contentNamesLegacy && !saved.retrieve[TO])
+  if (needsLegacy && !saved.retrieve[TO])
     throw new Error(item.view.name + " does not retrieve " + TO);
 }
 
