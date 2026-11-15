@@ -1,5 +1,6 @@
 const ERROR = require("./error");
 const loadView = require("./load");
+const { absoluteURL } = require("./load/augment");
 const finalRender = require("./main");
 const retrieve = require("./retrieve");
 const listingViews = require("./listingViews");
@@ -213,6 +214,16 @@ module.exports = function attachRenderView(req, res, _next) {
       .and(folderManifestUrl.locals(req, viewLocals))
       .and(folderManifestUrl.locals(req, req.template.locals))
       .and(blog.locals);
+
+    // Menu items get an absoluteURL like entries do. blogURL depends on the
+    // host the request arrived on, so it is set per request, on copies.
+    if (Array.isArray(res.locals.menu)) {
+      res.locals.menu = res.locals.menu.map((item) =>
+        typeof item.url === "string" && item.url[0] === "/"
+          ? { ...item, absoluteURL: absoluteURL(blog.locals.blogURL, item.url) }
+          : item
+      );
+    }
 
     // Templates may configure sorting as nested `sort: { by, direction }`.
     // Expose the resolved selection as flat sort_by / sort_order so views

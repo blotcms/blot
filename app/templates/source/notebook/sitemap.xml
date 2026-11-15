@@ -9,7 +9,7 @@
   {{#menu}}
   {{#isPage}}
   <url>
-    <loc>{{{siteURL}}}{{{url}}}</loc> 
+    <loc>{{{absoluteURL}}}</loc> 
   </url>
   {{/isPage}}
   {{/menu}}    
