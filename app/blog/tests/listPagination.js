@@ -123,9 +123,9 @@ describe("pagination URLs", function () {
   require("./util/setup")();
 
   beforeEach(async function () {
-    await this.write({ path: "/a.txt", content: "Tags: x y\n\nA" });
-    await this.write({ path: "/b.txt", content: "Tags: x y\n\nB" });
-    await this.write({ path: "/c.txt", content: "Tags: x y\n\nC" });
+    await this.write({ path: "/a.txt", content: "Tags: x, y\n\nA" });
+    await this.write({ path: "/b.txt", content: "Tags: x, y\n\nB" });
+    await this.write({ path: "/c.txt", content: "Tags: x, y\n\nC" });
   });
 
   const URLS =

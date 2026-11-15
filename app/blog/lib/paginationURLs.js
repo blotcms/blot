@@ -44,6 +44,12 @@ function patternsFor(req) {
     ? req.viewURLPatterns.filter((p) => typeof p === "string")
     : [];
   const builtIn = BUILT_IN_PATTERNS[req.viewName] || [];
+
+  // Rendered by a built-in route (blog.get sets req.route): its patterns
+  // come first, so page 1 of the index is /, not the view's own URL
+  if (req.route && builtIn.length)
+    return [...builtIn, ...patterns.filter((p) => !builtIn.includes(p))];
+
   return [...patterns, ...builtIn.filter((p) => !patterns.includes(p))];
 }
 
