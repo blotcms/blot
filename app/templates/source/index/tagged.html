@@ -16,7 +16,7 @@
       {{> post_row}}
       {{/entries}}
 
-      {{#pagination}}
+      {{#entries.pagination}}
       <div class="pagination">
         {{#previous}}
         <a href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>
@@ -26,7 +26,7 @@
         <a href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
         {{/next}}
       </div>
-      {{/pagination}}
+      {{/entries.pagination}}
 
       {{> footer}}
 

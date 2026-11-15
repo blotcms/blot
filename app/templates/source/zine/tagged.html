@@ -11,7 +11,7 @@
       <br>
       {{/entries}}
       <br>
-      {{#pagination}}
+      {{#entries.pagination}}
       <div class="pagination small">
         {{#previous}}
         <a class="light" href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous page</a>
@@ -21,7 +21,7 @@
         <a class="light" href="/tagged/{{slug}}/page/{{next}}">Next page &rarr;</a>
         {{/next}}
       </div>
-      {{/pagination}}
+      {{/entries.pagination}}
     </div>
     {{> footer}}
   </body>

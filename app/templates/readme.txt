@@ -339,7 +339,7 @@ remaining_entries:
 
 {{/entries}}
 
-{{#pagination}}
+{{#entries.pagination}}
 
   {{#next}}
     <a href="/page/{{next}}">Next page</a>
@@ -349,6 +349,6 @@ remaining_entries:
     <a href="/page/{{previous}}">Previous page</a>
   {{/previous}}
 
-{{/pagination}}
+{{/entries.pagination}}
 
 {{> footer}}

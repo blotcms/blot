@@ -1,4 +1,4 @@
-{{#pagination}}
+{{#entries.pagination}}
 <nav class="pagination" aria-label="Pagination" data-pagination data-base="{{#tag}}/tagged/{{slug}}{{/tag}}" data-current="{{current}}" data-total="{{total}}">
   <ul class="pagination__list">
     <li>{{#previous}}<a class="pagination__control" href="{{#tag}}/tagged/{{slug}}{{/tag}}/page/{{previous}}" rel="prev" aria-label="Previous page"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14.5 5-7 7 7 7" /></svg></a>{{/previous}}{{^previous}}<span class="pagination__control" aria-disabled="true"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m14.5 5-7 7 7 7" /></svg></span>{{/previous}}</li>
@@ -6,4 +6,4 @@
     <li>{{#next}}<a class="pagination__control" href="{{#tag}}/tagged/{{slug}}{{/tag}}/page/{{next}}" rel="next" aria-label="Next page"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9.5 5 7 7-7 7" /></svg></a>{{/next}}{{^next}}<span class="pagination__control" aria-disabled="true"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m9.5 5 7 7-7 7" /></svg></span>{{/next}}</li>
   </ul>
 </nav>
-{{/pagination}}
+{{/entries.pagination}}

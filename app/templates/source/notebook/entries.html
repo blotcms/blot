@@ -27,13 +27,13 @@
           </article>
           {{/posts}}
 
-          {{#pagination}}
+          {{#posts.pagination}}
           <div class="blog-pager">
             <span class="pager-newer">{{#previous}}<a href="/page/{{previous}}">Newer Posts</a>{{/previous}}</span>
             <a class="pager-home" href="/">Home</a>
             <span class="pager-older">{{#next}}<a href="/page/{{next}}">Older Posts</a>{{/next}}</span>
           </div>
-          {{/pagination}}
+          {{/posts.pagination}}
 
           {{> feed-links}}
         </main>

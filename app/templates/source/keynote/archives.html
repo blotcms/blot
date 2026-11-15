@@ -13,19 +13,19 @@
 
       {{> tag_filters}}
 
-      <div class="list" data-grid data-page="{{pagination.current}}" data-page-size="{{pagination.page_size}}" data-entries="{{pagination.total_entries}}">
+      <div class="list" data-grid data-page="{{posts.pagination.current}}" data-page-size="{{posts.pagination.page_size}}" data-entries="{{posts.pagination.total_entries}}">
         {{#posts}}
         {{> cell}}
         {{/posts}}
       </div>
 
-      {{#pagination}}
+      {{#posts.pagination}}
       <nav class="pagination" aria-label="Pages">
         {{#previous}}<a class="collection-previous" href="/archives?page={{previous}}">&larr; Previous</a>{{/previous}}
         <span class="page-count">Page {{current}} of {{total}}</span>
         {{#next}}<a class="more collection-next" rel="next" href="/archives?page={{next}}">Next &rarr;</a>{{/next}}
       </nav>
-      {{/pagination}}
+      {{/posts.pagination}}
 
       <p class="list-total">{{total_posts}} of {{total_posts}}</p>
 
