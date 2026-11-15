@@ -19,7 +19,7 @@ nvm use "$(sed -n 's/^NODE_VERSION=//p' config/versions.env)"
 
 These commands read the version from `config/versions.env`. If you use another version manager, select that version. Use the npm bundled with Node.js.
 
-Restart development with `npm start` so Docker Compose rebuilds the app and Agentation images. For dependencies installed directly on the host, run `npm install` under the new Node version to rebuild native modules. The root package does not track a lockfile.
+Restart development with `npm start` so Docker Compose rebuilds the app image. For dependencies installed directly on the host, run `npm install` under the new Node version to rebuild native modules. The root package does not track a lockfile.
 
 ## In production
 
