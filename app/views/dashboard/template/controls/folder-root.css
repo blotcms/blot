@@ -24,7 +24,7 @@ form.folder-input .folder-input__error {
   margin: 0;
   font-size: 12px;
   text-align: right;
-  color: var(--error-color, #c0392b);
+  color: var(--editor-error-color);
 }
 
 form.folder-input .folder-input__error[hidden] {
