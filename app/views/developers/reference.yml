@@ -392,12 +392,12 @@
         {{/all_entries}}
     - name: Pagination
       type: section
-      description: "Pagination is applied on tagged routes (`/tagged/:slug` and `/tagged/:slug/page/:page`) and on entry list routes that set `page_size`. Each list of entries carries its own pagination object, read as `posts.pagination` (or `entries.pagination` on entries.html and tagged.html, or `tagged.pagination`), with `current`, `previous`, `next`, `total`, `page_size`, and `total_entries`. Use it outside the list, after `{{/posts}}`: inside the loop the names refer to the current entry. It renders even when the list is empty. Older templates use a top-level `pagination`, which is the pagination of the list the URL pages, or `{{#pagination}}` inside the loop, which renders once after the last entry; both still work. Defaults and limits: `page_size` uses a baseline of `5` with valid values `1-100`; tagged routes prefer `tagged_page_size` over `page_size`, and use an effective default of `100` when unset, invalid, or outside `1-500`."
+      description: "Pagination is applied on tagged routes (`/tagged/:slug` and `/tagged/:slug/page/:page`) and on entry list routes that set `page_size`. Each list of entries carries its own pagination object, read as `posts.pagination` (or `entries.pagination` on entries.html and tagged.html, or `tagged.pagination`), with `current`, `previous`, `next`, `next_url`, `previous_url`, `total`, `page_size`, and `total_entries`. `next` and `previous` are page numbers; `next_url` and `previous_url` are the URLs of those pages of the same listing (`/page/2`, `/tagged/foo/page/2`, or a template view's own `:page` URL pattern, else the same URL with `?page=2` and the other query parameters kept), and `null` when there is no such page. Page 1 is the listing's own URL, never `/page/1`. Use it outside the list, after `{{/posts}}`: inside the loop the names refer to the current entry. It renders even when the list is empty. Older templates use a top-level `pagination`, which is the pagination of the list the URL pages, or `{{#pagination}}` inside the loop, which renders once after the last entry; both still work. Defaults and limits: `page_size` uses a baseline of `5` with valid values `1-100`; tagged routes prefer `tagged_page_size` over `page_size`, and use an effective default of `100` when unset, invalid, or outside `1-500`."
       example: |
         {{#entries}}<a href="{{{url}}}">{{title}}</a>{{/entries}}
         {{#entries.pagination}}
-        {{#next}}<a href="/tagged/{{slug}}/page/{{next}}">Older</a>{{/next}}
-        {{#previous}}<a href="/tagged/{{slug}}/page/{{previous}}">Newer</a>{{/previous}}
+        {{#next_url}}<a href="{{next_url}}">Older</a>{{/next_url}}
+        {{#previous_url}}<a href="{{previous_url}}">Newer</a>{{/previous_url}}
         {{/entries.pagination}}
     - name: archives
       type: array

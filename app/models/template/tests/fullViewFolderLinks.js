@@ -12,7 +12,7 @@ describe("getFullView folder links", function () {
 
   const wrap = (path) => `{{#cdn}}${path}{{/cdn}}`;
 
-  // getFullView's response: [locals, partials, retrieve, type, source, usesBacklinks]
+  // getFullView's response: [locals, partials, retrieve, type, source, usesBacklinks, urlPatterns]
   const PARTIALS = 1;
   const RETRIEVE = 2;
   const SOURCE = 4;

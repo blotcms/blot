@@ -341,13 +341,13 @@ remaining_entries:
 
 {{#entries.pagination}}
 
-  {{#next}}
-    <a href="/page/{{next}}">Next page</a>
-  {{/next}}
+  {{#next_url}}
+    <a href="{{next_url}}">Next page</a>
+  {{/next_url}}
 
-  {{#previous}}
-    <a href="/page/{{previous}}">Previous page</a>
-  {{/previous}}
+  {{#previous_url}}
+    <a href="{{previous_url}}">Previous page</a>
+  {{/previous_url}}
 
 {{/entries.pagination}}
 

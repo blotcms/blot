@@ -2,6 +2,7 @@ const Entries = require("models/entries");
 const Tags = require("models/tags");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const listPagination = require("./helpers/listPagination");
+const paginationURLs = require("../../lib/paginationURLs");
 const getTemplateSortOptions = require("blog/sortOptions");
 const asRetriever = require("../../lib/asRetriever");
 const {
@@ -64,8 +65,11 @@ async function posts(req, res) {
     page = { entries: result.entries, pagination: result.pagination || {} };
   }
 
-  res.locals.pagination = page.pagination;
-  return listPagination(page.entries, page.pagination);
+  // A copy with next_url and previous_url, which depend on the request
+  const pagination = paginationURLs(req, page.pagination);
+
+  res.locals.pagination = pagination;
+  return listPagination(page.entries, pagination);
 }
 
 module.exports = asRetriever(posts);

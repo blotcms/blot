@@ -598,9 +598,10 @@ describe("posts cache", function () {
     );
 
     // pagination: the last entry's copy (see helpers/listPagination.js)
+    const pagination = { next_url: null, previous_url: null };
     expect(result).toEqual([
-      { id: "1", title: "A", html: "<p>A</p>", pagination: {} },
+      { id: "1", title: "A", html: "<p>A</p>", pagination },
     ]);
-    expect(result.pagination).toEqual({});
+    expect(result.pagination).toEqual(pagination);
   });
 });
