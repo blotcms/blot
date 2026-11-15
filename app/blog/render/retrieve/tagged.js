@@ -1,6 +1,7 @@
 const Tags = require("models/tags");
 const projectEntryFields = require("./helpers/projectEntryFields");
 const listPagination = require("./helpers/listPagination");
+const { assertPageInRange } = require("../../lib/pageNotFound");
 const asRetriever = require("../../lib/asRetriever");
 const {
   normalizePageNumber,
@@ -50,6 +51,9 @@ async function tagged(req, res) {
     cacheID: req.blog.cacheID,
     log,
   });
+
+  // A page past the last one is a 404 (page 1 never is)
+  assertPageInRange(res, payload.pagination);
 
   // A copy with next_url and previous_url, which depend on the request
   const pagination = paginationURLs(req, payload.pagination);

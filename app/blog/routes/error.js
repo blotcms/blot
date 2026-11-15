@@ -5,6 +5,7 @@ const path = require("path");
 const clfdate = require("helper/clfdate");
 const { redisUnavailableHandler } = require("helper/redisUnavailable");
 const { checkRedirect } = require("../lib/models");
+const { NOT_FOUND_LOCALS } = require("../lib/pageNotFound");
 
 const VIEW_DIR = path.resolve(__dirname + "/../../views");
 
@@ -35,12 +36,8 @@ module.exports = function register(blog) {
   });
 
   // 404s
-  blog.use(function (req, res, next) {
-    res.locals.error = {
-      title: "Page not found",
-      message: "There is no page with this URL.",
-      status: 404,
-    };
+  function notFound(req, res, next) {
+    res.locals.error = { ...NOT_FOUND_LOCALS };
 
     res.status(404);
     res.renderView("error.html", next);
@@ -48,7 +45,9 @@ module.exports = function register(blog) {
     // We expose these to the user. Nothing waits for it and a failure to
     // record the URL is ignored, as it always was
     store404(req.blog.id, req.url).catch(function () {});
-  });
+  }
+
+  blog.use(notFound);
 
   // Redis unreachable: 503 and a generic page, not a template error
   blog.use(redisUnavailableHandler);
@@ -80,6 +79,12 @@ module.exports = function register(blog) {
 
       return;
     }
+
+    // A listing page past the last one: the same page as any unknown URL
+    // If the template can't render it (say it has no error.html), carry on
+    // without the error, as the catch-all 404 does, rather than to the
+    // bad-render handler below
+    if (err.pageNotFound) return notFound(req, res, () => next());
 
     let status = 400;
 
