@@ -20,10 +20,11 @@ module.exports = {
     return prefix(blogID) + ":lower:" + dirPath;
   },
 
-  // Sorted set of a directory's child names, all at score 0, so a page of
-  // the directory in name order is one ZRANGEBYLEX. Members are the names as
-  // member() below spells them. Missing for a directory last changed before
-  // this key existed, which is then read whole: see README.
+  // The sorted set of a directory's child names in code-unit order, which
+  // listings read before the natural-order sets (sort below) replaced it.
+  // Nothing writes one now; the writers still delete a directory's with it,
+  // since code from before this one could still make one during a deploy,
+  // until scripts/storage/remove-file-index-names.js has removed the rest.
   names: function (blogID, dirPath) {
     return prefix(blogID) + ":names:" + dirPath;
   },
@@ -60,31 +61,6 @@ module.exports = {
 // The folder itself is "/".
 module.exports.normalize = function normalize(path) {
   return pathNormalizer(path || "/") || "/";
-};
-
-// Directory listings sort names by UTF-16 code unit, as JavaScript compares
-// strings and as the local backend sorts. ZRANGEBYLEX compares UTF-8 bytes,
-// which is code point order, and the two differ in one place: a character
-// from U+E000 to U+FFFF sorts before every character beyond U+FFFF by code
-// point, and after them by code unit (those are surrogate pairs, D800 to
-// DFFF). So a names member spells each such character with U+10FFFF, the
-// highest code point, in front of it, and U+10FFFF itself as U+10FFFF then
-// NUL, which sorts both after everything else beyond U+FFFF, in their own
-// order. Any other name, which is nearly every name, is its own member.
-var HIGH = /[-￿]|\u{10FFFF}/gu;
-var ESCAPED = /\u{10FFFF}([\s\S])/gu;
-
-module.exports.member = function member(name) {
-  return name.replace(HIGH, function (c) {
-    return c === "\u{10FFFF}" ? "\u{10FFFF}\u0000" : "\u{10FFFF}" + c;
-  });
-};
-
-// The name a names member spells
-module.exports.nameOf = function nameOf(member) {
-  return member.replace(ESCAPED, function (match, c) {
-    return c === "\u0000" ? "\u{10FFFF}" : c;
-  });
 };
 
 // A child's member in the natural-order sets (sort:v1): a group, a sort key,

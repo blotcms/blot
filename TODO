@@ -1,3 +1,5 @@
+- Once `scripts/storage/remove-file-index-names.js --apply` has run and a dry run counts no names sets (#2693 step 7c), drop `key.names` from the `DEL` lists in `app/models/file/index.js` (`setMany`, `remove`, `removeBelow`, `removeAll`), then the script itself and `key.names`. (15 Nov 2026)
+
 - `scripts/template/migrate-folder-legacy.js` runs out of memory without blog handles: it reads every file of every locally edited template on every blog (images included) before checking whether the template uses `folder`. Plan folder files only for templates with a view to change, before step 12 of #2693 reuses it. (15 Nov 2026)
 
 Security notes from the CodeQL triage, 15 Nov 2026 (#2707). None was flagged by CodeQL and none is urgent:

@@ -180,9 +180,9 @@ describe("models/file", function () {
         keys.push(...(Array.isArray(key) ? key : [key]));
       }
 
-      // A hash, a lowercased lookup, a names set and a natural-order sorted
-      // set each for "/" and "/d", the path set and the totals
-      expect(keys.length).toEqual(10);
+      // A hash, a lowercased lookup and a natural-order sorted set each for
+      // "/" and "/d", the path set and the totals
+      expect(keys.length).toEqual(8);
     });
   });
 
@@ -393,7 +393,7 @@ describe("models/file", function () {
       });
     });
 
-    describe("a directory without a names set or a sorted set", function () {
+    describe("a directory without a sorted set", function () {
       // As a directory last changed before they existed is stored
       async function forget(blogID, dir) {
         await client.del([
@@ -456,9 +456,6 @@ describe("models/file", function () {
         );
 
         expect(
-          await client.zCard(File.key.names(this.blog.id, "/old"))
-        ).toEqual(expected.length);
-        expect(
           await client.zCard(File.key.sort(this.blog.id, "all", "/old"))
         ).toEqual(expected.length);
         expect(await pages(this.blog.id, "/old", 101)).toEqual(expected);
@@ -469,9 +466,6 @@ describe("models/file", function () {
         await File.remove(this.blog.id, "/old/0002");
 
         expect(
-          await client.exists(File.key.names(this.blog.id, "/old"))
-        ).toEqual(0);
-        expect(
           await client.exists(File.key.sort(this.blog.id, "all", "/old"))
         ).toEqual(0);
         expect(await pages(this.blog.id, "/old", 500)).toEqual(
@@ -479,26 +473,7 @@ describe("models/file", function () {
         );
       });
 
-      it("is given one by addMissingNames, which only counts without apply", async function () {
-        expect(await File.addMissingNames(this.blog.id)).toEqual({
-          dirs: 3,
-          missing: 3,
-          names: 1205,
-        });
-        expect(
-          await client.exists(File.key.names(this.blog.id, "/old"))
-        ).toEqual(0);
-
-        expect(
-          await File.addMissingNames(this.blog.id, { apply: true })
-        ).toEqual({ dirs: 3, missing: 3, names: 1205 });
-        expect(await File.addMissingNames(this.blog.id)).toEqual({
-          dirs: 3,
-          missing: 0,
-          names: 0,
-        });
-
-        // Listings read the sorted set, which checkSorts builds
+      it("is given one by checkSorts, after which listings don't read the hash", async function () {
         for await (var found of File.checkSorts(this.blog.id, { apply: true }))
           expect(found.state).not.toBe("mismatched");
 
@@ -507,6 +482,22 @@ describe("models/file", function () {
         expect(await pages(this.blog.id, "/old", 101)).toEqual(this.expected);
         expect(client.hScan).not.toHaveBeenCalled();
       });
+    });
+
+    it("writes no names set, and deletes a directory's leftover one with it", async function () {
+      await File.set(this.blog.id, "/d/a", file(1));
+
+      expect(await client.exists(File.key.names(this.blog.id, "/d"))).toBe(0);
+      expect(await client.exists(File.key.names(this.blog.id, "/"))).toBe(0);
+
+      // As code from before this one could leave while it ran beside it
+      await client.zAdd(File.key.names(this.blog.id, "/d"), {
+        score: 0,
+        value: "a",
+      });
+      await File.remove(this.blog.id, "/d");
+
+      expect(await client.exists(File.key.names(this.blog.id, "/d"))).toBe(0);
     });
 
     it("gives each entry's record", async function () {
