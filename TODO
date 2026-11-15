@@ -219,6 +219,9 @@ Proxy container follow-ups (cut over 8 Oct 2026, #1941)
 
 ---
 
+In cv template, could the template editor have a file picker ui to select the file embedded on the index page?
+- File picker for homepage bio, reuse Reuse folder_root 
+
 Finish the host consolidation
 - should we use unix sockets for communication with redis?
 
