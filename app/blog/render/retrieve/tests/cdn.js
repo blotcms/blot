@@ -172,11 +172,15 @@ describe("cdn", function () {
       );
     });
 
-    it("returns an unversioned URL for a reserved global path", async function () {
+    it("versions a reserved global path by the file in this release", async function () {
+      const { staticVersion } = require("blog/lib/staticVersion");
       const lambda = await cdn(this.request, {});
       expect(
         mustache.render("{{#cdn}}/icons/search.svg{{/cdn}}", { cdn: lambda })
-      ).toBe("%%BLOT_CDN%%/icons/search.svg");
+      ).toBe(
+        "%%BLOT_CDN%%/icons/search.svg?version=" +
+          staticVersion("/icons/search.svg")
+      );
     });
 
     it("still returns view URLs", async function () {

@@ -2,6 +2,7 @@ const BLOT_CDN_TOKEN = require("./replaceFolderLinks/cdnToken");
 const { folderUrl } = require("./replaceFolderLinks/folderFile");
 const { pathPartOf, encodeFolderPath } = require("./replaceFolderLinks/shared");
 const blogHosts = require("../lib/blogHosts");
+const { staticSuffix } = require("../lib/staticVersion");
 const { mapFolderLocals } = require("models/template/util/resolveFolderLinks");
 
 // The versioned CDN URL for a file in the blog's folder, from the template's
@@ -30,9 +31,14 @@ module.exports = function folderManifestUrl(req, target) {
   // ?query or #hash, which are kept from the link.
   const suffix = target.slice(pathPartOf(target).length);
 
-  // Reserved global paths such as /fonts have no version
+  // Reserved global paths such as /icons have no version in the manifest:
+  // theirs comes from the file in this release
   if (!entry.version)
-    return BLOT_CDN_TOKEN + encodeFolderPath(entry.path) + suffix;
+    return (
+      BLOT_CDN_TOKEN +
+      encodeFolderPath(entry.path) +
+      staticSuffix(entry.path, suffix)
+    );
 
   return folderUrl(req.blog.id, entry.path, entry.version, suffix);
 };

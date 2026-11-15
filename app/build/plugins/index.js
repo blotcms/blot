@@ -9,19 +9,35 @@ var time = require("helper/time");
 var _ = require("lodash");
 const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 const { GLOBAL_STATIC_SUBDIRECTORIES } = require("blog/lib/staticPaths");
+const { staticSuffix } = require("blog/lib/staticVersion");
 
 // A plugin's public.css is appended to a blog's stylesheet by {{{app_css}}},
 // after the template has been wrapped for the CDN, so its links to Blot's own
 // static files (the KaTeX fonts) would reach the origin. Point them at the
 // CDN, which serves the same paths, through the token the render middleware
-// swaps for the real origin.
+// swaps for the real origin, each with its file's version
+// (blog/lib/staticVersion).
 const GLOBAL_STATIC_URL = new RegExp(
-  "url\\((\\s*['\"]?)(" + GLOBAL_STATIC_SUBDIRECTORIES.join("|") + ")/",
+  "url\\((\\s*['\"]?)((?:" +
+    GLOBAL_STATIC_SUBDIRECTORIES.join("|") +
+    ")/[^'\")\\s?#]*)([^'\")\\s]*)",
   "g"
 );
 
 function cdnGlobalStaticUrls(css) {
-  return css.replace(GLOBAL_STATIC_URL, "url($1" + BLOT_CDN_TOKEN + "$2/");
+  return css.replace(GLOBAL_STATIC_URL, (match, quote, path, suffix) => {
+    let decoded = path;
+
+    try {
+      decoded = decodeURIComponent(path);
+    } catch (err) {
+      // e.g. a lone '%': looked up as written
+    }
+
+    return (
+      "url(" + quote + BLOT_CDN_TOKEN + path + staticSuffix(decoded, suffix)
+    );
+  });
 }
 
 // Wait 10 minutes to go to next plugin

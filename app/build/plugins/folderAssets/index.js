@@ -9,6 +9,7 @@ const {
   isReservedStaticPath,
 } = require("blog/lib/staticPaths");
 const blogHosts = require("blog/lib/blogHosts");
+const { staticSuffix } = require("blog/lib/staticVersion");
 const { report } = require("build/flags");
 const {
   hashFolderFile,
@@ -381,7 +382,10 @@ async function resolveBuildFile(ctx, value) {
     (await globalStaticFileExists(ctx, pathFromValue))
   ) {
     return {
-      url: `${BLOT_CDN_TOKEN}${encodeFolderPath(pathFromValue)}${query}${hash_}`,
+      url:
+        BLOT_CDN_TOKEN +
+        encodeFolderPath(pathFromValue) +
+        staticSuffix(pathFromValue, query + hash_),
       // Not a file in the blog's folder, so there is nothing to depend on.
       path: null,
     };
