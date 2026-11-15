@@ -114,18 +114,6 @@ function setNames(multi, lowerKey, folded, joined) {
   else multi.hDel(lowerKey, folded);
 }
 
-// Queues adding names to a directory's names set, a page per ZADD
-function addNames(multi, namesKey, names) {
-  for (var i = 0; i < names.length; i += PAGE) {
-    multi.zAdd(
-      namesKey,
-      names.slice(i, i + PAGE).map(function (name) {
-        return { score: 0, value: key.member(name) };
-      })
-    );
-  }
-}
-
 // The keys of a directory's sorted sets, one per order in sorts.js
 function sortKeys(blogID, dir) {
   return SORTS.map(function (order) {
@@ -552,13 +540,11 @@ async function setMany(blogID, items) {
     })
   );
 
-  // The names sets which gain a name. A directory which already had a hash
-  // but has no names set yet (it was last changed before they existed) gets
-  // one built from its hash in the same exec, so a names set, once there, is
-  // always complete; adding just the new name would leave it partial.
-  // The same holds for the sorted sets, keyed by whether the first order's
-  // set exists, since they are always built together.
-  var named = new Map();
+  // The sorted sets which gain a child. A directory which already had a hash
+  // but has no sorted set yet gets them built from its hash in the same
+  // exec, so a set, once there, is complete; adding just the new child would
+  // leave it partial. Whether the first order's set exists decides, since
+  // they are always built together.
   var sorted = new Map();
 
   for (const [path, record] of writes) {
@@ -566,40 +552,25 @@ async function setMany(blogID, items) {
 
     var parent = parentOf(path);
 
-    if (!named.has(parent)) {
-      named.set(parent, []);
-      sorted.set(parent, []);
-    }
+    if (!sorted.has(parent)) sorted.set(parent, []);
 
-    named.get(parent).push(nameOf(path));
     sorted.get(parent).push({ name: nameOf(path), type: record.type });
   }
 
   // A directory new in this call has no hash to build from
-  var older = [...named.keys()].filter(function (dir) {
+  var older = [...sorted.keys()].filter(function (dir) {
     return dir === "/" || !!existing.get(dir);
   });
 
   await Promise.all(
     older.map(async function (dir) {
-      var [hasNames, hasSorted] = await Promise.all([
-        client.exists(key.names(blogID, dir)),
-        client.exists(sortKeys(blogID, dir)[0]),
-      ]);
+      if (await client.exists(sortKeys(blogID, dir)[0])) return;
 
-      if (hasNames && hasSorted) return;
-
-      for (const entry of await scan(blogID, dir)) {
-        if (!hasNames) named.get(dir).push(entry.name);
-        if (!hasSorted) sorted.get(dir).push(entry);
-      }
+      for (const entry of await scan(blogID, dir)) sorted.get(dir).push(entry);
     })
   );
 
   var multi = client.multi();
-
-  for (const [dir, children] of named)
-    addNames(multi, key.names(blogID, dir), children);
 
   for (const [dir, children] of sorted) addSorted(multi, blogID, dir, children);
   var bytes = 0;
@@ -734,10 +705,7 @@ async function removeBelow(blogID, dir) {
         ]);
       }
 
-      // ZREM never creates a key, so a parent without a names set stays
-      // without one
       multi.hDel(key.dir(blogID, parentOf(path)), nameOf(path));
-      multi.zRem(key.names(blogID, parentOf(path)), key.member(nameOf(path)));
       removeSorted(multi, blogID, parentOf(path), nameOf(path));
     });
 
@@ -773,7 +741,6 @@ async function remove(blogID, path) {
   var multi = client.multi();
 
   multi.hDel(key.dir(blogID, parent), name);
-  multi.zRem(key.names(blogID, parent), key.member(name));
   removeSorted(multi, blogID, parent, name);
   multi.zRem(key.paths(blogID), path);
   setNames(multi, lowerKey, folded, updateNames(joined, name, false));
@@ -831,52 +798,6 @@ async function removeAll(blogID) {
     key.paths(blogID),
     key.totals(blogID),
   ]);
-}
-
-// Gives every directory of a blog which has entries but no names set (it was
-// last changed before they existed) its names set, from its hash. Resolves
-// to { dirs, missing, names }: the directories looked at, those without a
-// names set, and the names they hold. Writes only if options.apply. Run it
-// under the blog's sync lock: a remove between reading a hash and adding
-// its names would leave a name in the set with no record.
-async function addMissingNames(blogID, options) {
-  check(blogID);
-
-  var apply = !!(options && options.apply);
-  var counts = { dirs: 0, missing: 0, names: 0 };
-  var queue = ["/"];
-
-  while (queue.length) {
-    var dir = queue.pop();
-    var entries = await scan(blogID, dir);
-    var namesKey = key.names(blogID, dir);
-
-    counts.dirs++;
-
-    for (var entry of entries)
-      if (entry.type === "dir") queue.push(child(dir, entry.name));
-
-    if (!entries.length || (await client.exists(namesKey))) continue;
-
-    counts.missing++;
-    counts.names += entries.length;
-
-    if (!apply) continue;
-
-    var multi = client.multi();
-
-    addNames(
-      multi,
-      namesKey,
-      entries.map(function (entry) {
-        return entry.name;
-      })
-    );
-
-    await multi.exec();
-  }
-
-  return counts;
 }
 
 // Checks a directory's sorted set for one order against its hash, a page
@@ -1131,6 +1052,5 @@ module.exports = {
   remove,
   removeAll,
   rebuild,
-  addMissingNames,
   checkSorts,
 };

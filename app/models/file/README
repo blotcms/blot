@@ -18,13 +18,12 @@ Paths are normalised with `helper/pathNormalizer`, exactly as entry keys are (`m
 
 ## Redis keys
 
-No key per file. There is a hash, a lookup and a names set per directory, and two keys per blog. Every key starts `blog:{blogID}:file`, so blog deletion's `blog:{blogID}:*` sweep takes it with the rest.
+No key per file. There is a hash, a lookup and a sorted set per order (see Natural order) per directory, and two keys per blog. Every key starts `blog:{blogID}:file`, so blog deletion's `blog:{blogID}:*` sweep takes it with the rest.
 
 | Key | Type | Contents |
 |-----|------|----------|
 | `blog:{blogID}:file:dir:{dirPath}` | hash | child name → packed record `type\|size\|modified\|sha1` |
 | `blog:{blogID}:file:lower:{dirPath}` | hash | lowercased child name → the child names that fold to it, joined by `/` and sorted |
-| `blog:{blogID}:file:names:{dirPath}` | sorted set | every child name (as `key.member` spells it), all at score 0, so a page of the directory in name order is one `ZRANGEBYLEX` |
 | `blog:{blogID}:file:sort:v1:{order}:{dirPath}` | sorted set | the directory's children in one of the orders in `sorts.js`, all at score 0 (see Natural order below). Today the one order is `all`: every child, in natural name order |
 | `blog:{blogID}:file:paths` | sorted set | every path below the root, all at score 0, for `ZRANGEBYLEX` subtree queries |
 | `blog:{blogID}:file:totals` | hash | `bytes`, `files`: the folder's totals, for the storage quota |
@@ -37,13 +36,13 @@ blog:X:file:dir:/          Posts  -> d|0|1700000000000|
                            drafts -> d|0|1700000000000|
 blog:X:file:lower:/        posts  -> Posts/posts
                            drafts -> drafts
-blog:X:file:names:/        Posts drafts posts
+blog:X:file:sort:v1:all:/  drafts Posts posts   (each as its member)
 blog:X:file:dir:/Posts     a.txt  -> f|5|1700000000000|aaf4c61d...
 blog:X:file:lower:/Posts   a.txt  -> a.txt
-blog:X:file:names:/Posts   a.txt
+blog:X:file:sort:v1:all:/Posts  a.txt
 blog:X:file:dir:/posts     b.txt  -> f|3|1700000000000|e9d71f5e...
 blog:X:file:lower:/posts   b.txt  -> b.txt
-blog:X:file:names:/posts   b.txt
+blog:X:file:sort:v1:all:/posts  b.txt
 blog:X:file:paths          /Posts /Posts/a.txt /drafts /posts /posts/b.txt
 blog:X:file:totals         bytes -> 8, files -> 2
 ```
@@ -62,7 +61,7 @@ A directory without the set (none has one until a writer or the backfill builds 
 
 Paging through the path set instead needs no new key, but a directory's children are interleaved there with all their descendants, so skipping each subdirectory's subtree costs a round trip per subdirectory on the page.
 
-The names set, each directory's children in code-unit order, is still written beside the sorted sets so that rolling back to code which reads it stays safe; nothing reads it, and it goes in the next step of #2693. When `setMany` adds a name to a directory without one, it builds the whole set from the hash in the same exec, so a names set that exists is always complete. `addMissingNames(blogID, { apply })` builds the rest, from `scripts/storage/add-file-index-names.js`.
+Before the sorted sets, listings read a names set per directory (`blog:{blogID}:file:names:{dirPath}`, the children in code-unit order). Nothing writes one now. The writers still delete a directory's names set with the directory, since code from before could make one during a deploy, until `scripts/storage/remove-file-index-names.js` has removed the rest.
 
 ### Natural order
 
@@ -76,7 +75,7 @@ A member is a group, a sort key, NUL and the name (`key.sortMember`), so byte or
 
 `ZRANGEBYLEX` compares bytes, so code compares members with `key.compareSorted` (`Buffer.compare`), never `<`. The `v1` in the key is the member format: changing it means a new key and a backfill.
 
-A writer keeps a set complete as the names set is kept: a directory with a hash but no set gets one built whole on its first new child. Code from before the sets, running beside the new code during a deploy or after a rollback, can still change a directory without them, so a set which exists is not trusted until checked: `checkSorts(blogID, { apply })` compares every directory's set with its hash member by member, and with `apply` rebuilds each one which is missing or differs, under another key (`sort:build`) renamed into place, so a run stopped part way never leaves a partial set. `scripts/storage/add-file-index-sorts.js` runs it for every blog under its sync lock, and estimates the sets' memory.
+A writer keeps a set complete: a directory with a hash but no set gets one built whole on its first new child. Code from before the sets, running beside the new code during a deploy or after a rollback, can still change a directory without them, so a set which exists is not trusted until checked: `checkSorts(blogID, { apply })` compares every directory's set with its hash member by member, and with `apply` rebuilds each one which is missing or differs, under another key (`sort:build`) renamed into place, so a run stopped part way never leaves a partial set. `scripts/storage/add-file-index-sorts.js` runs it for every blog under its sync lock, and estimates the sets' memory.
 
 ---
 
@@ -112,7 +111,6 @@ All return promises.
 | `remove(blogID, path)` | Forget a file, or a directory and its whole subtree. Resolves to the removed record, or null |
 | `removeAll(blogID)` | Forget the whole folder |
 | `checkSorts(blogID, { apply, order })` | Async iterator of `{ dir, order, state, expected, card, bytes, longest }` per directory and order: `state` is `ok`, `missing` or `mismatched`. With `apply`, rebuilds each set which isn't ok; must run under the sync lock then |
-| `addMissingNames(blogID, { apply })` | Build the names set of every directory which lacks one (see above). Resolves to `{ dirs, missing, names }`; writes only with `apply`, and must run under the sync lock |
 | `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a file system cannot) is skipped and listed in `skipped` as `{ path, type, code }`. Flags of unchanged files are carried over |
 
 Removing a directory goes through its subtree deepest first, a page at a time, so each file's size is still in its parent's hash when the totals are corrected. If it stops part way, what is left is consistent apart from a lowercased lookup which may still name a child already gone, until its directory goes too.
@@ -124,7 +122,7 @@ Removing a directory goes through its subtree deepest first, a page at a time, s
 | File | Purpose |
 |------|---------|
 | `index.js` | The functions above |
-| `key.js` | Key names, the path normalisation, and how a name is spelled in a names set and a sorted set |
+| `key.js` | Key names, the path normalisation, and how a name is spelled in a sorted set |
 | `sorts.js` | The orders a directory's children are indexed in |
 | `record.js` | Packs and parses records |
 | `flags.js` | The dictionary of flag codes, and how flags are capped and replaced |
