@@ -119,3 +119,80 @@ describe("linkScreenshot plugin", function () {
     expect($.html()).not.toContain("bookmark-container");
   });
 });
+
+describe("linkScreenshot plugin, on rebuilds", function () {
+  global.test.blog();
+
+  const cheerio = require("cheerio");
+  const fs = require("fs-extra");
+  const assets = require("storage/assets");
+  const screenshotPath = require.resolve("helper/screenshot");
+  const pluginPath = require.resolve("./index.js");
+
+  const doc = (href) =>
+    cheerio.load(`<p><a class="bookmark" href="${href}">Example</a></p>`);
+  const srcOf = ($) => $("img").attr("src");
+
+  let taken;
+  let render;
+
+  // A screenshot service that writes a file where it's asked to
+  beforeEach(function () {
+    taken = [];
+    delete require.cache[pluginPath];
+    require.cache[screenshotPath] = {
+      id: screenshotPath,
+      filename: screenshotPath,
+      loaded: true,
+      exports: Object.assign(
+        async function (site, path) {
+          taken.push(site);
+          await fs.outputFile(path, "png for " + site);
+        },
+        { restart: function () {}, shutdown: function () {} }
+      ),
+    };
+    render = require("./index.js").render;
+  });
+
+  afterEach(function () {
+    delete require.cache[pluginPath];
+    delete require.cache[screenshotPath];
+  });
+
+  const build = async (blogID, href) => {
+    const $ = doc(href);
+    await render($, { blogID, path: "/bookmark.webloc" });
+    return $;
+  };
+
+  it("reuses the link's screenshot rather than taking another", async function () {
+    const first = await build(this.blog.id, "https://example.com/");
+    const second = await build(this.blog.id, "https://example.com/");
+
+    expect(taken).toEqual(["https://example.com/"]);
+    expect(srcOf(first)).toContain("/_bookmark_screenshots/");
+    expect(srcOf(second)).toBe(srcOf(first));
+  });
+
+  it("takes another once the screenshot is gone from the bucket", async function () {
+    const first = await build(this.blog.id, "https://example.com/");
+    const path = srcOf(first).slice(
+      srcOf(first).indexOf("_bookmark_screenshots/")
+    );
+
+    await assets.remove(this.blog.id, path);
+
+    const second = await build(this.blog.id, "https://example.com/");
+
+    expect(taken.length).toBe(2);
+    expect(srcOf(second)).not.toBe(srcOf(first));
+  });
+
+  it("takes one per link", async function () {
+    await build(this.blog.id, "https://example.com/a");
+    await build(this.blog.id, "https://example.com/b");
+
+    expect(taken).toEqual(["https://example.com/a", "https://example.com/b"]);
+  });
+});

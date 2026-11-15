@@ -4,9 +4,47 @@ const clfdate = require("helper/clfdate");
 const { v4: uuid } = require("uuid");
 const { is } = require("build/converters/webloc");
 const { report } = require("build/flags");
+const client = require("models/client");
+const hash = require("helper/hash");
 const SCREENSHOT_DIR = "_bookmark_screenshots";
 const SCREENSHOT_WIDTH = 1200;
 const SCREENSHOT_HEIGHT = 1200;
+
+// The screenshot last taken of each link, per blog: a rebuild of a bookmark
+// post reuses it rather than taking another into a new file, which left
+// every earlier one in the bucket. Removed with the blog's other keys.
+function screenshotKey(blogID, href) {
+  return "blog:" + blogID + ":store:screenshots:" + hash(href);
+}
+
+// The path of the link's last screenshot, if it is still in the bucket
+async function previousScreenshot(blogID, href) {
+  try {
+    const previous = await client.get(screenshotKey(blogID, href));
+
+    if (previous && (await assets.exists(blogID, previous))) return previous;
+  } catch (err) {
+    console.log(
+      clfdate(),
+      "[linkScreenshot] lookup failed",
+      "blog=" + blogID,
+      err.message
+    );
+  }
+
+  return null;
+}
+
+function wrap($, href, caption, src) {
+  $.root().html(
+    `<p class="bookmark-container">
+        <a class="bookmark-screenshot" href="${href}">
+          <img width="${SCREENSHOT_WIDTH}" height="${SCREENSHOT_HEIGHT}" src="${src}" title="Screenshot of ${caption}" />
+        </a>
+        <a class="bookmark" href="${href}">${caption}</a>
+       </p>`
+  );
+}
 
 async function render($, { blogID, path }) {
   if (!is(path)) return;
@@ -14,11 +52,6 @@ async function render($, { blogID, path }) {
   const link = $("p a.bookmark").first();
   const href = link.attr("href");
   const caption = link.html();
-  const filename = uuid() + ".png";
-  const screenshotPath = SCREENSHOT_DIR + "/" + filename;
-  const localPathToScreenshot = assets.path(blogID, screenshotPath);
-
-  const src = assets.url(blogID, screenshotPath);
 
   if (!href) {
     return;
@@ -42,6 +75,13 @@ async function render($, { blogID, path }) {
   ) {
     return;
   }
+
+  const previous = await previousScreenshot(blogID, href);
+
+  if (previous) return wrap($, href, caption, assets.url(blogID, previous));
+
+  const screenshotPath = SCREENSHOT_DIR + "/" + uuid() + ".png";
+  const localPathToScreenshot = assets.path(blogID, screenshotPath);
 
   try {
     await screenshot(
@@ -72,14 +112,20 @@ async function render($, { blogID, path }) {
     return;
   }
 
-  $.root().html(
-    `<p class="bookmark-container">
-        <a class="bookmark-screenshot" href="${href}">
-          <img width="${SCREENSHOT_WIDTH}" height="${SCREENSHOT_HEIGHT}" src="${src}" title="Screenshot of ${caption}" />
-        </a>
-        <a class="bookmark" href="${href}">${caption}</a>
-       </p>`
-  );
+  // Only a screenshot in the bucket is remembered. A failure here leaves the
+  // next build to take another.
+  try {
+    await client.set(screenshotKey(blogID, href), screenshotPath);
+  } catch (err) {
+    console.log(
+      clfdate(),
+      "[linkScreenshot] remembering screenshot failed",
+      "blog=" + blogID,
+      err.message
+    );
+  }
+
+  wrap($, href, caption, assets.url(blogID, screenshotPath));
 }
 
 module.exports = {
