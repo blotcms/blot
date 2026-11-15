@@ -35,7 +35,8 @@ describe("cdn/permaCache", function () {
 
     for (const spec of paths) {
       const path = typeof spec === "string" ? spec : spec.path;
-      const file = typeof spec === "string" ? {} : spec.file || {};
+      const files =
+        typeof spec === "string" ? [{}] : spec.files || [spec.file || {}];
       const segments = path.slice(1).split("/");
       let dir = BASE;
 
@@ -48,7 +49,11 @@ describe("cdn/permaCache", function () {
         dir += name + "/";
       });
 
-      dirs[dir] = [{ name: "___file___", isDirectory: false, ...file }];
+      dirs[dir] = files.map((file, i) => ({
+        name: i ? "___file___variation___" + i : "___file___",
+        isDirectory: false,
+        ...file,
+      }));
     }
 
     removed = [];
@@ -243,15 +248,45 @@ describe("cdn/permaCache", function () {
 
     zone([
       { path: "/icons/" + name, file: { checksum: current } },
-      { path: "/icons/sub/" + name, file: { checksum: current } },
+      {
+        path: "/icons/" + name.replace(/(\.\w+)$/, ".copy$1"),
+        file: { checksum: "AB" },
+      },
       { path: "/icons/gone.svg", file: { checksum: "AB" } },
     ]);
 
-    const { lines, totals } = await report({ only: "icons" });
+    const { lines, totals } = await report({ only: "icons", apply: true });
 
     expect(totals.stale).toBe(2);
     expect(lines).toContain("icons static file gone: /icons/gone.svg");
-    expect(lines).toContain(`icons static file gone: /icons/sub/${name}`);
+    expect(removed).toContain(BASE + "icons/___gone.svg___/");
+    expect(removed).not.toContain(BASE + `icons/___${name}___/`);
+  });
+
+  it("purges a static file one of whose variations has other bytes", async function () {
+    const name = fs
+      .readdirSync(GLOBAL_STATIC_DIR + "/icons")
+      .find((entry) =>
+        fs.statSync(GLOBAL_STATIC_DIR + "/icons/" + entry).isFile()
+      );
+    const current = crypto
+      .createHash("sha256")
+      .update(fs.readFileSync(GLOBAL_STATIC_DIR + "/icons/" + name))
+      .digest("hex")
+      .toUpperCase();
+
+    zone([
+      {
+        path: "/icons/" + name,
+        files: [{ checksum: current }, { checksum: "AB" }],
+      },
+    ]);
+
+    const { lines, totals } = await report({ only: "icons", apply: true });
+
+    expect(totals.stale).toBe(1);
+    expect(lines).toContain(`icons static file changed: /icons/${name}`);
+    expect(removed).toEqual([BASE + `icons/___${name}___/`]);
   });
 
   it("deletes anything else at the top level", async function () {

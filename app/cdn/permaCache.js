@@ -27,7 +27,10 @@ const documentationURL = require("documentation/tools/cdn-url-helper");
 // Layout, below __bcdn_perma_cache__/pullzone__<pull zone>__<n>/: one
 // directory per URL path segment, the last named ___<segment>___ and holding
 // the cached response (___file___). So /blog_1/_thumbnails/a/small.jpg is
-// blog_1/_thumbnails/a/___small.jpg___/___file___.
+// blog_1/_thumbnails/a/___small.jpg___/___file___. A URL cached with a query
+// string the pull zone varies by (the fonts' ?version=) is a separate file
+// in the same directory, ___file___variation___<hash>, and a purge of the
+// plain URL may not reach it.
 //
 // Each stale copy is either purged, when its URL may still be requested
 // (the edges hold it too, and a person may expect it gone: a deleted file, a
@@ -77,9 +80,9 @@ async function root() {
 
 // Every cached URL below dir (relative to base, ending in "/"), as
 // { path, storagePath }: path is the URL's path as stored, storagePath the
-// directory holding its cached response. With withFile, also file: the
-// cached response's listing entry (size, checksum, dates), which costs a
-// listing per URL.
+// directory holding its cached response. With withFile, also files: the
+// listing entries (size, checksum, dates) of the cached response and of any
+// query-string variations of it, which costs a listing per URL.
 async function* cachedBelow(base, dir, options = {}) {
   for (const entry of await bunnyStorage.list(base + dir)) {
     if (!entry.isDirectory) continue;
@@ -92,10 +95,10 @@ async function* cachedBelow(base, dir, options = {}) {
         storagePath: base + dir + entry.name,
       };
 
-      if (options.withFile) {
-        const files = await bunnyStorage.list(item.storagePath + "/");
-        item.file = files.find((file) => !file.isDirectory) || null;
-      }
+      if (options.withFile)
+        item.files = (await bunnyStorage.list(item.storagePath + "/")).filter(
+          (file) => !file.isDirectory
+        );
 
       yield item;
     } else {
@@ -245,8 +248,7 @@ async function* staleForBlog(base, blogID) {
           yield { ...item, reason: "generated file gone" };
         } else if (
           rewritten &&
-          item.file &&
-          modified > storageTime(item.file.lastChanged)
+          item.files.some((file) => modified > storageTime(file.lastChanged))
         ) {
           yield { ...item, reason: "generated file changed" };
         }
@@ -333,27 +335,33 @@ async function* staleTemplateOutputs(base) {
 }
 
 // The global static files (fonts, plugins, ...) at plain paths, which Blot
-// and templates link without a version in the path: a copy whose bytes
-// differ from the file in this release, or whose file is gone, is purged.
-// Bunny lists each stored file's SHA-256. The query string (the fonts'
-// ?version=) isn't part of the path checked.
+// and templates link without a version in the path: a URL any of whose
+// copies (the plain one and its query-string variations) has bytes that
+// differ from the file in this release, or whose file is gone, is purged,
+// for the edges, and its directory deleted, for every variation; the
+// current ones refill. Bunny lists each stored file's SHA-256.
 async function* staleStaticFiles(base, name) {
   const { decodeFolderPath } = shared();
   const hashes = new Map();
 
   for await (const item of cachedBelow(base, name + "/", { withFile: true })) {
-    if (!item.file || !item.file.checksum) continue;
-
     const path = decodeFolderPath(item.path).replace(/\?.*$/, "");
 
     if (!hashes.has(path))
       hashes.set(path, await sha256(GLOBAL_STATIC_DIR + path));
 
     const current = hashes.get(path);
+    const stale = { ...item, remove: true, purge: true };
 
-    if (!current) yield { ...item, reason: "static file gone" };
-    else if (current !== item.file.checksum.toLowerCase())
-      yield { ...item, reason: "static file changed" };
+    if (!current) {
+      yield { ...stale, reason: "static file gone" };
+    } else if (
+      item.files.some(
+        (file) => file.checksum && file.checksum.toLowerCase() !== current
+      )
+    ) {
+      yield { ...stale, reason: "static file changed" };
+    }
   }
 }
 
@@ -465,7 +473,8 @@ async function applyStale(stale, name, { apply, log, totals }) {
     totals.stale++;
     log(`${name} ${item.reason}: ${item.path}`);
     if (!apply) continue;
-    (item.remove ? toRemove : toPurge).push(item);
+    if (item.purge || !item.remove) toPurge.push(item);
+    if (item.remove) toRemove.push(item);
     if (toPurge.length + toRemove.length >= 100) await flush();
   }
 

@@ -384,8 +384,14 @@ Blot no longer owns the domain.
     | `blog_*/_*` | gone from the bucket; under `_assets` (rewritten in place by a document's conversion), also changed in the bucket since Perma-Cache copied it | purge |
     | `documentation/` | not at the file's current hash (`documentation/tools/cdn-url-helper`) | delete the storage copy |
     | `template/` | the hash's rendered output gone from Redis | delete the storage copy |
-    | `fonts/`, `icons/`, `katex/`, `plugins/`, `syntax-highlighter/` | Bunny's SHA-256 differs from the file in this release, or the file is gone | purge |
+    | `fonts/`, `icons/`, `katex/`, `plugins/`, `syntax-highlighter/` | Bunny's SHA-256 of any copy differs from the file in this release, or the file is gone | purge, and delete the URL's directory |
     | anything else | always | delete it |
+
+    A URL cached with a query string the pull zone varies by (the fonts'
+    `?version=`) is a separate file in the URL's directory,
+    `___file___variation___<hash>`, which a purge of the plain URL may not
+    reach; so a stale static file's whole directory is deleted, and its
+    current variations refill.
 
     A copy nothing links any more and that the origin would answer
     correctly is only deleted from storage, one call, without a purge. The
