@@ -1,38 +1,39 @@
 const screenshot = require("helper/screenshot");
 const assets = require("storage/assets");
 const clfdate = require("helper/clfdate");
-const { v4: uuid } = require("uuid");
+const crypto = require("crypto");
 const { is } = require("build/converters/webloc");
 const { report } = require("build/flags");
-const client = require("models/client");
-const hash = require("helper/hash");
 const SCREENSHOT_DIR = "_bookmark_screenshots";
 const SCREENSHOT_WIDTH = 1200;
 const SCREENSHOT_HEIGHT = 1200;
 
-// The screenshot last taken of each link, per blog: a rebuild of a bookmark
-// post reuses it rather than taking another into a new file, which left
-// every earlier one in the bucket. Removed with the blog's other keys.
-function screenshotKey(blogID, href) {
-  return "blog:" + blogID + ":store:screenshots:" + hash(href);
+// A link's screenshot lives at a path made from its URL, so a rebuild of a
+// bookmark post finds the one an earlier build took and links it again,
+// rather than taking another into a new file, which left every earlier one
+// in the bucket. A screenshot is taken only while there's none at the path:
+// for a new link, or once the file has been deleted, which purges its CDN
+// URL, so the new bytes never meet a stale cached copy.
+function screenshotPathFor(href) {
+  const name = crypto.createHash("sha256").update(href).digest("hex");
+  return SCREENSHOT_DIR + "/" + name.slice(0, 32) + ".png";
 }
 
-// The path of the link's last screenshot, if it is still in the bucket
-async function previousScreenshot(blogID, href) {
+// Whether the screenshot is in the bucket. If S3 can't say, one is taken:
+// at worst it replaces the file with a newer screenshot of the same page.
+async function taken(blogID, screenshotPath) {
   try {
-    const previous = await client.get(screenshotKey(blogID, href));
-
-    if (previous && (await assets.exists(blogID, previous))) return previous;
+    return await assets.exists(blogID, screenshotPath);
   } catch (err) {
     console.log(
       clfdate(),
-      "[linkScreenshot] lookup failed",
+      "[linkScreenshot] checking for a screenshot failed",
       "blog=" + blogID,
+      "path=" + screenshotPath,
       err.message
     );
+    return false;
   }
-
-  return null;
 }
 
 function wrap($, href, caption, src) {
@@ -76,11 +77,11 @@ async function render($, { blogID, path }) {
     return;
   }
 
-  const previous = await previousScreenshot(blogID, href);
+  const screenshotPath = screenshotPathFor(href);
+  const src = assets.url(blogID, screenshotPath);
 
-  if (previous) return wrap($, href, caption, assets.url(blogID, previous));
+  if (await taken(blogID, screenshotPath)) return wrap($, href, caption, src);
 
-  const screenshotPath = SCREENSHOT_DIR + "/" + uuid() + ".png";
   const localPathToScreenshot = assets.path(blogID, screenshotPath);
 
   try {
@@ -112,20 +113,7 @@ async function render($, { blogID, path }) {
     return;
   }
 
-  // Only a screenshot in the bucket is remembered. A failure here leaves the
-  // next build to take another.
-  try {
-    await client.set(screenshotKey(blogID, href), screenshotPath);
-  } catch (err) {
-    console.log(
-      clfdate(),
-      "[linkScreenshot] remembering screenshot failed",
-      "blog=" + blogID,
-      err.message
-    );
-  }
-
-  wrap($, href, caption, assets.url(blogID, screenshotPath));
+  wrap($, href, caption, src);
 }
 
 module.exports = {

@@ -186,13 +186,14 @@ describe("linkScreenshot plugin, on rebuilds", function () {
     const second = await build(this.blog.id, "https://example.com/");
 
     expect(taken.length).toBe(2);
-    expect(srcOf(second)).not.toBe(srcOf(first));
+    expect(srcOf(second)).toBe(srcOf(first));
   });
 
   it("takes one per link", async function () {
-    await build(this.blog.id, "https://example.com/a");
-    await build(this.blog.id, "https://example.com/b");
+    const a = await build(this.blog.id, "https://example.com/a");
+    const b = await build(this.blog.id, "https://example.com/b");
 
     expect(taken).toEqual(["https://example.com/a", "https://example.com/b"]);
+    expect(srcOf(a)).not.toBe(srcOf(b));
   });
 });
