@@ -357,9 +357,12 @@ Blot no longer owns the domain.
   its exact URL is purged, so `app/cdn/permaCache.js` purges:
   - **a folder file's old URL** when a write replaces its bytes, or a remove
     or move takes it away (`storage/folder/s3.js`; the old version comes from
-    the index record, so nothing is read);
+    the index record, so nothing is read), in both forms: the edge still
+    caches the form used before #2695, which the rule "No Perma-Cache for old
+    folder URLs" keeps out of Perma-Cache;
   - **a deleted blog's URLs**, all of them, listed from the storage zone,
-    then its directory (`models/blog/remove.js`, after the removal resolves);
+    then its directory, which is kept for the next sweep to retry if any
+    purge fails (`models/blog/remove.js`, after the removal resolves);
   - **everything they missed, weekly** (scheduler, Sundays 04:15, under a
     lock): for each `blog_*` directory, a deleted blog's whole directory,
     and an existing blog's folder files at other than their current version,

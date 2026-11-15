@@ -83,17 +83,29 @@ function purgeFolderFile(blogID, path, record) {
 
   if (!version) return;
 
-  const url = config.cdn.origin + shared().folderCdnPath(blogID, version, path);
+  const { folderCdnPath, encodeFolderPath } = shared();
 
   // Not awaited: a write shouldn't wait for Bunny. purgeCdnUrls logs failures.
-  purgeQuietly(url);
+  // The form links used before #2695, /folder/v-<version>/<blogID><path>, is
+  // still served (by the app, for posts not rebuilt since) and cached at the
+  // edge, so it is purged too. Perma-Cache doesn't keep it: its edge rule
+  // bypasses Perma-Cache.
+  purgeQuietly([
+    config.cdn.origin + folderCdnPath(blogID, version, path),
+    config.cdn.origin +
+      "/folder/v-" +
+      version +
+      "/" +
+      blogID +
+      encodeFolderPath(path.normalize("NFC")),
+  ]);
 }
 
-async function purgeQuietly(url) {
+async function purgeQuietly(urls) {
   try {
-    await purgeCdnUrls([url]);
+    await purgeCdnUrls(urls);
   } catch (err) {
-    console.error("permaCache: purging", url, err);
+    console.error("permaCache: purging", urls, err);
   }
 }
 
@@ -197,10 +209,14 @@ async function purge(items) {
 }
 
 // Every URL Perma-Cache holds for a deleted blog is purged, then its
-// directory is deleted, for anything the purges missed
+// directory is deleted, for anything the purges missed. If any purge fails
+// the directory is kept, since its listing is what lets the next sweep
+// retry: deleting it would leave those edge copies public with nothing left
+// to find them by.
 async function removeBlog(base, blogID, { apply, onItem }) {
   let count = 0;
   let batch = [];
+  let purged = true;
 
   for await (const item of cachedBelow(base, blogID + "/")) {
     count++;
@@ -208,14 +224,21 @@ async function removeBlog(base, blogID, { apply, onItem }) {
     if (!apply) continue;
     batch.push(item);
     if (batch.length >= 100) {
-      await purge(batch);
+      if (!(await purge(batch))) purged = false;
       batch = [];
     }
   }
 
   if (apply) {
-    await purge(batch);
-    await bunnyStorage.remove(base + blogID + "/");
+    if (batch.length && !(await purge(batch))) purged = false;
+
+    if (purged) {
+      await bunnyStorage.remove(base + blogID + "/");
+    } else {
+      console.error(
+        "permaCache: kept " + blogID + "'s directory: some purges failed"
+      );
+    }
   }
 
   return count;
@@ -295,8 +318,10 @@ async function sweep(options = {}) {
 
 // Deletes a top-level directory of Perma-Cache outright, without purging
 // its URLs one by one: for the folder/ tree of URLs in the form used before
-// #2695 (/folder/v-<version>/blog_<id>/...), whose copies are refetched from
-// the app on demand.
+// #2695 (/folder/v-<version>/blog_<id>/...). Its edge rule, "No Perma-Cache
+// for old folder URLs", keeps it from filling again: those URLs are still
+// served, by the app, and cached at the edge only, where purgeFolderFile
+// purges them on change.
 async function removeTopLevel(name) {
   if (!name || name.includes("/") || BLOG_ID.test(name))
     throw new Error("permaCache: not a top-level directory name: " + name);

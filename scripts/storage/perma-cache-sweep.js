@@ -15,8 +15,9 @@
 // Perma-Cache outright: every /folder/v-<version>/blog_<id>/... URL, grouped
 // by version rather than by blog, so the sweep can't tell which are stale.
 // Those URLs are still linked from posts not yet rebuilt and from feeds, and
-// refill from the app on demand. The edge keeps its own copies until they
-// expire or are purged.
+// are served by the app; the edge rule "No Perma-Cache for old folder URLs"
+// keeps them out of Perma-Cache from then on, and a folder file's change
+// purges its edge copy at the old form's URL too.
 //
 // Safe to re-run: each run lists what is there now.
 
