@@ -549,15 +549,37 @@ async function checkCodeScanning() {
       ])
     );
     if (!analyses.length) throw new Error("no analyses on master");
-    const last = new Date(analyses[0].created_at);
-    const days = Math.floor((today - last) / 86400000);
+    // Newest first: report a language whose latest analysis failed, and
+    // measure freshness from the newest analysis that didn't
+    const seen = new Set();
+    for (const a of analyses) {
+      if (seen.has(a.category)) continue;
+      seen.add(a.category);
+      if (a.error)
+        add(
+          "watch",
+          "Code scanning: master's latest " +
+            a.category +
+            " analysis failed: " +
+            a.error
+        );
+    }
+    const good = analyses.find((a) => !a.error);
+    if (!good) {
+      add(
+        "watch",
+        "Code scanning: none of master's last 10 analyses succeeded"
+      );
+      return;
+    }
+    const days = Math.floor((today - new Date(good.created_at)) / 86400000);
     // Default setup scans every push to master and weekly
     add(
       days > 8 ? "watch" : "ok",
-      "Code scanning: last master scan " +
+      "Code scanning: last successful master scan " +
         days +
         " days ago (" +
-        analyses[0].created_at.slice(0, 10) +
+        good.created_at.slice(0, 10) +
         ")"
     );
   });
