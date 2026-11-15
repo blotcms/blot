@@ -50,7 +50,22 @@ function patternsFor(req) {
 // Resolves to a function from page number to path, or null when no pattern
 // can build the path.
 function pathBuilder(req) {
-  const params = req.params || {};
+  // Express decodes its route params, but a view's params are matched on an
+  // encoded path (models/template/getViewByURL), so decode them all once
+  // before compile encodes them again. A value that isn't valid encoding is
+  // kept as it is.
+  const params = {};
+  for (const [name, value] of Object.entries(req.params || {})) {
+    let decoded = value;
+    if (typeof value === "string") {
+      try {
+        decoded = decodeURIComponent(value);
+      } catch (e) {
+        decoded = value;
+      }
+    }
+    params[name] = decoded;
+  }
   const patterns = patternsFor(req);
 
   for (const pattern of patterns) {
@@ -95,7 +110,8 @@ function pathBuilder(req) {
       if (second && /\/page\/2$/.test(second))
         return second.replace(/\/page\/2$/, "") || "/";
 
-      return null;
+      // Only a page pattern, such as /pagination/:page: page 1 is /pagination/1
+      return compileOrNull(pattern, { ...params, page: "1" });
     };
   }
 

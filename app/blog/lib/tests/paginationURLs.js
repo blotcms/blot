@@ -180,4 +180,31 @@ describe("paginationURLs", function () {
     expect(result.previous_url).toBeNull();
     expect(pagination).toEqual({});
   });
+
+  it("links page 1 of a view whose only pattern has :page", function () {
+    const result = paginationURLs(
+      {
+        originalUrl: "/pagination/2",
+        params: { page: "2" },
+        viewURLPatterns: ["/pagination/:page"],
+      },
+      { next: 3, previous: 1 }
+    );
+    expect(result.next_url).toBe("/pagination/3");
+    expect(result.previous_url).toBe("/pagination/1");
+  });
+
+  it("doesn't encode a view's params twice", function () {
+    // A view's params are matched on the encoded path
+    const result = paginationURLs(
+      {
+        originalUrl: "/s/a%20b/page/2",
+        params: { section: "a%20b", page: "2" },
+        viewURLPatterns: ["/s/:section", "/s/:section/page/:page"],
+      },
+      { next: 3, previous: 1 }
+    );
+    expect(result.next_url).toBe("/s/a%20b/page/3");
+    expect(result.previous_url).toBe("/s/a%20b");
+  });
 });

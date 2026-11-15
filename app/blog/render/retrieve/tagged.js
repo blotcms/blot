@@ -25,7 +25,8 @@ async function tagged(req, res) {
     (res.locals && res.locals.tag) ||
     "";
 
-  const page = normalizePageNumber(req.params.page);
+  // ?page= too, for views without a :page pattern (see lib/paginationURLs)
+  const page = normalizePageNumber(req.params.page ?? req.query.page);
 
   const templateLocals = (req.template && req.template.locals) || {};
   const pathPrefix =

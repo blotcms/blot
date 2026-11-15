@@ -178,4 +178,20 @@ describe("pagination URLs", function () {
       "n=/list?page=3&z=1;p=/list?z=1"
     );
   });
+
+  it("pages a tagged list with ?page= on a view without a page pattern", async function () {
+    await this.template(
+      {
+        "tags.html":
+          "{{#tagged}}{{#entries}}[{{title}}]{{/entries}}" +
+          "{{#pagination}}c={{current}};p={{{previous_url}}}{{/pagination}}{{/tagged}}",
+      },
+      {
+        views: { "tags.html": { url: ["/tags"], locals: { tag: "x" } } },
+        locals: { page_size: 1 },
+      }
+    );
+
+    expect(await this.text("/tags?page=2")).toContain("c=2;p=/tags");
+  });
 });
