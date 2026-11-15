@@ -7,6 +7,7 @@ const {
   normalize: normalizePath,
 } = require("path");
 const makeSlug = require("helper/makeSlug");
+const withoutExtension = require("helper/withoutExtension");
 
 // We want to think about the specific kinds of wikilinks we want to
 // support here. The first should be a relative path, e.g.
@@ -83,6 +84,8 @@ module.exports = async function byPath(blogID, pathOfPost, href, isLink) {
   throw new Error("No entry found by path");
 };
 
+module.exports.searchForExtension = searchForExtension;
+
 function getEntry(blogID, path) {
   const get = require("models/entry").get;
 
@@ -128,6 +131,27 @@ async function caseInsensitive(blogID, path) {
   return entry;
 }
 
+// Which name in a directory an extensionless link refers to. The rule does not
+// depend on the order the directory is listed in:
+//   1. a name which is the link plus an extension (post.md, post.txt), else
+//   2. the same after normalize (case, punctuation and spaces ignored), else
+//   3. a name which merely starts with the link (the shortest, so post-a.md
+//      beats post-two.md; this fallback has existed since wikilinks began).
+// Ties go by code-unit order, so post.md beats post.txt.
+function pickName(names, base) {
+  const sorted = [...names].sort(
+    (a, b) => a.length - b.length || (a < b ? -1 : a > b ? 1 : 0)
+  );
+  const wanted = normalize(base);
+
+  return (
+    sorted.find((name) => withoutExtension(name) === base) ||
+    sorted.find((name) => normalize(withoutExtension(name)) === wanted) ||
+    sorted.find((name) => name.startsWith(base)) ||
+    sorted.find((name) => normalize(name).startsWith(wanted))
+  );
+}
+
 // e.g '/blog/post' -> '/blog/post.md'
 async function searchForExtension(blogID, path) {
   const dir = dirname(path);
@@ -139,17 +163,14 @@ async function searchForExtension(blogID, path) {
 
   const entries = await folder.listNames(blogID, correctDir);
 
-  const contents = entries.map((entry) => entry.name);
-
-  const perfectMatch = contents.find((item) => item.startsWith(base));
-
-  if (perfectMatch) return join(correctDir, perfectMatch);
-
-  const roughMatch = contents.find((item) =>
-    normalize(item).startsWith(normalize(base))
+  // A folder is never an entry, so a folder called post/ must not shadow
+  // post.md
+  const match = pickName(
+    entries.filter((entry) => !entry.isDirectory).map((entry) => entry.name),
+    base
   );
 
-  if (roughMatch) return join(correctDir, roughMatch);
+  if (match) return join(correctDir, match);
 
   throw new Error("No matching file");
 }
