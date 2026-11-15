@@ -15,15 +15,18 @@
             <input type="submit" value="Go" />
           </form>
 
+          {{#archives.length}}
           <ul class="full-archive">
             {{#archives}}
               {{#months}}
                 {{#entries}}
-                <li><a href="{{{url}}}" title="{{title}}"><span class="archive-title">{{title}}</span> <span class="light">{{date}}</span></a></li>
+                <li><a href="{{{url}}}" title="{{title}}"><span class="archive-title">{{title}}</span>{{^hide_dates}} <span class="light">{{date}}</span>{{/hide_dates}}</a></li>
                 {{/entries}}
               {{/months}}
             {{/archives}}
           </ul>
+          {{/archives.length}}
+          {{^archives.length}}<p class="empty-state">No posts yet.</p>{{/archives.length}}
           </div>
           {{> feed-links}}
         </main>

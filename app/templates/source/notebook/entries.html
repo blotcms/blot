@@ -9,8 +9,9 @@
         <main class="main">
 
           {{^posts.length}}
-          <div class="centered">
-            <p>No posts yet.</p>
+          <div class="page-body">
+            {{#posts.pagination.total_entries}}<p class="empty-state">There are no posts on this page. <a href="/">Go to the latest posts</a></p>{{/posts.pagination.total_entries}}
+            {{^posts.pagination.total_entries}}<p class="empty-state">No posts yet.</p>{{/posts.pagination.total_entries}}
           </div>
           {{/posts.length}}
 
@@ -27,13 +28,8 @@
           </article>
           {{/posts}}
 
-          {{#posts.pagination}}
-          <div class="blog-pager">
-            <span class="pager-newer">{{#previous}}<a href="/page/{{previous}}">Newer Posts</a>{{/previous}}</span>
-            <a class="pager-home" href="/">Home</a>
-            <span class="pager-older">{{#next}}<a href="/page/{{next}}">Older Posts</a>{{/next}}</span>
-          </div>
-          {{/posts.pagination}}
+          {{! Only when there is another page to go to }}
+          {{#posts.pagination}}{{#previous}}{{> blog-pager}}{{/previous}}{{^previous}}{{#next}}{{> blog-pager}}{{/next}}{{/previous}}{{/posts.pagination}}
 
           {{> feed-links}}
         </main>

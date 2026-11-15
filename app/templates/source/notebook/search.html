@@ -23,7 +23,7 @@
           {{/query}}
 
           {{#entries}}
-            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span> <span class="light">{{date}}</span></a></li>
+            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span>{{^hide_dates}} <span class="light">{{date}}</span>{{/hide_dates}}</a></li>
           {{/entries}}
           </ul>
           </div>

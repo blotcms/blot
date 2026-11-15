@@ -10,19 +10,17 @@
           <div class="page-body">
           <h1 class="page-title">{{tag}}</h1>
 
+          {{#entries.length}}
           <ul class="full-archive">
             {{#entries}}
-            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span> <span class="light">{{date}}</span></a></li>
+            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span>{{^hide_dates}} <span class="light">{{date}}</span>{{/hide_dates}}</a></li>
             {{/entries}}
           </ul>
+          {{/entries.length}}
+          {{^entries.length}}<p class="empty-state">No posts are tagged &ldquo;{{tag}}&rdquo;.</p>{{/entries.length}}
 
-          {{#entries.pagination}}
-          <div class="pager">
-            <span class="pager-newer">{{#previous}}<a href="/tagged/{{slug}}/page/{{previous}}">&larr; Newer</a>{{/previous}}</span>
-            <span class="pager-page">Page {{current}} of {{total}}</span>
-            <span class="pager-older">{{#next}}<a href="/tagged/{{slug}}/page/{{next}}">Older &rarr;</a>{{/next}}</span>
-          </div>
-          {{/entries.pagination}}
+          {{! Only when there is another page to go to }}
+          {{#entries.pagination}}{{#previous}}{{> tag-pager}}{{/previous}}{{^previous}}{{#next}}{{> tag-pager}}{{/next}}{{/previous}}{{/entries.pagination}}
           </div>
           {{> feed-links}}
         </main>

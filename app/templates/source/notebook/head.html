@@ -1,8 +1,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="robots" content="index, follow">
-    <meta property="og:site_name" content="{{title}}">
+    {{> robots_meta}}
+    <meta property="og:site_name" content="{{title}}{{^title}}{{handle}}{{/title}}">
   
     <title>{{> title}}</title>
     {{#entry}}
@@ -11,8 +11,8 @@
     {{/entry}}
     {{^entry}}<meta name="description" content="{{> description}}">{{/entry}}
   
-    <link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}" href="{{{siteURL}}}{{{feedURL}}}">
-    {{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}" type="image/x-icon">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}" type="image/x-icon">{{/avatar}}{{/profile_image.thumbnails.square.url}}
+    <link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}{{^title}}{{handle}}{{/title}}" href="{{{siteURL}}}{{{feedURL}}}">
+    {{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{^avatar}}<link rel="icon" href="data:,">{{/avatar}}{{/profile_image.thumbnails.square.url}}
     <link rel="preconnect" href="{{{cdn}}}" />
     <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
   
@@ -74,13 +74,11 @@
     {{/tags}}
     {{/entry}}
   
-    <!-- Non-entry pages: og:type website; canonical/og:url if view exposes url; og:image fallback to avatar -->
+    <!-- Non-entry pages: og:type website; canonical/og:url from the view's
+         canonical partial (none on search and error pages); og:image fallback to avatar -->
     {{^entry}}
     <meta property="og:type" content="website">
-    {{#url}}
-    <link rel="canonical" href="{{{url}}}">
-    <meta property="og:url" content="{{{url}}}">
-    {{/url}}
+    {{> canonical}}
     <meta property="og:title" content="{{> title}}">
     <meta property="og:description" content="{{> description}}">
     {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}

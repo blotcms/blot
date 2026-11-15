@@ -1,5 +1,13 @@
 {{{app_js}}}
 
+// Page 1 of a listing is the listing itself: link there, not to /page/1
+(function () {
+  var links = document.querySelectorAll('.blog-pager a[href="/page/1"], .pager a[href$="/page/1"]');
+  for (var i = 0; i < links.length; i++) {
+    links[i].setAttribute("href", links[i].getAttribute("href").replace(/\/page\/1$/, "") || "/");
+  }
+})();
+
 (function () {
   var KEY = "notebook-archive";
   var root = document.querySelector(".sidebar .archive-list");

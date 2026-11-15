@@ -468,15 +468,17 @@ a:hover {filter: brightness(0.75);}
   letter-spacing: 0.03em;
 }
 
+/* Three columns, so Home stays centred when only one neighbour exists */
 .blog-pager {
-  position: relative;
-  overflow: hidden;
-  text-align: center;
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: baseline;
+  gap: 1em;
   margin: 1em 0.5rem 0.5em 1.3125rem;
 }
 
-.blog-pager .pager-newer {float: left;}
-.blog-pager .pager-older {float: right;}
+.blog-pager .pager-newer {justify-self: start;}
+.blog-pager .pager-older {justify-self: end;}
 .blog-pager a {text-decoration: underline;}
 
 .pager-home {
@@ -513,12 +515,13 @@ a:hover {filter: brightness(0.75);}
 
 .tag-list {margin: 0; line-height: 1.4em;}
 
+/* Positioned rather than inline, so a long unbroken label wraps beside the
+   bullet instead of dropping onto the line below it */
+.link-list li {position: relative;}
 .link-list li:before {
   content: "\2022";
-  display: inline-block;
-  width: 0.9375rem;
-  margin-left: -0.9375rem;
-  margin-right: 0;
+  position: absolute;
+  left: -0.9375rem;
   color: var(--sidebar-heading-color);
 }
 
@@ -571,6 +574,8 @@ a:hover {filter: brightness(0.75);}
   font-family: {{{stack}}};
   {{/title_font}}
 }
+
+.empty-state {margin: 1.5em 0;}
 
 .full-archive {
   list-style: none;
@@ -653,7 +658,17 @@ input[type="submit"] {
 
 /* ---------- Tables ---------- */
 
+/* Display maths scrolls inside its own box. Both are positioned so that
+   KaTeX's visually hidden MathML copy, which is absolutely positioned, is
+   contained by them instead of widening the page. */
+.katex {position: relative;}
+.katex-display {position: relative; overflow-x: auto; overflow-y: hidden;}
+
+/* A table wider than the column scrolls inside its own box */
 table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   border-spacing: 0;
   margin: 1em 0;

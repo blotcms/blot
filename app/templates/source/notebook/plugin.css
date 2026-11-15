@@ -68,13 +68,16 @@ blockquote.twitter-tweet p {margin: 0}
 
 
 /* IMAGE SIZE */
-img {max-width: 100%;height: auto;}
+img, svg {max-width: 100%;height: auto;}
 
 /* CODE HIGHLIGHTING */
 
+/* Inside the column, with space below, and scrolling sideways when a line
+   is longer than the column (highlighted or not) */
 pre {
   padding: 0.7em 1em;
-  margin: 0 -1em;
+  margin: 0 0 1em;
+  overflow-x: auto;
   background: rgba(0,0,0,0.03)
 }
 
