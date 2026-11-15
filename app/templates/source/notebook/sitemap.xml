@@ -6,6 +6,11 @@
   <url>
     <loc>{{{siteURL}}}/archives</loc> 
   </url>
+  {{#all_tags.length}}
+  <url>
+    <loc>{{{siteURL}}}/tags</loc>
+  </url>
+  {{/all_tags.length}}
   {{#menu}}
   {{#isPage}}
   <url>

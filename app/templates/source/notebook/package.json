@@ -42,7 +42,7 @@
   "views": {
     "entries.html": {
       "partials": {
-        "title": "{{title}}{{^title}}{{handle}}{{/title}}",
+        "title": "{{#pagination.previous}}Page {{pagination.current}} - {{/pagination.previous}}{{title}}{{^title}}{{handle}}{{/title}}",
         "description": "The latest entries posted on {{title}}{{^title}}{{handle}}{{/title}}",
         "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">",
         "site_title_element": "h1"
@@ -56,6 +56,18 @@
         "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/archives\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/archives\">",
         "site_title_element": "p"
       }
+    },
+    "tags.html": {
+      "url": "/tags",
+      "partials": {
+        "title": "Tags - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "Every tag on {{title}}{{^title}}{{handle}}{{/title}}",
+        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/tags\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/tags\">",
+        "site_title_element": "p"
+      }
+    },
+    "archive-tree.html": {
+      "url": "/archives/tree"
     },
     "search.html": {
       "partials": {
@@ -82,7 +94,7 @@
     },
     "tagged.html": {
       "partials": {
-        "title": "{{tag}} - {{title}}{{^title}}{{handle}}{{/title}}",
+        "title": "{{tag}}{{#pagination.previous}} - Page {{pagination.current}}{{/pagination.previous}} - {{title}}{{^title}}{{handle}}{{/title}}",
         "description": "All of the entries posted on {{title}}{{^title}}{{handle}}{{/title}} tagged {{tag}}",
         "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">",
         "site_title_element": "p"

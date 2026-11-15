@@ -6,23 +6,21 @@
       <ul class="archive-list">
         {{#archives}}
         <li>
-          <details data-archive-id="{{year}}"{{#first}} open{{/first}}>
+          {{! The newest year is in the page. Older years are fetched from
+              archive-tree.html when opened; the link is for readers
+              without JavaScript. }}
+          {{#first}}
+          <details data-archive-id="{{year}}" open>
             <summary><span class="archive-label">{{year}}</span> <span class="archive-count">({{total}})</span></summary>
-            <ul class="archive-list archive-months">
-              {{#months}}
-              <li>
-                <details data-archive-id="{{year}}/{{month}}"{{#first}} open{{/first}}>
-                  <summary><span class="archive-label">{{month}}</span></summary>
-                  <ul class="archive-list archive-posts">
-                    {{#entries}}
-                    <li><a href="{{{url}}}" title="{{title}}">{{title}}</a></li>
-                    {{/entries}}
-                  </ul>
-                </details>
-              </li>
-              {{/months}}
-            </ul>
+            {{> archive-months}}
           </details>
+          {{/first}}
+          {{^first}}
+          <details data-archive-id="{{year}}" data-archive-year="{{year}}">
+            <summary><span class="archive-label">{{year}}</span> <span class="archive-count">({{total}})</span></summary>
+            <p class="archive-fallback"><a href="/archives#{{year}}">See {{year}} in the archives</a></p>
+          </details>
+          {{/first}}
         </li>
         {{/archives}}
       </ul>
@@ -42,10 +40,11 @@
   {{/last}}
   {{/menu}}
 
-  {{#all_tags}}
+  {{! The most used tags (up to 100), with every tag on tags.html }}
+  {{#popular_tags}}
   {{#first}}
   <div class="widget">
-    <h2>Tags</h2>
+    <h2><a href="/tags">Tags</a></h2>
     <p class="tag-list">
   {{/first}}
       <a href="/tagged/{{slug}}">{{name}}</a>{{^last}}, {{/last}}
@@ -53,6 +52,6 @@
     </p>
   </div>
   {{/last}}
-  {{/all_tags}}
+  {{/popular_tags}}
 
 </aside>

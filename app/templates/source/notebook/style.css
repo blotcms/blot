@@ -95,6 +95,19 @@ b, strong {font-weight: 600;}
    ~3.5:1, failing WCAG AA on hover). brightness() darkens the color
    itself instead, which increases contrast here (up to ~9:1). */
 a:hover {filter: brightness(0.75);}
+a:focus-visible {outline: 2px solid currentColor; outline-offset: 2px;}
+
+/* Off screen until a keyboard reader tabs to it */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 10;
+  padding: 0.5em 0.8em;
+  background: var(--content-background);
+  color: var(--link-color);
+}
+.skip-link:focus {left: 0.5rem; top: 0.5rem;}
 
 .light {
   color: var(--light-text-color);
@@ -156,14 +169,13 @@ a:hover {filter: brightness(0.75);}
 .site-title a:hover {filter: brightness(0.75);}
 
 .site-avatar {
-  /* Fixed width AND height reserve the box before the image has loaded and
-     its natural size is known, so there's no layout shift once it arrives
-     - same technique other Blot templates use (see profile/style.css).
-     object-fit: contain scales the image down to fit that box without
-     cropping or distorting its aspect ratio. */
-  width: 1.5em;
+  /* A fixed height, and the width the image's shape gives it, so a wide
+     photo isn't shrunk into a sliver inside a square. Wider than 3:1, it's
+     cropped at the sides. */
+  width: auto;
   height: 1.5em;
-  object-fit: contain;
+  max-width: 4.5em;
+  object-fit: cover;
   flex-shrink: 0;
 }
 
@@ -195,8 +207,8 @@ a:hover {filter: brightness(0.75);}
 }
 
 .site-header--stripe .site-avatar {
-  width: 1.2em;
   height: 1.2em;
+  max-width: 3.6em;
 }
 
 .site-header--stripe .hamburger {
@@ -218,6 +230,7 @@ a:hover {filter: brightness(0.75);}
    breakpoint, where the sidebar is already shown inline. */
 
 .sidebar-toggle {
+  display: none;
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -294,7 +307,7 @@ a:hover {filter: brightness(0.75);}
   min-width: 0;
   font-size: 90%;
   line-height: var(--line-height);
-  padding: 1rem 0.6875rem 0 1.8125rem;
+  padding: 1rem 1.25rem 0 1.8125rem;
   background: var(--sidebar-background);
   {{#title_font}}
   font-family: {{{stack}}};
@@ -307,8 +320,11 @@ a:hover {filter: brightness(0.75);}
   .main {padding-right: 0.5rem; padding-left: 0.5rem;}
   .sidebar {box-shadow: 0 -1px 0 var(--sidebar-border-color);}
   .site-header {gap: 1rem;}
-  .site-header:not(.site-header--stripe) .site-title {font-size: 180%;}
-  .site-title {flex: 1 1 auto;}
+  /* Smaller than on wider screens, so a long title doesn't fill the
+     first screen */
+  .site-header:not(.site-header--stripe) .site-title {font-size: 140%;}
+  .site-title {flex: 1 1 auto; overflow-wrap: anywhere;}
+  .site-avatar {max-width: 2.5em;}
 }
 
 /* ---------- Date header ---------- */
@@ -356,7 +372,9 @@ a:hover {filter: brightness(0.75);}
   border-bottom: 0.1875rem solid var(--border-color);
 }
 
-.post:last-child {
+/* The last post on the page: the pager and feed links come after it, so
+   :last-child wouldn't match */
+.post:last-of-type {
   border-bottom: none;
   margin-bottom: 0;
 }
@@ -435,18 +453,9 @@ a:hover {filter: brightness(0.75);}
   color: var(--light-text-color);
 }
 
-.post-author + .post-date:before {
-  content: "\00b7";
-  margin: 0 0.6em;
-}
-
 .post-tag-separator {margin: 0 0.6em;}
-
-.post-date {
-  {{#title_font}}
-  font-family: {{{stack}}};
-  {{/title_font}}
-}
+/* No author before the tags, so nothing to separate the first tag from */
+.post-footer > .post-tag-separator:first-child {display: none;}
 
 .post-tag {
   color: var(--light-text-color);
@@ -583,8 +592,12 @@ a:hover {filter: brightness(0.75);}
   padding: 0;
 }
 
+/* The title, then the date (or count) at the end of the row */
 .full-archive a {
-  display: block;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1em;
   padding: 0.4em 0;
   text-decoration: none;
   {{#title_font}}
@@ -592,7 +605,35 @@ a:hover {filter: brightness(0.75);}
   {{/title_font}}
 }
 
-.full-archive .archive-title {text-decoration: underline;}
+.full-archive .archive-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-decoration: underline;
+}
+.full-archive .light {flex: none; font-size: 0.85em;}
+
+.archive-years {
+  margin: 1.5em 0;
+  line-height: 1.8;
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+.archive-years a {margin-right: 0.6em;}
+
+.archive-year {
+  margin: 1.8em 0 0;
+  color: var(--title-color);
+  font-size: 1.2em;
+  {{#title_font}}
+  font-family: {{{stack}}};
+  {{/title_font}}
+}
+.archive-year + .full-archive {margin-top: 0.5em;}
+
+/* In place of an older year's months until script.js fetches them */
+.archive-fallback {margin: 0.3em 0 0.4em; font-size: 0.9em;}
 
 .full-archive li {
   padding: 0;
@@ -608,8 +649,10 @@ a:hover {filter: brightness(0.75);}
   margin: 1.5em 0;
 }
 
-input[type="text"],
+input[type="search"],
 input[type="submit"] {
+  -webkit-appearance: none;
+  appearance: none;
   font: inherit;
   font-size: 0.9em;
   padding: 0.5em 0.7em 0.3em;
@@ -621,7 +664,7 @@ input[type="submit"] {
   {{/title_font}}
 }
 
-input[type="text"] {
+input[type="search"] {
   flex: 1 1 16em;
   min-width: 0;
   max-width: 100%;
@@ -738,6 +781,10 @@ th, td {border: 1px solid var(--border-color); padding: 0.3em 0.7em;}
   }
 
   .hamburger {display: block;}
+  .sidebar-toggle {display: block;}
 
   .sidebar-toggle:checked ~ .content-wrapper .sidebar {display: block;}
+
+  /* Dates under the titles, where there isn't room beside them */
+  .full-archive a {flex-direction: column; gap: 0.15em;}
 }
