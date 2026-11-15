@@ -36,47 +36,47 @@
   "views": {
     "error.html": {
       "partials": {
-        "title": "{{{error.title}}} - {{{title}}}",
-        "description": "Error on {{{title}}}"
+        "title": "{{error.title}} - {{title}}",
+        "description": "Error on {{title}}"
       }
     },
     "entry.html": {
       "partials": {
-        "title": "{{{entry.title}}} - {{{title}}}",
-        "description": "{{{entry.summary}}}"
+        "title": "{{entry.title}} - {{title}}",
+        "description": "{{entry.summary}}"
       }
     },
     "entries.html": {
       "partials": {
-        "title": "{{{title}}}",
-        "description": "The latest on {{{title}}}"
+        "title": "{{title}}",
+        "description": "The latest on {{title}}"
       }
     },
     "tagged.html": {
       "partials": {
-        "title": "{{{tag}}} - {{{title}}}",
-        "description": "{{{tag}}} on {{{title}}}"
+        "title": "{{tag}} - {{title}}",
+        "description": "{{tag}} on {{title}}"
       }
     },
     "writing.html": {
       "url": "/writing",
       "partials": {
-        "title": "{{{title}}} - Writing",
+        "title": "{{title}} - Writing",
         "description": ""
       }
     },
     "archives.html": {
       "url": "/archives",
       "partials": {
-        "title": "Archives - {{{title}}}",
-        "description": "All entries on {{{title}}}"
+        "title": "Archives - {{title}}",
+        "description": "All entries on {{title}}"
       }
     },
     "search.html": {
       "url": "/search",
       "partials": {
-        "title": "Search - {{{title}}}",
-        "description": "Search everything on {{{title}}}"
+        "title": "Search - {{title}}",
+        "description": "Search everything on {{title}}"
       }
     }
   }

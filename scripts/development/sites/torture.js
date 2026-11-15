@@ -392,7 +392,10 @@ async function build(dir) {
     const body = raw
       .split(/\n\s*\n/)
       .filter((p) => !/^[A-Za-z-]+:\s/.test(p) && !/^\s*#/.test(p))
-      .join("\n\n");
+      .join("\n\n")
+      // Images the borrowed text links by relative path aren't copied here
+      .replace(/!\[[^\]]*\]\((?!https?:|\/\/)[^)]*\)/g, "")
+      .replace(/<img\b[^>]*\bsrc=["'](?!https?:|\/\/)[^"']*["'][^>]*>/gi, "");
     if (!body.trim()) continue;
     paragraphs.push(body);
     words += body.split(/\s+/).length;

@@ -1,5 +1,6 @@
 Title: このブログについて
 Page: yes
+Link: about
 Date: 2020-04-01
 
 # このブログについて

@@ -59,25 +59,25 @@
     },
     "tagged.html": {
       "partials": {
-        "title": "{{{tag}}} - {{{title}}}",
-        "description": "All entries tagged {{{tag}}} on {{{title}}}"
+        "title": "{{tag}} - {{title}}",
+        "description": "All entries tagged {{tag}} on {{title}}"
       }
     },
     "entries.html": {
       "partials": {
-        "title": "{{{title}}}",
-        "description": "Latest posts on {{{title}}}"
+        "title": "{{title}}",
+        "description": "Latest posts on {{title}}"
       }
     },
     "entry.html": {
       "partials": {
-        "title": "{{{entry.title}}} - {{{title}}}",
-        "description": "{{{entry.title}}} - {{{title}}}"
+        "title": "{{entry.title}} - {{title}}",
+        "description": "{{entry.title}} - {{title}}"
       }
     },
     "error.html": {
       "partials": {
-        "title": "{{error.title}} - {{{title}}}",
+        "title": "{{error.title}} - {{title}}",
         "description": "{{error.message}}"
       }
     }

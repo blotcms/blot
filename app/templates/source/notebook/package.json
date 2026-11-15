@@ -44,7 +44,8 @@
       "partials": {
         "title": "{{title}}{{^title}}{{handle}}{{/title}}",
         "description": "The latest entries posted on {{title}}{{^title}}{{handle}}{{/title}}",
-        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">"
+        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">",
+        "site_title_element": "h1"
       }
     },
     "archives.html": {
@@ -52,34 +53,39 @@
       "partials": {
         "title": "Archives - {{title}}{{^title}}{{handle}}{{/title}}",
         "description": "All the entries posted on {{title}}{{^title}}{{handle}}{{/title}}",
-        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/archives\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/archives\">"
+        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/archives\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/archives\">",
+        "site_title_element": "p"
       }
     },
     "search.html": {
       "partials": {
         "title": "Search - {{title}}{{^title}}{{handle}}{{/title}}",
         "description": "Search all the entries posted on {{title}}{{^title}}{{handle}}{{/title}}",
-        "robots_meta": "<meta name=\"robots\" content=\"noindex\">"
+        "robots_meta": "<meta name=\"robots\" content=\"noindex\">",
+        "site_title_element": "p"
       }
     },
     "error.html": {
       "partials": {
         "title": "{{error.title}} - {{title}}{{^title}}{{handle}}{{/title}}",
         "description": "Error on {{title}}{{^title}}{{handle}}{{/title}}",
-        "robots_meta": "<meta name=\"robots\" content=\"noindex\">"
+        "robots_meta": "<meta name=\"robots\" content=\"noindex\">",
+        "site_title_element": "p"
       }
     },
     "entry.html": {
       "partials": {
         "title": "{{entry.title}} - {{title}}{{^title}}{{handle}}{{/title}}",
-        "description": "{{entry.summary}}"
+        "description": "{{entry.summary}}",
+        "site_title_element": "p"
       }
     },
     "tagged.html": {
       "partials": {
         "title": "{{tag}} - {{title}}{{^title}}{{handle}}{{/title}}",
         "description": "All of the entries posted on {{title}}{{^title}}{{handle}}{{/title}} tagged {{tag}}",
-        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">"
+        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">",
+        "site_title_element": "p"
       }
     }
   }

@@ -1,5 +1,6 @@
 Title: عن المدونة
 Page: yes
+Link: about
 Date: 2020-01-10
 
 # عن المدونة
