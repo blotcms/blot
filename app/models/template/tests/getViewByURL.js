@@ -263,7 +263,7 @@ describe("template", function () {
 
       const deep = await this.getViewByURL("/a/b/c");
       expect(deep.viewName).toEqual("a.html");
-      expect(deep.params).toEqual({ path: ["a", "b", "c"] });
+      expect(deep.params).toEqual({ path: "a/b/c" });
     });
 
     it("routes the wildcard with the longer literal prefix first", async function () {
