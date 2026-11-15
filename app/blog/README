@@ -126,7 +126,7 @@ Caching: the template-independent reads are cached inside the models, per blog `
 | `encode_uri_component` | `encode_uri_component.js` | Lambda that URI-encodes rendered text. |
 | `encode_xml` | `encode_xml.js` | Lambda that sanitizes HTML for XML inclusion (RSS). Resolves relative URLs and strips `<script>` tags. |
 | `feed_url` | `feed_url.js` | The blog's RSS feed URL. |
-| `folder` | `folder.js` | Files in the blog's folder. |
+| `folder` / `folder_legacy` | `folder.js` | Files in the blog's folder, at `?path=`. `folder_legacy` is the same retriever under a second name, so the few customer templates on `{{#folder}}` can move to it before `{{#folder}}` is replaced (#2693); remove it once no view names it. |
 | `is` / `is_active` | `is.js`, `is_active.js` | Boolean helpers for conditional rendering. |
 | `latest_entry` | `latest_entry.js` | The most recently published entry. |
 | `plugin` | `plugin.js` | CSS and JS URLs for individually requested plugins. |

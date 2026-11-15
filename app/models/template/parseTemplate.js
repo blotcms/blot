@@ -78,6 +78,8 @@ var retrieveAliases = {
   encodeJSON: true,
   encodeURIComponent: true,
   encodeXML: true,
+  // folder.js under a second name, until {{#folder}} is replaced (#2693)
+  folder_legacy: true,
   isActive: true,
   plugin_css: true,
   plugin_js: true,
