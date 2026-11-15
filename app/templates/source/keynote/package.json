@@ -40,6 +40,11 @@
     "show_captions": true,
     "always_show_post_details": true,
     "drift": true,
+    "rail_layout": "same_width",
+    "rail_layout_options": [
+      "same_width",
+      "same_height"
+    ],
     "slide_size": 5,
     "slide_size_range": [1, 10],
     "content_width": 600,

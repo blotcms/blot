@@ -555,6 +555,29 @@
     lightbox.classList.toggle("has-info", infoWanted);
     root.classList.toggle("info-open", infoWanted);
     infoButton.setAttribute("aria-expanded", String(infoWanted));
+    placeIndex();
+  }
+
+  // The index sits on the Info button's line, below the details. While there is more of the
+  // details still to scroll to, it moves down by as much, so it follows their end and the text
+  // never runs behind it. The details scroll in their own column, or on a phone the whole
+  // viewer scrolls.
+  const infoIndex = lightbox.querySelector(".lightbox-info-index");
+  const infoScroll = infoPanel?.querySelector(".lightbox-info-scroll");
+  const leftToScroll = (element) => Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
+  function placeIndex() {
+    if (!infoIndex || !infoScroll || infoPanel.hidden) return;
+    const viewerScrolls = getComputedStyle(lightbox).overflowY === "auto";
+    const push = leftToScroll(infoScroll) + (viewerScrolls ? leftToScroll(lightbox) : 0);
+    infoIndex.style.setProperty("--index-push", `${Math.round(push)}px`);
+  }
+  if (infoScroll) {
+    infoScroll.addEventListener("scroll", placeIndex, { passive: true });
+    lightbox.addEventListener("scroll", placeIndex, { passive: true });
+    // The details change size as images in the text load, and with the window.
+    const resized = new ResizeObserver(placeIndex);
+    resized.observe(infoScroll);
+    for (const child of infoScroll.children) resized.observe(child);
   }
 
   function fillInfo(entry) {
@@ -1604,6 +1627,8 @@
       clone,
       near: false,
       onscreen: null,
+      width: 0, // measured from the slide: the same for every slide, or with the "same
+      start: 0, // height" layout, as wide as its image; start is its place along the ring
     });
 
     // Slots are in ring order. Until every page is in there are no clones, so slot i shows
@@ -1629,8 +1654,8 @@
 
     let x = 0;
     let velocity = 0;
-    let step = 0;
-    let itemWidth = 0;
+    let gap = 0;
+    let maxStep = 0; // the widest slide and the gap after it
     let padding = 0;
     let cycle = 0;
     let viewWidth = 0;
@@ -1652,14 +1677,26 @@
     }
     renumber();
 
+    // Places each slot along the ring, one after another, from the widths measured.
+    function layout() {
+      let start = 0;
+      maxStep = 0;
+      for (const item of slots) {
+        item.start = start;
+        start += item.width + gap;
+        maxStep = Math.max(maxStep, item.width + gap);
+      }
+      cycle = start;
+    }
+
     // Where a slot's left edge sits on screen.
-    const slotLeft = (item) => mod(item.index * step - x + 2 * step, cycle) - 2 * step + padding;
+    const slotLeft = (item) => mod(item.start - x + 2 * maxStep, cycle) - 2 * maxStep + padding;
 
     function render() {
       for (const item of slots) {
         const left = slotLeft(item);
-        const near = left < viewWidth + step && left + itemWidth > -step;
-        const onscreen = left < viewWidth && left + itemWidth > 0;
+        const near = left < viewWidth + maxStep && left + item.width > -maxStep;
+        const onscreen = left < viewWidth && left + item.width > 0;
         if (near) item.slot.style.transform = `translate3d(${left}px, 0, 0)`;
         if (near !== item.near) {
           item.near = near;
@@ -1722,7 +1759,7 @@
       link?.setAttribute("tabindex", "-1");
       link?.classList.remove("is-zoomed");
       list.append(slot);
-      const item = { ...makeSlot(slot, true, original.page), entryIndex: original.entryIndex };
+      const item = { ...makeSlot(slot, true, original.page), entryIndex: original.entryIndex, width: original.width };
       fadeImagesIn([item.img]);
       return item;
     }
@@ -1730,47 +1767,46 @@
     // Once every page is in, repeat the slides until the ring is longer than the screen,
     // keeping it a whole number of repeats so entries line up when it wraps.
     function fill() {
-      if (!complete() || !step) return;
+      if (!complete()) return;
       const originals = slots.filter((item) => !item.clone);
       if (!originals.length) return;
-      const needed = Math.ceil((viewWidth + 4 * step) / step);
+      const widest = Math.max(...originals.map((item) => item.width + gap));
+      if (!widest) return;
+      const needed = viewWidth + 4 * widest;
+      let length = slots.reduce((sum, item) => sum + item.width + gap, 0);
       let guard = 0;
-      while ((slots.length < needed || slots.length % originals.length !== 0) && guard < 400) {
+      while ((length < needed || slots.length % originals.length !== 0) && guard < 400) {
         guard += 1;
-        slots.push(cloneSlot(originals[slots.length % originals.length]));
+        const item = cloneSlot(originals[slots.length % originals.length]);
+        slots.push(item);
+        length += item.width + gap;
       }
       renumber();
     }
 
+    // Where the middle of the screen falls along the ring.
+    const middle = () => x + viewWidth / 2 - padding;
+
     function measure() {
       const styles = getComputedStyle(list);
-      const centerIndex = step ? (x + viewWidth / 2 - padding - itemWidth / 2) / step : null;
-      itemWidth = slots[0]?.slot.offsetWidth ?? probeWidth();
-      step = itemWidth + (parseFloat(styles.columnGap) || 0);
+      // Keep the point in the middle of the screen where it is, as a share of its slide.
+      const anchor = cycle ? nearestSlot() : null;
+      const within = anchor ? (mod(middle() - anchor.start + cycle / 2, cycle) - cycle / 2) / (anchor.width || 1) : 0;
+      gap = parseFloat(styles.columnGap) || 0;
       padding = parseFloat(styles.paddingLeft) || 0;
       viewWidth = viewport.clientWidth;
-      if (!step) return;
+      for (const item of slots) item.width = item.slot.offsetWidth;
       fill();
-      cycle = step * slots.length;
-      if (centerIndex !== null) x = centerOffset(centerIndex);
+      layout();
+      if (anchor && cycle) x = anchor.start + within * anchor.width + padding - viewWidth / 2;
       render();
       maybeLoad();
       schedule();
     }
 
-    // An empty rail measures a stand-in slide.
-    function probeWidth() {
-      const probe = document.createElement("li");
-      probe.className = "slide";
-      probe.setAttribute("aria-hidden", "true");
-      list.append(probe);
-      const width = probe.offsetWidth;
-      probe.remove();
-      return width;
-    }
-
-    function centerOffset(index) {
-      return index * step + padding + itemWidth / 2 - viewWidth / 2;
+    // The offset that puts a slot in the middle of the screen.
+    function centerOffset(item) {
+      return item.start + padding + item.width / 2 - viewWidth / 2;
     }
 
     // ---- Pages either side of the start ----
@@ -1785,8 +1821,8 @@
         return;
       }
       if (!cycle) return;
-      const reach = viewWidth * 1.5 + step * 2;
-      const seamX = seam * step + padding - (step - itemWidth) / 2;
+      const reach = viewWidth * 1.5 + maxStep * 2;
+      const seamX = (slots[seam]?.start ?? cycle) + padding - gap / 2;
       const distance = mod(seamX - (x + viewWidth / 2) + cycle / 2, cycle) - cycle / 2;
       if (Math.abs(distance) < reach) void loadPage(distance >= 0 ? "forward" : "backward");
     }
@@ -1835,7 +1871,7 @@
 
       if (!added.length) {
         fill();
-        cycle = step * slots.length;
+        layout();
         render();
         return;
       }
@@ -1850,6 +1886,7 @@
         list.insertBefore(element, before);
         return makeSlot(element, false, page);
       });
+      for (const item of items) item.width = item.slot.offsetWidth;
       const newEntries = items.map((item) => readEntry(item.link));
       slots.splice(at, 0, ...items);
 
@@ -1873,8 +1910,8 @@
       renumber();
       fadeImagesIn(items.map((item) => item.img));
       fill();
-      cycle = step * slots.length;
-      if (anchor) x = mod(anchor.index * step - (anchorLeft - padding), cycle);
+      layout();
+      if (anchor) x = mod(anchor.start - (anchorLeft - padding), cycle);
       entriesInserted(at, items.length, moved);
       render();
       schedule();
@@ -1897,12 +1934,12 @@
 
     function visibleFraction(item) {
       const left = slotLeft(item);
-      const overlap = Math.min(left + itemWidth, viewWidth) - Math.max(left, 0);
-      return Math.max(overlap, 0) / itemWidth;
+      const overlap = Math.min(left + item.width, viewWidth) - Math.max(left, 0);
+      return Math.max(overlap, 0) / (item.width || 1);
     }
 
     function glideToSlot(item) {
-      const distance = mod(centerOffset(item.index) - x + cycle / 2, cycle) - cycle / 2;
+      const distance = mod(centerOffset(item) - x + cycle / 2, cycle) - cycle / 2;
       velocity = 0;
       holdUntil = 0;
       if (reducedMotion.matches || Math.abs(distance) < 1) {
@@ -1914,9 +1951,20 @@
       schedule();
     }
 
+    // The slot whose middle is nearest the middle of the screen.
     function nearestSlot() {
-      const index = mod(Math.round((x + viewWidth / 2 - padding - itemWidth / 2) / step), slots.length);
-      return slots[index];
+      if (!cycle) return slots[0];
+      const centre = middle();
+      let best = slots[0];
+      let bestDistance = Infinity;
+      for (const item of slots) {
+        const distance = Math.abs(mod(item.start + item.width / 2 - centre + cycle / 2, cycle) - cycle / 2);
+        if (distance < bestDistance) {
+          best = item;
+          bestDistance = distance;
+        }
+      }
+      return best;
     }
 
     function pointerDown(event) {
@@ -2052,7 +2100,7 @@
         // Bring the entry's slide in only if it is mostly off screen.
         const item = slotFor(index);
         if (item && visibleFraction(item) < 0.5) {
-          x = centerOffset(item.index);
+          x = centerOffset(item);
           render();
         }
       },

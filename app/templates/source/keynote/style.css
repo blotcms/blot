@@ -482,6 +482,20 @@ body[data-view="entry"] .rail-viewport {
   container-type: size;
 }
 
+/* The "rail layout" setting. Same height: every image is the height the slide size sets, a
+   share of the space under the header, and as wide as its shape. */
+{{#is.rail_layout.same_height}}
+.rail-viewport {
+  --item-height: min(calc(70cqh + var(--slide-size) * 3cqh), 100cqh);
+  /* Images of different widths sit close together, like a contact sheet. */
+  --gap: clamp(8px, 1.2vw, 20px);
+}
+
+.slide {
+  --item-width: calc((var(--item-height) - var(--caption-height)) * var(--w, 1) / var(--h, 1));
+}
+{{/is.rail_layout.same_height}}
+
 .js .rail-viewport {
   cursor: grab;
   touch-action: pan-y;
@@ -1454,12 +1468,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   display: flex;
   align-items: center;
   gap: 0.15em;
-  padding: 0 0.35em;
-  border-radius: 999px;
   color: {{text_color}};
-  background: var(--glass);
-  -webkit-backdrop-filter: var(--glass-blur);
-  backdrop-filter: var(--glass-blur);
   font-size: 0.8em;
   opacity: 0;
   visibility: hidden;
@@ -1509,8 +1518,10 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   outline-offset: -2px;
 }
 
+/* No pill behind the icons: a soft shadow in the page colour keeps them clear of the image. */
 .zoom-button svg {
   display: block;
+  filter: drop-shadow(0 0 2px rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.9)) drop-shadow(0 1px 6px rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.6));
   width: 13px;
   height: 13px;
   fill: currentColor;
@@ -1631,8 +1642,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 
   .lightbox .lightbox-close:hover .lightbox-icon,
   .lightbox .lightbox-info-button:hover .lightbox-icon,
-  .lightbox .lightbox-step:hover .lightbox-icon,
-  .zoom-button:hover:not(:disabled) {
+  .lightbox .lightbox-step:hover .lightbox-icon {
     background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
   }
 }
@@ -1735,7 +1745,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  /* Below the row of arrows along the top; the text runs down behind the index and Info pill. */
+  /* Below the row of arrows along the top; the text runs down behind the Info pill. */
   padding: calc(var(--edge-y) + 0.85rem + 22px) var(--edge-x) 0 1.5rem;
   color: {{text_color}};
   background: var(--glass);
@@ -1752,7 +1762,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
 }
 
 /* Long details scroll here, without a scrollbar, fading out under the arrows at the top and
-   behind the index and Info pill at the foot. The padding keeps the text clear of both fades
+   behind the Info pill at the foot. The padding keeps the text clear of both fades
    until it scrolls. */
 .lightbox-info-scroll {
   --fade-end: calc(var(--edge-y) + 6px);
@@ -1861,7 +1871,9 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   stroke-linejoin: round;
 }
 
-/* The index, at the gutter's foot on the Info pill's line, below the scrolling details. */
+/* The index, at the gutter's foot on the Info pill's line. While there is more of the details
+   to scroll to, script pushes it down by that much (--index-push), so it follows the end of
+   the details rather than sitting over them. */
 .lightbox-info-index {
   position: absolute;
   bottom: 0;
@@ -1876,6 +1888,7 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   font-size: 0.9375em;
   pointer-events: none;
   opacity: 0;
+  transform: translateY(var(--index-push, 0px));
   transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
 }
 
@@ -2181,13 +2194,25 @@ html {
     mask-image: none;
   }
 
-  .lightbox.has-info:not(.is-zoomed) :is(.lightbox-close, .lightbox-info-button) {
+  .lightbox.has-info:not(.is-zoomed) :is(.lightbox-close, .lightbox-info-button, .lightbox-info-index) {
     position: fixed;
   }
 
-  .lightbox.has-info:not(.is-zoomed) .lightbox-info-index {
+  /* The text scrolls away softly under the Info button and the index, which stay put. */
+  .lightbox.has-info.is-revealed:not(.is-zoomed)::after {
     position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1;
+    height: calc(44px + var(--edge-y));
     background: linear-gradient(rgba({{#rgb}}{{background_color}}{{/rgb}}, 0), rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.85) 50%);
+    pointer-events: none;
+    content: "";
+  }
+
+  .lightbox.has-info.is-revealed.is-dragging-down:not(.is-zoomed)::after {
+    opacity: max(0, 1 - var(--drag, 0) * 3);
   }
 
   /* Touch screens hide the arrows, so the text needn't clear them. */
