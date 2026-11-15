@@ -5,12 +5,14 @@
 // security bulletins), compares, and prints a short report.
 //
 //   node scripts/security/check-advisories.js [--days N] [--json]
-//        [--npm] [--dependabot]
+//        [--npm] [--dependabot] [--code-scanning]
 //
 //   --days N       ALAS look-back window (default 2)
 //   --json         machine-readable output
 //   --npm          also run `npm audit --omit=dev` in the repo root
 //   --dependabot   also summarise open Dependabot alerts via `gh api`
+//   --code-scanning  also list open CodeQL alerts and the age of master's
+//                  last scan via `gh api`
 //
 // Exit code 1 if anything is in ACTION NEEDED, else 0. Every source is
 // fetched independently with a timeout; a failing one is reported as
@@ -507,6 +509,60 @@ async function checkDependabot() {
   });
 }
 
+// The open alert list is normally empty (everything was triaged in Nov 2026),
+// so every open alert is listed. A scan that stops running would also leave
+// the list empty, hence the check on the age of master's last analysis.
+async function checkCodeScanning() {
+  await source("Code scanning alerts (gh)", async () => {
+    const alerts = JSON.parse(
+      await run("gh", [
+        "api",
+        "repos/{owner}/{repo}/code-scanning/alerts?state=open&per_page=100",
+      ])
+    );
+    const serious = (a) =>
+      ["critical", "high"].includes(a.rule && a.rule.security_severity_level);
+    for (const a of alerts) {
+      const loc = a.most_recent_instance && a.most_recent_instance.location;
+      add(
+        serious(a) ? "action" : "watch",
+        "Code scanning alert #" +
+          a.number +
+          " (" +
+          (a.rule.security_severity_level || a.rule.severity) +
+          "): " +
+          a.rule.id +
+          " at " +
+          (loc ? loc.path + ":" + loc.start_line : "?") +
+          " " +
+          a.html_url
+      );
+    }
+    if (!alerts.length) add("ok", "Code scanning: no open alerts");
+  });
+
+  await source("Code scanning analyses (gh)", async () => {
+    const analyses = JSON.parse(
+      await run("gh", [
+        "api",
+        "repos/{owner}/{repo}/code-scanning/analyses?ref=refs/heads/master&per_page=10",
+      ])
+    );
+    if (!analyses.length) throw new Error("no analyses on master");
+    const last = new Date(analyses[0].created_at);
+    const days = Math.floor((today - last) / 86400000);
+    // Default setup scans every push to master and weekly
+    add(
+      days > 8 ? "watch" : "ok",
+      "Code scanning: last master scan " +
+        days +
+        " days ago (" +
+        analyses[0].created_at.slice(0, 10) +
+        ")"
+    );
+  });
+}
+
 // ---- main -----------------------------------------------------------------
 
 (async () => {
@@ -521,6 +577,7 @@ async function checkDependabot() {
     checkAlas(),
     flag("--npm") ? checkNpm() : null,
     flag("--dependabot") ? checkDependabot() : null,
+    flag("--code-scanning") ? checkCodeScanning() : null,
   ]);
 
   const result = {
