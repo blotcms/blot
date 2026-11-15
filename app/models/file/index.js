@@ -60,8 +60,27 @@ function below(dir) {
   return dir === "/" ? ["-", "+"] : ["[" + dir + "/", "(" + dir + "0"];
 }
 
-function byName(a, b) {
-  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+// Listings are in natural name order, the order of the "all" sorted set
+// (key.sortMember). A directory without one is sorted the same way here,
+// comparing members as bytes as Redis does.
+var ALL = "all";
+
+function bySorted(entries) {
+  return entries
+    .map(function (entry) {
+      return { entry: entry, member: key.sortMember(entry.name) };
+    })
+    .sort(function (a, b) {
+      return key.compareSorted(a.member, b.member);
+    })
+    .map(function (item) {
+      return item.entry;
+    });
+}
+
+// Whether name comes after the name after in listing order
+function isAfter(name, after) {
+  return key.compareSorted(key.sortMember(name), key.sortMember(after)) > 0;
 }
 
 function failure(code, message) {
@@ -165,16 +184,16 @@ async function scan(blogID, dir) {
   return entries;
 }
 
-// One page of a directory, sorted by name (code-unit order):
+// One page of a directory, in natural name order (key.sortMember):
 // { entries: [{ name, type, size, modified, sha1 }], next }, where next is
 // the name to pass as after for the page which follows, or null after the
 // last page. after need not still be in the directory. Resolves to null if
 // dir is not a directory.
 //
-// A page is one ZRANGEBYLEX of the directory's names set and one HMGET of
-// the page's names, however large the directory. A directory without a
-// names set (last changed before it existed, see README) is read whole and
-// sorted instead, as every page was before.
+// A page is one ZRANGEBYLEX of the directory's "all" sorted set and one
+// HMGET of the page's names, however large the directory. after is turned
+// back into its member, so it need not still be there. A directory without
+// the set (see README) is read whole and sorted the same way instead.
 async function list(blogID, dir, options) {
   check(blogID);
   options = options || {};
@@ -189,15 +208,15 @@ async function list(blogID, dir, options) {
   if (!Number.isInteger(limit) || limit < 1)
     throw new Error("models/file: limit must be a positive integer");
 
-  var namesKey = key.names(blogID, dir);
+  var sortKey = key.sort(blogID, ALL, dir);
 
   // Sent together, so one round trip
   var [record, sorted, members] = await Promise.all([
     get(blogID, dir),
-    client.exists(namesKey),
+    client.exists(sortKey),
     client.zRangeByLex(
-      namesKey,
-      after === null ? "-" : "(" + key.member(after),
+      sortKey,
+      after === null ? "-" : "(" + key.sortMember(after),
       "+",
       {
         LIMIT: { offset: 0, count: limit + 1 },
@@ -208,8 +227,8 @@ async function list(blogID, dir, options) {
   if (!record || record.type !== "dir") return null;
 
   if (!sorted) {
-    var all = (await scan(blogID, dir)).sort(byName).filter(function (entry) {
-      return after === null || entry.name > after;
+    var all = bySorted(await scan(blogID, dir)).filter(function (entry) {
+      return after === null || isAfter(entry.name, after);
     });
 
     return {
@@ -218,7 +237,7 @@ async function list(blogID, dir, options) {
     };
   }
 
-  var names = members.slice(0, limit).map(key.nameOf);
+  var names = members.slice(0, limit).map(key.nameOfSorted);
   var packed = names.length
     ? await client.hmGet(key.dir(blogID, dir), names)
     : [];
@@ -240,7 +259,7 @@ async function list(blogID, dir, options) {
 // An async iterator of the pages of a directory, in order: arrays of
 // entries, as list gives them. Rejects with ENOENT if dir is not a
 // directory when it starts; a directory removed part way just ends. A
-// directory without a names set is read whole once, not once a page.
+// directory without the sorted set is read whole once, not once a page.
 async function* pages(blogID, dir, options) {
   check(blogID);
   dir = normalize(dir);
@@ -248,14 +267,14 @@ async function* pages(blogID, dir, options) {
   var limit = (options && options.limit) || PAGE;
   var [record, sorted] = await Promise.all([
     get(blogID, dir),
-    client.exists(key.names(blogID, dir)),
+    client.exists(key.sort(blogID, ALL, dir)),
   ]);
 
   if (!record || record.type !== "dir")
     throw failure("ENOENT", "Not a directory: " + dir);
 
   if (!sorted) {
-    var all = (await scan(blogID, dir)).sort(byName);
+    var all = bySorted(await scan(blogID, dir));
 
     for (var i = 0; i < all.length; i += limit) yield all.slice(i, i + limit);
 
@@ -274,7 +293,7 @@ async function* pages(blogID, dir, options) {
   } while (after !== null);
 }
 
-// Every entry of a directory, sorted by name, or null if it is not one. The
+// Every entry of a directory, in listing order, or null if it is not one. The
 // whole directory ends up in memory: use list or pages for a large one.
 async function listAll(blogID, dir) {
   var entries = [];
@@ -287,6 +306,80 @@ async function listAll(blogID, dir) {
   }
 
   return entries;
+}
+
+// A page of a directory's visible children (those not hidden everywhere:
+// dotfiles and .preview.html, key.hiddenEverywhere) by position, for pages
+// a person picks by number: { entries, total }, entries in listing order,
+// or reversed with { order: "desc" }, and total the number of visible
+// children. Null if dir is not a directory.
+//
+// The visible children are the first ranks of the "all" set, so total is
+// one ZLEXCOUNT and the page one ZRANGE by rank, O(log N + page) however
+// deep the page, then one HMGET. A descending page reads the same ranks
+// counted from the end of the visible ones, not from the end of the set,
+// which holds the hidden children.
+async function range(blogID, dir, options) {
+  check(blogID);
+  options = options || {};
+  dir = normalize(dir);
+
+  var offset = options.offset === undefined ? 0 : options.offset;
+  var limit = options.limit === undefined ? PAGE : options.limit;
+  var descending = options.order === "desc";
+
+  if (!Number.isInteger(offset) || offset < 0)
+    throw new Error("models/file: offset must be a non-negative integer");
+  if (!Number.isInteger(limit) || limit < 1)
+    throw new Error("models/file: limit must be a positive integer");
+
+  var sortKey = key.sort(blogID, ALL, dir);
+
+  var [record, sorted, total] = await Promise.all([
+    get(blogID, dir),
+    client.exists(sortKey),
+    client.zLexCount(sortKey, "[\u0001", "(\u0002"),
+  ]);
+
+  if (!record || record.type !== "dir") return null;
+
+  if (!sorted) {
+    var visible = bySorted(await scan(blogID, dir)).filter(function (entry) {
+      return !key.hiddenEverywhere(entry.name);
+    });
+
+    if (descending) visible.reverse();
+
+    return {
+      entries: visible.slice(offset, offset + limit),
+      total: visible.length,
+    };
+  }
+
+  var start = descending ? total - offset - limit : offset;
+  var stop = descending
+    ? total - offset - 1
+    : Math.min(offset + limit, total) - 1;
+
+  start = Math.max(start, 0);
+
+  if (stop < start) return { entries: [], total: total };
+
+  var names = (await client.zRange(sortKey, start, stop)).map(key.nameOfSorted);
+
+  if (descending) names.reverse();
+
+  var packed = names.length
+    ? await client.hmGet(key.dir(blogID, dir), names)
+    : [];
+  var entries = [];
+
+  names.forEach(function (name, i) {
+    if (packed[i] !== null && packed[i] !== undefined)
+      entries.push(Object.assign({ name: name }, parse(packed[i])));
+  });
+
+  return { entries: entries, total: total };
 }
 
 // An async iterator of every path below dir (files and directories), in
@@ -1035,6 +1128,7 @@ module.exports = {
   list,
   pages,
   listAll,
+  range,
   subtree,
   resolveCaseInsensitive,
   totals,

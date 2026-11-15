@@ -124,20 +124,32 @@ module.exports = {
   // Resolves to a boolean
   exists: delegate("exists"),
 
-  // One page of a directory, sorted by name:
+  // Listings are in natural name order, as a file browser shows them:
+  // case and common accents ignored, runs of digits by value (IMG_2 before
+  // IMG_10), and dotfiles and .preview.html after everything else. Names
+  // which differ only in case keep code-unit order (models/file's README).
+  //
+  // One page of a directory, in listing order:
   //   { entries: [{ name, isDirectory, size, modified }], cursor }
   // A flagged file's entry also has flags and placeholder, as stat's does.
   // cursor is opaque: pass it back for the next page; null means that was the
   // last. Options: { cursor, limit } (limit defaults to 1000).
   list: delegate("list"),
 
-  // An async iterator of the paths below dir, depth first and sorted by name,
+  // A page of a directory's visible entries (not dotfiles or .preview.html)
+  // by position, for pages a person picks by number:
+  //   { entries, total }, entries as list gives them
+  // Options: { offset, limit, order: "asc" | "desc" }. total counts every
+  // visible entry, so a page count needs nothing else.
+  listPage: delegate("listPage"),
+
+  // An async iterator of the paths below dir, depth first in listing order,
   // as "/a/b.txt" paths relative to the blog folder. Only the directory being
   // read is held in memory. Yields files only, unless { directories: true },
   // which also yields each directory before its contents.
   walk: delegate("walk"),
 
-  // [{ name, isDirectory }] for every entry of a directory, sorted by name,
+  // [{ name, isDirectory }] for every entry of a directory, in listing order,
   // without sizes or times
   listNames: delegate("listNames"),
 
@@ -147,7 +159,8 @@ module.exports = {
   // Resolves to the path of the entry which path names ignoring case, spelled
   // as it is stored ("/Templates/a.css"), or rejects with NotFoundError. If
   // several entries differ only by case, the exact name wins, otherwise the
-  // first in the directory's listing order, as helper/caseSensitivePath does.
+  // first in code-unit order (which is also their listing order), as
+  // helper/caseSensitivePath does.
   // Nothing may assume a lowercased name is unique.
   resolveCaseInsensitive: delegate("resolveCaseInsensitive"),
 

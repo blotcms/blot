@@ -53,9 +53,14 @@ module.exports = async function byFilename(blogID, pathOfPost, href, isLink) {
 
     debug("Searching in", current, "for", targetName, "found", entries);
 
-    entries.forEach((dirent) => {
-      if (dirent.isDirectory) enqueue(join(current, dirent.name));
-    });
+    // Subfolders are searched in code-unit order of name, not listing order,
+    // so which folder's file a link resolves to doesn't depend on how the
+    // folder index sorts a directory
+    entries
+      .filter((dirent) => dirent.isDirectory)
+      .map((dirent) => dirent.name)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+      .forEach((name) => enqueue(join(current, name)));
 
     let resolvedPath;
 

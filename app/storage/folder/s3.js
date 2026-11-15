@@ -150,9 +150,8 @@ async function fromS3(fn) {
   }
 }
 
-// Directory entries sort by plain code-unit order
-// (models/file keeps that order), so a cursor is just the last name of the
-// previous page
+// models/file can find a name's place in a directory's order from the name
+// alone, so a cursor is just the last name of the previous page
 function encodeCursor(name) {
   return Buffer.from(JSON.stringify({ after: name })).toString("base64url");
 }
@@ -999,7 +998,7 @@ async function exists(blogID, relPath) {
   }
 }
 
-// A directory's entries, sorted by name, or NotFoundError
+// A directory's entries, in listing order, or NotFoundError
 async function entriesOf(blogID, path, relDir) {
   var entries = await File.listAll(blogID, path);
 
@@ -1049,6 +1048,17 @@ async function list(blogID, relDir, options) {
   };
 }
 
+// A page of a directory's visible entries by position, for pages a person
+// picks by number (models/file's range)
+async function listPage(blogID, relDir, options) {
+  var path = locate(blogID, relDir);
+  var page = await File.range(blogID, path, options);
+
+  if (!page) throw new NotFoundError("No such directory: " + relDir);
+
+  return { entries: page.entries.map(toEntry), total: page.total };
+}
+
 async function listNames(blogID, relDir) {
   var path = locate(blogID, relDir);
 
@@ -1063,9 +1073,9 @@ async function listAll(blogID, relDir) {
   return (await entriesOf(blogID, path, relDir)).map(toEntry);
 }
 
-// Depth first and sorted by name, a page of a
+// Depth first and in listing order, a page of a
 // directory at a time, so a large directory is not held whole (except one
-// without a names set, see models/file's README). A directory
+// without its sorted set, see models/file's README). A directory
 // which vanishes mid-walk is skipped; the one asked for must exist.
 async function* walk(blogID, relDir, options) {
   var path = locate(blogID, relDir);
@@ -1198,6 +1208,7 @@ module.exports = {
   stat,
   exists,
   list,
+  listPage,
   listNames,
   listAll,
   walk,
