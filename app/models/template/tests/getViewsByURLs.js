@@ -1,6 +1,9 @@
 describe("template", function () {
   const getViewsByURLs = require("models/template").getViewsByURLs;
 
+  const client = require("models/client");
+  const key = require("../key");
+
   require("./setup")({ createTemplate: true });
 
   beforeEach(function () {
@@ -38,6 +41,32 @@ describe("template", function () {
     for (const [index, url] of urls.entries()) {
       const { viewName } = await this.getViewByURL(url);
       expect(viewNames[index]).toEqual(viewName || null);
+    }
+  });
+
+  it("routes most explicit first, like getViewByURL", async function () {
+    await this.setView({ name: "entry.html", url: ["/:slug"] });
+    await this.setView({ name: "style.css", url: ["/style.css"] });
+    await this.setView({ name: "catchall.html", url: ["/{*path}"] });
+    await client.set(key.url(this.template.id, "/old"), "old.html");
+    // The view has patterns, so its exact-URL key is ignored
+    await client.set(key.url(this.template.id, "/other"), "style.css");
+
+    const urls = ["/style.css", "/hello", "/a/b", "/old", "/other", "/"];
+    const viewNames = await this.getViewsByURLs(urls);
+
+    expect(viewNames).toEqual([
+      "style.css",
+      "entry.html",
+      "catchall.html",
+      "old.html",
+      "entry.html",
+      "catchall.html",
+    ]);
+
+    for (const [index, url] of urls.entries()) {
+      const { viewName } = await this.getViewByURL(url);
+      expect(viewNames[index]).toEqual(viewName);
     }
   });
 

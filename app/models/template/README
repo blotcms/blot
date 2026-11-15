@@ -32,7 +32,7 @@ All state is stored in Redis. There is no relational database or document store 
 | `setMultipleViews.js` | Writes multiple views in parallel. Used by `clone`. |
 | `getFullView.js` | Returns a view's render source, resolved partials, aggregated retrieve descriptors, MIME type, and locals — the complete rendering payload for a single view. On the rendering blog's own template, the source has its folder links wrapped in `{{#cdn}}` (see Folder links in views). |
 | `getPartials.js` | Recursively resolves a view's partial tree. Partials whose name starts with `/` are fetched as entry HTML from `models/entry`; others are fetched as template views, with their folder links wrapped when `getFullView` asks for it. |
-| `getViewByURL.js` | Matches a URL against stored URL patterns (using `path-to-regexp`) and falls back to exact URL lookup. Returns the matching view name, path params, and query string. |
+| `getViewByURL.js` | Matches a URL against a template's views, most explicit first (see `getViewByURL` below). Returns the matching view name, the pattern, path params, and query string. |
 | `getTemplateList.js` | Returns the combined list of SITE-owned templates and blog-owned templates visible to a given blog. |
 | `parseTemplate.js` | Parses Mustache template content and returns two objects: `partials` (partial names referenced in the template) and `retrieve` (a descriptor of which data locals must be fetched before rendering, including CDN targets). |
 | `injectLocals.js` | Mutates a template's `locals` object in-place to hydrate font and syntax-highlighter entries with canonical data from the platform's static font and theme registries. Called whenever metadata is saved. |
@@ -190,7 +190,16 @@ Async; returns a promise (no callback form). Resolves to `{ allPartials, retriev
 ```js
 async getViewByURL(templateID, url)
 ```
-Resolves to `{ viewName, params, query }` and rejects on an invalid argument or a Redis error. First attempts pattern matching against stored URL patterns using `path-to-regexp`. Falls back to exact URL lookup. Returns `null` values for all results when no match exists.
+Resolves to `{ viewName, pattern, params, query }` and rejects on an invalid argument or a Redis error. `pattern` is the raw pattern that matched, or `null` when the match was an exact-URL key. All `null` values (and `query`) when no view matches.
+
+Views are routed most explicit first, like nginx (`viewURLPatterns.js`). Each (view, pattern) pair is ranked, not each view:
+
+1. Exact: patterns with no parameters or wildcards (`/archives`), and the exact-URL key `template:{id}:url:{url}`. The key decides only when the view it names has no entry in the `url_patterns` hash (legacy views); otherwise it is ignored, since that view's patterns already compete. An exact pattern beats the key of another view.
+2. Named parameters (`/:slug`, optional groups count by what they contain): more literal path segments first, then more literal characters.
+3. Wildcards (`/{*path}`): more literal segments first, then more literal characters.
+4. Ties go to the view name (`localeCompare`).
+
+The patterns hash and the exact-URL key are read in parallel, so a lookup is one Redis round trip. `getViewsByURLs` does the same for many URLs with one `HGETALL` and one `MGET`.
 
 ### Template listing and sharing
 

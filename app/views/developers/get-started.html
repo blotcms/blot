@@ -25,6 +25,8 @@
   <li><strong><code>script.js</code></strong> — Optional client-side behavior (plain JavaScript).</li>
 </ul>
 
+<p>When more than one view’s <code>url</code> matches a request, Blot picks the most specific, as nginx does. Exact URLs such as <code>/archives</code> or <code>/style.css</code> come first. Then URLs with named parameters such as <code>/tagged/:tag</code>, with more literal path segments (then more literal characters) first. Wildcards such as <code>/{*path}</code> come last, again with the longest literal prefix first. If two are equally specific, the view whose file name sorts first wins.</p>
+
 <h2>Template language</h2>
 
 <p>Template files are rendered using  <a href="/developers/guides/mustache">Mustache</a> regardless of the file extension.</p>
