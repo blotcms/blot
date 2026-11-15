@@ -2,16 +2,20 @@ describe("wikilinks byPath: extensionless links", function () {
   const folder = require("storage/folder");
   const { searchForExtension } = require("build/plugins/wikilinks/byPath");
 
+  let listing;
+
+  beforeEach(function () {
+    spyOn(folder, "resolveCaseInsensitive").and.callFake(async () => "/Posts");
+    spyOn(folder, "listNames").and.callFake(async () => listing);
+  });
+
   // Resolve "/Posts/<base>" against a directory which lists these names,
   // in the order given and then reversed. Both must give the same answer.
   async function resolve(names, base) {
-    spyOn(folder, "resolveCaseInsensitive").and.resolveTo("/Posts");
-    const listNames = spyOn(folder, "listNames");
-
-    listNames.and.resolveTo(names.map((name) => ({ name })));
+    listing = names.map((name) => ({ name }));
     const forward = await searchForExtension("blog", "/Posts/" + base);
 
-    listNames.and.resolveTo([...names].reverse().map((name) => ({ name })));
+    listing = [...listing].reverse();
     const backward = await searchForExtension("blog", "/Posts/" + base);
 
     expect(backward).toEqual(forward);
