@@ -6,7 +6,7 @@
     {{> header}}
     <h1>{{tag}}</h1>
 
-    <ul class="catalog" data-grid data-page="{{pagination.current}}" data-page-size="{{pagination.page_size}}" data-entries="{{pagination.total_entries}}">
+    <ul class="catalog" data-grid data-page="{{entries.pagination.current}}" data-page-size="{{entries.pagination.page_size}}" data-entries="{{entries.pagination.total_entries}}">
       {{#entries}}
         {{> card}}
       {{/entries}}

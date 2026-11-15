@@ -15,7 +15,7 @@
 
     <br><br>
 
-    {{#pagination}}
+    {{#posts.pagination}}
       <div class="pagination small">
         {{#previous}}
         <a class="light" href="/page/{{previous}}">&larr; Previous page</a>
@@ -25,7 +25,7 @@
         <a class="light" href="/page/{{next}}">Next page &rarr;</a>
         {{/next}}
       </div>
-      {{/pagination}}
+      {{/posts.pagination}}
 
     {{> footer}}
   </body>

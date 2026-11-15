@@ -22,7 +22,7 @@
         </article>
         {{/entries}}
 
-        {{#pagination}}
+        {{#entries.pagination}}
         <nav
             class="pagination"
             aria-label="Tag pagination"
@@ -36,7 +36,7 @@
             <a class="pagination-next" href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
             {{/next}}
         </nav>
-        {{/pagination}}
+        {{/entries.pagination}}
         </div>
     </main>
     {{> footer}}

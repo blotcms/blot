@@ -3,7 +3,7 @@
 
 {{> head}}
 
-<body class=" {{^pagination.previous}}homefirstpage{{/pagination.previous}}">
+<body class=" {{^posts.pagination.previous}}homefirstpage{{/posts.pagination.previous}}">
 
   {{> header}}
 
@@ -12,7 +12,7 @@
     <div class="container">
 
       <!-- Begin post excerpts, let's highlight the first 4 posts on top -->
-      {{^pagination.previous}}
+      {{^posts.pagination.previous}}
       <div class="row remove-site-content-margin">
 
         {{#posts}}
@@ -153,7 +153,7 @@
         </div>
         {{/posts}}
       </div>
-      {{/pagination.previous}}
+      {{/posts.pagination.previous}}
 
       <!--endif page url is / -->
 
@@ -214,7 +214,7 @@
           <div class="mt-5">
             <!-- Pagination links -->
 
-            {{#pagination}}
+            {{#posts.pagination}}
             <ul class="pagination">
 
               {{^previous}}
@@ -234,7 +234,7 @@
               {{/next}}
 
             </ul>
-            {{/pagination}}
+            {{/posts.pagination}}
 
           </div>
 

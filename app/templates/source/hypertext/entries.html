@@ -49,7 +49,7 @@
 
         {{/posts}}
 
-        {{#pagination}}
+        {{#posts.pagination}}
         <nav
             class="pagination"
             aria-label="Pagination"
@@ -63,7 +63,7 @@
             <a class="pagination-next" href="/page/{{next}}">Next &rarr;</a>
             {{/next}}
         </nav>
-        {{/pagination}}
+        {{/posts.pagination}}
         </div>
     </main>
     {{> footer}}

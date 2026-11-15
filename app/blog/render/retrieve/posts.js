@@ -1,6 +1,7 @@
 const Entries = require("models/entries");
 const Tags = require("models/tags");
 const projectEntryFields = require("./helpers/projectEntryFields");
+const listPagination = require("./helpers/listPagination");
 const getTemplateSortOptions = require("blog/sortOptions");
 const asRetriever = require("../../lib/asRetriever");
 const {
@@ -64,7 +65,7 @@ async function posts(req, res) {
   }
 
   res.locals.pagination = page.pagination;
-  return page.entries;
+  return listPagination(page.entries, page.pagination);
 }
 
 module.exports = asRetriever(posts);

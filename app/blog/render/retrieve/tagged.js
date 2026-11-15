@@ -1,5 +1,6 @@
 const Tags = require("models/tags");
 const projectEntryFields = require("./helpers/projectEntryFields");
+const listPagination = require("./helpers/listPagination");
 const asRetriever = require("../../lib/asRetriever");
 const {
   normalizePageNumber,
@@ -49,6 +50,10 @@ async function tagged(req, res) {
   });
 
   res.locals.pagination = res.locals.pagination || payload.pagination || {};
+
+  // {{#tagged.pagination}} is the documented form; this also gives
+  // {{#entries.pagination}} on tagged.html and the last-entry copy
+  listPagination(payload.entries, payload.pagination || {});
 
   return { ...payload, is: payload.tagged }; // is: an alias
 }

@@ -392,14 +392,13 @@
         {{/all_entries}}
     - name: Pagination
       type: section
-      description: "Pagination is applied on tagged routes (`/tagged/:slug` and `/tagged/:slug/page/:page`) and on entry list routes that set `page_size`. Templates receive a `pagination` object with `current`, `previous`, `next`, `total`, `page_size`, and `total_entries`. Defaults and limits: `page_size` uses a baseline of `5` with valid values `1-100`; tagged routes prefer `tagged_page_size` over `page_size`, and use an effective default of `100` when unset, invalid, or outside `1-500`."
+      description: "Pagination is applied on tagged routes (`/tagged/:slug` and `/tagged/:slug/page/:page`) and on entry list routes that set `page_size`. Each list of entries carries its own pagination object, read as `posts.pagination` (or `entries.pagination` on entries.html and tagged.html, or `tagged.pagination`), with `current`, `previous`, `next`, `total`, `page_size`, and `total_entries`. Use it outside the list, after `{{/posts}}`: inside the loop the names refer to the current entry. It renders even when the list is empty. Older templates use a top-level `pagination`, which is the pagination of the list the URL pages, or `{{#pagination}}` inside the loop, which renders once after the last entry; both still work. Defaults and limits: `page_size` uses a baseline of `5` with valid values `1-100`; tagged routes prefer `tagged_page_size` over `page_size`, and use an effective default of `100` when unset, invalid, or outside `1-500`."
       example: |
-        {{#pagination.next}}
-        <a href="/tagged/{{slug}}/page/{{pagination.next}}">Older</a>
-        {{/pagination.next}}
-        {{#pagination.previous}}
-        <a href="/tagged/{{slug}}/page/{{pagination.previous}}">Newer</a>
-        {{/pagination.previous}}
+        {{#entries}}<a href="{{{url}}}">{{title}}</a>{{/entries}}
+        {{#entries.pagination}}
+        {{#next}}<a href="/tagged/{{slug}}/page/{{next}}">Older</a>{{/next}}
+        {{#previous}}<a href="/tagged/{{slug}}/page/{{previous}}">Newer</a>{{/previous}}
+        {{/entries.pagination}}
     - name: archives
       type: array
       description: A list of all the entries on your site, structured by date. Each item in the entries property of each month is of type [entry](#entry).

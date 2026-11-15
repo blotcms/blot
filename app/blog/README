@@ -131,7 +131,7 @@ Caching: the template-independent reads are cached inside the models, per blog `
 | `latest_entry` | `latest_entry.js` | The most recently published entry. |
 | `plugin` | `plugin.js` | CSS and JS URLs for individually requested plugins. |
 | `popular_tags` | `popular_tags.js` | Tags sorted by entry count (top 100). |
-| `posts` | `posts.js` | A paginated page of entries, respecting template `sort_by`, `sort_order`, `page_size`, and `path_prefix` locals (`Entries.getCachedPage`, or `Tags.getCachedTagged` with a tag). |
+| `posts` | `posts.js` | A paginated page of entries, respecting template `sort_by`, `sort_order`, `page_size`, and `path_prefix` locals (`Entries.getCachedPage`, or `Tags.getCachedTagged` with a tag). The array carries its pagination as `posts.pagination` (see `helpers/listPagination.js`). |
 | `recent_entries` | `recent_entries.js` | A small list of recent entries (`Entries.getCachedRecent`). |
 | `rgb` | `rgb.js` | Lambda that converts a CSS color value to an RGB component string (e.g. `255, 128, 0`) for use in `rgba()`. |
 | `search_query` | `search_query.js` | The current search query string from `req.query.q`. |
@@ -203,6 +203,8 @@ Comments (Disqus plugin) are suppressed when entry metadata sets `Comments: No`,
 ### `routes/entries.js`
 
 Calls `models/entries.getPage()` with options derived from `req.template.locals` (`sort_by`, `sort_order`, `page_size`, `path_prefix`) and from `req.params.page` or `req.query.page`. Sets `res.locals.entries` and `res.locals.pagination` (documented in templates with snake_case fields such as `page_size` and `total_entries`). Renders `entries.html`.
+
+A list's pagination is documented as `<list>.pagination` (`posts.pagination`, `entries.pagination`, `tagged.pagination`): a property on the array, so a page with several lists gives each its own, and it renders even when the list is empty. Two older forms stay for customer templates: the top-level `pagination`, for the list the URL pages, and a copy on the list's last entry. Every other entry carries `pagination: null`, so `{{#posts}}{{#pagination}}` renders once, after the last entry, instead of falling through to the top-level `pagination` on every entry. A cache that clones the array drops the property, so `helpers/listPagination.js` runs on the copy that is rendered.
 
 ### `routes/view.js`
 

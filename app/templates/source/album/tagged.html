@@ -86,7 +86,7 @@
   {{/entries}}
 </div>
 
-{{#pagination}}
+{{#entries.pagination}}
 <div class="pagination">
   {{#previous}}
   <a class="collection-previous" href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>
@@ -96,6 +96,6 @@
   <a class="collection-next" href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
   {{/next}}
 </div>
-{{/pagination}}
+{{/entries.pagination}}
 
 {{> footer}}

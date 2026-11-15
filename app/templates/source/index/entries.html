@@ -6,8 +6,8 @@
     {{> header}}
 
     <small style="margin-top: -.625em;display: block;">
-    {{#pagination.previous}}Page {{pagination.current}} of {{pagination.total}}{{/pagination.previous}}
-    {{^pagination.previous}}Latest posts:{{/pagination.previous}}
+    {{#posts.pagination.previous}}Page {{posts.pagination.current}} of {{posts.pagination.total}}{{/posts.pagination.previous}}
+    {{^posts.pagination.previous}}Latest posts:{{/posts.pagination.previous}}
     </small>
 
     <br><br>
@@ -18,7 +18,7 @@
 
     <br><br><br>
 
-    {{#pagination}}
+    {{#posts.pagination}}
 
       {{#previous}}
       <a class="menu" href="/page/{{previous}}">&larr;&nbsp;Previous</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
@@ -34,7 +34,7 @@
       <small>Page {{current}} of {{total}}</small>
       </div>
 
-    {{/pagination}}
+    {{/posts.pagination}}
 
     <br>
 

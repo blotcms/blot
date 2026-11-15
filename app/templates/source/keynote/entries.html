@@ -3,7 +3,7 @@
   {{> head}}
   <body data-view="home">
     {{> header}}
-    <main class="rail-viewport" id="main" data-page="{{pagination.current}}" data-total="{{pagination.total}}" data-entries="{{#pagination}}{{total_entries}}{{/pagination}}{{^pagination}}{{total_posts}}{{/pagination}}">
+    <main class="rail-viewport" id="main" data-page="{{posts.pagination.current}}" data-total="{{posts.pagination.total}}" data-entries="{{#posts.pagination}}{{total_entries}}{{/posts.pagination}}{{^posts.pagination}}{{total_posts}}{{/posts.pagination}}">
       <h1 class="visually-hidden">{{title}}</h1>
       <div class="rail-layer">
         <ul class="rail" aria-label="Image rail">

@@ -13,18 +13,18 @@
 
       {{> tag_filters}}
 
-      <div class="list" data-grid data-page="{{pagination.current}}" data-page-size="{{pagination.page_size}}" data-entries="{{pagination.total_entries}}">
+      <div class="list" data-grid data-page="{{entries.pagination.current}}" data-page-size="{{entries.pagination.page_size}}" data-entries="{{entries.pagination.total_entries}}">
         {{#entries}}
         {{> cell}}
         {{/entries}}
       </div>
 
-      {{#pagination}}
+      {{#entries.pagination}}
       <nav class="pagination" aria-label="Pages">
         {{#previous}}<a class="collection-previous" href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>{{/previous}}
         {{#next}}<a class="more collection-next" rel="next" href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>{{/next}}
       </nav>
-      {{/pagination}}
+      {{/entries.pagination}}
 
       <p class="list-total">{{total}} of {{total}}</p>
 

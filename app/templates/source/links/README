@@ -22,7 +22,7 @@ Templates consist of **views** (full page templates) and **partials** (reusable 
 
 **`entries.html`** - The index page that displays a list of your blog entries. This is rendered at the root URL (`/`) and paginated URLs (`/page/2`, etc.). It receives:
 - `entries` - An array of entry objects for the current page
-- `pagination` - Information about pagination (current page, total pages, next/previous links)
+- `entries.pagination` - Information about pagination (current page, total pages, next/previous links)
 
 **`entry.html`** - The template for individual blog posts. This is rendered when someone visits a specific entry's URL. It receives:
 - `entry` - The current entry object with properties like `title`, `html`, `url`, `date`, etc.

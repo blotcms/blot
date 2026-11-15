@@ -1,19 +1,19 @@
 {{> header}}
 
 
-{{^pagination.previous}}{{^posts.length}}
+{{^posts.pagination.previous}}{{^posts.length}}
 <p class="black-50 pt3">Nothing published yet.</p>
-{{/posts.length}}{{/pagination.previous}}
+{{/posts.length}}{{/posts.pagination.previous}}
 
-{{#pagination.previous}}
+{{#posts.pagination.previous}}
 <div class="mt5 cf">
-  {{#pagination}}
+  {{#posts.pagination}}
   <a {{^next}}style="visibility:hidden"{{/next}} class="fr ml4 black-50 no-underline" href="/page/{{next}}">Next  →</a>
   <a {{^previous}}style="visibility:hidden"{{/previous}} class="fr black-50 no-underline" href="/page/{{previous}}">←  Previous</a>
   <p class="mv0 fw5 fl">Page {{current}} of {{total}}</p>
-  {{/pagination}}
+  {{/posts.pagination}}
 </div>
-{{/pagination.previous}}
+{{/posts.pagination.previous}}
 
 {{! bug needs to be here or partial does not load}}
 <div style="display:none">
@@ -22,7 +22,7 @@
 
 
 {{! First page}}
-{{^pagination.previous}}
+{{^posts.pagination.previous}}
 
 {{#show_featured_entry}}
 <div class="clip-1 mt3 featured-entry">
@@ -45,20 +45,20 @@
 
 <div class="cf"></div>
 
-{{/pagination.previous}}
+{{/posts.pagination.previous}}
 
 {{! All other pages}}
-{{#pagination.previous}}
+{{#posts.pagination.previous}}
 
 {{#posts}}
 {{> entry_line}}
 {{/posts}}
-{{/pagination.previous}}
+{{/posts.pagination.previous}}
 
-{{#pagination}}
+{{#posts.pagination}}
 {{#next}}
 <span class=" db bt   b--black-05 pb4"></span>
 <a class="dim db tc fw8 f5 pt4 pb6 no-underline 2" href="/page/{{next}}">Next page</a>
 {{/next}}
-{{/pagination}}
+{{/posts.pagination}}
 {{> footer}}
