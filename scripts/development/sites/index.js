@@ -18,8 +18,11 @@
 
 const fs = require("fs-extra");
 const { join, relative } = require("path");
+const crypto = require("crypto");
+const sharp = require("sharp");
 const config = require("config");
 const Blog = require("models/blog");
+const assets = require("storage/assets");
 const client = require("models/client");
 const setupUser = require("templates/folders/setupUser");
 const source = require("clients/local/source");
@@ -44,6 +47,56 @@ const SITES = {
   arabic: "./arabic",
   japanese: "./japanese",
 };
+
+// Profile photos, which templates also fall back on for the favicon. Each is
+// cut from the nth image in the demo folders, so it changes if they do. They
+// are set on the blog, not the template (unlike an uploaded favicon, which
+// forks the template), so they survive switching templates in the dashboard.
+// empty and local get none.
+const AVATARS = {
+  tiny: { image: 0, width: 400, height: 400 },
+  huge: { image: 7, width: 400, height: 400 },
+  torture: { image: 13, width: 1200, height: 200, round: true },
+  arabic: { image: 21, width: 400, height: 400, round: true },
+  japanese: { image: 34, width: 300, height: 400 },
+  // Demo folder sites whose templates show the photo prominently
+  clara: { image: 3, width: 400, height: 400, round: true },
+  david: { image: 5, width: 400, height: 400 },
+  bees: { image: 8, width: 400, height: 400 },
+};
+
+// Sets the blog's profile photo from AVATARS, writing it to the blog's assets
+// under a name taken from its bytes, so a re-run with the same image is a no-op
+async function setAvatar(blog) {
+  const wanted = AVATARS[blog.handle];
+  if (!wanted) return;
+
+  const images = await material.images();
+  if (!images.length) return;
+  const src = images[wanted.image % images.length];
+
+  let data;
+  try {
+    data = await sharp(src)
+      .rotate()
+      .resize(wanted.width, wanted.height, { fit: "cover" })
+      .jpeg({ quality: 85 })
+      .toBuffer();
+  } catch (err) {
+    console.warn("No profile photo for", blog.handle + ":", err.message);
+    return;
+  }
+
+  const hash = crypto.createHash("sha1").update(data).digest("hex");
+  const relPath = "_avatars/" + hash.slice(0, 16) + ".jpg";
+  const url = assets.url(blog.id, relPath);
+  const roundAvatar = Boolean(wanted.round);
+
+  if (blog.avatar === url && blog.roundAvatar === roundAvatar) return;
+  await assets.write(blog.id, relPath, data);
+  await Blog.set(blog.id, { avatar: url, roundAvatar });
+  console.log("Set profile photo for", blog.handle);
+}
 
 function load(handle) {
   const site = SITES[handle];
@@ -158,6 +211,7 @@ async function upSite(user, handle) {
   // The source directory exists by now, so the Local client reconciles the
   // blog against it rather than seeding it from the blog's folder.
   await Blog.set(blog.id, { ...settings, forceSSL: false, client: "local" });
+  await setAvatar(await Blog.get({ id: blog.id }));
   await client.publish(
     LOCAL_CLIENT_CHANNEL,
     JSON.stringify({ blogID: blog.id })
@@ -177,6 +231,7 @@ async function up(handles) {
     await require("templates/folders/local").apply();
     for (const handle of demoFolderHandles()) {
       const blog = await Blog.get({ handle });
+      if (blog && blog.owner === user.uid) await setAvatar(blog);
       if (blog && blog.owner === user.uid && blog.client === "local") {
         await client.publish(
           LOCAL_CLIENT_CHANNEL,

@@ -20,6 +20,8 @@ npm run folder list       # list the folders and sites
 
 Each site is a module here exporting `{ settings, build }`. `build(dir)` writes the site's files into its Local client source directory, `data/local-sources/{handle}`. Only files that changed are rewritten, so a re-run is cheap. A new blog gets the module's template and an existing one keeps whatever template it was switched to, while the title and menu are reset on every run.
 
+The script also gives some sites a profile photo (see `AVATARS` in `index.js`): the test sites other than `empty`, plus `bees`, `clara` and `david`. Most templates fall back on it for the favicon. It sets no favicon of its own, since saving one forks the site's template and switching templates would then lose it.
+
 Most of the material comes from the demo folders, through `material.js`. Pick it by scanning (`texts()`, `images()`, `converterSamples()`) and copy it with `copy()`, which skips a missing file with a warning, so cleaning up the demo folders never breaks a site. The Arabic and Japanese writing is committed here, since there is none in the demo folders.
 
 A site with many files takes a while to appear in full after its first build, while the Local client syncs it: `huge` takes about half an hour.
