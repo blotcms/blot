@@ -1,6 +1,5 @@
 var Turndown = require("turndown");
 var turndown = new Turndown();
-var pretty = require("pretty");
 
 // Themes like figures!
 turndown.keep(["figure"]);
@@ -33,14 +32,7 @@ turndown.addRule("pretty-figures", {
     return node.nodeName === "FIGURE";
   },
   replacement: function (content, node) {
-    // for (var i in node)
-    //   console.log(i);
-
-    // console.log(node.innerHTML,);
-
-    // throw '';
-
-    return pretty(node.outerHTML) + "\n\n";
+    return node.outerHTML + "\n\n";
   },
 });
 

@@ -1,4 +1,12 @@
 {
+  "ignoreDependencies": [
+    "node-addon-api",
+    "node-gyp",
+    "eslint",
+    "prettier",
+    "nodemon",
+    "http-auth"
+  ],
   "entry": [
     "scripts/**/*.js",
     "**/tests/**/*.js",
