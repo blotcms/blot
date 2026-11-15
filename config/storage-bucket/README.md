@@ -363,8 +363,13 @@ Blot no longer owns the domain.
 - **Security.** Block POST requests on (Bunny answers 405); block root path
   access off; no referrer or IP lists; no country redirects or blocks
   (Traffic Manager); no network limits (all 0); AWS S3 authentication off;
-  Bunny Shield never set up. TLS security level "Legacy", with TLS 1.0 and
-  1.1 still accepted.
+  Bunny Shield never set up. TLS security level "Compatible": TLS 1.2 and
+  1.3 with forward-secret cipher suites only, matching openresty's
+  `ssl_protocols TLSv1.2 TLSv1.3` (`proxy/config/wildcard-ssl.conf`), so a
+  client that can't load a Blot page can't reach the CDN either. Raised from
+  "Legacy" (TLS 1.0 and 1.1 accepted) on 15 Nov 2026; check with
+  `openssl s_client -tls1 -cipher 'DEFAULT:@SECLEVEL=0' -connect cdn.blot.im:443`,
+  which should fail with a protocol version alert.
 - **Logging** on, IPs anonymised ("Drop IP", replaced by 0.0.0.0), no log
   forwarding, no permanent log storage. Bunny keeps raw logs for 3 days.
 - **Error pages.** Whitelabel on, StatusPage widget off, custom error page on,
@@ -372,8 +377,9 @@ Blot no longer owns the domain.
   offline", linking to support email and status.blot.im). Bunny shows it when
   the origin fails.
 - **Edge rules**, in the dashboard's order. Saving an edited rule moves it to
-  the end of the list, so refer to rules by name, not number. Only the
-  origin-changing rules depend on order (see the test rules below).
+  the end of the list, so refer to rules by name, not number. When two
+  rules both override the origin, the one listed first won in a test on
+  15 Nov 2026, so keep origin rules' URL patterns from overlapping.
   - Block requests by bot User-Agent: img2dataset, Bytespider, AhrefsBot,
     ClaudeBot, bingbot; and a second rule for GPTBot, python-requests,
     AliyunSecBot, Go-http-client, Yandex.
@@ -395,20 +401,9 @@ Blot no longer owns the domain.
     host-less `*/fonts/*` would let `/.env/fonts/x` through). It covers
     `cdn.blot.im` only, not `blot-cdn.b-cdn.net`. Rollback: switch the rule
     off.
-  - "TEST Folder files from the bucket" and "TEST Old folder URLs from the
-    bucket": temporary, for [#2695](https://github.com/blotcms/blot/issues/2695),
-    added 15 Nov 2026. Both apply only to requests with the header
-    `X-Blot-Origin: s3`, and send folder files to the bucket: the first for
-    `/blog_<id>/v-<ver>/<path>` (Override Origin URL
-    `https://<bucket host>/%{Path.0}/folder/%{Path.2-}`), the second for
-    `/folder/v-<ver>/blog_<id>/<path>` (`%{Path.2}/folder/%{Path.3-}`), each
-    with the bucket's `Host` and an `X-Blot-Debug` response header showing the
-    expanded variables. Remove both when #2695 is done or dropped.
-  - "Storage bucket for generated assets" and "CORS for storage bucket
-    assets", described below. The first also has a condition, Request Header
-    `X-Blot-Origin` match none of `s3`, so the test rules above can be tried
-    on `/blog_*` URLs: when two rules both override the origin, this one won.
-    Remove that condition with the test rules.
+  - "CORS for storage bucket assets", "Immutable browser cache", "Short cache
+    for pending folder images" and "Storage bucket for generated assets",
+    in that order; the bucket and CORS rules are described below.
   - "Immutable browser cache": Browser Cache Header (Cache-Control) Override
     to `public, max-age=31536000, immutable`, when all of: the URL is on one
     of the two hostnames (`*://cdn.blot.im/*`, `*://blot-cdn.b-cdn.net/*`),
@@ -447,12 +442,11 @@ hold every object. In a new account:
 3. Add the hostname `cdn.blot.im`, point its CNAME at the new
    `<zone>.b-cdn.net`, and enable SSL once DNS resolves.
 4. Set pricing tier, SafeHop, caching, Perma-Cache (with the storage zone),
-   request coalescing, the CORS header list, security, logging and the error
+   request coalescing, the CORS header list, security (TLS level included),
+   logging and the error
    page, all as listed above.
-5. Recreate the edge rules in the order above, leaving out the TEST rules
-   (and the `X-Blot-Origin` condition on the bucket rule) unless #2695 is
-   still being tested. Read each form back before saving: a new rule's
-   top-level condition defaults to "Match any".
+5. Recreate the edge rules in the order above. Read each form back before
+   saving: a new rule's top-level condition defaults to "Match any".
 6. Check, as in the procedure below: a generated image through
    `cdn.blot.im` returns 200 with `x-amz-request-id`, a folder file and a
    font return 200 from the app, `/health` is not cached, `/.env` is 403,
