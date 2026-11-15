@@ -3,21 +3,6 @@ const Mustache = require("mustache");
 const fs = require("fs-extra");
 const { getMetadata } = require("../lib/models");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
-const { stackWithFallback } = require("blog/static/fonts/fallback");
-
-// Stored font stacks end without a generic family or fonts for Arabic and
-// Japanese. Add them as the template loads so existing sites get them
-// without their template being saved again. Copies, in case metadata is shared.
-function withFontFallbacks(locals) {
-  const result = { ...locals };
-  for (const key of Object.keys(result)) {
-    if (key !== "font" && !key.includes("_font")) continue;
-    const font = result[key];
-    if (!font || typeof font !== "object" || !font.stack) continue;
-    result[key] = { ...font, stack: stackWithFallback(font) };
-  }
-  return result;
-}
 
 module.exports = async function loadTemplate(req, res, next) {
   // We care about template metadata for template
@@ -65,7 +50,7 @@ module.exports = async function loadTemplate(req, res, next) {
   }
 
   const template = {
-    locals: withFontFallbacks(metadata.locals),
+    locals: metadata.locals,
     id: req.blog.template,
     cacheID: metadata.cacheID,
     cdn: metadata.cdn || {},
