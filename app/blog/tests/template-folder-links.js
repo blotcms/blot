@@ -5,7 +5,7 @@ describe("folder links in templates", function () {
   const crypto = require("crypto");
   const BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
 
-  // The version of a file's content, as in /folder/v-<version>/ URLs.
+  // The version of a file's content, as in /<blogID>/folder/v-<version>/ URLs.
   const version = (content) =>
     crypto.createHash("sha1").update(content).digest("hex").slice(0, 8);
 
@@ -13,7 +13,7 @@ describe("folder links in templates", function () {
   const missingUrl = (blog, path) => path;
 
   const folderUrl = (blog, content, path) =>
-    `${config.cdn.origin}/folder/v-${version(content)}/${blog.id}${path}`;
+    `${config.cdn.origin}/${blog.id}/folder/v-${version(content)}${path}`;
 
   it("rewrites a literal link in a template to a versioned CDN URL", async function () {
     await this.write({ path: "/a.png", content: "one" });

@@ -65,7 +65,7 @@ function isValidTarget(target) {
 // A folder target's manifest entry is { path, version }: path is the file's
 // real (case-corrected) path, version a hash of its content, from which
 // blog/render/folderManifestUrl builds
-// %%BLOT_CDN%%/folder/v-<version>/<blogID><path>, the URL entries use.
+// %%BLOT_CDN%%/<blogID>/folder/v-<version><path>, the URL entries use.
 // Reserved global paths (/fonts, /katex, ...) are served from Blot's own
 // static directory, have no version, and so no version in the entry. A view's
 // entry stays a plain hash string, so existing manifests are valid as they are.

@@ -11,7 +11,7 @@ describe("folderAssets plugin", function () {
 
   var tokenRegex = (path) =>
     new RegExp(
-      `${BLOT_CDN_TOKEN.replace(/%/g, "\\%")}/folder/v-[a-f0-9]{8}/[^"]*${path}`
+      `${BLOT_CDN_TOKEN.replace(/%/g, "\\%")}/[^/"]+/folder/v-[a-f0-9]{8}[^"]*${path}`
     );
 
   it("bakes a relative folder link into a %%BLOT_CDN%%-prefixed, versioned URL at build time", async function () {
@@ -202,7 +202,7 @@ describe("folderAssets plugin", function () {
       var entry = await buildEntry(blog, "/Hello.txt");
 
       expect(entry.html).toContain(
-        `${BLOT_CDN_TOKEN}/folder/v-${expected}/${blog.id}/photo.jpg`
+        `${BLOT_CDN_TOKEN}/${blog.id}/folder/v-${expected}/photo.jpg`
       );
     });
   });
@@ -302,7 +302,7 @@ describe("folderAssets plugin", function () {
 
     expect(entry.html).toMatch(
       new RegExp(
-        `poster="${BLOT_CDN_TOKEN}/folder/v-[a-f0-9]{8}/[^"]*/poster\\.jpg"`
+        `poster="${BLOT_CDN_TOKEN}/[^/"]+/folder/v-[a-f0-9]{8}[^"]*/poster\\.jpg"`
       )
     );
     expect(entry.html).toMatch(
@@ -389,7 +389,7 @@ describe("folderAssets plugin", function () {
     var entry = await buildEntry(this.blog, path);
 
     expect(entry.html).toContain(
-      `src="${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}/Photo.JPG"`
+      `src="${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-pending/Photo.JPG"`
     );
     expect(entry.dependencies).toContain("/Photo.JPG");
   });
@@ -397,7 +397,7 @@ describe("folderAssets plugin", function () {
   it("bakes a missing image in src, poster and srcset as a pending CDN URL", async function () {
     var path = "/posts/Hello.txt";
     var pending = (file) =>
-      `${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}${file}`;
+      `${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-pending${file}`;
     var contents =
       '<video poster="still.png"></video>\n\n' +
       '<img src="/a%20b.jpg?w=1#top" loading="lazy" srcset="/here.jpg 1x, /gone.webp 2x">';
@@ -572,6 +572,29 @@ describe("folderAssets plugin", function () {
   it("re-bakes an already-baked encoded srcset, keeping a missing file's path encoded", async function () {
     var path = "/Hello.txt";
     var baked = (file) =>
+      `${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-deadbeef${file}`;
+    var contents = `<img srcset="${baked("/my%20pic.jpg")} 2x, ${baked("/gone%20pic.jpg")} 1x">`;
+
+    await folder.write(this.blog.id, path, contents);
+    await folder.write(this.blog.id, "/my pic.jpg", "small");
+
+    var entry = await buildEntry(this.blog, path);
+
+    expect(entry.html).toMatch(
+      new RegExp(
+        'srcset="' +
+          tokenRegex("/my%20pic\\.jpg 2x").source +
+          ", " +
+          `${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-pending/gone%20pic\\.jpg 1x"`
+      )
+    );
+    expect(entry.html).not.toContain("v-deadbeef");
+    expect(entry.dependencies).toContain("/my pic.jpg");
+    expect(entry.dependencies).toContain("/gone pic.jpg");
+  });
+  it("re-bakes an already-baked encoded srcset, keeping a missing file's path encoded (baked before #2695)", async function () {
+    var path = "/Hello.txt";
+    var baked = (file) =>
       `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${file}`;
     var contents = `<img srcset="${baked("/my%20pic.jpg")} 2x, ${baked("/gone%20pic.jpg")} 1x">`;
 
@@ -585,7 +608,7 @@ describe("folderAssets plugin", function () {
         'srcset="' +
           tokenRegex("/my%20pic\\.jpg 2x").source +
           ", " +
-          `${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}/gone%20pic\\.jpg 1x"`
+          `${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-pending/gone%20pic\\.jpg 1x"`
       )
     );
     expect(entry.html).not.toContain("v-deadbeef");

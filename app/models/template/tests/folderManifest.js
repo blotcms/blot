@@ -226,7 +226,7 @@ describe("updateCdnManifest folder files", function () {
       const rendered = await renderView(this.template.id, "style.css");
 
       expect(rendered).toBe(
-        `a{background:url(${config.cdn.origin}/folder/v-${version("two")}/${this.blog.id}/a.png)}`
+        `a{background:url(${config.cdn.origin}/${this.blog.id}/folder/v-${version("two")}/a.png)}`
       );
     });
 
@@ -352,7 +352,7 @@ describe("updateCdnManifest folder files", function () {
       });
 
       expect(await renderView(this.template.id, "style.css")).toContain(
-        `/folder/v-${version("root")}/${this.blog.id}/img/a.png`
+        `/${this.blog.id}/folder/v-${version("root")}/img/a.png`
       );
     });
   });

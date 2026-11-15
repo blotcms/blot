@@ -6,7 +6,7 @@ describe("unwrapFolderLink", function () {
   it("recovers the original path from a baked link", function () {
     expect(
       unwrapFolderLink(
-        `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/photos/a.jpg`,
+        `${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef/photos/a.jpg`,
         blogID
       )
     ).toEqual("/photos/a.jpg");
@@ -15,7 +15,7 @@ describe("unwrapFolderLink", function () {
   it("preserves query strings and fragments", function () {
     expect(
       unwrapFolderLink(
-        `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/a.svg?x=1#home`,
+        `${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef/a.svg?x=1#home`,
         blogID
       )
     ).toEqual("/a.svg?x=1#home");
@@ -24,7 +24,7 @@ describe("unwrapFolderLink", function () {
   it("leaves the path percent-encoded", function () {
     expect(
       unwrapFolderLink(
-        `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/my%20pic.jpg?x=a%20b#c`,
+        `${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef/my%20pic.jpg?x=a%20b#c`,
         blogID
       )
     ).toEqual("/my%20pic.jpg?x=a%20b#c");
@@ -42,7 +42,7 @@ describe("unwrapFolderLink", function () {
       "/café, 2x.jpg",
       "/already%20encoded.jpg",
     ].forEach((path) => {
-      const baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}${encodeFolderPath(path)}`;
+      const baked = `${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef${encodeFolderPath(path)}`;
       expect(baked.slice(BLOT_CDN_TOKEN.length)).not.toMatch(/[\s,#?'"()]/);
 
       const unwrapped = unwrapFolderLink(baked + "?x=1#top", blogID);
@@ -60,10 +60,50 @@ describe("unwrapFolderLink", function () {
   });
 
   it("returns null for other blogs, plain paths, and missing blogID", function () {
-    const baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/a.jpg`;
+    const baked = `${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef/a.jpg`;
 
     expect(unwrapFolderLink(baked, "blog_other")).toBeNull();
     expect(unwrapFolderLink("/a.jpg", blogID)).toBeNull();
+    expect(unwrapFolderLink(baked)).toBeNull();
+    expect(
+      unwrapFolderLink(
+        `${BLOT_CDN_TOKEN}/${blogID}x/folder/v-deadbeef/a.jpg`,
+        blogID
+      )
+    ).toBeNull();
+  });
+
+  it("returns null for a new-form link for another blog", function () {
+    expect(
+      unwrapFolderLink(
+        `${BLOT_CDN_TOKEN}/blog_other/folder/v-deadbeef/a.jpg`,
+        blogID
+      )
+    ).toBeNull();
+  });
+
+  it("returns null for a new-form link with no path after the version", function () {
+    expect(
+      unwrapFolderLink(`${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef`, blogID)
+    ).toBeNull();
+    expect(
+      unwrapFolderLink(`${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef/`, blogID)
+    ).toBeNull();
+  });
+
+  it("recovers the original path from a baked link (baked before #2695)", function () {
+    expect(
+      unwrapFolderLink(
+        `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/photos/a.jpg?x=1#home`,
+        blogID
+      )
+    ).toEqual("/photos/a.jpg?x=1#home");
+  });
+
+  it("returns null for old-form links for other blogs or no path (baked before #2695)", function () {
+    const baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/a.jpg`;
+
+    expect(unwrapFolderLink(baked, "blog_other")).toBeNull();
     expect(unwrapFolderLink(baked)).toBeNull();
     expect(
       unwrapFolderLink(

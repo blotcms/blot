@@ -393,7 +393,8 @@ Blot no longer owns the domain.
     allowlist mirrors `app/cdn/index.js` plus the top level of
     `app/blog/static`: `/`, `/health`, `/favicon.ico`, `/robots.txt`,
     `/fonts/`, `/icons/`, `/katex/`, `/plugins/`, `/syntax-highlighter/`,
-    `/html2canvas.min.js`, `/layout.css`, `/documentation/v-`, `/folder/v-`,
+    `/html2canvas.min.js` (stale: #2661 removed it; drop it next time the rule is
+    edited), `/layout.css`, `/documentation/v-`, `/folder/v-`,
     `/template/`, `/blog_`. **A new top-level path on the CDN must be added
     to this rule or Bunny will 403 it.** Bunny allows 5 patterns per
     condition, so the allowlist is split over several "match none"
@@ -537,6 +538,62 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
    its disk and S3; after, it serves `/blog_*` from S3 itself.
 8. **Nothing to purge.** The objects in the bucket are byte-identical to what
    the app served.
+
+### Folder files from the bucket ([#2695](https://github.com/blotcms/blot/issues/2695))
+
+**Not live yet:** these rules are added by the Deployment plan of the pull
+request that changes the app's folder URLs. Move this section into "Current
+pull zone" once they are.
+
+Folder files are linked as `/blog_<id>/folder/v-<version>/<path>`: the
+object's key, `{blogID}/folder/{path}`, with the content version inserted.
+Bunny fetches them from the bucket by dropping the version segment. Links
+baked before, `/folder/v-<version>/blog_<id>/<path>`, stay on the app, as does
+`v-pending` (the app finds a pending file case-insensitively, which S3 can't).
+Tested through header-gated rules on 15 Nov 2026: encoding, Content-Type,
+range, HEAD, `.git` and missing files all behave as on the app (see #2695).
+
+1. **Narrow "Storage bucket for generated assets"** to generated files, whose
+   first segment always starts with `_` (`app/storage/assets.js` refuses any
+   other): Request URL matches any of
+
+   ```
+   pattern:^https?://cdn%.blot%.im/blog_%x+/_
+   pattern:^https?://blot%-cdn%.b%-cdn%.net/blog_%x+/_
+   ```
+
+   As it stands it matches every `/blog_*` URL, and when two rules override
+   the origin the one listed first won, so the folder rule can't work until
+   this is done (or until it has a "match none" header condition for tests).
+2. **New rule "Folder files from the bucket"**: Override Origin URL
+   `https://blot-storage-prod.s3.us-west-2.amazonaws.com/%{Path.0}/folder/%{Path.3-}`
+   and Add Request Header `Host` = the bucket host, when the Request URL
+   matches any of
+
+   ```
+   pattern:^https?://cdn%.blot%.im/blog_%x+/folder/v%-%x+/.*[^/]$
+   pattern:^https?://blot%-cdn%.b%-cdn%.net/blog_%x+/folder/v%-%x+/.*[^/]$
+   ```
+
+   Lua patterns, since `*` matches across `/`. The condition sees the
+   scheme, hence `https?`. `[^/]$` keeps a URL ending in `/` on the app: S3
+   has a zero-byte marker for an empty directory that would be cached as a
+   200. `v-pending` isn't hex, so it doesn't match. The expansion replaces
+   the request path and keeps its percent-encoding; the query string is not
+   passed on. No cache-time action: the pull zone's 1-year override and
+   "Immutable browser cache" already apply.
+3. **"Short cache for pending folder images"** also matches
+   `*://cdn.blot.im/blog_*/folder/v-pending/*` and the same on
+   `blot-cdn.b-cdn.net`.
+4. Unchanged: "CORS for storage bucket assets" (matches `/blog_*`),
+   "Immutable browser cache" (its `*/folder/v-pending/*` exclusion has no
+   host, so it covers both forms), "Block unknown paths" (allows `/blog_`).
+
+To test before going live, add Request Header `X-Blot-Origin` equals `s3`
+to the new rule and send it with `support: true`, using files Bunny hasn't
+stored. Expect `x-amz-request-id` on each response. Missing files and `.git`
+paths give S3's 403. Roll back by switching the new rule off: misses go to
+the app, which serves the same URLs.
 
 ## Backup
 

@@ -109,7 +109,7 @@ describe("build-time baked folder links", function () {
 
     // on the CDN while it's missing, as written
     expect(before).toContain(
-      `src="${config.cdn.origin}/folder/v-pending/${this.blog.id}/Photo.JPG"`
+      `src="${config.cdn.origin}/${this.blog.id}/folder/v-pending/Photo.JPG"`
     );
     expect(before).not.toContain('src="/Photo.JPG"');
 
@@ -136,8 +136,8 @@ describe("build-time baked folder links", function () {
     const after = await this.text("/gallery");
 
     expect(versionOf(after, "two\\.jpg")).toBeTruthy();
-    expect(after).toContain(`/folder/v-pending/${this.blog.id}/one.jpg"`);
-    expect(after).toContain(`/folder/v-pending/${this.blog.id}/three.jpg"`);
+    expect(after).toContain(`/${this.blog.id}/folder/v-pending/one.jpg"`);
+    expect(after).toContain(`/${this.blog.id}/folder/v-pending/three.jpg"`);
     expect(after.match(/loading="lazy"/g).length).toEqual(3);
   });
 
@@ -149,7 +149,7 @@ describe("build-time baked folder links", function () {
     });
 
     expect(await this.text("/encoded")).toContain(
-      `/folder/v-pending/${this.blog.id}/my%20pic.jpg"`
+      `/${this.blog.id}/folder/v-pending/my%20pic.jpg"`
     );
 
     await this.write({ path: "/my pic.jpg", content: "pic one" });
@@ -185,7 +185,7 @@ describe("build-time baked folder links", function () {
     expect(versionOf(after, "photo\\.jpg")).toBeFalsy();
     expect(after).not.toContain(BLOT_CDN_TOKEN);
     expect(after).toContain(
-      `src="${config.cdn.origin}/folder/v-pending/${this.blog.id}/photo.jpg"`
+      `src="${config.cdn.origin}/${this.blog.id}/folder/v-pending/photo.jpg"`
     );
 
     const json = await (await this.get("/pages/a?json=true")).json();
@@ -203,7 +203,7 @@ describe("build-time baked folder links", function () {
     const feed = await this.text("/feed.rss");
 
     expect(feed).not.toContain(BLOT_CDN_TOKEN);
-    expect(feed).toContain(`${config.cdn.origin}/folder/v-`);
+    expect(feed).toContain(`${config.cdn.origin}/${this.blog.id}/folder/v-`);
   });
 
   it("puts a missing image on the CDN in RSS feeds too", async function () {
@@ -216,7 +216,7 @@ describe("build-time baked folder links", function () {
 
     expect(feed).not.toContain(BLOT_CDN_TOKEN);
     expect(feed).toContain(
-      `${config.cdn.origin}/folder/v-pending/${this.blog.id}/late.jpg`
+      `${config.cdn.origin}/${this.blog.id}/folder/v-pending/late.jpg`
     );
   });
 });

@@ -156,7 +156,7 @@ describe("cdn", function () {
       const lambda = await cdn(this.request, {});
       expect(
         mustache.render("{{#cdn}}/images/a.png{{/cdn}}", { cdn: lambda })
-      ).toBe("%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png");
+      ).toBe("%%BLOT_CDN%%/" + blogID + "/folder/v-deadbeef/images/A.png");
     });
 
     it("keeps the query string and hash of the link", async function () {
@@ -168,7 +168,7 @@ describe("cdn", function () {
           cdn: lambda,
         })
       ).toBe(
-        "%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png?v=2#top"
+        "%%BLOT_CDN%%/" + blogID + "/folder/v-deadbeef/images/A.png?v=2#top"
       );
     });
 

@@ -168,7 +168,7 @@ Rendered HTML and CSS are not scanned for links to files in the blog's folder. A
 Anything not baked (a link assembled from variables, a view that changes delimiters with `{{=`, a template SITE view, a relative link in a stylesheet, an entry built before baking existed, a menu `<a href>`) keeps its plain path and is served by `routes/assets.js` from the origin.
 
 - `cdnToken.js` — The `%%BLOT_CDN%%` sentinel.
-- `folderFile.js` — Resolves a blog-folder file to its real path and content-hash version, for versioned folder CDN URLs (`cdn.origin/folder/v-{hash}/{blogID}/{path}`). `routes/assets.js` uses a size+mtime version (`helper/contentVersion`'s `fromStat`) where reading the file would be too costly.
+- `folderFile.js` — Resolves a blog-folder file to its real path and content-hash version, for versioned folder CDN URLs (`cdn.origin/{blogID}/folder/v-{hash}/{path}`, the file's bucket key with the version inserted; posts built before #2695 have `cdn.origin/folder/v-{hash}/{blogID}/{path}`, which the CDN still serves). `routes/assets.js` uses a size+mtime version (`helper/contentVersion`'s `fromStat`) where reading the file would be too costly.
 - `shared.js` — Link eligibility and path helpers shared by the build plugin and the template wrapper.
 - `unwrapFolderLink.js` — Recovers the original path from an already-baked CDN URL.
 

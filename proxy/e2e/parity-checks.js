@@ -1200,6 +1200,7 @@ function corpus() {
     "/fonts/agbalumo/400.woff2",
     "/folder/v-1234/blog_abc/photo.jpg",
     "/folder/v-1234/blog_abc/doc.pdf",
+    "/blog_abc/folder/v-1234/photo.jpg",
     "/blog_abc/_assets/x.jpg",
     "/documentation/v-1/css.css",
     "/health",

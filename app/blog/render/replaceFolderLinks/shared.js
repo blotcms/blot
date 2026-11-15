@@ -60,7 +60,7 @@ const pathPartOf = (value) => {
   return cutIndex === -1 ? value : value.slice(0, cutIndex);
 };
 
-// Folder URLs (%%BLOT_CDN%%/folder/v-<version>/<blogID><path>) are built
+// Folder URLs (%%BLOT_CDN%%/<blogID>/folder/v-<version><path>) are built
 // from the decoded, case-corrected path on disk, so percent-encode each
 // segment: a literal space would split a srcset candidate in two, a literal
 // '%', '#' or '?' would be misread by the browser or the CDN route, and
@@ -77,11 +77,18 @@ const encodeFolderPath = (path) =>
     )
     .join("/");
 
-// The part of a folder CDN URL after /folder/: v-<version>/<blogID><path>,
-// for a path relative to the blog folder, given its storage/folder stat.
-// Used by the routes which redirect large files to the CDN.
+// The path of a folder file on the CDN, /<blogID>/folder/v-<version><path>:
+// the file's key in the storage bucket ({blogID}/folder/{path}) with the
+// version inserted, so Bunny can fetch it from the bucket by dropping that
+// segment (see "Folder files from the bucket" in
+// config/storage-bucket/README.md). path is the decoded path in the folder.
+const folderCdnPath = (blogID, version, path) =>
+  `/${blogID}/folder/v-${version}${encodeFolderPath(path)}`;
+
+// The same, for a path relative to the blog folder, given its storage/folder
+// stat. Used by the routes which redirect large files to the CDN.
 const versionedFolderPath = (blogID, path, stat) =>
-  `v-${contentVersion.fromFolderStat(stat)}/${blogID}${encodeFolderPath(path)}`;
+  folderCdnPath(blogID, contentVersion.fromFolderStat(stat), path);
 
 // Decodes the path portion of a folder link. Split off any ?query and
 // #hash first, so an encoded '#' or '?' in a file name isn't mistaken for
@@ -115,5 +122,6 @@ module.exports = {
   pathPartOf,
   encodeFolderPath,
   decodeFolderPath,
+  folderCdnPath,
   versionedFolderPath,
 };

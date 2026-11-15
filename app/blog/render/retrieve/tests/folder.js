@@ -82,7 +82,7 @@ describe("folder", function () {
 
     expect(byName("photo.jpg").url).toMatch(
       new RegExp(
-        "^%%BLOT_CDN%%/folder/v-[^/]+/" + this.blog.id + "/photo\\.jpg$"
+        "^%%BLOT_CDN%%/" + this.blog.id + "/folder/v-[^/]+/photo\\.jpg$"
       )
     );
     expect(byName("sub").url).toEqual("/sub");
@@ -108,8 +108,9 @@ describe("folder", function () {
       new RegExp(
         '<a href="https?://' +
           escaped +
-          "/folder/v-[^/]+/" +
+          "/" +
           this.blog.id +
+          "/folder/v-[^/]+" +
           '/photo\\.jpg">photo.jpg</a>'
       )
     );
@@ -130,10 +131,10 @@ describe("folder", function () {
     const item = result.contents.find((item) => item.name === "photo.jpg");
 
     expect(item.url).toEqual(
-      "%%BLOT_CDN%%/folder/v-" +
-        contentVersion.fromFolderStat(stat) +
-        "/" +
+      "%%BLOT_CDN%%/" +
         this.blog.id +
+        "/folder/v-" +
+        contentVersion.fromFolderStat(stat) +
         "/photo.jpg"
     );
     expect(item.updated).toEqual(new Date(Math.round(stat.modified)));
