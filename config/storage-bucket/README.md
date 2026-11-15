@@ -314,11 +314,12 @@ same access without that exposure. See `app/storage/README` §3.
 
 ## Bunny (cdn.blot.im)
 
-### Current pull zone (as of 10 Oct 2026)
+### Current pull zone (as of 15 Nov 2026)
 
-Pull zone `blot-cdn`, hostnames `cdn.blot.im`, `cdn.blot.site` and the system
-hostname `blot-cdn.b-cdn.net` (SSL on, Force SSL off). High-volume tier,
-SafeHop on.
+Pull zone `blot-cdn`, hostnames `cdn.blot.im` and the system hostname
+`blot-cdn.b-cdn.net` (SSL on, Force SSL off). High-volume tier, SafeHop on.
+`cdn.blot.site` was removed on 15 Nov 2026, hostname and rule patterns both:
+Blot no longer owns the domain.
 
 - **Origin.** Type Origin URL, `http://<origin IP>` (the app host's openresty); plain HTTP to the IP on purpose, to keep the origin hop as fast as possible.
   Host header `cdn.blot.im`, Forward host header off, Verify origin SSL off,
@@ -328,7 +329,7 @@ SafeHop on.
   cache expiration overridden to 1 year; browser
   cache "match server", which sends browsers a `Cache-Control` made from that
   1-year edge time, never the origin's (so the origin's `immutable` is lost
-  without edge rule 8 below); query string sort on; vary cache by URL query string,
+  without the "Immutable browser cache" edge rule below); query string sort on; vary cache by URL query string,
   limited to the `version` parameter (the only one CDN URLs use, as the
   fonts' cache-buster; no CDN route reads the query string, so other
   parameters only fragmented the cache); cache error responses on (errors
@@ -346,52 +347,66 @@ SafeHop on.
 - **Optimizer** off and no token authentication or URL signing (everything on
   the CDN is public by design), so Bunny requests the origin with the plain
   path.
-- **Edge rules**, in order:
-  1. Block requests by bot User-Agent: img2dataset, Bytespider, AhrefsBot,
-     ClaudeBot, bingbot.
-  2. The same, for GPTBot, python-requests, AliyunSecBot, Go-http-client,
-     Yandex.
-  3. "Disable Cache For Support Testing": request header `support: true`
-     overrides the cache time to 0 s.
-  4-5. The storage bucket and CORS rules, described below.
-  6. "Never cache health check": Override Cache Time 0 and Bypass Perma-Cache
-     on `*://cdn.blot.im/health*`, because updown.io monitors that URL.
-  7. "Block unknown paths on cdn blot im": Block Request (Bunny answers 403, the
-     origin never sees it) for any `cdn.blot.im` URL not on an allowlist, so
-     scanner probes (`/.env`, `/.git`, `/api`, ...) stop reaching Node. The
-     allowlist mirrors `app/cdn/index.js` plus the top level of
-     `app/blog/static`: `/`, `/health`, `/favicon.ico`, `/robots.txt`,
-     `/fonts/`, `/icons/`, `/katex/`, `/plugins/`, `/syntax-highlighter/`,
-     `/layout.css`, `/documentation/v-`, `/folder/v-`,
-     `/template/`, `/blog_`. **A new top-level path on the CDN must be added
-     to this rule or Bunny will 403 it.** Bunny allows 5 patterns per
-     condition, so the allowlist is split over several "match none"
-     conditions; `*` matches across `/`, so every pattern names the host (a
-     host-less `*/fonts/*` would let `/.env/fonts/x` through). Rollback: switch
-     the rule off.
-  8. "Immutable browser cache": Browser Cache Header (Cache-Control) Override
-     to `public, max-age=31536000, immutable`, when all of: the URL is on one
-     of the three hostnames (`*://cdn.blot.im/*`, `*://cdn.blot.site/*`,
-     `*://blot-cdn.b-cdn.net/*`), the status is 200, and the URL matches none
-     of `*/folder/v-pending/*`, `*/health*`, `*/favicon.ico*`,
-     `*/robots.txt*`. Every other CDN URL is versioned or never changes, so
-     browsers need not revalidate it even on reload. The exclusions are
-     host-less, so they also leave out the odd asset whose path contains one
-     of them; those keep the plain 1-year header. Errors keep the 5 s of
-     "cache error responses". Rollback: switch the rule off.
-
-  9. "Short cache for pending folder images": Override Cache Time 60 s and
-     Bypass Perma-Cache on `*://cdn.blot.im/folder/v-pending/*` (and the same
-     for `cdn.blot.site` and `blot-cdn.b-cdn.net`). The build links an image
-     that hasn't synced yet there (`app/build/plugins/folderAssets`), and the
-     rebuild when it arrives moves the post to the image's content-versioned
-     URL, but feed readers and cached pages keep the pending one. Without
-     this rule the image it then serves would be cached for a year, and
-     perma-cached, so a replaced image would stay stale on those copies. The
-     override applies to the 404 before the image arrives too (instead of the
-     5 s of "cache error responses"), so it is 60 s, the minute Node asks for
-     that 404, rather than an hour. Recreated on 7 Nov 2026: the pull zone
-     had lost it.
+- **Edge rules**, in the dashboard's order. Saving an edited rule moves it to
+  the end of the list, so refer to rules by name, not number. Only the
+  origin-changing rules depend on order (see the test rules below).
+  - Block requests by bot User-Agent: img2dataset, Bytespider, AhrefsBot,
+    ClaudeBot, bingbot; and a second rule for GPTBot, python-requests,
+    AliyunSecBot, Go-http-client, Yandex.
+  - "Disable Cache For Support Testing": request header `support: true`
+    overrides the cache time to 0 s. Perma-Cache still stores the response.
+  - "Never cache health check": Override Cache Time 0 and Bypass Perma-Cache
+    on `*://cdn.blot.im/health*`, because updown.io monitors that URL.
+  - "Block unknown paths on cdn blot im": Block Request (Bunny answers 403, the
+    origin never sees it) for any `cdn.blot.im` URL not on an allowlist, so
+    scanner probes (`/.env`, `/.git`, `/api`, ...) stop reaching Node. The
+    allowlist mirrors `app/cdn/index.js` plus the top level of
+    `app/blog/static`: `/`, `/health`, `/favicon.ico`, `/robots.txt`,
+    `/fonts/`, `/icons/`, `/katex/`, `/plugins/`, `/syntax-highlighter/`,
+    `/html2canvas.min.js`, `/layout.css`, `/documentation/v-`, `/folder/v-`,
+    `/template/`, `/blog_`. **A new top-level path on the CDN must be added
+    to this rule or Bunny will 403 it.** Bunny allows 5 patterns per
+    condition, so the allowlist is split over several "match none"
+    conditions; `*` matches across `/`, so every pattern names the host (a
+    host-less `*/fonts/*` would let `/.env/fonts/x` through). It covers
+    `cdn.blot.im` only, not `blot-cdn.b-cdn.net`. Rollback: switch the rule
+    off.
+  - "TEST Folder files from the bucket" and "TEST Old folder URLs from the
+    bucket": temporary, for [#2695](https://github.com/blotcms/blot/issues/2695),
+    added 15 Nov 2026. Both apply only to requests with the header
+    `X-Blot-Origin: s3`, and send folder files to the bucket: the first for
+    `/blog_<id>/v-<ver>/<path>` (Override Origin URL
+    `https://<bucket host>/%{Path.0}/folder/%{Path.2-}`), the second for
+    `/folder/v-<ver>/blog_<id>/<path>` (`%{Path.2}/folder/%{Path.3-}`), each
+    with the bucket's `Host` and an `X-Blot-Debug` response header showing the
+    expanded variables. Remove both when #2695 is done or dropped.
+  - "Storage bucket for generated assets" and "CORS for storage bucket
+    assets", described below. The first also has a condition, Request Header
+    `X-Blot-Origin` match none of `s3`, so the test rules above can be tried
+    on `/blog_*` URLs: when two rules both override the origin, this one won.
+    Remove that condition with the test rules.
+  - "Immutable browser cache": Browser Cache Header (Cache-Control) Override
+    to `public, max-age=31536000, immutable`, when all of: the URL is on one
+    of the two hostnames (`*://cdn.blot.im/*`, `*://blot-cdn.b-cdn.net/*`),
+    the status is 200, and the URL matches none
+    of `*/folder/v-pending/*`, `*/health*`, `*/favicon.ico*`,
+    `*/robots.txt*`. Every other CDN URL is versioned or never changes, so
+    browsers need not revalidate it even on reload. The exclusions are
+    host-less, so they also leave out the odd asset whose path contains one
+    of them; those keep the plain 1-year header. Errors keep the 5 s of
+    "cache error responses". Rollback: switch the rule off.
+  - "Short cache for pending folder images": Override Cache Time 60 s and
+    Bypass Perma-Cache on `*://cdn.blot.im/folder/v-pending/*` (and the same
+    for `blot-cdn.b-cdn.net`). The build links an image
+    that hasn't synced yet there (`app/build/plugins/folderAssets`), and the
+    rebuild when it arrives moves the post to the image's content-versioned
+    URL, but feed readers and cached pages keep the pending one. Without
+    this rule the image it then serves would be cached for a year, and
+    perma-cached, so a replaced image would stay stale on those copies. The
+    override applies to the 404 before the image arrives too (instead of the
+    5 s of "cache error responses"), so it is 60 s, the minute Node asks for
+    that 404, rather than an hour. Recreated on 7 Nov 2026: the pull zone
+    had lost it.
 
 Large folder files and generated assets (`/_image_cache/`, `/_assets/`, ...)
 requested on a blog host answer with a 302 to this CDN (see
@@ -427,7 +442,6 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
 
    ```
    *://cdn.blot.im/blog_*
-   *://cdn.blot.site/blog_*
    *://blot-cdn.b-cdn.net/blog_*
    ```
 
@@ -454,7 +468,7 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
 5. **Test before going live.** Add a second condition to rules 2 and 3,
    Request Header `X-Blot-Origin` equals `s3` (a header, not a query string:
    Perma-Cache may key on the path alone), and send it together with
-   `support: true` (rule 3 above sets cache time 0). Use objects Bunny hasn't
+   `support: true` ("Disable Cache For Support Testing" sets cache time 0). Use objects Bunny hasn't
    stored yet, since Perma-Cache answers for anything it holds: a fresh image
    post on a test blog (the `test-blogs` skill). Check:
    - 200, with the S3 copy's `Content-Type`,
