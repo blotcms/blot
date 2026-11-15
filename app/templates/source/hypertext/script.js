@@ -228,7 +228,6 @@ class PageTransitioner {
     }
 
     // The current page stays until the new one has arrived
-    content.classList.add("loading");
     document.documentElement.classList.add("is-loading");
 
     // close the mobile nav when a link is clicked
@@ -308,7 +307,6 @@ class PageTransitioner {
       if (current()) fallback();
     } finally {
       if (current()) {
-        content.classList.remove("loading");
         document.documentElement.classList.remove("is-loading");
       }
       if (this.currentXHR === controller) this.currentXHR = null;

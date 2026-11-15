@@ -515,22 +515,8 @@ class SidebarNavigation {
   }
 }
 
-// boot
-(async function boot() {
-  const start = async () => {
-    await new SidebarNavigation().init();
-  };
-  if (document.querySelector(".sidebar")) start();
-  else {
-    const mo = new MutationObserver(() => {
-      if (document.querySelector(".sidebar")) {
-        start();
-        mo.disconnect();
-      }
-    });
-    mo.observe(document.documentElement, { childList: true, subtree: true });
-  }
-})();
+// A module script runs once the page is parsed, so the sidebar is there
+new SidebarNavigation().init();
 
 // make the class available globally
 if (typeof window !== "undefined") window.SidebarNavigation = SidebarNavigation;

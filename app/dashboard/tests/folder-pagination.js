@@ -93,42 +93,23 @@ describe("folder (pagination and sorting)", function () {
       expect($(".directory-pagination").length).toEqual(0);
     });
 
-    it("still lists a folder when an entry disappears mid-read", async function () {
-      // An entry which is listed but gone by the time it is stat'd is the
-      // failure mode of a file removed between list and stat while a big
-      // folder syncs. Previously this made the whole folder render as empty.
+    it("reads a page's rows from the folder index, without a stat per row", async function () {
+      // A listing's entries carry their stats, so a page costs a count, a
+      // range and one read of its records, however large the folder
       const storage = require("storage/folder");
-      await this.write({ path: "dangling.txt", content: "dangling" });
       const stat = storage.stat;
+      const statted = [];
       spyOn(storage, "stat").and.callFake((blogID, path, ...rest) => {
-        if (path === "/dangling.txt") throw new storage.NotFoundError();
-        return stat(blogID, path, ...rest);
-      });
-
-      const $ = await this.parse(`/sites/${this.blog.handle}`);
-
-      expect(rowNames($)).toEqual(names);
-    });
-
-    it("backfills a page when an entry on it has vanished", async function () {
-      // "p00.txt" sorts before the real files and would be the first row of
-      // page one; it is listed but gone by the time it is stat'd (or has
-      // become a symlink). The page should still show a full pageSize of real
-      // files by pulling the next name in.
-      const storage = require("storage/folder");
-      await this.write({ path: "p00.txt", content: "p00" });
-      const stat = storage.stat;
-      spyOn(storage, "stat").and.callFake((blogID, path, ...rest) => {
-        if (path === "/p00.txt") throw new storage.NotFoundError();
+        statted.push(path);
         return stat(blogID, path, ...rest);
       });
 
       const $ = await this.parse(
-        `/sites/${this.blog.handle}?pageSize=2&page=1`
+        `/sites/${this.blog.handle}?pageSize=2&page=2`
       );
 
-      expect(rowNames($)).toEqual(["p01.txt", "p02.txt"]);
-      expect($("a.directory-pagination__link[rel='next']").length).toEqual(1);
+      expect(rowNames($)).toEqual(["p03.txt", "p04.txt"]);
+      expect(statted.filter((path) => /\/p0\d\.txt$/.test(path))).toEqual([]);
     });
 
     it("caps the page size at the default", async function () {

@@ -1,6 +1,6 @@
 const path = require("path");
-const alphanum = require("helper/alphanum");
 const folder = require("storage/folder");
+const fileKey = require("models/file/key");
 const Stat = require("./stat");
 const Entry = require("models/entry");
 const pathNormalize = require("helper/pathNormalizer");
@@ -55,7 +55,6 @@ const DEFAULT_PAGE_SIZE = 100;
 // being shown. We sweep the whole folder and cache the result so the
 // follow-up infinite-scroll page fetches don't re-list it. The cache is
 // bounded so a few huge folders can't pin unbounded memory.
-const STAT_SWEEP_CONCURRENCY = 32;
 const STAT_CACHE_LIMIT = 8;
 const statCache = new Map(); // "blogID_cacheID_dir" -> Promise<stat[]>
 
@@ -77,43 +76,19 @@ function resolveOrder(order) {
   return order === "desc" ? "desc" : "asc";
 }
 
-// The server is now the sole authority on row order (directory.html no
-// longer re-sorts on load), so order names here the way a file browser
-// does: natural, case-insensitive alphanumeric — "file2" before "file10",
-// "1 copy 2.txt" before "1 copy 10.txt". The same comparator decides page
-// boundaries and the tie-break for date / size sorts, so a name never lands
-// on a different page than the one that then renders it.
-function byDisplayName(a, b) {
-  return alphanum.compare(String(a).trim(), String(b).trim(), {
-    insensitive: true,
-  });
+// The server is the sole authority on row order (directory.html doesn't
+// re-sort), and the folder index keeps every directory in the order a file
+// browser shows: natural, case-insensitive, "file2" before "file10" (see
+// models/file's README). The same order breaks ties in the date / size
+// sorts, so a name never lands on a different page than the one that then
+// renders it.
+function byListingOrder(a, b) {
+  return fileKey.compareSorted(fileKey.sortMember(a), fileKey.sortMember(b));
 }
 
-// Small promise pool: run fn over items, at most `limit` in flight.
-async function mapWithLimit(items, limit, fn) {
-  const results = new Array(items.length);
-  let cursor = 0;
-
-  async function worker() {
-    while (cursor < items.length) {
-      const index = cursor++;
-      results[index] = await fn(items[index], index);
-    }
-  }
-
-  const size = Math.max(1, Math.min(limit, items.length));
-  await Promise.all(Array.from({ length: size }, worker));
-  return results;
-}
-
-// Dotfiles and previews are not shown, and the rest is in display order
+// Dotfiles and previews are not shown; a listing gives the rest in order
 function visible(entries) {
-  return entries
-    .filter(
-      (item) =>
-        !item.name.startsWith(".") && !item.name.endsWith(".preview.html")
-    )
-    .sort((a, b) => byDisplayName(a.name, b.name));
+  return entries.filter((item) => !fileKey.hiddenEverywhere(item.name));
 }
 
 // entry is a listing's entry or a stat of storage/folder, which both carry
@@ -127,24 +102,6 @@ function statEntry(blog, dir, name, entry) {
   stat.name = name;
 
   return stat;
-}
-
-// Stats one name, or resolves null if it is gone
-async function statName(blog, dir, name) {
-  try {
-    return statEntry(
-      blog,
-      dir,
-      name,
-      await folder.stat(blog.id, path.join(dir, name))
-    );
-  } catch (err) {
-    // The file was removed between the listing and the stat (common while a
-    // large folder is still syncing), or is now a symlink. Skip it rather
-    // than failing the listing.
-    if (err && (err.code === "ENOENT" || err.code === "ELOOP")) return null;
-    throw err;
-  }
 }
 
 // Stat every entry once, cached per folder. Used for date / size sorts,
@@ -299,39 +256,35 @@ async function getContents(blog, dir, options = {}) {
   let hasNext;
 
   if (sort === "name") {
-    const names = visible(await folder.listNames(blog.id, dir)).map(
-      (entry) => entry.name
-    );
-    const ordered = descending ? names.slice().reverse() : names;
-    total = ordered.length;
-    page = clampPage(options.page, total, pageSize);
-    startIndex = (page - 1) * pageSize;
+    // One page by position from the folder index: a count, a range and the
+    // page's records, which carry each entry's stat, however large the
+    // folder. A page past the end is clamped to the last page and read again.
+    const read = (number) =>
+      folder.listPage(blog.id, dir, {
+        offset: (number - 1) * pageSize,
+        limit: pageSize,
+        order,
+      });
 
-    // Walk forward from startIndex collecting up to pageSize entries that
-    // still exist. Files vanish between the listing and the stat while a
-    // folder is syncing; skipping them without pulling the next name forward
-    // would leave the page short and the running count adrift.
-    const collected = [];
-    let cursor = startIndex;
+    page = Math.max(parseInt(options.page, 10) || 1, 1);
 
-    while (collected.length < pageSize && cursor < ordered.length) {
-      const batch = ordered.slice(
-        cursor,
-        cursor + (pageSize - collected.length)
-      );
-      cursor += batch.length;
+    let listed = await read(page);
 
-      const batchStats = await mapWithLimit(
-        batch,
-        STAT_SWEEP_CONCURRENCY,
-        (name) => statName(blog, dir, name)
-      );
+    total = listed.total;
 
-      for (const stat of batchStats) if (stat !== null) collected.push(stat);
+    const last = clampPage(page, total, pageSize);
+
+    if (last !== page) {
+      page = last;
+      listed = await read(page);
+      total = listed.total;
     }
 
-    pageStats = collected;
-    hasNext = cursor < ordered.length;
+    startIndex = (page - 1) * pageSize;
+    pageStats = listed.entries.map((entry) =>
+      statEntry(blog, dir, entry.name, entry)
+    );
+    hasNext = startIndex + pageSize < total;
   } else {
     // Date / size sort: needs a stat for every entry, so sweep (and cache)
     // the whole folder, then order and slice.
@@ -341,7 +294,7 @@ async function getContents(blog, dir, options = {}) {
     allStats.sort((a, b) => {
       const av = a[key] || 0;
       const bv = b[key] || 0;
-      if (av === bv) return byDisplayName(a.name, b.name);
+      if (av === bv) return byListingOrder(a.name, b.name);
       return descending ? bv - av : av - bv;
     });
 

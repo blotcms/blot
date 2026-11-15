@@ -56,19 +56,17 @@ Subtree queries use the bounds `[/dir/` and `(/dir0` (`0` is the character after
 
 ### Paging a directory
 
-Listings sort by name in UTF-16 code-unit order, as JavaScript compares strings, so `storage/folder`'s cursor is just the last name of a page. `list` reads a page with `ZRANGEBYLEX` on the names set, from just after that name, one more than the limit to tell whether another page follows, then `HMGET`s the page's records from the hash: a page costs the same however large the directory. A cursor need not name an entry still there.
+Listings are in natural name order, the order of each directory's `all` sorted set (see Natural order below). `list` reads a page with `ZRANGEBYLEX` on that set, from just after the member of the name `after` (which `key.sortMember` gives from the name alone, so a cursor need not name an entry still there), one more than the limit to tell whether another page follows, then `HMGET`s the page's records from the hash: a page costs the same however large the directory. `range` reads a page by position instead, for pages a person picks by number: the visible children (not hidden everywhere) are the first ranks of the set, so their total is one `ZLEXCOUNT` and the page one `ZRANGE` by rank.
 
-`ZRANGEBYLEX` compares UTF-8 bytes, which is code point order. That differs from code-unit order only for characters from U+E000 to U+FFFF against characters beyond U+FFFF, so a member spells those with U+10FFFF in front (and U+10FFFF itself as U+10FFFF, NUL), which puts them in code-unit order (`key.member`, `key.nameOf`). Every other name is its own member.
+A directory without the set (none has one until a writer or the backfill builds it) is read whole from its hash and sorted the same way, comparing members as bytes with `key.compareSorted`, so it lists in exactly the set's order.
 
 Paging through the path set instead needs no new key, but a directory's children are interleaved there with all their descendants, so skipping each subdirectory's subtree costs a round trip per subdirectory on the page.
 
-Names sets came after the rest of the index, so a directory may lack one. `list` then reads its hash whole and sorts it, as every listing did before. Only a writer, under the sync lock, makes a names set: when `setMany` adds a name to a directory without one, it builds the whole set from the hash in the same exec, so a names set that exists is always complete. A remove never creates one (`ZREM` of a missing key does nothing). `addMissingNames(blogID, { apply })` builds the rest, from `scripts/storage/add-file-index-names.js`, which holds each blog's sync lock while it does.
-
-Memory: a names set holds each name once more, beside its field in the hash and its full path in the path set. A small directory's set is a ziplist, a few bytes per name over the names themselves, plus the key; above `zset-max-ziplist-entries` (128 by default, Redis 6.2) or with a name over 64 bytes it is a skiplist, roughly 90 to 100 bytes per name on top of the name. Against an index of about 250 bytes per path, that is roughly a tenth to a fifth more for most folders.
+The names set, each directory's children in code-unit order, is still written beside the sorted sets so that rolling back to code which reads it stays safe; nothing reads it, and it goes in the next step of #2693. When `setMany` adds a name to a directory without one, it builds the whole set from the hash in the same exec, so a names set that exists is always complete. `addMissingNames(blogID, { apply })` builds the rest, from `scripts/storage/add-file-index-names.js`.
 
 ### Natural order
 
-Beside the names set, each directory has a sorted set per order in `sorts.js`, written by the same writers in the same `exec`. Nothing reads them yet: listings move to them once every directory has one (#2693, step 7).
+Each directory has a sorted set per order in `sorts.js`, written by the same writers in the same `exec`. Listings read the `all` set.
 
 A member is a group, a sort key, NUL and the name (`key.sortMember`), so byte order of members is the order a file browser shows:
 
@@ -102,8 +100,9 @@ All return promises.
 | Function | |
 |----------|---|
 | `get(blogID, path)` | The record, or null |
-| `list(blogID, dir, { after, limit })` | One page of a directory sorted by name (code-unit order), starting after the name `after`: `{ entries: [{ name, ...record }], next }`, next the `after` of the following page, or null after the last. `limit` defaults to 1000. Null if dir is not a directory |
-| `listAll(blogID, dir)` | Every entry of a directory, sorted by name, or null. Pages through `list`, but holds the whole directory |
+| `list(blogID, dir, { after, limit })` | One page of a directory in natural name order, starting after the name `after`: `{ entries: [{ name, ...record }], next }`, next the `after` of the following page, or null after the last. `limit` defaults to 1000. Null if dir is not a directory |
+| `listAll(blogID, dir)` | Every entry of a directory, in listing order, or null. Pages through `list`, but holds the whole directory |
+| `range(blogID, dir, { offset, limit, order })` | A page of the visible children (not dotfiles or `.preview.html`) by position: `{ entries, total }`, `order` `asc` or `desc`. Null if dir is not a directory |
 | `subtree(blogID, dir, { pageSize })` | Async iterator over every path below dir, in byte order of the whole path |
 | `resolveCaseInsensitive(blogID, path)` | The stored spelling of path, or null |
 | `totals(blogID)` | `{ bytes, files }` |
