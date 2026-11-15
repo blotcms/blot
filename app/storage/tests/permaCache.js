@@ -95,7 +95,7 @@ describe("cdn/permaCache", function () {
       `/${id}/folder/a.txt`,
       `/${id}/v-${current}/a.txt`,
     ]);
-    spyOn(assets, "walk").and.callFake(async function* () {});
+    spyOn(assets, "walk").and.callFake(() => (async function* () {})());
 
     const { lines, totals } = await report({ blogID: id });
 
@@ -113,9 +113,11 @@ describe("cdn/permaCache", function () {
     const id = this.blog.id;
 
     zone([`/${id}/_thumbnails/a/small.jpg`, `/${id}/_thumbnails/b/small.jpg`]);
-    spyOn(assets, "walk").and.callFake(async function* () {
-      yield "_thumbnails/a/small.jpg";
-    });
+    spyOn(assets, "walk").and.callFake(() =>
+      (async function* () {
+        yield "_thumbnails/a/small.jpg";
+      })()
+    );
 
     const { lines, totals } = await report({ blogID: id });
 
