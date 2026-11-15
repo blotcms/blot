@@ -81,7 +81,10 @@ module.exports = function register(blog) {
     }
 
     // A listing page past the last one: the same page as any unknown URL
-    if (err.pageNotFound) return notFound(req, res, next);
+    // If the template can't render it (say it has no error.html), carry on
+    // without the error, as the catch-all 404 does, rather than to the
+    // bad-render handler below
+    if (err.pageNotFound) return notFound(req, res, () => next());
 
     let status = 400;
 
