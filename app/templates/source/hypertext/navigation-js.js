@@ -27,8 +27,17 @@ class SidebarNavigation {
       return null;
     }
   }
+  // Only a complete tree is cached, and only when it has changed
   _saveCache() {
-    SidebarNavigation.saveCache(this.root);
+    if (!this.complete) return;
+    const html = this.root.innerHTML;
+    if (html === this._lastSaved) return;
+    try {
+      localStorage.setItem(this.cacheKey, html);
+      this._lastSaved = html;
+    } catch (err) {
+      console.warn("Sidebar cache write failed:", err);
+    }
   }
 
   _normalizePathname(pathname) {
@@ -80,72 +89,114 @@ class SidebarNavigation {
   update() {
     if (!this.root) return;
     this.syncActiveFromLocation();
-    this.revealActive();
-    this._saveCache();
+    if (this.revealActive()) this._saveCache();
   }
 
   // ------- pagination -------
-  async loadAllPages() {
-    if (!this.root) return;
-    const parseHTML = (html) => {
-      const t = document.createElement("template");
-      t.innerHTML = html;
-      return t.content;
-    };
+  // One page of /pagination/:page (a separate view with its own, larger page
+  // size) as a fragment of <li data-path> rows
+  async fetchPage(page) {
+    const res = await fetch(`/pagination/${encodeURIComponent(page)}`, {
+      credentials: "same-origin",
+    });
+    if (!res.ok) throw new Error(`Status ${res.status} for page ${page}`);
+    const t = document.createElement("template");
+    t.innerHTML = await res.text();
+    return t.content;
+  }
 
-    // The sidebar is server-rendered with the blog's own page_size, but
-    // /pagination/:page is a separate view with its own (larger) page size,
-    // so the inline data-next token doesn't line up with it: following it
-    // skips every entry between the two page sizes. Ignore the inline token
-    // and walk /pagination from page 1, de-duplicating against what's
-    // already in the list.
-    const hasMore = this.root.querySelector(":scope span[data-next]");
-    this.root
-      .querySelectorAll(":scope span[data-next]")
-      .forEach((el) => el.remove());
-
-    const knownPaths = new Set(
-      Array.from(this.root.querySelectorAll(":scope > li[data-path]")).map(
-        (li) => li.getAttribute("data-path")
-      )
-    );
-
-    const seen = new Set();
-    let token = hasMore ? "1" : null;
-    while (token) {
-      if (seen.has(token)) break;
-      seen.add(token);
-
-      try {
-        const res = await fetch(`/pagination/${encodeURIComponent(token)}`, {
-          credentials: "same-origin",
-        });
-        if (!res.ok) {
-          console.warn("Pagination fetch failed:", res.status, token);
-          break;
+  // Every page, in order: page 1 says how many there are, then the rest are
+  // fetched a few at a time. Resolves null if any page fails.
+  async fetchAllPages() {
+    try {
+      const first = await this.fetchPage(1);
+      const total =
+        parseInt(first.querySelector("span[data-pages]")?.getAttribute("data-pages"), 10) || 1;
+      const rest = [];
+      for (let page = 2; page <= total; page++) rest.push(page);
+      const results = new Array(rest.length);
+      let next = 0;
+      const worker = async () => {
+        while (next < rest.length) {
+          const i = next++;
+          results[i] = await this.fetchPage(rest[i]);
         }
-        const frag = parseHTML(await res.text());
-
-        token = frag.querySelector("span[data-next]")?.getAttribute("data-next");
-
-        for (const node of Array.from(frag.childNodes)) {
-          if (node.nodeType === Node.TEXT_NODE && !node.textContent.trim())
-            continue;
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            if (node.matches("span[data-next]")) continue;
-            const path = node.getAttribute("data-path");
-            if (path) {
-              if (knownPaths.has(path)) continue;
-              knownPaths.add(path);
-            }
-          }
-          this.root.appendChild(node);
-        }
-      } catch (err) {
-        console.warn("Pagination fetch failed:", err);
-        break;
-      }
+      };
+      await Promise.all([worker(), worker(), worker(), worker()]);
+      return [first, ...results];
+    } catch (err) {
+      console.warn("Sidebar pages failed to load:", err);
+      return null;
     }
+  }
+
+  // Replaces the tree built from this page's posts with one built from every
+  // post. It's built off the page, then swapped in at once, keeping any folder
+  // the reader opened in the meantime.
+  async loadAll() {
+    if (this.complete || this.loading) return;
+    this.loading = true;
+    try {
+      const pages = await this.fetchAllPages();
+      if (!pages) return;
+
+      const live = this.root;
+      const temp = live.cloneNode(false);
+      delete temp.dataset.treeBuilt;
+      temp.innerHTML = this.menuHTML;
+      const known = new Set();
+      for (const page of pages) {
+        for (const li of Array.from(page.querySelectorAll("li[data-path]"))) {
+          const path = li.getAttribute("data-path");
+          if (known.has(path)) continue;
+          known.add(path);
+          temp.appendChild(li);
+        }
+      }
+
+      const opened = new Set(
+        Array.from(live.querySelectorAll("li.folder"))
+          .filter((li) => li.querySelector(":scope > ul.submenu")?.hidden === false)
+          .map((li) => li.dataset.folder)
+      );
+
+      this.root = temp;
+      try {
+        this.build();
+        this.applyDefaultExpansion();
+        temp.querySelectorAll("li.folder").forEach((li) => {
+          if (opened.has(li.dataset.folder)) this.setFolder(li, true);
+        });
+      } finally {
+        this.root = live;
+      }
+
+      live.replaceChildren(...temp.childNodes);
+      this.complete = true;
+      this.syncActiveFromLocation();
+      this.revealActive();
+      this._saveCache();
+    } finally {
+      this.loading = false;
+    }
+  }
+
+  // Calls fn once the sidebar can be seen. On phones it's the menu, hidden
+  // until opened, so nothing is fetched for a reader who never opens it.
+  whenVisible(fn) {
+    const column = this.root.closest(".column");
+    const hidden = () => column && getComputedStyle(column).display === "none";
+    if (!hidden()) return fn();
+
+    const wide = window.matchMedia("(min-width: 769px)");
+    const go = () => {
+      if (hidden()) return;
+      document.removeEventListener("hypertext:menu-open", go);
+      wide.removeEventListener("change", go);
+      fn();
+    };
+    document.addEventListener("hypertext:menu-open", go);
+    wide.addEventListener("change", go);
   }
 
   // ------- build -------
@@ -387,13 +438,17 @@ class SidebarNavigation {
 
   // Open every folder above the active page (an active index page sits on its
   // own folder's label, so that folder opens too).
+  // Returns whether it opened any.
   revealActive() {
     const active = this.root.querySelector("a.active");
     let folder = active?.closest("li.folder");
+    let opened = false;
     while (folder) {
+      if (folder.querySelector(":scope > ul.submenu")?.hidden) opened = true;
       this.setFolder(folder, true);
       folder = folder.parentElement?.closest("li.folder");
     }
+    return opened;
   }
 
   // ------- events -------
@@ -433,10 +488,19 @@ class SidebarNavigation {
     const serverHTML = this.root.innerHTML;
     const cached = this._loadCache();
 
+    this.menuHTML = Array.from(this.root.querySelectorAll(":scope > li[data-menu]"))
+      .map((li) => li.outerHTML)
+      .join("");
+    this.root
+      .querySelectorAll(":scope > span[data-next], :scope > span[data-pages]")
+      .forEach((el) => el.remove());
+
     if (cached && !this._cacheIsStale(serverHTML, cached)) {
       this.root.innerHTML = cached;
+      this._lastSaved = cached;
+      this.complete = true;
     } else {
-      await this.loadAllPages();
+      // This page's own posts until every page has loaded
       this.build();
       this.applyDefaultExpansion();
     }
@@ -445,17 +509,9 @@ class SidebarNavigation {
     this.revealActive();
     this._bindEvents();
     this.root.classList.add("initialized");
-    this._saveCache();
     SidebarNavigation.instance = this;
-  }
 
-  static saveCache(root = document.querySelector(".sidebar")) {
-    if (!root) return;
-    try {
-      localStorage.setItem(sidebarCacheKey(root), root.innerHTML);
-    } catch (err) {
-      console.warn("Sidebar cache write failed:", err);
-    }
+    if (!this.complete) this.whenVisible(() => this.loadAll());
   }
 }
 

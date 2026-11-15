@@ -92,9 +92,38 @@ hr {
   padding: calc({{spacing}} * 34px) calc({{spacing}} * 16px);
 }
 
-.entry {
-  overflow-wrap: break-word;
+/* anywhere, not break-word: long words and URLs also stop widening the
+   column, not just wrap inside it */
+.entry,
+.summary {
+  overflow-wrap: anywhere;
 }
+
+/* Hidden from view, kept for screen readers */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* Off screen until a keyboard reader tabs to it */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 100;
+  padding: 0.5em 0.8em;
+  background: var(--background-color);
+  color: var(--link-color);
+}
+.skip-link:focus {left: 0.5rem; top: 0.5rem;}
+
+main:focus {outline: none;}
+
+.empty-state {color: var(--medium-text-color);}
 
 .entry-meta {
   display: flex;
@@ -117,6 +146,7 @@ hr {
 }
 
 .entry-tags {
+  max-width: 100%;
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
@@ -130,6 +160,7 @@ hr {
   color: var(--light-text-color);
   font-size: var(--smallest-font-size);
   text-decoration: none;
+  overflow-wrap: anywhere;
 }
 
 .entry-tags a:hover {
@@ -154,8 +185,9 @@ hr {
   flex-wrap: wrap;
   justify-content: flex-start;
   gap: 0.75rem;
+  max-width: calc(var(--main-width) - 96px);
   margin-top: 3rem;
-  padding: 1rem 0 0 2rem;
+  padding: 1rem 0 0;
   border-top: 1px solid var(--dark-border-color);
   color: var(--text-color);
   font-size: var(--small-font-size);
@@ -165,25 +197,24 @@ hr {
   display: none;
 }
 
+/* Plain text links, like the sidebar's */
 .pagination a {
-  color: inherit;
+  color: var(--text-color);
+  text-decoration: none;
+  transition: opacity 0.1s ease-in;
 }
 
 .pagination a:hover {
-  color: var(--link-color);
+  opacity: 0.7;
 }
 
 .pagination-previous,
 .pagination-next {
   display: inline-flex;
-  min-height: 2.5em;
   align-items: center;
-  gap: 0.5em;
-  padding: 0.55em 1em;
-  border: 1px solid var(--dark-border-color);
-  border-radius: 999px;
-  font-weight: 600;
-  text-decoration: none;
+  gap: 0.35em;
+  min-height: 44px;
+  font-weight: 500;
 }
 
 .pagination-status {
@@ -194,12 +225,7 @@ hr {
   word-spacing: 0.15em;
 }
 
-@media (max-width: 480px) {
-  .pagination-previous,
-  .pagination-next {
-    padding-inline: 0.7em;
-  }
-}
+
 
 main {
   position: relative;
@@ -240,6 +266,7 @@ html.is-loading main::after {
 
 main {
   flex-grow: 1; /* Main content takes up remaining space */
+  min-width: 0; /* so wide content scrolls or wraps instead of widening the page */
   padding-right: calc({{spacing}} * 4em);
   padding-left: calc({{spacing}} * 48px);
   padding-bottom: calc({{spacing}} * 10em);
@@ -268,12 +295,28 @@ main {
   text-decoration: none;
 }
 
+/* The menu button: a 44px target around the 24px icon */
 .control-label {
   visibility: hidden;
-  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  margin: -10px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
   cursor: pointer;
-  color: var(--light-text-color);
-  text-decoration: none;
+  color: var(--medium-text-color);
+  font: inherit;
+}
+
+.control-label:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: -4px;
 }
 
 
@@ -307,6 +350,10 @@ main {
   #toggle-left:checked ~ .column-container > .column:nth-child(1) {
     display: flex;
     width: 100%;
+    flex-basis: 100%;
+    min-width: 0;
+    position: relative;
+    overflow: visible;
     justify-content: flex-start;
     padding-top: 0;
     right: 0;
@@ -320,14 +367,30 @@ main {
     }
 #toggle-left:checked ~ .column-container > .column:nth-child(1) .navigation,
 #toggle-left:checked ~ .column-container > .column:nth-child(1) .navigation .sidebar {
-  width: auto;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  margin-left: 0;
   overflow: visible;
   height: auto;
 }
 
+/* Long labels wrap; every row is at least a 44px target */
 #toggle-left:checked ~ .column-container > .column:nth-child(1) .navigation .sidebar a,
 #toggle-left:checked ~ .column-container > .column:nth-child(1) .navigation .sidebar button {
   font-size: 15px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  overflow-wrap: anywhere;
+}
+
+#toggle-left:checked ~ .column-container > .column:nth-child(1) .navigation .sidebar button:before {
+  top: calc(50% - 6px);
+}
+
+#toggle-left:checked ~ .column-container > .column:nth-child(1) .navigation .sidebar li.has-index > button.folder-toggle {
+  height: 44px;
 }
 
   #toggle-left:checked ~ .column-container > .column:nth-child(1) .navigation > a {
@@ -335,7 +398,7 @@ main {
   }
 
   main {
-    padding: 0 calc({{spacing}} * 1em);
+    padding: 0 calc({{spacing}} * 1em) 4rem;
   }
 }
 
@@ -469,8 +532,15 @@ pre code {
 }
 
 .entry video,
-.entry iframe {
+.entry iframe,
+.entry svg {
   max-width: 100%;
+}
+
+/* The zoom plugin moves a zoomed image out of .entry and fixes its width,
+   so keep its height in proportion rather than its height attribute */
+img.zoom-img {
+  height: auto;
 }
 
 .entry a:hover {
@@ -541,6 +611,17 @@ figcaption {
 }
 
 .entry h2, .entry h3 {font-weight: 600;}
+
+/* The heading of the archives, tag, search and error pages: the same size
+   as a post's title */
+main > h1 {
+  font-size: var(--heading-font-size);
+  line-height: var(--heading-line-height);
+  font-weight: 700;
+  margin: 12px 0 8.8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border-color);
+}
 .entry h2 {font-size: calc(var(--heading-font-size) * 0.91);}
 .entry h3 {font-size: calc(var(--heading-font-size) * 0.8);}
 
@@ -603,7 +684,19 @@ table {
   color: var(--text-color);
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  overflow: hidden;
+  /* A block that scrolls sideways, so a wide table doesn't widen the page */
+  display: block;
+  width: max-content;
+  max-width: min(100%, calc(var(--main-width) - 96px));
+  overflow-x: auto;
+}
+
+math[display="block"],
+.katex-display {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 thead {
@@ -663,7 +756,7 @@ summary {
   padding-left: 32px;
 }
 
-summary:focus {
+summary:focus:not(:focus-visible) {
   outline: none;
 }
 
@@ -729,10 +822,12 @@ kbd {
 }
 
 /* Archives grid layout */
+/* Titles wrap in the first column; dates keep to the second */
 .archives-grid {
   display: grid;
-  grid-template-columns: max-content auto;
+  grid-template-columns: minmax(0, 1fr) max-content;
   gap: 0.75rem 2rem;
+  max-width: calc(var(--main-width) - 96px);
   margin-top: 2rem;
   align-items: baseline;
 }
@@ -748,6 +843,7 @@ kbd {
 }
 
 .archive-title {
+  overflow-wrap: anywhere;
   text-decoration: none;
   color: var(--text-color);
 }
@@ -764,12 +860,20 @@ kbd {
 }
 
 @media (max-width: 768px) {
+  /* Each date under its title */
   .archives-grid {
-    gap: 0.5rem 1rem;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
   }
-  
+
   .archive-date {
     font-size: 0.8rem;
+    text-align: left;
+    margin: 0.1rem 0 0.75rem;
+  }
+
+  .archive-title:last-child {
+    margin-bottom: 0.75rem;
   }
 }
 

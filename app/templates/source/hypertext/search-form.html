@@ -6,10 +6,11 @@
         </svg>
         <input 
             placeholder="Search..." 
-            value="{{#query.q}}{{query}}{{/query.q}}" 
+            value="{{search_query}}" 
             name="q" 
             id="search" 
-            type="text"
+            type="search"
+            aria-label="Search"
             class="search-input"
             autocomplete="off"
         />

@@ -4,12 +4,43 @@
 {{> heading.js}}
 {{> pre-copy.js}}
 
+// The phone menu. The checkbox drives the CSS; the button is what readers
+// and keyboards use.
+const menu = {
+  toggle: document.getElementById("toggle-left"),
+  button: document.querySelector(".control-label"),
+
+  isOpen() {
+    return !!this.toggle?.checked;
+  },
+
+  set(open) {
+    if (!this.toggle) return;
+    this.toggle.checked = open;
+    this.button?.setAttribute("aria-expanded", open ? "true" : "false");
+    // navigation-js.js loads the full list of posts the first time
+    if (open) document.dispatchEvent(new Event("hypertext:menu-open"));
+  },
+
+  init() {
+    this.button?.addEventListener("click", () => this.set(!this.isOpen()));
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.isOpen()) {
+        this.set(false);
+        this.button?.focus();
+      }
+    });
+  },
+};
+menu.init();
+
 class PageTransitioner {
   constructor(linkSelector, contentSelector) {
     this.linkSelector = linkSelector;
     this.contentSelector = contentSelector;
     this.pageCache = new Map();
     this.currentXHR = null;
+    this.navigationID = 0;
 
     this.init();
   }
@@ -65,7 +96,7 @@ class PageTransitioner {
         const path = url.pathname.toLowerCase();
         // Feeds and static files should not be loaded into <main>.
         if (
-          /\.(rss|xml|atom|json|css|js|png|jpe?g|gif|webp|svg|pdf|zip|txt)$/i.test(
+          /\.(rss|xml|atom|json|css|js|png|jpe?g|gif|webp|avif|heic|tiff?|bmp|ico|svg|pdf|zip|gz|tgz|tar|rar|7z|dmg|exe|txt|md|csv|tsv|mp3|m4a|wav|flac|aac|ogg|oga|opus|mp4|m4v|mov|webm|avi|mkv|ogv|docx?|xlsx?|pptx?|odt|ods|odp|rtf|epub|pages|numbers|key|psd|ai|eps|woff2?|ttf|otf)$/i.test(
             path
           )
         ) {
@@ -76,6 +107,9 @@ class PageTransitioner {
         return false;
       }
     }
+
+    // Scroll positions are kept in history.state, and restored after a swap
+    if ("scrollRestoration" in history) history.scrollRestoration = "manual";
 
     if (!history.state?.url) {
       history.replaceState(
@@ -122,7 +156,7 @@ class PageTransitioner {
     // Handle browser back/forward
     window.addEventListener("popstate", (e) => {
       if (e.state?.url) {
-        this.navigate(e.state.url, false);
+        this.navigate(e.state.url, false, e.state.scrollY);
       }
     });
   }
@@ -161,30 +195,49 @@ class PageTransitioner {
     else window.scrollTo(0, 0);
   }
 
-  async navigate(url, pushState = true) {
+  // Tells screen readers the new page's title after a swap
+  announce(title) {
+    if (!this.announcer) {
+      this.announcer = document.createElement("div");
+      this.announcer.className = "visually-hidden";
+      this.announcer.setAttribute("aria-live", "polite");
+      document.body.appendChild(this.announcer);
+    }
+    this.announcer.textContent = title;
+  }
+
+  async navigate(url, pushState = true, scrollY) {
     if (this.currentXHR) {
       this.currentXHR.abort();
+      this.currentXHR = null;
     }
 
     const content = document.querySelector(this.contentSelector);
 
     if (!content) return;
 
-    const previousHTML = content.innerHTML;
+    // A newer navigation started after this one if the ID has moved on
+    const id = ++this.navigationID;
+    const current = () => id === this.navigationID;
+
     const { hash, displayUrl, cacheKey, fetchUrl } = this.parsePageUrl(url);
 
-    content.innerHTML = "";
+    // Remember where the reader was on this page, for the back button
+    if (pushState && history.state?.url) {
+      history.replaceState({ ...history.state, scrollY: window.scrollY }, "");
+    }
+
+    // The current page stays until the new one has arrived
     content.classList.add("loading");
     document.documentElement.classList.add("is-loading");
-    
-    // close the mobile nav when a link is clicked
-    const toggle = document.querySelector("#toggle-left");
-    if (toggle) toggle.checked = false;
 
-    const fallback = () => {
-      content.innerHTML = previousHTML;
-      window.location.assign(displayUrl);
-    };
+    // close the mobile nav when a link is clicked
+    menu.set(false);
+
+    // A normal page load, for anything the swap can't handle
+    const fallback = () => window.location.assign(displayUrl);
+
+    let controller = null;
 
     try {
       let html;
@@ -192,17 +245,19 @@ class PageTransitioner {
       if (this.pageCache.has(cacheKey)) {
         html = this.pageCache.get(cacheKey);
       } else {
-        const controller = new AbortController();
+        controller = new AbortController();
         this.currentXHR = controller;
 
         const response = await fetch(fetchUrl, {
           signal: controller.signal,
         });
+        if (!current()) return;
         if (!response.ok) {
           fallback();
           return;
         }
         html = await response.text();
+        if (!current()) return;
       }
 
       const parser = new DOMParser();
@@ -238,17 +293,25 @@ class PageTransitioner {
         console.warn("Sidebar update failed:", err);
       }
 
-      this.scrollToHash(hash);
+      if (typeof scrollY === "number") window.scrollTo(0, scrollY);
+      else this.scrollToHash(hash);
+
+      // Keyboard and screen reader readers carry on from the new page
+      if (!hash) content.focus({ preventScroll: true });
+      this.announce(document.title);
+
       renderHeadingAnchors();
       preCopy();
     } catch (err) {
       if (err.name === "AbortError") return;
       console.error("Navigation failed:", err);
-      fallback();
+      if (current()) fallback();
     } finally {
-      content.classList.remove("loading");
-      document.documentElement.classList.remove("is-loading");
-      this.currentXHR = null;
+      if (current()) {
+        content.classList.remove("loading");
+        document.documentElement.classList.remove("is-loading");
+      }
+      if (this.currentXHR === controller) this.currentXHR = null;
     }
   }
 }

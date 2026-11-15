@@ -3,9 +3,9 @@
 {{> head}}
 <body>
     {{> navigation}}
-    <main>
+    <main id="main" tabindex="-1">
       <h1>{{error.title}}</h1>
-      <p>{{error.message}}</p>
+      {{#error.message}}<p>{{error.message}}</p>{{/error.message}}
     </main>
     {{> footer}}
 </body>

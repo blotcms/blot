@@ -2,8 +2,9 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>document.documentElement.classList.add("js")</script>
     <meta name="robots" content="index, follow">
-    <meta property="og:site_name" content="{{title}}">
+    <meta property="og:site_name" content="{{title}}{{^title}}{{handle}}{{/title}}">
 
     <title>{{> title}}</title>
     {{#entry}}
@@ -13,7 +14,7 @@
     {{^entry}}<meta name="description" content="{{> description}}">{{/entry}}
 
     <meta name="blot-cache-id" content="{{cacheID}}">
-    <link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}" href="{{{siteURL}}}{{{feedURL}}}">
+    <link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}{{^title}}{{handle}}{{/title}}" href="{{{siteURL}}}{{{feedURL}}}">
     {{#favicon}}
     <link rel="icon" href="{{{ico}}}" sizes="any">
     <link rel="icon" type="image/png" sizes="32x32" href="{{{png32}}}">
@@ -69,10 +70,8 @@
 
     {{^entry}}
     <meta property="og:type" content="website">
-    {{#url}}
-    <link rel="canonical" href="{{{url}}}">
-    <meta property="og:url" content="{{{url}}}">
-    {{/url}}
+    {{! The canonical link, or noindex, from package.json }}
+    {{> page_meta}}
     <meta property="og:title" content="{{> title}}">
     <meta property="og:description" content="{{> description}}">
     {{#profile_image.thumbnails.large}}
