@@ -598,14 +598,6 @@ async function setMany(blogID, items) {
 
   var multi = client.multi();
 
-  // A directory new in this call starts with empty sets. One can be left
-  // behind by code from before the sets existed, which removed a directory
-  // without deleting them, while it ran beside this code during a deploy.
-  for (const [path, record] of writes) {
-    if (record.type === "dir" && !existing.get(path))
-      multi.del([key.names(blogID, path), ...sortKeys(blogID, path)]);
-  }
-
   for (const [dir, children] of named)
     addNames(multi, key.names(blogID, dir), children);
 

@@ -76,7 +76,7 @@ A member is a group, a sort key, NUL and the name (`key.sortMember`), so byte or
 
 `ZRANGEBYLEX` compares bytes, so code compares members with `key.compareSorted` (`Buffer.compare`), never `<`. The `v1` in the key is the member format: changing it means a new key and a backfill.
 
-A writer keeps a set complete as the names set is kept: a directory with a hash but no set gets one built whole on its first new child, and a directory new in a write starts with empty sets. Code from before the sets, running beside the new code during a deploy or after a rollback, can still change a directory without them, so a set which exists is not trusted until checked: `checkSorts(blogID, { apply })` compares every directory's set with its hash member by member, and with `apply` rebuilds each one which is missing or differs, under another key (`sort:build`) renamed into place, so a run stopped part way never leaves a partial set. `scripts/storage/add-file-index-sorts.js` runs it for every blog under its sync lock, and estimates the sets' memory.
+A writer keeps a set complete as the names set is kept: a directory with a hash but no set gets one built whole on its first new child. Code from before the sets, running beside the new code during a deploy or after a rollback, can still change a directory without them, so a set which exists is not trusted until checked: `checkSorts(blogID, { apply })` compares every directory's set with its hash member by member, and with `apply` rebuilds each one which is missing or differs, under another key (`sort:build`) renamed into place, so a run stopped part way never leaves a partial set. `scripts/storage/add-file-index-sorts.js` runs it for every blog under its sync lock, and estimates the sets' memory.
 
 ---
 
