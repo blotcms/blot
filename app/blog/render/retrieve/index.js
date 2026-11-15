@@ -29,6 +29,9 @@ const dictionary = {
   encode_xml: encode_xml,
   feed_url: require("./feed_url"),
   folder: require("./folder"),
+  // The same retriever under a second name, while customer templates move
+  // off {{#folder}} before it is replaced (plan issue #2693)
+  folder_legacy: require("./folder"),
   is: require("./is"),
   is_active: is_active,
   latest_entry: latest_entry,
