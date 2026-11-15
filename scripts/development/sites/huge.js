@@ -193,7 +193,8 @@ async function build(dir) {
     let tags = [];
     const t = rand();
     if (heavy.has(i)) {
-      const n = 30 + Math.floor(rand() * 21);
+      // No more than the vocabulary holds, which shrinks if the demo folders do
+      const n = Math.min(30 + Math.floor(rand() * 21), new Set(vocab).size);
       while (tags.length < n) {
         const tag = pick(rand, vocab);
         if (!tags.includes(tag)) tags.push(tag);

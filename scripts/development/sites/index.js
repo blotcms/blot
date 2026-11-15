@@ -210,8 +210,12 @@ async function down(only) {
     const blog = await Blog.get({ handle });
 
     if (blog && blog.owner !== user.uid) {
+      // Its source directory is that blog's too, so leave both alone
       console.warn("Leaving", handle + ":", "owned by another account");
-    } else if (blog) {
+      continue;
+    }
+
+    if (blog) {
       await Blog.remove(blog.id);
       console.log("Removed blog", handle);
     }
