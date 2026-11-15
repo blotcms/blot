@@ -1,6 +1,9 @@
 const s3 = require("storage/s3");
+const client = require("models/client");
 const Entries = require("models/entries");
+const Entry = require("models/entry");
 const Template = require("models/template");
+const templateKey = require("models/template/key");
 const Blog = require("models/blog");
 
 // The sweep of generated files nothing uses any more (#2688, section 7):
@@ -20,14 +23,17 @@ const Blog = require("models/blog");
 // remote images and template images.
 //
 // Template uploads (_template_assets) and avatars (_avatars) exist nowhere
-// else, so they are never candidates.
+// else, so they are never candidates. Nor is _assets: a Google Doc imported
+// from Drive keeps its images there, linked from the source document in the
+// folder rather than from the entry, whose HTML has their _image_cache copies
+// instead (clients/google-drive/util/download.js, build/converters/gdoc).
+//
+// Every read here rejects on a failure rather than skipping what it couldn't
+// read, so a blog whose references can't all be read fails its report
+// instead of counting live files as unreferenced.
 
-const SCOPES = [
-  "_image_cache",
-  "_thumbnails",
-  "_assets",
-  "_bookmark_screenshots",
-];
+const SCOPES = ["_image_cache", "_thumbnails", "_bookmark_screenshots"];
+const ENTRY_BATCH = 100;
 const REFERENCE = new RegExp(
   "/(" + SCOPES.join("|") + ")/([^/\"'\\s?#)\\\\]+)",
   "g"
@@ -49,23 +55,46 @@ function referencesIn(value, into) {
 
 async function inUse(blogID) {
   const used = new Set();
+  const ids = await Entries.getAllIDs(blogID);
 
-  await Entries.each(blogID, async function (entry) {
-    if (entry && !entry.deleted) referencesIn(entry, used);
-  });
+  for (let i = 0; i < ids.length; i += ENTRY_BATCH) {
+    for (const entry of await Entry.get(blogID, ids.slice(i, i + ENTRY_BATCH)))
+      if (entry && !entry.deleted) referencesIn(entry, used);
+  }
 
   const blog = await Blog.get({ id: blogID });
+
+  if (!blog) throw new Error("sweepGenerated: no blog " + blogID);
+
   referencesIn(blog, used);
 
-  for (const template of await Template.getTemplateList(blogID)) {
-    if (!template || template.owner !== blogID) continue;
+  for (const id of await client.sMembers(templateKey.blogTemplates(blogID))) {
+    let metadata;
 
     try {
-      const { views, metadata } = await Template.getAllViews(template.id);
-      referencesIn(views, used);
-      referencesIn(metadata, used);
+      metadata = await Template.getMetadata(id);
     } catch (err) {
-      if (err.code !== "ENOENT") throw err;
+      // An ID in the set with no template behind it, not a failed read
+      if (err.code === "ENOENT") continue;
+      throw err;
+    }
+
+    if (metadata.owner !== blogID) continue;
+
+    referencesIn(metadata, used);
+
+    for (const name of await client.sMembers(templateKey.allViews(id))) {
+      let view;
+
+      try {
+        view = await Template.getView(id, name);
+      } catch (err) {
+        // A name in the set with no view behind it, not a failed read
+        if (/^No view: /.test(err.message)) continue;
+        throw err;
+      }
+
+      referencesIn(view, used);
     }
   }
 

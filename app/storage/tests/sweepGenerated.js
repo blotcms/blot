@@ -3,6 +3,7 @@ describe("storage/sweepGenerated", function () {
 
   const s3 = require("storage/s3");
   const Entries = require("models/entries");
+  const Entry = require("models/entry");
   const sweep = require("storage/sweepGenerated");
 
   it("finds generated directories mentioned anywhere in a value", function () {
@@ -28,10 +29,11 @@ describe("storage/sweepGenerated", function () {
     const old = new Date(Date.now() - 100 * 24 * 60 * 60 * 1000);
     const recent = new Date();
 
-    spyOn(Entries, "each").and.callFake(async (blogID, fn) => {
-      await fn({ html: `<img src="/_image_cache/used/a.jpg">` });
-      await fn({ deleted: true, html: `<img src="/_image_cache/gone/a.jpg">` });
-    });
+    spyOn(Entries, "getAllIDs").and.resolveTo(["/used.txt", "/gone.txt"]);
+    spyOn(Entry, "get").and.resolveTo([
+      { html: `<img src="/_image_cache/used/a.jpg">` },
+      { deleted: true, html: `<img src="/_image_cache/gone/a.jpg">` },
+    ]);
 
     const objects = {
       [id + "/_image_cache/"]: [
@@ -41,9 +43,11 @@ describe("storage/sweepGenerated", function () {
       ],
     };
 
-    spyOn(s3, "listEntries").and.callFake(async function* (prefix) {
-      yield* objects[prefix] || [];
-    });
+    spyOn(s3, "listEntries").and.callFake((prefix) =>
+      (async function* () {
+        yield* objects[prefix] || [];
+      })()
+    );
 
     const { totals, unreferenced } = await sweep.report(id, {
       graceDays: 60,
@@ -60,5 +64,15 @@ describe("storage/sweepGenerated", function () {
       "_image_cache/gone",
       "_image_cache/new",
     ]);
+  });
+
+  it("fails a blog's report when a read fails, rather than undercounting", async function () {
+    spyOn(Entries, "getAllIDs").and.resolveTo(["/a.txt"]);
+    spyOn(Entry, "get").and.rejectWith(new Error("Redis went away"));
+
+    const err = await sweep.report(this.blog.id).catch((err) => err);
+
+    expect(err instanceof Error).toBe(true);
+    expect(err.message).toBe("Redis went away");
   });
 });
