@@ -86,7 +86,12 @@ function parseViewPatterns(viewPatternStrings) {
         const rank = rankTokens(tokens);
         entries.push({ viewName, pattern, kind: rank[0], rank });
       } catch (err) {
-        // A pattern that does not parse never matches
+        // A URL path-to-regexp can't parse, such as /about(me), is a literal
+        // URL: it matches only itself, as an exact URL
+        if (typeof pattern !== "string") continue;
+        const literal = normalizePathname(pattern);
+        const rank = rankTokens([{ type: "text", value: literal }]);
+        entries.push({ viewName, pattern, kind: EXACT, rank, literal });
       }
     }
   }
@@ -125,7 +130,10 @@ function matchViewPatterns(entries, pathname, kind) {
     if (kind !== undefined && entry.kind !== kind) continue;
 
     try {
-      const matchResult = safeMatch(entry.pattern, normalizedPathname);
+      const matchResult =
+        entry.literal !== undefined
+          ? entry.literal === normalizedPathname && { params: {} }
+          : safeMatch(entry.pattern, normalizedPathname);
 
       if (matchResult) {
         return {

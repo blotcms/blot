@@ -253,6 +253,18 @@ describe("template", function () {
       );
     });
 
+    it("routes a literal URL that isn't a valid pattern as an exact URL", async function () {
+      await this.setView({ name: "about.html", url: "/about(me)" });
+      await this.setView({ name: "entry.html", url: ["/:slug"] });
+
+      const about = await this.getViewByURL("/about(me)");
+      expect(about.viewName).toEqual("about.html");
+
+      expect((await this.getViewByURL("/hello")).viewName).toEqual(
+        "entry.html"
+      );
+    });
+
     it("routes wildcards last", async function () {
       await this.setView({ name: "a.html", url: ["/{*path}"] });
       await this.setView({ name: "b.html", url: ["/:slug"] });
