@@ -1,4 +1,4 @@
-const { match } = require("path-to-regexp");
+const { match, parse } = require("path-to-regexp");
 
 /**
  * Normalize a pathname by adding a leading slash, removing trailing slashes, and converting to lowercase.
@@ -13,19 +13,90 @@ function normalizePathname(pathname) {
   return `/${pathname.replace(/^\/+/, "").replace(/\/+$/, "").toLowerCase()}`;
 }
 
+const EXACT = 0;
+const PARAMETERS = 1;
+const WILDCARDS = 2;
+
 /**
- * Parse view patterns from Redis hash object.
+ * Rank a parsed pattern, most explicit first (lower sorts first).
+ *
+ * @param {Array} tokens - The tokens path-to-regexp parsed the pattern into.
+ * @returns {Array} - [class, -literalSegments, -literalCharacters], where class
+ *   is EXACT, PARAMETERS or WILDCARDS.
+ */
+function rankTokens(tokens) {
+  let hasParam = false;
+  let hasWildcard = false;
+  let literalChars = 0;
+  let text = "";
+
+  (function walk(list) {
+    for (const token of list) {
+      if (token.type === "text") {
+        literalChars += token.value.length;
+        text += token.value;
+      } else if (token.type === "param") {
+        hasParam = true;
+        text += "\u0000";
+      } else if (token.type === "wildcard") {
+        hasWildcard = true;
+        text += "\u0000";
+      } else if (token.type === "group") {
+        walk(token.tokens);
+      }
+    }
+  })(tokens);
+
+  // A literal segment is a /-separated piece made only of text
+  const literalSegments = text
+    .split("/")
+    .filter((segment) => segment && !segment.includes("\u0000")).length;
+
+  const kind = hasWildcard ? WILDCARDS : hasParam ? PARAMETERS : EXACT;
+
+  return [kind, -literalSegments, -literalChars];
+}
+
+function compareEntries(a, b) {
+  return (
+    a.rank[0] - b.rank[0] ||
+    a.rank[1] - b.rank[1] ||
+    a.rank[2] - b.rank[2] ||
+    a.viewName.localeCompare(b.viewName)
+  );
+}
+
+/**
+ * Parse view patterns from the Redis hash into a list ranked most explicit
+ * first. Each (view, pattern) pair is ranked on its own: exact URLs, then
+ * patterns with parameters, then wildcards; within a class, more literal path
+ * segments, then more literal characters, then the view name.
  *
  * @param {object} viewPatternStrings - The Redis hash object with view patterns.
- * @returns {Array} - An array of [viewName, urlPatterns].
+ * @returns {Array} - Entries {viewName, pattern, kind, rank}, best first.
  */
 function parseViewPatterns(viewPatternStrings) {
-  return Object.entries(viewPatternStrings)
-    .map(([viewName, patterns]) => [
-      viewName,
-      JSON.parse(patterns), // Patterns are stored as JSON strings
-    ])
-    .sort(([viewNameA], [viewNameB]) => viewNameA.localeCompare(viewNameB));
+  const entries = [];
+
+  for (const [viewName, patterns] of Object.entries(viewPatternStrings || {})) {
+    // Patterns are stored as JSON strings
+    for (const pattern of JSON.parse(patterns)) {
+      try {
+        const { tokens } = parse(normalizePathname(pattern));
+        const rank = rankTokens(tokens);
+        entries.push({ viewName, pattern, kind: rank[0], rank });
+      } catch (err) {
+        // A URL path-to-regexp can't parse, such as /about(me), is a literal
+        // URL: it matches only itself, as an exact URL
+        if (typeof pattern !== "string") continue;
+        const literal = normalizePathname(pattern);
+        const rank = rankTokens([{ type: "text", value: literal }]);
+        entries.push({ viewName, pattern, kind: EXACT, rank, literal });
+      }
+    }
+  }
+
+  return entries.sort(compareEntries);
 }
 
 /**
@@ -45,39 +116,76 @@ function safeMatch(rawPattern, normalizedPathname) {
 }
 
 /**
- * Find the first view whose URL patterns match a pathname.
+ * Find the best entry of one kind whose pattern matches a pathname.
  *
- * @param {Array} views - An array of [viewName, urlPatterns], as returned by parseViewPatterns.
+ * @param {Array} entries - As returned by parseViewPatterns.
  * @param {string} pathname - The pathname to match, without a query string.
- * @returns {object|null} - {viewName, pattern, params} or null if nothing matched.
+ * @param {number} kind - EXACT, PARAMETERS or WILDCARDS; omit to match any.
+ * @returns {object|null} - {viewName, pattern, params} or null.
  */
-function matchViewPatterns(views, pathname) {
+function matchViewPatterns(entries, pathname, kind) {
   const normalizedPathname = normalizePathname(pathname);
 
-  for (const [viewName, urlPatterns] of views) {
-    for (const rawPattern of urlPatterns) {
-      try {
-        const matchResult = safeMatch(rawPattern, normalizedPathname);
+  for (const entry of entries) {
+    if (kind !== undefined && entry.kind !== kind) continue;
 
-        if (matchResult) {
-          return {
-            viewName,
-            pattern: rawPattern,
-            params: matchResult.params,
-          };
-        }
-      } catch (err) {
-        // Continue to the next pattern without failing completely
+    try {
+      const matchResult =
+        entry.literal !== undefined
+          ? entry.literal === normalizedPathname && { params: {} }
+          : safeMatch(entry.pattern, normalizedPathname);
+
+      if (matchResult) {
+        return {
+          viewName: entry.viewName,
+          pattern: entry.pattern,
+          params: matchResult.params,
+        };
       }
+    } catch (err) {
+      // Continue to the next pattern without failing completely
     }
   }
 
   return null;
 }
 
+/**
+ * Resolve a pathname to a view: exact patterns, then the exact-URL key if the
+ * view it names has no patterns, then parameter patterns, then wildcards.
+ *
+ * @param {Array} entries - As returned by parseViewPatterns.
+ * @param {object} viewPatternStrings - The Redis hash the entries came from.
+ * @param {string} pathname - The pathname to match, without a query string.
+ * @param {?string} exactKeyView - The view named by the exact-URL key, if any.
+ * @returns {object|null} - {viewName, pattern, params}; pattern is null for an
+ *   exact-URL key match.
+ */
+function resolveView(entries, viewPatternStrings, pathname, exactKeyView) {
+  const exact = matchViewPatterns(entries, pathname, EXACT);
+  if (exact) return exact;
+
+  // Only views without stored patterns (legacy) are routed by their key
+  if (
+    exactKeyView &&
+    !Object.prototype.hasOwnProperty.call(
+      viewPatternStrings || {},
+      exactKeyView
+    )
+  ) {
+    return { viewName: exactKeyView, pattern: null, params: null };
+  }
+
+  return (
+    matchViewPatterns(entries, pathname, PARAMETERS) ||
+    matchViewPatterns(entries, pathname, WILDCARDS)
+  );
+}
+
 module.exports = {
   matchViewPatterns,
   normalizePathname,
   parseViewPatterns,
+  resolveView,
   safeMatch,
 };

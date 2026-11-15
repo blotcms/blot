@@ -43,6 +43,27 @@ describe("routing", function () {
     expect(body4).toContain("Success ");
   });
 
+  it("routes an exact view URL before a parameter pattern of a view that sorts earlier", async function () {
+    await this.template(
+      {
+        "entry.html": "ENTRY VIEW {{request.params.slug}}",
+        "style.css": "body { color: red }",
+      },
+      {
+        views: {
+          "entry.html": { url: ["/:slug"] },
+          "style.css": { url: ["/style.css"] },
+        },
+      }
+    );
+
+    const css = await this.get("/style.css");
+    expect(await css.text()).toContain("color: red");
+
+    const other = await this.get("/hello");
+    expect(await other.text()).toContain("ENTRY VIEW hello");
+  });
+
   it("when there are duplicate URLs, router will serve an entry, then a template view, then a file in that order", async function () {
     // Prepare the template, entry, and file
     await this.write({

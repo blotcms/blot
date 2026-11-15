@@ -3,14 +3,14 @@ const client = require("models/client");
 const debug = require("debug")("blot:template:getViewByURLPattern");
 const { parse } = require("url");
 const urlNormalizer = require("helper/urlNormalizer");
-const { matchViewPatterns, parseViewPatterns } = require("./viewURLPatterns");
+const { parseViewPatterns, resolveView } = require("./viewURLPatterns");
 
 /**
- * Get a view by matching its URL pattern.
+ * Get a view by matching its URL, most explicit first (see viewURLPatterns).
  *
  * @param {string} templateID - The ID of the template.
  * @param {string} url - The URL to match.
- * @returns {Promise<{viewName: ?string, params: ?object, query: ?object}>}
+ * @returns {Promise<{viewName: ?string, pattern: ?string, params: ?object, query: ?object}>}
  */
 module.exports = async function getViewByURLPattern(templateID, url) {
   debug("Looking up views for templateID:", templateID, "URL:", url);
@@ -32,42 +32,41 @@ module.exports = async function getViewByURLPattern(templateID, url) {
 
     debug("Normalized URL:", pathname);
 
-    // Fetch all views and their patterns for the given template ID
-    const viewPatternStrings = await client.hGetAll(
-      key.urlPatterns(templateID)
+    // The exact-URL key is only used for views without patterns, so it is
+    // fetched alongside the patterns, in one round trip
+    const exactURL = urlNormalizer(url);
+    const [viewPatternStrings, exactKeyView] = await Promise.all([
+      client.hGetAll(key.urlPatterns(templateID)),
+      exactURL ? client.get(key.url(templateID, exactURL)) : null,
+    ]);
+
+    const entries = parseViewPatterns(viewPatternStrings);
+    const matched = resolveView(
+      entries,
+      viewPatternStrings,
+      pathname,
+      exactKeyView
     );
 
-    if (viewPatternStrings) {
-      const views = parseViewPatterns(viewPatternStrings);
-      const matched = matchViewPatterns(views, pathname);
-
-      if (matched) {
-        debug(
-          "Matched pattern:",
-          matched.pattern,
-          "with URL:",
-          pathname,
-          "in view:",
-          matched.viewName
-        );
-        return { viewName: matched.viewName, params: matched.params, query };
-      }
-
-      debug("No matching URL pattern found for URL:", url);
-    } else {
-      debug("No URL patterns found for templateID:", templateID);
-    }
-
-    // Fall back to matching the URL directly
-    const viewName = await client.get(key.url(templateID, urlNormalizer(url)));
-
-    if (viewName) {
-      debug("Found view by URL:", viewName);
-      return { viewName, params: null, query };
+    if (matched) {
+      debug(
+        "Matched pattern:",
+        matched.pattern,
+        "with URL:",
+        pathname,
+        "in view:",
+        matched.viewName
+      );
+      return {
+        viewName: matched.viewName,
+        pattern: matched.pattern,
+        params: matched.params,
+        query,
+      };
     }
 
     debug("No view found for URL:", url);
-    return { viewName: null, params: null, query: null };
+    return { viewName: null, pattern: null, params: null, query: null };
   } catch (error) {
     debug("Error while processing URL:", error);
     throw error;
