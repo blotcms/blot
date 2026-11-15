@@ -25,6 +25,7 @@ No key per file. There is a hash, a lookup and a names set per directory, and tw
 | `blog:{blogID}:file:dir:{dirPath}` | hash | child name → packed record `type\|size\|modified\|sha1` |
 | `blog:{blogID}:file:lower:{dirPath}` | hash | lowercased child name → the child names that fold to it, joined by `/` and sorted |
 | `blog:{blogID}:file:names:{dirPath}` | sorted set | every child name (as `key.member` spells it), all at score 0, so a page of the directory in name order is one `ZRANGEBYLEX` |
+| `blog:{blogID}:file:sort:v1:{order}:{dirPath}` | sorted set | the directory's children in one of the orders in `sorts.js`, all at score 0 (see Natural order below). Today the one order is `all`: every child, in natural name order |
 | `blog:{blogID}:file:paths` | sorted set | every path below the root, all at score 0, for `ZRANGEBYLEX` subtree queries |
 | `blog:{blogID}:file:totals` | hash | `bytes`, `files`: the folder's totals, for the storage quota |
 
@@ -65,6 +66,20 @@ Names sets came after the rest of the index, so a directory may lack one. `list`
 
 Memory: a names set holds each name once more, beside its field in the hash and its full path in the path set. A small directory's set is a ziplist, a few bytes per name over the names themselves, plus the key; above `zset-max-ziplist-entries` (128 by default, Redis 6.2) or with a name over 64 bytes it is a skiplist, roughly 90 to 100 bytes per name on top of the name. Against an index of about 250 bytes per path, that is roughly a tenth to a fifth more for most folders.
 
+### Natural order
+
+Beside the names set, each directory has a sorted set per order in `sorts.js`, written by the same writers in the same `exec`. Nothing reads them yet: listings move to them once every directory has one (#2693, step 7).
+
+A member is a group, a sort key, NUL and the name (`key.sortMember`), so byte order of members is the order a file browser shows:
+
+- The group is `\x01` for a name shown somewhere and `\x02` for one hidden everywhere (a dotfile, a `.preview.html`), so the visible children are one range of ranks.
+- The sort key is the name in NFD, without the combining diacritics U+0300 to U+036F and without control characters, lowercased, with each run of digits written as `\x01`, its length without leading zeros (as the code point length + 1), the digits without leading zeros, and `0x1000` minus the number of leading zeros (one code point). So `IMG_2` sorts before `IMG_10`, `café` beside `cafe`, digits before letters and punctuation, and more leading zeros first, as the dashboard's `helper/alphanum` orders names. Leading spaces stay, so the names that start with `_` are one run.
+- The name breaks ties, so names which differ only in case keep code-unit order, uppercase first, and `key.nameOfSorted` reads it back. A path holding NUL is refused.
+
+`ZRANGEBYLEX` compares bytes, so code compares members with `key.compareSorted` (`Buffer.compare`), never `<`. The `v1` in the key is the member format: changing it means a new key and a backfill.
+
+A writer keeps a set complete as the names set is kept: a directory with a hash but no set gets one built whole on its first new child, and a directory new in a write starts with empty sets. Code from before the sets, running beside the new code during a deploy or after a rollback, can still change a directory without them, so a set which exists is not trusted until checked: `checkSorts(blogID, { apply })` compares every directory's set with its hash member by member, and with `apply` rebuilds each one which is missing or differs, under another key (`sort:build`) renamed into place, so a run stopped part way never leaves a partial set. `scripts/storage/add-file-index-sorts.js` runs it for every blog under its sync lock, and estimates the sets' memory.
+
 ---
 
 ## Flags
@@ -97,6 +112,7 @@ All return promises.
 | `flagged(blogID, dir)` | Async iterator of `{ path, ...record }` for every flagged file below dir. Reads each directory's hash once, so it is for rebuilds and scripts |
 | `remove(blogID, path)` | Forget a file, or a directory and its whole subtree. Resolves to the removed record, or null |
 | `removeAll(blogID)` | Forget the whole folder |
+| `checkSorts(blogID, { apply, order })` | Async iterator of `{ dir, order, state, expected, card, bytes, longest }` per directory and order: `state` is `ok`, `missing` or `mismatched`. With `apply`, rebuilds each set which isn't ok; must run under the sync lock then |
 | `addMissingNames(blogID, { apply })` | Build the names set of every directory which lacks one (see above). Resolves to `{ dirs, missing, names }`; writes only with `apply`, and must run under the sync lock |
 | `rebuild(blogID, records)` | Replace the index with records from a full listing (an iterable or async iterable). Resolves to `{ files, dirs, bytes, skipped }`. A record which conflicts with one before it (below a file, or a file and a directory at one path, which S3 can hold and a file system cannot) is skipped and listed in `skipped` as `{ path, type, code }`. Flags of unchanged files are carried over |
 
@@ -109,7 +125,8 @@ Removing a directory goes through its subtree deepest first, a page at a time, s
 | File | Purpose |
 |------|---------|
 | `index.js` | The functions above |
-| `key.js` | Key names, the path normalisation, and how a name is spelled in a names set |
+| `key.js` | Key names, the path normalisation, and how a name is spelled in a names set and a sorted set |
+| `sorts.js` | The orders a directory's children are indexed in |
 | `record.js` | Packs and parses records |
 | `flags.js` | The dictionary of flag codes, and how flags are capped and replaced |
 | `tests/` | Specs, against real Redis |

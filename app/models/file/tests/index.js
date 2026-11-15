@@ -172,9 +172,9 @@ describe("models/file", function () {
         keys.push(...(Array.isArray(key) ? key : [key]));
       }
 
-      // A hash, a lowercased lookup and a names set each for "/" and "/d",
-      // the path set and the totals
-      expect(keys.length).toEqual(8);
+      // A hash, a lowercased lookup, a names set and a natural-order sorted
+      // set each for "/" and "/d", the path set and the totals
+      expect(keys.length).toEqual(10);
     });
   });
 
