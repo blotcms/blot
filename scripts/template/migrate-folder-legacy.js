@@ -410,7 +410,27 @@ async function planFolderFiles(blog, template, views, plan) {
   for (const name of Object.keys((pkg && pkg.views) || {})) {
     const viewPackage = pkg.views[name];
 
-    if (!viewPackage || typeof viewPackage.partials !== "object") continue;
+    if (!viewPackage || typeof viewPackage !== "object") continue;
+
+    // An explicit dependency would bring `folder` back on the next sync
+    const retrieve = viewPackage.retrieve;
+    if (
+      retrieve &&
+      typeof retrieve === "object" &&
+      retrieve[FROM] !== undefined
+    ) {
+      if (retrieve[TO] === undefined) retrieve[TO] = retrieve[FROM];
+      delete retrieve[FROM];
+      changes.push({
+        view: name,
+        line: 0,
+        before: "retrieve." + FROM,
+        after: "retrieve." + TO,
+      });
+    }
+
+    if (typeof viewPackage.partials !== "object" || !viewPackage.partials)
+      continue;
 
     const rewritten = rewritePartials(viewPackage.partials);
     if (!rewritten.changes.length) continue;
@@ -430,49 +450,26 @@ async function planFolderFiles(blog, template, views, plan) {
     };
 }
 
-// Saves a view with rewritten content through the template model. The old
-// view is dropped first and saved again with all its fields, since setView
-// keeps a stored `folder` retrieve; if saving fails, the old view is restored.
+// Saves a view with rewritten content through the template model, in place:
+// nothing is deleted, so stopping part way leaves every view whole. setView
+// keeps a stored retrieve local the parser can't see, so `folder: false`
+// asks it to drop the stored `folder` (util/applyUserRetrieveOptions).
 async function replaceView(templateID, item) {
   const { Template } = models();
   const old = item.view;
+  const updates = {
+    name: old.name,
+    content: item.content,
+    partials: item.partials,
+    locals: old.locals || {},
+    retrieve: Object.assign({}, old.retrieve, { [FROM]: false }),
+  };
 
-  function fields(view, content, partials, retrieve) {
-    const updates = {
-      name: view.name,
-      content,
-      partials,
-      locals: view.locals || {},
-    };
+  if (Array.isArray(old.urlPatterns) && old.urlPatterns.length)
+    updates.url = old.urlPatterns;
+  else if (old.url) updates.url = old.url;
 
-    if (Array.isArray(view.urlPatterns) && view.urlPatterns.length)
-      updates.url = view.urlPatterns;
-    else if (view.url) updates.url = view.url;
-
-    if (retrieve && Object.keys(retrieve).length) updates.retrieve = retrieve;
-
-    return updates;
-  }
-
-  // What else the stored view retrieves (other locals, includeDraft, filters)
-  // carries over, without `folder`
-  const keep = Object.assign({}, old.retrieve);
-  delete keep[FROM];
-
-  await Template.dropView(templateID, old.name);
-
-  try {
-    await Template.setView(
-      templateID,
-      fields(old, item.content, item.partials, keep)
-    );
-  } catch (err) {
-    await Template.setView(
-      templateID,
-      fields(old, old.content || "", old.partials || {}, old.retrieve)
-    );
-    throw err;
-  }
+  await Template.setView(templateID, updates);
 }
 
 // Reads a saved view back: it must retrieve no `folder`, and `folder_legacy`
@@ -536,6 +533,7 @@ function printPlan(plan, apply) {
 // Plans, and with apply writes, one template. Resolves with
 // { id, installed, local, changed, failures }.
 async function migrateTemplate(blog, template, { apply = false } = {}) {
+  const { withFolderLock } = models();
   const installed = !!blog && blog.template === template.id;
   const local = !!template.localEditing;
   const result = {
@@ -546,6 +544,26 @@ async function migrateTemplate(blog, template, { apply = false } = {}) {
     failures: [],
   };
 
+  // A locally edited template is planned and written under its folder lock,
+  // so a dashboard save or sync waiting on the lock can't land between the
+  // reads and the writes and be overwritten by them
+  if (apply && local) {
+    try {
+      await withFolderLock(() => planAndWrite(blog, template, result, apply))(
+        blog.id,
+        template.id
+      );
+    } catch (err) {
+      result.failures.push(err.message);
+    }
+  } else {
+    await planAndWrite(blog, template, result, apply);
+  }
+
+  return result;
+}
+
+async function planAndWrite(blog, template, result, apply) {
   const plan = await planTemplate(blog, template);
   result.failures.push(...plan.problems);
 
@@ -566,37 +584,28 @@ async function migrateTemplate(blog, template, { apply = false } = {}) {
     return result;
   }
 
-  const { withFolderLock, blogFolder } = models();
+  const { blogFolder } = models();
 
-  async function write() {
-    // The folder first, then Redis, under one lock, so a sync can't rebuild
-    // the template from old files in between
-    for (const file of [...plan.files, plan.packageFile].filter(Boolean)) {
-      try {
-        await blogFolder.write(blog, file.path, file.content);
-        console.log("    wrote " + file.path);
-      } catch (err) {
-        result.failures.push(file.path + ": write failed: " + err.message);
-      }
-    }
-
-    for (const item of plan.views) {
-      try {
-        await replaceView(template.id, item);
-        await verifyView(template.id, item);
-        result.changed++;
-        console.log("    saved " + item.view.name);
-      } catch (err) {
-        result.failures.push(item.view.name + ": " + err.message);
-      }
+  // The folder first, then Redis (under the lock for a locally edited
+  // template), so a sync can't rebuild the template from old files between
+  for (const file of [...plan.files, plan.packageFile].filter(Boolean)) {
+    try {
+      await blogFolder.write(blog, file.path, file.content);
+      console.log("    wrote " + file.path);
+    } catch (err) {
+      result.failures.push(file.path + ": write failed: " + err.message);
     }
   }
 
-  try {
-    if (local) await withFolderLock(write)(blog.id, template.id);
-    else await write();
-  } catch (err) {
-    result.failures.push(err.message);
+  for (const item of plan.views) {
+    try {
+      await replaceView(template.id, item);
+      await verifyView(template.id, item);
+      result.changed++;
+      console.log("    saved " + item.view.name);
+    } catch (err) {
+      result.failures.push(item.view.name + ": " + err.message);
+    }
   }
 
   return result;

@@ -54,6 +54,20 @@ module.exports = function applyUserRetrieveOptions(
     });
   });
 
+  // An explicit false drops a request the parser can't see in the content,
+  // such as a stored one that no longer applies. It can't drop one the
+  // content still makes.
+  if (requestedRetrieve) {
+    Object.keys(requestedRetrieve).forEach(function (key) {
+      if (
+        requestedRetrieve[key] === false &&
+        (!parsedRetrieve || parsedRetrieve[key] === undefined)
+      ) {
+        delete result[key];
+      }
+    });
+  }
+
   USER_RETRIEVE_KEYS.forEach(function (key) {
     var value;
 
