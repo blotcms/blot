@@ -403,8 +403,9 @@ Blot no longer owns the domain.
     `cdn.blot.im` only, not `blot-cdn.b-cdn.net`. Rollback: switch the rule
     off.
   - "CORS for storage bucket assets", "Immutable browser cache", "Short cache
-    for pending folder images" and "Storage bucket for generated assets",
-    in that order; the bucket and CORS rules are described below.
+    for pending folder images", "Storage bucket for generated assets" and
+    "Folder files from the bucket", in that order; the last two and CORS are
+    described below.
   - "Immutable browser cache": Browser Cache Header (Cache-Control) Override
     to `public, max-age=31536000, immutable`, when all of: the URL is on one
     of the two hostnames (`*://cdn.blot.im/*`, `*://blot-cdn.b-cdn.net/*`),
@@ -416,8 +417,9 @@ Blot no longer owns the domain.
     of them; those keep the plain 1-year header. Errors keep the 5 s of
     "cache error responses". Rollback: switch the rule off.
   - "Short cache for pending folder images": Override Cache Time 60 s and
-    Bypass Perma-Cache on `*://cdn.blot.im/folder/v-pending/*` (and the same
-    for `blot-cdn.b-cdn.net`). The build links an image
+    Bypass Perma-Cache on `*://cdn.blot.im/folder/v-pending/*` and
+    `*://cdn.blot.im/blog_*/folder/v-pending/*` (and the same for
+    `blot-cdn.b-cdn.net`). The build links an image
     that hasn't synced yet there (`app/build/plugins/folderAssets`), and the
     rebuild when it arrives moves the post to the image's content-versioned
     URL, but feed readers and cached pages keep the pending one. Without
@@ -495,7 +497,8 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
    *://blot-cdn.b-cdn.net/blog_*
    ```
 
-   Anchor on the hostname. A bare `*/blog_*` also matches
+   (Narrowed on 15 Nov 2026 to generated files only: see "Folder files from
+   the bucket" below.) Anchor on the hostname. A bare `*/blog_*` also matches
    `/folder/v-.../blog_.../` and `/template/...` URLs, which must stay on the
    app.
 3. **Edge rule for CORS**, same condition: Set Response Header
@@ -541,9 +544,7 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
 
 ### Folder files from the bucket ([#2695](https://github.com/blotcms/blot/issues/2695))
 
-**Not live yet:** these rules are added by the Deployment plan of the pull
-request that changes the app's folder URLs. Move this section into "Current
-pull zone" once they are.
+Live since 15 Nov 2026 (#2714).
 
 Folder files are linked as `/blog_<id>/folder/v-<version>/<path>`: the
 object's key, `{blogID}/folder/{path}`, with the content version inserted.
@@ -553,19 +554,21 @@ baked before, `/folder/v-<version>/blog_<id>/<path>`, stay on the app, as does
 Tested through header-gated rules on 15 Nov 2026: encoding, Content-Type,
 range, HEAD, `.git` and missing files all behave as on the app (see #2695).
 
-1. **Narrow "Storage bucket for generated assets"** to generated files, whose
+1. **"Storage bucket for generated assets"** is narrowed to generated files, whose
    first segment always starts with `_` (`app/storage/assets.js` refuses any
    other): Request URL matches any of
 
    ```
-   pattern:^https?://cdn%.blot%.im/blog_%x+/_
-   pattern:^https?://blot%-cdn%.b%-cdn%.net/blog_%x+/_
+   pattern:^https?://cdn%.blot%.im/blog_%x+/_.*$
+   pattern:^https?://blot%-cdn%.b%-cdn%.net/blog_%x+/_.*$
    ```
 
-   As it stands it matches every `/blog_*` URL, and when two rules override
-   the origin the one listed first won, so the folder rule can't work until
-   this is done (or until it has a "match none" header condition for tests).
-2. **New rule "Folder files from the bucket"**: Override Origin URL
+   Bunny rejects a `pattern:` condition that doesn't end in `$` ("The
+   trigger path is not a valid URL"), hence `.*$`.
+
+   Matching every `/blog_*` URL, as it did before, it would win over the
+   folder rule: when two rules override the origin, the one listed first won.
+2. **"Folder files from the bucket"**: Override Origin URL
    `https://blot-storage-prod.s3.us-west-2.amazonaws.com/%{Path.0}/folder/%{Path.3-}`
    and Add Request Header `Host` = the bucket host, when the Request URL
    matches any of
@@ -589,11 +592,11 @@ range, HEAD, `.git` and missing files all behave as on the app (see #2695).
    "Immutable browser cache" (its `*/folder/v-pending/*` exclusion has no
    host, so it covers both forms), "Block unknown paths" (allows `/blog_`).
 
-To test before going live, add Request Header `X-Blot-Origin` equals `s3`
-to the new rule and send it with `support: true`, using files Bunny hasn't
+To test a change to these rules, add Request Header `X-Blot-Origin` equals
+`s3` to a copy and send it with `support: true`, using files Bunny hasn't
 stored. Expect `x-amz-request-id` on each response. Missing files and `.git`
-paths give S3's 403. Roll back by switching the new rule off: misses go to
-the app, which serves the same URLs.
+paths give S3's 403. Roll back by switching "Folder files from the bucket"
+off: misses go to the app, which serves the same URLs.
 
 ## Backup
 
