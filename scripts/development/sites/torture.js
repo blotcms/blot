@@ -41,7 +41,7 @@ const settings = {
     },
     {
       id: "/Pages/Café.txt",
-      label: "Café ☕ Crème brûlée Ünïcödé Ångström",
+      label: "Café \u{2615} Crème brûlée Ünïcödé Ångström",
       url: "/cafe",
     },
     {
@@ -55,7 +55,10 @@ const settings = {
         "Supercalifragilisticexpialidocious_Pneumonoultramicroscopicsilicovolcanoconiosis_Floccinaucinihilipilification",
       url: "/unbroken",
     },
-    external("🌍 External link with emoji 🚀✨", "https://example.com/emoji"),
+    external(
+      "\u{1f30d} External link with emoji \u{1f680}\u{2728}",
+      "https://example.com/emoji"
+    ),
     external(
       "https://example.com/a/very/long/url/that/is/used/as/the/label/of/a/menu/item/with/no/spaces/at/all",
       "https://example.com/very/long"
@@ -333,7 +336,11 @@ async function build(dir) {
     ),
     "untitled.txt": post({ Date: "2024-01-05" }, lorem(30, 5)),
     "emoji title.txt": post(
-      { Date: "2024-01-06", Title: "🎉🔥 Emoji 👩‍👩‍👧‍👦 title 🏳️‍🌈 🧪" },
+      {
+        Date: "2024-01-06",
+        Title:
+          "\u{1f389}\u{1f525} Emoji \u{1f469}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f466} title \u{1f3f3}\u{fe0f}\u{200d}\u{1f308} \u{1f9ea}",
+      },
       lorem(30, 6)
     ),
     "html title.txt": post(
@@ -444,7 +451,7 @@ async function build(dir) {
       {
         Date: "2024-03-04",
         Tags:
-          "Tag with spaces, Café, naïve, 日本語, 🌈 rainbow, ÅNGSTRÖM, a/b, UPPER, upper, " +
+          "Tag with spaces, Café, naïve, 日本語, \u{1f308} rainbow, ÅNGSTRÖM, a/b, UPPER, upper, " +
           "long".repeat(25),
       },
       "# Odd tags\n\n" + lorem(30, 15)
@@ -475,7 +482,7 @@ async function build(dir) {
     dir,
     "Metadata/Non-ASCII permalink.txt",
     post(
-      { Date: "2024-03-07", Link: "/café/日本語/привет/🙂" },
+      { Date: "2024-03-07", Link: "/café/日本語/привет/\u{1f642}" },
       "# Non-ASCII permalink\n\n" + lorem(30, 18)
     )
   );
@@ -693,7 +700,7 @@ async function build(dir) {
   );
   await write(
     dir,
-    "Structure/Café ☕ résumé — 日本語 🙂.txt",
+    "Structure/Café \u{2615} résumé — 日本語 \u{1f642}.txt",
     post({ Date: "2024-05-04" }, lorem(30, 45))
   );
 

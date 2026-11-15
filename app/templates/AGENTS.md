@@ -7,6 +7,18 @@
 - When the maintainer asks to “clear the folder,” remove everything inside the validated source directory `data/local-sources/<handle>/`, including hidden files and nested directories, but leave the source folder itself in place. Use `local` unless another blog handle is specified, then wait for the watcher/rebuild to finish and verify that the live site and Archives reflect the empty source.
 - Treat the replacement as exact: include all source-folder contents, including hidden files, and clear only the validated destination folder. Confirm the source and destination paths before removing existing destination contents.
 
+## Sites for checking templates
+
+`npm run folder` builds every site there is for checking a template: one per demo folder in `app/templates/folders` (bees, sergey, david and the rest, each on the template that previews it) and the test sites in `scripts/development/sites`, each meant to break templates in one way:
+
+- `empty`: no posts and no title, for empty states.
+- `tiny`: exactly one post.
+- `huge`: about 1,500 posts and 300 tags, for pagination, archives and tag pages.
+- `torture`: long titles and menu labels, odd image shapes, every file type, a folder post, a draft, a scheduled post and Markdown edge cases.
+- `arabic` and `japanese`: right-to-left and CJK writing.
+
+Switch a test site to the template being worked on in the dashboard; re-running `npm run folder` keeps that choice. `npm run folder <handle>` rebuilds one site, and `npm run folder --down` deletes them all. None of it touches the `local` scratchpad site. See `scripts/development/sites/README.md`.
+
 ## Edit, fork, and preview
 
 When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use the maintainer's local `preview` skill (`~/.claude/skills/preview/SKILL.md`): read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not ask for `https://blot.localhost` or use it directly as the worktree preview. You must use host access to access the local server.

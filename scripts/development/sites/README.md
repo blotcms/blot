@@ -22,4 +22,4 @@ Each site is a module here exporting `{ settings, build }`. `build(dir)` writes 
 
 Most of the material comes from the demo folders, through `material.js`. Pick it by scanning (`texts()`, `images()`, `converterSamples()`) and copy it with `copy()`, which skips a missing file with a warning, so cleaning up the demo folders never breaks a site. The Arabic and Japanese writing is committed here, since there is none in the demo folders.
 
-A site with many files takes a while to appear in full after its first build, while the Local client syncs it: `huge` takes most of an hour.
+A site with many files takes a while to appear in full after its first build, while the Local client syncs it: `huge` takes about half an hour.
