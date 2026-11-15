@@ -10,7 +10,7 @@
 
           {{#entry}}
           <article class="post single">
-            {{^hide_dates}}{{#date}}<div class="date-header"><span>{{date}}</span></div>{{/date}}{{/hide_dates}}
+            {{^hide_dates}}{{#date}}<div class="date-header"><time datetime="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">{{date}}</time></div>{{/date}}{{/hide_dates}}
             <h1 class="post-title">{{title}}</h1>
             <div class="post-body">{{{body}}}</div>
             <div class="post-footer">
@@ -30,7 +30,6 @@
           {{> pluginHTML}}
           {{/entry}}
 
-          {{> feed-links}}
         </main>
 
         {{> sidebar}}

@@ -23,11 +23,10 @@
           {{/query}}
 
           {{#entries}}
-            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span>{{^hide_dates}} <span class="light">{{date}}</span>{{/hide_dates}}</a></li>
+            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span>{{^hide_dates}} <time class="light" datetime="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">{{date}}</time>{{/hide_dates}}</a></li>
           {{/entries}}
           </ul>
           </div>
-          {{> feed-links}}
         </main>
 
         {{> sidebar}}

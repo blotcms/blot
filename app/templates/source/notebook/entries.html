@@ -17,7 +17,7 @@
 
           {{#posts}}
           <article class="post">
-            {{^hide_dates}}{{#date}}<div class="date-header"><span>{{date}}</span></div>{{/date}}{{/hide_dates}}
+            {{^hide_dates}}{{#date}}<div class="date-header"><time datetime="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">{{date}}</time></div>{{/date}}{{/hide_dates}}
             <h2 class="post-title"><a href="{{{url}}}">{{title}}</a></h2>
             <div class="post-body">{{{body}}}</div>
             <div class="post-footer">
@@ -30,7 +30,6 @@
           {{! Only when there is another page to go to }}
           {{#posts.pagination}}{{#previous}}{{> blog-pager}}{{/previous}}{{^previous}}{{#next}}{{> blog-pager}}{{/next}}{{/previous}}{{/posts.pagination}}
 
-          {{> feed-links}}
         </main>
 
         {{> sidebar}}

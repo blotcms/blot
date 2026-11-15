@@ -13,7 +13,7 @@
           {{#entries.length}}
           <ul class="full-archive">
             {{#entries}}
-            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span>{{^hide_dates}} <span class="light">{{date}}</span>{{/hide_dates}}</a></li>
+            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span>{{^hide_dates}} <time class="light" datetime="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">{{date}}</time>{{/hide_dates}}</a></li>
             {{/entries}}
           </ul>
           {{/entries.length}}
@@ -22,7 +22,6 @@
           {{! Only when there is another page to go to }}
           {{#entries.pagination}}{{#previous}}{{> tag-pager}}{{/previous}}{{^previous}}{{#next}}{{> tag-pager}}{{/next}}{{/previous}}{{/entries.pagination}}
           </div>
-          {{> feed-links}}
         </main>
 
         {{> sidebar}}
