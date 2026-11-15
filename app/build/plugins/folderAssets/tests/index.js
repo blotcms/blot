@@ -252,7 +252,14 @@ describe("folderAssets plugin", function () {
 
     var entry = await buildEntry(this.blog, path);
 
-    expect(entry.html).toContain(`src="${BLOT_CDN_TOKEN}/icons/search.svg"`);
+    var version = require("blog/lib/staticVersion").staticVersion(
+      "/icons/search.svg"
+    );
+
+    expect(entry.html).toContain(
+      `src="${BLOT_CDN_TOKEN}/icons/search.svg?version=${version}"`
+    );
+    // A link with a query of its own keeps it as written
     expect(entry.html).toContain(
       `src="${BLOT_CDN_TOKEN}/icons/search.svg?v=2#a"`
     );

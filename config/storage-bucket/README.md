@@ -398,11 +398,16 @@ Blot no longer owns the domain.
     | `fonts/`, `icons/`, `katex/`, `plugins/`, `syntax-highlighter/` | Bunny's SHA-256 of any copy differs from the file in this release, or the file is gone | purge, and delete the URL's directory |
     | anything else | always | delete it |
 
-    A URL cached with a query string the pull zone varies by (the fonts'
-    `?version=`) is a separate file in the URL's directory,
+    A URL cached with a query string the pull zone varies by (`?version=`)
+    is a separate file in the URL's directory,
     `___file___variation___<hash>`, which a purge of the plain URL may not
     reach; so a stale static file's whole directory is deleted, and its
-    current variations refill.
+    current variations refill. Blot links every static file it can with
+    `?version=` and a hash of the file in the running release
+    (`blog/lib/staticVersion`; the fonts' stylesheets carry their own), so a
+    release that changes one gives it a new URL at once. The sweep removes
+    the old copies, and the unversioned ones that older links and HTML
+    built before this still reach.
 
     A copy nothing links any more and that the origin would answer
     correctly is only deleted from storage, one call, without a purge. The
