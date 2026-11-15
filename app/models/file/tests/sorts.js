@@ -266,16 +266,16 @@ describe("models/file sorted sets", function () {
       expect(await stored(this.blog.id, "/d")).toEqual(["a", "b", "c"]);
     });
 
-    it("starts a new directory with an empty set, even if one was left behind", async function () {
-      // Code from before the sets removed /d without deleting its set
-      await client.zAdd(key.sort(this.blog.id, "all", "/d"), {
-        score: 0,
-        value: key.sortMember("gone"),
-      });
+    it("keeps every child when two writes create a directory at once", async function () {
+      // Writers outside the sync lock, as specs and some callers are, can
+      // both find the directory new; neither may clear what the other adds
+      await Promise.all([
+        File.set(this.blog.id, "/d/a", file()),
+        File.set(this.blog.id, "/d/b", file()),
+        File.set(this.blog.id, "/d/c", file()),
+      ]);
 
-      await File.set(this.blog.id, "/d/new", file());
-
-      expect(await stored(this.blog.id, "/d")).toEqual(["new"]);
+      expect(await stored(this.blog.id, "/d")).toEqual(["a", "b", "c"]);
     });
 
     it("forgets a removed file, and a removed directory's sets", async function () {
