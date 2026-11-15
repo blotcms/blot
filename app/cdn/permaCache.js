@@ -456,26 +456,33 @@ async function sweepEntry(base, entry, { apply, log, totals, deleted }) {
     await bunnyStorage.remove(base + name + (entry.isDirectory ? "/" : ""));
 }
 
+// Purges or deletes each stale item, in batches. An item to purge and then
+// delete (a static file's directory, holding every variation) keeps its
+// storage copy if its purge fails, since that copy is what lets the next
+// sweep find the URL and retry: deleting it would leave the edge copies
+// public with nothing left to find them by.
 async function applyStale(stale, name, { apply, log, totals }) {
-  let toPurge = [];
-  let toRemove = [];
+  let batch = [];
 
   async function flush() {
-    const purging = toPurge;
-    const removing = toRemove;
-    toPurge = [];
-    toRemove = [];
-    if (!(await purge(purging))) totals.failed++;
-    await removeCopies(removing);
+    const items = batch;
+    batch = [];
+
+    const purged = await Promise.all(
+      items.map((item) => (item.purge || !item.remove ? purge([item]) : true))
+    );
+
+    totals.failed += purged.filter((ok) => !ok).length;
+
+    await removeCopies(items.filter((item, i) => item.remove && purged[i]));
   }
 
   for await (const item of stale) {
     totals.stale++;
     log(`${name} ${item.reason}: ${item.path}`);
     if (!apply) continue;
-    if (item.purge || !item.remove) toPurge.push(item);
-    if (item.remove) toRemove.push(item);
-    if (toPurge.length + toRemove.length >= 100) await flush();
+    batch.push(item);
+    if (batch.length >= 100) await flush();
   }
 
   if (apply) await flush();

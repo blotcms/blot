@@ -289,6 +289,30 @@ describe("cdn/permaCache", function () {
     expect(removed).toEqual([BASE + `icons/___${name}___/`]);
   });
 
+  it("keeps a static file's directory when its purge fails", async function () {
+    zone([{ path: "/icons/gone.svg", file: { checksum: "AB" } }]);
+    const purgeCdnUrls = require.cache[require.resolve("helper/purgeCdnUrls")];
+    const real = purgeCdnUrls.exports;
+    purgeCdnUrls.exports = async () => false;
+
+    try {
+      delete require.cache[require.resolve("cdn/permaCache")];
+      const fresh = require("cdn/permaCache");
+      const totals = await fresh.sweep({
+        only: "icons",
+        apply: true,
+        log: () => {},
+      });
+
+      expect(totals.failed).toBe(1);
+      expect(removed).toEqual([]);
+    } finally {
+      purgeCdnUrls.exports = real;
+      delete require.cache[require.resolve("cdn/permaCache")];
+      require("cdn/permaCache");
+    }
+  });
+
   it("deletes anything else at the top level", async function () {
     zone(["/folder/v-1/blog_1/a.txt", "/health"]);
 
