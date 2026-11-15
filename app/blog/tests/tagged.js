@@ -313,21 +313,9 @@ describe("tags work on sites", function () {
       "page one",
     ]);
 
-    // fetch page beyond total pages
+    // a page beyond the last is a 404, like any unknown URL
     const resPage3 = await this.get(`/tagged/paginated/page/3`);
-    expect(resPage3.status).toBe(200);
-    const textPage3 = await resPage3.text();
-    const parsedPage3 = JSON.parse(textPage3);
-
-    expect(parsedPage3).toEqual(
-      jasmine.objectContaining({
-        current: 3,
-        total: 2,
-        previous: "2",
-        next: "",
-      })
-    );
-    expect(parsedPage3.entries).toEqual([]);
+    expect(resPage3.status).toBe(404);
   });
 
   it("prefers tagged_page_size over default template page size", async function () {
