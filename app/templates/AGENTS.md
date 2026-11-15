@@ -11,6 +11,12 @@
 
 When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use the maintainer's local `preview` skill (`~/.claude/skills/preview/SKILL.md`): read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not ask for `https://blot.localhost` or use it directly as the worktree preview. You must use host access to access the local server.
 
+## Changing a bundled template
+
+Blogs run their own copies of the bundled templates, so a bundled template in `source/` can be changed, redesigned or replaced without changing anyone's site. Don't flag that as a risk to customers.
+
+How the copy is made: Install only points the blog at `SITE:<name>`. The blog gets its own copy, `{blogID}:<name>`, the first time it changes anything in the template (`app/dashboard/site/template/save/fork-if-needed.js`). A blog still on `SITE:<name>` would see the change, but almost none are: a production count on 15 Nov 2026 found under 0.1% of blogs on any `SITE:` template, and none on the one being replaced. Before reworking a bundled template, recount the blogs on its `SITE:` id if in doubt.
+
 ## Editing discipline
 
 - Treat CSS order as functional. Before moving rules, preserve specificity and base-before-override relationships.
