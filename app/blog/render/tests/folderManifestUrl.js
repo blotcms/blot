@@ -12,7 +12,7 @@ describe("folderManifestUrl.locals", function () {
     "style.css": "0123456789abcdef",
   };
 
-  const cdnUrl = BLOT_CDN_TOKEN + "/folder/v-abc12345/blog_1/img/a.png";
+  const cdnUrl = BLOT_CDN_TOKEN + "/blog_1/folder/v-abc12345/img/a.png";
 
   it("swaps the folder links the manifest resolves, nested too", function () {
     const result = folderManifestUrl.locals(request(manifest), {

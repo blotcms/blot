@@ -51,10 +51,10 @@ describe("asset", function () {
       const render = (text) => text;
 
       expect(lambda("/img/a.png", render)).toEqual(
-        BLOT_CDN_TOKEN + "/folder/v-abc12345/blog_1/img/a.png"
+        BLOT_CDN_TOKEN + "/blog_1/folder/v-abc12345/img/a.png"
       );
       expect(lambda("img/a.png", render)).toEqual(
-        BLOT_CDN_TOKEN + "/folder/v-abc12345/blog_1/img/a.png"
+        BLOT_CDN_TOKEN + "/blog_1/folder/v-abc12345/img/a.png"
       );
     });
 

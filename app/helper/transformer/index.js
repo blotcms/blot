@@ -56,7 +56,7 @@ function resolveCDNPath(src) {
 // A build-time consumer of an <img src> that runs after
 // app/build/plugins/folderAssets in the pipeline (e.g. app/build/thumbnail,
 // called from app/build/index.js on the same post-plugin html) sees the
-// baked %%BLOT_CDN%%/folder/v-<hash>/<blogID><path> link instead of a
+// baked %%BLOT_CDN%%/<blogID>/folder/v-<hash><path> link instead of a
 // local path. Map it back to <path>. Only the token form matters: every
 // caller of Transformer.lookup() sees build-time HTML, which never
 // contains the real CDN origin (middleware.js substitutes that per request).

@@ -28,6 +28,16 @@ describe("internalLinks", function () {
     ).toEqual([]);
   });
 
+  it("recovers the original path from a link baked before #2695", function () {
+    var blogID = "blog_abc123";
+    var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/photo.jpg`;
+
+    expect(this.internalLinks(`<a href="${baked}">Photo</a>`, blogID)).toEqual([
+      "/photo.jpg",
+    ]);
+    expect(this.internalLinks(`<a href="${baked}">Photo</a>`)).toEqual([]);
+  });
+
   it("normalizes fragments and query strings to the base path", function () {
     expect(
       this.internalLinks(
@@ -46,7 +56,7 @@ describe("internalLinks", function () {
 
   it("recovers the original path from a link baked by app/build/plugins/folderAssets", function () {
     var blogID = "blog_abc123";
-    var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/photo.jpg`;
+    var baked = `${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef/photo.jpg`;
 
     expect(this.internalLinks(`<a href="${baked}">Photo</a>`, blogID)).toEqual([
       "/photo.jpg",
@@ -55,7 +65,7 @@ describe("internalLinks", function () {
 
   it("normalizes fragments and query strings on a baked link", function () {
     var blogID = "blog_abc123";
-    var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/target?x=1#section`;
+    var baked = `${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef/target?x=1#section`;
 
     expect(this.internalLinks(`<a href="${baked}">Target</a>`, blogID)).toEqual(
       ["/target"]
@@ -64,7 +74,7 @@ describe("internalLinks", function () {
 
   it("decodes a baked link's path, keeping an encoded '#' in a file name", function () {
     var blogID = "blog_abc123";
-    var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${blogID}/my%20post%231.txt?x=1#section`;
+    var baked = `${BLOT_CDN_TOKEN}/${blogID}/folder/v-deadbeef/my%20post%231.txt?x=1#section`;
 
     expect(this.internalLinks(`<a href="${baked}">Post</a>`, blogID)).toEqual([
       "/my post#1.txt",
@@ -72,7 +82,7 @@ describe("internalLinks", function () {
   });
 
   it("ignores a baked link when no blogID is provided", function () {
-    var baked = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/blog_abc123/photo.jpg`;
+    var baked = `${BLOT_CDN_TOKEN}/blog_abc123/folder/v-deadbeef/photo.jpg`;
 
     expect(this.internalLinks(`<a href="${baked}">Photo</a>`)).toEqual([]);
   });

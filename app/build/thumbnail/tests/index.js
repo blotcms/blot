@@ -92,7 +92,7 @@ describe("thumbnail", function () {
     // entry.html at build time, before Thumbnail() is called on that same
     // html in app/build/index.js - the src is no longer the plain local
     // path, it's a %%BLOT_CDN%%-prefixed, versioned CDN URL.
-    var bakedSrc = `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${imagePath}`;
+    var bakedSrc = `${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-deadbeef${imagePath}`;
     var html = `<img src="${bakedSrc}">`;
     var path = "/post.txt";
 
@@ -112,7 +112,7 @@ describe("thumbnail", function () {
     var BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
     var { encodeFolderPath } = require("blog/render/replaceFolderLinks/shared");
     var imagePath = "/hero #1.jpg";
-    var html = `<img src="${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${encodeFolderPath(imagePath)}">`;
+    var html = `<img src="${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-deadbeef${encodeFolderPath(imagePath)}">`;
 
     await folder.writeFrom(
       this.blog.id,
@@ -129,7 +129,24 @@ describe("thumbnail", function () {
     var thumbnail = require("../index");
     var BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
     var imagePath = "/portrait.jpg";
-    var html = `<img src="${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${imagePath}?static=1#x">`;
+    var html = `<img src="${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-deadbeef${imagePath}?static=1#x">`;
+
+    await folder.writeFrom(
+      this.blog.id,
+      imagePath,
+      __dirname + "/images/" + imagePath
+    );
+    var result = await thumbnail(this.blog, "/post.txt", {}, html);
+
+    expect(result).toEqual(jasmine.any(Object));
+    expect(result.small).toEqual(jasmine.any(Object));
+  });
+
+  it("creates thumbnails from an <img src> baked before #2695 into a %%BLOT_CDN%% URL", async function () {
+    var thumbnail = require("../index");
+    var BLOT_CDN_TOKEN = require("blog/render/replaceFolderLinks/cdnToken");
+    var imagePath = "/portrait.jpg";
+    var html = `<img src="${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${imagePath}">`;
 
     await folder.writeFrom(
       this.blog.id,

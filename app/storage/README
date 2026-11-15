@@ -55,7 +55,8 @@ at sync/build time instead.
   this half of storage.
 - Per-request disk reads remain (§4c): `app/blog/render/retrieve/folder.js`'s
   uncached `fs.readdir` + `fs.stat`, and `app/blog/routes/assets.js` and the
-  CDN's `/folder/v-:version` serving folder files. Links in posts are baked at build time by
+  CDN's folder-file routes (`/{blogID}/folder/v-:version`, and the older
+  `/folder/v-:version/{blogID}`) serving folder files. Links in posts are baked at build time by
   `build/plugins/folderAssets` and links in templates by the template's CDN
   manifest, so rendering no longer looks files up.
 - The per-blog sync lock is a Redis mutex (`app/sync/lock.js`:
@@ -112,7 +113,8 @@ at sync/build time instead.
   public by design (except `.git` directories in a folder and
   `{blogID}/git/`, which the policy denies outside the AWS account): assets are
   served on the CDN, and a blog's folder is served at the blog's domain and
-  through the CDN's `/folder/v-:version` route. Folder files go in the same bucket: a second, versioned bucket
+  through the CDN at `/{blogID}/folder/v-:version/{path}`, which Bunny fetches
+  from the bucket ([#2695](https://github.com/blotcms/blot/issues/2695)). Folder files go in the same bucket: a second, versioned bucket
   for folders (for a "restore deleted file" feature) was considered and
   turned down.
 - **Versioning: off**, bucket-wide. The B2 backup is the only history.
@@ -304,7 +306,7 @@ the storage layer, not raw S3 calls threaded through each client.
 
 **c. Request-time folder reads.**
 `app/blog/routes/assets.js` serves from the blog folder with case-folding
-and index.html/.html fallbacks; `app/cdn/index.js`'s `/folder/v-:version`
+and index.html/.html fallbacks; `app/cdn/index.js`'s folder-file
 route uses `express.static()` plus `assertNoSymlinks`; `retrieve/folder.js`
 still does an uncached
 `readdir`+`stat` per request. All of these move onto the storage layer

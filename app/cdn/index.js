@@ -49,7 +49,14 @@ cdn.use("/plugins", static(GLOBAL_STATIC_FILES + "/plugins"));
 cdn.use("/documentation/v-:version", static(config.views_directory));
 
 // Serves files directly from a blog's folder e.g.
-// /folder/v-1a2b3c4d/blog_1234/favicon.ico
+// /blog_1234/folder/v-1a2b3c4d/favicon.ico
+// /folder/v-1a2b3c4d/blog_1234/favicon.ico (links baked before #2695)
+// The first form is the file's key in the storage bucket with the version
+// inserted, so in production Bunny fetches it from the bucket and only
+// v-pending reaches this route (see "Folder files from the bucket" in
+// config/storage-bucket/README.md). The second form, still in posts, feeds
+// and emails built before, is always served here.
+//
 // With the semantics express.static had here: a year of caching, dotfiles
 // ignored, a directory without its trailing slash redirected to it. Anything
 // missing or behind a symlink is a bare 404, which exposes no path and does
@@ -65,24 +72,55 @@ cdn.use("/documentation/v-:version", static(config.views_directory));
 // edge rule for v-pending does the same at the edge (see "Edge rules" in
 // config/storage-bucket/README.md). The path is as the author wrote it, so
 // it is found case-insensitively, like the build's own lookup.
-cdn.use("/folder/v-:version", async (req, res, next) => {
-  const pending = req.params.version === PENDING_VERSION;
-
-  let pathname;
-
-  try {
-    pathname = decodeURIComponent(req.path);
-  } catch (err) {
-    return res.sendStatus(404);
-  }
+cdn.use("/folder/v-:version", (req, res, next) => {
+  const pathname = decodedPath(req);
 
   // pathname is /{blogID}/{path in the blog's folder}
-  const match = /^\/(blog_[^/]+)(\/.*)?$/.exec(pathname);
+  const match = pathname && /^\/(blog_[^/]+)(\/.*)?$/.exec(pathname);
+
+  if (!match) return res.sendStatus(404);
+
+  return serveFolderFile(req, res, next, match[1], match[2] || "");
+});
+
+cdn.use("/:blogID/folder/v-:version", (req, res, next) => {
+  if (!/^blog_[^/]+$/.test(req.params.blogID)) return next();
+
+  const pathname = decodedPath(req);
+
+  if (!pathname) return res.sendStatus(404);
+
+  // Express gives "/" for both /blog_1/folder/v-1 and /blog_1/folder/v-1/,
+  // so tell the first apart, for the trailing-slash redirect
+  const atRoot = req.originalUrl.replace(/\?.*$/, "") === req.baseUrl;
+
+  return serveFolderFile(
+    req,
+    res,
+    next,
+    req.params.blogID,
+    atRoot ? "" : pathname
+  );
+});
+
+// The request's path below the route, decoded, or null if it isn't valid
+// percent-encoding
+function decodedPath(req) {
+  try {
+    return decodeURIComponent(req.path);
+  } catch (err) {
+    return null;
+  }
+}
+
+// relPath is the decoded path in the blog's folder: "/" for the folder
+// itself, "" for the folder without its trailing slash
+async function serveFolderFile(req, res, next, blogID, relPath) {
+  const pending = req.params.version === PENDING_VERSION;
 
   if (
-    !match ||
-    pathname.indexOf("\0") !== -1 ||
-    pathname
+    relPath.indexOf("\0") !== -1 ||
+    relPath
       .split("/")
       .some((segment) => segment === ".." || segment.charAt(0) === ".")
   ) {
@@ -90,19 +128,21 @@ cdn.use("/folder/v-:version", async (req, res, next) => {
   }
 
   try {
-    let relPath = match[2] || "/";
     let stat;
+    const requested = relPath;
+
+    relPath = relPath || "/";
 
     if (pending) {
-      ({ stat, path: relPath } = await getStat(match[1], relPath));
+      ({ stat, path: relPath } = await getStat(blogID, relPath));
     } else {
-      stat = await folder.stat(match[1], relPath);
+      stat = await folder.stat(blogID, relPath);
     }
 
     // Only ever an image's URL, never a directory's
     if (pending && stat.isDirectory) return pendingNotFound(res);
 
-    if (stat.isDirectory && pathname.slice(-1) !== "/") {
+    if (stat.isDirectory && requested.slice(-1) !== "/") {
       return res.redirect(301, req.originalUrl.replace(/^[^?]*/, "$&/"));
     }
 
@@ -110,7 +150,7 @@ cdn.use("/folder/v-:version", async (req, res, next) => {
       return methodNotAllowed(res);
 
     // A trailing slash serves the directory's index.html
-    await folder.serve(req, res, match[1], relPath, {
+    await folder.serve(req, res, blogID, relPath, {
       maxAge: pending ? "1h" : "1y",
     });
   } catch (err) {
@@ -120,7 +160,7 @@ cdn.use("/folder/v-:version", async (req, res, next) => {
     if (pending) return pendingNotFound(res);
     res.sendStatus(404);
   }
-});
+}
 
 function pendingNotFound(res) {
   res.set("Cache-Control", "public, max-age=60");
