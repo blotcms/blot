@@ -49,6 +49,29 @@ describe("entry.set permalink key of a deleted entry", function () {
     expect(await this.ttl("/apple")).toEqual(-1);
   });
 
+  it("keeps the old url as a permanent redirect when the file comes back under another", async function () {
+    await this.set("/a.txt", "Permalink: apple\nHello");
+    await this.drop("/a.txt");
+    expect(await this.ttl("/apple")).toBeGreaterThan(0);
+
+    const entry = await this.set("/a.txt", "Permalink: banana\nHello");
+
+    expect(entry.url).toEqual("/banana");
+    expect(await redis.get(key.url(this.blog.id, "/apple"))).toEqual("/a.txt");
+    expect(await this.ttl("/apple")).toEqual(-1);
+    expect(await this.ttl("/banana")).toEqual(-1);
+    expect(await redis.exists(key.deletedUrl(this.blog.id, "/a.txt"))).toBe(0);
+  });
+
+  it("gives the marker of a deleted entry's url the entry's TTL", async function () {
+    await this.set("/a.txt", "Permalink: apple\nHello");
+    await this.drop("/a.txt");
+
+    const marker = key.deletedUrl(this.blog.id, "/a.txt");
+    expect(await redis.get(marker)).toEqual("/apple");
+    expect(await redis.ttl(marker)).toBeGreaterThan(0);
+  });
+
   it("leaves a permalink key which points at another entry alone", async function () {
     await this.set("/a.txt", "Permalink: apple\nHello");
     await redis.set(key.url(this.blog.id, "/apple"), "/other.txt");

@@ -9,6 +9,13 @@ module.exports = {
     return "blog:" + blogID + ":entry:" + pathNormalize(path);
   },
 
+  // String: the url a deleted entry had, kept for as long as the deleted
+  // entry is, so that if its file comes back under another url the old one
+  // stays a permanent redirect (set.js)
+  deletedUrl: function (blogID, path) {
+    return "blog:" + blogID + ":deleted-url:" + pathNormalize(path);
+  },
+
   // Set representing the paths of files which depend on this particular
   // path. The path itself may or may not be its own entry.
   // A path cannot have dependencies however without it also being an entry

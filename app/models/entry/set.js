@@ -191,7 +191,14 @@ async function set(blogID, path, updates) {
       .set(entryKey, json)
       .expire(entryKey, DELETED_ENTRY_TTL_SECONDS);
 
-    if (ownsPermalink) multi.expire(permalinkKey, DELETED_ENTRY_TTL_SECONDS);
+    // Remember which url that was, for as long as the deleted entry is kept,
+    // in case the file comes back under another one (below)
+    if (ownsPermalink)
+      multi
+        .expire(permalinkKey, DELETED_ENTRY_TTL_SECONDS)
+        .set(key.deletedUrl(blogID, entry.id), previousUrl, {
+          EX: DELETED_ENTRY_TTL_SECONDS,
+        });
 
     var replies = await multi.exec();
 
@@ -202,6 +209,11 @@ async function set(blogID, path, updates) {
     // re-added within the day has a permanent permalink again
     await redis.set(entryKey, json);
     await redis.persist(entryKey);
+
+    // A file deleted and re-added within the day under another url (an
+    // editor that saves by deleting and re-creating, while the title
+    // changed): its old url is a redirect again, so it no longer expires
+    if (stored && stored.deleted) await keepRedirect(blogID, entry);
   }
 
   // These all start at once and run in parallel. updateTagList is first.
@@ -276,6 +288,22 @@ async function set(blogID, path, updates) {
     changed:
       backlinksMoved || tagsChanged || !isEqual(stored, JSON.parse(json)),
   };
+}
+
+// The url a re-added entry had before it was deleted stays a permanent
+// redirect to it, if its key still points at this entry. The marker goes
+// either way.
+async function keepRedirect(blogID, entry) {
+  var markerKey = key.deletedUrl(blogID, entry.id);
+  var oldUrl = await redis.get(markerKey);
+
+  if (oldUrl && oldUrl !== entry.url) {
+    var oldKey = key.url(blogID, oldUrl);
+
+    if ((await redis.get(oldKey)) === entry.id) await redis.persist(oldKey);
+  }
+
+  if (oldUrl) await redis.del(markerKey);
 }
 
 module.exports = set;
