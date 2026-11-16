@@ -244,6 +244,8 @@ function pandocArgs(options, dir, files) {
 
   if (from === "rtf" || from === "org") {
     return [
+      // An RTF's images are in the document itself (\pict)
+      ...(from === "rtf" ? ["--extract-media=" + path.join(dir, "media")] : []),
       "-f",
       from,
       "-t",

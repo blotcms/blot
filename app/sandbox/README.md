@@ -59,7 +59,9 @@ starts `SANDBOX_`, and it never falls back to in-process.
   worker took about six times the document's size, so one of 60 MiB passed the
   jail's 512 MiB; now it is about three times, under the 100 MiB a sync takes.
   A medium that isn't a marker has a null entry and its bytes as the next
-  output. A document
+  output. An RTF holds its images in the document itself (`\pict`), so
+  its media all come back this way, and the rtf converter writes them to the
+  blog's assets as the docx converter does. A document
   pandoc can't convert is `meta.error`, so it fails the build like any bad file
   without being a sandbox failure. The callouts Lua filter is `jobs/callouts.lua`.
 
