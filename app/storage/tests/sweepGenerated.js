@@ -869,7 +869,7 @@ describe("storage/sweep generated files", function () {
         const c = clock();
 
         await previousRun();
-        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        await cacheID(id, PREVIOUS_START + HOUR);
         references.inUse.and.callFake(async () => {
           throw new Error("Redis went away");
         });
