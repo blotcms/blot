@@ -78,7 +78,8 @@ starts `SANDBOX_`, and it never falls back to in-process.
   emails the admin; a heap pandoc can't grow (it exits) is `SANDBOX_FAILED`.
 - `unzip` a zip archive into its files, one output each. It refuses absolute and
   upward paths, symlinks, too many records, too many bytes and too high a ratio
-  (a bad archive is a `meta.error`, not a thrown error). Output stops at 60 MiB.
+  (a bad archive is a `meta.error`, not a thrown error). It takes archives up to
+  128 MiB, and output stops at 60 MiB.
   With `only`, a list of names, it reads just those, and a file that would take
   the batch past `maxBytes` ends the batch instead of failing it (unless it is
   the first), so a caller gets an archive's large files in turns.
