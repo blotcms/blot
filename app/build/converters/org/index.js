@@ -5,6 +5,7 @@ var extname = require("path").extname;
 var Metadata = require("build/metadata");
 var convert = require("./convert");
 var folderStat = require("build/converters/folderStat");
+var postSourceSize = require("build/converters/post-source-size");
 
 function is(path) {
   return [".org"].indexOf(extname(path).toLowerCase()) > -1;
@@ -50,6 +51,12 @@ async function read(blog, path) {
   } finally {
     time.end("stat");
   }
+
+  // Org text costs pandoc as much as markdown does: a file at markdown's limit
+  // takes about 70% of the pandoc jail's memory, and one five times larger is
+  // killed there
+  if (stat.size > postSourceSize.MARKDOWN.bytes)
+    throw postSourceSize.tooLargeError(postSourceSize.MARKDOWN);
 
   time("readFile");
 
