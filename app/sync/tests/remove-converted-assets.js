@@ -84,7 +84,9 @@ describe("sync removing a converted file", function () {
     await this.blog.rebuild();
 
     spyOn(console, "error");
-    spyOn(assets, "remove").and.rejectWith(new Error("bucket down"));
+    spyOn(assets, "remove").and.callFake(async function () {
+      throw new Error("bucket down");
+    });
 
     await removeAndSync(this.blog, path);
 
