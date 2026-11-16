@@ -1,5 +1,11 @@
 {{{app_js}}}
 
+{{> motion}}
+{{> drag}}
+{{> pager}}
+{{> zoom}}
+{{> dismiss}}
+
 (() => {
   const view = document.body.dataset.view;
   const root = document.documentElement;
@@ -422,19 +428,19 @@
   // ---- The viewer: one lightbox for whichever collection is on the page ----
 
   let controller = null; // the rail or the grid that supplies entries
+  // The copy of the image that flies between the page and the viewer.
+  const flyer = createFlyer(lightbox);
   // Set once the link preview card exists. The card follows a link under the pointer, but the
   // viewer can swap that link out (a step, a close) without the pointer moving: no pointerout.
   let hideLinkCard = () => {};
   let activeIndex = 0;
   let imageToken = 0;
   let opening = false;
-  let closeAfterOpen = false;
   let closing = false;
   let closePending = false;
   let closedByScript = false;
   let leavingAddress = false; // a history move or navigation away is under way
   let stepping = false;
-  let lightboxGesture = null;
   let suppressLightboxClickUntil = 0;
   let wheelLockUntil = 0;
 
@@ -458,7 +464,140 @@
     updateCaption();
   };
 
-  function setActive(index) {
+  // ---- Paging: the image on show and its neighbours sit side by side on a pager (see createPager).
+  // Swipes follow the finger and flick on to the next or previous entry; arrows and keys glide.
+  // The pager runs in virtual positions around BASE, so the entries can grow (the rail loads pages
+  // while the viewer is open) without it noticing: `anchor` says which entry sits at BASE.
+  const PAGE_GAP = 40; // px between images while paging
+  const BASE = 1e6;
+  const pages = [lightboxImage.cloneNode(), lightboxImage, lightboxImage.cloneNode()];
+  for (const page of [pages[0], pages[2]]) {
+    page.classList.add("lightbox-neighbour");
+    page.setAttribute("aria-hidden", "true");
+    page.alt = "";
+  }
+  lightboxImage.before(pages[0]);
+  lightboxImage.after(pages[2]);
+  let anchor = { v: BASE, entry: null };
+  let syncing = false;
+
+  const pitch = () => lightboxFrame.clientWidth + PAGE_GAP;
+  const paging = createPager({ count: 2 * BASE, pitch, onPosition: onPage });
+
+  // The entries that can be paged through: the ones on the rail's ring, not one from outside it.
+  function ring() {
+    const list = controller.entries();
+    const indexes = [];
+    list.forEach((entry, index) => {
+      if (!entry.detached) indexes.push(index);
+    });
+    return indexes.length ? indexes : list.map((entry, index) => index);
+  }
+
+  // The index of the entry at virtual position v, or -1 where there is none (past either end).
+  function indexAt(v) {
+    const places = ring();
+    const base = places.indexOf(controller.entries().indexOf(anchor.entry));
+    if (base < 0) return -1;
+    const place = base + (v - anchor.v);
+    if (controller.wrap) return places[mod(place, places.length)];
+    return place >= 0 && place < places.length ? places[place] : -1;
+  }
+
+  // Paging needs neighbours on hand: not for an entry reached through a listing's page links, which
+  // steps by loading the next page, nor for one from outside the rail.
+  function pagingActive() {
+    const entry = controller?.entries()[activeIndex];
+    return Boolean(lightbox.open && entry && !entry.detached && !stepsByEntryLinks(entry) && ring().length > 1);
+  }
+
+  function showPage(image, index) {
+    if (image.dataset.index === String(index)) return;
+    const entry = controller.entries()[index];
+    const source = controller.sourceImage(index);
+    image.dataset.index = index;
+    image.style.setProperty("--image-ratio", entry.width / entry.height);
+    image.style.setProperty("--image-width", `${entry.fullWidth}px`);
+    image.width = entry.width;
+    image.height = entry.height;
+    image.src = source && isLoaded(source) && source.currentSrc ? source.currentSrc : entry.preview;
+  }
+
+  function renderPages() {
+    const base = Math.round(paging.position);
+    pages.forEach((image, slot) => {
+      const index = indexAt(base + slot - 1);
+      if (slot !== 1) {
+        image.style.display = index < 0 ? "none" : "";
+        if (index < 0) return;
+        showPage(image, index);
+      }
+      const offset = base + slot - 1 - paging.position;
+      image.style.translate = offset === 0 ? "" : `${offset * pitch()}px`;
+    });
+  }
+
+  function onPage() {
+    if (!syncing && lightbox.open) {
+      const index = indexAt(Math.round(paging.position));
+      if (index >= 0 && index !== activeIndex) {
+        setActive(index, { fromPager: true });
+        replaceAddress();
+      }
+    }
+    renderPages();
+  }
+
+  // Put the pager at rest on the active entry (after the viewer opens or jumps to another entry).
+  function syncPager() {
+    anchor = { v: BASE, entry: controller.entries()[activeIndex] };
+    syncing = true;
+    paging.set(BASE);
+    syncing = false;
+    for (const image of pages) delete image.dataset.index;
+    renderPages();
+  }
+
+  // Swipe the image sideways: it follows the pointer and a flick moves on one entry at most. The
+  // swipe is measured from where the drag began, so passing the threshold doesn't jump. Where
+  // paging isn't on offer a long enough swipe steps (to the entry's next page).
+  let swipeOrigin = 0;
+  let swipeOriginV = 0;
+  let swipeAborted = false;
+  const swipe = drag(lightboxFrame, {
+    canStart: (event) => event.isPrimary && lightbox.open && !lightboxBusy() && !zoomed(),
+    onPress() {
+      swipeAborted = false;
+      paging.grab();
+      swipeOriginV = Math.round(paging.position);
+    },
+    onStart: ({ event }) => (swipeOrigin = event.clientX),
+    onMove({ event }) {
+      if (swipeAborted || !pagingActive()) return;
+      const distance = event.clientX - swipeOrigin;
+      // Past either end there is nothing to page to: the image stretches and springs back.
+      const missing = indexAt(swipeOriginV + (distance < 0 ? 1 : -1)) < 0;
+      paging.move(missing ? Math.sign(distance) * rubberBand(Math.abs(distance), pitch()) : distance);
+    },
+    onEnd({ dx, dy, velocity }) {
+      suppressLightboxClickUntil = performance.now() + 350;
+      if (swipeAborted) {
+        paging.settle();
+        return;
+      }
+      if (!pagingActive()) {
+        if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) void step(dx < 0 ? 1 : -1);
+        return;
+      }
+      if (indexAt(paging.release(velocity.x)) < 0) paging.goTo(swipeOriginV);
+    },
+    // A press that stopped a page turn without swiping finishes it.
+    onRelease() {
+      if (paging.position !== Math.round(paging.position)) paging.settle();
+    },
+  });
+
+  function setActive(index, { fromPager = false } = {}) {
     resetZoom();
     const entries = controller.entries();
     activeIndex = controller.wrap ? mod(index, entries.length) : Math.min(entries.length - 1, Math.max(0, index));
@@ -496,6 +635,7 @@
     fillInfo(entry);
 
     upgradeChain(entry, token);
+    if (!fromPager) syncPager();
   }
 
   // The title, then its place among the posts as "5 of 52", worked out from each post's index and
@@ -703,11 +843,14 @@
       if (link?.href) link.click();
       return;
     }
+    const paged = pagingActive();
+    // Stepping goes on from where the last step is heading.
+    const from = paged ? indexAt(Math.round(paging.target)) : activeIndex;
     stepping = true;
     try {
       // The rail loads the neighbouring page first when the step would cross into it.
-      for (let guard = 0; guard < 50 && (await controller.ensure?.(activeIndex, direction)); guard += 1);
-      if (!controller.wrap && activeIndex + direction >= controller.entries().length && controller.hasMore?.()) {
+      for (let guard = 0; guard < 50 && (await controller.ensure?.(from, direction)); guard += 1);
+      if (!controller.wrap && from + direction >= controller.entries().length && controller.hasMore?.()) {
         await controller.loadMore();
       }
     } catch (error) {
@@ -716,6 +859,12 @@
       stepping = false;
     }
     if (!lightbox.open || lightboxBusy()) return;
+    if (paged && pagingActive()) {
+      // The arrows and keys change the image at once; only swipes animate.
+      const next = Math.round(paging.target) + direction;
+      if (indexAt(next) >= 0) paging.set(next);
+      return;
+    }
     const entries = controller.entries();
     let next = activeIndex + direction;
     if (!controller.wrap && (next < 0 || next >= entries.length)) return;
@@ -727,49 +876,18 @@
     replaceAddress();
   }
 
-  function startSwipe(event) {
-    if (!lightbox.open || lightboxBusy() || !event.isPrimary || event.button !== 0 || zoomed()) return;
-    lightboxGesture = { id: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false };
-    lightboxFrame.setPointerCapture(event.pointerId);
-  }
-
-  function moveSwipe(event) {
-    if (!lightboxGesture || event.pointerId !== lightboxGesture.id) return;
-    const deltaX = event.clientX - lightboxGesture.startX;
-    const deltaY = event.clientY - lightboxGesture.startY;
-    if (Math.hypot(deltaX, deltaY) > 8) lightboxGesture.moved = true;
-  }
-
-  function finishSwipe(event) {
-    if (!lightboxGesture || event.pointerId !== lightboxGesture.id) return;
-    const gesture = lightboxGesture;
-    lightboxGesture = null;
-    if (gesture.moved) suppressLightboxClickUntil = performance.now() + 350;
-    if (event.type === "pointercancel" || lightboxBusy()) return;
-    const deltaX = event.clientX - gesture.startX;
-    const deltaY = event.clientY - gesture.startY;
-    if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) <= Math.abs(deltaY)) return;
-    void step(deltaX < 0 ? 1 : -1);
-  }
-
   function reveal() {
     opening = false;
     lightbox.classList.remove("is-opening");
-    if (closeAfterOpen) {
-      // The close was asked for during the opening zoom, and the address has already been
-      // dealt with (Back, or requestClose), so only the viewer itself is left to close.
-      closeAfterOpen = false;
-      void close();
-      return;
-    }
     if (lightbox.open) lightbox.classList.add("is-revealed");
   }
 
   // `animate` zooms from the entry's image on the page; without it the viewer simply appears.
+  // A copy of the image flies between the page and the viewer on springs (see createFlyer), and
+  // reverses from wherever it is, keeping its speed, if the viewer is closed while it is opening.
   async function open(index, { animate = true } = {}) {
     if (viewerActive() || !controller) return;
     opening = true;
-    closeAfterOpen = false;
     controller.pause();
     resetZoom();
     setActive(index);
@@ -778,16 +896,16 @@
     if (source && isLoaded(source)) await lightboxImage.decode().catch(() => {});
 
     const show = () => {
-      source?.classList.remove("is-transitioning");
       controller.hideSource(activeIndex, true);
       lightbox.classList.remove("is-revealed", "is-closing");
       lightbox.classList.add("is-opening");
       lightbox.showModal();
       root.classList.add("is-viewing");
       lightboxFrame.focus({ preventScroll: true });
+      renderPages();
     };
 
-    if (!source || reducedMotion.matches || !document.startViewTransition) {
+    if (!source || reducedMotion.matches) {
       // Appearing without the zoom (an entry's own page), the details and controls are there
       // from the first frame rather than fading in after the image.
       if (!animate) lightbox.classList.add("is-instant");
@@ -796,33 +914,23 @@
       if (!animate) requestAnimationFrame(() => requestAnimationFrame(() => lightbox.classList.remove("is-instant")));
       return;
     }
-    root.classList.add("is-zooming");
-    source.classList.add("is-transitioning");
-    source.style.viewTransitionName = "active-image";
-    const transition = document.startViewTransition(() => {
-      source.style.removeProperty("view-transition-name");
-      show();
-    });
-    transition.ready.then(() => {
-      if (opening && lightbox.open && !closeAfterOpen) lightbox.classList.add("is-revealed");
-    }, () => {});
-    transition.finished.then(() => {
-      root.classList.remove("is-zooming");
-      reveal();
-    }, () => {
-      root.classList.remove("is-zooming");
-      reveal();
+    show();
+    // The backdrop and controls fade in while the image flies.
+    lightbox.classList.add("is-revealed");
+    flyer.open({
+      src: source.currentSrc || source.src,
+      from: rectOf(source),
+      to: rectOf(lightboxImage),
+      hide: lightboxImage,
+      done: reveal,
     });
   }
 
   // Puts the page back as it was before the viewer opened. Safe to run more than once, so
   // it also tidies up after the browser closes the dialog itself.
   function cleanUpViewer() {
-    root.classList.remove("lightbox-transition-closing", "is-zooming", "is-leaving", "is-viewing", "is-deep-open");
-    for (const image of document.querySelectorAll(".is-transitioning")) {
-      image.classList.remove("is-transitioning");
-      image.style.removeProperty("view-transition-name");
-    }
+    flyer.stop();
+    root.classList.remove("is-leaving", "is-viewing", "is-deep-open");
     lightbox.classList.remove("is-closing", "is-opening", "is-revealed");
     if (lightbox.open) {
       closedByScript = true;
@@ -831,19 +939,16 @@
     resetZoom();
     controller?.hideSource(activeIndex, false);
     opening = false;
-    closeAfterOpen = false;
     closing = false;
     closePending = false;
-    lightboxGesture = null;
+    paging.stop();
+    for (const image of pages) image.style.translate = "";
     controller?.resume();
     measureScrollbar();
   }
 
   async function close({ animate = true } = {}) {
-    if (opening) {
-      closeAfterOpen = true;
-      return;
-    }
+    // Closing while the viewer is still opening reverses the flight from where it is.
     if (!lightbox.open || closePending) return;
     closePending = true;
     root.classList.remove("is-deep-open");
@@ -852,32 +957,32 @@
     // An image mostly still on screen zooms back to where it was; otherwise the page brings it in first.
     controller.settle(activeIndex);
     const source = animate ? controller.sourceImage(activeIndex) : null;
-    await Promise.all([source, lightboxImage].filter((image) => image && isLoaded(image)).map((image) => image.decode().catch(() => {})));
+    if (!flyer.active) {
+      await Promise.all([source, lightboxImage].filter((image) => image && isLoaded(image)).map((image) => image.decode().catch(() => {})));
+    }
     if (!lightbox.open) {
       cleanUpViewer();
       return;
     }
 
-    const hide = () => {
-      controller.hideSource(activeIndex, false);
-      lightbox.classList.remove("is-revealed", "is-opening");
-      lightbox.classList.add("is-closing");
-    };
+    lightbox.classList.remove("is-revealed", "is-opening");
+    lightbox.classList.add("is-closing");
+    opening = false;
 
-    if (!source || reducedMotion.matches || !document.startViewTransition) {
-      hide();
+    if (!source || reducedMotion.matches) {
       cleanUpViewer();
       return;
     }
     closing = true;
-    root.classList.add("is-zooming");
-    source.classList.add("is-transitioning");
-    const transition = document.startViewTransition(() => {
-      root.classList.add("lightbox-transition-closing");
-      source.style.viewTransitionName = "active-image";
-      hide();
+    paging.stop();
+    // Zoom out from wherever the image is now, mid-swipe, mid-pan or mid-drag included.
+    flyer.close({
+      src: lightboxImage.currentSrc || lightboxImage.src,
+      from: rectOf(source),
+      to: rectOf(lightboxImage),
+      hide: lightboxImage,
+      done: cleanUpViewer,
     });
-    transition.finished.then(cleanUpViewer, cleanUpViewer);
   }
 
   // ---- Address and history: opening pushes the entry's address, Back closes ----
@@ -980,9 +1085,6 @@
   const ZOOM_STEP = 0.5;
   const WHEEL_ZOOM_RATE = Math.log(1.25) / 100; // a wheel notch, about 100px, zooms 25%
   const EXIT_PULL_LIMIT = 230; // wheel travel at 100% that closes the viewer
-  const PAN_FRICTION = 4.2;
-  const PAN_STIFFNESS = 420;
-  const PAN_DAMPING = 40;
   const zoomOutButton = lightbox.querySelector(".zoom-out");
   const zoomInButton = lightbox.querySelector(".zoom-in");
 
@@ -991,17 +1093,12 @@
   let panY = 0;
   let exitPull = 0;
   let exitTimer = 0;
-  let animateTimer = 0;
   let pulledClosed = false;
   let wheelStamp = 0;
   let wheelTrackpad = false; // whether the current wheel gesture is a trackpad's two-finger scroll
   let calmUntil = 0;
   let panDrag = null;
-  let panMotion = null;
-  let panFrame = 0;
   let pinch = null;
-  let dragX = 0; // a drag down to close moves the image with the finger
-  let dragY = 0;
   let dragDown = null;
   let lastTap = null;
   let lastDoubleTapAt = 0;
@@ -1010,8 +1107,6 @@
   const zoomed = () => zoomLevel > 1.001;
   const clampValue = (value, low, high) => Math.min(high, Math.max(low, value));
   const pullAmount = (distance) => (160 * distance) / (distance + 160);
-  // How far a drag down to close has gone, from 0 to 1 at 60% of the screen's height.
-  const dragProgress = () => (dragY > 0 ? Math.min(1, dragY / (lightbox.clientHeight * 0.6)) : 0);
 
   // Where the image's centre sits on screen with no zoom or pan applied.
   function baseCenter() {
@@ -1048,13 +1143,31 @@
     return { lowX, highX, lowY, highY };
   }
 
+  // What is drawn lags what is asked for, on springs: a zoom step, the end of a pull or a drag
+  // glides to its new place, and a new target keeps the speed it has (see createValue). Drags
+  // and pinches set the drawn values straight away so the image follows the fingers.
+  const shownScale = createValue({ value: 1, precision: 0.0005, onUpdate: paintZoom });
+  const shownX = createValue({ precision: 0.25, onUpdate: paintZoom });
+  const shownY = createValue({ precision: 0.25, onUpdate: paintZoom });
+  let glideZoom = false;
+
+  function paintZoom() {
+    const moved = shownScale.value !== 1 || shownX.value || shownY.value;
+    lightboxImage.style.transform = moved ? `translate3d(${shownX.value}px, ${shownY.value}px, 0) scale(${shownScale.value})` : "";
+    // Larger than its place, the image has the whole screen: nothing else is clipped or shown.
+    lightbox.classList.toggle("is-scaled", shownScale.value > 1.001);
+  }
+
   function renderZoom() {
     const pullScale = reducedMotion.matches ? 1 : 1 - pullAmount(exitPull) / 500;
-    const drag = dragProgress();
-    const dragScale = 1 - drag * 0.3;
-    const moved = zoomed() || panX || panY || dragX || dragY || pullScale !== 1;
-    lightboxImage.style.transform = moved ? `translate3d(${panX + dragX}px, ${panY + dragY}px, 0) scale(${zoomLevel * pullScale * dragScale})` : "";
-    lightbox.style.setProperty("--drag", drag.toFixed(3));
+    const scale = zoomLevel * pullScale;
+    const x = panX;
+    const y = panY;
+    for (const [value, target] of [[shownScale, scale], [shownX, x], [shownY, y]]) {
+      if (glideZoom) value.to(target, presets.zoomOpen);
+      else value.set(target);
+    }
+    glideZoom = false;
     // Zoomed in, the image has the whole screen, so the details scrolled up out of the way come back.
     if (zoomed() && lightbox.scrollTop) lightbox.scrollTop = 0;
     lightbox.classList.toggle("is-zoomed", zoomed());
@@ -1062,12 +1175,9 @@
     zoomInButton.disabled = zoomLevel >= MAX_ZOOM - 0.001;
   }
 
-  // Lets the next change to the image's transform glide instead of jump.
+  // Lets the next change to the image's size and place glide instead of jump.
   function animateZoom() {
-    if (reducedMotion.matches) return;
-    lightboxImage.classList.add("is-zoom-animating");
-    window.clearTimeout(animateTimer);
-    animateTimer = window.setTimeout(() => lightboxImage.classList.remove("is-zoom-animating"), 260);
+    glideZoom = true;
   }
 
   function clearPull() {
@@ -1077,9 +1187,8 @@
   }
 
   function stopPan() {
-    if (panFrame) cancelAnimationFrame(panFrame);
-    panFrame = 0;
-    panMotion = null;
+    panCoastX.stop();
+    panCoastY.stop();
     panDrag = null;
     lightbox.classList.remove("is-panning");
   }
@@ -1117,8 +1226,10 @@
   function resetZoom() {
     stopPan();
     clearPull();
-    window.clearTimeout(animateTimer);
-    lightboxImage.classList.remove("is-zoom-animating");
+    shownScale.stop();
+    shownX.stop();
+    shownY.stop();
+    glideZoom = false;
     zoomLevel = 1;
     panX = 0;
     panY = 0;
@@ -1126,9 +1237,12 @@
     pinch = null;
     pulledClosed = false;
     dragDown = null;
-    dragX = 0;
-    dragY = 0;
+    if (dismiss.active) {
+      dismiss.stop();
+      flyer.stop();
+    }
     lightbox.classList.remove("is-dragging-down");
+    lightbox.style.setProperty("--drag", "0");
     renderZoom();
   }
 
@@ -1201,18 +1315,10 @@
     setZoom(zoomLevel * Math.exp(deltaY * WHEEL_ZOOM_RATE), pivot, { animate: !wheelTrackpad });
   }
 
-  // Panning: drag the enlarged image; it coasts and stretches a little past its edges.
-  function elastic(value, low, high, span) {
-    if (value > high) {
-      const over = value - high;
-      return high + (span * over) / (over + span);
-    }
-    if (value < low) {
-      const over = low - value;
-      return low - (span * over) / (over + span);
-    }
-    return value;
-  }
+  // Panning: drag the enlarged image; it stretches past its edges, and on release coasts or springs back.
+  const panTracker = velocityTracker();
+  const panCoastX = createValue({ onUpdate: (value) => { panX = value; renderZoom(); } });
+  const panCoastY = createValue({ onUpdate: (value) => { panY = value; renderZoom(); } });
 
   function beginPan(event) {
     stopPan();
@@ -1221,13 +1327,15 @@
       id: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      startPanX: panX,
-      startPanY: panY,
+      // A press on an image left stretched past an edge picks up the position it was pulled from.
+      startPanX: unband(panX, bounds.lowX, bounds.highX, lightbox.clientWidth),
+      startPanY: unband(panY, bounds.lowY, bounds.highY, lightbox.clientHeight),
       bounds,
       moved: false,
       onImage: event.target === lightboxImage,
-      samples: [{ x: event.clientX, y: event.clientY, time: event.timeStamp }],
     };
+    panTracker.reset();
+    panTracker.add(event);
     lightbox.setPointerCapture(event.pointerId);
     lightbox.classList.add("is-panning");
     event.preventDefault();
@@ -1235,55 +1343,24 @@
 
   function movePan(event) {
     const { bounds } = panDrag;
-    panDrag.samples.push({ x: event.clientX, y: event.clientY, time: event.timeStamp });
-    while (panDrag.samples.length > 2 && event.timeStamp - panDrag.samples[0].time > 100) panDrag.samples.shift();
+    panTracker.add(event);
     if (Math.hypot(event.clientX - panDrag.startX, event.clientY - panDrag.startY) > 5) panDrag.moved = true;
-    panX = elastic(panDrag.startPanX + event.clientX - panDrag.startX, bounds.lowX, bounds.highX, lightbox.clientWidth * 0.12);
-    panY = elastic(panDrag.startPanY + event.clientY - panDrag.startY, bounds.lowY, bounds.highY, lightbox.clientHeight * 0.12);
+    panX = band(panDrag.startPanX + event.clientX - panDrag.startX, bounds.lowX, bounds.highX, lightbox.clientWidth);
+    panY = band(panDrag.startPanY + event.clientY - panDrag.startY, bounds.lowY, bounds.highY, lightbox.clientHeight);
     renderZoom();
   }
 
-  function stepAxis(axis, dt) {
-    const edge = clampValue(axis.pos, axis.low, axis.high);
-    const out = axis.pos - edge;
-    if (out) axis.v += (-PAN_STIFFNESS * out - PAN_DAMPING * axis.v) * dt;
-    else axis.v *= Math.exp(-PAN_FRICTION * dt);
-    axis.pos += axis.v * dt;
-    const settled = clampValue(axis.pos, axis.low, axis.high);
-    if (out && axis.pos === settled) {
-      axis.pos = edge;
-      axis.v = 0;
-    } else if (axis.pos === settled) {
-      if (Math.abs(axis.v) < 2) axis.v = 0;
-    } else if (Math.abs(axis.pos - settled) < 0.3 && Math.abs(axis.v) < 8) {
-      axis.pos = settled;
-      axis.v = 0;
-    }
-    return axis.v !== 0 || axis.pos !== clampValue(axis.pos, axis.low, axis.high);
-  }
-
+  // Carry on from the release: coast to where the flick would stop, kept inside the edges, or if
+  // the image was left stretched past one, spring back to it.
   function startPanMotion(velocityX, velocityY) {
-    // Momentum follows the finger, so it stays on with reduced motion.
     const bounds = panBounds();
-    panMotion = {
-      x: { pos: panX, v: velocityX, low: bounds.lowX, high: bounds.highX },
-      y: { pos: panY, v: velocityY, low: bounds.lowY, high: bounds.highY },
+    const settle = (value, position, speed, low, high) => {
+      value.set(position, speed);
+      if (position < low || position > high) value.to(clampValue(position, low, high), presets.page);
+      else value.coast(clampValue(position + project(speed), low, high), presets.page, { within: 0.5, min: 1 });
     };
-    let last = 0;
-    const frame = (now) => {
-      panFrame = 0;
-      if (!panMotion) return;
-      const dt = last ? Math.min((now - last) / 1000, 0.05) : 0;
-      last = now;
-      const movingX = stepAxis(panMotion.x, dt);
-      const movingY = stepAxis(panMotion.y, dt);
-      panX = panMotion.x.pos;
-      panY = panMotion.y.pos;
-      renderZoom();
-      if (movingX || movingY) panFrame = requestAnimationFrame(frame);
-      else panMotion = null;
-    };
-    panFrame = requestAnimationFrame(frame);
+    settle(panCoastX, panX, velocityX, bounds.lowX, bounds.highX);
+    settle(panCoastY, panY, velocityY, bounds.lowY, bounds.highY);
   }
 
   function endPan(event) {
@@ -1293,23 +1370,13 @@
     // The capture sends the click to the viewer itself, which would read it as a click on the
     // backdrop and close: a press on the image, or a drag, isn't one.
     if (gesture.moved || gesture.onImage) suppressLightboxClickUntil = performance.now() + 350;
-    let velocityX = 0;
-    let velocityY = 0;
-    if (event.type === "pointerup") {
-      const first = gesture.samples[0];
-      const last = gesture.samples.at(-1);
-      const seconds = Math.max((last.time - first.time) / 1000, 0.001);
-      const still = Math.max((event.timeStamp - last.time) / 1000, 0);
-      const decay = Math.exp(-PAN_FRICTION * still);
-      velocityX = clampValue((last.x - first.x) / seconds, -1100, 1100) * decay;
-      velocityY = clampValue((last.y - first.y) / seconds, -1100, 1100) * decay;
-    }
+    const { x: velocityX, y: velocityY } = event.type === "pointerup" ? panTracker.velocity(event.timeStamp) : { x: 0, y: 0 };
     startPanMotion(velocityX, velocityY);
   }
 
   // Pinching with two fingers zooms around their midpoint and follows them as they move.
   function beginPinch() {
-    lightboxGesture = null;
+    swipeAborted = true;
     stopPan();
     const [a, b] = [...pointers.values()];
     pinch = { distance: Math.hypot(a.x - b.x, a.y - b.y) || 1, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
@@ -1383,21 +1450,43 @@
   lightbox.addEventListener("pointerup", releasePointer);
   lightbox.addEventListener("pointercancel", releasePointer);
 
-  // On touch screens, dragging the image down closes the viewer, as in a photo app: the image
-  // follows the finger and shrinks, the page shows through, and letting go far enough or with
-  // a flick closes it; otherwise it springs back. With the details open on a phone the viewer
-  // scrolls, so the drag only takes over when it is already at the top.
-  const DRAG_CLOSE_DISTANCE = 110;
-  const DRAG_CLOSE_SPEED = 0.6; // px per ms
+  // On touch screens, dragging the image down closes the viewer, as in a photo app (see
+  // createDismiss): a copy of the image follows the finger on both axes and shrinks, the page
+  // shows through, and letting go with enough pull or flick closes it into its place on the page;
+  // otherwise it springs back. With the details open on a phone the viewer scrolls, so the drag
+  // only takes over when it is already at the top.
+  const dragTracker = velocityTracker();
+  const thumbState = () => {
+    const source = controller?.sourceImage(activeIndex);
+    return fullState(rectOf(source || lightboxImage));
+  };
+  const dismiss = createDismiss(flyer.zoom, {
+    height: () => lightbox.clientHeight,
+    // The controls fade out first, with the pull.
+    onBackdrop: (opacity) => lightbox.style.setProperty("--drag", (1 - opacity).toFixed(3)),
+    from: thumbState,
+    // The copy now flies home at the speed of the release.
+    onDismiss() {
+      pulledClosed = true;
+      void requestClose();
+    },
+    onReturn() {
+      flyer.stop();
+      lightbox.classList.remove("is-dragging-down");
+      lightbox.style.setProperty("--drag", "0");
+    },
+  });
 
-  function springBackDrag() {
+  function startDismiss(touch) {
+    flyer.show({ src: lightboxImage.currentSrc || lightboxImage.src, from: thumbState(), to: rectOf(lightboxImage), hide: lightboxImage });
+    dismiss.start({ x: touch.clientX, y: touch.clientY });
+    lightbox.classList.add("is-dragging-down");
+  }
+
+  // A second finger or a zoom ends the drag where it is.
+  function abortDismiss() {
+    if (dragDown?.active) dismiss.end({ x: 0, y: 0 });
     dragDown = null;
-    if (!dragX && !dragY) return;
-    dragX = 0;
-    dragY = 0;
-    animateZoom();
-    lightbox.classList.remove("is-dragging-down");
-    renderZoom();
   }
 
   lightbox.addEventListener(
@@ -1407,7 +1496,7 @@
       if (event.touches.length !== 1 || zoomed() || lightboxBusy() || pulledClosed) return;
       if (event.target.closest("button, a, .zoom-controls, .lightbox-info")) return;
       const touch = event.touches[0];
-      dragDown = { startX: touch.clientX, startY: touch.clientY, active: false, samples: [] };
+      dragDown = { startX: touch.clientX, startY: touch.clientY, active: false };
     },
     { passive: true }
   );
@@ -1417,7 +1506,7 @@
     (event) => {
       if (!dragDown) return;
       if (event.touches.length !== 1 || zoomed()) {
-        springBackDrag();
+        abortDismiss();
         return;
       }
       const touch = event.touches[0];
@@ -1431,16 +1520,14 @@
           return;
         }
         dragDown.active = true;
-        lightboxGesture = null; // not a swipe to the next image
+        swipeAborted = true; // not a swipe to the next image
         suppressLightboxClickUntil = Number.POSITIVE_INFINITY;
-        lightbox.classList.add("is-dragging-down");
+        dragTracker.reset();
+        startDismiss({ clientX: dragDown.startX, clientY: dragDown.startY });
       }
       event.preventDefault();
-      dragX = deltaX;
-      dragY = deltaY;
-      dragDown.samples.push({ y: touch.clientY, time: event.timeStamp });
-      while (dragDown.samples.length > 2 && event.timeStamp - dragDown.samples[0].time > 100) dragDown.samples.shift();
-      renderZoom();
+      dragTracker.add({ timeStamp: event.timeStamp, clientX: touch.clientX, clientY: touch.clientY });
+      dismiss.move(deltaX, deltaY);
     },
     { passive: false }
   );
@@ -1448,21 +1535,10 @@
   const endDragDown = (event) => {
     if (!dragDown) return;
     const gesture = dragDown;
-    if (!gesture.active) {
-      dragDown = null;
-      return;
-    }
+    dragDown = null;
+    if (!gesture.active) return;
     suppressLightboxClickUntil = performance.now() + 350;
-    const first = gesture.samples[0];
-    const last = gesture.samples[gesture.samples.length - 1];
-    const speed = first && last && last.time > first.time ? (last.y - first.y) / (last.time - first.time) : 0;
-    if (event.type === "touchend" && (dragY > DRAG_CLOSE_DISTANCE || (speed > DRAG_CLOSE_SPEED && dragY > 30))) {
-      dragDown = null;
-      pulledClosed = true;
-      void requestClose(); // closes from where the finger left the image
-      return;
-    }
-    springBackDrag();
+    dismiss.end(event.type === "touchend" ? dragTracker.velocity(event.timeStamp) : { x: 0, y: 0 });
   };
   lightbox.addEventListener("touchend", endDragDown);
   lightbox.addEventListener("touchcancel", endDragDown);
@@ -1531,10 +1607,6 @@
     if (suppress) event.preventDefault();
     else requestClose();
   });
-  lightboxFrame.addEventListener("pointerdown", startSwipe);
-  lightboxFrame.addEventListener("pointermove", moveSwipe);
-  lightboxFrame.addEventListener("pointerup", finishSwipe);
-  lightboxFrame.addEventListener("pointercancel", finishSwipe);
   lightbox.addEventListener("wheel", onLightboxWheel, { passive: false });
   lightbox.addEventListener("cancel", (event) => {
     event.preventDefault();
@@ -1601,8 +1673,6 @@
     const drift = {{#drift}}true{{/drift}}{{^drift}}false{{/drift}}; // the "drift" setting
     // No drift while the tab is hidden, so a background tab does no work at all.
     const drifting = () => drift && !reducedMotion.matches && !document.hidden;
-    const FRICTION = 4.2;
-    const MAX_VELOCITY = 1100;
     const RETRY_DELAY = 5000; // ms before a page that failed to load is tried again
     const EMPTY_PAGE_LIMIT = 5; // pages to look through for an image before giving up
 
@@ -1652,19 +1722,24 @@
       }
     }
 
-    let x = 0;
-    let velocity = 0;
+    // The scroll position in px, unwrapped: slots are placed on the ring from it. Drags, wheels and
+    // the drift move it directly; flicks and glides run it on springs (see the motion library).
+    const scroll = createValue({
+      precision: 0.5,
+      onUpdate() {
+        render();
+        maybeLoad();
+      },
+    });
+    let goal = 0; // where a running flick or glide is heading
     let gap = 0;
     let maxStep = 0; // the widest slide and the gap after it
     let padding = 0;
     let cycle = 0;
     let viewWidth = 0;
-    let drag = null;
-    let glide = null;
     let holdUntil = 0;
     let frameId = 0;
     let lastTime = 0;
-    let suppressClickUntil = 0;
     let paused = false;
     let keyboardIndex = null;
 
@@ -1690,7 +1765,7 @@
     }
 
     // Where a slot's left edge sits on screen.
-    const slotLeft = (item) => mod(item.start - x + 2 * maxStep, cycle) - 2 * maxStep + padding;
+    const slotLeft = (item) => mod(item.start - scroll.value + 2 * maxStep, cycle) - 2 * maxStep + padding;
 
     function render() {
       for (const item of slots) {
@@ -1720,32 +1795,15 @@
       frameId = requestAnimationFrame(frame);
     }
 
+    // The drift runs on its own frame loop at a constant speed, and waits while the rail is
+    // dragged, wheeled, flung or gliding (those run on springs in createValue).
     function frame(now) {
       frameId = 0;
-      if (paused || !cycle) return;
+      if (paused || !cycle || !drifting()) return;
       const dt = lastTime ? Math.min((now - lastTime) / 1000, 0.05) : 0;
       lastTime = now;
-
-      if (glide) {
-        const t = Math.min((now - glide.start) / glide.duration, 1);
-        const eased = 1 - (1 - t) ** 5;
-        x += (eased - glide.done) * glide.distance;
-        glide.done = eased;
-        if (t === 1) glide = null;
-      } else if (!drag) {
-        if (Math.abs(velocity) >= 2) {
-          x += velocity * dt;
-          velocity *= Math.exp(-FRICTION * dt);
-        } else {
-          velocity = 0;
-        }
-        if (now >= holdUntil && drifting()) x += DRIFT_SPEED * dt;
-      }
-
-      x = mod(x, cycle);
-      render();
-      maybeLoad();
-      if (drag || glide || velocity || drifting()) frameId = requestAnimationFrame(frame);
+      if (!railDrag.active && !scroll.running && now >= holdUntil) moveBy(DRIFT_SPEED * dt);
+      frameId = requestAnimationFrame(frame);
     }
 
     function cloneSlot(original) {
@@ -1785,7 +1843,23 @@
     }
 
     // Where the middle of the screen falls along the ring.
-    const middle = () => x + viewWidth / 2 - padding;
+    const middle = () => scroll.value + viewWidth / 2 - padding;
+    const moveBy = (distance) => scroll.set(scroll.value + distance);
+
+    // Move the ring under the view to `candidate` (or the place a whole turn away that is nearest),
+    // carrying on a flick or glide that is running instead of stopping it.
+    function shift(candidate) {
+      const target = candidate + Math.round((scroll.value - candidate) / cycle) * cycle;
+      const delta = target - scroll.value;
+      if (!delta) return;
+      const running = scroll.running;
+      scroll.stop();
+      scroll.value = target;
+      if (running) {
+        goal += delta;
+        scroll.to(goal, presets.page);
+      }
+    }
 
     function measure() {
       const styles = getComputedStyle(list);
@@ -1798,7 +1872,7 @@
       for (const item of slots) item.width = item.slot.offsetWidth;
       fill();
       layout();
-      if (anchor && cycle) x = anchor.start + within * anchor.width + padding - viewWidth / 2;
+      if (anchor && cycle) shift(anchor.start + within * anchor.width + padding - viewWidth / 2);
       render();
       maybeLoad();
       schedule();
@@ -1823,7 +1897,7 @@
       if (!cycle) return;
       const reach = viewWidth * 1.5 + maxStep * 2;
       const seamX = (slots[seam]?.start ?? cycle) + padding - gap / 2;
-      const distance = mod(seamX - (x + viewWidth / 2) + cycle / 2, cycle) - cycle / 2;
+      const distance = mod(seamX - (scroll.value + viewWidth / 2) + cycle / 2, cycle) - cycle / 2;
       if (Math.abs(distance) < reach) void loadPage(distance >= 0 ? "forward" : "backward");
     }
 
@@ -1911,7 +1985,7 @@
       fadeImagesIn(items.map((item) => item.img));
       fill();
       layout();
-      if (anchor) x = mod(anchor.start - (anchorLeft - padding), cycle);
+      if (anchor) shift(anchor.start - (anchorLeft - padding));
       entriesInserted(at, items.length, moved);
       render();
       schedule();
@@ -1939,16 +2013,11 @@
     }
 
     function glideToSlot(item) {
-      const distance = mod(centerOffset(item) - x + cycle / 2, cycle) - cycle / 2;
-      velocity = 0;
+      const distance = mod(centerOffset(item) - scroll.value + cycle / 2, cycle) - cycle / 2;
       holdUntil = 0;
-      if (reducedMotion.matches || Math.abs(distance) < 1) {
-        glide = null;
-        x += distance;
-      } else {
-        glide = { start: performance.now(), duration: Math.min(600, Math.max(260, Math.abs(distance) * 0.45)), distance, done: 0 };
-      }
-      schedule();
+      scroll.velocity = 0;
+      goal = scroll.value + distance;
+      scroll.to(goal, presets.page);
     }
 
     // The slot whose middle is nearest the middle of the screen.
@@ -1967,93 +2036,51 @@
       return best;
     }
 
-    function pointerDown(event) {
-      if (paused || viewerActive() || event.button !== 0 || !cycle) return;
-      keyboardIndex = null;
-      viewport.classList.remove("is-keyboard-navigating");
-      glide = null;
-      velocity = 0;
-      drag = { id: event.pointerId, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, moved: false, samples: [{ x: event.clientX, time: event.timeStamp }] };
-      viewport.classList.add("is-dragging");
-      viewport.addEventListener("pointermove", pointerMove);
-      viewport.addEventListener("pointerup", pointerEnd);
-      viewport.addEventListener("pointercancel", pointerEnd);
-      viewport.addEventListener("lostpointercapture", pointerEnd);
-      event.target.setPointerCapture?.(event.pointerId);
-      if (event.target.closest(".item")) event.preventDefault();
-      schedule();
-    }
+    // Drag the rail; a flick coasts to rest where it lands, with no speed cap, then the drift resumes.
+    let dragX = 0;
+    const railDrag = drag(viewport, {
+      threshold: 5,
+      canStart: () => !paused && !viewerActive() && cycle > 0,
+      onPress(event) {
+        keyboardIndex = null;
+        viewport.classList.remove("is-keyboard-navigating");
+        // A press stops a moving rail where it is; a tap then opens the image under it.
+        scroll.stop();
+        dragX = event.clientX;
+      },
+      onStart: () => viewport.classList.add("is-dragging"),
+      onMove({ event }) {
+        moveBy(dragX - event.clientX);
+        dragX = event.clientX;
+      },
+      onEnd({ velocity }) {
+        viewport.classList.remove("is-dragging");
+        if (reducedMotion.matches) return;
+        scroll.velocity = -velocity.x;
+        goal = scroll.value + project(scroll.velocity);
+        scroll.coast(goal, presets.page, { within: 0.5, min: 1 });
+      },
+    });
 
-    function pointerMove(event) {
-      if (!drag || event.pointerId !== drag.id) return;
-      x -= event.clientX - drag.lastX;
-      drag.lastX = event.clientX;
-      drag.lastY = event.clientY;
-      if (Math.abs(event.clientX - drag.startX) > 5) drag.moved = true;
-      drag.samples.push({ x: event.clientX, time: event.timeStamp });
-      while (drag.samples.length > 2 && event.timeStamp - drag.samples[0].time > 100) drag.samples.shift();
-      schedule();
-    }
-
-    function pointerEnd(event) {
-      if (!drag || event.pointerId !== drag.id) return;
-      const gesture = drag;
-      drag = null;
-      viewport.classList.remove("is-dragging");
-      viewport.removeEventListener("pointermove", pointerMove);
-      viewport.removeEventListener("pointerup", pointerEnd);
-      viewport.removeEventListener("pointercancel", pointerEnd);
-      viewport.removeEventListener("lostpointercapture", pointerEnd);
-      if (gesture.moved) suppressClickUntil = performance.now() + 350;
-      velocity = 0;
-      // A flick carries on however the drag ends. iOS Safari can end a touch drag with
-      // lostpointercapture or pointercancel rather than pointerup; only a cancel because the
-      // page took over a mostly vertical scroll stops the rail dead. Momentum follows the
-      // finger, so it stays on with reduced motion, like native scrolling does.
-      const scrolledAway =
-        event.type === "pointercancel" && Math.abs(gesture.lastY - gesture.startY) > Math.abs(gesture.lastX - gesture.startX);
-      if (gesture.moved && !scrolledAway) {
-        const first = gesture.samples[0];
-        const last = gesture.samples.at(-1);
-        const seconds = Math.max((last.time - first.time) / 1000, 0.001);
-        const still = Math.max((event.timeStamp - last.time) / 1000, 0);
-        const swipe = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, (last.x - first.x) / seconds));
-        velocity = -swipe * Math.exp(-FRICTION * still);
-      }
-      schedule();
-    }
-
-    viewport.addEventListener("pointerdown", pointerDown);
     viewport.addEventListener("wheel", (event) => {
-      if (paused || viewerActive() || drag || !cycle) return;
+      if (paused || viewerActive() || railDrag.active || !cycle) return;
       // A scroll that began in the viewer (and its trackpad momentum) must not move the rail.
       if (performance.now() < wheelLockUntil) {
         wheelLockUntil = performance.now() + WHEEL_GAP;
         event.preventDefault();
         return;
       }
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewWidth : 1;
-      const deltaX = event.deltaX * unit;
-      const deltaY = event.deltaY * unit;
+      const { x: deltaX, y: deltaY } = wheelDelta(event, viewWidth);
       const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
       if (!delta) return;
       event.preventDefault();
-      glide = null;
-      velocity = 0;
-      x += delta;
+      moveBy(delta);
       holdUntil = performance.now() + 180;
-      schedule();
     }, { passive: false });
 
     viewport.addEventListener("click", (event) => {
       const link = event.target.closest(".item");
       if (!link) return;
-      if (performance.now() < suppressClickUntil) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        suppressClickUntil = 0;
-        return;
-      }
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
       event.preventDefault();
       const item = slots.find((candidate) => candidate.link === link);
@@ -2061,7 +2088,7 @@
     }, true);
 
     reducedMotion.addEventListener("change", () => {
-      if (reducedMotion.matches) glide = null;
+      if (reducedMotion.matches) scroll.stop();
       schedule();
     });
 
@@ -2089,8 +2116,8 @@
       },
       pause() {
         paused = true;
-        glide = null;
-        velocity = 0;
+        scroll.stop();
+        scroll.velocity = 0;
       },
       resume() {
         paused = false;
@@ -2100,8 +2127,7 @@
         // Bring the entry's slide in only if it is mostly off screen.
         const item = slotFor(index);
         if (item && visibleFraction(item) < 0.5) {
-          x = centerOffset(item);
-          render();
+          scroll.set(centerOffset(item));
         }
       },
       // Before the viewer steps from `index` across the seam, load the page that belongs
@@ -2135,7 +2161,7 @@
           viewport.classList.remove("is-keyboard-navigating");
           return;
         }
-        if (paused || drag || event.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
+        if (paused || railDrag.active || event.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
         // Enter opens the chosen slide only while focus is on the page or the rail itself.
         const onRail = event.target === document.body || viewport.contains(event.target);
         if (keyboardIndex !== null && onRail && (event.key === "Enter" || event.key === " ")) {

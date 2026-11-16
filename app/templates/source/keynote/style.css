@@ -7,11 +7,6 @@
   navigation: auto;
 }
 
-/* The zoom between a thumbnail and the viewer keeps the page itself out of the cross-fade. */
-html.is-zooming {
-  view-transition-name: none;
-}
-
 pre code.hljs {
   display: block;
   overflow: auto;
@@ -334,9 +329,6 @@ body[data-view="home"] #title {
 
 .avatar {
   width: 36px;
-  {{#roundAvatar}}{{^profile_image.mask}}
-  border-radius: 50%;
-  {{/profile_image.mask}}{{/roundAvatar}}
   vertical-align: middle;
   margin-right: 0.65em;
 }
@@ -632,15 +624,8 @@ body[data-view="entry"] .rail-viewport {
 }
 
 .item img.is-loaded,
-.cell img.is-loaded,
-.item img.is-transitioning,
-.cell img.is-transitioning {
+.cell img.is-loaded {
   opacity: 1;
-}
-
-.item img.is-transitioning,
-.cell img.is-transitioning {
-  transition: none;
 }
 
 .item.is-zoomed,
@@ -1300,10 +1285,15 @@ code {
 
 /* The viewer: the image zooms up from where it was, over the page colour. */
 .lightbox {
-  --lightbox-open-duration: 320ms;
-  --lightbox-close-duration: 200ms;
-  --lightbox-open-easing: cubic-bezier(0.22, 1.1, 0.36, 1);
-  --lightbox-close-easing: cubic-bezier(0.32, 0.72, 0, 1);
+  /* The image flies on springs in script. The fades are the library's measured presets: the
+     controls (chromeFadeIn, chromeFadeOut) and the backdrop (backdropFade). */
+  --lightbox-open-duration: 193ms;
+  --lightbox-open-easing: cubic-bezier(0.64, 0.79, 0.66, 0.85);
+  --lightbox-close-duration: 180ms;
+  --lightbox-close-delay: 15ms;
+  --lightbox-close-easing: cubic-bezier(0.64, 0.79, 0.66, 0.85);
+  --lightbox-backdrop-duration: 211ms;
+  --lightbox-backdrop-easing: cubic-bezier(0.42, 0, 0.58, 1);
   /* The buttons sit as close to the screen's edges as the header's links: each 44px button
      is inset so its icon lines up with the page margin, and the image takes the rest. */
   --lightbox-button-inset: calc(var(--edge-x) - 10px);
@@ -1344,7 +1334,7 @@ code {
   background: {{background_color}};
   content: "";
   opacity: 0;
-  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
+  transition: opacity var(--lightbox-backdrop-duration) var(--lightbox-backdrop-easing);
 }
 
 .lightbox.is-revealed::before {
@@ -1368,8 +1358,6 @@ code {
   transition: none;
 }
 
-.lightbox.is-closing,
-.lightbox.is-closing::before,
 .lightbox.is-closing .lightbox-caption,
 .lightbox.is-closing .lightbox-close,
 .lightbox.is-closing .lightbox-info-button,
@@ -1377,6 +1365,7 @@ code {
 .lightbox.is-closing .lightbox-step {
   transition-duration: var(--lightbox-close-duration);
   transition-timing-function: var(--lightbox-close-easing);
+  transition-delay: var(--lightbox-close-delay);
 }
 
 .lightbox::backdrop {
@@ -1429,21 +1418,10 @@ html::view-transition-new(active-image) {
   animation-timing-function: cubic-bezier(0.22, 1.1, 0.36, 1);
 }
 
-html.lightbox-transition-closing::view-transition-group(active-image),
-html.lightbox-transition-closing::view-transition-old(active-image),
-html.lightbox-transition-closing::view-transition-new(active-image) {
-  animation-duration: 200ms;
-  animation-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
-}
-
 /* A new image still loading, so the last one doesn't stand in for it. */
 .lightbox-image.is-pending {
   opacity: 0;
   transition: none;
-}
-
-.lightbox-image.is-zoom-animating {
-  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* With the details open, a click zooms in on the place clicked. */
@@ -1554,8 +1532,26 @@ html.lightbox-transition-closing::view-transition-new(active-image) {
   -webkit-user-select: none;
 }
 
+/* The image on show and its neighbours share the frame's cell; script moves them sideways. They
+   are clipped to the frame sideways, except while zoomed or dragged, when the image has the screen. */
+.lightbox-frame {
+  overflow-x: clip;
+}
+
+.lightbox.is-zoomed .lightbox-frame,
+.lightbox.is-scaled .lightbox-frame,
+.lightbox.is-dragging-down .lightbox-frame {
+  overflow-x: visible;
+}
+
+.lightbox.is-zoomed .lightbox-neighbour,
+.lightbox.is-scaled .lightbox-neighbour {
+  visibility: hidden;
+}
+
 /* Sized from the declared dimensions so the preview and original fit identically. */
 .lightbox-image {
+  grid-area: 1 / 1;
   display: block;
   transition: opacity 160ms ease;
   width: min(100%, var(--image-width, 100%), calc((100dvh - var(--lightbox-top-gutter) - var(--lightbox-bottom-gutter)) * var(--image-ratio, 1)));
@@ -2412,17 +2408,7 @@ html {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .lightbox,
-  .lightbox::before {
-    --lightbox-open-duration: 0s;
-    --lightbox-close-duration: 0s;
-  }
-
-  .lightbox .lightbox-close,
-  .lightbox .lightbox-info-button,
-  .lightbox .lightbox-step,
-  .lightbox-info,
-  .lightbox-caption,
+  /* The viewer's fades stay: they replace the movement. */
   .list a.cell,
   .cell-title,
   .slide-title,
@@ -2430,7 +2416,6 @@ html {
   .tag-toggle,
   #header .nav a,
   .zoom-controls,
-  .lightbox-image.is-zoom-animating,
   .item img,
   .cell img {
     transition: none;
