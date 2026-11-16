@@ -23,7 +23,7 @@
   <link rel="icon" type="image/png" sizes="16x16" href="{{{png16}}}">
   <link rel="apple-touch-icon" sizes="180x180" href="{{{appleTouch}}}">
   {{/favicon}}
-  {{^favicon}}{{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/profile_image.thumbnails.square.url}}{{/favicon}}
+  {{^favicon}}{{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{/favicon}}
   <link href="/feed.json" title="{{title}}" type="application/json" rel="alternate">
   <link href="/feed.rss" title="RSS Feed for {{title}}" type="application/rss+xml" rel="alternate">
 
@@ -45,9 +45,6 @@
   <meta property="og:image:width" content="{{width}}">
   <meta property="og:image:height" content="{{height}}">
   {{/profile_image.thumbnails.large}}
-  {{^profile_image.thumbnails.large.url}}
-  {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
-  {{/profile_image.thumbnails.large.url}}
   {{/thumbnail.large}}
   <meta property="og:type" content="article">
   {{#thumbnail.large}}<meta name="twitter:card" content="summary_large_image">{{/thumbnail.large}}{{^thumbnail.large}}<meta name="twitter:card" content="summary">{{/thumbnail.large}}
@@ -58,9 +55,6 @@
   {{#profile_image.thumbnails.large}}
   <meta name="twitter:image" content="{{{url}}}">
   {{/profile_image.thumbnails.large}}
-  {{^profile_image.thumbnails.large.url}}
-  {{#avatar}}<meta name="twitter:image" content="{{{avatar}}}">{{/avatar}}
-  {{/profile_image.thumbnails.large.url}}
   {{/thumbnail.large}}
   <meta property="article:author" content="{{{siteURL}}}">
   <meta property="article:published_time" content="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">
@@ -83,9 +77,6 @@
   <meta property="og:image:width" content="{{width}}">
   <meta property="og:image:height" content="{{height}}">
   {{/profile_image.thumbnails.large}}
-  {{^profile_image.thumbnails.large.url}}
-  {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
-  {{/profile_image.thumbnails.large.url}}
   {{/entry}}
 </head>
 
@@ -104,9 +95,6 @@
           {{#profile_image.thumbnails.square}}<li>
             <img class="u-photo" width="{{width}}" height="{{height}}" src="{{{url}}}" alt="">
       </li>{{/profile_image.thumbnails.square}}
-          {{^profile_image.thumbnails.square.url}}{{#avatar}}<li>
-            <img class="u-photo" src="{{{avatar}}}" alt="">
-      </li>{{/avatar}}{{/profile_image.thumbnails.square.url}}
           {{#email}}<li>
             <a href="mailto:{{email}}" class="u-email" rel="me">{{email}}</a>
           </li>{{/email}}
@@ -128,7 +116,6 @@
     <section id="post-meta" class="clearfix">
       <a href="/">
     {{#profile_image.thumbnails.small}}<img class="avatar{{#profile_image.mask}} masked{{/profile_image.mask}}" width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="36px">{{/profile_image.thumbnails.small}}
-    {{^profile_image.thumbnails.small.url}}{{#avatar}}<img class="avatar" src="{{{avatar}}}">{{/avatar}}{{/profile_image.thumbnails.small.url}}
     <div>
       <span class="dark">{{#author}}{{author}}{{/author}}{{^author}}{{title}}{{/author}}</span>
       {{#description}}<span>{{description}}</span>{{/description}}

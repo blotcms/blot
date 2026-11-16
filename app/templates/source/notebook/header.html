@@ -5,7 +5,7 @@
   {{! h1 on the listing pages, where nothing else is; p elsewhere (package.json) }}
   <{{> site_title_element}} class="site-title">
     <a href="/">
-      {{#avatar}}<img class="site-avatar" src="{{{avatar}}}" alt="">{{/avatar}}
+      {{#profile_image.thumbnails.small}}<img class="site-avatar" width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="24px" alt="">{{/profile_image.thumbnails.small}}
       {{title}}{{^title}}{{handle}}{{/title}}
     </a>
   </{{> site_title_element}}>
