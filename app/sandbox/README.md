@@ -448,6 +448,10 @@ it is emailed. nsjail counts its time limit in whole seconds and exits 137 at
 it, as at the memory limit, so the broker calls a jail killed within a second
 of its `timeSeconds` a timeout. At most one
 email per process every ten minutes, with counts for what happened in between.
+The same failure for the same blog again within a day is logged (`sandbox: job
+pandoc: killed again for this blog, not emailed`) rather than counted, so a
+person re-saving a document too big for its jail doesn't send an email each
+time: the file's build flag tells them.
 
 ## Why
 

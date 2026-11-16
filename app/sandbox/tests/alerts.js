@@ -37,6 +37,36 @@ describe("sandbox alerts", function () {
     ]);
   });
 
+  it("emails a blog's failure once a day, and logs it again in between", async function () {
+    const logContext = require("helper/logContext");
+    spyOn(console, "log");
+
+    await logContext.run({ blog: "blog_a" }, async () => {
+      alerts.jobFailed("pandoc", error("SANDBOX_KILLED"));
+      alerts.jobFailed("pandoc", error("SANDBOX_KILLED"));
+    });
+    await logContext.run({ blog: "blog_b" }, async () => {
+      alerts.jobFailed("pandoc", error("SANDBOX_KILLED"));
+    });
+    await tick();
+
+    expect(email.SANDBOX_ALERT).toHaveBeenCalledTimes(1);
+    expect(email.SANDBOX_ALERT.calls.argsFor(0)[1].lines).toBe(
+      "2 × job pandoc: killed"
+    );
+    expect(console.log.calls.argsFor(0)[1]).toBe(
+      "sandbox: job pandoc: killed again for this blog, not emailed"
+    );
+
+    // A day later it is news again
+    const now = Date.now();
+    spyOn(Date, "now").and.returnValue(now + 24 * 60 * 60 * 1000);
+    await logContext.run({ blog: "blog_a" }, async () => {
+      alerts.jobFailed("pandoc", error("SANDBOX_KILLED"));
+    });
+    expect(console.log).toHaveBeenCalledTimes(1);
+  });
+
   it("logs a busy fetch-image job, which is backpressure, but emails busy from the others", async function () {
     spyOn(console, "log");
     alerts.jobFailed("fetch-image", error("SANDBOX_BUSY"));
