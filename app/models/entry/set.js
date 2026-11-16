@@ -177,13 +177,30 @@ async function set(blogID, path, updates) {
   var json = JSON.stringify(entry);
 
   // Store the entry
-  await redis.set(entryKey, json);
-
   if (entry.deleted) {
-    var expired = await redis.expire(entryKey, DELETED_ENTRY_TTL_SECONDS);
+    // The entry's current permalink key (the url it had before this save,
+    // since setUrl gives a deleted entry none) expires with the entry, so it
+    // doesn't outlive it. Only if it points at this entry: another entry may
+    // have claimed the url since. Keys for older urls are redirects and stay.
+    var permalinkKey = previousUrl ? key.url(blogID, previousUrl) : null;
+    var ownsPermalink =
+      permalinkKey && (await redis.get(permalinkKey)) === entry.id;
 
-    if (!expired) throw new Error("Failed to set expiration for deleted entry");
+    var multi = redis
+      .multi()
+      .set(entryKey, json)
+      .expire(entryKey, DELETED_ENTRY_TTL_SECONDS);
+
+    if (ownsPermalink) multi.expire(permalinkKey, DELETED_ENTRY_TTL_SECONDS);
+
+    var replies = await multi.exec();
+
+    if (!replies[1])
+      throw new Error("Failed to set expiration for deleted entry");
   } else {
+    // setUrl's SET of the permalink key cleared any TTL it had, so a file
+    // re-added within the day has a permanent permalink again
+    await redis.set(entryKey, json);
     await redis.persist(entryKey);
   }
 
