@@ -176,7 +176,7 @@ describe("img converter", function () {
     expect(assets.commit).not.toHaveBeenCalled();
   });
 
-  it("restores missing cached conversions using cached path", async function () {
+  it("converts a copy of a cached image into its own directory, whatever became of the first", async function () {
     const test = this;
     const firstPath = "/land.avif";
     const secondPath = "/land-copy.avif";
@@ -186,27 +186,18 @@ describe("img converter", function () {
 
     await read(test.blog, firstPath);
 
-    const cachedAssetPath = `_assets/${hash(firstPath)}/${path.basename(firstPath)}.png`;
+    const firstAssetPath = `_assets/${hash(firstPath)}/${path.basename(firstPath)}.png`;
 
-    expect(await assets.exists(test.blog.id, cachedAssetPath)).toBe(true);
-
-    await assets.remove(test.blog.id, cachedAssetPath);
-
-    const fallbackAssetPath = `_assets/${hash(secondPath)}/${path.basename(secondPath)}.png`;
-
-    await assets.remove(test.blog.id, fallbackAssetPath);
+    await assets.remove(test.blog.id, firstAssetPath);
 
     await folder.writeFrom(test.blog.id, secondPath, __dirname + firstPath);
 
     const result = await read(test.blog, secondPath);
+    const secondAssetPath = `_assets/${hash(secondPath)}/${path.basename(secondPath)}.png`;
 
-    const expectedSrc = encodeURI(
-      `/_assets/${hash(firstPath)}/${path.basename(firstPath)}.png`
-    );
-
-    expect(result).toContain(`src="${expectedSrc}"`);
-    expect(await assets.exists(test.blog.id, cachedAssetPath)).toBe(true);
-    expect(await assets.exists(test.blog.id, fallbackAssetPath)).toBe(false);
+    expect(result).toContain(`src="${encodeURI("/" + secondAssetPath)}"`);
+    expect(await assets.exists(test.blog.id, secondAssetPath)).toBe(true);
+    expect(await assets.exists(test.blog.id, firstAssetPath)).toBe(false);
   });
 
   it("returns an error if the image does not exist", async function () {
