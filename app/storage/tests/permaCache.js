@@ -7,6 +7,7 @@ describe("storage/sweep/permaCache", function () {
   const folder = require("storage/folder");
   const contentVersion = require("helper/contentVersion");
   const permaCache = require("storage/sweep/permaCache");
+  const sweep = require("storage/sweep");
   const client = require("models/client");
   const crypto = require("crypto");
   const fs = require("fs-extra");
@@ -69,7 +70,7 @@ describe("storage/sweep/permaCache", function () {
   }
 
   afterEach(async function () {
-    await client.del(permaCache.STATE);
+    await client.del(sweep.STATE);
   });
 
   async function report(options = {}) {
@@ -328,25 +329,25 @@ describe("storage/sweep/permaCache", function () {
     let time = 1000;
     const now = () => time;
 
-    await client.hSet(permaCache.STATE, { startedAt: "1", cursor: "a-dir" });
+    await client.hSet(sweep.STATE, { startedAt: "1", cursor: "a-dir" });
 
-    const totals = await permaCache.step(null, { now });
+    const totals = await sweep.step(null, { now, generated: "off" });
 
     expect(totals.stale).toBe(1);
     expect(removed).toEqual([BASE + "b-dir/"]);
 
-    const state = await client.hGetAll(permaCache.STATE);
+    const state = await client.hGetAll(sweep.STATE);
 
     expect(state.startedAt).toBeUndefined();
     expect(state.cursor).toBeUndefined();
     expect(state.finishedAt).toBe("1000");
 
-    expect(await permaCache.step(null, { now })).toBe(null);
+    expect(await sweep.step(null, { now, generated: "off" })).toBe(null);
 
     time += 7 * 24 * 60 * 60 * 1000 + 1;
     removed.length = 0;
 
-    expect((await permaCache.step(null, { now })).stale).toBe(2);
+    expect((await sweep.step(null, { now, generated: "off" })).stale).toBe(2);
     expect(removed.sort()).toEqual([BASE + "a-dir/", BASE + "b-dir/"]);
   });
 
