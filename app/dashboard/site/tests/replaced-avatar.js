@@ -88,6 +88,28 @@ describe("dashboard site save: replaced avatar", function () {
     expect(await names(this.blog.id)).toEqual(before);
   });
 
+  it("keeps the new file when a rejected save stored it anyway", async function () {
+    await saveAvatar(this, this.first);
+    const { req, res } = await request(this, this.second);
+
+    expect((await run(save.avatar, req, res)).err).toBeUndefined();
+
+    // Blog.set writes, then rejects (as when flushing caches fails after the
+    // write)
+    const set = Blog.set;
+    spyOn(Blog, "set").and.callFake(async (id, updates) => {
+      await set(id, updates);
+      throw new Error("flush failed");
+    });
+
+    expect((await run(save.finish, req, res)).err).toEqual(jasmine.any(Error));
+
+    const blog = await Blog.get({ id: this.blog.id });
+    const kept = await names(this.blog.id);
+
+    expect(kept.some((name) => blog.avatar.includes(name))).toBe(true);
+  });
+
   it("deletes the previous avatar in the photo and favicon flow, and when the photo is removed", async function () {
     await saveAvatar(this, this.first);
 
