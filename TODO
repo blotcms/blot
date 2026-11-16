@@ -109,6 +109,11 @@ Upgrade Pandoc past 3.6.1, set aside 14 Nov 2026 (#2689, closed; branch `pandoc-
 
 Fix this: 879 console.log calls in non-test app code, and no structured logging. Several of your skills exist mainly to grep and rebuild meaning from free-text logs ([STATS], [SLOW-FILL], [folder-asset]). Structured logs plus a metrics backend would make most of them unnecessary.
 
+Templates which use the outline inset offset technique to draw a border around images
+- could do the same in dark mode with a white offset, it looks nice](https://www.noahkalina.com/#Projects)
+
+Consider adding maps for exif location info: https://bruceroettgers.eu/blog/protomaps/
+
 Fix this: Weak input validation. The blog schema only type-checks client as string. In app/dashboard/site/client.js, POST /switch disconnects the current client, then saves req.body.client without checking it names a real client. Later, clients[req.blog.client].disconnect hits undefined. It’s minor, but it’s the kind of thing a reviewer finds in five minutes and generalises from.
 
 Unify this: Duplicated libraries: node-fetch alongside native fetch, moment throughout, and some scripts require request, which isn’t in package.json.
