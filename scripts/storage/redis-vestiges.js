@@ -199,10 +199,13 @@ async function deletedEntries({ apply = false, only = "*" } = {}) {
 
     if ((await client.type(list)) !== "zset") continue;
 
-    for (let start = 0; ; start += PAGE) {
-      const members = await client.zRange(list, start, start + PAGE - 1);
+    // A snapshot of the ids, taken before any is re-scored: fixing an entry
+    // gives it a new score, which moves it within the sorted set and would
+    // shift pages read by rank
+    const all = await client.zRange(list, 0, -1);
 
-      if (!members.length) break;
+    for (let start = 0; start < all.length; start += PAGE) {
+      const members = all.slice(start, start + PAGE);
 
       const keys = members.map((id) => entryKey.entry(blogID, id));
       const multi = client.multi();

@@ -74,6 +74,27 @@ describe("scripts/storage/redis-vestiges", function () {
     expect((await vestiges.deletedEntries({ only: blogID })).found).toBe(0);
   });
 
+  it("deleted-entries fixes every entry of a list longer than a page", async function () {
+    var blogID = this.blog.id;
+    var list = remember("blog:" + blogID + ":deleted");
+    var keys = [];
+
+    // Re-scoring moves a fixed entry to the end of the list: all must still
+    // be fixed in one run
+    for (var i = 0; i < 250; i++) {
+      var id = "/old-" + i + ".txt";
+      var key = remember(entryKey.entry(blogID, id));
+      keys.push(key);
+      await client.set(key, entry(id, { deleted: true }));
+      await client.zAdd(list, { score: i, value: id });
+    }
+
+    var applied = await vestiges.deletedEntries({ only: blogID, apply: true });
+
+    expect(applied.fixed).toBe(250);
+    for (var k of keys) expect(await client.ttl(k)).toBeGreaterThan(0);
+  });
+
   it("deleted-blogs deletes the keys of a blog which is gone, not of one which exists", async function () {
     var gone = "blog_" + "a1b2c3d4".repeat(4);
     var keys = [
