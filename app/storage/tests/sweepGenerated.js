@@ -750,7 +750,7 @@ describe("storage/sweep generated files", function () {
         await client.hSet(sweep.STATE, {
           finishedAt: String(PREVIOUS_END),
           previousStartedAt: String(PREVIOUS_START),
-          runs: "1",
+          lastFullAt: String(NOW - 2 * DAY),
           ...extra,
         });
       }
@@ -901,11 +901,11 @@ describe("storage/sweep generated files", function () {
         });
       });
 
-      it("sweeps everything in every fourth run", async function () {
+      it("sweeps everything when no full run finished in the last 28 days", async function () {
         const id = this.blog.id;
         const c = clock();
 
-        await previousRun({ runs: String(sweep.FULL_EVERY - 1) });
+        await previousRun({ lastFullAt: String(NOW - sweep.FULL_AFTER - DAY) });
         await cacheID(id, PREVIOUS_START - 3 * DAY);
         setUp(id);
 
@@ -960,7 +960,7 @@ describe("storage/sweep generated files", function () {
           const state = await client.hGetAll(fresh.STATE);
 
           expect(state.finishedAt).toBeDefined();
-          expect(state.previousStartedAt).toBe(String(PREVIOUS_START));
+          expect(state.previousStartedAt).toBeUndefined();
         });
       });
 
@@ -982,7 +982,51 @@ describe("storage/sweep generated files", function () {
 
           expect(state.startedAt).toBeUndefined();
           expect(state.previousStartedAt).toBe(startedAt);
-          expect(state.runs).toBe("2");
+          expect(state.lastFullAt).toBe(String(NOW - 2 * DAY));
+        });
+      });
+
+      it("records no start for the next run from a run with a failure, and records a full run's time when clean", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await cacheID(id, PREVIOUS_START + HOUR);
+        setUp(id);
+        references.inUse.and.callFake(async () => {
+          throw new Error("Redis went away");
+        });
+        spyOn(console, "error");
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+          c.time += 6 * HOUR + 10;
+          await fresh.step(null, options(c));
+
+          const state = await client.hGetAll(fresh.STATE);
+
+          expect(state.finishedAt).toBeDefined();
+          expect(state.previousStartedAt).toBeUndefined();
+          expect(state.lastFullAt).toBeUndefined();
+        });
+      });
+
+      it("records a clean full run as the last full run", async function () {
+        const c = clock();
+
+        zone([]);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          const startedAt = await client.hGet(fresh.STATE, "startedAt");
+
+          c.time += 6 * HOUR + 10;
+          await fresh.step(null, options(c));
+
+          const state = await client.hGetAll(fresh.STATE);
+
+          expect(state.previousStartedAt).toBe(startedAt);
+          expect(state.lastFullAt).toBe(startedAt);
         });
       });
 

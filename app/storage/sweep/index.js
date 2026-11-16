@@ -69,14 +69,25 @@ const bucket = require("./s3");
 // (models/blog/bumpCacheID). None of them can make the sweep delete
 // something it shouldn't: skipping only delays what it would delete or purge.
 //
-// The backstop is a full run, with no skipping, every FULL_EVERY runs (about
-// monthly), so such a miss is found within a month. The first run, and any
-// run that follows one that didn't apply (a "report" or "off" run swept
-// nothing in the way an "apply" run does), is full as well, and so is a run a
-// step is told to make full. The run's choice is kept in the state (full)
-// when it starts, so that a resumed run doesn't change its mind. A run that
-// began before this was added has no such record, so it is full and records
-// nothing for the next: it may have had failures nobody listed.
+// Also found only by the full run: a sync killed by a deploy after it wrote
+// some files and before its cacheID bump, whose retry builds exactly what is
+// stored (changed: false), so bumps nothing (a rebuild bumps at its start as
+// well as its end, so it isn't one of these); and a stale Perma-Cache copy of
+// an old folder-file URL, which appears when an old link is fetched, with no
+// change to the blog at all.
+//
+// The backstop is a full run, with no skipping, when none finished cleanly
+// in the last FULL_AFTER (lastFullAt, about monthly), so such a miss is
+// found within a month. The first run is full too, as is one with no
+// previousStartedAt (the last run was one that didn't apply, so recorded
+// none, or ended with failures) and one a step is told to make full. The
+// run's choice is kept in the state (full) when it starts, so that a resumed
+// run doesn't change its mind. A run that began before this was added has no
+// such record, so it is full and records nothing for the next: it may have
+// had failures nobody listed. A run that ended with any failure counted
+// records no previousStartedAt, which makes the next run full, since a
+// failure that escaped the per-blog list (Redis failing while listing it)
+// could otherwise let a changed blog be skipped.
 //
 // A new run also starts only in a quiet hour, START_WINDOW (UTC): the sweep
 // uses the units' CPU and memory, and what it does is nothing a person waits
@@ -95,8 +106,9 @@ const SECOND_PASS_DELAY = 6 * 60 * 60 * 1000;
 // The blogs whose generated step or Perma-Cache check failed in the last run
 // that visited them: never skipped, until one succeeds
 const FAILED = "perma-cache:sweep:failed";
-// Every FULL_EVERY-th run sweeps every blog, skipping none
-const FULL_EVERY = 4;
+// A run sweeps every blog, skipping none, unless a full run finished cleanly
+// within this long
+const FULL_AFTER = 28 * 24 * 60 * 60 * 1000;
 // A new run starts only from the hour FROM up to (not including) the hour TO,
 // UTC
 const START_WINDOW = { from: 2, to: 5 };
@@ -232,10 +244,14 @@ async function sweepOne(base, entry, context) {
 
   // The candidate set of a blog that is gone would otherwise stay
   if (context.deleted.has(entry.name))
-    await client.del([
-      generated.candidatesKey(entry.name),
-      generated.markedKey(entry.name),
-    ]);
+    await client
+      .multi()
+      .del([
+        generated.candidatesKey(entry.name),
+        generated.markedKey(entry.name),
+      ])
+      .sRem(FAILED, entry.name)
+      .exec();
 }
 
 // Whether a new run may start at this time (ms): the UTC hour is in the window
@@ -264,21 +280,21 @@ async function step(signal, options = {}) {
     if (!inWindow(now(), options.window)) return null;
 
     // Whether this run skips blogs, decided once for the whole run (see the
-    // top). Runs are counted from the first.
-    const runs = Number(state.runs || 0) + 1;
+    // top).
     const full =
-      !!options.full || !state.previousStartedAt || runs % FULL_EVERY === 0;
+      !!options.full ||
+      !state.previousStartedAt ||
+      !state.lastFullAt ||
+      now() - Number(state.lastFullAt) > FULL_AFTER;
 
     await client.hSet(STATE, {
       startedAt: String(now()),
       cursor: "",
-      runs: String(runs),
       full: full ? "1" : "0",
     });
     await client.hDel(STATE, ["totals", "mainDoneAt", "secondCursor"]);
     state.startedAt = String(now());
     state.cursor = "";
-    state.runs = String(runs);
     state.full = full ? "1" : "0";
     delete state.totals;
     delete state.mainDoneAt;
@@ -446,14 +462,26 @@ async function secondOne(base, entry, context) {
 
   totals.secondPassBlogs++;
 
-  if (entry.inPerma)
-    await permaCache.sweepEntry(base, entry, {
-      apply: true,
-      log: () => {},
-      totals,
-      deleted: new Set(),
-      files,
-    });
+  if (entry.inPerma) {
+    // Counted apart from the run's, to tell whether this blog's check failed
+    const own = permaCache.newTotals();
+
+    try {
+      await permaCache.sweepEntry(base, entry, {
+        apply: true,
+        log: () => {},
+        totals: own,
+        deleted: new Set(),
+        files,
+      });
+    } finally {
+      totals.stale += own.stale;
+      totals.deletedBlogs += own.deletedBlogs;
+      totals.failed += own.failed;
+    }
+
+    if (own.failed) await client.sAdd(FAILED, entry.name);
+  }
 }
 
 async function finish(state, totals, now, error, mode) {
@@ -464,13 +492,24 @@ async function finish(state, totals, now, error, mode) {
   };
 
   // The next run may skip what this one swept: only if it applied, finished
-  // without an error and recorded its failures (it has "full" in its state)
-  if (mode === "apply" && !error && state.full !== undefined)
-    finished.previousStartedAt = state.startedAt;
+  // with no error and no failure, and recorded its failures (it has "full"
+  // in its state). Otherwise there is none, which makes the next run full.
+  const clean =
+    mode === "apply" &&
+    !error &&
+    totals.failed === 0 &&
+    state.full !== undefined;
 
-  await client
-    .multi()
-    .hSet(STATE, finished)
+  if (clean) {
+    finished.previousStartedAt = state.startedAt;
+    if (state.full === "1") finished.lastFullAt = state.startedAt;
+  }
+
+  const tx = client.multi().hSet(STATE, finished);
+
+  if (!clean && mode === "apply") tx.hDel(STATE, "previousStartedAt");
+
+  await tx
     .hDel(STATE, ["startedAt", "cursor", "mainDoneAt", "secondCursor"])
     .exec();
 
@@ -502,7 +541,7 @@ module.exports = {
   LEASE,
   GENERATED,
   FAILED,
-  FULL_EVERY,
+  FULL_AFTER,
   START_WINDOW,
   SECOND_PASS_DELAY,
 };
