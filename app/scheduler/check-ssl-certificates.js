@@ -236,6 +236,7 @@ async function run(deps = {}) {
 module.exports = run;
 module.exports.check = check;
 module.exports.view = view;
+module.exports.expiryOf = expiryOf;
 
 if (require.main === module) {
   check()
