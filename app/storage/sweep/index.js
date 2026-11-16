@@ -38,7 +38,7 @@ const INTERVAL = 7 * 24 * 60 * 60 * 1000;
 // - "apply": deletes.
 // A step's options can override it. The Perma-Cache part applies whatever
 // the mode.
-const GENERATED = "report";
+const GENERATED = "apply";
 
 function newTotals() {
   return {

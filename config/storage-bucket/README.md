@@ -414,9 +414,9 @@ Blot no longer owns the domain.
     (the plugin reuses a file if it exists), so a build that has just found
     one can link it in the seconds before run N+1 deletes it, after a week
     unreferenced; the next rebuild takes it again (accepted, #2745). The
-    switch is `GENERATED` in `index.js`: `off`, `report` (the default: reads
-    everything and fills the totals, writes nothing, so that `apply` starts at
-    run N) or `apply`. The totals (`generatedBlogs`, `candidates`,
+    switch is `GENERATED` in `index.js`: `off`, `report` (reads everything and
+    fills the totals, writes nothing, so that `apply` starts at run N) or
+    `apply`, the default since #2745's report and test-blog runs. The totals (`generatedBlogs`, `candidates`,
     `candidateBytes`, `deletedDirs`, `deletedBytes`, `cacheKeysDeleted`,
     `generatedFailed`) are in the hash and logged at the end of a run; a blog
     whose step fails (any read) has nothing deleted and still gets its
