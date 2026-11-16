@@ -2,6 +2,10 @@ describe("scripts/storage/assets-of-removed-files", function () {
   var assets = require("storage/assets");
   var folder = require("storage/folder");
   var hash = require("helper/hash");
+  var client = require("models/client");
+  var Keys = require("helper/transformer/keys");
+  var Entries = require("models/entries");
+  var Entry = require("models/entry");
   var { cleanBlog } = require("../assets-of-removed-files");
 
   global.test.blog();
@@ -66,5 +70,96 @@ describe("scripts/storage/assets-of-removed-files", function () {
     expect(result.stale).toBe(0);
     expect(result.recent).toBe(1);
     expect(await names(this.blog.id)).toContain(this.hashes.stale);
+  });
+
+  it("matches a folder key with a space, a % and a CJK character", async function () {
+    var id = this.blog.id;
+    var path = "/My Notes 100% 日本語.docx";
+    var directory = hash(path);
+
+    await folder.write(id, path, "x");
+    await assets.write(id, "_assets/" + directory + "/image.png", "png");
+
+    await cleanBlog(id, true, Date.now() + TWO_DAYS);
+
+    expect(await names(id)).toContain(directory);
+  });
+
+  it("keeps a directory an entry still links, but not one only a deleted entry links", async function () {
+    var id = this.blog.id;
+    var linked = hash("/copy-of-a-file.docx");
+    var forgotten = hash("/deleted-entry-file.docx");
+
+    await assets.write(id, "_assets/" + linked + "/image.png", "png");
+    await assets.write(id, "_assets/" + forgotten + "/image.png", "png");
+
+    spyOn(Entries, "getAllIDs").and.callFake(async () => ["/a", "/b"]);
+    spyOn(Entry, "get").and.callFake(async () => [
+      { html: '<img src="/_assets/' + linked + '/image.png">' },
+      { deleted: true, html: '<img src="/_assets/' + forgotten + '/a.png">' },
+    ]);
+
+    var result = await cleanBlog(id, true, Date.now() + TWO_DAYS);
+    var remaining = await names(id);
+
+    expect(result.referenced).toBe(1);
+    expect(remaining).toContain(linked);
+    expect(remaining).not.toContain(forgotten);
+  });
+
+  it("skips a blog whose folder listing has no files", async function () {
+    var id = this.blog.id;
+
+    await folder.remove(id, "/Kept.docx");
+    await folder.remove(id, "/Folder");
+    await folder.remove(id, "/café.docx".normalize("NFD"));
+
+    var before = await names(id);
+    var result = await cleanBlog(id, true, Date.now() + TWO_DAYS);
+
+    expect(result.skipped).toBe(1);
+    expect(await names(id)).toEqual(before);
+  });
+
+  it("deletes the cached conversions which name a deleted directory, and no others", async function () {
+    var id = this.blog.id;
+    var doomed = Keys(id, "img-converter");
+    var kept = Keys(id, "img-converter");
+    var content = doomed.content("c1");
+    var other = kept.content("c2");
+
+    await client.set(
+      content,
+      JSON.stringify({
+        relativePath: "/_assets/" + this.hashes.stale + "/a.png",
+      })
+    );
+    await client.set(doomed.url.content("u1"), "c1");
+    await client.set(doomed.url.headers("u1"), "{}");
+    await client.set(
+      other,
+      JSON.stringify({
+        relativePath: "/_assets/" + this.hashes.kept + "/a.png",
+      })
+    );
+    await client.sAdd(doomed.everything, [
+      content,
+      doomed.url.content("u1"),
+      doomed.url.headers("u1"),
+      other,
+    ]);
+
+    await cleanBlog(id, false, Date.now() + TWO_DAYS);
+    expect(await client.exists(content)).toBe(1);
+
+    await cleanBlog(id, true, Date.now() + TWO_DAYS);
+
+    expect(await client.exists(content)).toBe(0);
+    expect(await client.exists(doomed.url.content("u1"))).toBe(0);
+    expect(await client.exists(doomed.url.headers("u1"))).toBe(0);
+    expect(await client.exists(other)).toBe(1);
+    expect(await client.sMembers(doomed.everything)).toEqual([other]);
+
+    await client.del([other, doomed.everything]);
   });
 });

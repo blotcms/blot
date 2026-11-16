@@ -223,4 +223,48 @@ describe("img converter", function () {
 
     expect(error).toBeTruthy();
   });
+
+  it("gives each path its own _assets directory, even for identical bytes", async function () {
+    const test = this;
+    const first = "/first.tiff";
+    const second = "/copies/second.tiff";
+
+    await folder.writeFrom(test.blog.id, first, __dirname + "/laptop.tiff");
+    await folder.writeFrom(test.blog.id, second, __dirname + "/laptop.tiff");
+
+    const [err1, html1] = await readAll(test.blog, first);
+    if (err1) throw err1;
+    const [err2, html2] = await readAll(test.blog, second);
+    if (err2) throw err2;
+
+    expect(html1).toContain("/_assets/" + hash(first) + "/first.tiff.png");
+    expect(html2).toContain("/_assets/" + hash(second) + "/second.tiff.png");
+
+    // removing the first path's directory leaves the second's working
+    await assets.remove(test.blog.id, "_assets/" + hash(first));
+
+    expect(
+      await assets.exists(
+        test.blog.id,
+        "_assets/" + hash(second) + "/second.tiff.png"
+      )
+    ).toBe(true);
+    expect(
+      await assets.exists(
+        test.blog.id,
+        "_assets/" + hash(first) + "/first.tiff.png"
+      )
+    ).toBe(false);
+
+    // and the first is made again, not linked from the second's
+    const [err3, html3] = await readAll(test.blog, first);
+    if (err3) throw err3;
+    expect(html3).toContain("/_assets/" + hash(first) + "/first.tiff.png");
+    expect(
+      await assets.exists(
+        test.blog.id,
+        "_assets/" + hash(first) + "/first.tiff.png"
+      )
+    ).toBe(true);
+  });
 });

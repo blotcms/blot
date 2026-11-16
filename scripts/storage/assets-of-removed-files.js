@@ -16,14 +16,25 @@
 // old is kept, in case its file is being written. A name which isn't a 32
 // character hash isn't ours and is kept.
 //
-// Without --apply nothing is written. With it, the objects found in the
-// listing are deleted by exact key, 1000 at a time, never by prefix.
+// A directory is also kept when a live entry of the blog, one of its
+// templates or its settings mentions _assets/<hash>: the converters' cached
+// results are keyed by the source's bytes, so before each path had its own
+// directory a copy of a file was linked into the first copy's directory, which
+// no file hashes to. A blog whose folder listing has no files is skipped and
+// reported (its listing can't be trusted to match against).
+//
+// Without --apply nothing is written. With it, the transformer's cached
+// results which name a directory are deleted first (so the next build
+// converts again), then the objects found in the listing are deleted by exact
+// key, 1000 at a time, never by prefix.
 // Resumable: it prints the last blog it finished, and --from starts at a blog
 // (inclusive). Rerunning is safe.
 
 const Blog = require("models/blog");
 const hash = require("helper/hash");
 const s3 = require("storage/s3");
+const { inUse, ASSET_REFERENCE } = require("storage/sweep/references");
+const { removePointingAt } = require("storage/sweep/assetsCache");
 
 const DAY = 24 * 60 * 60 * 1000;
 const HASH = /^[a-f0-9]{32}$/;
@@ -64,19 +75,21 @@ function hashesOf(path, into) {
   return into;
 }
 
-// The hashes of every file in the blog's folder
+// The hashes of every file in the blog's folder, and how many files there are
 async function folderHashes(blogID) {
   const prefix = blogID + "/folder/";
   const hashes = new Set();
+  let files = 0;
 
   for await (const entry of s3.listEntries(prefix)) {
     // a directory marker is not a file
     if (entry.key.endsWith("/")) continue;
 
+    files++;
     hashesOf("/" + entry.key.slice(prefix.length), hashes);
   }
 
-  return hashes;
+  return { hashes, files };
 }
 
 // The blog's _assets/ directories: name -> { keys, bytes, newest }
@@ -109,9 +122,12 @@ async function directories(blogID) {
 }
 
 // Finds a blog's stale directories and, with apply, deletes them. Resolves to
-// { directories, stale, recent, objects, bytes, totalBytes }, where stale
-// counts the directories deleted (or which would be), and objects and bytes
-// their contents. now is for specs.
+// { directories, stale, recent, referenced, objects, bytes, totalBytes,
+// skipped }, where stale counts the directories deleted (or which would be),
+// and objects and bytes their contents. now is for specs.
+//
+// Before a directory's objects go, so does every transformer cached result
+// which names it, so the next build converts again.
 async function cleanBlog(blogID, apply, now) {
   now = now || Date.now();
 
@@ -120,20 +136,36 @@ async function cleanBlog(blogID, apply, now) {
     directories: found.size,
     stale: 0,
     recent: 0,
+    referenced: 0,
     objects: 0,
     bytes: 0,
     totalBytes: 0,
+    skipped: 0,
   };
 
   if (!found.size) return result;
 
-  const live = await folderHashes(blogID);
-  let batch = [];
+  for (const directory of found.values()) result.totalBytes += directory.bytes;
+
+  const { hashes: live, files } = await folderHashes(blogID);
+
+  // Nothing to match against: not a blog with no files but a listing which
+  // can't be trusted
+  if (!files) {
+    result.skipped = 1;
+    return result;
+  }
+
+  const used = await inUse(blogID, ASSET_REFERENCE);
+  const doomed = [];
 
   for (const [name, directory] of found) {
-    result.totalBytes += directory.bytes;
-
     if (!HASH.test(name) || live.has(name)) continue;
+
+    if (used.has("_assets/" + name)) {
+      result.referenced++;
+      continue;
+    }
 
     if (now - directory.newest < DAY) {
       result.recent++;
@@ -143,9 +175,16 @@ async function cleanBlog(blogID, apply, now) {
     result.stale++;
     result.objects += directory.keys.length;
     result.bytes += directory.bytes;
+    doomed.push([name, directory]);
+  }
 
-    if (!apply) continue;
+  if (!apply || !doomed.length) return result;
 
+  await removePointingAt(blogID, new Set(doomed.map(([name]) => name)));
+
+  let batch = [];
+
+  for (const [, directory] of doomed) {
     for (const key of directory.keys) {
       batch.push(key);
 
@@ -174,9 +213,11 @@ async function main() {
     directories: 0,
     stale: 0,
     recent: 0,
+    referenced: 0,
     objects: 0,
     bytes: 0,
     totalBytes: 0,
+    skipped: 0,
   };
   const verb = options.apply ? "deleted" : "would delete";
   let last = null;
@@ -188,7 +229,14 @@ async function main() {
     totals.blogs++;
     for (const field of Object.keys(result)) totals[field] += result[field];
 
-    if (result.stale || result.recent)
+    if (result.skipped)
+      console.log(
+        blogID +
+          ": SKIPPED, no files in its folder listing but " +
+          result.directories +
+          " _assets directories"
+      );
+    else if (result.stale || result.recent || result.referenced)
       console.log(
         blogID +
           ": " +
@@ -205,7 +253,9 @@ async function main() {
           result.totalBytes +
           "), kept " +
           result.recent +
-          " under a day old"
+          " under a day old, " +
+          result.referenced +
+          " still linked by an entry, template or setting"
       );
   }
 
@@ -226,7 +276,11 @@ async function main() {
       totals.totalBytes +
       "), kept " +
       totals.recent +
-      " under a day old"
+      " under a day old, " +
+      totals.referenced +
+      " still linked; skipped " +
+      totals.skipped +
+      " blogs"
   );
   if (last) console.log("Last blog done: " + last + " (resume with --from)");
   if (!options.apply) console.log("Dry run: pass --apply to delete them");

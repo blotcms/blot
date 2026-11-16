@@ -3,6 +3,8 @@ describe("sync removing a converted file", function () {
   var assets = require("storage/assets");
   var folder = require("storage/folder");
   var hash = require("helper/hash");
+  var client = require("models/client");
+  var Keys = require("helper/transformer/keys");
 
   global.test.blog();
 
@@ -37,6 +39,24 @@ describe("sync removing a converted file", function () {
 
     expect(await assetDirectory(this.blog.id, path)).toEqual([]);
     expect((await assetDirectory(this.blog.id, other)).length).toBe(1);
+  });
+
+  it("deletes the cached conversions which name the directory", async function () {
+    var path = "/Report.docx";
+    var keys = Keys(this.blog.id, "gdoc-images");
+    var content = keys.content("c1");
+
+    await this.blog.write({ path: path, content: "not a real docx" });
+    await client.set(
+      content,
+      JSON.stringify({ output: "/_assets/" + hash(path) + "/a.png" })
+    );
+    await client.sAdd(keys.everything, [content]);
+
+    await removeAndSync(this.blog, path);
+
+    expect(await client.exists(content)).toBe(0);
+    expect(await client.sMembers(keys.everything)).toEqual([]);
   });
 
   it("leaves _assets alone when an unrelated file is removed", async function () {

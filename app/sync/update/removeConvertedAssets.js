@@ -2,6 +2,7 @@ var extname = require("path").extname;
 var hash = require("helper/hash");
 var assets = require("storage/assets");
 var clfdate = require("helper/clfdate");
+var { removePointingAt } = require("storage/sweep/assetsCache");
 
 // The extensions of the files whose converters write what they extract to
 // {blogID}/_assets/<md5 of the file's path>/: documents (build/converters/docx,
@@ -37,8 +38,14 @@ async function removeConvertedAssets(blogID, path) {
   if (!hasConvertedAssets(path)) return;
 
   try {
+    var directory = hash(path);
+
+    // First the transformer's cached results which name the directory, so a
+    // build after this converts again rather than linking what's gone
+    await removePointingAt(blogID, new Set([directory]));
+
     // A hash is fixed-length, so "_assets/<hash>" is no other directory's prefix
-    await assets.remove(blogID, "_assets/" + hash(path));
+    await assets.remove(blogID, "_assets/" + directory);
   } catch (err) {
     console.error(clfdate(), blogID, path, "Error removing _assets", err);
   }

@@ -117,7 +117,15 @@ async function processImages(blogID, docPath, $) {
         };
       };
 
-      const found = await transformer.lookup(src, fetchImage);
+      // The cache is keyed by the image's bytes, so another document with the
+      // same image would get this one's directory back. Each document owns
+      // its own: a result in any other is made again here.
+      const found = await transformer.lookup(src, fetchImage, {
+        isValid: (result) =>
+          !!result &&
+          typeof result.output === "string" &&
+          result.output.startsWith(assetPrefix),
+      });
 
       if (!found) throw new Error("Image lookup failed for " + src);
 
