@@ -2,6 +2,7 @@ var Entry = require("models/entry");
 var Preview = require("./preview");
 var isDraft = require("./drafts").isDraft;
 var rebuildDependents = require("./rebuildDependents");
+var removeConvertedAssets = require("./removeConvertedAssets");
 
 module.exports = async function drop(blogID, path) {
   // We don't know if this file used to be a draft based
@@ -20,4 +21,7 @@ module.exports = async function drop(blogID, path) {
   // Rebuild must happen after we remove the file from disk
   await Entry.drop(blogID, path);
   await rebuildDependents(blogID, path);
+
+  // Best effort: never fails the drop
+  await removeConvertedAssets(blogID, path);
 };
