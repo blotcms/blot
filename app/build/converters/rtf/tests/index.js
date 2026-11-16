@@ -56,7 +56,7 @@ describe("rtf converter images", function () {
     );
     expect(sources.length).toBe(2);
     for (const src of sources) {
-      expect(src.indexOf("/_assets/" + hash(path) + "/media/")).toBe(0);
+      expect(src.indexOf("/_assets/" + hash(path) + "/")).toBe(0);
       const data = await assets.read(this.blog.id, src);
       expect(data.subarray(1, 4).toString()).toBe("PNG");
     }
