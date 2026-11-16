@@ -21,7 +21,7 @@ const renewWildcardSSL = require("./renew-wildcard-ssl");
 const checkRedisHost = require("./check-redis-host");
 const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
-const permaCache = require("cdn/permaCache");
+const sweep = require("storage/sweep");
 const purgeQueue = require("cdn/purgeQueue");
 const pruneTmp = require("./prune-tmp");
 const gitStoreMaintenance = require("./git-store-maintenance");
@@ -447,12 +447,12 @@ module.exports = function () {
   // and blog deletion queue their purges, which a worker drains in the
   // background (cdn/purgeQueue). The sweep removes whatever they missed, a
   // week after its last run finished, resuming where it left off after a
-  // deploy (cdn/permaCache). Each runs on whichever process holds its lease.
+  // deploy (storage/sweep). Each runs on whichever process holds its lease.
   // Production only: they need the Bunny API key.
   if (config.environment === "production" && config.bunny.secret) {
     console.log(clfdate(), "Started the background CDN purges and sweep");
     purgeQueue.start();
-    permaCache.start();
+    sweep.start();
   }
 
   // config.tmp_directory is on the host's instance store and shared by every

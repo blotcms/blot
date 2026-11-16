@@ -379,7 +379,7 @@ Blot no longer owns the domain.
     or the template is dropped (`models/template`), and the dashboard and
     documentation bundles on a boot of a new release (`app/setup.js`).
 
-  `app/cdn/permaCache.js` removes **everything else, in the background
+  `app/storage/sweep/permaCache.js` removes **everything else, in the background
   sweep.** It runs on whichever
     process holds the `perma-cache:sweep:lease` lock, starts a week after
     the last run finished, and keeps its progress in the Redis hash
@@ -485,7 +485,7 @@ Blot no longer owns the domain.
     added 15 Nov 2026. Links built before #2695 still use that form and the
     app still serves it, but Perma-Cache groups it by version rather than by
     blog, so nothing could find its stale copies there; the edge caches it,
-    and a folder file's change purges that URL too (`app/cdn/permaCache.js`).
+    and a folder file's change purges that URL too (`app/storage/sweep/permaCache.js`).
   - "Immutable browser cache": Browser Cache Header (Cache-Control) Override
     to `public, max-age=31536000, immutable`, when all of: the URL is on one
     of the two hostnames (`*://cdn.blot.im/*`, `*://blot-cdn.b-cdn.net/*`),

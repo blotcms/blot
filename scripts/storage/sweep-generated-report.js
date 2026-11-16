@@ -1,5 +1,5 @@
 // Report-only run of the sweep of generated files nothing uses any more
-// (app/storage/sweepGenerated.js, #2688 section 7): per blog and in total,
+// (app/storage/sweep/s3.js and references.js, #2688 section 7): per blog and in total,
 // the bytes stored in each generated scope, how many are referenced by the
 // blog's entries, templates and settings, and how many are unreferenced and
 // older than the grace period (what a deleting sweep would remove). Reads
@@ -15,7 +15,8 @@
 // blog ID (in sorted order), to resume a stopped run.
 
 const Blog = require("models/blog");
-const { report, SCOPES } = require("storage/sweepGenerated");
+const { SCOPES } = require("storage/sweep/references");
+const { report } = require("storage/sweep/s3");
 
 function option(name) {
   const i = process.argv.indexOf(name);

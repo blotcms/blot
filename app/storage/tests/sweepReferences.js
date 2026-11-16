@@ -1,13 +1,14 @@
-describe("storage/sweepGenerated", function () {
+describe("storage/sweep/references and s3", function () {
   global.test.blog();
 
   const s3 = require("storage/s3");
   const Entries = require("models/entries");
   const Entry = require("models/entry");
-  const sweep = require("storage/sweepGenerated");
+  const references = require("storage/sweep/references");
+  const sweep = require("storage/sweep/s3");
 
   it("finds generated directories mentioned anywhere in a value", function () {
-    const used = sweep.referencesIn(
+    const used = references.referencesIn(
       {
         html: '<img src="%%BLOT_CDN%%/blog_1/_image_cache/abc-123/photo.jpg">',
         thumbnail: {

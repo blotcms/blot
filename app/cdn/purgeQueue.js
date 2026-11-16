@@ -10,7 +10,7 @@ const client = require("models/client");
 // whichever process holds its lease, usually within a minute. The set
 // outlives a deploy, so purges a unit didn't finish are picked up by the
 // next one. A URL whose purge keeps failing is given up on after
-// MAX_ATTEMPTS; the Perma-Cache sweep (cdn/permaCache) finds what that, or
+// MAX_ATTEMPTS; the Perma-Cache sweep (storage/sweep/permaCache) finds what that, or
 // anything else, misses.
 //
 // An entry is a URL. One ending /<blogID>/* is a deleted blog: a wildcard
@@ -94,8 +94,9 @@ async function purge(url) {
   try {
     const deleted = url.match(DELETED_BLOG);
 
-    // Required when used: cdn/permaCache requires storage/folder
-    if (deleted) return await require("cdn/permaCache").removeBlog(deleted[1]);
+    // Required when used: storage/sweep/permaCache requires storage/folder
+    if (deleted)
+      return await require("storage/sweep/permaCache").removeBlog(deleted[1]);
 
     return await purgeCdnUrls([url], { quiet: true });
   } catch (err) {

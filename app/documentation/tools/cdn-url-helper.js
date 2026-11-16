@@ -9,7 +9,7 @@ const { join } = require("path");
 // the same on every boot: the CDN serves whatever is at the path, whatever
 // the version, so a stable URL is all that matters, and the boot's cacheID
 // that was used before gave such a file a new URL, and a new Perma-Cache
-// copy, on every deploy. The Perma-Cache sweep (cdn/permaCache) uses this to
+// copy, on every deploy. The Perma-Cache sweep (storage/sweep/permaCache) uses this to
 // tell a stale copy from the current one.
 function versionOf(viewDirectory, path) {
   try {
