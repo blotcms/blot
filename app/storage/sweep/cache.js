@@ -20,13 +20,15 @@ const { referencesIn } = require("./references");
 //   <prefix>:url:headers:<urlhash> the response headers it gave
 // A URL pair belongs with the content key its hash points at.
 const NAMES = ["image-cache", "thumbnails"];
+const LEGACY = /blotcdn\.com|\/image-cache\/|\/thumbnails\/\d+\//;
 const BATCH = 500;
 
 // What the cache holds for a blog:
 // - pointers: "<scope>/<id>" -> [{ name, key }], every key to delete with the
 //   directory (the content key and the URL keys that point at it);
 // - stale: [{ name, key }], members of an `everything` set with nothing
-//   behind them (the value is gone), and URL keys whose content is gone.
+//   behind them (the value is gone), URL keys whose content is gone, and
+//   legacy results (marked `legacy: true`) with their URL keys.
 // Nothing is written.
 async function read(blogID) {
   const pointers = new Map();
@@ -47,6 +49,7 @@ async function read(blogID) {
 
     const contentKeys = new Map(); // content key -> its directories
     const urls = []; // [url content key, the content key it points at]
+    const legacy = new Set(); // content keys that are legacy results
 
     for (const [key, value] of values) {
       const rest = key.startsWith(prefix) ? key.slice(prefix.length) : "";
@@ -55,6 +58,18 @@ async function read(blogID) {
         stale.push({ name, key });
       } else if (rest.startsWith("content:")) {
         const dirs = referencesIn(value, new Set());
+
+        // Results from before the _image_cache/_thumbnails layout, pointing
+        // at the old CDN (blotcdn.com, which answers 403 now). Nothing can
+        // use them: the image plugin reads `src`, which they lack, so a post
+        // that hits one never gets its _image_cache copy, and thumbnails
+        // reject them by isValid and make them again. Deleting them lets the
+        // next build make the files properly.
+        if (!dirs.size && LEGACY.test(String(value))) {
+          legacy.add(key);
+          stale.push({ name, key, legacy: true });
+          continue;
+        }
 
         contentKeys.set(key, dirs);
 
@@ -66,6 +81,14 @@ async function read(blogID) {
 
     for (const [urlKey, contentKey] of urls) {
       const headersKey = prefix + "url:headers:" + urlKey.split(":").pop();
+
+      if (legacy.has(contentKey)) {
+        stale.push(
+          { name, key: urlKey, legacy: true },
+          { name, key: headersKey, legacy: true }
+        );
+        continue;
+      }
 
       if (!values.has(contentKey) || values.get(contentKey) === null) {
         // Its content has gone: the URL can't be used, and its headers would

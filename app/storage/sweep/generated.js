@@ -91,6 +91,8 @@ async function run(blogID, options) {
     if (!dirs.has(name)) doom(entries);
   doom(held.stale);
 
+  const legacyKeys = Array.from(doomed.values()).filter((e) => e.legacy).length;
+
   const sum = (names) =>
     names.reduce((bytes, name) => bytes + dirs.get(name).bytes, 0);
 
@@ -99,7 +101,8 @@ async function run(blogID, options) {
       `sweep generated ${blogID}: ${candidates.length} candidates ` +
         `(${sum(candidates)} bytes), ${toDelete.length} directories ` +
         `${apply ? "deleted" : "to delete"} (${sum(toDelete)} bytes), ` +
-        `${doomed.size} cache keys ${apply ? "deleted" : "to delete"}` +
+        `${doomed.size} cache keys ${apply ? "deleted" : "to delete"} ` +
+        `(${legacyKeys} legacy)` +
         (apply ? "" : " (report only)")
     );
 
@@ -137,6 +140,7 @@ async function run(blogID, options) {
   totals.deletedDirs += toDelete.length;
   totals.deletedBytes += sum(toDelete);
   totals.cacheKeysDeleted += doomed.size;
+  totals.legacyCacheKeys += legacyKeys;
 
   return files;
 }

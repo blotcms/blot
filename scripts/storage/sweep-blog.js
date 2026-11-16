@@ -38,6 +38,7 @@ function newTotals() {
     deletedDirs: 0,
     deletedBytes: 0,
     cacheKeysDeleted: 0,
+    legacyCacheKeys: 0,
   };
 }
 

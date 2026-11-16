@@ -100,6 +100,7 @@ describe("storage/sweep generated files", function () {
       deletedDirs: 0,
       deletedBytes: 0,
       cacheKeysDeleted: 0,
+      legacyCacheKeys: 0,
     };
   }
 
@@ -135,6 +136,7 @@ describe("storage/sweep generated files", function () {
       deletedDirs: 0,
       deletedBytes: 0,
       cacheKeysDeleted: 3,
+      legacyCacheKeys: 0,
     });
     expect(await client.exists(generated.candidatesKey(id))).toBe(0);
     expect(await exists(keys)).toBe(true);
@@ -517,6 +519,126 @@ describe("storage/sweep generated files", function () {
         expect(totals.entries).toBeGreaterThanOrEqual(4);
         expect(totals.cacheKeysDeleted).toBe(0);
       });
+    });
+  });
+
+  describe("legacy results", function () {
+    const LEGACY_IMAGE =
+      '{"url":"//blotcdn.com/1da9c32116/image-cache/1532083907566/w3ikrr-gallery.jpg","width":640,"height":426}';
+    const LEGACY_THUMBNAILS =
+      '{"small":{"width":160,"height":107,"url":"//blotcdn.com/1da9c32116/thumbnails/1532083929704/qjwy0.jpg"}}';
+
+    // A result stored under a content key, with a URL pair if given
+    async function stored(id, name, hash, value, url) {
+      const keys = Keys(id, name);
+      const content = keys.content(hash);
+      const members = [content];
+
+      await client.set(content, value);
+
+      if (url) {
+        await client.set(keys.url.content(url), hash);
+        await client.set(keys.url.headers(url), "{}");
+        members.push(keys.url.content(url), keys.url.headers(url));
+      }
+
+      await client.sAdd(keys.everything, members);
+
+      return members;
+    }
+
+    it("report mode counts them with their URL pair and deletes nothing", async function () {
+      const id = this.blog.id;
+      const image = await stored(
+        id,
+        "image-cache",
+        "legacyimage",
+        LEGACY_IMAGE,
+        "http://a/legacy.jpg"
+      );
+      const thumbnails = await stored(
+        id,
+        "thumbnails",
+        "legacythumbs",
+        LEGACY_THUMBNAILS
+      );
+
+      const { totals } = await run(id, "report");
+
+      expect(totals.cacheKeysDeleted).toBe(4);
+      expect(totals.legacyCacheKeys).toBe(4);
+      expect(await exists(image)).toBe(true);
+      expect(await exists(thumbnails)).toBe(true);
+      expect(await client.sCard(Keys(id, "image-cache").everything)).toBe(3);
+    });
+
+    it("apply mode deletes them and takes them out of the everything set", async function () {
+      const id = this.blog.id;
+      const image = await stored(
+        id,
+        "image-cache",
+        "legacyimage",
+        LEGACY_IMAGE,
+        "http://a/legacy.jpg"
+      );
+      const thumbnails = await stored(
+        id,
+        "thumbnails",
+        "legacythumbs",
+        LEGACY_THUMBNAILS
+      );
+
+      const { totals } = await run(id, "apply");
+
+      expect(totals.legacyCacheKeys).toBe(4);
+      expect(await client.exists(image)).toBe(0);
+      expect(await client.exists(thumbnails)).toBe(0);
+      expect(await client.sCard(Keys(id, "image-cache").everything)).toBe(0);
+      expect(await client.sCard(Keys(id, "thumbnails").everything)).toBe(0);
+    });
+
+    it("leaves a current result next to them alone", async function () {
+      const id = this.blog.id;
+
+      used.add("_image_cache/current");
+      put(id, "_image_cache/current");
+
+      const keep = await entry(
+        id,
+        "image-cache",
+        "_image_cache/current",
+        "http://a/current.jpg"
+      );
+
+      await stored(id, "image-cache", "legacyimage", LEGACY_IMAGE);
+
+      const { totals } = await run(id, "apply");
+
+      expect(totals.legacyCacheKeys).toBe(1);
+      expect(totals.cacheKeysDeleted).toBe(1);
+      expect(await exists(keep)).toBe(true);
+    });
+
+    it("does not treat a result that also names a current scope as legacy", async function () {
+      const id = this.blog.id;
+
+      used.add("_image_cache/abc");
+      put(id, "_image_cache/abc");
+
+      const mixed = await stored(
+        id,
+        "image-cache",
+        "mixed",
+        JSON.stringify({
+          url: "//blotcdn.com/x/image-cache/1532083907566/a.jpg",
+          src: "/_image_cache/abc/a.jpg",
+        })
+      );
+
+      const { totals } = await run(id, "apply");
+
+      expect(totals.legacyCacheKeys).toBe(0);
+      expect(await exists(mixed)).toBe(true);
     });
   });
 });
