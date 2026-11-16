@@ -43,7 +43,7 @@ describe("sandbox pandoc job", function () {
     expect(outputs[0].toString()).toEqual("<p>Hello <em>world</em></p>\n");
   });
 
-  it("returns a docx's media as outputs, named under the directory its HTML points at", async function () {
+  it("names a docx's media under the directory its HTML points at, and the archive's file for each rather than its bytes", async function () {
     const input = await fs.readFile(
       path.join(converters, "docx/tests/image.docx")
     );
@@ -53,12 +53,15 @@ describe("sandbox pandoc job", function () {
       input
     );
 
-    expect(meta.media.sort()).toEqual(["media/rId20.png", "media/rId23.png"]);
-    expect(outputs.length).toEqual(3);
+    expect(meta.media).toEqual(["media/rId20.png", "media/rId23.png"]);
+    expect(meta.entries).toEqual([
+      "word/media/rId20.png",
+      "word/media/rId23.png",
+    ]);
+    expect(outputs.length).toEqual(1);
     expect(outputs[0].toString()).toContain(
       'src="' + meta.dir + "/media/rId20.png"
     );
-    expect(outputs[1].subarray(1, 4).toString()).toEqual("PNG");
   });
 
   it("reads the bibliography and CSL after the document", async function () {
@@ -189,8 +192,28 @@ describe("sandbox pandoc job", function () {
       for (const name of ["../x.png", "/x.png", "a//b.png", "a/./b.png", ""]) {
         run.and.returnValue(
           Promise.resolve({
-            meta: { dir: "/tmp/x", media: [name] },
+            meta: { dir: "/tmp/x", media: [name], entries: [null] },
             outputs: [Buffer.from(""), Buffer.from("")],
+          })
+        );
+        const err = await rejection(pandoc({ from: "docx" }, Buffer.from("")));
+        expect(err.message).toEqual("pandoc: invalid reply");
+      }
+    });
+
+    it("refuses entries that don't match the media", async function () {
+      const run = spyOn(sandbox, "run");
+      for (const [entries, outputs] of [
+        [undefined, 2],
+        [[], 2],
+        [[1], 1],
+        [[null], 1],
+        [["word/media/x.png"], 2],
+      ]) {
+        run.and.returnValue(
+          Promise.resolve({
+            meta: { dir: "/tmp/x", media: ["media/x.png"], entries },
+            outputs: Array.from({ length: outputs }, () => Buffer.from("")),
           })
         );
         const err = await rejection(pandoc({ from: "docx" }, Buffer.from("")));

@@ -246,4 +246,65 @@ describe("sandbox unzip job", function () {
       "invalid arguments"
     );
   });
+  describe("only", function () {
+    async function message(promise) {
+      try {
+        await promise;
+      } catch (err) {
+        return err.message;
+      }
+    }
+
+    const files = [
+      { name: "word/document.xml", data: "<w:document/>" },
+      { name: "word/media/a.png", data: "a".repeat(600) },
+      { name: "word/media/b.png", data: "b".repeat(600) },
+      { name: "word/media/c.png", data: "c".repeat(300) },
+    ];
+
+    it("returns only the files asked for, in archive order", async function () {
+      const { meta, outputs } = await unzip(zip(files), {
+        only: ["word/media/c.png", "word/media/a.png", "missing.png"],
+      });
+      expect(meta).toEqual({
+        error: null,
+        files: ["word/media/a.png", "word/media/c.png"],
+      });
+      expect(outputs.map(String)).toEqual(["a".repeat(600), "c".repeat(300)]);
+    });
+
+    it("ends a batch at a file that would take it past maxBytes", async function () {
+      const only = ["word/media/a.png", "word/media/b.png", "word/media/c.png"];
+      const first = await unzip(zip(files), { only, maxBytes: 1000 });
+      expect(first.meta).toEqual({ error: null, files: ["word/media/a.png"] });
+
+      const second = await unzip(zip(files), {
+        only: only.slice(1),
+        maxBytes: 1000,
+      });
+      expect(second.meta).toEqual({
+        error: null,
+        files: ["word/media/b.png", "word/media/c.png"],
+      });
+    });
+
+    it("refuses a first file larger than maxBytes", async function () {
+      const { meta } = await unzip(zip(files), {
+        only: ["word/media/a.png"],
+        maxBytes: 100,
+      });
+      expect(meta).toEqual({
+        error: { reason: "size", path: "word/media/a.png" },
+        files: [],
+      });
+    });
+
+    it("refuses an only that isn't a list of names", async function () {
+      for (const only of ["a", [1], null, [{}]]) {
+        expect(await message(unzip(zip(files), { only }))).toEqual(
+          "invalid only"
+        );
+      }
+    });
+  });
 });
