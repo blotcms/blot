@@ -40,3 +40,48 @@ module.exports = function (req, res, next) {
       next();
     }, next);
 };
+
+// The relPath of the avatar a blog.avatar URL names, "_avatars/<name>", or
+// null when it names anything else (empty, another blog's, an outside URL).
+function relPathOf(blogID, url) {
+  if (!url || typeof url !== "string") return null;
+
+  var pathname;
+
+  try {
+    pathname = decodeURIComponent(new URL(url).pathname);
+  } catch (err) {
+    return null;
+  }
+
+  var prefix = "/" + blogID + "/" + folder + "/";
+  var name = pathname.slice(prefix.length);
+
+  if (pathname.indexOf(prefix) !== 0 || !name || /[/\\]|^\.+$/.test(name))
+    return null;
+
+  return folder + "/" + name;
+}
+
+// Deletes the avatar a blog had before it was replaced (or cleared), once
+// the blog has been saved with the new one. A failure is logged and never
+// thrown: the old file is only left behind, and the script
+// scripts/storage/replaced-avatars.js removes those.
+async function removeReplaced(blogID, previousUrl, currentUrl) {
+  try {
+    var previous = relPathOf(blogID, previousUrl);
+
+    if (!previous || previous === relPathOf(blogID, currentUrl)) return;
+
+    await assets.remove(blogID, previous);
+  } catch (err) {
+    console.error(
+      "[avatar] could not remove the replaced avatar of " + blogID + ":",
+      err
+    );
+  }
+}
+
+module.exports.relPathOf = relPathOf;
+module.exports.removeReplaced = removeReplaced;
+module.exports.folder = folder;
