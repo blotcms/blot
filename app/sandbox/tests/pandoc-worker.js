@@ -84,14 +84,22 @@ describe("sandbox pandoc worker", function () {
     worker.stdin.end();
   });
 
-  // The HTML with the media directory replaced, and the media by name
+  // The HTML with the media directory replaced, and the media by name: the
+  // archive's file each is, or the bytes of one that isn't
   function comparable({ meta, outputs }) {
     if (meta.error) return { error: true };
+    let next = 1;
     return {
       html: outputs[0].toString().split(meta.dir).join("<dir>"),
       media: meta.media
-        .map((name, i) => [name, outputs[i + 1].toString("base64")])
+        .map((name, i) => [
+          name,
+          meta.entries[i] === null
+            ? outputs[next++].toString("base64")
+            : "entry:" + meta.entries[i],
+        ])
         .sort(),
+      inline: outputs.length - 1,
     };
   }
 

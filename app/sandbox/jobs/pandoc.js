@@ -6,9 +6,14 @@
 //     bibliography: { length: 1234, extension: ".bib" }, csl: null }
 //
 // The input is the document, then the bibliography's bytes and the CSL's, whose
-// lengths are in the args (markdown only). outputs[0] is the HTML and the rest
-// are the media pandoc extracted from a docx or odt, named in meta.media
-// relative to meta.dir, the directory the HTML's image paths start with.
+// lengths are in the args (markdown only). outputs[0] is the HTML. meta.media
+// names the media pandoc extracted from a docx or odt, relative to meta.dir,
+// the directory the HTML's image paths start with, and meta.entries says, for
+// each, which of the archive's files it is: pandoc reads the document with a
+// marker in place of each of its files other than its XML (see markers()), so
+// the media's bytes never pass through pandoc or this reply, and the caller
+// takes them from the archive itself. A medium that isn't a marker has a null
+// entry, and its bytes are the next of the outputs after the HTML.
 // A document pandoc can't convert, a timeout, or pandoc killed by anything else
 // (the jail's memory limit) is meta.error, not a failure: the caller tells the
 // last apart, since the broker would only call it "failed".
@@ -17,6 +22,8 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 const { spawn } = require("child_process");
+const yauzl = require("yauzl");
+const archiver = require("archiver");
 
 const FORMATS = ["markdown", "docx", "odt", "rtf", "org"];
 const EXTENSION = /^\.[A-Za-z0-9]{1,16}$/;
@@ -31,6 +38,79 @@ const TIMEOUT_MS = 10 * 1000;
 const MAX_OUTPUT = 64 * 1024 * 1024;
 const MAX_STDERR = 16 * 1024;
 const MAX_MEDIA = 1000;
+
+// As in ./pandoc-worker.lua
+const MARKER = "blot-media:";
+
+function kept(name) {
+  return (
+    name.endsWith("/") ||
+    name.toLowerCase() === "mimetype" ||
+    /\.(xml|rels)$/i.test(name)
+  );
+}
+
+function readEntry(zipfile, entry) {
+  return new Promise((resolve, reject) => {
+    zipfile.openReadStream(entry, (err, stream) => {
+      if (err) return reject(err);
+      const chunks = [];
+      stream.on("data", (chunk) => chunks.push(chunk));
+      stream.on("error", reject);
+      stream.on("end", () => resolve(Buffer.concat(chunks)));
+    });
+  });
+}
+
+// The archive with a marker in place of each file other than its XML, as
+// with_markers() in ./pandoc-worker.lua, and the set of the files replaced;
+// null for a document that isn't an archive, which pandoc then reads as it
+// is, to fail with its own error
+async function markers(document) {
+  let zipfile;
+  try {
+    zipfile = await new Promise((resolve, reject) =>
+      yauzl.fromBuffer(document, { lazyEntries: true }, (err, zipfile) =>
+        err ? reject(err) : resolve(zipfile)
+      )
+    );
+    const archive = archiver("zip");
+    const chunks = [];
+    archive.on("data", (chunk) => chunks.push(chunk));
+    const finished = new Promise((resolve, reject) => {
+      archive.on("end", resolve);
+      archive.on("error", reject);
+    });
+    const replaced = new Set();
+    for (;;) {
+      const entry = await new Promise((resolve, reject) => {
+        zipfile.once("entry", resolve);
+        zipfile.once("end", () => resolve(null));
+        zipfile.once("error", reject);
+        zipfile.readEntry();
+      });
+      zipfile.removeAllListeners("entry");
+      zipfile.removeAllListeners("end");
+      zipfile.removeAllListeners("error");
+      if (!entry) break;
+      const name = entry.fileName;
+      if (name.endsWith("/")) continue;
+      if (kept(name)) {
+        archive.append(await readEntry(zipfile, entry), { name });
+      } else {
+        replaced.add(name);
+        archive.append(Buffer.from(MARKER + name), { name });
+      }
+    }
+    archive.finalize();
+    await finished;
+    return { document: Buffer.concat(chunks), replaced };
+  } catch (err) {
+    return null;
+  } finally {
+    if (zipfile) zipfile.close();
+  }
+}
 
 function pandocPath() {
   if (process.env.BLOT_PANDOC_PATH) return process.env.BLOT_PANDOC_PATH;
@@ -284,10 +364,11 @@ async function run(args, input) {
       );
 
     const isFile = options.from === "docx" || options.from === "odt";
+    const marked = isFile ? await markers(document) : null;
     if (isFile)
       await fs.promises.writeFile(
         path.join(dir, "input." + options.from),
-        document
+        marked ? marked.document : document
       );
 
     const result = await pandoc(
@@ -298,10 +379,21 @@ async function run(args, input) {
 
     const mediaDir = path.join(dir, "media");
     const media = await walk(mediaDir);
+    const entries = [];
     const outputs = [result.html];
-    for (const name of media)
-      outputs.push(await fs.promises.readFile(path.join(mediaDir, name)));
-    return { meta: { dir: mediaDir, media }, outputs };
+    for (const name of media) {
+      const data = await fs.promises.readFile(path.join(mediaDir, name));
+      const entry =
+        data.subarray(0, MARKER.length).toString() === MARKER &&
+        data.subarray(MARKER.length).toString();
+      if (entry && marked && marked.replaced.has(entry)) {
+        entries.push(entry);
+      } else {
+        entries.push(null);
+        outputs.push(data);
+      }
+    }
+    return { meta: { dir: mediaDir, media, entries }, outputs };
   } finally {
     await fs.promises.rm(dir, { recursive: true, force: true });
   }

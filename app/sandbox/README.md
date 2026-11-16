@@ -49,9 +49,17 @@ starts `SANDBOX_`, and it never falls back to in-process.
   `build/converters/pandoc.js`. The job picks pandoc's options from a few checked
   args (the format, and for markdown KaTeX, callouts and citations), never flags
   from the caller. A markdown post's bibliography and CSL come after the
-  document in the input, their lengths in the args. outputs[0] is the HTML and
-  the rest are the media pandoc extracted from a docx or odt, named in
-  `meta.media`; the converters write them to the blog's assets. A document
+  document in the input, their lengths in the args. outputs[0] is the HTML.
+  A docx or odt is read with a marker in place of each of its files other than
+  its XML, so its images never pass through pandoc: `meta.media` names the
+  media pandoc extracted and `meta.entries` the archive's file for each, and
+  `build/converters/pandoc.js` reads those from the document with the `unzip`
+  job, as many at a time as a reply holds, then writes them to the blog's
+  assets. This is what lets a document of photos convert: holding them in the
+  worker took about six times the document's size, so one of 60 MiB passed the
+  jail's 512 MiB; now it is about three times, under the 100 MiB a sync takes.
+  A medium that isn't a marker has a null entry and its bytes as the next
+  output. A document
   pandoc can't convert is `meta.error`, so it fails the build like any bad file
   without being a sandbox failure. The callouts Lua filter is `jobs/callouts.lua`.
 
@@ -71,6 +79,9 @@ starts `SANDBOX_`, and it never falls back to in-process.
 - `unzip` a zip archive into its files, one output each. It refuses absolute and
   upward paths, symlinks, too many records, too many bytes and too high a ratio
   (a bad archive is a `meta.error`, not a thrown error). Output stops at 60 MiB.
+  With `only`, a list of names, it reads just those, and a file that would take
+  the batch past `maxBytes` ends the batch instead of failing it (unless it is
+  the first), so a caller gets an archive's large files in turns.
 - `fetch-image` fetches an image from a URL and re-encodes it, for the remote
   images in posts (`helper/transformer/download`), so Node never handles the
   bytes a server sent. It has a network: see below. Args are `{ url, etag,

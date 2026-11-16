@@ -7,7 +7,10 @@
 // input is a Buffer or { path }. files ({ bibliography, csl }, markdown only)
 // are local paths, sent after the document. media is [{ name, data }]: what
 // pandoc extracted from a docx or odt, which the caller writes itself, named
-// relative to dir, the directory the HTML's image paths start with. A document
+// relative to dir, the directory the HTML's image paths start with. The job
+// names the archive's file for each image rather than sending its bytes, so a
+// document with many images fits in the jail, and they are read from the
+// archive here with the unzip job, as many at a time as a reply holds. A document
 // pandoc can't convert, or that takes too long, rejects with "Pandoc exited
 // ...", and pandoc killed by the jail's memory limit with code SANDBOX_KILLED,
 // which emails the admin.
@@ -16,6 +19,40 @@ const fs = require("fs-extra");
 const { extname } = require("path");
 const sandbox = require("sandbox");
 const alerts = require("sandbox/alerts");
+const { HARD } = require("sandbox/jobs/unzip");
+
+// Each batch of a document's images: as many as one reply holds
+const MEDIA_LIMITS = {
+  maxEntries: HARD.maxEntries,
+  maxBytes: HARD.maxBytes,
+  maxRatio: HARD.maxRatio,
+};
+
+// The archive's files, by name, read in batches of what one reply holds
+async function readEntries(input, names) {
+  const found = new Map();
+  let wanted = [...new Set(names)];
+
+  while (wanted.length) {
+    const { meta, outputs } = await sandbox.run(
+      "unzip",
+      Object.assign({ only: wanted }, MEDIA_LIMITS),
+      input
+    );
+    if (!meta || typeof meta !== "object" || !Array.isArray(meta.files))
+      throw new Error("pandoc: invalid media reply");
+    if (meta.error)
+      throw new Error(
+        "pandoc: could not read the document's images: " + meta.error.reason
+      );
+    if (!meta.files.length || meta.files.length !== outputs.length)
+      throw new Error("pandoc: could not read the document's images");
+    meta.files.forEach((name, i) => found.set(name, outputs[i]));
+    wanted = wanted.filter((name) => !found.has(name));
+  }
+
+  return found;
+}
 
 // A media name pandoc gave: relative, with no empty, . or .. parts
 function isMediaName(name) {
@@ -32,6 +69,8 @@ function isMediaName(name) {
 
 async function pandoc(args, input, files = {}) {
   args = Object.assign({}, args);
+  // The document alone, for its images
+  const document = input;
 
   const parts = [];
   for (const key of ["bibliography", "csl"]) {
@@ -92,20 +131,39 @@ async function pandoc(args, input, files = {}) {
     throw err;
   }
 
-  const media = meta.media;
+  const { media, entries } = meta;
+  const inline = Array.isArray(entries)
+    ? entries.filter((entry) => entry === null).length
+    : -1;
   if (
     typeof meta.dir !== "string" ||
     !Array.isArray(media) ||
     !media.every(isMediaName) ||
-    outputs.length !== media.length + 1
+    !Array.isArray(entries) ||
+    entries.length !== media.length ||
+    !entries.every((entry) => entry === null || typeof entry === "string") ||
+    outputs.length !== inline + 1
   ) {
     throw new Error("pandoc: invalid reply");
   }
 
+  // The images named by their file in the archive come from it, the rest
+  // from the reply, in order
+  const fromArchive = entries.filter((entry) => entry !== null);
+  const read = fromArchive.length
+    ? await readEntries(document, fromArchive)
+    : new Map();
+  let next = 1;
+
   return {
     html: outputs[0].toString("utf8"),
     dir: meta.dir,
-    media: media.map((name, i) => ({ name, data: outputs[i + 1] })),
+    media: media.map((name, i) => {
+      if (entries[i] === null) return { name, data: outputs[next++] };
+      if (!read.has(entries[i]))
+        throw new Error("pandoc: the document has no file " + entries[i]);
+      return { name, data: read.get(entries[i]) };
+    }),
   };
 }
 
