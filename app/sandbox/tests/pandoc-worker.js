@@ -131,6 +131,16 @@ describe("sandbox pandoc worker", function () {
     );
   }
 
+  it("extracts an RTF's images as the job does", async function () {
+    const input = await fs.readFile(
+      path.join(converters, "rtf/tests/image.rtf")
+    );
+    const reply = await ask({ from: "rtf" }, input);
+    expect(reply.meta.media.length).toBe(1);
+    expect(reply.outputs[1].subarray(1, 4).toString()).toBe("PNG");
+    await same({ from: "rtf" }, input);
+  });
+
   it("converts every markdown fixture as the job does, with and without katex and callouts", async function () {
     const directory = path.join(converters, "markdown/tests/examples");
     const fixtures = (await fs.readdir(directory)).filter((name) =>

@@ -206,6 +206,13 @@ local function convert(options, input)
   elseif from == "rtf" or from == "org" then
     local doc = read(input.document, from)
     input.document = nil
+    -- An RTF's images are in the document itself (\pict), so its media come
+    -- back in the reply, as --extract-media does it in ./pandoc.js
+    if from == "rtf" then
+      collect()
+      doc, names, entries, media = extract_media(doc, nil)
+      pandoc.mediabag.empty()
+    end
     html = pandoc.write(doc, "html5", {
       columns = 72,
       wrap_text = "auto",
