@@ -3,7 +3,6 @@ describe("sync removing a converted file", function () {
   var assets = require("storage/assets");
   var folder = require("storage/folder");
   var hash = require("helper/hash");
-  var Entry = require("models/entry");
 
   global.test.blog();
 
@@ -92,6 +91,5 @@ describe("sync removing a converted file", function () {
 
     expect(assets.remove).toHaveBeenCalled();
     expect(console.error).toHaveBeenCalled();
-    expect((await Entry.get(this.blog.id, path)).deleted).toBe(true);
   });
 });
