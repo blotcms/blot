@@ -410,14 +410,14 @@ Blot no longer owns the domain.
     again, by their exact object keys; a directory a build made again is kept
     for another round. Cache entries that point at directories missing from
     the bucket, and `everything` members with nothing behind them, are
-    deleted in run N. A bookmark screenshot isn't in the transformer cache
+    deleted in run N, and so are results from before the current layout that point at the old CDN (`blotcdn.com`, `/image-cache/`, `/thumbnails/<digits>/`; nothing can use them) with their URL keys, counted in `legacyCacheKeys`. A bookmark screenshot isn't in the transformer cache
     (the plugin reuses a file if it exists), so a build that has just found
     one can link it in the seconds before run N+1 deletes it, after a week
     unreferenced; the next rebuild takes it again (accepted, #2745). The
     switch is `GENERATED` in `index.js`: `off`, `report` (reads everything and
     fills the totals, writes nothing, so that `apply` starts at run N) or
     `apply`, the default since #2745's report and test-blog runs. The totals (`generatedBlogs`, `candidates`,
-    `candidateBytes`, `deletedDirs`, `deletedBytes`, `cacheKeysDeleted`,
+    `candidateBytes`, `deletedDirs`, `deletedBytes`, `cacheKeysDeleted`, `legacyCacheKeys`,
     `generatedFailed`) are in the hash and logged at the end of a run; a blog
     whose step fails (any read) has nothing deleted and still gets its
     Perma-Cache check. One blog by hand, in a unit:
