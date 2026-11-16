@@ -80,7 +80,11 @@ describe("Blog.remove", function () {
 
     async function createTemplate(blogID, name, hash) {
       var template = await Template.create(blogID, name, {});
-      await Template.setMetadata(template.id, { cdn: { "style.css": hash } });
+      await client.hSet(
+        templateKey.metadata(template.id),
+        "cdn",
+        JSON.stringify({ "style.css": hash })
+      );
       await client.set(templateKey.renderedOutput(hash), "rendered");
       return template;
     }
