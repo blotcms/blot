@@ -80,8 +80,8 @@ describe("Blog.remove", function () {
 
     async function createTemplate(blogID, name, hash) {
       var template = await Template.create(blogID, name, {});
-      await client.set(templateKey.renderedOutput(hash), "rendered");
       await Template.setMetadata(template.id, { cdn: { "style.css": hash } });
+      await client.set(templateKey.renderedOutput(hash), "rendered");
       return template;
     }
 
@@ -111,6 +111,10 @@ describe("Blog.remove", function () {
       await createTemplate(this.blog.id, "first", "c1d2e3f4a5b6c7d8");
       await createTemplate(this.blog.id, "second", "d1e2f3a4b5c6d7e8");
 
+      var count = (
+        await client.sMembers(templateKey.blogTemplates(this.blog.id))
+      ).length;
+
       // Template.drop's last step; the first template's drop throws
       spyOn(
         require("models/template/util/cacheID"),
@@ -122,7 +126,9 @@ describe("Blog.remove", function () {
 
       await remove(this.blog.id);
 
-      expect(calls).toEqual(2);
+      // The blog's own templates too, not only the two above
+      expect(calls).toEqual(count);
+      expect(count).toBeGreaterThan(1);
       expect(logged).toHaveBeenCalled();
       expect(await getAllIDs()).not.toContain(this.blog.id);
       expect(await redisSearch(this.blog.id)).toEqual([]);
