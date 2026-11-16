@@ -1,8 +1,8 @@
 // Runs the weekly sweep's step for generated files (app/storage/sweep/
 // generated.js, #2745) for one blog, or for every blog with --all, and prints
 // its totals: the directories it would mark as candidates, delete, and the
-// transformer cache keys it would delete. Report only unless --apply, which
-// reads everything and writes nothing.
+// transformer cache keys it would delete. Report only (it reads everything
+// and writes nothing) unless --apply.
 //
 //   docker exec -u 1000 blot-blue node scripts/storage/sweep-blog.js <blogID>
 //   docker exec -u 1000 blot-blue node scripts/storage/sweep-blog.js <blogID> --apply
