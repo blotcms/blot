@@ -404,8 +404,11 @@ Blot no longer owns the domain.
     transformer cache entries (`blog:<id>:store:image-cache:*` and
     `thumbnails:*`, read through each name's `everything` set) that point at
     an unreferenced directory whose newest file is over a day old, and
-    records the directory in the set `perma-cache:sweep:candidates:<blogID>`.
-    Run N+1, a week later, deletes the files of a candidate that is still
+    records the directory in the set `perma-cache:sweep:candidates:<blogID>`,
+    with the time in `...:candidates:<blogID>:marked`. Run N+1, a week later,
+    deletes only candidates marked before it started (a run resumed after a
+    deploy sweeps again the blogs it had in progress, and must not delete what
+    it marked itself). It deletes the files of a candidate that is still
     unreferenced, still over a day old and that no cache entry points at
     again, by their exact object keys; a directory a build made again is kept
     for another round. Cache entries that point at directories missing from

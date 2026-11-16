@@ -83,6 +83,8 @@ async function sweepOne(base, entry, context) {
         now: context.now,
         totals,
         log: context.log,
+        // Only candidates an earlier run recorded are deleted (./generated)
+        markedBefore: context.startedAt,
       });
     } catch (err) {
       // Nothing was deleted for the blog; the Perma-Cache check still runs,
@@ -104,7 +106,10 @@ async function sweepOne(base, entry, context) {
 
   // The candidate set of a blog that is gone would otherwise stay
   if (context.deleted.has(entry.name))
-    await client.del(generated.candidatesKey(entry.name));
+    await client.del([
+      generated.candidatesKey(entry.name),
+      generated.markedKey(entry.name),
+    ]);
 }
 
 // One step of the sweep, run by start() below whenever it holds the lease:
@@ -157,6 +162,7 @@ async function step(signal, options = {}) {
     live: all.live,
     deleted,
     totals,
+    startedAt: Number(state.startedAt),
   };
 
   await permaCache.sweepEntries(
