@@ -162,4 +162,35 @@ describe("gdoc converter", function () {
 
     expect(result).toContain(assetSrc);
   });
+
+  it("gives each document its own _assets directory for the same image", async function () {
+    const test = this;
+    const assets = require("storage/assets");
+    const html =
+      "<html><body><p><img alt='' src='http://localhost:7391/image.jpg'></p></body></html>";
+    const first = "/first.gdoc";
+    const second = "/second.gdoc";
+
+    await folder.write(test.blog.id, first, html);
+    await folder.write(test.blog.id, second, html);
+
+    const [one] = await gdoc.read(test.blog, first);
+    const [two] = await gdoc.read(test.blog, second);
+
+    expect(one).toContain("/_assets/" + hash(first) + "/");
+    expect(two).toContain("/_assets/" + hash(second) + "/");
+    expect(two).not.toContain(hash(first));
+
+    // removing the first document's directory leaves the second's working
+    await assets.remove(test.blog.id, "_assets/" + hash(first));
+
+    const filename = two.match(/_assets\/[a-f0-9]{32}\/([^"']+)/)[1];
+
+    expect(
+      await assets.exists(
+        test.blog.id,
+        "_assets/" + hash(second) + "/" + filename
+      )
+    ).toBe(true);
+  });
 });

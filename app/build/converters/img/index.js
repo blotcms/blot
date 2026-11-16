@@ -77,7 +77,18 @@ async function read(blog, path) {
         const convertImage = async (sourcePath) =>
           writeConversion(sourcePath, convertedRelativePath);
 
-        const conversion = await transformer.lookup(path, convertImage);
+        // The cache is keyed by the file's bytes, so a copy of the image at
+        // another path would get the first path's directory back. Each path
+        // owns its own: a result in any other is made again here.
+        const ownPrefix = `/_assets/${hashPath}/`;
+        const isValid = (result) =>
+          !!result &&
+          typeof result.relativePath === "string" &&
+          result.relativePath.startsWith(ownPrefix);
+
+        const conversion = await transformer.lookup(path, convertImage, {
+          isValid,
+        });
 
         const conversionRelativePath =
           conversion?.relativePath || convertedRelativePath;

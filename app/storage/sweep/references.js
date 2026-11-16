@@ -38,32 +38,37 @@ const REFERENCE = new RegExp(
   "g"
 );
 
-// Every "<scope>/<id>" mentioned in a value
-function referencesIn(value, into) {
+// What mentions "/_assets/<id>", for scripts/storage/assets-of-removed-files.js
+// (the sweep never reads it: _assets is not swept)
+const ASSET_REFERENCE = new RegExp("/(_assets)/([^/\"'\\s?#)\\\\]+)", "g");
+
+// Every "<scope>/<id>" mentioned in a value, by the pattern, which is the
+// sweep's scopes unless another is given
+function referencesIn(value, into, pattern) {
   const text = typeof value === "string" ? value : JSON.stringify(value);
 
   if (!text) return into;
 
-  for (const match of text.matchAll(REFERENCE))
+  for (const match of text.matchAll(pattern || REFERENCE))
     into.add(match[1] + "/" + match[2]);
 
   return into;
 }
 
-async function inUse(blogID) {
+async function inUse(blogID, pattern) {
   const used = new Set();
   const ids = await Entries.getAllIDs(blogID);
 
   for (let i = 0; i < ids.length; i += ENTRY_BATCH) {
     for (const entry of await Entry.get(blogID, ids.slice(i, i + ENTRY_BATCH)))
-      if (entry && !entry.deleted) referencesIn(entry, used);
+      if (entry && !entry.deleted) referencesIn(entry, used, pattern);
   }
 
   const blog = await Blog.get({ id: blogID });
 
   if (!blog) throw new Error("sweep/references: no blog " + blogID);
 
-  referencesIn(blog, used);
+  referencesIn(blog, used, pattern);
 
   for (const id of await client.sMembers(templateKey.blogTemplates(blogID))) {
     let metadata;
@@ -78,7 +83,7 @@ async function inUse(blogID) {
 
     if (metadata.owner !== blogID) continue;
 
-    referencesIn(metadata, used);
+    referencesIn(metadata, used, pattern);
 
     for (const name of await client.sMembers(templateKey.allViews(id))) {
       let view;
@@ -91,10 +96,10 @@ async function inUse(blogID) {
         throw err;
       }
 
-      referencesIn(view, used);
+      referencesIn(view, used, pattern);
     }
   }
 
   return used;
 }
-module.exports = { inUse, referencesIn, SCOPES };
+module.exports = { inUse, referencesIn, SCOPES, ASSET_REFERENCE };
