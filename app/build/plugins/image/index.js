@@ -4,6 +4,8 @@ var optimize = require("./optimize");
 var url = require("url");
 var isURL = require("helper/transformer/isURL");
 var { report } = require("build/flags");
+var assets = require("storage/assets");
+var config = require("config");
 
 // Images looked up at once for one entry. Each lookup is a sandbox job (a
 // fresh jail, ~70ms before any work), so two at a time overlap their start-up.
@@ -20,6 +22,30 @@ function describeDownloadError(err) {
 
 async function render($, { blogID }) {
   var cache = new Transformer(blogID, "image-cache");
+
+  // A cached result is found by the image's bytes, so it may be one built long
+  // ago, whose file has since gone from storage (removed, or never uploaded).
+  // If so, the image is made again rather than linked. The result holds the
+  // file's CDN URL, not its path, so the path is taken back out of it. A
+  // result which isn't one of ours counts as valid.
+  var urlPrefix = config.cdn.origin + "/" + blogID + "/";
+
+  async function isValid(result) {
+    if (!result || typeof result.src !== "string") return true;
+    if (result.src.indexOf(urlPrefix) !== 0) return true;
+
+    var relativePath;
+
+    try {
+      relativePath = decodeURIComponent(result.src.slice(urlPrefix.length));
+    } catch (e) {
+      return true;
+    }
+
+    if (!relativePath) return true;
+
+    return assets.exists(blogID, relativePath);
+  }
 
   // First collect each <img> with a cacheable src. The same src is looked up
   // once however often it appears in the entry, and distinct srcs run
@@ -69,14 +95,18 @@ async function render($, { blogID }) {
     var transform = optimize(blogID, src);
 
     try {
-      infos[src] = await cache.lookup(src, async function () {
-        try {
-          return await transform.apply(this, arguments);
-        } catch (err) {
-          if (err && typeof err === "object") err.fromTransform = true;
-          throw err;
-        }
-      });
+      infos[src] = await cache.lookup(
+        src,
+        async function () {
+          try {
+            return await transform.apply(this, arguments);
+          } catch (err) {
+            if (err && typeof err === "object") err.fromTransform = true;
+            throw err;
+          }
+        },
+        { isValid }
+      );
     } catch (err) {
       debug(src, "Optimize failed with Error:", err);
 
