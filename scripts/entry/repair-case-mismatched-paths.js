@@ -15,9 +15,16 @@
 // moved no longer matches. Each blog is repaired holding its sync lock.
 //
 //   node scripts/entry/repair-case-mismatched-paths.js [--apply] [blogID ...]
+//   node scripts/entry/repair-case-mismatched-paths.js --restore [file]
 //
-// With no blog IDs it checks every blog.
-const { basename } = require("path");
+// With no blog IDs it checks every blog. --apply appends each entry, as it
+// was, to a backup file ($BACKUP, or one in the temp directory) before
+// moving it. --restore puts back any entry whose move didn't finish. A
+// move keeps the entry's earlier URLs redirecting and its place on the
+// menu.
+const fs = require("fs");
+const os = require("os");
+const { basename, join } = require("path");
 const client = require("models/client");
 const Blog = require("models/blog");
 const Entry = require("models/entry");
@@ -29,6 +36,32 @@ const BackupDomain = require("models/blog/util/backupDomain");
 const folderPostFolder = require("sync/update/folderPostSourceFolder");
 
 const LIVE_LISTS = ["entries", "drafts", "pages", "scheduled"];
+
+// Each entry, as it was, is appended here before it is moved
+const BACKUP =
+  process.env.BACKUP || join(os.tmpdir(), "repair-case-mismatched-paths.jsonl");
+
+// Puts back each backed-up entry whose move didn't finish: its old entry
+// is deleted and nothing live is at its new path
+async function restore(file) {
+  let restored = 0;
+
+  for (const line of fs.readFileSync(file, "utf8").split("\n")) {
+    if (!line) continue;
+
+    const { blogID, from, to, entry } = JSON.parse(line);
+    const now = await Entry.get(blogID, to);
+    const old = await Entry.get(blogID, from);
+
+    if ((now && !now.deleted) || (old && !old.deleted)) continue;
+
+    await Entry.set(blogID, from, entry);
+    console.log(blogID, "RESTORED", from);
+    restored++;
+  }
+
+  console.log("Restored", restored, "entries from", file);
+}
 
 // The paths entry-ghosts tries, in its order (resolvePath)
 function candidates(path) {
@@ -91,6 +124,24 @@ async function mismatched(blogID) {
   return found;
 }
 
+// Every url key of the blog which points at the entry: its current URL
+// and any it had before, which routes/entry.js redirects from
+async function urlKeysOf(blogID, entryID) {
+  const keys = [];
+
+  for await (const batch of client.scanIterator({
+    MATCH: "blog:" + blogID + ":url:*",
+    COUNT: 1000,
+  })) {
+    for (const key of Array.isArray(batch) ? batch : [batch]) {
+      if ((await client.type(key)) !== "string") continue;
+      if ((await client.get(key)) === entryID) keys.push(key);
+    }
+  }
+
+  return keys;
+}
+
 async function move(blogID, entry, real) {
   const existing = await Entry.get(blogID, real);
 
@@ -99,6 +150,7 @@ async function move(blogID, entry, real) {
     return false;
   }
 
+  const oldID = entry.id || entry.path;
   const moved = JSON.parse(JSON.stringify(entry));
 
   moved.id = real;
@@ -106,8 +158,40 @@ async function move(blogID, entry, real) {
   moved.name = basename(real);
   moved.deleted = false;
 
-  await Entry.drop(blogID, entry.id || entry.path);
-  await Entry.set(blogID, real, moved);
+  const urlKeys = await urlKeysOf(blogID, oldID);
+  const menu = (await Blog.get({ id: blogID })).menu || [];
+  const onMenu = menu.some((item) => item.id === oldID);
+
+  // Kept before the drop, so --restore can put the entry back if this
+  // process dies between the drop and the save
+  fs.appendFileSync(
+    BACKUP,
+    JSON.stringify({ blogID, from: entry.path, to: real, entry }) + "\n"
+  );
+
+  await Entry.drop(blogID, oldID);
+
+  try {
+    await Entry.set(blogID, real, moved);
+  } catch (err) {
+    await Entry.set(blogID, entry.path, entry);
+    throw new Error("saving " + real + " failed, restored: " + err.message, {
+      cause: err,
+    });
+  }
+
+  // Earlier URLs keep redirecting to the entry
+  for (const key of urlKeys) await client.set(key, real);
+
+  // The drop took the page off the menu and the save appended it: put it
+  // back where it was
+  if (onMenu) {
+    await Blog.set(blogID, {
+      menu: menu.map((item) =>
+        item.id === oldID ? Object.assign({}, item, { id: real }) : item
+      ),
+    });
+  }
 
   const saved = await Entry.get(blogID, real);
   const same = saved && saved.url === entry.url;
@@ -162,7 +246,12 @@ async function repair(blogID, apply) {
 
 async function main() {
   const args = process.argv.slice(2);
+
+  if (args[0] === "--restore") return restore(args[1] || BACKUP);
+
   const apply = args.includes("--apply");
+
+  if (apply) console.log("Backing up each entry before its move to", BACKUP);
   let blogIDs = args.filter((arg) => arg !== "--apply");
 
   if (!blogIDs.length) blogIDs = (await Blog.getAllIDs()).sort();
