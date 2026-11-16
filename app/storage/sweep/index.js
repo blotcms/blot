@@ -21,6 +21,14 @@ const generated = require("./generated");
 // - the shared directories (documentation, template outputs, static files,
 //   anything else): ./permaCache.
 //
+// A run has a second pass, SECOND_PASS_DELAY after the main pass ends (the
+// state's mainDoneAt), for the blogs the main pass left candidates for:
+// ./generated deletes the candidates the main pass recorded, and the
+// Perma-Cache check purges what that deleted, in the same visit. The
+// lease's hourly step finds it due. Only then is the run finished and the
+// next INTERVAL counted. A "report" or "off" run has no second pass: it
+// records nothing to delete.
+//
 // The run is resumable: it keeps the name below which everything has been
 // swept (the cursor) in a Redis hash, and a deploy that kills it loses at
 // most the entries in progress, which the next holder of the lease sweeps
@@ -30,6 +38,7 @@ const generated = require("./generated");
 const STATE = "perma-cache:sweep";
 const LEASE = "perma-cache:sweep:lease";
 const INTERVAL = 7 * 24 * 60 * 60 * 1000;
+const SECOND_PASS_DELAY = 6 * 60 * 60 * 1000;
 
 // What the sweep of generated files does, per run:
 // - "off": nothing;
@@ -51,6 +60,7 @@ function newTotals() {
     cacheKeysDeleted: 0,
     legacyCacheKeys: 0,
     generatedFailed: 0,
+    secondPassBlogs: 0,
   };
 }
 
@@ -114,8 +124,9 @@ async function sweepOne(base, entry, context) {
 
 // One step of the sweep, run by start() below whenever it holds the lease:
 // starts a run if the last finished INTERVAL ago, or resumes the one in
-// progress from its cursor, saving the cursor as it goes. options: { now,
-// generated (the mode), log }.
+// progress from its cursor, saving the cursor as it goes, and runs the second
+// pass once it is due. options: { now, generated (the mode), log,
+// secondPassDelay }.
 async function step(signal, options = {}) {
   const now = options.now || Date.now;
   const mode = options.generated || GENERATED;
@@ -126,11 +137,15 @@ async function step(signal, options = {}) {
       return null;
 
     await client.hSet(STATE, { startedAt: String(now()), cursor: "" });
-    await client.hDel(STATE, "totals");
+    await client.hDel(STATE, ["totals", "mainDoneAt", "secondCursor"]);
     state.startedAt = String(now());
     state.cursor = "";
     delete state.totals;
+    delete state.mainDoneAt;
+    delete state.secondCursor;
   }
+
+  if (state.mainDoneAt) return secondPass(signal, state, options);
 
   const base = await permaCache.root();
   const all = await entriesOf(base);
@@ -179,12 +194,114 @@ async function step(signal, options = {}) {
 
   if (signal && signal.aborted) return null;
 
-  await finish(state, totals, now);
-  console.log(clfdate(), "Sweep:", mode, JSON.stringify(totals));
-  return totals;
+  // Nothing was recorded to delete unless applying
+  if (mode !== "apply") return finish(state, totals, now, "", mode);
+
+  await client.hSet(STATE, {
+    mainDoneAt: String(now()),
+    secondCursor: "",
+    totals: JSON.stringify(totals),
+  });
+  console.log(clfdate(), "Sweep: main pass", JSON.stringify(totals));
+  return null;
 }
 
-async function finish(state, totals, now, error) {
+// The second pass: the blogs with a candidate set, visited again with only
+// the candidates marked by the main pass or earlier eligible. Resumes from
+// secondCursor, like the main pass.
+async function secondPass(signal, state, options) {
+  const now = options.now || Date.now;
+  const mode = options.generated || GENERATED;
+  const mainDoneAt = Number(state.mainDoneAt);
+  const delay =
+    options.secondPassDelay === undefined
+      ? SECOND_PASS_DELAY
+      : options.secondPassDelay;
+  const totals = {
+    ...newTotals(),
+    ...(state.totals && JSON.parse(state.totals)),
+  };
+
+  if (mode !== "apply") return finish(state, totals, now, "", mode);
+
+  if (now() < mainDoneAt + delay) return null;
+
+  const base = await permaCache.root();
+  const all = await entriesOf(base);
+  const entries = all.entries.filter(
+    (entry) =>
+      all.live.has(entry.name) && entry.name > (state.secondCursor || "")
+  );
+
+  await permaCache.sweepEntries(
+    base,
+    entries,
+    // sweepEntries counts these; the totals are the main pass's and ours
+    { totals: { entries: 0, failed: 0 } },
+    {
+      signal,
+      each: async (entry) => {
+        try {
+          await secondOne(base, entry, {
+            mode,
+            now: options.now,
+            log: options.log,
+            totals,
+            markedBefore: mainDoneAt,
+          });
+        } catch (err) {
+          totals.failed++;
+          console.error(clfdate(), "sweep: second pass of", entry.name, err);
+        }
+      },
+      onDone: (name) =>
+        client.hSet(STATE, {
+          secondCursor: name,
+          totals: JSON.stringify(totals),
+        }),
+    }
+  );
+
+  if (signal && signal.aborted) return null;
+
+  return finish(state, totals, now, "", mode);
+}
+
+// One live blog of the second pass, if it has candidates
+async function secondOne(base, entry, context) {
+  const { totals } = context;
+
+  if (!(await client.exists(generated.candidatesKey(entry.name)))) return;
+
+  let files = null;
+
+  try {
+    files = await generated.run(entry.name, {
+      mode: context.mode,
+      now: context.now,
+      totals,
+      log: context.log,
+      markedBefore: context.markedBefore,
+    });
+  } catch (err) {
+    totals.failed++;
+    totals.generatedFailed++;
+    console.error(clfdate(), "sweep: generated files of", entry.name, err);
+  }
+
+  totals.secondPassBlogs++;
+
+  if (entry.inPerma)
+    await permaCache.sweepEntry(base, entry, {
+      apply: true,
+      log: () => {},
+      totals,
+      deleted: new Set(),
+      files,
+    });
+}
+
+async function finish(state, totals, now, error, mode) {
   await client
     .multi()
     .hSet(STATE, {
@@ -192,8 +309,12 @@ async function finish(state, totals, now, error) {
       totals: JSON.stringify(totals),
       error: error || "",
     })
-    .hDel(STATE, ["startedAt", "cursor"])
+    .hDel(STATE, ["startedAt", "cursor", "mainDoneAt", "secondCursor"])
     .exec();
+
+  if (!error) console.log(clfdate(), "Sweep:", mode, JSON.stringify(totals));
+
+  return totals;
 }
 
 // Runs the sweep in the background on whichever process holds the lease,
@@ -212,4 +333,11 @@ function start() {
   );
 }
 
-module.exports = { step, start, STATE, LEASE, GENERATED };
+module.exports = {
+  step,
+  start,
+  STATE,
+  LEASE,
+  GENERATED,
+  SECOND_PASS_DELAY,
+};
