@@ -860,7 +860,7 @@ describe("storage/sweep generated files", function () {
           await fresh.step(null, options(c));
 
           expect((await savedTotals()).generatedBlogs).toBe(1);
-          expect(await client.sIsMember(sweep.FAILED, id)).toBe(false);
+          expect(await client.sIsMember(sweep.FAILED, id)).toBeFalsy();
         });
       });
 
@@ -879,7 +879,7 @@ describe("storage/sweep generated files", function () {
         await withSweep(async (fresh) => {
           await fresh.step(null, options(c));
 
-          expect(await client.sIsMember(sweep.FAILED, id)).toBe(true);
+          expect(await client.sIsMember(sweep.FAILED, id)).toBeTruthy();
         });
       });
 
