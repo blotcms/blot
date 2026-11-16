@@ -13,12 +13,19 @@
 //
 // One email per process at most every ten minutes. What happens in between is
 // counted and sent when the ten minutes are up, so a burst sends one email.
+// A job failing the same way for the same blog again within a day is logged,
+// not counted: a person re-saving a document too big for its jail would
+// otherwise send an email every ten minutes they keep at it. The file's
+// build flag tells them.
 
 const http = require("http");
 const config = require("config");
 const clfdate = require("helper/clfdate");
+const logContext = require("helper/logContext");
 
 const INTERVAL_MS = 10 * 60 * 1000;
+const REPEAT_MS = 24 * 60 * 60 * 1000;
+const MAX_REPEATS = 1000;
 const PROXY_CHECK_MS = 5 * 60 * 1000;
 const PROXY_TIMEOUT_MS = 15 * 1000;
 const METADATA = "http://169.254.169.254/latest/meta-data/";
@@ -55,6 +62,8 @@ const TIMEOUT_IS_THE_INPUT = new Set(["pandoc", "thumbnail"]);
 const busyCounts = new Map();
 
 const counts = new Map();
+// When each blog last reported each failure, by "<blog> <what>"
+const reported = new Map();
 let lastSent = 0;
 let timer = null;
 
@@ -82,6 +91,23 @@ function report(what) {
   timer.unref();
 }
 
+// Whether this blog has reported this failure in the last day. Outside a
+// blog's work (no blog in the log context) every failure is new.
+function repeated(what) {
+  const blog = new Map(logContext.fields()).get("blog");
+  if (!blog) return false;
+  const key = blog + " " + what;
+  const now = Date.now();
+  const last = reported.get(key);
+  if (last !== undefined && now - last < REPEAT_MS) return true;
+  reported.delete(key);
+  reported.set(key, now);
+  // The oldest go first, since a Map keeps the order keys were set in
+  while (reported.size > MAX_REPEATS)
+    reported.delete(reported.keys().next().value);
+  return false;
+}
+
 function jobFailed(job, err) {
   if (!err) return;
   if (err.code === "SANDBOX_BUSY" && BUSY_IS_BACKPRESSURE.has(job)) {
@@ -99,7 +125,12 @@ function jobFailed(job, err) {
   const broken =
     err.code === "SANDBOX_FAILED" && FAILS_ONLY_WHEN_BROKEN.has(job);
   if (!REPORTED.has(err.code) && !broken) return;
-  report(`job ${job}: ${err.code.slice("SANDBOX_".length).toLowerCase()}`);
+  const what = `job ${job}: ${err.code.slice("SANDBOX_".length).toLowerCase()}`;
+  if (repeated(what)) {
+    console.log(clfdate(), `sandbox: ${what} again for this blog, not emailed`);
+    return;
+  }
+  report(what);
 }
 
 // Resolves with a problem, or null when the proxy refused the metadata address
@@ -147,6 +178,7 @@ function reset() {
   timer = null;
   counts.clear();
   busyCounts.clear();
+  reported.clear();
   lastSent = 0;
 }
 
