@@ -3,8 +3,10 @@ const lock = require("helper/lock");
 const bunnyStorage = require("helper/bunnyStorage");
 const client = require("models/client");
 const Blog = require("models/blog");
+const blogKey = require("models/blog/key");
 const permaCache = require("./permaCache");
 const generated = require("./generated");
+const bucket = require("./s3");
 
 // The weekly sweep, one run and one walk. A run goes through the sorted union
 // of Perma-Cache's top-level directories and the blogs in Redis (so a blog
@@ -29,6 +31,57 @@ const generated = require("./generated");
 // next INTERVAL counted. A "report" or "off" run has no second pass: it
 // records nothing to delete.
 //
+// Most blogs don't change in a week, so most of that work finds nothing new.
+// A main pass therefore skips a live blog's generated step and Perma-Cache
+// check (skippedUnchanged in the totals) when nothing about it can have
+// changed since a run last swept it:
+//
+// - its cacheID is older than the previous run's start, less a day (below);
+// - it has no candidate set, which a run found to finish (./generated);
+// - its step didn't fail last time (FAILED).
+//
+// Why the cacheID is enough. The sweep only ever has something new to do for
+// a blog after a change to its folder, its entries, its templates or its
+// settings that make a generated directory unreferenced or add one, or that
+// change what Perma-Cache should hold. Every path that does that goes through
+// a sync (a client's, or the dashboard's upload and delete, the demo blogs'),
+// a rebuild (sync/rebuild), a scheduled publication or Fix(), each of which
+// ends by setting the blog's cacheID, after the change; so does an edit of
+// the template the blog has installed or of its menu, plugins, handle or
+// domain (models/blog/set, models/template/util/cacheID). A blog whose
+// cacheID is older than the previous run's start has had none of those since
+// that run saw it, so a new run would find what that run left: nothing, or
+// the candidates, which is why a blog with a candidate set is never skipped.
+// The cacheID is compared with the previous start less a day (bucket.DAY),
+// because a directory younger than a day is never a candidate (./generated):
+// one made unreferenced just before the previous run started was too young
+// for it to record, and is found by the next run, which a skip would miss.
+//
+// What the cacheID doesn't cover, and so is found a run later than it
+// would be, or by the full run below: a template the blog hasn't installed,
+// edited in the dashboard (nothing renders it for the blog, so its edit
+// doesn't bump the blog); a settings save that changes nothing a render
+// reads, such as a title or the date format; a sync whose files all built
+// exactly the entries already stored, which creates no reference and so
+// nothing new, but may leave a duplicate directory from a build that ran
+// at the same time as another (./generated); and a bump that failed
+// because Redis was unavailable for over a minute
+// (models/blog/bumpCacheID). None of them can make the sweep delete
+// something it shouldn't: skipping only delays what it would delete or purge.
+//
+// The backstop is a full run, with no skipping, every FULL_EVERY runs (about
+// monthly), so such a miss is found within a month. The first run, and any
+// run that follows one that didn't apply (a "report" or "off" run swept
+// nothing in the way an "apply" run does), is full as well, and so is a run a
+// step is told to make full. The run's choice is kept in the state (full)
+// when it starts, so that a resumed run doesn't change its mind. A run that
+// began before this was added has no such record, so it is full and records
+// nothing for the next: it may have had failures nobody listed.
+//
+// A new run also starts only in a quiet hour, START_WINDOW (UTC): the sweep
+// uses the units' CPU and memory, and what it does is nothing a person waits
+// for. A run in progress carries on whatever the hour.
+//
 // The run is resumable: it keeps the name below which everything has been
 // swept (the cursor) in a Redis hash, and a deploy that kills it loses at
 // most the entries in progress, which the next holder of the lease sweeps
@@ -39,6 +92,14 @@ const STATE = "perma-cache:sweep";
 const LEASE = "perma-cache:sweep:lease";
 const INTERVAL = 7 * 24 * 60 * 60 * 1000;
 const SECOND_PASS_DELAY = 6 * 60 * 60 * 1000;
+// The blogs whose generated step or Perma-Cache check failed in the last run
+// that visited them: never skipped, until one succeeds
+const FAILED = "perma-cache:sweep:failed";
+// Every FULL_EVERY-th run sweeps every blog, skipping none
+const FULL_EVERY = 4;
+// A new run starts only from the hour FROM up to (not including) the hour TO,
+// UTC
+const START_WINDOW = { from: 2, to: 5 };
 
 // What the sweep of generated files does, per run:
 // - "off": nothing;
@@ -61,6 +122,7 @@ function newTotals() {
     legacyCacheKeys: 0,
     generatedFailed: 0,
     secondPassBlogs: 0,
+    skippedUnchanged: 0,
   };
 }
 
@@ -81,12 +143,48 @@ async function entriesOf(base) {
   return { entries: permaCache.sortByName(Array.from(byName.values())), live };
 }
 
+// Whether a live blog can be skipped (see the top): no change since the run
+// before's start (less a day), no candidate set, no failure last time. A
+// blog with no cacheID is never skipped.
+async function unchanged(name, skipBefore) {
+  const [cacheID, candidates, failed] = await client
+    .multi()
+    .hGet(blogKey.info(name), "cacheID")
+    .exists(generated.candidatesKey(name))
+    .sIsMember(FAILED, name)
+    .exec();
+
+  return (
+    cacheID !== null &&
+    cacheID !== undefined &&
+    Number(cacheID) < skipBefore &&
+    !candidates &&
+    !failed
+  );
+}
+
+// Records whether a live blog's step failed, for the next run (the FAILED
+// set). Only an applying run clears a failure, since only it did the work.
+async function settle(name, failed, mode) {
+  if (failed) await client.sAdd(FAILED, name);
+  else if (mode === "apply") await client.sRem(FAILED, name);
+}
+
 // One name of the run
 async function sweepOne(base, entry, context) {
   const { mode, live, totals } = context;
+  const isLive = live.has(entry.name);
   let files = null;
+  let failed = false;
 
-  if (mode !== "off" && live.has(entry.name)) {
+  if (isLive && context.skipBefore !== null) {
+    if (await unchanged(entry.name, context.skipBefore)) {
+      totals.skippedUnchanged++;
+      return;
+    }
+  }
+
+  if (mode !== "off" && isLive) {
     try {
       files = await generated.run(entry.name, {
         mode,
@@ -99,20 +197,38 @@ async function sweepOne(base, entry, context) {
     } catch (err) {
       // Nothing was deleted for the blog; the Perma-Cache check still runs,
       // with a listing of its own
+      failed = true;
       totals.failed++;
       totals.generatedFailed++;
       console.error(clfdate(), "sweep: generated files of", entry.name, err);
     }
   }
 
-  if (entry.inPerma)
-    await permaCache.sweepEntry(base, entry, {
-      apply: true,
-      log: () => {},
-      totals,
-      deleted: context.deleted,
-      files,
-    });
+  if (entry.inPerma) {
+    // Counted apart from the run's, to tell whether this blog's check failed
+    const own = permaCache.newTotals();
+
+    try {
+      await permaCache.sweepEntry(base, entry, {
+        apply: true,
+        log: () => {},
+        totals: own,
+        deleted: context.deleted,
+        files,
+      });
+    } catch (err) {
+      if (isLive) await settle(entry.name, true, mode);
+      throw err;
+    } finally {
+      totals.stale += own.stale;
+      totals.deletedBlogs += own.deletedBlogs;
+      totals.failed += own.failed;
+    }
+
+    if (own.failed) failed = true;
+  }
+
+  if (isLive) await settle(entry.name, failed, mode);
 
   // The candidate set of a blog that is gone would otherwise stay
   if (context.deleted.has(entry.name))
@@ -122,11 +238,20 @@ async function sweepOne(base, entry, context) {
     ]);
 }
 
+// Whether a new run may start at this time (ms): the UTC hour is in the window
+// ({ from, to }, to exclusive)
+function inWindow(time, window = START_WINDOW) {
+  const hour = new Date(time).getUTCHours();
+
+  return hour >= window.from && hour < window.to;
+}
+
 // One step of the sweep, run by start() below whenever it holds the lease:
 // starts a run if the last finished INTERVAL ago, or resumes the one in
 // progress from its cursor, saving the cursor as it goes, and runs the second
-// pass once it is due. options: { now, generated (the mode), log,
-// secondPassDelay }.
+// pass once it is due. A new run only starts in the START_WINDOW. options:
+// { now, generated (the mode), log, secondPassDelay, window (replaces
+// START_WINDOW), full (a run with no skipping) }.
 async function step(signal, options = {}) {
   const now = options.now || Date.now;
   const mode = options.generated || GENERATED;
@@ -136,10 +261,25 @@ async function step(signal, options = {}) {
     if (state.finishedAt && now() - Number(state.finishedAt) < INTERVAL)
       return null;
 
-    await client.hSet(STATE, { startedAt: String(now()), cursor: "" });
+    if (!inWindow(now(), options.window)) return null;
+
+    // Whether this run skips blogs, decided once for the whole run (see the
+    // top). Runs are counted from the first.
+    const runs = Number(state.runs || 0) + 1;
+    const full =
+      !!options.full || !state.previousStartedAt || runs % FULL_EVERY === 0;
+
+    await client.hSet(STATE, {
+      startedAt: String(now()),
+      cursor: "",
+      runs: String(runs),
+      full: full ? "1" : "0",
+    });
     await client.hDel(STATE, ["totals", "mainDoneAt", "secondCursor"]);
     state.startedAt = String(now());
     state.cursor = "";
+    state.runs = String(runs);
+    state.full = full ? "1" : "0";
     delete state.totals;
     delete state.mainDoneAt;
     delete state.secondCursor;
@@ -170,6 +310,18 @@ async function step(signal, options = {}) {
     throw err;
   }
 
+  // The cacheID a blog has to be older than to be skipped, or null when
+  // every blog is swept: a full run, one forced by the step's options, one in
+  // a mode that doesn't apply (nothing swept then counts for the next run),
+  // or a run that began before this was added (no "full" in its state)
+  const skipBefore =
+    mode !== "apply" ||
+    options.full ||
+    state.full !== "0" ||
+    !state.previousStartedAt
+      ? null
+      : Number(state.previousStartedAt) - bucket.DAY;
+
   const context = {
     mode,
     now: options.now,
@@ -178,6 +330,7 @@ async function step(signal, options = {}) {
     deleted,
     totals,
     startedAt: Number(state.startedAt),
+    skipBefore,
   };
 
   await permaCache.sweepEntries(
@@ -252,6 +405,7 @@ async function secondPass(signal, state, options) {
         } catch (err) {
           totals.failed++;
           console.error(clfdate(), "sweep: second pass of", entry.name, err);
+          await client.sAdd(FAILED, entry.name);
         }
       },
       onDone: (name) =>
@@ -287,6 +441,7 @@ async function secondOne(base, entry, context) {
     totals.failed++;
     totals.generatedFailed++;
     console.error(clfdate(), "sweep: generated files of", entry.name, err);
+    await client.sAdd(FAILED, entry.name);
   }
 
   totals.secondPassBlogs++;
@@ -302,13 +457,20 @@ async function secondOne(base, entry, context) {
 }
 
 async function finish(state, totals, now, error, mode) {
+  const finished = {
+    finishedAt: String(now()),
+    totals: JSON.stringify(totals),
+    error: error || "",
+  };
+
+  // The next run may skip what this one swept: only if it applied, finished
+  // without an error and recorded its failures (it has "full" in its state)
+  if (mode === "apply" && !error && state.full !== undefined)
+    finished.previousStartedAt = state.startedAt;
+
   await client
     .multi()
-    .hSet(STATE, {
-      finishedAt: String(now()),
-      totals: JSON.stringify(totals),
-      error: error || "",
-    })
+    .hSet(STATE, finished)
     .hDel(STATE, ["startedAt", "cursor", "mainDoneAt", "secondCursor"])
     .exec();
 
@@ -339,5 +501,8 @@ module.exports = {
   STATE,
   LEASE,
   GENERATED,
+  FAILED,
+  FULL_EVERY,
+  START_WINDOW,
   SECOND_PASS_DELAY,
 };

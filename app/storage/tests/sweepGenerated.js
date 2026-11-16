@@ -459,8 +459,18 @@ describe("storage/sweep generated files", function () {
       return JSON.parse(await client.hGet(sweep.STATE, "totals"));
     }
 
+    // Any hour: the specs that aren't about the start window don't care
+    // when the clock says it is
+    const ANY_HOUR = { from: 0, to: 24 };
+
     function options(c, extra = {}) {
-      return { now: c.now, generated: "apply", log: () => {}, ...extra };
+      return {
+        now: c.now,
+        generated: "apply",
+        log: () => {},
+        window: ANY_HOUR,
+        ...extra,
+      };
     }
 
     it("marks in the main pass and leaves the run unfinished", async function () {
@@ -660,6 +670,7 @@ describe("storage/sweep generated files", function () {
       await withSweep(async (fresh) => {
         await fresh.step(null, {
           now: () => NOW,
+          window: ANY_HOUR,
           generated: "apply",
           log: () => {},
         });
@@ -686,6 +697,7 @@ describe("storage/sweep generated files", function () {
       await withSweep(async (fresh) => {
         await fresh.step(null, {
           now: () => NOW,
+          window: ANY_HOUR,
           generated: "apply",
           log: () => {},
         });
@@ -718,12 +730,392 @@ describe("storage/sweep generated files", function () {
       await withSweep(async (fresh) => {
         const totals = await fresh.step(null, {
           now: () => NOW,
+          window: ANY_HOUR,
           generated: "off",
         });
 
         expect(totals.stale).toBe(2);
         expect(totals.entries).toBeGreaterThanOrEqual(4);
         expect(totals.cacheKeysDeleted).toBe(0);
+      });
+    });
+
+    describe("skipping blogs unchanged since the last run", function () {
+      const blogKey = require("models/blog/key");
+      // The previous run: started 8 days and a few hours ago, finished 8 days ago
+      const PREVIOUS_START = NOW - 8 * DAY - 3 * HOUR;
+      const PREVIOUS_END = NOW - 8 * DAY;
+
+      async function previousRun(extra = {}) {
+        await client.hSet(sweep.STATE, {
+          finishedAt: String(PREVIOUS_END),
+          previousStartedAt: String(PREVIOUS_START),
+          runs: "1",
+          ...extra,
+        });
+      }
+
+      async function cacheID(id, value) {
+        await client.hSet(blogKey.info(id), "cacheID", String(value));
+      }
+
+      // A blog in the bucket, in Perma-Cache, to see what a run reads of it
+      function setUp(id) {
+        put(id, "_thumbnails/old");
+        zone([`/${id}/_thumbnails/other/small.jpg`]);
+      }
+
+      afterEach(async function () {
+        await client.del(sweep.FAILED);
+      });
+
+      it("skips an unchanged blog with no candidates, reading neither entries, S3 nor Perma-Cache", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await previousRun();
+        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          const totals = await savedTotals();
+
+          expect(totals.skippedUnchanged).toBe(1);
+          expect(totals.generatedBlogs).toBe(0);
+          expect(references.inUse).not.toHaveBeenCalled();
+          expect(assets.walkEntries).not.toHaveBeenCalled();
+          expect(bunnyStorage.list).not.toHaveBeenCalledWith(BASE + id + "/");
+          expect(purged).toEqual([]);
+          expect(await candidates(id)).toEqual([]);
+        });
+      });
+
+      it("sweeps a blog changed since the previous run started", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await previousRun();
+        await cacheID(id, PREVIOUS_START + HOUR);
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          const totals = await savedTotals();
+
+          expect(totals.skippedUnchanged).toBe(0);
+          expect(totals.generatedBlogs).toBe(1);
+          expect(references.inUse).toHaveBeenCalled();
+          expect(await candidates(id)).toEqual(["_thumbnails/old"]);
+        });
+      });
+
+      it("sweeps a blog changed in the day before the previous run started", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        // What it made unreferenced was too young then to be a candidate
+        await previousRun();
+        await cacheID(id, PREVIOUS_START - HOUR);
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          expect((await savedTotals()).generatedBlogs).toBe(1);
+        });
+      });
+
+      it("sweeps a blog with a candidate set", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await previousRun();
+        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        await client.sAdd(generated.candidatesKey(id), "_thumbnails/old");
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          const totals = await savedTotals();
+
+          expect(totals.skippedUnchanged).toBe(0);
+          expect(totals.generatedBlogs).toBe(1);
+        });
+      });
+
+      it("sweeps a blog whose step failed last run, and takes it off the list when it succeeds", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await previousRun();
+        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        await client.sAdd(sweep.FAILED, id);
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          expect((await savedTotals()).generatedBlogs).toBe(1);
+          expect(await client.sIsMember(sweep.FAILED, id)).toBe(false);
+        });
+      });
+
+      it("lists a blog whose generated step throws, so the next run sweeps it", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await previousRun();
+        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        references.inUse.and.callFake(async () => {
+          throw new Error("Redis went away");
+        });
+        setUp(id);
+        spyOn(console, "error");
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          expect(await client.sIsMember(sweep.FAILED, id)).toBe(true);
+        });
+      });
+
+      it("sweeps everything in the first run, which has no previous run", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await cacheID(id, 1);
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          const totals = await savedTotals();
+
+          expect(totals.skippedUnchanged).toBe(0);
+          expect(totals.generatedBlogs).toBe(1);
+          expect(await client.hGet(fresh.STATE, "full")).toBe("1");
+        });
+      });
+
+      it("sweeps everything in every fourth run", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await previousRun({ runs: String(sweep.FULL_EVERY - 1) });
+        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          const totals = await savedTotals();
+
+          expect(totals.skippedUnchanged).toBe(0);
+          expect(totals.generatedBlogs).toBe(1);
+          expect(await client.hGet(fresh.STATE, "full")).toBe("1");
+        });
+      });
+
+      it("sweeps everything when the step is told to make a full run", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await previousRun();
+        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c, { full: true }));
+
+          expect((await savedTotals()).generatedBlogs).toBe(1);
+        });
+      });
+
+      it("sweeps everything in a run that began before skipping was added", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        // In progress, with no "full" in its state
+        await client.hSet(sweep.STATE, {
+          startedAt: String(NOW - HOUR),
+          cursor: "",
+          previousStartedAt: String(PREVIOUS_START),
+        });
+        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          expect((await savedTotals()).generatedBlogs).toBe(1);
+
+          // It records nothing for the next run: its failures weren't listed
+          c.time += 6 * HOUR + 10;
+          await fresh.step(null, options(c));
+
+          const state = await client.hGetAll(fresh.STATE);
+
+          expect(state.finishedAt).toBeDefined();
+          expect(state.previousStartedAt).toBe(String(PREVIOUS_START));
+        });
+      });
+
+      it("records the start of an applied run, once finished, for the next", async function () {
+        const c = clock();
+
+        await previousRun();
+        zone([]);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          const startedAt = await client.hGet(fresh.STATE, "startedAt");
+
+          c.time += 6 * HOUR + 10;
+          await fresh.step(null, options(c));
+
+          const state = await client.hGetAll(fresh.STATE);
+
+          expect(state.startedAt).toBeUndefined();
+          expect(state.previousStartedAt).toBe(startedAt);
+          expect(state.runs).toBe("2");
+        });
+      });
+
+      it("records nothing for the next run from a report run, and skips nothing in it", async function () {
+        const id = this.blog.id;
+        const c = clock();
+
+        await previousRun();
+        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        setUp(id);
+
+        await withSweep(async (fresh) => {
+          const totals = await fresh.step(
+            null,
+            options(c, { generated: "report" })
+          );
+
+          expect(totals.skippedUnchanged).toBe(0);
+          expect(totals.generatedBlogs).toBe(1);
+          expect(await client.hGet(fresh.STATE, "previousStartedAt")).toBe(
+            String(PREVIOUS_START)
+          );
+        });
+      });
+
+      it("never skips a blog that is gone or a directory that is not a blog", async function () {
+        const id = this.blog.id;
+        const gone = "blog_0123456789abcdef0123456789abcdef";
+        const c = clock();
+
+        await previousRun();
+        await cacheID(id, PREVIOUS_START - 3 * DAY);
+        zone([`/${gone}/_a/x.jpg`, "/loose/x"]);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, options(c));
+
+          const totals = await savedTotals();
+
+          expect(totals.skippedUnchanged).toBe(1);
+          expect(totals.deletedBlogs).toBe(1);
+          expect(bunnyStorage.remove).toHaveBeenCalledWith(BASE + gone + "/");
+          expect(bunnyStorage.remove).toHaveBeenCalledWith(BASE + "loose/");
+        });
+      });
+    });
+
+    describe("the start window", function () {
+      const AT_NIGHT = Date.UTC(2026, 10, 16, 3, 30);
+      const AT_NOON = Date.UTC(2026, 10, 16, 12, 30);
+
+      it("doesn't start a run outside the window", async function () {
+        zone([]);
+
+        await withSweep(async (fresh) => {
+          const outside = {
+            now: () => AT_NOON,
+            generated: "apply",
+            log: () => {},
+          };
+
+          expect(await fresh.step(null, outside)).toBe(null);
+          expect(await client.hGet(fresh.STATE, "startedAt")).toBe(null);
+        });
+      });
+
+      it("starts a run inside the window", async function () {
+        zone([]);
+
+        await withSweep(async (fresh) => {
+          await fresh.step(null, {
+            now: () => AT_NIGHT,
+            generated: "apply",
+            log: () => {},
+          });
+
+          expect(await client.hGet(fresh.STATE, "startedAt")).toBe(
+            String(AT_NIGHT)
+          );
+        });
+      });
+
+      it("doesn't start a run in the window before the interval has passed", async function () {
+        zone([]);
+
+        await client.hSet(sweep.STATE, {
+          finishedAt: String(AT_NIGHT - DAY),
+        });
+
+        await withSweep(async (fresh) => {
+          expect(
+            await fresh.step(null, {
+              now: () => AT_NIGHT,
+              generated: "apply",
+              log: () => {},
+            })
+          ).toBe(null);
+          expect(await client.hGet(fresh.STATE, "startedAt")).toBe(null);
+        });
+      });
+
+      it("carries on a run in progress, and its second pass, outside the window", async function () {
+        const id = this.blog.id;
+
+        put(id, "_thumbnails/old");
+        zone([]);
+
+        await client.hSet(sweep.STATE, {
+          startedAt: String(AT_NOON - HOUR),
+          cursor: "",
+        });
+
+        await withSweep(async (fresh) => {
+          const outside = (time) => ({
+            now: () => time,
+            generated: "apply",
+            log: () => {},
+          });
+
+          await fresh.step(null, outside(AT_NOON));
+
+          const mainDoneAt = await client.hGet(fresh.STATE, "mainDoneAt");
+
+          expect(mainDoneAt).not.toBe(null);
+
+          const later = AT_NOON + 6 * HOUR + 10;
+          const totals = await fresh.step(null, outside(later));
+
+          expect(totals.secondPassBlogs).toBe(1);
+          expect(await client.hGet(fresh.STATE, "finishedAt")).toBe(
+            String(later)
+          );
+        });
       });
     });
   });

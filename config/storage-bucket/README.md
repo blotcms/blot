@@ -383,10 +383,11 @@ Blot no longer owns the domain.
   sweep** (`index.js` owns the run, `permaCache.js` has the Perma-Cache checks
   below). It runs on whichever
     process holds the `perma-cache:sweep:lease` lock, starts a week after
-    the last run finished, and keeps its progress in the Redis hash
+    the last run finished, but only in a quiet hour (`START_WINDOW`, 02:00 to
+    05:00 UTC; a run in progress, and its second pass, carry on at any hour), and keeps its progress in the Redis hash
     `perma-cache:sweep` (`startedAt`, `cursor`, `mainDoneAt`, `secondCursor`,
-    `totals`, `finishedAt`, `error`; the names predate the move of the sweep into `storage/sweep`):
-    it sweeps, in name order and eight at a time, the union of the top-level
+    `totals`, `finishedAt`, `error`, `runs`, `full`, `previousStartedAt`; the names predate the move of the sweep into `storage/sweep`):
+    it sweeps, in name order and four at a time (Bunny storage deletes eight at a time), the union of the top-level
     directories of Perma-Cache and the blogs in Redis (so a blog with nothing
     in Perma-Cache still has its generated files swept), and saves the name
     below which all are done, so after a deploy the next holder resumes
@@ -398,8 +399,35 @@ Blot no longer owns the domain.
     the lease's hourly step finds it due) a **second pass** visits again the
     blogs that have a candidate set (below), with the same Redis, S3, Bunny
     order, resuming from `secondCursor`; the run finishes, and the week is
-    counted, when it does. A `report` or `off` run has no second pass. The
-    other directories:
+    counted, when it does. A `report` or `off` run has no second pass.
+
+    **Skipping unchanged blogs.** Only about a sixth of blogs change in a
+    week, so the main pass skips a live blog's generated step and its
+    Perma-Cache check (counted in `skippedUnchanged`) when its `cacheID` is
+    older than the previous run's start less a day (`previousStartedAt`,
+    recorded when an applying run finishes), it has no candidate set, and it
+    isn't in the Redis set `perma-cache:sweep:failed` (blogs whose generated
+    step or Perma-Cache check failed; removed when it next succeeds). Deleted
+    blogs and the shared directories are never skipped. This is safe because
+    every path that makes a generated directory unreferenced or new, or
+    changes what Perma-Cache should hold, ends by setting the blog's `cacheID`
+    after the change: a sync (every client, the dashboard's folder uploads and
+    deletes, the demo blogs), a rebuild, a scheduled publication, `Fix()`, an
+    edit of the installed template, and a change of menu, plugins, handle or
+    domain; replacing the avatar does too (`dashboard/site/save/avatar.js`).
+    The day is because a directory under a day old is never a candidate. A
+    few changes don't set it (an edit of a template the blog hasn't
+    installed, a settings save that changes nothing a render reads, a sync
+    whose files all built the entries already stored, a bump that failed for
+    over a minute while Redis was unavailable), so they are found by the next
+    full run, and skipping only ever delays what the sweep deletes. Every
+    fourth run (`FULL_EVERY`, about monthly) is full, with no skipping, as is
+    the first run, a run after one that didn't apply, and a step given
+    `full: true`; the choice is kept in `full` in the hash. A run that
+    began before this existed has no `full`, is full, and records no
+    `previousStartedAt`.
+
+    The other directories:
 
     **Generated files** (`generated.js`, `cache.js`, `s3.js`, `references.js`)
     are the directories of `_image_cache`, `_thumbnails` and

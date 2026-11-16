@@ -1,6 +1,7 @@
 var { v4: uuid } = require("uuid");
 var extname = require("path").extname;
 var assets = require("storage/assets");
+var Blog = require("models/blog");
 var folder = "_avatars";
 
 var VALID_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif"];
@@ -79,6 +80,16 @@ async function removeReplaced(blogID, previousUrl, currentUrl) {
       "[avatar] could not remove the replaced avatar of " + blogID + ":",
       err
     );
+    return;
+  }
+
+  // Saving an avatar doesn't change the blog's cacheID, and the weekly sweep
+  // skips a blog whose cacheID hasn't (storage/sweep), though it would purge
+  // the removed file's copy in Perma-Cache
+  try {
+    await Blog.bumpCacheID(blogID);
+  } catch (err) {
+    console.error("[avatar] could not update the cacheID of " + blogID, err);
   }
 }
 
