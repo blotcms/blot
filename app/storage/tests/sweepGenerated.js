@@ -53,7 +53,7 @@ describe("storage/sweep generated files", function () {
       await client.del(everything);
     }
 
-    await client.del(generated.candidatesKey(id));
+    await client.del([generated.candidatesKey(id), generated.markedKey(id)]);
     await client.del(sweep.STATE);
   });
 
@@ -185,6 +185,37 @@ describe("storage/sweep generated files", function () {
     expect(await candidates(id)).toEqual(["_image_cache/x", "_thumbnails/old"]);
     expect(deleted).toEqual([]);
     expect(store.size).toBe(3);
+  });
+
+  it("deletes only candidates marked before markedBefore", async function () {
+    const id = this.blog.id;
+
+    put(id, "_thumbnails/old");
+    await run(id, "apply");
+
+    // Marked at NOW: a run that started at NOW keeps it
+    const same = await run(id, "apply", { markedBefore: NOW });
+    expect(same.totals.deletedDirs).toBe(0);
+    expect(await candidates(id)).toEqual(["_thumbnails/old"]);
+
+    const later = await run(id, "apply", {
+      now: () => NOW + 1000,
+      markedBefore: NOW + 1,
+    });
+    expect(later.totals.deletedDirs).toBe(1);
+  });
+
+  it("treats a candidate set with no time as just marked", async function () {
+    const id = this.blog.id;
+
+    put(id, "_thumbnails/old");
+    await client.sAdd(generated.candidatesKey(id), "_thumbnails/old");
+
+    const weekly = await run(id, "apply", { markedBefore: NOW + 1 });
+    expect(weekly.totals.deletedDirs).toBe(0);
+
+    const byHand = await run(id, "apply");
+    expect(byHand.totals.deletedDirs).toBe(1);
   });
 
   it("run 2 deletes the candidate's objects", async function () {
@@ -437,8 +468,9 @@ describe("storage/sweep generated files", function () {
         purged.length = 0;
         await client.del(fresh.STATE);
 
+        // The next run, which starts after the first marked it
         const second = await fresh.step(null, {
-          now: () => NOW,
+          now: () => NOW + 1000,
           generated: "apply",
           log: () => {},
         });
@@ -446,6 +478,49 @@ describe("storage/sweep generated files", function () {
         expect(second.deletedDirs).toBe(1);
         expect(second.generatedBlogs).toBe(1);
         expect(purged).toContain(url);
+      });
+    });
+
+    it("doesn't delete what the same run marked when it resumes after a deploy", async function () {
+      const id = this.blog.id;
+
+      put(id, "_thumbnails/old");
+      zone([]);
+
+      await withSweep(async (fresh) => {
+        const first = await fresh.step(null, {
+          now: () => NOW,
+          generated: "apply",
+          log: () => {},
+        });
+
+        expect(first.candidates).toBe(1);
+
+        // A deploy killed the run with this blog in progress: the next holder
+        // resumes the same run (same start) and sweeps the blog again
+        await client.hDel(fresh.STATE, "finishedAt");
+        await client.hSet(fresh.STATE, { startedAt: String(NOW), cursor: "" });
+
+        const resumed = await fresh.step(null, {
+          now: () => NOW + 1000,
+          generated: "apply",
+          log: () => {},
+        });
+
+        expect(resumed.deletedDirs).toBe(0);
+        expect(await candidates(id)).toEqual(["_thumbnails/old"]);
+        expect(store.has(id + "/_thumbnails/old/small.jpg")).toBe(true);
+
+        // The next run deletes it
+        await client.del(fresh.STATE);
+
+        const next = await fresh.step(null, {
+          now: () => NOW + 2000,
+          generated: "apply",
+          log: () => {},
+        });
+
+        expect(next.deletedDirs).toBe(1);
       });
     });
 

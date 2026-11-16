@@ -48,9 +48,17 @@ const bucket = require("./s3");
 
 const candidatesKey = (blogID) => "perma-cache:sweep:candidates:" + blogID;
 
+// When the candidates were recorded (ms). The weekly run passes its own start
+// as markedBefore, so it only deletes candidates an earlier run recorded: a
+// run resumed after a deploy sweeps again the blogs that were in progress,
+// and without this their second visit would delete what the first had only
+// just marked. A set with no time is treated as just marked.
+const markedKey = (blogID) => candidatesKey(blogID) + ":marked";
+
 // Runs the step for one blog and resolves to the blog's files in the bucket
 // (relPath -> last modified) minus what it deleted, for the Perma-Cache
-// check that follows. options: { mode, now, totals, log }.
+// check that follows. options: { mode, now, totals, log, markedBefore }.
+// Without markedBefore (a run by hand) any recorded candidate may go.
 async function run(blogID, options) {
   const apply = options.mode === "apply";
   const now = options.now || Date.now;
@@ -63,7 +71,15 @@ async function run(blogID, options) {
   // like it points at a directory that is missing
   const held = await cache.read(blogID);
   const { files, dirs } = await bucket.listing(blogID);
-  const previous = new Set(await client.sMembers(candidatesKey(blogID)));
+  const [members, marked] = await client
+    .multi()
+    .sMembers(candidatesKey(blogID))
+    .get(markedKey(blogID))
+    .exec();
+  const due =
+    options.markedBefore === undefined ||
+    (marked !== null && Number(marked) < options.markedBefore);
+  const previous = new Set(due ? members : []);
   const cutoff = now() - bucket.DAY;
 
   const unreferenced = [];
@@ -123,9 +139,13 @@ async function run(blogID, options) {
       toDelete.map((name) => ({ name, keys: dirs.get(name).keys }))
     );
 
-    const tx = client.multi().del(candidatesKey(blogID));
+    const tx = client.multi().del(candidatesKey(blogID)).del(markedKey(blogID));
 
-    if (candidates.length) tx.sAdd(candidatesKey(blogID), candidates);
+    if (candidates.length)
+      tx.sAdd(candidatesKey(blogID), candidates).set(
+        markedKey(blogID),
+        String(now())
+      );
 
     await tx.exec();
 
@@ -145,4 +165,4 @@ async function run(blogID, options) {
   return files;
 }
 
-module.exports = { run, candidatesKey };
+module.exports = { run, candidatesKey, markedKey };
