@@ -19,38 +19,44 @@ const bucket = require("./s3");
 // - deletes a directory's objects from S3 only on the second run that finds
 //   it unreferenced.
 //
-// Why two phases. A build that read a cache entry just before run N deleted
-// it may still link the directory. By run N+1, a week later, that build has
-// finished, and if it linked the directory the reference is seen and the
-// directory is kept. A build after run N finds no cache entry and makes the
-// files again: a new directory for the image cache; the same, now new,
-// directory for thumbnails, which the one-day check protects. So the
-// directories run N finds unreferenced (more than a day old, so no build in
-// flight made them) are only recorded, in a set of the sweep's own
-// (candidatesKey), and run N+1 deletes the ones still unreferenced, still
-// more than a day old and that no cache entry points at again (a build made
-// it again since: kept one more round).
+// Why two phases. A build that read a cache entry just before the main pass
+// deleted it may still link the directory. A build after the pass finds no
+// cache entry and makes the files again: a new directory for the image
+// cache; the same, now new, directory for thumbnails, which the one-day
+// check protects. The only danger is the first build: it read the entry
+// before phase 1, and saves its own entry, linking the directory, after
+// phase 2 has read the references. A build takes minutes at most, so the
+// second pass, six hours after the main pass ends (./index), is far more
+// than enough: by then that build has finished and, if it linked the
+// directory, the reference is seen and the directory is kept. So the
+// directories the main pass finds unreferenced (more than a day old, so no
+// build in flight made them) are only recorded, in a set of the sweep's own
+// (candidatesKey), and the second pass deletes the ones still unreferenced,
+// still more than a day old and that no cache entry points at again (a build
+// made it again since: kept, and recorded again).
 //
 // Accepted gap, decided by the maintainer in #2745, so review need not raise
 // it: bookmark screenshots aren't in the transformer cache; the plugin
 // (build/plugins/linkScreenshot) reuses a screenshot when its file exists. A
-// build that has just found one can link it in the seconds before run N+1
-// deletes it. It must have been unreferenced for a week first, and the next
+// build that has just found one can link it in the seconds before the
+// second pass deletes it. It must have been unreferenced for six hours
+// first, and the next
 // rebuild finds no file and takes it again. There is no cache entry or lock
 // for it.
 //
 // Modes (see ./index): "report" reads everything and fills the totals as if
 // applying, but writes nothing (no candidate set, no cache deletes, no S3
-// deletes), so that switching to "apply" starts at run N, never at N+1.
+// deletes), so that switching to "apply" starts with the main pass, never the second.
 //
 // Any read that fails (references, the cache, the listing) rejects the step
 // before anything is written, so nothing is deleted on a partial picture.
 
 const candidatesKey = (blogID) => "perma-cache:sweep:candidates:" + blogID;
 
-// When the candidates were recorded (ms). The weekly run passes its own start
-// as markedBefore, so it only deletes candidates an earlier run recorded: a
-// run resumed after a deploy sweeps again the blogs that were in progress,
+// When the candidates were recorded (ms). The main pass passes the run's start
+// as markedBefore, and the second pass the time the main pass ended, so each
+// only deletes candidates recorded before: a
+// pass resumed after a deploy sweeps again the blogs that were in progress,
 // and without this their second visit would delete what the first had only
 // just marked. A set with no time is treated as just marked.
 const markedKey = (blogID) => candidatesKey(blogID) + ":marked";
@@ -130,7 +136,7 @@ async function run(blogID, options) {
     //     still the old one, so the next run finds the same directories (the
     //     ones already deleted are just absent from its listing);
     // (c) the candidate set is rewritten last. A set that was never written
-    //     only delays a directory by a week, whereas writing it before the
+    //     only delays a directory by a run, whereas writing it before the
     //     deletes could hide a directory still in the bucket.
     await cache.remove(blogID, Array.from(doomed.values()));
 

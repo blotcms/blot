@@ -384,8 +384,8 @@ Blot no longer owns the domain.
   below). It runs on whichever
     process holds the `perma-cache:sweep:lease` lock, starts a week after
     the last run finished, and keeps its progress in the Redis hash
-    `perma-cache:sweep` (`startedAt`, `cursor`, `totals`, `finishedAt`,
-    `error`; the names predate the move of the sweep into `storage/sweep`):
+    `perma-cache:sweep` (`startedAt`, `cursor`, `mainDoneAt`, `secondCursor`,
+    `totals`, `finishedAt`, `error`; the names predate the move of the sweep into `storage/sweep`):
     it sweeps, in name order and eight at a time, the union of the top-level
     directories of Perma-Cache and the blogs in Redis (so a blog with nothing
     in Perma-Cache still has its generated files swept), and saves the name
@@ -394,34 +394,42 @@ Blot no longer owns the domain.
     Bunny: its generated files (below), then its Perma-Cache directory,
     checked against the blog's listing of the bucket after the generated
     step's deletes, so a file deleted from S3 in the pass is purged from
-    Bunny in the same pass. The other directories:
+    Bunny in the same pass. Six hours after the main pass ends (`mainDoneAt`;
+    the lease's hourly step finds it due) a **second pass** visits again the
+    blogs that have a candidate set (below), with the same Redis, S3, Bunny
+    order, resuming from `secondCursor`; the run finishes, and the week is
+    counted, when it does. A `report` or `off` run has no second pass. The
+    other directories:
 
     **Generated files** (`generated.js`, `cache.js`, `s3.js`, `references.js`)
     are the directories of `_image_cache`, `_thumbnails` and
     `_bookmark_screenshots` that no saved entry, template or setting of the
     blog mentions. They are deleted in two phases, so that a build already
-    running can't link a directory the sweep deletes. Run N deletes the
+    running can't link a directory the sweep deletes. The main pass deletes the
     transformer cache entries (`blog:<id>:store:image-cache:*` and
     `thumbnails:*`, read through each name's `everything` set) that point at
     an unreferenced directory whose newest file is over a day old, and
     records the directory in the set `perma-cache:sweep:candidates:<blogID>`,
-    with the time in `...:candidates:<blogID>:marked`. Run N+1, a week later,
-    deletes only candidates marked before it started (a run resumed after a
-    deploy sweeps again the blogs it had in progress, and must not delete what
-    it marked itself). It deletes the files of a candidate that is still
+    with the time in `...:candidates:<blogID>:marked`. The second pass, six
+    hours later, deletes only candidates marked before the main pass ended (a
+    pass resumed after a deploy sweeps again the blogs it had in progress, and
+    must not delete what it marked itself). Six hours is far more than the
+    race needs: a build that read a cache entry before the main pass deleted
+    it and saves its entry after the second pass reads the references takes
+    minutes at most. It deletes the files of a candidate that is still
     unreferenced, still over a day old and that no cache entry points at
     again, by their exact object keys; a directory a build made again is kept
     for another round. Cache entries that point at directories missing from
     the bucket, and `everything` members with nothing behind them, are
-    deleted in run N, and so are results from before the current layout that point at the old CDN (`blotcdn.com`, `/image-cache/`, `/thumbnails/<digits>/`; nothing can use them) with their URL keys, counted in `legacyCacheKeys`. A bookmark screenshot isn't in the transformer cache
+    deleted in the main pass, and so are results from before the current layout that point at the old CDN (`blotcdn.com`, `/image-cache/`, `/thumbnails/<digits>/`; nothing can use them) with their URL keys, counted in `legacyCacheKeys`. A bookmark screenshot isn't in the transformer cache
     (the plugin reuses a file if it exists), so a build that has just found
-    one can link it in the seconds before run N+1 deletes it, after a week
+    one can link it in the seconds before the second pass deletes it, after six hours
     unreferenced; the next rebuild takes it again (accepted, #2745). The
     switch is `GENERATED` in `index.js`: `off`, `report` (reads everything and
-    fills the totals, writes nothing, so that `apply` starts at run N) or
+    fills the totals, writes nothing, so that `apply` starts with the main pass) or
     `apply`, the default since #2745's report and test-blog runs. The totals (`generatedBlogs`, `candidates`,
     `candidateBytes`, `deletedDirs`, `deletedBytes`, `cacheKeysDeleted`, `legacyCacheKeys`,
-    `generatedFailed`) are in the hash and logged at the end of a run; a blog
+    `generatedFailed`, `secondPassBlogs`) are in the hash and logged at the end of a run; a blog
     whose step fails (any read) has nothing deleted and still gets its
     Perma-Cache check. One blog by hand, in a unit:
     `node scripts/storage/sweep-blog.js <blogID> [--apply] [--both-phases]`.

@@ -443,9 +443,72 @@ describe("storage/sweep generated files", function () {
       spyOn(Blog, "getAllIDs").and.callFake(async () => [this.blog.id]);
     });
 
-    it("purges in the same pass the URLs of the files it deleted", async function () {
+    const HOUR = 60 * 60 * 1000;
+
+    // A clock that moves on each reading, so that what the main pass marks
+    // is marked before it ends. Set time to jump ahead.
+    function clock() {
+      const c = { time: NOW };
+
+      c.now = () => ++c.time;
+
+      return c;
+    }
+
+    async function savedTotals() {
+      return JSON.parse(await client.hGet(sweep.STATE, "totals"));
+    }
+
+    function options(c, extra = {}) {
+      return { now: c.now, generated: "apply", log: () => {}, ...extra };
+    }
+
+    it("marks in the main pass and leaves the run unfinished", async function () {
+      const id = this.blog.id;
+      const c = clock();
+
+      put(id, "_thumbnails/old");
+      zone([]);
+
+      await withSweep(async (fresh) => {
+        expect(await fresh.step(null, options(c))).toBe(null);
+
+        const state = await client.hGetAll(fresh.STATE);
+
+        expect(state.startedAt).toBeDefined();
+        expect(state.finishedAt).toBeUndefined();
+        expect(Number(state.mainDoneAt)).toBeGreaterThan(NOW);
+        expect((await savedTotals()).candidates).toBe(1);
+        expect(await candidates(id)).toEqual(["_thumbnails/old"]);
+        expect(store.has(id + "/_thumbnails/old/small.jpg")).toBe(true);
+      });
+    });
+
+    it("does nothing before six hours have passed", async function () {
+      const id = this.blog.id;
+      const c = clock();
+
+      put(id, "_thumbnails/old");
+      zone([]);
+
+      await withSweep(async (fresh) => {
+        await fresh.step(null, options(c));
+
+        const done = Number(await client.hGet(fresh.STATE, "mainDoneAt"));
+
+        c.time = done + fresh.SECOND_PASS_DELAY - 10;
+
+        expect(await fresh.step(null, options(c))).toBe(null);
+        expect(deleted).toEqual([]);
+        expect(await client.hGet(fresh.STATE, "finishedAt")).toBe(null);
+        expect(await candidates(id)).toEqual(["_thumbnails/old"]);
+      });
+    });
+
+    it("deletes the candidates six hours later and finishes the run", async function () {
       const id = this.blog.id;
       const url = config.cdn.origin + "/" + id + "/_thumbnails/old/small.jpg";
+      const c = clock();
 
       put(id, "_thumbnails/old");
       zone([
@@ -454,71 +517,135 @@ describe("storage/sweep generated files", function () {
       ]);
 
       await withSweep(async (fresh) => {
-        const first = await fresh.step(null, {
-          now: () => NOW,
-          generated: "apply",
-          log: () => {},
-        });
+        await fresh.step(null, options(c));
 
-        expect(first.candidates).toBe(1);
+        // The main pass purged what was already gone, not the candidate
         expect(purged).toEqual([
           config.cdn.origin + "/" + id + "/_thumbnails/other/small.jpg",
         ]);
-
         purged.length = 0;
-        await client.del(fresh.STATE);
 
-        // The next run, which starts after the first marked it
-        const second = await fresh.step(null, {
-          now: () => NOW + 1000,
-          generated: "apply",
-          log: () => {},
-        });
+        c.time += 6 * HOUR + 10;
 
-        expect(second.deletedDirs).toBe(1);
-        expect(second.generatedBlogs).toBe(1);
+        const totals = await fresh.step(null, options(c));
+
+        expect(totals.deletedDirs).toBe(1);
+        expect(totals.candidates).toBe(1);
+        expect(totals.generatedBlogs).toBe(2);
+        expect(totals.secondPassBlogs).toBe(1);
         expect(purged).toContain(url);
+        expect(store.has(id + "/_thumbnails/old/small.jpg")).toBe(false);
+        expect(await candidates(id)).toEqual([]);
+
+        const state = await client.hGetAll(fresh.STATE);
+
+        expect(state.startedAt).toBeUndefined();
+        expect(state.mainDoneAt).toBeUndefined();
+        expect(state.secondCursor).toBeUndefined();
+        expect(Number(state.finishedAt)).toBeGreaterThan(NOW);
+
+        // The next run waits an interval
+        expect(await fresh.step(null, options(c))).toBe(null);
       });
     });
 
-    it("doesn't delete what the same run marked when it resumes after a deploy", async function () {
+    it("resumes the second pass from its cursor without redoing blogs", async function () {
       const id = this.blog.id;
+      const c = clock();
 
       put(id, "_thumbnails/old");
       zone([]);
 
       await withSweep(async (fresh) => {
-        const first = await fresh.step(null, {
-          now: () => NOW,
-          generated: "apply",
-          log: () => {},
-        });
+        await fresh.step(null, options(c));
 
-        expect(first.candidates).toBe(1);
+        // A deploy killed the second pass after this blog was done
+        await client.hSet(fresh.STATE, { secondCursor: id });
+        c.time += 6 * HOUR + 10;
+
+        const totals = await fresh.step(null, options(c));
+
+        expect(totals.secondPassBlogs).toBe(0);
+        expect(totals.deletedDirs).toBe(0);
+        expect(store.has(id + "/_thumbnails/old/small.jpg")).toBe(true);
+        expect(await client.hGet(fresh.STATE, "finishedAt")).not.toBe(null);
+      });
+    });
+
+    it("finishes right after the main pass in report mode", async function () {
+      const id = this.blog.id;
+      const c = clock();
+
+      put(id, "_thumbnails/old");
+      zone([]);
+
+      await withSweep(async (fresh) => {
+        const totals = await fresh.step(
+          null,
+          options(c, { generated: "report" })
+        );
+
+        expect(totals.candidates).toBe(1);
+        expect(totals.secondPassBlogs).toBe(0);
+
+        const state = await client.hGetAll(fresh.STATE);
+
+        expect(state.finishedAt).toBeDefined();
+        expect(state.mainDoneAt).toBeUndefined();
+        expect(state.startedAt).toBeUndefined();
+        expect(await candidates(id)).toEqual([]);
+      });
+    });
+
+    it("keeps a candidate referenced again before the second pass", async function () {
+      const id = this.blog.id;
+      const c = clock();
+
+      put(id, "_thumbnails/old");
+      zone([]);
+
+      await withSweep(async (fresh) => {
+        await fresh.step(null, options(c));
+        used.add("_thumbnails/old");
+        c.time += 6 * HOUR + 10;
+
+        const totals = await fresh.step(null, options(c));
+
+        expect(totals.deletedDirs).toBe(0);
+        expect(totals.secondPassBlogs).toBe(1);
+        expect(store.has(id + "/_thumbnails/old/small.jpg")).toBe(true);
+        expect(await candidates(id)).toEqual([]);
+      });
+    });
+
+    it("doesn't delete what the main pass marked when it resumes after a deploy", async function () {
+      const id = this.blog.id;
+      const c = clock();
+
+      put(id, "_thumbnails/old");
+      zone([]);
+
+      await withSweep(async (fresh) => {
+        await fresh.step(null, options(c));
+
+        const startedAt = await client.hGet(fresh.STATE, "startedAt");
 
         // A deploy killed the run with this blog in progress: the next holder
         // resumes the same run (same start) and sweeps the blog again
-        await client.hDel(fresh.STATE, "finishedAt");
-        await client.hSet(fresh.STATE, { startedAt: String(NOW), cursor: "" });
+        await client.hDel(fresh.STATE, "mainDoneAt");
+        await client.hSet(fresh.STATE, { startedAt, cursor: "" });
 
-        const resumed = await fresh.step(null, {
-          now: () => NOW + 1000,
-          generated: "apply",
-          log: () => {},
-        });
+        const resumed = await fresh.step(null, options(c));
 
-        expect(resumed.deletedDirs).toBe(0);
+        expect(resumed).toBe(null);
+        expect((await savedTotals()).deletedDirs).toBe(0);
         expect(await candidates(id)).toEqual(["_thumbnails/old"]);
         expect(store.has(id + "/_thumbnails/old/small.jpg")).toBe(true);
 
-        // The next run deletes it
-        await client.del(fresh.STATE);
+        // The second pass of that run deletes it
+        c.time += 6 * HOUR + 10;
 
-        const next = await fresh.step(null, {
-          now: () => NOW + 2000,
-          generated: "apply",
-          log: () => {},
-        });
+        const next = await fresh.step(null, options(c));
 
         expect(next.deletedDirs).toBe(1);
       });
@@ -531,11 +658,13 @@ describe("storage/sweep generated files", function () {
       zone([]);
 
       await withSweep(async (fresh) => {
-        const totals = await fresh.step(null, {
+        await fresh.step(null, {
           now: () => NOW,
           generated: "apply",
           log: () => {},
         });
+
+        const totals = await savedTotals();
 
         expect(totals.generatedBlogs).toBe(1);
         expect(totals.candidates).toBe(1);
@@ -555,11 +684,13 @@ describe("storage/sweep generated files", function () {
       spyOn(console, "error");
 
       await withSweep(async (fresh) => {
-        const totals = await fresh.step(null, {
+        await fresh.step(null, {
           now: () => NOW,
           generated: "apply",
           log: () => {},
         });
+
+        const totals = await savedTotals();
 
         expect(totals.generatedFailed).toBe(1);
         expect(totals.failed).toBe(1);

@@ -11,8 +11,8 @@
 //
 // --apply is the first phase of the two-phase deletion: it deletes the cache
 // entries that point at unreferenced directories and records the directories
-// as candidates; a second run, a week later, deletes their files.
-// --both-phases runs the second phase straight after the first, with no week
+// as candidates; the second pass of the weekly run, six hours later, deletes their files.
+// --both-phases runs the second phase straight after the first, with no six hours
 // between them: for checking on a quiet test blog (dbtest, gittest,
 // drivetest, icloudtest) that rebuilds bring its images, thumbnails and
 // screenshots back. A build running at the time could link a directory it
