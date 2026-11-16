@@ -1,6 +1,8 @@
 var resaveEntries = require("models/entries").resave;
 var Blog = require("models/blog");
 var rebuild = require("sync/rebuild");
+var assets = require("storage/assets");
+var avatar = require("./avatar");
 
 var dictionary = {
   permalink: "Saved changes to your link format",
@@ -26,14 +28,23 @@ async function saveAndFinish(req, res, next) {
   // bounce the user out to the site homepage.
   var redirect = req.body.redirect || (req.baseUrl || "") + req.path;
 
+  var previousAvatar = req.blog.avatar;
+
   let changes;
   try {
     changes = await Blog.set(req.blog.id, updates);
   } catch (errors) {
+    // The blog still has its previous avatar, so the new file is unused
+    if (req.savedAvatarRelPath)
+      await assets.remove(req.blog.id, req.savedAvatarRelPath).catch(() => {});
+
     for (var i in errors)
       if (errors[i] instanceof Error) return next(errors[i]);
     return next(errors);
   }
+
+  if (changes && changes.indexOf("avatar") > -1)
+    await avatar.removeReplaced(req.blog.id, previousAvatar, updates.avatar);
 
   // We now need to save every entry so that
   // changes to permalink format take effect.
