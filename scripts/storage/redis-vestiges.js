@@ -10,7 +10,12 @@
 //   deleted-entries  gives deleted entries with no TTL the TTL Entry.set gives
 //                    a deleted entry, and scores them in the blog's "deleted"
 //                    list, so sweepExpiredDeleted removes their ids from the
-//                    lists once they expire (they predate that TTL)
+//                    lists once they expire (they predate that TTL). It pages
+//                    through each blog's "deleted" list and reads an entry
+//                    only when its TTL is -1; it never reads live entries. A
+//                    deleted entry missing from that list is not found (that
+//                    would mean reading every entry); Entry.set always adds
+//                    a deleted entry to it
 //   deleted-blogs    deletes blog:<id>:* and template:<id>:* of blogs which
 //                    have no info and are not in the blogs set (a removal which
 //                    failed part way); the bucket and Bunny are not touched
@@ -18,20 +23,26 @@
 //                    when the blog is gone (the set vanishes when empty)
 //   template-shares  deletes template:share:<id> when the template it names
 //                    has no metadata (the template was dropped)
-//   permalinks       deletes blog:<id>:url:<url> keys whose entry key is gone.
-//                    A key whose entry exists stays, even when the entry has
-//                    another URL now or is deleted: that is a redirect, the
-//                    entry route 301s to the entry's canonical URL
+//   permalinks       deletes blog:<id>:url:<url> keys whose entry key is gone,
+//                    after looking again 5 seconds later (Entry.set writes the
+//                    url key before the entry key). A key whose entry exists
+//                    stays, even when the entry has another URL now or is
+//                    deleted: that is a redirect, the entry route 301s to the
+//                    entry's canonical URL. A key whose name can't be read is
+//                    skipped
 //   rendered         deletes cdn:rendered:<hash> which no template's cdn
-//                    metadata references (an old hash cleanup which failed)
+//                    metadata references on two reads a minute apart (an old
+//                    hash cleanup which failed)
 //   ssl              deletes ssl:<domain>:latest when it has expired and the
 //                    domain has no domain:<domain> key (auto-ssl only renews
 //                    domains which have one), or is a subdomain of the host,
 //                    which the wildcard certificate covers. Only :latest is
 //                    deleted, it is the only auto-ssl key we can see in proxy/
-//   removed-features runs remove-ignored-files.js and
-//                    remove-file-index-names.js (keys of removed features)
-//   all              every subcommand in turn
+//   all              every subcommand above in turn
+//
+// The keys of removed features are not here: run remove-ignored-files.js and
+// remove-file-index-names.js on their own, they pace themselves and handle
+// the folder lock.
 //
 // --only <x> narrows a subcommand to one blog ID, account ID, share ID, hash
 // or domain: the part of the key pattern which would be a * (for tests, and
@@ -52,14 +63,20 @@ const {
   DELETED_ENTRY_TTL_SECONDS,
 } = require("models/entries/sweepExpiredDeleted");
 const { expiryOf } = require("scheduler/check-ssl-certificates");
-const removeIgnoredFiles = require("./remove-ignored-files");
-const removeFileIndexNames = require("./remove-file-index-names");
 
 const SCAN_COUNT = 100;
+const PAGE = 100;
+const PAGE_PAUSE_MS = 5;
 const BATCH = 200;
 const SAMPLE = 50;
 const BLOG_ID = /^blog_[a-f0-9]+$/;
-const NO_ENTRY = "blot:no-such-entry";
+const PERMALINK_WAIT_MS = 5000;
+const PERMALINK_BATCH = 2000;
+const RENDERED_WAIT_MS = 60000;
+
+function pause(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // Yields the keys of each page of a SCAN
 async function* scan(pattern) {
@@ -130,76 +147,96 @@ function verb(apply, done, would) {
 
 // ---- deleted-entries ----
 
-const ENTRY_KEY = /^blog:([^:]+):entry:(.+)$/s;
-
 // What Entry.set does for a deleted entry: the TTL on the key, and (Entry's
 // list assignment, models/entry/_assign.js) its id in the "deleted" list
 // scored with the time. The entry is read again first, so one saved again
-// since the scan is left alone. Resolves true when it fixed the entry.
-async function fixDeletedEntry(blogID, key, suffix) {
-  if ((await client.type(key)) !== "string") return false;
-  if ((await client.ttl(key)) !== -1) return false;
+// since the scan is left alone, and again after, so one saved again in
+// between is put back as it was (no TTL, out of the "deleted" list).
+// Resolves "fixed", "restored" or null (left alone).
+async function fixDeletedEntry(blogID, key, id) {
+  if ((await client.type(key)) !== "string") return null;
+  if ((await client.ttl(key)) !== -1) return null;
 
-  let entry;
+  const isDeleted = async () => {
+    try {
+      return JSON.parse(await client.get(key)).deleted === true;
+    } catch (err) {
+      return false;
+    }
+  };
 
-  try {
-    entry = JSON.parse(await client.get(key));
-  } catch (err) {
-    return false;
-  }
+  if (!(await isDeleted())) return null;
 
-  if (!entry || entry.deleted !== true) return false;
+  const list = "blog:" + blogID + ":deleted";
 
-  // The id the lists hold is the entry's id, its normalized path
-  const id = typeof entry.id === "string" && entry.id ? entry.id : suffix;
-
-  const [expired] = await client
+  await client
     .multi()
     .expire(key, DELETED_ENTRY_TTL_SECONDS)
-    .zAdd("blog:" + blogID + ":deleted", { score: Date.now(), value: id })
+    .zAdd(list, { score: Date.now(), value: id })
     .exec();
 
-  return !!expired;
+  if (await isDeleted()) return "fixed";
+
+  // The file came back between the read and the write
+  await client.multi().persist(key).zRem(list, id).exec();
+
+  return "restored";
 }
 
 async function deletedEntries({ apply = false, only = "*" } = {}) {
-  const result = { scanned: 0, found: 0, fixed: 0, estimatedBytes: 0 };
+  const result = {
+    scanned: 0,
+    found: 0,
+    fixed: 0,
+    restored: 0,
+    estimatedBytes: 0,
+  };
   const sample = sampler();
+  const ids = only === "*" ? await Blog.getAllIDs() : [only];
 
-  for await (const page of scan("blog:" + only + ":entry:*")) {
-    const strings = await ofType(page, "string");
+  for (const blogID of ids) {
+    const list = "blog:" + blogID + ":deleted";
 
-    if (!strings.length) continue;
+    if ((await client.type(list)) !== "zset") continue;
 
-    const multi = client.multi();
-    for (const key of strings) multi.ttl(key);
-    const ttl = await multi.exec();
-    const persistent = strings.filter((key, i) => ttl[i] === -1);
+    for (let start = 0; ; start += PAGE) {
+      const members = await client.zRange(list, start, start + PAGE - 1);
 
-    result.scanned += strings.length;
+      if (!members.length) break;
 
-    if (!persistent.length) continue;
+      const keys = members.map((id) => entryKey.entry(blogID, id));
+      const multi = client.multi();
+      for (const key of keys) multi.ttl(key);
+      const ttl = await multi.exec();
 
-    const values = await mget(persistent);
+      result.scanned += members.length;
 
-    for (let i = 0; i < persistent.length; i++) {
-      const key = persistent[i];
-      const match = ENTRY_KEY.exec(key);
-      let entry;
+      for (let i = 0; i < keys.length; i++) {
+        if (ttl[i] !== -1) continue;
+        if ((await client.type(keys[i])) !== "string") continue;
 
-      try {
-        entry = JSON.parse(values[i]);
-      } catch (err) {
-        continue;
+        let entry;
+
+        try {
+          entry = JSON.parse(await client.get(keys[i]));
+        } catch (err) {
+          continue;
+        }
+
+        if (!entry || entry.deleted !== true) continue;
+
+        result.found++;
+        await sample.add(keys[i]);
+
+        if (!apply) continue;
+
+        const outcome = await fixDeletedEntry(blogID, keys[i], members[i]);
+
+        if (outcome === "fixed") result.fixed++;
+        if (outcome === "restored") result.restored++;
       }
 
-      if (!match || !entry || entry.deleted !== true) continue;
-
-      result.found++;
-      await sample.add(key);
-
-      if (apply && (await fixDeletedEntry(match[1], key, match[2])))
-        result.fixed++;
+      await pause(PAGE_PAUSE_MS);
     }
   }
 
@@ -210,10 +247,18 @@ async function deletedEntries({ apply = false, only = "*" } = {}) {
       result.found +
       " deleted entries with no TTL, of " +
       result.scanned +
-      " entries scanned, about " +
+      " in the deleted lists, about " +
       size(result.estimatedBytes) +
       ". " +
-      verb(apply, "Gave " + result.fixed + " a TTL", "Would give them a TTL")
+      verb(
+        apply,
+        "Gave " +
+          result.fixed +
+          " a TTL; " +
+          result.restored +
+          " had come back, left alone",
+        "Would give them a TTL"
+      )
   );
 
   return result;
@@ -230,42 +275,26 @@ async function blogExists(blogID) {
   return !!(await client.sIsMember(Blog.key.ids, blogID));
 }
 
-// Deletes the keys Blog.remove's deleteKeys does (the same patterns; the
-// folder lock stays, its holder releases it or it expires) for a blog which
-// is still gone. The handle and domain keys need the blog's info, which is
-// gone, so they are not touched.
-async function deleteBlogKeys(blogID) {
+// Deletes the keys the scan found for a blog (the patterns Blog.remove's
+// deleteKeys uses; the folder lock stays, its holder releases it or it
+// expires) if the blog is still gone. The handle and domain keys need the
+// blog's info, which is gone, so they are not touched.
+async function deleteBlogKeys(blogID, keys) {
   // A blog created since the scan has its info and a place in the set
   if (await blogExists(blogID)) return 0;
 
   const lock = folderLock.key(blogID);
-  const patterns = ["template:" + blogID + ":*", "blog:" + blogID + ":*"];
-  let batch = [
-    "template:owned_by:" + blogID,
-    templateKey.folderPendingRemoval(blogID),
-    templateKey.folderFresh(blogID),
-  ];
+  const list = Array.from(keys).filter((key) => key !== lock);
   let deleted = 0;
 
-  async function flush() {
-    if (batch.length) deleted += await client.del(batch);
-    batch = [];
-  }
-
-  for (const pattern of patterns) {
-    for await (const page of scan(pattern)) {
-      for (const key of page) if (key !== lock) batch.push(key);
-      if (batch.length >= BATCH) await flush();
-    }
-  }
-
-  await flush();
+  for (let i = 0; i < list.length; i += BATCH)
+    deleted += await client.del(list.slice(i, i + BATCH));
 
   return deleted;
 }
 
 async function deletedBlogs({ apply = false, only = "*" } = {}) {
-  const counts = new Map(); // ID of a blog which is gone -> its keys
+  const found = new Map(); // ID of a blog which is gone -> its keys
   const checked = new Map(); // blog ID -> whether it is gone
   const sample = sampler();
   const patterns = [
@@ -289,7 +318,9 @@ async function deletedBlogs({ apply = false, only = "*" } = {}) {
           checked.set(blogID, !(await blogExists(blogID)));
         if (!checked.get(blogID)) continue;
 
-        counts.set(blogID, (counts.get(blogID) || 0) + 1);
+        if (!found.has(blogID)) found.set(blogID, new Set());
+
+        found.get(blogID).add(key);
         await sample.add(key);
       }
     }
@@ -298,17 +329,18 @@ async function deletedBlogs({ apply = false, only = "*" } = {}) {
   let total = 0;
   let deleted = 0;
 
-  for (const [blogID, count] of counts) {
-    total += count;
-    console.log("  " + blogID + ": " + count + " keys");
+  for (const [blogID, keys] of found) {
+    total += keys.size;
+    console.log("  " + blogID + ": " + keys.size + " keys");
   }
 
   if (apply)
-    for (const blogID of counts.keys()) deleted += await deleteBlogKeys(blogID);
+    for (const [blogID, keys] of found)
+      deleted += await deleteBlogKeys(blogID, keys);
 
   console.log(
     "deleted-blogs: " +
-      counts.size +
+      found.size +
       " blogs which are gone have " +
       total +
       " keys, about " +
@@ -317,7 +349,7 @@ async function deletedBlogs({ apply = false, only = "*" } = {}) {
       verb(apply, "Deleted " + deleted + " keys", "Would delete them")
   );
 
-  return { blogs: Array.from(counts.keys()).sort(), keys: total, deleted };
+  return { blogs: Array.from(found.keys()).sort(), keys: total, deleted };
 }
 
 // ---- dropbox-members ----
@@ -414,53 +446,62 @@ async function templateShares({ apply = false, only = "*" } = {}) {
 
 const URL_KEY = /^blog:([^:]+):url:/;
 
-// The entry key a permalink's value names
+// The entry key a permalink's value names, or null when the key's name or
+// value can't be read, which is never evidence that the entry is gone
 function entryKeyFor(key, value) {
   const match = URL_KEY.exec(key);
 
-  if (!match || typeof value !== "string" || !value) return NO_ENTRY;
+  if (!match || typeof value !== "string" || !value) return null;
 
   try {
     return entryKey.entry(match[1], value);
   } catch (err) {
-    return NO_ENTRY;
+    return null;
   }
 }
 
-async function existsAll(keys) {
-  const multi = client.multi();
-  for (const key of keys) multi.exists(key);
-  return multi.exec();
-}
-
-async function permalinks({ apply = false, only = "*" } = {}) {
+async function permalinks({
+  apply = false,
+  only = "*",
+  wait = PERMALINK_WAIT_MS,
+} = {}) {
   const result = { scanned: 0, stale: 0, deleted: 0, estimatedBytes: 0 };
   const sample = sampler();
   let pending = []; // [permalink key, value]
 
-  // Deletes the pending keys whose entry is still gone, and which still hold
-  // the value read: the entry may have come back since the scan
+  // Entry.set writes the permalink key before the entry key, so a new
+  // entry's key has no entry for a moment. So the keys which looked stale
+  // are looked at again after a wait, and deleted only if each still holds
+  // the value read and its entry is still missing.
   async function flush() {
     if (!pending.length) return;
 
-    const multi = client.multi();
-    for (const [key, value] of pending) {
-      multi.get(key);
-      multi.exists(entryKeyFor(key, value));
+    await pause(wait);
+
+    for (let i = 0; i < pending.length; i += BATCH) {
+      const chunk = pending.slice(i, i + BATCH);
+      const multi = client.multi();
+
+      for (const [key, value] of chunk) {
+        multi.get(key);
+        multi.exists(entryKeyFor(key, value));
+      }
+
+      const replies = await multi.exec();
+      const del = client.multi();
+      let count = 0;
+
+      chunk.forEach(([key, value], j) => {
+        if (replies[j * 2] !== value || replies[j * 2 + 1]) return;
+        del.del(key);
+        count++;
+      });
+
+      if (count) await del.exec();
+
+      result.deleted += count;
     }
-    const replies = await multi.exec();
-    const del = client.multi();
-    let count = 0;
 
-    pending.forEach(([key, value], i) => {
-      if (replies[i * 2] !== value || replies[i * 2 + 1]) return;
-      del.del(key);
-      count++;
-    });
-
-    if (count) await del.exec();
-
-    result.deleted += count;
     pending = [];
   }
 
@@ -469,21 +510,37 @@ async function permalinks({ apply = false, only = "*" } = {}) {
     if (!strings.length) continue;
 
     const values = await mget(strings);
-    const exists = await existsAll(
-      strings.map((key, i) => entryKeyFor(key, values[i]))
-    );
+    const readable = [];
+    const keys = [];
 
-    for (let i = 0; i < strings.length; i++) {
+    strings.forEach((key, i) => {
+      const target = entryKeyFor(key, values[i]);
+
+      // A name or value which doesn't parse is skipped, never stale
+      if (!target) return;
+
+      readable.push(i);
+      keys.push(target);
+    });
+
+    if (!keys.length) continue;
+
+    const multi = client.multi();
+    for (const key of keys) multi.exists(key);
+    const exists = await multi.exec();
+
+    for (let j = 0; j < readable.length; j++) {
       result.scanned++;
 
-      if (exists[i]) continue;
+      if (exists[j]) continue;
 
       result.stale++;
-      await sample.add(strings[i]);
+      await sample.add(strings[readable[j]]);
 
-      if (apply) pending.push([strings[i], values[i]]);
-      if (pending.length >= BATCH) await flush();
+      if (apply) pending.push([strings[readable[j]], values[readable[j]]]);
     }
+
+    if (pending.length >= PERMALINK_BATCH) await flush();
   }
 
   await flush();
@@ -535,7 +592,11 @@ async function referencedHashes() {
   return referenced;
 }
 
-async function rendered({ apply = false, only = "*" } = {}) {
+async function rendered({
+  apply = false,
+  only = "*",
+  wait = RENDERED_WAIT_MS,
+} = {}) {
   const result = { scanned: 0, unreferenced: 0, deleted: 0, estimatedBytes: 0 };
   const sample = sampler();
   let candidates = [];
@@ -547,22 +608,23 @@ async function rendered({ apply = false, only = "*" } = {}) {
 
   result.scanned = candidates.length;
 
-  const unreferenced = async () => {
+  const unreferenced = async (keys) => {
     const referenced = await referencedHashes();
-    return candidates.filter(
-      (key) => !referenced.has(key.slice(RENDERED.length))
-    );
+    return keys.filter((key) => !referenced.has(key.slice(RENDERED.length)));
   };
 
-  let stale = await unreferenced();
+  let stale = await unreferenced(candidates);
 
   result.unreferenced = stale.length;
 
   for (const key of stale.slice(0, SAMPLE)) await sample.add(key);
 
   if (apply && stale.length) {
-    // Read again right before deleting
-    stale = await unreferenced();
+    // Deleted only if still unreferenced when read again a minute later, so
+    // a save which wrote an output and its manifest in between is kept
+    await pause(wait);
+
+    stale = await unreferenced(stale);
 
     for (let i = 0; i < stale.length; i += BATCH)
       result.deleted += await client.del(stale.slice(i, i + BATCH));
@@ -651,37 +713,6 @@ async function ssl({ apply = false, only = "*", now = Date.now() } = {}) {
   return result;
 }
 
-// ---- removed-features ----
-
-async function removedFeatures({ apply = false, only } = {}) {
-  const ids = only ? [only] : await Blog.getAllIDs();
-  const result = { ignoredFiles: 0, fileIndexNames: 0 };
-
-  for (const blogID of ids) {
-    const ignored = await removeIgnoredFiles.removeFor(blogID, apply);
-
-    if (ignored && !ignored.type) result.ignoredFiles++;
-
-    result.fileIndexNames += await removeFileIndexNames.removeNames(
-      blogID,
-      apply
-    );
-  }
-
-  console.log(
-    "removed-features: " +
-      result.ignoredFiles +
-      " ignored_files hashes and " +
-      result.fileIndexNames +
-      " file index names sets, of " +
-      ids.length +
-      " blogs. " +
-      verb(apply, "Removed them", "Would remove them")
-  );
-
-  return result;
-}
-
 const SUBCOMMANDS = {
   "deleted-entries": deletedEntries,
   "deleted-blogs": deletedBlogs,
@@ -690,7 +721,6 @@ const SUBCOMMANDS = {
   permalinks,
   rendered,
   ssl,
-  "removed-features": removedFeatures,
 };
 
 async function all(options) {
@@ -738,7 +768,6 @@ module.exports = {
   permalinks,
   rendered,
   ssl,
-  removedFeatures,
 };
 
 if (require.main === module) {

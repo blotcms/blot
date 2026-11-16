@@ -41,12 +41,23 @@ describe("scripts/storage/redis-vestiges", function () {
     await client.set(liveKey, entry("/live.txt", { deleted: false }));
     await client.set(expiringKey, entry("/expiring.txt", { deleted: true }));
     await client.expire(expiringKey, 100);
+    // Only the entries in the list are looked at; a deleted entry which is
+    // not in it is not found
+    await client.set(
+      remember(entryKey.entry(blogID, "/unlisted.txt")),
+      entry("/unlisted.txt", { deleted: true })
+    );
+    await client.zAdd(list, [
+      { score: 1, value: "/old.txt" },
+      { score: 1, value: "/live.txt" },
+      { score: 1, value: "/expiring.txt" },
+    ]);
 
     var report = await vestiges.deletedEntries({ only: blogID });
 
     expect(report.found).toBe(1);
     expect(await client.ttl(deletedKey)).toBe(-1);
-    expect(await client.zCard(list)).toBe(0);
+    expect(await client.zScore(list, "/old.txt")).toBe(1);
 
     var applied = await vestiges.deletedEntries({ only: blogID, apply: true });
 
@@ -54,10 +65,11 @@ describe("scripts/storage/redis-vestiges", function () {
     expect(await client.ttl(deletedKey)).toBeGreaterThan(
       DELETED_ENTRY_TTL_SECONDS - 10
     );
-    expect(await client.zScore(list, "/old.txt")).not.toBeNull();
+    expect(await client.zScore(list, "/old.txt")).toBeGreaterThan(1000);
     expect(await client.ttl(liveKey)).toBe(-1);
     expect(await client.ttl(expiringKey)).toBeLessThanOrEqual(100);
-    expect(await client.zScore(list, "/expiring.txt")).toBeNull();
+    expect(await client.zScore(list, "/expiring.txt")).toBe(1);
+    expect(await client.zScore(list, "/live.txt")).toBe(1);
 
     expect((await vestiges.deletedEntries({ only: blogID })).found).toBe(0);
   });
@@ -161,7 +173,7 @@ describe("scripts/storage/redis-vestiges", function () {
     expect(report.stale).toBe(1);
     expect(await client.exists(gone)).toBe(1);
 
-    await vestiges.permalinks({ only: blogID, apply: true });
+    await vestiges.permalinks({ only: blogID, apply: true, wait: 0 });
 
     expect(await client.exists(gone)).toBe(0);
     expect(await client.exists([current, redirect, deleted])).toBe(3);
@@ -187,7 +199,7 @@ describe("scripts/storage/redis-vestiges", function () {
     expect(report.unreferenced).toBe(1);
     expect(await client.exists(orphan)).toBe(1);
 
-    await vestiges.rendered({ only: "vestiges-*", apply: true });
+    await vestiges.rendered({ only: "vestiges-*", apply: true, wait: 0 });
 
     expect(await client.exists(orphan)).toBe(0);
     expect(await client.exists(referenced)).toBe(1);
@@ -222,20 +234,5 @@ describe("scripts/storage/redis-vestiges", function () {
     expect(
       await client.exists("ssl:vestiges-sub-fresh." + config.host + ":latest")
     ).toBe(1);
-  });
-
-  it("removed-features counts without apply, and removes with it", async function () {
-    var ignored = remember("blog:" + this.blog.id + ":ignored_files");
-
-    await client.hSet(ignored, "/a.md", "PUBLIC_FILE");
-
-    expect(
-      (await vestiges.removedFeatures({ only: this.blog.id })).ignoredFiles
-    ).toBe(1);
-    expect(await client.exists(ignored)).toBe(1);
-
-    await vestiges.removedFeatures({ only: this.blog.id, apply: true });
-
-    expect(await client.exists(ignored)).toBe(0);
   });
 });
