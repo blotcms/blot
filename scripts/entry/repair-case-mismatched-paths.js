@@ -41,26 +41,63 @@ const LIVE_LISTS = ["entries", "drafts", "pages", "scheduled"];
 const BACKUP =
   process.env.BACKUP || join(os.tmpdir(), "repair-case-mismatched-paths.jsonl");
 
-// Puts back each backed-up entry whose move didn't finish: its old entry
-// is deleted and nothing live is at its new path
+// The steps after the save, safe to repeat: earlier url keys still on the
+// old ID point at the new one, and the menu item goes back to its place
+async function finish(blogID, { oldID, to, urlKeys, menuItem, menuIndex }) {
+  for (const key of urlKeys) {
+    if ((await client.get(key)) === oldID) await client.set(key, to);
+  }
+
+  if (!menuItem) return;
+
+  const menu = ((await Blog.get({ id: blogID })).menu || []).filter(
+    (item) => item.id !== oldID && item.id !== to
+  );
+
+  menu.splice(
+    Math.min(menuIndex, menu.length),
+    0,
+    Object.assign({}, menuItem, { id: to })
+  );
+
+  await Blog.set(blogID, { menu });
+}
+
+// For each backed-up move that didn't finish: puts the entry back if it
+// was dropped and not saved again, or finishes the steps after the save
 async function restore(file) {
   let restored = 0;
+  let finished = 0;
 
   for (const line of fs.readFileSync(file, "utf8").split("\n")) {
     if (!line) continue;
 
-    const { blogID, from, to, entry } = JSON.parse(line);
+    const move = JSON.parse(line);
+    const { blogID, from, to, entry } = move;
     const now = await Entry.get(blogID, to);
     const old = await Entry.get(blogID, from);
 
-    if ((now && !now.deleted) || (old && !old.deleted)) continue;
+    if (old && !old.deleted) continue;
+
+    if (now && !now.deleted) {
+      await finish(blogID, move);
+      finished++;
+      continue;
+    }
 
     await Entry.set(blogID, from, entry);
     console.log(blogID, "RESTORED", from);
     restored++;
   }
 
-  console.log("Restored", restored, "entries from", file);
+  console.log(
+    "Restored",
+    restored,
+    "entries and finished",
+    finished,
+    "moves from",
+    file
+  );
 }
 
 // The paths entry-ghosts tries, in its order (resolvePath)
@@ -158,16 +195,22 @@ async function move(blogID, entry, real) {
   moved.name = basename(real);
   moved.deleted = false;
 
-  const urlKeys = await urlKeysOf(blogID, oldID);
   const menu = (await Blog.get({ id: blogID })).menu || [];
-  const onMenu = menu.some((item) => item.id === oldID);
+  const menuIndex = menu.findIndex((item) => item.id === oldID);
+  const move = {
+    blogID,
+    from: entry.path,
+    to: real,
+    oldID,
+    urlKeys: await urlKeysOf(blogID, oldID),
+    menuItem: menuIndex > -1 ? menu[menuIndex] : null,
+    menuIndex,
+    entry,
+  };
 
-  // Kept before the drop, so --restore can put the entry back if this
-  // process dies between the drop and the save
-  fs.appendFileSync(
-    BACKUP,
-    JSON.stringify({ blogID, from: entry.path, to: real, entry }) + "\n"
-  );
+  // Kept before the drop, so --restore can put the entry back or finish
+  // the move if this process dies part way
+  fs.appendFileSync(BACKUP, JSON.stringify(move) + "\n");
 
   await Entry.drop(blogID, oldID);
 
@@ -180,18 +223,9 @@ async function move(blogID, entry, real) {
     });
   }
 
-  // Earlier URLs keep redirecting to the entry
-  for (const key of urlKeys) await client.set(key, real);
-
-  // The drop took the page off the menu and the save appended it: put it
-  // back where it was
-  if (onMenu) {
-    await Blog.set(blogID, {
-      menu: menu.map((item) =>
-        item.id === oldID ? Object.assign({}, item, { id: real }) : item
-      ),
-    });
-  }
+  // Earlier URLs keep redirecting to the entry, and the drop took a page
+  // off the menu and the save appended it: put it back where it was
+  await finish(blogID, move);
 
   const saved = await Entry.get(blogID, real);
   const same = saved && saved.url === entry.url;
