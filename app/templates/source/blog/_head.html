@@ -18,7 +18,7 @@
     <link rel="icon" type="image/png" sizes="16x16" href="{{{png16}}}">
     <link rel="apple-touch-icon" sizes="180x180" href="{{{appleTouch}}}">
     {{/favicon}}
-    {{^favicon}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{/favicon}}
+    {{^favicon}}{{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{/favicon}}
     <link rel="preconnect" href="{{{cdn}}}" />
     <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
   
@@ -35,14 +35,14 @@
     <!-- (C) Summary (fallback to title if no summary) -->
     {{#summary}}<meta property="og:description" content="{{summary}}">{{/summary}}{{^summary}}<meta property="og:description" content="{{title}}">{{/summary}}
   
-    <!-- (D) Preview image (prefer large for 1200x) and fallback to avatar -->
+    <!-- (D) Preview image (prefer large for 1200x) -->
     {{#thumbnail.large}}
     <meta property="og:image" content="{{{url}}}">
     <meta property="og:image:width" content="{{width}}">
     <meta property="og:image:height" content="{{height}}">
     {{/thumbnail.large}}
     {{^thumbnail.large}}
-    {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
+    {{#profile_image.thumbnails.large}}<meta property="og:image" content="{{{url}}}">{{/profile_image.thumbnails.large}}
     {{/thumbnail.large}}
   
     <!-- (E) Content type (article for posts) -->
@@ -52,7 +52,7 @@
     {{#summary}}<meta name="twitter:description" content="{{summary}}">{{/summary}}{{^summary}}<meta name="twitter:description" content="{{title}}">{{/summary}}
     {{#thumbnail.large}}<meta name="twitter:image" content="{{{url}}}">{{/thumbnail.large}}
     {{^thumbnail.large}}
-    {{#avatar}}<meta name="twitter:image" content="{{{avatar}}}">{{/avatar}}
+    {{#profile_image.thumbnails.large}}<meta name="twitter:image" content="{{{url}}}">{{/profile_image.thumbnails.large}}
     {{/thumbnail.large}}
   
     <!-- (F) Author (defaults to siteURL) -->
@@ -68,7 +68,7 @@
     {{/tags}}
     {{/entry}}
   
-    <!-- Non-entry pages: og:type website; canonical/og:url if view exposes url; og:image fallback to avatar -->
+    <!-- Non-entry pages: og:type website; canonical/og:url if view exposes url; og:image from the profile image -->
     {{^entry}}
     <meta property="og:type" content="website">
     {{#url}}
@@ -77,6 +77,6 @@
     {{/url}}
     <meta property="og:title" content="{{> title}}">
     <meta property="og:description" content="{{> description}}">
-    {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
+    {{#profile_image.thumbnails.large}}<meta property="og:image" content="{{{url}}}">{{/profile_image.thumbnails.large}}
     {{/entry}}
   </head>

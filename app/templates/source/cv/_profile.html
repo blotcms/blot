@@ -5,11 +5,6 @@
     sizes="92px"
     width="{{width}}" height="{{height}}" alt="{{title}}"></p>
 {{/profile_image.thumbnails.small}}
-{{^profile_image.thumbnails.small.url}}
-{{#avatar}}
-<p><img src="{{{avatar}}}" width="92" height="92" alt="{{title}}"></p>
-{{/avatar}}
-{{/profile_image.thumbnails.small.url}}
 <h1><a href="/">{{{title}}}</a></h1>
 {{#bio}}<p>{{bio}}</p>{{/bio}}
 <ul class="profile-links">

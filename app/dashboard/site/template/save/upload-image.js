@@ -387,3 +387,7 @@ module.exports.removeAssetsIfUnreferenced = removeAssetsIfUnreferenced;
 module.exports.removeTemplateAssetsIfUnreferenced =
   removeTemplateAssetsIfUnreferenced;
 module.exports.operations = operations;
+// Also used by scripts/development/sites to save a profile photo in-process
+module.exports.directory = directory;
+module.exports.url = url;
+module.exports.commitGenerated = commitGenerated;

@@ -12,7 +12,7 @@
     {{^entry}}<meta name="description" content="{{> description}}">{{/entry}}
   
     <link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}{{^title}}{{handle}}{{/title}}" href="{{{siteURL}}}{{{feedURL}}}">
-    {{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}{{#avatar}}<link rel="icon" href="{{{avatar}}}">{{/avatar}}{{^avatar}}<link rel="icon" href="data:,">{{/avatar}}{{/profile_image.thumbnails.square.url}}
+    {{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{^profile_image.thumbnails.square.url}}<link rel="icon" href="data:,">{{/profile_image.thumbnails.square.url}}
     <link rel="preconnect" href="{{{cdn}}}" />
     <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
   
@@ -29,7 +29,7 @@
     <!-- (C) Summary (fallback to title if no summary) -->
     {{#summary}}<meta property="og:description" content="{{summary}}">{{/summary}}{{^summary}}<meta property="og:description" content="{{title}}">{{/summary}}
   
-    <!-- (D) Preview image (prefer large for 1200x) and fallback to avatar -->
+    <!-- (D) Preview image (prefer large for 1200x) -->
     {{#thumbnail.large}}
     <meta property="og:image" content="{{{url}}}">
     <meta property="og:image:width" content="{{width}}">
@@ -41,9 +41,6 @@
     <meta property="og:image:width" content="{{width}}">
     <meta property="og:image:height" content="{{height}}">
     {{/profile_image.thumbnails.large}}
-    {{^profile_image.thumbnails.large.url}}
-    {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
-    {{/profile_image.thumbnails.large.url}}
     {{/thumbnail.large}}
   
     <!-- (E) Content type (article for posts) -->
@@ -56,9 +53,6 @@
     {{#profile_image.thumbnails.large}}
     <meta name="twitter:image" content="{{{url}}}">
     {{/profile_image.thumbnails.large}}
-    {{^profile_image.thumbnails.large.url}}
-    {{#avatar}}<meta name="twitter:image" content="{{{avatar}}}">{{/avatar}}
-    {{/profile_image.thumbnails.large.url}}
     {{/thumbnail.large}}
   
     <!-- (F) Author (defaults to siteURL) -->
@@ -75,12 +69,12 @@
     {{/entry}}
   
     <!-- Non-entry pages: og:type website; canonical/og:url from the view's
-         canonical partial (none on search and error pages); og:image fallback to avatar -->
+         canonical partial (none on search and error pages); og:image from the profile image -->
     {{^entry}}
     <meta property="og:type" content="website">
     {{> canonical}}
     <meta property="og:title" content="{{> title}}">
     <meta property="og:description" content="{{> description}}">
-    {{#avatar}}<meta property="og:image" content="{{{avatar}}}">{{/avatar}}
+    {{#profile_image.thumbnails.large}}<meta property="og:image" content="{{{url}}}">{{/profile_image.thumbnails.large}}
     {{/entry}}
   </head>

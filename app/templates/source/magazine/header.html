@@ -12,24 +12,18 @@
           <a href="/" class="dib fl pa3 no-underline"><img class="fl w2" width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="32px"></a>
           {{/profile_image.thumbnails.small}}
           {{^profile_image.thumbnails.small.url}}
-          {{#avatar}}
-          <a href="/" class="dib fl pa3 no-underline"><img class="fl w2" src="{{avatar}}"></a>
-          {{/avatar}}
-          {{/profile_image.thumbnails.small.url}}
-          {{^avatar}}
 <a href="/" class="lh-copy fl no-underline pa3 dim dib f3 fw3 black-80" title="The homepage of {{title}}">
-        {{#avatar}}<img class="avatar v-btm" src="{{{avatar}}}">{{/avatar}}
-        {{^avatar}}{{title}}{{/avatar}}
+        {{title}}
       </a>
-                {{/avatar}}
+          {{/profile_image.thumbnails.small.url}}
           <a href="/"  id="open-nav" class="dib no-underline pa3 fr" style="transform:rotate(90deg);"><span class="bg-background black-50  w2 h2 lh2 tc black relative db fr f2 fw2" style="box-sizing:border-box"><span class="tc" style="">|||</span></span></a>
       </div>
       
 		<div class="nav bg-sidebar br b--black-10 lh-copy pr5 " style="top:-10rem;bottom:-10rem;padding-top:10rem;padding-bottom:10rem;">
 			<a href="/" id="close-nav" style="z-index:2" class="relative no-underline {{#sticky_navigation}}fixed{{/sticky_navigation}} black-50 mt3  w2 h2 tc black db fl f2 fw1">✕</a>
 			<a href="/" class="site-title cap-trim no-underline dim mb4 db f3 fw3 black-80" title="The homepage of {{title}}">
-				{{#avatar}}<img class="avatar v-btm" src="{{{avatar}}}">{{/avatar}}
-				{{^avatar}}{{title}}{{/avatar}}
+				{{#profile_image.thumbnails.small}}<img class="avatar v-btm" width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="80px">{{/profile_image.thumbnails.small}}
+				{{^profile_image.thumbnails.small.url}}{{title}}{{/profile_image.thumbnails.small.url}}
 			</a>
 			{{#show_tags_in_navigation}}
 			<div class="clip-tags mt5 mb5">
