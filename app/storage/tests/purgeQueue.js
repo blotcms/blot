@@ -133,7 +133,7 @@ describe("cdn/purgeQueue", function () {
   });
 
   it("removes a deleted blog's Perma-Cache directory", async function () {
-    const permaCache = require("cdn/permaCache");
+    const permaCache = require("storage/sweep/permaCache");
     spyOn(permaCache, "removeBlog").and.returnValue(Promise.resolve(true));
     await purgeQueue.blog("blog_abc");
 

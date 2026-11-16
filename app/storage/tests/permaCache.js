@@ -1,4 +1,4 @@
-describe("cdn/permaCache", function () {
+describe("storage/sweep/permaCache", function () {
   global.test.blog();
 
   const config = require("config");
@@ -6,7 +6,7 @@ describe("cdn/permaCache", function () {
   const assets = require("storage/assets");
   const folder = require("storage/folder");
   const contentVersion = require("helper/contentVersion");
-  const permaCache = require("cdn/permaCache");
+  const permaCache = require("storage/sweep/permaCache");
   const client = require("models/client");
   const crypto = require("crypto");
   const fs = require("fs-extra");
@@ -296,8 +296,8 @@ describe("cdn/permaCache", function () {
     purgeCdnUrls.exports = async () => false;
 
     try {
-      delete require.cache[require.resolve("cdn/permaCache")];
-      const fresh = require("cdn/permaCache");
+      delete require.cache[require.resolve("storage/sweep/permaCache")];
+      const fresh = require("storage/sweep/permaCache");
       const totals = await fresh.sweep({
         only: "icons",
         apply: true,
@@ -308,8 +308,8 @@ describe("cdn/permaCache", function () {
       expect(removed).toEqual([]);
     } finally {
       purgeCdnUrls.exports = real;
-      delete require.cache[require.resolve("cdn/permaCache")];
-      require("cdn/permaCache");
+      delete require.cache[require.resolve("storage/sweep/permaCache")];
+      require("storage/sweep/permaCache");
     }
   });
 

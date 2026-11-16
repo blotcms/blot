@@ -3,7 +3,7 @@
 // deleted folder files, generated files gone from the bucket or rewritten
 // since, old documentation versions, template outputs gone from Redis,
 // changed static files, and anything else at the top level
-// (app/cdn/permaCache.js). The scheduler runs the same sweep in the
+// (app/storage/sweep/permaCache.js). The scheduler runs the same sweep in the
 // background, resuming across deploys; this runs it by hand, in one go.
 //
 // Report only unless --apply. Run in a unit, as the app user:
@@ -18,7 +18,7 @@
 //
 // Safe to re-run: each run lists what is there now.
 
-const permaCache = require("cdn/permaCache");
+const permaCache = require("storage/sweep/permaCache");
 
 function option(name) {
   const i = process.argv.indexOf(name);
