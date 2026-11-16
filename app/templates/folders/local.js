@@ -12,6 +12,7 @@ const chokidar = require("chokidar");
 const isEqual = require("lodash/isEqual");
 const config = require("config");
 const Blog = require("models/blog");
+const Template = require("models/template");
 const clfdate = require("helper/clfdate");
 const { settingsFor } = require("./setupBlogs");
 
@@ -39,6 +40,19 @@ function handles() {
     .map((item) => item.name);
 }
 
+// Whether the blog is on its own copy of the template config.js wants, made
+// when something was saved to the template (a profile photo, say). Putting the
+// blog back on the original would lose that.
+async function onForkOf(blog, wantedID) {
+  if (!wantedID || blog.template === wantedID) return false;
+  if (!String(blog.template).startsWith(blog.id + ":")) return false;
+  const [own, original] = await Promise.all([
+    Template.getMetadata(blog.template).catch(() => null),
+    Template.getMetadata(wantedID).catch(() => null),
+  ]);
+  return Boolean(own && original && own.name === original.name);
+}
+
 // Sets each existing matching blog's settings from config.js, and puts it on
 // the Local client, whose watcher then keeps its files in step. Only what
 // differs is written, so a restart doesn't flush every blog's cache.
@@ -48,6 +62,7 @@ async function apply({ reload } = {}) {
     if (!blog) continue;
 
     const wanted = { ...settingsFor(blog, { reload }), client: "local" };
+    if (await onForkOf(blog, wanted.template)) wanted.template = blog.template;
     const changed = Object.keys(wanted).filter(
       (key) => !isEqual(wanted[key], blog[key])
     );

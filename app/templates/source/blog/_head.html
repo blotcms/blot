@@ -41,9 +41,6 @@
     <meta property="og:image:width" content="{{width}}">
     <meta property="og:image:height" content="{{height}}">
     {{/thumbnail.large}}
-    {{^thumbnail.large}}
-    {{#profile_image.thumbnails.large}}<meta property="og:image" content="{{{url}}}">{{/profile_image.thumbnails.large}}
-    {{/thumbnail.large}}
   
     <!-- (E) Content type (article for posts) -->
     <meta property="og:type" content="article">
@@ -51,9 +48,6 @@
     <meta name="twitter:title" content="{{title}}">
     {{#summary}}<meta name="twitter:description" content="{{summary}}">{{/summary}}{{^summary}}<meta name="twitter:description" content="{{title}}">{{/summary}}
     {{#thumbnail.large}}<meta name="twitter:image" content="{{{url}}}">{{/thumbnail.large}}
-    {{^thumbnail.large}}
-    {{#profile_image.thumbnails.large}}<meta name="twitter:image" content="{{{url}}}">{{/profile_image.thumbnails.large}}
-    {{/thumbnail.large}}
   
     <!-- (F) Author (defaults to siteURL) -->
     <meta property="article:author" content="{{{siteURL}}}">
@@ -77,6 +71,5 @@
     {{/url}}
     <meta property="og:title" content="{{> title}}">
     <meta property="og:description" content="{{> description}}">
-    {{#profile_image.thumbnails.large}}<meta property="og:image" content="{{{url}}}">{{/profile_image.thumbnails.large}}
     {{/entry}}
   </head>
