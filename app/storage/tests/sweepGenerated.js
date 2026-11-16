@@ -621,6 +621,10 @@ describe("storage/sweep generated files", function () {
 
     it("does not treat a result that also names a current scope as legacy", async function () {
       const id = this.blog.id;
+
+      used.add("_image_cache/abc");
+      put(id, "_image_cache/abc");
+
       const mixed = await stored(
         id,
         "image-cache",
