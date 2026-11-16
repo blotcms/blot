@@ -109,6 +109,53 @@ describe("image", function () {
     this.result = secondResult;
   });
 
+  it("makes an image again when its cached file has gone from storage", async function () {
+    var path = "/tests-image.png";
+    var html = '<img src="' + path + '">';
+    var blog = this.blog;
+
+    await folder.writeFrom(blog.id, path, __dirname + path);
+
+    var firstResult = await render(blog, html);
+    var firstPath = extractCachedImagePaths(blog, firstResult)[0];
+
+    expect(await assets.exists(blog.id, firstPath)).toEqual(true);
+
+    await assets.remove(blog.id, firstPath);
+
+    expect(await assets.exists(blog.id, firstPath)).toEqual(false);
+
+    var secondResult = await render(blog, html);
+    var secondPath = extractCachedImagePaths(blog, secondResult)[0];
+
+    expect(secondPath).toContain("_image_cache/");
+    expect(secondPath).not.toEqual(firstPath);
+    expect(await assets.exists(blog.id, secondPath)).toEqual(true);
+
+    this.result = secondResult;
+  });
+
+  it("reuses a cached image whose file still exists, without making it again", async function () {
+    var path = "/tests-image.png";
+    var html = '<img src="' + path + '">';
+    var blog = this.blog;
+
+    await folder.writeFrom(blog.id, path, __dirname + path);
+
+    var firstResult = await render(blog, html);
+    var cacheDir = assets.path(blog.id, "_image_cache");
+    var before = await fs.readdir(cacheDir);
+
+    var secondResult = await render(blog, html);
+
+    expect(secondResult).toEqual(firstResult);
+
+    // No second copy was made
+    expect(await fs.readdir(cacheDir)).toEqual(before);
+
+    this.result = secondResult;
+  });
+
   it("downsizes large images", async function () {
     var large = "/tests-large-image.jpg";
     var html = '<img src="' + large + '">';
