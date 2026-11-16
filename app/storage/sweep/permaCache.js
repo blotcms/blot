@@ -2,7 +2,6 @@ const crypto = require("crypto");
 const fs = require("fs-extra");
 const config = require("config");
 const clfdate = require("helper/clfdate");
-const lock = require("helper/lock");
 const bunnyStorage = require("helper/bunnyStorage");
 const purgeCdnUrls = require("helper/purgeCdnUrls");
 const contentVersion = require("helper/contentVersion");
@@ -21,7 +20,8 @@ const documentationURL = require("documentation/tools/cdn-url-helper");
 // the edges. So whatever Blot stops publishing, or publishes different
 // bytes at, must be purged URL by URL, or it stays public at its old URL
 // indefinitely. This module finds those URLs in the storage zone, and runs
-// the sweep that removes them. See "Perma-Cache" in
+// the sweep that removes them, which the weekly run (./index) applies to each
+// blog after its generated files (./generated). See "Perma-Cache" in
 // config/storage-bucket/README.md.
 //
 // Layout, below __bcdn_perma_cache__/pullzone__<pull zone>__<n>/: one
@@ -49,12 +49,6 @@ const STATIC_DIRECTORIES = GLOBAL_STATIC_SUBDIRECTORIES.map((dir) =>
 
 // Top-level directories swept at once, and storage copies deleted at once
 const CONCURRENCY = 8;
-
-// The resumable sweep (start, below): its state in Redis, and how long after
-// a run finishes the next one starts
-const STATE = "perma-cache:sweep";
-const LEASE = "perma-cache:sweep:lease";
-const INTERVAL = 7 * 24 * 60 * 60 * 1000;
 
 // The pull zone's Perma-Cache directory. A full purge of the pull zone starts
 // a new one and leaves the old behind, so anything but exactly one means a
@@ -168,9 +162,9 @@ function storageTime(value) {
 // v-pending is never perma-cached (its edge rule bypasses Perma-Cache).
 // Purging a URL that is still current costs only a refetch from the bucket,
 // so a doubtful URL is treated as stale.
-async function* staleForBlog(base, blogID) {
+async function* staleForBlog(base, blogID, files) {
   const { decodeFolderPath } = shared();
-  let generated = null;
+  let generated = files || null;
 
   for (const entry of await bunnyStorage.list(base + blogID + "/")) {
     if (!entry.isDirectory) continue;
@@ -384,7 +378,7 @@ async function removeBlog(base, blogID) {
 
 // Sweeps one top-level directory (a blog or one of the shared ones) into
 // totals. Report-only unless apply.
-async function sweepEntry(base, entry, { apply, log, totals, deleted }) {
+async function sweepEntry(base, entry, { apply, log, totals, deleted, files }) {
   const name = entry.name;
 
   if (BLOG_ID.test(name) && entry.isDirectory) {
@@ -395,7 +389,11 @@ async function sweepEntry(base, entry, { apply, log, totals, deleted }) {
       return;
     }
 
-    return applyStale(staleForBlog(base, name), name, { apply, log, totals });
+    return applyStale(staleForBlog(base, name, files), name, {
+      apply,
+      log,
+      totals,
+    });
   }
 
   if (name === "documentation" && entry.isDirectory)
@@ -492,11 +490,18 @@ function checkDeleted(deleted, options) {
     );
 }
 
-// Sweeps entries (top-level listing entries, sorted), CONCURRENCY at a time.
+// Sweeps entries (top-level listing entries, sorted), CONCURRENCY at a time,
+// each with each(entry), which defaults to sweepEntry. The weekly run
+// (./index) passes its own, which sweeps a blog's generated files first.
 // After each, onDone(name) is called with the name below which everything
 // has been swept, for a run to resume from. Stops starting new entries once
 // signal aborts.
-async function sweepEntries(base, entries, context, { signal, onDone } = {}) {
+async function sweepEntries(
+  base,
+  entries,
+  context,
+  { signal, onDone, each } = {}
+) {
   const done = new Array(entries.length).fill(false);
   let next = 0;
   let resumeFrom = 0;
@@ -507,7 +512,8 @@ async function sweepEntries(base, entries, context, { signal, onDone } = {}) {
       const entry = entries[index];
 
       try {
-        await sweepEntry(base, entry, context);
+        if (each) await each(entry);
+        else await sweepEntry(base, entry, context);
       } catch (err) {
         context.totals.failed++;
         console.error(clfdate(), "permaCache: sweeping", entry.name, err);
@@ -557,93 +563,17 @@ function sortByName(entries) {
   return entries.slice().sort((a, b) => (a.name < b.name ? -1 : 1));
 }
 
-// One step of the resumable sweep, run by start() below whenever it holds
-// the lease: starts a run if the last finished INTERVAL ago, or resumes the
-// one in progress from its cursor (the name below which everything has been
-// swept), saving the cursor as it goes. A deploy that kills it loses at most
-// the directories in progress, which the next holder sweeps again.
-async function step(signal, options = {}) {
-  const now = options.now || Date.now;
-  const state = await client.hGetAll(STATE);
-
-  if (!state.startedAt) {
-    if (state.finishedAt && now() - Number(state.finishedAt) < INTERVAL)
-      return null;
-
-    await client.hSet(STATE, { startedAt: String(now()), cursor: "" });
-    await client.hDel(STATE, "totals");
-    state.startedAt = String(now());
-    state.cursor = "";
-    delete state.totals;
-  }
-
-  const base = await root();
-  const all = sortByName(await bunnyStorage.list(base));
-  const entries = all.filter((entry) => entry.name > (state.cursor || ""));
-  const totals = state.totals ? JSON.parse(state.totals) : newTotals();
-  const deleted = await deletedBlogs(entries);
-
-  try {
-    checkDeleted(deleted, { apply: true });
-  } catch (err) {
-    // Not retried until the next run: a person should look first
-    await finish(state, totals, now, err.message);
-    throw err;
-  }
-
-  await sweepEntries(
-    base,
-    entries,
-    { apply: true, log: () => {}, totals, deleted },
-    {
-      signal,
-      onDone: (name) =>
-        client.hSet(STATE, { cursor: name, totals: JSON.stringify(totals) }),
-    }
-  );
-
-  if (signal && signal.aborted) return null;
-
-  await finish(state, totals, now);
-  console.log(clfdate(), "Perma-Cache sweep:", JSON.stringify(totals));
-  return totals;
-}
-
-async function finish(state, totals, now, error) {
-  await client
-    .multi()
-    .hSet(STATE, {
-      finishedAt: String(now()),
-      totals: JSON.stringify(totals),
-      error: error || "",
-    })
-    .hDel(STATE, ["startedAt", "cursor"])
-    .exec();
-}
-
-// Runs the sweep in the background on whichever process holds the lease,
-// checking hourly whether a run is due. Returns the lease, to stop().
-function start() {
-  return lock.lease(
-    LEASE,
-    async (signal) => {
-      try {
-        await step(signal);
-      } catch (err) {
-        console.error(clfdate(), "Error: Perma-Cache sweep", err);
-      }
-    },
-    { ttl: 60 * 1000, heartbeat: 15 * 1000, retryEvery: 60 * 60 * 1000 }
-  );
-}
-
 module.exports = {
   root,
   cachedBelow,
   removeBlog: async (blogID) => removeBlog(await root(), blogID),
   sweep,
-  step,
-  start,
+  sweepEntry,
+  sweepEntries,
+  sortByName,
+  deletedBlogs,
+  checkDeleted,
+  newTotals,
+  BLOG_ID,
   urlOf,
-  STATE,
 };

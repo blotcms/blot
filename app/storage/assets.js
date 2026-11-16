@@ -358,7 +358,8 @@ async function* walk(blogID) {
   for await (var entry of walkEntries(blogID)) yield entry.relPath;
 }
 
-// As walk, with each file's last-modified time: { relPath, modified }
+// As walk, with each file's last-modified time and size:
+// { relPath, modified, size }
 async function* walkEntries(blogID) {
   root(blogID);
 
@@ -368,7 +369,7 @@ async function* walkEntries(blogID) {
     var rel = entry.key.slice(prefix.length);
 
     if (rel && !/\/$/.test(rel))
-      yield { relPath: rel, modified: entry.modified };
+      yield { relPath: rel, modified: entry.modified, size: entry.size };
   }
 }
 

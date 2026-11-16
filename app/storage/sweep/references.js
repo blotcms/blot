@@ -5,12 +5,12 @@ const Template = require("models/template");
 const templateKey = require("models/template/key");
 const Blog = require("models/blog");
 
-// The sweep of generated files nothing uses any more (#2688, section 7):
-// images from deleted posts, stale thumbnails, versions of photos replaced
-// or edited in place, changed remote images, duplicates from concurrent
-// builds. This is the report-only first run, which measures how much space
-// a deleting sweep would free and so sets its grace period; nothing here
-// deletes anything.
+// What the sweep of generated files (./generated, #2688 section 7, #2745)
+// treats as in use: images from deleted posts, stale thumbnails, versions of
+// photos replaced or edited in place, changed remote images and duplicates
+// from concurrent builds are what it removes. This module only reads; the
+// deleting, and the two phases that protect a build in progress, are in
+// ./generated.
 //
 // Generated files sit in the bucket at {blogID}/<scope>/<id>/..., one
 // directory per source (an image, a thumbnail set, a converted document),
@@ -28,8 +28,8 @@ const Blog = require("models/blog");
 // instead (clients/google-drive/util/download.js, build/converters/gdoc).
 //
 // Every read here rejects on a failure rather than skipping what it couldn't
-// read, so a blog whose references can't all be read fails its report
-// instead of counting live files as unreferenced.
+// read, so a blog whose references can't all be read fails its step
+// instead of counting live files as unreferenced and deleting them.
 
 const SCOPES = ["_image_cache", "_thumbnails", "_bookmark_screenshots"];
 const ENTRY_BATCH = 100;

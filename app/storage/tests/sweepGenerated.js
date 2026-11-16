@@ -1,0 +1,522 @@
+describe("storage/sweep generated files", function () {
+  global.test.blog();
+
+  const config = require("config");
+  const client = require("models/client");
+  const Blog = require("models/blog");
+  const bunnyStorage = require("helper/bunnyStorage");
+  const Keys = require("helper/transformer/keys");
+  const assets = require("storage/assets");
+  const s3 = require("storage/s3");
+  const references = require("storage/sweep/references");
+  const generated = require("storage/sweep/generated");
+  const cache = require("storage/sweep/cache");
+  const sweep = require("storage/sweep");
+
+  const DAY = 24 * 60 * 60 * 1000;
+  const NOW = Date.now();
+  const OLD = new Date(NOW - 3 * DAY);
+
+  let store; // object key -> { size, modified }
+  let deleted; // each call of deleteKeys
+  let used;
+
+  beforeEach(function () {
+    store = new Map();
+    deleted = [];
+    used = new Set();
+
+    spyOn(references, "inUse").and.callFake(async () => used);
+    spyOn(assets, "walkEntries").and.callFake(() =>
+      (async function* () {
+        for (const [key, object] of Array.from(store)) {
+          const rel = key.slice(key.indexOf("/") + 1);
+          yield { relPath: rel, modified: object.modified, size: object.size };
+        }
+      })()
+    );
+    spyOn(s3, "deleteKeys").and.callFake(async (keys) => {
+      deleted.push(keys);
+      for (const key of keys) store.delete(key);
+    });
+  });
+
+  afterEach(async function () {
+    const id = this.blog.id;
+
+    for (const name of cache.NAMES) {
+      const everything = Keys(id, name).everything;
+      const members = await client.sMembers(everything);
+
+      if (members.length) await client.del(members);
+
+      await client.del(everything);
+    }
+
+    await client.del(generated.candidatesKey(id));
+    await client.del(sweep.STATE);
+  });
+
+  // Files in the bucket, one per directory name, e.g. "_thumbnails/old"
+  function put(id, dir, options = {}) {
+    store.set(id + "/" + dir + "/" + (options.file || "small.jpg"), {
+      size: options.size || 10,
+      modified: options.modified || OLD,
+    });
+  }
+
+  // A cache entry for a directory, and with a URL if given: the transformer
+  // keys a lookup writes
+  async function entry(id, name, dir, url) {
+    const keys = Keys(id, name);
+    const content = keys.content("h" + dir.replace(/\W/g, ""));
+    const members = [content];
+
+    await client.set(
+      content,
+      JSON.stringify({ small: { path: "/" + dir + "/small.jpg" } })
+    );
+
+    if (url) {
+      await client.set(keys.url.content(url), content.split(":").pop());
+      await client.set(keys.url.headers(url), "{}");
+      members.push(keys.url.content(url), keys.url.headers(url));
+    }
+
+    await client.sAdd(keys.everything, members);
+
+    return members;
+  }
+
+  async function exists(keys) {
+    return (await client.exists(keys)) === keys.length;
+  }
+
+  function newTotals() {
+    return {
+      generatedBlogs: 0,
+      candidates: 0,
+      candidateBytes: 0,
+      deletedDirs: 0,
+      deletedBytes: 0,
+      cacheKeysDeleted: 0,
+    };
+  }
+
+  async function run(id, mode, options = {}) {
+    const totals = newTotals();
+    const files = await generated.run(id, {
+      mode,
+      totals,
+      now: () => NOW,
+      log: () => {},
+      ...options,
+    });
+
+    return { totals, files };
+  }
+
+  async function candidates(id) {
+    return (await client.sMembers(generated.candidatesKey(id))).sort();
+  }
+
+  it("report mode writes nothing and totals what apply would do", async function () {
+    const id = this.blog.id;
+    const keys = await entry(id, "thumbnails", "_thumbnails/old", "http://a/b");
+
+    put(id, "_thumbnails/old", { size: 30 });
+
+    const report = await run(id, "report");
+
+    expect(report.totals).toEqual({
+      generatedBlogs: 1,
+      candidates: 1,
+      candidateBytes: 30,
+      deletedDirs: 0,
+      deletedBytes: 0,
+      cacheKeysDeleted: 3,
+    });
+    expect(await client.exists(generated.candidatesKey(id))).toBe(0);
+    expect(await exists(keys)).toBe(true);
+    expect(await client.sCard(Keys(id, "thumbnails").everything)).toBe(3);
+    expect(deleted).toEqual([]);
+    expect(store.size).toBe(1);
+
+    const apply = await run(id, "apply");
+
+    expect(apply.totals).toEqual(report.totals);
+  });
+
+  it("report mode totals the deletes a recorded candidate would get", async function () {
+    const id = this.blog.id;
+
+    put(id, "_thumbnails/old", { size: 30 });
+    await client.sAdd(generated.candidatesKey(id), "_thumbnails/old");
+
+    const report = await run(id, "report");
+
+    expect(report.totals.deletedDirs).toBe(1);
+    expect(report.totals.deletedBytes).toBe(30);
+    expect(deleted).toEqual([]);
+    expect(await candidates(id)).toEqual(["_thumbnails/old"]);
+  });
+
+  it("run 1 deletes the cache entries and records the candidate, deleting no objects", async function () {
+    const id = this.blog.id;
+    const thumbnails = await entry(id, "thumbnails", "_thumbnails/old", "u1");
+    const images = await entry(id, "image-cache", "_image_cache/x", "u2");
+    const keep = await entry(id, "thumbnails", "_thumbnails/live", "u3");
+
+    put(id, "_thumbnails/old");
+    put(id, "_thumbnails/live");
+    put(id, "_image_cache/x");
+    used.add("_thumbnails/live");
+
+    const { totals } = await run(id, "apply");
+
+    expect(totals.candidates).toBe(2);
+    expect(totals.cacheKeysDeleted).toBe(6);
+    expect(await client.exists(thumbnails)).toBe(0);
+    expect(await client.exists(images)).toBe(0);
+    expect(await exists(keep)).toBe(true);
+    expect(await client.sCard(Keys(id, "thumbnails").everything)).toBe(3);
+    expect(await candidates(id)).toEqual(["_image_cache/x", "_thumbnails/old"]);
+    expect(deleted).toEqual([]);
+    expect(store.size).toBe(3);
+  });
+
+  it("run 2 deletes the candidate's objects", async function () {
+    const id = this.blog.id;
+
+    put(id, "_thumbnails/old", { size: 30 });
+    put(id, "_thumbnails/old", { file: "large.jpg", size: 5 });
+    put(id, "_thumbnails/live");
+    used.add("_thumbnails/live");
+
+    await run(id, "apply");
+    expect(deleted).toEqual([]);
+
+    const { totals, files } = await run(id, "apply");
+
+    expect(totals.deletedDirs).toBe(1);
+    expect(totals.deletedBytes).toBe(35);
+    expect(deleted.map((keys) => keys.slice().sort())).toEqual([
+      [id + "/_thumbnails/old/large.jpg", id + "/_thumbnails/old/small.jpg"],
+    ]);
+    expect(Array.from(files.keys())).toEqual(["_thumbnails/live/small.jpg"]);
+    expect(await client.exists(generated.candidatesKey(id))).toBe(0);
+  });
+
+  it("keeps a directory that is referenced again between the runs", async function () {
+    const id = this.blog.id;
+
+    put(id, "_thumbnails/old");
+
+    await run(id, "apply");
+    used.add("_thumbnails/old");
+
+    const { totals } = await run(id, "apply");
+
+    expect(totals.deletedDirs).toBe(0);
+    expect(totals.candidates).toBe(0);
+    expect(deleted).toEqual([]);
+    expect(await client.exists(generated.candidatesKey(id))).toBe(0);
+  });
+
+  it("keeps a directory a cache entry points at again, for one more round", async function () {
+    const id = this.blog.id;
+
+    put(id, "_thumbnails/old");
+    await entry(id, "thumbnails", "_thumbnails/old");
+    await run(id, "apply");
+
+    const again = await entry(id, "thumbnails", "_thumbnails/old");
+    const second = await run(id, "apply");
+
+    expect(second.totals.deletedDirs).toBe(0);
+    expect(deleted).toEqual([]);
+    expect(await candidates(id)).toEqual(["_thumbnails/old"]);
+    expect(await client.exists(again)).toBe(0);
+
+    const third = await run(id, "apply");
+
+    expect(third.totals.deletedDirs).toBe(1);
+  });
+
+  it("never marks a directory whose newest file is under a day old", async function () {
+    const id = this.blog.id;
+
+    put(id, "_thumbnails/old");
+    put(id, "_thumbnails/old", {
+      file: "new.jpg",
+      modified: new Date(NOW - DAY / 2),
+    });
+    put(id, "_thumbnails/fresh", { modified: new Date(NOW - 1000) });
+    await client.sAdd(generated.candidatesKey(id), [
+      "_thumbnails/old",
+      "_thumbnails/fresh",
+    ]);
+
+    const { totals } = await run(id, "apply");
+
+    expect(totals.candidates).toBe(0);
+    expect(totals.deletedDirs).toBe(0);
+    expect(deleted).toEqual([]);
+    expect(await client.exists(generated.candidatesKey(id))).toBe(0);
+  });
+
+  it("deletes the cache entries of a directory missing from the bucket, and stale members", async function () {
+    const id = this.blog.id;
+    const gone = await entry(id, "image-cache", "_image_cache/gone", "u1");
+    const here = await entry(id, "image-cache", "_image_cache/here", "u2");
+    const everything = Keys(id, "image-cache").everything;
+
+    put(id, "_image_cache/here");
+    used.add("_image_cache/here");
+    await client.sAdd(everything, Keys(id, "image-cache").content("nothing"));
+    // a URL whose content has gone
+    await client.set(Keys(id, "image-cache").url.content("u9"), "missing");
+    await client.set(Keys(id, "image-cache").url.headers("u9"), "{}");
+    await client.sAdd(everything, [
+      Keys(id, "image-cache").url.content("u9"),
+      Keys(id, "image-cache").url.headers("u9"),
+    ]);
+
+    const { totals } = await run(id, "apply");
+
+    expect(totals.cacheKeysDeleted).toBe(6);
+    expect(await client.exists(gone)).toBe(0);
+    expect(await exists(here)).toBe(true);
+    expect(await client.sMembers(everything)).toEqual(
+      jasmine.arrayContaining(here)
+    );
+    expect(await client.sCard(everything)).toBe(3);
+    expect(deleted).toEqual([]);
+  });
+
+  it("leaves the other transformer names alone", async function () {
+    const id = this.blog.id;
+    const keys = await entry(id, "img-converter", "_assets/x", "u1");
+
+    await run(id, "apply");
+
+    expect(await exists(keys)).toBe(true);
+    await client.del(keys);
+    await client.del(Keys(id, "img-converter").everything);
+  });
+
+  it("deletes a screenshot by its exact key, not its neighbours", async function () {
+    const id = this.blog.id;
+
+    for (const name of ["abc.png", "abc.png2", "abcd.png"])
+      store.set(id + "/_bookmark_screenshots/" + name, {
+        size: 1,
+        modified: OLD,
+      });
+
+    store.set(id + "/_bookmark_screenshots/dir/x.png", {
+      size: 1,
+      modified: OLD,
+    });
+    used.add("_bookmark_screenshots/abc.png2");
+    used.add("_bookmark_screenshots/abcd.png");
+    used.add("_bookmark_screenshots/dir");
+
+    await run(id, "apply");
+    await run(id, "apply");
+
+    expect(deleted).toEqual([[id + "/_bookmark_screenshots/abc.png"]]);
+    expect(Array.from(store.keys()).sort()).toEqual([
+      id + "/_bookmark_screenshots/abc.png2",
+      id + "/_bookmark_screenshots/abcd.png",
+      id + "/_bookmark_screenshots/dir/x.png",
+    ]);
+  });
+
+  it("deletes nothing when a read fails", async function () {
+    const id = this.blog.id;
+
+    put(id, "_thumbnails/old");
+    await client.sAdd(generated.candidatesKey(id), "_thumbnails/old");
+    references.inUse.and.callFake(async () => {
+      throw new Error("Redis went away");
+    });
+
+    const err = await run(id, "apply").catch((err) => err);
+
+    expect(err.message).toBe("Redis went away");
+    expect(deleted).toEqual([]);
+    expect(await candidates(id)).toEqual(["_thumbnails/old"]);
+  });
+
+  describe("in the weekly run, with Perma-Cache", function () {
+    const ROOT = "__bcdn_perma_cache__/";
+    const BASE = ROOT + "pullzone__" + config.bunny.pull_zone + "__1/";
+    let purged;
+
+    // A storage zone holding each URL path (as in permaCache's spec)
+    function zone(paths) {
+      const dirs = {
+        [ROOT]: [
+          {
+            name: "pullzone__" + config.bunny.pull_zone + "__1",
+            isDirectory: true,
+          },
+        ],
+      };
+
+      for (const path of paths) {
+        const segments = path.slice(1).split("/");
+        let dir = BASE;
+
+        segments.forEach((segment, i) => {
+          const name =
+            i === segments.length - 1 ? "___" + segment + "___" : segment;
+          dirs[dir] = dirs[dir] || [];
+          if (!dirs[dir].some((entry) => entry.name === name))
+            dirs[dir].push({ name, isDirectory: true });
+          dir += name + "/";
+        });
+
+        dirs[dir] = [{ name: "___file___", isDirectory: false }];
+      }
+
+      spyOn(bunnyStorage, "list").and.callFake(async (dir) => dirs[dir] || []);
+      spyOn(bunnyStorage, "remove").and.callFake(async () => {});
+    }
+
+    // The sweep modules, loaded again with the purge replaced
+    async function withSweep(fn) {
+      const purge = require.cache[require.resolve("helper/purgeCdnUrls")];
+      const real = purge.exports;
+      const names = ["storage/sweep/permaCache", "storage/sweep"];
+
+      purge.exports = async (urls) => {
+        purged.push(...urls);
+        return true;
+      };
+      names.forEach((name) => delete require.cache[require.resolve(name)]);
+
+      try {
+        return await fn(require("storage/sweep"));
+      } finally {
+        purge.exports = real;
+        names.forEach((name) => delete require.cache[require.resolve(name)]);
+      }
+    }
+
+    beforeEach(function () {
+      purged = [];
+      spyOn(Blog, "getAllIDs").and.callFake(async () => [this.blog.id]);
+    });
+
+    it("purges in the same pass the URLs of the files it deleted", async function () {
+      const id = this.blog.id;
+      const url = config.cdn.origin + "/" + id + "/_thumbnails/old/small.jpg";
+
+      put(id, "_thumbnails/old");
+      zone([
+        `/${id}/_thumbnails/old/small.jpg`,
+        `/${id}/_thumbnails/other/small.jpg`,
+      ]);
+
+      await withSweep(async (fresh) => {
+        const first = await fresh.step(null, {
+          now: () => NOW,
+          generated: "apply",
+          log: () => {},
+        });
+
+        expect(first.candidates).toBe(1);
+        expect(purged).toEqual([
+          config.cdn.origin + "/" + id + "/_thumbnails/other/small.jpg",
+        ]);
+
+        purged.length = 0;
+        await client.del(fresh.STATE);
+
+        const second = await fresh.step(null, {
+          now: () => NOW,
+          generated: "apply",
+          log: () => {},
+        });
+
+        expect(second.deletedDirs).toBe(1);
+        expect(second.generatedBlogs).toBe(1);
+        expect(purged).toContain(url);
+      });
+    });
+
+    it("sweeps a blog with nothing in Perma-Cache", async function () {
+      const id = this.blog.id;
+
+      put(id, "_thumbnails/old");
+      zone([]);
+
+      await withSweep(async (fresh) => {
+        const totals = await fresh.step(null, {
+          now: () => NOW,
+          generated: "apply",
+          log: () => {},
+        });
+
+        expect(totals.generatedBlogs).toBe(1);
+        expect(totals.candidates).toBe(1);
+        expect(await candidates(id)).toEqual(["_thumbnails/old"]);
+      });
+    });
+
+    it("counts a failed generated step and still checks Perma-Cache", async function () {
+      const id = this.blog.id;
+
+      put(id, "_thumbnails/old");
+      await client.sAdd(generated.candidatesKey(id), "_thumbnails/old");
+      references.inUse.and.callFake(async () => {
+        throw new Error("Redis went away");
+      });
+      zone([`/${id}/_thumbnails/missing/small.jpg`]);
+      spyOn(console, "error");
+
+      await withSweep(async (fresh) => {
+        const totals = await fresh.step(null, {
+          now: () => NOW,
+          generated: "apply",
+          log: () => {},
+        });
+
+        expect(totals.generatedFailed).toBe(1);
+        expect(totals.failed).toBe(1);
+        expect(deleted).toEqual([]);
+        expect(purged).toEqual([
+          config.cdn.origin + "/" + id + "/_thumbnails/missing/small.jpg",
+        ]);
+      });
+    });
+
+    it("loads totals saved by a run from before the generated step", async function () {
+      zone([]);
+
+      await client.hSet(sweep.STATE, {
+        startedAt: "1",
+        cursor: "",
+        totals: JSON.stringify({
+          entries: 4,
+          deletedBlogs: 0,
+          stale: 2,
+          failed: 0,
+        }),
+      });
+
+      await withSweep(async (fresh) => {
+        const totals = await fresh.step(null, {
+          now: () => NOW,
+          generated: "off",
+        });
+
+        expect(totals.stale).toBe(2);
+        expect(totals.entries).toBeGreaterThanOrEqual(4);
+        expect(totals.cacheKeysDeleted).toBe(0);
+      });
+    });
+  });
+});
