@@ -63,6 +63,9 @@
 {{#archives.length}}
 <script>
 (function () {
+  // script.js comes from the CDN, which a publish doesn't regenerate, so it
+  // takes the current cacheID from here
+  window.notebookCacheID = "{{cacheID}}";
   try {
     var root = document.querySelector(".sidebar .archive-list");
     var state = JSON.parse(localStorage.getItem("notebook-archive"));
