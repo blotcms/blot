@@ -95,4 +95,16 @@ describe("injectLocals", function () {
     // Computer Modern: the curly double quote is 0.3325em wide, the straight " 0.5em
     expect(locals.font.styles).toMatch(/\.pull-double\s*\{margin-left:-\.3325/);
   });
+
+  it("keeps the hanging punctuation rules on the Blog template's text_font", function () {
+    const locals = {
+      text_font: { id: "computer-modern" },
+      title_font: { id: "computer-modern" },
+    };
+
+    injectLocals(locals);
+
+    expect(locals.text_font.styles).toContain(".pull-double");
+    expect(locals.title_font.styles).not.toContain(".pull-double");
+  });
 });

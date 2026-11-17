@@ -13,8 +13,10 @@ const SYNTAX_HIGHLIGHTER_PROPS_TO_DELETE = [
 
 // The hanging punctuation rules (.pull-double, .push-single, ...) in a
 // font's styles are global classes sized to that font's quotes. They're right
-// only for the body font, so every other font local drops them, otherwise the
-// last font's rules override the body font's.
+// only for the body font (`font`, or `text_font` in the Blog template), so
+// every other font local drops them, otherwise the last font's rules override
+// the body font's.
+const BODY_FONT_KEYS = ["font", "text_font"];
 const TYPESET_RULE =
   /\.(?:pull|push)-(?:double|single)\s*\{[^}]*\}|\.push-double,\.push-single\s*\{[^}]*\}/g;
 
@@ -48,7 +50,9 @@ function renderFontStyles(fontStyles, fontId) {
 // templates/index.js to compare a bundled template with what's stored.
 function fontStylesFor(key, registryFont) {
   const styles = renderFontStyles(registryFont.styles, registryFont.id);
-  return key === "font" ? styles : styles.replace(TYPESET_RULE, "");
+  return BODY_FONT_KEYS.includes(key)
+    ? styles
+    : styles.replace(TYPESET_RULE, "");
 }
 
 function updateFontProperties(targetFont, sourceFont, key) {

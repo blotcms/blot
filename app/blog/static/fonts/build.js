@@ -400,7 +400,10 @@ async function main() {
 
     // Ignore dot folders and folders whose name
     // starts with a dash
-    .filter((i) => i[0] && i[0] !== "." && i[0] !== "-" && i !== "data")
+    .filter(
+      (i) =>
+        i[0] && i[0] !== "." && i[0] !== "-" && i !== "data" && i !== "tests"
+    )
     .filter((i) => fs.statSync(`${__dirname}/${i}`).isDirectory());
   // .filter((i) => {
   //   return (
@@ -420,6 +423,7 @@ async function main() {
     .readdirSync(__dirname)
     .filter((i) => {
       return (
+        i !== "tests" &&
         fs.statSync(`${__dirname}/${i}`).isDirectory() &&
         fs.existsSync(`${__dirname}/${i}/package.json`)
       );

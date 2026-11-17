@@ -1240,18 +1240,6 @@
     "styles": ""
   },
   {
-    "name": "Tests",
-    "id": "tests",
-    "stack": "'Tests'",
-    "tags": [
-      "sans"
-    ],
-    "line_height": 1.4,
-    "line_width": 38,
-    "font_size": 16,
-    "styles": ""
-  },
-  {
     "name": "TeX Gyre Heros",
     "id": "tex-gyre-heros",
     "specimen": {
