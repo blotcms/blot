@@ -1,5 +1,5 @@
 // Refreshes the stored font styles of every customer template that uses a
-// font, so existing sites serve a stylesheet with the corrected hanging
+// font with hanging punctuation rules, so existing sites serve a stylesheet with the corrected hanging
 // punctuation rules.
 //
 // injectLocals writes each font local's rendered `styles` into the template's
@@ -8,13 +8,13 @@
 // under its hash. So templates saved before the quote widths in
 // blog/static/fonts/build and the dropping of the other fonts' rules in
 // models/template/injectLocals changed keep the old rules until they are
-// saved again. This saves each one's locals again (which re-injects the
+// saved again. This saves each one again (which re-injects the
 // styles and rebuilds its CDN manifest) and bumps the cacheID of the blog it
 // is installed on. Bundled templates need nothing: app/templates compares
 // them with the registry at startup and rebuilds the ones that differ.
 //
 // Templates a person edits as files in their blog folder (localEditing) are
-// skipped, as are templates with no font local. Safe to re-run: saving
+// skipped, as are templates with no font local that has those rules. Safe to re-run: saving
 // unchanged locals changes nothing the second time. To resume, run it again.
 // The cacheID of each blog whose installed template uses a font is bumped on
 // every run, changed or not, so pages relink even after an interrupted run.
@@ -30,15 +30,19 @@ const FONTS = require("blog/static/fonts");
 const apply = process.argv.includes("--apply");
 const totals = { seen: 0, edited: 0, needed: 0, changed: 0, failed: 0 };
 
+// Only fonts whose styles carry hanging punctuation rules are affected; the
+// system fonts have none, so a template using only those needs nothing.
+const TYPESET_FONT_IDS = new Set(
+  FONTS.filter((font) => /\.(pull|push)-(double|single)/.test(font.styles)).map(
+    (font) => font.id
+  )
+);
+
 function usesFont(locals) {
   return Object.keys(locals || {}).some((key) => {
     if (key !== "font" && !key.includes("_font")) return false;
     const font = locals[key];
-    return (
-      font &&
-      typeof font === "object" &&
-      FONTS.some((candidate) => candidate.id === font.id)
-    );
+    return font && typeof font === "object" && TYPESET_FONT_IDS.has(font.id);
   });
 }
 
@@ -60,10 +64,11 @@ async function processTemplate(template, blog) {
 
   try {
     const metadata = await Template.getMetadata(template.id);
-    // Snapshot first: setMetadata injects the styles into the locals object
-    // it is given
     const before = JSON.stringify([metadata.locals, metadata.cdn || {}]);
-    await Template.setMetadata(template.id, { locals: metadata.locals });
+    // No updates: setMetadata reads the stored locals itself, re-injects
+    // their styles and writes them back, so a save made since we read the
+    // template isn't overwritten with older locals.
+    await Template.setMetadata(template.id, {});
     const after = await Template.getMetadata(template.id);
 
     if (before !== JSON.stringify([after.locals, after.cdn || {}])) {
