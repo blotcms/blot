@@ -240,3 +240,115 @@ html[data-auth="in"] .signed-in {
   white-space: nowrap;
   border: 0;
 }
+
+.public-header .public-masthead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 22px 12px 17px;
+}
+
+.public-header .site-brand {
+  flex-direction: column;
+  justify-content: flex-start;
+  gap: 10px;
+  width: 70px;
+  height: auto;
+  padding: 0;
+  background: transparent;
+  color: var(--text-color);
+  font: 400 12px / 1 Arial, sans-serif;
+}
+
+.public-header .site-brand-folder {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 37px;
+}
+
+.public-header .site-brand-folder::before {
+  position: absolute;
+  inset: -9px -5px;
+  border-radius: 6px;
+  background: #e6e6e6;
+  opacity: 0;
+  transition: opacity 140ms ease;
+  content: "";
+}
+
+.public-header .site-brand-logo {
+  z-index: 1;
+  width: 44px;
+  height: 37px;
+  margin: 0;
+}
+
+.public-header .site-brand-label {
+  padding: 1.5px 3.5px;
+  border-radius: 4px;
+  line-height: 14px;
+  transition: color 140ms ease, background-color 140ms ease;
+}
+
+.public-header .site-brand:hover .site-brand-folder::before,
+.public-header .site-brand:focus-visible .site-brand-folder::before {
+  opacity: 1;
+}
+
+.public-header .site-brand:hover .site-brand-label,
+.public-header .site-brand:focus-visible .site-brand-label {
+  background: var(--brochure-accent-color);
+  color: #fff;
+}
+
+.public-header .public-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.public-header .public-navigation a {
+  display: block;
+  padding: 4px 8px;
+  border-radius: 9999px;
+  background: #f5f5f5;
+  color: #111;
+  font: 400 13px / 19.5px system-ui, sans-serif;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease;
+}
+
+.public-header .public-navigation a:hover,
+.public-header .public-navigation a.selected {
+  background: #e9e9e9;
+}
+
+.public-header .public-navigation a:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+@media (max-width: 768px) {
+  .header.public-header {
+    margin-bottom: 0;
+  }
+
+  .public-header .public-masthead {
+    padding-right: 12px;
+    padding-left: 7px;
+  }
+
+  .header.public-header .public-navigation {
+    display: flex;
+    flex: 1;
+    width: auto;
+    padding: 0;
+    border: 0;
+  }
+}

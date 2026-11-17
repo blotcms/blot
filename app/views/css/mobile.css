@@ -83,25 +83,6 @@
   }
 }
 
-@media (max-width: 1050px) {
-  .home-hero {
-    grid-template-columns: minmax(0, 430px);
-    row-gap: 48px;
-    align-items: start;
-    justify-content: center;
-    max-width: 430px;
-    margin-top: 3rem;
-  }
-
-  .home-intro {
-    margin-top: 0;
-  }
-
-  .home-featured {
-    justify-self: center;
-  }
-}
-
 @media (max-width: 768px) {
   .home-tools {
     margin-top: 8rem;

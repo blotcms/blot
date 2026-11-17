@@ -4,6 +4,7 @@ require("./sync_status.js");
 require("./instant.page.js");
 require("./tagify.js");
 require("./examples.js");
+require("./home-intro.js");
 require("./home-folder-carousel.js");
 require("./templates.js");
 require("./questions-ask.js");

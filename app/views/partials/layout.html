@@ -5,7 +5,11 @@
 </head>
 <body class="{{#selected.watch}}watch-page{{/selected.watch}}">
   {{> header}}
-  <main class="content">
+  {{#selected.how}}
+  {{> documentation-layout}}
+  {{/selected.how}}
+  {{^selected.how}}
+  <main class="content {{mainClass}}">
     {{#show-main-section-right}}
     <section class="main-section main-section-with-toc">
       <section class="main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">
@@ -15,9 +19,6 @@
         {{> body}}
       </section>
       <aside class="toc-sidebar">
-        {{#selected.how}}
-        {{> links}}
-        {{/selected.how}}
         {{#show-toc-or-on-this-page}}
         <div id="toc-wrapper">
           <p>On this page</p>
@@ -37,5 +38,6 @@
     {{/show-main-section-right}}
     {{> footer}}
   </main>
+  {{/selected.how}}
 </body>
 </html>

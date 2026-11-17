@@ -1,7 +1,7 @@
 const config = require("config");
 const Express = require("express");
 const redirector = require("./redirector");
-const loadTemplates = require("./build/templates").loadTemplates;
+const home = require("./home");
 const { join } = require("path");
 
 const documentation = Express.Router();
@@ -75,23 +75,16 @@ documentation.get(
 
 documentation.use(require("./selected"));
 
-documentation.get("/", require("./featured"), async function (req, res, next) {
-  try {
-    res.locals.title = "Blot";
-    res.locals.description = "Turns a folder into a website";
-    res.locals.allTemplates = await loadTemplates();
-    // otherwise the <title> of the page is 'Blot - Blot'
-    res.locals.hide_title_suffix = true;
-    next();
-  } catch (error) {
-    next(error);
-  }
+documentation.get("/", home);
+
+documentation.get(["/examples", "/examples/:category"], (req, res) => {
+  res.redirect(301, req.originalUrl.replace(/^\/examples/i, "/discover"));
 });
 
-documentation.get("/examples", require("./featured"));
+documentation.get("/discover", require("./featured"));
 
 documentation.get(
-  "/examples/:category",
+  "/discover/:category",
   require("./featured"),
   require("./featured/filterByCategory")
 );
