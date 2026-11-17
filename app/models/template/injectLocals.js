@@ -43,14 +43,20 @@ function renderFontStyles(fontStyles, fontId) {
   }
 }
 
+// The styles stored for a font local: the registry's, rendered, without
+// the hanging punctuation rules unless it's the body font. Also used by
+// templates/index.js to compare a bundled template with what's stored.
+function fontStylesFor(key, registryFont) {
+  const styles = renderFontStyles(registryFont.styles, registryFont.id);
+  return key === "font" ? styles : styles.replace(TYPESET_RULE, "");
+}
+
 function updateFontProperties(targetFont, sourceFont, key) {
   try {
     // Update core properties
     targetFont.stack = sourceFont.stack;
     targetFont.name = sourceFont.name;
-    const styles = renderFontStyles(sourceFont.styles, sourceFont.id);
-    targetFont.styles =
-      key === "font" ? styles : styles.replace(TYPESET_RULE, "");
+    targetFont.styles = fontStylesFor(key, sourceFont);
 
     // Merge remaining properties
     Object.entries(sourceFont).forEach(([prop, value]) => {
@@ -155,3 +161,5 @@ module.exports = (locals) => {
     console.error("Error processing locals:", error);
   }
 };
+
+module.exports.fontStylesFor = fontStylesFor;
