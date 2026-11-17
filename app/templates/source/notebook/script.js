@@ -9,8 +9,8 @@
 })();
 
 // The sidebar archive: which years and months a reader left open, and the
-// months and posts of older years, fetched from /archives/tree (see
-// archive-tree.html) the first time one of them is opened
+// posts of older years, fetched from /archives/tree (see archive-tree.html)
+// the first time one of them is opened. The months are in the page already.
 (function () {
   var KEY = "notebook-archive";
   var TREE_KEY = "notebook-archive-tree";
@@ -39,73 +39,90 @@
     } catch (e) {}
   }
 
-  function restore(container) {
-    var nodes = container.querySelectorAll("details[data-archive-id]");
-    for (var i = 0; i < nodes.length; i++) {
-      var id = nodes[i].getAttribute("data-archive-id");
-      if (Object.prototype.hasOwnProperty.call(state, id)) {
-        nodes[i].open = !!state[id];
-      }
-    }
-  }
-
   var tree = null;
 
+  // The copy kept from an earlier page of this cacheID, if any
+  function cachedTree() {
+    try {
+      var saved = storage && JSON.parse(storage.getItem(TREE_KEY));
+      if (saved && saved.id === window.notebookCacheID) return saved.html;
+    } catch (e) {}
+    return null;
+  }
+
+  function parse(html) {
+    var holder = document.createElement("div");
+    holder.innerHTML = html;
+    return holder;
+  }
+
   function fetchTree() {
-    if (!tree && window.fetch) {
-      tree = fetch("/archives/tree", { credentials: "same-origin" })
-        .then(function (res) {
-          if (!res.ok) throw new Error("Status " + res.status);
-          return res.text();
-        })
-        .then(function (html) {
-          // Kept for the script in sidebar.html, which uses it to paint the
-          // archive already open next time. A new cacheID retires it.
-          try {
-            if (storage && window.notebookCacheID && html.length < 500000) {
-              storage.setItem(TREE_KEY, JSON.stringify({ id: window.notebookCacheID, html: html }));
-            }
-          } catch (e) {}
-          var holder = document.createElement("div");
-          holder.innerHTML = html;
-          // Opening a year shouldn't also open its newest month. The posts
-          // are already in the page, so a month opens without a request.
-          holder.querySelectorAll("details[open]").forEach(function (d) {
-            d.removeAttribute("open");
+    if (!tree) {
+      var saved = cachedTree();
+      if (saved !== null) {
+        tree = Promise.resolve(parse(saved));
+      } else if (window.fetch) {
+        tree = fetch("/archives/tree", { credentials: "same-origin" })
+          .then(function (res) {
+            if (!res.ok) throw new Error("Status " + res.status);
+            return res.text();
+          })
+          .then(function (html) {
+            // Kept for the script in sidebar.html, which uses it to paint the
+            // archive already open next time. A new cacheID retires it.
+            try {
+              if (storage && window.notebookCacheID && html.length < 500000) {
+                storage.setItem(TREE_KEY, JSON.stringify({ id: window.notebookCacheID, html: html }));
+              }
+            } catch (e) {}
+            return parse(html);
+          })
+          .catch(function () {
+            // The months stay, without their posts, and it is tried again
+            // next time
+            tree = null;
+            return null;
           });
-          return holder;
-        })
-        .catch(function () {
-          // Leave the links to the archives page, and try again next time
-          tree = null;
-          return null;
-        });
+      }
     }
     return tree || Promise.resolve(null);
   }
 
-  // Swaps an older year's link to the archives page for its months
+  // Puts an older year's posts into the months already in the page
   function fill(year) {
     fetchTree().then(function (holder) {
       if (!holder) return;
-      var months = holder.querySelector('[data-archive-year="' + year + '"] .archive-months');
       var details = root.querySelector('details[data-archive-year="' + year + '"]');
-      if (!months || !details || !details.hasAttribute("data-archive-year")) return;
-      var fallback = details.querySelector(".archive-fallback");
-      if (fallback) fallback.parentNode.removeChild(fallback);
-      details.appendChild(months);
+      if (!details) return;
+      var months = holder.querySelectorAll('[data-archive-year="' + year + '"] details[data-archive-id]');
+      for (var i = 0; i < months.length; i++) {
+        var id = months[i].getAttribute("data-archive-id");
+        var mine = details.querySelector('details[data-archive-id="' + id + '"] .archive-posts');
+        var posts = months[i].querySelector(".archive-posts");
+        if (mine && posts) mine.parentNode.replaceChild(posts, mine);
+      }
       details.removeAttribute("data-archive-year");
-      restore(details);
     });
   }
 
   var state = load();
-  restore(root);
+  var saved = root.querySelectorAll("details[data-archive-id]");
+  for (var n = 0; n < saved.length; n++) {
+    var id = saved[n].getAttribute("data-archive-id");
+    if (Object.prototype.hasOwnProperty.call(state, id)) saved[n].open = !!state[id];
+  }
 
   var waiting = root.querySelectorAll("details[data-archive-year]");
   for (var i = 0; i < waiting.length; i++) {
     if (waiting[i].open) fill(waiting[i].getAttribute("data-archive-year"));
   }
+
+  // Start the request as a reader reaches for a year, so it is often back
+  // by the time they open a month
+  root.addEventListener("mouseover", function (e) {
+    var summary = e.target.closest && e.target.closest("summary");
+    if (summary && summary.parentNode.hasAttribute("data-archive-year")) fetchTree();
+  });
 
   root.addEventListener("toggle", function (e) {
     var el = e.target;
