@@ -19,8 +19,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/d-din-expanded/700.woff2?version=8e18a6&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/d-din-expanded/700.woff?version=af49c1&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.337em}
-.push-double{margin-right:0.337em}
+.pull-double {margin-left:-0.338em}
+.push-double{margin-right:0.338em}
 .pull-single{margin-left:-0.177em}
 .push-single{margin-right:0.177em}
 .push-double,.push-single{display:inline-block}

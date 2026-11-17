@@ -11,6 +11,13 @@ const SYNTAX_HIGHLIGHTER_PROPS_TO_DELETE = [
   "colors",
 ];
 
+// The hanging punctuation rules (.pull-double, .push-single, ...) in a
+// font's styles are global classes sized to that font's quotes. They're right
+// only for the body font, so every other font local drops them, otherwise the
+// last font's rules override the body font's.
+const TYPESET_RULE =
+  /\.(?:pull|push)-(?:double|single)\s*\{[^}]*\}|\.push-double,\.push-single\s*\{[^}]*\}/g;
+
 // Cache for rendered font styles
 const fontStylesCache = new Map();
 
@@ -36,12 +43,14 @@ function renderFontStyles(fontStyles, fontId) {
   }
 }
 
-function updateFontProperties(targetFont, sourceFont) {
+function updateFontProperties(targetFont, sourceFont, key) {
   try {
     // Update core properties
     targetFont.stack = sourceFont.stack;
     targetFont.name = sourceFont.name;
-    targetFont.styles = renderFontStyles(sourceFont.styles, sourceFont.id);
+    const styles = renderFontStyles(sourceFont.styles, sourceFont.id);
+    targetFont.styles =
+      key === "font" ? styles : styles.replace(TYPESET_RULE, "");
 
     // Merge remaining properties
     Object.entries(sourceFont).forEach(([prop, value]) => {
@@ -62,7 +71,7 @@ function processFonts(locals) {
       const match = FONTS.find((font) => font.id === value.id);
 
       if (match) {
-        updateFontProperties(locals[key], match);
+        updateFontProperties(locals[key], match, key);
       } else {
         console.warn(`No matching font found for ID: ${value.id}`);
       }

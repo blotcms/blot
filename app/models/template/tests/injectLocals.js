@@ -69,4 +69,30 @@ describe("injectLocals", function () {
     expect(locals.heading).toEqual({ id: "geist" });
     expect(locals.page_size).toEqual(20);
   });
+
+  it("keeps the hanging punctuation rules only on the body font", function () {
+    const locals = {
+      font: { id: "computer-modern" },
+      syntax_highlighter_font: { id: "computer-modern-typewriter" },
+      title_font: { id: "geist" },
+    };
+
+    injectLocals(locals);
+
+    expect(locals.font.styles).toContain(".pull-double");
+    expect(locals.font.styles).toContain(".push-single");
+    expect(locals.syntax_highlighter_font.styles).toContain("@font-face");
+    for (const key of ["syntax_highlighter_font", "title_font"]) {
+      expect(locals[key].styles).not.toMatch(/\.(pull|push)-(double|single)/);
+    }
+  });
+
+  it("sizes the double quote hang to the curly quote, not the straight one", function () {
+    const locals = { font: { id: "computer-modern" } };
+
+    injectLocals(locals);
+
+    // Computer Modern: the curly double quote is 0.3325em wide, the straight " 0.5em
+    expect(locals.font.styles).toMatch(/\.pull-double\s*\{margin-left:-\.3325/);
+  });
 });

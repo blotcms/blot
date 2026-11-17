@@ -47,8 +47,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/inknut-antiqua/900.woff2?version=849d99&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/inknut-antiqua/900.woff?version=17f6eb&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.49em}
-.push-double{margin-right:0.49em}
-.pull-single{margin-left:-0.27em}
-.push-single{margin-right:0.27em}
+.pull-double {margin-left:-0.623em}
+.push-double{margin-right:0.623em}
+.pull-single{margin-left:-0.363em}
+.push-single{margin-right:0.363em}
 .push-double,.push-single{display:inline-block}

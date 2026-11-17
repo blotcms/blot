@@ -19,8 +19,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/infini/bold.woff2?version=96959c&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/infini/bold.woff?version=541aac&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.42em}
-.push-double{margin-right:0.42em}
-.pull-single{margin-left:-0.22em}
-.push-single{margin-right:0.22em}
+.pull-double {margin-left:-0.447em}
+.push-double{margin-right:0.447em}
+.pull-single{margin-left:-0.237em}
+.push-single{margin-right:0.237em}
 .push-double,.push-single{display:inline-block}

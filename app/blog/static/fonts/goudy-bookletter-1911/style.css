@@ -5,8 +5,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/goudy-bookletter-1911/400.woff2?version=1f50b6&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/goudy-bookletter-1911/400.woff?version=f3c8f2&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.388671875em}
-.push-double{margin-right:0.388671875em}
-.pull-single{margin-left:-0.2236328125em}
-.push-single{margin-right:0.2236328125em}
+.pull-double {margin-left:-0.4150390625em}
+.push-double{margin-right:0.4150390625em}
+.pull-single{margin-left:-0.2265625em}
+.push-single{margin-right:0.2265625em}
 .push-double,.push-single{display:inline-block}

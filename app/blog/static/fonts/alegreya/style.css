@@ -152,8 +152,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/alegreya/small-caps-black-italic.woff2?version=c1f0d9&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/alegreya/small-caps-black-italic.woff?version=c81b27&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.298em}
-.push-double{margin-right:0.298em}
+.pull-double {margin-left:-0.331em}
+.push-double{margin-right:0.331em}
 .pull-single{margin-left:-0.176em}
 .push-single{margin-right:0.176em}
 .push-double,.push-single{display:inline-block}

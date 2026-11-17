@@ -19,8 +19,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/et-book/600.woff2?version=11e9d9&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/et-book/600.woff?version=0cc761&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.4248046875em}
-.push-double{margin-right:0.4248046875em}
-.pull-single{margin-left:-0.1845703125em}
-.push-single{margin-right:0.1845703125em}
+.pull-double {margin-left:-0.501953125em}
+.push-double{margin-right:0.501953125em}
+.pull-single{margin-left:-0.27197265625em}
+.push-single{margin-right:0.27197265625em}
 .push-double,.push-single{display:inline-block}

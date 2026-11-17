@@ -12,8 +12,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/chivo/400-italic.woff2?version=b97d92&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/chivo/400-italic.woff?version=073c14&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.395em}
-.push-double{margin-right:0.395em}
-.pull-single{margin-left:-0.231em}
-.push-single{margin-right:0.231em}
+.pull-double {margin-left:-0.41em}
+.push-double{margin-right:0.41em}
+.pull-single{margin-left:-0.246em}
+.push-single{margin-right:0.246em}
 .push-double,.push-single{display:inline-block}

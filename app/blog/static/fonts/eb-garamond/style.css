@@ -12,8 +12,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/eb-garamond/400-italic.woff2?version=4e9b45&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/eb-garamond/400-italic.woff?version=d3a05d&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.33em}
-.push-double{margin-right:0.33em}
-.pull-single{margin-left:-0.2em}
-.push-single{margin-right:0.2em}
+.pull-double {margin-left:-0.418em}
+.push-double{margin-right:0.418em}
+.pull-single{margin-left:-0.242em}
+.push-single{margin-right:0.242em}
 .push-double,.push-single{display:inline-block}

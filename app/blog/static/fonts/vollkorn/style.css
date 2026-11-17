@@ -40,8 +40,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/vollkorn/900-small-caps.woff2?version=31b325&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/vollkorn/900-small-caps.woff?version=2fd5dd&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.343em}
-.push-double{margin-right:0.343em}
-.pull-single{margin-left:-0.198em}
-.push-single{margin-right:0.198em}
+.pull-double {margin-left:-0.386em}
+.push-double{margin-right:0.386em}
+.pull-single{margin-left:-0.242em}
+.push-single{margin-right:0.242em}
 .push-double,.push-single{display:inline-block}

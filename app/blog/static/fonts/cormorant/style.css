@@ -68,8 +68,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/cormorant/700-italic.woff2?version=6f57ca&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/cormorant/700-italic.woff?version=0db14e&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.283em}
-.push-double{margin-right:0.283em}
-.pull-single{margin-left:-0.14em}
-.push-single{margin-right:0.14em}
+.pull-double {margin-left:-0.34em}
+.push-double{margin-right:0.34em}
+.pull-single{margin-left:-0.194em}
+.push-single{margin-right:0.194em}
 .push-double,.push-single{display:inline-block}

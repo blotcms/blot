@@ -124,8 +124,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/fira-sans/900italic.woff2?version=92d9fd&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/fira-sans/900italic.woff?version=41e181&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.399em}
-.push-double{margin-right:0.399em}
-.pull-single{margin-left:-0.219em}
-.push-single{margin-right:0.219em}
+.pull-double {margin-left:-0.406em}
+.push-double{margin-right:0.406em}
+.pull-single{margin-left:-0.228em}
+.push-single{margin-right:0.228em}
 .push-double,.push-single{display:inline-block}

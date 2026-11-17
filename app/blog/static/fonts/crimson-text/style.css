@@ -40,8 +40,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/crimson-text/700-italic.woff2?version=8eb697&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/crimson-text/700-italic.woff?version=621130&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.33984375em}
-.push-double{margin-right:0.33984375em}
-.pull-single{margin-left:-0.181640625em}
-.push-single{margin-right:0.181640625em}
+.pull-double {margin-left:-0.3017578125em}
+.push-double{margin-right:0.3017578125em}
+.pull-single{margin-left:-0.15625em}
+.push-single{margin-right:0.15625em}
 .push-double,.push-single{display:inline-block}

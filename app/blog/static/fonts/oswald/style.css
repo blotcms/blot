@@ -40,8 +40,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/oswald/700.woff2?version=3dcc1d&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/oswald/700.woff?version=ec3f76&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.266em}
-.push-double{margin-right:0.266em}
-.pull-single{margin-left:-0.127em}
-.push-single{margin-right:0.127em}
+.pull-double {margin-left:-0.384em}
+.push-double{margin-right:0.384em}
+.pull-single{margin-left:-0.208em}
+.push-single{margin-right:0.208em}
 .push-double,.push-single{display:inline-block}

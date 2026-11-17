@@ -19,8 +19,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/800.woff2?version=3ad6d2&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/nanum-myeongjo/800.woff?version=5959f5&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.3203125em}
-.push-double{margin-right:0.3203125em}
-.pull-single{margin-left:-0.17578125em}
-.push-single{margin-right:0.17578125em}
+.pull-double {margin-left:-0.4404296875em}
+.push-double{margin-right:0.4404296875em}
+.pull-single{margin-left:-0.2890625em}
+.push-single{margin-right:0.2890625em}
 .push-double,.push-single{display:inline-block}
