@@ -14,8 +14,11 @@
 // them with the registry at startup and rebuilds the ones that differ.
 //
 // Templates a person edits as files in their blog folder (localEditing) are
-// skipped, as are templates with no font local that has those rules. Safe to re-run: saving
-// unchanged locals changes nothing the second time. To resume, run it again.
+// included: injectLocals overwrites their font styles from the registry
+// whatever their package.json says, so saving them now only does what their
+// next sync would, and setMetadata never writes to the folder. Templates with
+// no font that has those rules are skipped. Safe to re-run: saving unchanged
+// locals changes nothing the second time. To resume, run it again.
 // The cacheID of each blog whose installed template uses a font is bumped on
 // every run, changed or not, so pages relink even after an interrupted run.
 //
@@ -28,7 +31,7 @@ const Template = require("models/template");
 const FONTS = require("blog/static/fonts");
 
 const apply = process.argv.includes("--apply");
-const totals = { seen: 0, edited: 0, needed: 0, changed: 0, failed: 0 };
+const totals = { seen: 0, needed: 0, changed: 0, failed: 0 };
 
 // Only fonts whose styles carry hanging punctuation rules are affected; the
 // system fonts have none, so a template using only those needs nothing.
@@ -48,11 +51,6 @@ function usesFont(locals) {
 
 async function processTemplate(template, blog) {
   totals.seen++;
-
-  if (template.localEditing) {
-    totals.edited++;
-    return;
-  }
 
   if (!usesFont(template.locals)) return;
   totals.needed++;
@@ -95,7 +93,7 @@ async function main() {
   await eachTemplate((user, blog, template) => processTemplate(template, blog));
 
   console.log(
-    `Templates seen: ${totals.seen}, skipped as locally edited: ${totals.edited}, ` +
+    `Templates seen: ${totals.seen}, ` +
       `using a font: ${totals.needed}, saved with changes: ${totals.changed}, ` +
       `failed: ${totals.failed}`
   );
