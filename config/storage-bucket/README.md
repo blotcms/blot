@@ -383,10 +383,11 @@ Blot no longer owns the domain.
   sweep** (`index.js` owns the run, `permaCache.js` has the Perma-Cache checks
   below). It runs on whichever
     process holds the `perma-cache:sweep:lease` lock, starts a week after
-    the last run finished, and keeps its progress in the Redis hash
+    the last run finished, but only in a quiet hour (`START_WINDOW`, 02:00 to
+    05:00 UTC; a run in progress, and its second pass, carry on at any hour), and keeps its progress in the Redis hash
     `perma-cache:sweep` (`startedAt`, `cursor`, `mainDoneAt`, `secondCursor`,
-    `totals`, `finishedAt`, `error`; the names predate the move of the sweep into `storage/sweep`):
-    it sweeps, in name order and eight at a time, the union of the top-level
+    `totals`, `finishedAt`, `error`, `full`, `previousStartedAt`, `lastFullAt`; the names predate the move of the sweep into `storage/sweep`):
+    it sweeps, in name order and four at a time (Bunny storage deletes eight at a time), the union of the top-level
     directories of Perma-Cache and the blogs in Redis (so a blog with nothing
     in Perma-Cache still has its generated files swept), and saves the name
     below which all are done, so after a deploy the next holder resumes
@@ -398,8 +399,40 @@ Blot no longer owns the domain.
     the lease's hourly step finds it due) a **second pass** visits again the
     blogs that have a candidate set (below), with the same Redis, S3, Bunny
     order, resuming from `secondCursor`; the run finishes, and the week is
-    counted, when it does. A `report` or `off` run has no second pass. The
-    other directories:
+    counted, when it does. A `report` or `off` run has no second pass.
+
+    **Skipping unchanged blogs.** Only about a sixth of blogs change in a
+    week, so the main pass skips a live blog's generated step and its
+    Perma-Cache check (counted in `skippedUnchanged`) when its `cacheID` is
+    older than the previous run's start less a day (`previousStartedAt`,
+    recorded when an applying run finishes), it has no candidate set, and it
+    isn't in the Redis set `perma-cache:sweep:failed` (blogs whose generated
+    step or Perma-Cache check failed; removed when it next succeeds). Deleted
+    blogs and the shared directories are never skipped. This is safe because
+    every path that makes a generated directory unreferenced or new, or
+    changes what Perma-Cache should hold, ends by setting the blog's `cacheID`
+    after the change: a sync (every client, the dashboard's folder uploads and
+    deletes, the demo blogs), a rebuild, a scheduled publication, `Fix()`, an
+    edit of the installed template, and a change of menu, plugins, handle or
+    domain; replacing the avatar does too (`dashboard/site/save/avatar.js`).
+    The day is because a directory under a day old is never a candidate. A
+    few changes don't set it (an edit of a template the blog hasn't
+    installed, a settings save that changes nothing a render reads, a sync
+    whose files all built the entries already stored, a bump that failed for
+    over a minute while Redis was unavailable, a sync killed by a deploy whose
+    retry builds exactly what is stored), and a stale Perma-Cache copy of an
+    old folder-file URL can appear with no `cacheID` change at all (an old link
+    is fetched), so they are found by the next full run, and skipping only
+    ever delays what the sweep deletes. A run is full, with no skipping, when
+    no full run finished cleanly in the last 28 days (`FULL_AFTER`,
+    `lastFullAt`), so about monthly; also the first run, a run with no
+    `previousStartedAt` and a step given `full: true`. The choice is kept in
+    `full` in the hash. `previousStartedAt` is recorded only by an applying
+    run that finished with no error and no failure counted, so after a report
+    or `off` run, or a run with failures, the next run is full. A run that
+    began before this existed has no `full`, is full, and records neither.
+
+    The other directories:
 
     **Generated files** (`generated.js`, `cache.js`, `s3.js`, `references.js`)
     are the directories of `_image_cache`, `_thumbnails` and

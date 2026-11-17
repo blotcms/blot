@@ -47,8 +47,10 @@ const STATIC_DIRECTORIES = GLOBAL_STATIC_SUBDIRECTORIES.map((dir) =>
   dir.slice(1)
 );
 
-// Top-level directories swept at once, and storage copies deleted at once
-const CONCURRENCY = 8;
+// Top-level directories swept at once (four, to leave the units room: #2760),
+// and storage copies deleted at once
+const SWEEP_CONCURRENCY = 4;
+const DELETE_CONCURRENCY = 8;
 
 // The pull zone's Perma-Cache directory. A full purge of the pull zone starts
 // a new one and leaves the old behind, so anything but exactly one means a
@@ -344,7 +346,7 @@ async function purge(items) {
   );
 }
 
-// Deletes the storage copy of each item, CONCURRENCY at a time
+// Deletes the storage copy of each item, DELETE_CONCURRENCY at a time
 async function removeCopies(items) {
   let i = 0;
 
@@ -355,7 +357,7 @@ async function removeCopies(items) {
     }
   }
 
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  await Promise.all(Array.from({ length: DELETE_CONCURRENCY }, worker));
 }
 
 // A deleted blog: one wildcard purge of its URLs clears the edges, then its
@@ -490,7 +492,7 @@ function checkDeleted(deleted, options) {
     );
 }
 
-// Sweeps entries (top-level listing entries, sorted), CONCURRENCY at a time,
+// Sweeps entries (top-level listing entries, sorted), SWEEP_CONCURRENCY at a time,
 // each with each(entry), which defaults to sweepEntry. The weekly run
 // (./index) passes its own, which sweeps a blog's generated files first.
 // After each, onDone(name) is called with the name below which everything
@@ -529,7 +531,7 @@ async function sweepEntries(
     }
   }
 
-  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  await Promise.all(Array.from({ length: SWEEP_CONCURRENCY }, worker));
 }
 
 // Removes from Perma-Cache everything Blot no longer publishes, in one go:

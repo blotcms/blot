@@ -326,12 +326,18 @@ describe("storage/sweep/permaCache", function () {
   it("resumes a run from its cursor and waits a week after it finishes", async function () {
     zone(["/a-dir/x", "/b-dir/x"]);
 
+    // A run starts only in the quiet hours; this one is not about them
+    const anyHour = { from: 0, to: 24 };
     let time = 1000;
     const now = () => time;
 
     await client.hSet(sweep.STATE, { startedAt: "1", cursor: "a-dir" });
 
-    const totals = await sweep.step(null, { now, generated: "off" });
+    const totals = await sweep.step(null, {
+      now,
+      generated: "off",
+      window: anyHour,
+    });
 
     expect(totals.stale).toBe(1);
     expect(removed).toEqual([BASE + "b-dir/"]);
@@ -342,12 +348,16 @@ describe("storage/sweep/permaCache", function () {
     expect(state.cursor).toBeUndefined();
     expect(state.finishedAt).toBe("1000");
 
-    expect(await sweep.step(null, { now, generated: "off" })).toBe(null);
+    expect(
+      await sweep.step(null, { now, generated: "off", window: anyHour })
+    ).toBe(null);
 
     time += 7 * 24 * 60 * 60 * 1000 + 1;
     removed.length = 0;
 
-    expect((await sweep.step(null, { now, generated: "off" })).stale).toBe(2);
+    expect(
+      (await sweep.step(null, { now, generated: "off", window: anyHour })).stale
+    ).toBe(2);
     expect(removed.sort()).toEqual([BASE + "a-dir/", BASE + "b-dir/"]);
   });
 
