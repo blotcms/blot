@@ -26,8 +26,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700-italic.woff2?version=0cd3cc&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/junicode-condensed/700-italic.woff?version=306865&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.2958984375em}
-.push-double{margin-right:0.2958984375em}
-.pull-single{margin-left:-0.16455078125em}
-.push-single{margin-right:0.16455078125em}
+.pull-double {margin-left:-0.28369140625em}
+.push-double{margin-right:0.28369140625em}
+.pull-single{margin-left:-0.15185546875em}
+.push-single{margin-right:0.15185546875em}
 .push-double,.push-single{display:inline-block}

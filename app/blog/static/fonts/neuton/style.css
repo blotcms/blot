@@ -40,8 +40,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/neuton/800.woff2?version=690d5a&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/neuton/800.woff?version=7d5bf8&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.24267578125em}
-.push-double{margin-right:0.24267578125em}
-.pull-single{margin-left:-0.14111328125em}
-.push-single{margin-right:0.14111328125em}
+.pull-double {margin-left:-0.359375em}
+.push-double{margin-right:0.359375em}
+.pull-single{margin-left:-0.20458984375em}
+.push-single{margin-right:0.20458984375em}
 .push-double,.push-single{display:inline-block}

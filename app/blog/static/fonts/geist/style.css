@@ -12,8 +12,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/geist/400-italic.woff2?version=3e5cbc&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/geist/400-italic.woff?version=090047&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.346em}
-.push-double{margin-right:0.346em}
-.pull-single{margin-left:-0.178em}
-.push-single{margin-right:0.178em}
+.pull-double {margin-left:-0.368em}
+.push-double{margin-right:0.368em}
+.pull-single{margin-left:-0.203em}
+.push-single{margin-right:0.203em}
 .push-double,.push-single{display:inline-block}

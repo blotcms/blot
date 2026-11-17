@@ -12,8 +12,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/fondamento/400-italic.woff2?version=55ef94&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/fondamento/400-italic.woff?version=1589c5&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.34130859375em}
-.push-double{margin-right:0.34130859375em}
-.pull-single{margin-left:-0.19482421875em}
-.push-single{margin-right:0.19482421875em}
+.pull-double {margin-left:-0.39501953125em}
+.push-double{margin-right:0.39501953125em}
+.pull-single{margin-left:-0.21923828125em}
+.push-single{margin-right:0.21923828125em}
 .push-double,.push-single{display:inline-block}

@@ -12,6 +12,7 @@ var chokidar = require("chokidar");
 var parseTemplate = require("models/template/parseTemplate");
 var urlNormalizer = require("helper/urlNormalizer");
 var updateCdnManifest = require("models/template/util/updateCdnManifest");
+var injectLocals = require("models/template/injectLocals");
 var TEMPLATES_DIRECTORY = require("path").resolve(__dirname + "/source");
 var TEMPLATES_OWNER = "SITE";
 
@@ -466,19 +467,14 @@ var SYNTAX_HIGHLIGHTER_VOLATILE_PROPS = [
 // equal and a template with a non-system font (et-book, source-serif, ...)
 // drops/recreates on every startup.
 //
-// `styles` is fully derived from the font `id`, so on the *disk* snapshot we
-// render it from the registry exactly as injectLocals would - making the
+// `styles` is fully derived from the font `id` and the local's key, so on the
+// *disk* snapshot we render it from the registry exactly as injectLocals would
+// (injectLocals.fontStylesFor) - making the
 // snapshot represent the desired stored state. The *stored* snapshot is left
 // as-is. Result: a genuine registry change (e.g. .eot/.ttf -> .woff2) is a
 // real diff and triggers exactly one rebuild that refreshes the stored CSS;
 // once stored matches the registry, subsequent startups compare equal and
 // there is no rebuild loop.
-function renderFontStylesFromRegistry(fontStyles) {
-  return Mustache.render(fontStyles || "", {
-    config: { cdn: { origin: config.cdn.origin } },
-  });
-}
-
 function normalizeLocalsForComparison(locals, renderFontStyles) {
   var normalized = _.cloneDeep(locals || {});
 
@@ -502,7 +498,7 @@ function normalizeLocalsForComparison(locals, renderFontStyles) {
         return f.id === local.id;
       });
       if (registryFont)
-        local.styles = renderFontStylesFromRegistry(registryFont.styles);
+        local.styles = injectLocals.fontStylesFor(key, registryFont);
     });
   }
 

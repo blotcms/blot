@@ -124,8 +124,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/work-sans/900-italic.woff2?version=80e36a&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/work-sans/900-italic.woff?version=c772ca&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.403em}
-.push-double{margin-right:0.403em}
-.pull-single{margin-left:-0.234em}
-.push-single{margin-right:0.234em}
+.pull-double {margin-left:-0.443em}
+.push-double{margin-right:0.443em}
+.pull-single{margin-left:-0.255em}
+.push-single{margin-right:0.255em}
 .push-double,.push-single{display:inline-block}

@@ -5,8 +5,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/violet-sans/400.woff2?version=2bac06&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/violet-sans/400.woff?version=31fd8e&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.379em}
-.push-double{margin-right:0.379em}
-.pull-single{margin-left:-0.2em}
-.push-single{margin-right:0.2em}
+.pull-double {margin-left:-0.367em}
+.push-double{margin-right:0.367em}
+.pull-single{margin-left:-0.194em}
+.push-single{margin-right:0.194em}
 .push-double,.push-single{display:inline-block}

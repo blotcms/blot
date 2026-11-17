@@ -96,8 +96,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/newsreader/800-italic.woff2?version=5ae39e&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/newsreader/800-italic.woff?version=c6ffbd&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.3655em}
-.push-double{margin-right:0.3655em}
-.pull-single{margin-left:-0.207em}
-.push-single{margin-right:0.207em}
+.pull-double {margin-left:-0.4255em}
+.push-double{margin-right:0.4255em}
+.pull-single{margin-left:-0.2455em}
+.push-single{margin-right:0.2455em}
 .push-double,.push-single{display:inline-block}

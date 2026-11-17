@@ -7,6 +7,6 @@
 }
 .pull-double {margin-left:-0.375em}
 .push-double{margin-right:0.375em}
-.pull-single{margin-left:-0.21875em}
-.push-single{margin-right:0.21875em}
+.pull-single{margin-left:-0.25em}
+.push-single{margin-right:0.25em}
 .push-double,.push-single{display:inline-block}

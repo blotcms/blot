@@ -26,8 +26,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700-italic.woff2?version=71b878&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/tex-gyre-heros/700-italic.woff?version=704e0f&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.291em}
-.push-double{margin-right:0.291em}
-.pull-single{margin-left:-0.157em}
-.push-single{margin-right:0.157em}
+.pull-double {margin-left:-0.273em}
+.push-double{margin-right:0.273em}
+.pull-single{margin-left:-0.182em}
+.push-single{margin-right:0.182em}
 .push-double,.push-single{display:inline-block}

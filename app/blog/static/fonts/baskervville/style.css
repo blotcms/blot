@@ -12,8 +12,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/baskervville/400-italic.woff2?version=07c511&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/baskervville/400-italic.woff?version=c03bd5&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.337em}
-.push-double{margin-right:0.337em}
-.pull-single{margin-left:-0.204em}
-.push-single{margin-right:0.204em}
+.pull-double {margin-left:-0.43em}
+.push-double{margin-right:0.43em}
+.pull-single{margin-left:-0.215em}
+.push-single{margin-right:0.215em}
 .push-double,.push-single{display:inline-block}

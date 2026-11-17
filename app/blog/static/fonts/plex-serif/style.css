@@ -110,8 +110,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/plex-serif/bold-italic.woff2?version=f6463b&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/plex-serif/bold-italic.woff?version=bd1b44&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.415em}
-.push-double{margin-right:0.415em}
-.pull-single{margin-left:-0.241em}
-.push-single{margin-right:0.241em}
+.pull-double {margin-left:-0.462em}
+.push-double{margin-right:0.462em}
+.pull-single{margin-left:-0.268em}
+.push-single{margin-right:0.268em}
 .push-double,.push-single{display:inline-block}
