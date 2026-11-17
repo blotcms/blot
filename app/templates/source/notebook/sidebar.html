@@ -6,9 +6,9 @@
       <ul class="archive-list">
         {{#archives}}
         <li>
-          {{! The newest year is in the page. Older years are fetched from
-              archive-tree.html when opened; the link is for readers
-              without JavaScript. }}
+          {{! The newest year, with its posts, is in the page. Older years have
+              their months in the page and their posts fetched from
+              archive-tree.html when the year is opened (script.js). }}
           {{#first}}
           <details data-archive-id="{{year}}" open>
             <summary><span class="archive-label">{{year}}</span> <span class="archive-count">({{total}})</span></summary>
@@ -18,7 +18,8 @@
           {{^first}}
           <details data-archive-id="{{year}}" data-archive-year="{{year}}">
             <summary><span class="archive-label">{{year}}</span> <span class="archive-count">({{total}})</span></summary>
-            <p class="archive-fallback"><a href="/archives#{{year}}">See {{year}} in the archives</a></p>
+            {{> archive-outline}}
+            <noscript><p class="archive-fallback"><a href="/archives#{{year}}">See {{year}} in the archives</a></p></noscript>
           </details>
           {{/first}}
         </li>
@@ -55,3 +56,41 @@
   {{/popular_tags}}
 
 </aside>
+{{! Runs before the page first paints, so the archive opens at the height the
+    reader left it and the layout doesn't jump. It applies the open/closed
+    state saved by script.js and puts the posts of the years left open in
+    from the copy of /archives/tree script.js cached for this cacheID. A
+    publish or template change makes a new cacheID, which retires the cache. }}
+{{#archives.length}}
+<script>
+(function () {
+  // script.js comes from the CDN, which a publish doesn't regenerate, so it
+  // takes the current cacheID from here
+  window.notebookCacheID = "{{cacheID}}";
+  try {
+    var root = document.querySelector(".sidebar .archive-list");
+    var state = JSON.parse(localStorage.getItem("notebook-archive"));
+    var tree = JSON.parse(localStorage.getItem("notebook-archive-tree"));
+    if (!root || !state) return;
+    if (tree && tree.id === "{{cacheID}}") {
+      var holder = document.createElement("div");
+      holder.innerHTML = tree.html;
+      root.querySelectorAll("details[data-archive-year]").forEach(function (d) {
+        var year = d.getAttribute("data-archive-year");
+        if (!state[year]) return;
+        holder.querySelectorAll('[data-archive-year="' + year + '"] details[data-archive-id]').forEach(function (m) {
+          var id = m.getAttribute("data-archive-id");
+          var mine = d.querySelector('details[data-archive-id="' + id + '"] .archive-posts');
+          if (mine) mine.parentNode.replaceChild(m.querySelector(".archive-posts"), mine);
+        });
+        d.removeAttribute("data-archive-year");
+      });
+    }
+    root.querySelectorAll("details[data-archive-id]").forEach(function (d) {
+      var id = d.getAttribute("data-archive-id");
+      if (Object.prototype.hasOwnProperty.call(state, id)) d.open = !!state[id];
+    });
+  } catch (e) {}
+})();
+</script>
+{{/archives.length}}
