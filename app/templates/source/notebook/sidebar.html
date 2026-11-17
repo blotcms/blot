@@ -74,6 +74,9 @@
     if (tree && tree.id === "{{cacheID}}") {
       var holder = document.createElement("div");
       holder.innerHTML = tree.html;
+      holder.querySelectorAll("details[open]").forEach(function (d) {
+        d.removeAttribute("open");
+      });
       root.querySelectorAll("details[data-archive-year]").forEach(function (d) {
         var year = d.getAttribute("data-archive-year");
         var months = state[year] && holder.querySelector('[data-archive-year="' + year + '"] .archive-months');

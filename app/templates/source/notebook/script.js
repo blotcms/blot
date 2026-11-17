@@ -68,6 +68,11 @@
           } catch (e) {}
           var holder = document.createElement("div");
           holder.innerHTML = html;
+          // Opening a year shouldn't also open its newest month. The posts
+          // are already in the page, so a month opens without a request.
+          holder.querySelectorAll("details[open]").forEach(function (d) {
+            d.removeAttribute("open");
+          });
           return holder;
         })
         .catch(function () {
