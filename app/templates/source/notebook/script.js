@@ -13,6 +13,7 @@
 // archive-tree.html) the first time one of them is opened
 (function () {
   var KEY = "notebook-archive";
+  var TREE_KEY = "notebook-archive-tree";
   var root = document.querySelector(".sidebar .archive-list");
   if (!root) return;
 
@@ -58,6 +59,13 @@
           return res.text();
         })
         .then(function (html) {
+          // Kept for the script in sidebar.html, which uses it to paint the
+          // archive already open next time. A new cacheID retires it.
+          try {
+            if (storage && html.length < 500000) {
+              storage.setItem(TREE_KEY, JSON.stringify({ id: "{{cacheID}}", html: html }));
+            }
+          } catch (e) {}
           var holder = document.createElement("div");
           holder.innerHTML = html;
           return holder;

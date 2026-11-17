@@ -55,3 +55,37 @@
   {{/popular_tags}}
 
 </aside>
+{{! Runs before the page first paints, so the archive opens at the height the
+    reader left it and the layout doesn't jump. It applies the open/closed
+    state saved by script.js and fills older years from the copy of
+    /archives/tree script.js cached for this cacheID. A publish or template
+    change makes a new cacheID, which retires the cache. }}
+{{#archives.length}}
+<script>
+(function () {
+  try {
+    var root = document.querySelector(".sidebar .archive-list");
+    var state = JSON.parse(localStorage.getItem("notebook-archive"));
+    var tree = JSON.parse(localStorage.getItem("notebook-archive-tree"));
+    if (!root || !state) return;
+    if (tree && tree.id === "{{cacheID}}") {
+      var holder = document.createElement("div");
+      holder.innerHTML = tree.html;
+      root.querySelectorAll("details[data-archive-year]").forEach(function (d) {
+        var year = d.getAttribute("data-archive-year");
+        var months = state[year] && holder.querySelector('[data-archive-year="' + year + '"] .archive-months');
+        var note = d.querySelector(".archive-fallback");
+        if (!months || !note) return;
+        d.removeChild(note);
+        d.appendChild(months);
+        d.removeAttribute("data-archive-year");
+      });
+    }
+    root.querySelectorAll("details[data-archive-id]").forEach(function (d) {
+      var id = d.getAttribute("data-archive-id");
+      if (Object.prototype.hasOwnProperty.call(state, id)) d.open = !!state[id];
+    });
+  } catch (e) {}
+})();
+</script>
+{{/archives.length}}
