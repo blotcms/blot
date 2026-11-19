@@ -1,0 +1,29 @@
+Unit memory: {{{summary}}}
+
+{{#hasAlerts}}
+{{#alerts}}
+- **{{title}}**: {{{message}}}
+{{/alerts}}
+
+{{/hasAlerts}}
+{{#hasRecovered}}
+**Recovered**
+
+{{#recovered}}
+- {{title}}
+{{/recovered}}
+
+{{/hasRecovered}}
+**Latest readings**
+
+{{#readings}}
+- {{{.}}}
+{{/readings}}
+
+**What to do**
+
+- **Out of memory** (an `oom_kill` counter rose): the kernel killed a process in that cgroup. On the host, `unit-mem-summary.sh` shows the peaks and kills of each unit and sandbox cgroup, `journalctl -k | grep -i oom` which process was killed, and `scripts/prod/read.sh` the unit's logs. A `blot-sandbox-*` name is a sandbox job (or its browser) hitting its own limit, not the unit. At most one email per name per {{thresholds.oomInterval}}; kills in between are counted in the next.
+- **Memory near its limit** (anon+shmem over {{thresholds.memory}} of the unit's limit): this is memory the cgroup can't reclaim, so the unit is close to an OOM kill. `unit-mem-summary.sh` shows which process holds it (`node_a`, `node_b`, `broker`, `proxy`, `top`). Restarting the unit frees it; the cause is the follow-up. Emailed when it starts and when it clears.
+- **Sample stale** (no new sample for {{thresholds.stale}}): `unit-mem-log.sh` stopped running from `/etc/cron.d/blot-unit-mem`, or Redis refused its write. Check `systemctl status crond` and `tail /var/instance-ssd/logs/unit-mem.log` on the host.
+- Host memory is not in this email: see "Host memory low" in the Redis host emails.
+- Full report without sending email: `NODE_PATH=app node app/scheduler/check-unit-memory.js`

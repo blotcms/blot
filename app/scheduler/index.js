@@ -19,6 +19,7 @@ const subscriptionLifecycleJob = require("./subscription-lifecycle");
 const checkSSLCertificates = require("./check-ssl-certificates");
 const renewWildcardSSL = require("./renew-wildcard-ssl");
 const checkRedisHost = require("./check-redis-host");
+const checkUnitMemory = require("./check-unit-memory");
 const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
 const sweep = require("storage/sweep");
@@ -418,6 +419,24 @@ module.exports = function () {
         console.log(clfdate(), "Redis host check skipped: Redis unavailable");
       } else {
         console.log(clfdate(), "Error: Checking Redis host", err);
+      }
+    }
+  });
+
+  // The units' OOM kills and memory near the limit, from the host's sampler
+  // (config/host/scripts/unit-mem-log.sh), which writes every minute.
+  console.log(clfdate(), "Scheduled check of the units' memory");
+  lock.cron("check-unit-memory", "1-59/5 * * * *", async function () {
+    try {
+      const { sent } = await checkUnitMemory({
+        sendEmail: (view) => email.UNIT_MEMORY_ALERT(null, view),
+      });
+      if (sent) console.log(clfdate(), "Sent unit memory alert email");
+    } catch (err) {
+      if (isRedisUnavailableError(err)) {
+        console.log(clfdate(), "Unit memory check skipped: Redis unavailable");
+      } else {
+        console.log(clfdate(), "Error: Checking unit memory", err);
       }
     }
   });

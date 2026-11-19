@@ -56,12 +56,21 @@ proc 30 git 7 'git status'
 proc 31 pandoc 90 'pandoc x'
 proc 40 tini 1 'tini --'
 
+# A stub redis-cli that records its arguments, one per line
+printf '#!/bin/sh\nprintf "%%s\\n" "$@" > "%s/redis-args"\n' "$TMP" > "$TMP/redis-cli"
+chmod +x "$TMP/redis-cli"
+
 LOG=$TMP/unit-mem.log
 run() {
-  UNIT_MEM_LOG=$LOG PROC=$PROC CGROUP_ROOT=$CG DOCKER=$TMP/docker \
+  UNIT_MEM_LOG=$LOG PROC=$PROC CGROUP_ROOT=$CG DOCKER=$TMP/docker REDIS_CLI=$TMP/redis-cli \
     SAMPLES=2 INTERVAL=0 CONTAINERS=blot-blue "$SCRIPTS/unit-mem-log.sh"
 }
 check "the sampler exits cleanly" run
+
+check "the latest sample is stored in Redis" test "$(sed -n 1,2p "$TMP/redis-args" | tr '\n' ' ')" = "SET blot:unit-mem:latest "
+check "the stored value has the alerting fields for the container" \
+  grep -Eq '^[0-9TZ:-]+ name=blot-blue anon=1048576 shmem=0 limit=1073741824 oom_kill=0$' "$TMP/redis-args"
+check "the stored value is one sample, not the log" test "$(grep -c ' name=blot-blue ' "$TMP/redis-args")" = 1
 
 # line <field>: that field of the first blot-blue line
 field() { grep ' name=blot-blue ' "$LOG" | head -1 | tr ' ' '\n' | grep "^$1=" | cut -d= -f2-; }
