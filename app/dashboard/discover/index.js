@@ -138,11 +138,26 @@ add.post("/:token", async (req, res, next) => {
 
 // Locally, BLOT_ADMIN_UID is usually unset, so any account may manage
 // Discover there (see scripts/discover/mirror-featured.js)
+// An uploaded file's bytes. multiparty names the file itself, in the upload
+// directory; anything outside it is refused.
+async function readUpload(upload) {
+  const fs = require("fs-extra");
+  const { resolve, sep } = require("path");
+  const directory = resolve(require("helper/tempDir")()) + sep;
+  const path = resolve(upload.path);
+
+  if (!path.startsWith(directory)) throw new Error("Not an uploaded file");
+
+  return fs.readFile(path);
+}
+
 function isMaintainer(req) {
   if (!req.user) return false;
   if (config.environment === "development") return true;
   return !!(config.admin.uid && req.user.uid === config.admin.uid);
 }
+
+manage.use(require("./rateLimit"));
 
 manage.use((req, res, next) => {
   if (!isMaintainer(req)) {
@@ -231,10 +246,9 @@ manage.post("/profile", async (req, res, next) => {
       typeof req.body.avatarURL === "string" ? req.body.avatarURL.trim() : "";
 
     if (upload && upload.size) {
-      const fs = require("fs-extra");
       await Discover.profile.setAvatarData(
         blogID,
-        await fs.readFile(upload.path),
+        await readUpload(upload),
         crop
       );
     } else if (url) {
