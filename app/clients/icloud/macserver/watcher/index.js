@@ -13,6 +13,7 @@ import {
   recordPushed,
   recordedPaths,
   startTracking,
+  MAX_ENTRIES_PER_BLOG,
 } from "../pushedFiles.js";
 import { iCloudDriveDirectory } from "../config.js";
 import { join } from "path";
@@ -444,6 +445,18 @@ const sweepBlog = async (blogID) => {
   if (!isActive(blogID) || isEvictionSuppressed(blogID)) return;
 
   const recorded = recordedPaths(blogID);
+
+  // Past the cap the record drops its oldest entries, so each upload the
+  // sweep made would push out a file it hasn't compared yet, and every
+  // sweep would push the whole blog again. Such a blog relies on FSEvents
+  // and the journal alone.
+  if (recorded.length >= MAX_ENTRIES_PER_BLOG) {
+    console.warn(
+      clfdate(),
+      `Sweep: skipping ${blogID}, it has more files than the record holds`
+    );
+    return;
+  }
   const seen = new Set();
   let pushes = 0;
 
@@ -635,6 +648,9 @@ const watch = async (blogID) => {
     );
   }
 
+  // chokidar's initial events used to register every blog with the disk
+  // monitor; without them an idle blog could never be evicted
+  markBlogUpdated(blogID);
   markActive(blogID);
 };
 
