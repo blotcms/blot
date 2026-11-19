@@ -87,6 +87,16 @@ describe("sync end-of-sync work", function () {
     expect(template.buildFromFolder).toHaveBeenCalledWith(blogID);
   });
 
+  it("builds templates when the folder root was updated", async function () {
+    const blogID = this.blog.id;
+
+    await sync(blogID, async function (folder) {
+      await folder.update("/");
+    });
+
+    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID);
+  });
+
   it("builds templates when an installed template's removal is pending", async function () {
     const blogID = this.blog.id;
     await folderRenames.setPending(blogID, "SITE_x", { since: Date.now() });

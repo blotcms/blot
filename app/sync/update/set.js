@@ -43,11 +43,15 @@ function isTemplate(path) {
 }
 
 // Whether an update of path can change the templates in the folder: a file
-// inside the templates folder, or the folder itself (it may have been removed
-// or renamed, taking every template in it)
+// inside the templates folder, or the folder itself or its only ancestor, the
+// root (either may have been removed or renamed, taking every template in it)
 function isTemplatePath(path) {
+  const normalized = pathNormalizer(path).toLowerCase();
   return (
-    isTemplate(path) || pathNormalizer(path).toLowerCase() === "/templates"
+    isTemplate(path) ||
+    normalized === "/templates" ||
+    normalized === "/" ||
+    normalized === ""
   );
 }
 
