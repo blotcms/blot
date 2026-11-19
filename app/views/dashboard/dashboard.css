@@ -461,15 +461,6 @@ body.is-resizing-dashboard-sidebar .dashboard-sidebar {
   background: var(--active-background-color);
 }
 
-.dashboard-sidebar__brand .dashboard-sidebar__brand-icon {
-  display: block;
-  width: 18px;
-  height: 18px;
-  background-color: #a8c7fa;
-  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M0 2.75C0 1.784.784 1 1.75 1H5c.55 0 1.07.26 1.4.7l.9 1.2a.25.25 0 0 0 .2.1h6.75C15.216 3 16 3.784 16 4.75v8.5A1.75 1.75 0 0 1 14.25 15H1.75A1.75 1.75 0 0 1 0 13.25z'/%3E%3C/svg%3E");
-  mask-size: contain;
-}
-
 .dashboard-sidebar__nav,
 .dashboard-sidebar__section {
   display: flex;
