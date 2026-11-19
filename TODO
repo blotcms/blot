@@ -49,8 +49,6 @@ Dropbox: a file Dropbox refuses to download (restricted or flagged, a 409 "Confl
 Image jobs run about 3.5x slower in production than on a recent Mac (12 Nov 2026, animated GIF thumbnails)
 - About 2.3x is the CPU (Graviton2, Neoverse-N1) and about 1.5x Alpine's libvips build, resizing above all. The allocator (mimalloc, jemalloc) is under 10%. A newer instance type would speed up every image job.
 
-Prove memory of unit fits into cap
-
 Build add font ui
 
 Could we possibly consolidate storage assets and git s3?
@@ -154,30 +152,12 @@ Render and client-side cache follow-ups (#2390, #2401, #2420, #2426, #2434)
 - From 4 Nov 2026, a day after #2434's deploy (3 Nov, 11:21 UTC): in node-a's [STATS] in both units, check the client-side cache's `redis_cache_evictionCount` against the sum of the `redis_cache_<class>_evictions`. A cache-wide count above that sum means blog keys no longer fit: raise `maxEntries` in app/models/redis.js. Also check `redis_cache_entryCount` against the 10000 cap, and each capped class's evictions against its `CLASS_CAPS` share (app/models/redis-cache.js)
 - In the same lines, check the `redis_cache_session_*` and `redis_cache_user_*` hit rates. Every process starts with 63 `user` misses, one read of a batch of users at boot: find what reads them, and whether it needs to
 - From 10 Nov 2026, a week after #2426: no reports of early logouts, and `sess:*` TTLs stay at or under 30 days (disableTouch plus a fixed ttl, app/dashboard/util/session.js)
-- Then tune the render cache caps (under Memory below)
+- Then tune the render cache caps (#2795)
 - Run the mega benchmark (scripts/benchmarks/mega) twice before merging any render or client-side cache change
 
 ---
 
-Memory: cut each unit's total ceiling (the unit container plus its sandbox cgroups, about 4.8 GiB today now the airlock is gone: 3300m unit, 512M image jobs and proxy jail, 1G browser) to about 3 GiB, then aim for about 2 GiB of real use by shrinking Node itself.
-- Done: the airlock is gone (#2257), the sampler splits node-a, node-b, other node and git (#2413), and git commands are bounded per process (#2415).
-
-Unit and sandbox limits
-- After #2415 is deployed, collect a few days of unit-mem.log including a deploy and a busy period, then read unit-mem-summary.sh: node-a, node-b, other node and git maxima, the sandbox cgroups' peaks and oom_kill, and the host's lowest mem_available.
-- Then lower UNIT memory and the node-a/node-b heaps in scripts/deploy/constants.js to about 2000 MiB, with the node-a and node-b heaps around 1100-1200 MiB (keep V8's heap limit below the cgroup's, so a runaway heap dies with a report, not to the OOM killer), and the sandbox cgroups in config/host/host/setup.sh to about 384 MiB (image jobs and proxy jail) and 700 MiB (browser; real pages peaked at 417 MiB, the heaviest measured needed up to 880 MiB). Accept a few heavy pages failing in the browser jail; sandbox failures email the admin.
-- One-off scripts run with docker exec count against the unit: run anything heavy through scripts/probe (its own container and limit) instead.
-- Is 512 MiB enough for the image jobs, given four share it? The proxy jail (128 MiB) and the fetch-image job (256 MiB, one at a time, #2424) are in the same subtree, so the image jobs take the rest. cgroup peak against limit and oom_kill above 0 in blot-sandbox-blue/green say; `grep "broker: job="` in the unit logs for what failed.
-- The mid-Nov reservation check (host items below) reads the same unit-mem-summary.sh output: do the two together.
-- Does the deploy (scripts/deploy/units.sh) check the host has enough free memory and disk before it starts a new unit?
-
-Node heap and caches
-- Tune the render LRU caches, which now live in app/models (#2401, #2420), from the `render_cache_*` counters and `[SLOW-FILL]` lines in the [STATS] logs (#2233). Include the mustache template cache. Keep the config identical on node-a in blot-blue and blot-green, sized so it fits node-a's heap after the cut (~1100-1200 MiB, of which the client-side cache takes up to ~25 MB, 80 MB ceiling, see app/models/redis.js; before the units the worst case was ~620MB on 27 Oct). node-b in each unit runs with small caches via `BLOT_CACHE_SCALE`, so it is out of this tuning. Pull the counters from node-a in both units (ask before each prod command) and per cache check hit rate, evictions, fill ms (`fillMs`/`fills`, `fillMaxMs`), `uncachedFills` and which blogs the `[SLOW-FILL]` lines name. Then investigate an admission rule: only store a fill in the cache if it took longer than a threshold (~5ms, probably per cache; `fullView` and `getAllCached` are far slower than the rest, which were mostly ~0ms). Cheap fills would stop evicting the expensive ones. Things to settle: the threshold must beat the cost of a hit (every hit does a `cloneDeep`); cost times frequency may matter more than cost alone; fill time includes event-loop delay, so smooth it or add hysteresis; keep coalescing concurrent fills (store then delete, or an own in-flight map as `getAllCached` has); a nashp-sized catalog is slow but huge and may not fit `maxSize`. A two-tier cache or GDSF-style cost-aware eviction are heavier alternatives. Once the capacity counters (missGhost/missCold, evictIdle, hitAge, uncachedBy, cloneMs) have run a day or two on prod, size each cache from them: a high missGhost share means more room would help, a mostly-cold one means it would not.
-- Heap creep: before the units, green's baseline heap crept up ~40-80MB/day (lowest heapUsed in [STATS]) and never reset until a V8 OOM crash (13+14 Oct 2026). Check whether node-a's and node-b's lowest heapUsed still climbs between deploys; if it does, find whether it's a leak or an unbounded cache by comparing heap snapshots taken hours apart. Spikes from heavy post builds (e.g. blog_825ed2a 'All paths', ~250MB) only crash it once the baseline has crept up
-- Later: shrink Node's own memory (the render LRU caches, the heap) toward about 2 GiB per unit in real use; on 2 Nov the unit's own unreclaimable peak was about 1.4-1.6 GiB, with the biggest Node process about 1.15 GiB.
-
-Diagnostics
-- Per-request resource monitoring, e.g. heap size before/after, to find which requests and builds cause the spikes
-- CloudWatch memory metrics on the instance and from the app, or are unit-mem-log.sh and the existing alerts enough?
+Memory: a guaranteed cap per unit, then lowering it, is tracked in #2795 (the unit and sandbox limits, Node heap and cache tuning, heap creep and diagnostics items moved there).
 
 ---
 
@@ -268,7 +248,6 @@ Sandbox follow-ups (#2257):
 - Hardening: a CI job that runs the real jail (nsjail, pasta, the seccomp profile and a cgroup) against the unit image. Today the jail is only exercised by the deploy's verify-container checks on the host.
 - Retire the proxy jail (tinyproxy, proxy/unit/sandbox/proxy.js, egress-proxy.nft, BLOT_EGRESS_PROXY_URL, the proxy check in app/sandbox/alerts.js and verify-container's "sandbox proxy", sandboxProxyPort): the fetch and fetch-image jobs replaced every fetch through it. It frees its 128 MiB cgroup, which is when the image jobs' share of the unit's sandbox subtree grows.
 - Count successful sandbox jobs, not only failures: the broker logs only failed jobs, so how much each job is used shows only in the sampler's cgroup peaks.
-- Before dashboard screenshots of customer sites and template previews: size the browser cgroup and queue for that load (one Chromium per unit at a time today; heavy pages need up to about twice the median), from the sampler's blot-sandbox-<unit>-browser lines.
 - CJK fonts for the browser jail, so sites in those languages don't render as boxes. They are large, so weigh them against the unit image's size.
 ---
 
