@@ -3,6 +3,16 @@ describe("sync update builds", function () {
 
   const blogID = "blog_builds_spec";
 
+  // What promise rejects with, or a failed spec if it resolves
+  async function rejection(promise) {
+    try {
+      await promise;
+    } catch (err) {
+      return err;
+    }
+    fail("expected a rejection");
+  }
+
   function deferred() {
     let resolve;
     const promise = new Promise((r) => (resolve = r));
@@ -146,7 +156,7 @@ describe("sync update builds", function () {
 
       recheck.resolve();
 
-      await expectAsync(batch).toBeRejectedWithError(/NOREPLICAS/);
+      expect(String(await rejection(batch))).toContain("NOREPLICAS");
       expect(settled).toBe(true);
 
       // The next batch starts clean
@@ -188,7 +198,7 @@ describe("sync update builds", function () {
         await build;
       });
 
-      await expectAsync(batch).toBeRejectedWithError(/NOREPLICAS/);
+      expect(String(await rejection(batch))).toContain("NOREPLICAS");
       expect(reads).toBe(2);
     });
   });

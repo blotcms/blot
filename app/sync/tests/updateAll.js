@@ -5,6 +5,16 @@ describe("sync updateAll", function () {
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+  // What promise rejects with, or a failed spec if it resolves
+  async function rejection(promise) {
+    try {
+      await promise;
+    } catch (err) {
+      return err;
+    }
+    fail("expected a rejection");
+  }
+
   // A fake update which records how many ran at once and in what order
   function recorder() {
     const record = { started: [], running: 0, most: 0, overlaps: [] };
@@ -112,7 +122,7 @@ describe("sync updateAll", function () {
       { limit: 3 }
     );
 
-    await expectAsync(updating).toBeRejectedWithError(/NOREPLICAS/);
+    expect(String(await rejection(updating))).toContain("NOREPLICAS");
   });
 
   it("collects other errors and carries on", async function () {
