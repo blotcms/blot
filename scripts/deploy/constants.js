@@ -25,14 +25,28 @@ const SERVING_CPU_SHARES = 2048;
 // and requests need, and the unit's cgroup limit sits above both so a runaway
 // heap dies with a diagnostic report rather than to the OOM killer.
 // cpus overcommits slightly.
+//
+// Scripts run with `docker exec` in a unit are not part of that budget, so
+// they get a small heap of their own (scriptMaxOldSpaceSize: the container's
+// NODE_OPTIONS, which only they inherit, node-a's own options travel as
+// BLOT_NODE_A_OPTIONS) and start at oom_score_adj 1000, so under memory pressure
+// they are killed before node-b (900) or node-a (0). Nothing a script needs
+// beyond 256 MB belongs in a unit: it goes through scripts/prod/run-script.js
+// (SCRIPT_RUNNER), a container of its own outside the units' limits.
 const UNIT = {
   cpus: 4,
   memory: "3300m",
   cpuShares: SERVING_CPU_SHARES,
   nodeAMaxOldSpaceSize: 1800,
   nodeBMaxOldSpaceSize: 750,
+  scriptMaxOldSpaceSize: 256,
   stopTimeout: 40, // above OpenResty drain (10s) plus the app drain (25s): drained in turn
 };
+
+// The runner for heavier scripts (scripts/prod/run-script.js): its own
+// container of the live image, one at a time on the host, outside the units'
+// memory limits. The heap sits below the container's limit.
+const SCRIPT_RUNNER = { memory: "512m", oldSpace: 384 };
 
 // Each app container also listens on a Unix socket in this host directory,
 // bind-mounted at the same path into the app containers and the proxy
@@ -46,6 +60,7 @@ const SOCKET_DIRECTORY = "/run/blot";
 module.exports = {
   SOCKET_DIRECTORY,
   UNIT,
+  SCRIPT_RUNNER,
   REGISTRY_URL: "ghcr.io/blotcms/blot",
   // A single 512m file only held ~6 hours of a container's logs, so the output
   // leading up to a crash-restart was usually gone by the time anyone

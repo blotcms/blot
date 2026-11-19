@@ -493,7 +493,7 @@ time: the file's build flag tells them.
 - **Jobs go first when the host runs out of memory.** The broker's shell sets
   `oom_score_adj` to 1000 before it execs nsjail, so a job is killed before the
   units' Node: `node-b` sets itself to 900 (`app/index.js`) and `node-a` stays
-  at 0. Only Redis's BGSAVE child, also 1000 and larger, goes ahead of it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
+  at 0 (OpenResty is at -900 and a `docker exec` script at 1000: "Kill order" in `proxy/unit/supervisor.sh`). Only Redis's BGSAVE child, also 1000 and larger, goes ahead of it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
 - **The seccomp profile** (`proxy/deploy/sandbox-seccomp.json`) is Docker's
   default plus `clone`, `mount`, `umount2`, `pivot_root` and `sethostname`, so
   nsjail can build the jail, and `setns` and `unshare` for pasta. Nothing else is added: not `--privileged`, not

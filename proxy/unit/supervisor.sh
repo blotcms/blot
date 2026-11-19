@@ -29,6 +29,33 @@
 # (helper/drain), which stops node-b first, and then the broker and the proxy
 # jail. Then this exits 0.
 #
+# Kill order under memory pressure (the container is started with
+# --oom-score-adj 1000 and --cap-add SYS_RESOURCE, proxy/deploy/common.sh).
+# The kernel kills the process with the highest badness, roughly
+# rss + oom_score_adj x limit / 1000, where limit is the container's memory
+# limit. Every process a `docker exec` starts inherits the container's 1000, so
+# a script is the first victim. At startup, while this shell (root) still holds
+# CAP_SYS_RESOURCE, it sets:
+#
+#   tini (pid 1), this supervisor, node-a, the broker, the proxy jail:  0
+#       tini must not stay at 1000: killing pid 1 takes the whole container
+#   OpenResty                                                           -900
+#       the unit dies with it, and the other one takes over
+#   node-b                                                               900
+#       raised by the app itself (app/index.js)
+#   sandbox jobs                                                        1000
+#       raised by the broker (proxy/unit/sandbox/jail.js)
+#
+# With node-b at 900, a script at 1000 is killed before it whenever its resident
+# memory is larger than node-b's minus a tenth of the limit (node-b scores
+# R + 0.9 x limit, a script of S scores S + limit), and anything at 0 goes last.
+# Raising a score needs no privilege, so the app can do it; lowering one below
+# what the container started with needs CAP_SYS_RESOURCE, so everything this
+# supervisor starts loses that capability (setpriv, the bounding and
+# inheritable sets): only this shell and a root `docker exec` keep it. A
+# process the supervisor starts therefore cannot lower its own score, and a
+# script run as the app user never had the capability.
+#
 # Environment: BLOT_UNIT (blue or green) is required. Everything else defaults
 # from it: the sockets in /run/blot (<unit>-a.sock for node-a, <unit>-b.sock for
 # node-b) and the proxy's unit-mode upstreams, with the other unit's sockets as
@@ -56,6 +83,18 @@ export PROXY_UNIT_WORKER="${PROXY_UNIT_WORKER:-unix:$BLOT_WORKER_SOCKET}"
 export PROXY_PEER_MAIN="${PROXY_PEER_MAIN:-unix:/run/blot/$peer-a.sock}"
 export PROXY_PEER_WORKER="${PROXY_PEER_WORKER:-unix:/run/blot/$peer-b.sock}"
 
+# What every child the supervisor starts runs under: no CAP_SYS_RESOURCE, which
+# the kernel needs to lower an oom_score_adj (see "Kill order" above)
+DROP_CAP="/bin/setpriv --bounding-set -sys_resource --inh-caps -sys_resource"
+
+# Sets the score of this process (inherited by what it starts) or of another
+# one. A failure is only reported: a host that did not give the container the
+# capability, such as a local container, has no use for the order either.
+set_oom() { # set_oom <pid or self> <score>
+  echo "$2" > "/proc/$1/oom_score_adj" 2>/dev/null \
+    || echo "supervisor: could not set oom_score_adj of $1 to $2" >&2
+}
+
 # Waits for a child to exit and sets $status. A trapped signal cuts a wait
 # short, so wait again until the child has really gone.
 reap() {
@@ -72,9 +111,15 @@ reap() {
 run_node() {
   # Left unquoted below, so with the sandbox off it adds nothing. A filter that
   # won't load stops Node, which the deploy's checks then catch.
-  filter=
+  filter="$DROP_CAP"
   if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
-    filter="/bin/setpriv --no-new-privs --seccomp-filter $NODE_FILTER"
+    filter="$DROP_CAP --no-new-privs --seccomp-filter $NODE_FILTER"
+  fi
+
+  # the container's NODE_OPTIONS is the small default heap for scripts run with
+  # docker exec; only node-a (and node-b, which forks from it) gets its own
+  if [ -n "${BLOT_NODE_A_OPTIONS:-}" ]; then
+    export NODE_OPTIONS="$BLOT_NODE_A_OPTIONS"
   fi
 
   child=
@@ -116,7 +161,7 @@ run_sandbox() { # run_sandbox <file> <description>
 
   while [ -z "$stopping" ]; do
     env -i PATH=/usr/local/bin:/usr/bin:/bin BLOT_UNIT="$BLOT_UNIT" \
-      /usr/local/bin/node "/usr/local/lib/blot-sandbox/$1" &
+      $DROP_CAP /usr/local/bin/node "/usr/local/lib/blot-sandbox/$1" &
     child=$!
     echo "supervisor: started the $2 pid=$child"
     reap "$child"
@@ -129,6 +174,10 @@ run_sandbox() { # run_sandbox <file> <description>
   done
   exit 0
 }
+
+# tini must outlive everything, so it is not left at the container's 1000
+set_oom 1 0
+set_oom self 0
 
 stopping=
 stop() {
@@ -154,7 +203,7 @@ if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
 fi
 
 # proxy-start (proxy/start.sh) prepares the container, then becomes OpenResty
-/usr/local/bin/proxy-start "$OPENRESTY" -g "daemon off;" &
+( set_oom self -900; exec $DROP_CAP /usr/local/bin/proxy-start "$OPENRESTY" -g "daemon off;" ) &
 reap $!
 
 # A signal cuts the wait short and stop has begun the drain; otherwise

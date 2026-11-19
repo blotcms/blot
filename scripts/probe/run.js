@@ -504,4 +504,7 @@ module.exports = {
   WRAPPER_OPTIONS,
   fromWrapperOptions,
   OUT,
+  shellQuote,
+  chooseImage,
+  describePull,
 };

@@ -352,6 +352,14 @@ run_args() { # run_args <name>
     # must stay above the app's drain timeout (app/helper/drain.js)
     --stop-timeout "$UNIT_STOP_TIMEOUT"
     "${LOG_ARGS[@]}"
+    # Every process a docker exec starts inherits this score, so a script in
+    # a unit is the first thing the kernel kills under memory pressure.
+    # SYS_RESOURCE is what lets the supervisor, which runs as root, lower the
+    # score of tini and of the processes that must outlive a script (see
+    # "Kill order" in proxy/unit/supervisor.sh); it drops the capability from
+    # everything it starts.
+    --oom-score-adj 1000
+    --cap-add SYS_RESOURCE
     --memory "$UNIT_MEMORY" --cpus "$UNIT_CPUS" --cpu-shares "$UNIT_CPU_SHARES"
     --env-file "$SECRETS_ENV_FILE"
     --env-file "$ENV_FILE"
@@ -364,7 +372,10 @@ run_args() { # run_args <name>
     # too, not just the supervisor), node-b is the worker child it forks
     -e "BLOT_SOCKET=$SOCKET_DIRECTORY/$unit-a.sock"
     -e "BLOT_WORKER_SOCKET=$SOCKET_DIRECTORY/$unit-b.sock"
-    -e "NODE_OPTIONS=$node_options"
+    # the supervisor gives these to node-a alone; NODE_OPTIONS, which a script
+    # run with docker exec inherits, is the small default heap
+    -e "BLOT_NODE_A_OPTIONS=$node_options"
+    -e "NODE_OPTIONS=--max-old-space-size=$UNIT_SCRIPT_MAX_OLD_SPACE_SIZE"
     -e "BLOT_WORKER_MAX_OLD_SPACE_SIZE=$UNIT_NODE_B_MAX_OLD_SPACE_SIZE"
     -e "BLOT_TMP_DIRECTORY=$TMP_DIRECTORY"
     # rslave: a mount made on the host at this path reaches the running unit
