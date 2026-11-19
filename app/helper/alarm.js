@@ -125,18 +125,26 @@ module.exports = function alarm(name, handler, options = {}) {
     console.log(clfdate(), "[alarm]", name, message, err ? err.message : "");
   }
 
-  async function set(id, when) {
+  // queueSet and queueCancel add what set and cancel do to a MULTI the caller
+  // owns and execs, so an alarm can change in the same transaction as other keys
+  function queueSet(multi, id, when) {
     requireString(id, "id");
-    await client
-      .multi()
+    return multi
       .zAdd(key, { score: toMs(when), value: id })
-      .hDel(claimsKey, id)
-      .exec();
+      .hDel(claimsKey, id);
+  }
+
+  function queueCancel(multi, id) {
+    requireString(id, "id");
+    return multi.zRem(key, id).hDel(claimsKey, id);
+  }
+
+  async function set(id, when) {
+    await queueSet(client.multi(), id, when).exec();
   }
 
   async function cancel(id) {
-    requireString(id, "id");
-    await client.multi().zRem(key, id).hDel(claimsKey, id).exec();
+    await queueCancel(client.multi(), id).exec();
   }
 
   // Cancels the alarm only if it is still due at `when`, the time it was set
@@ -281,5 +289,15 @@ module.exports = function alarm(name, handler, options = {}) {
     }
   }
 
-  return { set, cancel, cancelIf, when, start, stop, poll };
+  return {
+    set,
+    cancel,
+    queueSet,
+    queueCancel,
+    cancelIf,
+    when,
+    start,
+    stop,
+    poll,
+  };
 };
