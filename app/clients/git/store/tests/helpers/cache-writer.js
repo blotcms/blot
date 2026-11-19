@@ -47,10 +47,12 @@ function entryBytes() {
     if (await cache.put(prefix + i, Buffer.alloc(Number(length), i % 256)))
       stored++;
     if (i % 3 === 0) await cache.get(prefix + Math.floor(i / 2));
+    const t0 = process.hrtime.bigint();
     const seen = entryBytes();
+    const scanMs = Number(process.hrtime.bigint() - t0) / 1e6;
     if (seen > maxSeen) {
       maxSeen = seen;
-      peak = { i, at: Date.now() % 100000, stats: cache.stats() };
+      peak = { i, scanMs, at: Date.now() % 100000, stats: cache.stats() };
     }
   }
   await cache.settle();

@@ -491,7 +491,7 @@ describe("git store cache", function () {
       const cap = 200 * 1024;
       const script = path.join(__dirname, "helpers", "cache-writer.js");
       let worst = 0;
-      for (let round = 0; round < 40; round++) {
+      for (let round = 0; round < 400; round++) {
         const rdir = path.join(dir, "r" + round);
         const children = [0, 1, 2].map((n) =>
           fork(script, [rdir, String(cap), "p" + n, "200", "2000"], {
