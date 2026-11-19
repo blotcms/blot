@@ -23,8 +23,12 @@ const {
 const driveReaddir = require("./util/driveReaddir");
 const localReaddir = require("./util/localReaddir");
 
+const createLimiter = require("./util/limiter");
 const truncateToSecond = require("./util/truncateToSecond");
 const transformDriveItems = require("./util/transformDriveItems");
+
+// How many downloads of a directory run at once, ahead of the build
+const DOWNLOAD_CONCURRENCY = 4;
 
 const SHORTCUT = "application/vnd.google-apps.shortcut";
 
@@ -207,7 +211,14 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     ).length;
     progress.discover(newFileCount);
 
-    for (const {
+    // Work out which files need a download, and start those downloads (a few
+    // at a time) while earlier files are still being built. The loop below
+    // goes through the entries in order and applies each result, so update()
+    // still runs one file at a time.
+    const limit = createLimiter(DOWNLOAD_CONCURRENCY);
+    let stopped = false;
+
+    const plan = async ({
       id,
       name,
       isDirectory,
@@ -215,101 +226,95 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       modifiedTime,
       mimeType,
       md5Checksum,
-    } of remoteContents) {
+    }) => {
       const path = join(dir, name);
       const existsLocally = localContents.find((item) => item.name === name);
 
-      if (!isDirectory) {
-        // e.g. a Drive folder replaced by a Sheet of the same name.
-        // download() can't write a file (or placeholder) over a directory,
-        // and the folder's child mappings must not outlive it.
-        if (existsLocally && existsLocally.isDirectory) {
-          await checkWeCanContinue();
-          console.log("Removing directory", path, "which is a file remotely");
-          const descendants = await localDescendants(blogID, path);
-          await folder.remove(blogID, path);
-          summary.removed += 1;
-          await update(path);
-          for (const descendant of descendants) await update(descendant);
-          const staleId = await getByPath(path);
-          if (staleId && staleId !== id) await remove(staleId);
+      // Compare against the Drive modifiedTime of the version we last
+      // wrote to the blog folder, not the file's own modified time, which
+      // storage backends other than local disk won't let us set. The
+      // record is only trusted while the file is unchanged since that
+      // write (util/localState.js). Files synced before applied records
+      // existed have none yet; their local mtime was set from Drive after
+      // each successful download, so fall back to it until they converge
+      // below.
+      const applied = await getApplied(id);
+
+      // Ensure the file is stored in the database (id <-> path mapping);
+      // any folders will be stored as they are walked.
+      await set(id, path, { isDirectory, modifiedTime });
+
+      // These do not have a md5Checksum so we fall
+      // back to using the modifiedTime
+      const isGoogleAppFile = mimeType.startsWith(
+        "application/vnd.google-apps."
+      );
+
+      // The file's state as its applied or verified record describes it,
+      // brought up to date, or null when the file may have changed since
+      // that record was written
+      let appliedState = null;
+      let verifiedState = null;
+      let identical;
+
+      if (isGoogleAppFile || !md5Checksum) {
+        const isModifiedTimeCurrent = applied
+          ? truncateToSecond(applied.modifiedTime) ===
+              truncateToSecond(modifiedTime) &&
+            Boolean(
+              (appliedState = await localState.unchanged(
+                blogID,
+                path,
+                applied,
+                existsLocally
+              ))
+            )
+          : truncateToSecond(existsLocally?.modifiedTime) ===
+            truncateToSecond(modifiedTime);
+
+        identical = isGoogleAppFile
+          ? isModifiedTimeCurrent
+          : existsLocally?.size === size && isModifiedTimeCurrent;
+
+        // An empty local copy of a Google App file is a placeholder, and
+        // one written before placeholders were flagged goes through
+        // download() once more, which flags it (or exports the Doc, if it
+        // now can), so it isn't taken for a file which really is empty
+        if (
+          identical &&
+          isGoogleAppFile &&
+          existsLocally &&
+          !existsLocally.isDirectory &&
+          existsLocally.size === 0 &&
+          !(await folder.isPlaceholder(blogID, path))
+        ) {
+          identical = false;
         }
+      } else {
+        // Drive's md5Checksum is the one Blot verified the file at this
+        // path against, and the file is unchanged since: no download and
+        // no read. Anything else falls back to download(), which compares
+        // the file's md5 with Drive's before it downloads anything.
+        const cached = verifiedById.get(id);
+        verifiedState =
+          cached && cached.path === path && cached.checksum === md5Checksum
+            ? await localState.unchanged(blogID, path, cached, existsLocally)
+            : null;
+        identical = Boolean(verifiedState);
+      }
 
-        // Compare against the Drive modifiedTime of the version we last
-        // wrote to the blog folder, not the file's own modified time, which
-        // storage backends other than local disk won't let us set. The
-        // record is only trusted while the file is unchanged since that
-        // write (util/localState.js). Files synced before applied records
-        // existed have none yet; their local mtime was set from Drive after
-        // each successful download, so fall back to it until they converge
-        // below.
-        const applied = await getApplied(id);
+      let started = null;
 
-        // Ensure the file is stored in the database (id <-> path mapping);
-        // any folders will be stored as they are walked.
-        await set(id, path, { isDirectory, modifiedTime });
-
-        // These do not have a md5Checksum so we fall
-        // back to using the modifiedTime
-        const isGoogleAppFile = mimeType.startsWith(
-          "application/vnd.google-apps."
-        );
-
-        // The file's state as its applied or verified record describes it,
-        // brought up to date, or null when the file may have changed since
-        // that record was written
-        let appliedState = null;
-        let verifiedState = null;
-        let identical;
-
-        if (isGoogleAppFile || !md5Checksum) {
-          const isModifiedTimeCurrent = applied
-            ? truncateToSecond(applied.modifiedTime) ===
-                truncateToSecond(modifiedTime) &&
-              Boolean(
-                (appliedState = await localState.unchanged(
-                  blogID,
-                  path,
-                  applied,
-                  existsLocally
-                ))
-              )
-            : truncateToSecond(existsLocally?.modifiedTime) ===
-              truncateToSecond(modifiedTime);
-
-          identical = isGoogleAppFile
-            ? isModifiedTimeCurrent
-            : existsLocally?.size === size && isModifiedTimeCurrent;
-
-          // An empty local copy of a Google App file is a placeholder, and
-          // one written before placeholders were flagged goes through
-          // download() once more, which flags it (or exports the Doc, if it
-          // now can), so it isn't taken for a file which really is empty
-          if (
-            identical &&
-            isGoogleAppFile &&
-            existsLocally &&
-            !existsLocally.isDirectory &&
-            existsLocally.size === 0 &&
-            !(await folder.isPlaceholder(blogID, path))
-          ) {
-            identical = false;
+      if (!existsLocally || !identical) {
+        started = limit(async () => {
+          // Nothing starts once the walk is over or can't continue
+          if (stopped) return { stop: new Error("Sync stopped") };
+          try {
+            await checkWeCanContinue();
+          } catch (err) {
+            return { stop: err };
           }
-        } else {
-          // Drive's md5Checksum is the one Blot verified the file at this
-          // path against, and the file is unchanged since: no download and
-          // no read. Anything else falls back to download(), which compares
-          // the file's md5 with Drive's before it downloads anything.
-          const cached = verifiedById.get(id);
-          verifiedState =
-            cached && cached.path === path && cached.checksum === md5Checksum
-              ? await localState.unchanged(blogID, path, cached, existsLocally)
-              : null;
-          identical = Boolean(verifiedState);
-        }
 
-        if (!existsLocally || !identical) {
-          await checkWeCanContinue();
           // A missing existsLocally was already added to total by the
           // discover() pass above; only a type mismatch (local dir where a
           // file is expected) is new work discovered here.
@@ -330,123 +335,194 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           }
 
           try {
-            const result = await download(
-              blogID,
-              drive,
-              path,
-              {
-                id,
-                md5Checksum,
-                mimeType,
+            return {
+              result: await download(
+                blogID,
+                drive,
+                path,
+                { id, md5Checksum, mimeType, modifiedTime },
+                { serviceAccountId, folderId }
+              ),
+            };
+          } catch (error) {
+            return { error };
+          }
+        });
+      }
+
+      return {
+        applied,
+        appliedState,
+        verifiedState,
+        isGoogleAppFile,
+        started,
+      };
+    };
+
+    // Plans run in order, ahead of the loop below. A failed plan fails every
+    // later one, and the loop throws it when it reaches that file.
+    const plans = new Map();
+    let previous = Promise.resolve();
+    for (const entry of remoteContents) {
+      const local = localContents.find((item) => item.name === entry.name);
+      // A directory in the way of a file is removed first, in the loop
+      if (entry.isDirectory || (local && local.isDirectory)) continue;
+      previous = previous.then(() => plan(entry));
+      previous.catch(() => {});
+      plans.set(entry.id, previous);
+    }
+
+    try {
+      for (const entry of remoteContents) {
+        const { id, name, isDirectory, modifiedTime, md5Checksum } = entry;
+        const path = join(dir, name);
+        const existsLocally = localContents.find((item) => item.name === name);
+
+        if (!isDirectory) {
+          // e.g. a Drive folder replaced by a Sheet of the same name.
+          // download() can't write a file (or placeholder) over a directory,
+          // and the folder's child mappings must not outlive it.
+          if (existsLocally && existsLocally.isDirectory) {
+            await checkWeCanContinue();
+            console.log("Removing directory", path, "which is a file remotely");
+            const descendants = await localDescendants(blogID, path);
+            await folder.remove(blogID, path);
+            summary.removed += 1;
+            await update(path);
+            for (const descendant of descendants) await update(descendant);
+            const staleId = await getByPath(path);
+            if (staleId && staleId !== id) await remove(staleId);
+          }
+
+          const {
+            applied,
+            appliedState,
+            verifiedState,
+            isGoogleAppFile,
+            started,
+          } = plans.has(id) ? await plans.get(id) : await plan(entry);
+
+          if (started) {
+            // The download may be done already or still running; either way
+            // it is applied here, in order. A stop is thrown, not counted as a
+            // failed download, and a download that finished after the sync
+            // lost its folder isn't applied.
+            const outcome = await started;
+            if (outcome.stop) throw outcome.stop;
+            await checkWeCanContinue();
+
+            try {
+              if (outcome.error) throw outcome.error;
+              const result = outcome.result;
+
+              if (result?.skippedReason === "exportSizeLimitExceeded") {
+                publish("Skipped oversized Google Doc", path);
+              }
+
+              // A previous rebuild/cache-store may have failed after publication.
+              // Rebuild before recording verification, even if bytes now match.
+              // Only count downloads that changed local bytes: a verified
+              // match isn't a missed
+              // change, even though it still triggers a rebuild below.
+              if (result?.updated) {
+                summary.downloaded += 1;
+                if (modifiedSince(modifiedTime, startedAt)) {
+                  summary.modifiedDuringWalk += 1;
+                }
+              }
+              if (
+                result?.updated ||
+                (!isGoogleAppFile && result?.verifiedContent)
+              ) {
+                await update(path);
+              }
+              if (!isGoogleAppFile && result?.verifiedContent) {
+                await setVerifiedContent(id, {
+                  path,
+                  ...result.verifiedContent,
+                });
+              }
+
+              // Only trust the remote modifiedTime once download() has
+              // returned without throwing: the blog folder now reflects that remote
+              // state. A failed download must not be treated as up to date, so
+              // this must not run in the catch below. A verified download
+              // already knows the file's state; anything else is described
+              // afresh.
+              await setApplied(id, {
                 modifiedTime,
-              },
-              {
-                serviceAccountId,
-                folderId,
-              }
-            );
+                ...(!isGoogleAppFile && result?.verifiedContent
+                  ? stateFields(result.verifiedContent)
+                  : await localState.stateOf(blogID, path)),
+              });
+            } catch (err) {
+              publish("Download failed", path);
+              console.error("Download failed for", path, err);
+              summary.failed += 1;
+              if (!summary.firstError)
+                summary.firstError = path + ": " + err.message;
+            }
+          } else {
+            progress.publishThrottled("Checking", path);
 
-            if (result?.skippedReason === "exportSizeLimitExceeded") {
-              publish("Skipped oversized Google Doc", path);
-            }
-
-            // A previous rebuild/cache-store may have failed after publication.
-            // Rebuild before recording verification, even if bytes now match.
-            // Only count downloads that changed local bytes: a verified
-            // match isn't a missed
-            // change, even though it still triggers a rebuild below.
-            if (result?.updated) {
-              summary.downloaded += 1;
-              if (modifiedSince(modifiedTime, startedAt)) {
-                summary.modifiedDuringWalk += 1;
-              }
-            }
-            if (
-              result?.updated ||
-              (!isGoogleAppFile && result?.verifiedContent)
-            ) {
-              await update(path);
-            }
-            if (!isGoogleAppFile && result?.verifiedContent) {
-              await setVerifiedContent(id, { path, ...result.verifiedContent });
+            // Unchanged, but the record was in the older form, or the file's
+            // modified time moved while its SHA-1 didn't (the same bytes
+            // written again): bring the record up to date, so the next sync
+            // matches on size and modified time alone
+            if (verifiedState && verifiedState.stale) {
+              await setVerifiedContent(id, {
+                path,
+                checksum: md5Checksum,
+                ...stateFields(verifiedState),
+              });
             }
 
-            // Only trust the remote modifiedTime once download() has
-            // returned without throwing: the blog folder now reflects that remote
-            // state. A failed download must not be treated as up to date, so
-            // this must not run in the catch below. A verified download
-            // already knows the file's state; anything else is described
-            // afresh.
-            await setApplied(id, {
-              modifiedTime,
-              ...(!isGoogleAppFile && result?.verifiedContent
-                ? stateFields(result.verifiedContent)
-                : await localState.stateOf(blogID, path)),
-            });
-          } catch (err) {
-            publish("Download failed", path);
-            console.error("Download failed for", path, err);
-            summary.failed += 1;
-            if (!summary.firstError)
-              summary.firstError = path + ": " + err.message;
+            if (appliedState && appliedState.stale) {
+              await setApplied(id, {
+                modifiedTime: applied.modifiedTime,
+                ...stateFields(appliedState),
+              });
+            }
+
+            // Converge: the local file already matches remotely, even though
+            // we only know that via the local-mtime fallback (or, for a file
+            // with an md5Checksum, its verified record). Store the remote
+            // modifiedTime now so future syncs no longer need it.
+            if (!applied) {
+              await setApplied(id, {
+                modifiedTime,
+                ...(verifiedState
+                  ? stateFields(verifiedState)
+                  : localState.stamp(existsLocally)),
+              });
+            }
           }
         } else {
-          progress.publishThrottled("Checking", path);
-
-          // Unchanged, but the record was in the older form, or the file's
-          // modified time moved while its SHA-1 didn't (the same bytes
-          // written again): bring the record up to date, so the next sync
-          // matches on size and modified time alone
-          if (verifiedState && verifiedState.stale) {
-            await setVerifiedContent(id, {
-              path,
-              checksum: md5Checksum,
-              ...stateFields(verifiedState),
-            });
+          if (existsLocally && !existsLocally.isDirectory) {
+            await checkWeCanContinue();
+            progress.publish("Removing file", path);
+            console.log("Removing file", path, "which is a directory remotely");
+            await folder.remove(blogID, path);
+            summary.removed += 1;
+            publish("Creating directory", path);
+            await folder.mkdir(blogID, path);
+            summary.createdDirs += 1;
+            await update(path);
+          } else if (!existsLocally) {
+            await checkWeCanContinue();
+            publish("Creating directory", path);
+            console.log("Creating directory locally", path);
+            await folder.mkdir(blogID, path);
+            summary.createdDirs += 1;
+            await update(path);
           }
 
-          if (appliedState && appliedState.stale) {
-            await setApplied(id, {
-              modifiedTime: applied.modifiedTime,
-              ...stateFields(appliedState),
-            });
-          }
-
-          // Converge: the local file already matches remotely, even though
-          // we only know that via the local-mtime fallback (or, for a file
-          // with an md5Checksum, its verified record). Store the remote
-          // modifiedTime now so future syncs no longer need it.
-          if (!applied) {
-            await setApplied(id, {
-              modifiedTime,
-              ...(verifiedState
-                ? stateFields(verifiedState)
-                : localState.stamp(existsLocally)),
-            });
-          }
+          await walk(path, id);
         }
-      } else {
-        if (existsLocally && !existsLocally.isDirectory) {
-          await checkWeCanContinue();
-          progress.publish("Removing file", path);
-          console.log("Removing file", path, "which is a directory remotely");
-          await folder.remove(blogID, path);
-          summary.removed += 1;
-          publish("Creating directory", path);
-          await folder.mkdir(blogID, path);
-          summary.createdDirs += 1;
-          await update(path);
-        } else if (!existsLocally) {
-          await checkWeCanContinue();
-          publish("Creating directory", path);
-          console.log("Creating directory locally", path);
-          await folder.mkdir(blogID, path);
-          summary.createdDirs += 1;
-          await update(path);
-        }
-
-        await walk(path, id);
       }
+    } finally {
+      // Downloads not started yet must not start now
+      stopped = true;
     }
   };
 
