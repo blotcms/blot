@@ -76,6 +76,21 @@ describe("models/discover", function () {
     await Blog.set(this.blog.id, { includeInDiscover: true });
   });
 
+  it("shows recent dates as relative and older ones in full", function () {
+    const { formatDate } = require("models/discover/list");
+    const now = Date.UTC(2026, 10, 19, 12);
+    const hour = 60 * 60 * 1000;
+
+    expect(formatDate(now - 30 * 1000, "UTC", now)).toBe("just now");
+    expect(formatDate(now - 5 * 60 * 1000, "UTC", now)).toBe("5m");
+    expect(formatDate(now - 4 * hour, "UTC", now)).toBe("4h");
+    expect(formatDate(now - 3 * 24 * hour, "UTC", now)).toBe("3d");
+    expect(formatDate(now - 15 * 24 * hour, "UTC", now)).toBe("2w");
+    expect(formatDate(now - 40 * 24 * hour, "UTC", now)).toBe(
+      "10 October 2026"
+    );
+  });
+
   it("uses a token once, and reading it does not use it up", async function () {
     const token = await Discover.token.create(this.blog.id, "/a.txt");
 

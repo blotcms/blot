@@ -195,24 +195,27 @@
   background: var(--light-background-color);
 }
 
+/* The site's favicon and address, under a rule */
 .discover-link-site {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 0.85rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
   font-size: var(--small-font-size);
   color: var(--medium-text-color);
 }
 
 .discover-link-site img {
-  width: 20px;
-  height: 20px;
-  border-radius: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
   object-fit: cover;
 }
 
 .discover-link-title {
   display: block;
-  margin-top: 0.5rem;
   font-size: 1.1em;
   font-weight: 500;
   line-height: 1.35;
@@ -230,14 +233,14 @@
   line-height: 1.5;
 }
 
-.discover-date {
+.discover-card .discover-date {
   display: inline-block;
   margin-top: 0.75rem;
   font-size: var(--small-font-size);
-  color: var(--medium-text-color);
+  color: var(--light-text-color);
 }
 
-.discover-date:hover {
+.discover-card .discover-date:hover {
   color: var(--accent-color);
 }
 

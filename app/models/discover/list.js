@@ -31,9 +31,27 @@ function hiddenBecause(record, blog, entry, shown) {
   return null;
 }
 
-// "19 November 2026", in the blog's time zone
-function formatDate(dateStamp, timeZone) {
+const MINUTE = 60 * 1000;
+const HOUR = 60 * MINUTE;
+const DAY = 24 * HOUR;
+const WEEK = 7 * DAY;
+const MONTH = 30 * DAY;
+
+// Under a month old: "just now", "5m", "4h", "3d", "2w". Older: "19 November
+// 2026", in the blog's time zone. The page isn't cached, so this is worked
+// out as it is rendered.
+function formatDate(dateStamp, timeZone, now = Date.now()) {
   if (!dateStamp) return "";
+
+  const age = now - dateStamp;
+
+  if (age >= 0 && age < MONTH) {
+    if (age < MINUTE) return "just now";
+    if (age < HOUR) return Math.floor(age / MINUTE) + "m";
+    if (age < DAY) return Math.floor(age / HOUR) + "h";
+    if (age < WEEK) return Math.floor(age / DAY) + "d";
+    return Math.floor(age / WEEK) + "w";
+  }
 
   const options = { day: "numeric", month: "long", year: "numeric" };
 
@@ -170,3 +188,4 @@ async function list(options = {}) {
 
 module.exports = list;
 module.exports.cards = cards;
+module.exports.formatDate = formatDate;
