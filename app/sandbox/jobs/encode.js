@@ -7,6 +7,13 @@ const fs = require("fs/promises");
 const os = require("os");
 const path = require("path");
 
+// The most pixels sharp decodes from one input in these jobs (its default is
+// 268 MP, about 1 GiB of RGBA). A larger image fails like one that can't be
+// decoded: the same sharp error as a corrupt file, so the callers' handling is
+// unchanged (no thumbnail, an image left as it was written). template-image and
+// favicon have the same limit.
+const MAX_INPUT_PIXELS = 100 * 1000 * 1000;
+
 const EXTENSION = /^(\.[a-z0-9]{1,8})?$/;
 
 function isExtension(extension) {
@@ -24,4 +31,4 @@ async function encode(pipeline, extension) {
   }
 }
 
-module.exports = { encode, isExtension };
+module.exports = { encode, isExtension, MAX_INPUT_PIXELS };

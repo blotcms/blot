@@ -13,14 +13,15 @@
 // made in one jail, not two.
 //
 // An animated image costs every frame of every size, so it has a budget
-// (BUDGET, which a spec may lower with args.budget). Past it, the thumbnails
-// are of the first frame, and meta.firstFrame is true. Within it, a GIF
+// (BUDGET, which a spec may lower with args.budget), and every frame is decoded
+// at once, so it has another (DECODE_BUDGET, args.decodeBudget). Past either, the thumbnails are
+// of the first frame, and meta.firstFrame is true. Within it, a GIF
 // size that comes out the GIF's own size is its bytes as they are, and the
 // other sizes are made largest first, each from the smallest one already made
 // that covers it.
 
 const sharp = require("sharp");
-const { encode, isExtension } = require("./encode");
+const { encode, isExtension, MAX_INPUT_PIXELS } = require("./encode");
 
 // Sharp seems to cache files based on their path and not the contents
 // of the file at that path, so stale versions of a file in a blog's
@@ -35,8 +36,13 @@ const MAX_SIZES = 16;
 // what the build waits (app/build/thumbnail/create.js).
 const BUDGET = 50 * 1000 * 1000;
 
-// sharp's limitInputPixels, which counts every frame of an animated image
-const MAX_INPUT_PIXELS = 268402689;
+// The most frame-pixels (width x height x frames) of an animated image that are
+// decoded at once. sharp holds every frame of an animation as raw RGBA, 4 bytes
+// a pixel, so this is about 160 MB for the decode, the least that leaves room
+// for the encoders in a 320-384 MiB jail: a 4 MP image of 10 frames, or a
+// 500x400 animation of 200 frames. Past it the thumbnails are of the first
+// frame, as they are past BUDGET.
+const DECODE_BUDGET = 40 * 1000 * 1000;
 
 // The largest animated GIF passed through as is. Two sizes may both be the
 // image's own size, and the job's output is capped (proxy/unit/sandbox/jail.js).
@@ -112,12 +118,24 @@ function check(args) {
     budget = args.budget;
   }
 
+  let decodeBudget = DECODE_BUDGET;
+  if (args.decodeBudget !== undefined) {
+    if (
+      !Number.isInteger(args.decodeBudget) ||
+      args.decodeBudget < 1 ||
+      args.decodeBudget > DECODE_BUDGET
+    )
+      throw new Error("invalid decodeBudget");
+    decodeBudget = args.decodeBudget;
+  }
+
   return {
     extension: args.extension,
     animated: args.animated,
     sizes,
     accept: checkAccept(args.accept),
     budget,
+    decodeBudget,
   };
 }
 
@@ -141,7 +159,9 @@ function fitted(width, height, { size, crop }) {
 
 // One size of a still image, or of an animated image's first frame
 function still(input, { size, crop }) {
-  const transform = sharp(input).keepIccProfile().rotate();
+  const transform = sharp(input, { limitInputPixels: MAX_INPUT_PIXELS })
+    .keepIccProfile()
+    .rotate();
   return crop
     ? transform.resize(size, size, {
         withoutEnlargement: true,
@@ -154,7 +174,7 @@ function still(input, { size, crop }) {
 // One size of an animated image, every frame. Animated images have never kept
 // their profile, nor had their crop weighted by entropy.
 function moving(input, { size, crop }) {
-  return sharp(input, { animated: true })
+  return sharp(input, { animated: true, limitInputPixels: MAX_INPUT_PIXELS })
     .rotate()
     .resize(size, size, {
       withoutEnlargement: true,
@@ -163,10 +183,15 @@ function moving(input, { size, crop }) {
 }
 
 async function run(args, input) {
-  const { extension, animated, sizes, accept, budget } = check(args);
+  const { extension, animated, sizes, accept, budget, decodeBudget } =
+    check(args);
 
-  // The first frame's size, as the metadata job reads it, animated or not
-  const { format, width, height, pages } = await sharp(input).metadata();
+  // The first frame's size, as the metadata job reads it, animated or not. The
+  // header only: no frame is decoded. An image over MAX_INPUT_PIXELS fails here,
+  // as one sharp can't read does.
+  const { format, width, height, pages } = await sharp(input, {
+    limitInputPixels: MAX_INPUT_PIXELS,
+  }).metadata();
   const source = { format, width, height };
   if (!accepted(source, accept))
     return { meta: { source, thumbnails: null }, outputs: [] };
@@ -188,7 +213,7 @@ async function run(args, input) {
   });
 
   // Encoding every frame is what costs: about 5M pixels a second in a
-  // production jail. Past the budget, or past what sharp decodes, the
+  // production jail. Past the budget, or past what is decoded at once, the
   // thumbnails are of the first frame.
   const encoded = plan
     .filter((p) => !p.same)
@@ -196,7 +221,7 @@ async function run(args, input) {
   const firstFrame =
     animated &&
     frames > 1 &&
-    (encoded > budget || width * height * frames > MAX_INPUT_PIXELS);
+    (encoded > budget || width * height * frames > decodeBudget);
 
   const results = new Array(plan.length);
 
@@ -259,4 +284,4 @@ async function run(args, input) {
   return { meta, outputs: results.map(({ data }) => data) };
 }
 
-module.exports = { run, BUDGET };
+module.exports = { run, BUDGET, DECODE_BUDGET };

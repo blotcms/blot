@@ -39,6 +39,13 @@ const node = (name) => [
   name,
 ];
 
+// The sharp jobs that decode a whole image (thumbnail, resize, to-png) share one
+// limit: two of them at once per unit, however they mix. One takes up to about
+// 4 bytes a pixel of a 100 MP image (app/sandbox/jobs/encode.js), so more would
+// not fit the unit's sandbox subtree. Jobs wait their turn in the broker's
+// queue, which answers busy after 32 and drops what has waited 60s.
+const HEAVY_IMAGE = { group: "heavy-image", maxRunning: 2 };
+
 // A job is a name from this table, never a path or a command from the client
 const JOBS = {
   metadata: {
@@ -53,6 +60,7 @@ const JOBS = {
   // The broker can't tell the client has gone (see the README's Protocol).
   thumbnail: {
     command: node("thumbnail"),
+    ...HEAVY_IMAGE,
     memoryBytes: 512 * MiB,
     timeSeconds: 20,
     maxInputBytes: 256 * MiB,
@@ -60,6 +68,7 @@ const JOBS = {
   },
   resize: {
     command: node("resize"),
+    ...HEAVY_IMAGE,
     memoryBytes: 512 * MiB,
     timeSeconds: 60,
     maxInputBytes: 256 * MiB,
@@ -67,6 +76,7 @@ const JOBS = {
   },
   "to-png": {
     command: node("to-png"),
+    ...HEAVY_IMAGE,
     memoryBytes: 512 * MiB,
     timeSeconds: 60,
     maxInputBytes: 256 * MiB,
@@ -97,13 +107,13 @@ const JOBS = {
   // pandoc's start-up (~30 ms of it reading our markdown extensions) each
   // time. timeSeconds is a worker's whole life, which the broker ends sooner
   // (worker.maxAgeSeconds); one document has worker.requestSeconds, after which
-  // the broker kills the worker. pandoc caps its own heap at 400M, so most
+  // the broker kills the worker. pandoc caps its own heap at 256M, so most
   // documents too large for the jail exit pandoc rather than the jail.
   pandoc: {
     command: [
       "/usr/local/bin/pandoc",
       "+RTS",
-      "-M400M",
+      "-M256M",
       "-RTS",
       "lua",
       "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",
@@ -117,7 +127,7 @@ const JOBS = {
       requests: 500,
       maxAgeSeconds: 300,
       idleSeconds: 60,
-      maxIdle: 2,
+      maxIdle: 1,
       // A worker that took more than this (a big document) is retired rather
       // than kept, so an idle worker's heap stays small (~20-40 MiB)
       heavyInputBytes: 1 * MiB,

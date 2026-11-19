@@ -147,12 +147,15 @@ function createBroker(options = {}) {
 
   // A job may have its own limit, below the broker's, and a jail in its own
   // cgroup needs one of them free
+  // A job's limit counts the jobs of its group (job.group, which jobs that
+  // share a memory cost name alike), or itself if it has none
   function hasRoom({ name, job }) {
     if (running.size >= maxRunning) return false;
     if (job.cgroups && !freeCgroup(job)) return false;
     if (!job.maxRunning) return true;
+    const group = job.group || name;
     let same = 0;
-    for (const entry of running) if (entry.name === name) same++;
+    for (const entry of running) if (entry.group === group) same++;
     return same < job.maxRunning;
   }
 
@@ -228,7 +231,7 @@ function createBroker(options = {}) {
     } catch (e) {
       return fail(socket, "failed");
     }
-    const entry = { child, name, cgroup: directory };
+    const entry = { child, name, group: job.group || name, cgroup: directory };
     running.add(entry);
     if (directory) lastNameIn.set(directory, name);
     const queuedMs = started - request.arrived;
