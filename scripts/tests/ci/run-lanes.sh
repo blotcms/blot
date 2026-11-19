@@ -63,9 +63,9 @@ start_lane() {
   docker network create "lane-$lane" > /dev/null
   docker run -d --name "lane-$lane-redis" --network "lane-$lane" "$REDIS_IMAGE" > /dev/null
   # The runner creates the bucket and waits for MinIO (scripts/tests/util/bucket.js)
-  (sleep 25; docker run -d --name "lane-$lane-minio" --network "lane-$lane" --user root \
+  docker run -d --name "lane-$lane-minio" --network "lane-$lane" --user root \
     -e MINIO_ROOT_USER=blot-test -e MINIO_ROOT_PASSWORD=blot-test-secret \
-    "$MINIO_IMAGE" server /data --address :9000 > /dev/null) &
+    "$MINIO_IMAGE" server /data --address :9000 > /dev/null
   for i in $(seq 1 30); do
     docker exec "lane-$lane-redis" redis-cli ping > /dev/null 2>&1 && return 0
     sleep 1
