@@ -9,7 +9,6 @@ const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
 const https = require("node:https");
 const http2 = require("node:http2");
-const tls = require("node:tls");
 const protocols = require("../build/protocols");
 
 const container = process.env.PROXY_CONTAINER || "proxy";
@@ -87,23 +86,27 @@ function http2Request(host, path) {
   });
 }
 
-// The protocol the server picks when a client offers h2 and http/1.1
+// The protocol the server picks when a client offers h2 and http/1.1, asked
+// with the image's openssl from inside the container (the CI proxy serves a
+// self-signed placeholder, which s_client reports but does not reject)
 function alpn(host) {
-  return new Promise((resolve, reject) => {
-    const socket = tls.connect({
-      host: new URL(origin).hostname,
-      port: Number(new URL(origin).port) || 443,
-      servername: host,
-      ALPNProtocols: ["h2", "http/1.1"],
-      rejectUnauthorized: false,
-    });
-    socket.setTimeout(5000, () => socket.destroy(new Error("TLS timeout")));
-    socket.on("secureConnect", () => {
-      resolve(socket.alpnProtocol);
-      socket.end();
-    });
-    socket.on("error", reject);
-  });
+  const out = execFileSync(
+    "docker",
+    [
+      "exec",
+      container,
+      "sh",
+      "-c",
+      'openssl s_client -connect 127.0.0.1:443 -servername "$1" -alpn h2,http/1.1 </dev/null 2>&1',
+      "sh",
+      host,
+    ],
+    { encoding: "utf8" }
+  );
+  const picked = /ALPN protocol: (\S+)/.exec(out);
+  if (picked) return picked[1];
+  assert(/No ALPN negotiated/.test(out), `${host}: openssl s_client\n${out}`);
+  return null;
 }
 
 async function main() {
@@ -125,7 +128,7 @@ async function main() {
     .some((line) => /:01BB$/i.test(line.trim().split(/\s+/)[1] || ""));
   assert.equal(bound, protocols.http3, "proxy binds UDP port 443");
   for (const host of hosts) {
-    const picked = await alpn(host);
+    const picked = alpn(host);
     assert.equal(
       picked,
       protocols.http2 ? "h2" : "http/1.1",
