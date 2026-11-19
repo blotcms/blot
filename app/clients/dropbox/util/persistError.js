@@ -8,6 +8,13 @@ async function persistError(blogID, err, source) {
   if (err && err.name === "AbortError") return;
 
   const classified = classify(err, (err && err.dropboxSource) || source);
+  // A token the cache holds may be the one Dropbox rejected
+  if (classified.status === 401) {
+    await require("./accessTokenCache")
+      .drop(blogID)
+      .catch(() => {});
+  }
+
   if (!classified.persist) return;
 
   // Required here, not at the top: ../database requires models/blog, which

@@ -407,7 +407,9 @@ function Apply(client, blogID, log, status) {
           client,
           item.path_display,
           blogID,
-          item.resolved_relative_path
+          item.resolved_relative_path,
+          // The delta entry already has what download would look up
+          { metadata: { path_display: item.path_display, size: item.size } }
         );
       } catch (downloadError) {
         err = downloadError;

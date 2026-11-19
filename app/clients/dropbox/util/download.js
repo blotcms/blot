@@ -11,7 +11,10 @@ const {
   exceedsFilesystemPathLimits,
 } = require("./constants");
 
-async function download(client, source, blogID, destination) {
+// options.metadata is the file's { path_display, size } when the caller has
+// them already (a delta entry carries both), which saves a filesGetMetadata
+// call. Without it they are fetched.
+async function download(client, source, blogID, destination, options) {
   const id = uuid();
   const prefix = () =>
     clfdate() + " clients:dropbox:download:" + id.slice(0, 6);
@@ -43,10 +46,14 @@ async function download(client, source, blogID, destination) {
   });
 
   const transfer = (async function () {
-    const { result: metadata } = await client.filesGetMetadata({
-      path: source,
-    });
-    if (timedOut) return;
+    let metadata = options && options.metadata;
+
+    if (!metadata) {
+      ({ result: metadata } = await client.filesGetMetadata({
+        path: source,
+      }));
+      if (timedOut) return;
+    }
 
     const metadataPath = metadata.path_display || source;
 
