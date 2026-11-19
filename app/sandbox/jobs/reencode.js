@@ -1,7 +1,7 @@
 // Decodes an image fetched from a URL and encodes it again, so what the app
 // keeps was written by libvips, not by the server. Shared by fetch-image.js and
 // the "image" kind of fetch.js. Its pixel limits are measured against the
-// 256 MiB cgroup these jobs run in (cgroupLimits in jail.js).
+// cgroup these jobs run in (192 MiB for fetch-image, 256 MiB for fetch) (cgroupLimits in jail.js).
 
 const sharp = require("sharp");
 const { FetchError } = require("./fetching");

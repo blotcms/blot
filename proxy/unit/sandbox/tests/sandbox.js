@@ -190,28 +190,34 @@ describe("sandbox broker and jail", function () {
     assert.strictEqual(jail.JOBS.screenshot.maxOutputBytes, 60 * 1024 * 1024);
   });
 
-  test("jail: the fetch-image job has one cgroup of its own, in the unit's subtree, and a short queue", () => {
+  test("jail: the fetch-image job has a cgroup of its own, in the unit's subtree, and a short queue", () => {
     const j = jail.JOBS["fetch-image"];
+    assert.deepStrictEqual(j.cgroups, [jail.FETCH_IMAGE_CGROUP]);
+    assert.strictEqual(
+      path.dirname(jail.FETCH_IMAGE_CGROUP),
+      "/sandbox-cgroup"
+    );
+    assert.deepStrictEqual(j.cgroupLimits, {
+      memoryBytes: 192 * 1024 * 1024,
+      pids: 64,
+    });
+    assert.strictEqual(j.maxQueued, 8);
+  });
+
+  test("jail: the fetch job has a cgroup of its own, in the unit's subtree, and a queue of its own", () => {
+    const j = jail.JOBS.fetch;
     assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
     assert.strictEqual(path.dirname(jail.FETCH_CGROUP), "/sandbox-cgroup");
     assert.deepStrictEqual(j.cgroupLimits, {
       memoryBytes: 256 * 1024 * 1024,
       pids: 64,
     });
-    assert.strictEqual(j.maxQueued, 8);
-  });
-
-  test("jail: the fetch job takes turns in fetch-image's cgroup, adds no memory, and has a queue of its own", () => {
-    const j = jail.JOBS.fetch;
-    assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
-    // the limits are made once, from fetch-image's: no second cgroup, no more memory
-    assert.strictEqual(j.cgroupLimits, undefined);
     const cgroups = new Set(
       Object.values(jail.JOBS).flatMap((job) => job.cgroups || [])
     );
     assert.deepStrictEqual(
       [...cgroups].sort(),
-      [jail.BROWSER_CGROUP, jail.FETCH_CGROUP].sort()
+      [jail.BROWSER_CGROUP, jail.FETCH_CGROUP, jail.FETCH_IMAGE_CGROUP].sort()
     );
     assert.strictEqual(j.maxQueued, 16);
     // a batch has up to 60s of fetching (jobs/fetch.js) and a few seconds to start and end
@@ -960,6 +966,33 @@ describe("sandbox broker and jail", function () {
       }
     );
     assert.deepStrictEqual(started, ["batch", "images", "batch", "batch"]);
+  });
+
+  test("broker: a job runs while another holds a different cgroup, each cgroup with one slot", async () => {
+    const jobs = {
+      ...JOBS(),
+      images: { ...JOBS().echo, cgroups: ["/c/images"] },
+      batch: { ...JOBS().echo, cgroups: ["/c/batch"] },
+    };
+    const { script, release } = hold();
+    await withBroker(
+      { jobs, maxRunning: 4, maxQueued: 8, script, clearCgroup: () => {} },
+      async (socket, broker) => {
+        const batch = request(socket, line("batch"), "");
+        await until(() => broker.running.size === 1);
+        // the batch holds its slot; an image still starts at once
+        const image = request(socket, line("images"), "");
+        await until(() => broker.running.size === 2);
+        assert.strictEqual(broker.queue.length, 0);
+        // but a second batch waits for the first
+        const batch2 = request(socket, line("batch"), "");
+        await until(() => broker.queue.length === 1);
+        assert.strictEqual(broker.running.size, 2);
+        release();
+        for (const reply of await Promise.all([batch, image, batch2]))
+          assert.strictEqual(reply.header.ok, true);
+      }
+    );
   });
 
   test("broker: makes the cgroups jobs ask for when it listens, and logs one it can't", async () => {
