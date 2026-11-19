@@ -46,7 +46,12 @@ starts `SANDBOX_`, and it never falls back to in-process.
   each from the smallest already made that covers it. The jail has 20s, as long
   as the build waits (`build/thumbnail/create.js`).
 - `resize` shrinks an image to fit inside a square, in its own format.
-- `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG.
+- `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG. With `{ exif: [fields] }`
+  it also reads the image's EXIF from the same bytes (`meta.exif`, as the `exif`
+  job returns it, or null; a failing exiftool never fails the conversion), so a
+  conversion that runs needs one jail and one read of the file, not two. A small
+  image is decoded with exiftool running beside it; one over 25M pixels is read for
+  its EXIF first, so their memory is never held together in the jail's 512 MiB.
 - `exif` exiftool on stdin, reduced to the fields asked for. It spawns
   `/usr/bin/perl /usr/bin/exiftool` directly; in-process it honours `EXIFTOOL_PATH`.
 - `template-image` a template image setting: a decode check, then the original
