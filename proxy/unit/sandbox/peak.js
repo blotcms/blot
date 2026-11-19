@@ -43,13 +43,27 @@ function track(
   let peak = null;
   let timer = null;
   let done = false;
+  // Only a cgroup that already exists when tracking starts is reset. One that
+  // appears later (a new pandoc worker's, while its first request runs) is new,
+  // so its peak since it was made is this request's, and a late reset would
+  // drop what the request used before it.
+  let first = true;
 
   function open() {
     if (fd !== null || done) return;
+    const eager = first;
+    first = false;
     const base = where();
     if (!base) return;
     const file = base + "/memory.peak";
-    if (wantReset) {
+    if (wantReset && !eager) {
+      try {
+        fd = fs.openSync(file, "r");
+        reset = true; // new since tracking started: nothing to reset
+        return;
+      } catch (e) {}
+    }
+    if (wantReset && eager) {
       try {
         const writable = fs.openSync(file, "r+");
         try {

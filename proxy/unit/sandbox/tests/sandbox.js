@@ -1449,6 +1449,25 @@ function answer(text) {
     }
   });
 
+  test("peak: a cgroup that appears after tracking starts keeps its peak since it was made", () => {
+    const directory = cgroupWithPeak(500);
+    let exists = false;
+    const tracker = peaks.track(() => (exists ? directory : null), {
+      reset: true,
+      shared: true,
+      interval: 10,
+    });
+    exists = true;
+    // a reset would make the file read back less; here it must stay at 500
+    const measured = tracker.finish();
+    assert.strictEqual(measured.peak, 500);
+    assert.strictEqual(measured.reset, true);
+    assert.strictEqual(
+      fs.readFileSync(directory + "/memory.peak", "utf8").trim(),
+      "500"
+    );
+  });
+
   test("peak: a cgroup given as a function is looked up until it exists", () => {
     const directory = cgroupWithPeak(64);
     let exists = false;
