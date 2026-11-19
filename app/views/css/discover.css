@@ -50,7 +50,7 @@
   margin-right: -0.75em;
   padding: 0.35em 0.75em;
   border-radius: 2em;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--accent-color);
   text-decoration: none;
@@ -233,7 +233,7 @@
   margin-right: -0.75em;
   padding: 0.35em 0.75em;
   border-radius: 2em;
-  font-size: 15px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--accent-color);
   transition: background 0.1s ease;
