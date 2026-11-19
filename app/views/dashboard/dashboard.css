@@ -464,7 +464,9 @@ body.is-resizing-dashboard-sidebar .dashboard-sidebar {
 .dashboard-sidebar__brand .dashboard-sidebar__brand-icon {
   display: block;
   width: 18px;
-  height: auto;
+  height: 18px;
+  background-color: #a8c7fa;
+  mask-size: contain;
 }
 
 .dashboard-sidebar__nav,
