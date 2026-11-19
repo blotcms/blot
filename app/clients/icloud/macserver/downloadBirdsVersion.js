@@ -13,6 +13,12 @@ const CATCH_UP_MS = 60 * 1000;
 const FORCE_DOWNLOAD_EVERY_MS = 5 * 1000;
 const EMPTY_RECORD_WAIT_MS = 5 * 1000;
 
+// Whether a stat is of a downloaded file: its blocks cover its size, as
+// brctl/download.js judges it. A zero-byte file counts as downloaded.
+const isDownloaded = (stat) =>
+  stat.size === 0 ||
+  stat.blocks >= Math.ceil(Math.ceil(stat.size / 512) / 8) * 8;
+
 // Downloads the file, then makes sure the disk holds the version bird has.
 // bird learns about a change before FileProvider updates the file: an edit to
 // a downloaded file can take tens of seconds to reach the disk, and pushing
@@ -32,9 +38,15 @@ export default async function downloadBirdsVersion(blogID, path, filePath) {
 
   let stat = await brctl.download(filePath);
   let lastForced = 0;
+  let failure = null;
 
-  while (version && !diskMatches(version, stat)) {
+  // bird's version, downloaded: a placeholder with the right size and mtime
+  // is not ready, and reading it would block until iCloud delivers it
+  while (version && !(diskMatches(version, stat) && isDownloaded(stat))) {
     if (Date.now() - start > CATCH_UP_MS) {
+      if (!isDownloaded(stat)) {
+        throw failure || new Error(`Timeout downloading file: ${filePath}`);
+      }
       console.warn(
         clfdate(),
         `Disk still behind bird after ${CATCH_UP_MS}ms, pushing what is on disk: ${filePath}`,
@@ -56,6 +68,7 @@ export default async function downloadBirdsVersion(blogID, path, filePath) {
 
     try {
       stat = await brctl.download(filePath, { force });
+      failure = null;
     } catch (error) {
       // the file is gone (renamed or deleted): the caller handles that
       if (!(await fs.pathExists(filePath))) throw error;
@@ -64,6 +77,7 @@ export default async function downloadBirdsVersion(blogID, path, filePath) {
         `Download while catching up failed: ${filePath}`,
         error.message
       );
+      failure = error;
       stat = await fs.stat(filePath);
     }
     version = (await fileVersion(blogID, path)) || version;

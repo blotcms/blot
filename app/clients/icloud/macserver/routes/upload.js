@@ -3,7 +3,8 @@ import { randomUUID } from "crypto";
 import { tmpdir } from "os";
 import { dirname, join, resolve, sep } from "path";
 import { iCloudDriveDirectory } from "../config.js";
-import { watch, unwatch } from "../watcher/index.js";
+import { expectBlotChange } from "../blotWrites.js";
+import { recordPushed } from "../pushedFiles.js";
 import clfdate from "../util/clfdate.js";
 import normalizeMacserverPath from "./normalizeMacserverPath.js";
 
@@ -26,10 +27,27 @@ async function writeAtomically(filePath, contents, modifiedTimeDate) {
   }
 
   // Confirm iCloud did not swap in another version straight away
-  const { size } = await fs.stat(filePath);
-  if (size !== contents.length) {
-    throw new Error(`Wrote ${contents.length} bytes but found ${size}`);
+  const stat = await fs.stat(filePath);
+  if (stat.size !== contents.length) {
+    throw new Error(`Wrote ${contents.length} bytes but found ${stat.size}`);
   }
+
+  return stat;
+}
+
+// The folders above filePath, up to basePath, that don't exist yet: writing
+// the file creates them, and the watcher must not send them back to Blot
+async function missingParents(basePath, filePath) {
+  const missing = [];
+  for (
+    let dir = dirname(filePath);
+    dir.startsWith(`${basePath}${sep}`);
+    dir = dirname(dir)
+  ) {
+    if (await fs.pathExists(dir)) break;
+    missing.push(dir.slice(basePath.length + 1));
+  }
+  return missing;
 }
 
 export default async (req, res) => {
@@ -52,6 +70,12 @@ export default async (req, res) => {
     `Received upload request for blogID: ${blogID}, path: ${path}`
   );
 
+  // express.raw gives a Buffer for application/octet-stream; anything else
+  // is not an upload this route understands
+  if (!Buffer.isBuffer(req.body)) {
+    return res.status(400).send("Expected an application/octet-stream body");
+  }
+
   const basePath = resolve(join(iCloudDriveDirectory, blogID));
   const filePath = resolve(join(basePath, normalizedPath));
 
@@ -67,43 +91,32 @@ export default async (req, res) => {
       .send("Invalid path: attempted to access parent directory");
   }
 
-  // first unwatch the blogID to prevent further events from being triggered
-  try {
-    await unwatch(blogID);
-  } catch (error) {
-    console.error(clfdate(), `Failed to unwatch blogID (${blogID}):`, error);
-    return res.status(500).send("Failed to unwatch blog folder");
+  // The watcher keeps running (see blotWrites.js): the new folders and the
+  // written file are recorded, so their events are not sent back to Blot
+  for (const dir of await missingParents(basePath, filePath)) {
+    expectBlotChange(blogID, dir, "mkdir");
   }
 
-  let success = false;
+  const modifiedTimeDate = new Date(parseInt(modifiedTime, 10));
 
-  try {
-    for (let i = 0; i < 10; i++) {
-      try {
-        const modifiedTimeDate = new Date(parseInt(modifiedTime, 10));
-        await writeAtomically(filePath, req.body, modifiedTimeDate);
-        success = true;
-        console.log(clfdate(), `Wrote file: ${filePath}`);
-        break;
-      } catch (error) {
-        success = false;
-        console.error(clfdate(), `Failed to write file (${filePath}):`, error);
-        await new Promise((resolve) => setTimeout(resolve, 1000 * i)); // Exponential backoff
-      }
-    }
+  // recorded before the rename too, so an event that arrives before the write
+  // returns is already known to be Blot's
+  recordPushed(blogID, normalizedPath, {
+    size: req.body.length,
+    mtimeMs: modifiedTimeDate.getTime(),
+  });
 
-    if (!success) {
-      return res.status(500).send("Failed to write file after retries");
-    }
-
-    console.log(clfdate(), `Recieved upload of file: ${filePath}`);
-    return res.sendStatus(200);
-  } finally {
-    // re-watch the blogID
+  for (let i = 0; i < 10; i++) {
     try {
-      await watch(blogID);
+      const stat = await writeAtomically(filePath, req.body, modifiedTimeDate);
+      recordPushed(blogID, normalizedPath, stat);
+      console.log(clfdate(), `Wrote file: ${filePath}`);
+      return res.sendStatus(200);
     } catch (error) {
-      console.error(clfdate(), `Failed to rewatch blogID (${blogID}):`, error);
+      console.error(clfdate(), `Failed to write file (${filePath}):`, error);
+      await new Promise((resolve) => setTimeout(resolve, 1000 * i)); // Exponential backoff
     }
   }
+
+  return res.status(500).send("Failed to write file after retries");
 };
