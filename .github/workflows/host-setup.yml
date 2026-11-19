@@ -26,6 +26,8 @@ on:
       - "config/host/bans.sh"
       - "config/host/tests/bans.sh"
       - "config/host/tests/wildcard-cert.sh"
+      - "config/host/tests/unit-mem.sh"
+      - "config/host/scripts/unit-mem-*.sh"
       - "config/host/wildcard-cert.sh"
       - "config/host/deploy.sh"
       - "config/host/.bashrc"
@@ -55,6 +57,8 @@ on:
       - "config/host/bans.sh"
       - "config/host/tests/bans.sh"
       - "config/host/tests/wildcard-cert.sh"
+      - "config/host/tests/unit-mem.sh"
+      - "config/host/scripts/unit-mem-*.sh"
       - "config/host/wildcard-cert.sh"
       - "config/host/deploy.sh"
       - "config/host/.bashrc"
@@ -88,6 +92,8 @@ jobs:
         run: config/host/tests/wildcard-cert.sh
       - name: launch.sh against stub aws, ssh and bootstrap.sh
         run: config/host/tests/launch.sh
+      - name: unit-mem-log.sh and unit-mem-summary.sh against a fake /proc and cgroup
+        run: config/host/tests/unit-mem.sh
       - name: bans.sh against stub ssh and fail2ban-client
         run: config/host/tests/bans.sh
       - name: cycle.sh against stub aws, ssh and phase scripts

@@ -1,0 +1,18 @@
+# The unit memory log (scripts/unit-mem-log.sh). Once a day a compressed copy
+# goes to the root disk, which survives a reboot and a stop/start of the
+# instance (the instance store, where the log is written, does not). The live
+# log is emptied with copytruncate because the sampler appends to it by path
+# and holds it only while it writes; a sample written between the copy and the
+# truncate is lost. About 1.5 MB a day, so 90 days is small. A host cycle starts
+# on a new root disk: copy /var/lib/blot-unit-mem across first if you want it.
+/var/instance-ssd/logs/unit-mem.log {
+    daily
+    rotate 90
+    olddir /var/lib/blot-unit-mem
+    createolddir 755 root root
+    dateext
+    copytruncate
+    missingok
+    notifempty
+    compress
+}

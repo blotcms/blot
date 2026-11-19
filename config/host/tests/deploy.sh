@@ -107,6 +107,7 @@ check "fstrim's weekly run also trims the instance store, when mounted" in_ct 'g
 check "fstrim is never run by deploy.sh" in_ct '! grep -q fstrim /tmp/systemctl.log'
 check "docker starts after rsyslog at boot" in_ct 'grep -qx "After=rsyslog.service" /etc/systemd/system/docker.service.d/20-rsyslog.conf'
 check "app.log is rotated" in_ct 'logrotate --debug /etc/logrotate.d/app-log 2>&1 | grep -q "/var/instance-ssd/logs/app.log"'
+check "the unit memory log is rotated into the root disk" in_ct 'logrotate --debug /etc/logrotate.d/unit-mem 2>&1 | grep -q "/var/lib/blot-unit-mem"'
 check "fail2ban accepts the deployed config" in_ct 'fail2ban-client -t'
 check "fail2ban was restarted" in_ct 'grep -qx "restart fail2ban" /tmp/systemctl.log'
 check "sshd -T reports x11forwarding no" in_ct 'sshd -T | grep -qx "x11forwarding no"'
