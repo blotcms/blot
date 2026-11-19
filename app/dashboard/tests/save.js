@@ -6,7 +6,7 @@ describe("dashboard site settings save", function () {
   it("does not pass protected request fields to Blog.set", async function () {
     spyOn(Blog, "set").and.callThrough();
 
-    await this.submit(`/sites/${this.blog.handle}/settings/date`, {
+    await this.submit(`/sites/${this.blog.handle}/settings/posts`, {
       dateFormat: "MM/DD/YYYY",
       id: "attacker-controlled-id",
       owner: "attacker-controlled-owner",

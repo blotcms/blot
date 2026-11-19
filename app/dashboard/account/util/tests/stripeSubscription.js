@@ -9,7 +9,7 @@ describe("account Stripe subscription check", function () {
     });
 
   // A fake Stripe client: retrieve answers with `retrieve`, list with `list`
-  function client({ retrieve, list }) {
+  function client({ retrieve = async () => ({}), list = async () => ({}) }) {
     return {
       customers: {
         retrieveSubscription: jasmine
