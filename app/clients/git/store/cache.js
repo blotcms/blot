@@ -1128,6 +1128,11 @@ function createCache({
     if (!closed && (await ready)) await publishNow();
     closed = true;
     timers.forEach(clearInterval);
+    clearTimeout(publishTimer);
+    publishTimer = null;
+    // A heartbeat or a publish asked for while the last one was written is
+    // queued behind it: wait for it too, so nothing writes after close resolves
+    await publishing;
     if (walking) await walking.catch(() => {});
   }
 

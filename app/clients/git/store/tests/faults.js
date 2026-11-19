@@ -8,7 +8,7 @@ const timeout = require("./helpers/timeout");
 const manifest = require("../manifest");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const {
   CorruptError,
   StaleManifestError,
@@ -396,7 +396,8 @@ describe("git store against a misbehaving object store", function () {
       [pack] = fx.readPacks(fixture.dir);
     });
 
-    afterAll(function () {
+    afterAll(async function () {
+      await createCache.closeAll();
       fx.remove(workDir);
     });
 

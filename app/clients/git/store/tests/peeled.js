@@ -7,7 +7,7 @@ const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const manifest = require("../manifest");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const { advertise } = require("../advertise");
 const { split } = require("../pktline");
@@ -45,6 +45,7 @@ describe("git store peeled tags", function () {
 
   afterEach(async function () {
     await received.close();
+    await createCache.closeAll();
     fx.remove(dir);
   });
 

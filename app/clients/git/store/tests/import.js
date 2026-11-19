@@ -19,7 +19,7 @@ const manifest = require("../manifest");
 const importRepo = require("../import");
 const { verifyImport } = importRepo;
 const compact = require("../compact");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const createFolderSink = require("../folderSink");
@@ -179,7 +179,8 @@ describe("git store import", function () {
     addLeftovers(rich);
   });
 
-  afterAll(function () {
+  afterAll(async function () {
+    await createCache.closeAll();
     fx.remove(root);
   });
 

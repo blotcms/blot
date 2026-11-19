@@ -4,7 +4,7 @@ const zlib = require("zlib");
 const path = require("path");
 const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const { readHistory } = require("../history");
 const { CorruptError } = require("../errors");
@@ -53,7 +53,10 @@ describe("git store history", function () {
     commits = fx.text(repo, ["rev-list", "--reverse", "HEAD"]).split("\n");
   });
 
-  afterAll(() => fx.remove(dir));
+  afterAll(async () => {
+    await createCache.closeAll();
+    fx.remove(dir);
+  });
   beforeEach(() => (store = createMemoryStore()));
 
   const manifestOf = (history, pieces) => ({ history, historyPieces: pieces });

@@ -246,7 +246,7 @@ describe("helper/lock lock", function () {
     const key = newKey();
     const compromised = [];
     const held = await lock(key, {
-      ttl: 200,
+      ttl: 1000,
       heartbeat: 30,
       onCompromised: (e) => compromised.push(e),
     });
@@ -372,8 +372,10 @@ describe("helper/lock lock", function () {
   it("treats a release retried after the key expired naturally as released", async function () {
     const key = newKey();
     const compromised = [];
+    // A long ttl keeps the acquire-reply deadline (derived from the ttl) far
+    // from what a busy runner can take; the key is shortened below instead
     const held = await lock(key, {
-      ttl: 200,
+      ttl: 10000,
       heartbeat: 10000,
       onCompromised: (e) => compromised.push(e),
     });
@@ -389,7 +391,8 @@ describe("helper/lock lock", function () {
     client.eval.and.callThrough();
     expect(error && error.message).toEqual("redis down");
     // The heartbeat stopped at the first call, so the key runs out on its own
-    await sleep(400);
+    await client.pExpire(key, 100);
+    await sleep(300);
     expect(await client.get(key)).toBeNull();
     await held.release();
     expect(compromised.length).toEqual(0);

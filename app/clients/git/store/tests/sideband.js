@@ -9,7 +9,7 @@ const timeout = require("./helpers/timeout");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const manifest = require("../manifest");
 const createResponse = require("../sideband");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 
 const MASTER = "refs/heads/master";
@@ -203,6 +203,7 @@ describe("git store progress", function () {
 
     afterEach(async function () {
       await server.close();
+      await createCache.closeAll();
       fx.remove(dir);
     });
 

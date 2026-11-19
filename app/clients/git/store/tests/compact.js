@@ -16,7 +16,7 @@ const { startServer, runGit } = require("./helpers/upload-server");
 const manifest = require("../manifest");
 const compact = require("../compact");
 const commit = require("../commit");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const { readHistory } = require("../history");
@@ -297,6 +297,7 @@ describe("git store compaction of snapshots alone", function () {
         (await compact({ store, cache, lock, maxSnapshots: 10 })).outcome
       ).toBe("nothing");
     } finally {
+      await createCache.closeAll();
       fx.remove(dir);
     }
   });
@@ -411,6 +412,7 @@ describe("git store compaction", function () {
     if (server) await server.close();
     if (received) await received.close();
     server = received = null;
+    await createCache.closeAll();
     fx.remove(dir);
   }
 

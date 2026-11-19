@@ -4,7 +4,7 @@ const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
 const createReader = require("../reader");
 const { chooseWhole } = require("../idx");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const { CorruptError, TooLargeError } = require("../errors");
 
@@ -27,7 +27,8 @@ describe("git store reader", function () {
     oracle = fx.catAll(fixture.dir);
   });
 
-  afterAll(function () {
+  afterAll(async function () {
+    await createCache.closeAll();
     fx.remove(workDir);
   });
 

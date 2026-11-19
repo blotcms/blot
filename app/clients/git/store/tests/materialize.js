@@ -14,7 +14,7 @@ const faults = require("./helpers/faults");
 const fx = require("./helpers/fixture");
 const { makeRepo, listFiles } = require("./helpers/repo");
 const createMemoryStore = require("../objectStore/memory");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createReader = require("../reader");
 const materialize = require("../materialize");
 const createFolderSink = require("../folderSink");
@@ -44,7 +44,8 @@ describe("git store materialize", function () {
     fs.mkdirSync(outside);
   });
 
-  afterEach(function () {
+  afterEach(async function () {
+    await createCache.closeAll();
     repo.remove();
     fx.remove(tmp);
   });
