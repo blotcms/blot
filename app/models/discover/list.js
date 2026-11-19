@@ -1,3 +1,4 @@
+const cheerio = require("cheerio");
 const client = require("models/client");
 const Blog = require("models/blog");
 const Entry = require("models/entry");
@@ -9,6 +10,30 @@ const profile = require("./profile");
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
 const EXCERPT_LENGTH = 200;
+
+// Enough text for the clipped block above the photos
+const TEXT_LENGTH = 1500;
+
+// The paragraphs of a post's text, for a card which shows it: plain text,
+// without the title and without empty or image-only paragraphs
+function paragraphs(entry) {
+  if (!entry || !entry.body) return [];
+
+  const $ = cheerio.load(entry.body);
+  const title = (entry.title || "").trim();
+  const result = [];
+  let length = 0;
+
+  $("p").each(function () {
+    if (length >= TEXT_LENGTH) return false;
+    const text = $(this).text().replace(/\s+/g, " ").trim();
+    if (!text || text === title) return;
+    result.push(text);
+    length += text.length;
+  });
+
+  return result;
+}
 
 function excerpt(text) {
   text = (text || "").replace(/\s+/g, " ").trim();
@@ -116,6 +141,8 @@ function card(record, blog, entry) {
       first: index === 0,
     })),
     excerpt: shown.length ? "" : excerpt(entry && entry.summary),
+    showText: record.showText,
+    text: record.showText && shown.length ? paragraphs(entry) : [],
   };
 }
 

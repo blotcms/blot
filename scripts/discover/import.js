@@ -110,7 +110,10 @@ async function importPost(post, apply) {
     sources
   );
 
-  await Discover.add(post.blogID, entry.id, photos, { added: post.added });
+  await Discover.add(post.blogID, entry.id, photos, {
+    added: post.added,
+    showText: !!post.showText,
+  });
 
   return { status: "imported", missing, sources, hidden: off(blog) };
 }

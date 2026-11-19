@@ -133,6 +133,7 @@ async function exportPosts(now = Date.now()) {
       url: entry.url,
       title: entry.title || "",
       sources: post.photos.map((photo) => photo.source),
+      showText: post.showText,
       added: post.added,
     });
   }

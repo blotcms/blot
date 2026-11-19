@@ -2,6 +2,7 @@ const post = require("./post");
 
 module.exports = {
   add: post.add,
+  setShowText: post.setShowText,
   get: post.get,
   has: post.has,
   remove: post.remove,

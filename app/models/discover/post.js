@@ -22,6 +22,8 @@ function deserialize(id, hash) {
     entryID: hash.entryID,
     photos: Array.isArray(saved) ? saved : [],
     added: parseInt(hash.added, 10) || 0,
+    // Whether the card shows the post's text above its photos
+    showText: hash.showText === "1",
   };
 }
 
@@ -52,8 +54,9 @@ async function has(blogID, entryID) {
 // the derived ones, from photos.derive. The feed is in the order the posts
 // were published, so the post's date is its score; a post without one goes
 // by when it was added. options.added (ms) sets when it was added, for an
-// import (scripts/discover/import.js) to keep the export's. Resolves to the
-// post.
+// import (scripts/discover/import.js) to keep the export's. options.showText
+// shows the post's text above its photos; left out, it stays as it was.
+// Resolves to the post.
 async function add(blogID, entryID, saved, options = {}) {
   ensure(blogID, "string").and(entryID, "string").and(saved, "array");
 
@@ -78,6 +81,14 @@ async function add(blogID, entryID, saved, options = {}) {
       entryID,
       photos: JSON.stringify(saved),
       added: String(added),
+      showText:
+        options.showText === undefined
+          ? existing && existing.showText
+            ? "1"
+            : "0"
+          : options.showText
+            ? "1"
+            : "0",
     })
     .zAdd(key.posts(), { score: published, value: id })
     .sAdd(key.blog(blogID), id)
@@ -91,6 +102,15 @@ async function add(blogID, entryID, saved, options = {}) {
     );
   }
 
+  return get(id);
+}
+
+// Shows or hides the post's text above its photos. Resolves to the post, or
+// null when it isn't on Discover.
+async function setShowText(id, show) {
+  ensure(id, "string");
+  if (!(await client.exists(key.post(id)))) return null;
+  await client.hSet(key.post(id), "showText", show ? "1" : "0");
   return get(id);
 }
 
@@ -124,4 +144,4 @@ async function removeBlog(blogID) {
   return ids.length;
 }
 
-module.exports = { get, getMany, has, add, remove, removeBlog };
+module.exports = { get, getMany, has, add, setShowText, remove, removeBlog };

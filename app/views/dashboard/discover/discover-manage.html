@@ -57,6 +57,14 @@
       · {{site.label}}
       {{#hidden}}<span class="discover-hidden">Not shown: {{hidden}}</span>{{/hidden}}
     </span>
+    {{#photos.length}}
+    <form method="post" action="/sites/discover/show-text">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+      <input type="hidden" name="id" value="{{id}}" />
+      {{#showText}}<input type="hidden" name="show" value="0" /><button type="submit">Hide text</button>{{/showText}}
+      {{^showText}}<input type="hidden" name="show" value="1" /><button type="submit">Show text</button>{{/showText}}
+    </form>
+    {{/photos.length}}
     <form method="post" action="/sites/discover/remove">
       <input type="hidden" name="_csrf" value="{{csrftoken}}" />
       <input type="hidden" name="id" value="{{id}}" />

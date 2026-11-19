@@ -252,6 +252,50 @@
   text-decoration: underline;
 }
 
+/* A post's text above its photos, when the maintainer turned it on: the
+   title and the post's paragraphs, clipped at 4 lines. When clipped
+   (.clamped, set by app/views/js/discover.js) the last line fades into a
+   grey "See more", as in the maintainer's reference. */
+.discover-text {
+  display: block;
+  position: relative;
+  margin-top: 4px;
+}
+
+.discover-text-clip {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+.discover-text p {
+  margin: 0 0 8px;
+}
+
+.discover-text p:last-child {
+  margin-bottom: 0;
+}
+
+.discover-see-more {
+  display: none;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding-left: 72px;
+  color: var(--medium-text-color);
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--background-color) 64px
+  );
+}
+
+.discover-text.clamped .discover-see-more {
+  display: block;
+}
+
 /* One photo: the full width. More: a row to scroll sideways, the next
    photo peeking in, with arrow buttons */
 .discover-carousel {
@@ -372,7 +416,7 @@
 }
 
 .discover-card .discover-date:hover {
-  color: var(--accent-color);
+  text-decoration: underline;
 }
 
 @media (max-width: 600px) {

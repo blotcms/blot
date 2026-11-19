@@ -16,7 +16,18 @@
     </div>
 
     {{#photos.length}}
+    {{#text.length}}
+    <a class="discover-text" href="{{{url}}}" target="_blank" rel="noopener">
+      <span class="discover-text-clip">
+        <p>{{title}}</p>
+        {{#text}}<p>{{.}}</p>{{/text}}
+      </span>
+      <span class="discover-see-more">See more</span>
+    </a>
+    {{/text.length}}
+    {{^text.length}}
     <a class="discover-title" href="{{{url}}}" target="_blank" rel="noopener">{{title}}</a>
+    {{/text.length}}
     <div class="discover-carousel discover-photos-{{photos.length}}">
       <div class="discover-track">
         {{#photos}}

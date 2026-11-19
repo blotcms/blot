@@ -39,6 +39,13 @@
   <p>This post has no photos, so it will be shown as a text card.</p>
   {{/candidates.length}}
 
+  {{#candidates.length}}
+  <label class="discover-show-text">
+    <input type="checkbox" name="showText" value="1" />
+    Show the post's text above the photos
+  </label>
+  {{/candidates.length}}
+
   <div class="buttons">
     <button type="submit">Add to Discover</button>
     <a href="/discover">Cancel</a>

@@ -123,7 +123,9 @@ add.post("/:token", async (req, res, next) => {
     // Two requests can get this far with one token; only one may add
     if (!(await Discover.token.consume(req.params.token))) return expired(res);
 
-    await Discover.add(blogID, entryID, photos);
+    await Discover.add(blogID, entryID, photos, {
+      showText: !!req.body.showText,
+    });
 
     res.locals.title = "Added to Discover";
     res.render("dashboard/discover/discover-added", {
@@ -246,6 +248,16 @@ manage.post("/profile", async (req, res, next) => {
     res.redirect(
       "/sites/discover?error=" + encodeURIComponent(err.message || String(err))
     );
+  }
+});
+
+manage.post("/show-text", async (req, res, next) => {
+  try {
+    if (typeof req.body.id === "string" && req.body.id)
+      await Discover.setShowText(req.body.id, req.body.show === "1");
+    res.redirect("/sites/discover");
+  } catch (err) {
+    next(err);
   }
 });
 

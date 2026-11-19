@@ -1,10 +1,11 @@
 // Puts one post on Discover by its URL (#2639), with up to 3 of its photos
 // by default, the maintainer's manual opt-in.
 //
-//   node scripts/discover/add-post.js <post URL> [--photos <n>] [--refresh]
+//   node scripts/discover/add-post.js <post URL> [--photos <n>] [--text] [--refresh]
 //
 // The site is found by its host and the post by its URL, and the site's
-// "Include site on discover page" setting is turned on. --photos 0 makes a
+// "Include site on discover page" setting is turned on. --text shows the
+// post's text above its photos, clipped with "See more". --photos 0 makes a
 // text-only card. Safe to rerun: adding a post already on Discover replaces
 // its photos and keeps its place.
 //
@@ -35,18 +36,22 @@ const NOT_PHOTOS = /^_(avatars|template_assets)\//;
 function usage(message) {
   if (message) console.error(message + "\n");
   console.error(
-    "Usage: node scripts/discover/add-post.js <post URL> [--photos <n>] [--refresh]"
+    "Usage: node scripts/discover/add-post.js <post URL> [--photos <n>] [--text|--no-text] [--refresh]"
   );
   process.exit(2);
 }
 
 function parse(argv) {
-  const options = { url: null, photos: 3, refresh: false };
+  const options = { url: null, photos: 3, refresh: false, text: undefined };
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--photos" && argv[i + 1] !== undefined) {
       options.photos = parseInt(argv[++i], 10);
       if (!(options.photos >= 0)) usage("--photos must be 0 or more");
+    } else if (argv[i] === "--text") {
+      options.text = true;
+    } else if (argv[i] === "--no-text") {
+      options.text = false;
     } else if (argv[i] === "--refresh") {
       options.refresh = true;
     } else if (!argv[i].startsWith("--") && !options.url) {
@@ -244,7 +249,9 @@ async function main(argv) {
 
   const id = Discover.postID(blog.id, entry.id);
   const photos = await Discover.photos.derive(blog.id, id, sources);
-  const post = await Discover.add(blog.id, entry.id, photos);
+  const post = await Discover.add(blog.id, entry.id, photos, {
+    showText: options.text,
+  });
 
   console.log(
     "On Discover:",

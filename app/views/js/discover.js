@@ -41,6 +41,7 @@ function init() {
       const cards = page.querySelectorAll("#discover-grid > li");
       for (const card of cards) grid.appendChild(document.adoptNode(card));
       updateAllArrows();
+      markClamped();
 
       const next = page.getElementById("discover-more");
       observer.unobserve(more);
@@ -129,12 +130,12 @@ if (document.readyState === "loading") {
   updateAllArrows();
 }
 
-// The popover shown on hovering a name or avatar, in the feed or the sites
+// The popover shown on hovering a name, date or avatar, in the feed or the sites
 // box. It is centred under the name, 8px below it (above it when there is no
 // room below), and kept inside the window. It opens after a short pause and
 // stays open while the pointer is on it. Only for pointers which hover.
 const POPOVER_TRIGGERS =
-  ".discover-card .discover-name, .discover-card .discover-avatar-link, .discover-sites li > a";
+  ".discover-card .discover-name, .discover-card .discover-date, .discover-card .discover-avatar-link, .discover-sites li > a";
 const POPOVER_GAP = 8;
 const POPOVER_MARGIN = 8;
 const OPEN_DELAY = 300;
@@ -228,4 +229,24 @@ if (window.matchMedia && window.matchMedia("(hover: hover)").matches) {
 
   window.addEventListener("scroll", closePopover, { passive: true });
   window.addEventListener("resize", closePopover);
+}
+
+// A post's text above its photos shows "See more" only when it's clipped
+function markClamped() {
+  document.querySelectorAll(".discover-text").forEach((text) => {
+    const clip = text.querySelector(".discover-text-clip");
+    if (clip)
+      text.classList.toggle(
+        "clamped",
+        clip.scrollHeight > clip.clientHeight + 1
+      );
+  });
+}
+
+window.addEventListener("resize", markClamped);
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", markClamped);
+} else {
+  markClamped();
 }
