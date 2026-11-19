@@ -272,7 +272,7 @@
   background: var(--light-background-color);
 }
 
-/* The site's favicon and address, under a rule */
+/* The site's address, under a rule */
 .discover-link-site {
   display: flex;
   align-items: center;
@@ -282,13 +282,6 @@
   border-top: 1px solid var(--border-color);
   font-size: var(--small-font-size);
   color: var(--medium-text-color);
-}
-
-.discover-link-site img {
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
-  object-fit: cover;
 }
 
 .discover-link-title {

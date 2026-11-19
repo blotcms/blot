@@ -31,8 +31,6 @@
       <span class="discover-link-title">{{title}}</span>
       {{#excerpt}}<span class="discover-excerpt">{{excerpt}}</span>{{/excerpt}}
       <span class="discover-link-site">
-        {{#site.featuredImage}}<img src="{{#cdn}}{{{site.featuredImage}}}{{/cdn}}" alt="" />{{/site.featuredImage}}
-        {{^site.featuredImage}}{{#site.avatar}}<img src="{{{site.avatar}}}" alt="" />{{/site.avatar}}{{/site.featuredImage}}
         {{site.address}}
       </span>
     </a>
