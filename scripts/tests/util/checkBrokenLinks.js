@@ -16,6 +16,30 @@ class LinkChecker {
       failures: new Map(),
       skipped: new Set(),
     };
+
+    // The server under test runs in this process. Fetching every page of
+    // the site at once starves its event loop for seconds, which resets
+    // connections (ECONNRESET) and times out its Redis client (503).
+    this.concurrency = options.concurrency || 10;
+    this.active = 0;
+    this.waiting = [];
+  }
+
+  // Runs fn once fewer than this.concurrency others are running
+  async limit(fn) {
+    if (this.active >= this.concurrency) {
+      await new Promise((resolve) => this.waiting.push(resolve));
+    }
+
+    this.active++;
+
+    try {
+      return await fn();
+    } finally {
+      this.active--;
+      const next = this.waiting.shift();
+      if (next) next();
+    }
   }
 
   validateInputs(fetch, url, options) {
@@ -74,8 +98,11 @@ class LinkChecker {
     try {
       return await this.fetch(url, { headers });
     } catch (err) {
-      this.log("Error", err.message);
-      throw new Error(err.code || "Network Error", { cause: err });
+      // undici's fetch throws "fetch failed" and keeps the reason (ECONNRESET,
+      // UND_ERR_SOCKET, ...) on err.cause
+      const code = err.code || err.cause?.code || "Network Error";
+      this.log("Error", url, err.message, code, err.cause?.message);
+      throw new Error(code, { cause: err });
     }
   }
 
@@ -123,17 +150,21 @@ class LinkChecker {
     this.state.checked.add(pathname);
 
     try {
-      const response = await this.fetchPage(url);
+      // The slot is released before the links are followed, or a page would
+      // hold one while waiting on the pages it links to
+      const urls = await this.limit(async () => {
+        const response = await this.fetchPage(url);
 
-      if (response.status !== 200 && response.status !== 400) {
-        this.addFailure(base, url, response.status);
-      }
+        if (response.status !== 200 && response.status !== 400) {
+          this.addFailure(base, url, response.status);
+        }
 
-      if (this.isHtmlResponse(response)) {
-        const body = await response.text();
-        const urls = await this.parseUrls(url, body);
-        await Promise.all(urls.map((url) => this.checkPage(base, url)));
-      }
+        if (!this.isHtmlResponse(response)) return [];
+
+        return this.parseUrls(url, await response.text());
+      });
+
+      await Promise.all(urls.map((url) => this.checkPage(base, url)));
     } catch (error) {
       this.addFailure(base, url, error.message);
     }
