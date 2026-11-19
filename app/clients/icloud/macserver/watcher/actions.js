@@ -5,6 +5,9 @@ import remove from "../httpClient/remove.js";
 import resync from "../httpClient/resync.js";
 import upload from "../httpClient/upload.js";
 import { forgetPath, recordDirectory } from "../pushedFiles.js";
+import { forgetBlotChange, isBlotEcho } from "../blotWrites.js";
+import { buildBlogPath } from "./pathUtils.js";
+import fs from "fs-extra";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -70,6 +73,24 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
       `Invalid action: ${action}. Must be one of: ${validActions.join(", ")}`
     );
   }
+
+  // Blot's own removal or new directory, seen by the watcher: Blot already
+  // has it. A removal counts only while the path is still gone.
+  if (
+    (action === "mkdir" && isBlotEcho(blogID, pathInBlogDirectory, "mkdir")) ||
+    (action === "remove" &&
+      isBlotEcho(blogID, pathInBlogDirectory, "remove") &&
+      !(await fs.pathExists(buildBlogPath(blogID, pathInBlogDirectory))))
+  ) {
+    console.log(
+      clfdate(),
+      `Skipping ${action}: Blot made this change, blogID: ${blogID}, path: ${pathInBlogDirectory}`
+    );
+    return;
+  }
+
+  if (action === "remove" || action === "upload")
+    forgetBlotChange(blogID, pathInBlogDirectory);
 
   const limiter = getLimiterForBlogID(blogID);
 

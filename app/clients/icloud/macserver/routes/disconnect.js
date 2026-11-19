@@ -2,6 +2,7 @@ import { join } from "path";
 import { iCloudDriveDirectory } from "../config.js";
 import { removeLimiterForBlogID } from "../limiters.js";
 import { forgetBlog } from "../pushedFiles.js";
+import { forgetBlotChanges } from "../blotWrites.js";
 import { unwatch } from "../watcher/index.js";
 import clfdate from "../util/clfdate.js";
 import leaveFolder from "../util/leaveFolder.js";
@@ -31,6 +32,7 @@ export default async (req, res) => {
   // remove it recursively: that deletes the owner's files (util/leaveFolder.js)
   removeLimiterForBlogID(blogID);
   forgetBlog(blogID);
+  forgetBlotChanges(blogID);
 
   try {
     await unwatch(blogID);
