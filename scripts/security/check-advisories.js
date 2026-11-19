@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Daily check: is a runtime or OS we depend on behind on a security release,
 // or past (or close to) end-of-life? Reads the pins from the repo, fetches
-// public sources (nodejs.org, endoflife.date, nginx.org, GitHub, Amazon Linux
+// public sources (nodejs.org, endoflife.date, nginx.org, Hackage, Amazon Linux
 // security bulletins), compares, and prints a short report.
 //
 //   node scripts/security/check-advisories.js [--days N] [--json]
@@ -346,15 +346,19 @@ async function checkNginxAndOpenresty() {
 }
 
 function pandocNote() {
-  // endoflife.date has no pandoc product; compare against GitHub.
+  // endoflife.date has no pandoc product. GitHub's unauthenticated API is
+  // rate-limited (403) from CI and the cloud sessions, so read Hackage, where
+  // every Pandoc release is published. "normal" marks a release that is not
+  // deprecated; take the highest version of those.
   if (!pins.pandoc) return;
-  return source("Pandoc latest release (GitHub)", async () => {
-    const rel = await (
-      await get("https://api.github.com/repos/jgm/pandoc/releases/latest", {
-        accept: "application/vnd.github+json",
-      })
+  return source("Pandoc latest release (Hackage)", async () => {
+    const versions = await (
+      await get("https://hackage.haskell.org/package/pandoc.json")
     ).json();
-    const latest = rel.tag_name;
+    const latest = Object.keys(versions)
+      .filter((v) => versions[v] === "normal")
+      .sort((a, b) => cmp(b, a))[0];
+    if (!latest) throw new Error("no normal releases listed");
     if (cmp(latest, pins.pandoc) > 0)
       add("watch", "Pandoc: pinned " + pins.pandoc + ", latest " + latest);
     else add("ok", "Pandoc " + pins.pandoc + " is the latest release");
