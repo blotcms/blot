@@ -1,6 +1,6 @@
 var url = require("url");
 var querystring = require("querystring");
-var eachEl = require("build/plugins/eachEl");
+var eachElConcurrent = require("build/plugins/eachElConcurrent");
 var { report } = require("build/flags");
 
 var Players = {
@@ -37,7 +37,9 @@ async function render($) {
   // we'd need to normalize both the href
   // and link text to remove space chars before
   // proceding. also url parse href gets screwy too.
-  await eachEl($, "a", async function (el) {
+  await eachElConcurrent($, "a", lookup, apply);
+
+  async function lookup(el) {
     var href = $(el).attr("href");
     var hostname;
     var parsed;
@@ -79,15 +81,21 @@ async function render($) {
       // The link stays in the post, so it still works; the flag says the
       // video wasn't embedded. A link to a channel or an artist's page was
       // never one to embed, so it is not flagged.
-      if (player.embeddable(parsed))
-        report({ code: "EMBED_FAILED", targets: [href] });
-      return;
+      return player.embeddable(parsed) ? { href, failed: true } : undefined;
     }
 
     if (!template) return;
 
-    insertPlayer(el, template, href);
-  });
+    return { href, template };
+  }
+
+  // Lookups run concurrently, but the document is changed here, in document
+  // order: two links in one paragraph each put their player after it.
+  function apply(el, result) {
+    if (result.failed)
+      return report({ code: "EMBED_FAILED", targets: [result.href] });
+    insertPlayer(el, result.template, result.href);
+  }
 
   // This function takes the HTML code for a particular
   // video player and replaces the link element with that code

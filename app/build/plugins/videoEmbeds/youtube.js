@@ -1,4 +1,4 @@
-const fetch = require("node-fetch");
+const fetch = require("../fetchWithTimeout");
 const { parse } = require("url");
 const config = require("config");
 const cheerio = require("cheerio");

@@ -1,4 +1,4 @@
-const fetch = require("node-fetch");
+const fetch = require("../fetchWithTimeout");
 const { parse } = require("url");
 
 async function vimeo(href) {
