@@ -58,6 +58,7 @@
 
 OPENRESTY=/usr/local/openresty/bin/openresty
 BROKER_BACKOFF=2
+BROKER_MAX_OLD_SPACE_SIZE=64
 NODE_FILTER=/usr/local/lib/blot-sandbox/node.seccomp
 MIN_BACKOFF=1
 MAX_BACKOFF=30
@@ -147,7 +148,11 @@ run_node() {
 # files (they are root-owned under /usr/local/lib/blot-sandbox), so it starts with
 # nothing from this environment: no secrets, no NODE_OPTIONS, and not in the app's
 # directory. One that dies is started again after a fixed delay and never stops
-# the unit: while it is down the app's jobs fail closed.
+# the unit: while it is down the app's jobs fail closed. Its heap is capped
+# (BROKER_MAX_OLD_SPACE_SIZE): without NODE_OPTIONS V8 would size it from the
+# container's limit, and the broker only holds request headers and job
+# bookkeeping there (job bodies are Buffers, outside the heap). In production
+# its whole resident memory peaked at about 140 MB.
 run_sandbox() { # run_sandbox <file> <description>
   cd /
   child=
@@ -156,7 +161,8 @@ run_sandbox() { # run_sandbox <file> <description>
 
   while [ -z "$stopping" ]; do
     env -i PATH=/usr/local/bin:/usr/bin:/bin BLOT_UNIT="$BLOT_UNIT" \
-      $DROP_CAP /usr/local/bin/node "/usr/local/lib/blot-sandbox/$1" &
+      $DROP_CAP /usr/local/bin/node --max-old-space-size="$BROKER_MAX_OLD_SPACE_SIZE" \
+      "/usr/local/lib/blot-sandbox/$1" &
     child=$!
     echo "supervisor: started the $2 pid=$child"
     reap "$child"
