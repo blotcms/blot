@@ -137,7 +137,12 @@ async function sync(blog, folder, stampLastSync) {
       folder.log(pathToUpdate, "Updating path");
 
       try {
-        await folder.update(pathToUpdate);
+        // A file's server_modified is when Dropbox stored this version,
+        // so the sync can log how long it took to go live
+        await folder.update(pathToUpdate, {
+          modified: item.server_modified,
+          since: "dropbox-server-modified",
+        });
       } catch (err) {
         // Redis cannot take writes (a host cutover, an outage), so
         // this change and those after it are not in the database.
