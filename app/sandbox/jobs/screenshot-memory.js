@@ -87,6 +87,9 @@ function createMeter({
     source: "pss",
     threshold: thresholdFrom(env.BLOT_BROWSER_MEMORY_MAX),
     async read() {
+      // Not in the jail (development, the specs): /proc is this machine's, and
+      // there is no limit to judge a page against
+      if (typeof env.BLOT_BROWSER_MEMORY_MAX !== "string") return null;
       const found = await processBytes(io);
       if (!found) return null; // no way to tell: the page is not judged
       meter.source = found.source;

@@ -342,17 +342,14 @@ describe("sandbox broker and jail", function () {
       }
     };
     const without = jail.command("screenshot").args.join(" ");
-    assert(!without.includes("BLOT_BROWSER_MEMORY_MAX"));
+    assert(without.includes("-E BLOT_BROWSER_MEMORY_MAX=max"));
 
     const set = limitOf("536870912\n");
     assert(set.includes("-E BLOT_BROWSER_MEMORY_MAX=536870912"));
-    assert.strictEqual(
-      set.replace(" -E BLOT_BROWSER_MEMORY_MAX=536870912", ""),
-      without
-    );
+    assert.strictEqual(set.replace("=536870912", "=max"), without);
     // Unlimited, or not a number: the job uses its own fixed limit
-    assert(!limitOf("max\n").includes("BLOT_BROWSER_MEMORY_MAX"));
-    assert(!limitOf("12 -E X=1").includes("BLOT_BROWSER_MEMORY_MAX"));
+    assert.strictEqual(limitOf("max\n"), without);
+    assert.strictEqual(limitOf("12 -E X=1"), without);
   });
 
   test("jail: the OOM score a job's shell sets reaches the program it execs", function () {

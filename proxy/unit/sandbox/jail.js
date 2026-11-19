@@ -440,16 +440,17 @@ function inCgroup(cgroup, args, { raiseOomScore }) {
 }
 
 // The screenshot job can't see its cgroup, so the broker passes it the limit
-// (memory.max, in bytes) for its per-page memory watchdog
-// (app/sandbox/jobs/screenshot-memory.js), which gives up on a page at a share
-// of it. Only digits are passed on: nothing is, where it is unlimited ("max")
-// or can't be read, and the job then uses a fixed limit of its own.
+// (memory.max, in bytes, or "max" where it is unlimited or can't be read) for
+// its per-page memory watchdog (app/sandbox/jobs/screenshot-memory.js), which
+// gives up on a page at a share of it. The variable also tells the job it is in
+// the jail: it never judges pages anywhere else. Only digits or "max" are passed.
 function browserMemoryEnv(directory) {
+  let limit = "max";
   try {
-    const limit = fs.readFileSync(directory + "/memory.max", "utf8").trim();
-    if (/^\d{1,15}$/.test(limit)) return ["BLOT_BROWSER_MEMORY_MAX=" + limit];
+    const text = fs.readFileSync(directory + "/memory.max", "utf8").trim();
+    if (/^\d{1,15}$/.test(text)) limit = text;
   } catch (e) {}
-  return [];
+  return ["BLOT_BROWSER_MEMORY_MAX=" + limit];
 }
 
 // The program and arguments that start a job's jail; for a job with a

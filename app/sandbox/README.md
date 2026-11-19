@@ -383,7 +383,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   goes on with the next page. The limit comes from the broker, which reads
   `memory.max` when it spawns the job and passes it in
   `BLOT_BROWSER_MEMORY_MAX` (`jail.js`; no bind is added: the jail can't see
-  the cgroup); absent or `max`, the job uses 430 MiB. The reading is the sum of
+  the cgroup); `max` (unlimited or unreadable) means 430 MiB, and without the variable (development, specs) the job judges no page. The reading is the sum of
   PSS (`smaps_rollup`, which splits shared pages between the processes that map
   them, so it is close to what the cgroup is charged) over the processes in the
   jail's cgroup; RSS replaces it for a process whose `smaps_rollup` can't be

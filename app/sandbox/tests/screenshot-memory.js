@@ -42,9 +42,20 @@ describe("sandbox screenshot memory watchdog", function () {
     const jail = "0::/\n";
     const outside = (path) => `0::/../${path}\n`;
 
-    it("sums the PSS of the processes in the jail's cgroup, not those outside it", async function () {
+    it("judges nothing outside the jail, where the broker passed no limit", async function () {
       const meter = memory.createMeter({
         env: {},
+        io: fakeIO(
+          { "/proc/10/cgroup": jail, "/proc/10/smaps_rollup": rollup(9) },
+          { "/proc": ["10"] }
+        ),
+      });
+      expect(await meter.read()).toBe(null);
+    });
+
+    it("sums the PSS of the processes in the jail's cgroup, not those outside it", async function () {
+      const meter = memory.createMeter({
+        env: { BLOT_BROWSER_MEMORY_MAX: "max" },
         io: fakeIO(
           {
             "/proc/10/cgroup": jail,
@@ -67,7 +78,7 @@ describe("sandbox screenshot memory watchdog", function () {
 
     it("can't tell, and reads null, when no process is shown to be in the jail", async function () {
       const meter = memory.createMeter({
-        env: {},
+        env: { BLOT_BROWSER_MEMORY_MAX: "max" },
         io: fakeIO(
           {
             "/proc/10/cgroup": outside("blue"),
@@ -82,7 +93,7 @@ describe("sandbox screenshot memory watchdog", function () {
 
     it("uses RSS for a process whose smaps_rollup can't be read, and says so", async function () {
       const meter = memory.createMeter({
-        env: {},
+        env: { BLOT_BROWSER_MEMORY_MAX: "max" },
         io: fakeIO(
           {
             "/proc/10/cgroup": jail,
