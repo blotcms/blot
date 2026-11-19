@@ -70,6 +70,12 @@ export default async (req, res) => {
     `Received upload request for blogID: ${blogID}, path: ${path}`
   );
 
+  // express.raw gives a Buffer for application/octet-stream; anything else
+  // is not an upload this route understands
+  if (!Buffer.isBuffer(req.body)) {
+    return res.status(400).send("Expected an application/octet-stream body");
+  }
+
   const basePath = resolve(join(iCloudDriveDirectory, blogID));
   const filePath = resolve(join(basePath, normalizedPath));
 
