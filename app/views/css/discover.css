@@ -19,16 +19,18 @@
   grid-column: 3;
   justify-self: end;
   width: 240px;
+  /* Sticks the same 8px from the top as the feed starts (.discover's
+     padding), so its top lines up with the first post's, and its heading
+     with that post's name */
   position: sticky;
-  top: 20px;
-  padding-top: 20px;
+  top: 8px;
 }
 
 /* The featured sites, in a box */
 .discover-sites {
   border: 1px solid var(--border-color);
   border-radius: 12px;
-  padding: 14px 16px 8px;
+  padding: 16px 16px 8px;
 }
 
 .discover-sites-head {
