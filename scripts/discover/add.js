@@ -2,12 +2,14 @@
 // photos by default: the maintainer's manual opt-in, usually run by an agent.
 //
 //   node scripts/discover/add.js <post URL> [<post URL> ...] [--photos <n>]
-//     [--text|--no-text] [--refresh]
+//     [--pick <1,3,...>] [--list-photos] [--text|--no-text] [--refresh]
 //
 // Each site is found by its host and each post by its URL, and the site's
 // "Include site on discover page" setting is turned on. --text shows the
 // post's text above its photos, clipped with "See more". --photos 0 makes a
-// text-only card. Safe to rerun: adding a post already on Discover replaces
+// text-only card. --list-photos prints a post's images, numbered, and adds
+// nothing; --pick then chooses which of them to show, in that order (at most
+// 4), in place of the first ones. Safe to rerun: adding a post already on Discover replaces
 // its photos and keeps its place.
 //
 // In development, a site or post which isn't there yet is copied from the
@@ -46,7 +48,7 @@ const NOT_PHOTOS = /^_(avatars|template_assets)\//;
 function usage(message) {
   if (message) console.error(message + "\n");
   console.error(
-    "Usage: node scripts/discover/add.js <post URL> [<post URL> ...] [--photos <n>] [--text|--no-text] [--refresh]"
+    "Usage: node scripts/discover/add.js <post URL> [<post URL> ...] [--photos <n>] [--pick <1,3,...>] [--list-photos] [--text|--no-text] [--refresh]"
   );
   process.exit(2);
 }
@@ -58,6 +60,20 @@ function parse(argv) {
     if (argv[i] === "--photos" && argv[i + 1] !== undefined) {
       options.photos = parseInt(argv[++i], 10);
       if (!(options.photos >= 0)) usage("--photos must be 0 or more");
+    } else if (argv[i] === "--pick" && argv[i + 1] !== undefined) {
+      options.pick = argv[++i].split(",").map((n) => parseInt(n, 10));
+      if (
+        !options.pick.every((n) => n > 0) ||
+        new Set(options.pick).size !== options.pick.length ||
+        options.pick.length > Discover.photos.MAX_PHOTOS
+      )
+        usage(
+          "--pick takes up to " +
+            Discover.photos.MAX_PHOTOS +
+            " different numbers from --list-photos"
+        );
+    } else if (argv[i] === "--list-photos") {
+      options.listPhotos = true;
     } else if (argv[i] === "--text") {
       options.text = true;
     } else if (argv[i] === "--no-text") {
@@ -359,14 +375,34 @@ async function addOne(url, options) {
   if (!entry || entry.deleted || entry.draft || entry.scheduled || !entry.url)
     throw new Error("The post is not published: " + url.href);
 
+  const candidates = Discover.photos.candidates(blog.id, entry);
+
+  if (options.listPhotos) {
+    console.log(entry.title);
+    candidates.forEach((rel, i) =>
+      console.log("  " + (i + 1) + "  " + Discover.photos.url(blog.id, rel))
+    );
+    return;
+  }
+
   if (blog.includeInDiscover !== true)
     await Blog.set(blog.id, { includeInDiscover: true });
 
   const sources = [];
 
-  for (const rel of Discover.photos.candidates(blog.id, entry)) {
-    if (sources.length >= options.photos) break;
-    if (await assets.exists(blog.id, rel)) sources.push(rel);
+  if (options.pick) {
+    for (const n of options.pick) {
+      const rel = candidates[n - 1];
+      if (!rel) throw new Error("The post has no image " + n);
+      if (!(await assets.exists(blog.id, rel)))
+        throw new Error("Image " + n + " is not in the bucket: " + rel);
+      sources.push(rel);
+    }
+  } else {
+    for (const rel of candidates) {
+      if (sources.length >= options.photos) break;
+      if (await assets.exists(blog.id, rel)) sources.push(rel);
+    }
   }
 
   const id = Discover.postID(blog.id, entry.id);

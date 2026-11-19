@@ -64,6 +64,8 @@ else is done by an agent running these in the node container
 needs the maintainer's go-ahead; `blot-node-<slot>` for a local preview):
 
     node scripts/discover/add.js <post URL> [...] [--photos <n>] [--text]
+    node scripts/discover/add.js <post URL> --list-photos
+    node scripts/discover/add.js <post URL> --pick 2,4
     node scripts/discover/manage.js list [--all]
     node scripts/discover/manage.js remove <post URL or ID> [...]
     node scripts/discover/manage.js text <post URL or ID> on|off
@@ -71,7 +73,8 @@ needs the maintainer's go-ahead; `blot-node-<slot>` for a local preview):
     node scripts/discover/profile.js <site> --name … --bio … --avatar <URL or file>
 
 `add.js` puts each post on Discover with up to 3 of its photos (`--photos 0`
-for a text card, `--text` for its text above the photos) and turns the
+for a text card, `--text` for its text above the photos; `--list-photos`
+numbers a post's images and `--pick` chooses among them) and turns the
 site's setting on. On production it finds the site by host and the post by
 URL and fetches nothing. In development it copies a site or post which isn't
 there yet from the live page, keeping production's blog ID, entry URL and
