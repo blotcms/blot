@@ -393,8 +393,10 @@ FROM dev AS dev-unit
 
 # The unit stage's runtime packages and user (see there). The dev image has no
 # USER, so git is configured again for ec2-user, who runs node-a; bind mounts
-# can be owned by anyone, hence the wildcard safe.directory.
-RUN apk add --no-cache bash openssl gettext brotli findutils libgcc zlib su-exec \
+# can be owned by anyone, hence the wildcard safe.directory. setpriv is
+# util-linux's, which the supervisor wraps its children in (BusyBox's can't
+# clear the bounding set), so the dev unit needs it as the unit stage does.
+RUN apk add --no-cache bash openssl gettext brotli findutils libgcc zlib su-exec setpriv \
  && deluser node \
  && addgroup -g 1000 ec2-user \
  && adduser -S -u 1000 -G ec2-user -h /home/node -H ec2-user \
