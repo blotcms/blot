@@ -49,7 +49,14 @@ used could not reach ssh, and deploys hung on their first `ssh`.
 ## Unit memory log
 
 `unit-mem-log.sh` appends to `/var/instance-ssd/logs/unit-mem.log` (instance
-store, so it survives deploys; about 30 days are kept). Each cron run takes four
+store, so it survives deploys; about 30 days are kept). The instance store is
+wiped by a stop/start and by a host cycle, so `logrotate/unit-mem` also copies
+the log once a day (`copytruncate`, compressed, 90 days) to
+`/var/lib/blot-unit-mem/unit-mem.log-<date>.gz` on the root disk. That survives
+a reboot and a stop/start, but not a host cycle, which starts on a new root
+disk and carries over only Redis, the env files and the Elastic IP (blog folders
+are in S3); copy the directory across by hand before a cycle if the history
+matters. Nothing is uploaded to S3. Each cron run takes four
 samples 15 seconds apart. Per sample there is one line per container
 (`blot-blue`, `blot-green`, and the sandbox cgroups) with `anon`, `file`, `shmem`,
 `limit` and `oom_kill` from the container's cgroup (v1 or v2), `node_max` (the
@@ -57,8 +64,12 @@ biggest node process), `node_a`, `node_b` and `node_other` (the two app
 processes and any other node, such as a script run with `docker exec`), `git`
 and `git_n` (the summed RSS and count of the unit's git processes, which share
 its limit) and `top=comm:bytes` (the biggest other process, i.e. a
-pandoc/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
-one `name=host` line with `mem_available`. Where the host has a sandbox subtree
+pandoc/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), then
+`broker` and `proxy` (the sandbox broker and the proxy jail, long-lived node
+processes that used to be counted in `node_other`, which is now only the
+`docker exec` scripts) and `openresty` and `openresty_n` (the summed RSS and
+count of the unit's nginx/openresty processes). Lines from before these four
+fields lack them. Plus one `name=host` line with `mem_available`. Where the host has a sandbox subtree
 (#2257) there are also `name=blot-sandbox-<unit>` and
 `name=blot-sandbox-<unit>-browser` lines: jobs are short, so read their `peak`
 and `oom_kill`.
@@ -69,8 +80,11 @@ page cache. Summarise it with:
 unit-mem-summary.sh [logfile]
 ```
 
-(per container: max and p99 anon+shmem, max node_max, max oom_kill, top 5 child
-processes; host: lowest mem_available.)
+(per container: max and p99 anon+shmem, max node_max, max oom_kill, max and p99
+of the broker, the proxy jail and OpenResty, top 5 child processes; host:
+lowest mem_available.) With no argument it reads the live log and the daily
+copies in `/var/lib/blot-unit-mem`. `config/host/tests/unit-mem.sh` tests both
+scripts against a fake `/proc` and cgroup tree.
 
 ## Permanent bans
 

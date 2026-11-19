@@ -1,8 +1,11 @@
 #!/bin/sh
 # Samples the memory of each app container and the host into
-# /var/instance-ssd/logs/unit-mem.log, to size the host from long-run peaks
-# (blotcms/blot#2261). The log is on the instance store, so unlike the
-# `[STATS] process_rss=` line in container logs it survives deploys.
+# /var/instance-ssd/logs/unit-mem.log, to size the host and the units' memory
+# limits from long-run peaks (blotcms/blot#2261, #2795). The log is on the
+# instance store, so unlike the `[STATS] process_rss=` line in container logs it
+# survives deploys. logrotate/unit-mem copies it daily to
+# /var/lib/blot-unit-mem on the root disk (see README.md), which survives a
+# reboot but not a host cycle.
 #
 # Run by /etc/cron.d/blot-unit-mem as root, once a minute. One run takes 4
 # samples 15 seconds apart and then exits, so a run never overlaps the next
@@ -11,13 +14,20 @@
 #
 # One line per container per sample:
 #   2026-10-30T07:20:15Z name=blot-blue anon=B file=B shmem=B limit=B oom_kill=N \
-#     node_max=B node_sum=B node_a=B node_b=B node_other=B git=B git_n=N top=comm:B
+#     node_max=B node_sum=B node_a=B node_b=B node_other=B git=B git_n=N top=comm:B \
+#     [peak=B] broker=B proxy=B openresty=B openresty_n=N
 # anon+shmem is the memory that cannot be reclaimed; the cgroup limit also
 # counts page cache (file), so usage against limit overstates the need.
 # node_max is the biggest node process (node_sum can't tell one from two; a
 # node process shows up in comm as MainThread); node_a and node_b are the
 # unit's two app processes (node-b is the one forked with BLOT_WORKER_CHILD),
 # node_other any other node in the unit, such as a script run with docker exec;
+# broker and proxy are the long-lived sandbox broker (blot-sandbox/broker.js)
+# and proxy jail (blot-sandbox/proxy.js), which used to be counted in
+# node_other, so node_other is now only the exec'd scripts (all are still in
+# node_sum). openresty is the summed RSS of the unit's nginx/openresty master
+# and workers and openresty_n how many there are. The fields from broker on
+# were added later than the rest, so older lines lack them;
 # git is the summed RSS of the unit's git processes and git_n how many there
 # are, since a burst of them shares the unit's limit with node;
 # top is the biggest process that is not node/nginx/openresty/tini/sh/su-exec
@@ -103,14 +113,20 @@ container_fields() {
   # "max" (v2) or a huge number (v1, 2^63 less a page) means unlimited
   case "$limit" in *[!0-9]* | "") limit=0 ;; esac
   [ "${#limit}" -ge 16 ] && limit=0
-  node_max=0 node_sum=0 node_a=0 node_b=0 node_other=0 git=0 git_n=0 top_comm="-" top_rss=0
+  node_max=0 node_sum=0 node_a=0 node_b=0 node_other=0 broker=0 proxy=0
+  openresty=0 openresty_n=0 git=0 git_n=0 top_comm="-" top_rss=0
   for pid in $(cat "$dir/cgroup.procs"); do
     comm=""; read -r comm < "$PROC/$pid/comm" || continue
     bytes=$(rss "$pid"); [ -n "$bytes" ] || continue
     case "$comm" in
       node | MainThread)
         node_sum=$((node_sum + bytes)); [ "$bytes" -gt "$node_max" ] && node_max=$bytes
-        if ! tr '\0' ' ' < "$PROC/$pid/cmdline" | grep -q 'app/index\.js'; then
+        cmdline=$(tr '\0' ' ' < "$PROC/$pid/cmdline")
+        case "$cmdline" in
+          *blot-sandbox/broker.js*) broker=$((broker + bytes)); continue ;;
+          *blot-sandbox/proxy.js*) proxy=$((proxy + bytes)); continue ;;
+        esac
+        if ! printf %s "$cmdline" | grep -q 'app/index\.js'; then
           node_other=$((node_other + bytes))
         elif tr '\0' '\n' < "$PROC/$pid/environ" | grep -qx 'BLOT_WORKER_CHILD=true'; then
           node_b=$((node_b + bytes))
@@ -118,7 +134,8 @@ container_fields() {
           node_a=$((node_a + bytes))
         fi ;;
       git | git-*) git=$((git + bytes)); git_n=$((git_n + 1)) ;;
-      nginx | openresty | tini | sh | su-exec) ;;
+      nginx | openresty) openresty=$((openresty + bytes)); openresty_n=$((openresty_n + 1)) ;;
+      tini | sh | su-exec) ;;
       *) if [ "$bytes" -gt "$top_rss" ]; then
            top_rss=$bytes; top_comm=$(printf %s "$comm" | tr ' ' _)
          fi ;;
@@ -128,7 +145,8 @@ container_fields() {
   [ -r "$dir/memory.peak" ] && peak=" peak=$(cat "$dir/memory.peak")"
   echo "anon=$1 file=$2 shmem=$3 limit=$limit oom_kill=${oom:-0}" \
     "node_max=$node_max node_sum=$node_sum node_a=$node_a node_b=$node_b node_other=$node_other" \
-    "git=$git git_n=$git_n top=$top_comm:$top_rss$peak"
+    "git=$git git_n=$git_n top=$top_comm:$top_rss$peak" \
+    "broker=$broker proxy=$proxy openresty=$openresty openresty_n=$openresty_n"
 }
 
 sample=0
