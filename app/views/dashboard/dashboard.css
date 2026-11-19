@@ -461,6 +461,12 @@ body.is-resizing-dashboard-sidebar .dashboard-sidebar {
   background: var(--active-background-color);
 }
 
+.dashboard-sidebar__brand .sidebar-site__icon {
+  /* The site block's folder icon is 1em square, and the site block's text
+     is 16px; the brand's is smaller, so the icon sets its own */
+  font-size: 16px;
+}
+
 .dashboard-sidebar__nav,
 .dashboard-sidebar__section {
   display: flex;
