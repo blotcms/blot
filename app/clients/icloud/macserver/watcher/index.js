@@ -609,7 +609,13 @@ const initialize = async () => {
     if (folder.isDirectory()) {
       const blogID = extractBlogID(join(iCloudDriveDirectory, folder.name));
       if (blogID) {
-        await watch(blogID);
+        await watch(blogID).catch((error) =>
+          console.error(
+            clfdate(),
+            `Not watching ${folder.name}:`,
+            error.message
+          )
+        );
       } else {
         console.warn(clfdate(), `Ignoring non-blog folder: ${folder.name}`);
       }
