@@ -122,7 +122,12 @@ describe("sandbox screenshot memory watchdog", function () {
         (bytes) => seen.push(bytes),
         { pollMs: 1 }
       );
-      await wait(60);
+      // A busy runner can take far longer than the polls add up to, so wait
+      // for the call rather than a fixed time
+      const deadline = Date.now() + 5000;
+      while (!seen.length && Date.now() < deadline) await wait(5);
+      // The watcher stops itself once it calls back: no later reading counts
+      await wait(20);
       watcher.stop();
       expect(seen).toEqual([120]);
       expect(watcher.peak()).toBe(120);
