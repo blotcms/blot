@@ -6,7 +6,11 @@
 <body class="{{bodyClass}}">
   <a class="skip-link" href="#main">Skip to content</a>
   {{> header}}
-  <main class="content" id="main" tabindex="-1">
+  {{#selected.how}}
+  {{> documentation-layout}}
+  {{/selected.how}}
+  {{^selected.how}}
+  <main class="content {{mainClass}}" id="main" tabindex="-1">
     {{#show-main-section-right}}
     <section class="main-section main-section-with-toc">
       <section class="main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">
@@ -24,9 +28,6 @@
         {{/isFolderSettingsView}}
       </section>
       <aside class="toc-sidebar">
-        {{#selected.how}}
-        {{> links}}
-        {{/selected.how}}
         {{#show-toc-or-on-this-page}}
         <div id="toc-wrapper">
           <p>On this page</p>
@@ -54,6 +55,7 @@
     {{/show-main-section-right}}
     {{> footer}}
   </main>
+  {{/selected.how}}
 {{#selected.dashboard}}
 <!-- One polite announcer for scripts' status messages (saved, removed,
      sorted): a region present from the start is read when its text changes -->

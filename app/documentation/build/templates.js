@@ -109,7 +109,7 @@ const relatedExampleCategoriesForTemplate = (slug) => {
     if (!category.templates.includes(slug)) continue;
     for (const link of EXAMPLES_LINKS[category.slug] || []) {
       if (seen.has(link.slug)) continue;
-      seen.set(link.slug, { ...link, href: `/examples/${link.slug}` });
+      seen.set(link.slug, { ...link, href: `/discover/${link.slug}` });
     }
   }
 

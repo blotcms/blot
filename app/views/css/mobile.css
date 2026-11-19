@@ -48,17 +48,14 @@
   }
 }
 
-@media (max-width: 1050px) {
-  .home-hero {
-    grid-template-columns: minmax(0, 430px);
-    row-gap: 48px;
-    align-items: start;
-    justify-content: center;
-    max-width: 430px;
-    margin-top: 3rem;
+@media (max-width: 768px) {
+  .watch-screen {
+    padding: 1rem;
   }
-  .home-intro {
-    margin-top: 0;
+
+  .watch-close {
+    top: 0.75rem;
+    right: 1rem;
   }
 }
 

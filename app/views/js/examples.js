@@ -116,125 +116,27 @@ const createFreshOrder = ({
   return bestOrder;
 };
 
-const renderFeatured = ({
-  id,
-  itemSelector = "li",
-  anchorSelector = null,
-  topOfListLength,
-  totalSites,
-  storageKey,
-  fadeIn = false,
-}) => {
-  const featured = document.getElementById(id);
-
+const renderFeatured = () => {
+  const featured = document.getElementById("featured");
   if (!featured) return;
 
-  const sitesArray = Array.prototype.slice.call(
-    featured.querySelectorAll(itemSelector)
-  );
+  const storageKey = "previousHrefs";
+  const sitesArray = Array.from(featured.querySelectorAll("li"));
   const recentOrders = readRecentOrders(storageKey);
   const result = createFreshOrder({
     sitesArray,
-    topOfListLength,
-    totalSites,
+    topOfListLength: 9,
+    totalSites: 16,
     recentOrders,
   });
 
   saveRecentOrders(storageKey, result.map(getSiteHref), recentOrders);
 
-  const anchor = anchorSelector ? featured.querySelector(anchorSelector) : null;
-
-  sitesArray.forEach(function (site) {
+  for (const site of sitesArray) {
     if (!result.includes(site)) site.remove();
-  });
-
-  if (fadeIn) {
-    featured.classList.add("home-fade-enabled");
-
-    const fadeStart = performance.now();
-    const fadeDelays = new Map();
-    let finalDelay = 0;
-
-    shuffleArray([...result]).forEach(function (site, index) {
-      const delay = index * 0.018 + Math.random() * 0.06;
-      finalDelay = Math.max(finalDelay, delay);
-      fadeDelays.set(site, delay);
-    });
-
-    const buttonDelay = finalDelay + 0.06;
-    let avatarsStarted = 0;
-
-    const startButton = () => {
-      if (!anchor) return;
-
-      const elapsed = (performance.now() - fadeStart) / 1000;
-      const remaining = Math.max(0.06, buttonDelay - elapsed);
-      window.setTimeout(
-        () => anchor.classList.add("home-fade-in"),
-        remaining * 1000
-      );
-    };
-
-    const waitForImage = (site, plannedDelay) => {
-      let started = false;
-
-      const startAvatar = () => {
-        if (started) return;
-        started = true;
-
-        const elapsed = (performance.now() - fadeStart) / 1000;
-        const remaining = Math.max(0, plannedDelay - elapsed);
-
-        window.setTimeout(() => {
-          site.classList.add("home-fade-in");
-          avatarsStarted++;
-
-          if (avatarsStarted === result.length) startButton();
-        }, remaining * 1000);
-      };
-
-      const image = site.querySelector("img");
-
-      if (!image || image.complete) {
-        startAvatar();
-        return;
-      }
-
-      image.addEventListener("load", startAvatar, { once: true });
-      image.addEventListener("error", startAvatar, { once: true });
-    };
-
-    result.forEach((site) => waitForImage(site, fadeDelays.get(site)));
-
-    if (result.length === 0) startButton();
   }
 
-  result.forEach(function (site) {
-    if (anchor) {
-      featured.insertBefore(site, anchor);
-    } else {
-      featured.appendChild(site);
-    }
-  });
+  featured.append(...result);
 };
 
-[
-  {
-    id: "featured",
-    totalSites: 16,
-    storageKey: "previousHrefs",
-  },
-  {
-    id: "home-featured-grid",
-    itemSelector: ".home-featured-item",
-    anchorSelector: ".home-featured-action",
-    totalSites: 27,
-    storageKey: "homePreviousHrefs",
-    fadeIn: true,
-  },
-].forEach((options) => {
-  renderFeatured({
-    topOfListLength: 9,
-    ...options,
-  });
-});
+renderFeatured();

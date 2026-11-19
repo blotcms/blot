@@ -13,7 +13,7 @@ var TITLES = {
   "google-docs": "Google Docs",
   icloud: "iCloud",
   cv: "CV",
-  examples: "Example sites",
+  discover: "Discover",
   markdown: "Markdown",
   "word-documents": "Word Documents",
   html: "HTML",

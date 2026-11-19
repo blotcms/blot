@@ -1,52 +1,42 @@
-<section class="home-hero" aria-label="About Blot">
-    <section class="home-intro home-panel">
-        <h1>Blot turns a folder into a website</h1>
+<section class="home-portfolio">
+  <div class="home-intro">
+    <h1>
+      Blot is a tool for building websites. It turns a folder into a website. Blot publishes files directly, so you can create a
+      <span class="visually-hidden">photo blog using Photoshop.</span><span class="home-example" aria-hidden="true"><span data-home-example>photo blog using Photoshop</span><span class="home-caret"></span>.</span>
+    </h1>
+    <a class="home-video-link" href="/watch" data-watch-trigger>
+      <span class="icon-play icon-inline" aria-hidden="true"></span>Watch the video
+    </a>
+  </div>
 
-        <p class="home-video-link">
-            <a href="/watch" data-watch-trigger><span class="icon-play icon-inline" aria-hidden="true"></span>Watch the video</a>
-        </p>
-
-        <p>Write with the tools you already use. Add files to a folder and Blot publishes them to your site.</p>
-
-        <nav class="home-links" aria-label="Blot links">
-            <a href="/how">How to use Blot{{> chevron}}</a>
-            <a href="/templates">Templates{{> chevron}}</a>
-            <a href="/about">About{{> chevron}}</a>
-        </nav>
-    </section>
-
-    {{#featured}}
-    <section class="home-featured" aria-label="People who use Blot">
-        <ul id="home-featured-grid" class="home-featured-grid home-fade-enabled">
-            {{#sites}}
-            <li class="home-featured-item">
-                <a class="home-avatar" target="_blank" rel="noopener" href="{{{link}}}">
-                    <img
-                        src="{{#cdn}}{{{image}}}{{/cdn}}"
-                        alt="{{name}}"
-                        width="{{featured.image_size}}"
-                        height="{{featured.image_size}}"
-                    />
-                    <span class="home-avatar-card">
-                        <span class="home-avatar-name">{{name}}</span>
-                        <span class="home-avatar-meta">
-                            {{bio}}{{#tenure_label}}<span class="home-avatar-tenure">Joined Blot {{tenure_label}}</span>{{/tenure_label}}
-                        </span>
-                    </span>
-                </a>
-            </li>
-            {{/sites}}
-            <li class="home-featured-action">
-                <a class="brochure-create-button" href="/sites/sign-up">Create site</a>
-            </li>
-        </ul>
-    </section>
-    {{/featured}}
+  <section class="home-templates" aria-labelledby="home-template-heading">
+    <h2 id="home-template-heading"><a href="/templates">Templates</a></h2>
+    <ul class="home-template-grid">
+      {{#homeTemplates}}
+      <li>
+        <a class="home-template" href="/templates/{{slug}}">
+          <div class="home-template-stage" aria-hidden="true">
+            <img class="home-template-screenshot"
+              src="{{#cdn}}/images/examples/{{slug}}/0-card.webp{{/cdn}}"
+              srcset="{{#cdn}}/images/examples/{{slug}}/0-thumb.png{{/cdn}} 320w, {{#cdn}}/images/examples/{{slug}}/0-card.webp{{/cdn}} 840w"
+              sizes="(max-width: 768px) calc((100vw - 40px) * .7), (max-width: 991px) calc((100vw - 60px) * .7), (max-width: 1300px) calc((100vw - 90px) * .35), calc((100vw - 120px) * .2333)"
+              width="1200" height="883" loading="lazy" decoding="async" alt="">
+            <div class="home-template-folder">{{{folder_html}}}</div>
+          </div>
+          <div class="home-template-caption">
+            <span>{{name}}</span>
+            {{#audience}}<span>For {{audience}}</span>{{/audience}}
+          </div>
+        </a>
+      </li>
+      {{/homeTemplates}}
+    </ul>
+  </section>
 </section>
 
 <section class="watch-screen" data-watch-screen aria-label="Blot video" aria-hidden="true">
-    {{> video}}
-    <button class="watch-close" data-watch-close type="button" aria-label="Close video">
-        <span class="watch-close-icon" aria-hidden="true"></span>
-    </button>
+  {{> video}}
+  <button class="watch-close" data-watch-close type="button" aria-label="Close video">
+    <span class="watch-close-icon" aria-hidden="true"></span>
+  </button>
 </section>
