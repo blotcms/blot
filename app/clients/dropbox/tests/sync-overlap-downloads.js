@@ -117,8 +117,13 @@ describe("dropbox sync/index overlapping downloads", function () {
       },
     });
 
-    await until(() => events.includes("download start /f2.txt"));
-    expect(events).toContain("update start f0.txt");
+    // The first update is held open; wait for it to have started as well as
+    // for the later download, as either can come first
+    await until(
+      () =>
+        events.includes("download start /f2.txt") &&
+        events.includes("update start f0.txt")
+    );
     expect(events).not.toContain("update end f0.txt");
 
     releaseFirst();
