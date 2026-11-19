@@ -38,7 +38,8 @@
   margin-bottom: 6px;
 }
 
-.discover-sites-head h2 {
+/* Not an h2: the documentation layout makes each h2 a link to itself */
+.discover-sites-title {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
