@@ -13,7 +13,7 @@
 //     profiles: [
 //       { blogID, host, name, bio, avatar: <base64 JPEG, or ""> } ] }
 //
-// Posts are oldest first. A post is identified by its blog ID and the URL of
+// Posts are in the order they were added, oldest first. A post is identified by its blog ID and the URL of
 // its entry (like "/my-post"), not the entry's path, since the same post has
 // a different path on another copy; each photo is identified by the asset
 // path of the original image, not Discover's resized copy. A post whose
@@ -139,6 +139,10 @@ async function exportPosts(now = Date.now()) {
   }
 
   const profiles = await exportProfiles();
+
+  // In the order they were added, whatever order the feed is in (it goes by
+  // the posts' dates)
+  posts.sort((a, b) => a.added - b.added);
 
   return { exported: { version: 1, exported: now, posts, profiles }, skipped };
 }
