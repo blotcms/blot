@@ -5,6 +5,7 @@ import recursiveList from "./util/recursiveList.js";
 import clfdate from "./util/clfdate.js";
 import { isEvictionSuppressed } from "./evictionSuppression.js";
 import { isActive } from "./watcher/activeBlogs.js";
+import { journalRunning, pollJournalSoon } from "./journal.js";
 
 // The purpose of this module is to keep iCloud Drive in sync
 // and it achieves this by running `brctl monitor` to detect blog
@@ -31,7 +32,8 @@ export default () => {
       // a date and time for the subsequent line or
       // refer to files outside a specific blog directory
       if (match) {
-        console.log(clfdate(), `brctl monitor event: ${line}`);
+        if (!journalRunning())
+          console.log(clfdate(), `brctl monitor event: ${line}`);
 
         const blogId = match[0];
 
@@ -48,6 +50,14 @@ export default () => {
             clfdate(),
             `Dropping brctl monitor event for inactive blogID: ${blogId}`
           );
+          return;
+        }
+
+        // bird's journal says exactly what changed, and the watcher lists
+        // only the folders FileProvider hasn't filled in yet; without the
+        // journal, fall back to listing the whole blog
+        if (journalRunning()) {
+          pollJournalSoon();
           return;
         }
 
