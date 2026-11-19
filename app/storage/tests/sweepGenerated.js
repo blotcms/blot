@@ -1075,8 +1075,11 @@ describe("storage/sweep generated files", function () {
     });
 
     describe("the start window", function () {
-      const AT_NIGHT = Date.UTC(2026, 10, 16, 3, 30);
-      const AT_NOON = Date.UTC(2026, 10, 16, 12, 30);
+      // Today's, so that the files the specs put (OLD, three days before
+      // NOW) are always more than a day older than these times
+      const MIDNIGHT = NOW - (NOW % DAY);
+      const AT_NIGHT = MIDNIGHT + 3.5 * HOUR;
+      const AT_NOON = MIDNIGHT + 12.5 * HOUR;
 
       it("doesn't start a run outside the window", async function () {
         zone([]);
