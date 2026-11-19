@@ -119,6 +119,7 @@ describe("scripts/discover/import", function () {
           url: older.url,
           title: "A post",
           sources: ["_image_cache/o.jpg"],
+          showText: false,
           added: 1000,
         },
         {
@@ -126,6 +127,7 @@ describe("scripts/discover/import", function () {
           url: newer.url,
           title: "A post",
           sources: ["_image_cache/n.jpg"],
+          showText: false,
           added: 2000,
         },
       ],
