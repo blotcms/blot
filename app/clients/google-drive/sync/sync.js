@@ -87,6 +87,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   const checkWeCanContinue = CheckWeCanContinue(blogID, account);
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
 
+  // Downloads run side by side, but each one writes into the blog folder only
+  // when no other is: File.setMany() reads and rewrites the directory index,
+  // so two writes at once could lose an entry.
+  const publishToFolder = createLimiter(1);
+
   const markSourceMissing = async (message) => {
     publish("Error syncing with Google Drive");
     await database.blog.store(blogID, sourceMissingFields(account, message));
@@ -350,7 +355,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                 drive,
                 path,
                 { id, md5Checksum, mimeType, modifiedTime },
-                { serviceAccountId, folderId }
+                { serviceAccountId, folderId, publish: publishToFolder }
               ),
             };
           } catch (error) {

@@ -18,6 +18,8 @@ function harness(count, { canContinue = async () => {} } = {}) {
     updateGates: new Map(),
     runningUpdates: 0,
     maxRunningUpdates: 0,
+    runningWrites: 0,
+    maxRunningWrites: 0,
     applied: [],
   };
   // A promise which resolves when the spec opens the gate
@@ -55,9 +57,21 @@ function harness(count, { canContinue = async () => {} } = {}) {
       unchanged: async () => null,
       stateOf: async () => ({ size: 1, modified: 1000, sha1: "sha1" }),
     },
-    "../util/download": async (blog, drive, path, remote) => {
+    "../util/download": async (blog, drive, path, remote, options) => {
       state.events.push("download start " + remote.id);
       await gate(state.downloadGates, remote.id);
+      // The step into the blog folder, as download() does it
+      await options.publish(async () => {
+        state.events.push("write start " + remote.id);
+        state.runningWrites += 1;
+        state.maxRunningWrites = Math.max(
+          state.maxRunningWrites,
+          state.runningWrites
+        );
+        await new Promise((resolve) => setTimeout(resolve, 2));
+        state.runningWrites -= 1;
+        state.events.push("write end " + remote.id);
+      });
       state.events.push("download end " + remote.id);
       return { updated: true };
     },
@@ -157,6 +171,33 @@ describe("google-drive sync() overlaps downloads with builds", function () {
     ]);
     // Recorded as applied only after each file's own build
     expect(h.applied).toEqual(["0", "1", "2"]);
+  });
+
+  it("lets downloads transfer together but writes into the folder one at a time", async function () {
+    const h = harness(3);
+    const done = h.run();
+
+    await settle();
+    // All three transfers are in flight, and finish together
+    for (const id of ["0", "1", "2"]) h.downloadGates.get(id)();
+    await settle();
+
+    expect(h.events.filter((e) => e.startsWith("download start")).length).toBe(
+      3
+    );
+    expect(h.maxRunningWrites).toBe(1);
+    const writes = h.events.filter((e) => e.startsWith("write "));
+    expect(writes.length).toBe(6);
+    // Each write ends before the next begins
+    writes.forEach((event, i) =>
+      expect(event.startsWith(i % 2 ? "write end" : "write start")).toBe(true)
+    );
+
+    for (let i = 0; i < 3; i++) {
+      await settle();
+      h.updateGates.get("/file" + i + ".txt")();
+    }
+    await done;
   });
 
   it("runs at most four downloads at once", async function () {
