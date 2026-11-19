@@ -33,7 +33,7 @@
 
 .discover-sites-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   margin-bottom: 6px;
 }
@@ -44,14 +44,20 @@
   font-weight: 600;
 }
 
+/* Like Visit site: text in the accent colour, a pill on hover */
 .discover-sites-head a {
-  font-size: 13px;
-  color: var(--medium-text-color);
+  margin-right: -0.75em;
+  padding: 0.35em 0.75em;
+  border-radius: 2em;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--accent-color);
   text-decoration: none;
+  transition: background 0.1s ease;
 }
 
 .discover-sites-head a:hover {
-  color: var(--accent-color);
+  background-color: #e8ecf9;
 }
 
 .discover-sites ul {
