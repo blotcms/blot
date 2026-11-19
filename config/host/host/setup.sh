@@ -269,11 +269,15 @@ Nice=19
 IOSchedulingClass=idle
 CPUWeight=20
 # rclone holds a blog's whole listing (--fast-list), so the largest blogs need
-# a few hundred MB each. GOMEMLIMIT makes each rclone collect garbage before
-# it grows past that, and OOMPolicy=continue means a kill fails only that
-# blog (retried by the next run) rather than the whole run.
-MemoryMax=2G
-Environment=GOMEMLIMIT=400MiB
+# a few hundred MB each. Two blogs at a time, each rclone collecting garbage
+# before it passes 300 MiB (GOMEMLIMIT), fit in 768M; OOMPolicy=continue means
+# a kill fails only that blog (retried by the next run) rather than the whole
+# run. Fewer at once makes the run slower, which is fine: it has 20 hours and
+# carries on where it got. The memory is the host's, beside Redis (#2795), and
+# each run logs its peak.
+MemoryMax=768M
+Environment=GOMEMLIMIT=300MiB
+Environment=BLOT_STORAGE_OFFSITE_PARALLEL=2
 OOMPolicy=continue
 # Stopped before the next day's run. The next run carries on from where it got.
 TimeoutStartSec=20h

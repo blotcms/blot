@@ -236,4 +236,6 @@ fi
 TIMEOUT=$(command -v timeout > /dev/null && echo "timeout 10" || true)
 $TIMEOUT redis6-cli SET "$OFFSITE_REDIS_KEY" "$(date -u +%Y-%m-%dT%H:%M:%SZ) $objects $bytes" > /dev/null 2>&1 ||
   log "WARNING: could not record the sync in Redis"
-log "done in ${elapsed}s: B2 holds $objects objects, $bytes bytes"
+# The run's memory high-water mark (cgroup v2), to size MemoryMax from (#2795)
+peak=$(cat "$ROOT/sys/fs/cgroup$(sed -n 's/^0:://p' /proc/self/cgroup 2> /dev/null)/memory.peak" 2> /dev/null || echo unknown)
+log "done in ${elapsed}s: B2 holds $objects objects, $bytes bytes, memory peak $peak bytes"
