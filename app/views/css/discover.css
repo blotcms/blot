@@ -1,5 +1,9 @@
 /* blot.im/discover (#2639), and the card preview on the confirm page */
 
+.discover-page {
+  container: discover / inline-size;
+}
+
 /* The feed in the middle of the page, the sites in a narrow column against
    the right edge; the left column is empty, so that the feed is centred */
 .discover {
@@ -19,11 +23,12 @@
   grid-column: 3;
   justify-self: end;
   width: 240px;
-  /* Sticks the same 8px from the top as the feed starts (.discover's
-     padding), so its top lines up with the first post's, and its heading
-     with that post's name */
+  /* The box's top in line with the top of the first post's Visit site pill,
+     15.5px into the post. Sticky, it keeps that plus the feed's 8px from the
+     top. */
+  margin-top: 15.5px;
   position: sticky;
-  top: 8px;
+  top: 23.5px;
 }
 
 /* The featured sites, in a box */
@@ -478,27 +483,33 @@
   left: 6px;
 }
 
-@media (max-width: 1000px) {
+/* Narrower, the layout follows the width it has (a container query, so the
+   page's own margins count): the feed against the left with the box against
+   the right, then the feed alone, centred, once the feed would be under
+   480px wide beside the box */
+@container discover (max-width: 1119px) {
   .discover {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .discover-main,
-  .discover-sidebar {
-    grid-column: 1;
+    grid-template-columns: minmax(0, 560px) 240px;
+    justify-content: space-between;
   }
 
   .discover-main {
-    max-width: 560px;
-    width: 100%;
-    margin: 0 auto;
+    grid-column: 1;
   }
 
   .discover-sidebar {
-    width: auto;
-    max-width: 560px;
-    margin: 0 auto;
-    position: static;
+    grid-column: 2;
+  }
+}
+
+@container discover (max-width: 759px) {
+  .discover {
+    grid-template-columns: minmax(0, 560px);
+    justify-content: center;
+  }
+
+  .discover-sidebar {
+    display: none;
   }
 }
 
