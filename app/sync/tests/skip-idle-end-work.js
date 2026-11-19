@@ -4,6 +4,8 @@ describe("sync end-of-sync work", function () {
   const storage = require("storage/folder");
   const template = require("models/template");
   const folderRenames = require("models/template/folderRenames");
+  const templateKey = require("models/template/key");
+  const client = require("models/client");
 
   const syncPath = require.resolve("../index");
   const renamesPath = require.resolve("../renames");
@@ -24,7 +26,8 @@ describe("sync end-of-sync work", function () {
     sync = require("../index");
   });
 
-  afterEach(function () {
+  afterEach(async function () {
+    await client.del(templateKey.needsBuild(this.blog.id));
     if (originalSync) require.cache[syncPath] = originalSync;
     else delete require.cache[syncPath];
     if (originalRenames) require.cache[renamesPath] = originalRenames;
@@ -85,6 +88,30 @@ describe("sync end-of-sync work", function () {
     });
 
     expect(template.buildFromFolder).toHaveBeenCalledWith(blogID);
+  });
+
+  it("retries a build which failed to read a template, then clears the key", async function () {
+    const blogID = this.blog.id;
+    const key = templateKey.needsBuild(blogID);
+    template.buildFromFolder.and.returnValue(Promise.resolve({ failed: 1 }));
+
+    await sync(blogID, async function (folder) {
+      await folder.update("/Templates/mine/package.json");
+    });
+
+    expect(template.buildFromFolder).toHaveBeenCalledTimes(1);
+    expect(await client.exists(key)).toBe(1);
+
+    // The next sync updates no template path, but still builds
+    template.buildFromFolder.and.returnValue(Promise.resolve({ failed: 0 }));
+    await sync(blogID, async function () {});
+
+    expect(template.buildFromFolder).toHaveBeenCalledTimes(2);
+    expect(await client.exists(key)).toBe(0);
+
+    // and the one after that does not
+    await sync(blogID, async function () {});
+    expect(template.buildFromFolder).toHaveBeenCalledTimes(2);
   });
 
   it("builds templates when the folder root was updated", async function () {

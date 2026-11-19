@@ -4,6 +4,8 @@ const Update = require("./update");
 const renames = require("./renames");
 const { isTemplatePath } = require("./update/set");
 const folderRenames = require("models/template/folderRenames");
+const templateKey = require("models/template/key");
+const client = require("models/client");
 const { take } = require("./hold");
 const messenger = require("./messenger");
 const previewReload = require("helper/publishPreviewReload");
@@ -16,6 +18,9 @@ const {
   addPendingUpdate,
   removePendingUpdate,
 } = require("./lock-diagnostics-state");
+
+// How long the templates-need-building key lasts if nothing clears it
+const NEEDS_BUILD_TTL_SECONDS = 60 * 60 * 24 * 90;
 
 // Runs async fn(folder) while holding the blog's folder lock, then finishes
 // the sync (renames, templates, CDN manifests, releasing the lock, the cacheID
@@ -227,12 +232,27 @@ async function acquire(blogID) {
     // missing: buildFromFolder keeps it for a rename window and finishes
     // removing it in the first sync after, whichever paths that sync updates
     // (see models/template/folderRenames), so it runs while one is pending.
+    //
+    // A build which fails to read a template (Redis trouble, say) would not
+    // be retried by the next sync, as the client has already saved its cursor,
+    // so a path in the templates folder also leaves a key behind, which is
+    // cleared only by a build in which every template was read.
     let buildTemplates = templatesTouched;
 
-    if (!buildTemplates) {
+    if (templatesTouched) {
+      try {
+        await client.set(templateKey.needsBuild(blogID), "1", {
+          EX: NEEDS_BUILD_TTL_SECONDS,
+        });
+      } catch (err) {
+        log("Could not mark templates as needing a build", err.message);
+      }
+    } else {
       try {
         const pending = await folderRenames.readPending(blogID);
-        buildTemplates = Object.keys(pending).length > 0;
+        buildTemplates =
+          Object.keys(pending).length > 0 ||
+          (await client.exists(templateKey.needsBuild(blogID))) > 0;
       } catch (err) {
         buildTemplates = true;
       }
@@ -241,7 +261,13 @@ async function acquire(blogID) {
     if (buildTemplates) {
       log("Building templates from folder");
       try {
-        await buildFromFolder(blogID);
+        const { failed } = (await buildFromFolder(blogID)) || {};
+
+        if (!failed) {
+          await client.del(templateKey.needsBuild(blogID));
+        } else {
+          log("Could not read " + failed + " template(s), will build again");
+        }
       } catch (buildError) {
         folder.status("Error building templates from folder");
         log("Error building templates in folder");
