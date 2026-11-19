@@ -37,8 +37,8 @@ describe("dropbox download with metadata passed in", function () {
   it("still applies the unsupported extension check to the metadata", async function () {
     const client = fakeClient();
 
-    await download(client, "/a.exe", blogID, "/a.exe", {
-      metadata: { path_display: "/a.exe", size: 2 },
+    await download(client, "/a.paper", blogID, "/a.paper", {
+      metadata: { path_display: "/a.paper", size: 2 },
     });
 
     expect(client.filesGetMetadata).not.toHaveBeenCalled();
