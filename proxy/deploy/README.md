@@ -49,9 +49,17 @@ unit gets:
 - these arguments: `/etc/blot/secrets.env` then `proxy.env` as
   env files (a key set differently in the two is refused before anything is
   touched), `BLOT_UNIT`, the data directory with `rslave`, the tmp directory,
-  `/run/blot`, `BLOT_RELEASE_ID`, `NODE_OPTIONS` (node-a's heap and the crash
-  report) and `BLOT_WORKER_MAX_OLD_SPACE_SIZE` (node-b), the memory and cpu
-  limits, `--stop-timeout`. The numbers are in `scripts/deploy/constants.js`
+  `/run/blot`, `BLOT_RELEASE_ID`, `BLOT_NODE_A_OPTIONS` (node-a's heap and the crash
+  report, which the supervisor passes to node-a alone),
+  `BLOT_WORKER_MAX_OLD_SPACE_SIZE` (node-b), `NODE_OPTIONS` (a 256 MB heap,
+  which only scripts run with `docker exec` inherit), the memory and cpu
+  limits, `--stop-timeout`, `--oom-score-adj 1000` (so a `docker exec`
+  script is the first thing killed under memory pressure) and
+  `--cap-add SYS_RESOURCE` (so the supervisor can set the scores of tini,
+  node-a and OpenResty, then drops the capability from everything it starts:
+  "Kill order" in `proxy/unit/supervisor.sh`). Scripts that need more than
+  256 MB run with `scripts/prod/run-script.js` instead, in a container of their
+  own. The numbers are in `scripts/deploy/constants.js`
   (`UNIT`), which `scripts/deploy/units.sh` writes to `unit-settings.env` beside
   these scripts;
 - no TCP port: node-a serves on its socket alone (two units on the host network

@@ -416,6 +416,48 @@ async function nodeFilter() {
   return `node-a has more seccomp filters than a docker exec (${own})`;
 }
 
+// The kill order under memory pressure (see "Kill order" in
+// proxy/unit/supervisor.sh): a script run with docker exec, like this one, is
+// killed first, then sandbox jobs and node-b, and OpenResty last.
+async function oomScores() {
+  const score = async (pid) =>
+    Number(await fs.readFile(`/proc/${pid}/oom_score_adj`, "utf8"));
+  const expected = {
+    "a script (this docker exec)": ["self", 1000],
+    tini: [1, 0],
+    "node-a": [null, 0],
+    "node-b": [null, 900],
+    OpenResty: [null, -900],
+  };
+
+  for (const pid of (await fs.readdir("/proc")).filter((name) =>
+    /^\d+$/.test(name)
+  )) {
+    const command = await fs
+      .readFile(`/proc/${pid}/cmdline`, "utf8")
+      .catch(() => "");
+    if (command === "node\0app/index.js\0") expected["node-a"][0] = pid;
+    else if (
+      command.includes("\0--max-old-space-size=") &&
+      command.endsWith("\0app/index.js\0")
+    )
+      expected["node-b"][0] = pid;
+    else if (command.startsWith("nginx: master process"))
+      expected["OpenResty"][0] = pid;
+  }
+
+  const found = [];
+  for (const [name, [pid, want]] of Object.entries(expected)) {
+    if (pid === null) throw new Error(`did not find ${name}`);
+    const got = await score(pid);
+    if (got !== want) {
+      throw new Error(`${name} has oom_score_adj ${got}, not ${want}`);
+    }
+    found.push(`${name} ${want}`);
+  }
+  return found.join(", ");
+}
+
 async function requiredEnv() {
   const missing = REQUIRED_ENV.filter((name) => !process.env[name]);
   if (missing.length) throw new Error(`unset: ${missing.join(", ")}`);
@@ -477,6 +519,7 @@ module.exports = [
   { name: "sandbox fetch", run: sandboxFetchWorks },
   { name: "sandbox parse-html", run: sandboxParseHtmlWorks },
   { name: "node filter", run: nodeFilter },
+  { name: "oom kill order", run: oomScores },
   { name: "required environment", run: requiredEnv },
   { name: "sandbox proxy", run: sandboxProxyWorks },
   { name: "host firewall", run: hostFirewall },
