@@ -211,7 +211,7 @@ const JOBS = {
     command: node("fetch-image"),
     network: true,
     cgroups: [FETCH_IMAGE_CGROUP],
-    cgroupLimits: { memoryBytes: 192 * MiB, pids: 64 },
+    cgroupLimits: { memoryBytes: 256 * MiB, pids: 64 },
     maxQueued: 8,
     timeSeconds: 30,
     maxInputBytes: 64 * 1024,

@@ -318,7 +318,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   broker kills what is left in it afterwards. So each holds one jail at a time.
   The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
   on the host), so one screenshot runs at a time per unit. `fetch-image`'s is
-  `/sandbox-cgroup/fetch-image`, 192 MiB and 64 pids, and `fetch`'s is
+  `/sandbox-cgroup/fetch-image`, 256 MiB and 64 pids, and `fetch`'s is
   `/sandbox-cgroup/fetch`, 256 MiB and 64 pids; the broker makes both when it
   starts (`proxy/unit/sandbox/cgroup.js`). So one `fetch-image` and one `fetch`
   run at a time per unit, and a slow server holds the rest of its own job up for
@@ -335,7 +335,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   request, not the wait).
 - **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
   512 MiB) with the image jobs (each up to 512 MiB, but two at once for the three sharp jobs that decode a whole image). The fetch
-  jobs' cgroups are in it, so their 192 + 256 MiB are limited by its 512 MiB, not added to it: the image jobs
+  jobs' cgroups are in it, so their 256 + 256 MiB are limited by its 512 MiB, not added to it: the image jobs
   have whatever the fetch jobs aren't using. (The retired proxy jail's
   128 MiB cgroup is gone from it.) The subtree's final size is for
   the unit memory work (TODO) to set from measured peaks.

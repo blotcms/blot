@@ -198,7 +198,7 @@ describe("sandbox broker and jail", function () {
       "/sandbox-cgroup"
     );
     assert.deepStrictEqual(j.cgroupLimits, {
-      memoryBytes: 192 * 1024 * 1024,
+      memoryBytes: 256 * 1024 * 1024,
       pids: 64,
     });
     assert.strictEqual(j.maxQueued, 8);
