@@ -39,6 +39,14 @@ module.exports = function (router) {
       done();
     });
 
+    // Node closes an idle connection after 5s and undici (fetch) reuses it
+    // until about then. The server shares a process with the specs, so when
+    // its event loop is busy a request can reach a socket Node is closing and
+    // the connection is reset (ECONNRESET). A longer timeout means the client
+    // is always the one to close an idle connection, as app/index.js does for
+    // nginx.
+    server.keepAliveTimeout = 60 * 1000;
+
     server.on("error", (err) => {
       console.error("Error starting test server:", err);
       done.fail(err);
