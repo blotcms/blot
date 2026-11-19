@@ -4,7 +4,8 @@
 //
 //   node scripts/discover/mirror-featured.js [host ...] [--limit <n>]
 //
-// With no hosts it does every host in sites.txt. Only each site's newest
+// With no hosts it does every host in sites.txt. Each site's newest post with
+// photos is put on Discover, so /discover has cards straight away. Only each site's newest
 // posts are mirrored, 10 unless --limit says otherwise, and only their
 // images are downloaded. For each one it fetches
 // https://<host>/feed.rss and finds the production blog ID in the image URLs
@@ -29,6 +30,11 @@
 // and listing a dozen of them would clutter the local dashboard and the blog
 // switcher. They are still reachable at <handle>.blot.localhost and listed by
 // Blog.getAllIDs.
+//
+// Each copy's domain is the real host, so it is found by host like the
+// production site (the /discover sidebar, add-links.js, include-featured.js)
+// and its cards link to the live post. Locally nothing resolves those hosts
+// to Blot, so the copy only answers at <handle>.blot.localhost.
 //
 // Safe to rerun: blogs and entries are found by ID and path, and images that
 // are already stored are not downloaded again. Refuses to run unless
@@ -123,6 +129,7 @@ async function createBlog(blogID, host, title, owner) {
     timeZone: "UTC",
     dateFormat: "M/D/YYYY",
     handle,
+    domain: host,
     includeInDiscover: true,
   };
 
@@ -173,6 +180,38 @@ async function mirrorAsset(blogID, rel) {
     console.log("  skipped " + rel + ": " + err.message);
     return "failed";
   }
+}
+
+// Puts the site's newest post with photos on Discover, with up to 3 of
+// them, so /discover has cards straight away. Its added time is the post's
+// date, so the grid is in the order the posts were published. Skipped if
+// the site already has a post on Discover. Resolves to whether it added one.
+async function addNewestToDiscover(blogID, paths) {
+  const entries = (await Entry.get(blogID, paths))
+    .filter((entry) => entry && entry.url)
+    .sort((a, b) => b.dateStamp - a.dateStamp);
+
+  for (const entry of entries)
+    if (await Discover.has(blogID, entry.id)) return false;
+
+  for (const entry of entries) {
+    const sources = [];
+
+    for (const rel of Discover.photos.candidates(blogID, entry)) {
+      if (await assets.exists(blogID, rel)) sources.push(rel);
+      if (sources.length === 3) break;
+    }
+
+    if (!sources.length) continue;
+
+    const id = Discover.postID(blogID, entry.id);
+    const photos = await Discover.photos.derive(blogID, id, sources);
+    await Discover.add(blogID, entry.id, photos, { added: entry.dateStamp });
+
+    return true;
+  }
+
+  return false;
 }
 
 async function writeEntry(blogID, item, now) {
@@ -233,7 +272,7 @@ async function writeEntry(blogID, item, now) {
     return null;
   }
 
-  return true;
+  return path;
 }
 
 // Resolves to { blogID, entries, images } for the host, or null if skipped
@@ -294,8 +333,11 @@ async function mirrorHost(host, owner, limit) {
 
     await createBlog(blogID, host, title, owner);
     created = true;
-  } else if (!existing.includeInDiscover) {
-    await Blog.set(blogID, { includeInDiscover: true });
+  } else if (!existing.includeInDiscover || !existing.domain) {
+    await Blog.set(blogID, {
+      includeInDiscover: true,
+      domain: existing.domain || host,
+    });
   }
 
   const local = config.cdn.origin + "/" + blogID + "/";
@@ -303,6 +345,7 @@ async function mirrorHost(host, owner, limit) {
   let entries = 0;
   let images = 0;
   const wanted = new Set();
+  const written = [];
 
   for (const item of items) {
     item.html = item.html.split(CDN + blogID + "/").join(local);
@@ -312,7 +355,11 @@ async function mirrorHost(host, owner, limit) {
     for (const rel of Discover.photos.candidates(blogID, item)) wanted.add(rel);
 
     try {
-      if (await writeEntry(blogID, item, now)) entries++;
+      const path = await writeEntry(blogID, item, now);
+      if (path) {
+        entries++;
+        written.push(path);
+      }
     } catch (err) {
       console.log("  entry " + item.link + " failed: " + err.message);
     }
@@ -320,6 +367,8 @@ async function mirrorHost(host, owner, limit) {
 
   for (const rel of wanted)
     if ((await mirrorAsset(blogID, rel)) === "stored") images++;
+
+  const added = await addNewestToDiscover(blogID, written);
 
   console.log(
     host +
@@ -334,10 +383,11 @@ async function mirrorHost(host, owner, limit) {
       images +
       " images downloaded, " +
       wanted.size +
-      " referenced"
+      " referenced" +
+      (added ? ", newest photo post added to Discover" : "")
   );
 
-  return { entries, images };
+  return { entries, images, added };
 }
 
 async function main() {
@@ -365,7 +415,7 @@ async function main() {
     usage("No local account " + OWNER_EMAIL + ". Sign up for one first.");
 
   const hosts = args.length ? args : await hostsFromSites();
-  const totals = { hosts: 0, skipped: 0, entries: 0, images: 0 };
+  const totals = { hosts: 0, skipped: 0, entries: 0, images: 0, added: 0 };
 
   for (const host of hosts) {
     const result = await mirrorHost(host, owner, limit);
@@ -378,6 +428,7 @@ async function main() {
     totals.hosts++;
     totals.entries += result.entries;
     totals.images += result.images;
+    if (result.added) totals.added++;
   }
 
   console.log(
@@ -389,7 +440,9 @@ async function main() {
       totals.entries +
       " entries, " +
       totals.images +
-      " images downloaded"
+      " images downloaded, " +
+      totals.added +
+      " posts added to Discover"
   );
 }
 
