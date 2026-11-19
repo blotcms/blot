@@ -392,10 +392,10 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-top: 0.85rem;
-  padding-top: 0.75rem;
-  border-top: 1px solid var(--border-color);
-  font-size: var(--small-font-size);
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 12px;
   color: var(--medium-text-color);
 }
 
