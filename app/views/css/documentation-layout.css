@@ -108,8 +108,10 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   margin-top: 64px;
 }
 
+/* On the right, beside the article: the site's own navigation is the
+   sidebar on the left */
 .documentation-sidebar {
-  grid-column: 1;
+  grid-column: 3;
   grid-row: 1;
   position: sticky;
   top: 80px;
@@ -184,9 +186,25 @@ html:has(.documentation-layout)::-webkit-scrollbar-thumb {
   outline-offset: -1px;
 }
 
-@media (max-width: 1080px) {
+/* Too narrow for a column beside the article: it follows the article */
+@media (max-width: 1200px) {
+  .documentation-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 582px) minmax(0, 1fr);
+  }
+
   .documentation-sidebar {
-    display: none;
+    grid-column: 2;
+    grid-row: 2;
+    position: static;
+    width: auto;
+    max-width: none;
+    max-height: none;
+    margin: 48px var(--documentation-gutter) 0;
+    overflow: visible;
+  }
+
+  .documentation-layout > footer {
+    grid-row: 3;
   }
 }
 

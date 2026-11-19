@@ -241,10 +241,6 @@
   }
 }
 
-body:has(.home-portfolio) .public-header {
-  animation: home-fade-in 850ms ease 200ms backwards;
-}
-
 .home-portfolio .home-intro {
   --home-entry-delay: 450ms;
 }

@@ -1,0 +1,135 @@
+/* The public site's navigation: the dashboard sidebar's look (fixed left
+   column, folder logo, quiet links) without its tokens or resize handle.
+   On phones it becomes a bar along the top. */
+.public-sidebar {
+  --public-sidebar-width: 240px;
+  position: fixed;
+  z-index: 100;
+  inset: 0 auto 0 0;
+  display: flex;
+  flex-direction: column;
+  width: var(--public-sidebar-width);
+  box-sizing: border-box;
+  overflow-y: auto;
+  padding: 24px 12px;
+  border-right: 1px solid var(--border-color);
+  background: var(--background-color);
+  font-size: 13px;
+}
+
+.public-sidebar__brand {
+  display: flex;
+  align-items: center;
+  height: 34px;
+  margin: 0 0 24px;
+  padding: 0 12px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+
+.public-sidebar__brand:hover,
+.public-sidebar__link:hover {
+  background: #f3f4f6;
+}
+
+.public-sidebar__logo {
+  width: 16px;
+  height: auto;
+}
+
+.public-sidebar__nav,
+.public-sidebar__account {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.public-sidebar__account {
+  margin-top: auto;
+}
+
+.public-sidebar__link {
+  display: flex;
+  align-items: center;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 0 12px;
+  border-radius: 8px;
+  color: var(--text-color);
+  line-height: 1.3;
+  text-decoration: none;
+}
+
+.public-sidebar__link.selected {
+  background: #ebecef;
+}
+
+.public-sidebar__brand:focus-visible,
+.public-sidebar__link:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+html[data-auth="in"] .public-sidebar .signed-in {
+  display: flex !important;
+}
+
+/* Everything beside the sidebar */
+.public-sidebar ~ main,
+.public-sidebar ~ .documentation-layout {
+  width: calc(100% - 240px);
+  margin-left: 240px;
+  box-sizing: border-box;
+}
+
+@media (max-width: 768px) {
+  .public-sidebar {
+    inset: 0 0 auto;
+    flex-direction: row;
+    align-items: center;
+    width: 100%;
+    height: 60px;
+    overflow: hidden;
+    padding: 8px 12px;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-color);
+  }
+
+  .public-sidebar__brand {
+    margin: 0 8px 0 0;
+  }
+
+  .public-sidebar__nav,
+  .public-sidebar__account {
+    flex-direction: row;
+    gap: 0;
+  }
+
+  .public-sidebar__nav {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .public-sidebar__account {
+    flex: 0 0 auto;
+    margin-top: 0;
+  }
+
+  /* Few links fit: the account links give way to the three main ones */
+  .public-sidebar__account .signed-out:first-child {
+    display: none;
+  }
+
+  .public-sidebar ~ main,
+  .public-sidebar ~ .documentation-layout {
+    width: 100%;
+    margin-left: 0;
+    margin-top: 60px;
+  }
+}
+
+@media (max-width: 480px) {
+  .public-sidebar__link {
+    padding: 0 8px;
+  }
+}
