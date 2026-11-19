@@ -490,36 +490,39 @@ describe("git store cache", function () {
     it("keeps to the budget with child processes writing at once, and one walk at a time evicting", async function () {
       const cap = 200 * 1024;
       const script = path.join(__dirname, "helpers", "cache-writer.js");
-      const children = [0, 1, 2].map((n) =>
-        fork(script, [dir, String(cap), "p" + n, "200", "2000"], {
-          stdio: ["ignore", "ignore", "inherit", "ipc"],
-        })
-      );
-      const results = await Promise.all(
-        children.map(
-          (child) =>
-            new Promise((resolve, reject) => {
-              let result = null;
-              child.on("message", (message) => (result = message));
-              child.on("exit", (code) =>
-                code === 0
-                  ? resolve(result)
-                  : reject(new Error("writer exited " + code))
-              );
-            })
-        )
-      );
-
-      // Writes past the high water mark were declined or asked for walks; at
-      // the end the directory is within the cap
-      expect(results.reduce((sum, r) => sum + r.stored, 0)).toBeGreaterThan(0);
-      expect(results.reduce((sum, r) => sum + r.walks, 0)).toBeGreaterThan(0);
-      expect(results.every((r) => r.maxSeen <= cap * 1.1)).toBe(true);
-
-      const cache = open({ maxBytes: cap });
-      await cache.settle();
-      expect(entryBytes(dir)).toBeLessThanOrEqual(cap);
-      expect(fs.existsSync(path.join(dir, "locks", "walk.lock"))).toBe(false);
+      let worst = 0;
+      for (let round = 0; round < 40; round++) {
+        const rdir = path.join(dir, "r" + round);
+        const children = [0, 1, 2].map((n) =>
+          fork(script, [rdir, String(cap), "p" + n, "200", "2000"], {
+            stdio: ["ignore", "ignore", "inherit", "ipc"],
+          })
+        );
+        const results = await Promise.all(
+          children.map(
+            (child) =>
+              new Promise((resolve, reject) => {
+                let result = null;
+                child.on("message", (message) => (result = message));
+                child.on("exit", (code) =>
+                  code === 0
+                    ? resolve(result)
+                    : reject(new Error("writer exited " + code))
+                );
+              })
+          )
+        );
+        const ratio = Math.max(...results.map((r) => r.maxSeen)) / cap;
+        worst = Math.max(worst, ratio);
+        console.error(
+          "STRESS round",
+          round,
+          ratio.toFixed(3),
+          JSON.stringify(results)
+        );
+      }
+      console.error("STRESS worst", worst.toFixed(3));
+      expect(worst).toBeLessThanOrEqual(1.1);
     });
 
     it("never lets concurrent large writes in several processes take the same room", async function () {

@@ -42,16 +42,21 @@ function entryBytes() {
 
   let stored = 0;
   let maxSeen = 0;
+  let peak = null;
   for (let i = 0; i < Number(count); i++) {
     if (await cache.put(prefix + i, Buffer.alloc(Number(length), i % 256)))
       stored++;
     if (i % 3 === 0) await cache.get(prefix + Math.floor(i / 2));
-    maxSeen = Math.max(maxSeen, entryBytes());
+    const seen = entryBytes();
+    if (seen > maxSeen) {
+      maxSeen = seen;
+      peak = { i, at: Date.now() % 100000, stats: cache.stats() };
+    }
   }
   await cache.settle();
   const { walks } = cache.stats();
   await cache.close();
-  process.send({ stored, walks, maxSeen }, () => process.exit(0));
+  process.send({ stored, walks, maxSeen, peak }, () => process.exit(0));
 })().catch((err) => {
   console.error(err);
   process.exit(1);
