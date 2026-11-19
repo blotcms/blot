@@ -4,6 +4,8 @@
     {{^site.featuredImage}}{{#site.avatar}}<img class="discover-avatar" src="{{{site.avatar}}}" alt="" />{{/site.avatar}}{{^site.avatar}}<span class="discover-avatar discover-initial">{{site.initial}}</span>{{/site.avatar}}{{/site.featuredImage}}
   </a>
 
+  {{#popover}}{{> discover-popover}}{{/popover}}
+
   <div class="discover-body">
     <div class="discover-head">
       <span class="discover-who">

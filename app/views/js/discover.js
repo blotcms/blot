@@ -128,3 +128,104 @@ if (document.readyState === "loading") {
 } else {
   updateAllArrows();
 }
+
+// The popover shown on hovering a name or avatar, in the feed or the sites
+// box. It is centred under the name, 8px below it (above it when there is no
+// room below), and kept inside the window. It opens after a short pause and
+// stays open while the pointer is on it. Only for pointers which hover.
+const POPOVER_TRIGGERS =
+  ".discover-card .discover-name, .discover-card .discover-avatar-link, .discover-sites li > a";
+const POPOVER_GAP = 8;
+const POPOVER_MARGIN = 8;
+const OPEN_DELAY = 300;
+const CLOSE_DELAY = 150;
+
+let openPopover = null;
+let openTimer = null;
+let closeTimer = null;
+
+function popoverFor(trigger) {
+  const item = trigger.closest(".discover-card, .discover-sites li");
+  if (!item) return null;
+
+  return {
+    popover: item.querySelector(".discover-popover"),
+    anchor:
+      item.querySelector(".discover-name, .discover-site-name") || trigger,
+  };
+}
+
+function place(popover, anchor) {
+  const rect = anchor.getBoundingClientRect();
+  const width = popover.offsetWidth;
+  const height = popover.offsetHeight;
+
+  let left = rect.left + rect.width / 2 - width / 2;
+  left = Math.max(
+    POPOVER_MARGIN,
+    Math.min(
+      left,
+      document.documentElement.clientWidth - width - POPOVER_MARGIN
+    )
+  );
+
+  let top = rect.bottom + POPOVER_GAP;
+  if (top + height > document.documentElement.clientHeight - POPOVER_MARGIN)
+    top = Math.max(POPOVER_MARGIN, rect.top - POPOVER_GAP - height);
+
+  popover.style.left = Math.round(left) + "px";
+  popover.style.top = Math.round(top) + "px";
+}
+
+function closePopover() {
+  if (openPopover) openPopover.classList.remove("open");
+  openPopover = null;
+}
+
+function showPopover(popover, anchor) {
+  if (openPopover && openPopover !== popover) closePopover();
+  popover.classList.add("open");
+  place(popover, anchor);
+  openPopover = popover;
+}
+
+if (window.matchMedia && window.matchMedia("(hover: hover)").matches) {
+  document.addEventListener("mouseover", (event) => {
+    const onPopover = event.target.closest(".discover-popover");
+    const trigger = event.target.closest(POPOVER_TRIGGERS);
+
+    if (onPopover || trigger) clearTimeout(closeTimer);
+    if (!trigger) return;
+
+    const found = popoverFor(trigger);
+    if (!found || !found.popover || found.popover === openPopover) return;
+
+    clearTimeout(openTimer);
+    openTimer = setTimeout(
+      () => showPopover(found.popover, found.anchor),
+      openPopover ? 0 : OPEN_DELAY
+    );
+  });
+
+  document.addEventListener("mouseout", (event) => {
+    const leaving = event.target.closest(
+      POPOVER_TRIGGERS + ", .discover-popover"
+    );
+    if (!leaving) return;
+
+    const to = event.relatedTarget;
+    if (
+      to &&
+      to.closest &&
+      to.closest(POPOVER_TRIGGERS + ", .discover-popover")
+    )
+      return;
+
+    clearTimeout(openTimer);
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(closePopover, CLOSE_DELAY);
+  });
+
+  window.addEventListener("scroll", closePopover, { passive: true });
+  window.addEventListener("resize", closePopover);
+}

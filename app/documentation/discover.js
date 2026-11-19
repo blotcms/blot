@@ -14,6 +14,31 @@ const SIDEBAR_TTL = 10 * 60 * 1000;
 const SIDEBAR_SITES = 10;
 let sidebar = { at: 0, hosts: null };
 
+const YEAR = 365.25 * 24 * 60 * 60 * 1000;
+
+// "7 years on Blot", from a featured site's tenure (ms), or "" if unknown
+function yearsOnBlot(tenure) {
+  if (!(tenure > 0)) return "";
+  const years = Math.floor(tenure / YEAR);
+  if (years < 1) return "New to Blot";
+  return years + (years === 1 ? " year" : " years") + " on Blot";
+}
+
+// What the popover shown on hovering a name or avatar needs: the
+// featured site's details where there are some, or the blog's own
+function popover(site, featured) {
+  return {
+    name: (featured && featured.name) || site.name,
+    address: (site.host || "").replace(/^www\./, ""),
+    url: site.url,
+    featuredImage: featured ? featured.image : "",
+    avatar: site.avatar || "",
+    initial: site.initial || "",
+    bio: featured ? featured.bio : "",
+    years: featured ? yearsOnBlot(featured.tenure) : "",
+  };
+}
+
 // Resolves to the set of featured hosts whose site has includeInDiscover on
 async function includedHosts(sites) {
   if (sidebar.hosts && Date.now() - sidebar.at < SIDEBAR_TTL)
@@ -60,16 +85,26 @@ module.exports = async function (req, res, next) {
         post.site.name = match.name;
         post.site.featuredImage = match.image;
       }
+
+      post.popover = popover(post.site, match);
     }
+
+    const sites = (featured.sites || [])
+      .filter((site) => hosts.has(site.host))
+      .slice(0, SIDEBAR_SITES)
+      .map((site) => ({
+        ...site,
+        popover: popover(
+          { host: site.host, url: site.link, name: site.name },
+          site
+        ),
+      }));
 
     res.locals.discover = {
       posts,
       next: more ? "/discover?before=" + more : "",
       // The first few; "See all" links to /examples for the rest
-      sites: (featured.sites || [])
-        .filter((site) => hosts.has(site.host))
-        .slice(0, SIDEBAR_SITES),
-      image_size: featured.image_size,
+      sites,
     };
 
     res.render("discover");

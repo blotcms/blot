@@ -478,3 +478,107 @@
     position: static;
   }
 }
+
+/* The popover shown on hovering a name or avatar, in the feed or the sites
+   box. Sizes follow the maintainer's reference: 320px wide, 12px padding,
+   an 18px name, a 48px avatar, 15px text on 20px lines, one button. It is
+   placed by app/views/js/discover.js. */
+.discover-popover {
+  display: none;
+  position: fixed;
+  z-index: 50;
+  width: 320px;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--background-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  color: var(--text-color);
+  font-size: 15px;
+  line-height: 20px;
+  text-align: left;
+}
+
+.discover-popover.open {
+  display: block;
+}
+
+.discover-popover-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.discover-popover-who {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.discover-popover-name {
+  font-size: 18px;
+  line-height: 24px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discover-popover-address {
+  margin-top: 4px;
+  color: var(--medium-text-color);
+}
+
+.discover-popover-avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+}
+
+.discover-popover-avatar img {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--light-background-color);
+}
+
+.discover-popover-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.discover-popover-bio,
+.discover-popover-years {
+  margin: 0;
+}
+
+.discover-popover-bio {
+  margin-top: 13px;
+}
+
+.discover-popover-years {
+  margin-top: 4px;
+  color: var(--medium-text-color);
+}
+
+.discover-popover .discover-popover-button {
+  display: block;
+  margin-top: 16px;
+  height: 31px;
+  line-height: 31px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent-color);
+  text-decoration: none;
+}
+
+.discover-popover .discover-popover-button:hover {
+  filter: brightness(1.08);
+}
