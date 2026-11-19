@@ -225,7 +225,7 @@ a.dashboard-support__option:focus-visible {
 
 .create-site-button {
   flex: 0 0 auto;
-  margin: 0;
+  margin: 0 0 0 auto;
 }
 
 .sites-list-container__table-wrap {
