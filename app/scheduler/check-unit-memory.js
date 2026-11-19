@@ -217,7 +217,7 @@ const titleOf = (name) =>
     ? "Unit memory sample stale"
     : `${name.replace(/^memory:/, "")} memory near its limit`;
 
-function describe(name, report) {
+function explain(name, report) {
   if (name === "sample-stale") {
     return `the host's sample of unit memory is ${minutes(report.age)} old: \`unit-mem-log.sh\` stopped running from \`/etc/cron.d/blot-unit-mem\`, or Redis refused its write`;
   }
@@ -234,7 +234,7 @@ function view(report) {
   }));
   const started = report.started.map((name) => ({
     title: titleOf(name),
-    message: describe(name, report),
+    message: explain(name, report),
   }));
   const alerts = kills.concat(started);
   const recovered = report.cleared.map((name) => ({ title: titleOf(name) }));
