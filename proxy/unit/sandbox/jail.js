@@ -494,6 +494,7 @@ function proxyCommand(unit) {
 module.exports = {
   JOBS,
   NSJAIL,
+  CGROUP_MOUNT,
   BROWSER_CGROUP,
   PROXY_CGROUP,
   FETCH_CGROUP,
