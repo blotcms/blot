@@ -60,14 +60,22 @@ const forgetPath = (blogID, path) => {
   }
 };
 
+// Every path recorded for a blog, as [path, isDirectory] pairs: what the
+// periodic sweep expects to find on disk
+const recordedPaths = (blogID) =>
+  Array.from(blogs.get(blogID) || [], ([path, value]) => [
+    path,
+    value === DIRECTORY,
+  ]);
+
 const forgetBlog = (blogID) => {
   blogs.delete(blogID);
 };
 
 // True, once, for a blog with no record yet: the first time it is watched in
 // this process (or after forgetBlog). Only that first initial scan may record
-// files as pushed. An eviction restarts the watcher, and a later scan would
-// record an edit whose upload is still queued.
+// files as pushed: a later scan would record an edit whose upload is still
+// queued.
 const startTracking = (blogID) => {
   if (blogs.has(blogID)) return false;
   blogs.set(blogID, new Map());
@@ -81,6 +89,7 @@ export {
   recordDirectory,
   forgetPath,
   forgetBlog,
+  recordedPaths,
   startTracking,
   MAX_ENTRIES_PER_BLOG,
 };
