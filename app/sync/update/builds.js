@@ -28,8 +28,16 @@ const queues = serialByKey();
 // blogID -> how many concurrent batches are running for it
 const batches = new Map();
 
-// blogID -> Set of promises for work started during a batch, settled or not
-const inFlight = new Map();
+// blogID -> Set of promises, settled or not, for the builds running in a
+// batch (what queue() runs). A recheck in rebuildDependents.js waits for
+// these only.
+const building = new Map();
+
+// blogID -> Set of promises for the rest of what a batch started: rechecks
+// and the dependents' rebuilds nobody waits for. Only the batch waits for
+// these. A recheck that waited for earlier rechecks too would hold every one
+// before it, so with one slow build they would pile up behind each other.
+const background = new Map();
 
 function concurrent(blogID) {
   return batches.has(blogID);
@@ -51,15 +59,13 @@ async function batch(blogID, fn) {
   }
 }
 
-// Counts promise as in flight for the blog until it settles. Returns it.
-function track(blogID, promise) {
-  if (!concurrent(blogID)) return promise;
-
-  let set = inFlight.get(blogID);
+// Adds promise to the blog's set in map until it settles. Returns it.
+function add(map, blogID, promise) {
+  let set = map.get(blogID);
 
   if (!set) {
     set = new Set();
-    inFlight.set(blogID, set);
+    map.set(blogID, set);
   }
 
   const done = promise.then(
@@ -71,23 +77,39 @@ function track(blogID, promise) {
 
   done.then(() => {
     set.delete(done);
-    if (!set.size && inFlight.get(blogID) === set) inFlight.delete(blogID);
+    if (!set.size && map.get(blogID) === set) map.delete(blogID);
   });
 
   return promise;
 }
 
-// The work in flight for the blog now, as promises which never reject
-function running(blogID) {
-  return Array.from(inFlight.get(blogID) || []);
+function list(map, blogID) {
+  return Array.from(map.get(blogID) || []);
 }
 
-// Resolves once nothing is in flight for the blog, including work started
-// while waiting
+// Counts promise, background work the batch started, as in flight for the
+// blog until it settles, so the batch waits for it. Returns it.
+function track(blogID, promise) {
+  if (!concurrent(blogID)) return promise;
+
+  return add(background, blogID, promise);
+}
+
+// The builds running for the blog now, as promises which never reject. Not
+// the background work: see background above.
+function running(blogID) {
+  return list(building, blogID);
+}
+
+// Resolves once nothing is in flight for the blog, builds and background
+// work, including work started while waiting
 async function settled(blogID) {
   let pending;
 
-  while ((pending = running(blogID)).length) await Promise.all(pending);
+  while (
+    (pending = list(building, blogID).concat(list(background, blogID))).length
+  )
+    await Promise.all(pending);
 }
 
 // Runs fn, which builds path and saves (or drops) its entry, once every
@@ -96,7 +118,9 @@ async function settled(blogID) {
 function queue(blogID, path, fn) {
   if (!concurrent(blogID)) return fn();
 
-  return queues(blogID + ":" + pathNormalizer(path), () => track(blogID, fn()));
+  return queues(blogID + ":" + pathNormalizer(path), () =>
+    add(building, blogID, fn())
+  );
 }
 
 module.exports = { batch, concurrent, queue, running, settled, track };
