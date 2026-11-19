@@ -97,22 +97,58 @@ describe("template", function () {
     expect(result.viewName).toEqual(null);
   });
 
-  it("reads a view's properties from package.json", async function () {
-    await Promise.all([
-      this.put("/style.css", "body {color:pink}"),
-      this.put(
-        "/package.json",
-        JSON.stringify({
-          locals: { foo: "bar" },
-          views: { "style.css": { url: "/test", locals: { baz: "bat" } } },
-        })
-      ),
-    ]);
+  for (let n = 0; n < 40; n++) {
+    it(
+      "[stress " + n + "] reads a view's properties from package.json",
+      async function () {
+        await Promise.all([
+          this.put("/style.css", "body {color:pink}"),
+          this.put(
+            "/package.json",
+            JSON.stringify({
+              locals: { foo: "bar" },
+              views: { "style.css": { url: "/test", locals: { baz: "bat" } } },
+            })
+          ),
+        ]);
 
-    var template = await readFromFolder(this.blog.id, this.dir);
-    var result = await getViewByURL(template.id, "/test");
-    expect(result.viewName).toEqual("style.css");
-  });
+        var template = await readFromFolder(this.blog.id, this.dir);
+        var result = await getViewByURL(template.id, "/test");
+        expect(result.viewName).toEqual("style.css");
+      }
+    );
+  }
+
+  for (let n = 0; n < 40; n++) {
+    it(
+      "[stress " + n + "] removes a view when you remove its file",
+      async function () {
+        const dir = this.dir;
+        const blogID = this.blog.id;
+
+        await Promise.all([
+          this.put("/hello.html", "Hello, world!"),
+          this.put("/test.html", "Hello, test!"),
+        ]);
+
+        var template = await readFromFolder(blogID, dir);
+        var view = await get(template.id, "test.html");
+        expect(view.content).toEqual("Hello, test!");
+
+        await folder.remove(blogID, dir + "/test.html");
+        await readFromFolder(blogID, dir);
+
+        var missing;
+        try {
+          missing = await get(template.id, "test.html");
+          fail("should have thrown");
+        } catch (err) {
+          expect(err.message.includes("No view")).toBe(true);
+          expect(missing).toEqual(undefined);
+        }
+      }
+    );
+  }
 
   it("assigns a view a URL automatically", async function () {
     await this.put("/style.css", "body {color:pink}");
@@ -139,32 +175,6 @@ describe("template", function () {
     template = await readFromFolder(blogID, templateFolder);
     var result = await getViewByURL(template.id, "/foo");
     expect(result.viewName).toEqual("style.css");
-  });
-
-  it("removes a view when you remove its file", async function () {
-    const dir = this.dir;
-    const blogID = this.blog.id;
-
-    await Promise.all([
-      this.put("/hello.html", "Hello, world!"),
-      this.put("/test.html", "Hello, test!"),
-    ]);
-
-    var template = await readFromFolder(blogID, dir);
-    var view = await get(template.id, "test.html");
-    expect(view.content).toEqual("Hello, test!");
-
-    await folder.remove(blogID, dir + "/test.html");
-    await readFromFolder(blogID, dir);
-
-    var missing;
-    try {
-      missing = await get(template.id, "test.html");
-      fail("should have thrown");
-    } catch (err) {
-      expect(err.message.includes("No view")).toBe(true);
-      expect(missing).toEqual(undefined);
-    }
   });
 
   it("reads a view's content from a folder", async function () {

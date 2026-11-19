@@ -26,6 +26,7 @@ module.exports = async function readFromFolder(blogID, dir) {
     return entry.name;
   });
 
+  console.log("STRESS listed", JSON.stringify(contents));
   if (!contents.length) throw new Error("No files found in " + dir);
 
   var id = makeID(blogID, basename(dir));
@@ -69,6 +70,7 @@ module.exports = async function readFromFolder(blogID, dir) {
     try {
       stat = await folder.stat(blogID, dir + "/" + name);
     } catch (err) {
+      console.log("STRESS stat failed", name, err);
       continue;
     }
 
@@ -80,6 +82,7 @@ module.exports = async function readFromFolder(blogID, dir) {
     try {
       buffer = await folder.read(blogID, dir + "/" + name);
     } catch (err) {
+      console.log("STRESS read failed", name, err);
       continue;
     }
 
