@@ -134,8 +134,12 @@ add.post("/:token", async (req, res, next) => {
   }
 });
 
+// Locally, BLOT_ADMIN_UID is usually unset, so any account may manage
+// Discover there (see scripts/discover/mirror-featured.js)
 function isMaintainer(req) {
-  return !!(config.admin.uid && req.user && req.user.uid === config.admin.uid);
+  if (!req.user) return false;
+  if (config.environment === "development") return true;
+  return !!(config.admin.uid && req.user.uid === config.admin.uid);
 }
 
 manage.use((req, res, next) => {

@@ -48,14 +48,21 @@ async function has(blogID, entryID) {
 }
 
 // Adds a post, or replaces the photos of one already on Discover (it keeps
-// its place). photos are the derived ones, from photos.derive. Resolves to
-// the post.
-async function add(blogID, entryID, saved) {
+// its place). photos are the derived ones, from photos.derive. options.added
+// (ms) sets when it was added, for an import (scripts/discover/import.js) to
+// keep the order of the export. Resolves to the post.
+async function add(blogID, entryID, saved, options = {}) {
   ensure(blogID, "string").and(entryID, "string").and(saved, "array");
 
   const id = postID(blogID, entryID);
   const existing = await get(id);
-  const added = existing ? existing.added : Date.now();
+  const given = parseInt(options.added, 10);
+  const added =
+    Number.isFinite(given) && given > 0
+      ? given
+      : existing
+        ? existing.added
+        : Date.now();
 
   await client
     .multi()
