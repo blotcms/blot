@@ -463,7 +463,7 @@ body.is-resizing-dashboard-sidebar .dashboard-sidebar {
 
 .dashboard-sidebar__brand .dashboard-sidebar__brand-icon {
   display: block;
-  width: 22px;
+  width: 18px;
   height: auto;
 }
 
@@ -769,10 +769,6 @@ body.is-resizing-dashboard-sidebar .dashboard-sidebar {
   .dashboard-sidebar__brand {
     margin-right: var(--space-1);
     font-size: var(--text-base);
-  }
-
-  .dashboard-sidebar__brand .dashboard-sidebar__brand-icon {
-    width: 25px;
   }
 
 }
