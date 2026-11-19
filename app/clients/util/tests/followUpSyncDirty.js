@@ -34,7 +34,10 @@ describe("followUpSync dirty flag", function () {
     await followUps.run(blogID);
 
     expect(syncBlog).not.toHaveBeenCalled();
-    expect(await client.get(dirtyKey())).toBe("1");
+    // The flag holds the time the alarm is due
+    expect(Number(await client.get(dirtyKey()))).toBe(
+      await followUps.alarm.when(blogID)
+    );
     const ttl = await client.ttl(dirtyKey());
     expect(ttl).toBeGreaterThan(0);
     expect(ttl).toBeLessThanOrEqual(300);
@@ -74,6 +77,56 @@ describe("followUpSync dirty flag", function () {
     await followUps.run(blogID);
 
     expect(syncBlog.calls.count()).toBe(1);
+  });
+
+  it("leaves the alarm due when the sync run again fails", async function () {
+    let syncs = 0;
+    let followUps;
+    const syncBlog = jasmine.createSpy("syncBlog").and.callFake(async () => {
+      syncs++;
+      if (syncs === 2) throw new Error("boom");
+      if (syncs === 1) {
+        const lock = await folderLock.lock(blogID, {
+          ttl: 10000,
+          heartbeat: 3000,
+        });
+        await followUps.run(blogID);
+        await lock.release();
+      }
+    });
+    followUps = followUpSync(name, syncBlog);
+
+    await followUps.run(blogID);
+
+    expect(syncs).toBe(2);
+    expect(await followUps.alarm.when(blogID)).not.toBe(null);
+  });
+
+  it("keeps an alarm which was moved since the sync run again took over", async function () {
+    let syncs = 0;
+    let followUps;
+    let moved;
+    const syncBlog = jasmine.createSpy("syncBlog").and.callFake(async () => {
+      syncs++;
+      if (syncs === 1) {
+        const lock = await folderLock.lock(blogID, {
+          ttl: 10000,
+          heartbeat: 3000,
+        });
+        await followUps.run(blogID);
+        await lock.release();
+      } else {
+        // Another process arms a follow-up during the sync run again
+        moved = Date.now() + 15000 + 0.5;
+        await followUps.alarm.set(blogID, moved);
+      }
+    });
+    followUps = followUpSync(name, syncBlog);
+
+    await followUps.run(blogID);
+
+    expect(syncs).toBe(2);
+    expect(await followUps.alarm.when(blogID)).toBe(moved);
   });
 
   it("leaves an existing follow-up alone when a sync finds no dirty flag", async function () {

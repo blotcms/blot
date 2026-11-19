@@ -68,30 +68,26 @@ function followUpSync(name, syncBlog) {
     return "sync:follow-up:dirty:" + name + ":" + blogID;
   }
 
-  // The lock is held: set the dirty flag and the follow-up in one MULTI
+  // The lock is held: set the dirty flag and the follow-up in one MULTI. The
+  // flag holds the time the alarm is due, so it always names the alarm the
+  // last request set.
   async function queue(blogID) {
+    const due = Date.now() + RETRY_MS;
     const multi = client
       .multi()
-      .set(dirtyKey(blogID), "1", { EX: DIRTY_TTL_SECONDS });
-    await alarms.queueSet(multi, blogID, Date.now() + RETRY_MS).exec();
+      .set(dirtyKey(blogID), String(due), { EX: DIRTY_TTL_SECONDS });
+    await alarms.queueSet(multi, blogID, due).exec();
   }
 
-  // Reads and clears the dirty flag, and if it was set, cancels the blog's
-  // follow-up. Resolves true if requests arrived during the sync which has
-  // just finished.
-  //
-  // The alarm is cancelled only when the flag was set, because a follow-up
-  // with no flag may be one another process armed for a change it has not
-  // synced yet (see arm), and must stay in case that process dies. With the
-  // flag set, cancelling is safe: the sync run again starts after the cancel,
-  // so it sees everything as it is by then. A request that sets the flag and
-  // the alarm again between our GETDEL and our cancel loses only its alarm;
-  // its flag is still set, so the next takeDirty sees it and syncs again.
+  // Reads and clears the dirty flag. Resolves the due time of the alarm the
+  // requests which set it left behind, or null if there was no flag. It leaves
+  // the alarm alone: run() takes that back only once the sync run again has
+  // succeeded.
   async function takeDirty(blogID) {
     const flag = await client.getDel(dirtyKey(blogID));
-    if (flag === null || flag === undefined) return false;
-    await alarms.cancel(blogID);
-    return true;
+    if (flag === null || flag === undefined) return null;
+    const due = Number(flag);
+    return Number.isFinite(due) ? due : null;
   }
 
   // Resolves "synced" if the sync ran, "locked" if it found the lock taken
@@ -156,19 +152,24 @@ function followUpSync(name, syncBlog) {
     // ran may have been walked past by it, so rather than leave them to the
     // follow-up alarm, which waits RETRY_MS, sync again now.
     //
-    // A request can still arrive after the flag was read and before the lock
-    // was released (or, in a sync run again below, while it runs). It sets the
-    // flag and the alarm again, and the alarm, which stays as the backstop,
-    // syncs it. A failed sync takes neither, so its alarm retries it.
-    let dirty;
+    // The sync run again takes over the alarm those requests set, and takes it
+    // back (cancelIf, as for an armed change) only once it has succeeded. If it
+    // fails, or the process dies, the alarm is still there to retry it. A
+    // request which arrives later moves the alarm and sets the flag again, so
+    // the alarm is kept and the next takeDirty sees the flag; a Git arm moves
+    // it to its own time, so it is kept too. If the alarm fires while the sync
+    // run again still holds the lock, its follow-up finds the lock held and
+    // queues again, which costs at most one more cycle, within MAX_REPEATS. A
+    // failed first sync never gets here, so its alarm retries it.
+    let due;
     try {
-      dirty = await takeDirty(blogID);
+      due = await takeDirty(blogID);
     } catch (err) {
       log("Could not read dirty flag", blogID, err);
       return;
     }
 
-    if (!dirty) return;
+    if (due === null) return;
 
     if (repeats >= MAX_REPEATS) {
       log(
@@ -179,7 +180,7 @@ function followUpSync(name, syncBlog) {
     }
 
     log("Changes arrived during the sync, syncing again", blogID);
-    return run(blogID, undefined, repeats + 1);
+    return run(blogID, due, repeats + 1);
   }
 
   // For the clients' test-only syncs-finished routes: whether a follow-up is
