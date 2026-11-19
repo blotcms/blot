@@ -446,10 +446,15 @@ async function main() {
   );
 }
 
-main().then(
-  () => process.exit(0),
-  (err) => {
-    console.error(err);
-    process.exit(1);
-  }
-);
+if (require.main === module) {
+  main().then(
+    () => process.exit(0),
+    (err) => {
+      console.error(err);
+      process.exit(1);
+    }
+  );
+}
+
+// Used by add-post.js to copy a single post
+module.exports = { OWNER_EMAIL, createBlog, writeEntry, mirrorAsset };

@@ -54,6 +54,13 @@ public RSS feed (development only), keeping production's blog IDs, entry
 URLs and image asset paths, and puts each site's newest post with photos on
 Discover. Run it in the node container (`blot-node-<slot>` for a preview).
 
+To add a particular post, `scripts/discover/add-post.js <post URL>
+[--photos <n>]` puts it on Discover with up to 3 of its photos (0 for a text
+card). Locally it copies the site and the post from the live page first if
+they aren't there (`--refresh` copies them again); on production it finds
+them by host and URL and fetches nothing, so it is also the maintainer's
+manual opt-in there.
+
 To pick posts by hand instead, `scripts/discover/add-links.js <host>` prints
 "Add to Discover" links for a site's newest posts; locally any account can
 open the manage page.
