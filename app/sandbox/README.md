@@ -318,36 +318,25 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   broker kills what is left in it afterwards. So each holds one jail at a time.
   The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
   on the host), so one screenshot runs at a time per unit. `fetch-image`'s is
-  `/sandbox-cgroup/fetch`, 256 MiB and 64 pids, which the broker makes when it
-  starts (`proxy/unit/sandbox/cgroup.js`). So
-  one fetch runs at a time per unit, and a slow server holds the rest up for
-  as long as 20s. That is background build work. A fetch waits in a queue of
+  `/sandbox-cgroup/fetch-image`, 256 MiB and 64 pids, and `fetch`'s is
+  `/sandbox-cgroup/fetch`, 256 MiB and 64 pids; the broker makes both when it
+  starts (`proxy/unit/sandbox/cgroup.js`). So one `fetch-image` and one `fetch`
+  run at a time per unit, and a slow server holds the rest of its own job up for
+  as long as 20s. That is background build work. A fetch-image waits in a queue of
   its own, at most 8, inside the broker's, so a backlog of them never fills
   the queue the dashboard's jobs wait in: past it, or after a minute queued,
   the answer is `busy` (logged, not emailed: see Alerts) and the post keeps its remote link.
-- **`fetch` is in the same cgroup, with a queue of its own.** An import's
-  files, the domain checks and the featured-site checks take turns with the
-  post builds' images in the one slot, and add no memory. What keeps them from
-  blocking each other is the queues and the broker's turn-taking: each job's
-  queue is its own (`fetch` 16, `fetch-image` 8), and when a cgroup is free the
-  broker starts the oldest request, except that a job that ran last in it yields
-  to a waiting job of the other name. So a big import's batches, however many
-  are queued ahead, alternate with the post build's images, and a post build's
-  image waits behind at most one batch (75s at most, usually a few seconds); and
-  the import waits behind at most one image (30s),
-  not behind the build's whole backlog. `busy` for either is logged, and the
-  caller carries on without that file or link. A second cgroup for imports was
-  weighed and left. It would have had to be 128 MiB or less (with the proxy jail's
-  128 and `fetch-image`'s 256 that was the whole 512 MiB), and 128 MiB can't hold a 50 MiB file in the
-  jail together with the copy made when it is joined (measured, in a real jail:
-  a 50 MiB file peaks at about 170 MiB), nor an image's decode.
-  The cost of one slot is that a domain check, which waits in the same queue,
-  can wait for an import batch that is running (the verification's 5s covers the
+- **`fetch` has a cgroup and a queue of its own.** An import's files, the
+  domain checks and the featured-site checks run beside the post builds'
+  images, not in turn with them, so an image never waits behind a batch (which
+  took up to 1.5s in production while the sync held the blog's lock). Each
+  job's queue is its own (`fetch` 16, `fetch-image` 8). A domain check can still
+  wait for an import batch that is running (the verification's 5s covers the
   request, not the wait).
 - **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
   512 MiB) with the image jobs (each up to 512 MiB, but two at once for the three sharp jobs that decode a whole image). The fetch
-  jobs take at most 256 MiB of it, whichever fetch job is running; the image jobs
-  have the rest and whatever the fetch jobs aren't using. (The retired proxy jail's
+  jobs' cgroups are in it, so their 256 + 256 MiB are limited by its 512 MiB, not added to it: the image jobs
+  have whatever the fetch jobs aren't using. (The retired proxy jail's
   128 MiB cgroup is gone from it.) The subtree's final size is for
   the unit memory work (TODO) to set from measured peaks.
 - **`/proc` is the container's, read-only, for the browser job only.** Chromium aborts without a real one.
