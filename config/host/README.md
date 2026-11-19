@@ -69,12 +69,26 @@ pandoc/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), then
 processes that used to be counted in `node_other`, which is now only the
 `docker exec` scripts) and `openresty` and `openresty_n` (the summed RSS and
 count of the unit's nginx/openresty processes). Lines from before these four
-fields lack them. Plus one `name=host` line with `mem_available`. Where the host has a sandbox subtree
+fields lack them. Plus one `name=host` line with `mem_available`, `mem_total`
+and `swap_used`. Where the host has a sandbox subtree
 (#2257) there are also `name=blot-sandbox-<unit>` and
 `name=blot-sandbox-<unit>-browser` lines: jobs are short, so read their `peak`
 and `oom_kill`.
 `anon+shmem` is the memory that can't be reclaimed; the cgroup limit also counts
-page cache. Summarise it with:
+page cache.
+
+Each run also stores its last sample in Redis at `blot:unit-mem:latest` (no
+TTL; `redis6-cli SET` with a 5 second timeout, errors dropped): one line per
+container and sandbox cgroup with `anon`, `shmem`, `limit` and `oom_kill`, and no
+host line. The app's scheduler (`app/scheduler/check-unit-memory.js`, every 5
+minutes, emails the admin as "Unit memory: ...") alerts when an `oom_kill` counter
+rises (at most once an hour per cgroup), when a unit's `anon+shmem` passes 85%
+of its limit (and when it falls back under 80%), and when the key has not been
+updated for 10 minutes (two checks in a row). Host `mem_available` under 10% of
+`mem_total` is alerted by the Redis host check ("Host memory low"). The key is
+written by the sampler on the host, so the units and the host can be deployed in
+either order: until the host script is updated the key is missing and the
+check says nothing. Summarise the log with:
 
 ```
 unit-mem-summary.sh [logfile]

@@ -14,6 +14,7 @@ describe("scheduler", function () {
     "renew-wildcard-ssl",
     "check-ssl-certificates",
     "check-redis-host",
+    "check-unit-memory",
     "sweep-git",
     "prune-tmp",
     "git-store-maintenance",

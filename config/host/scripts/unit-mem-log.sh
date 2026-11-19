@@ -43,6 +43,15 @@
 # Works on cgroup v1 (Amazon Linux 2) and v2 (Amazon Linux 2023).
 # Read it with unit-mem-summary.sh.
 #
+# It also stores the last sample of each run in Redis at blot:unit-mem:latest
+# (no TTL), for the app's scheduler to alert from
+# (app/scheduler/check-unit-memory.js): one line per container and sandbox
+# cgroup, "<time> name=N anon=B shmem=B limit=B oom_kill=N", without the host
+# line (the Redis host check alerts on host memory). It emails when an
+# oom_kill counter rises, when a container's anon+shmem passes 85% of its
+# limit, and when the key stops being updated. A write that fails or times out
+# is dropped silently: a sampler that stops writing is itself the alert.
+#
 # The paths and counts below can be overridden by env vars for testing.
 LOG="${UNIT_MEM_LOG:-/var/instance-ssd/logs/unit-mem.log}"
 CGROUP_ROOT="${CGROUP_ROOT:-/sys/fs/cgroup}"
@@ -51,6 +60,7 @@ DOCKER="${DOCKER:-docker}"
 SAMPLES="${SAMPLES:-4}"
 INTERVAL="${INTERVAL:-15}"
 CONTAINERS="${CONTAINERS:-blot-blue blot-green}"
+REDIS_CLI="${REDIS_CLI:-$(command -v redis6-cli || command -v valkey-cli || command -v redis-cli)}"
 
 # Cron mails any output, so stay quiet; a missing log directory means the
 # instance store isn't mounted, which is not ours to fix.
@@ -149,15 +159,21 @@ container_fields() {
     "broker=$broker proxy=$proxy openresty=$openresty openresty_n=$openresty_n"
 }
 
+latest=""
 sample=0
 while [ "$sample" -lt "$SAMPLES" ]; do
   [ "$sample" -gt 0 ] && sleep "$INTERVAL"
   sample=$((sample + 1))
   now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   out=""
+  latest=""
   for target in $targets; do
     fields=$(container_fields "${target#*=}") || continue
-    [ -n "$fields" ] && out="$out$now name=${target%%=*} $fields
+    [ -n "$fields" ] || continue
+    out="$out$now name=${target%%=*} $fields
+"
+    # anon, shmem, limit and oom_kill: fields 1, 3, 4 and 5
+    latest="$latest$now name=${target%%=*} $(printf %s "$fields" | cut -d' ' -f1,3-5)
 "
   done
   host=$(awk '$1 == "MemTotal:" {t = $2} $1 == "MemAvailable:" {a = $2}
@@ -167,6 +183,13 @@ while [ "$sample" -lt "$SAMPLES" ]; do
 "
   printf %s "$out" >> "$LOG"
 done
+
+# Latest state for the app. Errors are dropped (cron has nowhere to send them)
+# and the timeout keeps a stalled Redis from holding up the next run.
+if [ -n "$latest" ] && [ -n "$REDIS_CLI" ]; then
+  TIMEOUT=$(command -v timeout > /dev/null && echo "timeout 5")
+  $TIMEOUT "$REDIS_CLI" SET blot:unit-mem:latest "$latest" > /dev/null 2>&1 || true
+fi
 
 if [ "$trim" = 1 ] && [ "$(wc -l < "$LOG")" -gt 1250000 ]; then
   tail -n 1200000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
