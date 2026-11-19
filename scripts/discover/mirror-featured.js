@@ -17,7 +17,7 @@
 //     Entry.getByUrl(blogID, path) resolves. Entry.set takes the url from
 //     entry.permalink when the entry's metadata names one (see Candidates in
 //     app/models/entry/_setUrl.js), so the script sets both;
-//   - each image the posts refer to is stored in the local storage bucket at
+//   - each image Discover can offer for the posts is stored in the local storage bucket at
 //     the same asset path as production (_image_cache/<uuid>.jpg), downloaded
 //     from cdn.blot.im if it isn't there yet. Image URLs in the HTML point at
 //     config.cdn.origin, which is what models/discover/photos.js recognises.
@@ -48,6 +48,7 @@ const blogDefaults = require("models/blog/defaults");
 const extend = require("helper/extend");
 const makeSlug = require("helper/makeSlug");
 const assets = require("storage/assets");
+const Discover = require("models/discover");
 
 const OWNER_EMAIL = "example@example.com";
 const SITES = join(__dirname, "../../app/documentation/featured/sites.txt");
@@ -143,28 +144,6 @@ function excerpt(html) {
     .trim();
 
   return text.length > 200 ? text.slice(0, 200).trim() + "..." : text;
-}
-
-// The asset paths under this blog that html refers to. Generated assets
-// only: the first segment starts with "_" and there is no "..".
-function assetPaths(html, blogID) {
-  const pattern = new RegExp(
-    _.escapeRegExp(CDN + blogID + "/") + "([^\"'\\s)<>]+)",
-    "g"
-  );
-  const found = new Set();
-  let match;
-
-  while ((match = pattern.exec(html))) {
-    const rel = match[1].split(/[?#]/)[0];
-
-    if (!/^_[\w-]+\/[\w./%-]+$/.test(rel)) continue;
-    if (rel.split("/").indexOf("..") !== -1) continue;
-
-    found.add(rel);
-  }
-
-  return Array.from(found);
 }
 
 // Resolves to "stored", "present" or "failed"
@@ -326,9 +305,11 @@ async function mirrorHost(host, owner, limit) {
   const wanted = new Set();
 
   for (const item of items) {
-    for (const rel of assetPaths(item.html, blogID)) wanted.add(rel);
-
     item.html = item.html.split(CDN + blogID + "/").join(local);
+
+    // Only the images Discover can offer for the post (each <img src>, at
+    // most 24), not every size in a srcset
+    for (const rel of Discover.photos.candidates(blogID, item)) wanted.add(rel);
 
     try {
       if (await writeEntry(blogID, item, now)) entries++;
