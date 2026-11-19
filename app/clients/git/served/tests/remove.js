@@ -15,12 +15,6 @@ describe("git store: removing a blog's repository", function () {
     return disconnect(blogID);
   }
 
-  function sleep(ms) {
-    return new Promise(function (resolve) {
-      setTimeout(resolve, ms);
-    });
-  }
-
   async function keys(store) {
     var found = [];
     for await (var entry of store.list("")) found.push(entry.key);
@@ -42,10 +36,6 @@ describe("git store: removing a blog's repository", function () {
 
   var PACK = "packs/pack-" + "a".repeat(40) + ".pack";
 
-  afterEach(function () {
-    removal._setRemoveAgainMs(5 * 60 * 1000);
-  });
-
   it("deletes everything under the blog's prefix but the manifests on disconnect, and leaves a tombstone", async function () {
     await this.local.writeAndPush("/a.txt", "A");
     await this.local.writeAndPush("/b.txt", "B");
@@ -64,8 +54,6 @@ describe("git store: removing a blog's repository", function () {
   });
 
   it("deletes the copy again later, for work another process had started", async function () {
-    removal._setRemoveAgainMs(100);
-
     await this.local.writeAndPush("/a.txt", "A");
 
     var store = this.stores[this.blog.id];
@@ -75,14 +63,12 @@ describe("git store: removing a blog's repository", function () {
     // What another process's push, already running, uploads afterwards
     await store.put(PACK, Buffer.from("x"));
 
-    await sleep(1000);
+    await removal._runAgainNow();
 
     expect(await packsLeft(store)).toEqual([]);
   });
 
   it("keeps the copy when the blog is back on git by the second pass", async function () {
-    removal._setRemoveAgainMs(100);
-
     await this.local.writeAndPush("/a.txt", "A");
 
     var store = this.stores[this.blog.id];
@@ -93,14 +79,12 @@ describe("git store: removing a blog's repository", function () {
     await require("models/blog").set(this.blog.id, { client: "git" });
     await store.put(PACK, Buffer.from("x"));
 
-    await sleep(1000);
+    await removal._runAgainNow();
 
     expect(await packsLeft(store)).toEqual([PACK]);
   });
 
   it("keeps the copy when the later lookup of the blog fails", async function () {
-    removal._setRemoveAgainMs(100);
-
     await this.local.writeAndPush("/a.txt", "A");
 
     var store = this.stores[this.blog.id];
@@ -116,7 +100,7 @@ describe("git store: removing a blog's repository", function () {
     };
 
     try {
-      await sleep(1000);
+      await removal._runAgainNow();
     } finally {
       Blog.get = get;
     }

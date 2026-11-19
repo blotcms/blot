@@ -30,6 +30,8 @@
 // placeholders. render-config.sh always sets them from the mode and the
 // addresses above, so a value given for one of the six is ignored; their
 // defaults here are the unit-mode values.
+
+const protocols = require("./protocols");
 const placeholder = (name) => "${" + name + "}";
 
 const LETS_ENCRYPT = "https://acme-v02.api.letsencrypt.org/directory";
@@ -69,7 +71,10 @@ function container({ env = process.env, config }) {
   }M`;
 
   return {
-    disable_http2: env.DISABLE_HTTP2,
+    // HTTP/2 and HTTP/3 on the public servers: proxy/build/protocols.js.
+    // DISABLE_HTTP2 also turns HTTP/2 off when protocols.js has it on.
+    disable_http2: !protocols.http2 || env.DISABLE_HTTP2,
+    disable_http3: !protocols.http3,
 
     // The maximum size of webhooks bodies forwarded to the node server
     webhooks_client_max_body_size,
