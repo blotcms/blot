@@ -8,6 +8,7 @@ var dictionary = {
   permalink: "Saved changes to your link format",
   forceSSL: "Saved SSL redirect setting",
   roundAvatar: "Saved photo settings",
+  includeInDiscover: "Saved Discover setting",
   imageExif: "Saved image metadata preferences",
   converters: "Saved image publishing preferences",
   avatar: "Saved changes to your photo",

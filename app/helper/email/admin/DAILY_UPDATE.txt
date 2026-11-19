@@ -34,8 +34,9 @@ New posts:
 
 {{#blogs_with_new_posts}}
 {{#new_posts}}
-- [{{label}} - {{title}}]({{{link}}})
+- [{{label}} - {{title}}]({{{link}}}){{#discover}} · [Add to Discover]({{{discover}}}){{/discover}}
 {{/new_posts}}
 
 {{/blogs_with_new_posts}}
+[Manage Discover]({{{discover_manage}}})
 {{/blogs_with_new_posts.length}}

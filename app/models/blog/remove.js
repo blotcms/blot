@@ -40,6 +40,7 @@ var remove = async function remove(blogID) {
   // be able to run them in parallel though
   await disconnectClient(blog);
   await updateUser(blog);
+  await dropFromDiscover(blog);
   await wipeFolders(blog);
   await dropTemplates(blog);
   await deleteKeys(blog);
@@ -47,6 +48,11 @@ var remove = async function remove(blogID) {
 
   return blog;
 };
+
+// Required here, not at the top: models/discover requires models/blog
+async function dropFromDiscover(blog) {
+  await require("models/discover").removeBlog(blog.id);
+}
 
 async function wipeFolders(blog) {
   if (!blog.id || typeof blog.id !== "string")

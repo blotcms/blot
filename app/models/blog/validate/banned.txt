@@ -46,6 +46,7 @@ webhooks
 test
 preview
 default
+discover
 original
 cdn
 all

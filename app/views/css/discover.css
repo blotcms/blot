@@ -1,0 +1,186 @@
+/* blot.im/discover (#2639), and the card preview on the confirm page */
+
+.discover {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.discover-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.discover-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 1rem;
+}
+
+.discover-sidebar h2 {
+  font-size: var(--small-font-size);
+  color: var(--medium-text-color);
+  font-weight: 500;
+  margin: 0 0 0.5rem;
+}
+
+.discover-sidebar #featured li a {
+  padding: 8px 0;
+}
+
+.discover-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 1.5rem;
+}
+
+.discover-card a {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.discover-photos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  margin-bottom: 0.5rem;
+}
+
+.discover-photos img {
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: calc(var(--border-radius) / 2);
+  background: var(--light-background-color);
+  box-shadow: inset 0 0 0 1px var(--inset-image-border-color);
+}
+
+/* The first photo is the main image, the rest a row beneath it */
+.discover-photos img:first-child {
+  grid-column: 1 / -1;
+  aspect-ratio: 4 / 3;
+}
+
+.discover-excerpt {
+  display: block;
+  padding: 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: var(--border-radius);
+  color: var(--medium-text-color);
+  font-size: var(--small-font-size);
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.discover-title {
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.discover-card a:hover .discover-title {
+  color: var(--accent-color);
+}
+
+.discover-site {
+  font-size: var(--small-font-size);
+  color: var(--medium-text-color);
+}
+
+.discover-more {
+  display: block;
+  margin: 2rem auto;
+  text-align: center;
+}
+
+.discover-preview {
+  max-width: 320px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+}
+
+.discover-choose {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.5rem;
+}
+
+.discover-choose label {
+  display: block;
+  position: relative;
+  cursor: pointer;
+}
+
+.discover-choose img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: calc(var(--border-radius) / 2);
+  outline: 2px solid transparent;
+}
+
+.discover-choose input:checked + img {
+  outline-color: var(--accent-color);
+}
+
+.discover-choose input {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+}
+
+.discover-manage {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.discover-manage li {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.discover-manage li img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 4px;
+}
+
+.discover-manage .discover-manage-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.discover-manage .discover-hidden {
+  display: block;
+  color: var(--medium-text-color);
+  font-size: var(--small-font-size);
+}
+
+.discover-manage form {
+  margin: 0;
+}
+
+@media (max-width: 800px) {
+  .discover {
+    flex-direction: column-reverse;
+  }
+
+  .discover-sidebar {
+    width: 100%;
+    position: static;
+  }
+}

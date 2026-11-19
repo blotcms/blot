@@ -90,6 +90,10 @@ documentation.get("/", require("./featured"), async function (req, res, next) {
 
 documentation.get("/examples", require("./featured"));
 
+// Not cached by the proxy (proxy/config/blot-site.conf): it changes
+// whenever the maintainer adds a post or a site turns Discover off
+documentation.get("/discover", require("./featured"), require("./discover"));
+
 documentation.get(
   "/examples/:category",
   require("./featured"),

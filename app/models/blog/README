@@ -103,6 +103,7 @@ The blog schema is declared in `scheme.js`. Each field is classified along three
 | `cacheID` | number | no | yes |
 | `flags` | object | yes | no |
 | `roundAvatar` | boolean | yes | yes |
+| `includeInDiscover` | boolean | yes | no |
 | `imageExif` | string | yes | yes |
 | `converters` | object | yes | yes |
 

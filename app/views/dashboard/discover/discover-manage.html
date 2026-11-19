@@ -1,0 +1,33 @@
+<h1>Manage Discover</h1>
+
+<p>Every post on <a href="/discover">Discover</a>, newest first. Posts which aren't shown say why; they come back if that changes.</p>
+
+{{^posts.length}}
+<p>Nothing is on Discover yet. Add posts from the links in the daily email.</p>
+{{/posts.length}}
+
+<ul class="discover-manage">
+  {{#posts}}
+  <li>
+    {{#photos}}{{#first}}<img src="{{{src}}}" alt="" loading="lazy" />{{/first}}{{/photos}}
+    <span class="discover-manage-text">
+      {{#url}}<a href="{{{url}}}" target="_blank" rel="noopener">{{title}}</a>{{/url}}
+      {{^url}}{{title}}{{/url}}
+      · {{site.label}}
+      {{#hidden}}<span class="discover-hidden">Not shown: {{hidden}}</span>{{/hidden}}
+    </span>
+    <form method="post" action="/sites/discover/remove">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+      <input type="hidden" name="id" value="{{id}}" />
+      <button type="submit">Remove</button>
+    </form>
+    <form method="post" action="/sites/discover/remove-site" onsubmit="return confirm('Remove every post from this site?')">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+      <input type="hidden" name="blogID" value="{{blogID}}" />
+      <button type="submit">Remove site</button>
+    </form>
+  </li>
+  {{/posts}}
+</ul>
+
+{{#more}}<p><a href="{{{more}}}">Older posts</a></p>{{/more}}
