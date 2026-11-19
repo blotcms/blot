@@ -34,6 +34,7 @@
 
 const http = require("http");
 const http2 = require("http2");
+const protocols = require("../build/protocols");
 const https = require("https");
 const net = require("net");
 const zlib = require("zlib");
@@ -454,7 +455,9 @@ function sendRaw(c, spec) {
 
 function send(c, spec) {
   if (spec.raw) return sendRaw(c, spec);
-  if (spec.h2) return sendH2(c, spec);
+  // With HTTP/2 off (proxy/build/protocols.js) both trees get these over
+  // HTTP/1.1, so they still compare what the rest of the request sees.
+  if (spec.h2 && protocols.http2) return sendH2(c, spec);
   return sendH1(c, spec);
 }
 
@@ -1421,6 +1424,20 @@ function diff(spec, ra, rb) {
 // a client sees lists each change here, so the review is of the list.
 const H3 = 'h3=":443"; ma=86400';
 const INTENDED = [
+  {
+    id: "http3-off-clears-alt-svc",
+    class: "intended",
+    reason:
+      "HTTP/3 is off until OpenResty ships nginx 1.31.9 (#2789): HTTPS responses that advertised h3 send Alt-Svc: clear, so clients drop the cached route.",
+    match: (c, d) =>
+      !protocols.http3 &&
+      d.kind === "header" &&
+      d.name === "alt-svc" &&
+      header(c.ra, "alt-svc").length > 0 &&
+      header(c.ra, "alt-svc").every((v) => v === H3) &&
+      header(c.rb, "alt-svc").length === header(c.ra, "alt-svc").length &&
+      header(c.rb, "alt-svc").every((v) => v === "clear"),
+  },
   {
     id: "alt-svc-on-https-proxied-responses",
     class: "intended",
