@@ -81,6 +81,7 @@
 }
 
 .discover-name {
+  font-size: 15px;
   font-weight: 500;
   overflow: hidden;
   text-overflow: ellipsis;
