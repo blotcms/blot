@@ -38,5 +38,4 @@ New posts:
 {{/new_posts}}
 
 {{/blogs_with_new_posts}}
-[Manage Discover]({{{discover_manage}}})
 {{/blogs_with_new_posts.length}}

@@ -46,9 +46,8 @@ and of its sites.txt details. Each field is optional. The avatar is a
 assets under `_discover/profile/`. It comes from an upload or a URL on Blot:
 an image on cdn.blot.im is read from the bucket, a file at a Blot site's own
 address from that site's folder. Outside development nothing is fetched.
-Set them on the manage page (`/sites/discover`) or with
+Set them with
 `scripts/discover/profile.js <site> --name … --avatar <URL or file> --crop top`.
-Exports carry them, with the avatar's JPEG, so they import with the posts.
 
 ## Tokens
 
@@ -57,33 +56,24 @@ site with the setting on. `token.read` does not use the token up, because
 mail scanners open links; `token.consume` deletes it with `GETDEL`, so only
 one request can add the post.
 
-## Working on the page locally
+## Adding and editing posts
 
-One command fills the local /discover with real posts:
+The daily email's "Add to Discover" links are the only page for it. Anything
+else is done by an agent running these in the node container
+(`docker exec -u 1000 blot-blue …` on production, a production command which
+needs the maintainer's go-ahead; `blot-node-<slot>` for a local preview):
 
-    node scripts/discover/mirror-featured.js [host ...] [--limit <n>]
+    node scripts/discover/add.js <post URL> [...] [--photos <n>] [--text]
+    node scripts/discover/manage.js list [--all]
+    node scripts/discover/manage.js remove <post URL or ID> [...]
+    node scripts/discover/manage.js text <post URL or ID> on|off
+    node scripts/discover/manage.js remove-site <site>
+    node scripts/discover/profile.js <site> --name … --bio … --avatar <URL or file>
 
-It copies each featured site's 10 newest posts and their images from its
-public RSS feed (development only), keeping production's blog IDs, entry
-URLs and image asset paths, and puts each site's newest post with photos on
-Discover. Run it in the node container (`blot-node-<slot>` for a preview).
-
-To add a particular post, `scripts/discover/add-post.js <post URL>
-[--photos <n>]` puts it on Discover with up to 3 of its photos (0 for a text
-card). Locally it copies the site and the post from the live page first if
-they aren't there (`--refresh` copies them again); on production it finds
-them by host and URL and fetches nothing, so it is also the maintainer's
-manual opt-in there.
-
-To pick posts by hand instead, `scripts/discover/add-links.js <host>` prints
-"Add to Discover" links for a site's newest posts; locally any account can
-open the manage page.
-
-## Moving picks to production
-
-`scripts/discover/export.js data/discover.json` writes the local picks,
-identified by blog ID, entry URL and source image path. On production, after
-`docker cp` of the file, `scripts/discover/import.js /tmp/discover.json`
-checks them and `--apply` imports them: it finds each entry by URL, keeps the
-photos still in the post, resizes production's own copies and keeps the
-order. Posts already on Discover are skipped, so it is safe to re-run.
+`add.js` puts each post on Discover with up to 3 of its photos (`--photos 0`
+for a text card, `--text` for its text above the photos) and turns the
+site's setting on. On production it finds the site by host and the post by
+URL and fetches nothing. In development it copies a site or post which isn't
+there yet from the live page, keeping production's blog ID, entry URL and
+image asset paths, so the local page can be worked on with real posts
+(`--refresh` copies them again).

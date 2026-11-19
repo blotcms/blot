@@ -53,22 +53,14 @@ async function has(blogID, entryID) {
 // Adds a post, or replaces the photos of one already on Discover. photos are
 // the derived ones, from photos.derive. The feed is in the order the posts
 // were published, so the post's date is its score; a post without one goes
-// by when it was added. options.added (ms) sets when it was added, for an
-// import (scripts/discover/import.js) to keep the export's. options.showText
-// shows the post's text above its photos; left out, it stays as it was.
+// by when it was added. options.showText shows the post's text above its photos; left out, it stays as it was.
 // Resolves to the post.
 async function add(blogID, entryID, saved, options = {}) {
   ensure(blogID, "string").and(entryID, "string").and(saved, "array");
 
   const id = postID(blogID, entryID);
   const existing = await get(id);
-  const given = parseInt(options.added, 10);
-  const added =
-    Number.isFinite(given) && given > 0
-      ? given
-      : existing
-        ? existing.added
-        : Date.now();
+  const added = existing ? existing.added : Date.now();
 
   const entry = await Entry.get(blogID, entryID);
   const published =
@@ -81,14 +73,13 @@ async function add(blogID, entryID, saved, options = {}) {
       entryID,
       photos: JSON.stringify(saved),
       added: String(added),
-      showText:
+      showText: (
         options.showText === undefined
           ? existing && existing.showText
-            ? "1"
-            : "0"
           : options.showText
-            ? "1"
-            : "0",
+      )
+        ? "1"
+        : "0",
     })
     .zAdd(key.posts(), { score: published, value: id })
     .sAdd(key.blog(blogID), id)

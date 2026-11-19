@@ -1,19 +1,20 @@
-// Puts one post on Discover by its URL (#2639), with up to 3 of its photos
-// by default, the maintainer's manual opt-in.
+// Puts posts on Discover by their URLs (#2639), each with up to 3 of its
+// photos by default: the maintainer's manual opt-in, usually run by an agent.
 //
-//   node scripts/discover/add-post.js <post URL> [--photos <n>] [--text] [--refresh]
+//   node scripts/discover/add.js <post URL> [<post URL> ...] [--photos <n>]
+//     [--text|--no-text] [--refresh]
 //
-// The site is found by its host and the post by its URL, and the site's
+// Each site is found by its host and each post by its URL, and the site's
 // "Include site on discover page" setting is turned on. --text shows the
 // post's text above its photos, clipped with "See more". --photos 0 makes a
 // text-only card. Safe to rerun: adding a post already on Discover replaces
 // its photos and keeps its place.
 //
 // In development, a site or post which isn't there yet is copied from the
-// live post page first, the way scripts/discover/mirror-featured.js copies
-// feeds: the page holds the production blog ID even when the site's feed has
-// no images or no posts. --refresh copies it again. Elsewhere nothing is
-// fetched, and a missing site or post is an error.
+// live post page first, with production's blog ID, entry URL and image asset
+// paths, so the local /discover looks like production's. --refresh copies it
+// again. Elsewhere nothing is fetched, and a missing site or post is an
+// error.
 
 const _ = require("lodash");
 const cheerio = require("cheerio");
@@ -22,6 +23,11 @@ const Blog = require("models/blog");
 const User = require("models/user");
 const Entry = require("models/entry");
 const Discover = require("models/discover");
+const client = require("models/client");
+const blogKey = require("models/blog/key");
+const blogDefaults = require("models/blog/defaults");
+const extend = require("helper/extend");
+const makeSlug = require("helper/makeSlug");
 const assets = require("storage/assets");
 const blogForHost = require("documentation/featured/blogForHost");
 
@@ -29,6 +35,10 @@ const CDN = "https://cdn.blot.im/";
 const BLOG_ID = /blog_[a-f0-9]{32}/;
 const USER_AGENT = "Blot Discover mirror";
 const TIMEOUT = 15 * 1000;
+const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+
+// The local development account, which owns the copied sites
+const OWNER_EMAIL = "example@example.com";
 
 // Generated assets which are part of the site, not of a post
 const NOT_PHOTOS = /^_(avatars|template_assets)\//;
@@ -36,13 +46,13 @@ const NOT_PHOTOS = /^_(avatars|template_assets)\//;
 function usage(message) {
   if (message) console.error(message + "\n");
   console.error(
-    "Usage: node scripts/discover/add-post.js <post URL> [--photos <n>] [--text|--no-text] [--refresh]"
+    "Usage: node scripts/discover/add.js <post URL> [<post URL> ...] [--photos <n>] [--text|--no-text] [--refresh]"
   );
   process.exit(2);
 }
 
 function parse(argv) {
-  const options = { url: null, photos: 3, refresh: false, text: undefined };
+  const options = { urls: [], photos: 3, refresh: false, text: undefined };
 
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === "--photos" && argv[i + 1] !== undefined) {
@@ -54,20 +64,18 @@ function parse(argv) {
       options.text = false;
     } else if (argv[i] === "--refresh") {
       options.refresh = true;
-    } else if (!argv[i].startsWith("--") && !options.url) {
-      options.url = argv[i];
+    } else if (!argv[i].startsWith("--")) {
+      try {
+        options.urls.push(new URL(argv[i]));
+      } catch (err) {
+        usage("Not a URL: " + argv[i]);
+      }
     } else {
       usage("Unknown argument: " + argv[i]);
     }
   }
 
-  if (!options.url) usage();
-
-  try {
-    options.parsed = new URL(options.url);
-  } catch (err) {
-    usage("Not a URL: " + options.url);
-  }
+  if (!options.urls.length) usage();
 
   return options;
 }
@@ -182,9 +190,128 @@ async function fetchPage(url) {
   };
 }
 
+// Development only: a free handle for a copied site, made from its host
+async function chooseHandle(host, blogID) {
+  const base =
+    host
+      .replace(/^www\./, "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .slice(0, 60) || "copy";
+
+  for (let i = 0; i < 100; i++) {
+    const handle = i === 0 ? base : base + i;
+    const taken = await Blog.get({ handle });
+    if (!taken || taken.id === blogID)
+      return handle.length < 3 ? handle + "x" : handle;
+  }
+
+  throw new Error("No free handle for " + host);
+}
+
+// Development only: creates the site as models/blog/create.js does, but with
+// production's blog ID. Its domain is the real host, so it is found by host
+// like the production site. It is owned by the local development account but
+// not in its list of sites, and has no folder: it only exists for Discover.
+async function createBlog(blogID, host, title, owner) {
+  const handle = await chooseHandle(host, blogID);
+  const blog = {
+    owner: owner.uid,
+    id: blogID,
+    title: title || handle,
+    client: "",
+    timeZone: "UTC",
+    dateFormat: "M/D/YYYY",
+    handle,
+    domain: host,
+    includeInDiscover: true,
+  };
+
+  extend(blog).and(_.cloneDeep(blogDefaults));
+  await client.sAdd(blogKey.ids, blogID);
+  await Blog.set(blogID, blog);
+}
+
+// Development only: copies an image from cdn.blot.im to the local bucket, at
+// the same asset path
+async function copyAsset(blogID, rel) {
+  try {
+    if (await assets.exists(blogID, rel)) return;
+
+    const response = await fetch(CDN + blogID + "/" + rel, {
+      headers: { "User-Agent": USER_AGENT },
+      signal: AbortSignal.timeout(TIMEOUT),
+    });
+    if (!response.ok) throw new Error("HTTP " + response.status);
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > MAX_IMAGE_BYTES) throw new Error("over 15 MB");
+
+    await assets.write(blogID, rel, buffer);
+  } catch (err) {
+    console.log("  skipped " + rel + ": " + err.message);
+  }
+}
+
+// Development only: writes the post as an entry whose url is exactly the
+// path of its production URL, so Entry.getByUrl finds it. Entry.set takes
+// the url from entry.permalink when the metadata names one (Candidates in
+// app/models/entry/_setUrl.js), so both are set. Resolves to its path.
+async function writeEntry(blogID, item) {
+  const url = new URL(item.link).pathname;
+
+  if (!url || url === "/") return null;
+
+  // A stable file path, so a rerun updates the entry
+  const path = url.replace(/\/$/, "") + ".txt";
+  const stamp = Date.parse(item.pubDate);
+  const dateStamp = Number.isFinite(stamp) ? stamp : Date.now();
+  const html = item.html;
+  const title = item.title || url.split("/").pop();
+  const text = cheerio
+    .load("<div>" + html + "</div>")("div")
+    .text();
+
+  await Entry.set(blogID, path, {
+    id: path,
+    guid: blogID + ":" + url,
+    url: "",
+    permalink: url,
+    title,
+    titleTag: "<h1>" + _.escape(title) + "</h1>",
+    body: html,
+    summary: text.replace(/\s+/g, " ").trim().slice(0, 200),
+    teaser: "",
+    teaserBody: "",
+    more: false,
+    html,
+    slug: makeSlug(title),
+    name: path.slice(1),
+    path,
+    size: html.length,
+    tags: [],
+    dependencies: [],
+    backlinks: [],
+    internalLinks: [],
+    menu: false,
+    page: false,
+    deleted: false,
+    draft: false,
+    scheduled: false,
+    thumbnail: {},
+    dateStamp,
+    created: dateStamp,
+    updated: dateStamp,
+    metadata: { permalink: url },
+    exif: {},
+  });
+
+  const stored = await Entry.getByUrl(blogID, url.toLowerCase());
+  return stored && stored.path === path ? path : null;
+}
+
 // Development only: copies the site and the post from the live page
 async function copyFromPage(url, host) {
-  const mirror = require("./mirror-featured");
   const page = await fetchPage(url);
 
   let blog = await Blog.get({ id: page.blogID });
@@ -192,15 +319,15 @@ async function copyFromPage(url, host) {
   if (blog && page.siteTitle && blog.title !== page.siteTitle) {
     await Blog.set(page.blogID, { title: page.siteTitle });
   } else if (!blog) {
-    const owner = await User.getByEmail(mirror.OWNER_EMAIL);
-    if (!owner) throw new Error("No local account " + mirror.OWNER_EMAIL);
-    await mirror.createBlog(page.blogID, host, page.siteTitle.trim(), owner);
+    const owner = await User.getByEmail(OWNER_EMAIL);
+    if (!owner) throw new Error("No local account " + OWNER_EMAIL);
+    await createBlog(page.blogID, host, page.siteTitle.trim(), owner);
     console.log("Copied the site", host, "as", page.blogID);
   }
 
-  for (const rel of page.images) await mirror.mirrorAsset(page.blogID, rel);
+  for (const rel of page.images) await copyAsset(page.blogID, rel);
 
-  const path = await mirror.writeEntry(page.blogID, page.item, Date.now());
+  const path = await writeEntry(page.blogID, page.item);
   if (!path) throw new Error("Could not copy the post at " + url);
 
   console.log("Copied the post", page.item.title || url);
@@ -226,16 +353,11 @@ async function find(url, host, refresh) {
   throw new Error(blog ? "No post at " + url.href : "No site for " + host);
 }
 
-async function main(argv) {
-  const options = parse(argv);
-  const { blog, entry } = await find(
-    options.parsed,
-    options.parsed.host,
-    options.refresh
-  );
+async function addOne(url, options) {
+  const { blog, entry } = await find(url, url.host, options.refresh);
 
   if (!entry || entry.deleted || entry.draft || entry.scheduled || !entry.url)
-    throw new Error("The post is not published: " + options.url);
+    throw new Error("The post is not published: " + url.href);
 
   if (blog.includeInDiscover !== true)
     await Blog.set(blog.id, { includeInDiscover: true });
@@ -259,6 +381,24 @@ async function main(argv) {
     "(" + photos.length + (photos.length === 1 ? " photo" : " photos") + ")",
     post.id
   );
+}
+
+// Adds each URL in turn, and fails at the end if any could not be added
+async function main(argv) {
+  const options = parse(argv);
+  let failed = 0;
+
+  for (const url of options.urls) {
+    try {
+      await addOne(url, options);
+    } catch (err) {
+      failed++;
+      console.error("Not added:", url.href, "-", err.message || err);
+    }
+  }
+
+  if (failed)
+    throw new Error(failed + " of " + options.urls.length + " not added");
 }
 
 if (require.main === module) {

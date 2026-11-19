@@ -64,9 +64,6 @@ dashboard.use(require("dashboard/util/breadcrumbs"));
 // These need to be before ':handle'
 dashboard.use("/account", require("./account"));
 
-// "discover" is a banned handle (models/blog/validate/banned.txt)
-dashboard.use("/discover", require("./discover").manage);
-
 dashboard.use(
   "/share-template",
   require("dashboard/util/load-blogs"),

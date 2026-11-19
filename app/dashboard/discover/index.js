@@ -1,20 +1,16 @@
 const express = require("express");
-const config = require("config");
 const Blog = require("models/blog");
 const Entry = require("models/entry");
 const Discover = require("models/discover");
 
-// The pages behind the links in the maintainer's daily email (#2639):
-//
-// - /sites/discover/add/:token, mounted before authentication. A one-time
-//   token from the email is all it needs. GET shows the card and the photos
-//   to choose from and changes nothing, since mail scanners open links; the
-//   POST uses the token up and adds the post.
-// - /sites/discover, the "Manage Discover" page, for the maintainer's own
-//   account only (config.admin.uid).
+// The page behind the "Add to Discover" links in the maintainer's daily
+// email (#2639): /sites/discover/add/:token, mounted before authentication.
+// A one-time token from the email is all it needs. GET shows the card and the
+// photos to choose from and changes nothing, since mail scanners open links;
+// the POST uses the token up and adds the post. Everything else (removing
+// posts, profiles) is done with the scripts in scripts/discover.
 
 const add = express.Router();
-const manage = express.Router();
 
 // Resolves to what the confirm page needs for a token, or null when the
 // token has expired or been used
@@ -128,164 +124,10 @@ add.post("/:token", async (req, res, next) => {
     });
 
     res.locals.title = "Added to Discover";
-    res.render("dashboard/discover/discover-added", {
-      manage: "/sites/discover",
-    });
+    res.render("dashboard/discover/discover-added");
   } catch (err) {
     next(err);
   }
 });
 
-// Locally, BLOT_ADMIN_UID is usually unset, so any account may manage
-// Discover there (see scripts/discover/mirror-featured.js)
-// An uploaded file's bytes. multiparty names the file itself, in the upload
-// directory; anything outside it is refused.
-async function readUpload(upload) {
-  const fs = require("fs-extra");
-  const { resolve, sep } = require("path");
-  const directory = resolve(require("helper/tempDir")()) + sep;
-  const path = resolve(upload.path);
-
-  if (!path.startsWith(directory)) throw new Error("Not an uploaded file");
-
-  return fs.readFile(path);
-}
-
-function isMaintainer(req) {
-  if (!req.user) return false;
-  if (config.environment === "development") return true;
-  return !!(config.admin.uid && req.user.uid === config.admin.uid);
-}
-
-manage.use(require("./rateLimit"));
-
-manage.use((req, res, next) => {
-  if (!isMaintainer(req)) {
-    const err = new Error("Page not found");
-    err.status = 404;
-    return next(err);
-  }
-  next();
-});
-
-manage.get("/", async (req, res, next) => {
-  try {
-    const { posts, next: more } = await Discover.list({
-      all: true,
-      limit: 100,
-      before: req.query.before,
-    });
-
-    // One row per site with posts on this page, to set how it appears
-    const seen = new Set();
-    const sites = [];
-
-    for (const post of posts) {
-      if (seen.has(post.blogID)) continue;
-      seen.add(post.blogID);
-
-      const saved = await Discover.profile.get(post.blogID);
-
-      sites.push({
-        blogID: post.blogID,
-        label: post.site.label,
-        name: (saved && saved.name) || "",
-        bio: (saved && saved.bio) || "",
-        avatar: (saved && saved.avatar) || post.site.avatar || "",
-        shownName: post.site.name,
-        hasProfile: !!saved,
-      });
-    }
-
-    res.locals.title = "Manage Discover";
-    res.locals.breadcrumbs.add("Discover", "/sites/discover");
-    res.render("dashboard/discover/discover-manage", {
-      posts,
-      sites,
-      error: typeof req.query.error === "string" ? req.query.error : "",
-      positions: Discover.profile.POSITIONS,
-      more: more ? "/sites/discover?before=" + more : "",
-    });
-  } catch (err) {
-    next(err);
-  }
-});
-
-manage.post("/remove", async (req, res, next) => {
-  try {
-    if (typeof req.body.id === "string" && req.body.id)
-      await Discover.remove(req.body.id);
-    res.redirect("/sites/discover");
-  } catch (err) {
-    next(err);
-  }
-});
-
-// How a site appears on Discover: its name, bio and avatar, in place of
-// its own. The avatar is an uploaded file or a URL on Blot.
-manage.post("/profile", async (req, res, next) => {
-  const blogID = req.body.blogID;
-
-  if (typeof blogID !== "string" || !/^blog_\w+$/.test(blogID))
-    return res.redirect("/sites/discover");
-
-  try {
-    if (req.body.reset) {
-      await Discover.profile.remove(blogID);
-      return res.redirect("/sites/discover");
-    }
-
-    await Discover.profile.set(blogID, {
-      name: req.body.name || "",
-      bio: req.body.bio || "",
-    });
-
-    const crop = { position: req.body.crop };
-    const upload = req.files && req.files.avatar;
-    const url =
-      typeof req.body.avatarURL === "string" ? req.body.avatarURL.trim() : "";
-
-    if (upload && upload.size) {
-      await Discover.profile.setAvatarData(
-        blogID,
-        await readUpload(upload),
-        crop
-      );
-    } else if (url) {
-      await Discover.profile.setAvatarFromURL(blogID, url, crop);
-    } else if (req.body.removeAvatar) {
-      await Discover.profile.removeAvatar(blogID);
-    }
-
-    res.redirect("/sites/discover");
-  } catch (err) {
-    res.redirect(
-      "/sites/discover?error=" + encodeURIComponent(err.message || String(err))
-    );
-  }
-});
-
-manage.post("/show-text", async (req, res, next) => {
-  try {
-    if (typeof req.body.id === "string" && req.body.id)
-      await Discover.setShowText(req.body.id, req.body.show === "1");
-    res.redirect("/sites/discover");
-  } catch (err) {
-    next(err);
-  }
-});
-
-manage.post("/remove-site", async (req, res, next) => {
-  try {
-    if (
-      typeof req.body.blogID === "string" &&
-      /^blog_\w+$/.test(req.body.blogID)
-    )
-      await Discover.removeBlog(req.body.blogID);
-    res.redirect("/sites/discover");
-  } catch (err) {
-    next(err);
-  }
-});
-
-module.exports = { add, manage };
+module.exports = { add };

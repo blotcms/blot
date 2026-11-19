@@ -470,41 +470,6 @@
   left: 6px;
 }
 
-.discover-manage {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-}
-
-.discover-manage li {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 0.75rem 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.discover-manage li img {
-  height: 48px;
-  width: auto;
-  border-radius: 4px;
-}
-
-.discover-manage .discover-manage-text {
-  flex: 1;
-  min-width: 0;
-}
-
-.discover-manage .discover-hidden {
-  display: block;
-  color: var(--medium-text-color);
-  font-size: var(--small-font-size);
-}
-
-.discover-manage form {
-  margin: 0;
-}
-
 @media (max-width: 1000px) {
   .discover {
     grid-template-columns: minmax(0, 1fr);
@@ -631,51 +596,4 @@
 
 .discover-popover .discover-popover-button:hover {
   filter: brightness(1.08);
-}
-
-/* Manage page: how each site appears */
-.discover-profiles {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 2rem;
-}
-
-.discover-profiles li {
-  padding: 1rem 0;
-  border-bottom: 1px solid var(--border-color);
-}
-
-.discover-profiles form {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-  gap: 0.5rem 1rem;
-  margin: 0;
-}
-
-.discover-profiles label {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: var(--small-font-size);
-  color: var(--medium-text-color);
-}
-
-.discover-profile-head,
-.discover-profiles .buttons {
-  grid-column: 1 / -1;
-}
-
-.discover-profile-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.discover-profile-avatar {
-  display: block;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  object-fit: cover;
-  background: var(--light-background-color);
 }

@@ -3,7 +3,7 @@ const Entries = require("models/entries");
 const Discover = require("models/discover");
 const config = require("config");
 
-const DISCOVER = "https://" + config.host + "/sites/discover";
+const ADD = "https://" + config.host + "/sites/discover/add/";
 
 // A one-time "Add to Discover" link for a post from a site that allows it,
 // unless the post is already on Discover. These links are only in the
@@ -12,7 +12,7 @@ async function discoverLink(blog, entry) {
   if (blog.includeInDiscover !== true) return "";
   if (await Discover.has(blog.id, entry.id)) return "";
   const token = await Discover.token.create(blog.id, entry.id);
-  return DISCOVER + "/add/" + token;
+  return ADD + token;
 }
 
 function shuffle(items) {
@@ -68,7 +68,7 @@ async function main() {
   }
 
   shuffle(blogs_with_new_posts);
-  return { blogs_with_new_posts, discover_manage: DISCOVER };
+  return { blogs_with_new_posts };
 }
 
 module.exports = main;

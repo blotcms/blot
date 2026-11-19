@@ -64,7 +64,6 @@ env:
     - config/storage-bucket
     - proxy
     - scripts/deploy
-    - scripts/discover
     - scripts/storage
     - scripts/template
 
