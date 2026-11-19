@@ -6,7 +6,10 @@
 
   <div class="discover-body">
     <div class="discover-head">
-      <a class="discover-name" href="{{{site.url}}}" target="_blank" rel="noopener">{{site.name}}</a>
+      <span class="discover-who">
+        <a class="discover-name" href="{{{site.url}}}" target="_blank" rel="noopener">{{site.name}}</a>
+        {{#date}}<a class="discover-date" href="{{{url}}}" target="_blank" rel="noopener"><time datetime="{{datetime}}">{{date}}</time></a>{{/date}}
+      </span>
       <a class="discover-visit" href="{{{site.url}}}" target="_blank" rel="noopener">Visit site</a>
     </div>
 
@@ -35,6 +38,5 @@
     </a>
     {{/photos.length}}
 
-    {{#date}}<a class="discover-date" href="{{{url}}}" target="_blank" rel="noopener"><time datetime="{{datetime}}">{{date}}</time></a>{{/date}}
   </div>
 </li>

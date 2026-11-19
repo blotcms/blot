@@ -33,15 +33,19 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  max-width: 620px;
+  max-width: 560px;
 }
 
-/* A post: the site's avatar on the left, everything else beside it */
+/* A post: the site's avatar on the left, everything else beside it. Sizes
+   and spacing follow the maintainer's reference: a 560px column, a 36px
+   avatar, 15px text on 21px lines. */
 .discover-card {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr);
   column-gap: 12px;
-  padding: 1.25rem 0;
+  padding: 20px 0;
+  font-size: 15px;
+  line-height: 21px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -52,8 +56,8 @@
 
 .discover-avatar {
   display: block;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   object-fit: cover;
   box-shadow: inset 0 0 0 1px var(--inset-image-border-color);
@@ -92,16 +96,24 @@
 
 .discover-avatar-link::after {
   border-radius: 50%;
-  width: 44px;
-  height: 44px;
+  width: 36px;
+  height: 36px;
 }
 
+/* The name and the date, with Visit site on the right */
 .discover-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 28px;
+  height: 21px;
+}
+
+.discover-who {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
 }
 
 .discover-name {
@@ -118,7 +130,7 @@
   margin-right: -0.75em;
   padding: 0.35em 0.75em;
   border-radius: 2em;
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--accent-color);
   transition: background 0.1s ease;
@@ -130,8 +142,7 @@
 
 .discover-title {
   display: block;
-  margin: 0.15rem 0 0.75rem;
-  line-height: 1.4;
+  margin-top: 4px;
 }
 
 .discover-title:hover {
@@ -142,6 +153,7 @@
    photo peeking in, with arrow buttons */
 .discover-carousel {
   position: relative;
+  margin-top: 22px;
 }
 
 .discover-track {
@@ -163,9 +175,9 @@
 
 .discover-track img {
   display: block;
-  height: 360px;
+  height: 300px;
   width: auto;
-  max-width: 420px;
+  max-width: 400px;
   object-fit: cover;
   border-radius: 12px;
   background: var(--light-background-color);
@@ -213,8 +225,8 @@
 /* A post without photos: a box with the site and the title */
 .discover-link-card {
   display: block;
-  padding: 0.9rem 1rem 1rem;
-  margin-top: 0.4rem;
+  padding: 14px 16px;
+  margin-top: 8px;
   border: 1px solid var(--border-color);
   border-radius: 12px;
   background: var(--light-background-color);
@@ -241,9 +253,9 @@
 
 .discover-link-title {
   display: block;
-  font-size: 1.1em;
+  font-size: 16px;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 22px;
 }
 
 .discover-link-card:hover .discover-link-title {
@@ -259,9 +271,8 @@
 }
 
 .discover-card .discover-date {
-  display: inline-block;
-  margin-top: 0.75rem;
-  font-size: var(--small-font-size);
+  flex-shrink: 0;
+  font-size: 15px;
   color: var(--light-text-color);
 }
 
