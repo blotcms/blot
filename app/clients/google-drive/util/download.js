@@ -36,6 +36,11 @@ const isExportSizeLimitError = (err) => {
   );
 };
 
+// How a download publishes into the blog folder. A caller running several
+// downloads at once passes its own publish(fn), which runs fn when the folder
+// is free to take another write; by default fn runs straight away.
+const run = (fn) => fn();
+
 const ensurePlaceholder = async (blogID, path, flag) => {
   // The caller (sync.js) records the remote modifiedTime in the client's
   // own database once this resolves, so Blot knows not to re-fetch this
@@ -182,6 +187,7 @@ const downloadGoogleDocAsZip = async ({
   path,
   blogID,
   zipStream,
+  publish = run,
 }) => {
   const zipPath = join(tempDir, guid());
   const extractDir = join(tempDir, guid());
@@ -212,7 +218,9 @@ const downloadGoogleDocAsZip = async ({
         const srcPath = join(imagesDir, name);
         const st = await fs.stat(srcPath);
         if (st.isFile()) {
-          await assets.writeFrom(blogID, assetDir + "/" + name, srcPath);
+          await publish(() =>
+            assets.writeFrom(blogID, assetDir + "/" + name, srcPath)
+          );
         }
       }
     }
@@ -229,7 +237,7 @@ const downloadGoogleDocAsZip = async ({
       }
     });
 
-    await folder.write(blogID, path, $.html().trim());
+    await publish(() => folder.write(blogID, path, $.html().trim()));
   } finally {
     await fs.remove(zipPath).catch(() => {});
     await fs.remove(extractDir).catch(() => {});
@@ -241,7 +249,7 @@ module.exports = async (
   drive,
   path,
   { id, md5Checksum, mimeType },
-  { serviceAccountId, folderId, skipHotEnqueue } = {}
+  { serviceAccountId, folderId, skipHotEnqueue, publish = run } = {}
 ) => {
   const tempPath = join(tempDir, guid());
 
@@ -280,6 +288,7 @@ module.exports = async (
               path,
               blogID,
               zipStream,
+              publish,
             });
 
             debug("ZIP export fallback download SUCCEEDED");
@@ -299,7 +308,9 @@ module.exports = async (
       }
     }
 
-    await ensurePlaceholder(blogID, path, { code: "SYNC_EXPORT_TOO_LARGE" });
+    await publish(() =>
+      ensurePlaceholder(blogID, path, { code: "SYNC_EXPORT_TOO_LARGE" })
+    );
     debug("   created empty file at:", colors.green(path));
     return "placeholder";
   };
@@ -334,7 +345,7 @@ module.exports = async (
     }
 
     if (mimeType === "application/vnd.google-apps.folder") {
-      await folder.mkdir(blogID, path);
+      await publish(() => folder.mkdir(blogID, path));
       debug("MKDIR folder");
       debug("   to:", colors.green(path));
       return { updated: false };
@@ -348,10 +359,12 @@ module.exports = async (
       mimeType.startsWith("application/vnd.google-apps.") &&
       mimeType !== "application/vnd.google-apps.document"
     ) {
-      await ensurePlaceholder(blogID, path, {
-        code: "SYNC_UNSUPPORTED",
-        kind: mimeType,
-      });
+      await publish(() =>
+        ensurePlaceholder(blogID, path, {
+          code: "SYNC_UNSUPPORTED",
+          kind: mimeType,
+        })
+      );
       debug(
         "SKIP download of file because it is a Google App file type",
         mimeType
@@ -381,6 +394,7 @@ module.exports = async (
           id,
           path,
           blogID,
+          publish,
         });
         debug("DOWNLOAD file SUCCEEDED");
         return { updated: true };
@@ -436,7 +450,9 @@ module.exports = async (
         "Downloaded content does not match the listed Drive checksum"
       );
     }
-    await folder.writeFrom(blogID, path, tempPath, { move: true });
+    await publish(() =>
+      folder.writeFrom(blogID, path, tempPath, { move: true })
+    );
     // Publication has succeeded. A concurrent local write (or stat failure)
     // must not suppress the caller's rebuild; simply decline to cache it.
     const verified = await verifyPublished(blogID, path, hashes).catch(

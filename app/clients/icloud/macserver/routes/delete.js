@@ -3,7 +3,7 @@ import { join, resolve, sep } from "path";
 import { iCloudDriveDirectory } from "../config.js";
 import clfdate from "../util/clfdate.js";
 import normalizeMacserverPath from "./normalizeMacserverPath.js";
-import { watch, unwatch } from "../watcher/index.js";
+import { expectBlotChange } from "../blotWrites.js";
 import { forgetPath } from "../pushedFiles.js";
 
 export default async (req, res) => {
@@ -40,47 +40,22 @@ export default async (req, res) => {
       .send("Invalid path: attempted to access parent directory");
   }
 
-  // The watcher is stopped, so it never sees this removal: forget the path
-  // here, or the file put back with the same size and mtime would be skipped
+  // The watcher keeps running (see blotWrites.js). Its removal event is
+  // Blot's own; the path is forgotten so the file is pushed again if it comes
+  // back with the same size and mtime.
   forgetPath(blogID, normalizedPath);
+  expectBlotChange(blogID, normalizedPath, "remove");
 
-  // first unwatch the blogID to prevent further events from being triggered
-  try {
-    await unwatch(blogID);
-  } catch (error) {
-    console.error(clfdate(), `Failed to unwatch blogID (${blogID}):`, error);
-    return res.status(500).send("Failed to unwatch blog folder");
-  }
-
-  let success = false;
-
-  try {
-    for (let i = 0; i < 10; i++) {
-      try {
-        await fs.remove(filePath);
-        success = true;
-        console.log(clfdate(), `Deleted file: ${filePath}`);
-        break;
-      } catch (error) {
-        success = false;
-        console.error(clfdate(), `Failed to delete file (${filePath}):`, error);
-        await new Promise((resolve) => setTimeout(resolve, 1000 * i)); // Exponential backoff
-      }
-    }
-
-    console.log(clfdate(), `Handled file deletion: ${filePath}`);
-
-    if (!success) {
-      return res.status(500).send("Failed to delete file after retries");
-    }
-
-    return res.sendStatus(200);
-  } finally {
-    // re-watch the blogID
+  for (let i = 0; i < 10; i++) {
     try {
-      await watch(blogID);
+      await fs.remove(filePath);
+      console.log(clfdate(), `Deleted file: ${filePath}`);
+      return res.sendStatus(200);
     } catch (error) {
-      console.error(clfdate(), `Failed to rewatch blogID (${blogID}):`, error);
+      console.error(clfdate(), `Failed to delete file (${filePath}):`, error);
+      await new Promise((resolve) => setTimeout(resolve, 1000 * i)); // Exponential backoff
     }
   }
+
+  return res.status(500).send("Failed to delete file after retries");
 };

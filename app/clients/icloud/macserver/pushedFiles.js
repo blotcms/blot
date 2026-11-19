@@ -66,8 +66,8 @@ const forgetBlog = (blogID) => {
 
 // True, once, for a blog with no record yet: the first time it is watched in
 // this process (or after forgetBlog). Only that first initial scan may record
-// files as pushed. The routes that write to the folder restart the watcher,
-// and a later scan would record an edit whose upload is still queued.
+// files as pushed. An eviction restarts the watcher, and a later scan would
+// record an edit whose upload is still queued.
 const startTracking = (blogID) => {
   if (blogs.has(blogID)) return false;
   blogs.set(blogID, new Map());

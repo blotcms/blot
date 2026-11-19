@@ -21,6 +21,50 @@ var Sync = require("sync");
 var isRedisUnavailableError =
   require("helper/redisUnavailable").isRedisUnavailableError;
 
+// How many files are downloaded from Dropbox at once
+const MAX_CONCURRENT_DOWNLOADS = 4;
+
+// Runs functions at most max at a time, starting them in the order they are
+// given. limit(fn) resolves, or rejects, with what fn does.
+function Limiter(max) {
+  let running = 0;
+  const queue = [];
+
+  function next() {
+    while (running < max && queue.length) {
+      const { fn, resolve, reject } = queue.shift();
+      running++;
+      Promise.resolve()
+        .then(fn)
+        .then(resolve, reject)
+        .finally(function () {
+          running--;
+          next();
+        });
+    }
+  }
+
+  return function limit(fn) {
+    return new Promise(function (resolve, reject) {
+      queue.push({ fn, resolve, reject });
+      next();
+    });
+  };
+}
+
+// Returns publish(fn), which runs the functions it is given one at a time, in
+// order, and resolves, or rejects, with what each does. A failure does not
+// stop those after it.
+function Serial() {
+  let chain = Promise.resolve();
+
+  return function publish(fn) {
+    const run = chain.then(fn);
+    chain = run.catch(function () {});
+    return run;
+  };
+}
+
 // options.stampLastSync (default true) controls whether this sync records
 // last_sync. The hourly validation's catch-up sync passes false: last_sync
 // is what marks a blog as recently synced by a webhook, so a catch-up must
@@ -77,7 +121,9 @@ async function sync(blog, folder, stampLastSync) {
   folder.log("Constructing methods to sync changes");
 
   var delta = new Delta(client, account.folder_id, blog.id);
-  var apply = Apply(client, blog.id, folder.log, folder.status);
+  // Files download concurrently but are written into the folder one at a
+  // time (see util/download)
+  var apply = Apply(client, blog.id, folder.log, folder.status, Serial());
 
   var cursor = account.cursor;
 
@@ -102,10 +148,14 @@ async function sync(blog, folder, stampLastSync) {
 
     // Now we attempt to apply the changes which occured in the
     // user's folder on Dropbox to the blog folder on Blot's server.
-    // This means making any new directories, downloading any new
-    // or changed files, and removing any deleted items.
+    // This means removing deleted items and making any new directories, in
+    // order, and then starting the downloads of new or changed files. The
+    // downloads carry on while the changes are reported below, each as soon as
+    // its own file is there.
+    let batch;
+
     try {
-      await apply(result.entries);
+      batch = await apply(result.entries);
     } catch (err) {
       console.log("Blog", blog.id, "Dropbox Error:", err);
       return persistError(blog.id, err, SOURCES.APPLY);
@@ -117,48 +167,69 @@ async function sync(blog, folder, stampLastSync) {
     // We must do this in series until entry.set becomes
     // atomic. Right now, making changes to the blog's
     // menu cannot be done concurrently, hence one at a time!
-    for (const item of result.entries) {
-      debug("Updating on Blot:", item.relative_path);
+    // Before this returns or throws, every download started above has
+    // finished, so nothing writes into the folder after the lock is released
+    try {
+      for (const item of result.entries) {
+        debug("Updating on Blot:", item.relative_path);
 
-      // The items's relative path is computed by delta, based on the
-      // current path to the blog's folder in the user's Dropbox.
-      // The relative path is also lowercase. This is because Dropbox
-      // is case-insensitive but the file system for Blot's server is not.
-      // We therefore pass the name of the file, which has its case preserved
-      // to update, so things like automatic title generation based on the
-      // file can be computed nicely, along with the display path, which also
-      // has case-preserved, for things like extracting tags from tag folders.
-      // Use resolved_relative_path if available (set by determinePathOnDisk),
-      // otherwise fall back to relative_path
-      const pathToUpdate = item.resolved_relative_path || item.relative_path;
-      folder.log(pathToUpdate, "Updating path");
+        // The items's relative path is computed by delta, based on the
+        // current path to the blog's folder in the user's Dropbox.
+        // The relative path is also lowercase. This is because Dropbox
+        // is case-insensitive but the file system for Blot's server is not.
+        // We therefore pass the name of the file, which has its case preserved
+        // to update, so things like automatic title generation based on the
+        // file can be computed nicely, along with the display path, which also
+        // has case-preserved, for things like extracting tags from tag folders.
+        // Use resolved_relative_path if available (set by determinePathOnDisk),
+        // otherwise fall back to relative_path
+        const download = batch.downloads.get(item);
 
-      try {
-        // A file's server_modified is when Dropbox stored this version,
-        // so the sync can log how long it took to go live
-        await folder.update(pathToUpdate, {
-          modified: item.server_modified,
-          since: "dropbox-server-modified",
-        });
-      } catch (err) {
-        // Redis cannot take writes (a host cutover, an outage), so
-        // this change and those after it are not in the database.
-        // Stop here. The cursor below is not saved, so the next
-        // sync (a webhook, or the hourly catch-up) fetches the same
-        // changes again and applies them: the files already on
-        // disk hash-match and are not downloaded again.
-        if (isRedisUnavailableError(err)) {
-          folder.log(
-            "Redis unavailable, leaving cursor so changes are fetched again",
-            err
-          );
-          throw err;
+        if (download) {
+          try {
+            await download;
+          } catch (err) {
+            // Revoked access fails every remaining file and must not advance
+            // the cursor past changes we never downloaded.
+            console.log("Blog", blog.id, "Dropbox Error:", err);
+            return persistError(blog.id, err, SOURCES.APPLY);
+          }
         }
 
-        // We don't want any other error here to block other
-        // changes from being applied.
-        console.log("Dropbox client:", err);
+        // resolved_relative_path is set by the download, so it is read after it
+        const pathToUpdate = item.resolved_relative_path || item.relative_path;
+        folder.log(pathToUpdate, "Updating path");
+
+        try {
+          // A file's server_modified is when Dropbox stored this version,
+          // so the sync can log how long it took to go live
+          await folder.update(pathToUpdate, {
+            modified: item.server_modified,
+            since: "dropbox-server-modified",
+          });
+        } catch (err) {
+          // Redis cannot take writes (a host cutover, an outage), so
+          // this change and those after it are not in the database.
+          // Stop here. The cursor below is not saved, so the next
+          // sync (a webhook, or the hourly catch-up) fetches the same
+          // changes again and applies them: the files already on
+          // disk hash-match and are not downloaded again.
+          if (isRedisUnavailableError(err)) {
+            folder.log(
+              "Redis unavailable, leaving cursor so changes are fetched again",
+              err
+            );
+            throw err;
+          }
+
+          // We don't want any other error here to block other
+          // changes from being applied.
+          console.log("Dropbox client:", err);
+        }
       }
+    } finally {
+      batch.abort();
+      await batch.settled();
     }
 
     // Every change in this batch is now in the database, so it is
@@ -207,7 +278,14 @@ async function sync(blog, folder, stampLastSync) {
   }
 }
 
-function Apply(client, blogID, log, status) {
+// apply(changes) removes the deleted items and makes the folders, in order,
+// then starts downloading the files, MAX_CONCURRENT_DOWNLOADS at a time in the
+// order given, and resolves without waiting for them to finish to
+// { downloads, abort, settled }: downloads maps each file's change to a
+// promise for its download, which rejects only with an error that must stop
+// the sync; abort stops downloads which have not started; settled() resolves
+// once every download has finished.
+function Apply(client, blogID, log, status, publish) {
   return async function apply(changes) {
     debug("Retrieved changes", changes);
 
@@ -309,10 +387,12 @@ function Apply(client, blogID, log, status) {
         status("Skipping unsupported file " + item.resolved_relative_path);
 
         try {
-          await storage.writePlaceholder(blogID, item.resolved_relative_path, {
-            code: "SYNC_UNSUPPORTED",
-            kind: Path.extname(pathForUnsupportedCheck).toLowerCase(),
-          });
+          await publish(() =>
+            storage.writePlaceholder(blogID, item.resolved_relative_path, {
+              code: "SYNC_UNSUPPORTED",
+              kind: Path.extname(pathForUnsupportedCheck).toLowerCase(),
+            })
+          );
         } catch (err) {
           log(
             item.resolved_relative_path,
@@ -352,11 +432,13 @@ function Apply(client, blogID, log, status) {
         }
 
         try {
-          await storage.writePlaceholder(blogID, item.resolved_relative_path, {
-            code: "SYNC_TOO_LARGE",
-            size: item.size,
-            limit: MAX_FILE_SIZE,
-          });
+          await publish(() =>
+            storage.writePlaceholder(blogID, item.resolved_relative_path, {
+              code: "SYNC_TOO_LARGE",
+              size: item.size,
+              limit: MAX_FILE_SIZE,
+            })
+          );
         } catch (err) {
           log(
             item.resolved_relative_path,
@@ -402,7 +484,10 @@ function Apply(client, blogID, log, status) {
           blogID,
           item.resolved_relative_path,
           // The delta entry already has what download would look up
-          { metadata: { path_display: item.path_display, size: item.size } }
+          {
+            metadata: { path_display: item.path_display, size: item.size },
+            publish,
+          }
         );
       } catch (downloadError) {
         err = downloadError;
@@ -459,7 +544,30 @@ function Apply(client, blogID, log, status) {
 
     for (const item of deleted) await remove(item);
     for (const item of folders) await mkdir(item);
-    for (const item of files) await download(item);
+
+    let aborted = false;
+    const limit = Limiter(MAX_CONCURRENT_DOWNLOADS);
+    const downloads = new Map();
+
+    for (const item of files) {
+      const started = limit(function () {
+        if (!aborted) return download(item);
+      });
+      // The sync reads the outcome when it reaches the item, which may be
+      // after this has rejected
+      started.catch(function () {});
+      downloads.set(item, started);
+    }
+
+    return {
+      downloads,
+      abort: function () {
+        aborted = true;
+      },
+      settled: function () {
+        return Promise.allSettled(downloads.values());
+      },
+    };
   };
 }
 

@@ -116,9 +116,11 @@ function followUpSync(name, syncBlog) {
   async function arm(blogID) {
     if ((await alarms.when(blogID)) !== null) return undefined;
 
-    // The fraction makes the time ours alone, so run() can take back only
-    // this follow-up and not one written since
-    const due = Date.now() + ARM_MS + Math.random();
+    // The random milliseconds make the time ours alone, so run() can take
+    // back only this follow-up and not one written since. Whole milliseconds,
+    // not a fraction: Redis can hand a fractional score back a hair different
+    // from the one written, and cancelIf compares them exactly.
+    const due = Date.now() + ARM_MS + Math.floor(Math.random() * 1000);
     await alarms.set(blogID, due);
     return due;
   }
