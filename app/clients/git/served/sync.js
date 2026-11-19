@@ -2,7 +2,7 @@
 // so its folder lock: the blog folder is brought from the commit Blot last
 // applied (blog:<id>:git:applied) to master in the store's newest manifest,
 // by ./materialize.js, and each changed path is passed to Blot
-// (folder.update, in series). The applied commit is moved on once every path
+// (folder.update, through sync/updateAll). The applied commit is moved on once every path
 // has been processed; a Redis outage stops it, so the next sync applies the
 // same range again. Applying a path twice is harmless.
 //
@@ -19,6 +19,7 @@ const createReader = require("../store/reader");
 const isRedisUnavailableError =
   require("helper/redisUnavailable").isRedisUnavailableError;
 const materialize = require("./materialize");
+const updateAll = require("sync/updateAll");
 const context = require("./context");
 
 const { EMPTY_TREE } = materialize;
@@ -92,29 +93,30 @@ async function sync(blogID, folder) {
   folder.log(`Found ${paths.length} changes to git repo`);
   paths.forEach((path) => folder.log("/" + path, "changed"));
 
-  // In series until entry.set is atomic: changes to the blog's menu cannot be
-  // made concurrently
-  for (const path of paths) {
-    let err = null;
+  // Several at once when config.sync.concurrent_builds is on. The order of
+  // the paths doesn't matter: materialize has already brought the whole
+  // folder to the new commit, removals and moves included, so every update
+  // reads the folder as it now is.
+  let outcomes;
 
-    try {
-      await folder.update(path);
-    } catch (e) {
-      err = e;
-    }
-
-    // Redis cannot take the write, so this path and those after it are not
-    // in the database. Stop before recording the commit as applied: the next
-    // sync starts from the old one.
-    if (err && isRedisUnavailableError(err)) {
+  try {
+    outcomes = await updateAll(blogID, paths, (path) => folder.update(path));
+  } catch (err) {
+    // Redis cannot take the write, so some paths are not in the database.
+    // Stop before recording the commit as applied: the next sync starts
+    // from the old one.
+    if (isRedisUnavailableError(err)) {
       folder.log(
         "Redis unavailable, the next sync will apply these changes again"
       );
-      throw err;
     }
 
-    // Any other error does not stop the rest of the sync
-    if (err) console.log("Git client:", err);
+    throw err;
+  }
+
+  // Any other error does not stop the rest of the sync
+  for (const { error } of outcomes) {
+    if (error) console.log("Git client:", error);
   }
 
   folder.log(`Processed ${paths.length} changes`);

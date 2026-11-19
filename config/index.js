@@ -201,6 +201,13 @@ module.exports = {
       parseInt(process.env.BLOT_GIT_BACKGROUND_PROCESSES) || 2,
   },
 
+  sync: {
+    // Whether a sync builds several of its files at once (sync/updateAll.js).
+    // Off unless BLOT_SYNC_CONCURRENT_BUILDS is "true", so each file is built
+    // after the one before it is saved.
+    concurrent_builds: process.env.BLOT_SYNC_CONCURRENT_BUILDS === "true",
+  },
+
   // Untrusted, user-supplied URLs (remote images in posts, imports, domain
   // checks) are fetched in the sandbox's fetch and fetch-image jobs, behind the
   // jail's egress filter (app/sandbox/README.md). What is here is for the

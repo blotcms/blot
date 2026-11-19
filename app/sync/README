@@ -11,7 +11,9 @@ sync/
   index.js                  Primary export. Acquires the folder lock and runs a function with the
                             folder interface while it is held, then finishes the sync.
   rebuild.js                Full-folder rebuild: walks every file in the blog directory
-                            and calls update on each path in series.
+                            and calls update on each path through updateAll.js.
+  updateAll.js              Runs update over a list of paths, in series, or several at
+                            once when config.sync.concurrent_builds is on.
   renames.js                Post-sync rename detection. Correlates recently created and
                             deleted entries by file size and title to infer moves.
   messenger.js              Factory for the log/status/syncID triple attached to every
@@ -33,6 +35,9 @@ sync/
                             dependent rebuilds.
     drop.js                 Handles a removed file: drops the entry; removes the draft
                             preview file; triggers dependent rebuilds.
+    builds.js               Orders the builds of one blog while updateAll runs several
+                            at once: one build of a path at a time, and the batch
+                            waits for the dependents' rebuilds it started.
     rebuildDependents.js    Rebuilds all entries that declared a dependency on the
                             changed path. Reads the dependency set from Redis and calls
                             build + Entry.set for each dependent.

@@ -1,5 +1,6 @@
 const ensure = require("helper/ensure");
 const Update = require("./update");
+const updateAll = require("./updateAll");
 const storage = require("storage/folder");
 const messenger = require("./messenger");
 const assets = require("storage/assets");
@@ -119,35 +120,32 @@ module.exports = async function main(blogID, options = {}) {
   let current = 0;
   let failed = 0;
   let firstError = null;
+  let outcomes;
 
-  // One at a time on purpose: Entry.set is not safe for two paths of a
-  // blog at once (URL claims in models/entry/_setUrl.js and the blog
-  // menu in models/entry/_assign.js are read-then-write), see #2258.
-  for (const path of updatePaths) {
-    current += updatePathCounts.get(path);
-    status(`(${current}/${total}) Rebuilding ${path}`);
-
-    let err = null;
-    let result;
-
-    try {
-      result = await update(path);
-    } catch (e) {
-      err = e;
-    }
-
+  // Several at once when config.sync.concurrent_builds is on (see
+  // updateAll). Every path exists, and each "+" folder is one path.
+  try {
+    outcomes = await updateAll(blog.id, updatePaths, async (path) => {
+      current += updatePathCounts.get(path);
+      status(`(${current}/${total}) Rebuilding ${path}`);
+      return update(path);
+    });
+  } catch (err) {
     // Redis is unavailable, so every path after this one would fail
     // the same way. Stop, and tell the caller.
-    if (err && isRedisUnavailableError(err)) {
+    if (isRedisUnavailableError(err)) {
       log("Rebuild stopped, Redis is unavailable", err.message);
-      throw err;
     }
 
-    // Any other error is about this one file (update reports some as
-    // err, such as a symlink in the way, and others in result.error)
-    // and must not stop the rebuild of the others. Count them and
-    // say so once at the end.
-    const fileError = err || (result && result.error);
+    throw err;
+  }
+
+  // Any other error is about this one file (update reports some as
+  // err, such as a symlink in the way, and others in result.error)
+  // and must not stop the rebuild of the others. Count them and
+  // say so once at the end.
+  for (const { error, result } of outcomes) {
+    const fileError = error || (result && result.error);
 
     if (fileError) {
       failed++;

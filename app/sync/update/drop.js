@@ -2,6 +2,7 @@ var Entry = require("models/entry");
 var Preview = require("./preview");
 var isDraft = require("./drafts").isDraft;
 var rebuildDependents = require("./rebuildDependents");
+var builds = require("./builds");
 var removeConvertedAssets = require("./removeConvertedAssets");
 
 module.exports = async function drop(blogID, path) {
@@ -18,8 +19,12 @@ module.exports = async function drop(blogID, path) {
   if (is_draft) Preview.remove(blogID, path).catch(function () {});
 
   // ORDER IS IMPORTANT
-  // Rebuild must happen after we remove the file from disk
-  await Entry.drop(blogID, path);
+  // Rebuild must happen after we remove the file from disk. In a
+  // concurrent sync the drop waits for a rebuild of this path that is
+  // still running, which would otherwise store it again (see builds.js).
+  await builds.queue(blogID, path, function () {
+    return Entry.drop(blogID, path);
+  });
   await rebuildDependents(blogID, path);
 
   // Best effort: never fails the drop

@@ -10,6 +10,8 @@ var Preview = require("./preview");
 var isHidden = require("build/prepare/isHidden");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var rebuildEntry = require("./rebuildEntry");
+var builds = require("./builds");
+var folderPostSourceFolder = require("./folderPostSourceFolder");
 
 var NO_LONGER_VALID_ERRORS = [
   "WRONGTYPE",
@@ -37,6 +39,11 @@ module.exports = async function rebuildDependents(blogID, path) {
     ]);
   };
 
+  // While a sync builds several files at once, the builds running now
+  // may have read the folder and Redis before this path was saved, and
+  // may record their dependency on it only after the set below is read
+  const earlier = builds.concurrent(blogID) ? builds.running(blogID) : [];
+
   const blog = await Blog.get({ id: blogID });
 
   if (!blog) throw new Error("No blog");
@@ -47,18 +54,51 @@ module.exports = async function rebuildDependents(blogID, path) {
   const dependent_paths = await client.sMembers(dependentsKey(blogID, path));
 
   for (const dependent_path of dependent_paths) {
-    // A failed read is the same as no entry
-    const entry = await Entry.get(blogID, dependent_path).catch(
-      () => undefined
-    );
+    await rebuildDependent(blog, dependent_path, log);
+  }
 
-    if (!entry) {
-      log("No entry for dependent_path:", dependent_path);
-      continue;
+  // So once those builds have finished, rebuild any dependents they
+  // added. Not waited for here, so this file's update can finish, but
+  // the batch waits for it (see builds.js).
+  if (earlier.length) {
+    builds.track(blogID, recheck(blog, path, earlier, dependent_paths, log));
+  }
+
+  await markTemplateDependents(blog.id, path, log);
+};
+
+// Never rejects: nothing waits for it but the batch
+async function recheck(blog, path, earlier, rebuilt, log) {
+  try {
+    await Promise.all(earlier);
+
+    const now = await client.sMembers(dependentsKey(blog.id, path));
+
+    for (const dependent_path of now) {
+      if (rebuilt.indexOf(dependent_path) > -1) continue;
+      log("Rebuilding dependent added during the batch:", dependent_path);
+      await rebuildDependent(blog, dependent_path, log);
     }
+  } catch (err) {
+    log("Error rebuilding dependents added during the batch:", err);
+  }
+}
 
-    // Folder posts are rebuilt through their source folder, see
-    // rebuildEntry.
+async function rebuildDependent(blog, dependent_path, log) {
+  // A failed read is the same as no entry
+  const entry = await Entry.get(blog.id, dependent_path).catch(() => undefined);
+
+  if (!entry) {
+    log("No entry for dependent_path:", dependent_path);
+    return;
+  }
+
+  // Folder posts are rebuilt through their source folder, see
+  // rebuildEntry. In a concurrent sync this waits for any other
+  // build of the same path (see builds.js).
+  const buildPath = folderPostSourceFolder(entry) || entry.path;
+
+  await builds.queue(blog.id, buildPath, async function () {
     try {
       await rebuildEntry(blog, entry);
     } catch (err) {
@@ -73,16 +113,14 @@ module.exports = async function rebuildDependents(blogID, path) {
 
       if (shouldDropDependent(err)) {
         try {
-          await dropDependent(blogID, dependent_path);
+          await dropDependent(blog.id, dependent_path);
         } catch (dropErr) {
           log("Error dropping invalid dependent:", dependent_path, dropErr);
         }
       }
     }
-  }
-
-  await markTemplateDependents(blog.id, path, log);
-};
+  });
+}
 
 // Templates link to files in the blog's folder with {{#cdn}}. Their CDN
 // manifest holds each file's versioned URL, so when the file changes, appears

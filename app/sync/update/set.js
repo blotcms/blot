@@ -1,4 +1,5 @@
 var rebuildDependents = require("./rebuildDependents");
+var builds = require("./builds");
 var Entry = require("models/entry");
 var Preview = require("./preview");
 var isPreview = require("./drafts").isPreview;
@@ -256,7 +257,11 @@ async function buildAndSet(blog, path, multiInfo, state) {
   // depends on it would build the same
   if (!state.unchanged)
     syntheticKeys.forEach((syntheticKey) =>
-      rebuildDependents(blog.id, syntheticKey).catch(noop)
+      // Not waited for, but a concurrent sync waits for it before it
+      // finishes (see builds.js)
+      builds
+        .track(blog.id, rebuildDependents(blog.id, syntheticKey))
+        .catch(noop)
     );
 
   // A draft folder post outside /drafts/ would write "/album.html"
@@ -299,7 +304,15 @@ module.exports = async function set(blog, path) {
     await Entry.drop(blog.id, path);
   } else if (!isTemplate(path) && !is_preview) {
     // This file should become a blog post or page!
-    await buildAndSet(blog, path, multiInfo, state);
+    // A file in a "+" folder builds the folder's post, so it waits for
+    // other builds of the folder in a concurrent sync (see builds.js)
+    await builds.queue(
+      blog.id,
+      multiInfo ? multiInfo.folderPath : path,
+      function () {
+        return buildAndSet(blog, path, multiInfo, state);
+      }
+    );
   }
 
   // Resolves to { changed: false } when the file built exactly the
