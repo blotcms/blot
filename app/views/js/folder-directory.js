@@ -590,7 +590,7 @@
     sort: meta.sort || "name",
     order: meta.order || "asc",
     // Only a sort the viewer chose (in the address) shows an arrow; the
-    // default order (name, folders first) shows none
+    // default order (by name) shows none
     chosen: /[?&](sort|order)=/.test(window.location.search),
     hasNext: !!meta.hasNext,
     total: meta.total || 0,
