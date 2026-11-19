@@ -120,6 +120,10 @@ async function main() {
   const dockerRun = [
     "docker run --rm",
     `--name ${name}`,
+    // the app user, as docker exec -u 1000 in a unit: the image's last USER is
+    // root (for the supervisor), and as root git fails its ownership check on
+    // blog folders and new files would be root's
+    "--user 1000:1000",
     `--env-file ${ENV_FILE_ON_SERVER}`,
     ...Object.entries(environment).map(
       ([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`
