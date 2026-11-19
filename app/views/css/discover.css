@@ -1,32 +1,69 @@
 /* blot.im/discover (#2639), and the card preview on the confirm page */
 
+/* The feed in the middle of the page, the sites in a narrow column against
+   the right edge; the left column is empty, so that the feed is centred */
 .discover {
-  display: flex;
-  gap: 2rem;
-  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr);
+  column-gap: 40px;
+  align-items: start;
+  padding-top: 8px;
 }
 
 .discover-main {
-  flex: 1;
+  grid-column: 2;
   min-width: 0;
 }
 
 .discover-sidebar {
-  width: 280px;
-  flex-shrink: 0;
+  grid-column: 3;
+  justify-self: end;
+  width: 200px;
   position: sticky;
-  top: 1rem;
+  top: 20px;
+  padding-top: 20px;
 }
 
 .discover-sidebar h2 {
-  font-size: var(--small-font-size);
+  font-size: 13px;
   color: var(--medium-text-color);
   font-weight: 500;
-  margin: 0 0 0.5rem;
+  margin: 0 0 4px;
+}
+
+.discover-sidebar #featured {
+  font-size: 14px;
 }
 
 .discover-sidebar #featured li a {
-  padding: 8px 0;
+  display: flex;
+  padding: 6px 0;
+  align-items: flex-start;
+}
+
+.discover-sidebar #featured li a .pic {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  margin: 1px 10px 0 0;
+}
+
+.discover-site-text {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.discover-site-name {
+  display: block;
+  color: var(--accent-color);
+  line-height: 1.3;
+}
+
+.discover-site-bio {
+  display: block;
+  font-size: 12px;
+  line-height: 1.3;
+  color: var(--medium-text-color);
 }
 
 .discover-grid {
@@ -363,13 +400,26 @@
   margin: 0;
 }
 
-@media (max-width: 800px) {
+@media (max-width: 1000px) {
   .discover {
-    flex-direction: column;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .discover-main,
+  .discover-sidebar {
+    grid-column: 1;
+  }
+
+  .discover-main {
+    max-width: 560px;
+    width: 100%;
+    margin: 0 auto;
   }
 
   .discover-sidebar {
-    width: 100%;
+    width: auto;
+    max-width: 560px;
+    margin: 0 auto;
     position: static;
   }
 }
