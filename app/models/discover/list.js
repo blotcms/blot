@@ -31,6 +31,42 @@ function hiddenBecause(record, blog, entry, shown) {
   return null;
 }
 
+// "19 November 2026", in the blog's time zone
+function formatDate(dateStamp, timeZone) {
+  if (!dateStamp) return "";
+
+  const options = { day: "numeric", month: "long", year: "numeric" };
+
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      ...options,
+      timeZone: timeZone || "UTC",
+    }).format(new Date(dateStamp));
+  } catch (err) {
+    return new Intl.DateTimeFormat("en-GB", {
+      ...options,
+      timeZone: "UTC",
+    }).format(new Date(dateStamp));
+  }
+}
+
+function site(record, blog, extended) {
+  if (!extended) return { label: record.blogID, url: "", name: record.blogID };
+
+  const name = blog.title || extended.pretty.label;
+
+  return {
+    label: extended.pretty.label,
+    url: extended.url,
+    host: new URL(extended.url).host,
+    // "example.com", for the box of a post without photos
+    address: new URL(extended.url).host.replace(/^www\./, ""),
+    name,
+    avatar: blog.avatar || "",
+    initial: name.trim().charAt(0).toUpperCase(),
+  };
+}
+
 // The card for a post, with the live title and URL
 function card(record, blog, entry) {
   const shown = entry
@@ -50,9 +86,10 @@ function card(record, blog, entry) {
     hidden,
     title: (entry && entry.title) || record.entryID,
     url: extended && entry && entry.url ? extended.url + entry.url : "",
-    site: extended
-      ? { label: extended.pretty.label, url: extended.url }
-      : { label: record.blogID, url: "" },
+    site: site(record, blog, extended),
+    date: entry ? formatDate(entry.dateStamp, blog && blog.timeZone) : "",
+    datetime:
+      entry && entry.dateStamp ? new Date(entry.dateStamp).toISOString() : "",
     photos: shown.map((photo, index) => ({
       src: photos.url(record.blogID, photo.path),
       width: photo.width,

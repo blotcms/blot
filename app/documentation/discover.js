@@ -46,6 +46,21 @@ module.exports = async function (req, res, next) {
     res.locals.title = "Discover";
     res.locals.description = "Posts from sites on Blot";
     res.locals.fullWidth = true;
+    // A featured site's card shows the name and avatar from sites.txt
+    const byHost = new Map();
+    for (const site of featured.sites || [])
+      byHost.set(site.host.replace(/^www\./, ""), site);
+
+    for (const post of posts) {
+      const match =
+        post.site.host && byHost.get(post.site.host.replace(/^www\./, ""));
+
+      if (match) {
+        post.site.name = match.name;
+        post.site.featuredImage = match.image;
+      }
+    }
+
     res.locals.discover = {
       posts,
       next: more ? "/discover?before=" + more : "",

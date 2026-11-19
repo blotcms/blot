@@ -1,23 +1,40 @@
 <li class="discover-card">
-  <a href="{{{url}}}" target="_blank" rel="noopener">
-    {{#photos.length}}
-    <span class="discover-photos discover-photos-{{photos.length}}">
-      {{#photos}}
-      <img
-        src="{{{src}}}"
-        width="{{width}}"
-        height="{{height}}"
-        alt=""
-        loading="lazy"
-        decoding="async"
-      />
-      {{/photos}}
-    </span>
-    {{/photos.length}}
-    {{^photos.length}}
-    <span class="discover-excerpt">{{excerpt}}</span>
-    {{/photos.length}}
-    <span class="discover-title">{{title}}</span>
-    <span class="discover-site">{{site.label}}</span>
+  <a class="discover-avatar-link" href="{{{site.url}}}" target="_blank" rel="noopener" tabindex="-1" aria-hidden="true">
+    {{#site.featuredImage}}<img class="discover-avatar" src="{{#cdn}}{{{site.featuredImage}}}{{/cdn}}" alt="" />{{/site.featuredImage}}
+    {{^site.featuredImage}}{{#site.avatar}}<img class="discover-avatar" src="{{{site.avatar}}}" alt="" />{{/site.avatar}}{{^site.avatar}}<span class="discover-avatar discover-initial">{{site.initial}}</span>{{/site.avatar}}{{/site.featuredImage}}
   </a>
+
+  <div class="discover-body">
+    <div class="discover-head">
+      <a class="discover-name" href="{{{site.url}}}" target="_blank" rel="noopener">{{site.name}}</a>
+      <a class="discover-visit" href="{{{site.url}}}" target="_blank" rel="noopener">Visit site</a>
+    </div>
+
+    {{#photos.length}}
+    <a class="discover-title" href="{{{url}}}" target="_blank" rel="noopener">{{title}}</a>
+    <div class="discover-carousel discover-photos-{{photos.length}}">
+      <div class="discover-track">
+        {{#photos}}
+        <a href="{{{url}}}" target="_blank" rel="noopener" tabindex="-1"><img src="{{{src}}}" width="{{width}}" height="{{height}}" alt="" loading="lazy" decoding="async" /></a>
+        {{/photos}}
+      </div>
+      <button type="button" class="discover-prev" aria-label="Previous photo" hidden>&#8249;</button>
+      <button type="button" class="discover-next" aria-label="Next photo" hidden>&#8250;</button>
+    </div>
+    {{/photos.length}}
+
+    {{^photos.length}}
+    <a class="discover-post discover-link-card" href="{{{url}}}" target="_blank" rel="noopener">
+      <span class="discover-link-site">
+        {{#site.featuredImage}}<img src="{{#cdn}}{{{site.featuredImage}}}{{/cdn}}" alt="" />{{/site.featuredImage}}
+        {{^site.featuredImage}}{{#site.avatar}}<img src="{{{site.avatar}}}" alt="" />{{/site.avatar}}{{/site.featuredImage}}
+        {{site.address}}
+      </span>
+      <span class="discover-link-title">{{title}}</span>
+      {{#excerpt}}<span class="discover-excerpt">{{excerpt}}</span>{{/excerpt}}
+    </a>
+    {{/photos.length}}
+
+    {{#date}}<a class="discover-date" href="{{{url}}}" target="_blank" rel="noopener"><time datetime="{{datetime}}">{{date}}</time></a>{{/date}}
+  </div>
 </li>

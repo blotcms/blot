@@ -40,6 +40,7 @@ function init() {
 
       const cards = page.querySelectorAll("#discover-grid > li");
       for (const card of cards) grid.appendChild(document.adoptNode(card));
+      updateAllArrows();
 
       const next = page.getElementById("discover-more");
       observer.unobserve(more);
@@ -65,4 +66,65 @@ if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", init);
 } else {
   init();
+}
+
+// Photo carousels on cards with more than one photo. The arrows scroll by
+// most of a view and hide at either end. Listeners are on the document, so
+// cards added by the infinite scroll work too.
+function updateArrows(carousel) {
+  const track = carousel.querySelector(".discover-track");
+  const prev = carousel.querySelector(".discover-prev");
+  const next = carousel.querySelector(".discover-next");
+  if (!track || !prev || !next) return;
+
+  const end = track.scrollWidth - track.clientWidth - 2;
+  prev.hidden = track.scrollLeft <= 2;
+  next.hidden = track.scrollLeft >= end;
+}
+
+function updateAllArrows() {
+  document.querySelectorAll(".discover-carousel").forEach(updateArrows);
+}
+
+document.addEventListener("click", (event) => {
+  const button = event.target.closest(".discover-prev, .discover-next");
+  if (!button) return;
+
+  const carousel = button.closest(".discover-carousel");
+  const track = carousel.querySelector(".discover-track");
+  const direction = button.classList.contains("discover-next") ? 1 : -1;
+
+  track.scrollBy({
+    left: direction * track.clientWidth * 0.8,
+    behavior: "smooth",
+  });
+});
+
+document.addEventListener(
+  "scroll",
+  (event) => {
+    const carousel =
+      event.target.closest && event.target.closest(".discover-carousel");
+    if (carousel) updateArrows(carousel);
+  },
+  true
+);
+
+// Photos change the track's width as they load
+document.addEventListener(
+  "load",
+  (event) => {
+    const carousel =
+      event.target.closest && event.target.closest(".discover-carousel");
+    if (carousel) updateArrows(carousel);
+  },
+  true
+);
+
+window.addEventListener("resize", updateAllArrows);
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", updateAllArrows);
+} else {
+  updateAllArrows();
 }

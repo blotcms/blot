@@ -33,78 +33,219 @@
   list-style: none;
   margin: 0;
   padding: 0;
+  max-width: 620px;
+}
+
+/* A post: the site's avatar on the left, everything else beside it */
+.discover-card {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 3rem;
+  grid-template-columns: 44px minmax(0, 1fr);
+  column-gap: 12px;
+  padding: 1.25rem 0;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .discover-card a {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
   color: inherit;
   text-decoration: none;
 }
 
-.discover-photos {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 4px;
-  margin-bottom: 0.5rem;
+.discover-avatar {
+  display: block;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: inset 0 0 0 1px var(--inset-image-border-color);
+  background: var(--light-background-color);
 }
 
-.discover-photos img {
+.discover-initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--medium-text-color);
+}
+
+.discover-body {
+  min-width: 0;
+}
+
+.discover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 28px;
+}
+
+.discover-name {
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Text in the accent colour, which becomes a pill on hover */
+.discover-card .discover-visit {
+  flex-shrink: 0;
+  margin-right: -0.75em;
+  padding: 0.35em 0.75em;
+  border-radius: 2em;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--accent-color);
+  transition: background 0.1s ease;
+}
+
+.discover-card .discover-visit:hover {
+  background-color: #e8ecf9;
+}
+
+.discover-title {
+  display: block;
+  margin: 0.15rem 0 0.75rem;
+  line-height: 1.4;
+}
+
+.discover-title:hover {
+  color: var(--accent-color);
+}
+
+/* One photo: the full width. More: a row to scroll sideways, the next
+   photo peeking in, with arrow buttons */
+.discover-carousel {
+  position: relative;
+}
+
+.discover-track {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.discover-track::-webkit-scrollbar {
+  display: none;
+}
+
+.discover-track a {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+.discover-track img {
+  display: block;
+  height: 360px;
+  width: auto;
+  max-width: 420px;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--light-background-color);
+}
+
+.discover-photos-1 .discover-track a {
+  flex: 1;
+}
+
+.discover-photos-1 .discover-track img {
   width: 100%;
   height: auto;
-  aspect-ratio: 1;
-  object-fit: cover;
-  border-radius: calc(var(--border-radius) / 2);
+  max-width: none;
+  max-height: 560px;
+}
+
+.discover-carousel button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0 0 3px;
+  font-size: 26px;
+  line-height: 1;
+  color: #fff;
+  background: rgba(30, 30, 30, 0.8);
+  cursor: pointer;
+}
+
+.discover-carousel button[hidden] {
+  display: none;
+}
+
+.discover-prev {
+  left: 12px;
+}
+
+.discover-next {
+  right: 12px;
+}
+
+/* A post without photos: a box with the site and the title */
+.discover-link-card {
+  display: block;
+  padding: 0.9rem 1rem 1rem;
+  margin-top: 0.4rem;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
   background: var(--light-background-color);
-  box-shadow: inset 0 0 0 1px var(--inset-image-border-color);
 }
 
-/* The first photo is the main image, the rest one row beneath it that
-   fills the width whatever their number */
-.discover-photos img:first-child {
-  grid-column: 1 / -1;
-  aspect-ratio: 4 / 3;
+.discover-link-site {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: var(--small-font-size);
+  color: var(--medium-text-color);
 }
 
-.discover-photos img:not(:first-child) {
-  aspect-ratio: 3 / 2;
+.discover-link-site img {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  object-fit: cover;
 }
 
-.discover-photos-2 {
-  grid-template-columns: 1fr;
+.discover-link-title {
+  display: block;
+  margin-top: 0.5rem;
+  font-size: 1.1em;
+  font-weight: 500;
+  line-height: 1.35;
 }
 
-.discover-photos-3 {
-  grid-template-columns: repeat(2, 1fr);
+.discover-link-card:hover .discover-link-title {
+  color: var(--accent-color);
 }
 
 .discover-excerpt {
   display: block;
-  padding: 1rem;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
+  margin-top: 0.35rem;
   color: var(--medium-text-color);
   font-size: var(--small-font-size);
   line-height: 1.5;
-  margin-bottom: 0.5rem;
 }
 
-.discover-title {
-  font-weight: 600;
-  line-height: 1.3;
+.discover-date {
+  display: inline-block;
+  margin-top: 0.75rem;
+  font-size: var(--small-font-size);
+  color: var(--medium-text-color);
 }
 
-.discover-card a:hover .discover-title {
+.discover-date:hover {
   color: var(--accent-color);
 }
 
-.discover-site {
-  font-size: var(--small-font-size);
-  color: var(--medium-text-color);
+@media (max-width: 600px) {
+  .discover-track img {
+    height: 260px;
+    max-width: 300px;
+  }
 }
 
 .discover-more {
