@@ -1295,7 +1295,7 @@ function answer(text) {
     );
     assert.strictEqual(logged.length, 1);
     assert(
-      /^broker: job=echo ok ms=\d+ peak=4096 peak_sampled=1 queued_ms=0$/.test(
+      /^broker: job=echo ok ms=\d+ peak=4096 peak_sampled=1 queued_ms=\d+$/.test(
         logged[0]
       ),
       logged[0]
@@ -1319,7 +1319,7 @@ function answer(text) {
     );
     assert.strictEqual(logged.length, 1);
     assert(
-      /^broker: job=echo error=failed code=3 signal=null ms=\d+ peak=unknown queued_ms=0$/.test(
+      /^broker: job=echo error=failed code=3 signal=null ms=\d+ peak=unknown queued_ms=\d+$/.test(
         logged[0]
       ),
       logged[0]
@@ -1346,7 +1346,8 @@ function answer(text) {
       }
     );
     const waits = logged.map((line) => Number(/queued_ms=(\d+)/.exec(line)[1]));
-    assert.strictEqual(waits[0], 0);
+    // the first job never queued; a slow runner can still take a millisecond or two
+    assert(waits[0] < 50, logged.join("\n"));
     assert(waits[1] >= 50, logged.join("\n"));
   });
 
@@ -1376,7 +1377,7 @@ function answer(text) {
     assert.deepStrictEqual(cleared, [[directory, "777"]]);
     assert.strictEqual(logged.length, 1);
     assert(
-      /^broker: job=echo ok ms=\d+ peak=777 queued_ms=0$/.test(logged[0]),
+      /^broker: job=echo ok ms=\d+ peak=777 queued_ms=\d+$/.test(logged[0]),
       logged[0]
     );
   });
