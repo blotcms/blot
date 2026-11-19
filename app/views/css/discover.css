@@ -145,8 +145,8 @@
   margin-top: 4px;
 }
 
-.discover-title:hover {
-  color: var(--accent-color);
+.discover-card .discover-name:hover {
+  text-decoration: underline;
 }
 
 /* One photo: the full width. More: a row to scroll sideways, the next
@@ -256,10 +256,6 @@
   font-size: 16px;
   font-weight: 500;
   line-height: 22px;
-}
-
-.discover-link-card:hover .discover-link-title {
-  color: var(--accent-color);
 }
 
 .discover-excerpt {
