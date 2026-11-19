@@ -7,8 +7,11 @@
 //
 // Writes JSON to the file, or to stdout without one:
 //
-//   { version: 1, exported: <ms>, posts: [
-//     { blogID, url, title, sources: ["_image_cache/..."], added: <ms> } ] }
+//   { version: 1, exported: <ms>,
+//     posts: [
+//       { blogID, url, title, sources: ["_image_cache/..."], added: <ms> } ],
+//     profiles: [
+//       { blogID, host, name, bio, avatar: <base64 JPEG, or ""> } ] }
 //
 // Posts are oldest first. A post is identified by its blog ID and the URL of
 // its entry (like "/my-post"), not the entry's path, since the same post has
@@ -16,11 +19,21 @@
 // path of the original image, not Discover's resized copy. A post whose
 // entry is missing or has no URL is left out and reported on stderr.
 //
+// Profiles (the name, bio and avatar the maintainer sets for a site, see
+// app/models/discover/profile.js) are found by scanning Redis for
+// discover:profile:* hashes rather than from the posts, since a site can have
+// a profile before it has a post. The avatar travels in the file as base64,
+// because it is stored in the blog's own assets, which the other copy doesn't
+// have. host is for reading the file only; import goes by blogID.
+//
 // Only reads. Safe to rerun.
 
 const fs = require("fs-extra");
+const config = require("config");
 const client = require("models/client");
 const Entry = require("models/entry");
+const Blog = require("models/blog");
+const assets = require("storage/assets");
 const Discover = require("models/discover");
 
 function usage(message) {
@@ -28,6 +41,59 @@ function usage(message) {
 
   console.error("Usage: node scripts/discover/export.js [file]");
   process.exit(2);
+}
+
+// Resolves to the blog IDs which have a profile, sorted
+async function profileBlogIDs() {
+  const prefix = Discover.key.profile("");
+  const keys = new Set(); // SCAN can return a key more than once
+  let cursor = "0";
+
+  do {
+    const reply = await client.scan(cursor, {
+      MATCH: prefix + "*",
+      TYPE: "hash",
+      COUNT: 1000,
+    });
+    cursor = String(reply.cursor);
+    reply.keys.forEach((name) => keys.add(name));
+  } while (cursor !== "0");
+
+  return Array.from(keys)
+    .map((name) => name.slice(prefix.length))
+    .sort();
+}
+
+// The site's address, for reading the file: its domain or its blot.im host
+function hostOf(blog) {
+  if (!blog) return "";
+  if (blog.domain) return blog.domain;
+  return blog.handle ? blog.handle + "." + config.host : "";
+}
+
+// Resolves to the profiles of every blog which has one
+async function exportProfiles() {
+  const profiles = [];
+
+  for (const blogID of await profileBlogIDs()) {
+    const profile = await Discover.profile.get(blogID);
+
+    if (!profile) continue;
+
+    const avatar = profile.avatarPath
+      ? (await assets.read(blogID, profile.avatarPath)).toString("base64")
+      : "";
+
+    profiles.push({
+      blogID,
+      host: hostOf(await Blog.get({ id: blogID })),
+      name: profile.name,
+      bio: profile.bio,
+      avatar,
+    });
+  }
+
+  return profiles;
 }
 
 // Resolves to { exported, posts, skipped } where skipped lists
@@ -71,7 +137,9 @@ async function exportPosts(now = Date.now()) {
     });
   }
 
-  return { exported: { version: 1, exported: now, posts }, skipped };
+  const profiles = await exportProfiles();
+
+  return { exported: { version: 1, exported: now, posts, profiles }, skipped };
 }
 
 async function main() {
@@ -95,7 +163,12 @@ async function main() {
     );
 
   console.error(
-    "Exported " + exported.posts.length + " posts, skipped " + skipped.length
+    "Exported " +
+      exported.posts.length +
+      " posts and " +
+      exported.profiles.length +
+      " profiles, skipped " +
+      skipped.length
   );
 }
 

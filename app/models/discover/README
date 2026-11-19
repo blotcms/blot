@@ -11,6 +11,7 @@ are not under any blog.
 | `discover:posts` | sorted set | Post IDs, scored by each post's date (ms), or when it was added if it has none. The page reads it newest first. |
 | `discover:post:<id>` | hash | `blogID`, `entryID` (the entry's path), `photos` (JSON) and `added`. |
 | `discover:blog:<blogID>` | set | A blog's post IDs, so they can be removed together. |
+| `discover:profile:<blogID>` | hash | `name`, `bio` and `avatar` (an asset path) shown in place of the site's own. |
 | `discover:token:<token>` | string | `{ blogID, entryID }` for an "Add to Discover" link, expiring after 24 hours. |
 
 A post's ID is a hash of its blog ID and entry path (`postID.js`).
@@ -35,6 +36,19 @@ Discover only reads those, from the storage bucket, and never fetches a URL
 from a post. `photos.derive` resizes each chosen one to at most 1200px into
 `{blogID}/_discover/<postID>/`, served from cdn.blot.im. No sweep lists
 `_discover`, and blog deletion removes it with the rest of the blog's assets.
+
+## Profiles
+
+`discover:profile:<blogID>` holds a name, bio and avatar the maintainer set
+for a site (`profile.js`), shown in place of the blog's own title and avatar
+and of its sites.txt details. Each field is optional. The avatar is a
+400px square JPEG, cropped from the centre or a given side, in the blog's
+assets under `_discover/profile/`. It comes from an upload or a URL on Blot:
+an image on cdn.blot.im is read from the bucket, a file at a Blot site's own
+address from that site's folder. Outside development nothing is fetched.
+Set them on the manage page (`/sites/discover`) or with
+`scripts/discover/profile.js <site> --name … --avatar <URL or file> --crop top`.
+Exports carry them, with the avatar's JPEG, so they import with the posts.
 
 ## Tokens
 

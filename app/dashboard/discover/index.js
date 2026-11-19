@@ -159,10 +159,34 @@ manage.get("/", async (req, res, next) => {
       before: req.query.before,
     });
 
+    // One row per site with posts on this page, to set how it appears
+    const seen = new Set();
+    const sites = [];
+
+    for (const post of posts) {
+      if (seen.has(post.blogID)) continue;
+      seen.add(post.blogID);
+
+      const saved = await Discover.profile.get(post.blogID);
+
+      sites.push({
+        blogID: post.blogID,
+        label: post.site.label,
+        name: (saved && saved.name) || "",
+        bio: (saved && saved.bio) || "",
+        avatar: (saved && saved.avatar) || post.site.avatar || "",
+        shownName: post.site.name,
+        hasProfile: !!saved,
+      });
+    }
+
     res.locals.title = "Manage Discover";
     res.locals.breadcrumbs.add("Discover", "/sites/discover");
     res.render("dashboard/discover/discover-manage", {
       posts,
+      sites,
+      error: typeof req.query.error === "string" ? req.query.error : "",
+      positions: Discover.profile.POSITIONS,
       more: more ? "/sites/discover?before=" + more : "",
     });
   } catch (err) {
@@ -177,6 +201,51 @@ manage.post("/remove", async (req, res, next) => {
     res.redirect("/sites/discover");
   } catch (err) {
     next(err);
+  }
+});
+
+// How a site appears on Discover: its name, bio and avatar, in place of
+// its own. The avatar is an uploaded file or a URL on Blot.
+manage.post("/profile", async (req, res, next) => {
+  const blogID = req.body.blogID;
+
+  if (typeof blogID !== "string" || !/^blog_\w+$/.test(blogID))
+    return res.redirect("/sites/discover");
+
+  try {
+    if (req.body.reset) {
+      await Discover.profile.remove(blogID);
+      return res.redirect("/sites/discover");
+    }
+
+    await Discover.profile.set(blogID, {
+      name: req.body.name || "",
+      bio: req.body.bio || "",
+    });
+
+    const crop = { position: req.body.crop };
+    const upload = req.files && req.files.avatar;
+    const url =
+      typeof req.body.avatarURL === "string" ? req.body.avatarURL.trim() : "";
+
+    if (upload && upload.size) {
+      const fs = require("fs-extra");
+      await Discover.profile.setAvatarData(
+        blogID,
+        await fs.readFile(upload.path),
+        crop
+      );
+    } else if (url) {
+      await Discover.profile.setAvatarFromURL(blogID, url, crop);
+    } else if (req.body.removeAvatar) {
+      await Discover.profile.removeAvatar(blogID);
+    }
+
+    res.redirect("/sites/discover");
+  } catch (err) {
+    res.redirect(
+      "/sites/discover?error=" + encodeURIComponent(err.message || String(err))
+    );
   }
 });
 

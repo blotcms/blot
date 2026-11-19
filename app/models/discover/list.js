@@ -4,6 +4,7 @@ const Entry = require("models/entry");
 const key = require("./key");
 const post = require("./post");
 const photos = require("./photos");
+const profile = require("./profile");
 
 const DEFAULT_LIMIT = 24;
 const MAX_LIMIT = 100;
@@ -119,9 +120,38 @@ function card(record, blog, entry) {
 }
 
 // Resolves to the cards for the records, loading each blog once
+// A profile set by the maintainer (./profile) replaces the site's own name,
+// avatar and bio. site.custom says which, so that sites.txt details don't
+// replace them in turn (documentation/discover.js).
+function applyProfile(site, saved) {
+  site.custom = { name: false, avatar: false, bio: false };
+  if (!saved) return site;
+
+  if (saved.name) {
+    site.name = saved.name;
+    site.initial = saved.name.charAt(0).toUpperCase();
+    site.custom.name = true;
+  }
+
+  if (saved.avatar) {
+    site.avatar = saved.avatar;
+    site.custom.avatar = true;
+  }
+
+  if (saved.bio) {
+    site.bio = saved.bio;
+    site.custom.bio = true;
+  }
+
+  return site;
+}
+
 async function cards(records) {
   const blogs = new Map();
   const result = [];
+  const profiles = await profile.getMany(
+    records.map((record) => record.blogID)
+  );
 
   for (const record of records) {
     if (!blogs.has(record.blogID))
@@ -130,7 +160,9 @@ async function cards(records) {
     const blog = blogs.get(record.blogID);
     const entry = blog ? await Entry.get(record.blogID, record.entryID) : null;
 
-    result.push(card(record, blog, entry));
+    const item = card(record, blog, entry);
+    applyProfile(item.site, profiles.get(record.blogID));
+    result.push(item);
   }
 
   return result;

@@ -9,6 +9,7 @@ module.exports = {
   list: require("./list"),
   cards: require("./list").cards,
   photos: require("./photos"),
+  profile: require("./profile"),
   postID: require("./postID"),
   token: require("./token"),
   key: require("./key"),

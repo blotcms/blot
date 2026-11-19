@@ -27,7 +27,11 @@
 //
 // With --apply each kept photo is resized (as Discover does when a post is
 // added) and the post is added with its original added time, which keeps the
-// order. Without it, nothing is written. Safe to rerun: a post already on
+// order. Without it, nothing is written.
+//
+// After the posts, each profile in the file (an older export has none) is set
+// on its blog, if the blog exists: the name and bio, and the avatar when the
+// file has one. A profile whose blog doesn't exist is counted as "no blog". Safe to rerun: a post already on
 // Discover is left as it is, so after an interruption run it again.
 
 const fs = require("fs-extra");
@@ -140,6 +144,46 @@ async function importPosts(data, apply, report = () => {}) {
   return totals;
 }
 
+// Imports one profile of an export. Resolves to "set" (or "would set"
+// without apply) or "no blog".
+async function importProfile(profile, apply) {
+  const blog = await Blog.get({ id: profile.blogID });
+
+  if (!blog) return "no blog";
+  if (!apply) return "would set";
+
+  await Discover.profile.set(profile.blogID, {
+    name: profile.name,
+    bio: profile.bio,
+  });
+
+  // The avatar in the file is square already, so the default position
+  if (profile.avatar)
+    await Discover.profile.setAvatarData(
+      profile.blogID,
+      Buffer.from(profile.avatar, "base64")
+    );
+
+  return "set";
+}
+
+// Imports every profile of an export, calling report(profile, status) after
+// each. Resolves to the totals.
+async function importProfiles(data, apply, report = () => {}) {
+  const totals = { set: 0, noBlog: 0 };
+
+  for (const profile of data.profiles || []) {
+    const status = await importProfile(profile, apply);
+
+    if (status === "no blog") totals.noBlog++;
+    else totals.set++;
+
+    report(profile, status);
+  }
+
+  return totals;
+}
+
 async function main() {
   const options = parse(process.argv.slice(2));
   const data = await read(options.file);
@@ -176,6 +220,30 @@ async function main() {
       totals.photosMissing
   );
 
+  const profiles = await importProfiles(
+    data,
+    options.apply,
+    (profile, status) => {
+      console.log(
+        profile.blogID +
+          " profile" +
+          (profile.host ? " " + profile.host : "") +
+          ": " +
+          status
+      );
+    }
+  );
+
+  console.log(
+    "Total of " +
+      (data.profiles || []).length +
+      " profiles: " +
+      (options.apply ? "set " : "would set ") +
+      profiles.set +
+      ", no blog " +
+      profiles.noBlog
+  );
+
   if (!options.apply) console.log("Dry run: pass --apply to import them");
 }
 
@@ -191,4 +259,10 @@ if (require.main === module) {
   );
 }
 
-module.exports = { read, importPost, importPosts };
+module.exports = {
+  read,
+  importPost,
+  importPosts,
+  importProfile,
+  importProfiles,
+};

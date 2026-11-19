@@ -20,6 +20,13 @@ module.exports = {
     return "discover:blog:" + blogID;
   },
 
+  // Hash: name, bio and avatar (an asset path) shown in place of the site's
+  // own, set by the maintainer
+  profile: function (blogID) {
+    ensure(blogID, "string");
+    return "discover:profile:" + blogID;
+  },
+
   // String: the post reference an "Add to Discover" link is for
   token: function (token) {
     ensure(token, "string");

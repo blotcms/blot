@@ -119,6 +119,7 @@ async function removeBlog(blogID) {
   for (const id of ids) await remove(id);
 
   await client.del(key.blog(blogID));
+  await require("./profile").remove(blogID);
 
   return ids.length;
 }

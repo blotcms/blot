@@ -6,7 +6,7 @@ describe("scripts/discover/import", function () {
   const assets = require("storage/assets");
   const Discover = require("models/discover");
   const { exportPosts } = require("../export");
-  const { importPosts } = require("../import");
+  const { importPosts, importProfiles } = require("../import");
 
   global.test.blog();
 
@@ -129,6 +129,7 @@ describe("scripts/discover/import", function () {
           added: 2000,
         },
       ],
+      profiles: [],
     });
     expect(skipped.length).toBe(1);
     expect(skipped[0].reason).toMatch(/missing|no url/);
@@ -218,5 +219,74 @@ describe("scripts/discover/import", function () {
       photosMissing: 0,
     });
     expect(await Discover.get(id)).toEqual(before);
+  });
+
+  describe("profiles", function () {
+    async function profile(blogID) {
+      const data = await sharp({
+        create: {
+          width: 600,
+          height: 600,
+          channels: 3,
+          background: "#993366",
+        },
+      })
+        .jpeg()
+        .toBuffer();
+
+      await Discover.profile.set(blogID, { name: "Ada", bio: "Writes things" });
+      await Discover.profile.setAvatarData(blogID, data);
+    }
+
+    it("exports a profile with its avatar and restores it on apply, but not on a dry run", async function () {
+      const blogID = this.blog.id;
+
+      await profile(blogID);
+
+      const { exported } = await exportPosts();
+      const mine = exported.profiles.find((item) => item.blogID === blogID);
+
+      expect(mine.name).toBe("Ada");
+      expect(mine.bio).toBe("Writes things");
+      expect(mine.avatar.length).toBeGreaterThan(0);
+
+      await Discover.profile.remove(blogID);
+
+      const dry = await importProfiles(exported, false);
+
+      expect(dry.set).toBe(1);
+      expect(await Discover.profile.get(blogID)).toBe(null);
+
+      const totals = await importProfiles(exported, true);
+
+      expect(totals).toEqual({ set: 1, noBlog: 0 });
+
+      const restored = await Discover.profile.get(blogID);
+
+      expect(restored.name).toBe("Ada");
+      expect(restored.bio).toBe("Writes things");
+      expect(restored.avatarPath).toMatch(/^_discover\/profile\//);
+      expect(await assets.exists(blogID, restored.avatarPath)).toBe(true);
+    });
+
+    it("skips a profile whose blog is missing, and an export with no profiles", async function () {
+      const totals = await importProfiles(
+        {
+          profiles: [
+            {
+              blogID: "blog_missing",
+              host: "",
+              name: "X",
+              bio: "",
+              avatar: "",
+            },
+          ],
+        },
+        true
+      );
+
+      expect(totals).toEqual({ set: 0, noBlog: 1 });
+      expect(await importProfiles({}, true)).toEqual({ set: 0, noBlog: 0 });
+    });
   });
 });

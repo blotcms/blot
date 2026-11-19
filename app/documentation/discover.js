@@ -24,17 +24,20 @@ function yearsOnBlot(tenure) {
   return years + (years === 1 ? " year" : " years") + " on Blot";
 }
 
-// What the popover shown on hovering a name or avatar needs: the
-// featured site's details where there are some, or the blog's own
+// What the popover shown on hovering a name or avatar needs: a featured
+// site's details from sites.txt in place of the blog's own, but never in
+// place of a profile the maintainer set (site.custom, models/discover/profile)
 function popover(site, featured) {
+  const custom = site.custom || {};
+
   return {
-    name: (featured && featured.name) || site.name,
+    name: custom.name ? site.name : (featured && featured.name) || site.name,
     address: (site.host || "").replace(/^www\./, ""),
     url: site.url,
-    featuredImage: featured ? featured.image : "",
+    featuredImage: featured && !custom.avatar ? featured.image : "",
     avatar: site.avatar || "",
     initial: site.initial || "",
-    bio: featured ? featured.bio : "",
+    bio: custom.bio ? site.bio : featured ? featured.bio : "",
     years: featured ? yearsOnBlot(featured.tenure) : "",
   };
 }
@@ -81,9 +84,11 @@ module.exports = async function (req, res, next) {
       const match =
         post.site.host && byHost.get(post.site.host.replace(/^www\./, ""));
 
+      const custom = post.site.custom || {};
+
       if (match) {
-        post.site.name = match.name;
-        post.site.featuredImage = match.image;
+        if (!custom.name) post.site.name = match.name;
+        if (!custom.avatar) post.site.featuredImage = match.image;
       }
 
       post.popover = popover(post.site, match);
