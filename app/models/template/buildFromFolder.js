@@ -14,8 +14,13 @@ var defaults = require("models/blog/defaults");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var clfdate = require("helper/clfdate");
 
+// Resolves { failed }: how many templates in the folder could not be read,
+// plus one if removing those no longer in it failed. The caller retries the
+// build while it is not zero.
 module.exports = async function buildFromFolder(blogID) {
   ensure(blogID, "string");
+
+  let failed = 0;
 
   var templateDirs = ["/templates", "/Templates"];
 
@@ -76,6 +81,7 @@ module.exports = async function buildFromFolder(blogID) {
         await readFromFolder(blogID, dir);
       } catch (err) {
         readFailed = true;
+        failed++;
 
         // we need to expose this error
         // on the design page!
@@ -147,7 +153,12 @@ module.exports = async function buildFromFolder(blogID) {
       "buildFromFolder: failed to remove templates",
       err
     );
+    // Counted as a failure so the caller builds again: a removal that failed
+    // before it was recorded as pending would otherwise never be retried
+    failed++;
   }
+
+  return { failed };
 };
 
 // Removes local templates whose folder has gone missing. The installed one

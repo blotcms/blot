@@ -38,6 +38,13 @@ module.exports = {
     return "template:folder_fresh:" + blogID;
   },
 
+  // Set by sync when a path in the blog's templates folder was updated, and
+  // cleared once buildFromFolder has read every template without a failure, so
+  // a failed read is retried by the next sync
+  needsBuild: function needsBuild(blogID) {
+    return "template:needs_build:" + blogID;
+  },
+
   renderedOutput: function renderedOutput(hash) {
     return "cdn:rendered:" + hash;
   },

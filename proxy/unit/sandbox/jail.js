@@ -23,10 +23,12 @@ const ENTER_NETWORK = path.join(__dirname, "enter-network.sh");
 
 // The unit's browser cgroup, which the host binds in (proxy/deploy/common.sh)
 const BROWSER_CGROUP = "/sandbox-browser-cgroup";
-// The fetch-image job's, in the unit's subtree too, so it shares that budget
-// with the image jobs. The broker makes it (./cgroup.js),
-// with the job's cgroupLimits. The fetch job runs in it too, so the two take
-// turns and add no memory.
+// The fetch-image and fetch jobs' cgroups, in the unit's subtree too, so they
+// share that budget (its limit, not theirs, is the unit's worst case) with the
+// image jobs. The broker makes them (./cgroup.js), with their jobs'
+// cgroupLimits. Each job has its own, so one of each runs at once: a post
+// build's image never waits behind a batch of fetches.
+const FETCH_IMAGE_CGROUP = CGROUP_MOUNT + "/fetch-image";
 const FETCH_CGROUP = CGROUP_MOUNT + "/fetch";
 
 // pasta can't start from a root nsjail, so a jail with a network is started by
@@ -208,7 +210,7 @@ const JOBS = {
   "fetch-image": {
     command: node("fetch-image"),
     network: true,
-    cgroups: [FETCH_CGROUP],
+    cgroups: [FETCH_IMAGE_CGROUP],
     cgroupLimits: { memoryBytes: 256 * MiB, pids: 64 },
     maxQueued: 8,
     timeSeconds: 30,
@@ -217,15 +219,15 @@ const JOBS = {
   },
   // A batch of up to 32 URLs fetched one after the other in one jail: an
   // import's images, audio and PDFs, domain and featured-site checks. The same
-  // jail as fetch-image and the same cgroup, which fetch-image's entry makes
-  // and sizes, so the two take turns on one slot and no memory is added. Its
-  // own queue (the broker queues oldest first across both) is what keeps a big
-  // import from filling fetch-image's, and the reverse. A batch is at most 60s,
+  // jail as fetch-image, in a cgroup of its own, so a big import never holds up
+  // a post build's images. Its own queue keeps a big import from filling
+  // fetch-image's, and the reverse. A batch is at most 60s,
   // its bodies together at most 50 MiB (app/sandbox/jobs/fetch.js).
   fetch: {
     command: node("fetch"),
     network: true,
     cgroups: [FETCH_CGROUP],
+    cgroupLimits: { memoryBytes: 256 * MiB, pids: 64 },
     maxQueued: 16,
     timeSeconds: 75,
     maxInputBytes: 256 * 1024,
@@ -496,6 +498,7 @@ module.exports = {
   CGROUP_MOUNT,
   BROWSER_CGROUP,
   FETCH_CGROUP,
+  FETCH_IMAGE_CGROUP,
   OOM_SCORE_ADJ,
   job,
   args,

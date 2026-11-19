@@ -1,9 +1,10 @@
 // The macserver skips pushing a file whose size and mtime haven't changed since
 // it was last pushed (iCloud evicting or re-materialising a file is reported
 // as a change). Like macserverDisconnect.js, a resolve hook stubs dotenv and,
-// for httpClient/upload.js only, swaps brctl and fetch for spies held on
-// globalThis.__pushedFilesMocks and config.js for a stub, so this spec never
-// caches the config.js other specs set up through process.env.
+// for httpClient/upload.js and downloadBirdsVersion.js only, swaps brctl,
+// bird's database and fetch for spies held on globalThis.__pushedFilesMocks
+// and config.js for a stub, so this spec never caches the config.js other
+// specs set up through process.env.
 const fs = require("fs-extra");
 const os = require("os");
 const path = require("path");
@@ -21,6 +22,14 @@ const iCloudDriveDirectory = path.join(
 
 const hooks = `
 const ICLOUD_DRIVE_DIRECTORY = ${JSON.stringify(iCloudDriveDirectory)};
+const BRCTL = "data:text/javascript," + encodeURIComponent(
+  "export const download = (...args) => globalThis.__pushedFilesMocks.download(...args);" +
+  "export const evict = async () => {};"
+);
+const BIRD = "data:text/javascript," + encodeURIComponent(
+  "export const fileVersion = async (...args) => (globalThis.__pushedFilesMocks.fileVersion || (() => null))(...args);" +
+  "export const diskMatches = (v, s) => s.size === v.size && Math.floor(s.mtimeMs / 1000) === v.mtime;"
+);
 export async function resolve(specifier, context, nextResolve) {
   if (specifier === "dotenv/config") {
     try {
@@ -42,16 +51,24 @@ export async function resolve(specifier, context, nextResolve) {
       };
     }
     if (specifier === "../brctl/index.js") {
-      return {
-        url: "data:text/javascript,export const download = (...args) => globalThis.__pushedFilesMocks.download(...args)",
-        shortCircuit: true,
-      };
+      return { url: BRCTL, shortCircuit: true };
+    }
+    if (specifier === "../birdState.js") {
+      return { url: BIRD, shortCircuit: true };
     }
     if (specifier === "./rateLimitedFetchWithRetriesAndTimeout.js") {
       return {
         url: "data:text/javascript,export default (...args) => globalThis.__pushedFilesMocks.fetch(...args)",
         shortCircuit: true,
       };
+    }
+  }
+  if (context.parentURL && context.parentURL.endsWith("/downloadBirdsVersion.js")) {
+    if (specifier === "./brctl/index.js") {
+      return { url: BRCTL, shortCircuit: true };
+    }
+    if (specifier === "./birdState.js") {
+      return { url: BIRD, shortCircuit: true };
     }
   }
   return nextResolve(specifier, context);
@@ -206,6 +223,7 @@ describe("icloud macserver pushed files", function () {
     });
 
     afterEach(async function () {
+      delete globalThis.__pushedFilesMocks.fileVersion;
       pushedFiles.forgetBlog(blogID);
       await fs.remove(path.join(iCloudDriveDirectory, blogID));
     });
@@ -247,6 +265,63 @@ describe("icloud macserver pushed files", function () {
       await upload(blogID, "post.md");
 
       expect(fetch).toHaveBeenCalledTimes(2);
+    });
+
+    // bird has a version the disk doesn't yet: a forced download brings it
+    const birdHas = async (contents, seconds) => {
+      globalThis.__pushedFilesMocks.fileVersion = async () => ({
+        size: Buffer.byteLength(contents),
+        mtime: seconds,
+      });
+      download.and.callFake(async (p, options) => {
+        if (options && options.force) {
+          await fs.outputFile(p, contents);
+          await fs.utimes(p, seconds, seconds);
+        }
+        return fs.stat(p);
+      });
+    };
+    const pushedBytes = (call) => fetch.calls.argsFor(call)[1].body.length;
+
+    it("waits for the disk to reach the version bird has", async function () {
+      await birdHas("Hello, world", 1700000000);
+
+      await upload(blogID, "post.md");
+
+      expect(fetch).toHaveBeenCalledTimes(1);
+      expect(pushedBytes(0)).toBe("Hello, world".length);
+    });
+
+    it("does not skip a file as unchanged while bird has a newer version", async function () {
+      await upload(blogID, "post.md");
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      await birdHas("Hello again", 1700000100);
+      await upload(blogID, "post.md");
+
+      expect(fetch).toHaveBeenCalledTimes(2);
+      expect(pushedBytes(1)).toBe("Hello again".length);
+    });
+
+    it("gives a new file whose record is empty a moment to fill in", async function () {
+      await fs.outputFile(filePath, "");
+      await fs.utimes(filePath, 1700000200, 1700000200);
+      let calls = 0;
+      globalThis.__pushedFilesMocks.fileVersion = async () =>
+        ++calls < 2
+          ? { size: 0, mtime: 1700000200 }
+          : { size: 5, mtime: 1700000201 };
+      download.and.callFake(async (p) => {
+        if (calls >= 2) {
+          await fs.outputFile(p, "Hello");
+          await fs.utimes(p, 1700000201, 1700000201);
+        }
+        return fs.stat(p);
+      });
+
+      await upload(blogID, "post.md");
+
+      expect(pushedBytes(0)).toBe(5);
     });
 
     it("pushes again after the path is forgotten", async function () {

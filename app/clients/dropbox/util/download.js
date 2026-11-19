@@ -11,11 +11,21 @@ const {
   exceedsFilesystemPathLimits,
 } = require("./constants");
 
-async function download(client, source, blogID, destination) {
+// options.metadata is the file's { path_display, size } when the caller has
+// them already (a delta entry carries both), which saves a filesGetMetadata
+// call. Without it they are fetched.
+//
+// options.publish(fn) runs the step which writes into the blog's folder. The
+// transfer from Dropbox is not serialised, but concurrent writes race in
+// File.setMany (two siblings differing only in case lose a spelling from the
+// lowercased-name index), so a caller downloading several files at once passes
+// a publish which runs them one at a time. It defaults to calling fn.
+async function download(client, source, blogID, destination, options) {
   const id = uuid();
   const prefix = () =>
     clfdate() + " clients:dropbox:download:" + id.slice(0, 6);
   let timedOut = false;
+  const publish = (options && options.publish) || ((fn) => fn());
 
   console.log(prefix(), source, "->", destination);
 
@@ -43,10 +53,14 @@ async function download(client, source, blogID, destination) {
   });
 
   const transfer = (async function () {
-    const { result: metadata } = await client.filesGetMetadata({
-      path: source,
-    });
-    if (timedOut) return;
+    let metadata = options && options.metadata;
+
+    if (!metadata) {
+      ({ result: metadata } = await client.filesGetMetadata({
+        path: source,
+      }));
+      if (timedOut) return;
+    }
 
     const metadataPath = metadata.path_display || source;
 
@@ -56,10 +70,12 @@ async function download(client, source, blogID, destination) {
         "skipping download because file extension is unsupported",
         metadataPath
       );
-      await folder.writePlaceholder(blogID, destination, {
-        code: "SYNC_UNSUPPORTED",
-        kind: extname(metadataPath).toLowerCase(),
-      });
+      await publish(() =>
+        folder.writePlaceholder(blogID, destination, {
+          code: "SYNC_UNSUPPORTED",
+          kind: extname(metadataPath).toLowerCase(),
+        })
+      );
       return;
     }
 
@@ -71,17 +87,23 @@ async function download(client, source, blogID, destination) {
         ">",
         MAX_FILE_SIZE
       );
-      await folder.writePlaceholder(blogID, destination, {
-        code: "SYNC_TOO_LARGE",
-        size: metadata.size,
-        limit: MAX_FILE_SIZE,
-      });
+      await publish(() =>
+        folder.writePlaceholder(blogID, destination, {
+          code: "SYNC_TOO_LARGE",
+          size: metadata.size,
+          limit: MAX_FILE_SIZE,
+        })
+      );
       return;
     }
 
     const { result } = await client.filesDownload({ path: source });
     if (timedOut) return;
-    await folder.write(blogID, destination, result.fileBinary);
+    await publish(async () => {
+      // Not after the download was given up on, however long it waited
+      if (timedOut) return;
+      await folder.write(blogID, destination, result.fileBinary);
+    });
   })();
 
   // After a timeout the transfer is abandoned, and whatever it ends with
