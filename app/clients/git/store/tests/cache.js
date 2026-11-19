@@ -514,7 +514,10 @@ describe("git store cache", function () {
       // the end the directory is within the cap
       expect(results.reduce((sum, r) => sum + r.stored, 0)).toBeGreaterThan(0);
       expect(results.reduce((sum, r) => sum + r.walks, 0)).toBeGreaterThan(0);
-      expect(results.every((r) => r.maxSeen <= cap * 1.1)).toBe(true);
+      // One expectation per writer, so a failure shows how far over it saw
+      for (const r of results) {
+        expect(r.maxSeen).toBeLessThanOrEqual(cap * 1.1);
+      }
 
       const cache = open({ maxBytes: cap });
       await cache.settle();
