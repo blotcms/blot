@@ -15,9 +15,9 @@
 
 .home-portfolio .home-intro {
   max-width: 750px;
-  margin: 0;
+  margin: 0 auto;
   padding: 148px 0 164px;
-  text-align: left;
+  text-align: center;
 }
 
 .home-portfolio .home-intro h1 {
@@ -35,7 +35,7 @@
   align-items: center;
   width: fit-content;
   gap: 7px;
-  margin: 16px 0 0;
+  margin: 16px auto 0;
   color: var(--brochure-accent-color);
   font: 500 13px / 1.25 system-ui, sans-serif;
   text-decoration: none;
