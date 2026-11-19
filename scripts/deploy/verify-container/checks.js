@@ -10,6 +10,7 @@ const http = require("http");
 const net = require("net");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
+const nodeRole = require("./nodeRole");
 
 const execFileAsync = promisify(execFile);
 
@@ -405,7 +406,7 @@ async function nodeFilter() {
     const command = await fs
       .readFile(`/proc/${pid}/cmdline`, "utf8")
       .catch(() => "");
-    if (command !== "node\0app/index.js\0") continue;
+    if (nodeRole(command) !== "node-a") continue;
     const status = await fs.readFile(`/proc/${pid}/status`, "utf8");
     if (filters(status) <= own || !/^NoNewPrivs:\s*1/m.test(status)) {
       throw new Error(`node pid ${pid} is not under the filter`);
@@ -436,12 +437,8 @@ async function oomScores() {
     const command = await fs
       .readFile(`/proc/${pid}/cmdline`, "utf8")
       .catch(() => "");
-    if (command === "node\0app/index.js\0") expected["node-a"][0] = pid;
-    else if (
-      command.includes("\0--max-old-space-size=") &&
-      command.endsWith("\0app/index.js\0")
-    )
-      expected["node-b"][0] = pid;
+    const role = nodeRole(command);
+    if (role) expected[role][0] = pid;
     else if (command.startsWith("nginx: master process"))
       expected["OpenResty"][0] = pid;
   }
