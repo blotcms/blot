@@ -30,7 +30,8 @@ describe("entry.set run concurrently for one blog", function () {
       });
       list.push({
         path: `/${prefix}/tagged-${i}.txt`,
-        contents: `Tags: ${prefix}-shared, ${prefix}-own-${i}\n\nTagged ${i}`,
+        // Every url has the run's prefix, so runs in one blog don't collide
+        contents: `Link: ${prefix}-tagged-${i}\nTags: ${prefix}-shared, ${prefix}-own-${i}\n\nTagged ${i}`,
       });
       list.push({
         path: `/${prefix}/linker-${i}.txt`,

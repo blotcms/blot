@@ -60,7 +60,15 @@ describe("serialByKey", function () {
     });
     const next = run("a", async () => "next");
 
-    await expectAsync(failed).toBeRejectedWithError("failed");
+    let error;
+
+    try {
+      await failed;
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error && error.message).toBe("failed");
     expect(await next).toBe("next");
   });
 
