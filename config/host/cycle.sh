@@ -530,7 +530,9 @@ phase_app() {
 
   say "Pausing deploys on $OLD_NOW and $NEW"
   act pause_deploys "$OLD_NOW" "$NEW"
-  on "$OLD_NOW" 'f=/tmp/blot-proxy-deploy.lock; [ ! -e "$f" ] || flock -n "$f" true' ||
+  # A read-only open, as switch does: `flock <file>` opens with O_CREAT, which
+  # fs.protected_regular refuses for another user's file in sticky /tmp.
+  on "$OLD_NOW" "sudo bash -c 'f=/tmp/blot-proxy-deploy.lock; [ ! -e \$f ] || { exec 9< \$f; flock -n 9 true; }'" ||
     need "a deploy is running on $OLD_NOW: wait for it, then run app again"
 
   IMAGE=$(old_image); sha=${IMAGE##*:}
