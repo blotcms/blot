@@ -493,7 +493,7 @@ Improve iCloud sync
 - The dashboard needs more feedback as the macserver goes through iCloud setup: it would be useful to echo that the invite link is valid, we're waiting for the new folder, then that step can wait up to a minute while so the user understands what's happening?  the google drive client has a step based system
 - We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
   - Add icloud kill switch (when platform goes down, etc.)
-- iCloud: the hourly integrity check is back; once it has run cleanly for a while, decide whether to re-enable the daily resync (resyncAllConnected) and the startup/`/started` resync (resyncRecentlySynced), still disabled from these commits
+- iCloud: the hourly validation now also walks a twenty-fourth of the idle blogs each hour (every blog once a day), which replaces the daily resync (resyncAllConnected). Decide whether to delete resyncAllConnected and the startup/`/started` resync (resyncRecentlySynced); the macserver's saved journal position now covers changes made while it was down
   - 0043d91b36621ecd6aef2bcc263f51f209924792
   - 98dc9405c883825917de8e436ec620f60adaf975
 - iCloud server should periodically:
