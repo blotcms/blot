@@ -197,11 +197,6 @@ console.log(clfdate(), `Starting server env=${config.environment}`);
     // background; one process on the host does it (clients/git/served/warm.js)
     if (!config.preview) require("clients/git/served/warm").start();
 
-    // Emails if the unit's fetch proxy stops answering or filtering
-    // (app/sandbox/alerts.js). The worker child shares the proxy, so one check.
-    if (!config.preview && !config.worker_child)
-      require("sandbox/alerts").watchProxy();
-
     // Send an email notification if the server starts or restarts
     // Worktree preview sidecars (scripts/development/preview.sh) and forked
     // workers (their parent emails when one dies: workerExitEmail) skip it

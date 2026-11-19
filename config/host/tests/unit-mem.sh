@@ -47,7 +47,6 @@ proc() {
 proc 10 node 1000 'node app/index.js'
 proc 11 node 2000 'node app/index.js' 'BLOT_WORKER_CHILD=true'
 proc 12 node 300 'node /usr/local/lib/blot-sandbox/broker.js'
-proc 13 node 400 'node /usr/local/lib/blot-sandbox/proxy.js'
 proc 14 MainThread 50 'node scripts/some/script.js'
 proc 20 nginx 10 'nginx: master process'
 proc 21 nginx 20 'nginx: worker process'
@@ -80,9 +79,9 @@ check "two samples were taken" test "$(grep -c ' name=blot-blue ' "$LOG")" = 2
 check "node_a is the app process" test "$(field node_a)" = "$(bytes 1000)"
 check "node_b is the worker child" test "$(field node_b)" = "$(bytes 2000)"
 check "broker is the sandbox broker" test "$(field broker)" = "$(bytes 300)"
-check "proxy is the proxy jail" test "$(field proxy)" = "$(bytes 400)"
+check "proxy is retired and reads 0" test "$(field proxy)" = 0
 check "node_other is only the exec'd script" test "$(field node_other)" = "$(bytes 50)"
-check "node_sum still counts every node" test "$(field node_sum)" = "$(bytes 3750)"
+check "node_sum still counts every node" test "$(field node_sum)" = "$(bytes 3350)"
 check "openresty sums the nginx processes" test "$(field openresty)" = "$(bytes 60)"
 check "openresty_n counts them" test "$(field openresty_n)" = 3
 check "git is unchanged" test "$(field git_n)" = 1
@@ -90,7 +89,7 @@ check "top is the child-process spike" test "$(field top)" = "pandoc:$(bytes 90)
 check "peak is kept" test "$(field peak)" = 4194304
 check "the new fields come after the old ones" \
   test "$(grep ' name=blot-blue ' "$LOG" | head -1 | sed 's/.* top=[^ ]* //')" = \
-  "peak=4194304 broker=$(bytes 300) proxy=$(bytes 400) openresty=$(bytes 60) openresty_n=3"
+  "peak=4194304 broker=$(bytes 300) proxy=0 openresty=$(bytes 60) openresty_n=3"
 
 # An old line has none of the new fields; the summary has to take both.
 echo "2026-11-01T00:00:00Z name=blot-blue anon=1 file=1 shmem=0 limit=0 oom_kill=0 node_max=1 node_sum=1 node_a=1 node_b=0 node_other=0 git=0 git_n=0 top=-:0" >> "$LOG"

@@ -68,9 +68,10 @@ checks and how it cleans up. For build-probe the container:
 - mounts the data directory **read-write**, since builds write to it, and the
   host's tmp directory (`/var/instance-ssd/tmp`) read-write, as the app
   containers do;
-- runs on the host network with blot-blue's proxy jail as its egress proxy,
-  since builds fetch remote images; it has no browser, so link screenshots
-  fail;
+- has no sandbox and no route for fetching a user-supplied URL
+  (`BLOT_SCRIPT_RUNNER=1`): a build that needs a remote image or a link
+  screenshot stops with `SANDBOX_UNAVAILABLE`, so probe blogs whose posts
+  only use local images;
 - has its own memory limit (default 2g: room for a heap snapshot on top of a
   full heap), heap limit (default 750MB, as node-b) and one CPU, so a spike
   here can't get a live container OOM-killed or starve it;

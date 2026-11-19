@@ -422,14 +422,14 @@ fi
 say "Firewall for the app"
 # The units run with --network host as uid 1000, so without this Node and
 # OpenResty reach the instance metadata service (and the role's credentials)
-# and anything in the VPC directly. Untrusted fetches go through the sandbox's
-# proxy jail, whose own filter refuses these; this catches a code path that
+# and anything in the VPC directly. Untrusted fetches run as sandbox jobs, whose
+# jail has its own filter refusing these; this catches a code path that
 # misses it (#2257). Refused, not dropped, so such a request fails at once.
 # Only sockets in system.slice, where docker puts the units' scopes: ec2-user is
 # uid 1000 on the host too, and its ssh sessions and cron jobs (user.slice)
 # still need the metadata service (cycle.sh, instance-profile
 # backups). The jails run as other uids. Loopback stays open: the purge
-# listener, the proxy jails' ports and the resolved stub are on it. The VPC's
+# listener and the resolved stub are on it. The VPC's
 # resolver is the one private address the units need, for DNS (docker gives a
 # host-network container the host's upstream resolvers, not the stub).
 # Its own file and unit, so a failure here never keeps Redis from starting.

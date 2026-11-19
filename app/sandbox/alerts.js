@@ -7,9 +7,6 @@
 //     not reported, except from a job that answers bad input with meta.error
 //     (FAILS_ONLY_WHEN_BROKEN), where it means the jail itself is broken. A
 //     busy fetch-image or fetch is backpressure, logged and not reported.
-//   - from each web process (not the worker child), every five minutes, the
-//     unit's fetch proxy, the sandbox's proxy jail. It must answer,
-//     and must refuse the metadata address (tinyproxy says 500).
 //
 // One email per process at most every ten minutes. What happens in between is
 // counted and sent when the ten minutes are up, so a burst sends one email.
@@ -18,7 +15,6 @@
 // otherwise send an email every ten minutes they keep at it. The file's
 // build flag tells them.
 
-const http = require("http");
 const config = require("config");
 const clfdate = require("helper/clfdate");
 const logContext = require("helper/logContext");
@@ -26,9 +22,6 @@ const logContext = require("helper/logContext");
 const INTERVAL_MS = 10 * 60 * 1000;
 const REPEAT_MS = 24 * 60 * 60 * 1000;
 const MAX_REPEATS = 1000;
-const PROXY_CHECK_MS = 5 * 60 * 1000;
-const PROXY_TIMEOUT_MS = 15 * 1000;
-const METADATA = "http://169.254.169.254/latest/meta-data/";
 
 // The client's codes (./index.js) worth an email
 const REPORTED = new Set([
@@ -133,44 +126,6 @@ function jobFailed(job, err) {
   report(what);
 }
 
-// Resolves with a problem, or null when the proxy refused the metadata address
-function checkProxy(proxy) {
-  return new Promise((resolve) => {
-    const { hostname, port } = new URL(proxy);
-    const req = http.get(
-      {
-        hostname,
-        port,
-        path: METADATA,
-        headers: { host: "169.254.169.254" },
-        timeout: PROXY_TIMEOUT_MS,
-      },
-      (res) => {
-        res.resume();
-        resolve(
-          res.statusCode === 500
-            ? null
-            : `proxy let the metadata address through (${res.statusCode})`
-        );
-      }
-    );
-    req.on("timeout", () => req.destroy(new Error("timeout")));
-    req.on("error", (err) =>
-      resolve(`proxy did not answer (${err.code || err.message})`)
-    );
-  });
-}
-
-function watchProxy() {
-  const proxy = config.egress && config.egress.proxy;
-  if (!proxy) return;
-  const check = async () => {
-    const problem = await checkProxy(proxy);
-    if (problem) report(problem);
-  };
-  setInterval(check, PROXY_CHECK_MS).unref();
-}
-
 // For specs: forget what was counted and when the last email went, since other
 // specs' sandbox failures land here too
 function reset() {
@@ -182,4 +137,4 @@ function reset() {
   lastSent = 0;
 }
 
-module.exports = { jobFailed, watchProxy, checkProxy, reset, REPORTED };
+module.exports = { jobFailed, reset, REPORTED };

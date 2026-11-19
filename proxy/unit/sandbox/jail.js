@@ -22,10 +22,8 @@ const ENTER_NETWORK = path.join(__dirname, "enter-network.sh");
 
 // The unit's browser cgroup, which the host binds in (proxy/deploy/common.sh)
 const BROWSER_CGROUP = "/sandbox-browser-cgroup";
-// The proxy jail's, in the unit's subtree. ./proxy.js makes it.
-const PROXY_CGROUP = CGROUP_MOUNT + "/proxy";
 // The fetch-image job's, in the unit's subtree too, so it shares that budget
-// with the image jobs and the proxy jail. The broker makes it (./cgroup.js),
+// with the image jobs. The broker makes it (./cgroup.js),
 // with the job's cgroupLimits. The fetch job runs in it too, so the two take
 // turns and add no memory.
 const FETCH_CGROUP = CGROUP_MOUNT + "/fetch";
@@ -265,9 +263,6 @@ const BROWSER_BINDS = [
   "/etc/ssl/certs",
 ];
 
-// The proxy needs no Node, app code or /proc
-const PROXY_BINDS = ["/lib", "/usr/lib", "/usr/bin"];
-
 // What each job with a network adds to BINDS and NETWORK_BINDS, how many files
 // it may hold open, and its environment
 const NETWORK_JOBS = {
@@ -410,8 +405,7 @@ function networkArgs({ config, binds, timeSeconds, nofile, env, command }) {
 // score. A job fails closed and is cheap to lose, so it goes before the units'
 // Node (node-b 900, app/index.js; node-a 0), level with Redis's BGSAVE child
 // (1000, config/redis/redis.conf), which is larger and so still goes first. Raising it needs no privilege, the
-// jail inherits it, and the job's uid can't lower it again. The proxy jail
-// keeps the unit's: it is small and serves every fetch.
+// jail inherits it, and the job's uid can't lower it again.
 const OOM_SCORE_ADJ = 1000;
 const RAISE_OOM_SCORE = `echo ${OOM_SCORE_ADJ} > /proc/self/oom_score_adj`;
 
@@ -467,40 +461,14 @@ function command(name, cgroup) {
   );
 }
 
-// The program and arguments that start a unit's proxy jail, which runs until it
-// is stopped: no time limit. Its port is in its config, so it isn't passed in.
-function proxyCommand(unit) {
-  if (unit !== "blue" && unit !== "green") throw new Error("unknown unit");
-  return inCgroup(
-    PROXY_CGROUP,
-    networkArgs({
-      config: path.join(__dirname, `network-proxy-${unit}.cfg`),
-      binds: PROXY_BINDS.concat(NETWORK_BINDS),
-      timeSeconds: 0,
-      // A connection each way for each of tinyproxy's MaxClients
-      nofile: 256,
-      env: ["BLOT_PROXY_JAIL=1"],
-      command: [
-        "/usr/bin/tinyproxy",
-        "-d",
-        "-c",
-        path.join(__dirname, "tinyproxy.conf"),
-      ],
-    }),
-    { raiseOomScore: false }
-  );
-}
-
 module.exports = {
   JOBS,
   NSJAIL,
   CGROUP_MOUNT,
   BROWSER_CGROUP,
-  PROXY_CGROUP,
   FETCH_CGROUP,
   OOM_SCORE_ADJ,
   job,
   args,
   command,
-  proxyCommand,
 };

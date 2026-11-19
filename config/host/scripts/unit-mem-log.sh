@@ -22,10 +22,11 @@
 # node process shows up in comm as MainThread); node_a and node_b are the
 # unit's two app processes (node-b is the one forked with BLOT_WORKER_CHILD),
 # node_other any other node in the unit, such as a script run with docker exec;
-# broker and proxy are the long-lived sandbox broker (blot-sandbox/broker.js)
-# and proxy jail (blot-sandbox/proxy.js), which used to be counted in
-# node_other, so node_other is now only the exec'd scripts (all are still in
-# node_sum). openresty is the summed RSS of the unit's nginx/openresty master
+# broker is the long-lived sandbox broker (blot-sandbox/broker.js), which used
+# to be counted in node_other, so node_other is now only the exec'd scripts
+# (all are still in node_sum). proxy was the sandbox's proxy jail
+# (blot-sandbox/proxy.js), which is retired: the field stays so lines keep their
+# shape, and reads 0. openresty is the summed RSS of the unit's nginx/openresty master
 # and workers and openresty_n how many there are. The fields from broker on
 # were added later than the rest, so older lines lack them;
 # git is the summed RSS of the unit's git processes and git_n how many there
@@ -134,7 +135,6 @@ container_fields() {
         cmdline=$(tr '\0' ' ' < "$PROC/$pid/cmdline")
         case "$cmdline" in
           *blot-sandbox/broker.js*) broker=$((broker + bytes)); continue ;;
-          *blot-sandbox/proxy.js*) proxy=$((proxy + bytes)); continue ;;
         esac
         if ! printf %s "$cmdline" | grep -q 'app/index\.js'; then
           node_other=$((node_other + bytes))

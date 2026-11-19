@@ -8,7 +8,7 @@
 // quotes), so the file can be sourced by a shell.
 const constants = require("./constants");
 
-const { UNIT, SANDBOX } = constants;
+const { UNIT } = constants;
 
 function settings() {
   const values = {
@@ -29,10 +29,6 @@ function settings() {
     LOG_MAX_FILE: constants.LOG_MAX_FILE,
     LOG_COMPRESS: constants.LOG_COMPRESS,
   };
-
-  for (const [unit, sandbox] of Object.entries(SANDBOX.units)) {
-    values[`SANDBOX_${unit.toUpperCase()}_PROXY_PORT`] = sandbox.proxyPort;
-  }
 
   for (const [key, value] of Object.entries(values)) {
     if (!/^[A-Za-z0-9._/:-]+$/.test(String(value))) {
