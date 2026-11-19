@@ -625,6 +625,12 @@ const initialize = async () => {
 // macserver was down), so a later eviction or re-materialisation of one, which
 // leaves its size and mtime alone, is skipped without a download.
 const watch = async (blogID) => {
+  // the /watch route passes a header straight through: only a blog folder
+  // directly inside the iCloud folder may be walked
+  if (typeof blogID !== "string" || !/^blog_[a-zA-Z0-9]+$/.test(blogID)) {
+    throw new Error(`Invalid blogID: ${blogID}`);
+  }
+
   if (isActive(blogID)) {
     console.warn(clfdate(), `Already watching blog folder: ${blogID}`);
     return;
