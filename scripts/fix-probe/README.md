@@ -15,8 +15,8 @@ npm run fix-probe -- --help
 ```
 
 The container is started by the shared launcher (`scripts/probe/run.js`, see
-`scripts/render-probe/README.md`). It uses node-b's heap limit (750MB), joins
-blot-blue's proxy jail as its egress proxy (on the host network), asks for confirmation first, and copies its
+`scripts/render-probe/README.md`). It uses node-b's heap limit (750MB), has no route for
+fetching user-supplied URLs (`BLOT_SCRIPT_RUNNER=1`), asks for confirmation first, and copies its
 output back to `./data/fix-probe/<run>/`.
 
 ## Read-only

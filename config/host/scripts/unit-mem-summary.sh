@@ -2,7 +2,7 @@
 # Summarises unit-mem.log (written by unit-mem-log.sh): for each container the
 # sample count, first and last sample, max and p99 of anon+shmem (the memory
 # that can't be reclaimed), max node_max, the max of node-a, node-b, any other
-# node (docker exec scripts), the sandbox broker, the sandbox proxy jail,
+# node (docker exec scripts), the sandbox broker, the retired sandbox proxy jail (old lines only),
 # OpenResty's summed RSS with its most processes, and git's summed RSS with its
 # most processes at once (each where the log has them), max oom_kill, the cgroup's peak where
 # it has one, and the five non-node processes with the highest peak RSS; and

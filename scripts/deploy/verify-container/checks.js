@@ -36,9 +36,8 @@ const REQUIRED_ENV = [
   "BLOT_SESSION_SECRET",
   "BLOT_STRIPE_SECRET",
   "BLOT_STRIPE_WEBHOOK_SECRET",
-  // the sandbox: production has no other browser or egress proxy
+  // the sandbox: production has no other browser or way to fetch a URL
   "BLOT_SANDBOX_SOCKET",
-  "BLOT_EGRESS_PROXY_URL",
 ];
 
 // Where this process serves: 127.0.0.1:<port>, or its socket when it has no
@@ -329,30 +328,9 @@ async function sandboxParseHtmlWorks() {
   return "the jail scanned, rewrote and converted a post";
 }
 
-// The proxy jail, whenever there is a sandbox. A forward-proxy request for the
-// metadata address must not get through: tinyproxy answers 500 when the filter
-// refuses it, which also proves the proxy answers at all.
-async function sandboxProxyWorks({ config }) {
-  if (!process.env.BLOT_SANDBOX_SOCKET)
-    return "skipped, BLOT_SANDBOX_SOCKET is not set";
-
-  const { hostname, port } = new URL(config.egress.proxy);
-  const metadata = "http://169.254.169.254/latest/meta-data/";
-  const res = await request({
-    url: metadata,
-    host: "169.254.169.254",
-    options: { hostname, port, path: metadata },
-  });
-  if (res.status !== 500)
-    throw new Error(
-      `the metadata address answered ${res.status} through the proxy`
-    );
-  return `the metadata address was refused through ${config.egress.proxy}`;
-}
-
 // The host's firewall for the units (blot-app-firewall.service, from
 // config/host/host/setup.sh) refuses uid 1000 the metadata service, so a fetch
-// that misses the proxy jail can't reach it. The deploy runs this as uid 1000,
+// that misses the sandbox's egress filter can't reach it. The deploy runs this as uid 1000,
 // in the unit's cgroup, which is what the rule matches. Refused at once: a
 // connection or a timeout means the rule is not loaded.
 async function hostFirewall() {
@@ -518,7 +496,6 @@ module.exports = [
   { name: "node filter", run: nodeFilter },
   { name: "oom kill order", run: oomScores },
   { name: "required environment", run: requiredEnv },
-  { name: "sandbox proxy", run: sandboxProxyWorks },
   { name: "host firewall", run: hostFirewall },
   { name: "canary blog render", run: canaryBlog },
   { name: "dashboard log-in render", run: loginPage },

@@ -589,8 +589,8 @@ check "with it a unit logs to app.log through rsyslog, tagged with its name and 
 rm -f "$PROXY_APP_LOG_SOCKET"
 check "no port is published and the unit is on the host network, not blotnet" \
   '! called "create .* -p " && ! called "create .*blotnet" && called "create .*--network host"'
-check "without BLOT_SANDBOX a unit is given no browser and no proxy" \
-  '! called "BLOT_AIRLOCK_BROWSER_URL" && ! called "BLOT_EGRESS_PROXY_URL"'
+check "without BLOT_SANDBOX a unit is given no browser" \
+  '! called "BLOT_AIRLOCK_BROWSER_URL"'
 
 reset units; bluegreen
 check "without BLOT_SANDBOX a unit gets none of the sandbox flags" \
@@ -602,8 +602,8 @@ reset units; mkdir -p "$T/sandbox-cgroup/blue" "$T/sandbox-cgroup/green" "$T/san
 SECCOMP="$(cd "$DEPLOY" && pwd)/sandbox-seccomp.json"
 check "BLOT_SANDBOX=1: each unit gets the host cgroup namespace, the seccomp profile, its own cgroup subtree and the broker's socket" \
   '[ $RC = 0 ] && called "create .*--name blot-blue .*--cgroupns=host --security-opt seccomp=$SECCOMP --mount type=bind,source=$T/sandbox-cgroup/blue,target=/sandbox-cgroup -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock" && called "create .*--name blot-green .*source=$T/sandbox-cgroup/green,target=/sandbox-cgroup"'
-check "and the device and browser cgroup the jails need, and its fetches go to its own proxy jail" \
-  'called "create .*--name blot-blue .*--device /dev/net/tun --mount type=bind,source=$T/sandbox-cgroup/blue-browser,target=/sandbox-browser-cgroup -e BLOT_EGRESS_PROXY_URL=http://127.0.0.1:18988 -e BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:18988" && called "create .*--name blot-green .*BLOT_EGRESS_PROXY_URL=http://127.0.0.1:18989" && ! called "BLOT_AIRLOCK_BROWSER_URL"'
+check "and the device and browser cgroup the jails need, and no proxy URL" \
+  'called "create .*--name blot-blue .*--device /dev/net/tun --mount type=bind,source=$T/sandbox-cgroup/blue-browser,target=/sandbox-browser-cgroup" && ! called "BLOT_EGRESS_PROXY_URL" && ! called "BLOT_AIRLOCK_PROXY_URL" && ! called "BLOT_AIRLOCK_BROWSER_URL"'
 check "and none of the flags the sandbox must not need" \
   '! called "--privileged" && ! called "unconfined" && ! called "--cap-add SYS_ADMIN" && ! called "systempaths"'
 check "the profile is Docker's default plus exactly clone, mount, umount2, pivot_root and sethostname" \

@@ -1,5 +1,4 @@
 describe("sandbox alerts", function () {
-  const http = require("http");
   const email = require("helper/email");
   const config = require("config");
   const alerts = require("../alerts");
@@ -152,44 +151,5 @@ describe("sandbox alerts", function () {
       "1 × job fetch: timeout",
       "1 × job fetch: unavailable",
     ]);
-  });
-
-  describe("checkProxy", function () {
-    let server;
-
-    function proxy(status) {
-      return new Promise((resolve) => {
-        server = http.createServer((req, res) => {
-          res.statusCode = status;
-          res.end();
-        });
-        server.listen(0, "127.0.0.1", () =>
-          resolve(`http://127.0.0.1:${server.address().port}`)
-        );
-      });
-    }
-
-    afterEach(function (done) {
-      if (!server) return done();
-      server.close(() => done());
-      server = null;
-    });
-
-    it("is happy when the proxy refuses the metadata address", async function () {
-      expect(await alerts.checkProxy(await proxy(500))).toBeNull();
-    });
-
-    it("reports a proxy that lets the metadata address through", async function () {
-      expect(await alerts.checkProxy(await proxy(200))).toContain(
-        "let the metadata address through"
-      );
-    });
-
-    it("reports a proxy that does not answer", async function () {
-      const url = await proxy(500);
-      await new Promise((resolve) => server.close(resolve));
-      server = null;
-      expect(await alerts.checkProxy(url)).toContain("did not answer");
-    });
   });
 });

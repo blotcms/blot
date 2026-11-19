@@ -65,9 +65,10 @@ processes and any other node, such as a script run with `docker exec`), `git`
 and `git_n` (the summed RSS and count of the unit's git processes, which share
 its limit) and `top=comm:bytes` (the biggest other process, i.e. a
 pandoc/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), then
-`broker` and `proxy` (the sandbox broker and the proxy jail, long-lived node
-processes that used to be counted in `node_other`, which is now only the
-`docker exec` scripts) and `openresty` and `openresty_n` (the summed RSS and
+`broker` and `proxy` (the sandbox broker, a long-lived node process that used
+to be counted in `node_other`, which is now only the `docker exec` scripts; and
+the proxy jail, retired, so `proxy` reads 0 and is kept to keep the lines'
+shape) and `openresty` and `openresty_n` (the summed RSS and
 count of the unit's nginx/openresty processes). Lines from before these four
 fields lack them. Plus one `name=host` line with `mem_available`, `mem_total`
 and `swap_used`. Where the host has a sandbox subtree
@@ -95,7 +96,7 @@ unit-mem-summary.sh [logfile]
 ```
 
 (per container: max and p99 anon+shmem, max node_max, max oom_kill, max and p99
-of the broker, the proxy jail and OpenResty, top 5 child processes; host:
+of the broker, the retired proxy jail and OpenResty, top 5 child processes; host:
 lowest mem_available.) With no argument it reads the live log and the daily
 copies in `/var/lib/blot-unit-mem`. `config/host/tests/unit-mem.sh` tests both
 scripts against a fake `/proc` and cgroup tree.

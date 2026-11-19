@@ -180,7 +180,7 @@ describe("sandbox broker and jail", function () {
         /unknown cgroup/
       );
       assert.throws(
-        () => jail.command(name, jail.PROXY_CGROUP),
+        () => jail.command(name, "/sandbox-cgroup/proxy"),
         /unknown cgroup/
       );
     }
@@ -194,7 +194,6 @@ describe("sandbox broker and jail", function () {
     const j = jail.JOBS["fetch-image"];
     assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
     assert.strictEqual(path.dirname(jail.FETCH_CGROUP), "/sandbox-cgroup");
-    assert.notStrictEqual(jail.FETCH_CGROUP, jail.PROXY_CGROUP);
     assert.deepStrictEqual(j.cgroupLimits, {
       memoryBytes: 256 * 1024 * 1024,
       pids: 64,
@@ -220,15 +219,6 @@ describe("sandbox broker and jail", function () {
     // 32 requests, and a body or more of up to 50 MiB back (the client's reply limit is 64 MiB)
     assert.strictEqual(j.maxInputBytes, 256 * 1024);
     assert.strictEqual(j.maxOutputBytes, 52 * 1024 * 1024);
-  });
-
-  test("jail: the unit's sandbox subtree holds the proxy jail, the fetch cgroup and the image jobs' share", () => {
-    const MiB = 1024 * 1024;
-    const subtree = 512 * MiB;
-    const proxy = 128 * MiB; // proxy.js
-    const fetch = jail.JOBS["fetch-image"].cgroupLimits.memoryBytes;
-    assert(proxy + fetch <= subtree);
-    assert.strictEqual(subtree - proxy - fetch, 128 * MiB);
   });
 
   test("jail: a job with a network never binds keys, data or /usr", () => {
@@ -286,35 +276,7 @@ describe("sandbox broker and jail", function () {
     }
   });
 
-  test("jail: the proxy jail is its own uid, in its cgroup, behind the filter, with no time limit", () => {
-    const { file, args } = jail.proxyCommand("blue");
-    assert.strictEqual(file, "/bin/sh");
-    assert.strictEqual(args[3], jail.PROXY_CGROUP);
-    assert.deepStrictEqual(args.slice(4, 7), [
-      "/sbin/su-exec",
-      "65001:65001",
-      jail.NSJAIL,
-    ]);
-    assert.strictEqual(args[args.indexOf("--time_limit") + 1], "0");
-    assert.strictEqual(
-      path.basename(args[args.indexOf("--") + 2]),
-      "enter-network.sh"
-    );
-    assert(args.includes("BLOT_PROXY_JAIL=1"));
-  });
-
-  test("jail: the proxy jail binds no app, data, keys or /proc", () => {
-    const { args } = jail.proxyCommand("blue");
-    // Its own scripts are a bind. In the image they are under /usr/local/lib.
-    const own = path.dirname(require.resolve("../jail"));
-    const binds = args.filter((a, i) => args[i - 1] === "-R" && a !== own);
-    for (const bind of binds) {
-      assert(!/^\/(proc|etc\/ssl|usr\/src|usr$|$)/.test(bind), bind);
-    }
-    assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
-  });
-
-  test("jail: every job raises its OOM score before nsjail starts, the proxy jail doesn't", () => {
+  test("jail: every job raises its OOM score before nsjail starts", () => {
     const raise = `echo ${jail.OOM_SCORE_ADJ} > /proc/self/oom_score_adj && `;
     assert.strictEqual(jail.OOM_SCORE_ADJ, 1000);
     for (const name of Object.keys(jail.JOBS)) {
@@ -325,7 +287,6 @@ describe("sandbox broker and jail", function () {
     const { args } = jail.command("metadata");
     assert.deepStrictEqual(args.slice(2, 4), ["sh", jail.NSJAIL]);
     assert.deepStrictEqual(args.slice(4), jail.args("metadata"));
-    assert(!jail.proxyCommand("blue").args[1].includes("oom_score_adj"));
   });
 
   test("jail: the OOM score a job's shell sets reaches the program it execs", function () {
@@ -342,51 +303,6 @@ describe("sandbox broker and jail", function () {
       "/proc/self/oom_score_adj",
     ]);
     assert.strictEqual(out.toString().trim(), String(jail.OOM_SCORE_ADJ));
-  });
-
-  test("jail: the proxy jail only starts for a unit", () => {
-    for (const unit of ["red", "", undefined, "../blue"]) {
-      assert.throws(() => jail.proxyCommand(unit), /unknown unit/);
-    }
-  });
-
-  test("jail: each proxy config forwards the port the deploy gives that unit, on loopback only", () => {
-    const { SANDBOX } = require("../../../../scripts/deploy/constants");
-    for (const unit of ["blue", "green"]) {
-      const { args } = jail.proxyCommand(unit);
-      const config = fs.readFileSync(
-        args[args.indexOf("--config") + 1],
-        "utf8"
-      );
-      assert(
-        config.includes(
-          `tcp_ports: "127.0.0.1/${SANDBOX.units[unit].proxyPort}:8888"`
-        ),
-        unit
-      );
-    }
-  });
-
-  test("proxy: makes its cgroup, with limits, and clears what an old jail left", () => {
-    const { prepareCgroup } = require("../proxy");
-    const directory = path.join(
-      fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-proxy-")),
-      "proxy"
-    );
-    prepareCgroup(directory);
-    prepareCgroup(directory);
-    assert.strictEqual(
-      fs.readFileSync(directory + "/memory.max", "utf8"),
-      String(128 * 1024 * 1024)
-    );
-    assert.strictEqual(
-      fs.readFileSync(directory + "/memory.oom.group", "utf8"),
-      "1"
-    );
-    assert.strictEqual(
-      fs.readFileSync(directory + "/cgroup.kill", "utf8"),
-      "1"
-    );
   });
 
   // ---- node-filter.js ----------------------------------------------------------
