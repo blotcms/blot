@@ -11,6 +11,7 @@ const blogForHost = require("./featured/blogForHost");
 // The sidebar leaves out featured sites which have turned Discover off. The
 // list barely changes, so which sites are included is cached for a while.
 const SIDEBAR_TTL = 10 * 60 * 1000;
+const SIDEBAR_SITES = 10;
 let sidebar = { at: 0, hosts: null };
 
 // Resolves to the set of featured hosts whose site has includeInDiscover on
@@ -64,7 +65,10 @@ module.exports = async function (req, res, next) {
     res.locals.discover = {
       posts,
       next: more ? "/discover?before=" + more : "",
-      sites: (featured.sites || []).filter((site) => hosts.has(site.host)),
+      // The first few; "See all" links to /examples for the rest
+      sites: (featured.sites || [])
+        .filter((site) => hosts.has(site.host))
+        .slice(0, SIDEBAR_SITES),
       image_size: featured.image_size,
     };
 
