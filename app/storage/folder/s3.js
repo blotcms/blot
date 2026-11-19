@@ -14,6 +14,7 @@ var sendObject = require("../sendObject");
 var contentTypeFor = require("../contentType");
 var { walkLocal, createPool, FOLDER_STAGING_DIRECTORY } = require("../util");
 var File = require("models/file");
+var purgeQueue = require("cdn/purgeQueue");
 var contentCache = require("./cache");
 var { NotFoundError } = require("./errors");
 
@@ -149,9 +150,8 @@ async function fromS3(fn) {
   }
 }
 
-// Directory entries sort by plain code-unit order
-// (models/file keeps that order), so a cursor is just the last name of the
-// previous page
+// models/file can find a name's place in a directory's order from the name
+// alone, so a cursor is just the last name of the previous page
 function encodeCursor(name) {
   return Buffer.from(JSON.stringify({ after: name })).toString("base64url");
 }
@@ -212,8 +212,20 @@ async function keepParent(blogID, path) {
     await writeMarker(blogID, parent);
 }
 
+// Once a file's bytes are replaced or gone, the CDN URL they were linked at
+// is queued for a purge, so Perma-Cache doesn't keep them public. Nothing
+// waits for the purge itself (cdn/purgeQueue).
+async function purgeCdnCopy(blogID, path, previous) {
+  try {
+    await purgeQueue.folderFile(blogID, path, previous);
+  } catch (err) {
+    console.error("storage/folder: purging the CDN copy of", path, err);
+  }
+}
+
 // Resolves to the record written
 async function record(blogID, path, uploaded, modified, flags) {
+  var previous = await File.get(blogID, path);
   var written = {
     type: "file",
     size: uploaded.size,
@@ -225,6 +237,9 @@ async function record(blogID, path, uploaded, modified, flags) {
   if (flags && flags.length) written.flags = flags;
 
   await File.set(blogID, path, written);
+
+  if (previous && previous.type === "file" && previous.sha1 !== written.sha1)
+    await purgeCdnCopy(blogID, path, previous);
 
   return written;
 }
@@ -720,12 +735,15 @@ async function mkdir(blogID, relPath) {
 
 // Deletes from S3 everything at and below path, whatever the index says, so
 // nothing it missed is left behind, then forgets it in the index
+// A directory's files are left to the weekly Perma-Cache sweep.
 async function removePath(blogID, path, found) {
   if (found && found.type === "file")
     await s3.deleteKeys([objectKey(blogID, path)]);
   else await s3.remove(objectKey(blogID, path));
 
   await File.remove(blogID, path);
+
+  if (found && found.type === "file") await purgeCdnCopy(blogID, path, found);
 }
 
 async function removeOne(blogID, relPath, onlyDirectory) {
@@ -829,6 +847,7 @@ async function move(blogID, from, to) {
     await s3.deleteKeys([objectKey(blogID, source)]);
     await File.remove(blogID, source);
     await keepParent(blogID, source);
+    await purgeCdnCopy(blogID, source, found);
     return;
   }
 
@@ -866,6 +885,12 @@ async function move(blogID, from, to) {
   await File.set(blogID, destination, found);
 
   for await (var batch of recordsBelow(blogID, source)) {
+    await Promise.all(
+      batch.map(function (item) {
+        if (item.record) return purgeCdnCopy(blogID, item.path, item.record);
+      })
+    );
+
     await File.setMany(
       blogID,
       batch
@@ -973,7 +998,7 @@ async function exists(blogID, relPath) {
   }
 }
 
-// A directory's entries, sorted by name, or NotFoundError
+// A directory's entries, in listing order, or NotFoundError
 async function entriesOf(blogID, path, relDir) {
   var entries = await File.listAll(blogID, path);
 
@@ -1023,6 +1048,17 @@ async function list(blogID, relDir, options) {
   };
 }
 
+// A page of a directory's visible entries by position, for pages a person
+// picks by number (models/file's range)
+async function listPage(blogID, relDir, options) {
+  var path = locate(blogID, relDir);
+  var page = await File.range(blogID, path, options);
+
+  if (!page) throw new NotFoundError("No such directory: " + relDir);
+
+  return { entries: page.entries.map(toEntry), total: page.total };
+}
+
 async function listNames(blogID, relDir) {
   var path = locate(blogID, relDir);
 
@@ -1037,9 +1073,9 @@ async function listAll(blogID, relDir) {
   return (await entriesOf(blogID, path, relDir)).map(toEntry);
 }
 
-// Depth first and sorted by name, a page of a
+// Depth first and in listing order, a page of a
 // directory at a time, so a large directory is not held whole (except one
-// without a names set, see models/file's README). A directory
+// without its sorted set, see models/file's README). A directory
 // which vanishes mid-walk is skipped; the one asked for must exist.
 async function* walk(blogID, relDir, options) {
   var path = locate(blogID, relDir);
@@ -1172,6 +1208,7 @@ module.exports = {
   stat,
   exists,
   list,
+  listPage,
   listNames,
   listAll,
   walk,

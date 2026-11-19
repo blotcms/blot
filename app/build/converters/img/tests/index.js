@@ -126,6 +126,27 @@ describe("img converter", function () {
     });
   });
 
+  it("renders ImageDescription as inline Markdown", async function () {
+    const test = this;
+    const path = "/described.jpg";
+
+    await folder.writeFrom(
+      test.blog.id,
+      path,
+      __dirname + "/descriptions/described.jpg"
+    );
+
+    const [err, , , extras] = await readAll(test.blog, path);
+    if (err) throw err;
+
+    expect(extras).toEqual({
+      exif: {
+        ImageDescription:
+          'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a><br>IMG_2041_final_v2',
+      },
+    });
+  });
+
   it("reuses cached conversions on repeat builds", async function () {
     const test = this;
     const relativePath = "/land.avif";
@@ -155,7 +176,7 @@ describe("img converter", function () {
     expect(assets.commit).not.toHaveBeenCalled();
   });
 
-  it("restores missing cached conversions using cached path", async function () {
+  it("converts a copy of a cached image into its own directory, whatever became of the first", async function () {
     const test = this;
     const firstPath = "/land.avif";
     const secondPath = "/land-copy.avif";
@@ -165,27 +186,18 @@ describe("img converter", function () {
 
     await read(test.blog, firstPath);
 
-    const cachedAssetPath = `_assets/${hash(firstPath)}/${path.basename(firstPath)}.png`;
+    const firstAssetPath = `_assets/${hash(firstPath)}/${path.basename(firstPath)}.png`;
 
-    expect(await assets.exists(test.blog.id, cachedAssetPath)).toBe(true);
-
-    await assets.remove(test.blog.id, cachedAssetPath);
-
-    const fallbackAssetPath = `_assets/${hash(secondPath)}/${path.basename(secondPath)}.png`;
-
-    await assets.remove(test.blog.id, fallbackAssetPath);
+    await assets.remove(test.blog.id, firstAssetPath);
 
     await folder.writeFrom(test.blog.id, secondPath, __dirname + firstPath);
 
     const result = await read(test.blog, secondPath);
+    const secondAssetPath = `_assets/${hash(secondPath)}/${path.basename(secondPath)}.png`;
 
-    const expectedSrc = encodeURI(
-      `/_assets/${hash(firstPath)}/${path.basename(firstPath)}.png`
-    );
-
-    expect(result).toContain(`src="${expectedSrc}"`);
-    expect(await assets.exists(test.blog.id, cachedAssetPath)).toBe(true);
-    expect(await assets.exists(test.blog.id, fallbackAssetPath)).toBe(false);
+    expect(result).toContain(`src="${encodeURI("/" + secondAssetPath)}"`);
+    expect(await assets.exists(test.blog.id, secondAssetPath)).toBe(true);
+    expect(await assets.exists(test.blog.id, firstAssetPath)).toBe(false);
   });
 
   it("returns an error if the image does not exist", async function () {
@@ -201,5 +213,49 @@ describe("img converter", function () {
     }
 
     expect(error).toBeTruthy();
+  });
+
+  it("gives each path its own _assets directory, even for identical bytes", async function () {
+    const test = this;
+    const first = "/first.tiff";
+    const second = "/copies/second.tiff";
+
+    await folder.writeFrom(test.blog.id, first, __dirname + "/laptop.tiff");
+    await folder.writeFrom(test.blog.id, second, __dirname + "/laptop.tiff");
+
+    const [err1, html1] = await readAll(test.blog, first);
+    if (err1) throw err1;
+    const [err2, html2] = await readAll(test.blog, second);
+    if (err2) throw err2;
+
+    expect(html1).toContain("/_assets/" + hash(first) + "/first.tiff.png");
+    expect(html2).toContain("/_assets/" + hash(second) + "/second.tiff.png");
+
+    // removing the first path's directory leaves the second's working
+    await assets.remove(test.blog.id, "_assets/" + hash(first));
+
+    expect(
+      await assets.exists(
+        test.blog.id,
+        "_assets/" + hash(second) + "/second.tiff.png"
+      )
+    ).toBe(true);
+    expect(
+      await assets.exists(
+        test.blog.id,
+        "_assets/" + hash(first) + "/first.tiff.png"
+      )
+    ).toBe(false);
+
+    // and the first is made again, not linked from the second's
+    const [err3, html3] = await readAll(test.blog, first);
+    if (err3) throw err3;
+    expect(html3).toContain("/_assets/" + hash(first) + "/first.tiff.png");
+    expect(
+      await assets.exists(
+        test.blog.id,
+        "_assets/" + hash(first) + "/first.tiff.png"
+      )
+    ).toBe(true);
   });
 });

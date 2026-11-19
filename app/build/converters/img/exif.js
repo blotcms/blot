@@ -2,6 +2,7 @@
 
 const fs = require("node:fs/promises");
 const sandbox = require("sandbox");
+const markdown = require("./markdown");
 
 const BASIC_WHITELIST = [
   "Make",
@@ -66,6 +67,10 @@ async function parseExif(filePath, mode = "off") {
         if (!isNaN(val)) result.FocalLength = val;
       }
     }
+
+    // Rendered as inline Markdown. A blank description is left as it is.
+    const description = markdown.render(result.ImageDescription);
+    if (description) result.ImageDescription = description;
 
     return result;
   } catch {

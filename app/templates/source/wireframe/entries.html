@@ -15,7 +15,7 @@
     </p>
 
     {{#posts.length}}
-    {{#pagination}}
+    {{#posts.pagination}}
     <div class="pagination">
       {{#previous}}
       <a href="/page/{{previous}}">&larr; Previous</a>
@@ -25,7 +25,7 @@
       <a href="/page/{{next}}">Next &rarr;</a>
       {{/next}}
     </div>
-    {{/pagination}}
+    {{/posts.pagination}}
     {{/posts.length}}
     </div>
 

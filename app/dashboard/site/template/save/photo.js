@@ -94,6 +94,11 @@ module.exports = async function savePhoto(req, res, next) {
       await setBlog(req.blog.id, { avatar: req.updates.avatar });
       updateAvatarLocals(req, res, req.updates.avatar);
       avatarChanged = true;
+      await saveAvatar.removeReplaced(
+        req.blog.id,
+        previousAvatar,
+        req.updates.avatar
+      );
     }
 
     if (wantsFavicon) {

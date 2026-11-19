@@ -126,12 +126,12 @@ Caching: the template-independent reads are cached inside the models, per blog `
 | `encode_uri_component` | `encode_uri_component.js` | Lambda that URI-encodes rendered text. |
 | `encode_xml` | `encode_xml.js` | Lambda that sanitizes HTML for XML inclusion (RSS). Resolves relative URLs and strips `<script>` tags. |
 | `feed_url` | `feed_url.js` | The blog's RSS feed URL. |
-| `folder` | `folder.js` | Files in the blog's folder. |
+| `folder` / `folder_legacy` | `folder.js` | Files in the blog's folder, at `?path=`. `folder_legacy` is the same retriever under a second name, so the few customer templates on `{{#folder}}` can move to it before `{{#folder}}` is replaced (#2693); remove it once no view names it. |
 | `is` / `is_active` | `is.js`, `is_active.js` | Boolean helpers for conditional rendering. |
 | `latest_entry` | `latest_entry.js` | The most recently published entry. |
 | `plugin` | `plugin.js` | CSS and JS URLs for individually requested plugins. |
 | `popular_tags` | `popular_tags.js` | Tags sorted by entry count (top 100). |
-| `posts` | `posts.js` | A paginated page of entries, respecting template `sort_by`, `sort_order`, `page_size`, and `path_prefix` locals (`Entries.getCachedPage`, or `Tags.getCachedTagged` with a tag). |
+| `posts` | `posts.js` | A paginated page of entries, respecting template `sort_by`, `sort_order`, `page_size`, and `path_prefix` locals (`Entries.getCachedPage`, or `Tags.getCachedTagged` with a tag). The array carries its pagination as `posts.pagination` (see `helpers/listPagination.js`). |
 | `recent_entries` | `recent_entries.js` | A small list of recent entries (`Entries.getCachedRecent`). |
 | `rgb` | `rgb.js` | Lambda that converts a CSS color value to an RGB component string (e.g. `255, 128, 0`) for use in `rgba()`. |
 | `search_query` | `search_query.js` | The current search query string from `req.query.q`. |
@@ -168,7 +168,7 @@ Rendered HTML and CSS are not scanned for links to files in the blog's folder. A
 Anything not baked (a link assembled from variables, a view that changes delimiters with `{{=`, a template SITE view, a relative link in a stylesheet, an entry built before baking existed, a menu `<a href>`) keeps its plain path and is served by `routes/assets.js` from the origin.
 
 - `cdnToken.js` — The `%%BLOT_CDN%%` sentinel.
-- `folderFile.js` — Resolves a blog-folder file to its real path and content-hash version, for versioned folder CDN URLs (`cdn.origin/folder/v-{hash}/{blogID}/{path}`). `routes/assets.js` uses a size+mtime version (`helper/contentVersion`'s `fromStat`) where reading the file would be too costly.
+- `folderFile.js` — Resolves a blog-folder file to its real path and content-hash version, for versioned folder CDN URLs (`cdn.origin/{blogID}/folder/v-{hash}/{path}`, the file's bucket key with the version inserted; posts built before #2695 have `cdn.origin/folder/v-{hash}/{blogID}/{path}`, which the CDN still serves). `routes/assets.js` uses a size+mtime version (`helper/contentVersion`'s `fromStat`) where reading the file would be too costly.
 - `shared.js` — Link eligibility and path helpers shared by the build plugin and the template wrapper.
 - `unwrapFolderLink.js` — Recovers the original path from an already-baked CDN URL.
 
@@ -202,7 +202,9 @@ Comments (Disqus plugin) are suppressed when entry metadata sets `Comments: No`,
 
 ### `routes/entries.js`
 
-Calls `models/entries.getPage()` with options derived from `req.template.locals` (`sort_by`, `sort_order`, `page_size`, `path_prefix`) and from `req.params.page` or `req.query.page`. Sets `res.locals.entries` and `res.locals.pagination` (documented in templates with snake_case fields such as `page_size` and `total_entries`; camelCase aliases still resolve for backwards compatibility). Renders `entries.html`.
+Calls `models/entries.getPage()` with options derived from `req.template.locals` (`sort_by`, `sort_order`, `page_size`, `path_prefix`) and from `req.params.page` or `req.query.page`. Sets `res.locals.entries` and `res.locals.pagination` (documented in templates with snake_case fields such as `page_size` and `total_entries`). Renders `entries.html`.
+
+A list's pagination is documented as `<list>.pagination` (`posts.pagination`, `entries.pagination`, `tagged.pagination`): a property on the array, so a page with several lists gives each its own, and it renders even when the list is empty. Two older forms stay for customer templates: the top-level `pagination`, for the list the URL pages, and a copy on the list's last entry. Each pagination object has `next` and `previous` (page numbers) and `next_url` and `previous_url`, root-relative URLs of those pages of the same listing, or `null`; `lib/paginationURLs.js` adds them per request, in the `posts` and `tagged` retrievers, because they depend on the URL. Page 1 is the listing's own URL. The page-N URL comes from a view URL pattern with a `:page` parameter (`req.viewURLPatterns`, set in `render/middleware.js` from the loaded view; entries.html and tagged.html also have their built-in routes), otherwise it is the request's path with `?page=N` and the other query parameters kept. Every other entry carries `pagination: null`, so `{{#posts}}{{#pagination}}` renders once, after the last entry, instead of falling through to the top-level `pagination` on every entry. A cache that clones the array drops the property, so `helpers/listPagination.js` runs on the copy that is rendered.
 
 ### `routes/view.js`
 

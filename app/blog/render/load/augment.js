@@ -1,4 +1,5 @@
 const normalize = require("models/tags").normalize;
+const tagSlug = require("../retrieve/helpers/tagSlug");
 const type = require("helper/type");
 const backlinksFor = require("./backlinks");
 const moment = require("moment");
@@ -86,7 +87,7 @@ module.exports = async function augment(
     tags.push({
       name: tag,
       tag: tag,
-      slug: encodeURIComponent(slug),
+      slug: tagSlug(slug),
       first: i === 0,
       last: i === totalTags - 1,
     });

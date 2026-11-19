@@ -119,7 +119,7 @@ describe("sandbox broker and jail", function () {
       // a zip is read whole into memory, with its files beside it
       assert.strictEqual(
         j.maxInputBytes,
-        (name === "unzip" ? 64 : 256) * 1024 * 1024
+        (name === "unzip" ? 128 : 256) * 1024 * 1024
       );
     }
     assert.strictEqual(jail.JOBS.unzip.timeSeconds, 30);

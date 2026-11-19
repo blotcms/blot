@@ -292,7 +292,7 @@ aws iam create-access-key --user-name blot-storage-app-<bucket>
 ## Configure the app
 
 Add these to the app host's environment file (the one passed to the containers
-with `--env-file`; see `config/environment.sh` for the full list), then deploy:
+with `--env-file`; see `config/secrets.env.example` for the full list), then deploy:
 
 | Variable | Value |
 | --- | --- |
@@ -314,11 +314,16 @@ same access without that exposure. See `app/storage/README` §3.
 
 ## Bunny (cdn.blot.im)
 
-### Current pull zone (as of 10 Oct 2026)
+### Current pull zone (as of 15 Nov 2026)
 
-Pull zone `blot-cdn`, hostnames `cdn.blot.im`, `cdn.blot.site` and the system
-hostname `blot-cdn.b-cdn.net` (SSL on, Force SSL off). High-volume tier,
-SafeHop on.
+Pull zone `blot-cdn`, hostnames `cdn.blot.im` and the system hostname
+`blot-cdn.b-cdn.net` (SSL on, Force SSL off). `cdn.blot.im` is a CNAME to
+`blot-cdn.b-cdn.net` at Blot's DNS host (Bunny DNS isn't used), with a
+certificate Bunny issues itself (HTTP-01). High Volume tier, no routing
+filters (EEA-only and EU-only off), WebSockets off. SafeHop on, with origin
+retries "Do not retry", connect timeout 10 s and response timeout 60 s.
+`cdn.blot.site` was removed on 15 Nov 2026, hostname and rule patterns both:
+Blot no longer owns the domain.
 
 - **Origin.** Type Origin URL, `http://<origin IP>` (the app host's openresty); plain HTTP to the IP on purpose, to keep the origin hop as fast as possible.
   Host header `cdn.blot.im`, Forward host header off, Verify origin SSL off,
@@ -328,7 +333,7 @@ SafeHop on.
   cache expiration overridden to 1 year; browser
   cache "match server", which sends browsers a `Cache-Control` made from that
   1-year edge time, never the origin's (so the origin's `immutable` is lost
-  without edge rule 8 below); query string sort on; vary cache by URL query string,
+  without the "Immutable browser cache" edge rule below); query string sort on; vary cache by URL query string,
   limited to the `version` parameter (the only one CDN URLs use, as the
   fonts' cache-buster; no CDN route reads the query string, so other
   parameters only fragmented the cache); cache error responses on (errors
@@ -337,6 +342,169 @@ SafeHop on.
   and while updating.
 - **Perma-Cache** on, storage zone `blot-cdn-storage`. It serves any object it
   already holds without asking the origin.
+  The storage zone exists only for this: Edge (SSD) tier, main region
+  Frankfurt, replicated to New York and Seattle (replication regions can't be
+  removed once added), "rewrite 404 to 200" off, S3 compatibility off. Its
+  files sit under `__bcdn_perma_cache__/pullzone__blot-cdn__<id>/`, one
+  directory per request-path segment (`blog_<id>/_image_cache/...`,
+  `folder/v-<ver>/blog_<id>/...`). Purge single objects with the exact-URL
+  purge at dash.bunny.net/purge, which also deletes the Perma-Cache copy;
+  wildcard and tag purges don't reach Perma-Cache, and the pull zone's own
+  "Purge Cache" empties the whole edge cache.
+
+  The leaf of each URL is a directory `___<name>___` holding the response,
+  `___file___`. **Whatever Blot stops publishing, or publishes different
+  bytes at, stays public there** until its exact URL is purged. Each purge
+  waits for every edge (`async=false`), about 7 s, so `helper/purgeCdnUrls`
+  runs 16 at once, with a 60 s timeout; Bunny's `async=true` purges answer at
+  once, but a wildcard one was seen not to reach the edge minutes later
+  (15 Nov 2026).
+
+  Nothing that publishes, builds or deletes waits for Bunny: it adds the
+  URLs to the Redis set `cdn:purge-queue`, and a worker on whichever process
+  holds the `cdn:purge-queue:lease` lock purges them in the background,
+  usually within a minute (`app/cdn/purgeQueue.js`). An entry stays queued
+  until its purge succeeds, so a deploy doesn't lose it; one that fails 10
+  times (counted in the hash `cdn:purge-queue:failures`) is dropped and left
+  to the sweep. Queued:
+  - **a folder file's old URL** when a write replaces its bytes, or a remove
+    or move takes it away (`storage/folder/s3.js`; the old version comes from
+    the index record, so nothing is read), in both forms: the edge still
+    caches the form used before #2695, which the rule "No Perma-Cache for old
+    folder URLs" keeps out of Perma-Cache;
+  - **a deleted blog**, as `cdn.blot.im/<blogID>/*`: one wildcard purge,
+    which clears the edges, then its directory, which clears Perma-Cache; the
+    directory is kept for a retry if the purge fails (`models/blog/remove.js`);
+  - **a template's old CSS and JS URLs** when a change gives them a new hash
+    or the template is dropped (`models/template`), and the dashboard and
+    documentation bundles on a boot of a new release (`app/setup.js`).
+
+  `app/storage/sweep/` removes **everything else, in the background
+  sweep** (`index.js` owns the run, `permaCache.js` has the Perma-Cache checks
+  below). It runs on whichever
+    process holds the `perma-cache:sweep:lease` lock, starts a week after
+    the last run finished, but only in a quiet hour (`START_WINDOW`, 02:00 to
+    05:00 UTC; a run in progress, and its second pass, carry on at any hour), and keeps its progress in the Redis hash
+    `perma-cache:sweep` (`startedAt`, `cursor`, `mainDoneAt`, `secondCursor`,
+    `totals`, `finishedAt`, `error`, `full`, `previousStartedAt`, `lastFullAt`; the names predate the move of the sweep into `storage/sweep`):
+    it sweeps, in name order and four at a time (Bunny storage deletes eight at a time), the union of the top-level
+    directories of Perma-Cache and the blogs in Redis (so a blog with nothing
+    in Perma-Cache still has its generated files swept), and saves the name
+    below which all are done, so after a deploy the next holder resumes
+    there. A run takes a few hours. For a live blog, in the order Redis, S3,
+    Bunny: its generated files (below), then its Perma-Cache directory,
+    checked against the blog's listing of the bucket after the generated
+    step's deletes, so a file deleted from S3 in the pass is purged from
+    Bunny in the same pass. Six hours after the main pass ends (`mainDoneAt`;
+    the lease's hourly step finds it due) a **second pass** visits again the
+    blogs that have a candidate set (below), with the same Redis, S3, Bunny
+    order, resuming from `secondCursor`; the run finishes, and the week is
+    counted, when it does. A `report` or `off` run has no second pass.
+
+    **Skipping unchanged blogs.** Only about a sixth of blogs change in a
+    week, so the main pass skips a live blog's generated step and its
+    Perma-Cache check (counted in `skippedUnchanged`) when its `cacheID` is
+    older than the previous run's start less a day (`previousStartedAt`,
+    recorded when an applying run finishes), it has no candidate set, and it
+    isn't in the Redis set `perma-cache:sweep:failed` (blogs whose generated
+    step or Perma-Cache check failed; removed when it next succeeds). Deleted
+    blogs and the shared directories are never skipped. This is safe because
+    every path that makes a generated directory unreferenced or new, or
+    changes what Perma-Cache should hold, ends by setting the blog's `cacheID`
+    after the change: a sync (every client, the dashboard's folder uploads and
+    deletes, the demo blogs), a rebuild, a scheduled publication, `Fix()`, an
+    edit of the installed template, and a change of menu, plugins, handle or
+    domain; replacing the avatar does too (`dashboard/site/save/avatar.js`).
+    The day is because a directory under a day old is never a candidate. A
+    few changes don't set it (an edit of a template the blog hasn't
+    installed, a settings save that changes nothing a render reads, a sync
+    whose files all built the entries already stored, a bump that failed for
+    over a minute while Redis was unavailable, a sync killed by a deploy whose
+    retry builds exactly what is stored), and a stale Perma-Cache copy of an
+    old folder-file URL can appear with no `cacheID` change at all (an old link
+    is fetched), so they are found by the next full run, and skipping only
+    ever delays what the sweep deletes. A run is full, with no skipping, when
+    no full run finished cleanly in the last 28 days (`FULL_AFTER`,
+    `lastFullAt`), so about monthly; also the first run, a run with no
+    `previousStartedAt` and a step given `full: true`. The choice is kept in
+    `full` in the hash. `previousStartedAt` is recorded only by an applying
+    run that finished with no error and no failure counted, so after a report
+    or `off` run, or a run with failures, the next run is full. A run that
+    began before this existed has no `full`, is full, and records neither.
+
+    The other directories:
+
+    **Generated files** (`generated.js`, `cache.js`, `s3.js`, `references.js`)
+    are the directories of `_image_cache`, `_thumbnails` and
+    `_bookmark_screenshots` that no saved entry, template or setting of the
+    blog mentions. They are deleted in two phases, so that a build already
+    running can't link a directory the sweep deletes. The main pass deletes the
+    transformer cache entries (`blog:<id>:store:image-cache:*` and
+    `thumbnails:*`, read through each name's `everything` set) that point at
+    an unreferenced directory whose newest file is over a day old, and
+    records the directory in the set `perma-cache:sweep:candidates:<blogID>`,
+    with the time in `...:candidates:<blogID>:marked`. The second pass, six
+    hours later, deletes only candidates marked before the main pass ended (a
+    pass resumed after a deploy sweeps again the blogs it had in progress, and
+    must not delete what it marked itself). Six hours is far more than the
+    race needs: a build that read a cache entry before the main pass deleted
+    it and saves its entry after the second pass reads the references takes
+    minutes at most. It deletes the files of a candidate that is still
+    unreferenced, still over a day old and that no cache entry points at
+    again, by their exact object keys; a directory a build made again is kept
+    for another round. Cache entries that point at directories missing from
+    the bucket, and `everything` members with nothing behind them, are
+    deleted in the main pass, and so are results from before the current layout that point at the old CDN (`blotcdn.com`, `/image-cache/`, `/thumbnails/<digits>/`; nothing can use them) with their URL keys, counted in `legacyCacheKeys`. A bookmark screenshot isn't in the transformer cache
+    (the plugin reuses a file if it exists), so a build that has just found
+    one can link it in the seconds before the second pass deletes it, after six hours
+    unreferenced; the next rebuild takes it again (accepted, #2745). The
+    switch is `GENERATED` in `index.js`: `off`, `report` (reads everything and
+    fills the totals, writes nothing, so that `apply` starts with the main pass) or
+    `apply`, the default since #2745's report and test-blog runs. The totals (`generatedBlogs`, `candidates`,
+    `candidateBytes`, `deletedDirs`, `deletedBytes`, `cacheKeysDeleted`, `legacyCacheKeys`,
+    `generatedFailed`, `secondPassBlogs`) are in the hash and logged at the end of a run; a blog
+    whose step fails (any read) has nothing deleted and still gets its
+    Perma-Cache check. One blog by hand, in a unit:
+    `node scripts/storage/sweep-blog.js <blogID> [--apply] [--both-phases]`.
+    Perma-Cache checks per directory:
+
+    | Directory | Stale when | Then |
+    | --- | --- | --- |
+    | `blog_*`, blog gone from Redis | always | wildcard purge, delete the directory |
+    | `blog_*/folder/` | not at the file's current version, or the file is gone | purge |
+    | `blog_*/_*` | gone from the bucket; under `_assets` (rewritten in place by a document's conversion), also changed in the bucket since Perma-Cache copied it | purge |
+    | `documentation/` | not at the file's current hash (`documentation/tools/cdn-url-helper`) | delete the storage copy |
+    | `template/` | the hash's rendered output gone from Redis | delete the storage copy |
+    | `fonts/`, `icons/`, `katex/`, `plugins/`, `syntax-highlighter/` | Bunny's SHA-256 of any copy differs from the file in this release, or the file is gone | purge, and delete the URL's directory |
+    | anything else | always | delete it |
+
+    A URL cached with a query string the pull zone varies by (`?version=`)
+    is a separate file in the URL's directory,
+    `___file___variation___<hash>`, which a purge of the plain URL may not
+    reach; so a stale static file's whole directory is deleted, and its
+    current variations refill. Blot links every static file it can with
+    `?version=` and a hash of the file in the running release
+    (`blog/lib/staticVersion`; the fonts' stylesheets carry their own), so a
+    release that changes one gives it a new URL at once. The sweep removes
+    the old copies, and the unversioned ones that older links and HTML
+    built before this still reach.
+
+    A copy nothing links any more and that the origin would answer
+    correctly is only deleted from storage, one call, without a purge. The
+    sweep stops without deleting anything if more than 50 blogs look deleted
+    at once, records the error in the hash and waits for the next week.
+
+  The Storage API's password comes from the account API, with
+  `BUNNY_API_SECRET`. By hand, in one go, report-only unless `--apply`:
+  `docker exec -u 1000 blot-blue node scripts/storage/perma-cache-sweep.js [--only <blogID or directory>] [--apply]`.
+  The progress of the background sweep:
+  `redis6-cli HGETALL perma-cache:sweep` on the host.
+
+  One-off cleanup, 15 Nov 2026: the storage zone shrank by about two
+  thirds, after deleting the old-form `folder/` tree, every deleted blog and
+  every top-level directory that isn't a blog (`documentation/` alone held
+  about 5% of the zone, mostly old versions), and purging existing blogs'
+  stale URLs.
 - **Request coalescing** on, 30 s lock timeout.
 - **Headers:** "Add CORS headers" on for `eot, ttf, woff, woff2, css, otf, js,
   mjs` (added whatever the origin, and the only CORS headers on a Perma-Cache
@@ -346,52 +514,111 @@ SafeHop on.
 - **Optimizer** off and no token authentication or URL signing (everything on
   the CDN is public by design), so Bunny requests the origin with the plain
   path.
-- **Edge rules**, in order:
-  1. Block requests by bot User-Agent: img2dataset, Bytespider, AhrefsBot,
-     ClaudeBot, bingbot.
-  2. The same, for GPTBot, python-requests, AliyunSecBot, Go-http-client,
-     Yandex.
-  3. "Disable Cache For Support Testing": request header `support: true`
-     overrides the cache time to 0 s.
-  4-5. The storage bucket and CORS rules, described below.
-  6. "Never cache health check": Override Cache Time 0 and Bypass Perma-Cache
-     on `*://cdn.blot.im/health*`, because updown.io monitors that URL.
-  7. "Block unknown paths on cdn blot im": Block Request (Bunny answers 403, the
-     origin never sees it) for any `cdn.blot.im` URL not on an allowlist, so
-     scanner probes (`/.env`, `/.git`, `/api`, ...) stop reaching Node. The
-     allowlist mirrors `app/cdn/index.js` plus the top level of
-     `app/blog/static`: `/`, `/health`, `/favicon.ico`, `/robots.txt`,
-     `/fonts/`, `/icons/`, `/katex/`, `/plugins/`, `/syntax-highlighter/`,
-     `/layout.css`, `/documentation/v-`, `/folder/v-`,
-     `/template/`, `/blog_`. **A new top-level path on the CDN must be added
-     to this rule or Bunny will 403 it.** Bunny allows 5 patterns per
-     condition, so the allowlist is split over several "match none"
-     conditions; `*` matches across `/`, so every pattern names the host (a
-     host-less `*/fonts/*` would let `/.env/fonts/x` through). Rollback: switch
-     the rule off.
-  8. "Immutable browser cache": Browser Cache Header (Cache-Control) Override
-     to `public, max-age=31536000, immutable`, when all of: the URL is on one
-     of the three hostnames (`*://cdn.blot.im/*`, `*://cdn.blot.site/*`,
-     `*://blot-cdn.b-cdn.net/*`), the status is 200, and the URL matches none
-     of `*/folder/v-pending/*`, `*/health*`, `*/favicon.ico*`,
-     `*/robots.txt*`. Every other CDN URL is versioned or never changes, so
-     browsers need not revalidate it even on reload. The exclusions are
-     host-less, so they also leave out the odd asset whose path contains one
-     of them; those keep the plain 1-year header. Errors keep the 5 s of
-     "cache error responses". Rollback: switch the rule off.
+- **Security.** Block POST requests on (Bunny answers 405); block root path
+  access off; no referrer or IP lists; no country redirects or blocks
+  (Traffic Manager); no network limits (all 0); AWS S3 authentication off;
+  Bunny Shield never set up. TLS security level "Compatible": TLS 1.2 and
+  1.3 with forward-secret cipher suites only, matching openresty's
+  `ssl_protocols TLSv1.2 TLSv1.3` (`proxy/config/wildcard-ssl.conf`), so a
+  client that can't load a Blot page can't reach the CDN either. Raised from
+  "Legacy" (TLS 1.0 and 1.1 accepted) on 15 Nov 2026; check with
+  `openssl s_client -tls1 -cipher 'DEFAULT:@SECLEVEL=0' -connect cdn.blot.im:443`,
+  which should fail with a protocol version alert.
+- **Logging** on, IPs anonymised ("Drop IP", replaced by 0.0.0.0), no log
+  forwarding, no permanent log storage. Bunny keeps raw logs for 3 days.
+- **Error pages.** Whitelabel on, StatusPage widget off, custom error page on,
+  with the HTML in [`bunny-error-page.html`](bunny-error-page.html) ("Blot is
+  offline", linking to support email and status.blot.im). Bunny shows it when
+  the origin fails.
+- **Edge rules**, in the dashboard's order. Saving an edited rule moves it to
+  the end of the list, so refer to rules by name, not number. When two
+  rules both override the origin, the one listed first won in a test on
+  15 Nov 2026, so keep origin rules' URL patterns from overlapping.
+  - Block requests by bot User-Agent: img2dataset, Bytespider, AhrefsBot,
+    ClaudeBot, bingbot; and a second rule for GPTBot, python-requests,
+    AliyunSecBot, Go-http-client, Yandex.
+  - "Disable Cache For Support Testing": request header `support: true`
+    overrides the cache time to 0 s. Perma-Cache still stores the response.
+  - "Never cache health check": Override Cache Time 0 and Bypass Perma-Cache
+    on `*://cdn.blot.im/health*`, because updown.io monitors that URL.
+  - "Block unknown paths on cdn blot im": Block Request (Bunny answers 403, the
+    origin never sees it) for any `cdn.blot.im` URL not on an allowlist, so
+    scanner probes (`/.env`, `/.git`, `/api`, ...) stop reaching Node. The
+    allowlist mirrors `app/cdn/index.js` plus the top level of
+    `app/blog/static`: `/`, `/health`, `/favicon.ico`, `/robots.txt`,
+    `/fonts/`, `/icons/`, `/katex/`, `/plugins/`, `/syntax-highlighter/`,
+    `/html2canvas.min.js` (stale: #2661 removed it; drop it next time the rule is
+    edited), `/layout.css`, `/documentation/v-`, `/folder/v-`,
+    `/template/`, `/blog_`. **A new top-level path on the CDN must be added
+    to this rule or Bunny will 403 it.** Bunny allows 5 patterns per
+    condition, so the allowlist is split over several "match none"
+    conditions; `*` matches across `/`, so every pattern names the host (a
+    host-less `*/fonts/*` would let `/.env/fonts/x` through). It covers
+    `cdn.blot.im` only, not `blot-cdn.b-cdn.net`. Rollback: switch the rule
+    off.
+  - "CORS for storage bucket assets", "Immutable browser cache", "Short cache
+    for pending folder images", "Storage bucket for generated assets" and
+    "Folder files from the bucket", in that order; the last two and CORS are
+    described below.
+  - "No Perma-Cache for old folder URLs": Bypass Perma-Cache on
+    `*://cdn.blot.im/folder/v-*` (and the same for `blot-cdn.b-cdn.net`),
+    added 15 Nov 2026. Links built before #2695 still use that form and the
+    app still serves it, but Perma-Cache groups it by version rather than by
+    blog, so nothing could find its stale copies there; the edge caches it,
+    and a folder file's change purges that URL too (`app/storage/sweep/permaCache.js`).
+  - "Immutable browser cache": Browser Cache Header (Cache-Control) Override
+    to `public, max-age=31536000, immutable`, when all of: the URL is on one
+    of the two hostnames (`*://cdn.blot.im/*`, `*://blot-cdn.b-cdn.net/*`),
+    the status is 200, and the URL matches none
+    of `*/folder/v-pending/*`, `*/health*`, `*/favicon.ico*`,
+    `*/robots.txt*`. Every other CDN URL is versioned or never changes, so
+    browsers need not revalidate it even on reload. The exclusions are
+    host-less, so they also leave out the odd asset whose path contains one
+    of them; those keep the plain 1-year header. Errors keep the 5 s of
+    "cache error responses". Rollback: switch the rule off.
+  - "Short cache for pending folder images": Override Cache Time 60 s and
+    Bypass Perma-Cache on `*://cdn.blot.im/folder/v-pending/*` and
+    `*://cdn.blot.im/blog_*/folder/v-pending/*` (and the same for
+    `blot-cdn.b-cdn.net`). The build links an image
+    that hasn't synced yet there (`app/build/plugins/folderAssets`), and the
+    rebuild when it arrives moves the post to the image's content-versioned
+    URL, but feed readers and cached pages keep the pending one. Without
+    this rule the image it then serves would be cached for a year, and
+    perma-cached, so a replaced image would stay stale on those copies. The
+    override applies to the 404 before the image arrives too (instead of the
+    5 s of "cache error responses"), so it is 60 s, the minute Node asks for
+    that 404, rather than an hour. Recreated on 7 Nov 2026: the pull zone
+    had lost it.
 
-  9. "Short cache for pending folder images": Override Cache Time 60 s and
-     Bypass Perma-Cache on `*://cdn.blot.im/folder/v-pending/*` (and the same
-     for `cdn.blot.site` and `blot-cdn.b-cdn.net`). The build links an image
-     that hasn't synced yet there (`app/build/plugins/folderAssets`), and the
-     rebuild when it arrives moves the post to the image's content-versioned
-     URL, but feed readers and cached pages keep the pending one. Without
-     this rule the image it then serves would be cached for a year, and
-     perma-cached, so a replaced image would stay stale on those copies. The
-     override applies to the 404 before the image arrives too (instead of the
-     5 s of "cache error responses"), so it is 60 s, the minute Node asks for
-     that 404, rather than an hour. Recreated on 7 Nov 2026: the pull zone
-     had lost it.
+### Rebuilding the pull zone from scratch
+
+Everything Bunny holds for Blot is configuration plus caches, so a lost
+account costs only setup time and a cold cache: the bucket and the app host
+hold every object. In a new account:
+
+1. Create the storage zone (Edge SSD, main region Frankfurt, replicate to New
+   York and Seattle), named `blot-cdn-storage`.
+2. Create the pull zone `blot-cdn`, origin type Origin URL, with the origin,
+   Host header and toggles under "Origin" above. The system hostname is
+   derived from the zone name, so keep `blot-cdn` or change the CNAME to
+   match.
+3. Add the hostname `cdn.blot.im`, point its CNAME at the new
+   `<zone>.b-cdn.net`, and enable SSL once DNS resolves.
+4. Set pricing tier, SafeHop, caching, Perma-Cache (with the storage zone),
+   request coalescing, the CORS header list, security (TLS level included),
+   logging and the error
+   page, all as listed above.
+5. Recreate the edge rules in the order above. Read each form back before
+   saving: a new rule's top-level condition defaults to "Match any".
+6. Check, as in the procedure below: a generated image through
+   `cdn.blot.im` returns 200 with `x-amz-request-id`, a folder file and a
+   font return 200 from the app, `/health` is not cached, `/.env` is 403,
+   a POST is 405, and `v-pending` gets `max-age=60`.
+
+The app links only `cdn.` plus its host (`BLOT_CDN` in `config/index.js`), so
+it needs no code change. It does call Bunny's API to purge URLs: put the new
+account's API key in `BUNNY_API_SECRET` in `/etc/blot/secrets.env` (see
+`config/secrets.env.example`), which reaches the units with the next deploy.
 
 Large folder files and generated assets (`/_image_cache/`, `/_assets/`, ...)
 requested on a blog host answer with a 302 to this CDN (see
@@ -427,11 +654,11 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
 
    ```
    *://cdn.blot.im/blog_*
-   *://cdn.blot.site/blog_*
    *://blot-cdn.b-cdn.net/blog_*
    ```
 
-   Anchor on the hostname. A bare `*/blog_*` also matches
+   (Narrowed on 15 Nov 2026 to generated files only: see "Folder files from
+   the bucket" below.) Anchor on the hostname. A bare `*/blog_*` also matches
    `/folder/v-.../blog_.../` and `/template/...` URLs, which must stay on the
    app.
 3. **Edge rule for CORS**, same condition: Set Response Header
@@ -454,7 +681,7 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
 5. **Test before going live.** Add a second condition to rules 2 and 3,
    Request Header `X-Blot-Origin` equals `s3` (a header, not a query string:
    Perma-Cache may key on the path alone), and send it together with
-   `support: true` (rule 3 above sets cache time 0). Use objects Bunny hasn't
+   `support: true` ("Disable Cache For Support Testing" sets cache time 0). Use objects Bunny hasn't
    stored yet, since Perma-Cache answers for anything it holds: a fresh image
    post on a test blog (the `test-blogs` skill). Check:
    - 200, with the S3 copy's `Content-Type`,
@@ -474,6 +701,62 @@ nothing is rewritten. Only `/blog_*` changes origin. Everything else
    its disk and S3; after, it serves `/blog_*` from S3 itself.
 8. **Nothing to purge.** The objects in the bucket are byte-identical to what
    the app served.
+
+### Folder files from the bucket ([#2695](https://github.com/blotcms/blot/issues/2695))
+
+Live since 15 Nov 2026 (#2714).
+
+Folder files are linked as `/blog_<id>/folder/v-<version>/<path>`: the
+object's key, `{blogID}/folder/{path}`, with the content version inserted.
+Bunny fetches them from the bucket by dropping the version segment. Links
+baked before, `/folder/v-<version>/blog_<id>/<path>`, stay on the app, as does
+`v-pending` (the app finds a pending file case-insensitively, which S3 can't).
+Tested through header-gated rules on 15 Nov 2026: encoding, Content-Type,
+range, HEAD, `.git` and missing files all behave as on the app (see #2695).
+
+1. **"Storage bucket for generated assets"** is narrowed to generated files, whose
+   first segment always starts with `_` (`app/storage/assets.js` refuses any
+   other): Request URL matches any of
+
+   ```
+   pattern:^https?://cdn%.blot%.im/blog_%x+/_.*$
+   pattern:^https?://blot%-cdn%.b%-cdn%.net/blog_%x+/_.*$
+   ```
+
+   Bunny rejects a `pattern:` condition that doesn't end in `$` ("The
+   trigger path is not a valid URL"), hence `.*$`.
+
+   Matching every `/blog_*` URL, as it did before, it would win over the
+   folder rule: when two rules override the origin, the one listed first won.
+2. **"Folder files from the bucket"**: Override Origin URL
+   `https://blot-storage-prod.s3.us-west-2.amazonaws.com/%{Path.0}/folder/%{Path.3-}`
+   and Add Request Header `Host` = the bucket host, when the Request URL
+   matches any of
+
+   ```
+   pattern:^https?://cdn%.blot%.im/blog_%x+/folder/v%-%x+/.*[^/]$
+   pattern:^https?://blot%-cdn%.b%-cdn%.net/blog_%x+/folder/v%-%x+/.*[^/]$
+   ```
+
+   Lua patterns, since `*` matches across `/`. The condition sees the
+   scheme, hence `https?`. `[^/]$` keeps a URL ending in `/` on the app: S3
+   has a zero-byte marker for an empty directory that would be cached as a
+   200. `v-pending` isn't hex, so it doesn't match. The expansion replaces
+   the request path and keeps its percent-encoding; the query string is not
+   passed on. No cache-time action: the pull zone's 1-year override and
+   "Immutable browser cache" already apply.
+3. **"Short cache for pending folder images"** also matches
+   `*://cdn.blot.im/blog_*/folder/v-pending/*` and the same on
+   `blot-cdn.b-cdn.net`.
+4. Unchanged: "CORS for storage bucket assets" (matches `/blog_*`),
+   "Immutable browser cache" (its `*/folder/v-pending/*` exclusion has no
+   host, so it covers both forms), "Block unknown paths" (allows `/blog_`).
+
+To test a change to these rules, add Request Header `X-Blot-Origin` equals
+`s3` to a copy and send it with `support: true`, using files Bunny hasn't
+stored. Expect `x-amz-request-id` on each response. Missing files and `.git`
+paths give S3's 403. Roll back by switching "Folder files from the bucket"
+off: misses go to the app, which serves the same URLs.
 
 ## Backup
 

@@ -5,8 +5,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/quicksand/400.woff2?version=5b3d99&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/quicksand/400.woff?version=c3bfa9&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.367em}
-.push-double{margin-right:0.367em}
-.pull-single{margin-left:-0.187em}
-.push-single{margin-right:0.187em}
+.pull-double {margin-left:-0.314em}
+.push-double{margin-right:0.314em}
+.pull-single{margin-left:-0.193em}
+.push-single{margin-right:0.193em}
 .push-double,.push-single{display:inline-block}

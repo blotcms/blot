@@ -9,6 +9,7 @@ require("../controls/boolean.js");
 require("../controls/select.js");
 require("../controls/date.js");
 require("../controls/upload.js");
+require("../controls/folder-root.js");
 require("../controls/favicon.js");
 require("../controls/image-crop.js");
 require("../controls/profile-photo-crop.js");

@@ -78,6 +78,8 @@ var retrieveAliases = {
   encodeJSON: true,
   encodeURIComponent: true,
   encodeXML: true,
+  // folder.js under a second name, until {{#folder}} is replaced (#2693)
+  folder_legacy: true,
   isActive: true,
   plugin_css: true,
   plugin_js: true,
@@ -164,6 +166,17 @@ function parseTemplate(template) {
   // Helper function to set nested property in retrieve object
   // Converts boolean values to objects when needed
   function setNestedProperty(root, propertyPath, value) {
+    // Template variables are written by blog owners; a path like
+    // allTags.__proto__.x would otherwise write into Object.prototype
+    if (
+      [root].concat(propertyPath.split(".")).some(function (part) {
+        return (
+          part === "__proto__" || part === "constructor" || part === "prototype"
+        );
+      })
+    )
+      return;
+
     if (!retrieve[root]) {
       retrieve[root] = {};
     } else if (retrieve[root] === true) {

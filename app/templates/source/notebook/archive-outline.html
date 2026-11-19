@@ -1,0 +1,10 @@
+<ul class="archive-list archive-months">
+  {{#months}}
+  <li>
+    <details data-archive-id="{{year}}/{{month}}">
+      <summary><span class="archive-label">{{month}}</span></summary>
+      <ul class="archive-list archive-posts"></ul>
+    </details>
+  </li>
+  {{/months}}
+</ul>

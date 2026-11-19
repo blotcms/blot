@@ -1,4 +1,5 @@
 var Express = require("express");
+var safeThen = require("./safeThen");
 
 var blockCrawlers = require("./blockCrawlers");
 var checkToken = require("./checkToken");
@@ -28,7 +29,7 @@ form.use(function (req, res, next) {
   // Send logged-in users to the dashboard unless we're using
   // a one-time log-in link
   if (req.session && req.session.uid && !req.query.token) {
-    var then = req.query.then || (req.body && req.body.then) || "/sites";
+    var then = safeThen(req.query.then || (req.body && req.body.then));
     return res.redirect(then);
   }
 

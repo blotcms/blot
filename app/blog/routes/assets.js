@@ -340,11 +340,7 @@ async function redirectLargeFolderFile(req, res, path) {
 
   if (stat.isDirectory || stat.size < CDN_REDIRECT_MIN_SIZE) return false;
 
-  redirectToCdn(
-    req,
-    res,
-    "/folder/" + versionedFolderPath(req.blog.id, path, stat)
-  );
+  redirectToCdn(req, res, versionedFolderPath(req.blog.id, path, stat));
   return true;
 }
 

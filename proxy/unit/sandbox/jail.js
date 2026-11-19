@@ -128,12 +128,15 @@ const JOBS = {
   },
   // A zip archive, read into its files (app/sandbox/jobs/unzip.js): the
   // archive in memory, then every file. The output stops under the 64 MiB a
-  // reply may hold (app/sandbox/index.js), with the file names.
+  // reply may hold (app/sandbox/index.js), with the file names. The input may
+  // be larger: a docx or odt's images are read from it in batches
+  // (build/converters/pandoc.js), and sync takes files up to 100 MiB. The
+  // archive is held about twice, with a batch, well under the jail's memory.
   unzip: {
     command: node("unzip"),
     memoryBytes: 512 * MiB,
     timeSeconds: 30,
-    maxInputBytes: 64 * MiB,
+    maxInputBytes: 128 * MiB,
     maxOutputBytes: 60 * MiB,
   },
   // A post's HTML from a remote source, parsed by the importer's fixed

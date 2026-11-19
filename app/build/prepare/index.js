@@ -75,6 +75,14 @@ function overriddenMarkupFields(metadata) {
 // url: 'string', // this is handled by set
 // scheduled: scheduled, // this is handled by set
 
+// makeSlug turns "&amp;" into "and" and drops a bare "&". A title read from
+// the document's markup used to reach it escaped (cheerio 0.22 with
+// decodeEntities: false); now it arrives as text, so put the escape back.
+// Real entities, e.g. "&amp;" or "&eacute;", are left alone.
+function escapeAmpersands(title) {
+  return title.replace(/&(?![a-z][a-z0-9]*;|#\d+;|#x[0-9a-f]+;)/gi, "&amp;");
+}
+
 function Prepare(entry, options = {}) {
   ensure(entry, "object")
     .and(entry.path, "string")
@@ -167,7 +175,9 @@ function Prepare(entry, options = {}) {
   debug(entry.path, "Generated  teasers");
 
   debug(entry.path, "Generating makeSlug");
-  entry.slug = makeSlug(metadataValue("title") || entry.title);
+  entry.slug = makeSlug(
+    metadataValue("title") || escapeAmpersands(entry.title)
+  );
   debug(entry.path, "Generated  makeSlug");
 
   debug(entry.path, "Generating tags");

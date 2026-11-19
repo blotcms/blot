@@ -1,10 +1,13 @@
 const Tags = require("models/tags");
 const projectEntryFields = require("./helpers/projectEntryFields");
+const listPagination = require("./helpers/listPagination");
+const { assertPageInRange } = require("../../lib/pageNotFound");
 const asRetriever = require("../../lib/asRetriever");
 const {
   normalizePageNumber,
   normalizePageSize,
 } = require("../../lib/pagination");
+const paginationURLs = require("../../lib/paginationURLs");
 const getTemplateSortOptions = require("blog/sortOptions");
 
 const ALIASES = ["tagged", "entries"];
@@ -23,7 +26,8 @@ async function tagged(req, res) {
     (res.locals && res.locals.tag) ||
     "";
 
-  const page = normalizePageNumber(req.params.page);
+  // ?page= too, for views without a :page pattern (see lib/paginationURLs)
+  const page = normalizePageNumber(req.params.page ?? req.query.page);
 
   const templateLocals = (req.template && req.template.locals) || {};
   const pathPrefix =
@@ -48,9 +52,26 @@ async function tagged(req, res) {
     log,
   });
 
-  res.locals.pagination = res.locals.pagination || payload.pagination || {};
+  // A page past the last one is a 404 (page 1 never is)
+  assertPageInRange(res, payload.pagination);
 
-  return { ...payload, is: payload.tagged }; // is: an alias
+  // /tagged/:tag for a tag with no posts is a 404 too, but the template's own
+  // tagged.html still renders it, so the page looks just as it did. Only on
+  // that route: a template's other views can list a tag with no posts yet.
+  if (req.tagPage && !payload.total && !(res.locals && res.locals.error)) {
+    res.status(404);
+  }
+
+  // A copy with next_url and previous_url, which depend on the request
+  const pagination = paginationURLs(req, payload.pagination);
+
+  res.locals.pagination = res.locals.pagination || pagination;
+
+  // {{#tagged.pagination}} is the documented form; this also gives
+  // {{#entries.pagination}} on tagged.html and the last-entry copy
+  listPagination(payload.entries, pagination);
+
+  return { ...payload, pagination, is: payload.tagged }; // is: an alias
 }
 
 module.exports = asRetriever(tagged);

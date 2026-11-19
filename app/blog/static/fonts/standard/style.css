@@ -26,8 +26,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/standard/700-italic.woff2?version=89c591&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/standard/700-italic.woff?version=9838fc&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.428em}
-.push-double{margin-right:0.428em}
-.pull-single{margin-left:-0.228em}
-.push-single{margin-right:0.228em}
+.pull-double {margin-left:-0.432em}
+.push-double{margin-right:0.432em}
+.pull-single{margin-left:-0.234em}
+.push-single{margin-right:0.234em}
 .push-double,.push-single{display:inline-block}

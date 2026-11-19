@@ -6,36 +6,30 @@
       {{> header}}
 
       <div class="content-wrapper">
-        <main class="main">
+        <main class="main" id="main">
 
           {{^posts.length}}
-          <div class="centered">
-            <p>No posts yet.</p>
+          <div class="page-body">
+            {{#posts.pagination.total_entries}}<p class="empty-state">There are no posts on this page. <a href="/">Go to the latest posts</a></p>{{/posts.pagination.total_entries}}
+            {{^posts.pagination.total_entries}}<p class="empty-state">No posts yet.</p>{{/posts.pagination.total_entries}}
           </div>
           {{/posts.length}}
 
           {{#posts}}
           <article class="post">
-            {{^hide_dates}}{{#date}}<div class="date-header"><span>{{date}}</span></div>{{/date}}{{/hide_dates}}
+            {{^hide_dates}}{{#date}}<div class="date-header"><time datetime="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">{{date}}</time></div>{{/date}}{{/hide_dates}}
             <h2 class="post-title"><a href="{{{url}}}">{{title}}</a></h2>
             <div class="post-body">{{{body}}}</div>
             <div class="post-footer">
               {{#author}}<span class="post-author">Posted by {{.}}</span>{{/author}}
-              {{^hide_dates}}{{#date}}<span class="post-date">{{date}}</span>{{/date}}{{/hide_dates}}
               {{#tags}}<span class="post-tag-separator">&middot;</span><a href="/tagged/{{slug}}" class="post-tag">{{tag}}</a>{{/tags}}
             </div>
           </article>
           {{/posts}}
 
-          {{#pagination}}
-          <div class="blog-pager">
-            <span class="pager-newer">{{#previous}}<a href="/page/{{previous}}">Newer Posts</a>{{/previous}}</span>
-            <a class="pager-home" href="/">Home</a>
-            <span class="pager-older">{{#next}}<a href="/page/{{next}}">Older Posts</a>{{/next}}</span>
-          </div>
-          {{/pagination}}
+          {{! Only when there is another page to go to }}
+          {{#posts.pagination}}{{#previous}}{{> blog-pager}}{{/previous}}{{^previous}}{{#next}}{{> blog-pager}}{{/next}}{{/previous}}{{/posts.pagination}}
 
-          {{> feed-links}}
         </main>
 
         {{> sidebar}}

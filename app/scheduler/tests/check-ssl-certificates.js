@@ -47,6 +47,7 @@ describe("scheduler check-ssl-certificates", function () {
         expect(command).toEqual("MGET");
         return keys.map((key) => (store.has(key) ? store.get(key) : null));
       },
+      del: async (key) => store.delete(key),
       scan: async (cursor, options) => {
         expect(options).toEqual({ MATCH: "ssl:*:latest", COUNT: 1000 });
         const keys = Array.from(store.keys()).filter((k) =>
@@ -99,6 +100,47 @@ describe("scheduler check-ssl-certificates", function () {
     for (let i = 0; i < count; i++) certs[`b${i}.com`] = certJSON(daysLeft);
     return certs;
   }
+
+  describe("expired certificates", function () {
+    it("deletes an expired certificate with no domain key", async function () {
+      const deps = withNow(
+        setup({ certs: { "a.com": certJSON(-1) }, noKey: ["a.com"] })
+      );
+
+      const report = await check(deps);
+
+      expect(deps.client.store.has("ssl:a.com:latest")).toBe(false);
+      expect(report.deleted).toEqual(1);
+    });
+
+    it("deletes an expired certificate for a subdomain of the host", async function () {
+      const domain = "blog." + config.host;
+      const deps = withNow(setup({ certs: { [domain]: certJSON(-1) } }));
+
+      await check(deps);
+
+      expect(deps.client.store.has(`ssl:${domain}:latest`)).toBe(false);
+    });
+
+    it("keeps an unexpired certificate with no domain key", async function () {
+      const deps = withNow(
+        setup({ certs: { "a.com": certJSON(1) }, noKey: ["a.com"] })
+      );
+
+      const report = await check(deps);
+
+      expect(deps.client.store.has("ssl:a.com:latest")).toBe(true);
+      expect(report.deleted).toEqual(0);
+    });
+
+    it("keeps an expired certificate whose domain exists", async function () {
+      const deps = withNow(setup({ certs: { "a.com": certJSON(-1) } }));
+
+      await check(deps);
+
+      expect(deps.client.store.has("ssl:a.com:latest")).toBe(true);
+    });
+  });
 
   describe("customer certificates", function () {
     it("ignores a healthy certificate", async function () {

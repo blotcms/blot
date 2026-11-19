@@ -80,7 +80,10 @@ site.get("/webhook/syncs-finished/:blogID", async function (req, res, next) {
 // This is called by Dropbox to verify the webhook exists
 site.get("/webhook", function (req, res, next) {
   if (!req.query || !req.query.challenge) return next();
-  res.send(req.query.challenge);
+  // Echo as plain text so the challenge can't be rendered as HTML
+  res.set("Content-Type", "text/plain");
+  res.set("X-Content-Type-Options", "nosniff");
+  res.send(String(req.query.challenge));
 });
 // Syncs a blog, or leaves a follow-up for any process to run once a sync
 // already running (here or in another container) has finished

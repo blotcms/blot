@@ -148,7 +148,9 @@ function filenameFromContentDisposition(header) {
   }
 
   // filename="Koa Etymology Pie Chart.jpg"
-  var quoted = /filename\s*=\s*"((?:\\.|[^"])*)"/i.exec(header);
+  // [^"\\] keeps the two branches apart: matching a backslash both ways
+  // backtracks exponentially on a long run of them with no closing quote
+  var quoted = /filename\s*=\s*"((?:\\.|[^"\\])*)"/i.exec(header);
   if (quoted) return quoted[1].replace(/\\(.)/g, "$1");
 
   var unquoted = /filename\s*=\s*([^;]+)/i.exec(header);

@@ -2,4 +2,4 @@ iCloud Server Root Disk is approaching limit
 
 There is {{disk_available_human}} free on the root disk.
 
-Please log in and evict some sites to free up root disk space.
+Please log in and free up root disk space. Check /cores for crash dumps and the largest folders with du first: evicting sites only frees space in the iCloud folder.

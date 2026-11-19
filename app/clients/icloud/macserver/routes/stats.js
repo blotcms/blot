@@ -4,6 +4,8 @@ import fs from "fs-extra";
 import { statfs as statfsSync } from "fs";
 import { iCloudDriveDirectory } from "../config.js";
 import clfdate from "../util/clfdate.js";
+import processStats from "../util/processStats.js";
+import availableMemory from "../util/availableMemory.js";
 
 const statfs = promisify(statfsSync);
 
@@ -35,9 +37,25 @@ export default async (req, res) => {
   result.icloud_bytes_available = lastQuota;
 
   try {
+    Object.assign(result, processStats());
+  } catch (error) {
+    console.error(clfdate(), `Error getting CPU and memory: ${error}`);
+  }
+
+  try {
+    if (result.host_memory_total_bytes > 0)
+      result.host_memory_available_bytes = await availableMemory(
+        result.host_memory_total_bytes
+      );
+  } catch (error) {
+    console.error(clfdate(), `Error getting available memory: ${error}`);
+  }
+
+  try {
     const stats = await statfs("/");
-    // get disk free space in bytes
+    // get disk free space and size in bytes
     result.disk_bytes_available = stats.bavail * stats.bsize;
+    result.disk_bytes_total = stats.blocks * stats.bsize;
   } catch (error) {
     console.error(clfdate(), `Error getting disk free space: ${error}`);
   }

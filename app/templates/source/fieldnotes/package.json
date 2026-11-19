@@ -31,32 +31,32 @@
     "archives.html": {
       "url": "/archives",
       "partials": {
-        "title": "Archives - {{{title}}}",
-        "description": "All the entries posted on {{{title}}}"
+        "title": "Archives - {{title}}",
+        "description": "All the entries posted on {{title}}"
       }
     },
     "entries.html": {
       "partials": {
-        "title": "{{{title}}} - {{subtitle}}",
-        "description": "The latest entries posted on {{{title}}}"
+        "title": "{{title}} - {{subtitle}}",
+        "description": "The latest entries posted on {{title}}"
       }
     },
     "error.html": {
       "partials": {
-        "title": "{{{error.title}}} - {{{title}}}",
-        "description": "Error on {{{title}}}"
+        "title": "{{error.title}} - {{title}}",
+        "description": "Error on {{title}}"
       }
     },
     "entry.html": {
       "partials": {
-        "title": "{{{entry.title}}} - {{{title}}}",
-        "description": "{{{entry.summary}}}"
+        "title": "{{entry.title}} - {{title}}",
+        "description": "{{entry.summary}}"
       }
     },
     "search.html": {
       "partials": {
-        "title": "Search - {{{title}}}",
-        "description": "Search all the entries posted on {{{title}}}"
+        "title": "Search - {{title}}",
+        "description": "Search all the entries posted on {{title}}"
       }
     }
   }

@@ -46,7 +46,7 @@ function itemURL(blogID, path, stat) {
 
   if (!cdnable) return encodeFolderPath(path);
 
-  return BLOT_CDN_TOKEN + "/folder/" + versionedFolderPath(blogID, path, stat);
+  return BLOT_CDN_TOKEN + versionedFolderPath(blogID, path, stat);
 }
 
 async function folder(req, res) {

@@ -1,8 +1,10 @@
 const ERROR = require("./error");
 const loadView = require("./load");
+const { absoluteURL } = require("./load/augment");
 const finalRender = require("./main");
 const retrieve = require("./retrieve");
 const listingViews = require("./listingViews");
+const { carryListPagination } = require("./retrieve/helpers/listPagination");
 const { getFullView } = require("../lib/models");
 
 const ensure = require("helper/ensure");
@@ -212,6 +214,8 @@ module.exports = function attachRenderView(req, res, _next) {
     const missingLocals = response[2];
     const viewType = response[3];
     const view = response[4];
+    // The view's URL patterns, which pagination URLs are built from
+    req.viewURLPatterns = response[6] || [];
     // Only an explicit false skips resolving backlinks, and not for
     // ?debug and ?json, which dump every local, backlinks included.
     req.usesBacklinks =
@@ -226,6 +230,16 @@ module.exports = function attachRenderView(req, res, _next) {
       .and(folderManifestUrl.locals(req, viewLocals))
       .and(folderManifestUrl.locals(req, req.template.locals))
       .and(blog.locals);
+
+    // Menu items get an absoluteURL like entries do. blogURL depends on the
+    // host the request arrived on, so it is set per request, on copies.
+    if (Array.isArray(res.locals.menu)) {
+      res.locals.menu = res.locals.menu.map((item) =>
+        typeof item.url === "string" && item.url[0] === "/"
+          ? { ...item, absoluteURL: absoluteURL(blog.locals.blogURL, item.url) }
+          : item
+      );
+    }
 
     // Templates may configure sorting as nested `sort: { by, direction }`.
     // Expose the resolved selection as flat sort_by / sort_order so views
@@ -247,6 +261,8 @@ module.exports = function attachRenderView(req, res, _next) {
 
     const foundLocals = await retrieve(req, res, missingLocals);
     extend(res.locals).and(foundLocals);
+    // extend rebuilds arrays, dropping posts.pagination
+    carryListPagination(res.locals, foundLocals);
     listingViews.aliasLocals(name, req, res, foundLocals);
 
     try {

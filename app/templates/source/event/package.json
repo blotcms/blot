@@ -36,22 +36,22 @@
      "archives.html": {
       "url": "/archives",
       "partials": {
-        "title": "Archives - {{{title}}}"
+        "title": "Archives - {{title}}"
       }
     },
     "error.html": {
       "partials": {
-        "title": "{{{error.title}}} - {{{title}}}"
+        "title": "{{error.title}} - {{title}}"
       }
     },
     "entry.html": {
       "partials": {
-        "title": "{{{entry.title}}}"
+        "title": "{{entry.title}}"
       }
     },
     "entries.html": {
       "partials": {
-        "title": "{{{title}}}"
+        "title": "{{title}}"
       }
     }
   }

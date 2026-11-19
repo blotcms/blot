@@ -142,6 +142,16 @@ async function runPostListenTasks() {
     logError("Failed to start scheduler", err);
   }
 
+  // Blogs named like a demo folder follow it: settings from its config.js and
+  // files through the Local client. Before the clients start, so they're on it.
+  try {
+    if (!config.preview && config.environment === "development") {
+      await require("./templates/folders/local").start();
+    }
+  } catch (err) {
+    logError("Failed to sync demo folder blogs", err);
+  }
+
   try {
     if (!config.preview) {
       const clients = Object.values(require("clients"));

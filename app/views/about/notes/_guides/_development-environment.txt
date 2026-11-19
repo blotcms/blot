@@ -27,7 +27,7 @@ nvm use "$(sed -n 's/^NODE_VERSION=//p' config/versions.env)"
 npm install
 ```
 
-Export [environment variables](/config/environment.sh) needed by Blot:
+Export [environment variables](/config/secrets.env.example) needed by Blot:
 
 ```sh
 export BLOT_HOST=blot.development

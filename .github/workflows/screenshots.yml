@@ -33,6 +33,10 @@ concurrency:
   group: screenshots-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Least privilege by default; the screenshot job widens it below.
+permissions:
+  contents: read
+
 jobs:
   # Figures out which template previews a pull request touched, so the
   # screenshot job below only re-renders those previews instead of every
@@ -136,6 +140,12 @@ jobs:
         (needs.detect-templates.result == 'success' &&
           needs.detect-templates.outputs.templates != ''))
     runs-on: macos-latest
+
+    # contents: write for the GITHUB_TOKEN fallback that pushes the commit,
+    # actions: write for `gh cache delete` when rebuilding the demo blogs.
+    permissions:
+      contents: write
+      actions: write
 
     env:
       # How many screenshots to take at once. A tuning knob for the runner

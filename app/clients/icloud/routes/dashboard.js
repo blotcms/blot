@@ -75,7 +75,7 @@ dashboard
     if (warning) {
       return res.message(
         req.baseUrl,
-        "Disconnected from iCloud. Remote cleanup will retry in the background."
+        "Disconnected from iCloud. Blot's copy of the folder on its Mac will be removed within a day."
       );
     }
 

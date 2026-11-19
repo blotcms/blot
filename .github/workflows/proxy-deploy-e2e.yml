@@ -57,6 +57,12 @@ concurrency:
   group: proxy-deploy-e2e-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+# Read-only token: these jobs only build and test, and pull the proxy
+# image cache from ghcr.io.
+permissions:
+  contents: read
+  packages: read
+
 jobs:
   # The stand-in unit is the real proxy image plus a stub in place of the app
   # (proxy/deploy/e2e/unit): building and booting the real unit image is

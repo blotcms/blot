@@ -209,6 +209,11 @@ describe("resolveFolderLinks", function () {
     });
 
     it("skips values already baked with the CDN token", function () {
+      const input = '<img src="%%BLOT_CDN%%/blog_1/folder/v-abcd1234/a.png">';
+      expect(html(input)).toBe(input);
+    });
+
+    it("skips values already baked with the CDN token before #2695", function () {
       const input = '<img src="%%BLOT_CDN%%/folder/v-abcd1234/blog_1/a.png">';
       expect(html(input)).toBe(input);
     });

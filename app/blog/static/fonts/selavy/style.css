@@ -5,8 +5,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/selavy/400.woff2?version=087635&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/selavy/400.woff?version=125856&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.325em}
-.push-double{margin-right:0.325em}
-.pull-single{margin-left:-0.208em}
-.push-single{margin-right:0.208em}
+.pull-double {margin-left:-0.342em}
+.push-double{margin-right:0.342em}
+.pull-single{margin-left:-0.225em}
+.push-single{margin-right:0.225em}
 .push-double,.push-single{display:inline-block}

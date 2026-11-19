@@ -1,6 +1,6 @@
 const path = require("path");
-const alphanum = require("helper/alphanum");
 const folder = require("storage/folder");
+const fileKey = require("models/file/key");
 const Stat = require("./stat");
 const Entry = require("models/entry");
 const pathNormalize = require("helper/pathNormalizer");
@@ -76,37 +76,19 @@ function resolveOrder(order) {
   return order === "desc" ? "desc" : "asc";
 }
 
-// The server is now the sole authority on row order (directory.html no
-// longer re-sorts on load), so order names here the way a file browser
-// does: natural, case-insensitive alphanumeric — "file2" before "file10",
-// "1 copy 2.txt" before "1 copy 10.txt". The same comparator decides page
-// boundaries and the tie-break for date / size sorts, so a name never lands
-// on a different page than the one that then renders it.
-function byDisplayName(a, b) {
-  return alphanum.compare(String(a).trim(), String(b).trim(), {
-    insensitive: true,
-  });
+// The server is the sole authority on row order (directory.html doesn't
+// re-sort), and the folder index keeps every directory in the order a file
+// browser shows: natural, case-insensitive, "file2" before "file10" (see
+// models/file's README). The same order breaks ties in the date / size
+// sorts, so a name never lands on a different page than the one that then
+// renders it.
+function byListingOrder(a, b) {
+  return fileKey.compareSorted(fileKey.sortMember(a), fileKey.sortMember(b));
 }
 
-// Dotfiles and previews are not shown, and the rest is in display order:
-// folders above files, as Finder lists them
+// Dotfiles and previews are not shown; a listing gives the rest in order
 function visible(entries) {
-  return entries
-    .filter(
-      (item) =>
-        !item.name.startsWith(".") && !item.name.endsWith(".preview.html")
-    )
-    .sort(
-      (a, b) =>
-        !!b.isDirectory - !!a.isDirectory || byDisplayName(a.name, b.name)
-    );
-}
-
-// Z to A by name, keeping folders above files
-function reverseNames(entries) {
-  const folders = entries.filter((entry) => entry.isDirectory);
-  const files = entries.filter((entry) => !entry.isDirectory);
-  return folders.reverse().concat(files.reverse());
+  return entries.filter((item) => !fileKey.hiddenEverywhere(item.name));
 }
 
 // entry is a listing's entry or a stat of storage/folder, which both carry
@@ -273,17 +255,34 @@ async function getContents(blog, dir, options = {}) {
   let hasNext;
 
   if (sort === "name") {
-    // A listing carries each entry's size and modified time, so the page is
-    // built from it without a second read per file
-    const entries = visible(await folder.listAll(blog.id, dir));
-    const ordered = descending ? reverseNames(entries) : entries;
-    total = ordered.length;
-    page = clampPage(options.page, total, pageSize);
-    startIndex = (page - 1) * pageSize;
+    // One page by position from the folder index: a count, a range and the
+    // page's records, which carry each entry's stat, however large the
+    // folder. A page past the end is clamped to the last page and read again.
+    const read = (number) =>
+      folder.listPage(blog.id, dir, {
+        offset: (number - 1) * pageSize,
+        limit: pageSize,
+        order,
+      });
 
-    pageStats = ordered
-      .slice(startIndex, startIndex + pageSize)
-      .map((entry) => statEntry(blog, dir, entry.name, entry));
+    page = Math.max(parseInt(options.page, 10) || 1, 1);
+
+    let listed = await read(page);
+
+    total = listed.total;
+
+    const last = clampPage(page, total, pageSize);
+
+    if (last !== page) {
+      page = last;
+      listed = await read(page);
+      total = listed.total;
+    }
+
+    startIndex = (page - 1) * pageSize;
+    pageStats = listed.entries.map((entry) =>
+      statEntry(blog, dir, entry.name, entry)
+    );
     hasNext = startIndex + pageSize < total;
   } else {
     // Date / size sort: needs a stat for every entry, so sweep (and cache)
@@ -294,7 +293,7 @@ async function getContents(blog, dir, options = {}) {
     allStats.sort((a, b) => {
       const av = a[key] || 0;
       const bv = b[key] || 0;
-      if (av === bv) return byDisplayName(a.name, b.name);
+      if (av === bv) return byListingOrder(a.name, b.name);
       return descending ? bv - av : av - bv;
     });
 

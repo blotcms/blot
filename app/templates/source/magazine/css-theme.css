@@ -453,6 +453,17 @@ figure cite, figure cite a {font-size:0.8rem;color:rgba({{#rgb}}{{text_color}}{{
   width: 100%;
 }
 
+/* Trim the space above the first line so a title's top edge is the top
+   of its capitals, level with the thumbnail beside it */
+.cap-trim {
+  text-box: trim-start cap alphabetic;
+}
+
+/* Level with the top of the first entry (its mt3 plus pv4) */
+.nav .site-title {
+  margin-top: 3rem;
+}
+
 /* Let the configured body line height reach the article body, which
    Tachyons' .lh-copy would otherwise pin to 1.5 */
 .entry .lh-copy {
@@ -514,6 +525,7 @@ h3.f6 {line-height:1.25;}
   .entry-line .w-third,    
   .featured-entry .w-third {width:100%}
   .entry-line .ml3,
+  .entry-line .ml4,
   .entry-line .mr4 {
     margin-left:0;
     margin-right:0;

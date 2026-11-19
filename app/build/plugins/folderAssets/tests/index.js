@@ -9,9 +9,11 @@ describe("folderAssets plugin", function () {
 
   var buildEntry = (blog, path) => build(blog, path);
 
+  var escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
   var tokenRegex = (path) =>
     new RegExp(
-      `${BLOT_CDN_TOKEN.replace(/%/g, "\\%")}/folder/v-[a-f0-9]{8}/[^"]*${path}`
+      `${escapeRegex(BLOT_CDN_TOKEN)}/[^/"]+/folder/v-[a-f0-9]{8}[^"]*${path}`
     );
 
   it("bakes a relative folder link into a %%BLOT_CDN%%-prefixed, versioned URL at build time", async function () {
@@ -24,6 +26,67 @@ describe("folderAssets plugin", function () {
     var entry = await buildEntry(this.blog, path);
 
     expect(entry.html).toMatch(tokenRegex("/photo\\.jpg"));
+  });
+
+  describe("in an image's EXIF ImageDescription", function () {
+    // Its description is "[Original](original.zip), ![Detail](detail.jpg),
+    // [Missing](missing.pdf) and [Elsewhere](https://example.com)"
+    var image = require("path").join(
+      __dirname,
+      "../../../converters/img/tests/descriptions/relative.jpg"
+    );
+
+    beforeEach(async function () {
+      await folder.writeFrom(this.blog.id, "/photos/Sunset.jpg", image);
+      await folder.write(this.blog.id, "/photos/original.zip", "zip data");
+      await folder.write(this.blog.id, "/photos/detail.jpg", "fake image data");
+    });
+
+    it("resolves relative links against the image's folder and bakes them", async function () {
+      var entry = await buildEntry(this.blog, "/photos/Sunset.jpg");
+      var description = entry.exif.ImageDescription;
+
+      expect(description).toMatch(tokenRegex("/photos/original\\.zip"));
+      expect(description).toMatch(tokenRegex("/photos/detail\\.jpg"));
+      expect(description).toContain('alt="Detail"');
+      expect(description).toContain('href="/photos/missing.pdf"');
+      expect(description).toContain('href="https://example.com"');
+
+      expect(entry.dependencies).toContain("/photos/original.zip");
+      expect(entry.dependencies).toContain("/photos/detail.jpg");
+    });
+
+    it("bakes a new version when a linked file changes", async function () {
+      var first = await buildEntry(this.blog, "/photos/Sunset.jpg");
+
+      await folder.write(this.blog.id, "/photos/detail.jpg", "new image data");
+
+      var second = await buildEntry(this.blog, "/photos/Sunset.jpg");
+
+      expect(second.exif.ImageDescription).toMatch(
+        tokenRegex("/photos/detail\\.jpg")
+      );
+      expect(second.exif.ImageDescription).not.toEqual(
+        first.exif.ImageDescription
+      );
+    });
+
+    it("leaves a description without links as it was", async function () {
+      await folder.writeFrom(
+        this.blog.id,
+        "/photos/Plain.jpg",
+        require("path").join(
+          __dirname,
+          "../../../converters/img/tests/descriptions/described.jpg"
+        )
+      );
+
+      var entry = await buildEntry(this.blog, "/photos/Plain.jpg");
+
+      expect(entry.exif.ImageDescription).toEqual(
+        'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a><br>IMG_2041_final_v2'
+      );
+    });
   });
 
   it("leaves non-matching/ENOENT links untouched", async function () {
@@ -141,7 +204,7 @@ describe("folderAssets plugin", function () {
       var entry = await buildEntry(blog, "/Hello.txt");
 
       expect(entry.html).toContain(
-        `${BLOT_CDN_TOKEN}/folder/v-${expected}/${blog.id}/photo.jpg`
+        `${BLOT_CDN_TOKEN}/${blog.id}/folder/v-${expected}/photo.jpg`
       );
     });
   });
@@ -164,13 +227,17 @@ describe("folderAssets plugin", function () {
 
     var entry = await buildEntry(blog, "/Hello.txt");
 
-    var links = entry.html.match(/\/folder\/v-[a-f0-9]{8}\/[^"]*/g);
+    var links = entry.html.match(/\/[^/"]+\/folder\/v-[a-f0-9]{8}\/[^"]*/g);
 
     expect(links.length).toEqual(3);
-    expect(links[0]).toMatch(new RegExp("/" + blog.id + "/pics/a\\.png$"));
+    expect(links[0]).toMatch(
+      new RegExp("^/" + blog.id + "/folder/v-[a-f0-9]{8}/pics/a\\.png$")
+    );
     // Which of the two folders is first in the directory's listing
     expect(links[1]).toMatch(/\/(Pics|pics)\/a\.png$/);
-    expect(links[2]).toMatch(new RegExp("/" + blog.id + "/pics/b\\.png$"));
+    expect(links[2]).toMatch(
+      new RegExp("^/" + blog.id + "/folder/v-[a-f0-9]{8}/pics/b\\.png$")
+    );
     expect(entry.dependencies).toContain("/pics/b.png");
   });
 
@@ -185,7 +252,14 @@ describe("folderAssets plugin", function () {
 
     var entry = await buildEntry(this.blog, path);
 
-    expect(entry.html).toContain(`src="${BLOT_CDN_TOKEN}/icons/search.svg"`);
+    var version = require("blog/lib/staticVersion").staticVersion(
+      "/icons/search.svg"
+    );
+
+    expect(entry.html).toContain(
+      `src="${BLOT_CDN_TOKEN}/icons/search.svg?version=${version}"`
+    );
+    // A link with a query of its own keeps it as written
     expect(entry.html).toContain(
       `src="${BLOT_CDN_TOKEN}/icons/search.svg?v=2#a"`
     );
@@ -241,7 +315,7 @@ describe("folderAssets plugin", function () {
 
     expect(entry.html).toMatch(
       new RegExp(
-        `poster="${BLOT_CDN_TOKEN}/folder/v-[a-f0-9]{8}/[^"]*/poster\\.jpg"`
+        `poster="${BLOT_CDN_TOKEN}/[^/"]+/folder/v-[a-f0-9]{8}[^"]*/poster\\.jpg"`
       )
     );
     expect(entry.html).toMatch(
@@ -328,7 +402,7 @@ describe("folderAssets plugin", function () {
     var entry = await buildEntry(this.blog, path);
 
     expect(entry.html).toContain(
-      `src="${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}/Photo.JPG"`
+      `src="${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-pending/Photo.JPG"`
     );
     expect(entry.dependencies).toContain("/Photo.JPG");
   });
@@ -336,7 +410,7 @@ describe("folderAssets plugin", function () {
   it("bakes a missing image in src, poster and srcset as a pending CDN URL", async function () {
     var path = "/posts/Hello.txt";
     var pending = (file) =>
-      `${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}${file}`;
+      `${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-pending${file}`;
     var contents =
       '<video poster="still.png"></video>\n\n' +
       '<img src="/a%20b.jpg?w=1#top" loading="lazy" srcset="/here.jpg 1x, /gone.webp 2x">';
@@ -511,6 +585,29 @@ describe("folderAssets plugin", function () {
   it("re-bakes an already-baked encoded srcset, keeping a missing file's path encoded", async function () {
     var path = "/Hello.txt";
     var baked = (file) =>
+      `${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-deadbeef${file}`;
+    var contents = `<img srcset="${baked("/my%20pic.jpg")} 2x, ${baked("/gone%20pic.jpg")} 1x">`;
+
+    await folder.write(this.blog.id, path, contents);
+    await folder.write(this.blog.id, "/my pic.jpg", "small");
+
+    var entry = await buildEntry(this.blog, path);
+
+    expect(entry.html).toMatch(
+      new RegExp(
+        'srcset="' +
+          tokenRegex("/my%20pic\\.jpg 2x").source +
+          ", " +
+          `${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-pending/gone%20pic\\.jpg 1x"`
+      )
+    );
+    expect(entry.html).not.toContain("v-deadbeef");
+    expect(entry.dependencies).toContain("/my pic.jpg");
+    expect(entry.dependencies).toContain("/gone pic.jpg");
+  });
+  it("re-bakes an already-baked encoded srcset, keeping a missing file's path encoded (baked before #2695)", async function () {
+    var path = "/Hello.txt";
+    var baked = (file) =>
       `${BLOT_CDN_TOKEN}/folder/v-deadbeef/${this.blog.id}${file}`;
     var contents = `<img srcset="${baked("/my%20pic.jpg")} 2x, ${baked("/gone%20pic.jpg")} 1x">`;
 
@@ -524,7 +621,7 @@ describe("folderAssets plugin", function () {
         'srcset="' +
           tokenRegex("/my%20pic\\.jpg 2x").source +
           ", " +
-          `${BLOT_CDN_TOKEN}/folder/v-pending/${this.blog.id}/gone%20pic\\.jpg 1x"`
+          `${BLOT_CDN_TOKEN}/${this.blog.id}/folder/v-pending/gone%20pic\\.jpg 1x"`
       )
     );
     expect(entry.html).not.toContain("v-deadbeef");

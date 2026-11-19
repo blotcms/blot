@@ -170,7 +170,7 @@ describe("tags work on sites", function () {
     expect(lowerParsed.titles).toEqual(["mixed two", "mixed one"]);
   });
 
-  it("returns an empty list for unknown tags", async function () {
+  it("renders tagged.html with a 404 for unknown tags", async function () {
     await this.template({
       "tagged.html": "Total: {{total}}\n{{#entries}}{{title}}\n{{/entries}}",
     });
@@ -178,7 +178,7 @@ describe("tags work on sites", function () {
     const res = await this.get(`/tagged/does-not-exist`);
     const lines = (await res.text()).trim().split(/\n+/).filter(Boolean);
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
     expect(lines[0]).toBe("Total: 0");
     expect(lines.length).toBe(1);
   });
@@ -196,7 +196,7 @@ describe("tags work on sites", function () {
     const res = await this.get(`/tagged/multi%2520word`);
     const lines = (await res.text()).trim().split(/\n+/).filter(Boolean);
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(404);
     expect(lines[0]).toBe("Total: 0");
     expect(lines.length).toBe(1);
   });
@@ -313,21 +313,9 @@ describe("tags work on sites", function () {
       "page one",
     ]);
 
-    // fetch page beyond total pages
+    // a page beyond the last is a 404, like any unknown URL
     const resPage3 = await this.get(`/tagged/paginated/page/3`);
-    expect(resPage3.status).toBe(200);
-    const textPage3 = await resPage3.text();
-    const parsedPage3 = JSON.parse(textPage3);
-
-    expect(parsedPage3).toEqual(
-      jasmine.objectContaining({
-        current: 3,
-        total: 2,
-        previous: "2",
-        next: "",
-      })
-    );
-    expect(parsedPage3.entries).toEqual([]);
+    expect(resPage3.status).toBe(404);
   });
 
   it("prefers tagged_page_size over default template page size", async function () {

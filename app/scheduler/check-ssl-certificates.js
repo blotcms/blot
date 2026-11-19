@@ -31,6 +31,10 @@ const WILDCARD_WARNING_DAYS = 21;
 // day of the five day grace period.
 const SYSTEMIC_COUNT = 20;
 
+// lua-resty-auto-ssl stores a domain's certificate at ssl:<domain>:latest.
+// Nothing in proxy/ names its other keys for a domain, so only :latest is
+// ever deleted here, and only once the certificate has expired.
+
 // Certificates are ~7KB each, so read them a batch at a time.
 const BATCH_SIZE = 50;
 
@@ -88,6 +92,7 @@ async function checkCustomerCerts({ now, client, getBlog }) {
   const keys = await scanCertKeys(client);
   const flagged = [];
   const errors = [];
+  const expired = [];
 
   for (let i = 0; i < keys.length; i += BATCH_SIZE) {
     const batch = keys.slice(i, i + BATCH_SIZE);
@@ -96,11 +101,18 @@ async function checkCustomerCerts({ now, client, getBlog }) {
     batch.forEach((key, j) => {
       const domain = key.slice("ssl:".length, -":latest".length);
 
-      // Subdomains of Blot use the wildcard certificate
-      if (!values[j] || domain.endsWith("." + config.host)) return;
+      if (!values[j]) return;
+
+      // Subdomains of Blot use the wildcard certificate: never renewed or
+      // flagged, only deleted once expired
+      const wildcardCovered = domain.endsWith("." + config.host);
 
       try {
         const expires = expiryOf(values[j]);
+
+        if (expires < now) expired.push({ domain, key, wildcardCovered });
+        if (wildcardCovered) return;
+
         const daysLeft = daysUntil(expires, now);
         if (daysLeft < FLAGGED_DAYS)
           flagged.push({ domain, daysLeft, expires });
@@ -110,8 +122,20 @@ async function checkCustomerCerts({ now, client, getBlog }) {
     });
   }
 
-  // auto-ssl only renews domains with a domain:<d> key, so a certificate
-  // without one is expected to age out
+  // auto-ssl only renews domains with a domain:<d> key, and deletes an
+  // expired certificate only when it tries to renew it, so one whose domain
+  // is gone (or which the wildcard covers) stays in Redis for ever. Delete
+  // those once expired; never an unexpired certificate.
+  let deleted = 0;
+
+  for (const cert of expired) {
+    if (!cert.wildcardCovered && (await client.get("domain:" + cert.domain)))
+      continue;
+
+    await client.del(cert.key);
+    deleted++;
+  }
+
   const certs = [];
   let flaggedCount = 0;
 
@@ -133,7 +157,7 @@ async function checkCustomerCerts({ now, client, getBlog }) {
 
   certs.sort((a, b) => a.daysLeft - b.daysLeft);
 
-  return { certs, errors, flaggedCount, scanned: keys.length };
+  return { certs, errors, flaggedCount, scanned: keys.length, deleted };
 }
 
 async function checkWildcard({ now, client }) {
@@ -236,6 +260,7 @@ async function run(deps = {}) {
 module.exports = run;
 module.exports.check = check;
 module.exports.view = view;
+module.exports.expiryOf = expiryOf;
 
 if (require.main === module) {
   check()

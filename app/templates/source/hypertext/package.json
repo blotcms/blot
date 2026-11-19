@@ -46,10 +46,20 @@
   },
   "views": {
     "archives.html": {
-      "url": "/archives"
+      "url": "/archives",
+      "partials": {
+        "title": "Archives - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "Every post on {{title}}{{^title}}{{handle}}{{/title}}",
+        "page_meta": "<link rel=\"canonical\" href=\"{{{siteURL}}}/archives\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/archives\">"
+      }
     },
     "search.html": {
-      "url": "/search"
+      "url": "/search",
+      "partials": {
+        "title": "Search - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "Search the posts on {{title}}{{^title}}{{handle}}{{/title}}",
+        "page_meta": "<meta name=\"robots\" content=\"noindex\">"
+      }
     },
     "pagination.html": {
       "url": "/pagination/:page",
@@ -59,26 +69,29 @@
     },
     "tagged.html": {
       "partials": {
-        "title": "{{{tag}}} - {{{title}}}",
-        "description": "All entries tagged {{{tag}}} on {{{title}}}"
+        "title": "{{tag}}{{#pagination.previous}} - Page {{pagination.current}}{{/pagination.previous}} - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "All entries tagged {{tag}} on {{title}}{{^title}}{{handle}}{{/title}}",
+        "page_meta": "<link rel=\"canonical\" href=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">"
       }
     },
     "entries.html": {
       "partials": {
-        "title": "{{{title}}}",
-        "description": "Latest posts on {{{title}}}"
+        "title": "{{#pagination.previous}}Page {{pagination.current}} - {{/pagination.previous}}{{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "Latest posts on {{title}}{{^title}}{{handle}}{{/title}}",
+        "page_meta": "<link rel=\"canonical\" href=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">"
       }
     },
     "entry.html": {
       "partials": {
-        "title": "{{{entry.title}}} - {{{title}}}",
-        "description": "{{{entry.title}}} - {{{title}}}"
+        "title": "{{entry.title}} - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "{{entry.title}} - {{title}}{{^title}}{{handle}}{{/title}}"
       }
     },
     "error.html": {
       "partials": {
-        "title": "{{error.title}} - {{{title}}}",
-        "description": "{{error.message}}"
+        "title": "{{error.title}} - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "{{error.message}}",
+        "page_meta": "<meta name=\"robots\" content=\"noindex\">"
       }
     }
   }

@@ -50,7 +50,9 @@ The maintainer always squash merges. A branch's own commits never reach `master`
 
 # Local preview
 
-`https://local.blot` serves the main checkout, not agent worktrees. To show the maintainer a worktree's running code, use the `preview` skill (`scripts/development/preview.sh up <url-or-path>`) rather than asking them to check out the branch.
+`https://blot.localhost` serves the main checkout, not agent worktrees. To show the maintainer a worktree's running code, use the `preview` skill (`scripts/development/preview.sh up <url-or-path>`) rather than asking them to check out the branch.
+
+Open local pages (`blot.localhost`, its blog subdomains, `cdn.blot.localhost` and the `a-` to `e-blot.localhost` preview slots) in the built-in browser pane (`mcp__Claude_Browser__*`), not Claude in Chrome, even if the app's preferred browser is Chrome. If the pane blocks a page's stylesheets, scripts or images, tell the maintainer rather than switching to Chrome.
 
 # Redis
 

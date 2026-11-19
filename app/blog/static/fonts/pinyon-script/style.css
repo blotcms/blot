@@ -5,8 +5,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/pinyon-script/400.woff2?version=a18ea1&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/pinyon-script/400.woff?version=e7294f&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.359375em}
-.push-double{margin-right:0.359375em}
-.pull-single{margin-left:-0.1845703125em}
-.push-single{margin-right:0.1845703125em}
+.pull-double {margin-left:-0.3203125em}
+.push-double{margin-right:0.3203125em}
+.pull-single{margin-left:-0.16162109375em}
+.push-single{margin-right:0.16162109375em}
 .push-double,.push-single{display:inline-block}

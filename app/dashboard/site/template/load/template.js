@@ -85,13 +85,11 @@ module.exports = async function (req, res, next) {
     };
 
     hydrated.owner = hydrated.owner || req.blog.id;
-    hydrated.slug =
-      hydrated.id.split(":").slice(1).join(":") ||
-      req.params.templateSlug ||
-      slug ||
-      "";
+    // Never fall back to the raw URL parameter: it is decoded and
+    // unsanitised, and the slug ends up unescaped in page attributes
+    hydrated.slug = hydrated.id.split(":").slice(1).join(":") || slug || "";
 
-    const nameSource = hydrated.slug || req.params.templateSlug || "";
+    const nameSource = hydrated.slug;
 
     if (!hydrated.name) {
       hydrated.name = nameSource
@@ -119,9 +117,11 @@ module.exports = async function (req, res, next) {
 
     req.template = res.locals.template = hydrated;
 
-    // The slug as it was in the URL, encoded again: Express decodes params,
-    // and pages print base unescaped in links ({{{base}}})
-    res.locals.base = `${req.protocol}://${req.hostname}${req.baseUrl}/${encodeURIComponent(req.params.templateSlug)}`;
+    // Relative, and built from the encoded slug: the Host header and the
+    // decoded param both end up unescaped in attributes ({{{base}}})
+    res.locals.base = `${req.baseUrl}/${encodeURIComponent(
+      req.params.templateSlug
+    )}`;
     // used to filter messages sent from the iframe which contains a preview of the
     // template in the template editor, such that we only save the pages which are
     // part of the template.

@@ -1,73 +1,603 @@
 {{{app_js}}}
 
+{{> motion}}
+{{> drag}}
+{{> pager}}
+{{> zoom}}
+{{> dismiss}}
+
 (() => {
   const view = document.body.dataset.view;
+  const root = document.documentElement;
+  const mod = (value, length) => ((value % length) + length) % length;
+
+  // ---- Images fade in once decoded: the rail's slides and the grid's cells, wherever they
+  // are and however late they arrive. One already loaded when the script runs shows at once.
+
+  const FADING_IMAGES = ".item img, .cell img";
+
+  function revealImages(images) {
+    for (const img of images) {
+      if (img?.complete && img.naturalWidth > 0) img.classList.add("is-loaded");
+    }
+  }
+
+  // `load` fires before a large image is decoded, so fading from there would spend the fade
+  // on an image that isn't painting yet.
+  document.addEventListener(
+    "load",
+    (event) => {
+      const img = event.target;
+      if (!img.matches?.(FADING_IMAGES) || img.classList.contains("is-loaded")) return;
+      // Never left invisible: if decoding stalls, it shows anyway.
+      const stall = new Promise((resolve) => setTimeout(resolve, 300));
+      Promise.race([img.decode().catch(() => {}), stall]).then(() => img.classList.add("is-loaded"));
+    },
+    true
+  );
+  // A broken image shows rather than staying invisible.
+  document.addEventListener(
+    "error",
+    (event) => {
+      if (event.target.matches?.(FADING_IMAGES)) event.target.classList.add("is-loaded");
+    },
+    true
+  );
+  revealImages(document.querySelectorAll(FADING_IMAGES));
+
+  // ---- Keep the collection an entry was opened from so its arrows stay within it ----
+  // The chronological next/previous hrefs are only ever replaced once we know better.
+
+  const COLLECTION_KEY = "keynoteCollection";
+  const DEPTH_KEY = "keynoteCollectionDepth";
+  const cacheID = "{{cacheID}}";
+  let closeURL = null;
+  let closeDepth = 0;
+  let followingCollection = false; // this entry page was reached through a listing's order
+  let collectionPlace = null; // the entry's place in that listing, for the viewer's counter
+  let entryLinksChanged = () => {};
+
+  function pathOf(url) {
+    try {
+      const parsed = new URL(url, location.href);
+      return parsed.origin === location.origin ? parsed.pathname.replace(/\/+$/, "") || "/" : null;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  // Close by walking back through the history entries pushed since the listing,
+  // so the browser restores the listing exactly as it was left.
+  function closeEntry() {
+    if (closeDepth && closeDepth < history.length) history.go(-closeDepth);
+    else location.href = closeURL || "/";
+  }
+
+  // Each entry page remembers how many history entries sit between it and the
+  // listing. A page opened from the listing is one deep, and one reached with an
+  // arrow is one deeper than the page it was left from. The depth is handed over
+  // through sessionStorage, and kept in history.state so back, forward and
+  // reload see the same value.
+  function handOverDepth(link, depth) {
+    try {
+      sessionStorage.setItem(DEPTH_KEY, JSON.stringify({ path: pathOf(link.href), depth }));
+    } catch (error) { /* storage can be unavailable */ }
+  }
+
+  function takeDepth() {
+    const saved = history.state?.closeDepth;
+    if (saved) return saved;
+    try {
+      const handed = JSON.parse(sessionStorage.getItem(DEPTH_KEY));
+      sessionStorage.removeItem(DEPTH_KEY);
+      return handed && handed.path === pathOf(location.href) ? handed.depth : 0;
+    } catch (error) {
+      return 0;
+    }
+  }
+
+  function parseListing(doc, url) {
+    const entries = [];
+    for (const link of doc.querySelectorAll("a.collection-entry")) {
+      const path = pathOf(link.href);
+      if (path && !entries.includes(path)) entries.push(path);
+    }
+    if (!entries.length) return null;
+    const pagination = (selector) => {
+      const link = doc.querySelector(selector);
+      return link?.getAttribute("href") ? link.href : null;
+    };
+    const next = pagination("a.collection-next");
+    const previous = pagination("a.collection-previous");
+    // Where the listing starts among all its posts, and how many there are, from the grid's
+    // pagination. A listing with no pages (search) is the whole collection.
+    const grid = doc.querySelector("[data-grid]");
+    const pageNumber = Number(grid?.dataset.page) || 1;
+    const pageSize = Number(grid?.dataset.pageSize) || 0;
+    const total = Number(grid?.dataset.entries) || (!next && !previous ? entries.length : 0);
+    return {
+      url: url.split("#")[0],
+      entries,
+      next,
+      previous,
+      offset: pageSize ? (pageNumber - 1) * pageSize : 0,
+      total,
+    };
+  }
+
+  function readCollection() {
+    try {
+      return JSON.parse(sessionStorage.getItem(COLLECTION_KEY));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeCollection(state) {
+    try {
+      sessionStorage.setItem(COLLECTION_KEY, JSON.stringify(state));
+    } catch (error) { /* storage can be unavailable */ }
+  }
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.("a.entry-next, a.entry-previous");
+    if (link && closeDepth) handOverDepth(link, closeDepth + 1);
+  }, true);
+
+  // Record the order shown by the listing before following one of its entries.
+  document.addEventListener("click", (event) => {
+    const entryLink = event.target.closest?.("a.collection-entry");
+    if (!entryLink) return;
+    handOverDepth(entryLink, 1);
+    const listing = parseListing(document, location.href);
+    if (listing) writeCollection({ cacheID, listings: [listing] });
+  }, true);
+
+  document.addEventListener("click", (event) => {
+    const link = event.target.closest?.("a.entry-close");
+    if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    closeEntry();
+  });
+
+  async function loadListing(url) {
+    const response = await fetch(url, { credentials: "same-origin", cache: "no-cache" });
+    if (!response.ok) throw new Error("Could not load collection page");
+    return parseListing(new DOMParser().parseFromString(await response.text(), "text/html"), response.url);
+  }
+
+  // Follow a listing's pagination links, up to hops pages, until it has the entry.
+  async function findEntry(url, path, direction, hops) {
+    const listing = await loadListing(url);
+    if (!listing || listing.entries.includes(path)) return listing;
+    return hops && listing[direction] ? findEntry(listing[direction], path, direction, hops - 1) : null;
+  }
+
+  function initializeCollectionNavigation() {
+    const state = readCollection();
+    // Only trust the collection when arriving from elsewhere on this site. A reload keeps the
+    // referrer and session storage, but starts afresh on the rail: following the listing would
+    // turn each step into a page load.
+    const reloaded = performance.getEntriesByType?.("navigation")[0]?.type === "reload";
+    if (!state || !pathOf(document.referrer) || reloaded) return;
+
+    closeDepth = takeDepth();
+    // Only a page reached from the listing, or by stepping through it, follows its order. Any
+    // other link (a hover card, a link in a post) arrives with no depth: following the stored
+    // order there would turn every step into a page load.
+    if (!closeDepth) return;
+    history.replaceState({ ...history.state, closeDepth }, "");
+    // Without script, or from elsewhere, the link goes home and says so; here it goes back.
+    for (const link of document.querySelectorAll("a.entry-close")) link.textContent = "Back";
+
+    const path = pathOf(location.href);
+    let page = -1;
+    let index = -1;
+    for (let n = 0; n < state.listings.length && index < 0; n += 1) {
+      page = n;
+      index = state.listings[n].entries.indexOf(path);
+    }
+    if (index < 0) return;
+
+    // A publish changes cacheID and can push the entry onto a later page (or
+    // pull it earlier), so find it in the current listing before using the order.
+    if (state.cacheID !== cacheID) {
+      const { url, previous } = state.listings[page];
+      findEntry(url, path, "next", 3)
+        .then((found) => found || (previous && findEntry(previous, path, "previous", 1)))
+        .then((found) => {
+          if (!found) return;
+          const fresh = { cacheID, listings: [found] };
+          writeCollection(fresh);
+          followCollection(fresh, 0, found.entries.indexOf(path));
+        }, () => {});
+      return;
+    }
+    followCollection(state, page, index);
+  }
+
+  function followCollection(state, page, index) {
+    followingCollection = true;
+    const listing = state.listings[page];
+    collectionPlace = listing.total ? { index: (listing.offset || 0) + index + 1, total: listing.total } : null;
+    entryLinksChanged();
+    closeURL = listing.url;
+    for (const link of document.querySelectorAll("a.entry-close")) {
+      link.href = closeURL;
+      link.textContent = "Back";
+    }
+
+    const edge = (loaded, step) => loaded.entries[step > 0 ? 0 : loaded.entries.length - 1];
+
+    // Resolves to the neighbour's path, null at the end of the collection, and
+    // rejects when unsure (so the chronological link stays).
+    async function neighbor(direction) {
+      // entry.next is the newer entry, so it sits earlier in the listing; the
+      // listing's own "next" page is the older one.
+      const step = direction === "next" ? -1 : 1;
+      const pageLink = listing[direction === "next" ? "previous" : "next"];
+      if (listing.entries[index + step]) return listing.entries[index + step];
+
+      const loaded = state.listings[page + step];
+      if (loaded) return edge(loaded, step);
+      // No link means the last page. Search is a single page of the model's
+      // capped results, which are the whole collection.
+      if (!pageLink) return null;
+
+      const fetched = await loadListing(pageLink);
+      if (!fetched) throw new Error("No entries on collection page");
+      if (step > 0) state.listings.push(fetched);
+      else state.listings.unshift(fetched);
+      writeCollection(state);
+      return edge(fetched, step);
+    }
+
+    for (const [selector, direction] of [["a.entry-previous", "previous"], ["a.entry-next", "next"]]) {
+      const links = document.querySelectorAll(selector);
+      if (!links.length) continue;
+      neighbor(direction).then((target) => {
+        for (const link of links) {
+          if (target) {
+            link.href = location.origin + target;
+          } else {
+            link.removeAttribute("href");
+            link.setAttribute("aria-disabled", "true");
+          }
+        }
+        entryLinksChanged();
+      }, () => {});
+    }
+  }
+
+  if (view === "entry") initializeCollectionNavigation();
+
+  // Left is the newer entry and right the older one, as on the rail.
+  function followEntryKey(event) {
+    if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+    if (event.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
+    const selector = { ArrowLeft: "a.entry-next", ArrowRight: "a.entry-previous" }[event.key];
+    const link = selector && document.querySelector(selector);
+    if (link?.href) link.click();
+  }
+
+  for (const link of document.querySelectorAll(view === "search" ? "#header .nav a.active" : "#header .nav a.active, .tag-navigation a.active")) {
+    link.setAttribute("aria-current", "page");
+  }
+  if (view === "home") document.getElementById("title")?.setAttribute("aria-current", "page");
+
+  // ---- Tag filters: a row that ends in a button opening the full list, remembered across pages ----
+
+  const tagNavigation = document.querySelector(".tag-navigation");
+  const tagToggle = tagNavigation?.querySelector(".tag-toggle");
+  if (tagToggle) {
+    const TAGS_KEY = "keynoteTagsExpanded";
+    const tagList = tagNavigation.querySelector("ul");
+    const toggleItem = tagToggle.closest("li");
+    const toolbar = tagNavigation.closest(".list-toolbar");
+    const searchForm = toolbar?.querySelector(".search-form");
+    const pills = [...tagList.children].filter((item) => item !== toggleItem);
+    const expanded = () => root.classList.contains("tags-expanded");
+    const syncTags = () => {
+      for (const item of pills) item.classList.remove("is-overflow");
+      toggleItem.hidden = true;
+      const gap = parseFloat(getComputedStyle(tagList).columnGap) || 0;
+      const widths = pills.map((item) => item.offsetWidth);
+      const total = widths.reduce((sum, width) => sum + width, 0) + gap * (pills.length - 1);
+      // Squeeze the search box when the tags wouldn't fit beside it at its full width. Judged
+      // against that full width either way, so the decision doesn't flip once it is made.
+      if (searchForm) {
+        const fullSearch = 12 * parseFloat(getComputedStyle(searchForm).fontSize);
+        const fullRow = tagList.clientWidth + searchForm.offsetWidth - fullSearch;
+        toolbar.classList.toggle("tags-long", total > fullRow);
+      }
+      const available = tagList.clientWidth;
+      if (total > available) {
+        toggleItem.hidden = false;
+        if (!expanded()) {
+          // Keep whole pills that fit before the button; hide the rest.
+          const room = available - toggleItem.offsetWidth - gap;
+          let used = 0;
+          pills.forEach((item, index) => {
+            const width = widths[index] + (index ? gap : 0);
+            if (used + width > room) {
+              item.classList.add("is-overflow");
+              used = Infinity;
+            } else {
+              used += width;
+            }
+          });
+        }
+      }
+      tagToggle.setAttribute("aria-expanded", String(expanded()));
+    };
+    tagToggle.addEventListener("click", () => {
+      root.classList.toggle("tags-expanded");
+      try {
+        localStorage.setItem(TAGS_KEY, expanded() ? "1" : "0");
+      } catch (error) { /* storage can be unavailable */ }
+      syncTags();
+    });
+    new ResizeObserver(syncTags).observe(tagNavigation);
+    syncTags();
+  }
+
   const lightbox = document.querySelector(".lightbox");
   if (!lightbox) return;
 
-  const root = document.documentElement;
+  // The strip kept for the page's scrollbar, which the page is padded by while the viewer
+  // is open. It can only be measured while the strip is there.
+  const measureScrollbar = () => {
+    if (root.classList.contains("is-viewing") || root.classList.contains("is-deep-open")) return;
+    root.style.setProperty("--scrollbar-width", `${Math.max(0, innerWidth - root.getBoundingClientRect().width)}px`);
+  };
+  measureScrollbar();
+  window.addEventListener("resize", measureScrollbar);
+
   const lightboxFrame = lightbox.querySelector(".lightbox-frame");
   const lightboxImage = lightbox.querySelector(".lightbox-image");
   const closeButton = lightbox.querySelector(".lightbox-close");
   const previousButton = lightbox.querySelector(".lightbox-previous");
   const nextButton = lightbox.querySelector(".lightbox-next");
+  // The caption over the image, and its copy at the top of the details gutter.
+  const captionTitles = lightbox.querySelectorAll(".lightbox-title");
+  const captionIndexes = lightbox.querySelectorAll(".lightbox-index");
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
   const SWIPE_THRESHOLD = 56;
   const WHEEL_GAP = 150; // ms of quiet that ends a wheel gesture
   const CONTEXT_KEY = "keynoteContext";
 
-  const mod = (value, length) => ((value % length) + length) % length;
   const isLoaded = (image) => image.complete && image.naturalWidth > 0;
   const absolute = (url) => new URL(url, document.baseURI).href;
 
+  // The address bar and the tab title follow the entry in the viewer.
+  const siteName = document.querySelector('meta[property="og:site_name"]')?.content || document.title;
+  let restingTitle = view === "entry" ? siteName : document.title;
+  const titleFor = (entry) => (entry.title ? `${entry.title} - ${siteName}` : siteName);
+
   // ---- Entries: one per image link, read from the page ----
 
+  // The post's HTML rides along escaped in an attribute rather than in a <template>, whose
+  // images some browsers' preload scanners fetch: a page of full-size originals nobody sees.
+  // It is parsed into an inert fragment only when wanted.
+  function entryHTML(link) {
+    const template = document.createElement("template");
+    template.innerHTML = link.dataset.html || "";
+    return template.content;
+  }
+
   function readEntry(link) {
-    const html = link.querySelector("template.entry-html")?.content;
+    const html = entryHTML(link);
     const original = html?.querySelector("img");
     const width = Number(link.dataset.width) || 1;
     const height = Number(link.dataset.height) || 1;
     return {
       link,
       href: new URL(link.getAttribute("href"), document.baseURI).pathname,
-      title: link.getAttribute("aria-label") || "",
-      alt: original?.getAttribute("alt") || link.getAttribute("aria-label") || "",
+      title: link.dataset.title || "",
+      alt: original?.getAttribute("alt") || link.dataset.title || "",
+      date: link.dataset.date || "",
       preview: link.dataset.preview,
       full: original?.getAttribute("src") ? absolute(original.getAttribute("src")) : link.dataset.preview,
       width,
       height,
       fullWidth: Number(original?.getAttribute("width")) || width,
+      // The post's place among all posts, counting up from the oldest.
+      index: Number(link.dataset.index) || 0,
     };
   }
 
+  // Remembers the last few full-size images decoded, so stepping back and forth is instant
+  // without holding on to every image seen.
+  const LOADED_LIMIT = 6;
   const loadedImages = new Map();
   function preloadImage(url) {
-    if (!loadedImages.has(url)) {
+    let ready = loadedImages.get(url);
+    if (ready) {
+      loadedImages.delete(url);
+    } else {
       const image = new Image();
       image.src = url;
-      loadedImages.set(url, image.decode().then(() => true, () => false));
+      ready = image.decode().then(() => true, () => false);
     }
-    return loadedImages.get(url);
+    loadedImages.set(url, ready);
+    while (loadedImages.size > LOADED_LIMIT) loadedImages.delete(loadedImages.keys().next().value);
+    return ready;
   }
 
   // ---- The viewer: one lightbox for whichever collection is on the page ----
 
   let controller = null; // the rail or the grid that supplies entries
+  // The copy of the image that flies between the page and the viewer.
+  const flyer = createFlyer(lightbox);
+  // Set once the link preview card exists. The card follows a link under the pointer, but the
+  // viewer can swap that link out (a step, a close) without the pointer moving: no pointerout.
+  let hideLinkCard = () => {};
   let activeIndex = 0;
   let imageToken = 0;
   let opening = false;
-  let closeAfterOpen = false;
   let closing = false;
   let closePending = false;
-  let lightboxGesture = null;
+  let closedByScript = false;
+  let leavingAddress = false; // a history move or navigation away is under way
+  let stepping = false;
   let suppressLightboxClickUntil = 0;
   let wheelLockUntil = 0;
 
   const lightboxBusy = () => opening || closing || closePending;
   const viewerActive = () => lightbox.open || lightboxBusy();
 
-  function setActive(index) {
+  // An entry from outside the rail (an older entry's own page) steps with its page links.
+  const entryLink = (direction) => document.querySelector(direction > 0 ? "a.entry-previous" : "a.entry-next");
+
+  // The viewer steps with the entry page's own links (rather than through the rail) for an
+  // entry from outside the rail, and for an entry page reached through a listing, whose links
+  // follow that listing's order. Once the viewer is reopened from the rail, the rail leads.
+  const stepsByEntryLinks = (entry) =>
+    Boolean(entry?.detached) || (followingCollection && view === "entry" && history.state?.keynote === "open" && !history.state.pushed);
+
+  entryLinksChanged = () => {
+    const entry = controller?.entries()[activeIndex];
+    if (!lightbox.open || !stepsByEntryLinks(entry)) return;
+    previousButton.disabled = !entryLink(-1)?.href;
+    nextButton.disabled = !entryLink(1)?.href;
+    updateCaption();
+  };
+
+  // ---- Paging: the image on show and its neighbours sit side by side on a pager (see createPager).
+  // Swipes follow the finger and flick on to the next or previous entry; arrows and keys glide.
+  // The pager runs in virtual positions around BASE, so the entries can grow (the rail loads pages
+  // while the viewer is open) without it noticing: `anchor` says which entry sits at BASE.
+  const PAGE_GAP = 40; // px between images while paging
+  const BASE = 1e6;
+  const pages = [lightboxImage.cloneNode(), lightboxImage, lightboxImage.cloneNode()];
+  for (const page of [pages[0], pages[2]]) {
+    page.classList.add("lightbox-neighbour");
+    page.setAttribute("aria-hidden", "true");
+    page.alt = "";
+  }
+  lightboxImage.before(pages[0]);
+  lightboxImage.after(pages[2]);
+  let anchor = { v: BASE, entry: null };
+  let syncing = false;
+
+  const pitch = () => lightboxFrame.clientWidth + PAGE_GAP;
+  const paging = createPager({ count: 2 * BASE, pitch, onPosition: onPage });
+
+  // The entries that can be paged through: the ones on the rail's ring, not one from outside it.
+  function ring() {
+    const list = controller.entries();
+    const indexes = [];
+    list.forEach((entry, index) => {
+      if (!entry.detached) indexes.push(index);
+    });
+    return indexes.length ? indexes : list.map((entry, index) => index);
+  }
+
+  // The index of the entry at virtual position v, or -1 where there is none (past either end).
+  function indexAt(v) {
+    const places = ring();
+    const base = places.indexOf(controller.entries().indexOf(anchor.entry));
+    if (base < 0) return -1;
+    const place = base + (v - anchor.v);
+    if (controller.wrap) return places[mod(place, places.length)];
+    return place >= 0 && place < places.length ? places[place] : -1;
+  }
+
+  // Paging needs neighbours on hand: not for an entry reached through a listing's page links, which
+  // steps by loading the next page, nor for one from outside the rail.
+  function pagingActive() {
+    const entry = controller?.entries()[activeIndex];
+    return Boolean(lightbox.open && entry && !entry.detached && !stepsByEntryLinks(entry) && ring().length > 1);
+  }
+
+  function showPage(image, index) {
+    if (image.dataset.index === String(index)) return;
+    const entry = controller.entries()[index];
+    const source = controller.sourceImage(index);
+    image.dataset.index = index;
+    image.style.setProperty("--image-ratio", entry.width / entry.height);
+    image.style.setProperty("--image-width", `${entry.fullWidth}px`);
+    image.width = entry.width;
+    image.height = entry.height;
+    image.src = source && isLoaded(source) && source.currentSrc ? source.currentSrc : entry.preview;
+  }
+
+  function renderPages() {
+    const base = Math.round(paging.position);
+    pages.forEach((image, slot) => {
+      const index = indexAt(base + slot - 1);
+      if (slot !== 1) {
+        image.style.display = index < 0 ? "none" : "";
+        if (index < 0) return;
+        showPage(image, index);
+      }
+      const offset = base + slot - 1 - paging.position;
+      image.style.translate = offset === 0 ? "" : `${offset * pitch()}px`;
+    });
+  }
+
+  function onPage() {
+    if (!syncing && lightbox.open) {
+      const index = indexAt(Math.round(paging.position));
+      if (index >= 0 && index !== activeIndex) {
+        setActive(index, { fromPager: true });
+        replaceAddress();
+      }
+    }
+    renderPages();
+  }
+
+  // Put the pager at rest on the active entry (after the viewer opens or jumps to another entry).
+  function syncPager() {
+    anchor = { v: BASE, entry: controller.entries()[activeIndex] };
+    syncing = true;
+    paging.set(BASE);
+    syncing = false;
+    for (const image of pages) delete image.dataset.index;
+    renderPages();
+  }
+
+  // Swipe the image sideways: it follows the pointer and a flick moves on one entry at most. The
+  // swipe is measured from where the drag began, so passing the threshold doesn't jump. Where
+  // paging isn't on offer a long enough swipe steps (to the entry's next page).
+  let swipeOrigin = 0;
+  let swipeOriginV = 0;
+  let swipeAborted = false;
+  const swipe = drag(lightboxFrame, {
+    canStart: (event) => event.isPrimary && lightbox.open && !lightboxBusy() && !zoomed(),
+    onPress() {
+      swipeAborted = false;
+      paging.grab();
+      swipeOriginV = Math.round(paging.position);
+    },
+    onStart: ({ event }) => (swipeOrigin = event.clientX),
+    onMove({ event }) {
+      if (swipeAborted || !pagingActive()) return;
+      const distance = event.clientX - swipeOrigin;
+      // Past either end there is nothing to page to: the image stretches and springs back.
+      const missing = indexAt(swipeOriginV + (distance < 0 ? 1 : -1)) < 0;
+      paging.move(missing ? Math.sign(distance) * rubberBand(Math.abs(distance), pitch()) : distance);
+    },
+    onEnd({ dx, dy, velocity }) {
+      suppressLightboxClickUntil = performance.now() + 350;
+      if (swipeAborted) {
+        paging.settle();
+        return;
+      }
+      if (!pagingActive()) {
+        if (Math.abs(dx) >= SWIPE_THRESHOLD && Math.abs(dx) > Math.abs(dy)) void step(dx < 0 ? 1 : -1);
+        return;
+      }
+      if (indexAt(paging.release(velocity.x)) < 0) paging.goTo(swipeOriginV);
+    },
+    // A press that stopped a page turn without swiping finishes it.
+    onRelease() {
+      if (paging.position !== Math.round(paging.position)) paging.settle();
+    },
+  });
+
+  function setActive(index, { fromPager = false } = {}) {
     resetZoom();
     const entries = controller.entries();
     activeIndex = controller.wrap ? mod(index, entries.length) : Math.min(entries.length - 1, Math.max(0, index));
@@ -80,11 +610,206 @@
     const source = controller.sourceImage(activeIndex);
     lightboxImage.src = source && isLoaded(source) && source.currentSrc ? source.currentSrc : entry.preview;
     lightboxImage.alt = entry.alt;
-    previousButton.disabled = !controller.wrap && activeIndex === 0;
-    nextButton.disabled = !controller.wrap && activeIndex === entries.length - 1 && !controller.hasMore?.();
+    // Until a new image that isn't cached arrives, the browser keeps painting the old one. Hide
+    // it instead, and fade the new one in once it's here.
+    const pending = !lightboxImage.complete;
+    lightboxImage.classList.toggle("is-pending", pending);
+    if (pending) {
+      const shown = () => {
+        if (token === imageToken) lightboxImage.classList.remove("is-pending");
+      };
+      lightboxImage.addEventListener("load", shown, { once: true });
+      lightboxImage.addEventListener("error", shown, { once: true });
+    }
+    if (stepsByEntryLinks(entry)) {
+      previousButton.disabled = !entryLink(-1)?.href;
+      nextButton.disabled = !entryLink(1)?.href;
+    } else {
+      previousButton.disabled = !controller.wrap && activeIndex === 0;
+      nextButton.disabled = !controller.wrap && activeIndex === entries.length - 1 && !controller.hasMore?.();
+    }
     if (activeIndex >= entries.length - 4) controller.loadMore?.();
+    controller.prefetch?.(activeIndex);
+    updateCaption();
+    announce(entry);
+    fillInfo(entry);
 
     upgradeChain(entry, token);
+    if (!fromPager) syncPager();
+  }
+
+  // The title, then its place among the posts as "5 of 52", worked out from each post's index and
+  // the page's post count, so nothing extra has to load.
+  // Reached through a listing, the arrows follow it, and so does the counter.
+  const placeOf = (entry) => (stepsByEntryLinks(entry) && collectionPlace ? collectionPlace : controller.position?.(activeIndex));
+
+  function updateCaption() {
+    const entry = controller?.entries()[activeIndex];
+    if (!entry || !captionTitles.length) return;
+    for (const title of captionTitles) title.textContent = entry.title;
+    const place = placeOf(entry);
+    const index = place ? `${place.index} of ${place.total}` : "";
+    for (const node of captionIndexes) node.textContent = index;
+  }
+
+  // Screen readers hear each image once, as "Title, 5 of 52", whether or not captions show.
+  const announcer = lightbox.querySelector(".lightbox-announce");
+  function announce(entry) {
+    if (!announcer) return;
+    const place = placeOf(entry);
+    announcer.textContent = place ? `${entry.title}, ${place.index} of ${place.total}` : entry.title;
+  }
+
+  // ---- Post details: an Info button shows the post's text, then its date, tags and the photo's EXIF ----
+
+  const infoButton = lightbox.querySelector(".lightbox-info-button");
+  const infoPanel = lightbox.querySelector(".lightbox-info");
+  const infoBody = infoPanel?.querySelector(".lightbox-info-body");
+  const infoDetails = infoPanel?.querySelector(".lightbox-info-details");
+  const infoDescription = infoPanel?.querySelector(".lightbox-info-description");
+  const infoTags = infoPanel?.querySelector(".lightbox-info-tags");
+  const infoLink = infoPanel?.querySelector(".lightbox-info-link");
+  // One setting for every image, kept between visits: open, the details fill a gutter on the
+  // right of each image in turn, until it's closed again.
+  const INFO_KEY = "keynote:info";
+  // The "always show post details" setting keeps the gutter open, with no button to close it.
+  const infoAlways = {{#always_show_post_details}}true{{/always_show_post_details}}{{^always_show_post_details}}false{{/always_show_post_details}};
+  let infoWanted = infoAlways;
+  if (!infoAlways) {
+    try {
+      infoWanted = localStorage.getItem(INFO_KEY) === "1";
+    } catch {}
+  }
+
+  function setInfo(open) {
+    infoWanted = open;
+    try {
+      localStorage.setItem(INFO_KEY, open ? "1" : "0");
+    } catch {}
+    showInfo();
+  }
+
+  function showInfo() {
+    if (!infoPanel) return;
+    infoPanel.hidden = !infoWanted;
+    lightbox.classList.toggle("has-info", infoWanted);
+    root.classList.toggle("info-open", infoWanted);
+    infoButton.setAttribute("aria-expanded", String(infoWanted));
+    placeIndex();
+  }
+
+  // The index sits on the Info button's line, below the details. While there is more of the
+  // details still to scroll to, it moves down by as much, so it follows their end and the text
+  // never runs behind it. The details scroll in their own column, or on a phone the whole
+  // viewer scrolls.
+  const infoIndex = lightbox.querySelector(".lightbox-info-index");
+  const infoScroll = infoPanel?.querySelector(".lightbox-info-scroll");
+  const leftToScroll = (element) => Math.max(0, element.scrollHeight - element.scrollTop - element.clientHeight);
+  function placeIndex() {
+    if (!infoIndex || !infoScroll || infoPanel.hidden) return;
+    const viewerScrolls = getComputedStyle(lightbox).overflowY === "auto";
+    const push = leftToScroll(infoScroll) + (viewerScrolls ? leftToScroll(lightbox) : 0);
+    infoIndex.style.setProperty("--index-push", `${Math.round(push)}px`);
+  }
+  if (infoScroll) {
+    infoScroll.addEventListener("scroll", placeIndex, { passive: true });
+    lightbox.addEventListener("scroll", placeIndex, { passive: true });
+    // The details change size as images in the text load, and with the window.
+    const resized = new ResizeObserver(placeIndex);
+    resized.observe(infoScroll);
+    for (const child of infoScroll.children) resized.observe(child);
+  }
+
+  function fillInfo(entry) {
+    hideLinkCard();
+    lightbox.scrollTop = 0; // each post starts with its image in full view
+    if (!infoPanel) return;
+    const body = entry.link.dataset.html ? entryHTML(entry.link) : null;
+    // A bookmark's screenshot is on screen; its link becomes a button to the site.
+    const bookmark = body?.querySelector("a.bookmark[href]");
+    const bookmarkURL = bookmark ? safeURL(bookmark.getAttribute("href")) : null;
+    if (bookmark) (bookmark.closest(".bookmark-container") || bookmark).remove();
+    infoLink?.replaceChildren(...(bookmarkURL ? [bookmarkButton(bookmarkURL)] : []));
+    // A folder post joins several files, each in its own section.
+    const folderPost = body?.querySelector(".multi-file-post");
+    const pictureCount = body ? body.querySelectorAll("img").length : 0;
+    if (body) {
+      for (const script of body.querySelectorAll("script")) script.remove();
+      // The picture is already on screen, and so is the title: leave both out, with
+      // anything that only held them. The picture's caption goes with it, and so does a
+      // folder post's whole section for that file.
+      const picture = bookmark ? null : body.querySelector("img");
+      const caption = picture?.nextElementSibling?.matches(".caption") ? picture.nextElementSibling : null;
+      const section = picture?.closest(".multi-file-entry");
+      const heading = [...body.querySelectorAll("h1, h2, h3, p, .caption")].find((node) => node.textContent.trim() === entry.title);
+      for (const node of [section || picture, caption, heading]) {
+        let target = node;
+        while (target?.parentNode && target.parentNode !== body && target.parentNode.childElementCount === 1 && !target.parentNode.textContent.trim()) target = target.parentNode;
+        target?.remove();
+      }
+    }
+    const hasText = Boolean(body && (body.textContent.trim() || body.querySelector("img, video, audio, iframe")));
+    infoBody.replaceChildren(...(hasText ? [body] : []));
+    const details = entry.link.querySelector("template.entry-details")?.content.cloneNode(true);
+    // The photo's camera, lens and exposure, as a card.
+    const exif = details?.querySelector(".entry-exif");
+    const camera = exif?.querySelector(".entry-camera");
+    if (camera) {
+      // Most cameras repeat the make in the model ("Canon" and "Canon EOS R5"), so show it once.
+      const make = camera.querySelector(".entry-camera-make");
+      const model = camera.querySelector(".entry-camera-model");
+      if (make && model && model.textContent.trim().toLowerCase().startsWith(make.textContent.trim().toLowerCase())) make.remove();
+      if (!camera.textContent.trim()) camera.remove();
+    }
+    const exposure = exif?.querySelector(".entry-exposure");
+    if (exposure && !exposure.querySelector("li")) exposure.remove();
+    // A folder post of several photos merges their details, so the description and camera
+    // card would belong to its last photo, not the one on screen: leave them out.
+    const mixedPhotos = Boolean(folderPost) && pictureCount > 1;
+    const hasExif = !mixedPhotos && Boolean(exif?.querySelector("p, li"));
+    // The photo's own description reads as prose under the title.
+    const description = mixedPhotos ? null : details?.querySelector(".entry-description");
+    infoDescription?.replaceChildren(...(description ? [description] : []));
+    // The tags go straight under the title, like the rail's caption.
+    const tags = details?.querySelector(".entry-tags");
+    infoTags?.replaceChildren(...(tags ? [tags] : []));
+    // Then the date, and the camera card at the foot.
+    const parts = [details?.querySelector(".entry-date"), hasExif ? exif : null].filter(Boolean);
+    infoDetails.replaceChildren(...parts);
+    const hasDetails = parts.length > 0 || Boolean(description) || Boolean(tags) || Boolean(bookmarkURL);
+    // With the gutter open, the button stays to close it, even beside a post with no details.
+    infoButton.hidden = infoAlways || (!hasText && !hasDetails && !infoWanted);
+    showInfo();
+  }
+
+  // Only a web address may become the bookmark's button.
+  function safeURL(href) {
+    try {
+      const url = new URL(href, document.baseURI);
+      return url.protocol === "http:" || url.protocol === "https:" ? url : null;
+    } catch {
+      return null;
+    }
+  }
+
+  function bookmarkButton(url) {
+    const link = document.createElement("a");
+    link.className = "bookmark-button";
+    link.href = url.href;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = `Visit ${url.hostname.replace(/^www\./, "")}`;
+    link.insertAdjacentHTML("beforeend", '<svg aria-hidden="true" focusable="false" width="14" height="14" viewBox="0 0 24 24"><path d="M7 17 17 7M8 7h9v9" /></svg>');
+    return link;
+  }
+
+  infoButton?.addEventListener("click", () => setInfo(!infoWanted));
+
+  // The rail inserted `count` entries at `at`; keep the viewer on the same entry.
+  function entriesInserted(at, count, moved) {
+    if (moved && activeIndex === moved.from) activeIndex = moved.to;
+    else if (activeIndex >= at) activeIndex += count;
+    if (lightbox.open) updateCaption();
   }
 
   // Sharpen in steps: the large thumbnail, then the original. Each is fetched and decoded first
@@ -107,62 +832,62 @@
 
   function replaceAddress() {
     const entry = controller.entries()[activeIndex];
-    history.replaceState({ keynote: "open", pushed: Boolean(history.state?.pushed) }, "", entry.href);
+    history.replaceState({ ...history.state, keynote: "open" }, "", entry.href);
+    document.title = titleFor(entry);
   }
 
-  function step(direction) {
-    if (lightboxBusy()) return;
-    const entries = controller.entries();
-    const next = activeIndex + direction;
-    if (!controller.wrap && (next < 0 || next >= entries.length)) {
-      if (next >= entries.length) controller.loadMore?.();
+  async function step(direction) {
+    if (lightboxBusy() || stepping) return;
+    if (stepsByEntryLinks(controller.entries()[activeIndex])) {
+      const link = entryLink(direction);
+      if (link?.href) link.click();
       return;
+    }
+    const paged = pagingActive();
+    // Stepping goes on from where the last step is heading.
+    const from = paged ? indexAt(Math.round(paging.target)) : activeIndex;
+    stepping = true;
+    try {
+      // The rail loads the neighbouring page first when the step would cross into it.
+      for (let guard = 0; guard < 50 && (await controller.ensure?.(from, direction)); guard += 1);
+      if (!controller.wrap && from + direction >= controller.entries().length && controller.hasMore?.()) {
+        await controller.loadMore();
+      }
+    } catch (error) {
+      /* a page that fails to load leaves the step to the entries already here */
+    } finally {
+      stepping = false;
+    }
+    if (!lightbox.open || lightboxBusy()) return;
+    if (paged && pagingActive()) {
+      // The arrows and keys change the image at once; only swipes animate.
+      const next = Math.round(paging.target) + direction;
+      if (indexAt(next) >= 0) paging.set(next);
+      return;
+    }
+    const entries = controller.entries();
+    let next = activeIndex + direction;
+    if (!controller.wrap && (next < 0 || next >= entries.length)) return;
+    if (controller.wrap) {
+      next = mod(next, entries.length);
+      if (entries[next].detached && entries.length > 1) next = mod(next + direction, entries.length);
     }
     setActive(next);
     replaceAddress();
   }
 
-  function startSwipe(event) {
-    if (!lightbox.open || lightboxBusy() || !event.isPrimary || event.button !== 0 || zoomed()) return;
-    lightboxGesture = { id: event.pointerId, startX: event.clientX, startY: event.clientY, moved: false };
-    lightboxFrame.setPointerCapture(event.pointerId);
-  }
-
-  function moveSwipe(event) {
-    if (!lightboxGesture || event.pointerId !== lightboxGesture.id) return;
-    const deltaX = event.clientX - lightboxGesture.startX;
-    const deltaY = event.clientY - lightboxGesture.startY;
-    if (Math.hypot(deltaX, deltaY) > 8) lightboxGesture.moved = true;
-  }
-
-  function finishSwipe(event) {
-    if (!lightboxGesture || event.pointerId !== lightboxGesture.id) return;
-    const gesture = lightboxGesture;
-    lightboxGesture = null;
-    if (gesture.moved) suppressLightboxClickUntil = performance.now() + 350;
-    if (event.type === "pointercancel" || lightboxBusy()) return;
-    const deltaX = event.clientX - gesture.startX;
-    const deltaY = event.clientY - gesture.startY;
-    if (Math.abs(deltaX) < SWIPE_THRESHOLD || Math.abs(deltaX) <= Math.abs(deltaY)) return;
-    step(deltaX < 0 ? 1 : -1);
-  }
-
   function reveal() {
     opening = false;
     lightbox.classList.remove("is-opening");
-    if (closeAfterOpen) {
-      closeAfterOpen = false;
-      void requestClose();
-      return;
-    }
-    lightbox.classList.add("is-revealed");
+    if (lightbox.open) lightbox.classList.add("is-revealed");
   }
 
   // `animate` zooms from the entry's image on the page; without it the viewer simply appears.
+  // A copy of the image flies between the page and the viewer on springs (see createFlyer), and
+  // reverses from wherever it is, keeping its speed, if the viewer is closed while it is opening.
   async function open(index, { animate = true } = {}) {
     if (viewerActive() || !controller) return;
     opening = true;
-    closeAfterOpen = false;
     controller.pause();
     resetZoom();
     setActive(index);
@@ -171,92 +896,93 @@
     if (source && isLoaded(source)) await lightboxImage.decode().catch(() => {});
 
     const show = () => {
-      source?.classList.remove("is-transitioning");
       controller.hideSource(activeIndex, true);
       lightbox.classList.remove("is-revealed", "is-closing");
       lightbox.classList.add("is-opening");
       lightbox.showModal();
       root.classList.add("is-viewing");
       lightboxFrame.focus({ preventScroll: true });
+      renderPages();
     };
 
-    if (!source || reducedMotion.matches || !document.startViewTransition) {
+    if (!source || reducedMotion.matches) {
+      // Appearing without the zoom (an entry's own page), the details and controls are there
+      // from the first frame rather than fading in after the image.
+      if (!animate) lightbox.classList.add("is-instant");
       show();
       reveal();
+      if (!animate) requestAnimationFrame(() => requestAnimationFrame(() => lightbox.classList.remove("is-instant")));
       return;
     }
-    root.classList.add("is-zooming");
-    source.classList.add("is-transitioning");
-    source.style.viewTransitionName = "active-image";
-    const transition = document.startViewTransition(() => {
-      source.style.removeProperty("view-transition-name");
-      show();
-    });
-    transition.ready.then(() => {
-      if (opening && lightbox.open && !closeAfterOpen) lightbox.classList.add("is-revealed");
-    }, () => {});
-    transition.finished.then(() => {
-      root.classList.remove("is-zooming");
-      reveal();
-    }, () => {
-      root.classList.remove("is-zooming");
-      reveal();
+    show();
+    // The backdrop and controls fade in while the image flies.
+    lightbox.classList.add("is-revealed");
+    flyer.open({
+      src: source.currentSrc || source.src,
+      from: rectOf(source),
+      to: rectOf(lightboxImage),
+      hide: lightboxImage,
+      done: reveal,
     });
   }
 
-  async function close({ animate = true } = {}) {
-    if (opening) {
-      closeAfterOpen = true;
-      return;
+  // Puts the page back as it was before the viewer opened. Safe to run more than once, so
+  // it also tidies up after the browser closes the dialog itself.
+  function cleanUpViewer() {
+    flyer.stop();
+    root.classList.remove("is-leaving", "is-viewing", "is-deep-open");
+    lightbox.classList.remove("is-closing", "is-opening", "is-revealed");
+    if (lightbox.open) {
+      closedByScript = true;
+      lightbox.close();
     }
+    resetZoom();
+    controller?.hideSource(activeIndex, false);
+    opening = false;
+    closing = false;
+    closePending = false;
+    paging.stop();
+    for (const image of pages) image.style.translate = "";
+    controller?.resume();
+    measureScrollbar();
+  }
+
+  async function close({ animate = true } = {}) {
+    // Closing while the viewer is still opening reverses the flight from where it is.
     if (!lightbox.open || closePending) return;
     closePending = true;
+    root.classList.remove("is-deep-open");
     // Bring the header back as the viewer starts to leave, not once it has gone.
     root.classList.add("is-leaving");
     // An image mostly still on screen zooms back to where it was; otherwise the page brings it in first.
     controller.settle(activeIndex);
     const source = animate ? controller.sourceImage(activeIndex) : null;
-    await Promise.all([source, lightboxImage].filter((image) => image && isLoaded(image)).map((image) => image.decode().catch(() => {})));
+    if (!flyer.active) {
+      await Promise.all([source, lightboxImage].filter((image) => image && isLoaded(image)).map((image) => image.decode().catch(() => {})));
+    }
     if (!lightbox.open) {
-      root.classList.remove("is-leaving");
-      closePending = false;
+      cleanUpViewer();
       return;
     }
 
-    const hide = () => {
-      controller.hideSource(activeIndex, false);
-      lightbox.classList.remove("is-revealed", "is-opening");
-      lightbox.classList.add("is-closing");
-    };
-    const finish = () => {
-      root.classList.remove("lightbox-transition-closing", "is-zooming", "is-leaving");
-      if (source) {
-        source.classList.remove("is-transitioning");
-        source.style.removeProperty("view-transition-name");
-      }
-      lightbox.classList.remove("is-closing", "is-opening", "is-revealed");
-      lightbox.close();
-      resetZoom();
-      root.classList.remove("is-viewing");
-      closing = false;
-      closePending = false;
-      controller.resume();
-    };
+    lightbox.classList.remove("is-revealed", "is-opening");
+    lightbox.classList.add("is-closing");
+    opening = false;
 
-    if (!source || reducedMotion.matches || !document.startViewTransition) {
-      hide();
-      finish();
+    if (!source || reducedMotion.matches) {
+      cleanUpViewer();
       return;
     }
     closing = true;
-    root.classList.add("is-zooming");
-    source.classList.add("is-transitioning");
-    const transition = document.startViewTransition(() => {
-      root.classList.add("lightbox-transition-closing");
-      source.style.viewTransitionName = "active-image";
-      hide();
+    paging.stop();
+    // Zoom out from wherever the image is now, mid-swipe, mid-pan or mid-drag included.
+    flyer.close({
+      src: lightboxImage.currentSrc || lightboxImage.src,
+      from: rectOf(source),
+      to: rectOf(lightboxImage),
+      hide: lightboxImage,
+      done: cleanUpViewer,
     });
-    transition.finished.then(finish, finish);
   }
 
   // ---- Address and history: opening pushes the entry's address, Back closes ----
@@ -280,24 +1006,50 @@
     rememberContext();
     const entry = controller.entries()[index];
     history.pushState({ keynote: "open", pushed: true }, "", entry.href);
+    document.title = titleFor(entry);
     void open(index);
   }
 
   // Close button, Escape, a click outside the image and so on.
   async function requestClose() {
     if (!lightbox.open && !opening) return;
+    if (leaveEntryAddress()) return;
+    await close();
+  }
+
+  // Moves the address from the entry back to where the viewer was opened from. Returns true
+  // when that is another history entry or page, which then closes the viewer itself.
+  function leaveEntryAddress() {
+    if (leavingAddress) return true;
     if (history.state?.keynote === "open" && history.state.pushed) {
+      leavingAddress = true;
       history.back(); // the popstate handler closes the viewer
-      return;
+      return true;
     }
+    // Reached through a listing's links: walk back to the listing as it was left.
+    if (closeDepth && closeDepth < history.length) {
+      leavingAddress = true;
+      history.go(-closeDepth);
+      return true;
+    }
+    // Reached through a listing without history to walk back through (say, a new tab): load it.
+    if (closeURL) {
+      leavingAddress = true;
+      window.location.href = closeURL;
+      return true;
+    }
+    // Elsewhere the viewer was opened over the page without moving the address.
+    if (view !== "entry") return false;
     // Opened directly (or after a reload): go back to the listing it came from, or to the rail.
     const target = directTarget();
     if (target.navigate) {
+      leavingAddress = true;
       window.location.href = target.url;
-      return;
+      return true;
     }
     history.replaceState(null, "", target.url);
-    await close();
+    document.title = restingTitle;
+    return false;
   }
 
   function directTarget() {
@@ -313,13 +1065,17 @@
   }
 
   window.addEventListener("popstate", (event) => {
+    leavingAddress = false;
+    if (!controller) return;
     const state = event.state;
     if (state?.keynote === "open") {
       const index = controller.entries().findIndex((entry) => entry.href === location.pathname);
+      if (index >= 0) document.title = titleFor(controller.entries()[index]);
       if (index >= 0 && !viewerActive()) void open(index);
       else if (index >= 0 && lightbox.open) setActive(index);
       return;
     }
+    document.title = restingTitle;
     if (lightbox.open || opening) void close();
   });
 
@@ -327,30 +1083,23 @@
 
   const MAX_ZOOM = 2;
   const ZOOM_STEP = 0.5;
-  const WHEEL_STEP_DISTANCE = 60; // wheel travel that counts as one zoom step
+  const WHEEL_ZOOM_RATE = Math.log(1.25) / 100; // a wheel notch, about 100px, zooms 25%
   const EXIT_PULL_LIMIT = 230; // wheel travel at 100% that closes the viewer
-  const PAN_FRICTION = 4.2;
-  const PAN_STIFFNESS = 420;
-  const PAN_DAMPING = 40;
   const zoomOutButton = lightbox.querySelector(".zoom-out");
   const zoomInButton = lightbox.querySelector(".zoom-in");
-  const zoomValue = lightbox.querySelector(".zoom-value");
 
   let zoomLevel = 1;
   let panX = 0;
   let panY = 0;
   let exitPull = 0;
   let exitTimer = 0;
-  let animateTimer = 0;
   let pulledClosed = false;
-  let wheelTotal = 0;
   let wheelStamp = 0;
-  let stepLockUntil = 0;
+  let wheelTrackpad = false; // whether the current wheel gesture is a trackpad's two-finger scroll
   let calmUntil = 0;
   let panDrag = null;
-  let panMotion = null;
-  let panFrame = 0;
   let pinch = null;
+  let dragDown = null;
   let lastTap = null;
   let lastDoubleTapAt = 0;
   const pointers = new Map();
@@ -367,35 +1116,68 @@
     };
   }
 
-  // How far the zoomed image may be moved: its edges stay on or beyond the screen's edges.
+  // The part of the screen the image has: all of it, less the details gutter while that's
+  // open, down the right or, on narrow screens, along the bottom.
+  function stageSize() {
+    let width = lightbox.clientWidth;
+    let height = lightbox.clientHeight;
+    if (infoPanel && !infoPanel.hidden) {
+      const panel = infoPanel.getBoundingClientRect();
+      if (panel.top > 1) height = Math.min(height, panel.top);
+      else width = Math.min(width, panel.left);
+    }
+    return { width, height };
+  }
+
+  // How far the zoomed image may be moved: its edges stay on or beyond the stage's edges.
   function panBounds(level = zoomLevel) {
     const center = baseCenter();
+    const stage = stageSize();
     const axis = (middle, size, view) => {
       const low = view - middle - size / 2;
       const high = size / 2 - middle;
       return low > high ? [view / 2 - middle, view / 2 - middle] : [low, high];
     };
-    const [lowX, highX] = axis(center.x, lightboxImage.offsetWidth * level, lightbox.clientWidth);
-    const [lowY, highY] = axis(center.y, lightboxImage.offsetHeight * level, lightbox.clientHeight);
+    const [lowX, highX] = axis(center.x, lightboxImage.offsetWidth * level, stage.width);
+    const [lowY, highY] = axis(center.y, lightboxImage.offsetHeight * level, stage.height);
     return { lowX, highX, lowY, highY };
+  }
+
+  // What is drawn lags what is asked for, on springs: a zoom step, the end of a pull or a drag
+  // glides to its new place, and a new target keeps the speed it has (see createValue). Drags
+  // and pinches set the drawn values straight away so the image follows the fingers.
+  const shownScale = createValue({ value: 1, precision: 0.0005, onUpdate: paintZoom });
+  const shownX = createValue({ precision: 0.25, onUpdate: paintZoom });
+  const shownY = createValue({ precision: 0.25, onUpdate: paintZoom });
+  let glideZoom = false;
+
+  function paintZoom() {
+    const moved = shownScale.value !== 1 || shownX.value || shownY.value;
+    lightboxImage.style.transform = moved ? `translate3d(${shownX.value}px, ${shownY.value}px, 0) scale(${shownScale.value})` : "";
+    // Larger than its place, the image has the whole screen: nothing else is clipped or shown.
+    lightbox.classList.toggle("is-scaled", shownScale.value > 1.001);
   }
 
   function renderZoom() {
     const pullScale = reducedMotion.matches ? 1 : 1 - pullAmount(exitPull) / 500;
-    const moved = zoomed() || panX || panY || pullScale !== 1;
-    lightboxImage.style.transform = moved ? `translate3d(${panX}px, ${panY}px, 0) scale(${zoomLevel * pullScale})` : "";
+    const scale = zoomLevel * pullScale;
+    const x = panX;
+    const y = panY;
+    for (const [value, target] of [[shownScale, scale], [shownX, x], [shownY, y]]) {
+      if (glideZoom) value.to(target, presets.zoomOpen);
+      else value.set(target);
+    }
+    glideZoom = false;
+    // Zoomed in, the image has the whole screen, so the details scrolled up out of the way come back.
+    if (zoomed() && lightbox.scrollTop) lightbox.scrollTop = 0;
     lightbox.classList.toggle("is-zoomed", zoomed());
-    zoomValue.value = `${Math.round(zoomLevel * 100)}%`;
     zoomOutButton.disabled = !zoomed();
     zoomInButton.disabled = zoomLevel >= MAX_ZOOM - 0.001;
   }
 
-  // Lets the next change to the image's transform glide instead of jump.
+  // Lets the next change to the image's size and place glide instead of jump.
   function animateZoom() {
-    if (reducedMotion.matches) return;
-    lightboxImage.classList.add("is-zoom-animating");
-    window.clearTimeout(animateTimer);
-    animateTimer = window.setTimeout(() => lightboxImage.classList.remove("is-zoom-animating"), 260);
+    glideZoom = true;
   }
 
   function clearPull() {
@@ -405,9 +1187,8 @@
   }
 
   function stopPan() {
-    if (panFrame) cancelAnimationFrame(panFrame);
-    panFrame = 0;
-    panMotion = null;
+    panCoastX.stop();
+    panCoastY.stop();
     panDrag = null;
     lightbox.classList.remove("is-panning");
   }
@@ -445,19 +1226,30 @@
   function resetZoom() {
     stopPan();
     clearPull();
-    window.clearTimeout(animateTimer);
-    lightboxImage.classList.remove("is-zoom-animating");
+    shownScale.stop();
+    shownX.stop();
+    shownY.stop();
+    glideZoom = false;
     zoomLevel = 1;
     panX = 0;
     panY = 0;
     pointers.clear();
     pinch = null;
-    wheelTotal = 0;
     pulledClosed = false;
+    dragDown = null;
+    if (dismiss.active) {
+      dismiss.stop();
+      flyer.stop();
+    }
+    lightbox.classList.remove("is-dragging-down");
+    lightbox.style.setProperty("--drag", "0");
     renderZoom();
   }
 
-  const screenCenter = () => ({ x: lightbox.clientWidth / 2, y: lightbox.clientHeight / 2 });
+  const screenCenter = () => {
+    const stage = stageSize();
+    return { x: stage.width / 2, y: stage.height / 2 };
+  };
 
   // Scrolling at 100% pulls the image smaller; far enough closes the viewer, otherwise it springs back.
   function pullToClose(distance) {
@@ -479,6 +1271,7 @@
   }
 
   function onLightboxWheel(event) {
+    if (event.target.closest?.(".lightbox-info")) return; // the post text scrolls
     wheelLockUntil = performance.now() + WHEEL_GAP;
     event.preventDefault();
     if (lightboxBusy() || pulledClosed) return;
@@ -492,36 +1285,40 @@
       setZoom(zoomLevel * Math.exp(-deltaY * 0.01), pivot, { animate: false });
       return;
     }
-    if (Math.abs(deltaY) <= Math.abs(deltaX)) return;
-    if (now - wheelStamp > 200) wheelTotal = 0;
-    wheelStamp = now;
-    wheelTotal += deltaY;
-    if (now < stepLockUntil) return;
-    if (wheelTotal >= WHEEL_STEP_DISTANCE) {
-      wheelTotal = 0;
-      stepLockUntil = now + 200;
-      setZoom(zoomLevel + ZOOM_STEP, pivot);
-    } else if (wheelTotal <= -WHEEL_STEP_DISTANCE && zoomed()) {
-      wheelTotal = 0;
-      stepLockUntil = now + 200;
-      setZoom(zoomLevel - ZOOM_STEP, pivot);
-    } else if (deltaY < 0 && !zoomed() && now > calmUntil) {
-      pullToClose(-deltaY);
+    // A trackpad's two-finger scroll and a mouse wheel send the same events. Within one
+    // gesture, any sideways movement, or a step that isn't a multiple of a wheel notch's
+    // 120, gives the trackpad away.
+    if (now - wheelStamp > 200) {
+      wheelTrackpad = false;
     }
+    wheelStamp = now;
+    if (!wheelTrackpad && event.deltaMode === 0) {
+      const notch = event.wheelDeltaY;
+      wheelTrackpad = event.deltaX !== 0 || (Boolean(notch) && notch % 120 !== 0);
+    }
+    // Zoomed in, the trackpad pans the image, as it would scroll a page.
+    if (wheelTrackpad && zoomed()) {
+      stopPan();
+      const bounds = panBounds();
+      panX = clampValue(panX - deltaX, bounds.lowX, bounds.highX);
+      panY = clampValue(panY - deltaY, bounds.lowY, bounds.highY);
+      renderZoom();
+      return;
+    }
+    if (Math.abs(deltaY) <= Math.abs(deltaX)) return;
+    if (deltaY < 0 && !zoomed()) {
+      if (now > calmUntil) pullToClose(-deltaY);
+      return;
+    }
+    // The wheel zooms continuously: a mouse's notches glide into each other, a trackpad's
+    // small steps follow the fingers.
+    setZoom(zoomLevel * Math.exp(deltaY * WHEEL_ZOOM_RATE), pivot, { animate: !wheelTrackpad });
   }
 
-  // Panning: drag the enlarged image; it coasts and stretches a little past its edges.
-  function elastic(value, low, high, span) {
-    if (value > high) {
-      const over = value - high;
-      return high + (span * over) / (over + span);
-    }
-    if (value < low) {
-      const over = low - value;
-      return low - (span * over) / (over + span);
-    }
-    return value;
-  }
+  // Panning: drag the enlarged image; it stretches past its edges, and on release coasts or springs back.
+  const panTracker = velocityTracker();
+  const panCoastX = createValue({ onUpdate: (value) => { panX = value; renderZoom(); } });
+  const panCoastY = createValue({ onUpdate: (value) => { panY = value; renderZoom(); } });
 
   function beginPan(event) {
     stopPan();
@@ -530,12 +1327,15 @@
       id: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
-      startPanX: panX,
-      startPanY: panY,
+      // A press on an image left stretched past an edge picks up the position it was pulled from.
+      startPanX: unband(panX, bounds.lowX, bounds.highX, lightbox.clientWidth),
+      startPanY: unband(panY, bounds.lowY, bounds.highY, lightbox.clientHeight),
       bounds,
       moved: false,
-      samples: [{ x: event.clientX, y: event.clientY, time: event.timeStamp }],
+      onImage: event.target === lightboxImage,
     };
+    panTracker.reset();
+    panTracker.add(event);
     lightbox.setPointerCapture(event.pointerId);
     lightbox.classList.add("is-panning");
     event.preventDefault();
@@ -543,84 +1343,40 @@
 
   function movePan(event) {
     const { bounds } = panDrag;
-    panDrag.samples.push({ x: event.clientX, y: event.clientY, time: event.timeStamp });
-    while (panDrag.samples.length > 2 && event.timeStamp - panDrag.samples[0].time > 100) panDrag.samples.shift();
+    panTracker.add(event);
     if (Math.hypot(event.clientX - panDrag.startX, event.clientY - panDrag.startY) > 5) panDrag.moved = true;
-    panX = elastic(panDrag.startPanX + event.clientX - panDrag.startX, bounds.lowX, bounds.highX, lightbox.clientWidth * 0.12);
-    panY = elastic(panDrag.startPanY + event.clientY - panDrag.startY, bounds.lowY, bounds.highY, lightbox.clientHeight * 0.12);
+    panX = band(panDrag.startPanX + event.clientX - panDrag.startX, bounds.lowX, bounds.highX, lightbox.clientWidth);
+    panY = band(panDrag.startPanY + event.clientY - panDrag.startY, bounds.lowY, bounds.highY, lightbox.clientHeight);
     renderZoom();
   }
 
-  function stepAxis(axis, dt) {
-    const edge = clampValue(axis.pos, axis.low, axis.high);
-    const out = axis.pos - edge;
-    if (out) axis.v += (-PAN_STIFFNESS * out - PAN_DAMPING * axis.v) * dt;
-    else axis.v *= Math.exp(-PAN_FRICTION * dt);
-    axis.pos += axis.v * dt;
-    const settled = clampValue(axis.pos, axis.low, axis.high);
-    if (out && axis.pos === settled) {
-      axis.pos = edge;
-      axis.v = 0;
-    } else if (axis.pos === settled) {
-      if (Math.abs(axis.v) < 2) axis.v = 0;
-    } else if (Math.abs(axis.pos - settled) < 0.3 && Math.abs(axis.v) < 8) {
-      axis.pos = settled;
-      axis.v = 0;
-    }
-    return axis.v !== 0 || axis.pos !== clampValue(axis.pos, axis.low, axis.high);
-  }
-
+  // Carry on from the release: coast to where the flick would stop, kept inside the edges, or if
+  // the image was left stretched past one, spring back to it.
   function startPanMotion(velocityX, velocityY) {
     const bounds = panBounds();
-    if (reducedMotion.matches) {
-      panX = clampValue(panX, bounds.lowX, bounds.highX);
-      panY = clampValue(panY, bounds.lowY, bounds.highY);
-      renderZoom();
-      return;
-    }
-    panMotion = {
-      x: { pos: panX, v: velocityX, low: bounds.lowX, high: bounds.highX },
-      y: { pos: panY, v: velocityY, low: bounds.lowY, high: bounds.highY },
+    const settle = (value, position, speed, low, high) => {
+      value.set(position, speed);
+      if (position < low || position > high) value.to(clampValue(position, low, high), presets.page);
+      else value.coast(clampValue(position + project(speed), low, high), presets.page, { within: 0.5, min: 1 });
     };
-    let last = 0;
-    const frame = (now) => {
-      panFrame = 0;
-      if (!panMotion) return;
-      const dt = last ? Math.min((now - last) / 1000, 0.05) : 0;
-      last = now;
-      const movingX = stepAxis(panMotion.x, dt);
-      const movingY = stepAxis(panMotion.y, dt);
-      panX = panMotion.x.pos;
-      panY = panMotion.y.pos;
-      renderZoom();
-      if (movingX || movingY) panFrame = requestAnimationFrame(frame);
-      else panMotion = null;
-    };
-    panFrame = requestAnimationFrame(frame);
+    settle(panCoastX, panX, velocityX, bounds.lowX, bounds.highX);
+    settle(panCoastY, panY, velocityY, bounds.lowY, bounds.highY);
   }
 
   function endPan(event) {
     const gesture = panDrag;
     panDrag = null;
     lightbox.classList.remove("is-panning");
-    if (gesture.moved) suppressLightboxClickUntil = performance.now() + 350;
-    let velocityX = 0;
-    let velocityY = 0;
-    if (event.type === "pointerup") {
-      const first = gesture.samples[0];
-      const last = gesture.samples.at(-1);
-      const seconds = Math.max((last.time - first.time) / 1000, 0.001);
-      const still = Math.max((event.timeStamp - last.time) / 1000, 0);
-      const decay = Math.exp(-PAN_FRICTION * still);
-      velocityX = clampValue((last.x - first.x) / seconds, -1100, 1100) * decay;
-      velocityY = clampValue((last.y - first.y) / seconds, -1100, 1100) * decay;
-    }
+    // The capture sends the click to the viewer itself, which would read it as a click on the
+    // backdrop and close: a press on the image, or a drag, isn't one.
+    if (gesture.moved || gesture.onImage) suppressLightboxClickUntil = performance.now() + 350;
+    const { x: velocityX, y: velocityY } = event.type === "pointerup" ? panTracker.velocity(event.timeStamp) : { x: 0, y: 0 };
     startPanMotion(velocityX, velocityY);
   }
 
   // Pinching with two fingers zooms around their midpoint and follows them as they move.
   function beginPinch() {
-    lightboxGesture = null;
+    swipeAborted = true;
     stopPan();
     const [a, b] = [...pointers.values()];
     pinch = { distance: Math.hypot(a.x - b.x, a.y - b.y) || 1, mid: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 } };
@@ -643,7 +1399,7 @@
   }
 
   lightbox.addEventListener("pointerdown", (event) => {
-    if (event.target.closest("button, .zoom-controls") || lightboxBusy()) return;
+    if (event.target.closest("button, .zoom-controls, .lightbox-info") || lightboxBusy()) return;
     pointers.set(event.pointerId, { x: event.clientX, y: event.clientY, startX: event.clientX, startY: event.clientY, time: event.timeStamp });
     if (pointers.size === 2) beginPinch();
     else if (pointers.size === 1 && zoomed() && event.button === 0) beginPan(event);
@@ -694,9 +1450,119 @@
   lightbox.addEventListener("pointerup", releasePointer);
   lightbox.addEventListener("pointercancel", releasePointer);
 
-  lightboxImage.addEventListener("dblclick", (event) => {
-    // A touch double-tap has already been handled from its pointer events.
-    if (lightboxBusy() || performance.now() - lastDoubleTapAt < 600) return;
+  // On touch screens, dragging the image down closes the viewer, as in a photo app (see
+  // createDismiss): a copy of the image follows the finger on both axes and shrinks, the page
+  // shows through, and letting go with enough pull or flick closes it into its place on the page;
+  // otherwise it springs back. With the details open on a phone the viewer scrolls, so the drag
+  // only takes over when it is already at the top.
+  const dragTracker = velocityTracker();
+  const thumbState = () => {
+    const source = controller?.sourceImage(activeIndex);
+    return fullState(rectOf(source || lightboxImage));
+  };
+  const dismiss = createDismiss(flyer.zoom, {
+    height: () => lightbox.clientHeight,
+    // The controls fade out first, with the pull.
+    onBackdrop: (opacity) => lightbox.style.setProperty("--drag", (1 - opacity).toFixed(3)),
+    from: thumbState,
+    // The copy now flies home at the speed of the release.
+    onDismiss() {
+      pulledClosed = true;
+      void requestClose();
+    },
+    onReturn() {
+      flyer.stop();
+      lightbox.classList.remove("is-dragging-down");
+      lightbox.style.setProperty("--drag", "0");
+    },
+  });
+
+  function startDismiss(touch) {
+    flyer.show({ src: lightboxImage.currentSrc || lightboxImage.src, from: thumbState(), to: rectOf(lightboxImage), hide: lightboxImage });
+    dismiss.start({ x: touch.clientX, y: touch.clientY });
+    lightbox.classList.add("is-dragging-down");
+  }
+
+  // A second finger or a zoom ends the drag where it is.
+  function abortDismiss() {
+    if (dragDown?.active) dismiss.end({ x: 0, y: 0 });
+    dragDown = null;
+  }
+
+  lightbox.addEventListener(
+    "touchstart",
+    (event) => {
+      dragDown = null;
+      if (event.touches.length !== 1 || zoomed() || lightboxBusy() || pulledClosed) return;
+      if (event.target.closest("button, a, .zoom-controls, .lightbox-info")) return;
+      const touch = event.touches[0];
+      dragDown = { startX: touch.clientX, startY: touch.clientY, active: false };
+    },
+    { passive: true }
+  );
+
+  lightbox.addEventListener(
+    "touchmove",
+    (event) => {
+      if (!dragDown) return;
+      if (event.touches.length !== 1 || zoomed()) {
+        abortDismiss();
+        return;
+      }
+      const touch = event.touches[0];
+      const deltaX = touch.clientX - dragDown.startX;
+      const deltaY = touch.clientY - dragDown.startY;
+      if (!dragDown.active) {
+        if (Math.hypot(deltaX, deltaY) < 8) return;
+        // Mostly downwards, with nothing above to scroll back to: a drag to close.
+        if (deltaY <= 0 || Math.abs(deltaY) < Math.abs(deltaX) * 1.2 || lightbox.scrollTop > 0) {
+          dragDown = null;
+          return;
+        }
+        dragDown.active = true;
+        swipeAborted = true; // not a swipe to the next image
+        suppressLightboxClickUntil = Number.POSITIVE_INFINITY;
+        dragTracker.reset();
+        startDismiss({ clientX: dragDown.startX, clientY: dragDown.startY });
+      }
+      event.preventDefault();
+      dragTracker.add({ timeStamp: event.timeStamp, clientX: touch.clientX, clientY: touch.clientY });
+      dismiss.move(deltaX, deltaY);
+    },
+    { passive: false }
+  );
+
+  const endDragDown = (event) => {
+    if (!dragDown) return;
+    const gesture = dragDown;
+    dragDown = null;
+    if (!gesture.active) return;
+    suppressLightboxClickUntil = performance.now() + 350;
+    dismiss.end(event.type === "touchend" ? dragTracker.velocity(event.timeStamp) : { x: 0, y: 0 });
+  };
+  lightbox.addEventListener("touchend", endDragDown);
+  lightbox.addEventListener("touchcancel", endDragDown);
+
+  // With the details open, a click on the image zooms in on the place clicked. The swipe
+  // captures the pointer on the frame, so the click arrives there: check it hit the image.
+  let clickZoomAt = 0;
+  const overImage = (event) => {
+    const box = lightboxImage.getBoundingClientRect();
+    return event.clientX >= box.left && event.clientX <= box.right && event.clientY >= box.top && event.clientY <= box.bottom;
+  };
+  lightboxFrame.addEventListener("click", (event) => {
+    if (!lightbox.classList.contains("has-info") || zoomed() || lightboxBusy() || !overImage(event)) return;
+    if (event.detail > 1 || performance.now() < suppressLightboxClickUntil) return;
+    clickZoomAt = performance.now();
+    setZoom(MAX_ZOOM, { x: event.clientX, y: event.clientY });
+  });
+
+  // Pointer capture sends the double-click to the frame or the viewer, so check it hit the image.
+  lightbox.addEventListener("dblclick", (event) => {
+    if (!overImage(event) || event.target.closest("button, .zoom-controls, .lightbox-info")) return;
+    // A touch double-tap has already been handled from its pointer events, and the
+    // click before this one may already have zoomed in.
+    if (lightboxBusy() || performance.now() - lastDoubleTapAt < 600 || performance.now() - clickZoomAt < 600) return;
     setZoom(zoomed() ? 1 : MAX_ZOOM, { x: event.clientX, y: event.clientY });
   });
 
@@ -713,6 +1579,22 @@
     return true;
   }
 
+  // While zoomed in, the arrow keys move around the image instead of stepping to the next one.
+  const PAN_KEYS = { ArrowLeft: [1, 0], ArrowRight: [-1, 0], ArrowUp: [0, 1], ArrowDown: [0, -1] };
+  function panKey(event) {
+    const direction = PAN_KEYS[event.key];
+    if (!zoomed() || !direction) return false;
+    event.preventDefault();
+    stopPan();
+    const bounds = panBounds();
+    panX = clampValue(panX + direction[0] * lightbox.clientWidth * 0.2, bounds.lowX, bounds.highX);
+    panY = clampValue(panY + direction[1] * lightbox.clientHeight * 0.2, bounds.lowY, bounds.highY);
+    animateZoom();
+    renderZoom();
+    return true;
+  }
+
+
   // ---- Viewer events ----
 
   closeButton.addEventListener("click", requestClose);
@@ -725,107 +1607,185 @@
     if (suppress) event.preventDefault();
     else requestClose();
   });
-  lightboxFrame.addEventListener("pointerdown", startSwipe);
-  lightboxFrame.addEventListener("pointermove", moveSwipe);
-  lightboxFrame.addEventListener("pointerup", finishSwipe);
-  lightboxFrame.addEventListener("pointercancel", finishSwipe);
   lightbox.addEventListener("wheel", onLightboxWheel, { passive: false });
   lightbox.addEventListener("cancel", (event) => {
     event.preventDefault();
     requestClose();
   });
   lightbox.addEventListener("close", () => {
-    lightboxGesture = null;
+    hideLinkCard();
+    const byScript = closedByScript;
+    closedByScript = false;
+    if (lightbox.open) return; // opened again since
+    cleanUpViewer();
+    // The browser closed the dialog itself (it can ignore the cancel handler, for example
+    // on Escape before the page has had a click): put the address back as a close would.
+    if (!byScript && history.state?.keynote === "open") leaveEntryAddress();
   });
 
   window.addEventListener("keydown", (event) => {
     if (lightbox.open) {
       if (zoomKey(event)) return;
-      if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+      // Escape closes (through the dialog's cancel event). Modified arrows are the browser's,
+      // for example Alt+Left for Back.
+      if (event.metaKey || event.ctrlKey || event.altKey || event.shiftKey) return;
+      if (panKey(event)) return;
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
         event.preventDefault();
-        void requestClose();
-      } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-        event.preventDefault();
-        step(event.key === "ArrowRight" ? 1 : -1);
+        void step(event.key === "ArrowRight" ? 1 : -1);
       }
       return;
     }
-    controller?.keydown?.(event);
+    if (controller) controller.keydown?.(event);
+    else if (view === "entry") followEntryKey(event);
   });
 
   // ---- Controllers ----
 
-  function fadeImagesIn(images) {
-    for (const img of images) {
-      if (isLoaded(img)) img.classList.add("is-loaded");
-      else img.addEventListener("load", () => img.classList.add("is-loaded"), { once: true });
-    }
+  // Clones of a slide carry an image that's already loaded, so it shows at once.
+  const fadeImagesIn = revealImages;
+
+  // Rail images carry their sources in data attributes until their slide nears the screen.
+  function loadImage(img) {
+    if (!img?.dataset.src) return;
+    if (img.dataset.srcset) img.srcset = img.dataset.srcset;
+    img.src = img.dataset.src;
+    delete img.dataset.src;
+    delete img.dataset.srcset;
   }
 
-  // A rail of slides that drifts, drags, and wraps round as a ring. With few images the
-  // set is repeated so the ring always fills the screen.
+  // A rail of slides that drifts, drags, and wraps round as a ring. It starts with one page
+  // of entries and loads the pages on either side as they come near: older pages to the
+  // right, and to the left the oldest pages, wrapping round from the newest. Once every page
+  // is in, the ring holds the whole blog; with few images the set is repeated so it always
+  // fills the screen.
   function createRail() {
     const viewport = document.querySelector(".rail-viewport");
-    const list = viewport.querySelector(".rail");
-    const sources = [...list.querySelectorAll(".slide:not([hidden])")];
-    if (!sources.length) return null;
+    const list = viewport?.querySelector(".rail");
+    if (!list) return null;
+    const firstSlides = [...list.querySelectorAll(".slide")];
+    const current = document.querySelector(".current-entry .item[data-preview]");
+    // With no images on this page there may still be some on later ones, or the entry page's
+    // own image: start empty and load pages until there are slides.
+    if (!firstSlides.length && !current && !(Number(viewport.dataset.total) > 1)) return null;
 
     const DRIFT_SPEED = 8; // px per second
-    const FRICTION = 4.2;
-    const MAX_VELOCITY = 1100;
+    const drift = {{#drift}}true{{/drift}}{{^drift}}false{{/drift}}; // the "drift" setting
+    // No drift while the tab is hidden, so a background tab does no work at all.
+    const drifting = () => drift && !reducedMotion.matches && !document.hidden;
+    const RETRY_DELAY = 5000; // ms before a page that failed to load is tried again
+    const EMPTY_PAGE_LIMIT = 5; // pages to look through for an image before giving up
 
-    const entries = sources.map((slot) => readEntry(slot.querySelector(".item")));
-    const entryIndexOf = new Map(entries.map((entry, index) => [entry.href, index]));
-    // The entry page also names the entry being shown, which may not be in the rail.
-    const current = document.querySelector(".current-entry .item[data-preview]");
+    const startPage = Number(viewport.dataset.page) || 1;
+    let total = Number(viewport.dataset.total) || startPage;
+    let forwardPage = startPage; // the last page loaded to the right of the start
+    let backwardPage = startPage; // the last page loaded to the left of the start
+    let pagesLoaded = 1;
+    let loadingPage = null;
+    let retryAt = 0;
+    const complete = () => pagesLoaded >= total;
+    const totalEntries = Number(viewport.dataset.entries) || 0;
+    const wrapPage = (page) => mod(page - 1, total) + 1;
+
+    const makeSlot = (slot, clone = false, page = startPage) => ({
+      slot,
+      page,
+      img: slot.querySelector(".item img"),
+      link: slot.querySelector(".item"),
+      entryIndex: 0,
+      index: 0,
+      clone,
+      near: false,
+      onscreen: null,
+      width: 0, // measured from the slide: the same for every slide, or with the "same
+      start: 0, // height" layout, as wide as its image; start is its place along the ring
+    });
+
+    // Slots are in ring order. Until every page is in there are no clones, so slot i shows
+    // entry i. `seam` is the slot where the pages to the right of the start meet those to
+    // the left; new pages go in there.
+    const slots = firstSlides.map((slot) => makeSlot(slot));
+    const entries = slots.map((item) => readEntry(item.link));
+    let seam = slots.length;
+    const searching = () => !slots.length && !complete() && pagesLoaded < EMPTY_PAGE_LIMIT;
+    const showLoading = () => viewport.classList.toggle("is-loading", searching());
+
+    // The entry page also names the entry being shown, which may not be on the rail yet.
+    let extra = null;
     let currentIndex = -1;
     if (current) {
       const entry = readEntry(current);
-      currentIndex = entryIndexOf.has(entry.href) ? entryIndexOf.get(entry.href) : entries.push(entry) - 1;
+      currentIndex = entries.findIndex((candidate) => candidate.href === entry.href);
+      if (currentIndex < 0) {
+        extra = { ...entry, detached: true };
+        currentIndex = entries.push(extra) - 1;
+      }
     }
 
-    const slots = sources.map((slot, index) => ({
-      slot,
-      img: slot.querySelector("img"),
-      link: slot.querySelector(".item"),
-      entryIndex: index,
-      near: false,
-      onscreen: true,
-    }));
-    const count = entries.length - (current && currentIndex >= sources.length ? 1 : 0);
-    const railLength = () => slots.length;
-
-    let x = 0;
-    let velocity = 0;
-    let step = 0;
-    let itemWidth = 0;
+    // The scroll position in px, unwrapped: slots are placed on the ring from it. Drags, wheels and
+    // the drift move it directly; flicks and glides run it on springs (see the motion library).
+    const scroll = createValue({
+      precision: 0.5,
+      onUpdate() {
+        render();
+        maybeLoad();
+      },
+    });
+    let goal = 0; // where a running flick or glide is heading
+    let gap = 0;
+    let maxStep = 0; // the widest slide and the gap after it
     let padding = 0;
     let cycle = 0;
     let viewWidth = 0;
-    let drag = null;
-    let glide = null;
     let holdUntil = 0;
     let frameId = 0;
     let lastTime = 0;
-    let suppressClickUntil = 0;
     let paused = false;
     let keyboardIndex = null;
 
+    function renumber() {
+      let original = 0;
+      slots.forEach((item, index) => {
+        item.index = index;
+        if (!item.clone) item.entryIndex = original++;
+      });
+    }
+    renumber();
+
+    // Places each slot along the ring, one after another, from the widths measured.
+    function layout() {
+      let start = 0;
+      maxStep = 0;
+      for (const item of slots) {
+        item.start = start;
+        start += item.width + gap;
+        maxStep = Math.max(maxStep, item.width + gap);
+      }
+      cycle = start;
+    }
+
+    // Where a slot's left edge sits on screen.
+    const slotLeft = (item) => mod(item.start - scroll.value + 2 * maxStep, cycle) - 2 * maxStep + padding;
+
     function render() {
       for (const item of slots) {
-        const left = mod(item.index * step - x + 2 * step, cycle) - 2 * step + padding;
-        const near = left < viewWidth + step && left + itemWidth > -step;
-        const onscreen = left < viewWidth && left + itemWidth > 0;
+        const left = slotLeft(item);
+        const near = left < viewWidth + maxStep && left + item.width > -maxStep;
+        const onscreen = left < viewWidth && left + item.width > 0;
         if (near) item.slot.style.transform = `translate3d(${left}px, 0, 0)`;
         if (near !== item.near) {
           item.near = near;
           item.slot.classList.toggle("is-visible", near);
-          if (near) item.img.decode().catch(() => {});
-          else item.slot.style.transform = "";
+          if (near) {
+            loadImage(item.img);
+            item.img.decode().catch(() => {});
+          } else {
+            item.slot.style.transform = "";
+          }
         }
         if (onscreen === item.onscreen) continue;
         item.onscreen = onscreen;
-        item.slot.inert = !onscreen || item.clone;
+        item.slot.inert = !onscreen; // clones stay clickable; aria-hidden and tabindex keep them out of the tab order
       }
     }
 
@@ -835,86 +1795,200 @@
       frameId = requestAnimationFrame(frame);
     }
 
+    // The drift runs on its own frame loop at a constant speed, and waits while the rail is
+    // dragged, wheeled, flung or gliding (those run on springs in createValue).
     function frame(now) {
       frameId = 0;
-      if (paused || !cycle) return;
+      if (paused || !cycle || !drifting()) return;
       const dt = lastTime ? Math.min((now - lastTime) / 1000, 0.05) : 0;
       lastTime = now;
-
-      if (glide) {
-        const t = Math.min((now - glide.start) / glide.duration, 1);
-        const eased = 1 - (1 - t) ** 5;
-        x += (eased - glide.done) * glide.distance;
-        glide.done = eased;
-        if (t === 1) glide = null;
-      } else if (!drag) {
-        if (Math.abs(velocity) >= 2) {
-          x += velocity * dt;
-          velocity *= Math.exp(-FRICTION * dt);
-        } else {
-          velocity = 0;
-        }
-        if (now >= holdUntil && !reducedMotion.matches) x += DRIFT_SPEED * dt;
-      }
-
-      x = mod(x, cycle);
-      render();
-      if (drag || glide || velocity || !reducedMotion.matches) frameId = requestAnimationFrame(frame);
+      if (!railDrag.active && !scroll.running && now >= holdUntil) moveBy(DRIFT_SPEED * dt);
+      frameId = requestAnimationFrame(frame);
     }
 
-    // Repeat the slides until the ring is longer than the screen.
+    function cloneSlot(original) {
+      const slot = original.slot.cloneNode(true);
+      slot.querySelector("template")?.remove();
+      slot.removeAttribute("id");
+      slot.setAttribute("aria-hidden", "true");
+      slot.classList.remove("is-visible");
+      slot.style.removeProperty("transform");
+      const link = slot.querySelector(".item");
+      link?.setAttribute("tabindex", "-1");
+      link?.classList.remove("is-zoomed");
+      list.append(slot);
+      const item = { ...makeSlot(slot, true, original.page), entryIndex: original.entryIndex, width: original.width };
+      fadeImagesIn([item.img]);
+      return item;
+    }
+
+    // Once every page is in, repeat the slides until the ring is longer than the screen,
+    // keeping it a whole number of repeats so entries line up when it wraps.
     function fill() {
-      const needed = Math.ceil((viewWidth + 4 * step) / step);
+      if (!complete()) return;
+      const originals = slots.filter((item) => !item.clone);
+      if (!originals.length) return;
+      const widest = Math.max(...originals.map((item) => item.width + gap));
+      if (!widest) return;
+      const needed = viewWidth + 4 * widest;
+      let length = slots.reduce((sum, item) => sum + item.width + gap, 0);
       let guard = 0;
-      while (slots.length < needed && guard < 200) {
+      while ((length < needed || slots.length % originals.length !== 0) && guard < 400) {
         guard += 1;
-        const original = slots[slots.length % sources.length];
-        const slot = original.slot.cloneNode(true);
-        slot.querySelector("template")?.remove();
-        slot.removeAttribute("id");
-        slot.setAttribute("aria-hidden", "true");
-        slot.querySelector(".item")?.setAttribute("tabindex", "-1");
-        list.append(slot);
-        slots.push({
-          slot,
-          img: slot.querySelector("img"),
-          link: slot.querySelector(".item"),
-          entryIndex: original.entryIndex,
-          clone: true,
-          near: false,
-          onscreen: true,
-        });
+        const item = cloneSlot(originals[slots.length % originals.length]);
+        slots.push(item);
+        length += item.width + gap;
       }
-      // Keep the ring a whole number of repeats so entries line up when it wraps.
-      while (slots.length % sources.length !== 0 && guard < 400) {
-        guard += 1;
-        const original = slots[slots.length % sources.length];
-        const slot = original.slot.cloneNode(true);
-        slot.querySelector("template")?.remove();
-        slot.setAttribute("aria-hidden", "true");
-        list.append(slot);
-        slots.push({ slot, img: slot.querySelector("img"), link: slot.querySelector(".item"), entryIndex: original.entryIndex, clone: true, near: false, onscreen: true });
+      renumber();
+    }
+
+    // Where the middle of the screen falls along the ring.
+    const middle = () => scroll.value + viewWidth / 2 - padding;
+    const moveBy = (distance) => scroll.set(scroll.value + distance);
+
+    // Move the ring under the view to `candidate` (or the place a whole turn away that is nearest),
+    // carrying on a flick or glide that is running instead of stopping it.
+    function shift(candidate) {
+      const target = candidate + Math.round((scroll.value - candidate) / cycle) * cycle;
+      const delta = target - scroll.value;
+      if (!delta) return;
+      const running = scroll.running;
+      scroll.stop();
+      scroll.value = target;
+      if (running) {
+        goal += delta;
+        scroll.to(goal, presets.page);
       }
-      slots.forEach((item, index) => { item.index = index; });
     }
 
     function measure() {
       const styles = getComputedStyle(list);
-      const centerIndex = step ? (x + viewWidth / 2 - padding - itemWidth / 2) / step : null;
-      itemWidth = sources[0].offsetWidth;
-      step = itemWidth + (parseFloat(styles.columnGap) || 0);
+      // Keep the point in the middle of the screen where it is, as a share of its slide.
+      const anchor = cycle ? nearestSlot() : null;
+      const within = anchor ? (mod(middle() - anchor.start + cycle / 2, cycle) - cycle / 2) / (anchor.width || 1) : 0;
+      gap = parseFloat(styles.columnGap) || 0;
       padding = parseFloat(styles.paddingLeft) || 0;
       viewWidth = viewport.clientWidth;
-      if (!step) return;
+      for (const item of slots) item.width = item.slot.offsetWidth;
       fill();
-      cycle = step * railLength();
-      if (centerIndex !== null) x = centerOffset(centerIndex);
+      layout();
+      if (anchor && cycle) shift(anchor.start + within * anchor.width + padding - viewWidth / 2);
       render();
+      maybeLoad();
       schedule();
     }
 
-    function centerOffset(index) {
-      return index * step + padding + itemWidth / 2 - viewWidth / 2;
+    // The offset that puts a slot in the middle of the screen.
+    function centerOffset(item) {
+      return item.start + padding + item.width / 2 - viewWidth / 2;
+    }
+
+    // ---- Pages either side of the start ----
+
+    // Load the next page on whichever side the seam is near: within a screen and a half of
+    // the middle of the view.
+    function maybeLoad() {
+      showLoading();
+      if (complete() || loadingPage || performance.now() < retryAt) return;
+      if (!slots.length) {
+        if (searching()) void loadPage("forward");
+        return;
+      }
+      if (!cycle) return;
+      const reach = viewWidth * 1.5 + maxStep * 2;
+      const seamX = (slots[seam]?.start ?? cycle) + padding - gap / 2;
+      const distance = mod(seamX - (scroll.value + viewWidth / 2) + cycle / 2, cycle) - cycle / 2;
+      if (Math.abs(distance) < reach) void loadPage(distance >= 0 ? "forward" : "backward");
+    }
+
+    function loadPage(direction) {
+      if (complete()) return Promise.resolve();
+      if (loadingPage) return loadingPage;
+      loadingPage = (async () => {
+        const page = direction === "forward" ? wrapPage(forwardPage + 1) : wrapPage(backwardPage - 1);
+        try {
+          const response = await fetch(`/page/${page}`, { credentials: "same-origin" });
+          if (!response.ok) throw new Error(`Could not load page ${page}`);
+          const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+          total = Number(doc.querySelector(".rail-viewport")?.dataset.total) || total;
+          if (complete()) return;
+          if (direction === "forward") forwardPage = page;
+          else backwardPage = page;
+          pagesLoaded += 1;
+          insertSlides([...doc.querySelectorAll(".rail .slide")], direction, page);
+        } catch (error) {
+          retryAt = performance.now() + RETRY_DELAY;
+          // Try again then even if nothing moves the rail in the meantime.
+          setTimeout(maybeLoad, RETRY_DELAY);
+        }
+      })().finally(() => {
+        loadingPage = null;
+        setTimeout(maybeLoad);
+      });
+      return loadingPage;
+    }
+
+    function insertSlides(elements, direction, page) {
+      // A publish can move entries between pages, so skip any already on the rail.
+      const known = new Set(entries.filter((entry) => !entry.detached).map((entry) => entry.href));
+      const added = [];
+      for (const element of elements) {
+        const link = element.querySelector(".item");
+        if (!link) continue;
+        const href = new URL(link.getAttribute("href"), document.baseURI).pathname;
+        if (known.has(href)) continue;
+        known.add(href);
+        // The fetched page was parsed without script, so its fallback images are real elements.
+        for (const fallback of element.querySelectorAll("noscript")) fallback.remove();
+        added.push(document.adoptNode(element));
+      }
+
+      if (!added.length) {
+        fill();
+        layout();
+        render();
+        return;
+      }
+
+      // Keep the slide nearest the middle of the screen where it is.
+      const anchor = cycle ? nearestSlot() : null;
+      const anchorLeft = anchor ? slotLeft(anchor) : 0;
+
+      const at = seam;
+      const before = slots[at]?.slot || null;
+      const items = added.map((element) => {
+        list.insertBefore(element, before);
+        return makeSlot(element, false, page);
+      });
+      for (const item of items) item.width = item.slot.offsetWidth;
+      const newEntries = items.map((item) => readEntry(item.link));
+      slots.splice(at, 0, ...items);
+
+      // The entry page's own entry turned up on the rail: use its place there.
+      let moved = null;
+      if (extra) {
+        const found = newEntries.findIndex((entry) => entry.href === extra.href);
+        if (found >= 0) {
+          moved = { from: entries.length - 1, to: at + found };
+          entries.pop();
+          extra = null;
+        }
+      }
+      entries.splice(at, 0, ...newEntries);
+      if (direction === "forward") seam += items.length;
+      if (keyboardIndex !== null && keyboardIndex >= at) keyboardIndex += items.length;
+      if (currentIndex >= 0) {
+        currentIndex = moved && currentIndex === moved.from ? moved.to : currentIndex + (currentIndex >= at ? items.length : 0);
+      }
+
+      renumber();
+      fadeImagesIn(items.map((item) => item.img));
+      fill();
+      layout();
+      if (anchor) shift(anchor.start - (anchorLeft - padding));
+      entriesInserted(at, items.length, moved);
+      render();
+      schedule();
     }
 
     // The slot showing an entry that is closest to being on screen.
@@ -922,7 +1996,7 @@
       let best = null;
       let bestFraction = -1;
       for (const item of slots) {
-        if (item.entryIndex !== entryIndex) continue;
+        if (item.entryIndex !== entryIndex || entries[entryIndex]?.detached) continue;
         const fraction = visibleFraction(item);
         if (fraction > bestFraction) {
           best = item;
@@ -933,109 +2007,80 @@
     }
 
     function visibleFraction(item) {
-      const left = mod(item.index * step - x + 2 * step, cycle) - 2 * step + padding;
-      const overlap = Math.min(left + itemWidth, viewWidth) - Math.max(left, 0);
-      return Math.max(overlap, 0) / itemWidth;
+      const left = slotLeft(item);
+      const overlap = Math.min(left + item.width, viewWidth) - Math.max(left, 0);
+      return Math.max(overlap, 0) / (item.width || 1);
     }
 
     function glideToSlot(item) {
-      const distance = mod(centerOffset(item.index) - x + cycle / 2, cycle) - cycle / 2;
-      velocity = 0;
+      const distance = mod(centerOffset(item) - scroll.value + cycle / 2, cycle) - cycle / 2;
       holdUntil = 0;
-      if (reducedMotion.matches || Math.abs(distance) < 1) {
-        glide = null;
-        x += distance;
-      } else {
-        glide = { start: performance.now(), duration: Math.min(600, Math.max(260, Math.abs(distance) * 0.45)), distance, done: 0 };
-      }
-      schedule();
+      scroll.velocity = 0;
+      goal = scroll.value + distance;
+      scroll.to(goal, presets.page);
     }
 
+    // The slot whose middle is nearest the middle of the screen.
     function nearestSlot() {
-      const index = mod(Math.round((x + viewWidth / 2 - padding - itemWidth / 2) / step), slots.length);
-      return slots[index];
-    }
-
-    function pointerDown(event) {
-      if (paused || viewerActive() || event.button !== 0 || !cycle) return;
-      keyboardIndex = null;
-      viewport.classList.remove("is-keyboard-navigating");
-      glide = null;
-      velocity = 0;
-      drag = { id: event.pointerId, startX: event.clientX, lastX: event.clientX, moved: false, samples: [{ x: event.clientX, time: event.timeStamp }] };
-      viewport.classList.add("is-dragging");
-      viewport.addEventListener("pointermove", pointerMove);
-      viewport.addEventListener("pointerup", pointerEnd);
-      viewport.addEventListener("pointercancel", pointerEnd);
-      viewport.addEventListener("lostpointercapture", pointerEnd);
-      event.target.setPointerCapture?.(event.pointerId);
-      if (event.target.closest(".item")) event.preventDefault();
-      schedule();
-    }
-
-    function pointerMove(event) {
-      if (!drag || event.pointerId !== drag.id) return;
-      x -= event.clientX - drag.lastX;
-      drag.lastX = event.clientX;
-      if (Math.abs(event.clientX - drag.startX) > 5) drag.moved = true;
-      drag.samples.push({ x: event.clientX, time: event.timeStamp });
-      while (drag.samples.length > 2 && event.timeStamp - drag.samples[0].time > 100) drag.samples.shift();
-      schedule();
-    }
-
-    function pointerEnd(event) {
-      if (!drag || event.pointerId !== drag.id) return;
-      const gesture = drag;
-      drag = null;
-      viewport.classList.remove("is-dragging");
-      viewport.removeEventListener("pointermove", pointerMove);
-      viewport.removeEventListener("pointerup", pointerEnd);
-      viewport.removeEventListener("pointercancel", pointerEnd);
-      viewport.removeEventListener("lostpointercapture", pointerEnd);
-      if (gesture.moved) suppressClickUntil = performance.now() + 350;
-      velocity = 0;
-      if (gesture.moved && event.type === "pointerup" && !reducedMotion.matches) {
-        const first = gesture.samples[0];
-        const last = gesture.samples.at(-1);
-        const seconds = Math.max((last.time - first.time) / 1000, 0.001);
-        const still = Math.max((event.timeStamp - last.time) / 1000, 0);
-        const swipe = Math.max(-MAX_VELOCITY, Math.min(MAX_VELOCITY, (last.x - first.x) / seconds));
-        velocity = -swipe * Math.exp(-FRICTION * still);
+      if (!cycle) return slots[0];
+      const centre = middle();
+      let best = slots[0];
+      let bestDistance = Infinity;
+      for (const item of slots) {
+        const distance = Math.abs(mod(item.start + item.width / 2 - centre + cycle / 2, cycle) - cycle / 2);
+        if (distance < bestDistance) {
+          best = item;
+          bestDistance = distance;
+        }
       }
-      schedule();
+      return best;
     }
 
-    viewport.addEventListener("pointerdown", pointerDown);
+    // Drag the rail; a flick coasts to rest where it lands, with no speed cap, then the drift resumes.
+    let dragX = 0;
+    const railDrag = drag(viewport, {
+      threshold: 5,
+      canStart: () => !paused && !viewerActive() && cycle > 0,
+      onPress(event) {
+        keyboardIndex = null;
+        viewport.classList.remove("is-keyboard-navigating");
+        // A press stops a moving rail where it is; a tap then opens the image under it.
+        scroll.stop();
+        dragX = event.clientX;
+      },
+      onStart: () => viewport.classList.add("is-dragging"),
+      onMove({ event }) {
+        moveBy(dragX - event.clientX);
+        dragX = event.clientX;
+      },
+      onEnd({ velocity }) {
+        viewport.classList.remove("is-dragging");
+        if (reducedMotion.matches) return;
+        scroll.velocity = -velocity.x;
+        goal = scroll.value + project(scroll.velocity);
+        scroll.coast(goal, presets.page, { within: 0.5, min: 1 });
+      },
+    });
+
     viewport.addEventListener("wheel", (event) => {
-      if (paused || viewerActive() || drag || !cycle) return;
+      if (paused || viewerActive() || railDrag.active || !cycle) return;
       // A scroll that began in the viewer (and its trackpad momentum) must not move the rail.
       if (performance.now() < wheelLockUntil) {
         wheelLockUntil = performance.now() + WHEEL_GAP;
         event.preventDefault();
         return;
       }
-      const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? viewWidth : 1;
-      const deltaX = event.deltaX * unit;
-      const deltaY = event.deltaY * unit;
+      const { x: deltaX, y: deltaY } = wheelDelta(event, viewWidth);
       const delta = Math.abs(deltaX) > Math.abs(deltaY) ? deltaX : deltaY;
       if (!delta) return;
       event.preventDefault();
-      glide = null;
-      velocity = 0;
-      x += delta;
+      moveBy(delta);
       holdUntil = performance.now() + 180;
-      schedule();
     }, { passive: false });
 
     viewport.addEventListener("click", (event) => {
       const link = event.target.closest(".item");
       if (!link) return;
-      if (performance.now() < suppressClickUntil) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        suppressClickUntil = 0;
-        return;
-      }
       if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
       event.preventDefault();
       const item = slots.find((candidate) => candidate.link === link);
@@ -1043,14 +2088,22 @@
     }, true);
 
     reducedMotion.addEventListener("change", () => {
-      if (reducedMotion.matches) {
-        glide = null;
-        velocity = 0;
-      }
+      if (reducedMotion.matches) scroll.stop();
       schedule();
     });
 
-    fadeImagesIn(sources.map((slot) => slot.querySelector("img")));
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) return schedule();
+      cancelAnimationFrame(frameId);
+      frameId = 0;
+    });
+
+    // The first slides on screen load straight away, the very first ahead of everything else.
+    slots.slice(0, 3).forEach((item, index) => {
+      if (index === 0) item.img.fetchPriority = "high";
+      loadImage(item.img);
+    });
+    fadeImagesIn(slots.map((item) => item.img));
 
     const rail = {
       wrap: true,
@@ -1063,8 +2116,8 @@
       },
       pause() {
         paused = true;
-        glide = null;
-        velocity = 0;
+        scroll.stop();
+        scroll.velocity = 0;
       },
       resume() {
         paused = false;
@@ -1074,18 +2127,44 @@
         // Bring the entry's slide in only if it is mostly off screen.
         const item = slotFor(index);
         if (item && visibleFraction(item) < 0.5) {
-          x = centerOffset(item.index);
-          render();
+          scroll.set(centerOffset(item));
         }
       },
+      // Before the viewer steps from `index` across the seam, load the page that belongs
+      // there. Resolves true when a page came in, so the caller checks again.
+      async ensure(index, direction) {
+        if (complete() || entries[index]?.detached) return false;
+        const ring = slots.length;
+        const crossing = direction > 0 ? mod(index + 1, ring) === mod(seam, ring) : mod(index, ring) === mod(seam, ring);
+        if (!crossing) return false;
+        const before = pagesLoaded;
+        await loadPage(direction > 0 ? "forward" : "backward");
+        return pagesLoaded > before;
+      },
+      // An entry's place among all posts, newest first.
+      position(index) {
+        const entry = entries[index];
+        if (!totalEntries || !entry?.index) return null;
+        return { index: totalEntries - entry.index + 1, total: totalEntries };
+      },
+      // Load ahead while the viewer is within a few entries of the seam.
+      prefetch(index) {
+        if (complete() || entries[index]?.detached) return;
+        const ring = slots.length;
+        if (mod(seam - 1 - index, ring) < 4) void loadPage("forward");
+        else if (mod(index - seam, ring) < 4) void loadPage("backward");
+      },
       keydown(event) {
+        if (event.metaKey || event.ctrlKey || event.altKey) return;
         if (event.key === "Tab") {
           keyboardIndex = null;
           viewport.classList.remove("is-keyboard-navigating");
           return;
         }
-        if (paused || drag || event.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
-        if (keyboardIndex !== null && (event.key === "Enter" || event.key === " ")) {
+        if (paused || railDrag.active || event.target.closest?.("input, textarea, select, [contenteditable='true']")) return;
+        // Enter opens the chosen slide only while focus is on the page or the rail itself.
+        const onRail = event.target === document.body || viewport.contains(event.target);
+        if (keyboardIndex !== null && onRail && (event.key === "Enter" || event.key === " ")) {
           event.preventDefault();
           openFromPage(slots[keyboardIndex].entryIndex);
           return;
@@ -1100,12 +2179,14 @@
         viewport.classList.add("is-keyboard-navigating");
         glideToSlot(slots[next]);
       },
+      get currentIndex() {
+        return currentIndex >= 0 ? currentIndex : null;
+      },
     };
 
     measure();
     new ResizeObserver(measure).observe(viewport);
 
-    rail.currentIndex = currentIndex >= 0 ? currentIndex : null;
     return rail;
   }
 
@@ -1114,38 +2195,46 @@
     const list = document.querySelector("[data-grid]");
     if (!list) return null;
     let more = document.querySelector("a.more[rel='next']");
-    let loading = false;
+    let loading = null;
 
-    const links = () => [...list.querySelectorAll("a.cell:not([hidden])")];
+    // Posts without an image are cards that link to their page; only images open the viewer.
+    const links = () => [...list.querySelectorAll("a.cell[data-preview]:not([hidden])")];
     let cache = [];
     const refresh = () => {
       cache = links().map(readEntry);
     };
     refresh();
 
-    async function loadMore() {
-      if (loading || !more) return;
-      loading = true;
+    function loadMore() {
+      if (!more) return Promise.resolve();
+      if (loading) return loading;
       const pagination = more.closest(".pagination");
       pagination?.classList.add("is-loading-more");
-      try {
-        const response = await fetch(more.href, { credentials: "same-origin" });
-        const doc = new DOMParser().parseFromString(await response.text(), "text/html");
-        const added = [...doc.querySelectorAll("[data-grid] a.cell")];
-        for (const cell of added) list.append(document.adoptNode(cell));
-        const next = doc.querySelector("a.more[rel='next']");
-        if (next) more.href = next.href;
-        else {
-          more.closest(".pagination")?.remove();
-          more = null;
+      loading = (async () => {
+        try {
+          const response = await fetch(more.href, { credentials: "same-origin" });
+          if (!response.ok) throw new Error(`Could not load ${more.href}`);
+          const doc = new DOMParser().parseFromString(await response.text(), "text/html");
+          const added = [...doc.querySelectorAll("[data-grid] a.cell")];
+          for (const cell of added) list.append(document.adoptNode(cell));
+          const status = document.querySelector(".list-status");
+          if (status && added.length) status.textContent = `${added.length} more ${added.length === 1 ? "post" : "posts"} loaded`;
+          const next = doc.querySelector("a.more[rel='next']");
+          if (next) more.href = next.href;
+          else {
+            more.closest(".pagination")?.remove();
+            more = null;
+          }
+          refresh();
+          observeSentinel();
+        } catch (error) {
+          // The link stays; look again shortly, since the sentinel may already be in view.
+          setTimeout(observeSentinel, 5000);
         }
-        refresh();
-        observeSentinel();
-      } catch (error) {
         pagination?.classList.remove("is-loading-more");
-      }
-      pagination?.classList.remove("is-loading-more");
-      loading = false;
+        loading = null;
+      })();
+      return loading;
     }
 
     let observer = null;
@@ -1153,7 +2242,7 @@
       observer?.disconnect();
       if (!more) return;
       observer = new IntersectionObserver((records) => {
-        if (records.some((record) => record.isIntersecting)) loadMore();
+        if (records.some((record) => record.isIntersecting)) void loadMore();
       }, { rootMargin: "600px 0px" });
       observer.observe(more);
     }
@@ -1180,6 +2269,16 @@
       resume() {},
       hasMore: () => Boolean(more),
       loadMore,
+      // An image's place among all the listing's posts (cards included), from the grid's
+      // pagination; without pages, the listing is everything.
+      position(index) {
+        const all = [...list.querySelectorAll("a.cell")];
+        const at = all.indexOf(cache[index]?.link);
+        const total = Number(list.dataset.entries) || (more ? 0 : all.length);
+        if (at < 0 || !total) return null;
+        const offset = (Number(list.dataset.page) - 1 || 0) * (Number(list.dataset.pageSize) || 0);
+        return { index: offset + at + 1, total };
+      },
       settle(index) {
         const link = cache[index]?.link;
         if (!link) return;
@@ -1192,18 +2291,226 @@
 
   // ---- Start up ----
 
-  controller = view === "home" || view === "entry" ? createRail() : createGrid();
+  if (view === "home" || (view === "entry" && root.classList.contains("rail-mode"))) controller = createRail();
+  else if (view !== "entry") controller = createGrid();
 
-  if (view === "entry") {
-    // The entry's own page: the viewer starts open, and closing returns to the rail.
-    if (!controller) {
-      // No rail to return to (the entry has no image); keep the plain page.
+  // No rail could be made, so let the entry page show its text instead.
+  if (view === "entry" && !controller) root.classList.remove("rail-mode", "is-deep-open");
+
+  // In rail mode the post's text is clipped out of sight, so keep focus out of it too. The
+  // viewer's Info button shows it instead.
+  const clippedText = view === "entry" && controller ? document.querySelector(".contents") : null;
+  if (clippedText) clippedText.inert = true;
+
+  // ---- Link previews: hovering a link to another post shows a card with its photo and title,
+  // or its title and description when it has no photo, from the post's JSON (?format=json) ----
+
+  const previewCard = (() => {
+    if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return null;
+    const SHOW_DELAY = 350;
+    const HIDE_DELAY = 200;
+    const previews = new Map(); // path → Promise of a preview, or null for no card
+    let card = null;
+    let current = null; // the link the card is for
+    let showTimer = 0;
+    let hideTimer = 0;
+
+    function eligible(link) {
+      // The rail and the grid are already pictures of the posts they link to.
+      if (!link || link.closest(".link-card, .rail, .collection-entry, .current-entry")) return null;
+      let url;
+      try {
+        url = new URL(link.getAttribute("href"), location.href);
+      } catch {
+        return null;
+      }
+      if (url.origin !== location.origin || url.pathname === location.pathname) return null;
+      // Files, feeds and listings have no post behind them.
+      if (/\.[a-z0-9]{1,5}$/i.test(url.pathname) || /^\/(tagged|page|search|archives)(\/|$)/.test(url.pathname) || url.pathname === "/") return null;
+      return url;
+    }
+
+    const textOf = (html) => new DOMParser().parseFromString(html || "", "text/html").body.textContent.replace(/\s+/g, " ").trim();
+
+    function load(url) {
+      const key = url.pathname;
+      if (!previews.has(key)) {
+        previews.set(
+          key,
+          fetch(`${url.pathname}?format=json`, { credentials: "same-origin", headers: { Accept: "application/json" } })
+            .then(async (response) => {
+              if (!response.ok || !response.headers.get("content-type")?.includes("json")) return null;
+              const post = await response.json();
+              const image = post.thumbnail?.medium || post.thumbnail?.large || null;
+              // The photo's description may be Markdown rendered to HTML: the card takes its words.
+              const description = textOf(post.description) || textOf(post.summary);
+              if (!post.title || (!image && (!description || description === post.title))) return null;
+              return { title: post.title, href: post.url || url.pathname, image, description: image ? "" : description };
+            })
+            .catch(() => null)
+        );
+      }
+      return previews.get(key);
+    }
+
+    function build() {
+      card = document.createElement("div");
+      card.className = "link-card";
+      card.addEventListener("pointerenter", () => clearTimeout(hideTimer));
+      card.addEventListener("pointerleave", scheduleHide);
+      return card;
+    }
+
+    function fill(preview) {
+      const link = document.createElement("a");
+      link.className = "link-card-inner";
+      link.href = preview.href;
+      link.tabIndex = -1;
+      link.setAttribute("aria-hidden", "true");
+      if (preview.image) {
+        const img = document.createElement("img");
+        img.className = "link-card-image";
+        img.src = preview.image.url;
+        img.alt = "";
+        img.decoding = "async";
+        if (preview.image.width && preview.image.height) {
+          img.width = preview.image.width;
+          img.height = preview.image.height;
+        }
+        link.append(img);
+      }
+      const text = document.createElement("p");
+      text.className = "link-card-text";
+      const title = document.createElement("strong");
+      title.textContent = preview.title;
+      text.append(title);
+      if (preview.description) text.append(" ", preview.description);
+      link.append(text);
+      card.replaceChildren(link);
+      card.classList.toggle("has-image", Boolean(preview.image));
+    }
+
+    // Below the link, or above it when there's more room there, with the arrow on the link.
+    function place(link) {
+      const box = [...link.getClientRects()].find((rect) => rect.width) || link.getBoundingClientRect();
+      const margin = 12;
+      const width = card.offsetWidth;
+      const height = card.offsetHeight;
+      const below = innerHeight - box.bottom >= height + margin || box.top < height + margin;
+      const anchor = box.left + Math.min(box.width / 2, 28);
+      const left = Math.min(Math.max(margin, anchor - 28), innerWidth - width - margin);
+      card.style.left = `${left}px`;
+      card.style.top = `${below ? box.bottom + 10 : box.top - height - 10}px`;
+      card.style.setProperty("--arrow-x", `${Math.min(Math.max(16, anchor - left), width - 16)}px`);
+      card.classList.toggle("is-above", !below);
+    }
+
+    async function show(link, url) {
+      const preview = await load(url);
+      if (current !== link || !preview || !link.isConnected) return;
+      if (!card) build();
+      fill(preview);
+      card.classList.remove("is-shown");
+      // Inside the viewer the card has to be in the dialog to sit above it.
+      const host = link.closest("dialog") || document.body;
+      if (card.parentNode !== host) host.append(card);
+      const image = card.querySelector("img");
+      if (image && !image.complete) await Promise.race([image.decode().catch(() => {}), new Promise((resolve) => setTimeout(resolve, 400))]);
+      if (current !== link || !link.isConnected) return;
+      place(link);
+      card.classList.add("is-shown");
+    }
+
+    function hide() {
+      current = null;
+      card?.classList.remove("is-shown");
+    }
+
+    function scheduleHide() {
+      clearTimeout(showTimer);
+      clearTimeout(hideTimer);
+      hideTimer = setTimeout(hide, HIDE_DELAY);
+    }
+
+    function enter(link) {
+      if (!link || link === current || card?.contains(link)) return;
+      const url = eligible(link);
+      if (!url) return;
+      clearTimeout(showTimer);
+      clearTimeout(hideTimer);
+      if (current) hide();
+      current = link;
+      void load(url); // start fetching while the pointer rests
+      showTimer = setTimeout(() => show(link, url), SHOW_DELAY);
+    }
+
+    document.addEventListener("pointerover", (event) => {
+      if (event.pointerType === "mouse") enter(event.target.closest?.("a[href]"));
+    });
+    document.addEventListener("pointerout", (event) => {
+      const link = event.target.closest?.("a[href]");
+      if (link && link === current && !link.contains(event.relatedTarget)) scheduleHide();
+    });
+    // Keyboard focus shows the card too, and moving on hides it.
+    document.addEventListener("focusin", (event) => {
+      const link = event.target.closest?.("a[href]");
+      if (link?.matches(":focus-visible")) enter(link);
+    });
+    document.addEventListener("focusout", (event) => {
+      if (event.target === current) scheduleHide();
+    });
+
+    function dismiss() {
+      clearTimeout(showTimer);
+      clearTimeout(hideTimer);
+      if (current) hide();
+    }
+
+    // Scrolling, the wheel, a click or a key (the arrows stepping the viewer) moves on from the link.
+    for (const type of ["scroll", "wheel", "pointerdown", "keydown"]) {
+      document.addEventListener(type, (event) => {
+        if (!card?.contains(event.target)) dismiss();
+      }, { capture: true, passive: true });
+    }
+    // So does anything that changes the page around a still pointer.
+    for (const type of ["popstate", "resize", "blur"]) window.addEventListener(type, dismiss);
+    document.addEventListener("visibilitychange", dismiss);
+
+    return { hide: dismiss };
+  })();
+  if (previewCard) hideLinkCard = previewCard.hide;
+
+  // A link to another post from inside the viewer (the card, the description, the post's text)
+  // moves the viewer to that post when it's among those already loaded, as the arrows would.
+  // Otherwise the link is followed, and the post's own page opens straight into the viewer.
+  lightbox?.addEventListener("click", (event) => {
+    const link = event.target.closest?.("a[href]");
+    if (!link || !lightbox.open || event.defaultPrevented || event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || (link.target && link.target !== "_self")) return;
+    if (!controller) return;
+    let url;
+    try {
+      url = new URL(link.getAttribute("href"), location.href);
+    } catch {
       return;
     }
+    if (url.origin !== location.origin) return;
+    const index = controller.entries().findIndex((entry) => entry.href === url.pathname && !entry.detached);
+    if (index < 0 || index === activeIndex) return;
+    event.preventDefault();
+    previewCard?.hide();
+    setActive(index);
+    replaceAddress();
+  });
+
+  if (view === "entry" && controller) {
+    // The entry's own page: the viewer starts open, and closing returns to the rail.
     const index = controller.currentIndex ?? controller.entries().findIndex((entry) => entry.href === location.pathname);
     if (index >= 0) {
-      history.replaceState({ keynote: "open", pushed: false }, "", location.href);
+      history.replaceState({ ...history.state, keynote: "open", pushed: false }, "", location.href);
       void open(index, { animate: false });
+    } else {
+      root.classList.remove("is-deep-open");
     }
   }
 })();

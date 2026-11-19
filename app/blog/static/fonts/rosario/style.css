@@ -12,8 +12,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/rosario/400-italic.woff2?version=7b0ba8&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/rosario/400-italic.woff?version=2d94b0&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.367em}
-.push-double{margin-right:0.367em}
-.pull-single{margin-left:-0.226em}
-.push-single{margin-right:0.226em}
+.pull-double {margin-left:-0.487em}
+.push-double{margin-right:0.487em}
+.pull-single{margin-left:-0.286em}
+.push-single{margin-right:0.286em}
 .push-double,.push-single{display:inline-block}

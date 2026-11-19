@@ -5,8 +5,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/agbalumo/400.woff2?version=e414e1&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/agbalumo/400.woff?version=6234bf&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.529em}
-.push-double{margin-right:0.529em}
-.pull-single{margin-left:-0.312em}
-.push-single{margin-right:0.312em}
+.pull-double {margin-left:-0.506em}
+.push-double{margin-right:0.506em}
+.pull-single{margin-left:-0.296em}
+.push-single{margin-right:0.296em}
 .push-double,.push-single{display:inline-block}

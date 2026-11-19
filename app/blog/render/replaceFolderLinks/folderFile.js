@@ -1,7 +1,7 @@
 const folder = require("storage/folder");
 const contentVersion = require("helper/contentVersion");
 const BLOT_CDN_TOKEN = require("./cdnToken");
-const { encodeFolderPath } = require("./shared");
+const { folderCdnPath } = require("./shared");
 
 // Build-time helpers for turning a file in a blog's folder into a versioned
 // CDN URL, shared by the entry plugin (app/build/plugins/folderAssets) and
@@ -46,7 +46,7 @@ async function getStat(blogID, path) {
 // encodeFolderPath). suffix is any ?query and/or #hash to keep on the end of
 // the URL, as written in the link.
 function folderUrl(blogID, path, version, suffix) {
-  return `${BLOT_CDN_TOKEN}/folder/v-${version}/${blogID}${encodeFolderPath(path)}${suffix || ""}`;
+  return BLOT_CDN_TOKEN + folderCdnPath(blogID, version, path) + (suffix || "");
 }
 
 // The version baked for an image that isn't in the folder yet (see

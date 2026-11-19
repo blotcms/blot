@@ -1,0 +1,32 @@
+form.folder-input {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25em 0.5em;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+form.folder-input label {
+  flex-shrink: 0;
+}
+
+form.folder-input input[type="text"] {
+  flex: 1 1 8em;
+  min-width: 0;
+  padding: 0.25em 0.5em;
+  font-size: 14px;
+  text-align: right;
+}
+
+form.folder-input .folder-input__error {
+  flex: 1 1 100%;
+  margin: 0;
+  font-size: 12px;
+  text-align: right;
+  color: var(--editor-error-color);
+}
+
+form.folder-input .folder-input__error[hidden] {
+  display: none;
+}

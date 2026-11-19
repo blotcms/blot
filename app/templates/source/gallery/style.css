@@ -30,7 +30,7 @@ pre code.hljs.hljs * {
 
 
 body {
-  margin: {{spacing}}em;
+  margin: 0;
   text-rendering: optimizelegibility;
   background: {{background_color}};
   color: {{text_color}};
@@ -75,66 +75,102 @@ h1 { font-size: calc({{font.font_size}}px * 2); }
 h2 { font-size: calc({{font.font_size}}px * 1.66); }
 h3 { font-size: calc({{font.font_size}}px * 1.34); }
 
-header {
-  margin: {{spacing}}em 0;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5em 1em;
-  {{#is.navigation_alignment.justified}}
-  justify-content: space-between;
-  {{/is.navigation_alignment.justified}}
-  {{#is.navigation_alignment.left}}
-  justify-content: flex-start;
-  {{/is.navigation_alignment.left}}
-  {{#is.navigation_alignment.right}}
-  justify-content: flex-end;
-  {{/is.navigation_alignment.right}}
-  {{#is.navigation_alignment.center}}
-  justify-content: center;
-  {{/is.navigation_alignment.center}}
+/* ---- Page layout and primary navigation ----
+   A centred header: the profile photo, the site's title, then the menu in a row
+   that wraps. The grid's own rule sits under it. */
+
+html {
+  --page-pad: 16px;
+  --gap: 24px;
 }
 
-{{#sticky_navigation}}
-header {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: {{background_color}};
-  margin: calc(-1 * {{spacing}}em) calc(-1 * {{spacing}}em) {{spacing}}em;
-  padding: {{spacing}}em;
+@media (min-width: 768px) {
+  html {
+    --page-pad: 24px;
+  }
 }
-{{/sticky_navigation}}
+
+@media (min-width: 1024px) {
+  html {
+    --page-pad: 36px;
+  }
+}
+
+@media (min-width: 1440px) {
+  html {
+    --page-pad: 60px;
+  }
+}
+
+.site-header {
+  padding: 24px var(--page-pad) 0;
+  text-align: center;
+}
+
+.avatar-link {
+  display: block;
+  width: fit-content;
+  margin: 0 auto 0.75rem;
+}
+
+/* The photo's saved shape is baked into it, so only a plain photo is rounded here. */
+.avatar {
+  display: block;
+  width: auto;
+  height: 6rem;
+}
+
+.avatar--round {
+  width: 6rem;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  object-fit: cover;
+}
 
 .site-title {
-  display: flex;
-  align-items: center;
-  gap: 0.4em;
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.site-title a {
   color: inherit;
   text-decoration: none;
 }
 
-.site-logo {
-  height: 1.4em;
-  width: auto;
-  display: block;
-}
-
-header nav {
+.primary-navigation {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 0 1em;
+  justify-content: center;
+  gap: 0.5rem 1.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
 }
 
-{{#is.navigation_alignment.justified}}
-header .tags {
-  flex: 1;
+.primary-navigation a.active,
+.primary-navigation a[aria-current="page"] {
+  font-weight: 700;
 }
-{{/is.navigation_alignment.justified}}
 
-.pagination {text-align: center;margin: {{spacing}}em 0}
-.pagination a {margin: 0 1em;display: inline-block;}
+.primary-navigation a:focus-visible,
+.site-title a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
+@media (max-width: 32rem) {
+  .primary-navigation {
+    gap: 0.5rem 1rem;
+  }
+}
+
+.site-main {
+  display: block;
+  min-width: 0;
+  padding: 0 var(--page-pad) 16px;
+}
 
 a {color: {{link_color}};}
 
@@ -154,7 +190,6 @@ pre, code {
   {{/syntax_highlighter_font}}
 }
 
-.clear {width: 100%;clear: both;display: block;}
 
 .search-form {
   text-align: center;
@@ -167,69 +202,1379 @@ pre, code {
   margin: 0 auto;
 }
 
-.entry {
-  width: {{thumbnail_size}}px;
-  height: {{thumbnail_size}}px;
-  display: block;
-  float: left;
-  overflow: hidden;
-  margin: {{spacing}}em;
+/* Ruled catalog grid on the index page: two, three or six columns of
+   uncropped images separated by hairline rules. Each row is sized by its
+   tallest image and caption, so images share a bottom edge and titles a
+   top edge. */
+.catalog {
+  --columns: 2;
+  --rule: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
+  --heading: 13px;
+  --text: 13px;
+  --detail: 11px;
+  --detail-line: 1.2;
+  --spacing: -0.005em;
+
   position: relative;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
+  column-gap: var(--gap);
+  width: 100%;
+  margin: 16px 0 0;
+  padding: 12px 0 0;
+  list-style: none;
 }
 
-.entry:hover .frame {opacity: 0.8}
-
-.entry .full {position: absolute;top:0;left: 0;right: 0;bottom: 0;z-index: 1}
-
-.entry:before {content: "";display: block;padding-top: 100%;}
-
-/* The frame's inline width and height fit the image's aspect ratio inside the square cell. */
-.entry .frame {
+/* Rule above the first row. */
+.catalog::before {
+  content: "";
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  margin: auto;
-  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.05);
+  inset: 0 0 auto;
+  height: 1px;
+  background: var(--rule);
 }
 
-.entry img {
+/* Each card spans an image row and a caption row shared with its neighbours,
+   so images share a bottom edge and captions share a height. */
+.catalog > li {
+  position: relative;
+  display: grid;
+  grid-row: span 2;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: subgrid;
+  margin: 0;
+}
+
+/* Vertical rule between columns, in the middle of the gap. */
+.catalog > li::before {
+  content: "";
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0 -12px 0 auto;
+  border-right: 1px solid var(--rule);
+  pointer-events: none;
+}
+
+/* The wrapper and link add no boxes, so the image and caption are the
+   card's two rows and share track sizes with the rest of the row. */
+.item,
+.item a {
+  display: contents;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Rule above each row of cards. */
+.catalog > li::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 1px;
+  background: var(--rule);
+}
+
+.item img {
+  display: block;
+  grid-row: 1;
+  align-self: end;
+  width: 100%;
+  height: auto;
+  margin: 12px 0 0;
+  outline: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
+  outline-offset: -1px;
+}
+
+.caption {
+  box-sizing: border-box;
+  grid-row: 2;
+  margin: 0 0 18px;
+  min-height: 2.4em;
+  padding-top: 8px;
+  font-size: 16px;
+}
+
+.caption h2,
+.caption p {
+  margin: 0;
+}
+
+.caption h2 {
+  font-size: var(--heading);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: var(--spacing);
+}
+
+.caption h2 span {
+  display: -webkit-box;
+  overflow: hidden;
+  border-bottom: 1px solid transparent;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  text-decoration: underline transparent;
+  transition: text-decoration-color 195ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.caption p {
+  margin-top: 4px;
+  font-size: var(--text);
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+}
+
+/* The post's tags, in italics and separated by commas. The card is one link,
+   so they are plain text here; the tag pages are in the archives and the viewer. */
+.caption .tags {
+  font-style: italic;
+}
+
+.caption .tags span + span::before {
+  content: ", ";
+}
+
+.caption .detail {
+  display: -webkit-box;
+  overflow: hidden;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.64);
+  font-size: var(--detail);
+  line-height: var(--detail-line);
+  letter-spacing: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.item a:hover h2 span,
+.item a:focus-visible h2 span {
+  text-decoration-color: currentcolor;
+}
+
+.item a:focus-visible {
+  outline: none;
+}
+
+.item a:focus-visible img {
+  outline: 4px solid {{link_color}};
+  outline-offset: 8px;
+}
+
+/* Two columns, then three, then six. */
+@media (max-width: 767px) {
+  .catalog > li:nth-child(-n + 2)::after,
+  .catalog > li:nth-child(2n)::before {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .catalog {
+    --columns: 3;
+    --heading: 14px;
+    --text: 14px;
+    --detail: 12px;
+    --spacing: -0.01em;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1023px) {
+  .catalog > li:nth-child(-n + 3)::after,
+  .catalog > li:nth-child(3n)::before {
+    display: none;
+  }
+}
+
+@media (min-width: 1024px) {
+  .catalog {
+    --columns: 6;
+    --heading: 15px;
+    --text: 15px;
+    --detail: 13px;
+    --detail-line: 1.35;
+  }
+
+  .catalog > li:nth-child(-n + 6)::after,
+  .catalog > li:nth-child(6n)::before {
+    display: none;
+  }
+
+  .item a:focus-visible img {
+    outline-offset: 12px;
+  }
+}
+
+@media (min-width: 1920px) {
+  .catalog {
+    --heading: 16px;
+    --text: 16px;
+    --detail: 14px;
+  }
+
+  .caption h2 {
+    letter-spacing: -0.015em;
+  }
+
+  .caption p:not(.detail) {
+    letter-spacing: 0.01em;
+  }
+}
+
+/* Circle pagination. The page shows previous, current and next without
+   JavaScript; script.js fills in the numbered pages around the current one. */
+.pagination {
+  box-sizing: border-box;
+  display: flex;
+  width: min(100%, 476px);
+  min-height: 84px;
+  margin: {{spacing}}em auto;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+}
+
+.pagination__list {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.pagination__list li {
+  flex: 0 0 auto;
+}
+
+.pagination__page,
+.pagination__control {
+  box-sizing: border-box;
+  display: inline-flex;
+  width: 40px;
+  height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border-radius: 50%;
+  color: inherit;
+  text-decoration: none;
+}
+
+.pagination__page[aria-current="page"] {
+  background: {{link_color}};
+  color: {{background_color}};
+}
+
+.pagination__control svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+.pagination__control[aria-disabled="true"] {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.25);
+}
+
+.pagination__ellipsis {
+  width: 24px;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.64);
+  text-align: center;
+}
+
+.pagination__page:focus-visible,
+.pagination__control:focus-visible {
+  outline: 2px solid {{link_color}};
+  outline-offset: 2px;
+}
+
+@media (hover: hover) {
+  .pagination__page:not([aria-current="page"]):hover,
+  a.pagination__control:hover {
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.06);
+  }
+}
+
+@media (max-width: 360px) {
+  .pagination__list {
+    gap: 0;
+  }
+
+  .pagination__page,
+  .pagination__control {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* Archives: a table the width of the page, ruled like the grid,
+   with a tiny uncropped thumbnail in the first cell. */
+.archive {
+  --rule: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
+
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 13px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+}
+
+.archive caption {
+  margin-bottom: 1em;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: left;
+}
+
+.archive th,
+.archive td {
+  padding: 8px 16px 8px 0;
+  border-top: 1px solid var(--rule);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.archive th:last-child,
+.archive td:last-child {
+  padding-right: 0;
+}
+
+.archive tbody tr:last-child > * {
+  border-bottom: 1px solid var(--rule);
+}
+
+.archive tbody th {
+  font-weight: 600;
+}
+
+.archive tbody th a {
+  color: inherit;
+  text-decoration: underline transparent;
+  transition: text-decoration-color 195ms cubic-bezier(0.25, 0.1, 0.25, 1);
+}
+
+.archive tbody tr:hover th a,
+.archive tbody th a:focus-visible {
+  text-decoration-color: currentcolor;
+}
+
+/* The thumbnail fits a small square cell without cropping. */
+.archive__thumb {
+  width: 40px;
+}
+
+.archive__thumb a {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+}
+
+.archive__thumb img {
+  display: block;
+  width: auto;
+  max-width: 40px;
+  height: auto;
+  max-height: 40px;
+  outline: 1px solid var(--rule);
+  outline-offset: -1px;
+}
+
+/* The post's tags, in italics and separated by commas, as in the grid. */
+.archive__tags {
+  font-style: italic;
+}
+
+.archive__tags a {
+  color: inherit;
+  text-decoration: none;
+}
+
+/* Inline-block keeps the hover underline off the comma. */
+.archive__tags a + a::before {
+  display: inline-block;
+  content: ", ";
+  white-space: pre;
+}
+
+@media (hover: hover) {
+  .archive__tags a:hover {
+    text-decoration: underline;
+  }
+}
+
+.archive__tags a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+
+.archive__date {
+  width: 1%;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.64);
+  white-space: nowrap;
+}
+
+@media (max-width: 767px) {
+  .archive__tags {
+    display: none;
+  }
+}
+
+@media (min-width: 768px) {
+  .archive {
+    font-size: 14px;
+  }
+}
+
+@media (min-width: 1024px) {
+  .archive {
+    font-size: 15px;
+  }
+}
+
+/* ---- The image viewer, from the Keynote template, without its transitions ---- */
+
+html {
+  /* The space from the screen's top and side edges to the viewer's caption and buttons. */
+  --edge-x: max(1rem, 2vw);
+  --edge-y: 1.25rem;
+}
+
+html.is-viewing {
+  overflow: hidden;
+}
+
+/* The viewer takes the whole window, so the page is padded by the scrollbar's width
+   (measured by script) while it's open and doesn't reflow underneath. */
+html.is-viewing {
+  padding-right: var(--scrollbar-width, 0px);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* The viewer: the image zooms up from where it was, over the page colour. */
+.lightbox {
+  --lightbox-open-duration: 320ms;
+  --lightbox-close-duration: 200ms;
+  --lightbox-open-easing: cubic-bezier(0.22, 1.1, 0.36, 1);
+  --lightbox-close-easing: cubic-bezier(0.32, 0.72, 0, 1);
+  /* The buttons sit as close to the screen's edges as the header's links: each 44px button
+     is inset so its icon lines up with the page margin, and the image takes the rest. */
+  --lightbox-button-inset: calc(var(--edge-x) - 10px);
+  --lightbox-gutter: calc(var(--lightbox-button-inset) + 48px);
+  /* The caption's band above the image, matched by one below it. Zoomed images cover both. */
+  --lightbox-top-gutter: calc(var(--edge-y) + 1.75rem + 0.75rem);
+  --lightbox-bottom-gutter: var(--lightbox-top-gutter);
+  position: fixed;
+  inset: 0;
   width: 100%;
   height: 100%;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  color: {{text_color}};
+  /* Zooming moves the image over the whole screen; the arrows and close button float above it. */
+  touch-action: none;
 }
 
-/* Thumbnails fade in once loaded, over a placeholder in their final shape. */
-.pre-loaded {
+.lightbox[open] {
+  display: grid;
+  grid-template-columns: var(--lightbox-gutter) minmax(0, 1fr) var(--lightbox-gutter);
+  grid-template-rows: var(--lightbox-top-gutter) minmax(0, 1fr) var(--lightbox-bottom-gutter);
+  align-items: stretch;
+  justify-items: stretch;
+}
+
+/* Fade a full-screen layer's opacity instead of repainting a background colour. Fixed, so
+   it stays put when the viewer scrolls on a phone. */
+.lightbox::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: {{background_color}};
+  content: "";
   opacity: 0;
-  transition: opacity 0.3s;
+  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
 }
 
-.pre-loaded.loaded {
+.lightbox.is-revealed::before {
   opacity: 1;
 }
 
+/* Dragging the image down to close lets the page show through, and the controls fade
+   first. Letting go springs them back, or the close carries on from here. */
+.lightbox.is-dragging-down.is-revealed::before {
+  opacity: calc(1 - var(--drag, 0));
+  transition: none;
+}
+
+.lightbox.is-dragging-down.is-revealed :is(.lightbox-caption, .lightbox-info, .lightbox-info-index) {
+  opacity: max(0, 1 - var(--drag, 0) * 3);
+  transition: none;
+}
+
+.lightbox.is-dragging-down.is-revealed :is(.lightbox-close, .lightbox-info-button, .lightbox-step) {
+  opacity: max(0, 0.65 - var(--drag, 0) * 2);
+  transition: none;
+}
+
+.lightbox.is-closing,
+.lightbox.is-closing::before,
+.lightbox.is-closing .lightbox-caption,
+.lightbox.is-closing .lightbox-close,
+.lightbox.is-closing .lightbox-info-button,
+.lightbox.is-closing .lightbox-info,
+.lightbox.is-closing .lightbox-step {
+  transition-duration: var(--lightbox-close-duration);
+  transition-timing-function: var(--lightbox-close-easing);
+}
+
+.lightbox::backdrop {
+  background: transparent;
+}
+
+.lightbox .lightbox-close,
+.lightbox .lightbox-info-button,
+.lightbox .lightbox-step {
+  opacity: 0;
+  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing), background-color 160ms ease;
+}
+
+.lightbox.is-revealed .lightbox-close,
+.lightbox.is-revealed .lightbox-step,
+.lightbox.is-revealed .lightbox-info-button {
+  opacity: 0.65;
+}
+
+@media (hover: hover) {
+  .lightbox.is-revealed .lightbox-close:hover,
+  .lightbox.is-revealed .lightbox-step:hover,
+  .lightbox.is-revealed .lightbox-info-button:hover {
+    opacity: 1;
+  }
+}
+
+.lightbox:not(.is-revealed) .lightbox-close,
+.lightbox:not(.is-revealed) .lightbox-info-button,
+.lightbox:not(.is-revealed) .lightbox-step,
+.lightbox.is-opening .lightbox-close,
+.lightbox.is-opening .lightbox-info-button,
+.lightbox.is-opening .lightbox-step {
+  pointer-events: none;
+}
+
+.lightbox.is-closing .lightbox-image {
+  visibility: hidden;
+}
+
+.lightbox-image.is-zoom-animating {
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* With the details open, a click zooms in on the place clicked. */
+.lightbox.has-info:not(.is-zoomed) .lightbox-image {
+  cursor: zoom-in;
+}
+
+.lightbox.is-zoomed .lightbox-image {
+  cursor: grab;
+}
+
+.lightbox.is-panning .lightbox-image {
+  cursor: grabbing;
+}
+
+/* Bottom left, out of the way of the details gutter on the right. */
+.zoom-controls {
+  position: absolute;
+  left: var(--lightbox-button-inset);
+  bottom: calc(var(--edge-y) - 10px);
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.15em;
+  padding: 0 0.35em;
+  border-radius: 999px;
+  color: {{text_color}};
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  font-size: 0.8em;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  /* Hidden from focus too until zoomed; visibility waits for the fade out. */
+  transition: opacity 200ms ease, visibility 0s linear 200ms;
+}
+
+.lightbox.is-zoomed.is-revealed .zoom-controls,
+/* Someone moving through the buttons with the keyboard can reach zoom before zooming. Only
+   a button counts: the viewer focuses its image frame on opening, which iOS Safari treats
+   as :focus-visible, and a tap that moved focus off it would hide the buttons mid-tap. */
+.lightbox.is-revealed:has(button:focus-visible) .zoom-controls {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: opacity 200ms ease, visibility 0s;
+}
+
+.zoom-button {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  outline: none;
+  color: inherit;
+  background: transparent;
+  opacity: 0.7;
+  cursor: pointer;
+  transition: opacity 160ms ease, background-color 160ms ease;
+}
+
+.zoom-button:hover:not(:disabled) {
+  opacity: 1;
+}
+
+.zoom-button:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+
+.zoom-button:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: -2px;
+}
+
+.zoom-button svg {
+  display: block;
+  width: 13px;
+  height: 13px;
+  fill: currentColor;
+}
+
+@media (pointer: coarse) {
+  .zoom-button {
+    width: 44px;
+    height: 44px;
+  }
+}
+
+.lightbox-frame:focus {
+  outline: none;
+}
+
+.lightbox-frame {
+  grid-column: 2;
+  grid-row: 2;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Sized from the declared dimensions so the preview and original fit identically. */
+.lightbox-image {
+  display: block;
+  width: min(100%, var(--image-width, 100%), calc((100dvh - var(--lightbox-top-gutter) - var(--lightbox-bottom-gutter)) * var(--image-ratio, 1)));
+  height: auto;
+  max-width: none;
+  aspect-ratio: var(--image-ratio, auto);
+  object-fit: contain;
+  transform-origin: center;
+}
+
+/* The entry's title and its place in the collection, top left. */
+.lightbox-caption {
+  position: absolute;
+  top: var(--edge-y);
+  left: var(--edge-x);
+  right: var(--lightbox-gutter);
+  z-index: 1;
+  margin: 0;
+  padding: 0.15em 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  overflow: hidden;
+  color: {{text_color}};
+  /* The header's type size, so the caption sits where the title does. */
+  font-size: 0.9375em;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
+}
+
+.lightbox.is-revealed .lightbox-caption {
+  opacity: 1;
+}
+
+.lightbox.is-zoomed .lightbox-caption {
+  opacity: 0;
+}
+
+.lightbox-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lightbox-index {
+  flex: 0 0 auto;
+  opacity: 0.5;
+  font-size: 0.8em;
+  font-variant-numeric: tabular-nums;
+}
+
+.lightbox-close,
+.lightbox-info-button,
+.lightbox-step {
+  position: absolute;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+  background: transparent;
+  color: {{text_color}};
+  cursor: pointer;
+}
+
+/* Keyboard focus rings the icon as a circle (the buttons themselves are wider than tall). */
+/* Zoomed in, the image can sit under the controls, so each gets a backing like the zoom buttons. */
+.lightbox.is-zoomed.is-revealed .lightbox-close,
+.lightbox.is-zoomed.is-revealed .lightbox-info-button,
+.lightbox.is-zoomed.is-revealed .lightbox-step {
+  opacity: 1;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.7);
+}
+
+@media (hover: hover) {
+  .lightbox.is-zoomed.is-revealed .lightbox-close:hover,
+  .lightbox.is-zoomed.is-revealed .lightbox-info-button:hover,
+  .lightbox.is-zoomed.is-revealed .lightbox-step:hover {
+    color: {{text_color}};
+  }
+
+  .lightbox .lightbox-close:hover .lightbox-icon,
+  .lightbox .lightbox-info-button:hover .lightbox-icon,
+  .lightbox .lightbox-step:hover .lightbox-icon,
+  .zoom-button:hover:not(:disabled) {
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
+  }
+}
+
+.lightbox.is-zoomed .lightbox-icon {
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+
+@media (hover: hover) {
+  .lightbox.is-zoomed .lightbox-close:hover .lightbox-icon,
+  .lightbox.is-zoomed .lightbox-info-button:hover .lightbox-icon,
+  .lightbox.is-zoomed .lightbox-step:hover .lightbox-icon {
+    background: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15)), var(--glass);
+  }
+}
+
+/* Buttons that sit on the details gutter already have its glass behind them. */
+.lightbox.is-zoomed.has-info .lightbox-step .lightbox-icon,
+.lightbox.is-zoomed.has-info .lightbox-info-button .lightbox-icon {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background: transparent;
+}
+
+@media (min-width: 701px) {
+  .lightbox.is-zoomed.has-info .lightbox-close .lightbox-icon {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: transparent;
+  }
+}
+
+@media (hover: hover) {
+  .lightbox.is-zoomed.has-info .lightbox-step:hover .lightbox-icon,
+  .lightbox.is-zoomed.has-info .lightbox-info-button:hover .lightbox-icon {
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
+  }
+}
+
+@media (hover: hover) and (min-width: 701px) {
+  .lightbox.is-zoomed.has-info .lightbox-close:hover .lightbox-icon {
+    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
+  }
+}
+
+.lightbox-close:focus-visible,
+.lightbox-info-button:focus-visible,
+.lightbox-step:focus-visible {
+  outline: none;
+}
+
+.lightbox-close:focus-visible .lightbox-icon,
+.lightbox-info-button:focus-visible .lightbox-icon,
+.lightbox-step:focus-visible .lightbox-icon {
+  border-radius: 50%;
+  outline: 2px solid {{text_color}};
+  outline-offset: 0;
+}
+
+/* Each icon sits in a round backing, shown when zoomed in and on hover. */
+.lightbox-icon {
+  display: block;
+  box-sizing: content-box;
+  width: 24px;
+  height: 24px;
+  padding: 6px;
+  border-radius: 999px;
+  fill: currentColor;
+  transition: background-color 200ms ease;
+}
+
+/* Bottom right, which is the gutter's foot once it opens, so it never moves. It shows in
+   the text colour while the details show, and grey like the other buttons otherwise. */
+.lightbox-info-button {
+  bottom: calc(var(--edge-y) - 10px);
+  right: var(--lightbox-button-inset);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.lightbox.is-revealed .lightbox-info-button[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.lightbox.is-zoomed.is-revealed .lightbox-info-button[aria-expanded="true"] {
+  color: {{text_color}};
+}
+
+/* The post's text, date, tags and EXIF, in a gutter down the right. */
+.lightbox-info {
+  position: relative;
+  z-index: 1;
+  grid-column: 3;
+  grid-row: 1 / -1;
+  box-sizing: border-box;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* Below the row of arrows along the top; the text runs down behind the index and Info pill. */
+  padding: calc(var(--edge-y) + 0.85rem + 22px) var(--edge-x) 0 1.5rem;
+  color: {{text_color}};
+  background: var(--glass);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  font-size: 0.875em;
+  line-height: 1.55;
+  opacity: 0;
+  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
+}
+
+.lightbox-info[hidden] {
+  display: none;
+}
+
+/* Long details scroll here, without a scrollbar, fading out under the arrows at the top and
+   behind the index and Info pill at the foot. The padding keeps the text clear of both fades
+   until it scrolls. */
+.lightbox-info-scroll {
+  --fade-end: calc(var(--edge-y) + 6px);
+  --fade-start: calc(var(--edge-y) + 40px);
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  padding: 1.25rem 0 var(--fade-start);
+  mask-image: linear-gradient(transparent, #000 1.25rem, #000 calc(100% - var(--fade-start)), transparent calc(100% - var(--fade-end)));
+}
+
+/* A column, so the details can fill what the text leaves and set the camera card at the foot. */
+.lightbox-info-scroll {
+  display: flex;
+  flex-direction: column;
+}
+
+.lightbox-info-scroll > * {
+  flex-shrink: 0;
+}
+
+.lightbox-info-details {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.lightbox-info-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* Late in the opening zoom and quickly, so the details arrive as the image lands. */
+.lightbox.is-revealed .lightbox-info,
+.lightbox.is-revealed .lightbox-info-index {
+  opacity: 1;
+  transition: opacity 140ms ease-out 180ms;
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .pre-loaded {
+  .lightbox.is-revealed .lightbox-info,
+  .lightbox.is-revealed .lightbox-info-index {
     transition: none;
   }
 }
 
-.entry .teaser {
-  padding: 0.33em;
-  max-width: {{thumbnail_size}}px;
-  max-height: calc({{thumbnail_size}}px * 4 / 3);
-  overflow: hidden;
-  border: 1px solid {{text_color}};
-  border-radius: 4px;
+.lightbox-info-tags:empty ~ .lightbox-info-link:empty ~ .lightbox-info-body:empty + .lightbox-info-details:empty::before {
+  content: "No details";
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
 }
 
-.entry .teaser * {
-  font-size: calc({{font.font_size}}px * 0.8571428571);
-  line-height: calc({{font.font_size}}px * 1.0714285714);
-  text-align: center;
+/* The caption moves into the gutter while it's open, wrapping rather than cut short. */
+.lightbox.has-info .lightbox-caption {
+  visibility: hidden;
+}
+
+.lightbox-info-caption {
+  margin: 0 0 1.25em;
+  /* The caption's own size, against the gutter's smaller text. */
+  font-size: calc(0.9375em / 0.875);
+  line-height: 1.35;
+}
+
+/* The tags sit right under the title, as on the caption under each image. */
+.lightbox-info-caption:has(+ .lightbox-info-tags:not(:empty)) {
+  margin-bottom: 0.15em;
+}
+
+.lightbox-info-tags:not(:empty) {
+  margin-bottom: 1.25em;
+}
+
+/* A bookmark's way to the site it saved, as a pill under the title. */
+.lightbox-info-link:not(:empty) {
+  margin-bottom: 1.25em;
+}
+
+.bookmark-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 999px;
   color: {{text_color}};
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.12);
+  text-decoration: none;
+  line-height: 18px;
+  transition: background-color 180ms ease;
+}
+
+.bookmark-button:hover {
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.22);
+}
+
+.bookmark-button:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: 3px;
+}
+
+.bookmark-button svg {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* The index, at the gutter's foot on the Info pill's line, below the scrolling details. */
+.lightbox-info-index {
+  position: absolute;
+  bottom: 0;
+  left: calc(100% - var(--lightbox-info-width));
+  right: 0;
+  z-index: 2;
+  display: none;
+  align-items: center;
+  height: 44px;
+  margin: 0;
+  padding: 0 0 calc(var(--edge-y) - 10px) 1.5rem;
+  font-size: 0.9375em;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--lightbox-open-duration) var(--lightbox-open-easing);
+}
+
+.lightbox.has-info .lightbox-info-index {
+  display: flex;
+}
+
+/* In the date's grey, under the title and tags. The photo's caption may carry links. */
+.entry-description {
+  margin: 0 0 1.25em;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+}
+
+.entry-description a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+.lightbox-info-body > :first-child {
+  margin-top: 0;
+}
+
+.lightbox-info-body img {
+  max-width: 100%;
+  height: auto;
+}
+
+.lightbox-info-body a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+/* Under the post's text: the date, then the camera card. */
+.lightbox-info .lightbox-info-details > * + * {
+  margin-top: 1em;
+}
+
+.lightbox-info-body:not(:empty) + .lightbox-info-details {
+  margin-top: 1.25em;
+}
+
+/* The camera card sits at the gutter's foot, or under the rest when they fill it. */
+.lightbox-info .lightbox-info-details > .entry-exif {
+  margin-top: auto;
+}
+
+.lightbox-info .lightbox-info-details > :has(+ .entry-exif) {
+  margin-bottom: 1.75em;
+}
+
+.entry-date {
+  margin: 0;
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+  font-size: 0.857em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The post's tags, in italics and separated by commas, at the caption's size. */
+.entry-tags {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: calc(0.9375em / 0.875);
+  font-style: italic;
+  line-height: 1.35;
+}
+
+.entry-tags li {
+  display: inline;
+}
+
+.entry-tags li + li::before {
+  content: ", ";
+}
+
+.entry-tags a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.entry-tags a:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+
+/* The camera, lens and exposure, set like a camera's own info card: the exposure along the
+   foot, under a rule, and a camera icon in the corner. */
+.entry-exif {
+  position: relative;
+  margin: 0;
+  padding: 0.75em 1em 0;
+  border: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
+  border-radius: 10px;
+  background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
+  /* The same grey as the date. */
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
+  font-size: 0.875em;
+  line-height: 1.45;
+}
+
+.entry-exif p {
+  margin: 0;
+  padding-right: 1.75em;
+  overflow-wrap: anywhere;
+}
+
+.entry-exif-icon {
+  position: absolute;
+  /* Centred on the camera's line. */
+  top: 0.75em;
+  right: 1em;
+  /* Lucide's camera, drawn as a 1px line whatever the icon's size. */
+  fill: none;
+  stroke: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
+  stroke-width: 1px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.entry-exposure {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.25em 1em;
+  margin: 0.75em -1em 0;
+  padding: 0.6em 1em 0.7em;
+  border-top: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.14);
+  list-style: none;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.entry-exif p:last-of-type:not(:has(+ .entry-exposure)) {
+  padding-bottom: 0.75em;
+}
+
+.lightbox-close {
+  /* Centred on the caption's line. */
+  top: calc(var(--edge-y) + 0.85rem - 22px);
+  right: var(--lightbox-button-inset);
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.lightbox-step {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+}
+
+.lightbox-step:disabled {
+  visibility: hidden;
+}
+
+.lightbox-previous {
+  grid-column: 1;
+  grid-row: 2;
+  align-self: center;
+  justify-self: start;
+  margin-left: var(--lightbox-button-inset);
+}
+
+.lightbox-next {
+  grid-column: 3;
+  grid-row: 2;
+  align-self: center;
+  justify-self: end;
+  margin-right: var(--lightbox-button-inset);
+}
+
+/* With the details open, the image gives up the right of the screen to them, and the
+   arrows move to the gutter's top left, on the close button's line. */
+html {
+  --lightbox-info-width: clamp(16rem, 28vw, 24rem);
+}
+
+/* The details gutter's glass: translucent and blurred, so a zoomed image shows through. The
+   controls floating over the image use it too. */
+html {
+  --glass: linear-gradient(rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04), rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04)), rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.72);
+  --glass-blur: blur(24px);
+}
+
+.lightbox.has-info[open] {
+  grid-template-columns: var(--edge-x) minmax(0, 1fr) var(--lightbox-info-width);
+}
+
+.lightbox.has-info .lightbox-caption {
+  right: calc(var(--lightbox-info-width) + 1rem);
+}
+
+.lightbox.has-info .lightbox-close,
+.lightbox.has-info .lightbox-info-button,
+.lightbox.has-info .lightbox-step {
+  z-index: 3;
+}
+
+.lightbox.has-info .lightbox-step {
+  grid-column: 3;
+  grid-row: 1;
+  align-self: start;
+  justify-self: start;
+  margin: calc(var(--edge-y) + 0.85rem - 22px) 0 0 calc(1.5rem - 10px);
+}
+
+.lightbox.has-info .lightbox-next {
+  margin-left: calc(1.5rem - 10px + 44px);
+}
+
+/* Side by side, a missing arrow stays in place, faded, rather than leaving a gap. */
+.lightbox.has-info .lightbox-step:disabled {
+  visibility: visible;
+  cursor: default;
+}
+
+.lightbox.has-info.is-revealed .lightbox-step:disabled {
+  opacity: 0.3;
+}
+
+.lightbox.has-info .lightbox-step:disabled .lightbox-icon {
+  background: transparent;
+}
+
+/* Too narrow for a gutter: the details take the bottom of the screen instead. */
+@media (max-width: 700px) {
+  .lightbox.has-info {
+    --lightbox-bottom-gutter: 40dvh;
+    --lightbox-info-width: 0px;
+  }
+
+  .lightbox.has-info[open] {
+    grid-template-columns: var(--lightbox-gutter) minmax(0, 1fr) var(--lightbox-gutter);
+  }
+
+  .lightbox-info-index {
+    left: 0;
+    padding-left: var(--edge-x);
+  }
+
+  .lightbox-info {
+    grid-column: 1 / -1;
+    grid-row: 3;
+    padding-top: calc(44px - 0.25rem);
+    padding-left: var(--edge-x);
+  }
+
+  .lightbox.has-info .lightbox-step {
+    grid-column: 1;
+    grid-row: 3;
+    margin: 0.5rem 0 0 var(--lightbox-button-inset);
+  }
+
+  .lightbox.has-info .lightbox-next {
+    margin-left: calc(var(--lightbox-button-inset) + 44px);
+  }
+
+  .lightbox.has-info .lightbox-caption {
+    right: var(--lightbox-gutter);
+  }
+
+  .lightbox.has-info .zoom-controls {
+    bottom: calc(40dvh + 0.5rem);
+  }
+
+  /* The viewer scrolls like a page: the details run on below the image at full length, and
+     scrolling moves the image up out of the way. Zoomed in, it stops, so pinches and pans
+     have the image. The close button and the index stay put. */
+  .lightbox.has-info[open]:not(.is-zoomed) {
+    grid-template-rows: var(--lightbox-top-gutter) calc(100% - var(--lightbox-top-gutter) - 40dvh) auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    touch-action: pan-y;
+  }
+
+  .lightbox.has-info[open]:not(.is-zoomed)::-webkit-scrollbar {
+    display: none;
+  }
+
+  .lightbox.has-info:not(.is-zoomed) .lightbox-info {
+    min-height: 40dvh;
+    overflow: visible;
+  }
+
+  .lightbox.has-info:not(.is-zoomed) .lightbox-info-scroll {
+    flex: 1 0 auto;
+    overflow: visible;
+    padding-bottom: calc(44px + var(--edge-y));
+    mask-image: none;
+  }
+
+  .lightbox.has-info:not(.is-zoomed) :is(.lightbox-close, .lightbox-info-button) {
+    position: fixed;
+  }
+
+  .lightbox.has-info:not(.is-zoomed) .lightbox-info-index {
+    position: fixed;
+    background: linear-gradient(rgba({{#rgb}}{{background_color}}{{/rgb}}, 0), rgba({{#rgb}}{{background_color}}{{/rgb}}, 0.85) 50%);
+  }
+}
+
+/* Touch screens swipe between images, so the arrows give way to a larger image and a
+   top bar for the close button. The arrows stay reachable for assistive technology. */
+@media (pointer: coarse) {
+  .lightbox {
+    --lightbox-gutter: 0px;
+  }
+
+  .lightbox .lightbox-step {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+
+  .lightbox-caption {
+    right: calc(var(--lightbox-button-inset) + 48px);
+  }
+}
+
+@media (pointer: coarse) and (orientation: landscape) {
+  .lightbox {
+    --lightbox-gutter: calc(var(--lightbox-button-inset) + 48px);
+  }
+}
+
+
+/* Everything in the viewer happens at once: no fades, glides or springs. */
+.lightbox,
+.lightbox::before,
+.lightbox *,
+.lightbox *::before,
+.lightbox *::after {
+  transition: none !important;
+  animation: none !important;
 }

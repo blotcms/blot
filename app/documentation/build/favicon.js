@@ -1,6 +1,6 @@
 const fs = require("fs-extra");
 const sharp = require("sharp");
-const toIco = require("to-ico");
+const toIco = require("sandbox/jobs/ico");
 
 module.exports = async function generateFavicon(sourcePath, destPath) {
   const faviconDimensions = [16, 24, 32, 64];
@@ -16,12 +16,13 @@ module.exports = async function generateFavicon(sourcePath, destPath) {
           metadata.density,
       })
         .resize(dimension, dimension)
+        .png()
         .toBuffer()
     )
   );
 
   // Write the ICO file
-  await fs.writeFile(destPath, await toIco(resizedBuffers));
+  await fs.writeFile(destPath, toIco(resizedBuffers));
 
   // Extract the path without .ico at the end
   const destPathWithoutICO = destPath.replace(/\.ico$/, "");

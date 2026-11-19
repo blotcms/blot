@@ -3,7 +3,9 @@
 {{> head}}
 <body>
     {{> navigation}}
-    <main>
+    <main id="main" tabindex="-1">
+        {{! For screen readers: the page's heading is the site's title }}
+        <h1 class="visually-hidden">{{title}}{{^title}}{{handle}}{{/title}}</h1>
         <div class="entries">
         {{^posts.length}}
             <p class="entry">Nothing here.</p>
@@ -49,7 +51,7 @@
 
         {{/posts}}
 
-        {{#pagination}}
+        {{#posts.pagination}}
         <nav
             class="pagination"
             aria-label="Pagination"
@@ -63,7 +65,7 @@
             <a class="pagination-next" href="/page/{{next}}">Next &rarr;</a>
             {{/next}}
         </nav>
-        {{/pagination}}
+        {{/posts.pagination}}
         </div>
     </main>
     {{> footer}}

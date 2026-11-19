@@ -23,7 +23,13 @@ notes.use(function (req, res, next) {
   next();
 });
 
+// Section and article names map to files in NOTES_DIRECTORY, so they
+// may not contain dots or slashes (Express decodes %2F in params)
+const SAFE_NAME = /^[\w -]+$/;
+
 notes.param("section", function (req, res, next) {
+  if (!SAFE_NAME.test(req.params.section)) return next("route");
+
   res.locals.toc = TOC.map((section) => {
     section.isSelected = req.params.section === section.id ? "selected" : false;
     return section;
@@ -34,6 +40,8 @@ notes.param("section", function (req, res, next) {
 });
 
 notes.param("article", function (req, res, next) {
+  if (!SAFE_NAME.test(req.params.article)) return next("route");
+
   res.locals.toc = TOC.map((section) => {
     section.isSelected = req.params.section === section.id ? "selected" : false;
     section.items = section.items.map((article) => {

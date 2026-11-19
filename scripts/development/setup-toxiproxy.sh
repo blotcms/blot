@@ -19,7 +19,7 @@ REORDER_PERCENT="${BLOT_TOXIPROXY_REORDER_PERCENT:-10}"
 
 API="http://127.0.0.1:8474"
 compose() {
-  BLOT_HOST="${BLOT_HOST:-local.blot}" \
+  BLOT_HOST="${BLOT_HOST:-blot.localhost}" \
   command -v docker-compose >/dev/null 2>&1 \
     && docker-compose -f "$COMPOSE_FILE" "$@" \
     || docker compose -f "$COMPOSE_FILE" "$@"

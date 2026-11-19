@@ -6,16 +6,15 @@
       {{> header}}
 
       <div class="content-wrapper">
-        <main class="main">
+        <main class="main" id="main">
 
           {{#entry}}
           <article class="post single">
-            {{^hide_dates}}{{#date}}<div class="date-header"><span>{{date}}</span></div>{{/date}}{{/hide_dates}}
+            {{^hide_dates}}{{#date}}<div class="date-header"><time datetime="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">{{date}}</time></div>{{/date}}{{/hide_dates}}
             <h1 class="post-title">{{title}}</h1>
             <div class="post-body">{{{body}}}</div>
             <div class="post-footer">
               {{#author}}<span class="post-author">Posted by {{.}}</span>{{/author}}
-              {{^hide_dates}}{{#date}}<span class="post-date">{{date}}</span>{{/date}}{{/hide_dates}}
               {{#tags}}<span class="post-tag-separator">&middot;</span><a href="/tagged/{{slug}}" class="post-tag">{{tag}}</a>{{/tags}}
             </div>
           </article>
@@ -31,7 +30,6 @@
           {{> pluginHTML}}
           {{/entry}}
 
-          {{> feed-links}}
         </main>
 
         {{> sidebar}}

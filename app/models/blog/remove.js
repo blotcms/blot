@@ -9,6 +9,8 @@ var templateKey = require("models/template/key");
 var BackupDomain = require("./util/backupDomain");
 var flushCache = require("./flushCache");
 var folderLock = require("sync/lock");
+var purgeQueue = require("cdn/purgeQueue");
+var dropTemplate = require("models/template/drop");
 
 var START_CURSOR = "0";
 var SCAN_SIZE = 1000;
@@ -39,7 +41,9 @@ var remove = async function remove(blogID) {
   await disconnectClient(blog);
   await updateUser(blog);
   await wipeFolders(blog);
+  await dropTemplates(blog);
   await deleteKeys(blog);
+  await purgeQueue.blog(blog.id);
 
   return blog;
 };
@@ -51,6 +55,26 @@ async function wipeFolders(blog) {
   // removeAll only ever deletes the one folder named for the blog (blog IDs
   // must be a single path segment), never anything above or beside it
   await Promise.all([folder.removeAll(blog.id), assets.removeAll(blog.id)]);
+}
+
+// deleteKeys removes a template's keys but not its rendered CDN outputs
+// (cdn:rendered:<hash>), which sit under no blog prefix, and queues no purge
+// of its CDN urls. Template.drop does both. A template that fails to drop is
+// logged and doesn't stop the removal.
+async function dropTemplates(blog) {
+  var templateIDs = await client.sMembers(templateKey.blogTemplates(blog.id));
+  var prefix = blog.id + ":";
+
+  for (var templateID of templateIDs) {
+    try {
+      if (templateID.indexOf(prefix) !== 0)
+        throw new Error("Template is not owned by the blog");
+
+      await dropTemplate(blog.id, templateID.slice(prefix.length));
+    } catch (err) {
+      console.error("Error dropping template", templateID, err);
+    }
+  }
 }
 
 async function deleteKeys(blog) {

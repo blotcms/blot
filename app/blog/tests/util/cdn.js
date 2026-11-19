@@ -1,7 +1,7 @@
 const config = require("config");
 
 const cdnRegex = (path) =>
-  new RegExp(`${config.cdn.origin}/folder/v-[a-f0-9]{8}/blog_[a-f0-9]+${path}`);
+  new RegExp(`${config.cdn.origin}/blog_[a-f0-9]+/folder/v-[a-f0-9]{8}${path}`);
 
 const extractHash = (cdnURL) => {
   // New format: /template/{hash[0:2]}/{hash[2:4]}/{hash[4:]}/{viewName}

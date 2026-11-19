@@ -1,19 +1,13 @@
-<header>
-
-<a href="/" title="Home" class="site-title {{#is_active}}/{{/is_active}}">{{#profile_image.thumbnails.small}}<img width="{{width}}" height="{{height}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="24px" alt="" class="site-logo">{{/profile_image.thumbnails.small}}<strong>{{title}}</strong></a>
-
-{{#show_tags_in_navigation}}
-<nav class="tags">
-{{#all_tags}}
-<a href="/tagged/{{slug}}" title="{{name}}" class="{{active}}">{{name}}</a>
-{{/all_tags}}
-</nav>
-{{/show_tags_in_navigation}}
-
-<nav class="menu">
-{{#menu}}
-<a href="{{{url}}}" title="{{label}}" class="{{active}}">{{label}}</a>
-{{/menu}}
-</nav>
-
+<header class="site-header" data-scheme="{{#light_or_dark}}{{background_color}}{{/light_or_dark}}">
+  {{#profile_image.thumbnails.small}}<a href="/" class="avatar-link" tabindex="-1" aria-hidden="true"><img class="avatar{{^profile_image.mask}} avatar--round{{/profile_image.mask}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="96px" width="{{width}}" height="{{height}}" alt=""></a>{{/profile_image.thumbnails.small}}
+  <p class="site-title"><a href="/">{{title}}</a></p>
+  <nav aria-label="Primary">
+    <ul class="primary-navigation">
+      {{#menu}}
+      <li><a href="{{{url}}}" class="{{active}}">{{label}}</a></li>
+      {{/menu}}
+    </ul>
+  </nav>
 </header>
+
+<main class="site-main" id="main">

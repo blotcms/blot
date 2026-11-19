@@ -63,7 +63,7 @@ locally-edited template installed.*
 - Resolve the host authoritatively:
   `docker exec blot-node-app-1 node -e 'console.log(require("config").host)'`
   (do **not** read `BLOT_HOST` from the host env — `start.sh` defaults it to
-  `local.blot` but `config/index.js` defaults to `localhost`).
+  `blot.localhost` but `config/index.js` defaults to `localhost`).
 - `GET https://<host>/health` must return 200. Use `--insecure`: an untrusted
   mkcert certificate is not the same failure as a server being down.
 - Two or three retries with short backoff — the container can be up while nodemon
@@ -99,7 +99,7 @@ locally-edited template installed.*
   shell wrapper to consume (`preview-newsletter.sh` greps script output the same
   way).
 - **Done when:** running it twice produces one blog, and
-  `https://<handle>.local.blot` responds.
+  `https://<handle>.blot.localhost` responds.
 
 ### A5. Template scaffold (done)
 - `Template.create(blogID, name, { cloneFrom: "SITE:blog" })` — catch
@@ -183,7 +183,7 @@ found on the first pass. Verified.
 hand.*
 
 ### C1. `screenshot.js` — host-side wrapper (§7.2 default 4) (done)
-- Runs **on the host**: the container resolves `*.local.blot` to `127.0.0.1`, which
+- Runs **on the host**: the container resolves `*.blot.localhost` to `127.0.0.1`, which
   is itself, so it cannot reach the site (verified — connection refused).
 - Standalone rather than importing `app/helper/screenshot` (its `args.js` is tuned
   for Alpine), but copy its behaviour: viewports `1260×778` desktop / `400×650`
@@ -353,12 +353,12 @@ restarts.*
   drops it, and `package.generate` therefore never emits it. Two paths also strip
   it back out — `writeToFolder` regenerating the file, and
   `removeEnabledFromAllTemplates` on a dashboard install — so assert it last.
-- `grep` the folder for host-specific strings: `local.blot`, `cdn.local.blot`, the
+- `grep` the folder for host-specific strings: `blot.localhost`, `cdn.blot.localhost`, the
   blog ID. Report, do not auto-edit.
 - Print the folder path, site URL, preview URL, and a reminder that `.git/` and
   `.verification/` are dot-directories excluded by Finder's select-all zip.
 - **Done when:** the flag survives a dashboard template install followed by
-  finalize, and the grep catches a deliberately planted `https://cdn.local.blot`.
+  finalize, and the grep catches a deliberately planted `https://cdn.blot.localhost`.
 
 ### G2. `state.js` and the re-run flow (§6.7)
 - Run state at `data/tmp/translate/<handle>.json` via `helper/tempDir()` — outside

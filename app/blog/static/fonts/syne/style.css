@@ -33,8 +33,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/syne/800.woff2?version=e0a39d&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/syne/800.woff?version=644b14&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.315em}
-.push-double{margin-right:0.315em}
-.pull-single{margin-left:-0.178em}
-.push-single{margin-right:0.178em}
+.pull-double {margin-left:-0.348em}
+.push-double{margin-right:0.348em}
+.pull-single{margin-left:-0.198em}
+.push-single{margin-right:0.198em}
 .push-double,.push-single{display:inline-block}

@@ -4,9 +4,33 @@ const getBlog = (by) => Blog.get(by);
 const createBlog = (...args) => Blog.create(...args);
 
 const config = require("./config");
+const CONFIG_PATH = require.resolve("./config");
 const basename = require("path").basename;
 
-module.exports = async function setupBlogs(user, folders) {
+// The settings config.js gives a blog: title, template, menu, plugins. Read
+// fresh each time when asked to, so a development server can pick up an edit.
+function settingsFor(blog, { reload } = {}) {
+  let settings = config;
+
+  if (reload) {
+    delete require.cache[CONFIG_PATH];
+    settings = require("./config");
+  }
+
+  const update = { ...(settings[blog.handle] || {}) };
+
+  if (update.plugins) {
+    update.plugins = { ...blog.plugins, ...update.plugins };
+  }
+
+  if (update.menu) {
+    update.menu = mergeMenu(update.menu, blog.menu);
+  }
+
+  return update;
+}
+
+async function setupBlogs(user, folders) {
   const blogs = {};
 
   // Create/get blogs
@@ -26,15 +50,7 @@ module.exports = async function setupBlogs(user, folders) {
       blog = await createBlog(user.uid, { handle });
     }
 
-    const update = { ...(config[blog.handle] || {}) };
-
-    if (update.plugins) {
-      update.plugins = { ...blog.plugins, ...update.plugins };
-    }
-
-    if (update.menu) {
-      update.menu = mergeMenu(update.menu, blog.menu);
-    }
+    const update = settingsFor(blog);
 
     await setBlog(blog.id, { ...update, client: "" });
 
@@ -42,7 +58,10 @@ module.exports = async function setupBlogs(user, folders) {
   }
 
   return blogs;
-};
+}
+
+module.exports = setupBlogs;
+module.exports.settingsFor = settingsFor;
 
 // The config decides which pages are in the menu and in what order, but each
 // item's label, url and metadata are copied from its page entry by sync/fix.

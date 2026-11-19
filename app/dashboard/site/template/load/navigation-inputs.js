@@ -16,6 +16,9 @@ const MAP = {
   navigation_position: {
     label: "Position",
   },
+  navigation_style: {
+    label: "Style",
+  },
 };
 
 module.exports = function (req, res, next) {

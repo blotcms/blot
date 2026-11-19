@@ -3,7 +3,7 @@
 {{> head}}
 <body>
     {{> navigation}}
-    <main>
+    <main id="main" tabindex="-1">
         <h1>{{tag}}</h1>
         <div class="entries">
         {{^entries.length}}
@@ -22,7 +22,7 @@
         </article>
         {{/entries}}
 
-        {{#pagination}}
+        {{#entries.pagination}}
         <nav
             class="pagination"
             aria-label="Tag pagination"
@@ -36,7 +36,7 @@
             <a class="pagination-next" href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
             {{/next}}
         </nav>
-        {{/pagination}}
+        {{/entries.pagination}}
         </div>
     </main>
     {{> footer}}

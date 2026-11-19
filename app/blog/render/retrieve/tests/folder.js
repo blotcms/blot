@@ -82,13 +82,29 @@ describe("folder", function () {
 
     expect(byName("photo.jpg").url).toMatch(
       new RegExp(
-        "^%%BLOT_CDN%%/folder/v-[^/]+/" + this.blog.id + "/photo\\.jpg$"
+        "^%%BLOT_CDN%%/" + this.blog.id + "/folder/v-[^/]+/photo\\.jpg$"
       )
     );
     expect(byName("sub").url).toEqual("/sub");
     expect(byName("page.html").url).toEqual("/page.html");
     expect(byName("README").url).toEqual("/README");
     expect(byName("photo.jpg").path).toEqual("/photo.jpg");
+  });
+
+  it("renders the same listing as {{#folder_legacy}}", async function () {
+    await this.write({ path: "/sub/b.txt", content: "World" });
+    await this.write({ path: "/a.txt", content: "Hello" });
+    await this.template({
+      "entries.html":
+        "{{#folder_legacy}}{{#contents}}[{{name}}]{{/contents}}{{/folder_legacy}}" +
+        "|{{#folder}}{{#contents}}[{{name}}]{{/contents}}{{/folder}}",
+    });
+
+    // The root also holds the test blog's Templates folder
+    const [legacy, current] = (await this.text("/")).split("|");
+    expect(legacy).toContain("[a.txt][sub]");
+    expect(legacy).toEqual(current);
+    expect(await this.text("/?path=/sub")).toContain("[b.txt]|[b.txt]");
   });
 
   it("renders file links pointing at the CDN and directory links plain", async function () {
@@ -108,8 +124,9 @@ describe("folder", function () {
       new RegExp(
         '<a href="https?://' +
           escaped +
-          "/folder/v-[^/]+/" +
+          "/" +
           this.blog.id +
+          "/folder/v-[^/]+" +
           '/photo\\.jpg">photo.jpg</a>'
       )
     );
@@ -130,10 +147,10 @@ describe("folder", function () {
     const item = result.contents.find((item) => item.name === "photo.jpg");
 
     expect(item.url).toEqual(
-      "%%BLOT_CDN%%/folder/v-" +
-        contentVersion.fromFolderStat(stat) +
-        "/" +
+      "%%BLOT_CDN%%/" +
         this.blog.id +
+        "/folder/v-" +
+        contentVersion.fromFolderStat(stat) +
         "/photo.jpg"
     );
     expect(item.updated).toEqual(new Date(Math.round(stat.modified)));

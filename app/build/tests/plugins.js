@@ -19,7 +19,7 @@ describe("build", function () {
     const contents = `![Alt text here](foo.jpg "Title here")`;
     const path = "/hello.txt";
     // foo.jpg isn't in the folder, so it's baked as a pending CDN URL
-    const html = `<p><img src="%%BLOT_CDN%%/folder/v-pending/${this.blog.id}/foo.jpg" title="Title here" alt="Alt text here"><span class="caption">Title here</span></p>`;
+    const html = `<p><img src="%%BLOT_CDN%%/${this.blog.id}/folder/v-pending/foo.jpg" title="Title here" alt="Alt text here"><span class="caption">Title here</span></p>`;
 
     this.blog.plugins.imageCaption = { enabled: true, options: {} };
     await this.buildAndCheck({ path, contents }, { html });

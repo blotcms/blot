@@ -1,0 +1,11 @@
+{{! The posts of every year but the newest, which the sidebar fetches the
+    first time a reader opens one of those years (script.js), so they aren't
+    in every page's HTML. The months themselves are in the page already
+    (archive-outline.html). }}
+{{#archives}}
+{{^first}}
+<div data-archive-year="{{year}}">
+  {{> archive-months}}
+</div>
+{{/first}}
+{{/archives}}

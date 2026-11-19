@@ -37,7 +37,7 @@ async function read(blog, path) {
 
   var text = buffer.toString("utf-8");
 
-  var html = await convert(blog, text);
+  var html = await convert(blog, text, path);
   var metadata = {};
   var $ = cheerio.load(html, { decodeEntities: false }, false);
 

@@ -29,6 +29,8 @@ async function main() {
     require("./redis-server"),
     log("Checking the storage bucket"),
     require("./storage"),
+    log("Checking the iCloud macserver"),
+    require("./macserver"),
     log("Finished daily update"),
   ];
 

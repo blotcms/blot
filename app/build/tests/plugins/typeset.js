@@ -138,15 +138,17 @@ describe("typeset plugin", function () {
       );
     });
 
-    // typeset serialized and re-parsed the document between modules, which
-    // mangled a single-quoted attribute holding a double quote a little more
-    // each time
-    it("serializes the document once", function () {
+    // typeset 0.3 (cheerio 0.22) serialized a single-quoted attribute holding
+    // a double quote without escaping it, and mangled it a little more on
+    // each re-parse between modules. cheerio 1.x escapes it.
+    it("keeps an attribute holding a double quote intact", function () {
       const html = '<p>"x"</p><img alt=\'"x"\' src="a.jpg">';
       const options = { disable: ["ligatures", "hyphenate"] };
 
-      expect(typeset(html, options)).toContain('<img alt x"" src="a.jpg">');
-      expect(walk(html, options)).toContain('<img alt=""x"" src="a.jpg">');
+      expect(typeset(html, options)).toContain(
+        '<img alt="&quot;x&quot;" src="a.jpg">'
+      );
+      expect(walk(html, options)).toEqual(typeset(html, options));
     });
   });
 });

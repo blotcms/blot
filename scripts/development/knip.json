@@ -1,5 +1,12 @@
 {
-  "ignore": ["scripts/development/agentation/**"],
+  "ignoreDependencies": [
+    "node-addon-api",
+    "node-gyp",
+    "eslint",
+    "prettier",
+    "nodemon",
+    "http-auth"
+  ],
   "entry": [
     "scripts/**/*.js",
     "**/tests/**/*.js",
@@ -26,6 +33,7 @@
     "app/blog/static/fonts/test.js",
     "app/blog/static/syntax-highlighter/build.js",
     "app/build/plugins/katex/preview.js",
+    "app/build/plugins/katex/build-css.js",
     "scripts/benchmarks/spec/build-render.spec.js"
   ],
   "paths": {

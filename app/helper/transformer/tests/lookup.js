@@ -27,6 +27,43 @@ describe("transformer", function () {
     expect(result.size).toEqual(jasmine.any(Number));
   });
 
+  it("transforms the file again when isValid rejects the cached result", async function () {
+    var calls = 0;
+    var transform = async (path) => ({ call: ++calls });
+
+    expect(await this.transformer.lookup(this.path, transform)).toEqual({
+      call: 1,
+    });
+    expect(await this.transformer.lookup(this.path, transform)).toEqual({
+      call: 1,
+    });
+
+    const again = await this.transformer.lookup(this.path, transform, {
+      isValid: async (result) => result.call !== 1,
+    });
+
+    expect(again).toEqual({ call: 2 });
+    // The new result replaced the old one in the cache
+    expect(await this.transformer.lookup(this.path, transform)).toEqual({
+      call: 2,
+    });
+  });
+
+  it("uses the cached result when isValid itself fails", async function () {
+    var calls = 0;
+    var transform = async () => ({ call: ++calls });
+
+    await this.transformer.lookup(this.path, transform);
+
+    const result = await this.transformer.lookup(this.path, transform, {
+      isValid: async () => {
+        throw new Error("S3 is down");
+      },
+    });
+
+    expect(result).toEqual({ call: 1 });
+  });
+
   it("transforms a file with incorrect case in the blog's directory", async function () {
     this.path = this.path.toUpperCase();
 

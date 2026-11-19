@@ -2,12 +2,18 @@
 // The archive is hostile, and so are the args, which come from a process we
 // treat as less trusted than this one, so they are checked here too:
 //
-//   { maxEntries, maxBytes, maxRatio }
+//   { maxEntries, maxBytes, maxRatio, only }
 //
 // maxEntries is how many records (directories included) may be walked,
 // maxBytes how many uncompressed bytes the files may add up to, and maxRatio
 // how much more than the archive's own size they may add up to (kept out of
 // the way of small archives: see RATIO_FLOOR). Each is capped by HARD below.
+//
+// only (optional) is a list of the files wanted, for an archive whose files
+// together are more than one reply may hold (a docx's images, from
+// build/converters/pandoc.js). Only those are read, and a file that would take
+// the batch past maxBytes ends it rather than failing it, unless it is the
+// first: meta.files says which came back, and the caller asks again for the rest.
 //
 // The outputs are the files' contents, in archive order, and meta is
 //
@@ -28,6 +34,7 @@
 const yauzl = require("yauzl");
 
 const MiB = 1024 * 1024;
+const MAX_ONLY = 10 * 1000;
 
 // What no caller may raise: the jail's output limit (proxy/unit/sandbox/jail.js)
 // less room for the paths, and what a reply may hold (app/sandbox/index.js)
@@ -133,7 +140,7 @@ function next(zipfile) {
   });
 }
 
-async function extract(input, { maxEntries, maxBytes, maxRatio }) {
+async function extract(input, { maxEntries, maxBytes, maxRatio, only }) {
   const zipfile = await open(input);
   const files = [];
   const outputs = [];
@@ -160,8 +167,13 @@ async function extract(input, { maxEntries, maxBytes, maxRatio }) {
       if (entry.fileName.endsWith("/")) continue;
       if (isSymlink(entry)) throw new Refusal("symlink", entry.fileName);
 
+      if (only && !only.has(entry.fileName)) continue;
+
       declared += entry.uncompressedSize || 0;
-      if (declared > maxBytes) throw new Refusal("size", entry.fileName);
+      if (declared > maxBytes) {
+        if (only && files.length) break;
+        throw new Refusal("size", entry.fileName);
+      }
 
       const buffer = await readEntry(zipfile, entry, over);
       total += buffer.length;
@@ -181,7 +193,19 @@ async function run(args, input) {
     maxEntries: limit(args.maxEntries, HARD.maxEntries),
     maxBytes: limit(args.maxBytes, HARD.maxBytes),
     maxRatio: limit(args.maxRatio, HARD.maxRatio),
+    only: null,
   };
+  if (args.only !== undefined) {
+    if (
+      !Array.isArray(args.only) ||
+      args.only.length > MAX_ONLY ||
+      !args.only.every(
+        (name) => typeof name === "string" && name.length <= 4096
+      )
+    )
+      throw new Error("invalid only");
+    limits.only = new Set(args.only);
+  }
 
   try {
     const { files, outputs } = await extract(input, limits);

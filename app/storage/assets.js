@@ -355,6 +355,12 @@ async function list(blogID, relDir) {
 // relPaths with no leading slash. Other keys under {blogID}/ in the bucket
 // are not listed.
 async function* walk(blogID) {
+  for await (var entry of walkEntries(blogID)) yield entry.relPath;
+}
+
+// As walk, with each file's last-modified time and size:
+// { relPath, modified, size }
+async function* walkEntries(blogID) {
   root(blogID);
 
   var prefix = blogID + "/";
@@ -362,7 +368,8 @@ async function* walk(blogID) {
   for await (var entry of s3.listScope(blogID)) {
     var rel = entry.key.slice(prefix.length);
 
-    if (rel && !/\/$/.test(rel)) yield rel;
+    if (rel && !/\/$/.test(rel))
+      yield { relPath: rel, modified: entry.modified, size: entry.size };
   }
 }
 
@@ -599,6 +606,7 @@ module.exports = {
   exists,
   list,
   walk,
+  walkEntries,
   createReadStream,
   ensureLocal,
   serve,

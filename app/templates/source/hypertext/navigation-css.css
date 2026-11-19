@@ -93,8 +93,13 @@
 }
 
 /* Scrollable sidebar column. Extra 17px ensures no layout shift when scrollbar appears */
-.navigation .sidebar {
+/* Hidden until navigation-js.js has built the tree; only when scripts run,
+   so the links still show without them */
+.js .navigation .sidebar:not(.initialized) {
   visibility: hidden;
+}
+
+.navigation .sidebar {
   {{#sticky_navigation}}
   width: calc(var(--sidebar-width) + 17px); /* keep to accommodate scrollbar */
   height: 100vh;
@@ -168,6 +173,12 @@
 
 .sidebar a:hover {
   color: var(--text-color);
+}
+
+.sidebar a:focus-visible,
+.sidebar button:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: -2px;
 }
 
 .sidebar a.active {

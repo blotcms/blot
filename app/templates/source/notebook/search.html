@@ -6,12 +6,12 @@
       {{> header}}
 
       <div class="content-wrapper">
-        <main class="main">
+        <main class="main" id="main">
           <div class="page-body">
           <h1 class="page-title">Search</h1>
 
           <form class="search-form">
-            <input placeholder="Search for an entry..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" />
+            <input placeholder="Search for an entry..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="search" aria-label="Search" />
             <input type="submit" value="Go" />
           </form>
 
@@ -23,11 +23,10 @@
           {{/query}}
 
           {{#entries}}
-            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span> <span class="light">{{date}}</span></a></li>
+            <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span>{{^hide_dates}} <time class="light" datetime="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">{{date}}</time>{{/hide_dates}}</a></li>
           {{/entries}}
           </ul>
           </div>
-          {{> feed-links}}
         </main>
 
         {{> sidebar}}
@@ -37,6 +36,13 @@
       {{> footer}}
     </div>
 
-    <script type="text/javascript">document.getElementById('search').focus();</script>
+    <script type="text/javascript">
+      // Ready to type into, unless there's already a query or the keyboard
+      // would cover the page on a phone
+      (function () {
+        var input = document.getElementById("search");
+        if (input && !input.value && window.matchMedia && window.matchMedia("(pointer: fine)").matches) input.focus();
+      })();
+    </script>
   </body>
 </html>

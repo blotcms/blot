@@ -19,8 +19,6 @@ export PS1='[BLOT:\u] \W > '
 # Linux 2023) breaks on anything printed to stdout here; keep the rest quiet too.
 cd /var/www/blot 2>/dev/null || true
 
-#. /etc/blot/environment.sh
-
 LOGS=/var/instance-ssd/logs
 
 # Memory and CPU of the running units, blot-blue and blot-green. Whole names: a

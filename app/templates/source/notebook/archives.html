@@ -6,26 +6,35 @@
       {{> header}}
 
       <div class="content-wrapper">
-        <main class="main">
+        <main class="main" id="main">
           <div class="page-body">
           <h1 class="page-title">Archives</h1>
 
           <form action="/search" class="search-form">
-            <input placeholder="Search..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" />
+            <input placeholder="Search..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="search" aria-label="Search" />
             <input type="submit" value="Go" />
           </form>
 
+          {{#archives.length}}
+          {{! A list of years to jump to, when there's more than one }}
+          {{#archives.1}}
+          <nav class="archive-years" aria-label="Years">
+            {{#archives}}<a href="#{{year}}">{{year}}</a>{{^last}} {{/last}}{{/archives}}
+          </nav>
+          {{/archives.1}}
+          {{#archives}}
+          <h2 class="archive-year" id="{{year}}">{{year}}</h2>
           <ul class="full-archive">
-            {{#archives}}
-              {{#months}}
-                {{#entries}}
-                <li><a href="{{{url}}}" title="{{title}}"><span class="archive-title">{{title}}</span> <span class="light">{{date}}</span></a></li>
-                {{/entries}}
-              {{/months}}
-            {{/archives}}
+            {{#months}}
+              {{#entries}}
+              <li><a href="{{{url}}}"><span class="archive-title">{{title}}</span>{{^hide_dates}} <time class="light" datetime="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">{{date}}</time>{{/hide_dates}}</a></li>
+              {{/entries}}
+            {{/months}}
           </ul>
+          {{/archives}}
+          {{/archives.length}}
+          {{^archives.length}}<p class="empty-state">No posts yet.</p>{{/archives.length}}
           </div>
-          {{> feed-links}}
         </main>
 
         {{> sidebar}}

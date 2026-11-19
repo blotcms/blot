@@ -7,9 +7,27 @@
 - When the maintainer asks to “clear the folder,” remove everything inside the validated source directory `data/local-sources/<handle>/`, including hidden files and nested directories, but leave the source folder itself in place. Use `local` unless another blog handle is specified, then wait for the watcher/rebuild to finish and verify that the live site and Archives reflect the empty source.
 - Treat the replacement as exact: include all source-folder contents, including hidden files, and clear only the validated destination folder. Confirm the source and destination paths before removing existing destination contents.
 
+## Sites for checking templates
+
+`npm run folder` builds every site there is for checking a template: one per demo folder in `app/templates/folders` (bees, sergey, david and the rest, each on the template that previews it) and the test sites in `scripts/development/sites`, each meant to break templates in one way:
+
+- `empty`: no posts and no title, for empty states.
+- `tiny`: exactly one post.
+- `huge`: about 1,500 posts and 300 tags, for pagination, archives and tag pages.
+- `torture`: long titles and menu labels, odd image shapes, every file type, a folder post, a draft, a scheduled post and Markdown edge cases.
+- `arabic` and `japanese`: right-to-left and CJK writing.
+
+Switch a test site to the template being worked on in the dashboard; re-running `npm run folder` keeps that choice. `npm run folder <handle>` rebuilds one site, and `npm run folder --down` deletes them all. None of it touches the `local` scratchpad site. See `scripts/development/sites/README.md`.
+
 ## Edit, fork, and preview
 
-When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use the maintainer's local `preview` skill (`~/.claude/skills/preview/SKILL.md`): read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not ask for `https://local.blot` or use it directly as the worktree preview. You must use host access to access the local server.
+When working from an isolated git worktree, any request to “preview,” “show,” “set up a preview,” or “spin up a preview” must use the maintainer's local `preview` skill (`~/.claude/skills/preview/SKILL.md`): read and follow that file for preview setup, URLs, login links, slot lifecycle, and cleanup. Those instructions take precedence over the main-checkout workflow below. Do not ask for `https://blot.localhost` or use it directly as the worktree preview. You must use host access to access the local server.
+
+## Changing a bundled template
+
+Blogs run their own copies of the bundled templates, so a bundled template in `source/` can be changed, redesigned or replaced without changing anyone's site. Don't flag that as a risk to customers.
+
+How the copy is made: Install only points the blog at `SITE:<name>`. The blog gets its own copy, `{blogID}:<name>`, the first time it changes anything in the template (`app/dashboard/site/template/save/fork-if-needed.js`). A blog still on `SITE:<name>` would see the change, but almost none are: a production count on 15 Nov 2026 found under 0.1% of blogs on any `SITE:` template, and none on the one being replaced. Before reworking a bundled template, recount the blogs on its `SITE:` id if in doubt.
 
 ## Editing discipline
 
@@ -47,15 +65,15 @@ Set `sizes` to the photo's rendered CSS width (px, not `em`/`rem`, which follow 
 
 Keep a page from shifting sideways when a scrollbar appears or disappears (for example when a lightbox locks scrolling) with `html { scrollbar-gutter: stable; }`. Browsers that draw classic scrollbars then reserve that strip on the right at all times, even on a page that never scrolls, so anything aligned to the right edge sits a scrollbar's width further in than the left edge.
 
-To pull a right-aligned control (such as a header nav) back towards the edge, give it a small negative right margin of about a scrollbar's width, roughly `-1em` at the header's type size, with a short comment saying why. This is a deliberate trade: with overlay scrollbars, where no room is reserved, the links sit slightly closer to the edge than the title does on the left. Keynote's `#header .nav` does this.
+To pull a right-aligned control (such as a header nav) back towards the edge, give it a small negative right margin of about a scrollbar's width, roughly `-1em` at the header's type size, with a short comment saying why. This is a deliberate trade: with overlay scrollbars, where no room is reserved, the links sit slightly closer to the edge than the title does on the left.
 
 ## Responsive thumbnails
 
 Use `srcset` with width descriptors when a template displays a generated thumbnail at a size that can differ from the available thumbnail sizes. Include the small, medium, and large URLs with their actual pixel widths. Add a `sizes` value that describes the image's rendered CSS width so the browser can choose an appropriate candidate for the viewport and device pixel ratio. Keep a regular `src` as the fallback, and mirror the responsive attributes in a `<noscript>` image when that fallback is present.
 
-The album template uses this pattern in `album/entries.html` and `album/tagged.html`. The portfolio template uses it in `portfolio/fitted-grid.html`, where `sizes` calculates the image width from its aspect ratio and configured row height, and in `portfolio/archives.html` and `portfolio/search.html`, where the thumbnail slot is 80px wide.
+The album template uses this pattern in `album/entries.html` and `album/tagged.html`, and the gallery template in `gallery/_card.html` (ruled catalog columns). The portfolio template uses it in `portfolio/fitted-grid.html`, where `sizes` calculates the image width from its aspect ratio and configured row height, and in `portfolio/archives.html` and `portfolio/search.html`, where the thumbnail slot is 80px wide.
 
-Other thumbnail views now use the same pattern: `gallery/_item.html` (`thumbnail_size` square), `links/_post.html` and `links/search.html` (responsive grid columns), `studio/entries.html` and `studio/tagged.html` (responsive grid columns), `fieldnotes/related.html` (350px image slot), and `magazine/entry_line.html` (one-third and two-thirds columns). Their existing CSS, image styles, and fallback URLs are preserved; `sizes` describes their current layout so the browser can select among generated variants without changing the rendered dimensions.
+Other thumbnail views now use the same pattern: `links/_post.html` and `links/search.html` (responsive grid columns), `studio/entries.html` and `studio/tagged.html` (responsive grid columns), `fieldnotes/related.html` (350px image slot), and `magazine/entry_line.html` (one-third and two-thirds columns). Their existing CSS, image styles, and fallback URLs are preserved; `sizes` describes their current layout so the browser can select among generated variants without changing the rendered dimensions.
 
 Use responsive candidates for displayed thumbnails, not social preview metadata or full-size entry images. When a template has a `<noscript>` image, keep its `srcset` and `sizes` in sync with the primary image.
 

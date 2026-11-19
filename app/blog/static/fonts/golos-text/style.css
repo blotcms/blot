@@ -5,8 +5,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/golos-text/400.woff2?version=b19334&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/golos-text/400.woff?version=f6d3e9&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.39em}
-.push-double{margin-right:0.39em}
-.pull-single{margin-left:-0.22em}
-.push-single{margin-right:0.22em}
+.pull-double {margin-left:-0.49em}
+.push-double{margin-right:0.49em}
+.pull-single{margin-left:-0.3em}
+.push-single{margin-right:0.3em}
 .push-double,.push-single{display:inline-block}

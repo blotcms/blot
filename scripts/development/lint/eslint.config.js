@@ -15,7 +15,6 @@ module.exports = [
       "coverage/**",
       ".nyc_output/**",
       ".benchmarks/**",
-      "scripts/development/agentation/**",
       // Mustache templates that only become JavaScript once rendered
       "app/templates/source/**",
       "app/build/plugins/analytics/public.js",

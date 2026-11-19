@@ -175,6 +175,66 @@ describe("build", function () {
     });
   });
 
+  describe("an image's caption", function () {
+    var fixtures = require("path").join(__dirname, "../converters/img/tests");
+
+    async function build(test, name, fixture) {
+      var path = "/" + name;
+      await folder.writeFrom(test.blog.id, path, fixtures + fixture);
+      test.blog.plugins.imageCaption.enabled = true;
+      return buildEntry(test.blog, path);
+    }
+
+    it("is its EXIF ImageDescription", async function () {
+      this.blog.imageExif = "basic";
+
+      var entry = await build(
+        this,
+        "Sunset.jpg",
+        "/descriptions/described.jpg"
+      );
+      var caption =
+        'Sunset at <strong>Point Reyes</strong>, by <a href="https://ann.example">Ann</a><br>IMG_2041_final_v2';
+
+      expect(entry.exif.ImageDescription).toEqual(caption);
+      expect(entry.html).toContain(
+        '<span class="caption">' + caption + "</span>"
+      );
+      expect(entry.html).not.toContain('<span class="caption">Sunset</span>');
+      expect(entry.html).toContain('alt="Sunset"');
+    });
+
+    it("is its title when EXIF is off", async function () {
+      this.blog.imageExif = "off";
+
+      var entry = await build(
+        this,
+        "Sunset.jpg",
+        "/descriptions/described.jpg"
+      );
+
+      expect(entry.html).toContain('<span class="caption">Sunset</span>');
+      expect(entry.html).not.toContain("Point Reyes");
+    });
+
+    it("is its title when a camera wrote the description", async function () {
+      this.blog.imageExif = "basic";
+
+      var entry = await build(this, "Camera.jpg", "/captions/camera.jpg");
+
+      expect(entry.exif.ImageDescription).toEqual("OLYMPUS DIGITAL CAMERA");
+      expect(entry.html).toContain('<span class="caption">Camera</span>');
+    });
+
+    it("is its title when the description is blank", async function () {
+      this.blog.imageExif = "basic";
+
+      var entry = await build(this, "gps.jpg", "/gps.jpg");
+
+      expect(entry.html).toContain('<span class="caption">gps</span>');
+    });
+  });
+
   it("handles images with accents and spaces in their filename", async function () {
     var path = "/blog/Hello world.txt";
     var contents = "![Best Image Ever](óå g.jpg)";

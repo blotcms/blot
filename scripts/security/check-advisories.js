@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 // Daily check: is a runtime or OS we depend on behind on a security release,
 // or past (or close to) end-of-life? Reads the pins from the repo, fetches
-// public sources (nodejs.org, endoflife.date, nginx.org, GitHub, Amazon Linux
+// public sources (nodejs.org, endoflife.date, nginx.org, Hackage, Amazon Linux
 // security bulletins), compares, and prints a short report.
 //
 //   node scripts/security/check-advisories.js [--days N] [--json]
-//        [--npm] [--dependabot]
+//        [--npm] [--dependabot] [--code-scanning]
 //
 //   --days N       ALAS look-back window (default 2)
 //   --json         machine-readable output
 //   --npm          also run `npm audit --omit=dev` in the repo root
-//   --dependabot   also summarise open Dependabot alerts via `gh api`
+//   --dependabot   also list open Dependabot alerts via `gh api`
+//   --code-scanning  also list open CodeQL alerts and the age of master's
+//                  last scan via `gh api`
 //
 // Exit code 1 if anything is in ACTION NEEDED, else 0. Every source is
 // fetched independently with a timeout; a failing one is reported as
@@ -315,44 +317,48 @@ async function checkNginxAndOpenresty() {
   }
 
   if (pins.openresty) {
-    await source("OpenResty tags (GitHub)", async () => {
-      const tags = await (
-        await get(
-          "https://api.github.com/repos/openresty/openresty/tags?per_page=30",
-          { accept: "application/vnd.github+json" }
-        )
-      ).json();
-      const vers = tags
-        .map((t) => t.name.replace(/^v/, ""))
-        .filter((v) => /^\d+\.\d+\.\d+\.\d+$/.test(v))
-        .sort((a, b) => cmp(b, a));
-      if (!vers.length) throw new Error("no tags");
+    await source("OpenResty releases (openresty.org)", async () => {
+      const html = await (
+        await get("https://openresty.org/en/download.html")
+      ).text();
+      const vers = [
+        ...new Set(
+          [...html.matchAll(/openresty-(\d+\.\d+\.\d+\.\d+)\.tar\.gz/g)].map(
+            (m) => m[1]
+          )
+        ),
+      ].sort((a, b) => cmp(b, a));
+      if (!vers.length) throw new Error("no releases listed");
       if (cmp(vers[0], pins.openresty) > 0) {
         add(
           "watch",
           "OpenResty: pinned " +
             pins.openresty +
-            ", newest tag " +
+            ", newest release " +
             vers[0] +
             " (read release notes for security fixes)"
         );
       } else {
-        add("ok", "OpenResty " + pins.openresty + " is the newest tag");
+        add("ok", "OpenResty " + pins.openresty + " is the newest release");
       }
     });
   }
 }
 
 function pandocNote() {
-  // endoflife.date has no pandoc product; compare against GitHub.
+  // endoflife.date has no pandoc product. GitHub's unauthenticated API is
+  // rate-limited (403) from CI and the cloud sessions, so read Hackage, where
+  // every Pandoc release is published. "normal" marks a release that is not
+  // deprecated; take the highest version of those.
   if (!pins.pandoc) return;
-  return source("Pandoc latest release (GitHub)", async () => {
-    const rel = await (
-      await get("https://api.github.com/repos/jgm/pandoc/releases/latest", {
-        accept: "application/vnd.github+json",
-      })
+  return source("Pandoc latest release (Hackage)", async () => {
+    const versions = await (
+      await get("https://hackage.haskell.org/package/pandoc.json")
     ).json();
-    const latest = rel.tag_name;
+    const latest = Object.keys(versions)
+      .filter((v) => versions[v] === "normal")
+      .sort((a, b) => cmp(b, a))[0];
+    if (!latest) throw new Error("no normal releases listed");
     if (cmp(latest, pins.pandoc) > 0)
       add("watch", "Pandoc: pinned " + pins.pandoc + ", latest " + latest);
     else add("ok", "Pandoc " + pins.pandoc + " is the latest release");
@@ -480,29 +486,121 @@ async function checkNpm() {
   });
 }
 
+// Lists each open alert, so the brief can say which are new since the last
+// run. Critical goes under ACTION NEEDED, everything else under WATCH.
 async function checkDependabot() {
   await source("Dependabot alerts (gh)", async () => {
-    const out = JSON.parse(
+    // --slurp wraps the pages in one array, so flatten them
+    const alerts = JSON.parse(
       await run("gh", [
         "api",
+        "--paginate",
+        "--slurp",
         "repos/{owner}/{repo}/dependabot/alerts?state=open&per_page=100",
       ])
+    ).flat();
+    for (const a of alerts) {
+      const sev = (a.security_advisory && a.security_advisory.severity) || "?";
+      const dep = a.dependency || {};
+      const fix =
+        a.security_vulnerability &&
+        a.security_vulnerability.first_patched_version;
+      add(
+        sev === "critical" ? "action" : "watch",
+        "Dependabot alert #" +
+          a.number +
+          " (" +
+          sev +
+          "): " +
+          ((dep.package && dep.package.name) || "?") +
+          " in " +
+          (dep.manifest_path || "?") +
+          (dep.scope === "development" ? " (dev)" : "") +
+          ", fixed in " +
+          ((fix && fix.identifier) || "no release yet") +
+          " " +
+          a.html_url
+      );
+    }
+    if (!alerts.length) add("ok", "Dependabot: no open alerts");
+  });
+}
+
+// The open alert list is normally empty (everything was triaged in Nov 2026),
+// so every open alert is listed. A scan that stops running would also leave
+// the list empty, hence the check on the age of master's last analysis.
+async function checkCodeScanning() {
+  await source("Code scanning alerts (gh)", async () => {
+    // --slurp wraps the pages in one array, so flatten them
+    const alerts = JSON.parse(
+      await run("gh", [
+        "api",
+        "--paginate",
+        "--slurp",
+        "repos/{owner}/{repo}/code-scanning/alerts?state=open&per_page=100",
+      ])
+    ).flat();
+    const serious = (a) =>
+      ["critical", "high"].includes(a.rule && a.rule.security_severity_level);
+    for (const a of alerts) {
+      const loc = a.most_recent_instance && a.most_recent_instance.location;
+      add(
+        serious(a) ? "action" : "watch",
+        "Code scanning alert #" +
+          a.number +
+          " (" +
+          (a.rule.security_severity_level || a.rule.severity) +
+          "): " +
+          a.rule.id +
+          " at " +
+          (loc ? loc.path + ":" + loc.start_line : "?") +
+          " " +
+          a.html_url
+      );
+    }
+    if (!alerts.length) add("ok", "Code scanning: no open alerts");
+  });
+
+  await source("Code scanning analyses (gh)", async () => {
+    const analyses = JSON.parse(
+      await run("gh", [
+        "api",
+        "repos/{owner}/{repo}/code-scanning/analyses?ref=refs/heads/master&per_page=10",
+      ])
     );
-    const count = (s) =>
-      out.filter(
-        (a) => a.security_advisory && a.security_advisory.severity === s
-      ).length;
-    const crit = count("critical"),
-      high = count("high");
+    if (!analyses.length) throw new Error("no analyses on master");
+    // Newest first: report a language whose latest analysis failed, and
+    // measure freshness from the newest analysis that didn't
+    const seen = new Set();
+    for (const a of analyses) {
+      if (seen.has(a.category)) continue;
+      seen.add(a.category);
+      if (a.error)
+        add(
+          "watch",
+          "Code scanning: master's latest " +
+            a.category +
+            " analysis failed: " +
+            a.error
+        );
+    }
+    const good = analyses.find((a) => !a.error);
+    if (!good) {
+      add(
+        "watch",
+        "Code scanning: none of master's last 10 analyses succeeded"
+      );
+      return;
+    }
+    const days = Math.floor((today - new Date(good.created_at)) / 86400000);
+    // Default setup scans every push to master and weekly
     add(
-      crit ? "action" : high ? "watch" : "ok",
-      "Dependabot open alerts: critical " +
-        crit +
-        ", high " +
-        high +
-        " (of " +
-        out.length +
-        " open)"
+      days > 8 ? "watch" : "ok",
+      "Code scanning: last successful master scan " +
+        days +
+        " days ago (" +
+        good.created_at.slice(0, 10) +
+        ")"
     );
   });
 }
@@ -521,6 +619,7 @@ async function checkDependabot() {
     checkAlas(),
     flag("--npm") ? checkNpm() : null,
     flag("--dependabot") ? checkDependabot() : null,
+    flag("--code-scanning") ? checkCodeScanning() : null,
   ]);
 
   const result = {

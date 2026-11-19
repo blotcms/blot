@@ -41,51 +41,51 @@
       "line_height": 1.6
     },
     "profile_image": {},
-    "demo_folder": "bjorn"
+    "demo_folder": "sky"
   },
   "views": {
     "archives.html": {
       "url": "/archives",
       "partials": {
-        "title": "Archives - {{{title}}}",
-        "description": "Everything posted on {{{title}}}"
+        "title": "Archives - {{title}}",
+        "description": "Everything posted on {{title}}"
       }
     },
     "tags.html": {
       "url": "/tags",
       "partials": {
-        "title": "Tags - {{{title}}}",
-        "description": "All the tags used on {{{title}}}"
+        "title": "Tags - {{title}}",
+        "description": "All the tags used on {{title}}"
       }
     },
     "tagged.html": {
       "partials": {
-        "title": "{{{tag}}} - {{{title}}}",
-        "description": "{{{tag}}} on {{{title}}}"
+        "title": "{{tag}} - {{title}}",
+        "description": "{{tag}} on {{title}}"
       }
     },
     "entries.html": {
       "partials": {
-        "title": "{{{title}}}",
-        "description": "The latest on {{{title}}}"
+        "title": "{{title}}",
+        "description": "The latest on {{title}}"
       }
     },
     "error.html": {
       "partials": {
-        "title": "{{{error.title}}} - {{{title}}}",
-        "description": "Error on {{{title}}}"
+        "title": "{{error.title}} - {{title}}",
+        "description": "Error on {{title}}"
       }
     },
     "entry.html": {
       "partials": {
-        "title": "{{{entry.title}}} - {{{title}}}",
-        "description": "{{{entry.summary}}}"
+        "title": "{{entry.title}} - {{title}}",
+        "description": "{{entry.summary}}"
       }
     },
     "search.html": {
       "partials": {
-        "title": "Search - {{{title}}}",
-        "description": "Search everything on {{{title}}}"
+        "title": "Search - {{title}}",
+        "description": "Search everything on {{title}}"
       }
     }
   }

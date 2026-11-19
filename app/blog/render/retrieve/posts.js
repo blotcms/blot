@@ -1,7 +1,10 @@
 const Entries = require("models/entries");
 const Tags = require("models/tags");
 const projectEntryFields = require("./helpers/projectEntryFields");
+const listPagination = require("./helpers/listPagination");
+const paginationURLs = require("../../lib/paginationURLs");
 const getTemplateSortOptions = require("blog/sortOptions");
+const { assertPageInRange } = require("../../lib/pageNotFound");
 const asRetriever = require("../../lib/asRetriever");
 const {
   normalizePageNumber,
@@ -63,8 +66,14 @@ async function posts(req, res) {
     page = { entries: result.entries, pagination: result.pagination || {} };
   }
 
-  res.locals.pagination = page.pagination;
-  return page.entries;
+  // A page past the last one is a 404 (page 1 never is)
+  assertPageInRange(res, page.pagination);
+
+  // A copy with next_url and previous_url, which depend on the request
+  const pagination = paginationURLs(req, page.pagination);
+
+  res.locals.pagination = pagination;
+  return listPagination(page.entries, pagination);
 }
 
 module.exports = asRetriever(posts);

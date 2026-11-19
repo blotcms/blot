@@ -100,7 +100,7 @@ API; it edits a directory.
 - `redis` — 6.2.12-alpine, port 6379 exposed to the host.
 - `toxiproxy` — injects Redis latency once the app reports readiness (disabled
   during startup and during nodemon restarts). `BLOT_USE_TOXIPROXY=false` opts out.
-- `nginx` (openresty) — ports 80/443, terminates TLS for `local.blot`.
+- `nginx` (openresty) — ports 80/443, terminates TLS for `blot.localhost`.
 
 `start.sh` also runs `node scripts/development/open-folder-server.js` **on the host**
 (port 3020) so the dashboard's "open folder" button can `open -R` a real Finder path.
@@ -194,13 +194,13 @@ Code CLI on the host.
 | Key | Dev value |
 |---|---|
 | `environment` | `development` (unless `NODE_ENV=production`) |
-| `host` | `process.env.BLOT_HOST` — `start.sh` defaults it to `local.blot` |
+| `host` | `process.env.BLOT_HOST` — `start.sh` defaults it to `blot.localhost` |
 | `protocol` | `https://` |
-| `cdn.origin` | `https://cdn.local.blot` |
+| `cdn.origin` | `https://cdn.blot.localhost` |
 | `blog_folder_dir` | `<repo>/data/blogs` |
 | `tmp_directory` | `<repo>/data/tmp` |
 
-Site URL is therefore `https://<handle>.local.blot`.
+Site URL is therefore `https://<handle>.blot.localhost`.
 
 ### 1.5 Preflight — the server must already be running
 
@@ -224,9 +224,9 @@ routing → the `config.host` value the rest of the script will build URLs from.
 **Local DNS and TLS on this machine** (verified):
 
 - `/etc/resolver/blot` contains `nameserver 127.0.0.1`, so a local resolver maps
-  `*.blot` — including wildcard subdomains such as `<handle>.local.blot` and
-  `preview-of-x-on-y.local.blot` — to `127.0.0.1`. There is **no** `/etc/hosts`
-  entry for `local.blot`; do not look for one.
+  `*.blot` — including wildcard subdomains such as `<handle>.blot.localhost` and
+  `preview-of-x-on-y.blot.localhost` — to `127.0.0.1`. There is **no** `/etc/hosts`
+  entry for `blot.localhost`; do not look for one.
 - `scripts/development/proxy/setup.sh` generates a wildcard cert for `$BLOT_HOST` and
   `*.$BLOT_HOST` with `mkcert` into `data/ssl/`, and `mkcert -install` trusts it.
   It exits early if `data/ssl/certs/wildcard.crt` and `.../private/wildcard.key`
@@ -249,10 +249,10 @@ being down, and shouldn't produce a misleading error.
    an explicit check gives a better error than a downstream crash.
 
 Note the `BLOT_HOST` resolution order the script must mirror: `start.sh` defaults
-it to `local.blot` and passes it into compose, while `config/index.js` defaults to
+it to `blot.localhost` and passes it into compose, while `config/index.js` defaults to
 `localhost` when the variable is absent. A script running on the **host** without
 `BLOT_HOST` set would compute `localhost` and check the wrong URL. Read
-`BLOT_HOST` from the environment with a `local.blot` default (matching
+`BLOT_HOST` from the environment with a `blot.localhost` default (matching
 `start.sh`), or read the effective value out of the container:
 
 ```bash
@@ -890,12 +890,12 @@ the `README`) and partly a constraint on what the agent is allowed to create.
 | `Drafts/*.html` preview files | Blot writes a `.html` preview beside every draft (`app/sync/update/set.js` → `Preview.write`); generated artefacts | delete, or avoid creating drafts at all |
 | `.DS_Store`, `._*`, `*.swp`, `~$*` | noise; some are silently skipped by Blot anyway | `clients/util/shouldIgnoreFile` already encodes the full list if you want to script the cleanup |
 | `.git` and `.verification/` | both are dotfiles; Finder's select-all-then-compress excludes them automatically (§6.4, §6.10) | **nothing to do** — this is why both are dot-named. Blot also never publishes `.git`, and `/.git` is in `BLOCKED_PATTERNS` so it 404s over HTTP |
-| CDN-absolute URLs (`https://cdn.local.blot/…`) | the dev host is baked in; the customer's CDN origin differs | template markup must use `{{#cdn}}/style.css{{/cdn}}` and folder-relative asset paths only, never a literal origin. `{{{cdn}}}` for `preconnect` is fine — it resolves per-blog at render time |
+| CDN-absolute URLs (`https://cdn.blot.localhost/…`) | the dev host is baked in; the customer's CDN origin differs | template markup must use `{{#cdn}}/style.css{{/cdn}}` and folder-relative asset paths only, never a literal origin. `{{{cdn}}}` for `preconnect` is fine — it resolves per-blog at render time |
 | Any absolute `data/blogs/<blogID>/` path | blog-ID specific | none should exist; worth grepping for before handing over |
 | `Templates` vs `templates` casing | `determineTemplateFolder` prefers whichever already exists in the target folder, defaulting to `Templates` (or `templates` if every visible root entry is lowercase) | use `Templates/`. `buildFromFolder` scans **both** spellings, so either works on import |
 | Template slug collisions | the customer may already have a template with that slug — `makeID` is `<blogID>:<slug>` | pick a distinctive slug from the source site, and note in the `README` that a same-slug template will be merged into |
 
-A `grep` for `local.blot`, `cdn.local.blot` and the blog ID across the folder is a
+A `grep` for `blot.localhost`, `cdn.blot.localhost` and the blog ID across the folder is a
 cheap final assertion, and worth running automatically at the end of a run even
 though the script is not doing the zipping.
 
@@ -929,7 +929,7 @@ scripts/development/translate/
   targets.js           ← IN container: which pages to compare
   finalize.js          ← IN container: re-assert "enabled": true, grep for
                           host-specific strings (§5.1, §5.2) — milestone G
-  screenshot.js        ← ON host: puppeteer (container cannot reach *.local.blot)
+  screenshot.js        ← ON host: puppeteer (container cannot reach *.blot.localhost)
   capture.js           ← ON host: pair the shots, drop bad sources
   compare-server.js    ← ON host: comparison UI + feedback intake (§6.6.2)
   state.js             ← run-state read/write for idempotent re-runs — milestone G
@@ -1157,7 +1157,7 @@ Verified it behaves correctly everywhere that matters:
 | Check | Result |
 |---|---|
 | Published as a post? | **No** — `isHidden()` returns `true` for `.verification/out.png` (it tests each path segment for a leading `_` or `.`), and `isPublic()` in `sync/update/set.js` catches any path containing `/.` |
-| Served over HTTP? | **Yes** — `app/blog/assets.js` sets `dotfiles: "allow"`, and `.verification` is not in `BLOCKED_PATTERNS` (`..`, `.php`, `/.git`, `\0`). So `https://<handle>.local.blot/.verification/input-homepage.png` still works for the maintainer |
+| Served over HTTP? | **Yes** — `app/blog/assets.js` sets `dotfiles: "allow"`, and `.verification` is not in `BLOCKED_PATTERNS` (`..`, `.php`, `/.git`, `\0`). So `https://<handle>.blot.localhost/.verification/input-homepage.png` still works for the maintainer |
 | Ignored by the folder watcher? | **No** — `shouldIgnoreFile(".verification/out.png")` is `false`, so writing a screenshot still triggers one sync. Harmless, but see the `cacheID` note below |
 | Hidden from Finder select-all? | **Yes** — which is the point |
 
@@ -1191,21 +1191,21 @@ with a 20 s page timeout, and shoots at `deviceScaleFactor: 2` with
 But **it cannot reach the dev site from inside the container.** Verified:
 
 ```
-$ docker exec blot-node-app-1 getent hosts example.local.blot
-127.0.0.1   example.local.blot
-$ docker exec blot-node-app-1 wget -O- --no-check-certificate https://local.blot/health
+$ docker exec blot-node-app-1 getent hosts example.blot.localhost
+127.0.0.1   example.blot.localhost
+$ docker exec blot-node-app-1 wget -O- --no-check-certificate https://blot.localhost/health
 wget: can't connect to remote host (127.0.0.1): Connection refused
 ```
 
 Docker's embedded DNS forwards `*.blot` to the host resolver, which answers
 `127.0.0.1` — correct on the host, but inside the container that is the container
 itself, and nginx is a different container. So container-side screenshots of
-`https://<handle>.local.blot` fail.
+`https://<handle>.blot.localhost` fail.
 
 From the host both work:
 
 ```
-$ curl -o /dev/null -w '%{http_code}' https://example.local.blot/    → 200-series routing
+$ curl -o /dev/null -w '%{http_code}' https://example.blot.localhost/    → 200-series routing
 ```
 
 `/etc/resolver/blot` resolves the wildcard and the mkcert cert is trusted (§1.5).
@@ -1341,11 +1341,11 @@ every Blot response:
 
 ```
 X-Frame-Options: ALLOW-FROM <config.host>
-Content-Security-Policy: frame-ancestors 'self' https://local.blot
+Content-Security-Policy: frame-ancestors 'self' https://blot.localhost
 ```
 
 So a UI served from `http://localhost:3021` **cannot** iframe
-`https://<handle>.local.blot` — `frame-ancestors` does not include it, and
+`https://<handle>.blot.localhost` — `frame-ancestors` does not include it, and
 `ALLOW-FROM` is deprecated and ignored by modern browsers anyway, leaving CSP in
 charge.
 
@@ -1356,7 +1356,7 @@ precisely so the dashboard's template editor can embed the page. `app/blog/draft
 does the same for `/_draft/*`. So the local Blot site **is** iframeable at:
 
 ```
-https://preview-of-my-<template-slug>-on-<handle>.local.blot/
+https://preview-of-my-<template-slug>-on-<handle>.blot.localhost/
 ```
 
 `app/views/dashboard/template/js/template-editor-preview-iframe.js` is the working

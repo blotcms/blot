@@ -26,6 +26,14 @@ describe("models/file", function () {
     return found;
   }
 
+  // Names in listing order: natural order, by models/file/key's members
+  function natural(list) {
+    return list
+      .map(File.key.sortMember)
+      .sort(File.key.compareSorted)
+      .map(File.key.nameOfSorted);
+  }
+
   function names(entries) {
     return entries.map(function (entry) {
       return entry.name;
@@ -172,8 +180,8 @@ describe("models/file", function () {
         keys.push(...(Array.isArray(key) ? key : [key]));
       }
 
-      // A hash, a lowercased lookup and a names set each for "/" and "/d",
-      // the path set and the totals
+      // A hash, a lowercased lookup and a natural-order sorted set each for
+      // "/" and "/d", the path set and the totals
       expect(keys.length).toEqual(8);
     });
   });
@@ -267,11 +275,12 @@ describe("models/file", function () {
           })
           .filter(function (name, i, all) {
             return all.indexOf(name) === i;
-          })
-          .sort();
+          });
+
+        this.expected = natural(this.expected);
       });
 
-      it("pages in code-unit order, with no duplicate and no gap across cursors", async function () {
+      it("pages in natural order, with no duplicate and no gap across cursors", async function () {
         expect(this.expected.length).toEqual(3000 + 100 + AWKWARD.length);
         expect(await pages(this.blog.id, "/big", 97)).toEqual(this.expected);
         expect(names(await File.listAll(this.blog.id, "/big"))).toEqual(
@@ -328,21 +337,21 @@ describe("models/file", function () {
           after = page.next;
         } while (after !== null);
 
-        var expected = this.expected
-          .filter(function (name) {
-            return name !== "f2000" && name !== "s050";
-          })
-          .concat("f2000b", "new")
-          .sort();
+        var expected = natural(
+          this.expected
+            .filter(function (name) {
+              return name !== "f2000" && name !== "s050";
+            })
+            .concat("f2000b", "new")
+        );
 
         // f0050 was listed before it went, and a-before sorts before the
         // cursor, so neither is seen again
         expect(seen).toEqual(expected);
         expect(names(await File.listAll(blogID, "/big"))).toEqual(
-          expected
-            .filter((name) => name !== "f0050")
-            .concat("a-before")
-            .sort()
+          natural(
+            expected.filter((name) => name !== "f0050").concat("a-before")
+          )
         );
       });
 
@@ -384,10 +393,13 @@ describe("models/file", function () {
       });
     });
 
-    describe("a directory without a names set", function () {
-      // As a directory last changed before names sets existed is stored
+    describe("a directory without a sorted set", function () {
+      // As a directory last changed before they existed is stored
       async function forget(blogID, dir) {
-        await client.del(File.key.names(blogID, dir));
+        await client.del([
+          File.key.names(blogID, dir),
+          File.key.sort(blogID, "all", dir),
+        ]);
       }
 
       beforeEach(async function () {
@@ -419,7 +431,7 @@ describe("models/file", function () {
 
       it("still lists in order, reading the hash whole", async function () {
         expect(this.expected.length).toEqual(1203);
-        expect(this.expected.slice(-2)).toEqual(["\u{1F600}", "！"]);
+        expect(this.expected.slice(-2)).toEqual(["！", "\u{1F600}"]);
         expect(await pages(this.blog.id, "/old", 101)).toEqual(this.expected);
         expect(
           await File.list(this.blog.id, "/old", { after: this.expected[1202] })
@@ -428,22 +440,23 @@ describe("models/file", function () {
           this.expected
         );
         expect(
-          await client.exists(File.key.names(this.blog.id, "/old"))
+          await client.exists(File.key.sort(this.blog.id, "all", "/old"))
         ).toEqual(0);
       });
 
-      it("gets a complete names set from its first new name, and keeps it through removes", async function () {
+      it("gets complete sets from its first new name, and keeps them through removes", async function () {
         await File.set(this.blog.id, "/old/0600x", file(1));
         await File.remove(this.blog.id, "/old/0000");
         await File.remove(this.blog.id, "/old/sub");
 
-        var expected = this.expected
-          .filter((name) => name !== "0000" && name !== "sub")
-          .concat("0600x")
-          .sort();
+        var expected = natural(
+          this.expected
+            .filter((name) => name !== "0000" && name !== "sub")
+            .concat("0600x")
+        );
 
         expect(
-          await client.zCard(File.key.names(this.blog.id, "/old"))
+          await client.zCard(File.key.sort(this.blog.id, "all", "/old"))
         ).toEqual(expected.length);
         expect(await pages(this.blog.id, "/old", 101)).toEqual(expected);
       });
@@ -453,37 +466,38 @@ describe("models/file", function () {
         await File.remove(this.blog.id, "/old/0002");
 
         expect(
-          await client.exists(File.key.names(this.blog.id, "/old"))
+          await client.exists(File.key.sort(this.blog.id, "all", "/old"))
         ).toEqual(0);
         expect(await pages(this.blog.id, "/old", 500)).toEqual(
           this.expected.filter((name) => name !== "0002")
         );
       });
 
-      it("is given one by addMissingNames, which only counts without apply", async function () {
-        expect(await File.addMissingNames(this.blog.id)).toEqual({
-          dirs: 3,
-          missing: 3,
-          names: 1205,
-        });
-        expect(
-          await client.exists(File.key.names(this.blog.id, "/old"))
-        ).toEqual(0);
-
-        expect(
-          await File.addMissingNames(this.blog.id, { apply: true })
-        ).toEqual({ dirs: 3, missing: 3, names: 1205 });
-        expect(await File.addMissingNames(this.blog.id)).toEqual({
-          dirs: 3,
-          missing: 0,
-          names: 0,
-        });
+      it("is given one by checkSorts, after which listings don't read the hash", async function () {
+        for await (var found of File.checkSorts(this.blog.id, { apply: true }))
+          expect(found.state).not.toBe("mismatched");
 
         spyOn(client, "hScan").and.callThrough();
 
         expect(await pages(this.blog.id, "/old", 101)).toEqual(this.expected);
         expect(client.hScan).not.toHaveBeenCalled();
       });
+    });
+
+    it("writes no names set, and deletes a directory's leftover one with it", async function () {
+      await File.set(this.blog.id, "/d/a", file(1));
+
+      expect(await client.exists(File.key.names(this.blog.id, "/d"))).toBe(0);
+      expect(await client.exists(File.key.names(this.blog.id, "/"))).toBe(0);
+
+      // As code from before this one could leave while it ran beside it
+      await client.zAdd(File.key.names(this.blog.id, "/d"), {
+        score: 0,
+        value: "a",
+      });
+      await File.remove(this.blog.id, "/d");
+
+      expect(await client.exists(File.key.names(this.blog.id, "/d"))).toBe(0);
     });
 
     it("gives each entry's record", async function () {

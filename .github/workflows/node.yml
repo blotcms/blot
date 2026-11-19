@@ -65,6 +65,7 @@ env:
     - proxy
     - scripts/deploy
     - scripts/storage
+    - scripts/template
 
   # The nightly run, and a manual one. It slows the specs down too much for
   # every push; see also the node-ok job.
@@ -146,8 +147,10 @@ jobs:
 
       - name: Find unused dependencies
         if: always()
-        # node-addon-api,node-gyp are required to build sharp
-        run: npx depcheck --ignores=node-addon-api,node-gyp,depcheck,eslint,prettier,nyc,nodemon,fontkit,text-to-svg --skip-missing
+        # Unused (dev)dependencies only, as depcheck checked. node-addon-api and
+        # node-gyp build sharp; http-auth is required by app/clients/git, which
+        # is loaded by name
+        run: npx knip --config scripts/development/knip.json --include dependencies,devDependencies
 
       - name: Find unused files
         if: always()

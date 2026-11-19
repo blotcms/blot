@@ -156,12 +156,16 @@ async function generateStyle(directory) {
 function generateTypeset(path, name, hasSmallCaps) {
   const font = fontkit.openSync(path);
 
+  // The typographer outputs curly quotes, so the hanging punctuation
+  // rules are sized to the curly glyphs: in Computer Modern the straight
+  // " is 0.5em wide but the curly “ is 0.33em, so measuring the
+  // straight one hangs the quote too far.
   const double_quote_width =
-    font.getGlyph(font.glyphsForString('"')[0].id).advanceWidth /
+    font.getGlyph(font.glyphsForString("\u201C")[0].id).advanceWidth /
     font.unitsPerEm;
 
   const single_quote_width =
-    font.getGlyph(font.glyphsForString("'")[0].id).advanceWidth /
+    font.getGlyph(font.glyphsForString("\u2018")[0].id).advanceWidth /
     font.unitsPerEm;
 
   let typeset = `
@@ -396,7 +400,10 @@ async function main() {
 
     // Ignore dot folders and folders whose name
     // starts with a dash
-    .filter((i) => i[0] && i[0] !== "." && i[0] !== "-" && i !== "data")
+    .filter(
+      (i) =>
+        i[0] && i[0] !== "." && i[0] !== "-" && i !== "data" && i !== "tests"
+    )
     .filter((i) => fs.statSync(`${__dirname}/${i}`).isDirectory());
   // .filter((i) => {
   //   return (
@@ -416,6 +423,7 @@ async function main() {
     .readdirSync(__dirname)
     .filter((i) => {
       return (
+        i !== "tests" &&
         fs.statSync(`${__dirname}/${i}`).isDirectory() &&
         fs.existsSync(`${__dirname}/${i}/package.json`)
       );

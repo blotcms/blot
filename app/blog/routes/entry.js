@@ -4,6 +4,31 @@ const { getEntryByUrl } = require("../lib/models");
 const attachAdjacent = require("../lib/attachAdjacent");
 const loadPlugin = require("../lib/loadPlugin");
 
+// A post's title, thumbnails and description as JSON, for templates that preview a link
+// to it (e.g. a card shown on hover) without loading the whole page.
+const thumbnailJSON = (thumbnail) =>
+  thumbnail && thumbnail.url
+    ? { url: thumbnail.url, width: thumbnail.width, height: thumbnail.height }
+    : null;
+
+const entryJSON = (entry) => ({
+  title: entry.title || "",
+  url: entry.url,
+  page: !!entry.page,
+  date: entry.dateStamp ? new Date(entry.dateStamp).toISOString() : null,
+  summary: entry.summary || "",
+  // The photo's own description: inline HTML once rendered from Markdown
+  description: (entry.exif && entry.exif.ImageDescription) || "",
+  tags: entry.tags || [],
+  thumbnail: entry.thumbnail
+    ? {
+        small: thumbnailJSON(entry.thumbnail.small),
+        medium: thumbnailJSON(entry.thumbnail.medium),
+        large: thumbnailJSON(entry.thumbnail.large),
+      }
+    : null,
+});
+
 const normalizeMetadataToggle = function (value) {
   if (typeof value === "undefined" || value === null) return "";
   return String(value).trim().toLowerCase();
@@ -84,7 +109,9 @@ module.exports = async function entry(req, res, next) {
     )
       return next();
 
-    await attachAdjacent(blog.id, entry);
+    const asJSON = req.query && req.query.format === "json";
+
+    if (!asJSON) await attachAdjacent(blog.id, entry);
 
     // Ensure the user is always viewing
     // the entry at its latest and greatest URL
@@ -94,10 +121,12 @@ module.exports = async function entry(req, res, next) {
       // to do this now but OK. I feel like we're decoding
       // then recoding then decoding. I should just store
       // valid URI and skip the decoding.
-      const redirect = encodeURI(entry.url);
+      const redirect = encodeURI(entry.url) + (asJSON ? "?format=json" : "");
 
       return res.status(301).redirect(redirect);
     }
+
+    if (asJSON) return res.json(entryJSON(entry));
 
     let pluginHTML = await loadPlugin("entryHTML", blog.plugins);
 

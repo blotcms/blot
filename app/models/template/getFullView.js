@@ -89,6 +89,8 @@ module.exports = async function getFullView(blogID, templateID, viewName) {
     mime.lookup(view.name) || "text/html",
     source,
     usesBacklinks,
+    // For pagination URLs (blog/lib/paginationURLs)
+    view.urlPatterns || (view.url ? [view.url] : []),
   ];
 };
 

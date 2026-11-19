@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+  {{> head}}
+  <body>
+    <div class="wrapper">
+      {{> header}}
+
+      <div class="content-wrapper">
+        <main class="main" id="main">
+          <div class="page-body">
+          <h1 class="page-title">Tags</h1>
+
+          {{#all_tags.length}}
+          <ul class="full-archive">
+            {{#all_tags}}
+            <li><a href="/tagged/{{slug}}"><span class="archive-title">{{name}}</span> <span class="light">{{total}}</span></a></li>
+            {{/all_tags}}
+          </ul>
+          {{/all_tags.length}}
+          {{^all_tags.length}}<p class="empty-state">No tags yet.</p>{{/all_tags.length}}
+          </div>
+        </main>
+
+        {{> sidebar}}
+        <div class="clear"></div>
+      </div>
+
+      {{> footer}}
+    </div>
+  </body>
+</html>

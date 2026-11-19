@@ -6,12 +6,20 @@
       {{> header}}
 
       <div class="content-wrapper">
-        <main class="main">
+        <main class="main" id="main">
           <div class="page-body">
           <h1 class="page-title">{{error.title}}</h1>
-          <p>Something has gone wrong. {{error.message}}</p>
+          {{#error.message}}<p>{{error.message}}</p>{{/error.message}}
+          {{! The site's own menu, or the usual pages when it has none }}
+          <ul class="link-list error-links">
+            {{#menu}}<li><a href="{{{url}}}">{{label}}</a></li>{{/menu}}
+            {{^menu.length}}
+            <li><a href="/">Home</a></li>
+            <li><a href="/archives">Archives</a></li>
+            <li><a href="/search">Search</a></li>
+            {{/menu.length}}
+          </ul>
           </div>
-          {{> feed-links}}
         </main>
 
         {{> sidebar}}

@@ -26,8 +26,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700-italic.woff2?version=8bf417&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/computer-modern-sans/700-italic.woff?version=c96053&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.5em}
-.push-double{margin-right:0.5em}
+.pull-double {margin-left:-0.33251953125em}
+.push-double{margin-right:0.33251953125em}
 .pull-single{margin-left:-0.27783203125em}
 .push-single{margin-right:0.27783203125em}
 .push-double,.push-single{display:inline-block}

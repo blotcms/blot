@@ -4,12 +4,21 @@
   <body>
     {{> header}}
 
-    <h1>Archives</h1>
+    <table class="archive" data-grid>
+      <caption>Archives</caption>
+      <tbody>
+        {{#all_entries}}
+        <tr data-entry>
+          <td class="archive__thumb">{{#thumbnail.small.url}}<a href="{{{url}}}" tabindex="-1" aria-hidden="true"><img src="{{{thumbnail.small.url}}}" width="{{thumbnail.small.width}}" height="{{thumbnail.small.height}}" alt="" loading="lazy" decoding="async"></a>{{/thumbnail.small.url}}</td>
+          <th scope="row"><a href="{{{url}}}"{{#thumbnail.large.url}} data-title="{{title}}" data-preview="{{{thumbnail.large.url}}}" data-width="{{thumbnail.large.width}}" data-height="{{thumbnail.large.height}}"{{/thumbnail.large.url}}>{{title}}{{#thumbnail.large.url}}<template class="entry-details">{{> details}}</template>{{/thumbnail.large.url}}</a></th>
+          <td class="archive__tags">{{#tags}}<a href="/tagged/{{slug}}">{{name}}</a>{{/tags}}</td>
+          {{^hide_dates}}<td class="archive__date">{{#formatDate}}{{date_display}}{{/formatDate}}</td>{{/hide_dates}}
+        </tr>
+        {{/all_entries}}
+      </tbody>
+    </table>
 
-    {{#all_entries}}
-    {{#date}}{{date}} {{/date}}<a href="{{{url}}}"><strong>{{title}}</strong></a><br>
-    {{/all_entries}}
-
+    {{> lightbox}}
     {{> footer}}
   </body>
 </html>

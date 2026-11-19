@@ -72,7 +72,11 @@ module.exports = function typeset(html, options = {}) {
   if (options.ignore) ignore += ", " + options.ignore;
   const isIgnored = ignoreMatcher(ignore);
 
-  const $ = cheerio.load(html, { decodeEntities: false });
+  // The options typeset/src/eachTextNode.js loads with: htmlparser2 in HTML
+  // mode, which leaves fragments unwrapped and entities as written
+  const $ = cheerio.load(html, {
+    xml: { xmlMode: false, decodeEntities: false },
+  });
   const root = $.root()[0];
 
   for (const { fn } of modules) {

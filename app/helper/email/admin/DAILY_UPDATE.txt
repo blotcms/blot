@@ -14,6 +14,10 @@ Response time: {{render_time}}
 {{{storage}}}
 
 {{/storage}}
+{{#macserver}}
+{{{macserver}}}
+
+{{/macserver}}
 Sync: {{sync_summary}}
 
 Newsletter: {{newsletter_subscribers}} subscribers

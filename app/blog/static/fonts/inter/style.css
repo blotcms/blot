@@ -61,8 +61,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/inter/900.woff2?version=e78b54&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/inter/900.woff?version=08067b&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.4034090909090909em}
-.push-double{margin-right:0.4034090909090909em}
-.pull-single{margin-left:-0.2215909090909091em}
-.push-single{margin-right:0.2215909090909091em}
+.pull-double {margin-left:-0.3806818181818182em}
+.push-double{margin-right:0.3806818181818182em}
+.pull-single{margin-left:-0.19886363636363635em}
+.push-single{margin-right:0.19886363636363635em}
 .push-double,.push-single{display:inline-block}

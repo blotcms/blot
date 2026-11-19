@@ -156,7 +156,7 @@ describe("cdn", function () {
       const lambda = await cdn(this.request, {});
       expect(
         mustache.render("{{#cdn}}/images/a.png{{/cdn}}", { cdn: lambda })
-      ).toBe("%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png");
+      ).toBe("%%BLOT_CDN%%/" + blogID + "/folder/v-deadbeef/images/A.png");
     });
 
     it("keeps the query string and hash of the link", async function () {
@@ -168,15 +168,19 @@ describe("cdn", function () {
           cdn: lambda,
         })
       ).toBe(
-        "%%BLOT_CDN%%/folder/v-deadbeef/" + blogID + "/images/A.png?v=2#top"
+        "%%BLOT_CDN%%/" + blogID + "/folder/v-deadbeef/images/A.png?v=2#top"
       );
     });
 
-    it("returns an unversioned URL for a reserved global path", async function () {
+    it("versions a reserved global path by the file in this release", async function () {
+      const { staticVersion } = require("blog/lib/staticVersion");
       const lambda = await cdn(this.request, {});
       expect(
         mustache.render("{{#cdn}}/icons/search.svg{{/cdn}}", { cdn: lambda })
-      ).toBe("%%BLOT_CDN%%/icons/search.svg");
+      ).toBe(
+        "%%BLOT_CDN%%/icons/search.svg?version=" +
+          staticVersion("/icons/search.svg")
+      );
     });
 
     it("still returns view URLs", async function () {

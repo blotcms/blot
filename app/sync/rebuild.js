@@ -67,6 +67,11 @@ module.exports = async function main(blogID, options = {}) {
   const updateStatus = function () {};
   const update = new Update(blog, log, updateStatus);
 
+  // Before anything is wiped or built: a deploy can kill a rebuild after it
+  // has written entries and before its last bump, and the sweep skips a blog
+  // whose cacheID hasn't moved (storage/sweep)
+  await Blog.set(blogID, { cacheID: Date.now() });
+
   const paths = await walk(blog.id);
 
   if (options.thumbnails) {

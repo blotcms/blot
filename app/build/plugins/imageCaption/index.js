@@ -1,6 +1,10 @@
-async function render($) {
+// options.caption is the HTML of an image file's EXIF ImageDescription (see
+// build/single.js), which replaces the filename-derived title the converter
+// gives the image
+async function render($, options = {}) {
   $("img").each(function () {
-    var altText = $(this).attr("title") || $(this).attr("alt");
+    var altText =
+      options.caption || $(this).attr("title") || $(this).attr("alt");
 
     if (!altText) return;
 

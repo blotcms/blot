@@ -4,3 +4,5 @@
 {{#pagination.next}}
 <span data-next="{{.}}"></span>
 {{/pagination.next}}
+{{! How many pages there are, so navigation-js.js can fetch the rest at once }}
+{{#pagination}}<span data-pages="{{total}}"></span>{{/pagination}}

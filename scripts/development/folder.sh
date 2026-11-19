@@ -12,8 +12,31 @@ get_available_folders() {
   done | grep -v '^\.' | grep -v '^-' | sort
 }
 
-# If no argument provided, list available folders
-if [ $# -eq 0 ]; then
+# Test sites built by scripts/development/sites (not demo folders)
+TEST_SITES="empty tiny huge torture arabic japanese"
+
+sites() {
+  docker exec blot-node-app-1 node scripts/development/sites "$@"
+}
+
+# npm keeps flags such as --down for itself and sets npm_config_down instead
+if [ "${npm_config_down:-}" = "true" ]; then
+  sites down "$@"
+  exit 0
+fi
+if [ "${1:-}" = "--down" ] || [ "${1:-}" = "down" ]; then
+  shift
+  sites down "$@"
+  exit 0
+fi
+
+# With no argument, build every demo folder site and every test site
+if [ $# -eq 0 ] || [ "$1" = "up" ]; then
+  sites up
+  exit 0
+fi
+
+if [ "$1" = "list" ]; then
   echo "Available folders:"
   echo ""
   folders=$(get_available_folders)
@@ -21,6 +44,19 @@ if [ $# -eq 0 ]; then
     echo "  npm run folder $folder"
   done <<< "$folders"
   echo ""
+  echo "Test sites:"
+  echo ""
+  for site in $TEST_SITES; do
+    echo "  npm run folder $site"
+  done
+  echo ""
+  echo "  npm run folder          build them all"
+  echo "  npm run folder --down   remove them all (leaves the local site alone)"
+  exit 0
+fi
+
+if [[ " $TEST_SITES " == *" $1 "* ]]; then
+  sites up "$1"
   exit 0
 fi
 

@@ -1,18 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rss xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:atom="http://www.w3.org/2005/Atom" version="2.0">
 <channel>
-  <title><![CDATA[ {{{title}}}]]></title>
+  <title>{{title}}{{^title}}{{handle}}{{/title}}</title>
   <link>{{{siteURL}}}</link>
   <atom:link href="{{{siteURL}}}/feed.rss" rel="self" type="application/rss+xml"/>
-  <description><![CDATA[ The feed of updates to {{{title}}} ]]></description>
+  <description>The feed of updates to {{title}}{{^title}}{{handle}}{{/title}}</description>
   {{#recent_entries}}
   <item> 
-    <title><![CDATA[ {{{title}}} ]]></title>
+    <title>{{title}}</title>
     <link>{{{absoluteURL}}}</link>
     <guid>{{{absoluteURL}}}</guid>
     {{! RSS feeds need a RFC 822 date}}
     <pubDate>{{#formatDate}}ddd, DD MMM YYYY HH:mm:ss ZZ{{/formatDate}}</pubDate>
-    <dc:creator><![CDATA[ {{{title}}} ]]></dc:creator>
     <description><![CDATA[ {{#encode_xml}} {{{body}}} {{/encode_xml}} ]]></description>
   </item>
   {{/recent_entries}}

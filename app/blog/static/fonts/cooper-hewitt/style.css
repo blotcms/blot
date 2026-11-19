@@ -96,8 +96,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/cooper-hewitt/heavy-italic.woff2?version=ef8ab9&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/cooper-hewitt/heavy-italic.woff?version=b7004b&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.338em}
-.push-double{margin-right:0.338em}
-.pull-single{margin-left:-0.217em}
-.push-single{margin-right:0.217em}
+.pull-double {margin-left:-0.362em}
+.push-double{margin-right:0.362em}
+.pull-single{margin-left:-0.216em}
+.push-single{margin-right:0.216em}
 .push-double,.push-single{display:inline-block}

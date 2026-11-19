@@ -6,9 +6,9 @@
     "hide_dates": false,
     "date_display": "dddd, MMMM D, YYYY",
     "author": "",
-    "background_color": "#FFF7ED",
-    "text_color": "#431407",
-    "accent_color": "#9A3412",
+    "background_color": "#F9F9F9",
+    "text_color": "#000000",
+    "accent_color": "#2B2B2B",
     "header_layout": "block",
     "header_layout_options": [
       "block",
@@ -42,39 +42,62 @@
   "views": {
     "entries.html": {
       "partials": {
-        "title": "{{{title}}}",
-        "description": "The latest entries posted on {{{title}}}"
+        "title": "{{#pagination.previous}}Page {{pagination.current}} - {{/pagination.previous}}{{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "The latest entries posted on {{title}}{{^title}}{{handle}}{{/title}}",
+        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/{{#pagination.previous}}page/{{pagination.current}}{{/pagination.previous}}\">",
+        "site_title_element": "h1"
       }
     },
     "archives.html": {
       "url": "/archives",
       "partials": {
-        "title": "Archives - {{{title}}}",
-        "description": "All the entries posted on {{{title}}}"
+        "title": "Archives - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "All the entries posted on {{title}}{{^title}}{{handle}}{{/title}}",
+        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/archives\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/archives\">",
+        "site_title_element": "p"
       }
+    },
+    "tags.html": {
+      "url": "/tags",
+      "partials": {
+        "title": "Tags - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "Every tag on {{title}}{{^title}}{{handle}}{{/title}}",
+        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/tags\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/tags\">",
+        "site_title_element": "p"
+      }
+    },
+    "archive-tree.html": {
+      "url": "/archives/tree"
     },
     "search.html": {
       "partials": {
-        "title": "Search - {{{title}}}",
-        "description": "Search all the entries posted on {{{title}}}"
+        "title": "Search - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "Search all the entries posted on {{title}}{{^title}}{{handle}}{{/title}}",
+        "robots_meta": "<meta name=\"robots\" content=\"noindex\">",
+        "site_title_element": "p"
       }
     },
     "error.html": {
       "partials": {
-        "title": "{{{error.title}}} - {{{title}}}",
-        "description": "Error on {{{title}}}"
+        "title": "{{error.title}} - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "Error on {{title}}{{^title}}{{handle}}{{/title}}",
+        "robots_meta": "<meta name=\"robots\" content=\"noindex\">",
+        "site_title_element": "p"
       }
     },
     "entry.html": {
       "partials": {
-        "title": "{{{entry.title}}} - {{{title}}}",
-        "description": "{{{entry.summary}}}"
+        "title": "{{entry.title}} - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "{{entry.summary}}",
+        "site_title_element": "p"
       }
     },
     "tagged.html": {
       "partials": {
-        "title": "{{{tag}}} - {{{title}}}",
-        "description": "All of the entries posted on {{{title}}} tagged {{{tag}}}"
+        "title": "{{tag}}{{#pagination.previous}} - Page {{pagination.current}}{{/pagination.previous}} - {{title}}{{^title}}{{handle}}{{/title}}",
+        "description": "All of the entries posted on {{title}}{{^title}}{{handle}}{{/title}} tagged {{tag}}",
+        "canonical": "<link rel=\"canonical\" href=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">\n    <meta property=\"og:url\" content=\"{{{siteURL}}}/tagged/{{slug}}{{#pagination.previous}}/page/{{pagination.current}}{{/pagination.previous}}\">",
+        "site_title_element": "p"
       }
     }
   }

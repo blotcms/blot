@@ -4,6 +4,7 @@ var caseSensitivePath = require("helper/caseSensitivePath");
 var key = require("./key");
 var { pack, parse } = require("./record");
 var flags = require("./flags");
+var SORTS = require("./sorts");
 
 // The metadata index of a blog's folder: a record for every file and every
 // directory (type, size, modified, SHA-1), so listing, walking, stat and case
@@ -59,8 +60,27 @@ function below(dir) {
   return dir === "/" ? ["-", "+"] : ["[" + dir + "/", "(" + dir + "0"];
 }
 
-function byName(a, b) {
-  return a.name < b.name ? -1 : a.name > b.name ? 1 : 0;
+// Listings are in natural name order, the order of the "all" sorted set
+// (key.sortMember). A directory without one is sorted the same way here,
+// comparing members as bytes as Redis does.
+var ALL = "all";
+
+function bySorted(entries) {
+  return entries
+    .map(function (entry) {
+      return { entry: entry, member: key.sortMember(entry.name) };
+    })
+    .sort(function (a, b) {
+      return key.compareSorted(a.member, b.member);
+    })
+    .map(function (item) {
+      return item.entry;
+    });
+}
+
+// Whether name comes after the name after in listing order
+function isAfter(name, after) {
+  return key.compareSorted(key.sortMember(name), key.sortMember(after)) > 0;
 }
 
 function failure(code, message) {
@@ -94,16 +114,31 @@ function setNames(multi, lowerKey, folded, joined) {
   else multi.hDel(lowerKey, folded);
 }
 
-// Queues adding names to a directory's names set, a page per ZADD
-function addNames(multi, namesKey, names) {
-  for (var i = 0; i < names.length; i += PAGE) {
-    multi.zAdd(
-      namesKey,
-      names.slice(i, i + PAGE).map(function (name) {
-        return { score: 0, value: key.member(name) };
-      })
-    );
+// The keys of a directory's sorted sets, one per order in sorts.js
+function sortKeys(blogID, dir) {
+  return SORTS.map(function (order) {
+    return key.sort(blogID, order.name, dir);
+  });
+}
+
+// Queues adding children ({ name, type }) to each of a directory's sorted
+// sets that holds them, a page per ZADD
+function addSorted(multi, blogID, dir, children) {
+  for (const order of SORTS) {
+    var members = children.filter(order.holds).map(function (entry) {
+      return { score: 0, value: order.member(entry.name) };
+    });
+
+    for (var i = 0; i < members.length; i += PAGE)
+      multi.zAdd(key.sort(blogID, order.name, dir), members.slice(i, i + PAGE));
   }
+}
+
+// Queues removing a child from each of its directory's sorted sets. ZREM
+// never creates a key, so a directory without them stays without them.
+function removeSorted(multi, blogID, dir, name) {
+  for (const order of SORTS)
+    multi.zRem(key.sort(blogID, order.name, dir), order.member(name));
 }
 
 // The record at path, or null
@@ -137,16 +172,16 @@ async function scan(blogID, dir) {
   return entries;
 }
 
-// One page of a directory, sorted by name (code-unit order):
+// One page of a directory, in natural name order (key.sortMember):
 // { entries: [{ name, type, size, modified, sha1 }], next }, where next is
 // the name to pass as after for the page which follows, or null after the
 // last page. after need not still be in the directory. Resolves to null if
 // dir is not a directory.
 //
-// A page is one ZRANGEBYLEX of the directory's names set and one HMGET of
-// the page's names, however large the directory. A directory without a
-// names set (last changed before it existed, see README) is read whole and
-// sorted instead, as every page was before.
+// A page is one ZRANGEBYLEX of the directory's "all" sorted set and one
+// HMGET of the page's names, however large the directory. after is turned
+// back into its member, so it need not still be there. A directory without
+// the set (see README) is read whole and sorted the same way instead.
 async function list(blogID, dir, options) {
   check(blogID);
   options = options || {};
@@ -161,15 +196,15 @@ async function list(blogID, dir, options) {
   if (!Number.isInteger(limit) || limit < 1)
     throw new Error("models/file: limit must be a positive integer");
 
-  var namesKey = key.names(blogID, dir);
+  var sortKey = key.sort(blogID, ALL, dir);
 
   // Sent together, so one round trip
   var [record, sorted, members] = await Promise.all([
     get(blogID, dir),
-    client.exists(namesKey),
+    client.exists(sortKey),
     client.zRangeByLex(
-      namesKey,
-      after === null ? "-" : "(" + key.member(after),
+      sortKey,
+      after === null ? "-" : "(" + key.sortMember(after),
       "+",
       {
         LIMIT: { offset: 0, count: limit + 1 },
@@ -180,8 +215,8 @@ async function list(blogID, dir, options) {
   if (!record || record.type !== "dir") return null;
 
   if (!sorted) {
-    var all = (await scan(blogID, dir)).sort(byName).filter(function (entry) {
-      return after === null || entry.name > after;
+    var all = bySorted(await scan(blogID, dir)).filter(function (entry) {
+      return after === null || isAfter(entry.name, after);
     });
 
     return {
@@ -190,7 +225,7 @@ async function list(blogID, dir, options) {
     };
   }
 
-  var names = members.slice(0, limit).map(key.nameOf);
+  var names = members.slice(0, limit).map(key.nameOfSorted);
   var packed = names.length
     ? await client.hmGet(key.dir(blogID, dir), names)
     : [];
@@ -212,7 +247,7 @@ async function list(blogID, dir, options) {
 // An async iterator of the pages of a directory, in order: arrays of
 // entries, as list gives them. Rejects with ENOENT if dir is not a
 // directory when it starts; a directory removed part way just ends. A
-// directory without a names set is read whole once, not once a page.
+// directory without the sorted set is read whole once, not once a page.
 async function* pages(blogID, dir, options) {
   check(blogID);
   dir = normalize(dir);
@@ -220,14 +255,14 @@ async function* pages(blogID, dir, options) {
   var limit = (options && options.limit) || PAGE;
   var [record, sorted] = await Promise.all([
     get(blogID, dir),
-    client.exists(key.names(blogID, dir)),
+    client.exists(key.sort(blogID, ALL, dir)),
   ]);
 
   if (!record || record.type !== "dir")
     throw failure("ENOENT", "Not a directory: " + dir);
 
   if (!sorted) {
-    var all = (await scan(blogID, dir)).sort(byName);
+    var all = bySorted(await scan(blogID, dir));
 
     for (var i = 0; i < all.length; i += limit) yield all.slice(i, i + limit);
 
@@ -246,7 +281,7 @@ async function* pages(blogID, dir, options) {
   } while (after !== null);
 }
 
-// Every entry of a directory, sorted by name, or null if it is not one. The
+// Every entry of a directory, in listing order, or null if it is not one. The
 // whole directory ends up in memory: use list or pages for a large one.
 async function listAll(blogID, dir) {
   var entries = [];
@@ -259,6 +294,80 @@ async function listAll(blogID, dir) {
   }
 
   return entries;
+}
+
+// A page of a directory's visible children (those not hidden everywhere:
+// dotfiles and .preview.html, key.hiddenEverywhere) by position, for pages
+// a person picks by number: { entries, total }, entries in listing order,
+// or reversed with { order: "desc" }, and total the number of visible
+// children. Null if dir is not a directory.
+//
+// The visible children are the first ranks of the "all" set, so total is
+// one ZLEXCOUNT and the page one ZRANGE by rank, O(log N + page) however
+// deep the page, then one HMGET. A descending page reads the same ranks
+// counted from the end of the visible ones, not from the end of the set,
+// which holds the hidden children.
+async function range(blogID, dir, options) {
+  check(blogID);
+  options = options || {};
+  dir = normalize(dir);
+
+  var offset = options.offset === undefined ? 0 : options.offset;
+  var limit = options.limit === undefined ? PAGE : options.limit;
+  var descending = options.order === "desc";
+
+  if (!Number.isInteger(offset) || offset < 0)
+    throw new Error("models/file: offset must be a non-negative integer");
+  if (!Number.isInteger(limit) || limit < 1)
+    throw new Error("models/file: limit must be a positive integer");
+
+  var sortKey = key.sort(blogID, ALL, dir);
+
+  var [record, sorted, total] = await Promise.all([
+    get(blogID, dir),
+    client.exists(sortKey),
+    client.zLexCount(sortKey, "[\u0001", "(\u0002"),
+  ]);
+
+  if (!record || record.type !== "dir") return null;
+
+  if (!sorted) {
+    var visible = bySorted(await scan(blogID, dir)).filter(function (entry) {
+      return !key.hiddenEverywhere(entry.name);
+    });
+
+    if (descending) visible.reverse();
+
+    return {
+      entries: visible.slice(offset, offset + limit),
+      total: visible.length,
+    };
+  }
+
+  var start = descending ? total - offset - limit : offset;
+  var stop = descending
+    ? total - offset - 1
+    : Math.min(offset + limit, total) - 1;
+
+  start = Math.max(start, 0);
+
+  if (stop < start) return { entries: [], total: total };
+
+  var names = (await client.zRange(sortKey, start, stop)).map(key.nameOfSorted);
+
+  if (descending) names.reverse();
+
+  var packed = names.length
+    ? await client.hmGet(key.dir(blogID, dir), names)
+    : [];
+  var entries = [];
+
+  names.forEach(function (name, i) {
+    if (packed[i] !== null && packed[i] !== undefined)
+      entries.push(Object.assign({ name: name }, parse(packed[i])));
+  });
+
+  return { entries: entries, total: total };
 }
 
 // An async iterator of every path below dir (files and directories), in
@@ -340,6 +449,10 @@ async function setMany(blogID, items) {
 
     if (path === "/")
       throw new Error("models/file: the folder itself has no record");
+
+    // The sorted sets end a member's sort key with NUL (key.sortMember)
+    if (path.indexOf("\u0000") !== -1)
+      throw new Error("models/file: a path cannot contain NUL");
 
     // Packed now so a bad record fails before anything is read
     pack(item);
@@ -427,40 +540,39 @@ async function setMany(blogID, items) {
     })
   );
 
-  // The names sets which gain a name. A directory which already had a hash
-  // but has no names set yet (it was last changed before they existed) gets
-  // one built from its hash in the same exec, so a names set, once there, is
-  // always complete; adding just the new name would leave it partial.
-  var named = new Map();
+  // The sorted sets which gain a child. A directory which already had a hash
+  // but has no sorted set yet gets them built from its hash in the same
+  // exec, so a set, once there, is complete; adding just the new child would
+  // leave it partial. Whether the first order's set exists decides, since
+  // they are always built together.
+  var sorted = new Map();
 
-  for (const path of writes.keys()) {
+  for (const [path, record] of writes) {
     if (existing.get(path)) continue;
 
     var parent = parentOf(path);
 
-    if (!named.has(parent)) named.set(parent, []);
+    if (!sorted.has(parent)) sorted.set(parent, []);
 
-    named.get(parent).push(nameOf(path));
+    sorted.get(parent).push({ name: nameOf(path), type: record.type });
   }
 
   // A directory new in this call has no hash to build from
-  var older = [...named.keys()].filter(function (dir) {
+  var older = [...sorted.keys()].filter(function (dir) {
     return dir === "/" || !!existing.get(dir);
   });
 
   await Promise.all(
     older.map(async function (dir) {
-      if (await client.exists(key.names(blogID, dir))) return;
+      if (await client.exists(sortKeys(blogID, dir)[0])) return;
 
-      for (const entry of await scan(blogID, dir))
-        named.get(dir).push(entry.name);
+      for (const entry of await scan(blogID, dir)) sorted.get(dir).push(entry);
     })
   );
 
   var multi = client.multi();
 
-  for (const [dir, children] of named)
-    addNames(multi, key.names(blogID, dir), children);
+  for (const [dir, children] of sorted) addSorted(multi, blogID, dir, children);
   var bytes = 0;
   var files = 0;
 
@@ -589,13 +701,12 @@ async function removeBelow(blogID, dir) {
           key.dir(blogID, path),
           key.lower(blogID, path),
           key.names(blogID, path),
+          ...sortKeys(blogID, path),
         ]);
       }
 
-      // ZREM never creates a key, so a parent without a names set stays
-      // without one
       multi.hDel(key.dir(blogID, parentOf(path)), nameOf(path));
-      multi.zRem(key.names(blogID, parentOf(path)), key.member(nameOf(path)));
+      removeSorted(multi, blogID, parentOf(path), nameOf(path));
     });
 
     multi.zRem(key.paths(blogID), page);
@@ -630,7 +741,7 @@ async function remove(blogID, path) {
   var multi = client.multi();
 
   multi.hDel(key.dir(blogID, parent), name);
-  multi.zRem(key.names(blogID, parent), key.member(name));
+  removeSorted(multi, blogID, parent, name);
   multi.zRem(key.paths(blogID), path);
   setNames(multi, lowerKey, folded, updateNames(joined, name, false));
 
@@ -639,6 +750,7 @@ async function remove(blogID, path) {
       key.dir(blogID, path),
       key.lower(blogID, path),
       key.names(blogID, path),
+      ...sortKeys(blogID, path),
     ]);
   } else {
     if (record.size) multi.hIncrBy(key.totals(blogID), "bytes", -record.size);
@@ -668,7 +780,8 @@ async function removeAll(blogID) {
       keys.push(
         key.dir(blogID, path),
         key.lower(blogID, path),
-        key.names(blogID, path)
+        key.names(blogID, path),
+        ...sortKeys(blogID, path)
       );
 
     multi.del(keys);
@@ -681,55 +794,158 @@ async function removeAll(blogID) {
     key.dir(blogID, "/"),
     key.lower(blogID, "/"),
     key.names(blogID, "/"),
+    ...sortKeys(blogID, "/"),
     key.paths(blogID),
     key.totals(blogID),
   ]);
 }
 
-// Gives every directory of a blog which has entries but no names set (it was
-// last changed before they existed) its names set, from its hash. Resolves
-// to { dirs, missing, names }: the directories looked at, those without a
-// names set, and the names they hold. Writes only if options.apply. Run it
-// under the blog's sync lock: a remove between reading a hash and adding
-// its names would leave a name in the set with no record.
-async function addMissingNames(blogID, options) {
+// Checks a directory's sorted set for one order against its hash, a page
+// at a time: { expected, present, card, bytes, longest }, where expected is
+// how many children belong in the set, present how many of them it holds,
+// card how many members it has, and bytes and longest the total and the
+// largest member's size in bytes.
+async function compareSorted(blogID, dir, order) {
+  var setKey = key.sort(blogID, order.name, dir);
+  var card = await client.zCard(setKey);
+  var found = { expected: 0, present: 0, card: card, bytes: 0, longest: 0 };
+  var cursor = "0";
+
+  do {
+    var reply = await client.hScan(key.dir(blogID, dir), cursor, {
+      COUNT: PAGE,
+    });
+    var members = [];
+
+    for (var entry of reply.entries) {
+      var item = Object.assign({ name: entry.field }, parse(entry.value));
+
+      if (!order.holds(item)) continue;
+
+      var member = order.member(item.name);
+      var size = Buffer.byteLength(member);
+
+      members.push(member);
+      found.bytes += size;
+      found.longest = Math.max(found.longest, size);
+    }
+
+    found.expected += members.length;
+
+    if (card && members.length) {
+      for (var score of await client.zmScore(setKey, members))
+        if (score !== null && score !== undefined) found.present++;
+    }
+
+    cursor = String(reply.cursor);
+  } while (cursor !== "0");
+
+  return found;
+}
+
+// Replaces a directory's sorted set for one order with one built from its
+// hash. It is built under another key a page at a time, then renamed over
+// the set in one exec, so a run stopped part way leaves the old set or the
+// new one, never a partial set. An empty directory just loses its set.
+async function rebuildSorted(blogID, dir, order) {
+  var setKey = key.sort(blogID, order.name, dir);
+  var buildKey = key.sortBuild(blogID, order.name, dir);
+  var built = 0;
+  var cursor = "0";
+
+  await client.del(buildKey);
+
+  do {
+    var reply = await client.hScan(key.dir(blogID, dir), cursor, {
+      COUNT: PAGE,
+    });
+    var members = [];
+
+    for (var entry of reply.entries) {
+      var item = Object.assign({ name: entry.field }, parse(entry.value));
+
+      if (order.holds(item))
+        members.push({ score: 0, value: order.member(item.name) });
+    }
+
+    if (members.length) await client.zAdd(buildKey, members);
+
+    built += members.length;
+    cursor = String(reply.cursor);
+  } while (cursor !== "0");
+
+  var multi = client.multi();
+
+  if (built) multi.rename(buildKey, setKey);
+  else multi.del([buildKey, setKey]);
+
+  await multi.exec();
+}
+
+// An async iterator over every directory of a blog, checking each of its
+// sorted sets (sorts.js, or only options.order) against its hash. Yields
+// { dir, order, state, expected, card, bytes, longest } per directory and
+// order, where state is "ok", "missing" (no set, though the directory has
+// children) or "mismatched" (the set lacks a child or holds a member that
+// isn't one). The setMany above keeps the sets complete, but code from
+// before them, running beside it during a deploy or after a rollback,
+// changes a directory without them; this finds every such directory.
+//
+// With options.apply, a set which isn't ok is rebuilt (rebuildSorted), and
+// the yielded state is still what was found. Run it under the blog's sync
+// lock then: a write between reading a hash and renaming its set into place
+// would be lost from the set. One directory is held at a time, a page of it.
+async function* checkSorts(blogID, options) {
   check(blogID);
 
   var apply = !!(options && options.apply);
-  var counts = { dirs: 0, missing: 0, names: 0 };
+  var orders = SORTS.filter(function (order) {
+    return !options || !options.order || order.name === options.order;
+  });
+
+  if (!orders.length)
+    throw new Error("models/file: no such order: " + options.order);
+
   var queue = ["/"];
 
   while (queue.length) {
     var dir = queue.pop();
-    var entries = await scan(blogID, dir);
-    var namesKey = key.names(blogID, dir);
+    var cursor = "0";
 
-    counts.dirs++;
+    do {
+      var reply = await client.hScan(key.dir(blogID, dir), cursor, {
+        COUNT: PAGE,
+      });
 
-    for (var entry of entries)
-      if (entry.type === "dir") queue.push(child(dir, entry.name));
+      for (var entry of reply.entries)
+        if (parse(entry.value).type === "dir")
+          queue.push(child(dir, entry.field));
 
-    if (!entries.length || (await client.exists(namesKey))) continue;
+      cursor = String(reply.cursor);
+    } while (cursor !== "0");
 
-    counts.missing++;
-    counts.names += entries.length;
+    for (const order of orders) {
+      var found = await compareSorted(blogID, dir, order);
+      var state =
+        found.card === 0 && found.expected > 0
+          ? "missing"
+          : found.card !== found.expected || found.present !== found.expected
+            ? "mismatched"
+            : "ok";
 
-    if (!apply) continue;
+      if (apply && state !== "ok") await rebuildSorted(blogID, dir, order);
 
-    var multi = client.multi();
-
-    addNames(
-      multi,
-      namesKey,
-      entries.map(function (entry) {
-        return entry.name;
-      })
-    );
-
-    await multi.exec();
+      yield {
+        dir: dir,
+        order: order.name,
+        state: state,
+        expected: found.expected,
+        card: found.card,
+        bytes: found.bytes,
+        longest: found.longest,
+      };
+    }
   }
-
-  return counts;
 }
 
 // The errors setMany raises for a path which cannot exist beside what is
@@ -825,6 +1041,7 @@ module.exports = {
   list,
   pages,
   listAll,
+  range,
   subtree,
   resolveCaseInsensitive,
   totals,
@@ -835,5 +1052,5 @@ module.exports = {
   remove,
   removeAll,
   rebuild,
-  addMissingNames,
+  checkSorts,
 };

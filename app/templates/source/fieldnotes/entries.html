@@ -14,7 +14,7 @@
 				<nav class="navigation paging-navigation" role="navigation">
 					<h1 class="screen-reader-text">Posts navigation</h1>
 					<div class="nav-links">
-						{{#pagination}}
+						{{#posts.pagination}}
 						{{#previous}}
 						<div class="nav-previous">
 							<a href="/page/{{previous}}"><span class="meta-nav">&larr;</span> Previous</a>
@@ -25,15 +25,15 @@
 							<a href="/page/{{next}}">Next <span class="meta-nav">&rarr;</span> </a>
 						</div>
 						{{/next}}
-						{{/pagination}}
+						{{/posts.pagination}}
 					</div><!-- .nav-links -->
 				</nav><!-- .navigation -->
 				{{/infinite_scroll}}
 			</main><!-- #main -->
 			{{#infinite_scroll}}
-			{{#pagination.next}}
+			{{#posts.pagination.next}}
 			<script type="text/javascript">
-				var init = {{pagination.next}};
+				var init = {{posts.pagination.next}};
 
 jQuery(window).on("scroll", function() {
 	var scrollHeight = jQuery(document).height();
@@ -50,7 +50,7 @@ jQuery(window).on("scroll", function() {
 					});
 				}
 </script>
-			{{/pagination.next}}
+			{{/posts.pagination.next}}
 			{{/infinite_scroll}}
 		</div><!-- #primary -->
 	</div><!-- #content -->

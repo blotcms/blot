@@ -7,20 +7,20 @@
 
 <h2>2. Install dnsmasq and mkcert</h2>
 <p>Blot requires a huge number of subdomains to work, for example:</p>
-<pre><code>https://local.blot
-https://cdn.local.blot
-https://site.local.blot
-https://preview-of-blog-on-site.local.blot
-https://preview-of-hypertext-on-site.local.blot
+<pre><code>https://blot.localhost
+https://cdn.blot.localhost
+https://site.blot.localhost
+https://preview-of-blog-on-site.blot.localhost
+https://preview-of-hypertext-on-site.blot.localhost
 </code></pre>
-<p>We use dnsmasq to point all requests for the fake TLD <code>.blot</code> to the loopback address:</p>
+<p>Every name under <code>.localhost</code> points at your own computer. Chrome, Firefox and curl know this already. Safari and programs that ask macOS (Node, for example) don't, so we use dnsmasq to answer for <code>.localhost</code> too:</p>
 <pre class="bash"><code>brew install dnsmasq
 mkdir -pv $(brew --prefix)/etc/
-echo 'address=/.blot/127.0.0.1' >> $(brew --prefix)/etc/dnsmasq.conf
+echo 'address=/.localhost/127.0.0.1' >> $(brew --prefix)/etc/dnsmasq.conf
 echo 'port=53' >> $(brew --prefix)/etc/dnsmasq.conf
 sudo brew services start dnsmasq
 sudo mkdir -v /etc/resolver
-sudo bash -c 'echo "nameserver 127.0.0.1" > /etc/resolver/blot'</code></pre>
+sudo bash -c 'echo "nameserver 127.0.0.1" > /etc/resolver/localhost'</code></pre>
 <p>We use mkcert to create a locally-trusted SSL certificate. Install it, then <code>npm start</code> will generate and trust the certificate:</p>
 <pre class="bash"><code>brew install mkcert nss</code></pre>
 
@@ -35,8 +35,8 @@ sudo bash -c 'echo "nameserver 127.0.0.1" > /etc/resolver/blot'</code></pre>
 <h2>5. Open the dashboard and example site</h2>
 <p>When the server starts it prints a dashboard login URL. You can also open:</p>
 <ul>
-    <li>The dashboard: <a href="https://local.blot" target="_blank">https://local.blot</a></li>
-    <li>The example site: <a href="https://example.local.blot" target="_blank">https://example.local.blot</a></li>
+    <li>The dashboard: <a href="https://blot.localhost" target="_blank">https://blot.localhost</a></li>
+    <li>The example site: <a href="https://example.blot.localhost" target="_blank">https://example.blot.localhost</a></li>
 </ul>
 
 <h2>6. Edit the example blog</h2>

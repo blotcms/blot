@@ -5,6 +5,7 @@ const Template = require("models/template");
 const Tags = require("models/tags");
 const Redirects = require("models/redirects");
 const User = require("models/user");
+const { stackWithFallback } = require("blog/static/fonts/fallback");
 
 // All adapters look up the model method at call time so Jasmine spies
 // (and other runtime replacements) still take effect.
@@ -13,8 +14,24 @@ function getBlog(identifier) {
   return Blog.get(identifier);
 }
 
-function getMetadata(templateID) {
-  return Template.getMetadata(templateID);
+// Stored font stacks end without a generic family or fonts for Arabic and
+// Japanese. Both the live render (middleware/loadTemplate) and the CDN
+// stylesheet render (render/view) read locals here, so both get the fallback
+// without it being written to the template. Copies, in case metadata is shared.
+function withFontFallbacks(metadata) {
+  if (!metadata || !metadata.locals) return metadata;
+  const locals = { ...metadata.locals };
+  for (const key of Object.keys(locals)) {
+    if (key !== "font" && !key.includes("_font")) continue;
+    const font = locals[key];
+    if (!font || typeof font !== "object" || !font.stack) continue;
+    locals[key] = { ...font, stack: stackWithFallback(font) };
+  }
+  return { ...metadata, locals };
+}
+
+async function getMetadata(templateID) {
+  return withFontFallbacks(await Template.getMetadata(templateID));
 }
 
 function getFullView(blogID, templateID, viewName, options) {

@@ -12,7 +12,7 @@
         <a class="full-line" href="{{{url}}}"><em>{{title}}</em> &nbsp;<span class="small">{{date}}</span></a>
         {{/entries}}
       </div>
-      {{#pagination}}
+      {{#entries.pagination}}
       <div class="pagination">
         {{#previous}}
         <a href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>
@@ -22,7 +22,7 @@
         <a href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
         {{/next}}
       </div>
-      {{/pagination}}
+      {{/entries.pagination}}
       <p><a class="small date" href="/archives">View the archives &rarr;</a></p>
     </div>
   </div>

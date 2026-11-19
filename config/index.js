@@ -103,7 +103,7 @@ module.exports = {
     // the development server needs to know the production
     // server's host. This let's us use the same code
     relay_host: "webhooks.blot.im",
-    development_host: "local.blot",
+    development_host: "blot.localhost",
   },
 
   cache: process.env.BLOT_CACHE === "true",
@@ -256,6 +256,10 @@ module.exports = {
 
   bunny: {
     secret: process.env.BUNNY_API_SECRET,
+    // The pull zone serving cdn.blot.im, and the storage zone holding its
+    // Perma-Cache (config/storage-bucket/README.md), for storage/sweep/permaCache
+    pull_zone: "blot-cdn",
+    perma_cache_zone: "blot-cdn-storage",
   },
 
   session: {
@@ -396,9 +400,11 @@ module.exports = {
     email: process.env.BLOT_ICLOUD_EMAIL,
     // The maximum file size to sync with iCloud
     maxFileSize: 1e8, // 100MB
-    // The thresholds for sending warning emails
-    diskSpaceWarning: 4e9, // 4GB
-    diskSpaceLimit: 1e9, // 1GB
+    // The thresholds for sending warning emails. The macserver's root disk
+    // can lose several GB at once (a crash dump was 6.5 GB), so the warning
+    // band is wide enough that one jump can't skip it.
+    diskSpaceWarning: 25e9, // 25GB
+    diskSpaceLimit: 10e9, // 10GB
     iCloudSpaceWarning: 2e9, // 2GB
     iCloudSpaceLimit: 1e9, // 1GB
   },

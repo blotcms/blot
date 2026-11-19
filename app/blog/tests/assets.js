@@ -128,7 +128,7 @@ describe("asset middleware", function () {
         expect(res.headers.get("cache-control")).toEqual("no-cache");
         expect(res.headers.get("location")).toMatch(
           new RegExp(
-            `^https?://[^/]+/folder/v-${version}/${this.blog.id}${encoded}$`
+            `^https?://[^/]+/${this.blog.id}/folder/v-${version}${encoded}$`
           )
         );
       }

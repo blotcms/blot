@@ -124,8 +124,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/piazzolla/900-italic.woff2?version=291ab9&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/piazzolla/900-italic.woff?version=dda3e9&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.399em}
-.push-double{margin-right:0.399em}
+.pull-double {margin-left:-0.375em}
+.push-double{margin-right:0.375em}
 .pull-single{margin-left:-0.242em}
 .push-single{margin-right:0.242em}
 .push-double,.push-single{display:inline-block}

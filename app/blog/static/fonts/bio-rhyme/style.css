@@ -33,8 +33,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/bio-rhyme/800.woff2?version=23b2a0&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/bio-rhyme/800.woff?version=7c3ef9&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.447em}
-.push-double{margin-right:0.447em}
-.pull-single{margin-left:-0.278em}
-.push-single{margin-right:0.278em}
+.pull-double {margin-left:-0.53em}
+.push-double{margin-right:0.53em}
+.pull-single{margin-left:-0.304em}
+.push-single{margin-right:0.304em}
 .push-double,.push-single{display:inline-block}

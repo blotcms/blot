@@ -96,8 +96,8 @@
   src: url('{{{config.cdn.origin}}}/fonts/karla/800-italic.woff2?version=7eb308&extension=.woff2') format('woff2'),
        url('{{{config.cdn.origin}}}/fonts/karla/800-italic.woff?version=b9d749&extension=.woff') format('woff');
 }
-.pull-double {margin-left:-0.3045em}
-.push-double{margin-right:0.3045em}
-.pull-single{margin-left:-0.1355em}
-.push-single{margin-right:0.1355em}
+.pull-double {margin-left:-0.4015em}
+.push-double{margin-right:0.4015em}
+.pull-single{margin-left:-0.2125em}
+.push-single{margin-right:0.2125em}
 .push-double,.push-single{display:inline-block}

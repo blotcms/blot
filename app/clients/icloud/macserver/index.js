@@ -15,6 +15,7 @@ import recursiveListRoute from "./routes/recursiveList.js";
 import downloadRoute from "./routes/download.js";
 import statsRoute from "./routes/stats.js";
 import setupRoute from "./routes/setup.js";
+import foldersRoute from "./routes/folders.js";
 
 const asyncHandler = (handler) => (req, res, next) =>
   Promise.resolve(handler(req, res, next)).catch(next);
@@ -62,6 +63,8 @@ const startServer = async () => {
   app.get("/download", asyncHandler(downloadRoute));
 
   app.get("/stats", asyncHandler(statsRoute));
+
+  app.get("/folders", asyncHandler(foldersRoute));
 
   app.post("/setup", asyncHandler(setupRoute));
 

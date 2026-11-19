@@ -12,6 +12,21 @@ describe("prepare", function () {
     };
   });
 
+  it("makes 'and' of an ampersand in a title, escaped or not", function () {
+    const slugOf = (html) => {
+      const entry = Object.assign({}, this.entry, { html });
+      prepare(entry);
+      return entry.slug;
+    };
+
+    expect(slugOf("<h1>Salt & Pepper</h1>")).toEqual("salt-and-pepper");
+    expect(slugOf("<h1>Salt &amp; Pepper</h1>")).toEqual("salt-and-pepper");
+    expect(slugOf("<h1>& Pepper</h1>")).toEqual("and-pepper");
+    expect(slugOf("<h1>Salt &</h1>")).toEqual("salt-and");
+    expect(slugOf("<h1>Salt, & Pepper!</h1>")).toEqual("salt-and-pepper");
+    expect(slugOf("<h1>Salt&Pepper</h1>")).toEqual("saltandpepper");
+  });
+
   // This was the result of a rather niche bug, caused by files like this:
   // Title:
   // Hello world!

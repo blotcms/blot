@@ -3,8 +3,8 @@
 {{> head}}
 <body>
     {{> navigation}}
-    <main>
-       
+    <main id="main" tabindex="-1">
+        <h1>Search</h1>
         {{> search-form}}
 
         {{#query}}
@@ -16,6 +16,7 @@
          </div>
         {{/entries}}
         </div>
+        {{^entries.length}}<p class="empty-state">No posts match &ldquo;{{query}}&rdquo;.</p>{{/entries.length}}
         {{/query}}
 
     </main>

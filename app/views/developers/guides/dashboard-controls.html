@@ -40,6 +40,14 @@
   }
 }</code></pre>
 
+<h2>Folder</h2>
+<p>The local <code>folder_root</code> becomes a folder picker: a field which suggests the directories in the blog&rsquo;s folder. Its value is a path such as <code>/Posts</code>; an empty value means <code>/Posts</code>. The dashboard saves it with a leading slash and no trailing slash, and refuses a path containing <code>..</code>. If the folder doesn&rsquo;t exist, the dashboard shows an error beside the control but keeps the value, since the folder may be created later. Only the exact name <code>folder_root</code> gets the control, so a local such as <code>demo_folder</code> stays a plain value. A <code>{{#folder}}</code> tag that lists this folder is coming; for now the control only stores the path.</p>
+<pre class="json" data-file="package.json"><code>{
+  "locals": {
+    "folder_root": "/Posts"
+  }
+}</code></pre>
+
 <h2>Images</h2>
 <p>Any top-level local whose name ends in <code>_image</code> becomes an image control. Declare it with an empty object. Replacing or explicitly deleting an image removes its old files once no other template references them.</p>
 <pre class="json" data-file="package.json"><code>{
