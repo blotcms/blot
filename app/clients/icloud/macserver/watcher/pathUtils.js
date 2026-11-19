@@ -32,11 +32,6 @@ const assertValidAction = (action) => {
   }
 };
 
-const buildChokidarEventKey = (blogID, pathInBlogDirectory, action) => {
-  assertValidAction(action);
-  return `${blogID}:${pathInBlogDirectory}:${action}`;
-};
-
 const buildBlogPath = (blogID, pathInBlogDirectory) =>
   join(iCloudDriveDirectory, blogID, pathInBlogDirectory);
 
@@ -45,6 +40,5 @@ export {
   extractPathInBlogDirectory,
   validActions,
   assertValidAction,
-  buildChokidarEventKey,
   buildBlogPath,
 };

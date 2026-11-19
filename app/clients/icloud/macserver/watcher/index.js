@@ -1,4 +1,3 @@
-import chokidar from "chokidar";
 import fs from "fs-extra";
 import {
   getLimiterForBlogID,
@@ -12,10 +11,10 @@ import {
   isUnchanged,
   recordDirectory,
   recordPushed,
+  recordedPaths,
   startTracking,
 } from "../pushedFiles.js";
 import { iCloudDriveDirectory } from "../config.js";
-import { constants } from "fs";
 import { join } from "path";
 import * as brctl from "../brctl/index.js";
 import status from "../httpClient/status.js";
@@ -24,13 +23,7 @@ import {
   startFsWatch as startFsWatchInternal,
   stopFsWatch as stopFsWatchInternal,
 } from "./fswatch.js";
-import {
-  buildBlogPath,
-  buildChokidarEventKey,
-  assertValidAction,
-  extractBlogID,
-  extractPathInBlogDirectory,
-} from "./pathUtils.js";
+import { buildBlogPath, extractBlogID } from "./pathUtils.js";
 import {
   EVICTION_SUPPRESSION_BLOG_SCOPE,
   markEvictionSuppressed,
@@ -49,80 +42,75 @@ import {
 import { realpath } from "fs/promises";
 import path from "path";
 import shouldIgnore from "./shouldIgnore.js";
-import {
-  isActive,
-  markActive,
-  markInactive,
-  markStarting,
-} from "./activeBlogs.js";
+import { isActive, markActive, markInactive } from "./activeBlogs.js";
+
+// The watcher is FSEvents (one recursive fs.watch on the iCloud folder, see
+// fswatch.js) and nothing else. It used to be chokidar too, polling every file
+// of every blog four times a second: that kept the macserver at two busy
+// cores, and a change waited for the poll to reach it. FSEvents reports each
+// change within a second. Two things it doesn't do are covered here:
+// - a folder renamed or moved in is reported, its contents are not, so every
+//   folder the watcher reports is walked (requestDirectoryWalk);
+// - nothing guarantees an event is never lost, so every few minutes a sweep
+//   compares each blog's folder with what was last pushed (sweepBlog), with
+//   stat alone, which never downloads anything.
+
+const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
+const FS_WATCH_SETTLE_DELAY_MS = 300;
+
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function exactCaseViaRealpath(p) {
   const resolved = await realpath(p);
   return resolved === path.resolve(p);
 }
 
-// Map to track active chokidar watchers for each blog folder
-const blogWatchers = new Map();
-const chokidarEventMap = new Map();
-const CHOKIDAR_EVENT_WINDOW_MS = 60_000;
-const CHOKIDAR_PRUNE_INTERVAL_MS = 30_000;
-let chokidarPruneInterval = null;
-const FS_WATCH_SETTLE_DELAY_MS = 300;
+// Walks a blog folder (or one directory in it) depth first with readdir and
+// lstat, which never materialise anything. Calls onDirectory(path) and
+// onFile(path, stat) for each entry that isn't ignored. Resolves to the
+// directories that could not be listed, whose contents are then unknown.
+const walkTree = async (blogID, top, { onDirectory, onFile }) => {
+  const unlisted = [];
 
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const recordChokidarEvent = (blogID, pathInBlogDirectory, action) => {
-  if (!pathInBlogDirectory) {
-    return;
-  }
-
-  assertValidAction(action);
-  const key = buildChokidarEventKey(blogID, pathInBlogDirectory, action);
-  chokidarEventMap.set(key, Date.now());
-};
-
-const hasRecentChokidarEvent = (blogID, pathInBlogDirectory, action) => {
-  if (!pathInBlogDirectory) {
-    return false;
-  }
-
-  assertValidAction(action);
-  const key = buildChokidarEventKey(blogID, pathInBlogDirectory, action);
-  const timestamp = chokidarEventMap.get(key);
-  return Boolean(
-    timestamp && Date.now() - timestamp < CHOKIDAR_EVENT_WINDOW_MS
-  );
-};
-
-const pruneChokidarEvents = () => {
-  const cutoff = Date.now() - CHOKIDAR_EVENT_WINDOW_MS;
-  for (const [key, timestamp] of chokidarEventMap.entries()) {
-    if (timestamp < cutoff) {
-      chokidarEventMap.delete(key);
+  const visit = async (dir) => {
+    let entries;
+    try {
+      entries = await fs.readdir(buildBlogPath(blogID, dir), {
+        withFileTypes: true,
+      });
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") {
+        console.warn(clfdate(), `Could not list ${blogID}/${dir}:`, error.code);
+      }
+      unlisted.push(dir);
+      return;
     }
-  }
+
+    for (const entry of entries) {
+      const child = dir ? `${dir}/${entry.name}` : entry.name;
+      if (shouldIgnore(child)) continue;
+
+      if (entry.isDirectory()) {
+        await onDirectory(child);
+        await visit(child);
+      } else if (entry.isFile()) {
+        const stat = await fs
+          .lstat(buildBlogPath(blogID, child))
+          .catch(() => null);
+        if (stat) await onFile(child, stat);
+      }
+    }
+  };
+
+  await visit(top);
+  return unlisted;
 };
 
-const startChokidarPruneLoop = () => {
-  if (chokidarPruneInterval) {
-    return;
-  }
-
-  chokidarPruneInterval = setInterval(() => {
-    pruneChokidarEvents();
-    pruneEvictionSuppressions();
-  }, CHOKIDAR_PRUNE_INTERVAL_MS);
-  chokidarPruneInterval.unref?.();
-};
-
-const startFsWatch = () => startFsWatchInternal(reconcileFsWatchEvent);
-const stopFsWatch = () => stopFsWatchInternal();
-
-// When a folder is renamed (or moved in) on iCloud, neither chokidar nor
-// fs.watch reliably report the files inside it, only the new directory. Once
-// Blot has created a directory, walk it and push its contents through the same
-// actions as watcher events. The walk runs outside the per-blog limiter (each
-// performAction schedules itself), so it cannot deadlock on nested scheduling.
+// When a folder is renamed (or moved in) on iCloud, fs.watch reports only the
+// new directory, not the files inside it. Once Blot has created a directory,
+// walk it and push its contents through the same actions as watcher events.
+// The walk runs outside the per-blog limiter (each performAction schedules
+// itself), so it cannot deadlock on nested scheduling.
 //
 // A disk-usage eviction mid-walk suppresses the whole blog, so the walk would
 // skip every remaining entry. Walks report when they skipped anything for that
@@ -201,14 +189,11 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
         continue;
 
       if (isDirectory) {
-        if (!hasRecentChokidarEvent(blogID, childPath, "mkdir")) {
-          await performAction(blogID, childPath, "mkdir");
-        }
+        await performAction(blogID, childPath, "mkdir");
         entered.add(childPath);
         if (await walkDirectoryContents(blogID, childPath, entered))
           interrupted = true;
-      } else if (!hasRecentChokidarEvent(blogID, childPath, "upload")) {
-        // if chokidar did report the file it is already being uploaded.
+      } else {
         // Files unchanged since their last push are skipped here, without
         // queueing behind the blog's other actions or logging each one
         const stat = await fs
@@ -237,8 +222,8 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
 // Walk every directory the watcher reports, not only ones Blot did not already
 // have: a child upload or mkdir can create the folder on Blot first, which
 // would otherwise make /mkdir report "not created" and skip the walk (some
-// children synced, siblings missed). Walks are idempotent (chokidar-reported
-// entries are skipped and Blot dedupes uploads), and fs.watch reports existing
+// children synced, siblings missed). Walks are idempotent (unchanged files are
+// skipped and Blot dedupes uploads), and fs.watch reports existing
 // directories whenever their contents change, so walks of one directory are
 // spaced at least DIRECTORY_WALK_MIN_INTERVAL_MS apart. A request inside that
 // window schedules one trailing walk, so late-arriving children are still seen.
@@ -297,107 +282,62 @@ const requestDirectoryWalk = async (blogID, pathInBlogDirectory) => {
   }
 };
 
+// A directory Blot already has isn't sent again, but is still walked: its
+// contents may have been moved in with it
 const mkdirAndSyncContents = async (blogID, pathInBlogDirectory) => {
-  await performAction(blogID, pathInBlogDirectory, "mkdir");
+  if (!isKnownDirectory(blogID, pathInBlogDirectory)) {
+    await performAction(blogID, pathInBlogDirectory, "mkdir");
+  }
   await requestDirectoryWalk(blogID, pathInBlogDirectory);
 };
 
-// Handle file events
-const handleFileEvent = async (event, blogID, filePath) => {
+// The blog's own folder was deleted or unshared on iCloud
+const handleBlogFolderRemoved = async (blogID) => {
+  console.warn(clfdate(), `Blog directory deleted: ${blogID}`);
+  const limiterCountBefore = getLimiterCount();
+  removeLimiterForBlogID(blogID);
+  forgetBlog(blogID);
+  const limiterCountAfter = getLimiterCount();
+  console.assert(
+    limiterCountAfter < limiterCountBefore,
+    `Expected limiter map size to decrease after deleting ${blogID}. Before: ${limiterCountBefore}, After: ${limiterCountAfter}`
+  );
+  await status(blogID, {
+    error: "Blog directory deleted",
+    errorCode: "SOURCE_MISSING",
+  });
+  await unwatch(blogID); // Stop watching this blog folder
+  removeBlog(blogID); // Remove from largest files map
+};
+
+// FSEvents reports the blog folder itself. Only a folder that stays gone is
+// treated as deleted: iCloud can briefly replace a folder it is updating.
+const BLOG_FOLDER_RECHECK_MS = 5_000;
+const blogFolderChecks = new Set();
+
+const reconcileBlogFolderEvent = async (blogID) => {
+  if (!isActive(blogID) || blogFolderChecks.has(blogID)) return;
+  if (await fs.pathExists(join(iCloudDriveDirectory, blogID))) return;
+
+  blogFolderChecks.add(blogID);
   try {
-    const pathInBlogDirectory = extractPathInBlogDirectory(filePath);
-
-    if (shouldIgnore(pathInBlogDirectory)) {
-      console.log(
-        clfdate(),
-        `Ignoring file event: ${event}, blogID: ${blogID}, path: ${pathInBlogDirectory} because it matches the shouldIgnore filter`
-      );
-      return;
-    }
-
-    // Handle the deletion of the entire blog directory
-    if (event === "unlinkDir" && pathInBlogDirectory === "") {
-      console.warn(clfdate(), `Blog directory deleted: ${blogID}`);
-      const limiterCountBefore = getLimiterCount();
-      removeLimiterForBlogID(blogID);
-      forgetBlog(blogID);
-      const limiterCountAfter = getLimiterCount();
-      console.assert(
-        limiterCountAfter < limiterCountBefore,
-        `Expected limiter map size to decrease after deleting ${blogID}. Before: ${limiterCountBefore}, After: ${limiterCountAfter}`
-      );
-      await status(blogID, {
-        error: "Blog directory deleted",
-        errorCode: "SOURCE_MISSING",
-      });
-      await unwatch(blogID); // Stop watching this blog folder
-      removeBlog(blogID); // Remove from largest files map
-      return;
-    }
-
-    try {
-      // Check if the directory for the blogID exists
-      await fs.access(join(iCloudDriveDirectory, blogID), constants.F_OK);
-    } catch (err) {
-      console.warn(
-        clfdate(),
-        `Ignoring event for unregistered blogID: ${blogID}`
-      );
-      return;
-    }
-
-    if (!pathInBlogDirectory) {
-      console.warn(clfdate(), `Failed to parse path from path: ${filePath}`);
-      return;
-    }
-
-    console.log(
-      clfdate(),
-      `Chokidar Event: ${event}, blogID: ${blogID}, path: ${pathInBlogDirectory}`
-    );
-
-    // because this runs on macos and the disk is
-    // case insensitive, we need to verify that the
-    // pathInBlogDirectory is the exact same as the path
-    // on the disk – if not, we need to issue a remove event
-    if (event === "add" || event === "change") {
-      try {
-        const fullPath = buildBlogPath(blogID, pathInBlogDirectory);
-        const exactCase = await exactCaseViaRealpath(fullPath);
-        if (!exactCase) {
-          console.log(
-            clfdate(),
-            `Chokidar Event: Changing event from add/change to remove for path: ${pathInBlogDirectory} because of case mismatch`
-          );
-          event = "unlink";
-        }
-      } catch (error) {
-        console.error(
-          clfdate(),
-          `Error verifying exact case for path: ${pathInBlogDirectory}:`,
-          error
-        );
-        return;
-      }
-    }
-
-    if (event === "add" || event === "change") {
-      await performAction(blogID, pathInBlogDirectory, "upload");
-    } else if (event === "unlink" || event === "unlinkDir") {
-      await performAction(blogID, pathInBlogDirectory, "remove");
-    } else if (event === "addDir") {
-      await mkdirAndSyncContents(blogID, pathInBlogDirectory);
-    }
-  } catch (error) {
-    console.error(
-      clfdate(),
-      `Error handling file event (${event}, ${filePath}):`,
-      error
-    );
+    await delay(BLOG_FOLDER_RECHECK_MS);
+    if (!isActive(blogID)) return;
+    if (await fs.pathExists(join(iCloudDriveDirectory, blogID))) return;
+    await handleBlogFolderRemoved(blogID);
+  } finally {
+    blogFolderChecks.delete(blogID);
   }
 };
 
+// One reconcile per path at a time: FSEvents often reports one change several
+// times. A report that arrives while the path is being handled runs it once
+// more afterwards, so a change in between is not missed.
+const reconciling = new Map(); // `${blogID}:${path}` -> { again }
+
 const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
+  if (!pathInBlogDirectory) return reconcileBlogFolderEvent(blogID);
+
   if (!isActive(blogID)) {
     console.log(
       clfdate(),
@@ -406,23 +346,7 @@ const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
     return;
   }
 
-  // This will skip blog directory deletions
-  // but that's OK!
-  if (!pathInBlogDirectory) {
-    console.log(
-      clfdate(),
-      `Ignoring FS Watch Event: blogID: ${blogID}, path: ${pathInBlogDirectory} because it is falsy`
-    );
-    return;
-  }
-
-  if (shouldIgnore(pathInBlogDirectory)) {
-    console.log(
-      clfdate(),
-      `Ignoring FS Watch Event: blogID: ${blogID}, path: ${pathInBlogDirectory} because it matches the shouldIgnore filter`
-    );
-    return;
-  }
+  if (shouldIgnore(pathInBlogDirectory)) return;
 
   if (isEvictionSuppressed(blogID, pathInBlogDirectory)) {
     console.log(
@@ -432,21 +356,40 @@ const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
     return;
   }
 
-  await delay(FS_WATCH_SETTLE_DELAY_MS);
+  const key = `${blogID}:${pathInBlogDirectory}`;
+  const running = reconciling.get(key);
+  if (running) {
+    running.again = true;
+    return;
+  }
 
-  const fullPath = buildBlogPath(blogID, pathInBlogDirectory);
-  let action = null;
+  const state = { again: false };
+  reconciling.set(key, state);
 
   try {
-    const stats = await fs.stat(fullPath);
+    do {
+      state.again = false;
+      await delay(FS_WATCH_SETTLE_DELAY_MS);
+      await reconcilePath(blogID, pathInBlogDirectory);
+    } while (state.again && isActive(blogID));
+  } finally {
+    reconciling.delete(key);
+  }
+};
 
-    const exactCase = await exactCaseViaRealpath(fullPath);
+const reconcilePath = async (blogID, pathInBlogDirectory) => {
+  const fullPath = buildBlogPath(blogID, pathInBlogDirectory);
+  let action = null;
+  let stats = null;
+
+  try {
+    stats = await fs.stat(fullPath);
 
     // because this runs on macos and the disk is
     // case insensitive, we need to verify that the
     // pathInBlogDirectory is the exact same as the path
     // on the disk – if not, we need to issue a remove event
-    if (!exactCase) {
+    if (!(await exactCaseViaRealpath(fullPath))) {
       action = "remove";
     } else if (stats.isFile()) {
       action = "upload";
@@ -461,28 +404,150 @@ const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
     }
   }
 
-  if (!action) {
-    return;
-  }
+  if (!action) return;
 
-  if (hasRecentChokidarEvent(blogID, pathInBlogDirectory, action)) {
+  // FSEvents also reports a file evicted or downloaded again, which leaves
+  // its size and mtime alone. The upload skips it (after checking bird's
+  // version, see httpClient/upload.js); it is just not logged here.
+  if (!(
+    action === "upload" && isUnchanged(blogID, pathInBlogDirectory, stats)
+  )) {
     console.log(
       clfdate(),
-      `FS Watch Event: duplicate, action: ${action}, blogID: ${blogID}, path: ${pathInBlogDirectory}`
+      `FS Watch Event: ${action}, blogID: ${blogID}, path: ${pathInBlogDirectory}`
     );
-    return;
   }
 
-  console.log(
-    clfdate(),
-    `FS Watch Event: ${action}, blogID: ${blogID}, path: ${pathInBlogDirectory}`
-  );
+  markBlogUpdated(blogID);
+
   if (action === "mkdir") {
     await mkdirAndSyncContents(blogID, pathInBlogDirectory);
   } else {
     await performAction(blogID, pathInBlogDirectory, action);
   }
 };
+
+// Every SWEEP_INTERVAL_MS, compare each active blog's folder with what was
+// last pushed, and push the difference: files that are new or whose size or
+// mtime changed, folders Blot doesn't have, and paths that are gone.
+// Removals are the dangerous part, since a wrong one deletes a published post
+// from Blot, so a path counts as gone only if its folder listed cleanly, it
+// is still gone two seconds later, and the sweep did not find a large share
+// of the blog missing at once (which points at a listing problem, not at the
+// customer: real deletions arrive through FSEvents anyway).
+const SWEEP_REMOVAL_RECHECK_MS = 2_000;
+const SWEEP_MAX_MISSING_SHARE = 0.2;
+let sweepTimer = null;
+let sweeping = false;
+
+const sweepBlog = async (blogID) => {
+  if (!isActive(blogID) || isEvictionSuppressed(blogID)) return;
+
+  const recorded = recordedPaths(blogID);
+  const seen = new Set();
+  let pushes = 0;
+
+  const unlisted = await walkTree(blogID, "", {
+    onDirectory: async (dir) => {
+      seen.add(dir);
+      if (!isKnownDirectory(blogID, dir)) {
+        pushes++;
+        await performAction(blogID, dir, "mkdir");
+      }
+    },
+    onFile: async (file, stat) => {
+      seen.add(file);
+      if (!isUnchanged(blogID, file, stat)) {
+        pushes++;
+        console.log(
+          clfdate(),
+          `Sweep: upload, blogID: ${blogID}, path: ${file}`
+        );
+        await performAction(blogID, file, "upload");
+      }
+    },
+  });
+
+  if (unlisted.includes("")) return; // the blog folder itself is gone
+
+  const insideUnlisted = (p) =>
+    unlisted.some((dir) => p === dir || p.startsWith(dir + "/"));
+
+  const missing = recorded
+    .filter(([p]) => !seen.has(p) && !shouldIgnore(p) && !insideUnlisted(p))
+    // deepest first, so a removed folder's files go before the folder
+    .sort(([a], [b]) => b.length - a.length);
+
+  if (
+    missing.length &&
+    missing.length > recorded.length * SWEEP_MAX_MISSING_SHARE
+  ) {
+    console.error(
+      clfdate(),
+      `Sweep: ${missing.length} of ${recorded.length} paths missing for ${blogID}, not removing any`
+    );
+    return;
+  }
+
+  if (missing.length) await delay(SWEEP_REMOVAL_RECHECK_MS);
+
+  for (const [p] of missing) {
+    if (!isActive(blogID)) return;
+    if (await fs.pathExists(buildBlogPath(blogID, p))) continue;
+    pushes++;
+    console.log(clfdate(), `Sweep: remove, blogID: ${blogID}, path: ${p}`);
+    await performAction(blogID, p, "remove").catch((error) =>
+      console.error(clfdate(), `Sweep: remove failed (${blogID}, ${p}):`, error)
+    );
+  }
+
+  if (pushes)
+    console.log(clfdate(), `Sweep: ${pushes} change(s) for ${blogID}`);
+};
+
+const sweepAll = async () => {
+  if (sweeping) return;
+  sweeping = true;
+  const started = Date.now();
+  let blogs = 0;
+
+  try {
+    const folders = await fs.readdir(iCloudDriveDirectory, {
+      withFileTypes: true,
+    });
+    for (const folder of folders) {
+      if (!folder.isDirectory()) continue;
+      const blogID = extractBlogID(join(iCloudDriveDirectory, folder.name));
+      if (!blogID || !isActive(blogID)) continue;
+      blogs++;
+      try {
+        await sweepBlog(blogID);
+      } catch (error) {
+        console.error(clfdate(), `Sweep failed for ${blogID}:`, error);
+      }
+    }
+  } finally {
+    sweeping = false;
+    console.log(
+      clfdate(),
+      `Sweep of ${blogs} blog(s) took ${Date.now() - started}ms`
+    );
+  }
+};
+
+const startSweepLoop = () => {
+  if (sweepTimer) return;
+  sweepTimer = setInterval(() => {
+    pruneEvictionSuppressions();
+    sweepAll().catch((error) =>
+      console.error(clfdate(), "Sweep failed:", error)
+    );
+  }, SWEEP_INTERVAL_MS);
+  sweepTimer.unref?.();
+};
+
+const startFsWatch = () => startFsWatchInternal(reconcileFsWatchEvent);
+const stopFsWatch = () => stopFsWatchInternal();
 
 // Initializes the top-level watcher and starts disk monitoring
 const initialize = async () => {
@@ -495,7 +560,7 @@ const initialize = async () => {
 
     // Schedule the event handler to run within the limiter
     await limiter.schedule(async () => {
-      // Unwatch the blogID to prevent file locks during eviction
+      // Events for the blog are dropped while its files are evicted
       await unwatch(blogID);
 
       markEvictionSuppressed(blogID, pathInBlogDirectory);
@@ -517,6 +582,10 @@ const initialize = async () => {
     });
   });
 
+  // FSEvents first, so nothing that changes while the blogs are scanned is
+  // missed; events for a blog are dropped until its scan is done
+  startFsWatch();
+
   // List all the folders in the iCloudDriveDirectory
   const folderPaths = await fs.readdir(iCloudDriveDirectory, {
     withFileTypes: true,
@@ -534,128 +603,48 @@ const initialize = async () => {
     }
   }
 
-  startChokidarPruneLoop();
-  startFsWatch();
+  startSweepLoop();
 };
 
-// Watches a specific blog folder
+// Watches a specific blog folder. The first time in this process, the files
+// already in it are taken to be in sync with Blot and recorded as pushed (the
+// hourly validation and resyncs cover anything that changed while the
+// macserver was down), so a later eviction or re-materialisation of one, which
+// leaves its size and mtime alone, is skipped without a download.
 const watch = async (blogID) => {
-  if (blogWatchers.has(blogID)) {
+  if (isActive(blogID)) {
     console.warn(clfdate(), `Already watching blog folder: ${blogID}`);
-
-    if (isActive(blogID)) {
-      markActive(blogID);
-    }
-
     return;
   }
-
-  const blogPath = join(iCloudDriveDirectory, blogID);
-  let initialScanComplete = false;
-  const recordInitialScan = startTracking(blogID);
 
   console.log(clfdate(), `Starting watcher for blog folder: ${blogID}`);
-  // Monitor the CPU usage on the macserver before and after
-  // making any changes to the polling intervals
-  const watcher = chokidar
-    .watch(blogPath, {
-      // we need to use polling otherwise we get this error on server start:
-      // Watcher error: Error: EMFILE: too many open files, watch
-      // IF in future, we can get rid of polling, perhaps we can remove the watch/unwatch calls in the rest of the code?
-      // This might work. We also might be able to leverage
-      // chokidar.watcher.add() and chokidar.watcher.unwatch() to manage files more specifically, reducing the risk of missed events and sync drift?
-      usePolling: true,
-      interval: 250, // Poll every 0.25s for non-binary files
-      binaryInterval: 1000, // Poll every 1s for binary files
-      ignoreInitial: false, // Process initial events
-      alwaysStat: true, // so the initial scan can record each file's size and mtime
-    })
-    .on("all", (event, filePath, stats) => {
-      const blogID = extractBlogID(filePath);
-      const pathInBlogDirectory = extractPathInBlogDirectory(filePath);
-      const action =
-        event === "add" || event === "change"
-          ? "upload"
-          : event === "unlink" || event === "unlinkDir"
-            ? "remove"
-            : event === "addDir"
-              ? "mkdir"
-              : null;
 
-      if (!blogID) {
-        console.warn(
-          clfdate(),
-          `Failed to parse blogID from path: ${filePath}`
-        );
-        return;
-      }
-
-      if (
-        event === "add" ||
-        event === "change" ||
-        event === "unlink" ||
-        event === "unlinkDir" ||
-        event === "addDir"
-      ) {
-        markBlogUpdated(blogID);
-      }
-
-      // Files already here when the blog is first watched are taken to be in
-      // sync with Blot (their initial events are not pushed), so record them
-      // as pushed: a later eviction or re-materialisation of one, which leaves
-      // its size and mtime alone, is then skipped without a download.
-      if (
-        recordInitialScan &&
-        !initialScanComplete &&
-        event === "add" &&
-        stats
-      ) {
-        recordPushed(blogID, pathInBlogDirectory, stats);
-      }
-      if (
-        recordInitialScan &&
-        !initialScanComplete &&
-        event === "addDir" &&
-        pathInBlogDirectory
-      ) {
-        recordDirectory(blogID, pathInBlogDirectory);
-      }
-
-      // We only handle file events after the initial scan is complete
-      if (initialScanComplete && action) {
-        assertValidAction(action);
-        recordChokidarEvent(blogID, pathInBlogDirectory, action);
-        handleFileEvent(event, blogID, filePath);
-      }
-    })
-    .on("ready", () => {
-      console.log(
-        clfdate(),
-        `Initial scan complete for blog folder: ${blogID}`
-      );
-      initialScanComplete = true; // Mark the initial scan as complete
-      markActive(blogID);
-    })
-    .on("error", (error) =>
-      console.error(clfdate(), `Watcher error: ${error}`)
+  if (startTracking(blogID)) {
+    const started = Date.now();
+    let files = 0;
+    await walkTree(blogID, "", {
+      onDirectory: (dir) => recordDirectory(blogID, dir),
+      onFile: (file, stat) => {
+        files++;
+        recordPushed(blogID, file, stat);
+      },
+    });
+    console.log(
+      clfdate(),
+      `Initial scan complete for blog folder: ${blogID} (${files} files, ${Date.now() - started}ms)`
     );
-
-  blogWatchers.set(blogID, watcher);
-  markStarting(blogID);
-};
-
-// Unwatches a specific blog folder
-const unwatch = async (blogID) => {
-  const watcher = blogWatchers.get(blogID);
-  if (!watcher) {
-    console.warn(clfdate(), `No active watcher for blog folder: ${blogID}`);
-    markInactive(blogID);
-    return;
   }
 
-  console.log(clfdate(), `Stopping watcher for blog folder: ${blogID}`);
-  await watcher.close();
-  blogWatchers.delete(blogID);
+  markActive(blogID);
+};
+
+// Unwatches a specific blog folder: its events are dropped from now on
+const unwatch = async (blogID) => {
+  if (!isActive(blogID)) {
+    console.warn(clfdate(), `No active watcher for blog folder: ${blogID}`);
+  } else {
+    console.log(clfdate(), `Stopping watcher for blog folder: ${blogID}`);
+  }
   markInactive(blogID);
 };
 
