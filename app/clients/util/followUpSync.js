@@ -1,4 +1,5 @@
 const alarm = require("helper/alarm");
+const client = require("models/client");
 const folderLock = require("sync/lock");
 const clfdate = require("helper/clfdate");
 
@@ -10,6 +11,14 @@ const RETRY_MS = 5000;
 // process runs it. The change normally syncs straight away and takes the
 // follow-up back, so this only has to be longer than a typical sync.
 const ARM_MS = 15 * 1000;
+
+// A blog's dirty flag (see run) is a safety net, not state: if nothing reads
+// it, it goes away on its own after this long.
+const DIRTY_TTL_SECONDS = 5 * 60;
+
+// How many times in a row run() syncs again straight away because changes
+// arrived during the sync, before leaving the rest to the follow-up alarm
+const MAX_REPEATS = 5;
 
 const instances = [];
 
@@ -53,15 +62,42 @@ function followUpSync(name, syncBlog) {
     await alarms.set(blogID, Date.now() + RETRY_MS);
   }
 
-  // Resolves true if the sync ran
+  // sync:follow-up:dirty:<name>:<blogID> exists while a request has found the
+  // blog's lock held and not yet been caught up with by a sync
+  function dirtyKey(blogID) {
+    return "sync:follow-up:dirty:" + name + ":" + blogID;
+  }
+
+  // The lock is held: set the dirty flag and the follow-up in one MULTI
+  async function queue(blogID) {
+    const multi = client
+      .multi()
+      .set(dirtyKey(blogID), "1", { EX: DIRTY_TTL_SECONDS });
+    await alarms.queueSet(multi, blogID, Date.now() + RETRY_MS).exec();
+  }
+
+  // Reads and clears the dirty flag together with the blog's follow-up, in one
+  // MULTI. Resolves true if requests arrived during the sync which has just
+  // finished.
+  async function takeDirty(blogID) {
+    const multi = client.multi().getDel(dirtyKey(blogID));
+    const [flag] = await alarms.queueCancel(multi, blogID).exec();
+    return flag !== null && flag !== undefined;
+  }
+
+  // Resolves "synced" if the sync ran, "locked" if it found the lock taken
+  // (a follow-up is queued) and "failed" if it threw anything else
   async function attempt(blogID) {
     try {
       await syncBlog(blogID);
-      return true;
+      return "synced";
     } catch (err) {
-      if (isLocked(err)) await later(blogID);
-      else log("Sync failed", blogID, err);
-      return false;
+      if (isLocked(err)) {
+        await later(blogID);
+        return "locked";
+      }
+      log("Sync failed", blogID, err);
+      return "failed";
     }
   }
 
@@ -89,21 +125,53 @@ function followUpSync(name, syncBlog) {
   //
   // If the change was armed, its token is passed too, and once the sync has
   // run the follow-up is taken back, unless another has been written since.
-  async function run(blogID, armed) {
+  async function run(blogID, armed, repeats = 0) {
     const { held } = await folderLock.inspect(blogID);
 
     if (held) {
       log("Sync already running, queueing follow-up", blogID);
-      return later(blogID);
+      return queue(blogID);
     }
 
-    const synced = await attempt(blogID);
+    const result = await attempt(blogID);
 
-    if (synced && armed !== undefined) {
+    if (result !== "synced") return;
+
+    if (armed !== undefined) {
       await alarms
         .cancelIf(blogID, armed)
         .catch((err) => log("Could not take back follow-up", blogID, err));
     }
+
+    // The sync has released the lock. Requests which found it held while it
+    // ran may have been walked past by it, so rather than leave them to the
+    // follow-up alarm, which waits RETRY_MS, sync again now. Taking the flag
+    // also takes the alarm those requests set, which this sync will cover.
+    //
+    // A request can still arrive after the flag was read and before the lock
+    // was released (or, in a sync run again below, while it runs). It sets the
+    // flag and the alarm again, and the alarm, which stays as the backstop,
+    // syncs it. A failed sync takes neither, so its alarm retries it.
+    let dirty;
+    try {
+      dirty = await takeDirty(blogID);
+    } catch (err) {
+      log("Could not read dirty flag", blogID, err);
+      return;
+    }
+
+    if (!dirty) return;
+
+    if (repeats >= MAX_REPEATS) {
+      log(
+        "Changes keep arriving during syncs, leaving the rest to a follow-up",
+        blogID
+      );
+      return later(blogID);
+    }
+
+    log("Changes arrived during the sync, syncing again", blogID);
+    return run(blogID, undefined, repeats + 1);
   }
 
   // For the clients' test-only syncs-finished routes: whether a follow-up is
