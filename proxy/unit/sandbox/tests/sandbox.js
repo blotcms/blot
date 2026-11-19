@@ -1419,15 +1419,15 @@ function answer(text) {
 
   test("peak: says what a peak is worth when the kernel can't reset it", () => {
     assert.strictEqual(
-      peaks.describe({ peak: 5, reset: true, sampled: false, shared: true }),
+      peaks.words({ peak: 5, reset: true, sampled: false, shared: true }),
       "peak=5"
     );
     assert.strictEqual(
-      peaks.describe({ peak: 5, reset: false, sampled: false, shared: true }),
+      peaks.words({ peak: 5, reset: false, sampled: false, shared: true }),
       "peak=unknown peak_since_create=5"
     );
     assert.strictEqual(
-      peaks.describe({
+      peaks.words({
         peak: null,
         reset: false,
         sampled: true,

@@ -96,10 +96,10 @@ function track(
 }
 
 // The log words for a peak: peak=<bytes or unknown>, and what to make of it
-function describe({ peak, reset, sampled, shared }) {
+function words({ peak, reset, sampled, shared }) {
   if (peak === null) return "peak=unknown";
   if (shared && !reset) return `peak=unknown peak_since_create=${peak}`;
   return sampled ? `peak=${peak} peak_sampled=1` : `peak=${peak}`;
 }
 
-module.exports = { track, describe, SAMPLE_MS };
+module.exports = { track, words, SAMPLE_MS };

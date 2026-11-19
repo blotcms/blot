@@ -70,7 +70,7 @@ function createBroker(options = {}) {
   // One line per job when it is done, for sizing each job's memory
   const jobLine = (name, error, ms, measured, queuedMs, extra = "") =>
     `broker: job=${name} ${error ? "error=" + error : "ok"}${extra} ms=${ms} ` +
-    `${peak.describe(measured)} queued_ms=${queuedMs}`;
+    `${peak.words(measured)} queued_ms=${queuedMs}`;
 
   const running = new Set();
   const queue = [];
@@ -403,7 +403,7 @@ function createBroker(options = {}) {
       log(
         `broker: worker=${worker.name} exit code=${code} signal=${signal} ` +
           `requests=${worker.requests} age_ms=${Date.now() - worker.started} ` +
-          `${peak.describe(measured)}`
+          `${peak.words(measured)}`
       );
       if (worker.onExit) worker.onExit(code, signal);
     };
