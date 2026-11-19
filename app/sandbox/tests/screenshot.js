@@ -590,6 +590,42 @@ describe("sandbox screenshot job", function () {
         expect(urls(run.calls.argsFor(1))).toEqual(["https://flaky"]);
       }, 10000);
 
+      it("fails a page that was too heavy for good, without sending it again", async function () {
+        const run = spyOn(sandbox, "run").and.callFake(async (name, args) => {
+          const results = args.pages.map((p) =>
+            p.url === "https://heavy"
+              ? {
+                  error: "the page needed more memory than the browser has",
+                  retryable: false,
+                  tooHeavy: true,
+                  host: "heavy",
+                  peakBytes: 450 * 1024 * 1024,
+                }
+              : {}
+          );
+          return {
+            meta: { results },
+            outputs: args.pages.map((p, i) =>
+              results[i].error ? empty : png(p.url)
+            ),
+          };
+        });
+
+        const [good, heavy] = await Promise.all([
+          screenshot("https://good", file("good")).then(
+            () => "ok",
+            (e) => e.message
+          ),
+          rejection(screenshot("https://heavy", file("heavy"))),
+        ]);
+
+        expect(good).toBe("ok");
+        expect(heavy.message).toMatch(/more memory than the browser has/);
+        expect(await fs.pathExists(file("heavy"))).toBe(false);
+        // The batch only: no attempt alone, and no retry
+        expect(run).toHaveBeenCalledTimes(1);
+      }, 10000);
+
       it("sends pages the job didn't reach in the next batch, without a failed attempt", async function () {
         const run = spyOn(sandbox, "run").and.callFake(async (name, args) => {
           if (run.calls.count() <= 3) {

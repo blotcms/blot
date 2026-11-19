@@ -289,6 +289,30 @@ describe("sandbox broker and jail", function () {
     assert.deepStrictEqual(args.slice(4), jail.args("metadata"));
   });
 
+  test("jail: the screenshot job is told its cgroup's memory limit, and nothing else changes", function () {
+    const real = fs.readFileSync;
+    const limitOf = (text) => {
+      fs.readFileSync = (file, ...rest) => {
+        if (file === jail.BROWSER_CGROUP + "/memory.max") return text;
+        return real.call(fs, file, ...rest);
+      };
+      try {
+        return jail.command("screenshot").args.join(" ");
+      } finally {
+        fs.readFileSync = real;
+      }
+    };
+    const without = jail.command("screenshot").args.join(" ");
+    assert(without.includes("-E BLOT_BROWSER_MEMORY_MAX=max"));
+
+    const set = limitOf("536870912\n");
+    assert(set.includes("-E BLOT_BROWSER_MEMORY_MAX=536870912"));
+    assert.strictEqual(set.replace("=536870912", "=max"), without);
+    // Unlimited, or not a number: the job uses its own fixed limit
+    assert.strictEqual(limitOf("max\n"), without);
+    assert.strictEqual(limitOf("12 -E X=1"), without);
+  });
+
   test("jail: the OOM score a job's shell sets reaches the program it execs", function () {
     if (!fs.existsSync("/proc/self/oom_score_adj"))
       return pending("needs Linux");

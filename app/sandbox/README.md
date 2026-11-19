@@ -384,6 +384,36 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   deferred. If the job as a whole is killed (the 1 GiB browser cgroup's OOM kill
   takes the group) or times out, `helper/screenshot` sends each page of that
   batch on its own, so a heavy page costs only itself.
+- **A memory watchdog gives up on a heavy page before the cgroup's OOM kill
+  takes the batch** (`jobs/screenshot-memory.js`). While a page loads and
+  renders, the job reads its total memory every 250 ms and, once it reaches 85%
+  of the browser cgroup's `memory.max`, closes that page's context and answers
+  `{ retryable: false, tooHeavy: true, host, peakBytes, meter }` for it, then
+  goes on with the next page. The limit comes from the broker, which reads
+  `memory.max` when it spawns the job and passes it in
+  `BLOT_BROWSER_MEMORY_MAX` (`jail.js`; no bind is added: the jail can't see
+  the cgroup); `max` (unlimited or unreadable) means 430 MiB, and without the variable (development, specs) the job judges no page. The reading is the sum of
+  PSS (`smaps_rollup`, which splits shared pages between the processes that map
+  them, so it is close to what the cgroup is charged) over the processes in the
+  jail's cgroup; RSS replaces it for a process whose `smaps_rollup` can't be
+  read. The jail's `/proc` is the container's (`--disable_proc` and a bind), in
+  a pid namespace of its own, so the job's `process.pid` is not a pid in it; but
+  nsjail also gives the jail a cgroup namespace, whose root is the browser
+  cgroup (the job joins it first), so the job's processes are exactly those whose
+  `/proc/<pid>/cgroup` reads `0::/` and every other process reads `0::/../...`.
+  Where none is found the meter reads nothing and the page is not judged (as
+  before the watchdog). The client treats the answer as a final failure (no single-page
+  retry, which would fail again), so a link preview falls back as it does for any
+  failed screenshot, and logs one `Page too heavy for the browser` line with the
+  host (never the query), the peak and which meter read it (the job's own stderr
+  is not logged). Every screenshot that is taken is unchanged: pages that need
+  more than the budget get none.
+- **The Chromium flags change no pixels** (`jobs/screenshot-args.js`). The
+  one `--disable-features` flag (Chromium honours only the last) also turns off
+  `BackForwardCache`, `MediaRouter`, `OptimizationHints` and `Translate`, and
+  `--renderer-process-limit=1` shares one renderer, which site isolation being off
+  already allows. Device scale factor, viewport, fonts, images and media
+  loading are untouched.
 - **`helper/screenshot` coalesces requests** from every caller (bookmark links,
   the template gallery): a request waits at most 150 ms for company, a batch
   goes at 8, only one batch is out at a time per process, and what arrives

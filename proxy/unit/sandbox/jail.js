@@ -2,6 +2,7 @@
 // starts nothing. The broker (./broker.js) runs as root and is the only caller.
 // See app/sandbox/README.md for why each flag is what it is.
 
+const fs = require("fs");
 const path = require("path");
 
 const MiB = 1024 * 1024;
@@ -442,6 +443,20 @@ function inCgroup(cgroup, args, { raiseOomScore }) {
   };
 }
 
+// The screenshot job can't see its cgroup, so the broker passes it the limit
+// (memory.max, in bytes, or "max" where it is unlimited or can't be read) for
+// its per-page memory watchdog (app/sandbox/jobs/screenshot-memory.js), which
+// gives up on a page at a share of it. The variable also tells the job it is in
+// the jail: it never judges pages anywhere else. Only digits or "max" are passed.
+function browserMemoryEnv(directory) {
+  let limit = "max";
+  try {
+    const text = fs.readFileSync(directory + "/memory.max", "utf8").trim();
+    if (/^\d{1,15}$/.test(text)) limit = text;
+  } catch (e) {}
+  return ["BLOT_BROWSER_MEMORY_MAX=" + limit];
+}
+
 // The program and arguments that start a job's jail; for a job with a
 // network, in one of its cgroups, the first unless the broker picks another
 function command(name, cgroup) {
@@ -457,6 +472,10 @@ function command(name, cgroup) {
   const directory = cgroup || j.cgroups[0];
   if (!j.cgroups.includes(directory)) throw new Error("unknown cgroup");
   const extra = NETWORK_JOBS[name];
+  const env =
+    name === "screenshot"
+      ? extra.env.concat(browserMemoryEnv(directory))
+      : extra.env;
   return inCgroup(
     directory,
     networkArgs({
@@ -464,7 +483,7 @@ function command(name, cgroup) {
       binds: BINDS.concat(NETWORK_BINDS, extra.binds),
       timeSeconds: j.timeSeconds,
       nofile: extra.nofile,
-      env: extra.env,
+      env,
       command: j.command,
     }),
     { raiseOomScore: true }
