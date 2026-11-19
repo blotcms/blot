@@ -5,6 +5,7 @@
 const { Dropbox } = require("dropbox");
 const database = require("../database");
 const config = require("config");
+const accessTokenCache = require("./accessTokenCache");
 
 // Resolves to { error, client, account } and never rejects, since the caller
 // sometimes needs the account even when there is an error with the client
@@ -48,6 +49,15 @@ module.exports = async function createClient(blogID) {
   client.auth.setClientSecret(clientSecret);
   client.auth.setRefreshToken(account.refresh_token);
 
+  // Use the access token cached with its expiry, if there is one, so the SDK
+  // only asks Dropbox for a new one when it is near expiry
+  const cached = await accessTokenCache.get(blogID, account);
+
+  if (cached) {
+    client.auth.setAccessToken(cached.access_token);
+    client.auth.setAccessTokenExpiresAt(new Date(cached.expires_at));
+  }
+
   try {
     await client.auth.checkAndRefreshAccessToken();
   } catch (error) {
@@ -59,8 +69,16 @@ module.exports = async function createClient(blogID) {
 
   let latestToken = client.auth.getAccessToken();
 
-  if (latestToken === account.access_token) {
+  if (latestToken === (cached ? cached.access_token : account.access_token)) {
     return { error: null, client, account };
+  }
+
+  const expiresAt = client.auth.getAccessTokenExpiresAt();
+
+  if (expiresAt) {
+    await accessTokenCache
+      .set(blogID, account, latestToken, expiresAt.getTime())
+      .catch((err) => console.log("Could not cache Dropbox token", err));
   }
 
   account.access_token = latestToken;

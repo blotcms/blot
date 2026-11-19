@@ -129,6 +129,7 @@ function harness(options) {
     },
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
+    "./util/limiter": require("../sync/util/limiter"),
     "./util/comparePaths": require("../sync/util/comparePaths"),
   };
 
