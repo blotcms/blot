@@ -200,7 +200,42 @@ describe("google-drive sync() overlaps downloads with builds", function () {
     await settle();
     // The 5th download is next in line and is refused
     expect(h.events).not.toContain("download start 4");
+    // The walk waits for the downloads still running before it returns
+    for (const id of ["1", "2", "3"]) h.downloadGates.get(id)();
     expect(await done).toBe(false);
+    expect(h.events.some((e) => e.startsWith("update start"))).toBe(false);
+    expect(h.applied).toEqual([]);
+  });
+
+  it("waits for downloads still running when the walk stops, so none writes after it returns", async function () {
+    let calls = 0;
+    const h = harness(3, {
+      canContinue: async () => {
+        calls += 1;
+        // Three downloads start; the check before applying the first fails
+        if (calls > 3) throw new Error("Folder ID changed");
+      },
+    });
+    let settled = false;
+    const done = h.run().then((summary) => {
+      settled = true;
+      return summary;
+    });
+
+    await settle();
+    h.downloadGates.get("0")();
+    await settle();
+
+    // The walk has stopped, but downloads 1 and 2 are still running
+    expect(settled).toBe(false);
+
+    h.downloadGates.get("1")();
+    await settle();
+    expect(settled).toBe(false);
+
+    h.downloadGates.get("2")();
+    expect(await done).toBe(false);
+    expect(h.events.indexOf("download end 2")).toBeGreaterThan(-1);
     expect(h.events.some((e) => e.startsWith("update start"))).toBe(false);
     expect(h.applied).toEqual([]);
   });

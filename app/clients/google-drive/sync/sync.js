@@ -218,6 +218,15 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     const limit = createLimiter(DOWNLOAD_CONCURRENCY);
     let stopped = false;
 
+    // Every download queued for this directory. They never reject: each
+    // resolves with a result, an error or a stop.
+    const downloads = [];
+    const startDownload = (task) => {
+      const promise = limit(task);
+      downloads.push(promise);
+      return promise;
+    };
+
     const plan = async ({
       id,
       name,
@@ -306,7 +315,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       let started = null;
 
       if (!existsLocally || !identical) {
-        started = limit(async () => {
+        started = startDownload(async () => {
           // Nothing starts once the walk is over or can't continue
           if (stopped) return { stop: new Error("Sync stopped") };
           try {
@@ -528,6 +537,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     } finally {
       // Downloads not started yet must not start now
       stopped = true;
+      // Downloads already running write into the blog folder. Wait for them
+      // before the walk returns or rethrows, so none writes after the folder
+      // lock is released. Any error from the walk still propagates.
+      await previous.catch(() => {});
+      await Promise.all(downloads);
     }
   };
 
