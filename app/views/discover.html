@@ -16,26 +16,25 @@
 
   {{#sites.length}}
   <aside class="discover-sidebar">
-    <h2>Sites</h2>
-    <ul id="featured" class="clients">
-      {{#sites}}
-      <li>
-        <a target="_blank" rel="noopener" href="{{{link}}}">
-          <img
-            class="pic"
-            src="{{#cdn}}{{{image}}}{{/cdn}}"
-            alt="{{name}}"
-            width="{{discover.image_size}}"
-            height="{{discover.image_size}}"
-          />
-          <span class="discover-site-text">
-            <span class="discover-site-name">{{name}}</span>
-            <span class="discover-site-bio">{{bio}}</span>
-          </span>
-        </a>
-      </li>
-      {{/sites}}
-    </ul>
+    <div class="discover-sites">
+      <div class="discover-sites-head">
+        <h2>Sites</h2>
+        <a href="/examples">See all</a>
+      </div>
+      <ul>
+        {{#sites}}
+        <li>
+          <a target="_blank" rel="noopener" href="{{{link}}}">
+            <span class="discover-sites-avatar"><img src="{{#cdn}}{{{image}}}{{/cdn}}" alt="" loading="lazy" /></span>
+            <span class="discover-site-text">
+              <span class="discover-site-name">{{name}}</span>
+              <span class="discover-site-bio">{{bio}}</span>
+            </span>
+          </a>
+        </li>
+        {{/sites}}
+      </ul>
+    </div>
   </aside>
   {{/sites.length}}
 </div>

@@ -18,34 +18,82 @@
 .discover-sidebar {
   grid-column: 3;
   justify-self: end;
-  width: 200px;
+  width: 240px;
   position: sticky;
   top: 20px;
   padding-top: 20px;
 }
 
-.discover-sidebar h2 {
+/* The featured sites, in a box */
+.discover-sites {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 14px 16px 8px;
+}
+
+.discover-sites-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.discover-sites-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.discover-sites-head a {
   font-size: 13px;
   color: var(--medium-text-color);
-  font-weight: 500;
-  margin: 0 0 4px;
+  text-decoration: none;
 }
 
-.discover-sidebar #featured {
-  font-size: 14px;
+.discover-sites-head a:hover {
+  color: var(--accent-color);
 }
 
-.discover-sidebar #featured li a {
+.discover-sites ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.discover-sites li a {
   display: flex;
-  padding: 6px 0;
-  align-items: flex-start;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  color: inherit;
+  text-decoration: none;
 }
 
-.discover-sidebar #featured li a .pic {
+/* The same round avatar as the posts, smaller, with the faint outline on a
+   layer above it */
+.discover-sites-avatar {
+  position: relative;
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
-  margin: 1px 10px 0 0;
+  width: 32px;
+  height: 32px;
+}
+
+.discover-sites-avatar img {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--light-background-color);
+}
+
+.discover-sites-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
 }
 
 .discover-site-text {
@@ -55,15 +103,26 @@
 
 .discover-site-name {
   display: block;
-  color: var(--accent-color);
-  line-height: 1.3;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 19px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discover-sites li a:hover .discover-site-name {
+  text-decoration: underline;
 }
 
 .discover-site-bio {
   display: block;
-  font-size: 12px;
-  line-height: 1.3;
+  font-size: 13px;
+  line-height: 18px;
   color: var(--medium-text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .discover-grid {
