@@ -14,8 +14,9 @@ var defaults = require("models/blog/defaults");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var clfdate = require("helper/clfdate");
 
-// Resolves { failed }: how many templates in the folder could not be read.
-// The caller retries the build while it is not zero.
+// Resolves { failed }: how many templates in the folder could not be read,
+// plus one if removing those no longer in it failed. The caller retries the
+// build while it is not zero.
 module.exports = async function buildFromFolder(blogID) {
   ensure(blogID, "string");
 
@@ -152,6 +153,9 @@ module.exports = async function buildFromFolder(blogID) {
       "buildFromFolder: failed to remove templates",
       err
     );
+    // Counted as a failure so the caller builds again: a removal that failed
+    // before it was recorded as pending would otherwise never be retried
+    failed++;
   }
 
   return { failed };
