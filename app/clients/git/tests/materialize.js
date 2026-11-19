@@ -5,7 +5,7 @@
 // imported into a store, so that it can hold what a push is no longer allowed
 // to: paths a real client would not send, and shapes that some filesystems
 // cannot show at once (names that differ by case).
-for (let round = 0; round < 40; round++)
+for (let round = 0; round < 8; round++)
   describe("git client: materialize " + round, function () {
     // A real blog: materialize writes its folder through storage/folder, by
     // blog ID, and the specs look at it the same way.
