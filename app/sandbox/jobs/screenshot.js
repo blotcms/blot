@@ -16,7 +16,7 @@
 // { error, retryable }: a page that can't be screenshotted is an answer, not a
 // failure of the job, and retryable says if trying again could help. A page
 // that took the browser past its memory budget is
-// { error, retryable: false, tooHeavy: true, host, peakBytes }. Pages the
+// { error, retryable: false, tooHeavy: true, host, peakBytes, meter }. Pages the
 // batch didn't reach (it ran out of time or output room, or Chromium died) are
 // { error, retryable: true, deferred: true }, for the caller to send again.
 //
@@ -118,9 +118,10 @@ class StalledError extends Error {}
 // The page took the browser's memory past what one page may, and was given up
 // on (./screenshot-memory.js). Final: it would take as much on every attempt.
 class TooHeavyError extends Error {
-  constructor(bytes) {
+  constructor(bytes, meter = "") {
     super("the page needed more memory than the browser has");
     this.bytes = bytes;
+    this.meter = meter; // "pss" or "rss": which reading it was
   }
 }
 
@@ -156,7 +157,7 @@ async function capture(
   let overBudget;
   const heavy = new Promise((resolve) => (overBudget = resolve));
   const watcher = memory.watch(meter, (bytes) => {
-    overBudget(new TooHeavyError(bytes));
+    overBudget(new TooHeavyError(bytes, meter.source));
     within(context.close(), CLOSE_TIMEOUT).catch(() => {});
   });
 
@@ -261,6 +262,7 @@ function pageFailure(error, puppeteer, url) {
       tooHeavy: true,
       host: hostOf(url),
       peakBytes: error.bytes,
+      meter: error.meter,
     };
   }
   const retryable = !(
@@ -324,8 +326,7 @@ async function run(args) {
     handleSIGHUP: false,
   });
 
-  // Read once, where the cgroup's limit is known
-  const meter = await memory.createMeter();
+  const meter = memory.createMeter();
 
   let outputBytes = 0;
   let ran = false;

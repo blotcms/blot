@@ -550,7 +550,8 @@ async function runBatch(items) {
             "host=" + String(entry.host || "").slice(0, 100),
             "peak=" +
               Math.round((Number(entry.peakBytes) || 0) / 1048576) +
-              "MiB"
+              "MiB",
+            "meter=" + (entry.meter === "pss" ? "pss" : "rss")
           );
         }
         return item.reject(error);

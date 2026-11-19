@@ -1,7 +1,7 @@
 // The browser jail's memory, and a watchdog on it for the screenshot job
 // (./screenshot.js). The unit's browser cgroup is one limit for the whole
 // batch, and its OOM kill takes every page of the batch with it. The watchdog
-// watches the browser's total memory while a page loads and renders, and gives
+// watches the job's total memory while a page loads and renders, and gives
 // up on that page, closing its context, before the kernel does, so that one
 // heavy page costs only itself.
 
@@ -12,47 +12,57 @@ const MiB = 1024 * 1024;
 // A page is given up on at this share of the cgroup's limit, which leaves the
 // rest for Chromium's own growth between two polls and for re-encoding the PNG
 const THRESHOLD_SHARE = 0.85;
-// Where the cgroup's limit can't be read
+// Where the cgroup's limit isn't known
 const FALLBACK_THRESHOLD = 430 * MiB;
 const POLL_MS = 250;
 const PAGE_SIZE = 4096;
 
-// Where the job may find the cgroup it runs in, if the jail shows it: the
-// unit's browser cgroup bound in, or the jail's own cgroup namespace root
-const CGROUP_DIRS = ["/sandbox-browser-cgroup", "/sys/fs/cgroup"];
+// The browser cgroup's name ends like this (<unit>-browser): the processes of
+// the job are the ones in it
+const BROWSER_CGROUP = /-browser$/;
 
-async function number(file, io) {
-  const text = (await io.readFile(file, "utf8")).trim();
-  if (!/^\d+$/.test(text)) return null;
-  return Number(text);
+// The job's limit, passed in by the broker (proxy/unit/sandbox/jail.js) as the
+// browser cgroup's memory.max in bytes: absent or "max" where it has none
+function thresholdFrom(value, fallback = FALLBACK_THRESHOLD) {
+  if (typeof value !== "string" || !/^\d+$/.test(value)) return fallback;
+  const max = Number(value);
+  return max > 0 ? Math.floor(max * THRESHOLD_SHARE) : fallback;
 }
 
-// The first of the cgroup directories that has a memory.current to read
-async function findCgroup(io, dirs) {
-  for (const dir of dirs) {
-    try {
-      if ((await number(dir + "/memory.current", io)) !== null) return dir;
-    } catch (e) {}
-  }
-  return null;
-}
-
-// Bytes of resident memory of this process and all it started (Chromium and
-// its children), from /proc, which is what is left where the cgroup is out of
-// sight. Resident memory counts a page shared between processes once for each,
-// so it errs on the high side.
-async function processTreeBytes(io, root) {
-  const entries = await io.readdir("/proc");
+async function listProcesses(io) {
   const parent = new Map();
-  for (const entry of entries) {
+  const cgroups = new Map();
+  for (const entry of await io.readdir("/proc")) {
     if (!/^\d+$/.test(entry)) continue;
     try {
       const stat = await io.readFile(`/proc/${entry}/stat`, "utf8");
       // pid (comm) state ppid ...: comm may hold spaces and parentheses
       const after = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
       parent.set(Number(entry), Number(after[1]));
-    } catch (e) {} // gone since the listing
+    } catch (e) {
+      continue; // gone since the listing
+    }
+    try {
+      cgroups.set(
+        Number(entry),
+        await io.readFile(`/proc/${entry}/cgroup`, "utf8")
+      );
+    } catch (e) {}
   }
+  return { parent, cgroups };
+}
+
+// The pids of the job. /proc is the container's and the jail has a pid
+// namespace of its own, so process.pid is not the pid /proc knows: the job's
+// processes are found by their cgroup, and only if there are none, as the
+// descendants of process.pid.
+function jobPids({ parent, cgroups }, root) {
+  const pids = [];
+  for (const [pid, text] of cgroups) {
+    const path = text.trim().split("\n").pop().split(":").pop();
+    if (BROWSER_CGROUP.test(path)) pids.push(pid);
+  }
+  if (pids.length) return pids;
 
   const inTree = new Set([root]);
   let grew = true;
@@ -65,46 +75,54 @@ async function processTreeBytes(io, root) {
       }
     }
   }
-
-  let total = 0;
-  for (const pid of inTree) {
-    try {
-      const statm = await io.readFile(`/proc/${pid}/statm`, "utf8");
-      total += Number(statm.split(" ")[1]) * PAGE_SIZE;
-    } catch (e) {}
-  }
-  return total;
+  return [...inTree].filter((pid) => parent.has(pid));
 }
 
-// { read(), threshold, source }: read() resolves to the browser's memory in
-// bytes now, threshold is what a page is given up on. The cgroup's memory.current
-// is exact, and what the kernel's limit is judged against; otherwise the
-// processes' resident memory is summed. io is for the specs.
-async function createMeter({
-  io = { readFile: fs.readFile, readdir: fs.readdir },
-  dirs = CGROUP_DIRS,
-  pid = process.pid,
-  fallbackThreshold = FALLBACK_THRESHOLD,
-} = {}) {
-  const dir = await findCgroup(io, dirs);
-
-  if (dir) {
-    let max = null;
+// Bytes of memory of those processes, and of which kind: "pss" (proportional
+// set size, from smaps_rollup, which divides a shared page between the
+// processes that map it, so the sum is close to what the cgroup is charged) or,
+// where a process's smaps_rollup can't be read, "rss" (which counts a shared
+// page for each process, and so errs high).
+async function processBytes(io, root) {
+  const pids = jobPids(await listProcesses(io), root);
+  let total = 0;
+  let source = "pss";
+  for (const pid of pids) {
     try {
-      max = await number(dir + "/memory.max", io); // "max" if unlimited
-    } catch (e) {}
-    return {
-      source: "cgroup",
-      threshold: max ? Math.floor(max * THRESHOLD_SHARE) : fallbackThreshold,
-      read: () => number(dir + "/memory.current", io),
-    };
+      const rollup = await io.readFile(`/proc/${pid}/smaps_rollup`, "utf8");
+      const match = /^Pss:\s+(\d+) kB/m.exec(rollup);
+      if (!match) throw new Error("no Pss");
+      total += Number(match[1]) * 1024;
+    } catch (e) {
+      try {
+        const statm = await io.readFile(`/proc/${pid}/statm`, "utf8");
+        total += Number(statm.split(" ")[1]) * PAGE_SIZE;
+        source = "rss";
+      } catch (e2) {} // gone
+    }
   }
+  return { bytes: total, source };
+}
 
-  return {
-    source: "proc",
-    threshold: fallbackThreshold,
-    read: () => processTreeBytes(io, pid),
+// { read(), threshold, source }: read() resolves to the job's memory in bytes
+// now and sets source to the kind of reading it was; threshold is what a page
+// is given up on, a share of the limit the broker passed in the environment.
+// io and env are for the specs.
+function createMeter({
+  io = { readFile: fs.readFile, readdir: fs.readdir },
+  env = process.env,
+  pid = process.pid,
+} = {}) {
+  const meter = {
+    source: "pss",
+    threshold: thresholdFrom(env.BLOT_BROWSER_MEMORY_MAX),
+    async read() {
+      const { bytes, source } = await processBytes(io, pid);
+      meter.source = source;
+      return bytes;
+    },
   };
+  return meter;
 }
 
 // Polls meter.read() until stop() is called, and calls onExceed(bytes) once
@@ -144,8 +162,8 @@ function watch(meter, onExceed, { pollMs = POLL_MS } = {}) {
 
 module.exports = {
   createMeter,
+  thresholdFrom,
   watch,
-  processTreeBytes,
   THRESHOLD_SHARE,
   FALLBACK_THRESHOLD,
   POLL_MS,

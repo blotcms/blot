@@ -17,52 +17,88 @@ describe("sandbox screenshot memory watchdog", function () {
     },
   });
 
-  describe("createMeter", function () {
-    it("reads the cgroup, and judges a page at 85% of its limit", async function () {
-      const meter = await memory.createMeter({
-        dirs: ["/missing", "/cg"],
-        io: fakeIO({
-          "/cg/memory.current": "1000\n",
-          "/cg/memory.max": String(512 * MiB),
-        }),
+  describe("the threshold", function () {
+    it("is 85% of the limit the broker passed in", function () {
+      const meter = memory.createMeter({
+        env: { BLOT_BROWSER_MEMORY_MAX: String(512 * MiB) },
+        io: fakeIO({}),
       });
-      expect(meter.source).toBe("cgroup");
       expect(meter.threshold).toBe(Math.floor(512 * MiB * 0.85));
-      expect(await meter.read()).toBe(1000);
     });
 
-    it("uses the fixed threshold when the cgroup has no limit", async function () {
-      const meter = await memory.createMeter({
-        dirs: ["/cg"],
-        io: fakeIO({ "/cg/memory.current": "5", "/cg/memory.max": "max" }),
-      });
-      expect(meter.source).toBe("cgroup");
-      expect(meter.threshold).toBe(430 * MiB);
+    it("is the fixed 430 MiB when it is absent, unlimited or not a number", function () {
+      for (const value of [undefined, "", "max", "-1", "0", "5 MiB"]) {
+        expect(memory.thresholdFrom(value)).toBe(430 * MiB);
+      }
     });
+  });
 
-    it("sums the resident memory of the process and what it started when the cgroup is out of sight", async function () {
-      const stat = (ppid) => `x (a b) S ${ppid} 1 1 0`;
-      const pages = (n) => `100 ${n} 0 0 0 0 0`;
-      const meter = await memory.createMeter({
-        dirs: ["/nowhere"],
-        pid: 10,
+  describe("the meter", function () {
+    const stat = (ppid) => `x (a b) S ${ppid} 1 1 0`;
+    const pages = (n) => `100 ${n} 0 0 0 0 0`;
+    const rollup = (kb) =>
+      `00400000-ff Rollup\nRss: ${kb * 2} kB\nPss: ${kb} kB\n`;
+    const browser = "0::/blot-sandbox/blue-browser\n";
+
+    it("sums the PSS of the processes in the browser cgroup, whatever pid the job has", async function () {
+      const meter = memory.createMeter({
+        pid: 7, // the jail's own numbering: not in /proc
+        env: {},
         io: fakeIO(
           {
             "/proc/10/stat": stat(1),
-            "/proc/10/statm": pages(10),
-            "/proc/11/stat": stat(10), // chromium
-            "/proc/11/statm": pages(100),
-            "/proc/12/stat": stat(11), // its renderer
-            "/proc/12/statm": pages(1000),
-            "/proc/99/stat": stat(1), // somebody else's
-            "/proc/99/statm": pages(5000),
+            "/proc/10/cgroup": browser,
+            "/proc/10/smaps_rollup": rollup(100),
+            "/proc/11/stat": stat(10),
+            "/proc/11/cgroup": browser,
+            "/proc/11/smaps_rollup": rollup(2000),
+            "/proc/99/stat": stat(1),
+            "/proc/99/cgroup": "0::/system.slice/other\n",
+            "/proc/99/smaps_rollup": rollup(50000),
           },
-          { "/proc": ["10", "11", "12", "99", "self", "meminfo"] }
+          { "/proc": ["10", "11", "99", "self", "meminfo"] }
         ),
       });
-      expect(meter.source).toBe("proc");
-      expect(meter.threshold).toBe(430 * MiB);
-      expect(await meter.read()).toBe(1110 * 4096);
+      expect(await meter.read()).toBe(2100 * 1024);
+      expect(meter.source).toBe("pss");
+    });
+
+    it("falls back to the descendants of its own pid when no process is in that cgroup", async function () {
+      const meter = memory.createMeter({
+        pid: 10,
+        env: {},
+        io: fakeIO(
+          {
+            "/proc/10/stat": stat(1),
+            "/proc/10/smaps_rollup": rollup(10),
+            "/proc/12/stat": stat(10),
+            "/proc/12/smaps_rollup": rollup(20),
+            "/proc/99/stat": stat(1),
+            "/proc/99/smaps_rollup": rollup(5000),
+          },
+          { "/proc": ["10", "12", "99"] }
+        ),
+      });
+      expect(await meter.read()).toBe(30 * 1024);
+    });
+
+    it("uses RSS for a process whose smaps_rollup can't be read, and says so", async function () {
+      const meter = memory.createMeter({
+        env: {},
+        io: fakeIO(
+          {
+            "/proc/10/stat": stat(1),
+            "/proc/10/cgroup": browser,
+            "/proc/10/smaps_rollup": rollup(100),
+            "/proc/11/stat": stat(10),
+            "/proc/11/cgroup": browser,
+            "/proc/11/statm": pages(1000),
+          },
+          { "/proc": ["10", "11"] }
+        ),
+      });
+      expect(await meter.read()).toBe(100 * 1024 + 1000 * 4096);
+      expect(meter.source).toBe("rss");
     });
   });
 
@@ -133,7 +169,7 @@ describe("sandbox screenshot memory watchdog", function () {
 
     it("gives up on a page that takes the memory past the threshold, closing its context", async function () {
       const { browser, closed } = hangingBrowser();
-      const meter = { threshold: 100, read: async () => 120 };
+      const meter = { threshold: 100, source: "pss", read: async () => 120 };
 
       let error;
       try {
@@ -154,7 +190,7 @@ describe("sandbox screenshot memory watchdog", function () {
 
     it("reports it as a final failure with the host and not the query", function () {
       const failure = pageFailure(
-        new TooHeavyError(450 * MiB),
+        new TooHeavyError(450 * MiB, "pss"),
         {},
         "https://heavy.example:8080/a?secret=1"
       );
@@ -164,6 +200,7 @@ describe("sandbox screenshot memory watchdog", function () {
         tooHeavy: true,
         host: "heavy.example:8080",
         peakBytes: 450 * MiB,
+        meter: "pss",
       });
     });
   });
