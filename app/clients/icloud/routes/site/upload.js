@@ -12,9 +12,14 @@ const stampLastSync = require("./stampLastSync");
 // otherwise find it already current and never build the entry. Removing it,
 // rather than restoring what was there, also lets a resync notice the change:
 // it compares sizes, which an edit can leave unchanged.
-async function updateOrRollBack(blogID, folder, filePath) {
+// modifiedTime is the file's mtime on the macserver (an ISO string), so the
+// sync can log how long the change took to go live.
+async function updateOrRollBack(blogID, folder, filePath, modifiedTime) {
   try {
-    await folder.update(filePath);
+    await folder.update(filePath, {
+      modified: modifiedTime,
+      since: "icloud-mtime",
+    });
   } catch (err) {
     if (isRedisUnavailableError(err)) await storage.remove(blogID, filePath);
     throw err;
@@ -96,7 +101,7 @@ module.exports = async function (req, res) {
           limit: config.icloud.maxFileSize,
         });
 
-        await updateOrRollBack(blogID, folder, filePath);
+        await updateOrRollBack(blogID, folder, filePath, modifiedTime);
         folder.status("Updated placeholder " + filePath);
 
         console.warn(
@@ -121,7 +126,7 @@ module.exports = async function (req, res) {
       await storage.write(blogID, filePath, incomingContents);
 
       // Call the folder's update method to register the file change
-      await updateOrRollBack(blogID, folder, filePath);
+      await updateOrRollBack(blogID, folder, filePath, modifiedTime);
 
       // Set the folder status to reflect the upload action
       folder.status("Updated " + filePath);

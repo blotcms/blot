@@ -365,7 +365,12 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
               result?.updated ||
               (!isGoogleAppFile && result?.verifiedContent)
             ) {
-              await update(path);
+              // Drive's modifiedTime, so the sync can log how long the
+              // change took to go live
+              await update(path, {
+                modified: modifiedTime,
+                since: "drive-modified",
+              });
             }
             if (!isGoogleAppFile && result?.verifiedContent) {
               await setVerifiedContent(id, { path, ...result.verifiedContent });
