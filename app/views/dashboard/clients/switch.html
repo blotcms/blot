@@ -1,42 +1,43 @@
-{{> close-button}}
-
-  <form method='post' class="dashboard-form" style="padding: 0;margin: 0;">
-
-    <input type="hidden" name="_csrf" value="{{csrftoken}}">
-
-  <p>The folder syncs with <b>{{client.display_name}}</b></p>
-  
-  <p>You can choose another way and Blot will transfer the contents of your folder automatically.
-  </p>
-
-  
-    <style type="text/css">
-  
-  button[name="client"] {
-    background: none;max-width:475px;margin-bottom: 0;
-    padding: 10px 0;border:none;border-top:1px solid #eeeeec;
-    text-align: left;display: block;width: 100%;color:var(--accent-color);padding: 12px;font-size:var(--font-size)
-  }
-  button[name="client"] b {
-    display: block;
-  }
-  button[name="client"]:hover {background: var(--light-background-color);cursor: pointer;}
-  </style>
-  
-  
-  
-  {{#clients}}
-  
-    <button type="submit" name="client" value="{{name}}">
-      <img width="16" height="16" src="{{#cdn}}/images/sync/{{name}}.svg{{/cdn}}" style="position: relative;top:1px;margin-right: 4px;" />
-     {{display_name}}
-    </button>
-  
-  {{/clients}}
-  
-  <div class="buttons">
-    <a href="{{{base}}}/client">Cancel</a>
+<header class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">{{#confirm}}Switch to {{display_name}}{{/confirm}}{{^confirm}}Change sync method{{/confirm}}</h1>
   </div>
-  
-  </form>
-  
+</header>
+
+{{#confirm}}
+<form method="post" class="dashboard-form dashboard-form--flush">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}">
+  <input type="hidden" name="client" value="{{name}}">
+
+  <p class="client-intro">Blot will disconnect {{client.display_name}} and set up {{display_name}}. Your files on Blot aren’t deleted.</p>
+
+  <div class="btn-row">
+    <button type="submit" class="btn btn-primary">Switch to {{display_name}}</button>
+    <a class="btn btn-quiet" href="{{{base}}}/switch">Cancel</a>
+  </div>
+</form>
+{{/confirm}}
+
+{{^confirm}}
+<p class="folder-sync folder-sync--static">
+  <span class="folder-sync__label">Syncs with</span>
+  <span class="folder-sync__client"><img class="client-icon" alt="" width="16" height="16" src="{{#cdn}}/images/sync/{{blog.client}}.svg{{/cdn}}"> {{client.display_name}}</span>
+</p>
+
+<p class="client-intro">You can choose another way and Blot will transfer the contents of your folder automatically.</p>
+
+<ul class="client-choices">
+  {{#clients}}
+  <li>
+    <a class="client-choices__link" href="{{{base}}}/switch?to={{name}}">
+      <img class="client-icon" alt="" width="16" height="16" src="{{#cdn}}/images/sync/{{name}}.svg{{/cdn}}">
+      {{display_name}}
+    </a>
+  </li>
+  {{/clients}}
+</ul>
+
+<div class="btn-row">
+  <a class="btn btn-quiet" href="{{{base}}}">Cancel</a>
+</div>
+{{/confirm}}

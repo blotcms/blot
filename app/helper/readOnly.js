@@ -17,6 +17,12 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 // crashed script, a closed laptop) lifts on its own. If Redis is unreachable
 // the freeze counts as off: every write needs Redis anyway, and the
 // redis-unavailable handling already turns those requests away.
+//
+// Every dashboard page and write checks it, so status() is one plain GET,
+// which the client-side cache serves locally (the "readonly" class in
+// models/redis-cache): setting, removing or expiring the key pushes an
+// invalidation to every process. The value carries its own expiry time, so
+// status() needs no TTL call and ignores a value whose expiry push is late.
 
 const KEY = "blot:read-only";
 const DEFAULT_TTL_SECONDS = 15 * 60;
@@ -28,10 +34,10 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 // Resolves to null when writes are allowed, otherwise to
 // { reason, since, expiresInSeconds }
 async function status() {
-  let value, ttl;
+  let value;
 
   try {
-    [value, ttl] = await client.multi().get(KEY).ttl(KEY).exec();
+    value = await client.get(KEY);
   } catch (err) {
     if (isRedisUnavailableError(err)) return null;
     throw err;
@@ -44,10 +50,16 @@ async function status() {
     parsed = JSON.parse(value) || {};
   } catch (e) {}
 
+  // A value written before expiresAt was stored has no expiry to report
+  const expiresAt = Number(parsed.expiresAt) || null;
+  if (expiresAt && expiresAt <= Date.now()) return null;
+
   return {
     reason: typeof parsed.reason === "string" ? parsed.reason : "",
     since: Number(parsed.since) || null,
-    expiresInSeconds: ttl,
+    expiresInSeconds: expiresAt
+      ? Math.ceil((expiresAt - Date.now()) / 1000)
+      : null,
   };
 }
 
@@ -61,7 +73,11 @@ async function enable({ reason = "", ttl = DEFAULT_TTL_SECONDS } = {}) {
   const current = await status();
   const since = (current && current.since) || Date.now();
 
-  await client.set(KEY, JSON.stringify({ reason, since }), { EX: ttl });
+  const expiresAt = Date.now() + ttl * 1000;
+
+  await client.set(KEY, JSON.stringify({ reason, since, expiresAt }), {
+    EX: ttl,
+  });
 }
 
 async function disable() {

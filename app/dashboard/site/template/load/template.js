@@ -133,6 +133,19 @@ module.exports = async function (req, res, next) {
 
     res.locals.preview = res.locals.previewOrigin;
 
+    // aria-current for the Settings and Code tabs, from whichever page sets
+    // res.locals.selected, read when the page renders
+    Object.defineProperty(res.locals, "currentPage", {
+      enumerable: true,
+      get() {
+        const selected = res.locals.selected || {};
+        return {
+          settings: selected.settings ? 'aria-current="page"' : "",
+          source: selected.source ? 'aria-current="page"' : "",
+        };
+      },
+    });
+
     res.locals.breadcrumbs.add(hydrated.displayName, hydrated.slug);
 
     next();

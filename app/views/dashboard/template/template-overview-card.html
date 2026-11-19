@@ -1,0 +1,13 @@
+<li class="template-item {{cardClass}}" data-template-type="{{filterType}}">
+  <a class="template-link" href="{{{editURL}}}">
+    <span class="template-image">
+      <span class="template-overview__placeholder" aria-hidden="true">{{name}}</span>
+      <img src="{{thumbnailURL}}" data-screenshot="{{screenshotState}}" alt="" loading="lazy" decoding="async">
+    </span>
+    <span class="template-name">
+      <span data-template-name>{{name}}</span>
+      {{#checked}}<span class="template-card__live"><span class="template-live-dot" aria-hidden="true"></span>Live on your site</span>{{/checked}}
+      {{^checked}}{{#isCopyOfDefault}}<span class="template-overview__tag">Your copy</span>{{/isCopyOfDefault}}{{#isMirror}}<span class="template-overview__tag">Customized</span>{{/isMirror}}{{/checked}}
+    </span>
+  </a>
+</li>

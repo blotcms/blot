@@ -1,6 +1,10 @@
 {{#discover}}
 <div class="discover-page">
 <div class="discover">
+  <header class="discover-intro">
+    <h1>Discover</h1>
+    <p>Recent posts from sites on Blot.</p>
+  </header>
   <div class="discover-main">
     {{^posts.length}}
     <p>Nothing here yet.</p>
@@ -20,7 +24,7 @@
     <div class="discover-sites">
       <div class="discover-sites-head">
         <div class="discover-sites-title">People</div>
-        <a href="/examples">See all</a>
+        <a href="/discover/people">See all</a>
       </div>
       <ul>
         {{#sites}}

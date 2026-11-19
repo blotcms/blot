@@ -1,119 +1,239 @@
+/*
+  Buttons
 
-.buttons {
-  display: flex;
-  margin: 2em 0 1em;
-  line-height: 39px;
+  .btn            a secondary button (grey)
+  .btn-primary    the main action (solid accent)
+  .btn-soft       a lighter companion to the primary (tinted accent)
+  .btn-danger     a destructive action
+  .btn-quiet      text only
+  .btn-sm         smaller
+  .btn-row        lays buttons out in a row
+
+  Older markup keeps its class names and is styled as one of the above:
+  .buttons rows (first button primary, the rest secondary, .red danger),
+  form.dashboard-form .button, and the template list's .panel-link.edit-design
+  (primary).
+
+  .working shows a pulsing dot while a form submits (js/form-buttons.js).
+*/
+
+:root {
+  --button-radius: var(--radius-pill);
 }
 
-.buttons > * {
-  text-decoration: none;
-  border: none;
-  font-weight: 600;
-  border-radius: 4px;
-  font-size: 14px;
-  padding: 0 18px;
+.btn,
+.buttons > *,
+form.dashboard-form .button{
   position: relative;
-  display: flex;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
   box-sizing: border-box;
-  width: auto!important;
-  transition: background-color 0.1s ease;
-}
-
-.buttons > *:hover {
-  cursor: pointer;
-}
-.buttons > * > span {position: relative;top:13px;margin-right:12px}
-.buttons > * > span.icon-small-chevron-right {transform: rotate(180deg);}
-
-.buttons > *:focus,
-.buttons > *:active {
-  outline: none;
-}
-
-.buttons > :first-child {
-  flex-grow: 0.6666;
-  flex-basis: 0%;
-  line-height: 39px;
-  margin-right: 2em;
-  box-sizing: border-box;
-  border-radius: 4px;
-  color: var(--background-color);
-  border: none;
-  cursor: pointer;
-  background-color: var(--dark-accent-color);
-  font-weight: 600;
-}
-
-.buttons > :first-child:not(:last-child):hover:not(.working):not(:disabled) {
-  background-color: #1a75e5;
-}
-
-
-.buttons .red {
-  background: red;
-  box-shadow: none;
-}
-
-.buttons > :first-child.red:hover:not(.working):not(:disabled) {
-  background: #d50000;
-}
-
-.buttons .red:active {
-  background: #c70000;
-}
-
-.buttons > :last-child {
-  flex-grow: 0.3333;
-  text-align: left;
-  border-radius: 4px;
+  min-height: var(--control-height);
+  margin: 0;
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--button-radius);
+  background: var(--surface-strong-color);
+  color: var(--text-color);
+  font: var(--weight-semibold) var(--text-md) / var(--leading-tight)
+    var(--font-family);
   text-decoration: none;
-  color: var(--medium-text-color);
-  background-color: #ececec;
-  line-height: 39px;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color var(--transition-fast),
+    color var(--transition-fast);
 }
 
-.buttons > :last-child:hover {
-  background-color: #dedede;
+.btn:hover,
+.buttons > :hover,
+form.dashboard-form .button:hover {
+  background: var(--border-strong-color);
+  color: var(--text-color);
 }
 
+.btn:focus-visible,
+.buttons > :focus-visible,
+form.dashboard-form .button:focus-visible{
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
 
-.buttons .working,
-.buttons button:disabled {
-  background-color: #d5d5d5;
-  color: #999;
-  box-shadow: none;
+/* Primary */
+.btn-primary,
+.buttons > :first-child:not(:only-child),
+.buttons > :only-child:not(a) {
+  background: var(--accent-color);
+  color: var(--background-color);
+}
+
+.btn-primary:hover,
+.buttons > :first-child:not(:only-child):hover,
+.buttons > :only-child:not(a):hover {
+  background: var(--accent-hover-color);
+  color: var(--background-color);
+}
+
+/* Soft */
+.btn-soft{
+  background: var(--accent-soft-color);
+  color: var(--accent-color);
+}
+
+.btn-soft:hover{
+  background: var(--accent-soft-hover-color);
+  color: var(--accent-color);
+}
+
+/* Danger; also when it is the row's first button, which is otherwise primary */
+.btn-danger,
+.buttons > .red,
+.buttons > .red:first-child:not(:only-child) {
+  background: var(--danger-color);
+  color: var(--background-color);
+}
+
+.btn-danger:hover,
+.buttons > .red:hover,
+.buttons > .red:first-child:not(:only-child):hover {
+  background: var(--danger-hover-color);
+  color: var(--background-color);
+}
+
+/* Quiet */
+.btn-quiet {
+  background: transparent;
+  color: var(--accent-color);
+}
+
+.btn-quiet:hover {
+  background: var(--accent-soft-color);
+  color: var(--accent-color);
+}
+
+/* Sizes */
+.btn-sm,
+form.dashboard-form .button.small {
+  min-height: 28px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-sm);
+}
+
+/* Icons inside buttons take the text colour */
+.btn svg,
+.buttons > * svg{
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  fill: currentColor;
+}
+
+.btn span{
+  color: currentColor;
+}
+
+.buttons > * > span.icon-small-chevron-right {
+  transform: rotate(180deg);
+}
+
+/* Disabled and working */
+.btn:disabled,
+.btn.is-disabled,
+.buttons > :disabled,
+.buttons > .working,
+form.dashboard-form .button:disabled,
+form.dashboard-form .button.disabled,
+form.dashboard-form .button.working {
+  background: var(--surface-strong-color);
+  color: var(--light-text-color);
   cursor: default;
 }
 
-@keyframes pulse {
-  0% {
+.buttons > .red.working {
+  background: var(--danger-color);
+  color: var(--background-color);
+  opacity: 0.6;
+}
+
+.btn.working,
+.buttons > .working,
+form.dashboard-form .button.working {
+  padding-right: calc(var(--space-4) + var(--space-4));
+}
+
+.btn.working::after,
+.buttons > .working::after,
+form.dashboard-form .button.working::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  right: var(--space-3);
+  width: 8px;
+  height: 8px;
+  margin-top: -4px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: button-working 0.4s cubic-bezier(0.5, 0, 0.5, 1) alternate infinite;
+}
+
+@keyframes button-working {
+  from {
     opacity: 0.333;
   }
 
-  100% {
+  to {
     opacity: 1;
   }
 }
 
-.buttons .working:after {
-  content: "";
-  animation: pulse 0.2s cubic-bezier(0.5, 0, 0.5, 1) alternate infinite;
-  width: 0.5rem;
-  height: 0.5rem;
-  margin: 0;
-  border-radius: 0.55rem;
-  background: #666;
-  position: absolute;
-  right: 2em;
-  top: 17px;
+/* A row of buttons */
+.btn-row,
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-6) 0 var(--space-4);
 }
 
-.buttons .red.working {
-  background-color: #ff2a2a;
-  color: #8b0000;
-  opacity: 0.6;
+/* A row a script hides until it is needed (Save changes on Redirects) */
+.buttons[hidden] {
+  display: none;
 }
 
-.buttons .red.working:after {
-  background: #8b0000;
+/* Pressed */
+.btn:active,
+.buttons > :active,
+form.dashboard-form .button:active{
+  transform: translateY(1px);
+}
+
+.btn:active,
+.buttons > :active,
+form.dashboard-form .button:active {
+  background: var(--border-strong-color);
+}
+
+.btn-primary:active,
+.buttons > :first-child:not(:only-child):active,
+.buttons > :only-child:not(a):active {
+  background: var(--accent-active-color);
+}
+
+.btn-soft:active{
+  background: #c8dcf8;
+}
+
+.btn-danger:active,
+.buttons > .red:active,
+.buttons > .red:first-child:not(:only-child):active {
+  background: #8f1a02;
+}
+
+.btn:disabled:active,
+.btn.working:active,
+.buttons > :disabled:active,
+.buttons > .working:active {
+  transform: none;
 }

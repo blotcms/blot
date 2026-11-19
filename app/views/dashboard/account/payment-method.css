@@ -1,5 +1,5 @@
 .payment-methods-list {
-  margin-bottom: 1.5em;
+  margin-bottom: var(--space-5);
 }
 
 .payment-method-row {
@@ -13,7 +13,7 @@
   display: inline-block;
   width: 32px;
   height: 22px;
-  margin-right: 12px;
+  margin-right: var(--space-3);
   flex-shrink: 0;
   background-repeat: no-repeat;
   background-position: center;
@@ -53,24 +53,30 @@
 
 .payment-method-expiry {
   color: var(--medium-text-color);
-  font-size: 13px;
-  margin-left: 8px;
+  font-size: var(--text-sm);
+  margin-left: var(--space-2);
 }
 
 .payment-method-row .tablet {
-  margin-left: 8px;
+  margin-left: var(--space-2);
 }
 
 /* Used both on this page's payment method rows and on the expiry badge
    shown next to "Manage payment methods" in subscription.html. */
 .tablet.expired {
-  color: #c0392b;
-  border-color: #c0392b;
+  color: var(--danger-color);
+  border-color: var(--danger-color);
 }
 
 .tablet.expiring {
-  color: #b7791f;
-  border-color: #b7791f;
+  color: var(--warning-color);
+  border-color: var(--warning-color);
+}
+
+.payment-method-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
 }
 
 .payment-method-actions form {
@@ -83,30 +89,18 @@
 
 .payment-method-note {
   color: var(--medium-text-color);
-  font-size: 13px;
-}
-
-.link-button {
-  background: none;
-  border: none;
-  padding: 0;
-  margin-left: 12px;
-  font: inherit;
-  font-size: 14px;
-  color: var(--accent-color);
-  text-decoration: underline;
-  cursor: pointer;
+  font-size: var(--text-sm);
 }
 
 .payment-methods-disclaimer {
   color: var(--medium-text-color);
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
   max-width: 500px;
 }
 
 .powered-by-stripe {
-  font-size: 12px;
+  font-size: var(--text-xs);
   color: var(--light-text-color);
-  margin-top: 0.5em;
+  margin-top: var(--space-2);
 }

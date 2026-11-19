@@ -31,6 +31,38 @@
   top: 23.5px;
 }
 
+/* The page's title and a line about it, in the left column, in the type of
+   the documentation (css/documentation-layout.css) */
+.discover-intro {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: start;
+  width: 240px;
+  margin-top: 15.5px;
+  position: sticky;
+  top: 23.5px;
+  font-family: Inter, system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 20px;
+  letter-spacing: -.09008px;
+}
+
+.discover-intro h1 {
+  margin: 0;
+  padding: 0;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+.discover-intro p {
+  margin: 4px 0 0;
+  color: rgb(18 18 18 / 40%);
+  font-size: 13px;
+  font-weight: 460;
+  line-height: 1.2;
+}
+
 /* The featured sites, in a box */
 .discover-sites {
   border: 1px solid var(--border-color);
@@ -499,6 +531,10 @@
 
   .discover-sidebar {
     grid-column: 2;
+  }
+
+  .discover-intro {
+    display: none;
   }
 }
 

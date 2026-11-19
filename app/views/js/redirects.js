@@ -3,34 +3,151 @@ const sortEl = document.querySelector(".sortable");
 const redirectsContainer = document.getElementById("redirects");
 
 if (redirectsContainer) {
+  // Save changes and Cancel show once there is something to save: a redirect
+  // added, removed, moved or edited
+  const redirectsForm = redirectsContainer.closest("form");
+  const saveButtons = redirectsForm && redirectsForm.querySelector(".buttons");
+
+  // The rows' names and values in order, without the hidden template row
+  function serialize() {
+    return Array.from(redirectsContainer.querySelectorAll("input[name]"))
+      .map(function (input) {
+        return input.name + "=" + input.value;
+      })
+      .join("\n");
+  }
+
+  const initialRows = serialize();
+
+  // Shown while the rows differ from the saved ones, so adding a redirect
+  // and removing it again hides them
+  function showSaveButtons() {
+    if (saveButtons) saveButtons.hidden = serialize() === initialRows;
+  }
+
+  if (saveButtons) {
+    saveButtons.hidden = true;
+    redirectsForm.addEventListener("input", showSaveButtons);
+  }
+
+  // The rows as the page loaded, so Cancel can put them back without
+  // leaving the page (without scripts it reloads it)
+  const savedRows = Array.from(redirectsContainer.childNodes).map(
+    function (node) {
+      return node.cloneNode(true);
+    }
+  );
+  const cancelLink =
+    saveButtons && saveButtons.querySelector(".redirects-cancel");
+
+  if (cancelLink) {
+    cancelLink.addEventListener("click", function (e) {
+      e.preventDefault();
+      while (redirectsContainer.firstChild) {
+        redirectsContainer.removeChild(redirectsContainer.firstChild);
+      }
+      savedRows.forEach(function (node) {
+        redirectsContainer.appendChild(node.cloneNode(true));
+      });
+      cancelLink.classList.remove("disabled");
+      saveButtons.hidden = true;
+      document.getElementById("addRedirect").focus();
+      announce("Changes discarded");
+    });
+  }
+
+  function announce(message) {
+    const announcer = document.getElementById("dashboard-announcer");
+    if (!announcer) return;
+    announcer.textContent = "";
+    setTimeout(function () {
+      announcer.textContent = message;
+    }, 50);
+  }
+
+  // Row inputs are named redirects.<index>.from|to: renumber after a move
+  function renumberRows() {
+    const sections = redirectsContainer.querySelectorAll("section");
+    sections.forEach((section, index) => {
+      const inputs = section.querySelectorAll("input");
+      inputs.forEach((input) => {
+        const name = input.getAttribute("name");
+        const newName =
+          name.slice(0, name.indexOf(".") + 1) +
+          index +
+          name.slice(name.lastIndexOf("."));
+        input.setAttribute("name", newName);
+      });
+    });
+    showSaveButtons();
+  }
+
+  // Name each row's buttons after its "from" value
+  function labelRow(section) {
+    const from = section.querySelector('input[name*="from"]');
+    const suffix = from && from.value ? " from " + from.value : "";
+    const handle = section.querySelector(".handle");
+    const remove = section.querySelector(".removeLink");
+    if (handle) handle.setAttribute("aria-label", "Move redirect" + suffix);
+    if (remove) remove.setAttribute("aria-label", "Remove redirect" + suffix);
+  }
+
+  redirectsContainer.addEventListener("input", function (e) {
+    if (e.target.name && e.target.name.slice(-5) === ".from") {
+      labelRow(e.target.closest("section"));
+    }
+  });
+
   new Sortable(sortEl, {
     handle: ".handle",
     ghostClass: "sortable-ghost",
-    onUpdate: function () {
-      const sections = document.querySelectorAll(".sortable section");
-      sections.forEach((section, index) => {
-        const inputs = section.querySelectorAll("input");
-        inputs.forEach((input) => {
-          const name = input.getAttribute("name");
-          const newName =
-            name.slice(0, name.indexOf(".") + 1) +
-            index +
-            name.slice(name.lastIndexOf("."));
-          input.setAttribute("name", newName);
-        });
-      });
-    },
+    onUpdate: renumberRows,
+  });
+
+  // Keyboard reordering: ArrowUp / ArrowDown on a row's handle
+  redirectsContainer.addEventListener("keydown", function (e) {
+    const handle = e.target.closest(".handle");
+    if (!handle || (e.key !== "ArrowUp" && e.key !== "ArrowDown")) return;
+    e.preventDefault();
+    const row = handle.closest("section");
+    const rows = Array.from(redirectsContainer.querySelectorAll("section"));
+    const index = rows.indexOf(row);
+    if (e.key === "ArrowUp" && index > 0) {
+      redirectsContainer.insertBefore(row, rows[index - 1]);
+    } else if (e.key === "ArrowDown" && index < rows.length - 1) {
+      redirectsContainer.insertBefore(row, rows[index + 1].nextSibling);
+    } else {
+      return;
+    }
+    handle.focus();
+    renumberRows();
+    announce(
+      "Moved to position " +
+        (rows.indexOf(row) + (e.key === "ArrowUp" ? 0 : 2)) +
+        " of " +
+        rows.length
+    );
   });
 
   redirectsContainer.addEventListener("click", function (e) {
-    if (e.target.classList.contains("removeLink")) {
-      e.target.parentNode.remove();
+    const removeButton = e.target.closest(".removeLink");
+    if (removeButton) {
+      const row = removeButton.closest("section");
+      const rows = Array.from(redirectsContainer.querySelectorAll("section"));
+      const neighbour =
+        rows[rows.indexOf(row) + 1] || rows[rows.indexOf(row) - 1];
+      row.remove();
       e.preventDefault();
+      showSaveButtons();
 
-      if (!redirectsContainer.querySelector("section")) {
+      if (neighbour) {
+        neighbour.querySelector('input[name*="from"]').focus();
+      } else {
         const emptyRedirects = document.getElementById("emptyRedirects");
         emptyRedirects.style.display = "block";
+        document.getElementById("addRedirect").focus();
       }
+      announce("Redirect removed. Save changes to apply.");
 
       return false;
     }
@@ -65,6 +182,7 @@ if (redirectsContainer) {
     });
 
     redirectsContainer.appendChild(newlink);
+    showSaveButtons();
 
     if (from) {
       newlink.querySelector('input[name*="to"]').focus();

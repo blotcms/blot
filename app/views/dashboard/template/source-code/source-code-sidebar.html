@@ -1,4 +1,4 @@
-  <div style="flex-shrink:0;display: flex;flex-direction: column;width:284px">
+  <div class="source-code-sidebar">
 
         {{> template-sub-navigation}}
 
@@ -12,43 +12,44 @@
         <div class="template-row row-action-menu-row {{selected}}">
           <a class="template-row__link {{selected}}" href="{{{base}}}/source-code/{{name}}/edit">
             {{#extension.css}}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--accent-color)" d="m10.3 23.3.8-4H8.6v-2.1h3l.5-2.5H9.5v-2.1h3.1l.8-3.9h2.8l-.8 3.9h2.8l.8-3.9h2.8l-.8 3.9h2.5v2.1h-2.9l-.6 2.5h2.6v2.1h-3l-.8 4H16l.8-4H14l-.8 4h-2.9zm6.9-6.1.5-2.5h-2.8l-.5 2.5h2.8z"/></svg>
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--accent-color)" d="m10.3 23.3.8-4H8.6v-2.1h3l.5-2.5H9.5v-2.1h3.1l.8-3.9h2.8l-.8 3.9h2.8l.8-3.9h2.8l-.8 3.9h2.5v2.1h-2.9l-.6 2.5h2.6v2.1h-3l-.8 4H16l.8-4H14l-.8 4h-2.9zm6.9-6.1.5-2.5h-2.8l-.5 2.5h2.8z"/></svg>
             {{/extension.css}}
             {{#extension.html}}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--success-text-color)" d="m8 15 6-5.6V12l-4.5 4 4.5 4v2.6L8 17v-2zm16 2.1-6 5.6V20l4.6-4-4.6-4V9.3l6 5.6v2.2z"/></svg>
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--success-text-color)" d="m8 15 6-5.6V12l-4.5 4 4.5 4v2.6L8 17v-2zm16 2.1-6 5.6V20l4.6-4-4.6-4V9.3l6 5.6v2.2z"/></svg>
             {{/extension.html}}
             {{#extension.xml}}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--warning-text-color)" d="M9.7 9.6c7.2-.1 12.9 6.2 12.7 12.7h-2.6c-.1-2.8-1-5.1-2.9-7.1s-4.4-2.9-7.1-2.9c-.1-.9-.1-1.8-.1-2.7zm8.6 12.8h-2.6c-.1-.5-.2-1.1-.3-1.6-.8-2.4-2.3-3.8-4.8-4.3-.2-.1-.4-.1-.7-.1-.2 0-.2-.1-.2-.2v-2.5c2.1 0 3.9.7 5.5 2 2 1.8 3 4 3.1 6.7zm-5.1-1.8c0 1-.8 1.8-1.8 1.8s-1.7-.8-1.8-1.8c0-1 .8-1.8 1.8-1.8s1.8.8 1.8 1.8z"/></svg>
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--warning-text-color)" d="M9.7 9.6c7.2-.1 12.9 6.2 12.7 12.7h-2.6c-.1-2.8-1-5.1-2.9-7.1s-4.4-2.9-7.1-2.9c-.1-.9-.1-1.8-.1-2.7zm8.6 12.8h-2.6c-.1-.5-.2-1.1-.3-1.6-.8-2.4-2.3-3.8-4.8-4.3-.2-.1-.4-.1-.7-.1-.2 0-.2-.1-.2-.2v-2.5c2.1 0 3.9.7 5.5 2 2 1.8 3 4 3.1 6.7zm-5.1-1.8c0 1-.8 1.8-1.8 1.8s-1.7-.8-1.8-1.8c0-1 .8-1.8 1.8-1.8s1.8.8 1.8 1.8z"/></svg>
             {{/extension.xml}}
             {{#extension.rss}}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--warning-text-color)" d="M9.7 9.6c7.2-.1 12.9 6.2 12.7 12.7h-2.6c-.1-2.8-1-5.1-2.9-7.1s-4.4-2.9-7.1-2.9c-.1-.9-.1-1.8-.1-2.7zm8.6 12.8h-2.6c-.1-.5-.2-1.1-.3-1.6-.8-2.4-2.3-3.8-4.8-4.3-.2-.1-.4-.1-.7-.1-.2 0-.2-.1-.2-.2v-2.5c2.1 0 3.9.7 5.5 2 2 1.8 3 4 3.1 6.7zm-5.1-1.8c0 1-.8 1.8-1.8 1.8s-1.7-.8-1.8-1.8c0-1 .8-1.8 1.8-1.8s1.8.8 1.8 1.8z"/></svg>
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--warning-text-color)" d="M9.7 9.6c7.2-.1 12.9 6.2 12.7 12.7h-2.6c-.1-2.8-1-5.1-2.9-7.1s-4.4-2.9-7.1-2.9c-.1-.9-.1-1.8-.1-2.7zm8.6 12.8h-2.6c-.1-.5-.2-1.1-.3-1.6-.8-2.4-2.3-3.8-4.8-4.3-.2-.1-.4-.1-.7-.1-.2 0-.2-.1-.2-.2v-2.5c2.1 0 3.9.7 5.5 2 2 1.8 3 4 3.1 6.7zm-5.1-1.8c0 1-.8 1.8-1.8 1.8s-1.7-.8-1.8-1.8c0-1 .8-1.8 1.8-1.8s1.8.8 1.8 1.8z"/></svg>
             {{/extension.rss}}
             {{#extension.js}}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#CD3F45" d="M11.4 10h2.7v7.6c0 3.4-1.6 4.6-4.3 4.6-.6 0-1.5-.1-2-.3l.3-2.2c.4.2.9.3 1.4.3 1.1 0 1.9-.5 1.9-2.4V10zm5.1 9.2c.7.4 1.9.8 3 .8 1.3 0 1.9-.5 1.9-1.3s-.6-1.2-2-1.7c-2-.7-3.3-1.8-3.3-3.6 0-2.1 1.7-3.6 4.6-3.6 1.4 0 2.4.3 3.1.6l-.6 2.2c-.5-.2-1.3-.6-2.5-.6s-1.8.5-1.8 1.2c0 .8.7 1.1 2.2 1.7 2.1.8 3.1 1.9 3.1 3.6 0 2-1.6 3.7-4.9 3.7-1.4 0-2.7-.4-3.4-.7l.6-2.3z"/></svg>
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="#CD3F45" d="M11.4 10h2.7v7.6c0 3.4-1.6 4.6-4.3 4.6-.6 0-1.5-.1-2-.3l.3-2.2c.4.2.9.3 1.4.3 1.1 0 1.9-.5 1.9-2.4V10zm5.1 9.2c.7.4 1.9.8 3 .8 1.3 0 1.9-.5 1.9-1.3s-.6-1.2-2-1.7c-2-.7-3.3-1.8-3.3-3.6 0-2.1 1.7-3.6 4.6-3.6 1.4 0 2.4.3 3.1.6l-.6 2.2c-.5-.2-1.3-.6-2.5-.6s-1.8.5-1.8 1.2c0 .8.7 1.1 2.2 1.7 2.1.8 3.1 1.9 3.1 3.6 0 2-1.6 3.7-4.9 3.7-1.4 0-2.7-.4-3.4-.7l.6-2.3z"/></svg>
             {{/extension.js}}
             {{#extension.json}}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--warning-text-color)" d="M7.5 15.1c1.5 0 1.7-.8 1.7-1.5 0-.6-.1-1.1-.1-1.7S9 10.7 9 10.2c0-2.1 1.3-3 3.4-3h.8v1.9h-.4c-1 0-1.3.6-1.3 1.6 0 .4.1.8.1 1.3 0 .4.1.9.1 1.5 0 1.7-.7 2.3-1.9 2.6 1.2.3 1.9.9 1.9 2.6 0 .6-.1 1.1-.1 1.5 0 .4-.1.9-.1 1.2 0 1 .3 1.6 1.3 1.6h.4v1.9h-.8c-2 0-3.3-.8-3.3-3 0-.6 0-1.1.1-1.7.1-.6.1-1.2.1-1.7 0-.6-.2-1.5-1.7-1.5l-.1-1.9zm17 1.7c-1.5 0-1.7.9-1.7 1.5s.1 1.1.1 1.7c.1.6.1 1.2.1 1.7 0 2.2-1.4 3-3.4 3h-.8V23h.4c1 0 1.3-.6 1.3-1.6 0-.4 0-.8-.1-1.2 0-.5-.1-1-.1-1.5 0-1.7.7-2.3 1.9-2.6-1.2-.3-1.9-.9-1.9-2.6 0-.6.1-1.1.1-1.5.1-.5.1-.9.1-1.3 0-1-.4-1.5-1.3-1.6h-.4V7.2h.8c2.1 0 3.4.9 3.4 3 0 .6-.1 1.1-.1 1.7-.1.6-.1 1.2-.1 1.7 0 .7.2 1.5 1.7 1.5v1.7z"/></svg>
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><path fill="var(--warning-text-color)" d="M7.5 15.1c1.5 0 1.7-.8 1.7-1.5 0-.6-.1-1.1-.1-1.7S9 10.7 9 10.2c0-2.1 1.3-3 3.4-3h.8v1.9h-.4c-1 0-1.3.6-1.3 1.6 0 .4.1.8.1 1.3 0 .4.1.9.1 1.5 0 1.7-.7 2.3-1.9 2.6 1.2.3 1.9.9 1.9 2.6 0 .6-.1 1.1-.1 1.5 0 .4-.1.9-.1 1.2 0 1 .3 1.6 1.3 1.6h.4v1.9h-.8c-2 0-3.3-.8-3.3-3 0-.6 0-1.1.1-1.7.1-.6.1-1.2.1-1.7 0-.6-.2-1.5-1.7-1.5l-.1-1.9zm17 1.7c-1.5 0-1.7.9-1.7 1.5s.1 1.1.1 1.7c.1.6.1 1.2.1 1.7 0 2.2-1.4 3-3.4 3h-.8V23h.4c1 0 1.3-.6 1.3-1.6 0-.4 0-.8-.1-1.2 0-.5-.1-1-.1-1.5 0-1.7.7-2.3 1.9-2.6-1.2-.3-1.9-.9-1.9-2.6 0-.6.1-1.1.1-1.5.1-.5.1-.9.1-1.3 0-1-.4-1.5-1.3-1.6h-.4V7.2h.8c2.1 0 3.4.9 3.4 3 0 .6-.1 1.1-.1 1.7-.1.6-.1 1.2-.1 1.7 0 .7.2 1.5 1.7 1.5v1.7z"/></svg>
             {{/extension.json}}
             {{#extension.txt}}
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1000"><path d="M394.1 537.8h411.7v54.7H394.1v-54.7zm0-130.3H624v54.7H394.1v-54.7zm0-130.3h411.7v54.7H394.1v-54.7zm0 390.9H700v54.7H394.1v-54.7z"/></svg>
+            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1000"><path d="M394.1 537.8h411.7v54.7H394.1v-54.7zm0-130.3H624v54.7H394.1v-54.7zm0-130.3h411.7v54.7H394.1v-54.7zm0 390.9H700v54.7H394.1v-54.7z"/></svg>
             {{/extension.txt}}
              {{name}}
           </a>
           <button
             class="template-row__menu-trigger row-action-menu__trigger"
             type="button"
-            aria-haspopup="true"
+            aria-controls="source-file-action-menu"
             aria-expanded="false"
+            aria-label="Actions for {{name}}"
             data-baseurl="{{{base}}}/source-code/{{name}}"
             data-name="{{name}}"
             {{#isPackageJSON}}data-disable-rename="true" data-disable-delete="true"{{/isPackageJSON}}
           >
-            <span class="icon-dots"></span>
+            <span class="icon-dots" aria-hidden="true"></span>
           </button>
         </div>
         {{/views}}
 
-        <div style="border-top: 1px solid var(--border-color);padding-top:4px;margin-top:4px">
+        <div style="border-top: 1px solid var(--template-editor-divider-color);padding-top:4px;margin-top:4px">
                 <div class="template-row">
                   <a class="template-row__link {{selected.create}}"  href="{{{base}}}/source-code/create"><span class="icon-plus"></span> Create file</a>
                 </div>
@@ -63,15 +64,16 @@
     {{/template.localEditing}}
     {{^template.localEditing}}
      <div class="template-row">
-     <a class="template-row__link template-row__link--move-to-folder {{selected.local_editing}}" href="{{{base}}}/local-editing"><span class="template-row__move-to-folder-icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17 14" width="1em" height="0.82em" fill="none"><path d="m12.687 9 1.173-1.233a.75.75 0 0 0-1.087-1.034l-2.378 2.5a.75.75 0 0 0 0 1.034l2.378 2.5a.75.75 0 1 0 1.087-1.034L12.687 10.5h3.25a.75.75 0 0 0 0-1.5h-3.25Z"/><path d="M1.75 0A1.75 1.75 0 0 0 0 1.75v10.5A1.75 1.75 0 0 0 1.75 14H9c1 0 1-1.5 0-1.5H1.75a.25.25 0 0 1-.25-.25V1.75a.25.25 0 0 1 .25-.25H5a.25.25 0 0 1 .2.1l.9 1.2c.33.44.85.7 1.4.7h6.75a.25.25 0 0 1 .25.25v.75c0 1 1.5 1 1.5 0v-.75A1.75 1.75 0 0 0 14.25 2H7.5a.25.25 0 0 1-.2-.1L6.4.7C6.07.26 5.55 0 5 0H1.75Z"/></svg></span> Move to folder</a>
+     <a class="template-row__link template-row__link--move-to-folder {{selected.local_editing}}" href="{{{base}}}/local-editing"><span class="template-row__move-to-folder-icon"><svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 17 14" width="1em" height="0.82em" fill="none"><path d="m12.687 9 1.173-1.233a.75.75 0 0 0-1.087-1.034l-2.378 2.5a.75.75 0 0 0 0 1.034l2.378 2.5a.75.75 0 1 0 1.087-1.034L12.687 10.5h3.25a.75.75 0 0 0 0-1.5h-3.25Z"/><path d="M1.75 0A1.75 1.75 0 0 0 0 1.75v10.5A1.75 1.75 0 0 0 1.75 14H9c1 0 1-1.5 0-1.5H1.75a.25.25 0 0 1-.25-.25V1.75a.25.25 0 0 1 .25-.25H5a.25.25 0 0 1 .2.1l.9 1.2c.33.44.85.7 1.4.7h6.75a.25.25 0 0 1 .25.25v.75c0 1 1.5 1 1.5 0v-.75A1.75 1.75 0 0 0 14.25 2H7.5a.25.25 0 0 1-.2-.1L6.4.7C6.07.26 5.55 0 5 0H1.75Z"/></svg></span> Move to folder</a>
      </div>
     {{/template.localEditing}}
 
-        <div id="source-file-action-menu" class="template-action-menu row-action-menu" aria-hidden="true">
+        <div id="source-file-action-menu" class="template-action-menu row-action-menu menu" aria-hidden="true">
           <ul>
             <li><a data-menu-link="edit" href="#">Edit</a></li>
             <li><a data-menu-link="config" href="#">Config</a></li>
             <li><a data-menu-link="rename" href="#">Rename</a></li>
+            <li class="menu__separator" role="separator"></li>
             <li><a data-menu-link="delete" href="#">Delete</a></li>
           </ul>
         </div>

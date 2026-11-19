@@ -4,6 +4,7 @@ var Express = require("express");
 var Account = new Express.Router();
 var logout = require("./util/logout");
 const prettyPrice = require("helper/prettyPrice");
+const { LRUCache } = require("lru-cache");
 const Email = require("helper/email");
 const { errorHandler } = require("dashboard/util/message");
 
@@ -12,23 +13,35 @@ const BREADCRUMBS = {
 };
 
 Account.use(function (req, res, next) {
-  res.locals.breadcrumbs.add("Account", "/account");
+  res.locals.breadcrumbs.add("Account", "/sites/account");
   res.locals.account = true;
   next();
 });
 
-Account.use(
-  ["/subscription", "/pay-subscription"],
-  async function (req, res, next) {
-    if (!req.user.subscription || !req.user.subscription.customer)
+// A Stripe round trip takes ~200ms. The account page shows a credit from a
+// cache; the subscription pages always ask Stripe, and refresh the cache.
+const balances = new LRUCache({ max: 1000, ttl: 10 * 60 * 1000 });
+
+function describeBalance(balance) {
+  if (balance < 0)
+    return { credit: true, amount: prettyPrice(Math.abs(balance)) };
+  if (balance > 0) return { debit: true, amount: prettyPrice(balance) };
+}
+
+function loadSubscriptionBalance({ cached } = {}) {
+  return async function (req, res, next) {
+    const customerID = req.user.subscription && req.user.subscription.customer;
+    if (!customerID) return next();
+
+    if (cached && balances.has(customerID)) {
+      res.locals.balance = describeBalance(balances.get(customerID));
       return next();
+    }
 
     let customer;
 
     try {
-      customer = await stripe.customers.retrieve(
-        req.user.subscription.customer
-      );
+      customer = await stripe.customers.retrieve(customerID);
     } catch (err) {
       // If we're offline or Stripe is down don't take the settings
       // page
@@ -37,25 +50,27 @@ Account.use(
       return next(err);
     }
 
-    if (customer.balance !== 0 && Math.sign(customer.balance) === -1) {
-      res.locals.balance = {
-        credit: true,
-        amount: prettyPrice(Math.abs(customer.balance)),
-      };
-    } else if (customer.balance !== 0 && Math.sign(customer.balance) === 1) {
-      res.locals.balance = {
-        debit: true,
-        amount: prettyPrice(Math.abs(customer.balance)),
-      };
-    }
-
+    balances.set(customerID, customer.balance);
+    res.locals.balance = describeBalance(customer.balance);
     next();
-  }
+  };
+}
+
+// Only the pages that show the balance ask Stripe for it, not every
+// subscription subpage (payment methods, cancel, ...)
+Account.get(
+  ["/subscription", "/subscription/billing-interval", "/pay-subscription"],
+  loadSubscriptionBalance()
 );
 
-Account.route("/").get(function (req, res) {
-  res.redirect("/sites");
-});
+Account.route("/").get(
+  loadSubscriptionBalance({ cached: true }),
+  function (req, res) {
+    res.locals.title = "Account";
+    res.locals.isAccountView = true;
+    res.render("dashboard/account/index", { monthly: req.user.isMonthly });
+  }
+);
 
 Account.use("/:section", function (req, res, next) {
   var uppercaseName = req.params.section;
@@ -120,8 +135,7 @@ Account.post("/log-out", logout, function (req, res) {
 Account.use(function (err, req, res, next) {
   if (req.method === "GET") {
     console.log(err, err.trace);
-    res.status(400);
-    res.render("dashboard/error", { error: err });
+    require("dashboard/util/render-error")(err, req, res);
   } else if (req.method === "POST") {
     return errorHandler(err, req, res, next);
   } else {

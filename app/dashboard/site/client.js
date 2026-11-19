@@ -1,9 +1,7 @@
 const clients = require("clients");
-const _ = require("lodash");
-const moment = require("moment");
+const syncSummary = require("dashboard/util/sync-summary");
 const express = require("express");
 const client_routes = express.Router();
-const Path = require("path");
 const Blog = require("models/blog");
 const load = require("./load");
 const Sync = require("sync");
@@ -13,6 +11,8 @@ const config = require("config");
 const fetch = require("node-fetch");
 const notifyAdminIfResyncFoundChanges = require("./notifyResyncFoundChanges");
 const syncReport = require("clients/util/syncReport");
+const storage = require("storage/folder");
+const fileFlags = require("models/file/flags");
 
 const RESYNC_REFUSALS = [
   "DROPBOX_TRANSFER_INCOMPLETE",
@@ -20,11 +20,27 @@ const RESYNC_REFUSALS = [
   "ICLOUD_FOLDER_MISSING",
   "ICLOUD_SETUP_INCOMPLETE",
 ];
-const getStatuses = (...args) => Blog.getStatuses(...args);
 
-// So the breadcrumbs look like: Settings > Client
+// A connected folder's sync pages: Resync sits beside the status, for the
+// clients that can, and hides while the folder syncs (so once it's clicked)
+client_routes.get(/.*/, function (req, res, next) {
+  if (!req.blog.client) return next();
+  res.locals.canResync = !!(
+    clients[req.blog.client] && clients[req.blog.client].resync
+  );
+  res.locals.isSyncing = syncSummary(req.blog).state === "syncing";
+  // The client's own page, headed with its logo and name; its subpages
+  // have headings of their own
+  res.locals.isClientPage =
+    req.path.replace(/\/$/, "") === "/" + req.blog.client;
+  next();
+});
+
+// The sync pages, at /sites/<handle>/sync. Breadcrumbs: Sites > Site > Sync
 client_routes.use(function (req, res, next) {
-  res.locals.breadcrumbs.add("Folder", "client");
+  res.locals.base = req.baseUrl;
+  res.locals.isFolderSettingsView = true;
+  res.locals.breadcrumbs.add("Sync", "sync");
   next();
 });
 
@@ -46,15 +62,21 @@ client_routes
 
     res.locals.breadcrumbs.add("Switch", "switch");
 
+    // ?to=<client> asks the user to confirm before the POST below
+    // disconnects the current client
+    const target = res.locals.clients.find((c) => c.name === req.query.to);
+
     res.render("dashboard/clients/switch", {
       title: "Switch to another client",
+      confirm: target || false,
     });
   })
 
   .post(async function (req, res, next) {
     const redirect = req.baseUrl + "/" + req.body.client;
 
-    if (!req.body.client) {
+    // A client Blot has, by name (own keys only)
+    if (!req.body.client || !Object.hasOwn(clients, req.body.client)) {
       return next(new Error("Please select a client"));
     }
 
@@ -70,71 +92,13 @@ client_routes
     }
   });
 
-// Used to change tense of activity on dashboard
-// and to help parse paths from status messages
-const verbs = {
-  Downloading: "downloaded",
-  Syncing: "synced",
-  Transferring: "transferred",
-  Removing: "removed",
-};
-
-// Reset progress messages are prefixed with "(current/total) ", e.g.
-// "(1/10) Downloading /post.md" - strip it before matching a verb so
-// these still parse into a path, verb and folder URL below.
-const PROGRESS_PREFIX = /^\(\d+\/\d+\)\s+/;
-
-client_routes
-  .route("/activity")
-  .get(load.clients, async function (req, res, next) {
-    try {
-      res.locals.breadcrumbs.add("Activity", "activity");
-
-      let { statuses, next, previous } = await getStatuses(req.blog.id);
-
-      statuses = _.chain(statuses)
-        .groupBy("syncID")
-        .map((value, key) => ({
-          syncID: key,
-          messages: value
-            .map((item) => {
-              const message = item.message.replace(PROGRESS_PREFIX, "");
-              const matchedVerb = Object.keys(verbs).find((i) =>
-                message.startsWith(i + " /")
-              );
-
-              if (matchedVerb) {
-                const path = message.slice((matchedVerb + " ").length);
-                item.path = Path.parse(path);
-                item.verb = verbs[matchedVerb];
-                item.url = Path.join(
-                  res.locals.base,
-                  "folder",
-                  encodeURIComponent(path.slice(1))
-                );
-              }
-
-              item.fromNow = moment(item.datestamp).fromNow();
-
-              return item;
-            })
-            .filter(
-              ({ message }) => message !== "Syncing" && message !== "Synced"
-            ),
-        }))
-        .filter((i) => i.messages && i.messages.length)
-        .value();
-
-      res.render("dashboard/clients/activity", {
-        title: "Activity",
-        statuses,
-        next,
-        previous,
-      });
-    } catch (err) {
-      next(err);
-    }
-  });
+// The sync log moved to the site's Activity page
+client_routes.get("/activity", function (req, res) {
+  const query = req.originalUrl.includes("?")
+    ? req.originalUrl.slice(req.originalUrl.indexOf("?"))
+    : "";
+  res.redirect(302, res.locals.dashboardBase + "/activity" + query);
+});
 
 client_routes
 
@@ -156,10 +120,7 @@ client_routes.post("/reset/rebuild", function (req, res) {
   Sync(req.blog.id, async function (syncFolder) {
     folder = syncFolder;
 
-    res.message(
-      res.locals.base + "/client/reset",
-      "Begin rebuild of your site"
-    );
+    res.message(res.locals.base + "/reset", "Begin rebuild of your site");
 
     folder.status("Rebuilding your site");
 
@@ -195,7 +156,7 @@ client_routes.post("/reset/rebuild", function (req, res) {
   }).catch(function (err) {
     if (!folder) {
       return res.message(
-        res.locals.base + "/client/reset",
+        res.locals.base + "/reset",
         new Error("Failed to rebuild folder since it is syncing")
       );
     }
@@ -215,7 +176,11 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
   Sync(req.blog.id, async function (syncFolder) {
     folder = syncFolder;
 
-    res.message(res.locals.base + "/client/reset", "Begin resync of your site");
+    // Back to the client's page, where the status shows it running
+    res.message(
+      res.locals.base + "/" + req.blog.client,
+      "Begin resync of your site"
+    );
 
     let summary;
 
@@ -273,7 +238,7 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
     function (err) {
       if (!folder) {
         return res.message(
-          res.locals.base + "/client/reset",
+          res.locals.base + "/reset",
           new Error("Failed to resync folder since it is syncing")
         );
       }
@@ -313,8 +278,8 @@ if (config.environment === "development") {
       }
 
       res.redirect(
-        res.locals.base +
-          "/client" +
+        res.locals.dashboardBase +
+          "/sync" +
           (req.blog.client ? "/" + req.blog.client : "")
       );
     } catch (error) {
@@ -327,8 +292,11 @@ client_routes
   .route("/")
 
   .get(load.clients, function (req, res) {
+    // The Sync breadcrumb leads to the client's page
     if (req.blog.client) {
-      return res.redirect(req.baseUrl + "/" + req.blog.client);
+      return res.redirect(
+        res.locals.dashboardBase + "/sync/" + req.blog.client
+      );
     }
 
     res.render("dashboard/clients", { title: "Select a client" });
@@ -348,11 +316,11 @@ client_routes
 
 client_routes.use("/:client", function (req, res, next) {
   if (clients[req.params.client] === undefined) {
-    return res.redirect(res.locals.base + "/client");
+    return res.redirect(res.locals.dashboardBase + "/sync");
   }
 
   if (req.blog.client && req.params.client !== req.blog.client) {
-    return res.redirect(res.locals.base + "/client/" + req.blog.client);
+    return res.redirect(res.locals.dashboardBase + "/sync/" + req.blog.client);
   }
 
   if (!req.blog.client) {
@@ -369,7 +337,7 @@ client_routes.use("/:client", function (req, res, next) {
     ]);
 
     if (!allowedUnpersistedPaths.has(relativePath)) {
-      return res.redirect(res.locals.base + "/client");
+      return res.redirect(res.locals.dashboardBase + "/sync");
     }
   }
 
@@ -377,6 +345,41 @@ client_routes.use("/:client", function (req, res, next) {
   res.locals.effectiveClient = req.params.client;
 
   load.client(req, res, next);
+});
+
+// The disconnect page lists the placeholders: the empty files a client wrote
+// where it couldn't download a file. Disconnecting removes them, since only
+// that client can fetch their bytes. The listing reads the folder's whole
+// index, so it runs on this page only, and a failure just leaves it out.
+const PLACEHOLDERS_SHOWN = 20;
+
+client_routes.get("/:client/disconnect", async (req, res, next) => {
+  try {
+    const found = [];
+    for await (const file of storage.flagged(req.blog.id)) {
+      if (!file.placeholder) continue;
+      const flag = (file.flags || []).find(
+        (flag) => fileFlags.CODES[flag.code]?.placeholder
+      );
+      const code = flag && fileFlags.CODES[flag.code];
+      found.push({
+        path: file.path,
+        reason: code ? code.message : "couldn't be downloaded",
+      });
+    }
+    if (found.length) {
+      found.sort((a, b) => a.path.localeCompare(b.path));
+      res.locals.placeholders = {
+        count: found.length,
+        one: found.length === 1,
+        shown: found.slice(0, PLACEHOLDERS_SHOWN),
+        more: Math.max(0, found.length - PLACEHOLDERS_SHOWN),
+      };
+    }
+  } catch (err) {
+    console.error("Could not list placeholders", req.blog.id, err.message);
+  }
+  next();
 });
 
 for (let client_name in clients) {
@@ -388,7 +391,7 @@ for (let client_name in clients) {
 }
 
 client_routes.use("/:client", (req, res) => {
-  res.redirect(`/sites/${req.blog.handle}/client`);
+  res.redirect(`${res.locals.dashboardBase}/sync`);
 });
 
 module.exports = client_routes;

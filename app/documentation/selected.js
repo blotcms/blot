@@ -13,7 +13,7 @@ var TITLES = {
   "google-docs": "Google Docs",
   icloud: "iCloud",
   cv: "CV",
-  examples: "Example sites",
+  discover: "Discover",
   markdown: "Markdown",
   "word-documents": "Word Documents",
   html: "HTML",
@@ -76,6 +76,9 @@ module.exports = function (req, res, next) {
 
   // Handle index page of site.
   if (req.originalUrl === "/") res.locals.selected.index = "selected";
+
+  // A plain value for the layout's <body class>
+  res.locals.bodyClass = res.locals.selected.watch ? "watch-page" : "";
 
   let slug = slugs.pop() || "Blot";
   let title = TITLES[slug] || titleFromSlug(slug);

@@ -1,0 +1,13 @@
+{{#placeholders}}
+<!-- The empty stand-ins a client wrote for files it couldn't download, which
+     disconnecting removes (app/dashboard/site/client.js) -->
+<div class="disconnect-placeholders">
+  <p>{{#one}}One file in your folder on Blot is an empty placeholder{{/one}}{{^one}}{{count}} files in your folder on Blot are empty placeholders{{/one}}, for files Blot couldn’t download. Disconnecting removes {{#one}}it{{/one}}{{^one}}them{{/one}}. The originals stay where they are.</p>
+  <ul class="disconnect-placeholders__list">
+    {{#shown}}
+    <li><code>{{path}}</code> {{reason}}</li>
+    {{/shown}}
+  </ul>
+  {{#more}}<p class="disconnect-placeholders__more">and {{more}} more</p>{{/more}}
+</div>
+{{/placeholders}}

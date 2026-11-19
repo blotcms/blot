@@ -1,0 +1,19 @@
+<div class="documentation-layout">
+  <aside class="documentation-sidebar">
+    <nav aria-label="Documentation">
+      {{> links}}
+    </nav>
+    {{#show-toc-or-on-this-page}}
+    <nav id="toc-wrapper" aria-labelledby="documentation-toc-heading">
+      <h2 id="documentation-toc-heading">On this page</h2>
+      <div id="toc"></div>
+    </nav>
+    {{/show-toc-or-on-this-page}}
+  </aside>
+
+  <main id="main" tabindex="-1" class="documentation-article main-section-content {{#show-toc-or-on-this-page}}js-toc-content{{/show-toc-or-on-this-page}}">
+    {{> body}}
+  </main>
+
+  {{> footer}}
+</div>

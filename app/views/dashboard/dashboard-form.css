@@ -1,9 +1,10 @@
+/* Two thirds of the window */
 form.dashboard-form,
 .dashboard-form-panel {
   box-sizing: border-box;
   width: 66.6666vw;
   min-width: min(448px, calc(100vw - 2rem));
-  max-width: calc(100vw - 2rem);
+  max-width: 100%;
 }
 
 @media (max-width: 600px) {
@@ -15,8 +16,35 @@ form.dashboard-form,
   }
 }
 
+/* A settings page: the page's heading (a .page-header, ruled below and as
+   wide as the page) and its form, kept to a readable width */
 .dashboard-form-panel {
   flex-grow: 0;
+  width: 100%;
+  min-width: 0;
+}
+
+.dashboard-form-panel > :not(.page-header):not(.dashboard-form-panel__body),
+.dashboard-form-panel__body > :not(.page-header) {
+  max-width: 720px;
+}
+
+.dashboard-form-panel > :first-child,
+.dashboard-form-panel__body > :first-child {
+  margin-top: 0;
+}
+
+/* A form inside a card fills it rather than taking the card's own width */
+.dashboard-form-panel form.dashboard-form,
+form.dashboard-form .dashboard-form-panel {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.dashboard-form-panel__label {
+  color: var(--medium-text-color);
+  font-size: var(--text-md);
 }
 
 .template-main form.dashboard-form {
@@ -44,23 +72,45 @@ form.dashboard-form,
   }
   
   #menu .handle {
-    padding: 12px 10px;
+    padding: var(--space-3) var(--space-3);
     cursor: grab;
     display: flex;
   }
 
-   #add {
-    padding: 8px 16px;
+  #add {
+    padding: var(--space-2) var(--space-7) var(--space-2) var(--space-4);
     display: block;
-    border: 1px solid rgba(0, 0, 0, 0.05);
-    border-radius: 4px;
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
     color: var(--accent-color);
-    padding-right: 40px;
+  }
+
+  #menu .handle,
+  #add {
+    transition: background-color 150ms ease, color 150ms ease;
   }
 
   #menu .handle:hover,
-   #add:hover {
-    background-color: var(--light-background-color);
+  #add:hover {
+    background-color: var(--hover-background-color);
+  }
+
+  #menu .handle:active,
+  #add:active {
+    background-color: var(--active-background-color);
+  }
+
+  #add:hover {
+    color: var(--accent-hover-color);
+  }
+
+  #add:active {
+    color: var(--accent-active-color);
+  }
+
+  #add:focus-visible {
+    outline: 2px solid var(--accent-color);
+    outline-offset: 2px;
   }
 
   #menu input {
@@ -78,12 +128,12 @@ form.dashboard-form,
 
   form.dashboard-form label {
     margin: 0;
-    font-size: 14px;
+    font-size: var(--text-md);
     position: relative;
     color: var(--medium-text-color);
-    margin-bottom: 4px;
-    padding-top: 1rem;
-    padding-bottom: .25rem;
+    margin-bottom: var(--space-1);
+    padding-top: var(--space-4);
+    padding-bottom: var(--space-1);
   }
 
   form.dashboard-form .source-file-name-label {
@@ -95,22 +145,26 @@ form.dashboard-form,
     display: block;display: block;
   color: var(--text-color);
   background: var(--light-background-color);
-  font-size: var(--font-size);
+  font-size: var(--text-base);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 8px;
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  transition: border-color 150ms ease;
+  }
 
+  form.dashboard-form select:hover {
+    border-color: var(--accent-color);
   }
   
   form.dashboard-form input[type="checkbox"] {
-    margin-right: 0.222em;
+    margin-right: var(--space-1);
     vertical-align: middle;
   }
   
   input[type="file"] {
-    font-size: 11px;
+    font-size: var(--text-xs);
     display: block;
-    margin-top: 1em;
+    margin-top: var(--space-3);
   }
   
   form.dashboard-form label,
@@ -125,16 +179,16 @@ form.dashboard-form,
   form.dashboard-form input[type="password"],
   form.dashboard-form input[type="url"],
   form.dashboard-form textarea {
-  margin: 2px 0;
-      font-size: 17px;
-      padding: 10px;
+  margin: var(--space-0) 0;
+      font-size: var(--text-lg);
+      padding: var(--space-3);
       font-family: inherit;
       z-index: 1;
       position: relative;
       border: 1px solid var(--border-color);
       box-sizing: border-box;
       background: 0 0;
-      transition: border-color ease-in-out .1s,box-shadow ease-in-out .1s,-webkit-box-shadow ease-in-out .1s;
+      transition: border-color 150ms ease, box-shadow 150ms ease;
   }
   
   form.dashboard-form textarea {
@@ -152,67 +206,442 @@ form.dashboard-form,
     border-color: var(--accent-color)
   }
   
+  /* One focus ring, as in css/inputs.css: the accent border and a halo */
   form.dashboard-form input[type="text"]:focus,
   form.dashboard-form input[type="password"]:focus,
   form.dashboard-form input[type="url"]:focus,
-  form.dashboard-form textarea:focus {
+  form.dashboard-form input[type="email"]:focus,
+  form.dashboard-form input[type="number"]:focus,
+  form.dashboard-form textarea:focus,
+  form.dashboard-form select:focus {
     outline: none;
     z-index: 1;
     border: 1px solid var(--accent-color);
+    box-shadow: 0 0 0 3px rgba(0, 102, 222, 0.25);
   }
-
 
 /* Buttons */
 
-form.dashboard-form .button {
-    color: black;
-    background: white;
-    border-radius: 4px;
-    margin-right: 1em;
-    display: inline-block;
-    padding: 0 1.33em;
-    line-height: 2.5;
-    border: 1px solid #9f9f9f;
-    border-bottom-color: #999;
-    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1), inset 0 -2px 2px rgba(0, 0, 0, 0.04);
-    font-size: 15px;
-    cursor: pointer;
-    text-decoration: none;
-  }
-  
-  form.dashboard-form .button:active {
-    position: relative;
-    top: 1px;
-  }
-  
-  form.dashboard-form .button:focus {
-    outline: none;
-  }
-  
-  
-  
-  form.dashboard-form .button.small {
-    font-size: 0.77em;
-  }
-  
-  
-  
-  form.dashboard-form .button.disabled,
-  form.dashboard-form .button:disabled,
-  form.dashboard-form .button.working {
-    cursor: default;
-    opacity: 1;
-    box-shadow: none;
-    border: none;
-    background-color: #d5d5d5;
-    color: #fff;
-  }
-  
-  form.dashboard-form .button.working {
-    background: #d5d5d5 url("/images/spinner_grey.gif?{{cacheID}}") center right 20px no-repeat;
-    background-size: 1.33em;
-    padding-right: 2em;
-    box-shadow: none;
-    border-right: 1em solid transparent;
-  }
-  
+/* A row of the 404 log: the URL, then its actions (wrapping below it on
+   narrow screens) */
+.error-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.error-form__url {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.error-form__time {
+  display: block;
+  color: var(--light-text-color);
+  font-size: var(--text-xs);
+}
+
+.error-form__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+/* The 404 log: a count, then the rows above (ignored ones use the same row) */
+.error-log {
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.error-log__count,
+.error-log__toggle,
+.error-log > .site-dashboard-empty {
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--light-text-color);
+  font-size: var(--text-md);
+}
+
+.error-log__toggle {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.error-log > .error-form:last-child {
+  border-bottom: none;
+}
+
+.error-form:hover {
+  background: var(--hover-background-color);
+}
+
+/* Redirects: the Add redirect and Bulk editor buttons, the empty state and
+   the links under the rows */
+.redirect-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-4);
+}
+
+.redirect-tools svg {
+  margin-right: var(--space-1);
+  fill: currentColor;
+  vertical-align: text-bottom;
+}
+
+.redirects-empty {
+  display: block;
+  padding: var(--space-6) var(--space-4);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  text-align: center;
+  font-size: var(--text-md);
+  color: var(--light-text-color);
+}
+
+.redirect-link {
+  display: block;
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--border-color);
+  color: var(--accent-color);
+  text-decoration: none;
+}
+
+.redirect-link span {
+  float: right;
+}
+
+.redirect-link:hover {
+  text-decoration: underline;
+}
+
+.redirect-link:focus-visible,
+#redirects .removeLink:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+/* A row's remove control is a button; clicks land on it, not its icon (the
+   page's script matches the click target against .removeLink) */
+#redirects button.removeLink {
+  margin: 0;
+  border-width: 0 0 0 1px;
+  border-style: solid;
+  border-radius: 0;
+  background: transparent;
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+#redirects .removeLink * {
+  pointer-events: none;
+}
+
+.redirects-bulk {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 200px;
+  margin-bottom: var(--space-4);
+  font-family: monospace;
+  line-height: var(--leading-normal);
+}
+
+.redirects-bulk-note {
+  margin: 0 0 var(--space-4);
+  color: var(--medium-text-color);
+  font-size: var(--text-md);
+}
+
+.settings-page > .dashboard-form-panel__body > h2 {
+  margin: var(--space-6) 0 var(--space-3);
+}
+
+.settings-page > .dashboard-form-panel__body > h2:first-child {
+  margin-top: 0;
+}
+
+/* Flash messages (partials/message.html): the text, then a Dismiss button */
+.flash[hidden] {
+  display: none;
+}
+
+.flash__body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.flash__body > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.flash__dismiss {
+  flex: none;
+}
+
+/* Section headings and their Save/Cancel buttons on the content page */
+.settings-section {
+  max-width: 720px;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+}
+
+.dashboard-form-panel .settings-section > h2 {
+  margin: var(--space-6) 0 var(--space-2);
+  padding: 0;
+  border: 0;
+  color: var(--text-color);
+  font-size: var(--text-lg);
+  font-weight: var(--weight-semibold);
+  line-height: var(--leading-tight);
+}
+
+/* Settings page helpers, replacing inline styles */
+form.dashboard-form label.setting-check {
+  display: flex;
+  margin: 0;
+  cursor: pointer;
+}
+
+.flag-row label.setting-check {
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: 0;
+}
+
+.setting-check__text {
+  flex-grow: 1;
+}
+
+.setting-help-text {
+  margin: var(--space-2) 0 0 var(--space-5);
+  color: var(--secondary-text-color);
+  font-size: var(--text-sm);
+}
+
+form.dashboard-form .select-spaced {
+  max-width: var(--form-max-width);
+  margin-top: var(--space-3);
+}
+
+form.dashboard-form.dashboard-form--flush {
+  padding: 0;
+  margin: 0;
+}
+
+form.dashboard-form.dashboard-form--narrow,
+.dashboard-form-panel form.dashboard-form.dashboard-form--narrow {
+  max-width: 720px;
+}
+
+/* A sync status icon: the tick and the alert glyphs */
+.sync-status-check,
+.sync-status-alert {
+  margin-right: var(--space-1);
+  font-size: var(--text-xs);
+  position: relative;
+  top: -2px;
+}
+
+.sync-status-check {
+  color: var(--success-color);
+}
+
+.sync-status-alert {
+  color: var(--warning-color);
+}
+
+/* Folder client pages */
+.client-intro {
+  max-width: 480px;
+  color: var(--medium-text-color);
+}
+
+.client-icon {
+  flex-shrink: 0;
+  margin-right: var(--space-1);
+  vertical-align: text-bottom;
+}
+
+/* Switching sync method: one link row per client, then a confirm page */
+.client-choices {
+  max-width: 480px;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  list-style: none;
+}
+
+.client-choices li {
+  border-top: 1px solid var(--border-color);
+}
+
+.client-choices li:last-child {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.client-choices__link {
+  display: block;
+  padding: var(--space-3);
+  color: var(--accent-color);
+  text-decoration: none;
+  transition: background-color 150ms ease;
+}
+
+.client-choices__link:hover {
+  background: var(--hover-background-color);
+}
+
+.client-choices__link:active {
+  background: var(--active-background-color);
+}
+
+.client-choices__link:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+/* Resync and rebuild: a button with a line under it saying what it does */
+.reset-action {
+  margin-bottom: var(--space-4);
+}
+
+.reset-action__help {
+  max-width: 480px;
+  margin: var(--space-2) 0 0;
+  color: var(--medium-text-color);
+  font-size: var(--text-md);
+}
+
+.health-message {
+  display: block;
+  margin-top: var(--space-2);
+  color: var(--medium-text-color);
+  font-size: var(--text-md);
+}
+
+.health-actions {
+  margin: var(--space-3) 0 0;
+}
+
+/* Account pages */
+.price-highlight {
+  background: var(--surface-strong-color);
+}
+
+.payment-intro {
+  margin: 0;
+  padding: var(--space-3) 0 0;
+}
+
+/* Settings rows: flags and URL formats */
+.flag-row {
+  margin: var(--space-4) 0;
+}
+
+form.dashboard-form label.format {
+  display: block;
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-color);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+form.dashboard-form label.format:hover {
+  background: var(--hover-background-color);
+}
+
+form.dashboard-form label.format:active {
+  background: var(--active-background-color);
+}
+
+form.dashboard-form label.format:focus-within {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+label.format > input[type="radio"] {
+  float: left;
+  width: auto;
+  margin: var(--space-1) var(--space-3) var(--space-5) 0;
+}
+
+label.format > b {
+  display: block;
+  color: var(--text-color);
+  font-weight: var(--weight-medium);
+  cursor: pointer;
+}
+
+label.format .format-example {
+  background: none;
+  color: var(--light-text-color);
+  font-size: var(--text-md);
+}
+
+label.format .format-custom {
+  margin: var(--space-1) var(--space-5) var(--space-1) var(--space-5);
+}
+
+label.format .format-custom input[type="text"] {
+  margin: 0;
+}
+
+label.format .buttons {
+  padding: 0 var(--space-5);
+}
+
+/* Stripe's card field (js/account-card-form.js) mounts after load: keep its
+   line's height so the form below doesn't move */
+#card {
+  min-height: 1.2em;
+}
+
+/* Redirect row handle is a button (keyboard reordering with the arrow keys) */
+#redirects button.handle {
+  margin: 0;
+  border-width: 0 1px 0 0;
+  border-style: solid;
+  border-radius: 0;
+  background: none;
+  font: inherit;
+}
+
+#redirects button.handle:focus-visible,
+#redirects .redirectWarning:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: -2px;
+}
+
+/* A form's single-line fields and selects share one width
+   (--form-max-width), whatever the page */
+.dashboard-form-panel input[type="text"],
+.dashboard-form-panel input[type="email"],
+.dashboard-form-panel input[type="password"],
+.dashboard-form-panel input[type="url"],
+.dashboard-form-panel input[type="number"],
+.dashboard-form-panel input[type="search"],
+.dashboard-form-panel input:not([type]),
+.dashboard-form-panel select,
+form.dashboard-form input[type="text"],
+form.dashboard-form input[type="email"],
+form.dashboard-form input[type="password"],
+form.dashboard-form input[type="url"],
+form.dashboard-form select {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--form-max-width);
+}

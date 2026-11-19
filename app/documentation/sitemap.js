@@ -20,6 +20,8 @@ module.exports = function (req, res) {
     "/sites/sign-up",
     "/sites/log-in",
     "/templates",
+    "/discover",
+    "/discover/people",
     "/developers",
     "/questions",
     "/contact",

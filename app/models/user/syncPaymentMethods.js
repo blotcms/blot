@@ -206,7 +206,10 @@ async function syncPaymentMethods(user) {
     })
   );
 
-  await set(user.uid, { paymentMethods: paymentMethods });
+  await set(user.uid, {
+    paymentMethods: paymentMethods,
+    paymentMethodsSyncedAt: Date.now(),
+  });
 
   return paymentMethods;
 }

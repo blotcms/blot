@@ -15,6 +15,8 @@ describe("models/redis-cache", function () {
       "template:owned_by:SITE": "owners",
       "template:owned_by:blog_123": "owners",
       "sess:abc123": "session",
+      "blot:read-only": "readonly",
+      "blot:read-only:extra": "other",
       "user:user_123:info": "user",
       "user:user_123:paypal_cancel_email:sub_1": "other",
       "blog:blog_123:url:/foo": "url",

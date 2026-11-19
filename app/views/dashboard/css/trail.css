@@ -1,0 +1,126 @@
+/*
+  Breadcrumb trails: the dashboard's breadcrumbs (partials/dashboard-trail.html,
+  from res.locals.breadcrumbs), on every page more than one level deep.
+
+  <nav class="trail" aria-label="Breadcrumb">
+    <ol>
+      <li><a href="…">Folder</a></li>
+      <li><span class="truncate" aria-current="page">A long file name.jpg</span></li>
+    </ol>
+  </nav>
+
+  One line. The current page fills what the links leave and takes a middle
+  ellipsis (js/truncate.js); links past their share end in an ellipsis.
+*/
+
+.trail {
+  min-width: 0;
+}
+
+.trail ol {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.trail li {
+  display: flex;
+  flex: 0 1 auto;
+  align-items: center;
+  min-width: 0;
+  max-width: 40%;
+  margin: 0;
+  padding: 0;
+  color: var(--secondary-text-color);
+}
+
+/* Its width never depends on its text, so truncate.js can fit it */
+.trail li:last-child {
+  flex: 1 1 0;
+  min-width: 4em;
+  max-width: none;
+  color: var(--text-color);
+}
+
+.trail li + li::before {
+  flex: 0 0 auto;
+  padding: 0 var(--space-2);
+  color: var(--secondary-text-color);
+  content: "\203A";
+  /* Empty alt text, so screen readers skip the separator; browsers without
+     this syntax ignore it and keep the line above */
+  content: "\203A" / "";
+}
+
+.trail a {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--secondary-text-color);
+  text-decoration: none;
+  text-overflow: ellipsis;
+  transition: color 150ms ease;
+}
+
+.trail a:hover {
+  color: var(--accent-hover-color);
+  text-decoration: underline;
+}
+
+.trail a:active {
+  color: var(--accent-active-color);
+}
+
+.trail a:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+/* The dashboard's breadcrumbs (partials/dashboard-trail.html): smaller and
+   lighter than the page's own heading */
+.dashboard-trail {
+  flex: 1 1 auto;
+}
+
+.dashboard-trail ol {
+  font-size: var(--text-sm);
+}
+
+.dashboard-trail li,
+.dashboard-trail a {
+  color: var(--light-text-color);
+}
+
+/* The parts share the line in proportion to their length (each link at
+   most 40%, .trail li above): the folders on the way end in an ellipsis
+   only when the line is full, and the current page takes what's left, with
+   a middle ellipsis (js/truncate.js). */
+.dashboard-trail li:last-child {
+  color: var(--medium-text-color);
+}
+
+/* On phones a trail of four or more collapses its middle to "…": the first
+   part, then the last two. The collapsed parts stay for screen readers. */
+@media (max-width: 600px) {
+  .dashboard-trail li:not(:first-child):not(:nth-last-child(-n + 2)) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .dashboard-trail li:first-child:nth-last-child(n + 4)::after {
+    flex: 0 0 auto;
+    padding-left: var(--space-2);
+    color: var(--secondary-text-color);
+    content: "\203A  \2026";
+    content: "\203A  \2026" / "";
+  }
+}

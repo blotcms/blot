@@ -1,23 +1,23 @@
 {{> message}}
 
 
-<div style="display: flex;">
-    <div style="width: 33.33333%;flex-grow: 0;flex-shrink: 0;box-sizing: border-box;padding:0 1rem 0 0;max-width: 300px;">
+<div class="template-editor-layout">
+    <div class="template-editor-controls">
             {{> template-sub-navigation}}
 
             {{> template-editor-sidebar}}
     </div>
-    <div style="box-sizing: border-box;flex-grow: 1;width: 66.66666%;
-    flex-shrink: 0;padding:0 0 0 1rem;align-self: flex-start;position: sticky;
-    top: 1.5rem;">
+    <div class="template-editor-preview">
                
-        <div class="iframe-container" data-origin="{{{previewOrigin}}}">
+        <div class="iframe-container {{previewContainerClass}}" data-origin="{{previewOrigin}}">
             <div class="iframe-scroll">
                 <iframe id="full_size_preview"
-                          width="960"
-                          height="1400"
+                          class="{{previewIframeClass}}"
+                          title="Preview of your site"
+                          width="{{previewWidth}}"
+                          height="{{previewHeight}}"
                           scrolling="no"
-                        src="{{{preview}}}"
+                        src="{{preview}}"
                         ></iframe>
             </div>
             <div class="iframe-loading" data-iframe-loading aria-hidden="true">
@@ -28,12 +28,13 @@
         </div>
         
          <div class="segmented-control" style="width:200px;margin:12px 0;font-size: 12px;" data-view-toggle>
-                    <button type="button" class="template-button selected" data-view="desktop" aria-pressed="true">Desktop</button>
-                    <button type="button" class="template-button" data-view="mobile" aria-pressed="false">Mobile</button>
+                    <button type="button" class="template-button {{previewDesktopSelected}}" data-view="desktop" aria-pressed="{{previewDesktopPressed}}">Desktop</button>
+                    <button type="button" class="template-button {{previewMobileSelected}}" data-view="mobile" aria-pressed="{{previewMobilePressed}}">Mobile</button>
                 </div>
     </div>
 </div>
 
+{{#fontPickerOptions.length}}
 <div
   id="template-font-picker"
   class="template-font-picker"
@@ -87,21 +88,20 @@
   <div
     class="template-font-picker__options"
     data-font-picker-options
-    role="listbox"
+    role="group"
     aria-label="Available fonts"
   >
     {{#fontPickerOptions}}
     <button
       type="button"
       class="template-font-picker__option"
-      data-font-option-id="{{{id}}}"
+      data-font-option-id="{{id}}"
       data-font-stack="{{stack}}"
       data-font-tags="{{tagsString}}"
-      role="option"
-      aria-selected="false"
+      aria-pressed="false"
     >
       {{#specimenURL}}
-        <img class="font-specimen" src="{{{specimenURL}}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async">
+        <img class="font-specimen" src="{{specimenURL}}" width="{{specimenWidth}}" height="{{specimenHeight}}" alt="{{name}}" loading="lazy" decoding="async">
       {{/specimenURL}}
       {{^specimenURL}}
         <span style="font-family: {{stack}};">{{name}}</span>
@@ -110,4 +110,5 @@
     {{/fontPickerOptions}}
   </div>
 </div>
+{{/fontPickerOptions.length}}
 

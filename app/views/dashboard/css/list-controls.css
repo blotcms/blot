@@ -1,0 +1,130 @@
+/*
+  List controls, shared by every list that filters or searches: the
+  folder (folder/folder-filters.html), its filter pages, search results and
+  the template list.
+
+  .folder-filters             a segmented control, like a Finder view
+                              switcher: the chosen segment raised, the
+                              others plain text on the control's tray
+  .folder-filters__item       a segment: a link, or a button for a list
+                              filtered in the page; chosen with .is-selected,
+                              .is-active or aria-pressed="true"
+  .folder-filters__count      a small grey count on a segment (how many
+                              posts are scheduled; none shows nothing)
+  .site-dashboard-search      the search field: a form or wrapper holding
+                              an input, like the Finder's
+*/
+
+.folder-filters {
+  display: inline-flex;
+  align-items: stretch;
+  gap: 2px;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: var(--surface-muted-color);
+}
+
+.folder-filters__item {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 var(--space-3);
+  border-radius: calc(var(--radius-md) - 2px);
+  color: var(--text-color);
+  font-size: var(--text-xs);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+
+/* A segment that's a button (a list filtered in the page) looks like one
+   that's a link */
+button.folder-filters__item {
+  margin: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.folder-filters__item:hover {
+  background: var(--surface-strong-color);
+}
+
+.folder-filters__item:active {
+  background: var(--border-strong-color);
+}
+
+.folder-filters__item.is-selected,
+.folder-filters__item.is-selected:hover,
+.folder-filters__item.is-active,
+.folder-filters__item[aria-pressed="true"] {
+  background: var(--background-color);
+  box-shadow: var(--shadow-sm);
+}
+
+.folder-filters__item:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.folder-filters__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  margin-left: var(--space-1);
+  padding: 0 3px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-strong-color);
+  color: var(--medium-text-color);
+  /* Smaller than --text-xs: a badge, not text to read */
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+
+.site-dashboard-search {
+  flex: 0 1 auto;
+  box-sizing: border-box;
+  width: 260px;
+  max-width: 100%;
+  min-width: 140px;
+  margin-left: auto;
+}
+
+.site-dashboard-search input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  height: 28px;
+  padding: 0 var(--space-2) 0 28px;
+  border: 1px solid rgba(0, 0, 0, 0.14);
+  border-radius: 7px;
+  background: var(--background-color)
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6.75' cy='6.75' r='4.75' fill='none' stroke='%236e6e73' stroke-width='1.5'/%3E%3Cpath d='m10.25 10.25 3.5 3.5' stroke='%236e6e73' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E")
+    no-repeat 9px center / 14px 14px;
+  color: var(--text-color);
+  font: inherit;
+  font-size: var(--text-md);
+  caret-color: var(--accent-color);
+  -webkit-appearance: none;
+  appearance: none;
+  transition: box-shadow 150ms ease;
+}
+
+.site-dashboard-search input::placeholder {
+  color: #a1a1a6;
+  opacity: 1;
+}
+
+.site-dashboard-search input:focus {
+  outline: none;
+  border-color: transparent;
+  box-shadow: 0 0 0 3px rgba(0, 103, 244, 0.45);
+}

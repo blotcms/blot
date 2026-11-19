@@ -1,4 +1,3 @@
-{{> message}}
 
 {{#account}}
 <div class="live-updates">
@@ -27,12 +26,12 @@
     
     {{#setupComplete}}
     Set up complete
-    <span style="color:rgb(158, 154, 152);max-width:500px;display: block;margin-top: 10px;font-size: 14px;">
+    <span class="folder-sync-note">
     You can rename, move or make changes to your site’s folder in iCloud.</span>
     {{/setupComplete}}
     {{^setupComplete}}
     Transferring files to iCloud   
-    <span style="color:rgb(158, 154, 152);max-width:500px;display: block;margin-top: 10px;font-size: 14px;">
+    <span class="folder-sync-note">
       Do not make changes to your site’s folder in iCloud until the transfer is complete.</span>
     {{/setupComplete}}
 
@@ -46,5 +45,4 @@
 {{/setupFailed}}
 
 </div>
-<br><br>
 {{/account}}

@@ -1,7 +1,7 @@
 // Sites in sites.txt are not tagged with a category directly —
 // each has only a free-text bio (e.g. "software engineer",
 // "production designer"). These rules match that bio against a
-// fixed set of audience categories so /examples/:category can
+// fixed set of audience categories so /discover/people/:category can
 // filter the list without touching sites.txt. A site's bio may
 // match more than one category.
 

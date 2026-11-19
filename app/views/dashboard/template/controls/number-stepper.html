@@ -1,0 +1,15 @@
+{{#stepper}}<div class="number-stepper"><button type="button" class="number-stepper__step" data-number-step="-1" aria-label="Decrease {{label}}">−</button><span class="number-stepper__readout"><span class="number-stepper__value" aria-hidden="true" data-number-stepper-value data-value="{{value}}">{{value}}</span><input
+  type="number"
+  class="number-stepper__input"
+  data-number-stepper
+  data-number-stepper-ready="true"
+  data-number-stepper-label="{{label}}"
+  id="{{id}}"
+  name="{{id}}"
+  aria-label="{{ariaLabel}}"
+  value="{{value}}"
+  min="{{min}}"
+  max="{{max}}"
+  step="1"
+  inputmode="numeric"
+></span><button type="button" class="number-stepper__step" data-number-step="1" aria-label="Increase {{label}}">+</button></div>{{/stepper}}

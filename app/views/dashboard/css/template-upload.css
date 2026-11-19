@@ -3,7 +3,7 @@
    shown after an upload. */
 
 .template-upload {
-  margin-bottom: 2rem;
+  margin-bottom: var(--space-6);
 }
 
 /* Unlike the importer there is no single input to open, so clicking anywhere
@@ -28,8 +28,8 @@
 
 .template-upload__message {
   margin: 0;
-  font-weight: 600;
-  padding-right: 1.5rem;
+  font-weight: var(--weight-semibold);
+  padding-right: var(--space-5);
 }
 
 .template-upload__message:empty {
@@ -37,8 +37,8 @@
 }
 
 .template-upload__list {
-  margin: 0.5rem 0 0;
-  padding-left: 1.2rem;
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
 }
 
 .template-upload__list:empty {
@@ -46,17 +46,17 @@
 }
 
 .template-upload__list code {
-  font-size: 13px;
+  font-size: var(--text-sm);
 }
 
 .template-upload__dismiss {
   position: absolute;
-  top: 10px;
-  right: 12px;
+  top: var(--space-3);
+  right: var(--space-3);
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px;
+  padding: var(--space-1);
   margin: 0;
   border: none;
   background: none;
@@ -64,9 +64,21 @@
   cursor: pointer;
   line-height: 0;
   opacity: 0.7;
+  border-radius: var(--radius-sm);
+  transition: opacity 150ms ease;
 }
 
 .template-upload__dismiss:hover {
+  opacity: 1;
+}
+
+.template-upload__dismiss:active {
+  opacity: 0.85;
+}
+
+.template-upload__dismiss:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
   opacity: 1;
 }
 
@@ -81,23 +93,23 @@
 .template-upload__files {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--space-1);
   max-height: 18rem;
   overflow-y: auto;
 }
 
 .template-upload__file {
-  gap: 0.6rem;
-  padding: 0.5rem 0.75rem;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
 }
 
 .template-upload__file .file-drop__name {
-  font-weight: 400;
+  font-weight: var(--weight-regular);
 }
 
 .template-upload__file-state {
   flex-shrink: 0;
-  font-size: 13px;
+  font-size: var(--text-sm);
   color: var(--medium-text-color);
 }
 
@@ -110,23 +122,23 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1rem;
+  width: var(--space-4);
 }
 
 /* Queued: a single dim dot */
 .template-upload__file-indicator::before {
   content: "";
-  width: 0.5rem;
-  height: 0.5rem;
+  width: var(--space-2);
+  height: var(--space-2);
   border-radius: 50%;
-  background: #666;
+  background: var(--secondary-text-color);
   opacity: 0.25;
 }
 
 .template-upload__file-indicator .icon-small-check {
   display: none;
-  color: green;
-  font-size: 12px;
+  color: var(--success-color);
+  font-size: var(--text-xs);
 }
 
 /* The active file pulses like a working button */
@@ -152,11 +164,11 @@
 }
 
 .template-upload__file--problem .template-upload__file-state {
-  color: var(--error-text-color);
+  color: var(--danger-color);
 }
 
 .template-upload__again {
-  margin: 0.75rem 0 0;
+  margin: var(--space-3) 0 0;
 }
 
 .template-upload__reset {
@@ -164,7 +176,22 @@
   border: none;
   background: none;
   font: inherit;
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
+  cursor: pointer;
+  transition: color 150ms ease;
+}
+
+.template-upload__reset:hover {
+  color: var(--accent-hover-color);
+}
+
+.template-upload__reset:active {
+  color: var(--accent-active-color);
+}
+
+.template-upload__reset:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
 }
 
 .template-upload.is-working .template-upload__reset {

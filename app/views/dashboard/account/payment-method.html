@@ -1,5 +1,7 @@
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">{{title}}</h1></div></header>
+
 {{#paypal}}
-<div class="line" style="border-bottom: none">
+<div class="line line--flat">
   <span class="center"
     >Your subscription is billed through PayPal, so your payment method is
     managed there rather than on Blot.</span
@@ -34,14 +36,14 @@
       {{^isDefault}}
       <form method="POST" action="{{defaultUrl}}">
         <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-        <button type="submit" class="link-button">Make default</button>
+        <button type="submit" class="btn btn-quiet btn-sm">Make default</button>
       </form>
       <form
         method="POST"
         action="{{removeUrl}}"
         onsubmit="return confirm('Remove this payment method?')">
         <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-        <button type="submit" class="link-button">Remove</button>
+        <button type="submit" class="btn btn-quiet btn-sm">Remove</button>
       </form>
       {{/isDefault}}
       {{#isDefault}}
@@ -56,29 +58,16 @@
   {{/paymentMethods}}
 
   {{^hasPaymentMethods}}
-  <div class="line" style="border-bottom: none">
+  <div class="line line--flat">
     <span class="center">You don't have a payment method on file yet.</span>
   </div>
   {{/hasPaymentMethods}}
 </div>
 
-<form
-  method="POST"
-  class="account"
-  id="payment-form"
-  data-stripe-key="{{stripe_key}}"
-  style="max-width: 400px; margin-top: 2em">
-  <p>Add a payment method:</p>
-
-  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
-
-  {{> card-form}}
-
-  <div class="buttons">
-    <button type="submit">Add payment method</button>
-    <a href="/sites/account/subscription">Done</a>
-  </div>
-</form>
+<div class="btn-row">
+  <a class="btn btn-primary" href="{{addUrl}}">Add payment method</a>
+  <a class="btn" href="/sites/account/subscription">Done</a>
+</div>
 
 <p class="payment-methods-disclaimer">
   Your card details are never stored on Blot's servers &mdash; we only keep

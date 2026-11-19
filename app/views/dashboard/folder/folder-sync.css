@@ -1,0 +1,289 @@
+/*
+  The top row of the overview's file box (folder/folder-toolbar.html):
+  "Folder", then the filters and search on the right. Where the folder syncs from is
+  the summary card's Sync row (site/site-summary.html).
+
+  .folder-toolbar         the row
+  .folder-filters         Files, Posts, Pages, Drafts, Scheduled: Files is
+                          the folder itself and the others filter it to its
+                          entries (their own pages); one is always selected
+  .folder-sync-issue      a problem with the folder, under the row
+                          (folder/folder-sync-issue.html)
+*/
+
+/* "Folder" lines up with the summary card's labels; search ends where the
+   table's last column does */
+.folder-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
+  padding: 0 calc(var(--space-1) + var(--space-2)) var(--space-2)
+    var(--space-4);
+}
+
+/* "Folder", as the summary card labels its rows; the filters and search
+   follow on the right. On phones, where the row is the filters' dropdown
+   and search, it goes. */
+.folder-toolbar__label {
+  flex: 0 0 5.5em;
+  margin-right: auto;
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
+}
+
+/* (The overview's own search pushes itself right too, which would split
+   the space with the label) */
+.site-dashboard .folder-toolbar .site-dashboard-search {
+  margin-left: 0;
+}
+
+@media (max-width: 600px) {
+  .folder-toolbar__label {
+    display: none;
+  }
+}
+
+/* On narrow screens the filters are a dropdown named after the current
+   choice (folder/folder-filters.html renders both). The panel is a shared
+   menu (css/menu.css). */
+.folder-filters-menu {
+  display: none;
+  position: relative;
+}
+
+.folder-filters-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 28px;
+  padding: 0 var(--space-2) 0 var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--surface-muted-color);
+  color: var(--text-color);
+  font-size: var(--text-xs);
+  list-style: none;
+  cursor: pointer;
+  transition: background-color 150ms ease;
+}
+
+.folder-filters-menu__trigger::-webkit-details-marker {
+  display: none;
+}
+
+.folder-filters-menu__trigger:hover,
+.folder-filters-menu[open] .folder-filters-menu__trigger {
+  background: var(--surface-strong-color);
+}
+
+.folder-filters-menu__trigger:active {
+  background: var(--border-strong-color);
+}
+
+.folder-filters-menu__trigger:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 1px;
+}
+
+.folder-filters-menu__chevron {
+  display: inline-flex;
+  color: var(--medium-text-color);
+}
+
+.folder-filters-menu__panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  min-width: 160px;
+  padding: var(--space-1);
+}
+
+@media (max-width: 600px) {
+  .folder-toolbar .folder-filters {
+    display: none;
+  }
+
+  .folder-filters-menu {
+    display: block;
+  }
+}
+
+/* On wider screens the header stays one line: the pills keep their size and
+   the search box gives up width */
+@media (min-width: 900px) {
+  .folder-toolbar {
+    flex-wrap: nowrap;
+  }
+
+  .folder-filters {
+    flex-wrap: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* The same on the overview and the filter pages, so the pills don't move
+     when one is chosen (outranks the overview's own search width) */
+  .site-dashboard .folder-toolbar .folder-filters-menu + .site-dashboard-search {
+    flex: 0 1 220px;
+    width: 220px;
+    min-width: 120px;
+  }
+}
+
+/* The first row's client: its logo on the text, Switch beside it */
+.folder-sync-client .client-icon {
+  margin-right: var(--space-1);
+  vertical-align: -3px;
+}
+
+.folder-sync-client .link {
+  margin-left: var(--space-3);
+}
+
+/* The sync pages: the client's settings in a card */
+.folder-box--sync {
+  box-sizing: border-box;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  background: var(--background-color);
+}
+
+/* The client's settings: rows edge to edge across the card, at the summary
+   card's size, a label column then the value; a subpage's own content
+   (resync, disconnect, ...) inset like them */
+.folder-sync-panel {
+  --folder-sync-inset: var(--space-4);
+  padding: 0 var(--folder-sync-inset) var(--space-2);
+}
+
+.folder-sync-panel > :first-child {
+  margin-top: var(--space-4);
+}
+
+.folder-sync-panel > .live-updates:first-child,
+.folder-sync-panel > .line:first-child {
+  margin-top: 0;
+}
+
+.folder-sync-panel .line {
+  align-items: baseline;
+  margin: 0 calc(var(--folder-sync-inset) * -1);
+  padding: var(--space-2) var(--folder-sync-inset);
+  background: transparent;
+  font-size: var(--text-sm);
+}
+
+/* Every value at the label's size, whatever its client's page set */
+.folder-sync-panel .line .center,
+.folder-sync-panel .line .right {
+  font-size: var(--text-sm);
+}
+
+/* A short note under a value, such as what can be done with the folder */
+.folder-sync-note {
+  display: block;
+  max-width: 34em;
+  margin-top: var(--space-1);
+  color: var(--medium-text-color);
+  font-size: var(--text-xs);
+}
+
+/* The status, then Resync (while not syncing) and View activity */
+.folder-sync-status {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+
+.folder-sync-resync {
+  display: inline;
+  margin: 0;
+}
+
+.folder-sync-panel .line .label {
+  flex: 0 0 14em;
+  color: var(--medium-text-color);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 600px) {
+  .folder-sync-panel .line .label {
+    flex-basis: 100%;
+  }
+}
+
+/* "Open in Dropbox" and the like, beside the folder's name */
+.folder-sync-open {
+  margin-left: var(--space-3);
+  vertical-align: middle;
+}
+
+@media (max-width: 600px) {
+  .folder-sync-panel .line .label {
+    flex-basis: 100%;
+  }
+}
+
+/* Change sync method and disconnect: plain buttons under the rows */
+.folder-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+}
+
+/* The same line as plain text, where it is not a control (the page for
+   changing how the folder syncs) */
+.folder-sync--static {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-2);
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+}
+
+.folder-sync-issue {
+  margin: 0 var(--space-4) var(--space-3);
+  color: var(--danger-color);
+  font-size: var(--text-md);
+}
+
+.folder-sync-issue p {
+  margin: 0 0 var(--space-2);
+}
+
+.folder-sync-issue .btn-row {
+  margin: 0;
+}
+
+/* The placeholders a disconnect removes (clients/disconnect-placeholders.html) */
+.disconnect-placeholders__list {
+  max-height: 240px;
+  overflow-y: auto;
+  margin: 0 0 var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  list-style: none;
+  font-size: var(--text-sm);
+  color: var(--medium-text-color);
+}
+
+.disconnect-placeholders__list li {
+  padding: var(--space-1) 0;
+  overflow-wrap: anywhere;
+}
+
+.disconnect-placeholders__list code {
+  color: var(--text-color);
+}
+
+.disconnect-placeholders__more {
+  font-size: var(--text-sm);
+  color: var(--medium-text-color);
+}

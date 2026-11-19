@@ -6,7 +6,7 @@ describe("dashboard site settings save", function () {
   it("does not pass protected request fields to Blog.set", async function () {
     spyOn(Blog, "set").and.callThrough();
 
-    await this.submit(`/sites/${this.blog.handle}/settings/date`, {
+    await this.submit(`/sites/${this.blog.handle}/settings/posts`, {
       dateFormat: "MM/DD/YYYY",
       id: "attacker-controlled-id",
       owner: "attacker-controlled-owner",
@@ -27,16 +27,18 @@ describe("dashboard site settings save", function () {
   // sub-page used to bounce the user out to the site homepage because the
   // form omitted the `redirect` field and save/finish.js fell back to a
   // router-relative req.path of "/".
-  ["settings", "settings/images", "settings/links"].forEach((page) => {
-    it(`keeps the redirect on /${page} pointed back at itself`, async function () {
-      const $ = await this.parse(`/sites/${this.blog.handle}/${page}`);
-      const redirect = $('input[name="redirect"]').attr("value");
-      expect(redirect).toBe(`/sites/${this.blog.handle}/${page}`);
-    }, 30000);
-  });
+  ["settings/posts", "settings/redirects", "settings/services"].forEach(
+    (page) => {
+      it(`keeps the redirect on /${page} pointed back at itself`, async function () {
+        const $ = await this.parse(`/sites/${this.blog.handle}/${page}`);
+        const redirect = $('input[name="redirect"]').attr("value");
+        expect(redirect).toBe(`/sites/${this.blog.handle}/${page}`);
+      }, 30000);
+    }
+  );
 
   it("does not redirect to the homepage when the form omits a redirect field", async function () {
-    const res = await this.submit(`/sites/${this.blog.handle}/settings`, {
+    const res = await this.submit(`/sites/${this.blog.handle}/settings/posts`, {
       "plugins.typeset.options.punctuation": "on",
     });
 

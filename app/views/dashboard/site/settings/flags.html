@@ -1,17 +1,21 @@
 {{> settings-form-header}}
 
-<h1>Flags</h1>
-<p>Toggle experimental features for this site.</p>
+<header class="page-header">
+  <div class="page-header__text">
+    <h1 class="page-header__title">Flags</h1>
+    <p class="page-header__subtitle">Experimental features, and settings almost every site leaves on, so they're not on the Settings tabs.</p>
+  </div>
+</header>
 
 <input type="hidden" name="redirect" value="{{{base}}}/settings/flags" />
 
 {{#flags}}
-<div style="margin: 1rem 0;">
-  <label style="display: flex; gap: 0.5rem; align-items: center;">
+<div class="flag-row">
+  <label class="setting-check">
     <input type="checkbox" name="flags.{{key}}" {{#value}}checked{{/value}} />
     <span>{{label}}</span>
   </label>
-  <div style="color: var(--secondary-text-color); font-size: 0.9em; margin-left: 1.5rem;">
+  <div class="setting-help-text">
     <code>{{key}}</code>
     {{#defaultValue}}(default: on){{/defaultValue}}
     {{^defaultValue}}(default: off){{/defaultValue}}
@@ -19,9 +23,21 @@
 </div>
 {{/flags}}
 
-<div class="buttons">
+<h2>Settings almost every site leaves on</h2>
+{{#plugins}}
+<div class="flag-row">
+  <label class="setting-check">
+    <input type="hidden" name="plugins.{{id}}.enabled" value="off" />
+    <input type="checkbox" name="plugins.{{id}}.enabled" {{checked}} />
+    <span>{{{description}}}</span>
+  </label>
+  <div class="setting-help-text"><code>{{id}}</code> (default: on)</div>
+</div>
+{{/plugins}}
+
+<div class="buttons" data-on-change>
   <button type="submit">Save flags</button>
-  <a href="{{{base}}}/settings">Cancel</a>
+  <a href="{{{base}}}/settings/flags" data-cancel>Cancel</a>
 </div>
 
 {{> settings-form-footer}}

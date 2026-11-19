@@ -31,6 +31,7 @@ module.exports = async function create(
         subscription: subscription,
         paypal: paypal,
         paymentMethods: [],
+        paymentMethodsSyncedAt: 0,
         passwordHash: passwordHash,
       };
 

@@ -6,12 +6,15 @@ module.exports = function (req, res, next) {
 function Breadcrumbs() {
   var list = [];
 
+  // slug is relative to the previous crumb's URL, unless it starts with "/"
   list.add = function (label, slug = label.toLowerCase()) {
     var base = "/";
 
     if (list.length) base = list[list.length - 1].url;
 
-    list.push({ label: label, url: require("path").join(base, slug) });
+    var url = slug.startsWith("/") ? slug : require("path").join(base, slug);
+
+    list.push({ label: label, url: url });
 
     for (var i = 0; i < list.length; i++) {
       list[i].first = i === 0;
@@ -19,6 +22,14 @@ function Breadcrumbs() {
       list[i].only = i === 0 && list.length === 1;
     }
   };
+
+  // The crumb before the current page: where Cancel on a form goes
+  // (partials/form-footer.html)
+  Object.defineProperty(list, "parentURL", {
+    get: function () {
+      return list.length > 1 ? list[list.length - 2].url : "/sites";
+    },
+  });
 
   return list;
 }

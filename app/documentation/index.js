@@ -1,7 +1,7 @@
 const config = require("config");
 const Express = require("express");
 const redirector = require("./redirector");
-const loadTemplates = require("./build/templates").loadTemplates;
+const home = require("./home");
 const { join } = require("path");
 
 const documentation = Express.Router();
@@ -75,27 +75,28 @@ documentation.get(
 
 documentation.use(require("./selected"));
 
-documentation.get("/", require("./featured"), async function (req, res, next) {
-  try {
-    res.locals.title = "Blot";
-    res.locals.description = "Turns a folder into a website";
-    res.locals.allTemplates = await loadTemplates();
-    // otherwise the <title> of the page is 'Blot - Blot'
-    res.locals.hide_title_suffix = true;
-    next();
-  } catch (error) {
-    next(error);
-  }
-});
+documentation.get("/", home);
 
-documentation.get("/examples", require("./featured"));
+// The old examples page, the featured sites with their profession filters,
+// is at /discover/people
+documentation.get(["/examples", "/examples/:category"], (req, res) => {
+  res.redirect(
+    301,
+    req.originalUrl.replace(/^\/examples/i, "/discover/people")
+  );
+});
 
 // Not cached by the proxy (proxy/config/blot-site.conf): it changes
 // whenever the maintainer adds a post or a site turns Discover off
 documentation.get("/discover", require("./featured"), require("./discover"));
 
+documentation.get("/discover/people", require("./featured"), (req, res) => {
+  res.locals.title = "Discover · People";
+  res.render("discover-people");
+});
+
 documentation.get(
-  "/examples/:category",
+  "/discover/people/:category",
   require("./featured"),
   require("./featured/filterByCategory")
 );

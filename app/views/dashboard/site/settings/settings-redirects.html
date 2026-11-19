@@ -1,0 +1,36 @@
+{{> message}}
+{{> settings-tabs}}
+
+<!-- Redirects, with links to the bulk editor and the 404 log, then whether
+     HTTP redirects to HTTPS -->
+<div class="dashboard-form-panel settings-page">
+  <div class="dashboard-form-panel__body">
+    <h2 id="redirect-rows-heading">Redirects</h2>
+    <form method="post" aria-labelledby="redirect-rows-heading" class="dashboard-form settings-section" action="{{{base}}}" enctype="multipart/form-data">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      {{> redirect-fields}}
+    </form>
+
+    <!-- Saves as soon as it changes, in its own form -->
+    <h2 id="https-heading">HTTPS</h2>
+        <form method="post" class="dashboard-form settings-section" action="{{{base}}}" aria-labelledby="https-heading" enctype="multipart/form-data">
+          <input type="hidden" name="_csrf" value="{{csrftoken}}">
+          <input type="hidden" name="redirect" value="{{{base}}}/settings/redirects">
+        <div class="line plugins" style="max-width: 400px;">
+          <span class="center">
+            <div class="plugin {{{forceSSLPluginClass}}}">
+              <label class="setting-check">
+                <span class="setting-check__text">Redirect HTTP to HTTPS</span>
+                <span>
+                  <input name='forceSSL' type='hidden' value='off' >
+                  <input name='forceSSL' type="checkbox" {{{forceSSLChecked}}}/>
+                  &nbsp;
+                </span>
+              </label>
+      
+            </div>
+          </span>
+        </div>
+        </form>
+  </div>
+</div>

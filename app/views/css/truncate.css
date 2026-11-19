@@ -1,0 +1,10 @@
+/* One line, end ellipsis until js/truncate.js fits a middle ellipsis */
+.truncate {
+  display: inline-block;
+  max-width: 100%;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+}

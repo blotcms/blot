@@ -1,7 +1,9 @@
+<header class="page-header"><div class="page-header__text"><h1 class="page-header__title">{{title}}</h1></div></header>
 
 <style type="text/css">
-a {color: rgb(54, 88, 153);text-decoration: none;}
-a:hover {text-decoration: underline;}
+a {color: var(--accent-color);text-decoration: none;}
+a:hover {color: var(--accent-hover-color);text-decoration: underline;}
+a:active {color: var(--accent-active-color);}
 </style>
 
 <a href="" class="mess error" style="display:none">
@@ -42,7 +44,7 @@ a:hover {text-decoration: underline;}
     <p><a href="/sites/account/subscription/delete" style="text-decoration:none;padding:0 11px;color:var(--light-text-color)">Delete your account</a></p>
     <form class="foot" action="/sites/account/log-out" method="post" style="background:none;padding:0 0 0;margin:0;font-size: 14px;color: var(--border-color);">
 			<input type="hidden" name="_csrf" value="{{csrftoken}}">
-			<button type="submit" class="logout">
+			<button type="submit" class="btn btn-quiet btn-sm">
 				Log out 
 			</button>
 		</form>
