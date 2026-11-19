@@ -11,9 +11,9 @@ const key = require("./key");
 // avatar, each optional, set by the maintainer for sites added by hand.
 //
 // The avatar is a square, resized copy in the blog's own assets, under
-// _discover/profile/, served from the CDN. It comes from an uploaded file or
-// from an image on Blot named by its URL (see readImage). Outside development
-// nothing is fetched from a URL: anything else is uploaded.
+// _discover/profile/, served from the CDN. It comes from a file or
+// from an image on Blot named by its URL (see readImage). Nothing is fetched
+// from a URL: anything else is downloaded first and passed as a file.
 
 const AVATAR_SIZE = 400;
 const JPEG_QUALITY = 88;
@@ -128,8 +128,7 @@ async function setAvatarData(blogID, data, options = {}) {
 // - a file in a Blot site's folder, at the site's own address
 //   (https://example.com/images/me.jpg), read from the site's folder.
 //
-// In development, where the bucket is local and won't have production's
-// files, it is downloaded instead. Nothing else is fetched.
+// Nothing is fetched.
 async function readImage(url) {
   let parsed;
 
@@ -152,34 +151,21 @@ async function readImage(url) {
 
   if (path.split("/").includes("..")) throw new Error("Not a URL: " + url);
 
-  try {
-    if (
-      parsed.origin === "https://cdn.blot.im" ||
-      parsed.origin === config.cdn.origin
-    ) {
-      const match = CDN_ASSET.exec(path);
-      if (!match) throw new Error("Not an image on the CDN: " + url);
-      return await assets.read(match[1], match[2]);
-    }
-
-    const blogForHost = require("documentation/featured/blogForHost");
-    const blog = await blogForHost(parsed.host);
-
-    if (!blog) throw new Error("Not a Blot site: " + parsed.host);
-
-    return await require("storage/folder").read(blog.id, path);
-  } catch (err) {
-    if (config.environment !== "development") throw err;
-
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(15 * 1000),
-    });
-    if (!response.ok)
-      throw new Error("HTTP " + response.status + " for " + url, {
-        cause: err,
-      });
-    return Buffer.from(await response.arrayBuffer());
+  if (
+    parsed.origin === "https://cdn.blot.im" ||
+    parsed.origin === config.cdn.origin
+  ) {
+    const match = CDN_ASSET.exec(path);
+    if (!match) throw new Error("Not an image on the CDN: " + url);
+    return assets.read(match[1], match[2]);
   }
+
+  const blogForHost = require("documentation/featured/blogForHost");
+  const blog = await blogForHost(parsed.host);
+
+  if (!blog) throw new Error("Not a Blot site: " + parsed.host);
+
+  return require("storage/folder").read(blog.id, path);
 }
 
 // Stores the image at a URL on Blot (see readImage) as the site's avatar
