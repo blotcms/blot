@@ -257,6 +257,35 @@ describe("icloud init validateAllBlogs", function () {
     expect(sentEmails.length).toEqual(0);
   });
 
+  it("also walks idle blogs in the slice it is given", async function () {
+    const { init, calls } = setup({
+      [id("stale")]: {
+        account: { lastSync: Date.now() - 2 * HOUR },
+        summary: {},
+      },
+      [id("never")]: {
+        account: { lastSync: undefined },
+        summary: {},
+      },
+    });
+    const slice = init.idleSliceOf(id("stale"));
+
+    await init.validateAllBlogs({ idleSlice: slice });
+
+    const expected = [id("stale")];
+    if (init.idleSliceOf(id("never")) === slice) expected.push(id("never"));
+    expect(calls.walked.sort()).toEqual(expected.sort());
+  });
+
+  it("puts every blog in one of 24 slices", function () {
+    const { init } = setup({});
+    for (let i = 0; i < 50; i++) {
+      const slice = init.idleSliceOf(`blog_${i}`);
+      expect(slice).toBeGreaterThanOrEqual(0);
+      expect(slice).toBeLessThan(24);
+    }
+  });
+
   it("skips a blog whose setup is incomplete or has a stored error", async function () {
     const { init, sentEmails, calls } = setup({
       [id("setup")]: {

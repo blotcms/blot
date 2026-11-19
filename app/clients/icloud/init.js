@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const Blog = require("models/blog");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
@@ -118,8 +119,27 @@ const hasRecentSync = (account) => {
   return Date.now() - account.lastSync <= ONE_HOUR_IN_MS;
 };
 
-const validateAllBlogs = async () => {
-  console.log(clfdate(), "iCloud: Running hourly sync validation");
+// Blogs the macserver hasn't pushed to are checked too, a twenty-fourth of
+// them each hour (by a hash of the blog ID), so every blog is walked once a
+// day. A change the macserver missed on a quiet blog was otherwise never
+// repaired: one blog kept stale versions of five files for six weeks. Spread
+// across the day it is a handful of extra walks an hour, not one burst.
+const IDLE_SLICES = 24;
+
+const idleSliceOf = (blogID) =>
+  parseInt(
+    crypto.createHash("sha1").update(blogID).digest("hex").slice(0, 8),
+    16
+  ) % IDLE_SLICES;
+
+// { idleSlice }: also walk the idle blogs in that slice (0-23); without it
+// only blogs with a recent push are walked
+const validateAllBlogs = async ({ idleSlice } = {}) => {
+  console.log(
+    clfdate(),
+    "iCloud: Running hourly sync validation",
+    idleSlice === undefined ? "" : `(idle slice ${idleSlice})`
+  );
 
   const report = syncReport.create();
   let checkedBlogs = 0;
@@ -150,7 +170,9 @@ const validateAllBlogs = async () => {
         if (await syncReport.recordStuckLock(report, blog)) return;
 
         if (shouldSkipBackgroundSync(account)) return;
-        if (!hasRecentSync(account)) return;
+        if (!hasRecentSync(account) && idleSliceOf(blogID) !== idleSlice) {
+          return;
+        }
 
         checkedBlogs += 1;
 
@@ -281,7 +303,9 @@ const resyncAllConnected = async ({ notify = true } = {}) => {
 
 // The sweep is sequential and a slow macserver can stretch it past an hour, so
 // a run is skipped if one is still going in any process.
-const runValidation = exclusive("icloud-validation", validateAllBlogs);
+const runValidation = exclusive("icloud-validation", () =>
+  validateAllBlogs({ idleSlice: new Date().getUTCHours() % IDLE_SLICES })
+);
 
 const resumeInitialTransfers = () =>
   database.iterate(async (blogID, account) => {
@@ -323,6 +347,7 @@ init.resyncRecentlySynced = resyncRecentlySynced;
 init.resyncAllConnected = resyncAllConnected;
 // Exposed for tests
 init.validateAllBlogs = validateAllBlogs;
+init.idleSliceOf = idleSliceOf;
 init.runValidation = runValidation;
 
 module.exports = init;
