@@ -1,12 +1,16 @@
-// GitHub integration checks: the rendered config listens for QUIC, the live
-// container binds UDP 443, and HTTP/1.1 and HTTP/2 serve every public vhost
-// and advertise HTTP/3 on it, on proxied responses too (cdn. excepted). Run
-// against the already-started proxy; the HTTP/3 requests themselves are made
-// by h3-check.py.
+// GitHub integration checks: the public servers speak the protocols
+// proxy/build/protocols.js turns on, and no others. With HTTP/3 on, the
+// rendered config listens for QUIC, the live container binds UDP 443 and every
+// HTTPS response advertises it (cdn. excepted); with it off there is no QUIC
+// listener or UDP socket and those responses send Alt-Svc: clear. HTTP/2 is
+// checked by ALPN. Run against the already-started proxy; the HTTP/3 requests
+// themselves are made by h3-check.py.
 const assert = require("node:assert/strict");
 const { execFileSync } = require("node:child_process");
 const https = require("node:https");
 const http2 = require("node:http2");
+const tls = require("node:tls");
+const protocols = require("../build/protocols");
 
 const container = process.env.PROXY_CONTAINER || "proxy";
 const origin = process.env.PROXY_HTTPS || "https://127.0.0.1:8443";
@@ -21,7 +25,7 @@ if (!hosts.length)
     "someblog.example"
   );
 const agent = "Mozilla/5.0 (proxy protocol checks)";
-const ADVERTISED = 'h3=":443"; ma=86400';
+const ADVERTISED = protocols.http3 ? 'h3=":443"; ma=86400' : "clear";
 const read = (...paths) =>
   execFileSync("docker", ["exec", container, "cat", ...paths], {
     encoding: "utf8",
@@ -83,24 +87,52 @@ function http2Request(host, path) {
   });
 }
 
+// The protocol the server picks when a client offers h2 and http/1.1
+function alpn(host) {
+  return new Promise((resolve, reject) => {
+    const socket = tls.connect({
+      host: new URL(origin).hostname,
+      port: Number(new URL(origin).port) || 443,
+      servername: host,
+      ALPNProtocols: ["h2", "http/1.1"],
+      rejectUnauthorized: false,
+    });
+    socket.setTimeout(5000, () => socket.destroy(new Error("TLS timeout")));
+    socket.on("secureConnect", () => {
+      resolve(socket.alpnProtocol);
+      socket.end();
+    });
+    socket.on("error", reject);
+  });
+}
+
 async function main() {
   const config = read("/usr/local/openresty/nginx/conf/nginx.conf");
-  assert(
-    /^\s*listen\b[^;]*\bquic\b/m.test(config),
-    "rendered config must enable a QUIC listener"
-  );
-  assert(
-    !/Alt-Svc\s+clear/i.test(config),
-    "rendered config must not clear Alt-Svc"
+  const quic = /^\s*listen\b[^;]*\bquic\b/m.test(config);
+  assert.equal(quic, protocols.http3, "rendered config: QUIC listener");
+  assert.equal(
+    /^\s*http2\s+on\s*;/m.test(config),
+    protocols.http2,
+    "rendered config: http2 on"
   );
   // The live network namespace too: an advertisement with nothing on UDP 443
-  // sends every client on a failed QUIC attempt.
+  // sends every client on a failed QUIC attempt, and a socket left open with
+  // HTTP/3 off is still reachable by anyone who tries it.
   const udp = read("/proc/net/udp", "/proc/net/udp6");
   const bound = udp
     .trim()
     .split("\n")
     .some((line) => /:01BB$/i.test(line.trim().split(/\s+/)[1] || ""));
-  assert(bound, "proxy must bind UDP port 443");
+  assert.equal(bound, protocols.http3, "proxy binds UDP port 443");
+  for (const host of hosts) {
+    const picked = await alpn(host);
+    assert.equal(
+      picked,
+      protocols.http2 ? "h2" : "http/1.1",
+      `${host}: ALPN when offered h2`
+    );
+    console.log(`ok: ${host} ALPN picks ${picked}`);
+  }
   // /health is answered by the proxy; the other path goes to the upstream
   // through the proxy locations, which have add_header of their own. Exactly
   // one Alt-Svc on both. cdn. is reached only by Bunny, so it advertises
@@ -110,7 +142,7 @@ async function main() {
     for (const path of ["/health", "/protocol-check"]) {
       for (const [fetch, protocol] of [
         [http1, "1.1"],
-        [http2Request, "h2"],
+        ...(protocols.http2 ? [[http2Request, "h2"]] : []),
       ]) {
         const res = await fetch(host, path);
         assert(
@@ -134,7 +166,11 @@ async function main() {
       }
     }
   }
-  console.log("ok: QUIC listener configured and UDP 443 bound");
+  console.log(
+    protocols.http3
+      ? "ok: QUIC listener configured and UDP 443 bound"
+      : "ok: no QUIC listener and nothing on UDP 443"
+  );
 }
 
 main().catch((err) => {

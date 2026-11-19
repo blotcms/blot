@@ -77,8 +77,14 @@ when running `build.sh` to change the domain the config is built for.
 list baked into the image as a fallback); CI sets `FETCH_CDN_IPS=false` so image
 builds do not depend on that API.
 
-HTTP/3 (QUIC) is served on UDP 443 alongside HTTP/2 and HTTP/1.1 on TCP 443,
-and every HTTPS response advertises it (`Alt-Svc: h3=":443"`) except on `cdn.`,
+**HTTP/2 and HTTP/3 are off for now** (#2789): nginx 1.31.8 has HTTP/2 and
+HTTP/3 advisories that OpenResty 1.31.9.1 will fix, so the public servers speak
+only HTTP/1.1 and every HTTPS response sends `Alt-Svc: clear` instead of the h3
+route below. `proxy/build/protocols.js` turns each back on; the config
+generator and the e2e checks both read it.
+
+With it on, HTTP/3 (QUIC) is served on UDP 443 alongside HTTP/2 and HTTP/1.1
+on TCP 443, and every HTTPS response advertises it (`Alt-Svc: h3=":443"`) except on `cdn.`,
 which only Bunny reaches. It is set once, at `http` level in `config/http.conf`,
 with `more_set_headers` rather than `add_header`: that reaches the locations
 with `add_header` of their own, and sets the header once even on the 416 and
@@ -460,7 +466,7 @@ and "Proxy container follow-ups". The main ones:
     renders, a seeded user signs in / reaches the dashboard / signs out, and a
     seeded blog (`proxy/e2e/seed-blog.js`) renders on its own vhost with the
     proxy cache going MISS then HIT.
-  - `proxy-behaviour` checks that the rendered config has QUIC listeners and the container binds UDP 443, that HTTP/1.1 and HTTP/2 serve every public vhost and advertise HTTP/3 (`proxy/e2e/protocol-checks.js`), and makes real HTTP/3 requests (`proxy/e2e/h3-check.py`) to the site and a custom domain. It repeats them with the wildcard certificate from Redis.
+  - `proxy-behaviour` checks that the public servers speak what `proxy/build/protocols.js` turns on (`proxy/e2e/protocol-checks.js`): the QUIC listeners and UDP 443 socket, h2 by ALPN, and the Alt-Svc each vhost sends. With HTTP/3 on it makes real HTTP/3 requests (`proxy/e2e/h3-check.py`) to the site and a custom domain. It repeats them with the wildcard certificate from Redis.
   - `cert-issuance` issues a real custom-domain certificate through the proxy
     against a Pebble ACME server, checks it persists across a container
     recreate and is served over HTTP/3 by the recreated container before any

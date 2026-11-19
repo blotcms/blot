@@ -39,6 +39,7 @@
 
 const http = require("http");
 const http2 = require("http2");
+const protocols = require("../build/protocols");
 const https = require("https");
 const crypto = require("crypto");
 const zlib = require("zlib");
@@ -263,7 +264,10 @@ function req(
     timeout = 30000,
   } = {}
 ) {
-  if (h2) return req2(c, host, p, { method, headers, body });
+  // With HTTP/2 off (proxy/build/protocols.js) an h2 request goes over
+  // HTTPS/1.1 instead, the only way a client can reach these servers then.
+  if (h2 && protocols.http2) return req2(c, host, p, { method, headers, body });
+  if (h2) tls = true;
   const t0 = Date.now();
   const mod = tls ? https : http;
   const options = {
