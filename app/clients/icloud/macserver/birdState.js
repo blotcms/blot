@@ -1,0 +1,117 @@
+// A read-only view of what bird (the iCloud Drive daemon) knows about a file,
+// from its own database. bird learns about a change in a shared folder before
+// FileProvider updates the file on disk: an edit to a file that is already
+// downloaded can take tens of seconds to reach the disk, and a new file's
+// record can exist, empty, before its data has been uploaded. Comparing the
+// disk with bird's version tells us whether the disk is still behind.
+//
+// The database is Apple's and undocumented, so everything here is best
+// effort: if node:sqlite, the file or the columns we read are missing, every
+// lookup returns null and callers carry on as if there were no database.
+// It is opened read-only and never written.
+
+import { homedir } from "os";
+import { join } from "path";
+import clfdate from "./util/clfdate.js";
+
+const DB_PATH = join(
+  homedir(),
+  "Library/Application Support/CloudDocs/session/db/client.db"
+);
+
+let db = null;
+let statements = null;
+let unavailable = false;
+const roots = new Map(); // blogID -> { z, id }
+
+const open = async () => {
+  if (statements) return statements;
+  if (unavailable) return null;
+
+  try {
+    const { DatabaseSync } = await import("node:sqlite");
+    db = new DatabaseSync(DB_PATH, { readOnly: true });
+    statements = {
+      // a blog folder is the root of its own shared zone, listed under the
+      // account's zone
+      root: db.prepare(
+        "select zone_rowid z, item_id id from client_items where item_filename = ? and item_parent_zone_rowid != zone_rowid"
+      ),
+      child: db.prepare(
+        "select zone_rowid z, item_id id, item_type type, version_size size, version_mtime mtime, hex(version_content_signature) sig from client_items where item_parent_zone_rowid = ? and item_parent_id = ? and item_filename = ?"
+      ),
+    };
+    console.log(clfdate(), "birdState: reading bird's database");
+    return statements;
+  } catch (error) {
+    unavailable = true;
+    console.warn(
+      clfdate(),
+      "birdState: bird's database is unavailable, carrying on without it:",
+      error.message
+    );
+    return null;
+  }
+};
+
+// bird may replace its database; drop the connection so the next lookup
+// opens it again
+const reset = (error) => {
+  console.warn(
+    clfdate(),
+    "birdState: lookup failed, reopening:",
+    error.message
+  );
+  try {
+    db?.close();
+  } catch {
+    // already closed
+  }
+  db = null;
+  statements = null;
+  roots.clear();
+};
+
+const lookup = (s, blogID, pathInBlogDirectory) => {
+  let node = roots.get(blogID);
+  if (!node) {
+    node = s.root.get(blogID);
+    if (!node) return null;
+    roots.set(blogID, node);
+  }
+
+  const names = pathInBlogDirectory.split("/").filter(Boolean);
+  let row = null;
+  for (const name of names) {
+    row =
+      s.child.get(node.z, node.id, name) ||
+      s.child.get(node.z, node.id, name.normalize("NFC")) ||
+      s.child.get(node.z, node.id, name.normalize("NFD"));
+    if (!row) return null;
+    node = row;
+  }
+  return row;
+};
+
+// Resolves to { size, mtime (whole seconds), sig } for a file bird knows,
+// or null when it doesn't know it or the database can't be read
+const fileVersion = async (blogID, pathInBlogDirectory) => {
+  const s = await open();
+  if (!s) return null;
+
+  try {
+    const row = lookup(s, blogID, pathInBlogDirectory);
+    if (!row || row.type !== 1) return null;
+    return { size: row.size, mtime: row.mtime, sig: row.sig };
+  } catch (error) {
+    reset(error);
+    return null;
+  }
+};
+
+// True when the file on disk (an fs.Stats) is the version bird has
+const diskMatches = (version, stat) =>
+  stat.size === version.size &&
+  Math.floor(stat.mtimeMs / 1000) === version.mtime;
+
+export { fileVersion, diskMatches };

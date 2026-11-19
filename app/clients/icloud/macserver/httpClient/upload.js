@@ -9,6 +9,8 @@ import fs from "fs-extra";
 import * as brctl from "../brctl/index.js";
 import fetch from "./rateLimitedFetchWithRetriesAndTimeout.js";
 import { isUnchanged, recordPushed } from "../pushedFiles.js";
+import { fileVersion, diskMatches } from "../birdState.js";
+import downloadBirdsVersion from "../downloadBirdsVersion.js";
 import { join } from "path";
 
 class FileTooLargeError extends Error {
@@ -35,6 +37,17 @@ class FileMissingError extends Error {
 }
 
 const isMissingCode = (e) => e?.code === "ENOENT" || e?.code === "ENOTDIR";
+
+// Once a file has been pushed its contents are in Blot and in iCloud, so the
+// local copy is evicted: FileProvider applies a remote edit to a file that is
+// not downloaded at once (a tenth of a second), but holds an edit to a
+// downloaded file until it has fetched the new contents (up to tens of
+// seconds). Best effort; a failure only means the next edit is slower.
+const evictAfterPush = (filePath) => {
+  brctl.evict(filePath).catch((error) => {
+    console.warn(clfdate(), `Could not evict after push: ${filePath}`, error);
+  });
+};
 
 export default async (blogID, path) => {
   // Input validation
@@ -119,12 +132,21 @@ export default async (blogID, path) => {
   // Checked before the download: an evicted file is reported as changed each
   // time iCloud evicts or re-materialises it, and downloading it to find out
   // nothing changed is what can time out.
+  // Unless bird already has a newer version: the event can fire before
+  // FileProvider has updated the file, which then still looks unchanged
   if (isUnchanged(blogID, path, preStat)) {
+    const version = await fileVersion(blogID, path);
+    if (!version || diskMatches(version, preStat)) {
+      console.log(
+        clfdate(),
+        `Skipping upload: unchanged since last push: ${filePath}`
+      );
+      return;
+    }
     console.log(
       clfdate(),
-      `Skipping upload: unchanged since last push: ${filePath}`
+      `Disk unchanged since last push but bird has a newer version: ${filePath}`
     );
-    return;
   }
 
   if (preStat.size > maxFileSize) {
@@ -144,7 +166,7 @@ export default async (blogID, path) => {
   // Download and check file
   let stat;
   try {
-    stat = await brctl.download(filePath);
+    stat = await downloadBirdsVersion(blogID, path, filePath);
   } catch (e) {
     // brctl reports a vanished file as a generic command failure with no code
     if (isMissingCode(e) || !(await fs.pathExists(filePath))) {
@@ -237,4 +259,5 @@ export default async (blogID, path) => {
 
   recordPushed(blogID, path, stat);
   console.log(clfdate(), "Upload successful:", text);
+  evictAfterPush(filePath);
 };
