@@ -47,7 +47,6 @@ const blogKey = require("models/blog/key");
 const blogDefaults = require("models/blog/defaults");
 const extend = require("helper/extend");
 const makeSlug = require("helper/makeSlug");
-const folder = require("storage/folder");
 const assets = require("storage/assets");
 
 const OWNER_EMAIL = "example@example.com";
@@ -129,8 +128,9 @@ async function createBlog(blogID, host, title, owner) {
   extend(blog).and(_.cloneDeep(blogDefaults));
 
   await client.sAdd(blogKey.ids, blogID);
+  // No folder is made: the mirror is only for Discover, has no sync client,
+  // and Blot's changes to folders go through one (check-folder-access.js)
   await Blog.set(blogID, blog);
-  await folder.mkdir(blogID, "/");
 
   return handle;
 }
@@ -149,7 +149,7 @@ function excerpt(html) {
 // only: the first segment starts with "_" and there is no "..".
 function assetPaths(html, blogID) {
   const pattern = new RegExp(
-    CDN.replace(/\./g, "\\.") + blogID + "/([^\"'\\s)<>]+)",
+    _.escapeRegExp(CDN + blogID + "/") + "([^\"'\\s)<>]+)",
     "g"
   );
   const found = new Set();
