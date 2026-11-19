@@ -4,12 +4,12 @@ if (typed) {
   const example = typed.parentElement;
   const phrases = [
     typed.textContent,
-    "journal with Google Docs",
-    "company site using Microsoft Word",
-    "travel journal with Ulysses",
-    "photo essay using Lightroom",
-    "documentation site with VS Code",
-    "blog using Obsidian",
+    "journal in Google Docs",
+    "company site in Microsoft Word",
+    "travel journal in Ulysses",
+    "photo essay in Lightroom",
+    "documentation site in VS Code",
+    "blog in Obsidian",
   ];
 
   const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
