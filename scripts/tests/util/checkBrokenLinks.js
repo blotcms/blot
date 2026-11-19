@@ -74,8 +74,11 @@ class LinkChecker {
     try {
       return await this.fetch(url, { headers });
     } catch (err) {
-      this.log("Error", err.message);
-      throw new Error(err.code || "Network Error", { cause: err });
+      // undici's fetch throws "fetch failed" and keeps the reason (ECONNRESET,
+      // UND_ERR_SOCKET, ...) on err.cause
+      const code = err.code || err.cause?.code || "Network Error";
+      this.log("Error", url, err.message, code, err.cause?.message);
+      throw new Error(code, { cause: err });
     }
   }
 

@@ -9,9 +9,10 @@ describe("Blot's documentation'", function () {
   global.test.site();
   global.test.timeout(5 * 60 * 1000); // Set timeout to 5 minutes
 
-  it("has no broken links", async function () {
-    await this.checkBrokenLinks();
-  });
+  for (let i = 0; i < 25; i++)
+    it("has no broken links " + i, async function () {
+      await this.checkBrokenLinks();
+    });
 
   it("skips the build until a source changes", async function () {
     const toolName = "__documentation-build-hash-test";
