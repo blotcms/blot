@@ -34,18 +34,31 @@ function execExifTool(filePath, fields) {
   );
 }
 
+// The fields exiftool is asked for in a mode, or null when the mode reads none
+function fieldsFor(mode) {
+  if (mode === "full") return FULL_WHITELIST;
+  if (mode === "basic") return BASIC_WHITELIST;
+  return null;
+}
+
 async function parseExif(filePath, mode = "off") {
-  if (mode === "off") return {};
+  if (!fieldsFor(mode)) return {};
 
   if (!filePath || typeof filePath !== "string") return {};
   try {
     const stat = await fs.stat(filePath).catch(() => null);
     if (!stat || !stat.isFile() || stat.size === 0) return {};
-    const raw = await execExifTool(
-      filePath,
-      mode === "full" ? FULL_WHITELIST : BASIC_WHITELIST
-    );
+    return shape(await execExifTool(filePath, fieldsFor(mode)), mode);
+  } catch {
+    return {};
+  }
+}
 
+// What the exif job returned for fieldsFor(mode), as the image's EXIF: only
+// those fields, with FocalLength a number and the description as Markdown.
+// Never throws; null (no EXIF, or exiftool failed) is {}.
+function shape(raw, mode) {
+  try {
     const result = {};
 
     Object.keys(raw || {}).forEach((key) => {
@@ -80,4 +93,6 @@ async function parseExif(filePath, mode = "off") {
 
 module.exports = {
   parseExif,
+  fieldsFor,
+  shape,
 };

@@ -45,9 +45,13 @@ async function read(blog, path) {
   let extras;
 
   const { stat } = await withLocalHeld(blog.id, path, async (localPath) => {
-    // exiftool and the conversion are separate jails reading the same
-    // file, so they run side by side (parseExif never rejects)
-    const exifPromise = exif.parseExif(localPath, blog.imageExif);
+    // An image that is converted has its EXIF read by the same job, from the
+    // same bytes (to-png's exif arg): one jail and one read of the file, not
+    // two. Only a conversion which runs reads it: one found in the cache does
+    // not, and its EXIF is read after, as an image that is not converted has
+    // its EXIF read, by the exif job (parseExif never rejects).
+    const exifFields = exif.fieldsFor(blog.imageExif);
+    let converted; // { exif } from a conversion that read the EXIF too
 
     const convert = async () => {
       if (EXTENSIONS_TO_CONVERT.includes(extname(path).toLowerCase())) {
@@ -63,11 +67,12 @@ async function read(blog, path) {
 
           await fs.ensureDir(dirname(absolutePath));
           await assets.remove(blog.id, relativePath);
-          const { outputs } = await sandbox.run(
+          const { outputs, meta } = await sandbox.run(
             "to-png",
-            {},
+            exifFields ? { exif: exifFields } : {},
             { path: sourcePath }
           );
+          if (exifFields) converted = { exif: meta.exif };
           await fs.writeFile(absolutePath, outputs[0]);
           await assets.commit(blog.id, relativePath);
 
@@ -101,15 +106,16 @@ async function read(blog, path) {
       }
     };
 
-    try {
-      await convert();
-    } finally {
-      const parsedExif = await exifPromise;
+    let parsedExif;
 
-      extras = Object.keys(parsedExif).length
-        ? { exif: parsedExif }
-        : undefined;
-    }
+    await convert();
+
+    if (converted) parsedExif = exif.shape(converted.exif, blog.imageExif);
+
+    if (!parsedExif)
+      parsedExif = await exif.parseExif(localPath, blog.imageExif);
+
+    extras = Object.keys(parsedExif).length ? { exif: parsedExif } : undefined;
   });
 
   const contents = `<img src="${encodeURI(

@@ -484,6 +484,55 @@ describe("sandbox image jobs", function () {
         await rejection(sandbox.run("to-png", {}, Buffer.from("nope")))
       ).not.toBeNull();
     });
+
+    describe("with exif", function () {
+      const fs = require("fs");
+      const path = require("path");
+      const fields = ["Make", "Model", "FNumber", "FocalLength"];
+      const photo = fs.readFileSync(
+        path.join(__dirname, "../../build/converters/img/tests/exif.jpg")
+      );
+
+      it("returns what the exif job does, with the same conversion", async function () {
+        const separate = await sandbox.run("exif", { fields }, photo);
+        const plain = await sandbox.run("to-png", {}, photo);
+        const both = await sandbox.run("to-png", { exif: fields }, photo);
+
+        expect(separate.meta.Make).toEqual("SONY");
+        expect(both.meta).toEqual({ ...plain.meta, exif: separate.meta });
+        expect(both.outputs[0].equals(plain.outputs[0])).toBe(true);
+      });
+
+      it("returns null for an image with no exif, and still converts it", async function () {
+        const { meta, outputs } = await sandbox.run(
+          "to-png",
+          { exif: fields },
+          await image(30, 20, "webp")
+        );
+
+        expect(meta.width).toEqual(30);
+        expect(meta.exif).toBeNull();
+        expect((await sharp(outputs[0]).metadata()).format).toEqual("png");
+      });
+
+      it("rejects fields it does not expect", async function () {
+        for (const exif of [[], ["-all"], "Make", [1], null]) {
+          expect(
+            await rejection(
+              sandbox.run("to-png", { exif }, await image(10, 10, "webp"))
+            )
+          ).not.toBeNull();
+        }
+      });
+
+      it("still rejects bytes that are not an image", async function () {
+        expect(
+          await rejection(
+            sandbox.run("to-png", { exif: fields }, Buffer.from("nope"))
+          )
+        ).not.toBeNull();
+      });
+    });
   });
 
   describe("template-image", function () {
