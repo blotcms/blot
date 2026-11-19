@@ -1,0 +1,79 @@
+# models/discover
+
+The posts the maintainer has put on the public Discover page,
+blot.im/discover (#2639). Discover is one list for all of blot.im, so its keys
+are not under any blog.
+
+## Keys
+
+| Key | Type | What |
+|-----|------|------|
+| `discover:posts` | sorted set | Post IDs, scored by each post's date (ms), or when it was added if it has none. The page reads it newest first. |
+| `discover:post:<id>` | hash | `blogID`, `entryID` (the entry's path), `photos` (JSON) and `added`. |
+| `discover:blog:<blogID>` | set | A blog's post IDs, so they can be removed together. |
+| `discover:profile:<blogID>` | hash | `name`, `bio` and `avatar` (an asset path) shown in place of the site's own. |
+| `discover:token:<token>` | string | `{ blogID, entryID }` for an "Add to Discover" link, expiring after 24 hours. |
+
+A post's ID is a hash of its blog ID and entry path (`postID.js`).
+
+## Live entries
+
+Only the reference and the chosen photos are stored. `list.js` loads each
+blog and entry as the page is read and leaves a post out while:
+
+- its site is disabled, gone, or has `includeInDiscover` off;
+- the entry is deleted, a draft, scheduled or has no URL;
+- it had photos and none of the chosen ones are still in the entry's HTML.
+
+So nothing stored changes when a site turns the setting off and on again,
+or an author edits a post: the title and URL always come from the entry.
+
+## Photos
+
+`photos.candidates` lists the images in an entry's HTML which are the blog's
+own generated assets on the CDN (`_image_cache/...`, `_thumbnails/...`).
+Discover only reads those, from the storage bucket, and never fetches a URL
+from a post. `photos.derive` resizes each chosen one to at most 1200px into
+`{blogID}/_discover/<postID>/`, served from cdn.blot.im. No sweep lists
+`_discover`, and blog deletion removes it with the rest of the blog's assets.
+
+## Profiles
+
+`discover:profile:<blogID>` holds a name, bio and avatar the maintainer set
+for a site (`profile.js`), shown in place of the blog's own title and avatar
+and of its sites.txt details. Each field is optional. The avatar is a
+400px square JPEG, cropped from the centre or a given side, in the blog's
+assets under `_discover/profile/`. It comes from a file or a URL on Blot:
+an image on cdn.blot.im is read from the bucket, a file at a Blot site's own
+address from that site's folder. Nothing is fetched.
+Set them with
+`scripts/discover/profile.js <site> --name … --avatar <URL or file> --crop top`.
+
+## Tokens
+
+`token.create` is called by the daily update email for each new post from a
+site with the setting on. `token.read` does not use the token up, because
+mail scanners open links; `token.consume` deletes it with `GETDEL`, so only
+one request can add the post.
+
+## Adding and editing posts
+
+The daily email's "Add to Discover" links are the only page for it. Anything
+else is done by an agent running these in the node container
+(`docker exec -u 1000 blot-blue …` on production, a production command which
+needs the maintainer's go-ahead; `blot-node-<slot>` for a local preview):
+
+    node scripts/discover/add.js <post URL> [...] [--photos <n>] [--text]
+    node scripts/discover/add.js <post URL> --list-photos
+    node scripts/discover/add.js <post URL> --pick 2,4
+    node scripts/discover/manage.js list [--all]
+    node scripts/discover/manage.js remove <post URL or ID> [...]
+    node scripts/discover/manage.js text <post URL or ID> on|off
+    node scripts/discover/manage.js remove-site <site>
+    node scripts/discover/profile.js <site> --name … --bio … --avatar <URL or file>
+
+`add.js` puts each post on Discover with up to 3 of its photos (`--photos 0`
+for a text card, `--text` for its text above the photos; `--list-photos`
+numbers a post's images and `--pick` chooses among them) and turns the
+site's setting on. It finds the site by host and the post by URL and fetches
+nothing, so locally it only works for sites and posts on the local stack.

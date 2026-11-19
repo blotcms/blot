@@ -21,6 +21,7 @@ module.exports = function (req, res) {
     "/sites/log-in",
     "/templates",
     "/discover",
+    "/discover/people",
     "/developers",
     "/questions",
     "/contact",

@@ -45,7 +45,7 @@ module.exports = async function (req, res, next) {
     res.locals.categories = CATEGORIES.map((category) => ({
       slug: category.slug,
       label: category.label,
-      href: `/discover/${category.slug}`,
+      href: `/discover/people/${category.slug}`,
       active: req.params.category === category.slug,
     }));
     res.locals.allCategoriesActive = !req.params.category;

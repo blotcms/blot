@@ -33,6 +33,8 @@ var DECLARATION = {
   // Flags
   flags: [FLAGS, true, false],
   roundAvatar: ["boolean", true, true],
+  // Whether the maintainer may feature the site's posts on blot.im/discover
+  includeInDiscover: ["boolean", true, false],
   imageExif: ["string", true, true],
   converters: ["object", true, true],
 };

@@ -1,0 +1,39 @@
+<h1>Discover</h1>
+
+<ul class="pill-navigation">
+  <li><a href="/discover/people" class="{{#allCategoriesActive}}selected{{/allCategoriesActive}}">All</a></li>
+  {{#categories}}
+  <li><a href="{{href}}" class="{{#active}}selected{{/active}}">{{label}}</a></li>
+  {{/categories}}
+</ul>
+
+{{#featured}}
+<ul id="featured" class="clients">
+  {{#sites}}
+  <li>
+    <a target="_blank" rel="noopener" href="{{{link}}}">
+      <img
+        class="pic"
+        src="{{#cdn}}{{{image}}}{{/cdn}}"
+        alt="{{name}}"
+        width="{{featured.image_size}}"
+        height="{{featured.image_size}}"
+      />
+      <span style="flex-grow: 1;">
+        <span class="color-on-hover" style="color:var(--accent-color)">{{name}}</span>
+        <span style="font-size: var(--small-font-size);color:var(--medium-text-color);display:block">{{bio}} <span style="font-size:12px;color:var(--light-text-color)">{{#tenure_label}} · Joined Blot {{tenure_label}}{{/tenure_label}}</span></span>
+        
+      </span>
+      {{> chevron}}
+    </a>
+  </li>
+  {{/sites}}
+</ul>
+{{/featured}}
+
+<style>
+    #featured li a .pic {
+      width:{{featured.image_size}}px;
+      height:{{featured.image_size}}px;
+    }
+</style>

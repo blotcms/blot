@@ -24,5 +24,27 @@
 {{> plugin-row}}
 {{/categories.Typography}}
 
+<h2>Discover</h2>
+<section class="setting-block" id="discover">
+  <div class="plugin {{#blog.includeInDiscover}}checked{{/blog.includeInDiscover}}">
+    <label style="margin:0;display:flex">
+      <span>
+        <input name="includeInDiscover" type="hidden" value="off" />
+        <input
+          name="includeInDiscover"
+          type="checkbox"
+          {{#blog.includeInDiscover}}checked{{/blog.includeInDiscover}}
+        />
+        &nbsp;
+      </span>
+      <span style="flex-grow:1;">Include site on discover page</span>
+    </label>
+    <p class="setting-help" style="margin:0.5rem 0 0 2rem;">
+      Blot may feature your posts on <a href="/discover">blot.im/discover</a>.
+      Posts link back to your site.
+    </p>
+  </div>
+</section>
+
 
 {{> settings-form-footer}}

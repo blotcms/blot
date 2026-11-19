@@ -1,6 +1,6 @@
 // Filters res.locals.featured.sites (already populated by ./index.js)
 // down to the sites whose bio matches the requested category, then
-// renders the Discover view directly since this route lives outside
+// renders the people view directly since this route lives outside
 // the generic path-to-view middleware in ../index.js.
 const { categoryForSlug, filterSitesByCategory } = require("./categories");
 
@@ -21,5 +21,5 @@ module.exports = function (req, res, next) {
   res.locals.title = `Discover · ${category.label}`;
   res.locals.hidebreadcrumbs = true;
 
-  res.render("discover");
+  res.render("discover-people");
 };

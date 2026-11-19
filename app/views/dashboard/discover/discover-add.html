@@ -1,0 +1,53 @@
+<h1>Add to Discover</h1>
+
+{{#expired}}
+<p>This link has expired or has already been used. Links in the daily email last a day.</p>
+{{/expired}}
+
+{{^expired}}
+{{#refused}}
+<p class="error">{{refused}}</p>
+{{/refused}}
+
+{{^refused}}
+{{#already}}
+<p>This post is already on Discover. Adding it again replaces its photos and keeps its place.</p>
+{{/already}}
+
+<ul class="discover-preview">
+  {{#preview}}{{> discover-card}}{{/preview}}
+</ul>
+
+<form method="post" class="dashboard-form">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+
+  {{#candidates.length}}
+  <p>Choose up to {{maxPhotos}} photos to feature. The first of them in the post is the main image. Choose none for a text card.</p>
+  <div class="discover-choose">
+    {{#candidates}}
+    <label>
+      <input type="checkbox" name="photo" value="{{source}}" {{#checked}}checked{{/checked}} />
+      <img src="{{{src}}}" alt="" loading="lazy" />
+    </label>
+    {{/candidates}}
+  </div>
+  {{/candidates.length}}
+
+  {{^candidates.length}}
+  <p>This post has no photos, so it will be shown as a text card.</p>
+  {{/candidates.length}}
+
+  {{#candidates.length}}
+  <label class="discover-show-text">
+    <input type="checkbox" name="showText" value="1" />
+    Show the post's text above the photos
+  </label>
+  {{/candidates.length}}
+
+  <div class="buttons">
+    <button type="submit">Add to Discover</button>
+    <a href="/discover">Cancel</a>
+  </div>
+</form>
+{{/refused}}
+{{/expired}}

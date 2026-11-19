@@ -77,14 +77,26 @@ documentation.use(require("./selected"));
 
 documentation.get("/", home);
 
+// The old examples page, the featured sites with their profession filters,
+// is at /discover/people
 documentation.get(["/examples", "/examples/:category"], (req, res) => {
-  res.redirect(301, req.originalUrl.replace(/^\/examples/i, "/discover"));
+  res.redirect(
+    301,
+    req.originalUrl.replace(/^\/examples/i, "/discover/people")
+  );
 });
 
-documentation.get("/discover", require("./featured"));
+// Not cached by the proxy (proxy/config/blot-site.conf): it changes
+// whenever the maintainer adds a post or a site turns Discover off
+documentation.get("/discover", require("./featured"), require("./discover"));
+
+documentation.get("/discover/people", require("./featured"), (req, res) => {
+  res.locals.title = "Discover · People";
+  res.render("discover-people");
+});
 
 documentation.get(
-  "/discover/:category",
+  "/discover/people/:category",
   require("./featured"),
   require("./featured/filterByCategory")
 );

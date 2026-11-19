@@ -7,6 +7,8 @@ module.exports = {
   isDisabled: false,
   avatar: "",
   roundAvatar: false,
+  // Only create.js applies these defaults, so existing sites stay unset (off)
+  includeInDiscover: true,
   imageExif: "basic",
   converters: {
     html: true,
