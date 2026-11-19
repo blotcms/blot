@@ -105,7 +105,6 @@ module.exports = async function (req, res, next) {
         ),
       }));
 
-    res.locals.mainClass = "discover-content";
     res.locals.discover = {
       posts,
       next: more ? "/discover?before=" + more : "",

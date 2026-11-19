@@ -4,12 +4,6 @@
   container: discover / inline-size;
 }
 
-/* The page's side padding is small, so that the box can sit near the right
-   edge while the feed stays centred in the width beside the sidebar */
-.content.discover-content {
-  padding-inline: 20px;
-}
-
 /* The feed in the middle of the page, the sites in a narrow column against
    the right edge; the left column is empty, so that the feed is centred */
 .discover {
