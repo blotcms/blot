@@ -8,7 +8,7 @@ are not under any blog.
 
 | Key | Type | What |
 |-----|------|------|
-| `discover:posts` | sorted set | Post IDs, scored by when the maintainer added each post (ms). The page reads it newest first. |
+| `discover:posts` | sorted set | Post IDs, scored by each post's date (ms), or when it was added if it has none. The page reads it newest first. |
 | `discover:post:<id>` | hash | `blogID`, `entryID` (the entry's path), `photos` (JSON) and `added`. |
 | `discover:blog:<blogID>` | set | A blog's post IDs, so they can be removed together. |
 | `discover:token:<token>` | string | `{ blogID, entryID }` for an "Add to Discover" link, expiring after 24 hours. |

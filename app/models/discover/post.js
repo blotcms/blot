@@ -1,4 +1,5 @@
 const client = require("models/client");
+const Entry = require("models/entry");
 const ensure = require("helper/ensure");
 const key = require("./key");
 const postID = require("./postID");
@@ -47,10 +48,12 @@ async function has(blogID, entryID) {
   return !!(await client.exists(key.post(postID(blogID, entryID))));
 }
 
-// Adds a post, or replaces the photos of one already on Discover (it keeps
-// its place). photos are the derived ones, from photos.derive. options.added
-// (ms) sets when it was added, for an import (scripts/discover/import.js) to
-// keep the order of the export. Resolves to the post.
+// Adds a post, or replaces the photos of one already on Discover. photos are
+// the derived ones, from photos.derive. The feed is in the order the posts
+// were published, so the post's date is its score; a post without one goes
+// by when it was added. options.added (ms) sets when it was added, for an
+// import (scripts/discover/import.js) to keep the export's. Resolves to the
+// post.
 async function add(blogID, entryID, saved, options = {}) {
   ensure(blogID, "string").and(entryID, "string").and(saved, "array");
 
@@ -64,6 +67,10 @@ async function add(blogID, entryID, saved, options = {}) {
         ? existing.added
         : Date.now();
 
+  const entry = await Entry.get(blogID, entryID);
+  const published =
+    entry && entry.dateStamp > 0 ? Math.round(entry.dateStamp) : added;
+
   await client
     .multi()
     .hSet(key.post(id), {
@@ -72,7 +79,7 @@ async function add(blogID, entryID, saved, options = {}) {
       photos: JSON.stringify(saved),
       added: String(added),
     })
-    .zAdd(key.posts(), { score: added, value: id })
+    .zAdd(key.posts(), { score: published, value: id })
     .sAdd(key.blog(blogID), id)
     .exec();
 
