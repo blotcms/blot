@@ -16,13 +16,12 @@ let sidebar = { at: 0, hosts: null };
 
 const YEAR = 365.25 * 24 * 60 * 60 * 1000;
 
-// "Joined Blot 7 years ago", "Joined Blot 1 year ago" or "Joined Blot this
-// year", from a featured site's tenure (ms), or "" if unknown
+// "7 years on Blot", from a featured site's tenure (ms), or "" if unknown
 function yearsOnBlot(tenure) {
   if (!(tenure > 0)) return "";
   const years = Math.floor(tenure / YEAR);
-  if (years < 1) return "Joined Blot this year";
-  return "Joined Blot " + years + (years === 1 ? " year" : " years") + " ago";
+  if (years < 1) return "New to Blot";
+  return years + (years === 1 ? " year" : " years") + " on Blot";
 }
 
 // What the popover shown on hovering a name or avatar needs: the
