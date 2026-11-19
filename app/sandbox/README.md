@@ -26,7 +26,12 @@ starts `SANDBOX_`, and it never falls back to in-process.
 
 ## Jobs
 
-- `metadata` format, size and orientation of an image.
+- `metadata` format, size and orientation of an image. `metadata`, `thumbnail`,
+  `resize` and `to-png` refuse an image of more than 100M pixels (`limitInputPixels`
+  in `jobs/encode.js`; sharp's default is 268M, about 1 GiB decoded). That fails
+  as an image sharp can't decode does: the job errors, and the caller carries on
+  as it does for a corrupt file (no thumbnail; an image left as it was written,
+  reported as `IMAGE_OPTIMIZE_FAILED`).
 - `thumbnail` the thumbnail sizes of one image, static or animated; one output per size.
   With `accept` (formats and minimum sizes) it first checks the image can be a
   thumbnail and makes none if not, so a candidate costs one jail, not two.
@@ -34,7 +39,9 @@ starts `SANDBOX_`, and it never falls back to in-process.
   (about 5M pixels a second in a production jail, on Graviton2 and Alpine's
   libvips). So its thumbnails may encode at most 50M pixels, every frame of
   every size counted, about 10s; past that they are of the first frame
-  (`meta.firstFrame`). A GIF size that comes out the GIF's own size (up to
+  (`meta.firstFrame`). So are those of an animation whose frames would take
+  more than 40M pixels to decode together (width x height x frames, about
+  160 MB of raw RGBA), read from its header before any frame is. A GIF size that comes out the GIF's own size (up to
   8 MiB) is its bytes as they are, and the other sizes are made largest first,
   each from the smallest already made that covers it. The jail has 20s, as long
   as the build waits (`build/thumbnail/create.js`).
@@ -73,7 +80,7 @@ starts `SANDBOX_`, and it never falls back to in-process.
   the specs run, does with the CLI; `tests/pandoc-worker.js` runs every
   converter fixture through both, so a change to the options in one must be
   made in the other. It has the usual 512 MiB and 128 MiB `/tmp`, under the
-  unit's sandbox subtree's cap, and caps pandoc's heap at 400M. A document gets
+  unit's sandbox subtree's cap, and caps pandoc's heap at 256M. A document gets
   15s, after which the broker kills its worker: the caller fails that document
   with "Pandoc exited ... (timed out)", and `alerts.js` logs it instead of
   emailing. pandoc killed by the jail's memory limit is `SANDBOX_KILLED`, which
@@ -230,7 +237,10 @@ One connection is one job, on `/run/blot-sandbox/broker.sock` (0660, root and gr
    bytes. The client checks it against N and the lengths; the broker never
    reads it.
 
-The broker runs at most 4 jails, fewer of a job with its own `maxRunning` or `cgroups`, and queues 32 more, then answers `busy`. It
+The broker runs at most 4 jails, fewer of a job with its own `maxRunning` or `cgroups`, and queues 32 more, then answers `busy`. `thumbnail`, `resize` and
+`to-png` share one `maxRunning` of 2 (their `group` in `jail.js`), so two of
+them decode at once per unit, however they mix; the rest wait in the queue, which
+drops a request after 60s. It
 takes no paths, and logs one line per failed job with no input data. A client
 that vanishes after ending its input is not noticed until the jail finishes,
 which is at most its time limit.
@@ -263,7 +273,7 @@ speed, as screenshot batches accept it for their pages; the jail boundary
 itself is unchanged.
 
 Memory: at most 4 busy workers (the broker's limit across all jobs) and
-`maxIdle` (2) idle ones, all in the unit's sandbox subtree. An idle pandoc
+`maxIdle` (1) idle one, all in the unit's sandbox subtree. An idle pandoc
 worker holds about 20-40 MiB of its own; the ~85 MiB of pandoc's binary is page
 cache that every pandoc jail shares.
 
@@ -337,7 +347,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   request, not the wait).
 - **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
   512 MiB) with the proxy jail (128 MiB at most) and the image jobs (each up
-  to 512 MiB, four at once). The fetch jobs and the proxy together take at most
+  to 512 MiB, but two at once for the three sharp jobs that decode a whole image). The fetch jobs and the proxy together take at most
   384 MiB of it (256 + 128), whichever fetch job is running; the image jobs have
   the rest and whatever those two aren't using. The subtree's final size is for
   the unit memory work (TODO) to set from measured peaks.

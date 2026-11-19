@@ -820,6 +820,30 @@ describe("sandbox broker and jail", function () {
     );
   });
 
+  test("broker: jobs in one group share its maxRunning", async () => {
+    const jobs = {
+      ...JOBS(),
+      a: { ...JOBS().echo, group: "g", maxRunning: 1 },
+      b: { ...JOBS().echo, group: "g", maxRunning: 1 },
+    };
+    const { script, release } = hold();
+    await withBroker(
+      { jobs, maxRunning: 4, script },
+      async (socket, broker) => {
+        const first = request(socket, line("a"), "");
+        await until(() => broker.running.size === 1);
+        const second = request(socket, line("b"), "");
+        await until(() => broker.queue.length === 1);
+        assert.strictEqual(broker.running.size, 1);
+
+        release();
+        for (const reply of await Promise.all([first, second])) {
+          assert.strictEqual(reply.header.ok, true);
+        }
+      }
+    );
+  });
+
   test("broker: what a job leaves in its cgroup is cleared when it ends, and failing to is logged", async () => {
     const cleared = [];
     const jobs = JOBS({ cgroups: ["/some/cgroup"] });

@@ -4,7 +4,7 @@
 // sharp's info for it.
 
 const sharp = require("sharp");
-const { encode } = require("./encode");
+const { encode, MAX_INPUT_PIXELS } = require("./encode");
 
 sharp.cache(false);
 
@@ -16,7 +16,7 @@ async function run(args, input) {
     throw new Error("invalid max");
 
   const { data, info } = await encode(
-    sharp(input)
+    sharp(input, { limitInputPixels: MAX_INPUT_PIXELS })
       .keepIccProfile()
       .rotate()
       .resize(max, max, { withoutEnlargement: true, fit: "inside" }),
