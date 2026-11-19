@@ -2,7 +2,6 @@ var storage = require("storage/folder");
 var clfdate = require("helper/clfdate");
 var drop = require("./drop");
 var set = require("./set");
-var flushCache = require("models/blog/flushCache");
 var pathNormalizer = require("helper/pathNormalizer");
 var Blog = require("models/blog");
 var build = require("build");
@@ -37,6 +36,20 @@ function fingerprint(stat) {
 }
 
 module.exports = function (blog, log, status) {
+  // Puts a changed file live as soon as it is saved, rather than when the
+  // whole sync ends. The entry lists that render pages read are cached per
+  // cacheID (models/entries/catalog, cachedRecent, cachedPage), so a purge
+  // without a bump would let a reader mid-sync render the old list, which
+  // the proxy then caches again until the sync's own bump. Blog.set purges
+  // the proxies when the cacheID changes. The sync still bumps once more at
+  // the end (sync/index.js), for its template work. A failed bump is
+  // ignored here: bumpCacheID retries a Redis outage in the background.
+  async function publish() {
+    try {
+      await Blog.bumpCacheID(blog.id);
+    } catch (err) {}
+  }
+
   // The re-syncs below call this one directly, not the guarded export.
   async function update(path) {
     // if typeof path is not string, return error
@@ -94,18 +107,14 @@ module.exports = function (blog, log, status) {
         status("Re-syncing " + path);
 
         // This pass may already have stored the file's new entry, which
-        // the next one then finds unchanged: the change still needs its
-        // purge, and the sync its cacheID bump
+        // the next one then finds unchanged: the change still needs to be
+        // published, and the sync its cacheID bump
         var changedHere = !(result && result.changed === false);
 
         var retried = await update(path);
 
         if (changedHere && retried && retried.changed === false) {
-          // An error flushing is ignored
-          try {
-            await flushCache(blog.id);
-          } catch (err) {}
-
+          await publish();
           return { error: retried.error || null };
         }
 
@@ -119,14 +128,7 @@ module.exports = function (blog, log, status) {
         return { error: null, changed: false };
       }
 
-      // the cache is flushed at the end of a sync too
-      // but if we don't do it after updating each files
-      // long syncs can produce weird cache behaviour
-      // An error flushing is ignored
-      try {
-        await flushCache(blog.id);
-      } catch (err) {}
-
+      await publish();
       return { error: updateError || null };
     }
 

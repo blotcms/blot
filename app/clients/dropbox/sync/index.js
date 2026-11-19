@@ -21,8 +21,6 @@ var Sync = require("sync");
 var isRedisUnavailableError =
   require("helper/redisUnavailable").isRedisUnavailableError;
 
-var MAX_CHECKS_WITHOUT_RESULTS = 5;
-
 // options.stampLastSync (default true) controls whether this sync records
 // last_sync. The hourly validation's catch-up sync passes false: last_sync
 // is what marks a blog as recently synced by a webhook, so a catch-up must
@@ -81,7 +79,6 @@ async function sync(blog, folder, stampLastSync) {
   var delta = new Delta(client, account.folder_id, blog.id);
   var apply = Apply(client, blog.id, folder.log, folder.status);
 
-  var checksWithoutResults = 0;
   var cursor = account.cursor;
 
   // Delta retrieves changes to the folder on Dropbox for a given
@@ -137,7 +134,12 @@ async function sync(blog, folder, stampLastSync) {
       folder.log(pathToUpdate, "Updating path");
 
       try {
-        await folder.update(pathToUpdate);
+        // A file's server_modified is when Dropbox stored this version,
+        // so the sync can log how long it took to go live
+        await folder.update(pathToUpdate, {
+          modified: item.server_modified,
+          since: "dropbox-server-modified",
+        });
       } catch (err) {
         // Redis cannot take writes (a host cutover, an outage), so
         // this change and those after it are not in the database.
@@ -187,28 +189,19 @@ async function sync(blog, folder, stampLastSync) {
     // be split across two pages of file events.
     if (result.has_more) {
       folder.log("There are more changes to fetch on Dropbox");
-      checksWithoutResults = 0;
       continue;
     }
 
     // If a webhook arrived during this long sync...
     if (result.entries && result.entries.length) {
       folder.log("Checking in case there are new changes to fetch");
-      checksWithoutResults = 0;
       continue;
     }
 
-    if (checksWithoutResults < MAX_CHECKS_WITHOUT_RESULTS) {
-      checksWithoutResults++;
-      let delay = checksWithoutResults * 100;
-      folder.log(`Waiting ${delay}ms to check for changes`);
-      await new Promise(function (resolve) {
-        setTimeout(resolve, delay);
-      });
-      folder.log("Checking again for new changes");
-      continue;
-    }
-
+    // An empty answer ends the sync. We don't wait and poll again: a
+    // webhook that arrives while we hold the folder lock is queued as a
+    // follow-up by followUpSync and runs once the lock is released, so
+    // nothing is lost by returning now.
     folder.log("Folder in sync with Dropbox");
     return;
   }

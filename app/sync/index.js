@@ -122,14 +122,42 @@ async function acquire(blogID) {
   // we want to know if folder.update or folder.rename is called
   let changes = false;
   const originalUpdate = new Update(blog, log, status);
+  // How long after the change in the source a file went live: the update
+  // bumps the blog's cacheID once it has saved a changed file (see
+  // update/index.js), so the change is live when update resolves. options:
+  //   modified  the source's own time for the change, ms since the epoch or
+  //             an ISO string: Dropbox's server_modified, Drive's
+  //             modifiedTime, the file's mtime on the macserver for iCloud,
+  //             the committer time for Git
+  //   since     which of those it is, for the log line
+  // The lag includes the provider's delay in telling Blot, any wait for the
+  // lock and the files built before this one in the same sync. Grep for
+  // "live lag_ms=" to measure it.
+  function logLag(path, options) {
+    if (!options || options.modified === undefined) return;
+
+    const modified =
+      typeof options.modified === "string"
+        ? Date.parse(options.modified)
+        : Number(options.modified);
+
+    if (!Number.isFinite(modified)) return;
+
+    log(
+      path,
+      `live lag_ms=${Date.now() - modified} since=${options.since || "modified"}`
+    );
+  }
+
   // There is no path to the blog's folder here: clients read and write it
   // through storage/folder, by blogID
   // An update which resolves { changed: false } built exactly the entry
   // already stored (see update/index.js), so it needs no cacheID bump. Any
   // other outcome counts as a change. Each update is listed as pending for
-  // lock-diagnostics until it settles.
+  // lock-diagnostics until it settles. A client may pass the source's time
+  // for the change as options.modified (see logLag).
   const folder = {
-    update: async function update(path) {
+    update: async function update(path, options) {
       let result;
 
       addPendingUpdate(blogID, syncID, path);
@@ -143,7 +171,10 @@ async function acquire(blogID) {
       }
 
       removePendingUpdate(blogID, syncID, path);
-      if (!result || result.changed !== false) changes = true;
+      if (!result || result.changed !== false) {
+        changes = true;
+        if (!result || !result.error) logLag(path, options);
+      }
       return result;
     },
     status,

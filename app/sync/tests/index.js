@@ -399,6 +399,26 @@ describe("sync cacheID", function () {
     expect(Blog.bumpCacheID).toHaveBeenCalled();
   });
 
+  // The entry lists pages render from are cached per cacheID, so a change is
+  // only live once the cacheID moves: that must happen when the file is
+  // saved, not when the whole sync ends (which can be seconds later)
+  it("bumps the cacheID as soon as an update changes a file", async function () {
+    const blogID = this.blog.id;
+
+    await syncContents(blogID, "Hello");
+
+    const before = await Blog.get({ id: blogID });
+    let during;
+
+    await sync(blogID, async function (folder) {
+      await storage.write(blogID, "/a.txt", Buffer.from("Hello, world"));
+      await folder.update("/a.txt");
+      during = await Blog.get({ id: blogID });
+    });
+
+    expect(during.cacheID).toBeGreaterThan(before.cacheID);
+  });
+
   // A file which changes while it builds is synced again. The first pass has
   // already stored the new entry, so the second finds it unchanged: the sync
   // must still purge and bump for the change the first pass stored.
