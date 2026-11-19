@@ -42,6 +42,15 @@ function isTemplate(path) {
   return pathNormalizer(path).toLowerCase().startsWith("/templates/");
 }
 
+// Whether an update of path can change the templates in the folder: a file
+// inside the templates folder, or the folder itself (it may have been removed
+// or renamed, taking every template in it)
+function isTemplatePath(path) {
+  return (
+    isTemplate(path) || pathNormalizer(path).toLowerCase() === "/templates"
+  );
+}
+
 // Sets one source's flags on a file (models/file/flags.js). A failure is
 // ignored, as a failed clear of the ignored record is: flags are a report,
 // and must never fail a sync.
@@ -319,3 +328,5 @@ module.exports = async function set(blog, path) {
     await rebuildDependents(blog.id, target);
   }
 };
+
+module.exports.isTemplatePath = isTemplatePath;

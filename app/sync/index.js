@@ -2,6 +2,8 @@ const buildFromFolder = require("models/template").buildFromFolder;
 const Blog = require("models/blog");
 const Update = require("./update");
 const renames = require("./renames");
+const { isTemplatePath } = require("./update/set");
+const folderRenames = require("models/template/folderRenames");
 const { take } = require("./hold");
 const messenger = require("./messenger");
 const previewReload = require("helper/publishPreviewReload");
@@ -121,6 +123,8 @@ async function acquire(blogID) {
 
   // we want to know if folder.update or folder.rename is called
   let changes = false;
+  // and whether any updated path was in the templates folder
+  let templatesTouched = false;
   const originalUpdate = new Update(blog, log, status);
   // There is no path to the blog's folder here: clients read and write it
   // through storage/folder, by blogID
@@ -133,6 +137,7 @@ async function acquire(blogID) {
       let result;
 
       addPendingUpdate(blogID, syncID, path);
+      if (isTemplatePath(path)) templatesTouched = true;
 
       try {
         result = await originalUpdate(path);
@@ -204,22 +209,44 @@ async function acquire(blogID) {
   }
 
   async function beforeRelease() {
-    log("Checking for renamed files");
-    try {
-      await renames(blogID);
-    } catch (err) {
-      folder.status("Error checking file renames");
-      log("Error checking file renames");
-      console.log(err);
+    // A rename is a deleted entry and a created one, so a sync in which no
+    // update changed anything has none to pair up
+    if (changes) {
+      log("Checking for renamed files");
+      try {
+        await renames(blogID);
+      } catch (err) {
+        folder.status("Error checking file renames");
+        log("Error checking file renames");
+        console.log(err);
+      }
     }
 
-    log("Building templates from folder");
-    try {
-      await buildFromFolder(blogID);
-    } catch (buildError) {
-      folder.status("Error building templates from folder");
-      log("Error building templates in folder");
-      console.log(buildError);
+    // Templates in the folder only change when a path in the templates folder
+    // is updated. The exception is an installed template whose folder went
+    // missing: buildFromFolder keeps it for a rename window and finishes
+    // removing it in the first sync after, whichever paths that sync updates
+    // (see models/template/folderRenames), so it runs while one is pending.
+    let buildTemplates = templatesTouched;
+
+    if (!buildTemplates) {
+      try {
+        const pending = await folderRenames.readPending(blogID);
+        buildTemplates = Object.keys(pending).length > 0;
+      } catch (err) {
+        buildTemplates = true;
+      }
+    }
+
+    if (buildTemplates) {
+      log("Building templates from folder");
+      try {
+        await buildFromFolder(blogID);
+      } catch (buildError) {
+        folder.status("Error building templates from folder");
+        log("Error building templates in folder");
+        console.log(buildError);
+      }
     }
 
     // Templates which link to files that changed in this sync have
