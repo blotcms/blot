@@ -1,4 +1,4 @@
-describe("git store: removing a blog's repository", function () {
+for (let i = 0; i < 40; i++) describe("git store: removing a blog's repository " + i, function () {
   // A blog on the git client with a clone, a memory store per blog, and the
   // store's log lines kept
   require("clients/git/tests/setup")({
