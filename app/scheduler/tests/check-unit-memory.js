@@ -394,7 +394,7 @@ describe("scheduler check-unit-memory", function () {
             throw new Error("smtp down");
           },
         })
-      ).toBeRejectedWithError("smtp down");
+      ).toBeRejectedWith(new Error("smtp down"));
 
       await h.tick();
       expect(h.sent.length).toBe(1);
