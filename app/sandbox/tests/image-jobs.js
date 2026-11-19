@@ -276,7 +276,7 @@ describe("sandbox image jobs", function () {
         expect(over.meta.thumbnails).toEqual([
           { width: 50, height: 25, format: "gif" },
         ]);
-        expect((await sharp(over.outputs[0]).metadata()).pages).toBeUndefined();
+        expect((await sharp(over.outputs[0]).metadata()).pages).toEqual(1);
 
         const within = await sandbox.run(
           "thumbnail",
