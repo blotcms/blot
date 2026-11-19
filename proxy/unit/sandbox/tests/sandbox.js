@@ -48,7 +48,7 @@ describe("sandbox broker and jail", function () {
     assert.deepStrictEqual(j.command, [
       "/usr/local/bin/pandoc",
       "+RTS",
-      "-M400M",
+      "-M256M",
       "-RTS",
       "lua",
       "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",

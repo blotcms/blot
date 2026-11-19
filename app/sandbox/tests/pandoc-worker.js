@@ -65,7 +65,7 @@ describe("sandbox pandoc worker", function () {
       job.pandocPath(),
       [
         "+RTS",
-        "-M400M",
+        "-M256M",
         "-RTS",
         "lua",
         path.join(__dirname, "../jobs/pandoc-worker.lua"),
