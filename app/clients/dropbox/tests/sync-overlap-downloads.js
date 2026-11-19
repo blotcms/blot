@@ -180,8 +180,10 @@ describe("dropbox sync/index overlapping downloads", function () {
 
   it("waits for running downloads before a throw from the loop propagates", async function () {
     let running = 0;
-    const err = new Error("Redis down");
-    err.name = "ClientOfflineError";
+    // A Redis outage is recognised by its constructor's name
+    // (helper/redisUnavailable), so the spec throws one of that class
+    class ClientOfflineError extends Error {}
+    const err = new ClientOfflineError("Redis down");
 
     const { done } = run({
       entries: files(6),
