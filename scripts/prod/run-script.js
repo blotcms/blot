@@ -19,6 +19,9 @@
 //
 // The script that runs is the image's copy of the path (the deployed code, so
 // a new script has to be deployed first); the local file only has to exist.
+// There is no sandbox in the container (BLOT_SCRIPT_RUNNER is set, and the
+// sandbox client throws for the fetch, fetch-image and screenshot jobs), so a
+// script that fetches remote URLs or takes screenshots runs in a unit instead.
 // Options before the script are this runner's, everything after it goes to the
 // script.
 
@@ -49,6 +52,9 @@ function usage() {
 Runs <script> (a path in this repository, as deployed in the image) on production
 in its own container: node --max-old-space-size=${SCRIPT_RUNNER.oldSpace}, ${SCRIPT_RUNNER.memory} of memory and no swap,
 oom_score_adj 1000, the data directory read-write. One at a time on the host.
+There is no sandbox in it: a script that fetches remote URLs or takes screenshots
+stops at the first one. Those run inside a unit with docker exec under the
+256 MB default (or are split into smaller runs).
 
   --release SHA  run that image instead of blot-blue's current one
   --wait         wait for a run that is in progress instead of refusing
@@ -115,6 +121,9 @@ async function main() {
     // Empty, so the env file can't override the flags given to node below
     NODE_OPTIONS: "",
     BLOT_TMP_DIRECTORY: TMP_DIRECTORY,
+    // There is no sandbox here: app/sandbox refuses the jobs that need the
+    // jail's network (fetch, fetch-image, screenshot) instead of degrading
+    BLOT_SCRIPT_RUNNER: "1",
   };
 
   const dockerRun = [
@@ -178,7 +187,7 @@ async function main() {
   let code;
   try {
     code = await new Promise((resolve) => {
-      const child = spawn("ssh", ["blot", remoteCommand], {
+      const child = spawn("ssh", [sshCommand.deployTarget(), remoteCommand], {
         stdio: ["ignore", "inherit", "inherit"],
       });
       child.on("exit", (exitCode) => resolve(exitCode));
