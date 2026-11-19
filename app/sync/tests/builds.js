@@ -96,4 +96,100 @@ describe("sync update builds", function () {
 
     expect(events).toEqual(["start 1", "end 1", "start 2"]);
   });
+
+  it("queues a '+' folder's files and the plain file of its entry together", async function () {
+    expect(builds.entryPath("/article.md+/one.md")).toBe("/article.md");
+    expect(builds.entryPath("/article.md+")).toBe("/article.md");
+    expect(builds.entryPath("/article.md")).toBe("/article.md");
+    expect(builds.entryPath("/notes/a.md")).toBe("/notes/a.md");
+
+    const events = [];
+    const first = deferred();
+
+    await builds.batch(blogID, async () => {
+      const folderPost = builds.queue(blogID, "/article.md+", async () => {
+        events.push("start folder");
+        await first.promise;
+        events.push("end folder");
+      });
+      const plain = builds.queue(blogID, "/article.md", async () => {
+        events.push("start plain");
+      });
+
+      await new Promise(setImmediate);
+      first.resolve();
+      await Promise.all([folderPost, plain]);
+    });
+
+    expect(events).toEqual(["start folder", "end folder", "start plain"]);
+  });
+
+  describe("a Redis outage in background work", function () {
+    const { SimpleError } = require("redis");
+    const outage = () =>
+      new SimpleError("NOREPLICAS Not enough good replicas to write.");
+
+    it("fails the batch once it has settled", async function () {
+      const recheck = deferred();
+      let settled = false;
+
+      const batch = builds.batch(blogID, async () => {
+        builds.track(
+          blogID,
+          recheck.promise.then(() => {
+            settled = true;
+            throw outage();
+          })
+        );
+        return "done";
+      });
+
+      recheck.resolve();
+
+      await expectAsync(batch).toBeRejectedWithError(/NOREPLICAS/);
+      expect(settled).toBe(true);
+
+      // The next batch starts clean
+      expect(await builds.batch(blogID, async () => "next")).toBe("next");
+    });
+
+    it("but not any other error", async function () {
+      const result = await builds.batch(blogID, async () => {
+        builds.track(blogID, Promise.reject(new Error("one file")));
+        return "done";
+      });
+
+      expect(result).toBe("done");
+    });
+
+    it("from a dependents recheck fails the batch", async function () {
+      const rebuildDependents = require("../update/rebuildDependents");
+      const Blog = require("models/blog");
+      const client = require("models/client");
+      const slow = deferred();
+      let reads = 0;
+
+      spyOn(Blog, "get").and.callFake(async () => ({ id: blogID }));
+      spyOn(client, "sMembers").and.callFake(async (key) => {
+        if (key.indexOf("template") > -1) return [];
+        // The first read finds no dependents; the recheck's read fails
+        if (reads++ === 0) return [];
+        throw outage();
+      });
+
+      const batch = builds.batch(blogID, async () => {
+        // A build still running, which the recheck must wait for
+        const build = builds.queue(blogID, "/slow.txt", () => slow.promise);
+        await new Promise(setImmediate);
+
+        await rebuildDependents(blogID, "/target.md");
+
+        slow.resolve();
+        await build;
+      });
+
+      await expectAsync(batch).toBeRejectedWithError(/NOREPLICAS/);
+      expect(reads).toBe(2);
+    });
+  });
 });

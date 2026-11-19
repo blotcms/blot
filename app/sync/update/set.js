@@ -304,15 +304,11 @@ module.exports = async function set(blog, path) {
     await Entry.drop(blog.id, path);
   } else if (!isTemplate(path) && !is_preview) {
     // This file should become a blog post or page!
-    // A file in a "+" folder builds the folder's post, so it waits for
-    // other builds of the folder in a concurrent sync (see builds.js)
-    await builds.queue(
-      blog.id,
-      multiInfo ? multiInfo.folderPath : path,
-      function () {
-        return buildAndSet(blog, path, multiInfo, state);
-      }
-    );
+    // In a concurrent sync this waits for other builds of the same entry:
+    // a file in a "+" folder builds the folder's post (see builds.js)
+    await builds.queue(blog.id, path, function () {
+      return buildAndSet(blog, path, multiInfo, state);
+    });
   }
 
   // Resolves to { changed: false } when the file built exactly the

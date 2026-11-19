@@ -14,21 +14,22 @@
 //
 // The default of 3 at once leaves one of the sandbox's 4 job slots to other
 // blogs. While it runs:
-//  - the paths in one "+" folder build the same post, so they are updated
-//    one after another, in order, never at once
-//  - two builds of one path never overlap, and a dependent's rebuild waits
+//  - paths which build the same entry (a "+" folder's files, and a plain
+//    file at the folder's path without the "+") are updated one after
+//    another, in order, never at once
+//  - two builds of one entry never overlap, and a dependent's rebuild waits
 //    for any build which might add a dependency on what changed (see
 //    update/builds.js)
 //  - it resolves only once the dependents' rebuilds it started have
-//    finished, so none outlives the sync's folder lock
+//    finished, so none outlives the sync's folder lock, and once the
+//    backlinks saving in series would have added are added
+//  - a Redis outage in that background work rejects too
 //
 // The order across paths isn't kept, so a client whose updates rely on it
 // (deletions before the writes which replace them, say) runs each group as
 // its own call.
 const config = require("config");
-const build = require("build");
 const eachLimit = require("helper/eachLimit");
-const pathNormalizer = require("helper/pathNormalizer");
 const builds = require("./update/builds");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 
@@ -58,25 +59,30 @@ module.exports = async function updateAll(blogID, paths, update, options = {}) {
     for (let index = 0; index < paths.length && !stopped; index++)
       await run(index);
   } else {
-    // One lane per "+" folder, and one for each other path
+    // One lane per entry the paths build: a "+" folder's files, and a
+    // plain file at the folder's path without the "+", share one
     const lanes = new Map();
 
     paths.forEach((path, index) => {
-      const multiInfo = build.findMultiFolder(path);
-      const lane = pathNormalizer(multiInfo ? multiInfo.folderPath : path);
+      const lane = builds.entryPath(path);
 
       if (!lanes.has(lane)) lanes.set(lane, []);
       lanes.get(lane).push(index);
     });
 
-    await builds.batch(blogID, () =>
-      eachLimit(Array.from(lanes.values()), limit, async (lane) => {
-        for (const index of lane) {
-          if (stopped) return;
-          await run(index);
-        }
-      })
-    );
+    try {
+      await builds.batch(blogID, () =>
+        eachLimit(Array.from(lanes.values()), limit, async (lane) => {
+          for (const index of lane) {
+            if (stopped) return;
+            await run(index);
+          }
+        })
+      );
+    } catch (err) {
+      // A Redis outage in work the updates started in the background
+      if (!stopped) stopped = err;
+    }
   }
 
   if (stopped) throw stopped;

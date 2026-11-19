@@ -11,7 +11,8 @@ var isHidden = require("build/prepare/isHidden");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var rebuildEntry = require("./rebuildEntry");
 var builds = require("./builds");
-var folderPostSourceFolder = require("./folderPostSourceFolder");
+var isRedisUnavailableError =
+  require("helper/redisUnavailable").isRedisUnavailableError;
 
 var NO_LONGER_VALID_ERRORS = [
   "WRONGTYPE",
@@ -67,7 +68,9 @@ module.exports = async function rebuildDependents(blogID, path) {
   await markTemplateDependents(blog.id, path, log);
 };
 
-// Never rejects: nothing waits for it but the batch
+// Nothing waits for it but the batch, so it only rejects with a Redis
+// outage, which fails the batch (see builds.js): the client then keeps its
+// place and the next sync applies these changes again
 async function recheck(blog, path, earlier, rebuilt, log) {
   try {
     await Promise.all(earlier);
@@ -80,6 +83,7 @@ async function recheck(blog, path, earlier, rebuilt, log) {
       await rebuildDependent(blog, dependent_path, log);
     }
   } catch (err) {
+    if (isRedisUnavailableError(err)) throw err;
     log("Error rebuilding dependents added during the batch:", err);
   }
 }
@@ -95,10 +99,8 @@ async function rebuildDependent(blog, dependent_path, log) {
 
   // Folder posts are rebuilt through their source folder, see
   // rebuildEntry. In a concurrent sync this waits for any other
-  // build of the same path (see builds.js).
-  const buildPath = folderPostSourceFolder(entry) || entry.path;
-
-  await builds.queue(blog.id, buildPath, async function () {
+  // build of the same entry (see builds.js).
+  await builds.queue(blog.id, entry.path, async function () {
     try {
       await rebuildEntry(blog, entry);
     } catch (err) {

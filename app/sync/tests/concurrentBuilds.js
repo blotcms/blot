@@ -52,12 +52,14 @@ describe("sync building files concurrently", function () {
         `Link: ${p}-uses-data\n\n[data](/${p}/_data.csv)`,
       ],
       [`/${p}/doomed.txt`, `Link: ${p}-doomed\n\n[data](/${p}/_data.csv)`],
+      [`/${p}/article.md+/one.txt`, "Folder article"],
     ];
   }
 
   // The changes: a wikilink to a new post, two new links to an existing
   // post, two menu pages, a "+" folder's two files, a changed file two posts
-  // depend on, and one of those posts deleted
+  // depend on, one of those posts deleted, a new post with a link to another
+  // new post, and a "+" folder replaced by a plain file of the same entry
   function changes(p) {
     return {
       write: [
@@ -72,8 +74,17 @@ describe("sync building files concurrently", function () {
         [`/${p}/album+/a.txt`, "Alpha"],
         [`/${p}/album+/b.txt`, "Beta"],
         [`/${p}/_data.csv`, "a,b\n3,4"],
+        // In series the target is saved first, so it gets the backlink
+        [`/${p}/new-target.txt`, `Link: ${p}-new-target\n\nNew target`],
+        [
+          `/${p}/new-linker.txt`,
+          `Link: ${p}-new-linker\n\n[t](/${p}-new-target)`,
+        ],
+        [`/${p}/article.md`, `Link: ${p}-article\n\nPlain article`],
       ],
-      remove: [`/${p}/doomed.txt`],
+      // The folder goes with its only file, as in a Git push
+      remove: [`/${p}/doomed.txt`, `/${p}/article.md+/one.txt`],
+      removeFolders: [`/${p}/article.md+`],
     };
   }
 
@@ -92,11 +103,12 @@ describe("sync building files concurrently", function () {
     const usesDataBefore = (await Entry.get(blog.id, `/${p}/uses-data.txt`))
       .html;
 
-    const { write, remove } = changes(p);
+    const { write, remove, removeFolders } = changes(p);
 
     for (const [path, content] of write)
       await folder.write(blog.id, path, content);
     for (const path of remove) await folder.remove(blog.id, path);
+    for (const path of removeFolders) await folder.remove(blog.id, path);
 
     await syncPaths(blog.id, write.map(([path]) => path).concat(remove), limit);
 
@@ -113,6 +125,8 @@ describe("sync building files concurrently", function () {
     const usesData = await get("uses-data.txt");
     const doomed = await get("doomed.txt");
     const album = await get("album");
+    const newTarget = await get("new-target.txt");
+    const article = await get("article.md");
 
     const menu = (await Blog.get({ id: blog.id })).menu
       .filter((item) => item.id.indexOf(`/${p}/`) === 0)
@@ -131,6 +145,12 @@ describe("sync building files concurrently", function () {
         album.html.indexOf("Alpha") > -1 &&
         album.html.indexOf("Beta") > -1,
       menu,
+      newTargetBacklinks: newTarget.backlinks.map(strip).sort(),
+      article:
+        !!article &&
+        !article.deleted &&
+        article.html.indexOf("Plain article") > -1 &&
+        article.html.indexOf("multi-file-post") === -1,
     };
   }
 
@@ -148,6 +168,8 @@ describe("sync building files concurrently", function () {
         doomedDeleted: true,
         album: true,
         menu: ["/P/page-1.txt", "/P/page-2.txt"],
+        newTargetBacklinks: ["/P-new-linker"],
+        article: true,
       });
 
       for (let i = 0; i < ITERATIONS; i++) {

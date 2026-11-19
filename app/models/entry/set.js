@@ -305,4 +305,51 @@ async function save(blogID, path, updates) {
   };
 }
 
+// Adds the stored entry's backlink to each entry it links to that lacks
+// it, as a save of the entry would if those entries had existed when it
+// was saved. It only adds: the entry's links and permalink are taken as
+// unchanged, so nothing is removed. A sync building several files at once
+// calls it for the entries it built (sync/update/builds.js), since a
+// linker saved before its target found nothing to add its backlink to.
+// Runs in the blog's queue. Resolves to the paths of the entries updated.
+async function addBacklinks(blogID, path) {
+  ensure(blogID, "string").and(path, "string");
+
+  return queue(blogID, async function () {
+    var entry = await get(blogID, path);
+
+    var links = (entry && entry.internalLinks) || [];
+
+    if (!entry || entry.deleted || !links.length) return [];
+
+    var changes = await backlinksToUpdate(
+      blogID,
+      entry,
+      links,
+      entry.permalink,
+      entry.url
+    );
+
+    var updated = Object.keys(changes);
+
+    for (const linkedEntryPath of updated) {
+      console.log(
+        clfdate(),
+        blogID.slice(0, 12),
+        "adding backlink from",
+        path,
+        "to",
+        linkedEntryPath
+      );
+
+      await save(blogID, linkedEntryPath, {
+        backlinks: changes[linkedEntryPath],
+      });
+    }
+
+    return updated;
+  });
+}
+
 module.exports = set;
+module.exports.addBacklinks = addBacklinks;

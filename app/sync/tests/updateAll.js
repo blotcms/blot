@@ -70,6 +70,51 @@ describe("sync updateAll", function () {
     expect(outcomes.map((outcome) => outcome.result.path)).toEqual(paths);
   });
 
+  it("updates a '+' folder's files and the plain file of the same entry in turn", async function () {
+    const record = recorder();
+    const replaced = [
+      "/article.md",
+      "/other.txt",
+      "/article.md+/one.md",
+      "/more.txt",
+      "/article.md+",
+    ];
+
+    await updateAll("blog", replaced, record.update, { limit: 3 });
+
+    const article = (path) => path.indexOf("/article.md") === 0;
+    expect(record.overlaps.filter((pair) => pair.every(article))).toEqual([]);
+    expect(record.started.filter(article)).toEqual([
+      "/article.md",
+      "/article.md+/one.md",
+      "/article.md+",
+    ]);
+  });
+
+  it("rejects when background work meets a Redis outage", async function () {
+    const builds = require("../update/builds");
+
+    const updating = updateAll(
+      "blog",
+      ["/a.txt", "/b.txt"],
+      async (path) => {
+        if (path === "/b.txt")
+          builds.track(
+            "blog",
+            sleep(10).then(() => {
+              throw new SimpleError(
+                "NOREPLICAS Not enough good replicas to write."
+              );
+            })
+          );
+        return {};
+      },
+      { limit: 3 }
+    );
+
+    await expectAsync(updating).toBeRejectedWithError(/NOREPLICAS/);
+  });
+
   it("collects other errors and carries on", async function () {
     const outcomes = await updateAll(
       "blog",
