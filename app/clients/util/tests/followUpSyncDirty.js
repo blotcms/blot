@@ -76,6 +76,22 @@ describe("followUpSync dirty flag", function () {
     expect(syncBlog.calls.count()).toBe(1);
   });
 
+  it("leaves an existing follow-up alone when a sync finds no dirty flag", async function () {
+    const syncBlog = jasmine
+      .createSpy("syncBlog")
+      .and.returnValue(Promise.resolve());
+    const followUps = followUpSync(name, syncBlog);
+
+    // Armed by another process for a change it has not synced yet
+    const armed = await followUps.arm(blogID);
+    expect(armed).toBeDefined();
+
+    await followUps.run(blogID);
+
+    expect(syncBlog.calls.count()).toBe(1);
+    expect(await followUps.alarm.when(blogID)).toBe(armed);
+  });
+
   it("caps the repeats and leaves the rest to the follow-up alarm", async function () {
     let followUps;
     const syncBlog = jasmine.createSpy("syncBlog").and.callFake(async () => {

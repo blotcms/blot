@@ -76,13 +76,22 @@ function followUpSync(name, syncBlog) {
     await alarms.queueSet(multi, blogID, Date.now() + RETRY_MS).exec();
   }
 
-  // Reads and clears the dirty flag together with the blog's follow-up, in one
-  // MULTI. Resolves true if requests arrived during the sync which has just
-  // finished.
+  // Reads and clears the dirty flag, and if it was set, cancels the blog's
+  // follow-up. Resolves true if requests arrived during the sync which has
+  // just finished.
+  //
+  // The alarm is cancelled only when the flag was set, because a follow-up
+  // with no flag may be one another process armed for a change it has not
+  // synced yet (see arm), and must stay in case that process dies. With the
+  // flag set, cancelling is safe: the sync run again starts after the cancel,
+  // so it sees everything as it is by then. A request that sets the flag and
+  // the alarm again between our GETDEL and our cancel loses only its alarm;
+  // its flag is still set, so the next takeDirty sees it and syncs again.
   async function takeDirty(blogID) {
-    const multi = client.multi().getDel(dirtyKey(blogID));
-    const [flag] = await alarms.queueCancel(multi, blogID).exec();
-    return flag !== null && flag !== undefined;
+    const flag = await client.getDel(dirtyKey(blogID));
+    if (flag === null || flag === undefined) return false;
+    await alarms.cancel(blogID);
+    return true;
   }
 
   // Resolves "synced" if the sync ran, "locked" if it found the lock taken
@@ -145,8 +154,7 @@ function followUpSync(name, syncBlog) {
 
     // The sync has released the lock. Requests which found it held while it
     // ran may have been walked past by it, so rather than leave them to the
-    // follow-up alarm, which waits RETRY_MS, sync again now. Taking the flag
-    // also takes the alarm those requests set, which this sync will cover.
+    // follow-up alarm, which waits RETRY_MS, sync again now.
     //
     // A request can still arrive after the flag was read and before the lock
     // was released (or, in a sync run again below, while it runs). It sets the
