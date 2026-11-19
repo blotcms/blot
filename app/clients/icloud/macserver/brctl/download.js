@@ -3,12 +3,22 @@ import fs from "fs-extra";
 import exec from "../exec.js";
 import clfdate from "../util/clfdate.js";
 
-const TIMEOUT = 15 * 1000; // 15 seconds
+// 15 seconds, plus 2 seconds a megabyte: a fixed 15 seconds timed out (and
+// retried) on multi-megabyte photos
+const BASE_TIMEOUT = 15 * 1000;
+const TIMEOUT_PER_MB = 2 * 1000;
+const MAX_TIMEOUT = 120 * 1000;
 const POLLING_INTERVAL = 200; // 200ms
+
+const timeoutFor = (size) =>
+  Math.min(MAX_TIMEOUT, BASE_TIMEOUT + (size / 1e6) * TIMEOUT_PER_MB);
 
 const BLOCK_SIZE = 512;
 
-export default async (path) => {
+// { force: true } issues the download even when the file looks downloaded:
+// a downloaded file whose newer version bird already has keeps its old
+// blocks until FileProvider fetches the new one.
+export default async (path, { force = false } = {}) => {
   console.log(clfdate(), `Downloading file from iCloud: ${path}`);
 
   const stat = await fs.stat(path);
@@ -36,28 +46,35 @@ export default async (path) => {
     }`
   );
 
-  if (isDownloaded) {
+  if (isDownloaded && !force) {
     console.log(clfdate(), `File already downloaded: ${path}`);
     return stat;
   }
 
   const pathInDrive = path.replace(iCloudDriveDirectory, "").slice(1);
 
-  console.log(clfdate(), `Issuing brctl download for path: ${pathInDrive}`);
+  const request = async () => {
+    console.log(clfdate(), `Issuing brctl download for path: ${pathInDrive}`);
 
-  const { stdout, stderr } = await exec("brctl", ["download", pathInDrive], {
-    cwd: iCloudDriveDirectory,
-  });
+    const { stdout, stderr } = await exec("brctl", ["download", pathInDrive], {
+      cwd: iCloudDriveDirectory,
+    });
 
-  if (stdout !== "") {
-    throw new Error(`Unexpected stdout: ${stdout}`);
-  }
+    if (stdout !== "") {
+      throw new Error(`Unexpected stdout: ${stdout}`);
+    }
 
-  if (stderr !== "") {
-    throw new Error(`Unexpected stderr: ${stderr}`);
-  }
+    if (stderr !== "") {
+      throw new Error(`Unexpected stderr: ${stderr}`);
+    }
+  };
 
-  while (Date.now() - start < TIMEOUT) {
+  await request();
+
+  let requested = { size: stat.size, mtimeMs: stat.mtimeMs };
+  const timeout = timeoutFor(stat.size);
+
+  while (Date.now() - start < timeout) {
     // wait for the file to be downloaded
     await new Promise((resolve) => setTimeout(resolve, POLLING_INTERVAL));
 
@@ -71,6 +88,15 @@ export default async (path) => {
     if (stat.blocks === expectedBlocks) {
       console.log(clfdate(), `Finish brctl download: ${path}`);
       return stat;
+    }
+
+    // A newer version replaced the file while we waited (FileProvider swaps
+    // in its placeholder, not downloaded): the download we asked for was for
+    // the old one, so ask again
+    if (stat.size !== requested.size || stat.mtimeMs !== requested.mtimeMs) {
+      console.log(clfdate(), `File changed while downloading: ${path}`);
+      requested = { size: stat.size, mtimeMs: stat.mtimeMs };
+      await request();
     }
   }
 
