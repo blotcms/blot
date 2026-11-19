@@ -1,3 +1,5 @@
+Google Drive: every time blot-blue starts, it logs 4 `Google Drive Client Error: Setup timed out` lines (app/clients/google-drive/routes/setup.js:51, `checkWeCanContinue`), at each deploy on 19 Nov 2026. Probably one blog's setup that never finished is resumed at startup and times out every time. Find the blog, then either finish or clear its stale setup state, so it stops retrying on every start.
+
 Noticed while fixing the flaky specs, 19 Nov 2026
 - Specs that hard-code a date beside `Date.now()` break once the real clock passes it, as `app/storage/tests/sweepGenerated.js`'s start window did on 18 Nov (#2790). `grep -rn "Date.UTC(20" app --include=*.js` under `tests/` finds the others; build such times from the spec's clock.
 - `app/models/template/readFromFolder.js` `continue`s when `folder.stat` or `folder.read` fails, so a view it couldn't read just goes missing and the read looks successful. Report them in `errors` instead.
