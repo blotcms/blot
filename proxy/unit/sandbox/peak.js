@@ -34,7 +34,10 @@ function track(
   directory,
   { reset: wantReset = false, shared = false, interval = 0 } = {}
 ) {
-  const file = directory + "/memory.peak";
+  // A function is resolved each time the file isn't open yet: nsjail's cgroup
+  // appears only once it has cloned the jailed process
+  const where = () =>
+    typeof directory === "function" ? directory() : directory;
   let fd = null;
   let reset = false;
   let peak = null;
@@ -43,6 +46,9 @@ function track(
 
   function open() {
     if (fd !== null || done) return;
+    const base = where();
+    if (!base) return;
+    const file = base + "/memory.peak";
     if (wantReset) {
       try {
         const writable = fs.openSync(file, "r+");
@@ -102,4 +108,34 @@ function words({ peak, reset, sampled, shared }) {
   return sampled ? `peak=${peak} peak_sampled=1` : `peak=${peak}`;
 }
 
-module.exports = { track, words, SAMPLE_MS };
+// nsjail names a jail's cgroup after the process it cloned, NSJAIL.<that
+// pid> (pid as the broker sees it), not after itself: so find nsjail's child,
+// from /proc/<pid>/task/<pid>/children, or failing that the NSJAIL.<n> under
+// mount whose process has nsjail as its parent. null until it exists.
+function nsjailCgroup(mount, nsjailPid) {
+  const exists = (pid) => fs.existsSync(`${mount}/NSJAIL.${pid}`);
+  try {
+    const children = fs
+      .readFileSync(`/proc/${nsjailPid}/task/${nsjailPid}/children`, "utf8")
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+    for (const pid of children)
+      if (exists(pid)) return `${mount}/NSJAIL.${pid}`;
+  } catch (e) {}
+  try {
+    for (const name of fs.readdirSync(mount)) {
+      const match = /^NSJAIL\.(\d+)$/.exec(name);
+      if (!match) continue;
+      try {
+        const stat = fs.readFileSync(`/proc/${match[1]}/stat`, "utf8");
+        // the parent pid is the second field after the ")" that ends comm
+        const ppid = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[1];
+        if (Number(ppid) === nsjailPid) return `${mount}/${name}`;
+      } catch (e) {}
+    }
+  } catch (e) {}
+  return null;
+}
+
+module.exports = { track, words, nsjailCgroup, SAMPLE_MS };

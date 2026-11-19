@@ -1417,6 +1417,50 @@ function answer(text) {
     );
   });
 
+  test("peak: finds the cgroup nsjail names after the process it cloned", async () => {
+    if (process.platform !== "linux") return;
+    const mount = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-mount-"));
+    // stands in for nsjail: a process whose one child is the jailed process
+    const parent = spawn("sh", ["-c", "sleep 5 & wait"], { stdio: "ignore" });
+    try {
+      let child = null;
+      for (let i = 0; i < 50 && !child; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        try {
+          child = fs
+            .readFileSync(
+              `/proc/${parent.pid}/task/${parent.pid}/children`,
+              "utf8"
+            )
+            .trim();
+        } catch (e) {}
+      }
+      assert.ok(child, "the stand-in's child started");
+      assert.strictEqual(peaks.nsjailCgroup(mount, parent.pid), null);
+      fs.mkdirSync(`${mount}/NSJAIL.${parent.pid}`);
+      assert.strictEqual(peaks.nsjailCgroup(mount, parent.pid), null);
+      fs.mkdirSync(`${mount}/NSJAIL.${child}`);
+      assert.strictEqual(
+        peaks.nsjailCgroup(mount, parent.pid),
+        `${mount}/NSJAIL.${child}`
+      );
+    } finally {
+      parent.kill("SIGKILL");
+    }
+  });
+
+  test("peak: a cgroup given as a function is looked up until it exists", () => {
+    const directory = cgroupWithPeak(64);
+    let exists = false;
+    const tracker = peaks.track(() => (exists ? directory : null), {
+      interval: 10,
+    });
+    tracker.sample();
+    exists = true;
+    tracker.sample();
+    assert.strictEqual(tracker.finish().peak, 64);
+  });
+
   test("peak: says what a peak is worth when the kernel can't reset it", () => {
     assert.strictEqual(
       peaks.words({ peak: 5, reset: true, sampled: false, shared: true }),

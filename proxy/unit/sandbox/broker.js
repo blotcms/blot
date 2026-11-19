@@ -60,13 +60,16 @@ function createBroker(options = {}) {
   // a jail with a network, has its cgroup made here (./cgroup.js)
   const prepareCgroup = options.prepareCgroup || cgroup.prepare;
   // Where a jail's memory is counted: its broker-made cgroup, or the one nsjail
-  // makes for it, NSJAIL.<its pid> (nsjail is the jail's process: the shell
-  // that starts it execs it). Tests replace it.
+  // makes for it, named after the process nsjail cloned (child.pid is nsjail
+  // itself: the shell that starts it execs it), found once it exists. Tests
+  // replace it.
   const cgroupOf =
     options.cgroupOf ||
     ((child, directory) =>
       directory ||
-      (child.pid ? `${jail.CGROUP_MOUNT}/NSJAIL.${child.pid}` : null));
+      (child.pid
+        ? () => peak.nsjailCgroup(jail.CGROUP_MOUNT, child.pid)
+        : null));
   // One line per job when it is done, for sizing each job's memory
   const jobLine = (name, error, ms, measured, queuedMs, extra = "") =>
     `broker: job=${name} ${error ? "error=" + error : "ok"}${extra} ms=${ms} ` +
