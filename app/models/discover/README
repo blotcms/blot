@@ -46,8 +46,8 @@ one request can add the post.
 ## Curating locally
 
 To try the page with real posts, `scripts/discover/mirror-featured.js`
-(development only) rebuilds the featured sites locally from their public RSS
-feeds. It keeps production's blog IDs, entry URLs and image asset paths, and
+(development only) rebuilds each featured site's 10 newest posts locally
+from its public RSS feed (`--limit <n>` for more or fewer). It keeps production's blog IDs, entry URLs and image asset paths, and
 copies the images from the CDN into the local bucket.
 `scripts/discover/add-links.js <host>` prints "Add to Discover" links for a
 site's newest posts (it works on production too, for older posts). Locally

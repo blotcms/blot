@@ -2,9 +2,11 @@
 // (app/documentation/featured/sites.txt) from their public RSS feeds, so the
 // maintainer can curate the Discover page locally with real posts.
 //
-//   node scripts/discover/mirror-featured.js [host ...]
+//   node scripts/discover/mirror-featured.js [host ...] [--limit <n>]
 //
-// With no hosts it does every host in sites.txt. For each one it fetches
+// With no hosts it does every host in sites.txt. Only each site's newest
+// posts are mirrored, 10 unless --limit says otherwise, and only their
+// images are downloaded. For each one it fetches
 // https://<host>/feed.rss and finds the production blog ID in the image URLs
 // (https://cdn.blot.im/blog_.../). The local copy uses the same identifiers
 // as production, so that a later export/import maps local picks onto
@@ -52,6 +54,7 @@ const OWNER_EMAIL = "example@example.com";
 const SITES = join(__dirname, "../../app/documentation/featured/sites.txt");
 const TIMEOUT = 15 * 1000;
 const MAX_IMAGE_BYTES = 15 * 1024 * 1024;
+const DEFAULT_LIMIT = 10;
 const USER_AGENT = "Blot Discover mirror";
 const CDN = "https://cdn.blot.im/";
 const BLOG_ID = /https:\/\/cdn\.blot\.im\/(blog_[a-f0-9]+)\//;
@@ -59,7 +62,9 @@ const BLOG_ID = /https:\/\/cdn\.blot\.im\/(blog_[a-f0-9]+)\//;
 function usage(message) {
   if (message) console.error(message + "\n");
 
-  console.error("Usage: node scripts/discover/mirror-featured.js [host ...]");
+  console.error(
+    "Usage: node scripts/discover/mirror-featured.js [host ...] [--limit <n>]"
+  );
   process.exit(2);
 }
 
@@ -253,7 +258,7 @@ async function writeEntry(blogID, item, now) {
 }
 
 // Resolves to { blogID, entries, images } for the host, or null if skipped
-async function mirrorHost(host, owner) {
+async function mirrorHost(host, owner, limit) {
   let xml;
 
   try {
@@ -281,7 +286,10 @@ async function mirrorHost(host, owner) {
       };
     })
     .get()
-    .filter((item) => item.link && item.html);
+    .filter((item) => item.link && item.html)
+    .sort(
+      (a, b) => (Date.parse(b.pubDate) || 0) - (Date.parse(a.pubDate) || 0)
+    );
 
   if (!items.length) {
     console.log(host + ": skipped, no items in the feed");
@@ -296,6 +304,9 @@ async function mirrorHost(host, owner) {
   }
 
   const blogID = found[1];
+
+  // The blog ID may only be in older posts' images, so trim after finding it
+  items.splice(limit);
   const existing = await Blog.get({ id: blogID });
   let created = false;
 
@@ -352,10 +363,20 @@ async function main() {
   if (config.environment !== "development")
     usage("This script only runs in development, not " + config.environment);
 
-  const args = process.argv.slice(2);
+  const argv = process.argv.slice(2);
+  const args = [];
+  let limit = DEFAULT_LIMIT;
 
-  for (const arg of args)
-    if (arg.startsWith("-")) usage("Unknown argument: " + arg);
+  for (let i = 0; i < argv.length; i++) {
+    if (argv[i] === "--limit" && argv[i + 1]) {
+      limit = parseInt(argv[++i], 10);
+      if (!(limit > 0)) usage("--limit must be a positive number");
+    } else if (argv[i].startsWith("-")) {
+      usage("Unknown argument: " + argv[i]);
+    } else {
+      args.push(argv[i]);
+    }
+  }
 
   const owner = await User.getByEmail(OWNER_EMAIL);
 
@@ -366,7 +387,7 @@ async function main() {
   const totals = { hosts: 0, skipped: 0, entries: 0, images: 0 };
 
   for (const host of hosts) {
-    const result = await mirrorHost(host, owner);
+    const result = await mirrorHost(host, owner, limit);
 
     if (!result) {
       totals.skipped++;
