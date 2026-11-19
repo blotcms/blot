@@ -1,5 +1,19 @@
 const Blog = require("models/blog");
 const Entries = require("models/entries");
+const Discover = require("models/discover");
+const config = require("config");
+
+const ADD = "https://" + config.host + "/sites/discover/add/";
+
+// A one-time "Add to Discover" link for a post from a site that allows it,
+// unless the post is already on Discover. These links are only in the
+// maintainer's daily email.
+async function discoverLink(blog, entry) {
+  if (blog.includeInDiscover !== true) return "";
+  if (await Discover.has(blog.id, entry.id)) return "";
+  const token = await Discover.token.create(blog.id, entry.id);
+  return ADD + token;
+}
 
 function shuffle(items) {
   for (let i = items.length - 1; i > 0; i--) {
@@ -27,18 +41,19 @@ async function main() {
       if (!entries || !entries.length) continue;
 
       const cutoff = Date.now() - 24 * 60 * 60 * 1000;
-      const new_posts = entries
-        .filter(function (entry) {
-          if (!entry || !entry.dateStamp) return false;
-          if (entry.deleted || entry.draft || entry.scheduled) return false;
-          return entry.dateStamp > cutoff;
-        })
-        .map(function (entry) {
-          return {
-            title: entry.title,
-            link: extendedBlog.url + entry.url,
-          };
+      const new_posts = [];
+
+      for (const entry of entries) {
+        if (!entry || !entry.dateStamp) continue;
+        if (entry.deleted || entry.draft || entry.scheduled) continue;
+        if (entry.dateStamp <= cutoff) continue;
+
+        new_posts.push({
+          title: entry.title,
+          link: extendedBlog.url + entry.url,
+          discover: await discoverLink(blog, entry),
         });
+      }
 
       if (!new_posts.length) continue;
 

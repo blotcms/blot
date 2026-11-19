@@ -1,0 +1,44 @@
+{{#discover}}
+<div class="discover-page">
+<div class="discover">
+  <div class="discover-main">
+    {{^posts.length}}
+    <p>Nothing here yet.</p>
+    {{/posts.length}}
+
+    <ul class="discover-grid" id="discover-grid">
+      {{#posts}}{{> discover-card}}{{/posts}}
+    </ul>
+
+    {{#next}}
+    <a class="discover-more" id="discover-more" href="{{{next}}}">More posts</a>
+    {{/next}}
+  </div>
+
+  {{#sites.length}}
+  <aside class="discover-sidebar">
+    <div class="discover-sites">
+      <div class="discover-sites-head">
+        <div class="discover-sites-title">People</div>
+        <a href="/examples">See all</a>
+      </div>
+      <ul>
+        {{#sites}}
+        <li>
+          {{#popover}}{{> discover-popover}}{{/popover}}
+          <a target="_blank" rel="noopener" href="{{{link}}}">
+            <span class="discover-sites-avatar"><img src="{{#cdn}}{{{image}}}{{/cdn}}" alt="" loading="lazy" /></span>
+            <span class="discover-site-text">
+              <span class="discover-site-name">{{name}}</span>
+              <span class="discover-site-bio">{{bio}}</span>
+            </span>
+          </a>
+        </li>
+        {{/sites}}
+      </ul>
+    </div>
+  </aside>
+  {{/sites.length}}
+</div>
+</div>
+{{/discover}}

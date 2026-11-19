@@ -1,0 +1,618 @@
+/* blot.im/discover (#2639), and the card preview on the confirm page */
+
+.discover-page {
+  container: discover / inline-size;
+}
+
+/* The feed in the middle of the page, the sites in a narrow column against
+   the right edge; the left column is empty, so that the feed is centred */
+.discover {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 560px) minmax(0, 1fr);
+  column-gap: 40px;
+  align-items: start;
+  padding-top: 8px;
+}
+
+.discover-main {
+  grid-column: 2;
+  min-width: 0;
+}
+
+.discover-sidebar {
+  grid-column: 3;
+  justify-self: end;
+  width: 240px;
+  /* The box's top in line with the top of the first post's Visit site pill,
+     15.5px into the post. Sticky, it keeps that plus the feed's 8px from the
+     top. */
+  margin-top: 15.5px;
+  position: sticky;
+  top: 23.5px;
+}
+
+/* The featured sites, in a box */
+.discover-sites {
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 16px 16px 8px;
+}
+
+.discover-sites-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+/* Not an h2: the documentation layout makes each h2 a link to itself */
+.discover-sites-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Like Visit site: text in the accent colour, a pill on hover */
+.discover-sites-head a {
+  margin-right: -0.75em;
+  padding: 0.35em 0.75em;
+  border-radius: 2em;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-color);
+  text-decoration: none;
+  transition: background 0.1s ease;
+}
+
+.discover-sites-head a:hover {
+  background-color: #e8ecf9;
+}
+
+.discover-sites ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.discover-sites li a {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  color: inherit;
+  text-decoration: none;
+}
+
+/* The same round avatar as the posts, smaller, with the faint outline on a
+   layer above it */
+.discover-sites-avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+}
+
+.discover-sites-avatar img {
+  display: block;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--light-background-color);
+}
+
+.discover-sites-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+}
+
+.discover-site-text {
+  flex-grow: 1;
+  min-width: 0;
+}
+
+.discover-site-name {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 19px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discover-sites li a:hover .discover-site-name {
+  text-decoration: underline;
+}
+
+.discover-site-bio {
+  display: block;
+  font-size: 13px;
+  line-height: 18px;
+  color: var(--medium-text-color);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discover-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-width: 560px;
+}
+
+/* A post: the site's avatar on the left, everything else beside it. Sizes
+   and spacing follow the maintainer's reference: a 560px column, a 36px
+   avatar, 15px text on 21px lines. */
+.discover-card {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  column-gap: 12px;
+  padding: 20px 0;
+  font-size: 15px;
+  line-height: 21px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.discover-card a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.discover-avatar {
+  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  object-fit: cover;
+  box-shadow: inset 0 0 0 1px var(--inset-image-border-color);
+  background: var(--light-background-color);
+}
+
+.discover-initial {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  color: var(--medium-text-color);
+}
+
+.discover-body {
+  min-width: 0;
+}
+
+/* A faint dark outline inside photos and avatars. An inset shadow on the
+   img itself is drawn under the image, so it's on a layer above it. */
+.discover-avatar-link,
+.discover-track a {
+  position: relative;
+  display: block;
+}
+
+.discover-avatar-link::after,
+.discover-track a::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+  pointer-events: none;
+}
+
+.discover-avatar-link::after {
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+}
+
+/* The name and the date, with Visit site on the right */
+.discover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  height: 21px;
+}
+
+.discover-who {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.discover-name {
+  font-size: 15px;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Text in the accent colour, which becomes a pill on hover */
+.discover-card .discover-visit {
+  flex-shrink: 0;
+  margin-right: -0.75em;
+  padding: 0.35em 0.75em;
+  border-radius: 2em;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--accent-color);
+  transition: background 0.1s ease;
+}
+
+.discover-card .discover-visit:hover {
+  background-color: #e8ecf9;
+}
+
+.discover-title {
+  display: block;
+  margin-top: 4px;
+}
+
+.discover-card .discover-name:hover {
+  text-decoration: underline;
+}
+
+/* A post's text above its photos, when the maintainer turned it on: the
+   title and the post's paragraphs, clipped at 4 lines. When clipped
+   (.clamped, set by app/views/js/discover.js) the last line fades into a
+   grey "See more", as in the maintainer's reference. */
+.discover-text {
+  display: block;
+  position: relative;
+  margin-top: 4px;
+}
+
+.discover-text-clip {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
+
+.discover-text p {
+  margin: 0 0 8px;
+}
+
+.discover-text p:last-child {
+  margin-bottom: 0;
+}
+
+.discover-see-more {
+  display: none;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding-left: 72px;
+  color: var(--medium-text-color);
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--background-color) 64px
+  );
+}
+
+.discover-text.clamped .discover-see-more {
+  display: block;
+}
+
+/* One photo: the full width. More: a row to scroll sideways, the next
+   photo peeking in, with arrow buttons */
+.discover-carousel {
+  position: relative;
+  margin-top: 22px;
+}
+
+.discover-track {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.discover-track::-webkit-scrollbar {
+  display: none;
+}
+
+.discover-track a {
+  flex: 0 0 auto;
+  scroll-snap-align: start;
+}
+
+/* Photos are never cropped: in a carousel each is 300px tall at its own
+   width */
+.discover-track img {
+  display: block;
+  height: 300px;
+  width: auto;
+  border-radius: 12px;
+  background: var(--light-background-color);
+}
+
+/* A single photo at its own shape: at most the column's width, and at most
+   500px tall, so a portrait photo is narrower than the column */
+.discover-photos-1 .discover-track a {
+  flex: 0 1 auto;
+  max-width: 100%;
+}
+
+.discover-photos-1 .discover-track img {
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  max-height: 500px;
+}
+
+.discover-carousel button {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 50%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(30, 30, 30, 0.8);
+  cursor: pointer;
+}
+
+/* Octicons chevron-left-16 and chevron-right-16 */
+.discover-carousel button svg {
+  fill: currentColor;
+}
+
+.discover-carousel button[hidden] {
+  display: none;
+}
+
+.discover-prev {
+  left: 12px;
+}
+
+.discover-next {
+  right: 12px;
+}
+
+/* A post without photos: a box with the site and the title */
+.discover-link-card {
+  display: block;
+  padding: 14px 16px;
+  margin-top: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+}
+
+/* The site's address, under a rule */
+.discover-link-site {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+  font-size: 12px;
+  color: var(--medium-text-color);
+}
+
+.discover-link-title {
+  display: block;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 22px;
+}
+
+.discover-excerpt {
+  display: block;
+  margin-top: 0.35rem;
+  color: var(--medium-text-color);
+  font-size: var(--small-font-size);
+  line-height: 1.5;
+}
+
+.discover-card .discover-date {
+  flex-shrink: 0;
+  font-size: 15px;
+  color: var(--light-text-color);
+}
+
+.discover-card .discover-date:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 600px) {
+  .discover-track img {
+    height: 260px;
+  }
+}
+
+.discover-more {
+  display: block;
+  margin: 2rem auto;
+  text-align: center;
+}
+
+.discover-preview {
+  max-width: 320px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 2rem;
+}
+
+.discover-choose {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.5rem;
+}
+
+.discover-choose label {
+  display: block;
+  position: relative;
+  cursor: pointer;
+}
+
+.discover-choose img {
+  display: block;
+  max-width: 100%;
+  height: 120px;
+  width: auto;
+  margin: 0 auto;
+  border-radius: calc(var(--border-radius) / 2);
+  outline: 2px solid transparent;
+}
+
+.discover-choose input:checked + img {
+  outline-color: var(--accent-color);
+}
+
+.discover-choose input {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+}
+
+/* Narrower, the layout follows the width it has (a container query, so the
+   page's own margins count): the feed against the left with the box against
+   the right, then the feed alone, centred, once the feed would be under
+   480px wide beside the box */
+@container discover (max-width: 1119px) {
+  .discover {
+    grid-template-columns: minmax(0, 560px) 240px;
+    justify-content: space-between;
+  }
+
+  .discover-main {
+    grid-column: 1;
+  }
+
+  .discover-sidebar {
+    grid-column: 2;
+  }
+}
+
+@container discover (max-width: 759px) {
+  .discover {
+    grid-template-columns: minmax(0, 560px);
+    justify-content: center;
+  }
+
+  .discover-sidebar {
+    display: none;
+  }
+}
+
+/* The popover shown on hovering a name or avatar, in the feed or the sites
+   box. Sizes follow the maintainer's reference: 320px wide, 12px padding,
+   an 18px name, a 48px avatar, 15px text on 20px lines, one button. It is
+   placed by app/views/js/discover.js. */
+.discover-popover {
+  display: none;
+  position: fixed;
+  z-index: 50;
+  width: 320px;
+  box-sizing: border-box;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  background: var(--background-color);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+  color: var(--text-color);
+  font-size: 15px;
+  line-height: 20px;
+  text-align: left;
+}
+
+.discover-popover.open {
+  display: block;
+}
+
+.discover-popover-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.discover-popover-who {
+  min-width: 0;
+  padding-top: 2px;
+}
+
+.discover-popover-name {
+  font-size: 18px;
+  line-height: 24px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.discover-popover-address {
+  margin-top: 4px;
+  color: var(--medium-text-color);
+}
+
+.discover-popover-avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+}
+
+.discover-popover-avatar img {
+  display: block;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--light-background-color);
+}
+
+.discover-popover-avatar::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.1);
+}
+
+.discover-popover-bio,
+.discover-popover-years {
+  margin: 0;
+}
+
+.discover-popover-bio {
+  margin-top: 13px;
+}
+
+.discover-popover-years {
+  margin-top: 4px;
+  color: var(--medium-text-color);
+}
+
+.discover-popover .discover-popover-button {
+  display: block;
+  margin-top: 16px;
+  height: 31px;
+  line-height: 31px;
+  border-radius: 8px;
+  text-align: center;
+  font-weight: 600;
+  color: #fff;
+  background: var(--accent-color);
+  text-decoration: none;
+}
+
+.discover-popover .discover-popover-button:hover {
+  filter: brightness(1.08);
+}

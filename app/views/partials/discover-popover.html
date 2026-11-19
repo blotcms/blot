@@ -1,0 +1,13 @@
+<div class="discover-popover" role="dialog" aria-label="{{name}}">
+  <div class="discover-popover-top">
+    <div class="discover-popover-who">
+      <div class="discover-popover-name">{{name}}</div>
+      <div class="discover-popover-address">{{address}}</div>
+    </div>
+    {{#featuredImage}}<span class="discover-popover-avatar"><img src="{{#cdn}}{{{featuredImage}}}{{/cdn}}" alt="" /></span>{{/featuredImage}}
+    {{^featuredImage}}{{#avatar}}<span class="discover-popover-avatar"><img src="{{{avatar}}}" alt="" /></span>{{/avatar}}{{/featuredImage}}
+  </div>
+  {{#bio}}<p class="discover-popover-bio">{{bio}}</p>{{/bio}}
+  {{#years}}<p class="discover-popover-years">{{years}}</p>{{/years}}
+  <a class="discover-popover-button" href="{{{url}}}" target="_blank" rel="noopener">Visit site</a>
+</div>

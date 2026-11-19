@@ -30,6 +30,9 @@ dashboard.use(require("dashboard/util/csrf"));
 dashboard.use("/sign-up", require("./sign-up"));
 dashboard.use("/log-in", require("./log-in"));
 
+// The one-time "Add to Discover" links in the maintainer's daily email
+dashboard.use("/discover/add", require("./discover").add);
+
 dashboard.get("/disabled", logout, (req, res) => {
   res.render("dashboard/disabled");
 });
