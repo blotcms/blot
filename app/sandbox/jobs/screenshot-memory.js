@@ -17,9 +17,11 @@ const FALLBACK_THRESHOLD = 430 * MiB;
 const POLL_MS = 250;
 const PAGE_SIZE = 4096;
 
-// The browser cgroup's name ends like this (<unit>-browser): the processes of
-// the job are the ones in it
-const BROWSER_CGROUP = /-browser$/;
+// Inside the jail, /proc/<pid>/cgroup is relative to the jail's cgroup
+// namespace, whose root is the browser cgroup (the job joins it before nsjail
+// starts): the job's processes are exactly the ones reported as "0::/", and
+// every other process in the container is "0::/.." followed by a path.
+const JAIL_CGROUP = "0::/";
 
 // The job's limit, passed in by the broker (proxy/unit/sandbox/jail.js) as the
 // browser cgroup's memory.max in bytes: absent or "max" where it has none
@@ -29,53 +31,21 @@ function thresholdFrom(value, fallback = FALLBACK_THRESHOLD) {
   return max > 0 ? Math.floor(max * THRESHOLD_SHARE) : fallback;
 }
 
-async function listProcesses(io) {
-  const parent = new Map();
-  const cgroups = new Map();
+// The pids of the processes in the jail, which are the ones the cgroup says
+// so for. /proc is the container's and the jail's pid namespace is its own, so
+// no pid the job knows (process.pid) can be used, and nothing is summed that
+// can't be shown to be in the jail.
+async function jailPids(io) {
+  const pids = [];
   for (const entry of await io.readdir("/proc")) {
     if (!/^\d+$/.test(entry)) continue;
     try {
-      const stat = await io.readFile(`/proc/${entry}/stat`, "utf8");
-      // pid (comm) state ppid ...: comm may hold spaces and parentheses
-      const after = stat.slice(stat.lastIndexOf(")") + 2).split(" ");
-      parent.set(Number(entry), Number(after[1]));
-    } catch (e) {
-      continue; // gone since the listing
-    }
-    try {
-      cgroups.set(
-        Number(entry),
-        await io.readFile(`/proc/${entry}/cgroup`, "utf8")
-      );
-    } catch (e) {}
+      const text = await io.readFile(`/proc/${entry}/cgroup`, "utf8");
+      if (text.split("\n").some((line) => line === JAIL_CGROUP))
+        pids.push(Number(entry));
+    } catch (e) {} // gone since the listing
   }
-  return { parent, cgroups };
-}
-
-// The pids of the job. /proc is the container's and the jail has a pid
-// namespace of its own, so process.pid is not the pid /proc knows: the job's
-// processes are found by their cgroup, and only if there are none, as the
-// descendants of process.pid.
-function jobPids({ parent, cgroups }, root) {
-  const pids = [];
-  for (const [pid, text] of cgroups) {
-    const path = text.trim().split("\n").pop().split(":").pop();
-    if (BROWSER_CGROUP.test(path)) pids.push(pid);
-  }
-  if (pids.length) return pids;
-
-  const inTree = new Set([root]);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const [pid, ppid] of parent) {
-      if (!inTree.has(pid) && inTree.has(ppid)) {
-        inTree.add(pid);
-        grew = true;
-      }
-    }
-  }
-  return [...inTree].filter((pid) => parent.has(pid));
+  return pids;
 }
 
 // Bytes of memory of those processes, and of which kind: "pss" (proportional
@@ -83,8 +53,9 @@ function jobPids({ parent, cgroups }, root) {
 // processes that map it, so the sum is close to what the cgroup is charged) or,
 // where a process's smaps_rollup can't be read, "rss" (which counts a shared
 // page for each process, and so errs high).
-async function processBytes(io, root) {
-  const pids = jobPids(await listProcesses(io), root);
+async function processBytes(io) {
+  const pids = await jailPids(io);
+  if (!pids.length) return null;
   let total = 0;
   let source = "pss";
   for (const pid of pids) {
@@ -105,21 +76,21 @@ async function processBytes(io, root) {
 }
 
 // { read(), threshold, source }: read() resolves to the job's memory in bytes
-// now and sets source to the kind of reading it was; threshold is what a page
+// now, or null if it can't tell which processes are the jail's, and sets source to the kind of reading it was; threshold is what a page
 // is given up on, a share of the limit the broker passed in the environment.
 // io and env are for the specs.
 function createMeter({
   io = { readFile: fs.readFile, readdir: fs.readdir },
   env = process.env,
-  pid = process.pid,
 } = {}) {
   const meter = {
     source: "pss",
     threshold: thresholdFrom(env.BLOT_BROWSER_MEMORY_MAX),
     async read() {
-      const { bytes, source } = await processBytes(io, pid);
-      meter.source = source;
-      return bytes;
+      const found = await processBytes(io);
+      if (!found) return null; // no way to tell: the page is not judged
+      meter.source = found.source;
+      return found.bytes;
     },
   };
   return meter;

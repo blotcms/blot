@@ -34,52 +34,50 @@ describe("sandbox screenshot memory watchdog", function () {
   });
 
   describe("the meter", function () {
-    const stat = (ppid) => `x (a b) S ${ppid} 1 1 0`;
     const pages = (n) => `100 ${n} 0 0 0 0 0`;
     const rollup = (kb) =>
       `00400000-ff Rollup\nRss: ${kb * 2} kB\nPss: ${kb} kB\n`;
-    const browser = "0::/blot-sandbox/blue-browser\n";
+    // As the jail sees them: its own cgroup is the root of its namespace,
+    // everything else in the container is outside it
+    const jail = "0::/\n";
+    const outside = (path) => `0::/../${path}\n`;
 
-    it("sums the PSS of the processes in the browser cgroup, whatever pid the job has", async function () {
+    it("sums the PSS of the processes in the jail's cgroup, not those outside it", async function () {
       const meter = memory.createMeter({
-        pid: 7, // the jail's own numbering: not in /proc
         env: {},
         io: fakeIO(
           {
-            "/proc/10/stat": stat(1),
-            "/proc/10/cgroup": browser,
+            "/proc/10/cgroup": jail,
             "/proc/10/smaps_rollup": rollup(100),
-            "/proc/11/stat": stat(10),
-            "/proc/11/cgroup": browser,
+            "/proc/11/cgroup": jail,
             "/proc/11/smaps_rollup": rollup(2000),
-            "/proc/99/stat": stat(1),
-            "/proc/99/cgroup": "0::/system.slice/other\n",
+            "/proc/1/cgroup": outside("../docker-x.scope"),
+            "/proc/1/smaps_rollup": rollup(50000),
+            "/proc/99/cgroup": outside("blue"),
             "/proc/99/smaps_rollup": rollup(50000),
+            "/proc/98/cgroup": "0::/blue\n", // not the namespace root
+            "/proc/98/smaps_rollup": rollup(50000),
           },
-          { "/proc": ["10", "11", "99", "self", "meminfo"] }
+          { "/proc": ["1", "10", "11", "98", "99", "self", "meminfo"] }
         ),
       });
       expect(await meter.read()).toBe(2100 * 1024);
       expect(meter.source).toBe("pss");
     });
 
-    it("falls back to the descendants of its own pid when no process is in that cgroup", async function () {
+    it("can't tell, and reads null, when no process is shown to be in the jail", async function () {
       const meter = memory.createMeter({
-        pid: 10,
         env: {},
         io: fakeIO(
           {
-            "/proc/10/stat": stat(1),
+            "/proc/10/cgroup": outside("blue"),
             "/proc/10/smaps_rollup": rollup(10),
-            "/proc/12/stat": stat(10),
-            "/proc/12/smaps_rollup": rollup(20),
-            "/proc/99/stat": stat(1),
-            "/proc/99/smaps_rollup": rollup(5000),
+            "/proc/12/smaps_rollup": rollup(20), // no cgroup file
           },
-          { "/proc": ["10", "12", "99"] }
+          { "/proc": ["10", "12"] }
         ),
       });
-      expect(await meter.read()).toBe(30 * 1024);
+      expect(await meter.read()).toBe(null);
     });
 
     it("uses RSS for a process whose smaps_rollup can't be read, and says so", async function () {
@@ -87,11 +85,9 @@ describe("sandbox screenshot memory watchdog", function () {
         env: {},
         io: fakeIO(
           {
-            "/proc/10/stat": stat(1),
-            "/proc/10/cgroup": browser,
+            "/proc/10/cgroup": jail,
             "/proc/10/smaps_rollup": rollup(100),
-            "/proc/11/stat": stat(10),
-            "/proc/11/cgroup": browser,
+            "/proc/11/cgroup": jail,
             "/proc/11/statm": pages(1000),
           },
           { "/proc": ["10", "11"] }

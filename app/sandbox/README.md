@@ -386,12 +386,14 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   the cgroup); absent or `max`, the job uses 430 MiB. The reading is the sum of
   PSS (`smaps_rollup`, which splits shared pages between the processes that map
   them, so it is close to what the cgroup is charged) over the processes in the
-  browser cgroup, found by `/proc/<pid>/cgroup`; RSS replaces it for a process
-  whose `smaps_rollup` can't be read. The jail's `/proc` is the container's
-  (`--disable_proc` and a bind, in a pid namespace of its own, which nsjail
-  gives every jail unless told not to and no config here does), so the job's
-  `process.pid` is not a pid in it: hence the cgroup, not the pid, picks the
-  processes. The client treats the answer as a final failure (no single-page
+  jail's cgroup; RSS replaces it for a process whose `smaps_rollup` can't be
+  read. The jail's `/proc` is the container's (`--disable_proc` and a bind), in
+  a pid namespace of its own, so the job's `process.pid` is not a pid in it; but
+  nsjail also gives the jail a cgroup namespace, whose root is the browser
+  cgroup (the job joins it first), so the job's processes are exactly those whose
+  `/proc/<pid>/cgroup` reads `0::/` and every other process reads `0::/../...`.
+  Where none is found the meter reads nothing and the page is not judged (as
+  before the watchdog). The client treats the answer as a final failure (no single-page
   retry, which would fail again), so a link preview falls back as it does for any
   failed screenshot, and logs one `Page too heavy for the browser` line with the
   host (never the query), the peak and which meter read it (the job's own stderr
