@@ -117,7 +117,7 @@ describe("followUpSync dirty flag", function () {
         await lock.release();
       } else {
         // Another process arms a follow-up during the sync run again
-        moved = Date.now() + 15000 + 0.5;
+        moved = Date.now() + 15000 + 1;
         await followUps.alarm.set(blogID, moved);
       }
     });
