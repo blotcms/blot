@@ -149,6 +149,7 @@ async function dropAccount(blogID) {
   // including the OAUTH token used to interact with
   // Dropbox's API.
   multi.del(accountKey(blogID));
+  multi.del(require("./util/accessTokenCache").key(blogID));
 
   return multi.exec();
 }
