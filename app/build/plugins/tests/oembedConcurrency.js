@@ -107,7 +107,7 @@ describe("oEmbed plugins: timeouts and order", function () {
     }
 
     const $ = cheerio.load(
-      '<p>See <a href="https://vimeo.com/111">https://vimeo.com/111</a> and <a href="https://vimeo.com/222">https://vimeo.com/222</a></p>'
+      '<p><a href="https://vimeo.com/111">https://vimeo.com/111</a></p><p><a href="https://vimeo.com/222">https://vimeo.com/222</a></p>'
     );
 
     await videoEmbeds.render($, {});
@@ -118,5 +118,34 @@ describe("oEmbed plugins: timeouts and order", function () {
       .map((src) => src.match(/video\/(\d+)/)[1]);
 
     expect(ids).toEqual(["111", "222"]);
+  });
+
+  it("video embeds: two links in one paragraph still end up as they did one after the other", async function () {
+    // Each player goes right after the paragraph, so the later link's is
+    // first: that is what handling the links one by one did, and the lookups
+    // finishing in another order must not change it
+    for (const [id, delay] of [
+      ["111", 120],
+      ["222", 5],
+    ]) {
+      nock("https://vimeo.com")
+        .get("/api/oembed.json")
+        .query((q) => q.url === "https://vimeo.com/" + id)
+        .delay(delay)
+        .reply(200, { video_id: id, width: 640, height: 360 });
+    }
+
+    const $ = cheerio.load(
+      '<p>See <a href="https://vimeo.com/111">https://vimeo.com/111</a> and <a href="https://vimeo.com/222">https://vimeo.com/222</a></p>'
+    );
+
+    await videoEmbeds.render($, {});
+
+    const ids = $("iframe")
+      .map((i, el) => $(el).attr("src"))
+      .get()
+      .map((src) => src.match(/video\/(\d+)/)[1]);
+
+    expect(ids).toEqual(["222", "111"]);
   });
 });
