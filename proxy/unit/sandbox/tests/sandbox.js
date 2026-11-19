@@ -518,6 +518,7 @@ describe("sandbox broker and jail", function () {
       log: options.log || (() => {}),
       clearCgroup: options.clearCgroup,
       prepareCgroup: options.prepareCgroup,
+      cgroupOf: options.cgroupOf,
       spawnJail: (name, cgroup) => {
         counter++;
         if (options.spawned) options.spawned.push(cgroup);
@@ -1306,6 +1307,172 @@ function answer(text) {
         });
         assert.notStrictEqual((await ask(socket, "y")).pid, before.pid);
       }
+    );
+  });
+
+  // ---- one log line per job -----------------------------------------------------
+
+  const peaks = require("../peak");
+  const cgroupWithPeak = (value) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-peak-"));
+    if (value !== undefined)
+      fs.writeFileSync(directory + "/memory.peak", value + "\n");
+    return directory;
+  };
+
+  test("broker: a job that succeeds logs its duration, peak and wait", async () => {
+    const logged = [];
+    const directory = cgroupWithPeak(4096);
+    await withBroker(
+      { log: (line) => logged.push(line), cgroupOf: () => directory },
+      async (socket) => {
+        assert.strictEqual((await request(socket, job, "x")).header.ok, true);
+      }
+    );
+    assert.strictEqual(logged.length, 1);
+    assert(
+      /^broker: job=echo ok ms=\d+ peak=4096 peak_sampled=1 queued_ms=0$/.test(
+        logged[0]
+      ),
+      logged[0]
+    );
+  });
+
+  test("broker: a job that fails still logs its line, with peak=unknown when its cgroup can't be read", async () => {
+    const logged = [];
+    await withBroker(
+      {
+        script: "exit 3",
+        log: (line) => logged.push(line),
+        cgroupOf: () => "/nonexistent/NSJAIL.1",
+      },
+      async (socket) => {
+        assert.deepStrictEqual((await request(socket, job, "x")).header, {
+          ok: false,
+          error: "failed",
+        });
+      }
+    );
+    assert.strictEqual(logged.length, 1);
+    assert(
+      /^broker: job=echo error=failed code=3 signal=null ms=\d+ peak=unknown queued_ms=0$/.test(
+        logged[0]
+      ),
+      logged[0]
+    );
+  });
+
+  test("broker: a job that was queued logs how long it waited", async () => {
+    const logged = [];
+    const gate = hold();
+    await withBroker(
+      {
+        script: gate.script,
+        maxRunning: 1,
+        log: (line) => logged.push(line),
+      },
+      async (socket, broker) => {
+        const first = request(socket, job, "a");
+        await until(() => broker.running.size === 1);
+        const second = request(socket, job, "b");
+        await until(() => broker.queue.length === 1);
+        await sleep(60);
+        gate.release();
+        await Promise.all([first, second]);
+      }
+    );
+    const waits = logged.map((line) => Number(/queued_ms=(\d+)/.exec(line)[1]));
+    assert.strictEqual(waits[0], 0);
+    assert(waits[1] >= 50, logged.join("\n"));
+  });
+
+  test("broker: a job in a cgroup of the broker's own has its peak reset and read before the cgroup is cleared", async () => {
+    const logged = [];
+    const cleared = [];
+    const directory = cgroupWithPeak(999999);
+    const jobs = { echo: { ...JOBS().echo, cgroups: [directory] } };
+    await withBroker(
+      {
+        jobs,
+        // the stub's own use of memory, after the reset, which a real kernel
+        // does and a plain file doesn't
+        script: `sleep 0.1; echo 777 > ${directory}/memory.peak; cat`,
+        log: (line) => logged.push(line),
+        clearCgroup: (dir) => {
+          cleared.push([
+            dir,
+            fs.readFileSync(directory + "/memory.peak", "utf8").trim(),
+          ]);
+        },
+      },
+      async (socket) => {
+        assert.strictEqual((await request(socket, job, "x")).header.ok, true);
+      }
+    );
+    assert.deepStrictEqual(cleared, [[directory, "777"]]);
+    assert.strictEqual(logged.length, 1);
+    assert(
+      /^broker: job=echo ok ms=\d+ peak=777 queued_ms=0$/.test(logged[0]),
+      logged[0]
+    );
+  });
+
+  test("peak: says what a peak is worth when the kernel can't reset it", () => {
+    assert.strictEqual(
+      peaks.describe({ peak: 5, reset: true, sampled: false, shared: true }),
+      "peak=5"
+    );
+    assert.strictEqual(
+      peaks.describe({ peak: 5, reset: false, sampled: false, shared: true }),
+      "peak=unknown peak_since_create=5"
+    );
+    assert.strictEqual(
+      peaks.describe({
+        peak: null,
+        reset: false,
+        sampled: true,
+        shared: false,
+      }),
+      "peak=unknown"
+    );
+    // a cgroup that goes with its jail: the highest value seen
+    const directory = cgroupWithPeak(10);
+    const tracker = peaks.track(directory, { interval: 10 });
+    fs.writeFileSync(directory + "/memory.peak", "30\n");
+    tracker.sample();
+    fs.writeFileSync(directory + "/memory.peak", "20\n");
+    assert.strictEqual(tracker.finish().peak, 30);
+  });
+
+  test("broker: a worker logs a line per request and one when it exits", async () => {
+    const logged = [];
+    const directory = cgroupWithPeak(2048);
+    await withBroker(
+      {
+        jobs: WORKER({ requests: 2 }),
+        script: fakeWorker,
+        log: (line) => logged.push(line),
+        cgroupOf: () => directory,
+      },
+      async (socket) => {
+        await ask(socket, "a");
+        await ask(socket, "b");
+        await until(() => logged.some((line) => line.includes("worker=echo")));
+      }
+    );
+    const jobs = logged.filter((line) =>
+      line.startsWith("broker: job=echo ok")
+    );
+    assert.strictEqual(jobs.length, 2);
+    assert(
+      /worker_requests=1 /.test(jobs[0]) && /worker_requests=2 /.test(jobs[1])
+    );
+    const exit = logged.find((line) => line.startsWith("broker: worker=echo"));
+    assert(
+      /^broker: worker=echo exit code=\S+ signal=\S+ requests=2 age_ms=\d+ peak=2048$/.test(
+        exit
+      ),
+      exit
     );
   });
 
