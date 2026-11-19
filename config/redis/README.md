@@ -145,9 +145,28 @@ with `CONFIG SET` (never `CONFIG REWRITE`) and lists the settings that need a
 restart (for example `tcp-backlog`, and `LimitNOFILE` of the running process).
 It will not lower `maxmemory` below the memory in use. On the production
 host, which Redis shares with the units, always pass the shared limit
-(`REDIS_MAXMEMORY=6gb`): without it setup applies 70% of RAM. It prints a warning if
+(`REDIS_MAXMEMORY=5500mb`, from the budget below): without it setup applies 70% of RAM. It prints a warning if
 an existing sysctl file (e.g. `99-sysctl.conf`) sets a key that would override
 `90-blot-redis.conf` at boot.
+
+The production host's memory budget (#2795) is a sum of enforced limits, so
+the host can't run out of memory however busy the units get. In MiB of the
+host's 15,608 (no swap):
+
+| | MiB |
+| --- | --- |
+| two units, each: container 2560 (`scripts/deploy/constants.js`), sandbox 512 and browser 512 (`config/host/host/setup.sh`) | 7,168 |
+| the host itself (sshd, docker, journald, rsyslog, fail2ban, cron) | 768 |
+| offsite-sync (`MemoryMax` in `config/host/host/setup.sh`) | 512 |
+| Redis above its `maxmemory` (allocator overhead, client buffers) | 512 |
+| margin | 1,024 |
+| Redis `maxmemory` | 5,500 |
+
+A BGSAVE child's copy-on-write pages are not in this sum: the child runs at
+`oom_score_adj` 1000 (`oom-score-adj-values` in `redis.conf`, relative to the
+service's -900), the highest on the host, so under pressure a save fails, not
+the host or a unit. Raise `maxmemory` only after lowering a limit above
+has been deployed (units) or applied (`bootstrap.sh`), never before.
 
 To change a setting: edit `redis.conf`, run `bootstrap.sh`, restart Redis if
 it says so. `maxmemory` is about 70% of RAM, computed at bootstrap

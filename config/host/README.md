@@ -197,7 +197,7 @@ upgrades a package. It:
   `cpu.weight` of 25. Nothing uses them until `BLOT_SANDBOX=1` is set in the
   proxy env file (`proxy/deploy/proxy.env.example`). It also makes
   `{blue,green}-browser` for the browser job, one Chromium at a time, capped at
-  1G (no swap, the whole job killed at the limit), 512 pids, a `cpu.weight` of
+  512M (no swap, the whole job killed at the limit), 512 pids, a `cpu.weight` of
   25 and 1.5 CPUs;
 - creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
 - with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`

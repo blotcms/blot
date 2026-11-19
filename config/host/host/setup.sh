@@ -171,7 +171,7 @@ for unit in blue green; do
   # rather than leaving a browser hanging until its time limit.
   dir=$tree/$unit-browser
   mkdir -p "$dir"
-  echo 1G > "$dir/memory.max"
+  echo 512M > "$dir/memory.max"
   echo 0 > "$dir/memory.swap.max"
   echo 1 > "$dir/memory.oom.group"
   echo 512 > "$dir/pids.max"

@@ -11,19 +11,20 @@ const SERVING_CPU_SHARES = 2048;
 //
 // One unit must be able to carry all the traffic on its own while the other is
 // being replaced, so each is sized for everything the app does, not half of it:
-//   node-a   the blog container's heap (1500) plus room for dashboard reads
-//   node-b   the sync container's heap, with the same overhead it had for
-//            pandoc and esbuild (the browser runs in the sandbox)
-//   memory   both heaps plus 750m for everything else: OpenResty's workers,
-//            V8's overhead, pandoc, git and esbuild. Sized to fit beside Redis
-//            on one host (#2261): two units, their sandbox cgroups (outside
-//            this limit: config/host/host/setup.sh) and Redis's maxmemory and
-//            fork overhead come to under 14 GiB of 16. Page cache counts
-//            against this too, but it is reclaimed, so what matters is the
-//            memory that can't be (unit-mem-summary.sh on the host)
-// The heaps are ceilings, not reservations: V8 uses what the render caches
-// and requests need, and the unit's cgroup limit sits above both so a runaway
-// heap dies with a diagnostic report rather than to the OOM killer.
+// Sized from production peaks (#2795, 19 Nov 2026, about 11 hours including
+// deploys; unit-mem-summary.sh on the host and the [STATS] process lines):
+//   node-a   heapUsed peaked at 1072 MiB (mean ~600): 1536 leaves ~40% for GC
+//   node-b   heapUsed peaked at 199 MiB: 512 leaves room for a heavy build
+//   memory   the container's unreclaimable memory (anon + shmem: both Node
+//            processes, OpenResty, the broker, git and scripts) peaked at
+//            1966 MiB; 2560m leaves ~30%. Both heaps at their ceilings would
+//            not fit, which is deliberate: under pressure the kernel kills
+//            node-b (oom_score_adj 900) before node-a, and scripts first.
+//            Page cache counts against this too, but it is reclaimed.
+// The host's budget is the sum of enforced limits: two units at this memory,
+// plus each unit's sandbox cgroups (config/host/host/setup.sh, outside this
+// limit), plus Redis's maxmemory and overhead, the host itself, offsite-sync
+// and a 1 GiB margin, within the host's RAM (config/redis/README.md).
 // cpus overcommits slightly.
 //
 // Scripts run with `docker exec` in a unit are not part of that budget, so
@@ -35,10 +36,10 @@ const SERVING_CPU_SHARES = 2048;
 // (SCRIPT_RUNNER), a container of its own outside the units' limits.
 const UNIT = {
   cpus: 4,
-  memory: "3300m",
+  memory: "2560m",
   cpuShares: SERVING_CPU_SHARES,
-  nodeAMaxOldSpaceSize: 1800,
-  nodeBMaxOldSpaceSize: 750,
+  nodeAMaxOldSpaceSize: 1536,
+  nodeBMaxOldSpaceSize: 512,
   scriptMaxOldSpaceSize: 256,
   stopTimeout: 40, // above OpenResty drain (10s) plus the app drain (25s): drained in turn
 };
