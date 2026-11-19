@@ -14,7 +14,7 @@ const manifest = require("../manifest");
 const compact = require("../compact");
 const commit = require("../commit");
 const sweep = require("../sweep");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const {
@@ -822,6 +822,7 @@ describe("git store sweep, after compacting a real repository", function () {
     if (server) await server.close();
     if (received) await received.close();
     server = received = null;
+    await createCache.closeAll();
     fx.remove(dir);
   });
 

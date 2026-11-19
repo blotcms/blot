@@ -15,7 +15,7 @@ const timeout = require("./helpers/timeout");
 const manifest = require("../manifest");
 const commit = require("../commit");
 const receive = require("../receive");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const { manifestKey, packKey, idxKey, revKey } = require("../layout");
@@ -191,7 +191,11 @@ describe("git store commit", function () {
     }
   }
 
-  const teardown = () => fx.remove(dir);
+  // The caches write in the background: close them before their directory goes
+  const teardown = async () => {
+    await createCache.closeAll();
+    fx.remove(dir);
+  };
 
   // The repository as the store holds it, as a bare repository on disk
   async function exportRepo(name = "check.git") {

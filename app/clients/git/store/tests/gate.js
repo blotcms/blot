@@ -11,7 +11,7 @@ const timeout = require("./helpers/timeout");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const manifest = require("../manifest");
 const compact = require("../compact");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const { createSemaphore, createChildren } = require("../limit");
 
@@ -60,10 +60,11 @@ describe("git store gate", function () {
     process.env.PATH = bin + path.delimiter + process.env.PATH;
   });
 
-  afterEach(function () {
+  afterEach(async function () {
     process.env.PATH = saved.PATH;
     delete process.env.STORE_SPY_LOG;
     delete process.env.STORE_SPY_REAL;
+    await createCache.closeAll();
     fx.remove(dir);
   });
 

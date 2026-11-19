@@ -13,7 +13,7 @@ const removeRepo = require("../remove");
 const sweep = require("../sweep");
 const importRepo = require("../import");
 const { verifyImport } = importRepo;
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const {
   LATEST_KEY,
@@ -533,7 +533,8 @@ describe("git store removal", function () {
       root = fx.tempDir();
     });
 
-    afterEach(function () {
+    afterEach(async function () {
+      await createCache.closeAll();
       fx.remove(root);
     });
 

@@ -23,6 +23,7 @@ describe("git store", function () {
 
   it("stores a push's packs, swaps the manifest, and reads the repository back", async function () {
     const workDir = fx.tempDir();
+    let cache;
 
     try {
       const fixture = fx.buildFixture(workDir + "/repo", {
@@ -33,7 +34,7 @@ describe("git store", function () {
       const oracle = fx.catAll(fixture.dir);
 
       const objects = store.createMemoryStore();
-      const cache = store.createCache({
+      cache = store.createCache({
         dir: workDir + "/cache",
         maxBytes: 1024 * 1024,
       });
@@ -67,6 +68,8 @@ describe("git store", function () {
       expect(commit.type).toBe("commit");
       expect(commit.data.equals(oracle.get(fixture.head).data)).toBe(true);
     } finally {
+      // The cache writes in the background: stop it before its directory goes
+      if (cache) await cache.close();
       fx.remove(workDir);
     }
   });

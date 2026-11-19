@@ -12,7 +12,7 @@ const { createReceiveServer, push } = require("./helpers/receiveServer");
 const manifest = require("../manifest");
 const receive = require("../receive");
 const blotWrite = require("../commit");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const {
@@ -96,6 +96,7 @@ describe("git store receive", function () {
   async function teardown() {
     if (server) await server.close();
     server = null;
+    await createCache.closeAll();
     fx.remove(dir);
   }
 

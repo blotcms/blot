@@ -10,7 +10,7 @@ const timeout = require("./helpers/timeout");
 const manifest = require("../manifest");
 const importRepo = require("../import");
 const removeRepo = require("../remove");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createFsStore = require("../objectStore/fs");
 const { packKey, idxKey, manifestKey } = require("../layout");
 
@@ -97,7 +97,8 @@ describe("checking a store repository at an explicit target", function () {
     expect(result.outcome).toBe("imported");
   });
 
-  afterAll(function () {
+  afterAll(async function () {
+    await createCache.closeAll();
     fx.remove(root);
   });
 
