@@ -1,4 +1,4 @@
-Host cycle of 19 Nov (#2786, #2787, #2788): around 20 Nov, run `cycle.sh --production finish` to terminate the old host by instance ID (IDs and commands in `data/cycle-20261119/plan.md`), after lifting its termination protection. Then re-run the advisory check and close the three issues. (19 Nov 2026)
+Host cycle of 19 Nov (#2786, #2787, #2788): around 20 Nov, run `cycle.sh --production finish` to terminate the old host by instance ID (IDs and commands in `data/cycle-20261119/plan.md`), after lifting its termination protection. The three issues are closed. (19 Nov 2026)
 
 Noticed while fixing the flaky specs, 19 Nov 2026
 - Specs that hard-code a date beside `Date.now()` break once the real clock passes it, as `app/storage/tests/sweepGenerated.js`'s start window did on 18 Nov (#2790). `grep -rn "Date.UTC(20" app --include=*.js` under `tests/` finds the others; build such times from the spec's clock.
