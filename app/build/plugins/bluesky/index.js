@@ -21,9 +21,9 @@ You can learn more about oEmbed at https://oembed.com. Bluesky is a registered p
 
 */
 
-const each = require("../eachEl");
+const eachConcurrent = require("../eachElConcurrent");
 const Url = require("url");
-const fetch = require("node-fetch");
+const fetch = require("../fetchWithTimeout");
 var { report } = require("build/flags");
 
 // The link stays in the post, so it still works; the flag says it wasn't
@@ -33,7 +33,9 @@ function failed(href) {
 }
 
 async function render($) {
-  await each($, "a", async (el) => {
+  await eachConcurrent($, "a", lookup, apply);
+
+  async function lookup(el) {
     var href, host, text;
 
     try {
@@ -67,19 +69,18 @@ async function render($) {
       const res = await fetch(oembedUrl);
       const data = await res.json();
 
-      if (!data || !data.html) {
-        failed(href);
-        return;
-      }
+      if (!data || !data.html) return { href, failed: true };
 
-      var html = data.html;
-
-      $(el).replaceWith(html);
+      return { href, html: data.html };
     } catch (e) {
-      failed(href);
-      return;
+      return { href, failed: true };
     }
-  });
+  }
+
+  function apply(el, result) {
+    if (result.failed) return failed(result.href);
+    $(el).replaceWith(result.html);
+  }
 }
 
 module.exports = {
