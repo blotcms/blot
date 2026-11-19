@@ -41,8 +41,8 @@ describe("Blot dashboard settings", function () {
     // click on the button for the local folder client
     await page.click("button[name=client][value=local]");
 
-    // the sync page now says it syncs with Local
-    await page.goto("/sites/" + handle + "/sync");
+    // the page for changing sync method says it syncs with Local
+    await page.goto("/sites/" + handle + "/sync/switch");
 
     const client = page.$(".folder-sync__client");
 
