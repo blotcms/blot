@@ -34,8 +34,8 @@
   margin: 0;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: 1fr;
+  gap: 3rem;
 }
 
 .discover-card a {
@@ -63,10 +63,23 @@
   box-shadow: inset 0 0 0 1px var(--inset-image-border-color);
 }
 
-/* The first photo is the main image, the rest a row beneath it */
+/* The first photo is the main image, the rest one row beneath it that
+   fills the width whatever their number */
 .discover-photos img:first-child {
   grid-column: 1 / -1;
   aspect-ratio: 4 / 3;
+}
+
+.discover-photos img:not(:first-child) {
+  aspect-ratio: 3 / 2;
+}
+
+.discover-photos-2 {
+  grid-template-columns: 1fr;
+}
+
+.discover-photos-3 {
+  grid-template-columns: repeat(2, 1fr);
 }
 
 .discover-excerpt {
@@ -176,7 +189,7 @@
 
 @media (max-width: 800px) {
   .discover {
-    flex-direction: column-reverse;
+    flex-direction: column;
   }
 
   .discover-sidebar {
