@@ -173,6 +173,8 @@ for (let round = 0; round < 8; round++)
       var cache = createCache({
         dir: spec.tmp + "/cache-" + crypto.randomBytes(4).toString("hex"),
         maxBytes: 256 * 1024 * 1024,
+        heartbeatMs: 1,
+        publishDelayMs: 1,
       });
 
       if (spec.head)
