@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const redis = require("models/client");
 
 // A minute short of the token's expiry, so a cached token is never handed out
@@ -9,6 +10,11 @@ const MARGIN_MS = 60 * 1000;
 // asks Dropbox for a new one (about 330ms). The token is kept here with its
 // expiry and the refresh token it was issued for, so reconnecting a blog
 // (a new refresh token) never picks up the old connection's token.
+// A hash, so the cache never holds a second copy of the long-lived secret
+function fingerprint(refreshToken) {
+  return crypto.createHash("sha256").update(String(refreshToken)).digest("hex");
+}
+
 function key(blogID) {
   return "blog:" + blogID + ":dropbox:access-token";
 }
@@ -25,7 +31,7 @@ async function get(blogID, account) {
 
   if (
     !cached ||
-    cached.refresh_token !== account.refresh_token ||
+    cached.refresh_token_hash !== fingerprint(account.refresh_token) ||
     typeof cached.access_token !== "string" ||
     typeof cached.expires_at !== "number" ||
     cached.expires_at - MARGIN_MS <= Date.now()
@@ -45,7 +51,7 @@ async function set(blogID, account, accessToken, expiresAt) {
     JSON.stringify({
       access_token: accessToken,
       expires_at: expiresAt,
-      refresh_token: account.refresh_token,
+      refresh_token_hash: fingerprint(account.refresh_token),
     }),
     { PX: Math.floor(ttl) }
   );
