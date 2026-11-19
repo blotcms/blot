@@ -28,7 +28,9 @@ module.exports = async function ensureBucket() {
   // MinIO may still be starting, and slow to answer while every lane on the
   // runner is booting. The SDK retries a failed connection itself and then
   // throws an error that carries $metadata (the attempt count), so only an
-  // HTTP status shows that MinIO answered. Anything else is "not ready yet".
+  // HTTP status shows that MinIO answered. A 5xx is MinIO still starting
+  // (503 "server not initialized"); anything else without a status is "not
+  // ready yet" too.
   const deadline = Date.now() + READY_TIMEOUT_MS;
 
   for (;;) {
@@ -39,7 +41,8 @@ module.exports = async function ensureBucket() {
       return;
     } catch (err) {
       if (err.name === "BucketAlreadyOwnedByYou") return;
-      if (err.$metadata && err.$metadata.httpStatusCode) throw err;
+      const status = err.$metadata && err.$metadata.httpStatusCode;
+      if (status && status < 500) throw err;
       if (Date.now() >= deadline) {
         throw new Error(
           "The simulated S3 at " +
