@@ -92,9 +92,10 @@ module.exports = {
     parseInt(process.env.BLOT_WORKER_MAX_OLD_SPACE_SIZE) || null,
 
   webhooks: {
-    // Only Dropbox and Google Drive webhooks and OAuth redirects come through
-    // the relay, all small, and each relayed body is held in memory (#2795)
-    client_max_body_size: 1e7, // 10MB
+    // The relay forwards Dropbox and Google Drive webhooks and OAuth redirects
+    // to the maintainer's development machine, all small, and each relayed
+    // body is held in memory (#2795)
+    client_max_body_size: 1e6, // 1MB
     // ensure the reverse proxy supports SSE
     // on this host otherwise we can't relay webhooks
     server_host: "webhooks." + BLOT_HOST,
