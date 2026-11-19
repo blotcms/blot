@@ -503,15 +503,18 @@ describe("sandbox image jobs", function () {
         expect(both.outputs[0].equals(plain.outputs[0])).toBe(true);
       });
 
-      it("returns null for an image with no exif, and still converts it", async function () {
+      it("returns the same as the exif job for an image with no exif, and still converts it", async function () {
+        const input = await image(30, 20, "webp");
+        const separate = await sandbox.run("exif", { fields }, input);
         const { meta, outputs } = await sandbox.run(
           "to-png",
           { exif: fields },
-          await image(30, 20, "webp")
+          input
         );
 
         expect(meta.width).toEqual(30);
-        expect(meta.exif).toBeNull();
+        expect(meta.exif).toEqual(separate.meta);
+        expect(Object.keys(meta.exif || {})).toEqual([]);
         expect((await sharp(outputs[0]).metadata()).format).toEqual("png");
       });
 
