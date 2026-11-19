@@ -42,6 +42,7 @@ describe("git client: materialize", function () {
     this.index = this.tmp + "/index";
     this.logs = [];
     this.head = null;
+    this.caches = [];
 
     await fs.mkdirs(this.outside);
     await fs.mkdirs(this.directory);
@@ -49,6 +50,9 @@ describe("git client: materialize", function () {
   });
 
   afterEach(async function () {
+    // A cache publishes its counts and walks its directory in the background,
+    // so it is closed, which waits for that, before its directory is removed
+    await Promise.all(this.caches.map((cache) => cache.close()));
     await fs.remove(this.tmp);
   });
 
@@ -173,6 +177,8 @@ describe("git client: materialize", function () {
       dir: spec.tmp + "/cache-" + crypto.randomBytes(4).toString("hex"),
       maxBytes: 256 * 1024 * 1024,
     });
+
+    spec.caches.push(cache);
 
     if (spec.head)
       await importRepo({

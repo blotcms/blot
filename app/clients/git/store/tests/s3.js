@@ -8,7 +8,7 @@ const fx = require("./helpers/fixture");
 const cases = require("./helpers/contract");
 const timeout = require("./helpers/timeout");
 const createReader = require("../reader");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const manifest = require("../manifest");
 const { readRanges } = require("../ranges");
 
@@ -286,6 +286,7 @@ const MIB = 1024 * 1024;
           ).refs
         ).toBe(2);
       } finally {
+        await createCache.closeAll();
         fx.remove(workDir);
       }
     });
@@ -326,7 +327,8 @@ const MIB = 1024 * 1024;
         });
       });
 
-      afterAll(function () {
+      afterAll(async function () {
+        await createCache.closeAll();
         fx.remove(workDir);
       });
 

@@ -11,7 +11,7 @@ const timeout = require("./helpers/timeout");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const { startServer, runGit, collect } = require("./helpers/upload-server");
 const manifest = require("../manifest");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const { cacheKeyOf } = require("../packcache");
 const createMemoryStore = require("../objectStore/memory");
 const { serve } = require("../clone");
@@ -114,6 +114,7 @@ describe("git store fetch", function () {
     if (server) await server.close();
     if (received) await received.close();
     server = received = null;
+    await createCache.closeAll();
     fx.remove(dir);
   }
 

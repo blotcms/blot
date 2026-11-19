@@ -19,7 +19,7 @@ const importRepo = require("../import");
 const compact = require("../compact");
 const sweep = require("../sweep");
 const blotWrite = require("../commit");
-const createCache = require("../cache");
+const createCache = require("./helpers/caches");
 const createMemoryStore = require("../objectStore/memory");
 const createFsStore = require("../objectStore/fs");
 const createReader = require("../reader");
@@ -61,6 +61,7 @@ describe("git store rewrite", function () {
 
   afterAll(async function () {
     for (const server of open) await server.close();
+    await createCache.closeAll();
     fx.remove(root);
   });
 
