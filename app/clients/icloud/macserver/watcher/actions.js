@@ -89,7 +89,8 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
     return;
   }
 
-  if (action === "remove") forgetBlotChange(blogID, pathInBlogDirectory);
+  if (action === "remove" || action === "upload")
+    forgetBlotChange(blogID, pathInBlogDirectory);
 
   const limiter = getLimiterForBlogID(blogID);
 

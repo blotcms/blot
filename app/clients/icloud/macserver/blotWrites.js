@@ -31,7 +31,7 @@ const expectBlotChange = (blogID, path, action) => {
   expected.set(key(blogID, path), { action, at: now });
 };
 
-const isBlotEcho = (blogID, path, action) => {
+const matches = (blogID, path, action) => {
   const entry = expected.get(key(blogID, path));
   if (!entry) return false;
   if (Date.now() - entry.at > TTL_MS) {
@@ -41,8 +41,20 @@ const isBlotEcho = (blogID, path, action) => {
   return entry.action === action;
 };
 
-// A removal that wasn't Blot's: whatever Blot did at the path, or under it,
-// is over, so a folder recreated there is the customer's
+// A removal is also Blot's when it removed a folder above the path: the
+// watcher reports each file inside a deleted folder on its own
+const isBlotEcho = (blogID, path, action) => {
+  if (matches(blogID, path, action)) return true;
+  if (action !== "remove") return false;
+  for (let i = path.lastIndexOf("/"); i > 0; i = path.lastIndexOf("/", i - 1)) {
+    if (matches(blogID, path.slice(0, i), "remove")) return true;
+  }
+  return false;
+};
+
+// A removal that wasn't Blot's, or a file uploaded at the path: whatever Blot
+// did there, or under it, is over. A folder recreated there is the
+// customer's, and so is a later removal of a file put back there.
 const forgetBlotChange = (blogID, path) => {
   const k = key(blogID, path);
   for (const existing of expected.keys()) {
