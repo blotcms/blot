@@ -92,16 +92,4 @@ module.exports = {
   TMP_DIRECTORY: "/var/instance-ssd/tmp",
 
   ENV_FILE_ON_SERVER: "/etc/blot/secrets.env",
-
-  // The sandbox's proxy jail in each unit (proxy/unit/sandbox/proxy.js), the
-  // egress boundary for fetching untrusted, user-supplied URLs since the
-  // airlock went (#2257). It listens on the host's loopback at a port per
-  // unit: units share the host network, so the two must differ. Screenshots
-  // run in the sandbox's browser jail and need no port.
-  SANDBOX: {
-    units: {
-      blue: { proxyPort: 18988 },
-      green: { proxyPort: 18989 },
-    },
-  },
 };

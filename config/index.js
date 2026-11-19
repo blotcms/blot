@@ -44,13 +44,10 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
 // than falling back to an unprotected fetch. The warning just flags that this
 // container was deployed without BLOT_SANDBOX=1 (proxy/deploy/common.sh), so
 // those features are broken until it is redeployed with it.
-if (
-  environment === "production" &&
-  !(process.env.BLOT_EGRESS_PROXY_URL && process.env.BLOT_SANDBOX_SOCKET)
-) {
+if (environment === "production" && !process.env.BLOT_SANDBOX_SOCKET) {
   console.warn(
-    "WARNING: this production container has no sandbox (BLOT_SANDBOX_SOCKET, " +
-      "BLOT_EGRESS_PROXY_URL). Bookmark-link screenshots, remote-image " +
+    "WARNING: this production container has no sandbox (BLOT_SANDBOX_SOCKET). " +
+      "Bookmark-link screenshots, remote-image " +
       "downloads and user-domain checks fail closed until it is redeployed " +
       "with BLOT_SANDBOX=1. See app/sandbox/README.md."
   );
@@ -207,12 +204,8 @@ module.exports = {
   // Untrusted, user-supplied URLs (remote images in posts, imports, domain
   // checks) are fetched in the sandbox's fetch and fetch-image jobs, behind the
   // jail's egress filter (app/sandbox/README.md). What is here is for the
-  // fail-closed checks and the proxy jail's health check.
+  // fail-closed checks.
   egress: {
-    // The forward proxy in the sandbox's proxy jail in each unit, e.g.
-    // http://127.0.0.1:18988, which replaced the airlock container (#2257).
-    // Nothing in the app fetches through it now; the alerts still watch it.
-    proxy: process.env.BLOT_EGRESS_PROXY_URL || null,
     // When true (production), a user-controlled fetch or screenshot that
     // can't run in the sandbox fails instead of falling back to a direct one
     // (helper/egress, sandbox/fetch, helper/transformer/download). Read this

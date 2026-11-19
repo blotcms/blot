@@ -327,20 +327,17 @@ sync_static() { # sync_static <image>
 #     Docker's default plus a few syscalls, the cgroup subtrees the host made
 #     for this unit (config/host/host/setup.sh), and /dev/net/tun for pasta.
 #     Screenshots run in its browser jail, and the app's fetches of untrusted
-#     URLs go through the proxy jail in this unit, on its own port
-#     (proxy/unit/sandbox/proxy.js). Without it there is neither, and production
-#     refuses those features (helper/egress, helper/screenshot) rather than
-#     fetching directly; load_unit_settings has already refused if a subtree is
+#     URLs run as sandbox jobs (fetch, fetch-image) with their own network jail.
+#     Without it there is neither, and production refuses those features
+#     (helper/egress, helper/screenshot) rather than fetching directly; load_unit_settings has already refused if a subtree is
 #     missing.
 # The env files: secrets.env (what Node gets), then proxy.env,
 # then the -e settings below, each overriding the one before; load_unit_settings
 # refuses a key the two files set differently.
 run_args() { # run_args <name>
-  local name="$1" unit upper var proxy_port
+  local name="$1" unit
   log_args "$name"
   unit="$(unit_of "$name")"
-  upper="$(printf '%s' "$unit" | tr '[:lower:]' '[:upper:]')"
-  var="SANDBOX_${upper}_PROXY_PORT"; proxy_port="${!var}"
   # Node writes a diagnostic report here if it dies of a fatal error such as V8
   # running out of heap (the data directory outlives the container)
   local node_options="--max-old-space-size=$UNIT_NODE_A_MAX_OLD_SPACE_SIZE --report-on-fatalerror --report-directory=$DATA_DIRECTORY_ON_CONTAINER/$NODE_REPORT_DIRECTORY/$name --report-exclude-env --report-exclude-network"
@@ -401,10 +398,6 @@ run_args() { # run_args <name>
       -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock
       --device /dev/net/tun
       --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit-browser,target=/sandbox-browser-cgroup"
-      -e "BLOT_EGRESS_PROXY_URL=http://127.0.0.1:$proxy_port"
-      # the same, under the name images from before #2417 read, so a rollback
-      # to one with units.sh still finds its proxy
-      -e "BLOT_AIRLOCK_PROXY_URL=http://127.0.0.1:$proxy_port"
     )
   fi
 }

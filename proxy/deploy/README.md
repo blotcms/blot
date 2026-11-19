@@ -65,9 +65,9 @@ unit gets:
 - no TCP port: node-a serves on its socket alone (two units on the host network
   would both want 8080), so everything talks to the sockets;
 - with `BLOT_SANDBOX=1`, the sandbox in place of the airlock containers units
-  had until #2257: its browser jail takes screenshots and its proxy jail, on the
-  unit's own loopback port, carries the app's fetches of user-supplied URLs (see
-  below). A deploy removes any `blot-<unit>-airlock` container a host still has;
+  had until #2257: its browser jail takes screenshots and its fetch jobs, each in a
+  jail with its own network and egress filter, carry the app's fetches of
+  user-supplied URLs (see below). A deploy removes any `blot-<unit>-airlock` container a host still has;
 - health: the proxy's health socket, node-a and node-b `/health` on their sockets;
 - blue, deployed first, runs `scripts/deploy/verify-container` before green is
   touched; a failure rolls blue back and leaves green alone;
@@ -213,13 +213,12 @@ mounts at `/var/cache/openresty`. It must exist and belong to uid 1000
 ## The sandbox (`BLOT_SANDBOX=1`)
 
 Required in production: without `BLOT_SANDBOX=1` in the proxy env file a unit
-has no browser and no egress proxy, so screenshots, remote images and domain
+has no browser and no way to fetch a user-supplied URL, so screenshots, remote images and domain
 checks fail closed, and verify-container refuses the deploy. With it a unit
 gets `--cgroupns=host`, `--security-opt seccomp=sandbox-seccomp.json`, binds of
 `/sys/fs/cgroup/blot-sandbox/<unit>` at `/sandbox-cgroup` and
 `/sys/fs/cgroup/blot-sandbox/<unit>-browser` at `/sandbox-browser-cgroup`,
-`--device /dev/net/tun` for pasta, `BLOT_SANDBOX_SOCKET`, and
-`BLOT_EGRESS_PROXY_URL` pointing at its proxy jail on the unit's own port. The
+`--device /dev/net/tun` for pasta, and `BLOT_SANDBOX_SOCKET`. The
 deploy refuses, before touching anything, if the host has not made those
 directories (`config/host/host/setup.sh`, Amazon Linux 2023). See
 `app/sandbox/README.md`.

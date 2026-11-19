@@ -292,8 +292,8 @@ protected by the jail boundary itself: no secrets or env vars, no data mount, th
 seccomp. That is the same for one page or eight. The rule: keep the boundary intact above all; isolation between
 jobs inside one jail is not a goal, so don't split batches by site or customer.
 
-`fetch-image` and `fetch` fetch with Node's `http` and `https`, not through the
-proxy jail: their own jail is behind the same filter.
+`fetch-image` and `fetch` fetch with Node's `http` and `https`: their own jail is behind the egress filter. (A
+forward proxy in a jail of its own, tinyproxy, carried these fetches until they became jobs; it is retired.)
 
 Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js`):
 
@@ -309,7 +309,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
   on the host), so one screenshot runs at a time per unit. `fetch-image`'s is
   `/sandbox-cgroup/fetch`, 256 MiB and 64 pids, which the broker makes when it
-  starts (`proxy/unit/sandbox/cgroup.js`), as the proxy jail makes its own. So
+  starts (`proxy/unit/sandbox/cgroup.js`). So
   one fetch runs at a time per unit, and a slow server holds the rest up for
   as long as 20s. That is background build work. A fetch waits in a queue of
   its own, at most 8, inside the broker's, so a backlog of them never fills
@@ -327,19 +327,18 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   the import waits behind at most one image (30s),
   not behind the build's whole backlog. `busy` for either is logged, and the
   caller carries on without that file or link. A second cgroup for imports was
-  weighed and left. It would have to be 128 MiB or less (the proxy jail's 128 +
-  `fetch-image`'s 256 + 128 is the whole 512 MiB), so the image jobs would have
-  nothing when all three were busy, and 128 MiB can't hold a 50 MiB file in the
+  weighed and left. It would have had to be 128 MiB or less (with the proxy jail's
+  128 and `fetch-image`'s 256 that was the whole 512 MiB), and 128 MiB can't hold a 50 MiB file in the
   jail together with the copy made when it is joined (measured, in a real jail:
   a 50 MiB file peaks at about 170 MiB), nor an image's decode.
   The cost of one slot is that a domain check, which waits in the same queue,
   can wait for an import batch that is running (the verification's 5s covers the
   request, not the wait).
 - **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
-  512 MiB) with the proxy jail (128 MiB at most) and the image jobs (each up
-  to 512 MiB, four at once). The fetch jobs and the proxy together take at most
-  384 MiB of it (256 + 128), whichever fetch job is running; the image jobs have
-  the rest and whatever those two aren't using. The subtree's final size is for
+  512 MiB) with the image jobs (each up to 512 MiB, four at once). The fetch
+  jobs take at most 256 MiB of it, whichever fetch job is running; the image jobs
+  have the rest and whatever the fetch jobs aren't using. (The retired proxy jail's
+  128 MiB cgroup is gone from it.) The subtree's final size is for
   the unit memory work (TODO) to set from measured peaks.
 - **`/proc` is the container's, read-only, for the browser job only.** Chromium aborts without a real one.
   A job can read the unit's process list and command lines, so no secret may
@@ -388,24 +387,6 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
 A page that can't be screenshotted comes back as its entry in `meta.results` (`error`
 and `retryable`); only a broken job is a job failure.
 
-## The proxy jail
-
-Nothing in the app fetches through it now: the fetches of user-supplied URLs are the `fetch` and `fetch-image`
-jobs, and `helper/egress` is left with the screenshot job's fail-closed check. tinyproxy still runs, in a long-running
-jail in the unit, whenever the unit has a sandbox, until it is retired (TODO). It isn't a job, so the broker has no part in it: the supervisor
-keeps `proxy/unit/sandbox/proxy.js` running, which is root like the broker, makes
-`/sandbox-cgroup/proxy` (128 MiB, 128 pids) and starts the jail.
-
-It uses the same pasta network, `egress.nft` and capability drop as the browser
-job, and binds much less: no Node, app code or `/proc`. pasta forwards one port on
-the unit's loopback to it (`network-proxy-<unit>.cfg`, which must match
-`sandboxProxyPort` in `scripts/deploy/constants.js`), and `egress-proxy.nft`
-lets that port through the jail's loopback interface. pasta delivers connections
-from the jail's own address, `10.255.255.2`, which is the one client tinyproxy
-allows. A URL for `127.0.0.1:8888` gets a refusal from tinyproxy. pasta shares
-the job's uid outside the namespace, so the filter can't tell the two apart, and
-the most a URL can do is hold one of its 64 connections, as any slow server can.
-
 ## Node's filter
 
 With the sandbox on, the unit's seccomp profile gives the whole container `clone`
@@ -415,8 +396,8 @@ creating a user namespace is the usual first step of a kernel exploit. So the
 supervisor starts Node under a second filter (`proxy/unit/sandbox/node-filter.js`,
 written when the image is built) that refuses them, and refuses 32-bit calls and
 `clone3`, whose flags seccomp can't read. Everything Node spawns inherits it, and
-no-new-privs comes with it, so no setuid program works under Node. The broker and
-the proxy jail start separately, as they must. OpenResty isn't filtered, and
+no-new-privs comes with it, so no setuid program works under Node. The broker
+starts separately, as it must. OpenResty isn't filtered, and
 neither is anything run by `docker exec`.
 
 ## Markup from the network
@@ -446,9 +427,7 @@ bytes, and why:
 
 `alerts.js` emails the admin (`SANDBOX_ALERT`) when a job is killed, times out,
 is cut short or answers nonsense, when the broker can't be reached or its queue
-is full, and, checked every five minutes from each web process, when the unit's
-fetch proxy jail stops answering or lets the metadata
-address through. A job that fails on bad input isn't reported, except
+is full. A job that fails on bad input isn't reported, except
 `fetch-image` and `fetch`, which answer bad input with `meta.error`, so their
 failing means the jail is broken. A busy `fetch-image` or `fetch` is the other
 way round: their short queues fill by design when builds have many remote

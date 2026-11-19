@@ -18,16 +18,11 @@
 #              on): the root process that starts nsjail jails for the app
 #              (proxy/unit/sandbox/broker.js), under its own restart loop. It
 #              never stops the unit: while it is down, sandbox jobs fail closed.
-#   proxy jail with the broker: the forward proxy the app's
-#              fetches of user-supplied URLs go through, in a jail
-#              (proxy/unit/sandbox/proxy.js), under its own restart loop. While
-#              it is down those fetches fail.
 #
 # SIGTERM, SIGQUIT and SIGINT drain them, OpenResty first: `-s quit` lets it
 # finish what it has accepted (up to worker_shutdown_timeout), which may still
 # be waiting on node-a, and only once it has exited is node-a sent SIGTERM
-# (helper/drain), which stops node-b first, and then the broker and the proxy
-# jail. Then this exits 0.
+# (helper/drain), which stops node-b first, and then the broker. Then this exits 0.
 #
 # Kill order under memory pressure (the container is started with
 # --oom-score-adj 1000 and --cap-add SYS_RESOURCE, proxy/deploy/common.sh).
@@ -37,7 +32,7 @@
 # a script is the first victim. At startup, while this shell (root) still holds
 # CAP_SYS_RESOURCE, it sets:
 #
-#   tini (pid 1), this supervisor, node-a, the broker, the proxy jail:  0
+#   tini (pid 1), this supervisor, node-a, the broker:  0
 #       tini must not stay at 1000: killing pid 1 takes the whole container
 #   OpenResty                                                           -900
 #       the unit dies with it, and the other one takes over
@@ -147,12 +142,12 @@ run_node() {
   exit 0
 }
 
-# Keeps a sandbox root process running: the broker, or the proxy jail (app/sandbox,
-# only when the host turned them on). It is root, and the app can't rewrite its
+# Keeps a sandbox root process running: the broker (app/sandbox, only when
+# the host turned the sandbox on). It is root, and the app can't rewrite its
 # files (they are root-owned under /usr/local/lib/blot-sandbox), so it starts with
 # nothing from this environment: no secrets, no NODE_OPTIONS, and not in the app's
 # directory. One that dies is started again after a fixed delay and never stops
-# the unit: while it is down the app's jobs and fetches fail closed.
+# the unit: while it is down the app's jobs fail closed.
 run_sandbox() { # run_sandbox <file> <description>
   cd /
   child=
@@ -196,12 +191,6 @@ if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
   broker_loop=$!
 fi
 
-proxy_loop=
-if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
-  run_sandbox proxy.js "proxy jail" &
-  proxy_loop=$!
-fi
-
 # proxy-start (proxy/start.sh) prepares the container, then becomes OpenResty
 ( set_oom self -900; exec $DROP_CAP /usr/local/bin/proxy-start "$OPENRESTY" -g "daemon off;" ) &
 reap $!
@@ -220,9 +209,8 @@ fi
 kill -TERM "$node_loop" 2>/dev/null
 reap "$node_loop"
 # and no job is running without the app that asked for it
-for loop in "$broker_loop" "$proxy_loop"; do
-  [ -n "$loop" ] || continue
-  kill -TERM "$loop" 2>/dev/null
-  reap "$loop"
-done
+if [ -n "$broker_loop" ]; then
+  kill -TERM "$broker_loop" 2>/dev/null
+  reap "$broker_loop"
+fi
 exit "$exit_status"

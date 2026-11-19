@@ -1,6 +1,6 @@
 // Makes a cgroup for a jail that nsjail can't make itself, because a jail with
-// a network is started by its own uid (./jail.js): the proxy jail's and the
-// fetch-image job's, in the unit's sandbox subtree. Root only. oom.group: a jail
+// a network is started by its own uid (./jail.js): the fetch-image
+// job's, in the unit's sandbox subtree. Root only. oom.group: a jail
 // over its limit goes whole. Whatever an earlier jail left in it is killed.
 
 const fs = require("fs");

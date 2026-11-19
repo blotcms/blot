@@ -4,12 +4,12 @@ In the last ten minutes or so:
 
 {{{lines}}}
 
-Log in to the server and look at the broker and the proxy jail:
+Log in to the server and look at the broker:
 
-$ docker logs --since 30m blot-blue 2>&1 | grep -E "broker:|proxy jail:"
+$ docker logs --since 30m blot-blue 2>&1 | grep "broker:"
 
 Memory peaks and kills of the sandbox's cgroups:
 
 $ unit-mem-summary.sh
 
-Turning the sandbox off (BLOT_SANDBOX in /etc/blot/proxy.env, then a deploy of a new commit) runs image and document jobs in Node again, but leaves production with no browser and no egress proxy: screenshots, remote images and domain checks then fail. See app/sandbox/README.md.
+Turning the sandbox off (BLOT_SANDBOX in /etc/blot/proxy.env, then a deploy of a new commit) runs image and document jobs in Node again, but leaves production with no browser and no way to fetch a user-supplied URL: screenshots, remote images and domain checks then fail. See app/sandbox/README.md.

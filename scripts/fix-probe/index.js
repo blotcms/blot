@@ -53,8 +53,6 @@ async function main() {
     tool: "fix-probe",
     script: path.join(__dirname, "probe.js"),
     probeArgs: rest,
-    // On blotnet like green, so its Redis traffic takes the same path.
-    egressProxy: true,
     ...fromWrapperOptions(options, DEFAULTS),
   });
   if (exitCode) process.exitCode = exitCode;
