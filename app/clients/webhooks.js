@@ -69,10 +69,10 @@ server.get("/clients/dropbox/webhook", (req, res, next) => {
   res.send(String(req.query.challenge));
 });
 
-// A relayed body is held in memory while it is read and published, so a few
-// large webhooks at once could exhaust the process. Past this many in flight
+// A relayed body is held in memory while it is read and published. The relay
+// only serves development, so one at a time per process is plenty: past it
 // the relay answers 503 rather than queueing bodies.
-const MAX_IN_FLIGHT = 2;
+const MAX_IN_FLIGHT = 1;
 let inFlight = 0;
 
 // Messages are base64 text which the client joins before decoding. Each

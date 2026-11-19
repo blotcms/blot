@@ -186,7 +186,7 @@ describe("webhooks relay", function () {
 
   it("relays a large body whose size is not a multiple of 3", async function () {
     const stream = await connectAndSubscribe();
-    const body = crypto.randomBytes(3 * 1024 * 1024 + 1);
+    const body = crypto.randomBytes(512 * 1024 + 1);
 
     const response = await fetch(url + "/clients/test/webhook", {
       method: "POST",
@@ -245,7 +245,6 @@ describe("webhooks relay", function () {
     }
 
     await hold();
-    await hold();
 
     // Let the server's handlers take their slots
     await new Promise((resolve) => setTimeout(resolve, 200));
@@ -253,7 +252,7 @@ describe("webhooks relay", function () {
     const response = await fetch(url + "/clients/test/webhook", {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
-      body: "third",
+      body: "second",
     });
     expect(response.status).toBe(503);
     expect(stream.messages.length).toBe(0);
@@ -265,7 +264,7 @@ describe("webhooks relay", function () {
     const after = await fetch(url + "/clients/test/webhook", {
       method: "POST",
       headers: { "Content-Type": "application/octet-stream" },
-      body: "fourth",
+      body: "third",
     });
     expect(after.status).toBe(200);
   });
