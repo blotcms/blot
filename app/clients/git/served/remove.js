@@ -27,11 +27,12 @@ const log = require("./log");
 const removed = new Map();
 
 // How long after removing a store copy it is removed again
-let removeAgainMs = 5 * 60 * 1000;
+const REMOVE_AGAIN_MS = 5 * 60 * 1000;
 
-// The second passes waiting to run, so _reset() can cancel them: a spec's
-// disconnect would otherwise reach into a spec running minutes later
-const removeAgainTimers = new Set();
+// The second passes waiting to run, timer to pass, so _reset() can cancel them
+// (a spec's disconnect would otherwise reach into a spec running minutes later)
+// and _runAgainNow() can run them without waiting
+const removeAgainTimers = new Map();
 
 function detail(err) {
   return String((err && (err.code || err.message)) || "error");
@@ -79,49 +80,54 @@ async function removeBlog(blogID) {
 
   const again = setTimeout(() => {
     removeAgainTimers.delete(again);
-    (async () => {
-      let blog;
-      let lookupError = null;
+    removeAgain(blogID);
+  }, REMOVE_AGAIN_MS);
 
-      try {
-        blog = await require("models/blog").get({ id: blogID });
-      } catch (err) {
-        lookupError = err;
-      }
-
-      // Back on git: its new copy is not ours to delete. A failed lookup
-      // doesn't say it is gone, so the copy is kept: the monthly orphan sweep
-      // deletes it if the blog is still off git.
-      if (lookupError)
-        log({
-          blog: blogID,
-          op: "remove",
-          outcome: "spared",
-          pass: 2,
-          detail: detail(lookupError),
-        });
-      else if (!blog || blog.client !== "git") await deleteAndLog(blogID, 2);
-      removed.delete(blogID);
-    })();
-  }, removeAgainMs);
-
-  removeAgainTimers.add(again);
+  removeAgainTimers.set(again, () => removeAgain(blogID));
   if (again.unref) again.unref();
+}
+
+async function removeAgain(blogID) {
+  let blog;
+  let lookupError = null;
+
+  try {
+    blog = await require("models/blog").get({ id: blogID });
+  } catch (err) {
+    lookupError = err;
+  }
+
+  // Back on git: its new copy is not ours to delete. A failed lookup
+  // doesn't say it is gone, so the copy is kept: the monthly orphan sweep
+  // deletes it if the blog is still off git.
+  if (lookupError)
+    log({
+      blog: blogID,
+      op: "remove",
+      outcome: "spared",
+      pass: 2,
+      detail: detail(lookupError),
+    });
+  else if (!blog || blog.client !== "git") await deleteAndLog(blogID, 2);
+  removed.delete(blogID);
 }
 
 function isRemoved(blogID) {
   return removed.has(blogID);
 }
 
-// For specs
-function _setRemoveAgainMs(ms) {
-  removeAgainMs = ms;
+// For specs: runs the waiting second passes now, and resolves when they are done
+async function _runAgainNow() {
+  const pending = [...removeAgainTimers];
+  removeAgainTimers.clear();
+  pending.forEach(([timer]) => clearTimeout(timer));
+  await Promise.all(pending.map(([, run]) => run()));
 }
 
 function _reset() {
   removed.clear();
-  removeAgainTimers.forEach((timer) => clearTimeout(timer));
+  removeAgainTimers.forEach((run, timer) => clearTimeout(timer));
   removeAgainTimers.clear();
 }
 
-module.exports = { removeBlog, isRemoved, _setRemoveAgainMs, _reset };
+module.exports = { removeBlog, isRemoved, _runAgainNow, _reset };

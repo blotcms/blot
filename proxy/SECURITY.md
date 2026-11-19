@@ -16,15 +16,33 @@ the versions OpenResty's own packaging builds. Brotli is built against the
 same tarball, including its nginx patches. CI asserts the OpenResty release
 and the OpenSSL version from `openresty -V`.
 
-nginx 1.31.8 is past the fixed version of every advisory in the nginx index,
-so no advisory range covers it. The release announcement lists the twelve CVE
+nginx 1.31.9 (18 November 2026) fixed ten advisories that cover 1.31.8; see
+[HTTP/2 and HTTP/3](#http2-and-http3) below and #2789. Before that, 1.31.8 was
+past the fixed version of every advisory in the nginx index. The release announcement lists the twelve CVE
 fixes it took from nginx 1.31.2 through 1.31.8, among them both HTTP/3
 advisories that had kept QUIC disabled: CVE-2026-42530 (use-after-free, fixed
 in 1.31.2) and CVE-2026-95101 (request-body injection, fixed in 1.31.7).
 
-## HTTP/3
+## HTTP/2 and HTTP/3
 
-HTTP/3 is enabled on all six public servers, which listen for QUIC on UDP 443
+**Both are off until OpenResty ships nginx 1.31.9** (#2789), set in
+`proxy/build/protocols.js`. Blog pages reach the proxy with nothing in front of
+it, so these were open to anyone:
+
+- CVE-2026-123007 (major): HTTP/2 flow-control window overflow. nginx names no
+  configuration prerequisite; a client without credentials crashes a worker,
+  with "potential other impact" (memory corruption) beyond that.
+- CVE-2026-123633 (medium) and CVE-2026-121810 (medium): use-after-free in
+  HTTP/2 and in HTTP/3 once a worker runs out of `worker_connections` (10000).
+
+The public servers speak HTTP/1.1 only, have no QUIC listener, and send
+`Alt-Svc: clear` where they advertised h3, so clients drop the route they
+cached. Turning HTTP/2 off does not help with CVE-2026-118899 (endless loop
+reading a request body over SSL, major), which applies to any TLS client;
+CVE-2026-123634 (resolver use-after-free) also stays until the upgrade. Turn
+both back on with the OpenResty upgrade, and update this section.
+
+When on, HTTP/3 is enabled on all six public servers, which listen for QUIC on UDP 443
 and advertise it with `Alt-Svc: h3=":443"; ma=86400` (not on `cdn.`, which
 only Bunny reaches). The fail2ban jails ban
 over UDP as well as TCP.
@@ -38,11 +56,18 @@ QUIC advisories. Any future nginx HTTP/3 advisory is a reason to drop the
 ## Advisory applicability
 
 Every advisory that covered an nginx version the proxy has run since 1.25.3 is
-fixed in 1.31.8. The configuration notes record whether the old versions were
+fixed in 1.31.8, except the 1.31.9 fixes in #2789, listed first. The configuration notes record whether the old versions were
 exposed and still matter if a feature is enabled later.
 
 | CVE(s) | Configuration notes | Fixed in |
 | --- | --- | --- |
+| 2026-123007, 2026-123633 | HTTP/2 on every public server; turned off pending the upgrade. | 1.31.9 |
+| 2026-121810 | HTTP/3 on every public server; turned off pending the upgrade. | 1.31.9 |
+| 2026-118899 | Any request body over TLS. Still exposed until the upgrade. | 1.31.9 |
+| 2026-123634 | `resolver` configured. Still exposed until the upgrade. | 1.31.9 |
+| 2026-125283 | No `alias`. | 1.31.9 |
+| 2026-113425, 2026-120967, 2026-123640 | No mail listeners; stream module not used. | 1.31.9 |
+| 2026-120993 | No PROXY protocol listeners. | 1.31.9 |
 | 2024-24989, 2024-24990, 2024-31079, 2024-32760, 2024-34161, 2024-35200 | Public QUIC listeners on 1.25.3; 34161 needs an MTU above 4096. | 1.25.4 / 1.27.0 |
 | 2026-40460 | Public QUIC listeners on 1.25.3. | 1.31.0 |
 | 2026-42530 | HTTP/3 use-after-free; QUIC was disabled on 1.31.1. | 1.31.2 |
