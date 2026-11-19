@@ -1,3 +1,7 @@
+Sandbox image jobs, from a stress run on the test blogs (19 Nov 2026, #2795):
+- A 200-frame 1000x1000 GIF (200 MP of frames, above #2804's ~40e6 frame-pixel budget) peaked at 246 MiB in `exif` and 200 MiB in `thumbnail`, against ~100 MiB for a 90 MP JPEG, and its cached copy came out the same size as the original. Check whether the first-frame fallback applies to those jobs (and to `exif` at all). Until it does, a big GIF beside pandoc can use most of the sandbox's 512M.
+- `car.heic` in a post stayed a plain folder file (`/folder/v-.../car.heic`) rather than an `_image_cache` copy, although `to-png` and `resize` jobs ran for it. Check whether the converted image is dropped somewhere after the jobs.
+
 Google Drive: every time blot-blue starts, it logs 4 `Google Drive Client Error: Setup timed out` lines (app/clients/google-drive/routes/setup.js:51, `checkWeCanContinue`), at each deploy on 19 Nov 2026. Probably one blog's setup that never finished is resumed at startup and times out every time. Find the blog, then either finish or clear its stale setup state, so it stops retrying on every start.
 
 Noticed while fixing the flaky specs, 19 Nov 2026
