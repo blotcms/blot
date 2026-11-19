@@ -375,6 +375,27 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   deferred. If the job as a whole is killed (the 1 GiB browser cgroup's OOM kill
   takes the group) or times out, `helper/screenshot` sends each page of that
   batch on its own, so a heavy page costs only itself.
+- **A memory watchdog gives up on a heavy page before the cgroup's OOM kill
+  takes the batch** (`jobs/screenshot-memory.js`). While a page loads and
+  renders, the job reads the browser's total memory every 250 ms and, once it
+  reaches 85% of the cgroup's `memory.max` (read at job start; 430 MiB where the
+  limit can't be read), closes that page's context and answers
+  `{ retryable: false, tooHeavy: true, host, peakBytes }` for it, then goes on
+  with the next page. The client treats it as a final failure (no single-page
+  retry, which would fail again), so a link preview falls back as it does for any
+  failed screenshot, and logs one `Page too heavy for the browser` line with the
+  host (never the query) and the peak. The reading is the cgroup's
+  `memory.current` where the jail can see it (`/sandbox-browser-cgroup`, then
+  `/sys/fs/cgroup`); the jail binds neither today, so it falls back to the
+  resident memory of the job's process tree from `/proc` (which counts shared
+  pages once per process and so errs high). Every screenshot that is taken is
+  unchanged: pages that need more than the budget get none.
+- **The Chromium flags change no pixels** (`jobs/screenshot-args.js`). The
+  one `--disable-features` flag (Chromium honours only the last) also turns off
+  `BackForwardCache`, `MediaRouter`, `OptimizationHints` and `Translate`, and
+  `--renderer-process-limit=1` shares one renderer, which site isolation being off
+  already allows. Device scale factor, viewport, fonts, images and media
+  loading are untouched.
 - **`helper/screenshot` coalesces requests** from every caller (bookmark links,
   the template gallery): a request waits at most 150 ms for company, a batch
   goes at 8, only one batch is out at a time per process, and what arrives

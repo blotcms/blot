@@ -539,6 +539,20 @@ async function runBatch(items) {
           return again.push(item);
         const error = new Error(entry.error);
         error.retryable = entry.retryable === true;
+        if (entry.tooHeavy === true) {
+          // The page needs more memory than the browser jail has, and would
+          // again alone: a final failure, handled like any failed screenshot
+          error.retryable = false;
+          error.tooHeavy = true;
+          console.log(
+            prefix(),
+            "Page too heavy for the browser, no screenshot:",
+            "host=" + String(entry.host || "").slice(0, 100),
+            "peak=" +
+              Math.round((Number(entry.peakBytes) || 0) / 1048576) +
+              "MiB"
+          );
+        }
         return item.reject(error);
       }
 
