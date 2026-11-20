@@ -175,6 +175,69 @@ describe("template", function () {
     expect(view.content).toEqual("body {color:pink}");
   });
 
+  describe("a view whose file hasn't changed", function () {
+    const viewReads = (dir) =>
+      folder.read.calls
+        .allArgs()
+        .filter((args) => args[1] === dir + "/style.css").length;
+
+    it("is not read again", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      await readFromFolder(this.blog.id, this.dir);
+
+      spyOn(folder, "read").and.callThrough();
+      var template = await readFromFolder(this.blog.id, this.dir);
+
+      expect(viewReads(this.dir)).toEqual(0);
+      expect((await get(template.id, "style.css")).content).toEqual(
+        "body {color:pink}"
+      );
+    });
+
+    it("is read again once the file changes", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      await readFromFolder(this.blog.id, this.dir);
+      await this.put("/style.css", "body {color:red}");
+
+      spyOn(folder, "read").and.callThrough();
+      var template = await readFromFolder(this.blog.id, this.dir);
+
+      expect(viewReads(this.dir)).toEqual(1);
+      expect((await get(template.id, "style.css")).content).toEqual(
+        "body {color:red}"
+      );
+    });
+
+    it("is read again after the view was saved elsewhere", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      var template = await readFromFolder(this.blog.id, this.dir);
+
+      await setView(template.id, { name: "style.css", content: "edited" });
+      await readFromFolder(this.blog.id, this.dir);
+
+      expect((await get(template.id, "style.css")).content).toEqual(
+        "body {color:pink}"
+      );
+    });
+
+    it("is read again when its settings in package.json change", async function () {
+      const pkg = (url) =>
+        this.put(
+          "/package.json",
+          JSON.stringify({ views: { "style.css": { url } } })
+        );
+
+      await this.put("/style.css", "body {color:pink}");
+      await pkg("/one");
+      await readFromFolder(this.blog.id, this.dir);
+      await pkg("/two");
+
+      var template = await readFromFolder(this.blog.id, this.dir);
+      var result = await getViewByURL(template.id, "/two");
+      expect(result.viewName).toEqual("style.css");
+    });
+  });
+
   // A sync waits on buildFromFolder, which waits on this readFromFolder call,
   // before it releases the blog's folder lock. If an error (e.g. Redis
   // rejecting writes during a host cutover) never rejects the call the blog

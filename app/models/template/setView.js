@@ -19,8 +19,14 @@ var clfdate = require("helper/clfdate");
 var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
 const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 
-module.exports = async function setView(templateID, updates) {
+// options.source is the fingerprint of the folder file the view was read
+// from (readFromFolder), stored so a later build can skip the file while it is
+// unchanged. Any other save of a view clears it, so the next build reads the
+// file again.
+module.exports = async function setView(templateID, updates, options = {}) {
   ensure(templateID, "string").and(updates, "object");
+
+  var source = options.source;
 
   if (updates.partials !== undefined && type(updates.partials) !== "object") {
     updates.partials = {};
@@ -207,6 +213,7 @@ module.exports = async function setView(templateID, updates) {
       "setView: short-circuit",
       name
     );
+    if (source) await client.hSet(key.viewSources(templateID), name, source);
     return;
   } else {
     console.log(
@@ -322,6 +329,8 @@ module.exports = async function setView(templateID, updates) {
   if (changes) {
     multi.hSet(key.metadata(templateID), "cacheID", cacheID.create());
   }
+  if (source) multi.hSet(key.viewSources(templateID), name, source);
+  else multi.hDel(key.viewSources(templateID), name);
 
   await multi.exec();
 
