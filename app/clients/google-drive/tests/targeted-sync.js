@@ -41,10 +41,13 @@ function harness({
   upToDate = [],
   // Ids the mapping has at another path
   drift = {},
+  // Directory id -> { at, source }, as the dirty set's sightings
+  seen = null,
 } = {}) {
   const state = {
     listed: [],
     updates: [],
+    updateOptions: [],
     taken: [],
     takenAt: [],
     putBack: [],
@@ -195,8 +198,9 @@ function harness({
     module.exports(
       "blog",
       () => {},
-      async (path) => {
+      async (path, options) => {
         state.updates.push(path);
+        state.updateOptions.push(options);
       },
       {
         fullWalk: "if-asked",
@@ -211,6 +215,14 @@ function harness({
           members:
             members || (async () => ((await count()) > 0 ? ["recorded"] : [])),
           putBack: async (ids) => state.putBack.push(...ids),
+          ...(seen
+            ? {
+                seen: async (ids) =>
+                  Object.fromEntries(
+                    ids.filter((id) => seen[id]).map((id) => [id, seen[id]])
+                  ),
+              }
+            : {}),
         },
       }
     );
@@ -434,5 +446,21 @@ describe("google-drive sync() detecting what changed", function () {
     const h = harness({ local: allDirs, upToDate: everyFile, failOn: "dir-1" });
 
     expect(await h.detect()).toBe(false);
+  });
+
+  it("passes each file's sighting and download time to the update", async function () {
+    const h = harness({
+      local: allDirs,
+      dirty: ["dir-5"],
+      seen: { "dir-5": { at: 1234, source: "changes" } },
+    });
+    const before = Date.now();
+    await h.apply();
+
+    expect(h.updates[0]).toBe("/d05/a.txt");
+    const options = h.updateOptions[0];
+    expect(options.seenAt).toBe(1234);
+    expect(options.seenBy).toBe("changes");
+    expect(options.downloadedAt).not.toBeLessThan(before);
   });
 });

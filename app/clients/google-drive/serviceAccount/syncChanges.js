@@ -101,7 +101,7 @@ module.exports = async function syncChanges(
     await database.dirty.hintMoves(blogID, list);
   }
   for (const [blogID, ids] of dirty) {
-    await database.dirty.add(blogID, [...ids]);
+    await database.dirty.add(blogID, [...ids], source);
   }
 
   const armed = new Map();

@@ -19,18 +19,46 @@ const TTL_SECONDS = 24 * 60 * 60;
 const TAKE = 1000;
 
 const key = (blogID) => `${PREFIX}dirty-dirs:${blogID}`;
+const seenKey = (blogID) => `${PREFIX}dirty-seen:${blogID}`;
 const movesKey = (blogID) => `${PREFIX}moved-folders:${blogID}`;
 
 module.exports = {
   FULL,
 
-  async add(blogID, ids) {
+  // source names what saw the directories change (changes, search,
+  // walk:<trigger>), for the live line's stage timings (#2847). The first
+  // sighting of each directory is kept until a sync takes it (seen below);
+  // a putBack passes no source and keeps the sighting it had.
+  async add(blogID, ids, source = null) {
     if (!ids.length) return;
-    await client
+    const multi = client
       .multi()
       .sAdd(key(blogID), ids)
-      .expire(key(blogID), TTL_SECONDS)
+      .expire(key(blogID), TTL_SECONDS);
+    if (source) {
+      const value = `${Date.now()} ${source}`;
+      for (const id of ids) multi.hSetNX(seenKey(blogID), id, value);
+      multi.expire(seenKey(blogID), TTL_SECONDS);
+    }
+    await multi.exec();
+  },
+
+  // When each directory was first seen to change, and by what, as
+  // { id: { at, source } }, forgetting them so the next change is timed
+  // afresh. Only for the log: a sighting lost to a race just goes unlogged.
+  async seen(blogID, ids) {
+    if (!ids.length) return {};
+    const [values] = await client
+      .multi()
+      .hmGet(seenKey(blogID), ids)
+      .hDel(seenKey(blogID), ids)
       .exec();
+    const seen = {};
+    ids.forEach((id, i) => {
+      const [at, source] = String(values[i] || "").split(" ");
+      if (Number(at) && source) seen[id] = { at: Number(at), source };
+    });
+    return seen;
   },
 
   async take(blogID) {
@@ -64,5 +92,6 @@ module.exports = {
   },
 
   key,
+  seenKey,
   movesKey,
 };
