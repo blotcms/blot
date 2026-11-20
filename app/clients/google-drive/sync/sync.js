@@ -263,6 +263,10 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   // Directory listings for the pass under way; each pass makes its own
   let listings = null;
 
+  // Directory id -> when a change source first saw it change, and which
+  // ({ at, source }, from options.dirty.seen), for the live line (#2847)
+  const seenDirs = new Map();
+
   // Throws YIELD when changed directories are waiting, other than the ones
   // the pass is applying (busy), asking Redis at most every YIELD_CHECK_MS.
   // During a bulk upload changes.list records the same directory again with
@@ -627,6 +631,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                 { id, md5Checksum, mimeType, modifiedTime },
                 { serviceAccountId, folderId, publish: publishToFolder }
               ),
+              // For the live line's stage timings
+              downloadedAt: Date.now(),
             };
           } catch (error) {
             return { error };
@@ -748,10 +754,15 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                 (!isGoogleAppFile && result?.verifiedContent)
               ) {
                 // Drive's modifiedTime, so the sync can log how long the
-                // change took to go live
+                // change took to go live, and when it was first seen and
+                // downloaded, so the log shows where that time went
+                const sighting = seenDirs.get(dirId);
                 await update(path, {
                   modified: modifiedTime,
                   since: "drive-modified",
+                  seenAt: sighting?.at,
+                  seenBy: sighting?.source,
+                  downloadedAt: outcome.downloadedAt,
                 });
               }
               if (!isGoogleAppFile && result?.verifiedContent) {
@@ -899,6 +910,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           resume.has(a) - resume.has(b) ||
           paths.get(a).split("/").length - paths.get(b).split("/").length
       );
+    if (options.dirty?.seen) {
+      const seen = await options.dirty.seen(ordered).catch(() => ({}));
+      for (const [id, sighting] of Object.entries(seen))
+        seenDirs.set(id, sighting);
+    }
     const done = new Set();
     busy = new Set(ordered);
     try {

@@ -154,7 +154,7 @@ async function detectAndApply(blogID, sync, trigger) {
     `paths=${JSON.stringify((detected.paths || []).slice(0, 20))}`
   );
 
-  await markDirty(blogID, detected);
+  await markDirty(blogID, detected, `walk:${trigger}`);
   if (!(await database.dirty.count(blogID))) {
     return known || { downloaded: 0, removed: 0, createdDirs: 0, detected: 0 };
   }
@@ -172,16 +172,17 @@ async function detectAndApply(blogID, sync, trigger) {
       blogID,
       `still differs after apply changed=${check.changed.length} full=${check.full} again=${again.length}`
     );
-    await markDirty(blogID, check);
+    await markDirty(blogID, check, `check:${trigger}`);
     return applyLocked(blogID, sync);
   }
 
   return applied;
 }
 
-async function markDirty(blogID, { changed, full }) {
+// source names the walk and what started it, for the live line (#2847)
+async function markDirty(blogID, { changed, full }, source) {
   if (full) await database.dirty.add(blogID, [database.dirty.FULL]);
-  else if (changed.length) await database.dirty.add(blogID, changed);
+  else if (changed.length) await database.dirty.add(blogID, changed, source);
 }
 
 // Under the folder lock, applies the directories in the dirty set, and walks
@@ -198,6 +199,7 @@ async function applyLocked(blogID, sync, { full = false } = {}) {
         count: () => database.dirty.count(blogID),
         members: () => database.dirty.members(blogID),
         moveHint: (id) => database.dirty.moveHint(blogID, id),
+        seen: (ids) => database.dirty.seen(blogID, ids),
         putBack: (ids) => database.dirty.add(blogID, ids),
       },
     });

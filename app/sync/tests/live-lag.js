@@ -85,4 +85,41 @@ describe("sync live lag", function () {
 
     expect(lagLines()).toEqual([]);
   });
+
+  it("logs where the time went", async function () {
+    const blogID = this.blog.id;
+    const modified = Date.now() - 5000;
+
+    await sync(blogID, async function (folder) {
+      await storage.write(blogID, "/a.txt", "Hello");
+      await folder.update("/a.txt", {
+        modified,
+        since: "test",
+        seenAt: modified + 1000,
+        seenBy: "changes",
+        downloadedAt: modified + 3000,
+      });
+    });
+
+    const line = lagLines()[0];
+    expect(line).toContain("seen_ms=1000 seen_by=changes");
+    expect(line).toContain("download_ms=3000");
+    const [, lock] = /lock_ms=(-?\d+)/.exec(line);
+    expect(Number(lock)).toBeGreaterThanOrEqual(5000);
+    expect(line).toMatch(/build_ms=\d+/);
+  });
+
+  it("leaves out the stages the client didn't pass", async function () {
+    const blogID = this.blog.id;
+
+    await sync(blogID, async function (folder) {
+      await storage.write(blogID, "/a.txt", "Hello");
+      await folder.update("/a.txt", { modified: Date.now(), since: "test" });
+    });
+
+    const line = lagLines()[0];
+    expect(line).not.toContain("seen_ms=");
+    expect(line).not.toContain("download_ms=");
+    expect(line).toContain("lock_ms=");
+  });
 });
