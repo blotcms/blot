@@ -8,6 +8,7 @@ var referencedIdentifiers = require("./util/referencedIdentifiers");
 var { wrapFolderLinks } = require("./util/resolveFolderLinks");
 var blogHosts = require("blog/lib/blogHosts");
 var mime = require("mime-types");
+var isReadme = require("./util/isReadme");
 
 // This method is used to retrieve the locals,
 // partials and missing locals for a given view, and whether it uses backlinks.
@@ -17,7 +18,9 @@ module.exports = async function getFullView(blogID, templateID, viewName) {
 
   const view = await getView(templateID, viewName);
 
-  if (!view) return null;
+  // A README is never rendered (util/isReadme). Checked on the view found,
+  // since a name without an extension can find readme.html
+  if (!view || isReadme(view.name)) return null;
 
   // View has:
   //

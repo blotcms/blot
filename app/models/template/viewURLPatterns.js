@@ -1,4 +1,5 @@
 const { match, parse } = require("path-to-regexp");
+const isReadme = require("./util/isReadme");
 
 /**
  * Normalize a pathname by adding a leading slash, removing trailing slashes, and converting to lowercase.
@@ -79,6 +80,9 @@ function parseViewPatterns(viewPatternStrings) {
   const entries = [];
 
   for (const [viewName, patterns] of Object.entries(viewPatternStrings || {})) {
+    // A README is never a page, even one saved with a URL before that changed
+    if (isReadme(viewName)) continue;
+
     // Patterns are stored as JSON strings
     for (const pattern of JSON.parse(patterns)) {
       try {
@@ -168,6 +172,7 @@ function resolveView(entries, viewPatternStrings, pathname, exactKeyView) {
   // Only views without stored patterns (legacy) are routed by their key
   if (
     exactKeyView &&
+    !isReadme(exactKeyView) &&
     !Object.prototype.hasOwnProperty.call(
       viewPatternStrings || {},
       exactKeyView

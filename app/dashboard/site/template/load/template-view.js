@@ -1,5 +1,6 @@
 var Template = require("models/template");
 var extname = require("path").extname;
+var isReadme = require("models/template/util/isReadme");
 
 module.exports = async function (req, res, next) {
   try {
@@ -25,6 +26,7 @@ module.exports = async function (req, res, next) {
 
     view.editorMode = editorMode(view.name);
     view.isPackageJSON = false;
+    view.isReadme = isReadme(view.name);
     req.view = res.locals.view = view;
     next();
   } catch (err) {
@@ -35,6 +37,9 @@ module.exports = async function (req, res, next) {
 // Determine the mode for the
 // text editor based on the file extension
 function editorMode(name) {
+  // A README is plain text, never Mustache (models/template/util/isReadme)
+  if (isReadme(name)) return "text/plain";
+
   var mode = "htmlmixed";
 
   if (extname(name) === ".js") mode = "javascript";

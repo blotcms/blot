@@ -17,6 +17,7 @@ var cacheID = require("./util/cacheID");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 var clfdate = require("helper/clfdate");
 var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
+var isReadme = require("./util/isReadme");
 const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 
 // options.source is the fingerprint of the folder file the view was read
@@ -50,6 +51,13 @@ module.exports = async function setView(templateID, updates, options = {}) {
     throw new Error("View names cannot contain slashes");
   }
 
+  // A README is stored as written, with no URL, and is never parsed as
+  // Mustache (util/isReadme). Saving one also clears any URL it was given
+  // before READMEs stopped being pages.
+  var readme = isReadme(name);
+
+  if (readme) updates.url = [];
+
   const serializedUpdates = JSON.stringify(updates);
   const payloadSize = Buffer.byteLength(serializedUpdates);
 
@@ -57,7 +65,7 @@ module.exports = async function setView(templateID, updates, options = {}) {
     throw new Error("View payload exceeds maximum size of 2 MB");
   }
 
-  if (updates.content !== undefined) {
+  if (updates.content !== undefined && !readme) {
     Mustache.render(updates.content, {});
   }
 
@@ -171,7 +179,7 @@ module.exports = async function setView(templateID, updates, options = {}) {
     if (contentUnchanged && view.content) {
       // Content unchanged, so parse it to get the same parseResult.partials
       // that would be merged with updates.partials
-      var parseResultForComparison = parseTemplate(view.content);
+      var parseResultForComparison = readme ? {} : parseTemplate(view.content);
       var expectedPartials = {};
       // Start with updates.partials (normalized to object)
       if (type(updates.partials, "object")) {
@@ -270,7 +278,9 @@ module.exports = async function setView(templateID, updates, options = {}) {
   view.retrieve = view.retrieve || {};
   view.partials = view.partials || {};
 
-  var parseResult = parseTemplate(view.content);
+  var parseResult = readme
+    ? { partials: {}, retrieve: {} }
+    : parseTemplate(view.content);
 
   // TO DO REMOVE THIS
   if (type(view.partials, "array")) {
@@ -304,7 +314,8 @@ module.exports = async function setView(templateID, updates, options = {}) {
 
   extend(view.partials).and(parseResult.partials);
 
-  await detectInfinitePartialDependency(templateID, view, parseResult);
+  if (!readme)
+    await detectInfinitePartialDependency(templateID, view, parseResult);
 
   // Parser output is the source of truth for retrieve locals.
   // Keep user-provided retrieve options (includeDraft, filters)
@@ -464,7 +475,9 @@ async function detectInfinitePartialDependency(templateID, view, parseResult) {
       }
     }
 
-    if (!fetchedView) {
+    // A README renders as an empty partial (getPartials), so it has no
+    // dependencies, whatever tags it mentions
+    if (!fetchedView || isReadme(fetchedView.name)) {
       cache[name] = { deps: [], inlinePartials: {}, cacheable: true };
       return cache[name];
     }

@@ -11,6 +11,7 @@ var _ = require("lodash");
 var chokidar = require("chokidar");
 var parseTemplate = require("models/template/parseTemplate");
 var urlNormalizer = require("helper/urlNormalizer");
+var isReadme = require("models/template/util/isReadme");
 var updateCdnManifest = require("models/template/util/updateCdnManifest");
 var injectLocals = require("models/template/injectLocals");
 var TEMPLATES_DIRECTORY = require("path").resolve(__dirname + "/source");
@@ -545,6 +546,18 @@ function assembleTemplateSnapshot(directory, templatePackage, locals) {
 }
 
 function createViewSnapshot(view) {
+  // setView stores a README with no URL and no parsed partials
+  // (models/template/util/isReadme), so compare it as stored
+  if (isReadme(view.name)) {
+    return {
+      content: view.content,
+      url: undefined,
+      urlPatterns: [],
+      partials: view.partials || {},
+      locals: view.locals || {},
+    };
+  }
+
   var urlInfo = normalizeUrl(view.url, view.name);
   var parseResult = parseTemplate(view.content || "");
   var partials = _.cloneDeep(view.partials || {});
