@@ -200,8 +200,9 @@ TemplateEditor.route("/:templateSlug/install")
 
 function prepareTemplateUpdate(req, res, next) {
   let body = formJSON(req.body, Template.metadataModel);
-  let newLocals = body.locals;
-  let newPartials = body.partials;
+  // A control may post no locals.* field at all (save/tag-layouts.js)
+  let newLocals = body.locals || {};
+  let newPartials = body.partials || {};
   let locals = req.template.locals;
   let partials = req.template.partials;
 
@@ -241,10 +242,12 @@ TemplateEditor.route("/:templateSlug")
   .all(require("./load/sort-input"))
   .all(require("./load/navigation-inputs"))
   .all(require("./load/dates"))
+  .get(require("./load/tag-layouts"))
   .post(
     require("./save/fork-if-needed"),
     prepareTemplateUpdate,
     require("./save/layout-inputs"),
+    require("./save/tag-layouts"),
     require("./save/folder-root"),
     persistTemplateUpdate
   )

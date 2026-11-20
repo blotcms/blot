@@ -1,0 +1,52 @@
+form.tag-layouts {
+  font-size: 14px;
+}
+
+.tag-layouts__rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tag-layouts__row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  padding: 6px 16px;
+  border-top: 1px solid var(--light-border-color);
+}
+
+.tag-layouts__tag {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tag-layouts__row select,
+.tag-layouts__add select {
+  font: inherit;
+}
+
+.tag-layouts__remove {
+  padding: 0 4px;
+  border: 0;
+  background: none;
+  color: var(--light-text-color);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tag-layouts__remove:hover {
+  color: inherit;
+}
+
+.tag-layouts__add {
+  padding: 8px 16px;
+  border-top: 1px solid var(--light-border-color);
+}
+
+.tag-layouts__add select {
+  width: 100%;
+}

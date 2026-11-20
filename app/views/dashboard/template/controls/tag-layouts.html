@@ -1,0 +1,31 @@
+{{#default}}{{> select}}{{/default}}
+<form method="post" class="tag-layouts" data-tag-layouts>
+  <input type="hidden" name="_csrf" value="{{csrftoken}}" />
+  <input type="hidden" name="tag_layouts_json" value="{{json}}" />
+  <ul class="tag-layouts__rows">
+    {{#rows}}
+    <li class="tag-layouts__row" data-slug="{{slug}}">
+      <span class="tag-layouts__tag">{{name}}</span>
+      <select aria-label="Layout for {{name}}">
+        {{#options}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/options}}
+      </select>
+      <button type="button" class="tag-layouts__remove" aria-label="Use the default layout for {{name}}">×</button>
+    </li>
+    {{/rows}}
+  </ul>
+  <div class="tag-layouts__add">
+    <select aria-label="Tag" data-add-tag>
+      <option value="">Choose a different layout for a tag…</option>
+      {{#tags}}<option value="{{slug}}">{{name}}</option>{{/tags}}
+    </select>
+  </div>
+  <template data-row>
+    <li class="tag-layouts__row">
+      <span class="tag-layouts__tag"></span>
+      <select>
+        {{#options}}<option value="{{value}}" {{selected}}>{{label}}</option>{{/options}}
+      </select>
+      <button type="button" class="tag-layouts__remove">×</button>
+    </li>
+  </template>
+</form>

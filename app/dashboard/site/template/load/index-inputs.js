@@ -53,6 +53,9 @@ module.exports = function (req, res, next) {
     )
 
     .filter((key) => !SORT_INPUT_KEYS[key])
+
+    // Tag page layouts have their own control (load/tag-layouts.js)
+    .filter((key) => key !== "tag_layout")
     .filter((key) => key !== "show_adjacent_posts")
 
     .filter(

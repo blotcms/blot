@@ -33,6 +33,7 @@ const dictionary = {
   // off {{#folder}} before it is replaced (plan issue #2693)
   folder_legacy: require("./folder"),
   is: require("./is"),
+  layout_for_tag: require("./layout_for_tag"),
   is_active: is_active,
   latest_entry: latest_entry,
   light_or_dark: require("./light_or_dark"),
