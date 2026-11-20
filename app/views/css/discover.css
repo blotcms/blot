@@ -392,6 +392,11 @@
   margin-top: 8px;
   border: 1px solid var(--border-color);
   border-radius: 12px;
+  transition: border-color 0.1s ease;
+}
+
+.discover-link-card:hover {
+  border-color: var(--dark-border-color);
 }
 
 /* The site's address, under a rule */
