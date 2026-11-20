@@ -404,7 +404,7 @@ describe("upload template route", function () {
     const client = require("models/client");
     const key = require("models/template/key");
     const setView = Template.setView;
-    const drop = Template.drop;
+    const dropByID = Template.drop.byID;
 
     spyOn(Template, "setView").and.callFake(async function (id, view) {
       if (view.name === "second.html") {
@@ -419,15 +419,15 @@ describe("upload template route", function () {
     // between and have its mappings deleted out from under it.
     let urlsAtDropTime = null;
 
-    spyOn(Template, "drop").and.callFake(async function (owner, slug) {
-      const templateID = `${owner}:${slug}`;
-
-      urlsAtDropTime = await Promise.all([
-        client.exists(key.url(templateID, "/first.html")),
-        client.exists(key.url(templateID, "/second.html")),
-      ]);
-      return drop(owner, slug);
-    });
+    spyOn(Template.drop, "byID").and.callFake(
+      async function (owner, templateID) {
+        urlsAtDropTime = await Promise.all([
+          client.exists(key.url(templateID, "/first.html")),
+          client.exists(key.url(templateID, "/second.html")),
+        ]);
+        return dropByID(owner, templateID);
+      }
+    );
 
     const { req } = await folderRequest(this.blog, {
       "first.html": "<h1>Hi</h1>",
