@@ -185,7 +185,7 @@ HTML templates for user-facing pages:
 - Rate limiting via Bottleneck respects the Drive API quota (up to 48 calls per minute per service account).
 
 **Sync Algorithm** (`sync/sync.js`):
-- Recursively walks the remote folder tree.
+- Recursively walks the remote folder tree. It lists Drive directories ahead of itself, 16 at a time, and applies them in the same depth-first order as before: listing one directory takes 0.2-0.3s whatever its size, so on a 3,035-item folder in 31 directories the walk's listing went from about 9s to about 1.3s (#2847).
 - For each remote file/folder:
   - If missing locally, downloads it or creates a directory.
   - If present but out-of-date, verifies the local file and downloads only when needed.
