@@ -57,6 +57,7 @@ function load({
         add: async (blogID, ids) => ids.forEach((id) => dirty.add(id)),
         count: async () => dirty.size,
       },
+      recent: { touch: async () => {} },
     },
     "./sync.js": async (blogID, publish, update, options) => {
       if (options.detectOnly) {
