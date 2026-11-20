@@ -9,6 +9,10 @@ const QUEUE_LIMIT_MS = 5 * MINUTE;
 const JOURNAL_LIMIT_MS = 2 * MINUTE;
 // Paths bird had that never reached the disk, in the last 15 minutes
 const GAVE_UP_LIMIT = 3;
+// Nothing at all delivered from iCloud to the macserver for this long: the
+// link from iCloud to the Mac has probably broken (bird signed out, pushes no
+// longer arriving). Quiet nights have gone over six hours without a change.
+const DELIVERY_LIMIT_MS = 12 * 60 * MINUTE;
 // The median delay from a file's mtime to Blot, over the last 15 minutes,
 // from at least LAG_MIN_SAMPLES pushes. Pushes of files whose mtime is over
 // an hour old are left out: they are old files copied in, not live edits.
@@ -51,6 +55,16 @@ function syncDelays(stats, lagSamples) {
   if (stats && stats.fileprovider_gave_up_15m >= GAVE_UP_LIMIT) {
     reasons.push(
       `In the last 15 minutes, ${stats.fileprovider_gave_up_15m} files that iCloud has never reached the macserver's disk (FileProvider may be stuck).`
+    );
+  }
+
+  if (
+    stats &&
+    typeof stats.icloud_last_delivery_age_ms === "number" &&
+    stats.icloud_last_delivery_age_ms > DELIVERY_LIMIT_MS
+  ) {
+    reasons.push(
+      `The macserver hasn't received anything from iCloud for ${Math.round(stats.icloud_last_delivery_age_ms / (60 * MINUTE))} hours (the newest sync-down across bird's folders).`
     );
   }
 

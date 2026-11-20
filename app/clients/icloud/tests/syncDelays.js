@@ -53,6 +53,18 @@ describe("icloud syncDelays", function () {
     expect(syncDelays({}, lag(5, 6, 7, 7200, 9000, 9500, 9999))).toEqual([]);
   });
 
+  it("reports nothing delivered from iCloud for over twelve hours", function () {
+    const HOUR = 60 * MINUTE;
+    expect(
+      syncDelays({ icloud_last_delivery_age_ms: 13 * HOUR }, []).length
+    ).toBe(1);
+    expect(syncDelays({ icloud_last_delivery_age_ms: 7 * HOUR }, [])).toEqual(
+      []
+    );
+    // unknown (no database) is not a delay
+    expect(syncDelays({ icloud_last_delivery_age_ms: null }, [])).toEqual([]);
+  });
+
   it("copes with no stats", function () {
     expect(syncDelays(null, [])).toEqual([]);
   });

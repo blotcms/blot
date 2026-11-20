@@ -9,6 +9,7 @@ import availableMemory from "../util/availableMemory.js";
 import { backlog } from "../pathOrder.js";
 import { journalStatus } from "../journal.js";
 import { waitingForFileProvider } from "../watcher/index.js";
+import { lastDeliveryFromiCloud } from "../birdZones.js";
 
 const statfs = promisify(statfsSync);
 
@@ -95,6 +96,10 @@ export default async (req, res) => {
     result.fileprovider_waiting = waiting.count;
     result.fileprovider_oldest_ms = waiting.oldestMs;
     result.fileprovider_gave_up_15m = waiting.gaveUpRecently;
+
+    const delivered = await lastDeliveryFromiCloud();
+    result.icloud_last_delivery_age_ms =
+      delivered === null ? null : Date.now() - delivered;
   } catch (error) {
     console.error(clfdate(), `Error getting sync backlog: ${error}`);
   }
