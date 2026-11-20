@@ -526,6 +526,8 @@ nav[aria-label="Pages"] {
 }
 
 .when-day {
+  flex: none;
+  white-space: nowrap;
   color: var(--accent);
   font: var(--size-numeral) / 0.8 var(--font-serif);
   font-variant-numeric: lining-nums;
@@ -1248,8 +1250,17 @@ nav[aria-label="Pages"] {
     grid-column: auto / span 1;
   }
 
+  .has-contents .text > .margin {
+    grid-column: 1 / -1;
+  }
+
   .text > .contents {
     position: static;
+    margin-bottom: var(--leading-serif-l);
+  }
+
+  :root {
+    --size-numeral: 48px;
   }
 
   .facts {
