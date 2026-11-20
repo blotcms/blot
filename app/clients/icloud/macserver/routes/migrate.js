@@ -4,6 +4,8 @@ import { iCloudDriveDirectory } from "../config.js";
 import { refresh, rootOf } from "../blogFolder.js";
 import sharePermission from "../util/sharePermission.js";
 import { setupBlog, shareInfo } from "./setup.js";
+import leaveFolder from "../util/leaveFolder.js";
+import finderLimiter from "../util/finderLimiter.js";
 import { watch, unwatch } from "../watcher/index.js";
 import requestResync from "../httpClient/resync.js";
 import status from "../httpClient/status.js";
@@ -60,8 +62,14 @@ export default async (req, res) => {
   // would otherwise report to Blot as deleted
   await unwatch(blogID);
 
+  // Leave the share first: opening a link to a share this Mac is still in
+  // brings no new folder for setup to find. Through the Finder queue setup
+  // uses too, so the two never drive Finder at once
   let result;
   try {
+    await finderLimiter.schedule(() =>
+      leaveFolder(container, { root: iCloudDriveDirectory })
+    );
     result = await setupBlog(blogID, sharingLink, (stage) =>
       console.log(clfdate(), `Migrating ${blogID}: ${stage}`)
     );
@@ -74,13 +82,25 @@ export default async (req, res) => {
     return res.status(500).send(`Rejoin failed: ${error.message}`);
   }
 
-  const after = await collaborationID(rootOf(blogID));
-  const sameShare = after === before;
-  if (!sameShare)
+  // Setup takes the first new folder to appear. Only when it is the same
+  // share does the blog sync again: another folder must never be resynced
+  // into this blog, which could remove or replace its files. It stays
+  // unwatched for the maintainer to look at
+  let after = null;
+  try {
+    after = await collaborationID(rootOf(blogID));
+  } catch {
+    // no folder: after stays null
+  }
+  if (after !== before) {
     console.error(
       clfdate(),
-      `MIGRATION for ${blogID} came back with another share: ${before} -> ${after}`
+      `MIGRATION for ${blogID} came back with another share (${before} -> ${after}): not watched, not resynced`
     );
+    return res
+      .status(500)
+      .send(`Another share came back (${after}); ${blogID} is left unwatched`);
+  }
 
   await watch(blogID);
   await status(blogID, { folderName: result.folderName }).catch((error) =>
@@ -90,9 +110,6 @@ export default async (req, res) => {
     console.error(clfdate(), `resync for ${blogID}:`, error.message)
   );
 
-  console.log(
-    clfdate(),
-    `Migrated ${blogID} as "${result.folderName}"${sameShare ? "" : " (another share!)"}`
-  );
-  res.json({ folderName: result.folderName, sameShare });
+  console.log(clfdate(), `Migrated ${blogID} as "${result.folderName}"`);
+  res.json({ folderName: result.folderName, sameShare: true });
 };
