@@ -18,6 +18,12 @@ function load({ account, storeError }) {
       };
     },
     "../database": {
+      dirty: {
+        FULL: "*",
+        take: async () => [],
+        count: async () => 0,
+        add: async () => {},
+      },
       blog: {
         get: async () => account,
         store: async (blogID, data) => {
