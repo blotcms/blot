@@ -186,7 +186,11 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
   );
 
   // Folders and templates are matched by id, not slug: makeID lowercases, so a
-  // folder renamed only in case is still the same template
+  // folder renamed only in case is still the same template. Orphans are
+  // dropped by id too: a template made before create() kept slug and id in
+  // step can have a slug that makeID maps to another id, which is the
+  // template its folder is now read as. Dropping by slug deleted that one,
+  // every sync, and left the orphan.
   const idsInFolder = templatesInFolder.map((name) => makeID(blogID, name));
   const orphans = local.filter(
     (template) => !idsInFolder.includes(template.id)
@@ -198,7 +202,7 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
   )) {
     try {
       log("removing template", orphan.slug);
-      await drop(blogID, orphan.slug);
+      await drop.byID(blogID, orphan.id);
     } catch (err) {
       console.error(
         clfdate(),
@@ -274,7 +278,7 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
       // Something else was installed in the meantime (e.g. the new folder's
       // package.json said `enabled`), so nothing points at this one
       log("removing template", installed.slug);
-      await drop(blogID, installed.slug);
+      await drop.byID(blogID, installed.id);
       await folderRenames.clear(blogID, installed.id);
     } else if (now - record.since >= folderRenames.RENAME_WINDOW) {
       log(
@@ -287,7 +291,7 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
       // (a local edit of the default theme) the fork would reuse and then
       // delete it, leaving the blog pointing at nothing.
       try {
-        await drop(blogID, installed.slug);
+        await drop.byID(blogID, installed.id);
       } catch (dropErr) {
         // drop can fail after it has deleted the template (its last step
         // bumps the blog's cacheID). If the template is gone the blog must

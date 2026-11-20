@@ -5,6 +5,8 @@ const prettySize = require("helper/prettySize");
 const client = require("models/client");
 const lock = require("helper/lock");
 const { schedule } = require("clients/util/scheduleExclusive");
+const syncDelays = require("./syncDelays");
+const liveLag = require("./liveLag");
 
 const MAC_SERVER_ADDRESS = config.icloud.server_address;
 const Authorization = config.icloud.secret;
@@ -25,6 +27,12 @@ const DAY = 24 * 60 * 60 * 1000;
 // outage notify again; the long TTL only bounds a marker nobody cleared.
 const SPACE_NOTIFICATION_TTL = DAY;
 const DOWN_NOTIFICATION_TTL = 7 * DAY;
+
+// A delay is announced once, like an outage, and its recovery once. Another
+// delay within the hour after a recovery isn't announced, so a lag that
+// hovers around the limit doesn't send an email every few minutes.
+const DELAY_NOTIFICATION_TTL = 7 * DAY;
+const DELAY_QUIET_TTL = 60 * 60 * 1000;
 
 const fetch = require("./rateLimitedFetchWithRetriesAndTimeout");
 
@@ -118,8 +126,38 @@ const check = async () => {
       error
     );
   }
+
+  try {
+    await checkDelays(stats);
+  } catch (error) {
+    console.error(clfdate(), "Could not check iCloud sync delays", error);
+  }
+};
+
+// Emails when iCloud sync falls behind (see syncDelays.js), and again once it
+// has caught up
+const checkDelays = async (stats) => {
+  const samples = await liveLag.recent(syncDelays.LAG_WINDOW_MS);
+  const reasons = syncDelays(stats, samples);
+
+  if (reasons.length) {
+    console.warn(clfdate(), "iCloud sync is delayed:", reasons);
+    if (await client.exists(key("icloud_sync_delayed_quiet"))) return;
+    if (await shouldNotify("icloud_sync_delayed", DELAY_NOTIFICATION_TTL)) {
+      email.ICLOUD_SYNC_DELAYED(null, { reasons, stats });
+    }
+    return;
+  }
+
+  if (await client.del(key("icloud_sync_delayed"))) {
+    await client.set(key("icloud_sync_delayed_quiet"), "1", {
+      PX: DELAY_QUIET_TTL,
+    });
+    email.ICLOUD_SYNC_RECOVERED();
+  }
 };
 
 // Every minute, in one process per minute
 module.exports = () => schedule("icloud-macserver-stats", "* * * * *", check);
 module.exports.check = check;
+module.exports.checkDelays = checkDelays;

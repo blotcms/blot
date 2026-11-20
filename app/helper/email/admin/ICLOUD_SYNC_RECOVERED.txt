@@ -1,0 +1,3 @@
+iCloud sync has caught up
+
+The delay reported earlier has cleared: the macserver's queue, its journal and recent pushes are all within their limits again.

@@ -199,6 +199,13 @@ createRedisClient.getClientSideCacheStats = function (client) {
   stats.maxEntries = clientSideCache.maxEntries;
   // Cumulative hits/misses/bypass per key class, see models/redis-cache
   stats.classStats = JSON.parse(JSON.stringify(clientSideCache.classStats));
+  // Entries and rough value bytes per class held now, and the uncached reads
+  // and the writes per "COMMAND|key pattern" so far (models/redis-cache)
+  stats.classSizes = clientSideCache.classSizes();
+  const top = (map) =>
+    [...map].map(([pattern, { count, bytes }]) => ({ pattern, count, bytes }));
+  stats.bypassPatterns = top(clientSideCache.bypassPatterns);
+  stats.writePatterns = top(clientSideCache.writePatterns);
   return stats;
 };
 
