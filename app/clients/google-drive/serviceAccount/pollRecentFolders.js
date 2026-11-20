@@ -91,7 +91,7 @@ module.exports = async function pollRecentFolders(
   let calls = 0;
   // googleapis puts the methods on prototypes, so these inherit them
   const counted = Object.create(drive);
-  counted.files = Object.create(drive.files);
+  counted.files = Object.create(drive.files || {});
   counted.files.list = (...args) => {
     calls += 1;
     return drive.files.list(...args);
