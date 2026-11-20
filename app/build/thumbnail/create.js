@@ -20,15 +20,32 @@ var VERSION = "1";
 // image at once, a job that outlived the build's wait, a lost cache entry)
 // writes the same files to the same place, rather than leaving another
 // directory behind.
-async function directoryFor(path) {
+function directoryForHash(hash) {
   var name = crypto
     .createHash("sha256")
     .update(VERSION + "\n" + JSON.stringify(THUMBNAILS) + "\n")
-    .update(await hashFile(path))
+    .update(hash)
     .digest("hex")
     .slice(0, 32);
 
   return "/" + join("_thumbnails", name);
+}
+
+async function directoryFor(path) {
+  return directoryForHash(await hashFile(path));
+}
+
+// Gives the thumbnails Transform wrote to outputDirectory their paths and
+// URLs, and commits the directory, once they are all in place
+async function publish(blogID, outputDirectory, thumbnails) {
+  for (var i in thumbnails) {
+    thumbnails[i].path = outputDirectory + "/" + thumbnails[i].name;
+    thumbnails[i].url = assets.url(blogID, thumbnails[i].path);
+  }
+
+  await assets.commit(blogID, outputDirectory);
+
+  return thumbnails;
 }
 
 // Thumbnails being made in this process, by blog and directory: a second build of the
@@ -93,13 +110,8 @@ async function create(blogID, path) {
       throw err;
     }
 
-    for (var i in thumbnails) {
-      thumbnails[i].path = outputDirectory + "/" + thumbnails[i].name;
-      thumbnails[i].url = assets.url(blogID, thumbnails[i].path);
-    }
-
     // The transform wrote the files locally, now they are all in place
-    await assets.commit(blogID, outputDirectory);
+    await publish(blogID, outputDirectory, thumbnails);
 
     debug(blogID, "Done", thumbnails);
     return thumbnails;
@@ -107,3 +119,5 @@ async function create(blogID, path) {
 }
 
 module.exports = create;
+module.exports.directoryForHash = directoryForHash;
+module.exports.publish = publish;

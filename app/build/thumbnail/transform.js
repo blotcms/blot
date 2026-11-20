@@ -19,66 +19,87 @@ function make(animated) {
     // I couldn't work out how to handle filenames like ex?yz.jpg
     // Should I store the name URL-encoded (e.g. ex%3Fyz.jpg)...
     // Now I just use the guuid + size + file extension.
-    var extension = extname(path).toLowerCase();
+    var extension = outputExtension(path);
 
-    if (extension === ".svg") extension = ".png";
-
-    var names = Object.keys(thumbnails);
-    var sizes = names.map(function (name) {
-      return { size: thumbnails[name].size, crop: !!thumbnails[name].crop };
+    var reply = await sandbox.run("thumbnail", request(extension, animated), {
+      path: path,
     });
 
-    var reply = await sandbox.run(
-      "thumbnail",
-      {
-        extension: extension,
-        animated: animated,
-        sizes: sizes,
-        accept: validate.ACCEPT,
-      },
-      { path: path }
-    );
-
-    var meta = reply.meta;
-    if (!meta || typeof meta !== "object")
-      throw new Error("Unexpected thumbnail result");
-
-    var invalid = validate.check(meta.source);
-    if (invalid || meta.thumbnails === null) {
-      invalid = invalid || new Error("Image is not a valid thumbnail");
-      invalid.invalid = true;
-      throw invalid;
-    }
-
-    if (
-      !Array.isArray(meta.thumbnails) ||
-      meta.thumbnails.length !== names.length ||
-      reply.outputs.length !== names.length
-    ) {
-      throw new Error("Unexpected thumbnail result");
-    }
-
-    await fs.ensureDir(outputDirectory);
-
-    var result = {};
-
-    await Promise.all(
-      names.map(async function (name, i) {
-        var fileName = name.toLowerCase() + extension;
-
-        await fs.writeFile(outputDirectory + "/" + fileName, reply.outputs[i]);
-
-        result[name] = {
-          width: meta.thumbnails[i].width,
-          height: meta.thumbnails[i].height,
-          name: fileName,
-        };
-      })
-    );
-
-    return result;
+    return write(reply, extension, outputDirectory);
   };
+}
+
+// The extension of a file's thumbnails: its own, and PNG for an SVG
+function outputExtension(path) {
+  var extension = extname(path).toLowerCase();
+
+  return extension === ".svg" ? ".png" : extension;
+}
+
+// The thumbnail job's arguments for an image's thumbnails. The image plugin
+// sends the same to the resize job (./seed.js), which makes them from the
+// image it has just written.
+function request(extension, animated) {
+  var names = Object.keys(thumbnails);
+
+  return {
+    extension: extension,
+    animated: animated,
+    sizes: names.map(function (name) {
+      return { size: thumbnails[name].size, crop: !!thumbnails[name].crop };
+    }),
+    accept: validate.ACCEPT,
+  };
+}
+
+// Checks the job's reply, and writes its thumbnails to outputDirectory. The
+// directory is made only for an image that passes, and an image that doesn't
+// fails with the reason, with err.invalid set.
+async function write(reply, extension, outputDirectory) {
+  var names = Object.keys(thumbnails);
+  var meta = reply.meta;
+
+  if (!meta || typeof meta !== "object")
+    throw new Error("Unexpected thumbnail result");
+
+  var invalid = validate.check(meta.source);
+  if (invalid || meta.thumbnails === null) {
+    invalid = invalid || new Error("Image is not a valid thumbnail");
+    invalid.invalid = true;
+    throw invalid;
+  }
+
+  if (
+    !Array.isArray(meta.thumbnails) ||
+    meta.thumbnails.length !== names.length ||
+    reply.outputs.length !== names.length
+  ) {
+    throw new Error("Unexpected thumbnail result");
+  }
+
+  await fs.ensureDir(outputDirectory);
+
+  var result = {};
+
+  await Promise.all(
+    names.map(async function (name, i) {
+      var fileName = name.toLowerCase() + extension;
+
+      await fs.writeFile(outputDirectory + "/" + fileName, reply.outputs[i]);
+
+      result[name] = {
+        width: meta.thumbnails[i].width,
+        height: meta.thumbnails[i].height,
+        name: fileName,
+      };
+    })
+  );
+
+  return result;
 }
 
 module.exports = make(false);
 module.exports.animated = make(true);
+module.exports.request = request;
+module.exports.write = write;
+module.exports.outputExtension = outputExtension;

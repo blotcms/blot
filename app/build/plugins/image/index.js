@@ -20,7 +20,30 @@ function describeDownloadError(err) {
   return message || "could not be downloaded";
 }
 
-async function render($, { blogID }) {
+// The src of the image that will be the post's first thumbnail candidate
+// (build/thumbnail/candidates.js: the first <img> with a src, unless a video
+// embed comes first), or null if the thumbnail isn't taken from the post's
+// images. Only a guess: a wrong one costs thumbnails nobody uses, since they
+// are kept by the image's bytes, never a wrong thumbnail.
+function firstCandidateSrc($) {
+  var found = null;
+
+  $("img, .videoContainer iframe").each(function (i, el) {
+    if (found !== null) return false;
+
+    if (el.name !== "img") {
+      found = "";
+      return false;
+    }
+
+    var src = $(el).attr("src");
+    if (src) found = src;
+  });
+
+  return found || null;
+}
+
+async function render($, { blogID, seedThumbnail }) {
   var cache = new Transformer(blogID, "image-cache");
 
   // A cached result is found by the image's bytes, so it may be one built long
@@ -56,6 +79,7 @@ async function render($, { blogID }) {
   // does not de-duplicate in-flight lookups by design.
   var els = [];
   var srcs = [];
+  var thumbnailSrc = seedThumbnail ? firstCandidateSrc($) : null;
 
   $("img").each(function (i, el) {
     if (!el || el.name !== "img") return;
@@ -92,7 +116,9 @@ async function render($, { blogID }) {
   async function lookupSrc(src) {
     // Pass in the `pathname` component of the image src (no URL params or hash)
     // Also pass the original src so we can include the filename in the CDN URL
-    var transform = optimize(blogID, src);
+    var transform = optimize(blogID, src, {
+      thumbnail: src === thumbnailSrc,
+    });
 
     try {
       infos[src] = await cache.lookup(

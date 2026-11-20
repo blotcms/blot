@@ -7,6 +7,7 @@ var enabledConverters = require("./converters/enabled");
 var cheerio = require("cheerio");
 var wikilinks = require("./plugins/wikilinks");
 var bakeHTML = require("./plugins/folderAssets").bakeHTML;
+var metadataCaseInsensitive = require("helper/metadataCaseInsensitive");
 var isCameraDefault = require("./converters/img/markdown").isCameraDefault;
 
 // Resolves to [html, metadata, stat, dependencies, extras].
@@ -77,8 +78,14 @@ async function single(blog, path, options = {}) {
 
   // We pass the contents to the plugins for
   // this blog. The resulting HTML is now ready.
+  //
+  // The first image of a post is the one its thumbnails are made from, so the
+  // Image plugin makes them while it has the image, unless the metadata names
+  // another, or the post is a folder's, whose files are joined after this.
   var [pluginHTML, newDependencies] = await Plugins(blog, path, html, {
     caption: caption,
+    seedThumbnail:
+      !options.inFolderPost && !metadataCaseInsensitive(metadata).thumbnail,
   });
 
   debug("Blog:", blog.id, path, "finished plugins");

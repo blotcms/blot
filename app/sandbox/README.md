@@ -45,7 +45,13 @@ starts `SANDBOX_`, and it never falls back to in-process.
   8 MiB) is its bytes as they are, and the other sizes are made largest first,
   each from the smallest already made that covers it. The jail has 20s, as long
   as the build waits (`build/thumbnail/create.js`).
-- `resize` shrinks an image to fit inside a square, in its own format.
+- `resize` shrinks an image to fit inside a square, in its own format. With
+  `{ thumbnail: <the thumbnail job's args> }` it also makes the thumbnails of the
+  image it has just encoded, from those bytes (`meta.thumbnail`, outputs after the
+  first), unless the result is over 16M pixels or 24 MiB. The image plugin asks
+  this of a post's first image (`build/thumbnail/seed.js` stores the result where
+  `build/thumbnail` looks), so that image needs one jail, not two; a resize that
+  can't make them still succeeds and `build/thumbnail` runs its own job.
 - `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG. With `{ exif: [fields] }`
   it also reads the image's EXIF from the same bytes (`meta.exif`, as the `exif`
   job returns it, or null; a failing exiftool never fails the conversion), so a
