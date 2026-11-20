@@ -112,7 +112,8 @@ const main = async () => {
         "POST",
         "/migrate",
         { blogID, sharingLink: account.sharingLink },
-        5 * 60 * 1000
+        // the macserver retries the rejoin for about four minutes
+        10 * 60 * 1000
       );
     } catch (error) {
       console.error(`${blogID}: MIGRATION FAILED:`, error.message);

@@ -25,6 +25,11 @@ import clfdate from "../util/clfdate.js";
 // changes, and the same share (by its collaboration ID) must come back.
 // Unlike a setup, nothing is copied into the folder afterwards: Blot is asked
 // for a resync from iCloud instead, so the owner's latest files win.
+// Waits before each rejoin attempt, after leaving: about four minutes in all
+const REJOIN_DELAYS_MS = [15_000, 15_000, 30_000, 60_000, 120_000];
+const RETRYABLE = ["INVALID_LINK", "TIMEOUT"];
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 const collaborationID = async (path) => {
   try {
     return JSON.parse(await shareInfo(path)).CollaborationIdentifier || null;
@@ -104,14 +109,33 @@ export default async (req, res) => {
     return res.status(500).send(`Leave failed: ${error.message}`);
   }
 
+  // Right after a participant leaves, iCloud turns the share's link away for
+  // a little while ("Sorry, this folder can't be opened right now. Please try
+  // again later", which setup reports as INVALID_LINK) and may be slow to
+  // hand the folder over (TIMEOUT): seen on icloudtest, the link worked again
+  // within about 40 s. So wait, then retry those two with growing gaps.
+  // Anything else, or still failing after the last try, quarantines the blog.
   let result;
-  try {
-    result = await setupBlog(blogID, sharingLink, (stage) =>
-      console.log(clfdate(), `Migrating ${blogID}: ${stage}`)
-    );
-  } catch (error) {
-    await quarantine(blogID, `rejoin failed: ${error.message}`);
-    return res.status(500).send(`Rejoin failed: ${error.message}`);
+  for (let attempt = 0; ; attempt++) {
+    await sleep(REJOIN_DELAYS_MS[attempt]);
+    try {
+      result = await setupBlog(blogID, sharingLink, (stage) =>
+        console.log(clfdate(), `Migrating ${blogID}: ${stage}`)
+      );
+      break;
+    } catch (error) {
+      const retry =
+        RETRYABLE.includes(error.reason) &&
+        attempt + 1 < REJOIN_DELAYS_MS.length;
+      console.error(
+        clfdate(),
+        `Migration of ${blogID}: rejoin attempt ${attempt + 1} failed (${error.reason || error.message})${retry ? ", trying again" : ""}`
+      );
+      if (!retry) {
+        await quarantine(blogID, `rejoin failed: ${error.message}`);
+        return res.status(500).send(`Rejoin failed: ${error.message}`);
+      }
+    }
   }
 
   // Setup takes the first new folder to appear. Only when it is the same
