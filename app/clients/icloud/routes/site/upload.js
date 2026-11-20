@@ -6,6 +6,7 @@ const { handleRedisUnavailable } = require("../unavailable");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const stampLastSync = require("./stampLastSync");
+const liveLag = require("../../util/liveLag");
 
 // If Redis cannot take the update, take the file we just wrote back off the
 // disk. The macserver will push it again, and the upload route would
@@ -130,6 +131,7 @@ module.exports = async function (req, res) {
 
       // Set the folder status to reflect the upload action
       folder.status("Updated " + filePath);
+      await liveLag.record(modifiedTime);
 
       console.log(`File successfully written to: ${filePath}`);
       res.status(200).send(`File successfully uploaded for blogID: ${blogID}`);

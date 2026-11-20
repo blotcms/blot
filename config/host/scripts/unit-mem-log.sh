@@ -37,6 +37,15 @@
 # falls between samples. Plus one `name=host mem_available mem_total swap_used`
 # line per sample.
 #
+# Then, on cgroup v2, how hard the limit squeezes the page cache, all
+# cumulative for the cgroup: refault=N pages of file read back in after the
+# kernel had dropped them (workingset_refault_file), pressure_some=us and
+# pressure_full=us of time some or all of its tasks waited on memory
+# (memory.pressure), and at_max=N times it reached its limit (memory.events
+# max). A unit whose limit is too low for its page cache re-reads blog files
+# from disk and waits on it, which slows renders; these show that before
+# render times do (#2795). Older lines lack them, and cgroup v1 logs 0.
+#
 # The units' sandbox jobs (#2257) run in cgroups outside the unit's, so each
 # unit's subtree, where the host has made one, gets a line of its own as
 # name=blot-sandbox-<unit>. Jobs last under a second, so read peak and oom_kill
@@ -153,10 +162,19 @@ container_fields() {
   done
   peak=""
   [ -r "$dir/memory.peak" ] && peak=" peak=$(cat "$dir/memory.peak")"
+  refault=0 some=0 full=0 at_max=0
+  if [ "$V" = 2 ]; then
+    refault=$(awk '$1 == "workingset_refault_file" {print $2}' "$dir/memory.stat")
+    # "some avg10=0.00 avg60=0.00 avg300=0.00 total=893541", then "full ..."
+    some=$(awk '$1 == "some" {sub(/.*total=/, ""); print}' "$dir/memory.pressure")
+    full=$(awk '$1 == "full" {sub(/.*total=/, ""); print}' "$dir/memory.pressure")
+    at_max=$(awk '$1 == "max" {print $2}' "$dir/memory.events")
+  fi
   echo "anon=$1 file=$2 shmem=$3 limit=$limit oom_kill=${oom:-0}" \
     "node_max=$node_max node_sum=$node_sum node_a=$node_a node_b=$node_b node_other=$node_other" \
     "git=$git git_n=$git_n top=$top_comm:$top_rss$peak" \
-    "broker=$broker proxy=$proxy openresty=$openresty openresty_n=$openresty_n"
+    "broker=$broker proxy=$proxy openresty=$openresty openresty_n=$openresty_n" \
+    "refault=${refault:-0} pressure_some=${some:-0} pressure_full=${full:-0} at_max=${at_max:-0}"
 }
 
 latest=""

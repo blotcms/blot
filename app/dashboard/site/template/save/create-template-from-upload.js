@@ -42,11 +42,8 @@ const dropAttemptedViewUrls = async (templateID, views) => {
 };
 
 const dropTemplate = async (owner, templateID) => {
-  // Template.drop takes the id with the owner prefix removed
-  const slug = templateID.split(":").slice(1).join(":");
-
   try {
-    await Template.drop(owner, slug);
+    await Template.drop.byID(owner, templateID);
   } catch (err) {
     console.error("Failed to roll back uploaded template", templateID, err);
   }
