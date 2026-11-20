@@ -242,6 +242,7 @@ TemplateEditor.route("/:templateSlug")
   .all(require("./load/sort-input"))
   .all(require("./load/navigation-inputs"))
   .all(require("./load/dates"))
+  .all(require("./load/text-inputs"))
   .get(require("./load/tag-layouts"))
   .post(
     require("./save/fork-if-needed"),

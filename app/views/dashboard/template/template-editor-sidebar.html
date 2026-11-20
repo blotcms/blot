@@ -65,6 +65,15 @@
 	</div>
 	{{/other_images.length}}
 
+	{{#text_inputs.length}}
+	<div class="settings-group">
+		<h2 class="template-heading">Details</h2>
+		{{#text_inputs}}
+		{{> text}}
+		{{/text_inputs}}
+	</div>
+	{{/text_inputs.length}}
+
 	{{#folder_root_control}}
 	<div class="settings-group">
 		<h2 class="template-heading">Folder</h2>

@@ -2,6 +2,7 @@ const normalize = require("models/tags").normalize;
 const tagSlug = require("../retrieve/helpers/tagSlug");
 const type = require("helper/type");
 const backlinksFor = require("./backlinks");
+const eventDate = require("./eventDate");
 const moment = require("moment");
 require("moment-timezone");
 
@@ -34,6 +35,22 @@ module.exports = async function augment(
   entry.formatDate = FormatDate(entry.dateStamp, req.blog.timeZone);
   entry.formatUpdated = FormatDate(entry.updated, req.blog.timeZone);
   entry.formatCreated = FormatDate(entry.created, req.blog.timeZone);
+
+  // An Event line that is a date (./eventDate.js) gets the same formatting
+  // helper as the entry's own date, and says whether the event is still to
+  // come. A line that isn't a date is left for the template to show as it is.
+  const event = eventDate(entry.metadata, req.blog.timeZone);
+  if (event) {
+    const upcoming = eventDate.isUpcoming(event, Date.now(), req.blog.timeZone);
+    entry.formatEvent = FormatDate(event.stamp, req.blog.timeZone);
+    entry.event = {
+      stamp: event.stamp,
+      allDay: event.allDay,
+      timed: !event.allDay,
+      upcoming,
+      past: !upcoming,
+    };
+  }
 
   entry.absoluteURL = absoluteURL(req.blog.locals.blogURL, entry.url);
 

@@ -1,0 +1,22 @@
+form.text-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 16px;
+  font-size: 14px;
+  border-bottom: 1px solid var(--light-border-color);
+}
+
+form.text-input:last-of-type {
+  border-bottom: none;
+}
+
+form.text-input label {
+  color: var(--light-text-color);
+}
+
+form.text-input input {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+}

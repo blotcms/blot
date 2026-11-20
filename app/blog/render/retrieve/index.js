@@ -34,6 +34,7 @@ const dictionary = {
   folder_legacy: require("./folder"),
   is: require("./is"),
   layout_for_tag: require("./layout_for_tag"),
+  upcoming_events: require("./upcoming_events"),
   is_active: is_active,
   latest_entry: latest_entry,
   light_or_dark: require("./light_or_dark"),

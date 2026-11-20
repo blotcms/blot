@@ -6,6 +6,15 @@
     "description": "",
     "email": "",
     "microblog_user": "",
+    "text_inputs": [
+      "author",
+      "description",
+      "email",
+      "microblog_user"
+    ],
+    "text_input_labels": {
+      "microblog_user": "Micro.blog username"
+    },
     "page_size": 20,
     "hide_dates": false,
     "date_display": "MMMM D, Y",
@@ -28,9 +37,16 @@
       "line_height": 1.5
     },
     "max_width": 600,
-    "max_width_range": [400, 900],
+    "max_width_range": [
+      400,
+      900
+    ],
     "navigation_alignment": "right",
-    "navigation_alignment_options": ["left", "center", "right"],
+    "navigation_alignment_options": [
+      "left",
+      "center",
+      "right"
+    ],
     "sticky_navigation": false,
     "profile_image": {}
   },
