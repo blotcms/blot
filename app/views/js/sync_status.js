@@ -142,19 +142,31 @@ function updateContainerClass() {
   }
 }
 
+// A page whose live region changes in a few big steps (the iCloud setup)
+// can ask to re-render sooner than a folder listing would, with
+// data-throttle (ms) on its .live-updates
+function throttleDelay() {
+  var live = q(".live-updates");
+  var ms = live && parseInt(live.getAttribute("data-throttle"), 10);
+  return ms > 0 ? ms : THROTTLE_DELAY;
+}
+
 function scheduleLoad() {
   if (document.visibilityState === "hidden") {
     pendingWhileHidden = true;
     return;
   }
 
-  var now = Date.now();
-  var when = Math.max(nextAt, now);
-
-  if (timerId) {
+  // A load already running or already scheduled picks this up afterwards.
+  // Without this, a message that arrived mid-load set a 0 ms timer whose
+  // runLoad() returned at once, and the re-render it asked for was lost
+  if (timerId || inFlight) {
     shouldReload = true;
     return;
   }
+
+  var now = Date.now();
+  var when = Math.max(nextAt, now);
 
   if (!inFlight && now >= nextAt) {
     runLoad();
@@ -173,7 +185,7 @@ function runLoad() {
 
   loadFolder(function done() {
     inFlight = false;
-    nextAt = started + THROTTLE_DELAY;
+    nextAt = started + throttleDelay();
     // If events piled up, one schedule() coalesces them.
     if (shouldReload) {
       shouldReload = false;
