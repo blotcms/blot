@@ -25,7 +25,10 @@ const seconds = (ms) => Math.round(ms / 1000);
 
 const median = (values) => {
   const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[middle]
+    : (sorted[middle - 1] + sorted[middle]) / 2;
 };
 
 function syncDelays(stats, lagSamples) {

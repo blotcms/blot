@@ -47,6 +47,8 @@ describe("icloud syncDelays", function () {
 
   it("reports a slow median lag from enough pushes, ignoring old files copied in", function () {
     expect(syncDelays({}, lag(150, 160, 170, 180, 190)).length).toBe(1);
+    // an even count takes the mean of the middle two: (1 + 180) / 2 < 120
+    expect(syncDelays({}, lag(1, 1, 1, 180, 180, 180))).toEqual([]);
     // too few pushes to judge
     expect(syncDelays({}, lag(150, 160, 170, 180))).toEqual([]);
     // hours-old mtimes are copies of old files, not live edits

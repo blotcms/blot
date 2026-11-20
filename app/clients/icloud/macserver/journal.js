@@ -257,6 +257,9 @@ const openJournal = async () => {
 const startJournal = (handler) => {
   if (!statements || timer) return;
   onChange = handler;
+  // the age of the last poll counts from here until one succeeds, so a
+  // journal that fails from the start is reported stale too
+  lastPollAt = Date.now();
   timer = setInterval(poll, POLL_MS);
   timer.unref?.();
 };
