@@ -9,6 +9,7 @@ const {
   sourceMissingFields,
 } = require("../database/error");
 const download = require("../util/download");
+const prefetch = require("../util/prefetch");
 const localState = require("../util/localState");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
@@ -593,6 +594,15 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
       if (needsUpdate && detecting) {
         changed.set(dirId, dir);
+        // Started now, so the apply under the lock finds it downloaded. Not
+        // for a file Blot has at the same size, which download() usually
+        // finds identical and leaves as it is.
+        if (
+          !isGoogleAppFile &&
+          options.prefetch &&
+          !(existsLocally && existsLocally.size === size)
+        )
+          prefetch.start(drive, { id, md5Checksum, size });
       } else if (needsUpdate) {
         started = startDownload(async () => {
           // Nothing starts once the walk is over or can't continue
@@ -762,7 +772,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                   since: "drive-modified",
                   seenAt: sighting?.at,
                   seenBy: sighting?.source,
-                  downloadedAt: outcome.downloadedAt,
+                  downloadedAt: result?.downloadedAt || outcome.downloadedAt,
                 });
               }
               if (!isGoogleAppFile && result?.verifiedContent) {
