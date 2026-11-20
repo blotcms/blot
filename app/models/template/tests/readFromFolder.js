@@ -290,6 +290,30 @@ describe("template", function () {
       expect(updateCdnManifest).toHaveBeenCalledTimes(1);
     });
 
+    it("is updated again by the next build after an update failed", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      await readFromFolder(this.blog.id, this.dir);
+      await this.put("/style.css", "body {color:red}");
+
+      var read = readFromFolderCounting();
+      updateCdnManifest.and.returnValue(Promise.reject(new Error("Redis")));
+
+      try {
+        await read(this.blog.id, this.dir);
+        fail("should have thrown");
+      } catch (err) {
+        expect(err.message).toEqual("Redis");
+      }
+
+      // Nothing changed since, but the manifest is still out of date
+      updateCdnManifest.and.returnValue(Promise.resolve({}));
+      await read(this.blog.id, this.dir);
+      expect(updateCdnManifest).toHaveBeenCalledTimes(2);
+
+      await read(this.blog.id, this.dir);
+      expect(updateCdnManifest).toHaveBeenCalledTimes(2);
+    });
+
     it("is left alone by a build which changed nothing", async function () {
       await this.put("/style.css", "body {color:pink}");
       await readFromFolder(this.blog.id, this.dir);

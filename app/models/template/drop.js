@@ -69,6 +69,7 @@ module.exports = async function drop(owner, templateName) {
   multi.del(key.urlPatterns(templateID));
   multi.del(key.allViews(templateID));
   multi.del(key.viewSources(templateID));
+  multi.del(key.manifestPending(templateID));
 
   if (metadata && metadata.shareID) {
     multi.del(key.share(metadata.shareID));

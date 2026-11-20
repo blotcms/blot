@@ -156,11 +156,20 @@ module.exports = async function readFromFolder(blogID, dir) {
 
   // The CDN manifest renders and minifies every view it links, so it is
   // updated once, here, rather than after each view saved. setView and
-  // setMetadata give the template a new cacheID whenever they change it.
+  // setMetadata give the template a new cacheID whenever they change it. An
+  // update that fails leaves its key behind, so the next build updates the
+  // manifest again even when nothing else has changed by then.
   var after = await getMetadata(id);
+  var pendingKey = key.manifestPending(id);
 
-  if (!template || after.cacheID !== template.cacheID) {
+  if (
+    !template ||
+    after.cacheID !== template.cacheID ||
+    (await client.exists(pendingKey)) > 0
+  ) {
+    await client.set(pendingKey, "1");
     await updateCdnManifest(id);
+    await client.del(pendingKey);
     after = await getMetadata(id);
   }
 
