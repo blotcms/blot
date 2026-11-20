@@ -530,9 +530,9 @@ describe("template", function () {
     await buildFromFolder(blogID);
 
     expect(await exists(folderID)).toEqual(true);
-    expect(await client.sIsMember(key.blogTemplates(blogID), legacyID)).toEqual(
-      false
-    );
+    expect(
+      Boolean(await client.sIsMember(key.blogTemplates(blogID), legacyID))
+    ).toBe(false);
   });
 
   it("keeps a template whose folder reappears within the window", async function () {
