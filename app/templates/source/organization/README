@@ -1,0 +1,32 @@
+The _Organization_ template is for clubs, societies, studios and small institutions: a big name across the top, a menu of four columns, an index of what's been happening, and pages set like a well-made book.
+
+## What it does
+
+- **The name, as wide as the page.** The site title is set in its own font (Title font) and sized to fill the width of any window.
+- **A menu of four columns.** Up to four links share the bar; with more, the fourth column becomes More and opens the rest. Home, Search, Archives and Feed stay out of the bar: the title goes home and the footer links the rest. The page you're on gets a dot.
+- **An index of posts.** Each post is a row: title and date, its details, its tags and its picture. The details come from lines at the top of the post:
+
+      Speaker: Ruth Abernethy
+      Venue: Society Library
+      Summary: One sentence about the evening.
+
+- **Tag pages in four layouts.** In the template's settings, under Tag pages, choose rows, a grid of pictures, a list of events with their dates, or a plain list, for each tag. A grid suits a Gallery tag, events a Meetings tag.
+- **What's next.** A `Next:` line in your latest post appears under the title on the home page:
+
+      Next: Tuesday, December 8, 6:30 pm · The Christmas show and tell
+
+- **Carousels.** Put several pictures on consecutive lines, with no blank line between them, and they become a carousel with a counter, captions and arrows. Drag, swipe, or use the arrow keys.
+- **Questions that open.** Write a question and its answer as `<details><summary>Question</summary>Answer</details>` and it springs open when clicked. Good for a page of questions people ask.
+- **Pages set for reading.** Posts and pages are set in the Text font (EB Garamond to start with) in a wide column, with indented paragraphs.
+
+## Settings
+
+Colours; the Font (menu, index and captions), Title font and Text font; a logo (your photo, shown in the bar); the code style; posts per page; tag page layouts; whether the menu stays at the top as you scroll; and an address and email for the footer.
+
+## Try it
+
+Download the demo folder, the New York Stamp Club, to see every one of these in use: each meeting is a post with Speaker, Venue and Summary lines, runs of stamps make carousels, the Visit page has questions that open, and the Meetings, Gallery and Readings tags each have their own layout.
+
+## For template authors
+
+`script.js` adds the title sizing, carousels, More and the animated questions; everything works without it (carousels scroll sideways and snap, questions open instantly). Its springs are a trimmed copy of the motion library from the template patterns project. The menu is written twice in `_header.html` so the stylesheet alone can choose which links show. Tag page layouts are partials (`_layout-grid.html`, `_layout-events.html`, `_layout-list.html`, and `_post-row.html` for rows) chosen in `tagged.html` with `{{#layout_for_tag.grid}}` and its siblings; add a layout by adding a partial, a section in `tagged.html` and its name to `tag_layout_options` in `package.json`.
