@@ -755,13 +755,22 @@ describe("icloud fromiCloud sync", function () {
       return downloads;
     }
 
-    // Finishes the waiting downloads one at a time until the walk is done
-    async function drain(downloads, walking) {
+    // Finishes the waiting downloads one at a time until the walk is done,
+    // first holding them all until holdUntilRunning are running at once (or
+    // a second has passed)
+    async function drain(downloads, walking, holdUntilRunning = 0) {
       let done = false;
       walking.then(
         () => (done = true),
         () => (done = true)
       );
+      for (
+        let waited = 0;
+        !done && downloads.running < holdUntilRunning && waited < 1000;
+        waited += 5
+      ) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+      }
       while (!done) {
         await new Promise((resolve) => setTimeout(resolve, 5));
         const next = downloads.waiting.shift();
@@ -786,7 +795,7 @@ describe("icloud fromiCloud sync", function () {
           updated.push(path);
         }
       );
-      const summary = await drain(downloads, walking);
+      const summary = await drain(downloads, walking, 4);
 
       expect(downloads.maxRunning).toBe(4);
       expect(downloads.started).toEqual(names.map((name) => "/" + name));
@@ -810,7 +819,7 @@ describe("icloud fromiCloud sync", function () {
         () => {},
         async (path) => updated.push(path)
       );
-      const summary = await drain(downloads, walking);
+      const summary = await drain(downloads, walking, 4);
 
       expect(downloads.maxRunning).toBe(4);
       // The directory is created before anything is written into it
