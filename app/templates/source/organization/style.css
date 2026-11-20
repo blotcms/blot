@@ -152,39 +152,79 @@ video {
   align-items: center;
 }
 
-.bar ul {
-  display: flex;
+.bar nav > ul {
+  display: grid;
   flex: 1;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 0.25rem 1rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0 1rem;
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* Up to four items share four equal columns, as in the pattern; five or six
-   share the row equally; more wrap at their own widths. */
-@media (min-width: 40rem) {
-  .bar ul:has(> li:nth-child(-n + 6):last-child) {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: minmax(0, 1fr);
-  }
-
-  .bar ul:has(> li:nth-child(-n + 4):last-child) {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    grid-auto-flow: row;
-  }
+/* Home, Search, Archives and Feed stay out of the bar: the title links home
+   and the footer has the rest. With more than four other links, the first
+   three stay and More opens the rest. */
+.bar-item:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]),
+.bar-more li:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]) {
+  display: none;
 }
 
-.bar ul:not(:has(> li:nth-child(-n + 6):last-child)) {
-  justify-content: flex-start;
-  gap: 0.25rem 1.5rem;
+.bar-more {
+  display: none;
+  position: relative;
 }
 
-.bar li {
-  max-width: 100%;
+.bar nav > ul:has(> :nth-child(5 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) > :nth-child(n + 4 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) {
+  display: none;
+}
+
+.bar nav > ul:has(> :nth-child(5 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) > .bar-more {
+  display: block;
+}
+
+.bar-more summary {
+  display: inline-flex;
+  position: relative;
+  align-items: center;
+  padding: 2px 0;
+  cursor: pointer;
+  list-style: none;
+}
+
+.bar-more summary::-webkit-details-marker {
+  display: none;
+}
+
+.bar-more ul {
+  position: absolute;
+  top: calc(100% + 5px);
+  left: -0.75rem;
+  min-width: 100%;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--paper);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+  list-style: none;
+  line-height: var(--leading-m);
+}
+
+.bar-more li:nth-child(-n + 3 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) {
+  display: none;
+}
+
+.bar-more:has(li:nth-child(n + 4 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) .is-current) summary .dot,
+.bar-more details[open] summary .dot {
+  opacity: 1;
+}
+
+.bar-more:has(li:nth-child(n + 4 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) .is-current) summary .label,
+.bar-more details[open] summary .label {
+  transform: translateX(20px);
+}
+
+.bar-more ul a.is-current {
+  text-decoration: underline;
 }
 
 .bar a {

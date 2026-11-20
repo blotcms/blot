@@ -130,6 +130,19 @@
     resize();
   });
 
+  // More in the menu closes when you click elsewhere or press Escape.
+  document.querySelectorAll(".bar-more details").forEach(function (more) {
+    document.addEventListener("click", function (event) {
+      if (more.open && !more.contains(event.target)) more.open = false;
+    });
+    document.addEventListener("keydown", function (event) {
+      if (event.key === "Escape" && more.open) {
+        more.open = false;
+        more.querySelector("summary").focus();
+      }
+    });
+  });
+
   // Carousels: a paragraph holding two or more images (a run of images on
   // consecutive lines in a post) becomes a strip with a counter, the
   // image's caption, and previous and next buttons. Drag, flick, scroll or
