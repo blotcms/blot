@@ -46,7 +46,10 @@ const log = (...args) => console.log(clfdate(), "Google Drive Sync:", ...args);
 // With rethrowLocked, a folder or walk lock held by another sync rejects with
 // "Failed to acquire folder lock" instead of resolving false, for callers that
 // queue a follow-up (see clients/util/followUpSync).
-module.exports = async function (blogID, { rethrowLocked = false } = {}) {
+module.exports = async function (
+  blogID,
+  { rethrowLocked = false, trigger = "queued" } = {}
+) {
   const sync = require("./sync.js");
 
   try {
@@ -78,7 +81,7 @@ module.exports = async function (blogID, { rethrowLocked = false } = {}) {
       let walks = 0;
       do {
         await client.del(rewalkKey(blogID));
-        result = await detectAndApply(blogID, sync);
+        result = await detectAndApply(blogID, sync, trigger);
         walks += 1;
       } while (
         result !== false &&
@@ -114,7 +117,7 @@ const detect = (blogID, sync, canYield) =>
 
 // Resolves to the apply's summary, a truthy summary of the detection when
 // nothing needed applying, or false if the sync failed
-async function detectAndApply(blogID, sync) {
+async function detectAndApply(blogID, sync, trigger) {
   // Directories changes.list and the search already saw change are applied
   // before walking, and whenever more are recorded while it walks: the walk
   // takes seconds on a large folder, and they don't need it to be found
@@ -144,7 +147,11 @@ async function detectAndApply(blogID, sync) {
 
   log(
     blogID,
-    `detected changed=${detected.changed.length} full=${detected.full} ms=${Date.now() - startedAt}`
+    `detected changed=${detected.changed.length} full=${detected.full} ms=${Date.now() - startedAt}`,
+    // What started the sync, and which directories the walk found, so each can
+    // be matched with the source that saw it change first (#2847)
+    `trigger=${trigger}`,
+    `paths=${JSON.stringify((detected.paths || []).slice(0, 20))}`
   );
 
   await markDirty(blogID, detected);

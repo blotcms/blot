@@ -205,7 +205,7 @@ class HotDocPoller {
     // follow-up queue (not the webhook's), so it runs once a sync already
     // running has finished, in any process.
     this.followUps = followUpSync("google-drive-hot-docs", (blogID) =>
-      sync(blogID, { rethrowLocked: true })
+      sync(blogID, { rethrowLocked: true, trigger: "hotdoc" })
     );
 
     // Caps this process's concurrent docs.get calls; the per service account

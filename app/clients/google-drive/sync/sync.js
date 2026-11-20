@@ -160,7 +160,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   // outside the folder lock and then applies just those directories under
   // the lock (#2847). Its decisions are the walk's own, below.
   const detecting = Boolean(options.detectOnly);
-  const changed = new Set();
+  // Directory id -> its path, for the log
+  const changed = new Map();
   let needsFull = false;
 
   // Files Drive modified after this moment may just be edits that landed
@@ -331,7 +332,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
       if (shouldIgnoreFile(path)) {
         if (detecting) {
-          changed.add(dirId);
+          changed.set(dirId, dir);
           continue;
         }
         await checkWeCanContinue();
@@ -346,7 +347,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
       if (!remoteContents.find((item) => item.name === name)) {
         if (detecting) {
-          changed.add(dirId);
+          changed.set(dirId, dir);
           continue;
         }
         await checkWeCanContinue();
@@ -418,7 +419,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       // Ensure the file is stored in the database (id <-> path mapping);
       // any folders will be stored as they are walked.
       if (!detecting) await set(id, path, { isDirectory, modifiedTime });
-      else if (mappedPaths.get(id) !== path) changed.add(dirId);
+      else if (mappedPaths.get(id) !== path) changed.set(dirId, dir);
 
       // These do not have a md5Checksum so we fall
       // back to using the modifiedTime
@@ -483,7 +484,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       const needsUpdate = !existsLocally || !identical;
 
       if (needsUpdate && detecting) {
-        changed.add(dirId);
+        changed.set(dirId, dir);
       } else if (needsUpdate) {
         started = startDownload(async () => {
           // Nothing starts once the walk is over or can't continue
@@ -565,7 +566,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         if (detecting) {
           if (!isDirectory) {
             if (existsLocally && existsLocally.isDirectory) {
-              changed.add(dirId);
+              changed.set(dirId, dir);
               continue;
             }
             const planned = plans.has(id)
@@ -577,9 +578,9 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
               planned.verifiedState?.stale ||
               planned.appliedState?.stale
             )
-              changed.add(dirId);
+              changed.set(dirId, dir);
           } else if (!existsLocally || !existsLocally.isDirectory) {
-            changed.add(dirId);
+            changed.set(dirId, dir);
           } else {
             await walk(path, id, true);
           }
@@ -800,7 +801,10 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     console.log(
       "Google Drive Sync:",
       blogID,
-      `targeted dirs=${ordered.length} ms=${Date.now() - startedAt}`
+      `targeted dirs=${ordered.length} ms=${Date.now() - startedAt}`,
+      // Which directories, so each can be matched with the source that saw
+      // it change first (#2847)
+      `paths=${JSON.stringify(ordered.map((id) => paths.get(id)).slice(0, 20))}`
     );
   };
 
@@ -810,7 +814,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     canYield = Boolean(options.dirty);
     try {
       await pass(() => walk("/", folderId));
-      return { changed: [...changed], full: needsFull };
+      return {
+        changed: [...changed.keys()],
+        paths: [...changed.values()],
+        full: needsFull,
+      };
     } catch (err) {
       if (err === YIELD) return { yielded: true, changed: [], full: false };
       onError(err);

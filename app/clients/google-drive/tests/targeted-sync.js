@@ -364,7 +364,7 @@ describe("google-drive sync() detecting what changed", function () {
   it("finds nothing in a blog that is up to date, and changes nothing", async function () {
     const h = harness({ local: allDirs, upToDate: everyFile });
 
-    expect(await h.detect()).toEqual({ changed: [], full: false });
+    expect(await h.detect()).toEqual({ changed: [], paths: [], full: false });
     expect(h.writes).toEqual([]);
     expect(h.downloads).toEqual([]);
     expect(h.updates).toEqual([]);
@@ -376,7 +376,11 @@ describe("google-drive sync() detecting what changed", function () {
       upToDate: everyFile.filter((path) => path !== "/d04/b.txt"),
     });
 
-    expect(await h.detect()).toEqual({ changed: ["dir-4"], full: false });
+    expect(await h.detect()).toEqual({
+      changed: ["dir-4"],
+      paths: ["/d04"],
+      full: false,
+    });
     expect(h.downloads).toEqual([]);
     expect(h.writes).toEqual([]);
   });
@@ -388,7 +392,11 @@ describe("google-drive sync() detecting what changed", function () {
     });
 
     // Only the root: d06 is created, and walked whole, when it is applied
-    expect(await h.detect()).toEqual({ changed: ["root"], full: false });
+    expect(await h.detect()).toEqual({
+      changed: ["root"],
+      paths: ["/"],
+      full: false,
+    });
   });
 
   it("notes the directory of a file the mapping has elsewhere", async function () {
@@ -398,7 +406,11 @@ describe("google-drive sync() detecting what changed", function () {
       drift: { "dir-2-a": "/old/a.txt" },
     });
 
-    expect(await h.detect()).toEqual({ changed: ["dir-2"], full: false });
+    expect(await h.detect()).toEqual({
+      changed: ["dir-2"],
+      paths: ["/d02"],
+      full: false,
+    });
   });
 
   it("asks for a full walk when a directory's mapping has drifted", async function () {
