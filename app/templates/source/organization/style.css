@@ -272,7 +272,7 @@ video {
 
 .bar-more:has(li:nth-child(n + 4 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) .is-current) summary .label,
 .bar-more details[open] summary .label {
-  transform: translateX(20px);
+  transform: translateX(calc(var(--dot) * 1.6));
 }
 
 .bar-more ul a.is-current {
@@ -294,11 +294,22 @@ video {
   height: 24px;
 }
 
+.bar {
+  --dot: 12px;
+}
+
+/* On a phone the four columns are narrow: a smaller dot and shift */
+@media (max-width: 40rem) {
+  .bar {
+    --dot: 7px;
+  }
+}
+
 .dot {
   position: absolute;
   left: 0;
-  width: 12px;
-  height: 12px;
+  width: var(--dot);
+  height: var(--dot);
   border-radius: 50%;
   background: var(--accent);
   opacity: 0;
@@ -317,7 +328,7 @@ video {
 }
 
 .bar a.is-current .label {
-  transform: translateX(20px);
+  transform: translateX(calc(var(--dot) * 1.6));
 }
 
 /* ---------------------------------------------------------------------------
