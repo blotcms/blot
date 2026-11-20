@@ -22,7 +22,8 @@ const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 // options.source is the fingerprint of the folder file the view was read
 // from (readFromFolder), stored so a later build can skip the file while it is
 // unchanged. Any other save of a view clears it, so the next build reads the
-// file again.
+// file again. options.skipManifest leaves the template's CDN manifest for the
+// caller to update once it has saved every view (readFromFolder).
 module.exports = async function setView(templateID, updates, options = {}) {
   ensure(templateID, "string").and(updates, "object");
 
@@ -336,16 +337,18 @@ module.exports = async function setView(templateID, updates, options = {}) {
 
   if (changes) {
     await cacheID.bumpBlogIfInstalled(metadata.owner, templateID);
-    await updateCdnManifest(templateID);
+    if (!options.skipManifest) await updateCdnManifest(templateID);
   }
 
   // Clear this view from template metadata.errors when saving
   // via the dashboard so fixing a view clears its error state.
   if (metadata.errors && metadata.errors[name]) {
     delete metadata.errors[name];
-    return setMetadata(templateID, {
-      errors: metadata.errors,
-    });
+    await setMetadata(
+      templateID,
+      { errors: metadata.errors },
+      { skipManifest: options.skipManifest }
+    );
   }
 };
 
