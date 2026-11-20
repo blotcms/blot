@@ -1,6 +1,7 @@
 const Mustache = require("mustache");
 const makeSlug = require("helper/makeSlug");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
+const isReadme = require("models/template/util/isReadme");
 const improveJSONErrorMessage = require("models/template/util/improveJSONErrorMessage");
 const improveMustacheErrorMessage = require("models/template/util/improveMustacheErrorMessage");
 const UploadValidationError = require("./upload-validation-error");
@@ -430,8 +431,9 @@ module.exports = function parseUploadedTemplate(entries = [], options = {}) {
 
     const content = entry.buffer.toString("utf8");
 
+    // A README is kept as written and never parsed (models/template/util/isReadme)
     try {
-      Mustache.render(content, {});
+      if (!isReadme(name)) Mustache.render(content, {});
     } catch (e) {
       problems.push({
         path: name,

@@ -5,7 +5,9 @@
                 <strong style=""><a href="{{{base}}}/source-code/{{view.name}}/edit" style="color: inherit;">{{view.name}}</a></strong>
 				{{^view.isPackageJSON}}
                 <a class="smallLink {{selected.edit}}" href="{{{base}}}/source-code/{{view.name}}/edit">Edit</a>
+                {{^view.isReadme}}
                 <a class="smallLink {{selected.config}}" href="{{{base}}}/source-code/{{view.name}}/configure">Config</a>
+                {{/view.isReadme}}
                 <a class="smallLink {{selected.rename}}" href="{{{base}}}/source-code/{{view.name}}/rename">Rename</a>
                 <a class="smallLink {{selected.delete}}" href="{{{base}}}/source-code/{{view.name}}/delete">Delete</a>
                 {{/view.isPackageJSON}}

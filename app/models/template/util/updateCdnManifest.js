@@ -5,6 +5,7 @@ const key = require("../key");
 const getMetadata = require("../getMetadata");
 const getView = require("../getView");
 const getAllViews = require("../getAllViews");
+const isReadme = require("./isReadme");
 const parseTemplate = require("../parseTemplate");
 const generateCdnUrl = require("./generateCdnUrl");
 const { minifyCSS, minifyJS } = require("helper/minify");
@@ -118,6 +119,9 @@ async function collectTargets(templateID, views, extraFolderTargets) {
   for (const viewName in views) {
     const view = views[viewName];
 
+    // A README is never rendered, so the targets it mentions aren't used
+    if (isReadme(viewName)) continue;
+
     if (view?.retrieve?.cdn && Array.isArray(view.retrieve.cdn)) {
       view.retrieve.cdn.forEach((target) => addValid(explicit, target));
     }
@@ -169,7 +173,7 @@ function extraFolderTargets(metadata, views, hosts) {
 
   for (const viewName in views) {
     const view = views[viewName];
-    if (!view) continue;
+    if (!view || isReadme(viewName)) continue;
 
     wrapFolderLinks(view.content, {
       viewName: view.name || viewName,

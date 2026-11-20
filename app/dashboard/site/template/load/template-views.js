@@ -1,5 +1,6 @@
 var Template = require("models/template");
 var arrayify = require("helper/arrayify");
+var isReadme = require("models/template/util/isReadme");
 
 module.exports = async function (req, res, next) {
   try {
@@ -38,6 +39,7 @@ module.exports = async function (req, res, next) {
         view.extension.txt = true;
       }
       view.isPackageJSON = view.name === "package.json";
+      view.isReadme = isReadme(view.name);
     });
 
     views = sort(views);

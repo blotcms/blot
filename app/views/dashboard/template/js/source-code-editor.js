@@ -23,8 +23,14 @@ function initializeSourceEditor() {
 
   var baseMode = sourceElement.getAttribute("data-mode") || "htmlmixed";
 
+  // A README is plain text: no Mustache highlighting
+  var mode =
+    baseMode === "text/plain"
+      ? baseMode
+      : { name: "handlebars", base: baseMode };
+
   var editor = CodeMirror.fromTextArea(sourceElement, {
-    mode: { name: "handlebars", base: baseMode },
+    mode: mode,
     lineNumbers: true,
     lineWrapping: true,
     smartIndent: false,
@@ -227,7 +233,11 @@ function initializeSourceSidebarMenu() {
       },
       config: function (dataset) {
         var baseUrl = cleanBase(dataset);
-        return baseUrl ? baseUrl + "/configure" : null;
+        var disabled = dataset.disableConfig === "true";
+        return {
+          href: baseUrl ? baseUrl + "/configure" : null,
+          disabled: disabled || !baseUrl,
+        };
       },
       rename: function (dataset) {
         var baseUrl = cleanBase(dataset);

@@ -5,6 +5,7 @@ const formJSON = require("helper/formJSON");
 const extend = require("helper/extend");
 const writeChangeToFolder = require("./save/writeChangeToFolder");
 const previewReload = require("helper/publishPreviewReload");
+const isReadme = require("models/template/util/isReadme");
 
 SourceCode.param("viewSlug", require("./load/template-views"));
 SourceCode.param("viewSlug", require("./load/template-view"));
@@ -139,7 +140,8 @@ SourceCode.route("/:viewSlug/edit")
 
 SourceCode.route("/:viewSlug/configure")
   .get(function (req, res) {
-    if (req.params.viewSlug === "package.json") {
+    // package.json and a README have no URL, locals or partials to configure
+    if (req.params.viewSlug === "package.json" || isReadme(req.view.name)) {
       return res.redirect(
         res.locals.base + "/source-code/" + req.view.name + "/edit"
       );
@@ -184,6 +186,10 @@ SourceCode.route("/:viewSlug/configure")
   .post(require("./save/fork-if-needed"), function (req, res, next) {
     if (req.params.viewSlug === "package.json") {
       return next(new Error("You cannot configure package.json"));
+    }
+
+    if (isReadme(req.view.name)) {
+      return next(new Error("You cannot configure a README"));
     }
 
     if (!req.body || typeof req.body.content !== "string") {

@@ -8,12 +8,16 @@ var referencedIdentifiers = require("./util/referencedIdentifiers");
 var { wrapFolderLinks } = require("./util/resolveFolderLinks");
 var blogHosts = require("blog/lib/blogHosts");
 var mime = require("mime-types");
+var isReadme = require("./util/isReadme");
 
 // This method is used to retrieve the locals,
 // partials and missing locals for a given view, and whether it uses backlinks.
 // Uncached: Template.getFullView is ./fullViewCache, which calls this.
 module.exports = async function getFullView(blogID, templateID, viewName) {
   ensure(blogID, "string").and(templateID, "string").and(viewName, "string");
+
+  // A README is never rendered (util/isReadme)
+  if (isReadme(viewName)) return null;
 
   const view = await getView(templateID, viewName);
 
