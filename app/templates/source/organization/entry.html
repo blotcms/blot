@@ -5,17 +5,19 @@
     {{> header}}
     <main id="main">
       {{#entry}}
-      <article class="project{{#numbered_sections}} is-numbered{{/numbered_sections}}{{#metadata.contents}} has-contents{{/metadata.contents}}"{{#metadata.contents}} data-contents{{/metadata.contents}}>
+      <article class="project{{#numbered_sections}} is-numbered{{/numbered_sections}}{{#metadata.status}} has-status{{/metadata.status}}{{#metadata.contents}} has-contents{{/metadata.contents}}"{{#metadata.contents}} data-contents{{/metadata.contents}}>
         <header class="project-header">
           {{! Column 1: when, who, where and what it costs, from the post's metadata }}
           <div class="meta">
             {{#event}}{{> when}}{{/event}}
+            {{#event.upcoming}}<time class="relative quiet" datetime="{{#formatEvent}}YYYY-MM-DDTHH:mm:ssZ{{/formatEvent}}"></time>{{/event.upcoming}}
+            {{> status}}
             {{^event}}{{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time>{{/date}}{{/event}}
             {{#metadata.speaker}}<span>{{metadata.speaker}}</span>{{/metadata.speaker}}
             {{#metadata.author}}<span>{{metadata.author}}</span>{{/metadata.author}}
             {{#metadata.venue}}<span><i>{{metadata.venue}}</i></span>{{/metadata.venue}}
             {{#event.upcoming}}
-            {{#metadata.booking}}<a href="{{{metadata.booking}}}">Book a place</a>{{/metadata.booking}}
+            {{#metadata.booking}}<a class="button" href="{{{metadata.booking}}}">{{#metadata.action}}{{metadata.action}}{{/metadata.action}}{{^metadata.action}}Book a place{{/metadata.action}}</a>{{/metadata.booking}}
             <a href="/calendar.ics" class="quiet">Add to calendar</a>
             {{/event.upcoming}}
             {{#event.past}}<span class="quiet">This has happened</span>{{/event.past}}

@@ -18,6 +18,13 @@
     <p><a href="/search">Search</a></p>
     <p><a href="/calendar.ics">Calendar</a></p>
     <p><a href="{{{feedURL}}}">Feed</a></p>
+    {{#newsletter_link}}<p><a href="{{{newsletter_link}}}">Newsletter</a></p>{{/newsletter_link}}
+    {{#donate_link}}<p><a href="{{{donate_link}}}">Donate</a></p>{{/donate_link}}
+    {{#instagram}}<p><a href="{{{instagram}}}" rel="me">Instagram</a></p>{{/instagram}}
+    {{#mastodon}}<p><a href="{{{mastodon}}}" rel="me">Mastodon</a></p>{{/mastodon}}
+    {{#bluesky}}<p><a href="{{{bluesky}}}" rel="me">Bluesky</a></p>{{/bluesky}}
+    {{#facebook}}<p><a href="{{{facebook}}}" rel="me">Facebook</a></p>{{/facebook}}
+    {{#youtube}}<p><a href="{{{youtube}}}" rel="me">YouTube</a></p>{{/youtube}}
   </div>
 </footer>
 {{! The template's own script (title sizing, carousels, questions, contents), then the scripts of plugins the blog has turned on. }}

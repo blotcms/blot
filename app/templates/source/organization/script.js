@@ -462,4 +462,27 @@
       text.insertBefore(button, el);
     });
   });
+
+  // Today, Tomorrow, In 5 days: beside an upcoming event's date, worked out
+  // where it's read, so it is right whatever day the page was published.
+  var day = 24 * 60 * 60 * 1000;
+  var startOf = function (date) {
+    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  };
+  document.querySelectorAll("time.relative[datetime]").forEach(function (time) {
+    var when = new Date(time.getAttribute("datetime"));
+    if (isNaN(when)) return;
+    var days = Math.round((startOf(when) - startOf(new Date())) / day);
+    if (days < 0) return;
+    time.textContent =
+      days === 0 ? "Today" : days === 1 ? "Tomorrow" : days < 14 ? "In " + days + " days" : "";
+  });
+
+  // Timeline: each year once, in the margin.
+  var lastYear = null;
+  document.querySelectorAll(".timeline-item").forEach(function (item) {
+    var year = item.getAttribute("data-year");
+    if (year === lastYear) item.classList.add("is-same-year");
+    lastYear = year;
+  });
 })();

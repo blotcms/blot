@@ -57,6 +57,10 @@
   {{/entry.event}}
   <link rel="alternate" type="text/calendar" title="{{title}}: events" href="{{{siteURL}}}/calendar.ics">
 
+  {{! The organization itself, on every list page, for search engines }}
+  {{^entry}}
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"{{#encode_json}}{{{title}}}{{/encode_json}}","url":"{{#encode_json}}{{{siteURL}}}{{/encode_json}}"{{#tagline}},"description":"{{#encode_json}}{{{tagline}}}{{/encode_json}}"{{/tagline}}{{#address}},"address":"{{#encode_json}}{{{address}}}{{/encode_json}}"{{/address}}{{#email}},"email":"{{#encode_json}}{{{email}}}{{/encode_json}}"{{/email}}{{#phone}},"telephone":"{{#encode_json}}{{{phone}}}{{/encode_json}}"{{/phone}}{{#founded}},"foundingDate":"{{#encode_json}}{{{founded}}}{{/encode_json}}"{{/founded}}}</script>
+  {{/entry}}
   {{^entry}}
   <meta property="og:type" content="website">
   {{#url}}

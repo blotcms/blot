@@ -8,7 +8,8 @@
       "rows",
       "grid",
       "events",
-      "list"
+      "list",
+      "timeline"
     ],
     "tag_layouts": {
       "gallery": "grid",
@@ -18,7 +19,8 @@
       "readings": "list",
       "newsletters": "list",
       "minutes": "list",
-      "news": "rows"
+      "news": "rows",
+      "history": "timeline"
     },
     "background_color": "#ffffff",
     "text_color": "#000000",
@@ -53,6 +55,13 @@
     "phone": "",
     "announcement": "",
     "announcement_link": "",
+    "newsletter_link": "",
+    "donate_link": "",
+    "instagram": "",
+    "mastodon": "",
+    "bluesky": "",
+    "facebook": "",
+    "youtube": "",
     "text_inputs": [
       "tagline",
       "meets",
@@ -61,19 +70,34 @@
       "email",
       "phone",
       "announcement",
-      "announcement_link"
+      "announcement_link",
+      "newsletter_link",
+      "donate_link",
+      "instagram",
+      "mastodon",
+      "bluesky",
+      "facebook",
+      "youtube"
     ],
     "text_input_labels": {
       "tagline": "Tagline",
       "meets": "Meetings or opening hours",
       "founded": "Founded (a year)",
       "announcement": "Announcement banner",
-      "announcement_link": "Announcement link"
+      "announcement_link": "Announcement link",
+      "newsletter_link": "Newsletter sign-up link",
+      "donate_link": "Donation link",
+      "instagram": "Instagram link",
+      "mastodon": "Mastodon link",
+      "bluesky": "Bluesky link",
+      "facebook": "Facebook link",
+      "youtube": "YouTube link"
     },
     "upcoming_on_home": true,
     "upcoming_events_limit": 8,
     "numbered_sections": true,
     "fixed_navigation": true,
+    "menu_button": false,
     "demo_folder": "stampclub",
     "template_categories": [
       "design"

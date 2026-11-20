@@ -5,7 +5,9 @@
   {{#upcoming_events}}
   <a class="upcoming-item" href="{{{url}}}">
     {{> when}}
+    <time class="relative quiet" datetime="{{#formatEvent}}YYYY-MM-DDTHH:mm:ssZ{{/formatEvent}}"></time>
     <span class="event-title">{{title}}</span>
+    {{> status}}
     {{#metadata.venue}}<span class="quiet">{{metadata.venue}}</span>{{/metadata.venue}}
     {{#metadata.cost}}<span class="quiet"> · {{metadata.cost}}</span>{{/metadata.cost}}
   </a>

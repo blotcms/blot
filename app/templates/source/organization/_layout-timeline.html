@@ -1,0 +1,13 @@
+{{! Timeline: posts under their years, the year in the margin (script.js shows each year once), for a history. Date each post with the day it happened. }}
+<ol class="timeline">
+  {{#posts}}
+  <li class="timeline-item" data-year="{{#formatDate}}YYYY{{/formatDate}}">
+    <span class="timeline-year">{{#formatDate}}YYYY{{/formatDate}}</span>
+    <div class="timeline-body">
+      <h3 class="row-title"><a href="{{{url}}}">{{title}}</a></h3>
+      {{#summary}}<p class="quiet">{{summary}}</p>{{/summary}}
+    </div>
+    <div class="row-image">{{#thumbnail.small.url}}<a href="{{{url}}}" tabindex="-1" aria-hidden="true"><img src="{{{thumbnail.small.url}}}" width="{{thumbnail.small.width}}" height="{{thumbnail.small.height}}" alt="" loading="lazy"></a>{{/thumbnail.small.url}}</div>
+  </li>
+  {{/posts}}
+</ol>

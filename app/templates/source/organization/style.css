@@ -1249,3 +1249,183 @@ nav[aria-label="Pages"] {
     transition: none;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Small hooks for organizations
+   ------------------------------------------------------------------------ */
+
+/* Status: Sold out / Cancelled / Postponed ... as a badge; Cancelled strikes
+   the title through. */
+.status {
+  display: inline-block;
+  margin: 0.25em 0;
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  color: var(--accent);
+  font: 700 var(--size-s) / 1.4 var(--font-sans);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-style: normal;
+}
+
+:is(.row, .event, .upcoming-item, .project):has(.status[data-status="cancelled" i]) :is(.row-title, .event-title, h1) {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+/* Pinned: yes */
+.is-pinned .row-identity::before {
+  display: block;
+  color: var(--accent);
+  content: "Pinned";
+  font-size: var(--size-s);
+}
+
+/* Booking: and Action: on an event, and the menu's call to action (Last
+   menu link as a button, in the settings) */
+.button,
+.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) a {
+  display: inline-block;
+  justify-self: start;
+  padding: 4px 10px;
+  border-radius: 2px;
+  background: var(--accent);
+  color: var(--paper);
+  font-weight: 700;
+}
+
+.project-header .meta > .button {
+  display: inline-block;
+  width: max-content;
+  margin: 0.5em 0 0.25em;
+}
+
+.button:hover,
+.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) a:hover {
+  text-decoration: none;
+  opacity: 0.85;
+}
+
+.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) {
+  justify-self: start;
+  margin-top: -4px;
+  margin-bottom: -4px;
+}
+
+.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) .dot {
+  display: none;
+}
+
+.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) a.is-current .label {
+  transform: none;
+}
+
+/* Today, Tomorrow, In 5 days (script.js), beside an upcoming event's date */
+.relative:empty {
+  display: none;
+}
+
+.upcoming-item .relative {
+  display: block;
+  margin: -0.25em 0 0.25em;
+}
+
+/* Timeline (a tag page layout): the year in the margin, once */
+.timeline {
+  margin: 1rem calc(-1 * var(--pad)) 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.timeline-item {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gap);
+  padding: 0.5em var(--pad) var(--pad);
+  border-top: 1px solid var(--rule);
+}
+
+.timeline-year {
+  color: var(--accent);
+  font: var(--size-numeral) / 0.8 var(--font-serif);
+  font-variant-numeric: lining-nums;
+}
+
+.timeline-item.is-same-year {
+  border-top-color: transparent;
+}
+
+.timeline-item.is-same-year .timeline-year {
+  visibility: hidden;
+}
+
+.timeline-body {
+  grid-column: 2 / 4;
+}
+
+.timeline-body p {
+  margin: 0.25em 0 0;
+}
+
+/* Links to documents say what they are */
+.text a:is([href$=".pdf" i], [href$=".doc" i], [href$=".docx" i], [href$=".xls" i], [href$=".xlsx" i], [href$=".csv" i], [href$=".zip" i], [href$=".ics" i])::after {
+  margin-left: 0.3em;
+  padding: 0 3px;
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  color: var(--quiet);
+  font: var(--size-s) / 1 var(--font-sans);
+  letter-spacing: 0.04em;
+  vertical-align: 0.15em;
+}
+
+.text a[href$=".pdf" i]::after { content: "PDF"; }
+.text a:is([href$=".doc" i], [href$=".docx" i])::after { content: "DOC"; }
+.text a:is([href$=".xls" i], [href$=".xlsx" i], [href$=".csv" i])::after { content: "SHEET"; }
+.text a[href$=".zip" i]::after { content: "ZIP"; }
+.text a[href$=".ics" i]::after { content: "CALENDAR"; }
+
+/* Printing: the page alone, with its links written out */
+@media print {
+  .bar,
+  .notice,
+  .skip-link,
+  .site-footer,
+  .plugins,
+  .carousel-buttons,
+  .faq-toggle,
+  .calendar-link,
+  .contents {
+    display: none !important;
+  }
+
+  .bar.is-fixed {
+    position: static;
+  }
+
+  body {
+    background: none;
+    color: #000;
+  }
+
+  .text details {
+    border: 0;
+  }
+
+  .text details > :not(summary) {
+    display: block !important;
+    opacity: 1 !important;
+  }
+
+  .text a[href^="http"]::after {
+    content: " (" attr(href) ")";
+    color: #555;
+    font-size: 0.8em;
+  }
+
+  .carousel-track {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+}

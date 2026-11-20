@@ -1,7 +1,7 @@
 {{! The menu, in a bar of four equal columns. Home, Search, Archives and Feed are left out (the title links home; the footer has the rest). With more than four other links the first three stay and the fourth column becomes More, which opens the rest: style.css picks which to show, so the menu is written twice. The link to the page you're on gets a dot. }}
 <a class="skip-link" href="#main">Skip to the page</a>
 {{#announcement}}<p class="notice">{{#announcement_link}}<a href="{{{announcement_link}}}">{{announcement}}</a>{{/announcement_link}}{{^announcement_link}}{{announcement}}{{/announcement_link}}</p>{{/announcement}}
-<header class="bar{{#fixed_navigation}} is-fixed{{/fixed_navigation}}">
+<header class="bar{{#fixed_navigation}} is-fixed{{/fixed_navigation}}{{#menu_button}} has-button{{/menu_button}}">
   <nav aria-label="Menu">
     {{#profile_image.thumbnails.small}}<a class="bar-logo" href="/"><img src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}" sizes="24px" width="{{width}}" height="{{height}}" alt="{{title}}"></a>{{/profile_image.thumbnails.small}}
     <ul>
