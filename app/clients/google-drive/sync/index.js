@@ -126,6 +126,7 @@ async function detectHot(blogID, sync, trigger, account) {
     const found = await sync(blogID, null, null, {
       detectOnly: true,
       only: hot,
+      prefetch: true,
     });
     if (!found || !(found.changed.length || found.full)) return;
     log(
@@ -146,6 +147,8 @@ async function detectHot(blogID, sync, trigger, account) {
 const detect = (blogID, sync, canYield) =>
   sync(blogID, null, null, {
     detectOnly: true,
+    // Changed files start downloading straight away (util/prefetch.js)
+    prefetch: true,
     ...(canYield
       ? { dirty: { members: () => database.dirty.members(blogID) } }
       : {}),

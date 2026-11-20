@@ -3,6 +3,8 @@ const clfdate = require("helper/clfdate");
 const database = require("../database");
 const followUps = require("../sync/followUps");
 const hotDocPoller = require("./hotDocPoller");
+const createDriveClient = require("./createDriveClient");
+const prefetch = require("../util/prefetch");
 const { logChanges } = require("./readChanges");
 
 const DOCUMENT = "application/vnd.google-apps.document";
@@ -36,6 +38,24 @@ async function dirtyDirectories({ change, blogID, folderId, path, parentId }) {
   }
   if (parentId) ids.push(parentId);
   return ids;
+}
+
+// Starts downloading a changed file as soon as changes.list or the search
+// lists it (util/prefetch.js), so the sync that applies it, once it has the
+// folder lock and has listed the directory again, finds it downloaded. In
+// trials on a 3,035-item folder that took 1.2-2s after the lock, even for a
+// small file (#2847). Only files Drive gives an md5Checksum for, so a Doc or
+// a folder never is.
+async function prefetchFile(serviceAccountId, change) {
+  const file = change.file;
+  if (change.removed || !file || file.trashed || !file.md5Checksum) return;
+  if (file.mimeType?.startsWith("application/vnd.google-apps.")) return;
+  const drive = await createDriveClient(serviceAccountId);
+  prefetch.start(drive, {
+    id: change.fileId,
+    md5Checksum: file.md5Checksum,
+    size: file.size,
+  });
 }
 
 // Syncs the blogs a batch of changes belongs to (placed, from readChanges'
@@ -82,6 +102,8 @@ module.exports = async function syncChanges(
       if (!moves.has(blogID)) moves.set(blogID, []);
       moves.get(blogID).push({ id: change.fileId, parentId: entry.parentId });
     }
+
+    logFailure(prefetchFile(serviceAccountId, change), "prefetch failed");
 
     if (change.file?.mimeType === DOCUMENT && !change.file?.trashed) {
       logFailure(
