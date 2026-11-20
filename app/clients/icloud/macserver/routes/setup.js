@@ -120,9 +120,12 @@ async function shareInfo(path) {
 // still the same share. The watcher's sweep then finds it in place.
 const RENAME_CHECKS_MS = [5_000, 30_000, 90_000, 300_000];
 
+// Null when the lookup failed: shareInfo() writes "(none)" then, and two
+// failed lookups must never count as the same share
 async function collaborationIDOf(path) {
   try {
-    return JSON.parse(await shareInfo(path)).CollaborationIdentifier || null;
+    const id = JSON.parse(await shareInfo(path)).CollaborationIdentifier;
+    return id && id !== "(none)" ? id : null;
   } catch {
     return null;
   }
