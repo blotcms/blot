@@ -234,6 +234,7 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
   };
 
   if (stopLateArrivalWatch) stopLateArrivalWatch();
+  progress("Getting Finder ready");
   await pruneDiagnostics();
   await resetFinder();
   const removedDirNames = await removeStaleFolders();
@@ -342,6 +343,7 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
       const newPath = join(iCloudDriveDirectory, blogID);
 
       lap("folderWait");
+      progress("Found your folder");
       console.log(
         clfdate(),
         `New folder ${newDirName} share: ${await shareInfo(oldPath)}`
@@ -361,6 +363,7 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
       }
 
       // Rename the folder
+      progress("Linking the folder to your site");
       await fs.rename(oldPath, newPath);
       console.log(clfdate(), `Renamed folder from ${newDirName} to ${blogID}`);
 
@@ -375,6 +378,7 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
         await leaveFolder(newPath, { root: iCloudDriveDirectory });
         throw setupError("READ_ONLY");
       }
+      progress("Blot can make changes in the folder");
       console.log(
         clfdate(),
         `Setup timings: ${Object.entries(timings)
@@ -382,6 +386,7 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
           .join(", ")}`
       );
       watchRename(newDirName, newPath, blogID);
+      progress("Joined your folder");
       return; // Setup is complete, exit the loop
     }
 
