@@ -208,9 +208,10 @@ describe("dropbox resetToBlot", function () {
         load(tree(), { pageSize: 2 })
       );
 
-      // 6 entries, 2 to a page: the listing, then its two continuations
+      // 6 entries, 2 to a page: the listing, then its two continuations. The
+      // account has no folder_id, so the root is Dropbox's root, ""
       expect(listCalls).toEqual([
-        { recursive: true, path: "/Blog Folder" },
+        { recursive: true, path: "" },
         { cursor: "page-2" },
         { cursor: "page-4" },
       ]);
