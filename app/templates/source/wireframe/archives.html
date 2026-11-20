@@ -1,26 +1,30 @@
 <!DOCTYPE html>
-<html>
+<html dir="auto">
   {{> head}}
   <body>
     {{> header}}
-    <div class="container">
-    <h1>Archive</h1>
+    <main>
+      <h1>Archives</h1>
 
-    {{#archives}}
+      {{#total_posts}}<p>{{total_posts}} posts.</p>{{/total_posts}}
+      {{^total_posts}}<p>Nothing has been published yet.</p>{{/total_posts}}
+
+      {{#archives}}
       {{#months}}
-
-        <h3>{{month}} - {{year}}</h3>
-
-        <p>
-        {{#entries}}
-        <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
-        {{/entries}}
-        </p>
-
+      <h2>{{month}} {{year}}</h2>
+      <ul>
+        {{#entries}}{{> post}}{{/entries}}
+      </ul>
       {{/months}}
-    {{/archives}}
-    </div>
+      {{/archives}}
 
+      {{#all_tags.length}}
+      <h2>Tags</h2>
+      <ul>
+        {{#all_tags}}<li><a href="/tagged/{{slug}}">{{name}}</a></li>{{/all_tags}}
+      </ul>
+      {{/all_tags.length}}
+    </main>
     {{> footer}}
   </body>
 </html>
