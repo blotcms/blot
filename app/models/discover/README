@@ -9,7 +9,7 @@ are not under any blog.
 | Key | Type | What |
 |-----|------|------|
 | `discover:posts` | sorted set | Post IDs, scored by each post's date (ms), or when it was added if it has none. The page reads it newest first. |
-| `discover:post:<id>` | hash | `blogID`, `entryID` (the entry's path), `photos` (JSON) and `added`. |
+| `discover:post:<id>` | hash | `blogID`, `entryID` (the entry's path), `photos` (JSON), `added`, `showText` and `text`, the card's own text if the maintainer set one. |
 | `discover:blog:<blogID>` | set | A blog's post IDs, so they can be removed together. |
 | `discover:profile:<blogID>` | hash | `name`, `bio` and `avatar` (an asset path) shown in place of the site's own. |
 | `discover:token:<token>` | string | `{ blogID, entryID }` for an "Add to Discover" link, expiring after 24 hours. |
@@ -69,8 +69,13 @@ needs the maintainer's go-ahead; `blot-node-<slot>` for a local preview):
     node scripts/discover/manage.js list [--all]
     node scripts/discover/manage.js remove <post URL or ID> [...]
     node scripts/discover/manage.js text <post URL or ID> on|off
+    node scripts/discover/manage.js set-text <post URL or ID> "<text>"
     node scripts/discover/manage.js remove-site <site>
     node scripts/discover/profile.js <site> --name … --bio … --avatar <URL or file>
+
+`set-text` replaces the post's own text on its card with the text given:
+above the photos, or as the excerpt of a card without them. `""` goes back
+to the post's. Re-adding the post keeps it.
 
 `add.js` puts each post on Discover with up to 3 of its photos (`--photos 0`
 for a text card, `--text` for its text above the photos; `--list-photos`
