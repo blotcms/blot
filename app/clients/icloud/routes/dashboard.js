@@ -61,7 +61,7 @@ dashboard.get("/connect", function (req, res) {
   res.redirect(req.baseUrl);
 });
 
-// Steps 1-3 again: to retry, to share a new folder after the old one went
+// Steps 1 and 2 again: to retry, to share a new folder after the old one went
 // missing, or to change the folder
 dashboard.get("/setup", function (req, res) {
   render(req, res, { share: true });
