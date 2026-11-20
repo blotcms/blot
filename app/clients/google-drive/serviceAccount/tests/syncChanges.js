@@ -9,6 +9,18 @@ describe("google drive syncChanges", function () {
     const calls = [];
     const stubs = {
       "helper/clfdate": () => "[date]",
+      "../database": {
+        dirty: {
+          FULL: "*",
+          add: async (blogID, ids) => {
+            calls.push("dirty " + blogID + " " + ids.join(","));
+          },
+        },
+        folder: () => ({
+          getByPath: async (path) =>
+            ({ "/": "root", "/posts": "posts" })[path] || null,
+        }),
+      },
       "../sync/followUps": {
         arm: async (blogID) => {
           calls.push("arm " + blogID);
@@ -39,10 +51,13 @@ describe("google drive syncChanges", function () {
     return { syncChanges: module.exports, calls };
   }
 
-  const entry = (blogID, fileId, file = {}) => ({
+  const entry = (blogID, fileId, file = {}, place = {}) => ({
     blogID,
     folderId: blogID && "folder-" + blogID,
     change: { fileId, file: { mimeType: "text/plain", ...file } },
+    path: null,
+    parentId: "posts",
+    ...place,
   });
 
   it("arms a follow-up for each blog before syncing any, then syncs each blog once", async function () {
@@ -55,11 +70,30 @@ describe("google drive syncChanges", function () {
     ]);
 
     expect(calls).toEqual([
+      "dirty blog_a posts",
+      "dirty blog_b posts",
       "arm blog_a",
       "arm blog_b",
       "run blog_a token-blog_a",
       "run blog_b token-blog_b",
     ]);
+  });
+
+  it("marks the directory a file was in and the one it is in now", async function () {
+    const { syncChanges, calls } = load();
+
+    await syncChanges("sa", [
+      // Moved from /posts to the top of the folder
+      entry("blog_a", "1", {}, { path: "/posts/a.md", parentId: "root" }),
+      // A file whose directory the mapping lost asks for a full walk
+      entry("blog_b", "2", {}, { path: "/lost/b.md", parentId: null }),
+      // The blog's own folder changed
+      entry("blog_c", "folder-blog_c", {}, { path: "/", parentId: null }),
+    ]);
+
+    expect(calls).toContain("dirty blog_a posts,root");
+    expect(calls).toContain("dirty blog_b *");
+    expect(calls).toContain("dirty blog_c *");
   });
 
   it("ignores changes no blog holds", async function () {

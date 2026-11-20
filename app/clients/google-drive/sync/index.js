@@ -32,8 +32,17 @@ module.exports = async function (blogID, { rethrowLocked = false } = {}) {
 
     const { done, folder } = await establishSyncLock(blogID);
     try {
-      // Resolves to sync's summary, or false if the walk failed.
-      return await sync(blogID, folder.status, folder.update);
+      // Resolves to sync's summary, or false if the walk failed. The
+      // directories changes.list and the search saw change are listed
+      // first (database/dirty.js, #2847).
+      return await sync(blogID, folder.status, folder.update, {
+        dirty: {
+          FULL: database.dirty.FULL,
+          take: () => database.dirty.take(blogID),
+          count: () => database.dirty.count(blogID),
+          putBack: (ids) => database.dirty.add(blogID, ids),
+        },
+      });
     } catch (err) {
       console.log(clfdate(), "Google Drive Sync:", "Sync failed", err);
       return false;

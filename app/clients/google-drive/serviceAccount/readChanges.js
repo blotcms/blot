@@ -75,7 +75,8 @@ async function blogsOf(serviceAccountId) {
 // blog's folder mapping (database/folder.js) holds the file itself (so an
 // edit, rename, trash or move out) or one of its parents (so a new file, or
 // one moved in). Directories are in the mapping too, the root as "/".
-// Resolves to [{ change, blogID, folderId, path, parentPath }], one entry per
+// Resolves to [{ change, blogID, folderId, path, parentId, parentPath }], one
+// entry per
 // change and blog, and entries with blogID null for changes no blog holds.
 async function placeChanges(blogs, changes) {
   const ids = [
@@ -107,7 +108,14 @@ async function placeChanges(blogs, changes) {
       const parentPath = parent ? paths[i].get(parent) : null;
       if (!path && !parentPath) return;
       found = true;
-      placed.push({ change, blogID, folderId, path, parentPath });
+      placed.push({
+        change,
+        blogID,
+        folderId,
+        path,
+        parentId: parent || null,
+        parentPath,
+      });
     });
     if (!found)
       placed.push({
@@ -115,6 +123,7 @@ async function placeChanges(blogs, changes) {
         blogID: null,
         folderId: null,
         path: null,
+        parentId: null,
         parentPath: null,
       });
   }
