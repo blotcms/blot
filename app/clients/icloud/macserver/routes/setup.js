@@ -840,3 +840,6 @@ export default async (req, res) => {
 
   return res.status(202).json({ accepted: true });
 };
+
+// For the migration to the nested layout (routes/migrate.js)
+export { setupBlog, shareInfo };
