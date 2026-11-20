@@ -16,10 +16,15 @@ module.exports = async function drop(owner, templateName) {
 
 module.exports.byID = dropByID;
 
+// Only owner's own templates: a SITE template (or another blog's) shares no
+// prefix with owner, so it can never be dropped on owner's behalf
 async function dropByID(owner, templateID) {
-  var multi = client.multi();
-
   ensure(owner, "string").and(templateID, "string");
+
+  if (templateID.indexOf(owner + ":") !== 0)
+    throw new Error("Template " + templateID + " is not owned by " + owner);
+
+  var multi = client.multi();
 
   var views, metadata;
 

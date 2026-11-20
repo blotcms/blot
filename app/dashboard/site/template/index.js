@@ -503,6 +503,19 @@ TemplateEditor.route("/:templateSlug/photo")
   })
   .post(require("./load/favicon"), require("./save/photo"));
 
+// The blog's own template by its id (an older one's id need not be makeID of
+// its slug). For a template the blog doesn't own, such as a SITE template,
+// the blog's template of the same name, as before.
+function dropTemplate(req) {
+  if (req.template.owner === req.blog.id)
+    return Template.drop.byID(req.blog.id, req.template.id);
+
+  return Template.drop(
+    req.blog.id,
+    req.template.id.split(":").slice(1).join(":")
+  );
+}
+
 TemplateEditor.route("/:templateSlug/delete")
   .get(function (req, res, next) {
     res.locals.title = `Delete - ${req.template.displayName}`;
@@ -525,7 +538,7 @@ TemplateEditor.route("/:templateSlug/delete")
     Template.removeFromFolder(req.blog.id, req.template.id)
       .catch(function () {})
       .then(function () {
-        Template.drop.byID(req.blog.id, req.template.id).then(function () {
+        dropTemplate(req).then(function () {
           removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
             .then(() => {
               const currentTemplateIDSlug = req.blog.template
@@ -577,7 +590,7 @@ TemplateEditor.route("/:templateSlug/reset")
     };
 
     // work out if this template is currently installed on this site
-    Template.drop.byID(req.blog.id, req.template.id).then(function () {
+    dropTemplate(req).then(function () {
       if (req.blog.template === req.template.id) {
         Blog.set(req.blog.id, { template: "SITE:" + idSlug }).then(function () {
           finishReset();
