@@ -6,8 +6,17 @@
     <main>
       <h1>Archives</h1>
 
-      {{#total_posts}}<p>{{total_posts}} entries.</p>{{/total_posts}}
+      {{#total_posts}}<p>{{total_posts}} posts.</p>{{/total_posts}}
       {{^total_posts}}<p>Nothing has been published yet.</p>{{/total_posts}}
+
+      {{#archives}}
+      {{#months}}
+      <h2>{{month}} {{year}}</h2>
+      <ul>
+        {{#entries}}{{> post}}{{/entries}}
+      </ul>
+      {{/months}}
+      {{/archives}}
 
       {{#all_tags.length}}
       <h2>Tags</h2>
@@ -15,15 +24,6 @@
         {{#all_tags}}<li><a href="/tagged/{{slug}}">{{name}}</a></li>{{/all_tags}}
       </ul>
       {{/all_tags.length}}
-
-      {{#archives}}
-      {{#months}}
-      <h2>{{month}} {{year}}</h2>
-      <ul>
-        {{#entries}}{{> entry-item}}{{/entries}}
-      </ul>
-      {{/months}}
-      {{/archives}}
     </main>
     {{> footer}}
   </body>

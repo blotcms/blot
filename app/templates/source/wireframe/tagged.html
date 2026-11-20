@@ -6,17 +6,17 @@
     <main>
       <h1>Tagged “{{tag}}”</h1>
 
-      {{#entries.length}}
+      {{#posts.length}}
       <ul>
-        {{#entries}}{{> entry-item}}{{/entries}}
+        {{#posts}}{{> post}}{{/posts}}
       </ul>
-      {{/entries.length}}
-      {{^entries.length}}
+      {{/posts.length}}
+      {{^posts.length}}
       <p>Nothing is tagged “{{tag}}”.</p>
-      {{/entries.length}}
+      {{/posts.length}}
 
       {{! Shown only when there is a newer or an older page }}
-      {{#entries.pagination}}{{#next}}{{> tag-pages}}{{/next}}{{^next}}{{#previous}}{{> tag-pages}}{{/previous}}{{/next}}{{/entries.pagination}}
+      {{#posts.pagination}}{{#next}}{{> tag-pages}}{{/next}}{{^next}}{{#previous}}{{> tag-pages}}{{/previous}}{{/next}}{{/posts.pagination}}
     </main>
     {{> footer}}
   </body>

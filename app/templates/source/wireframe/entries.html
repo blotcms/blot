@@ -4,11 +4,11 @@
   <body>
     {{> header}}
     <main>
-      <h1>Entries</h1>
+      <h1>Posts</h1>
 
       {{#posts.length}}
       <ul>
-        {{#posts}}{{> entry-item}}{{/posts}}
+        {{#posts}}{{> post}}{{/posts}}
       </ul>
       {{/posts.length}}
       {{^posts.length}}
