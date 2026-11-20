@@ -26,6 +26,13 @@ describe("google drive dirty directories", function () {
     expect(await dirty.take(BLOG)).toEqual([dirty.FULL]);
   });
 
+  it("lists what is waiting without taking it", async function () {
+    await dirty.add(BLOG, ["a", "b"]);
+
+    expect((await dirty.members(BLOG)).sort()).toEqual(["a", "b"]);
+    expect(await dirty.count(BLOG)).toBe(2);
+  });
+
   it("expires a set nobody takes", async function () {
     await dirty.add(BLOG, ["a"]);
 

@@ -108,7 +108,7 @@ const detect = (blogID, sync, canYield) =>
   sync(blogID, null, null, {
     detectOnly: true,
     ...(canYield
-      ? { dirty: { count: () => database.dirty.count(blogID) } }
+      ? { dirty: { members: () => database.dirty.members(blogID) } }
       : {}),
   });
 
@@ -189,6 +189,7 @@ async function applyLocked(blogID, sync, { full = false } = {}) {
         FULL: database.dirty.FULL,
         take: () => database.dirty.take(blogID),
         count: () => database.dirty.count(blogID),
+        members: () => database.dirty.members(blogID),
         putBack: (ids) => database.dirty.add(blogID, ids),
       },
     });

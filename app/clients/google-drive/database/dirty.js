@@ -41,5 +41,10 @@ module.exports = {
     return await client.sCard(key(blogID));
   },
 
+  // What is waiting, without taking it
+  async members(blogID) {
+    return await client.sMembers(key(blogID));
+  },
+
   key,
 };

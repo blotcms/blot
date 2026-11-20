@@ -260,14 +260,19 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   // Directory listings for the pass under way; each pass makes its own
   let listings = null;
 
-  // Throws YIELD during a full walk when changed directories are waiting,
-  // asking Redis at most every YIELD_CHECK_MS
+  // Throws YIELD when changed directories are waiting, other than the ones
+  // the pass is applying (busy), asking Redis at most every YIELD_CHECK_MS.
+  // During a bulk upload changes.list records the same directory again with
+  // each batch of new files; making way for it would only start that
+  // directory over (and use up MAX_YIELDS), so it doesn't count.
   let canYield = false;
   let lastYieldCheck = 0;
+  let busy = new Set();
   const maybeYield = async () => {
     if (!canYield || Date.now() - lastYieldCheck < YIELD_CHECK_MS) return;
     lastYieldCheck = Date.now();
-    if ((await options.dirty.count()) > 0) throw YIELD;
+    const waiting = await options.dirty.members();
+    if (waiting.some((id) => !busy.has(id))) throw YIELD;
   };
 
   // With recurse false, only the directory itself is brought up to date, and
@@ -774,6 +779,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           paths.get(a).split("/").length - paths.get(b).split("/").length
       );
     const done = new Set();
+    busy = new Set(ordered);
     try {
       await pass(
         async () => {
@@ -788,6 +794,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     } catch (err) {
       if (err === YIELD) interrupted = ordered.filter((id) => !done.has(id));
       throw err;
+    } finally {
+      busy = new Set();
     }
     console.log(
       "Google Drive Sync:",
