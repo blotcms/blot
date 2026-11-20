@@ -70,6 +70,24 @@
   text-wrap: nowrap;
 }
 
+/* The status beside its label, cut short rather than wrapping under it. On
+   a phone the label sits above, as on every other line, which leaves the
+   status room for its text and progress bar */
+.line.sync-status-line {
+  flex-wrap: nowrap;
+}
+
+@media (max-width: 600px) {
+  .line.sync-status-line {
+    flex-wrap: wrap;
+  }
+
+  .line.sync-status-line > .center {
+    min-width: 0;
+    max-width: 100%;
+  }
+}
+
 .sync-status-center:has(.sync-status.has-progress) {
   flex: 1 1 auto;
   height: auto;

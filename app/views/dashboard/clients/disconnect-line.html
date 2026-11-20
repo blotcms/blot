@@ -1,7 +1,7 @@
 
 {{^blog.healthIssue}}
-<a class="line" href="{{{dashboardBase}}}/client/activity" style="flex-wrap: nowrap;">
-  <span class="label"  style="flex-shrink: 0;">Status</span>
+<a class="line sync-status-line" href="{{{dashboardBase}}}/client/activity">
+  <span class="label">Status</span>
   <span class="center sync-status-center">
     {{> sync-status}}
   </span>
@@ -9,8 +9,8 @@
 {{/blog.healthIssue}}
 
 {{#blog.healthIssue}}
-<div class="line health-issue" style="flex-wrap: nowrap;">
-  <span class="label" style="flex-shrink: 0;">Status</span>
+<div class="line health-issue sync-status-line">
+  <span class="label">Status</span>
   <span class="center">
     <span class="sync-status-center" style="display:block;">
       {{> sync-status}}

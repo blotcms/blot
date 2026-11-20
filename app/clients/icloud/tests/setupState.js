@@ -25,6 +25,34 @@ describe("icloud setupState", function () {
     ).toBe("complete");
   });
 
+  it("shows the final page's lines once Blot's Mac has joined the folder", function () {
+    const joined = (account) => setupState(account, { email }).joined;
+    expect(joined(null)).toBe(false);
+    expect(joined({ sharingLink: link })).toBe(false);
+    expect(joined({ sharingLink: link, acceptedSharingLink: true })).toBe(true);
+    expect(
+      joined({
+        sharingLink: link,
+        acceptedSharingLink: true,
+        errorCode: "TRANSFER_INCOMPLETE",
+        error: "x",
+      })
+    ).toBe(true);
+    expect(
+      joined({
+        sharingLink: link,
+        acceptedSharingLink: true,
+        setupComplete: true,
+      })
+    ).toBe(true);
+    expect(
+      setupState(
+        { sharingLink: link, acceptedSharingLink: true, setupComplete: true },
+        { email, share: true }
+      ).joined
+    ).toBe(false);
+  });
+
   it("puts sharing problems on step 2, with Blot's account", function () {
     for (const reason of ["PRIVATE", "NO_ACCESS", "READ_ONLY"]) {
       const state = setupState(

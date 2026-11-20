@@ -163,7 +163,7 @@ module.exports = async (blogID, publish, update) => {
           await folder.remove(blogID, path);
           summary.removed += 1;
           if (dirChangedDuringWalk) summary.changedDuringWalk += 1;
-          publish("Creating directory", path);
+          progress.note("Creating directory", path);
           await folder.mkdir(blogID, path);
           summary.createdDirs += 1;
           if (dirChangedDuringWalk || createdLive) {
@@ -173,7 +173,7 @@ module.exports = async (blogID, publish, update) => {
           await update(path);
         } else if (!existsLocally) {
           await checkWeCanContinue();
-          publish("Creating directory", path);
+          progress.note("Creating directory", path);
           await folder.mkdir(blogID, path);
           summary.createdDirs += 1;
           if (dirChangedDuringWalk || createdLive) {
@@ -244,13 +244,17 @@ module.exports = async (blogID, publish, update) => {
                   limit: maxFileSize,
                 });
                 summary.placeholdersCreated += 1;
-                publish("Created placeholder for oversized file", path);
+                progress.note("Created placeholder for oversized file", path);
                 // Register it, as the /upload placeholder route does, so an
                 // entry built from the old bytes is dropped.
                 await update(path);
                 for (const descendant of descendants) await update(descendant);
               } catch (err) {
-                publish("Failed to create placeholder", path, err.message);
+                progress.note(
+                  "Failed to create placeholder",
+                  path,
+                  err.message
+                );
                 fail(err);
               }
 
@@ -273,7 +277,7 @@ module.exports = async (blogID, publish, update) => {
             }
             await update(path);
           } catch (e) {
-            publish("Failed to download", path, e);
+            progress.note("Failed to download", path, e);
             fail(e);
           }
         }
