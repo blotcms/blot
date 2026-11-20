@@ -1,9 +1,10 @@
-Date: 2026-11-19 09:15
-Event: Tuesday, December 8, 6:30 pm
-Tags: Events, Meetings
+Date: 2026-11-18 09:15
+Event: 2026-12-08 18:30
+Ends: 9 pm
+Tags: Meetings, Events
 Venue: The members' room, Society Library
-Next: Tuesday, December 8, 6:30 pm · The Christmas show and tell, with mince pies
-Summary: Bring the best thing you found this year, and a plate of something to share.
+Cost: Free
+Summary: The December meeting: bring the best thing you found this year, and a plate of something to share.
 
 # The Christmas show and tell
 

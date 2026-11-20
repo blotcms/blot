@@ -1,20 +1,25 @@
-Date: 2025-11-11
-Tags: Meetings, Engraving, Postal history
+Date: 2025-11-12
+Event: 2025-11-11 18:30
+Ends: 9 pm
+Tags: Meetings
 Speaker: Walter Dziedzic
-Venue: Society Library
-Summary: Walter Dziedzic, retired carrier, on the 1869 Columbus issues, their colored frames, and one blue that is not quite the right blue.
+Venue: The members' room, Society Library
+Summary: Walter Dziedzic on two Columbuses: the 1869 landing printed in two colors, and the 1893 Columbian set, with one blue that is not quite the right blue.
 
 # Columbus and the engravers
 
-Walter Dziedzic carried mail in Queens for thirty-four years and says that every stamp he ever delivered looked like a Columbus. This turned out to be a joke. What he actually brought was a series of the 1869 pictorial issues, which were the first American stamps to show a scene instead of a portrait, and which were mocked for it.
+Walter Dziedzic spent thirty-four years writing railroad timetables, and he says he chose Columbus because Columbus also arrived somewhere other than where he was going. He brought two issues, a quarter of a century apart, that are often muddled.
 
-The famous feature of these stamps is the frame, printed in one color and the center in another. The two had to be printed in separate passes, so the center could land slightly out of register. Walter showed us a set where the fleet sails a little low in its frame and said, *this is not an error, this is a mood*.
+The first is the 15c Landing of Columbus of 1869, one of the pictorial stamps that were the first American issues to show a scene instead of a portrait, and that were mocked for it and replaced within a year. The frame is printed in one color and the picture in another, in separate passes, so the picture can sit a little off-center in its frame. Walter showed us one where the boats ride a little low and said, *this is not an error, this is a mood*.
 
-![4c Fleet of Columbus](/_stamps/4c Fleet of Columbus single.jpg)
-![4c ultramarine Fleet of Columbus](/_stamps/4c ultramarine Fleet of Columbus single.jpg)
-![5c Columbus Soliciting Aid from Queen Isabella](/_stamps/5c Columbus Soliciting Aid from Queen Isabella single.jpg)
-![15c Landing of Columbus with a G grill](/_stamps/15c Landing of Columbus G Grill single.jpg)
+![15c Landing of Columbus, 1869, with a G grill](/_stamps/15c Landing of Columbus G Grill single.jpg)
 
-The two blue stamps, he said, are the classic confusion. One is a shade known as ultramarine, and the difference shows only in good daylight, so he held a window open for the room.
+The second is the Columbian issue of 1893, sixteen stamps from one cent to five dollars, printed for the World's Columbian Exposition in Chicago, each in a single color. It tells the voyage in order, more or less, and collectors have been arguing about the more or less since.
 
-He closed with an essay we have not read at the club but recommend: *The Great British Gum Secret*, from 1852, which unmasks the poisonous gum of the penny stamp as potato starch. A fine thing, he said, to know before one licks anything.
+![4c Fleet of Columbus, 1893](/_stamps/4c Fleet of Columbus single.jpg)
+![4c Fleet of Columbus in ultramarine, 1893](/_stamps/4c ultramarine Fleet of Columbus single.jpg)
+![5c Columbus Soliciting Aid from Queen Isabella, 1893](/_stamps/5c Columbus Soliciting Aid from Queen Isabella single.jpg)
+
+The two 4c stamps, he said, are the classic confusion: one is ultramarine and the other a plainer blue, and the difference shows only in good daylight, so he held the window open for the room.
+
+He closed by reading *The Great British Gum Secret*, from *Household Words* in 1852, which traces the gum on the back of the penny stamp to a starch works near Dublin that caught fire in 1821, and disposes of the rumor that it was made of fish. The full text is in [Readings](/tagged/readings). A fine thing, Walter said, to know before one licks anything.

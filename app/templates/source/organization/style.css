@@ -222,7 +222,10 @@ video {
   position: relative;
 }
 
-.bar nav > ul:has(> :nth-child(5 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) > :nth-child(n + 4 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) {
+/* (Blot's CSS minifier joins "4 of" into "4of" unless the selector is
+   inside :is() or :has(), so these are wrapped.) */
+.bar nav > ul:has(> :nth-child(5 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) > :is(:nth-child(4 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))),
+.bar nav > ul:has(> :nth-child(5 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) > :is(:nth-child(4 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) ~ .bar-item {
   display: none;
 }
 
@@ -256,7 +259,7 @@ video {
   line-height: var(--leading-m);
 }
 
-.bar-more li:nth-child(-n + 3 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) {
+.bar-more li:is(:nth-child(1 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))), :nth-child(2 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))), :nth-child(3 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) {
   display: none;
 }
 
@@ -912,20 +915,33 @@ nav[aria-label="Pages"] {
   grid-column: auto / span 1;
 }
 
+/* A card ({||||}): a picture, then a bold name and an italic role on lines
+   of their own, then a line or two about them. */
+.text > .column.four > strong:first-of-type,
+.text > .column.four > strong:first-of-type + em,
+.text > .column.four > p > strong:first-child,
+.text > .column.four > p > strong:first-child + em {
+  display: block;
+}
+
+.text > .column.four > strong:first-of-type + em,
+.text > .column.four > p > strong:first-child + em {
+  color: var(--quiet);
+  margin-bottom: 0.25em;
+}
+
 .text > .column.two {
   grid-column: auto / span 2;
 }
 
-.text > :nth-child(3n + 1 of .column.three) {
-  grid-column: 2;
+/* Thirds sit in columns 2, 3 and 4: the first of a run starts in column 2
+   and the next two follow it. */
+.text > .column.three {
+  grid-column: auto / span 1;
 }
 
-.text > :nth-child(3n + 2 of .column.three) {
-  grid-column: 3;
-}
-
-.text > :nth-child(3n of .column.three) {
-  grid-column: 4;
+.text > :not(.column.three) + .column.three {
+  grid-column: 2 / span 1;
 }
 
 /* Callouts (the Callouts plugin: > [!note] ...) */
@@ -1219,7 +1235,8 @@ nav[aria-label="Pages"] {
   .text > .margin,
   .text > .contents,
   .text > .column.two,
-  .text > :nth-child(n of .column.three),
+  .text > .column.three,
+  .text > :not(.column.three) + .column.three,
   .text > p:has(> img + img),
   .text > p:has(> img + .caption + img),
   .text > .carousel {
@@ -1285,7 +1302,7 @@ nav[aria-label="Pages"] {
 /* Booking: and Action: on an event, and the menu's call to action (Last
    menu link as a button, in the settings) */
 .button,
-.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) a {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) a {
   display: inline-block;
   justify-self: start;
   padding: 4px 10px;
@@ -1302,22 +1319,22 @@ nav[aria-label="Pages"] {
 }
 
 .button:hover,
-.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) a:hover {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) a:hover {
   text-decoration: none;
   opacity: 0.85;
 }
 
-.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) {
   justify-self: start;
   margin-top: -4px;
   margin-bottom: -4px;
 }
 
-.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) .dot {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) .dot {
   display: none;
 }
 
-.bar.has-button .bar-item:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))) a.is-current .label {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) a.is-current .label {
   transform: none;
 }
 
@@ -1332,7 +1349,10 @@ nav[aria-label="Pages"] {
 }
 
 /* Timeline (a tag page layout): the year in the margin, once */
+/* Oldest first, within the page: a history reads forwards */
 .timeline {
+  display: flex;
+  flex-direction: column-reverse;
   margin: 1rem calc(-1 * var(--pad)) 2rem;
   padding: 0;
   list-style: none;

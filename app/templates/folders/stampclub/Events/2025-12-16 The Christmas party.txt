@@ -1,6 +1,9 @@
-Date: 2025-12-16 18:00
+Date: 2025-12-17
+Event: 2025-12-16 18:00
+Ends: 9 pm
 Tags: Events, Gallery
 Venue: The members' room, Society Library
+Cost: $10
 Summary: Two trees, a punch bowl, and the annual exchange of a stamp nobody wants.
 
 # The Christmas party

@@ -5,14 +5,14 @@
     {{> header}}
     <main id="main">
       {{> masthead}}
-      {{! Upcoming events first (Upcoming events on the home page, in the settings); they leave the list below until they've happened. }}
+      {{! Upcoming events first (Upcoming events on the home page, in the settings), then everything, newest first. }}
       {{#upcoming_on_home}}{{^posts.pagination.previous}}{{> upcoming}}{{/posts.pagination.previous}}{{/upcoming_on_home}}
       <h2 class="section-heading">Latest</h2>
       {{#posts.length}}
       <div class="rows">
         {{! Pinned: yes lifts a post to the top of the page it's on }}
         {{#posts}}{{#metadata.pinned}}<div class="is-pinned">{{> post-row}}</div>{{/metadata.pinned}}{{/posts}}
-        {{#posts}}{{^metadata.pinned}}{{^event.upcoming}}{{> post-row}}{{/event.upcoming}}{{#event.upcoming}}{{^upcoming_on_home}}{{> post-row}}{{/upcoming_on_home}}{{/event.upcoming}}{{/metadata.pinned}}{{/posts}}
+        {{#posts}}{{^metadata.pinned}}{{> post-row}}{{/metadata.pinned}}{{/posts}}
       </div>
       {{/posts.length}}
       {{^posts.length}}

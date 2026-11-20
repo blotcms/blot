@@ -480,7 +480,8 @@
 
   // Timeline: each year once, in the margin.
   var lastYear = null;
-  document.querySelectorAll(".timeline-item").forEach(function (item) {
+  // The list is shown oldest first (style.css reverses it), so walk it backwards
+  Array.prototype.slice.call(document.querySelectorAll(".timeline-item")).reverse().forEach(function (item) {
     var year = item.getAttribute("data-year");
     if (year === lastYear) item.classList.add("is-same-year");
     lastYear = year;

@@ -1,32 +1,65 @@
-The _Organization_ template is for clubs, societies, studios and small institutions: a big name across the top, a menu of four columns, an index of what's been happening, and pages set like a well-made book.
+The _Organization_ template is for clubs, societies, studios, community groups and small institutions: your name across the top of the page, what's coming up, what you've done, and pages set like a well-made book, all on one four-column grid.
 
-## What it does
+## The page
 
-- **The name, as wide as the page.** The site title is set in its own font (Title font) and sized to fill the width of any window.
-- **A menu of four columns.** Up to four links share the bar; with more, the fourth column becomes More and opens the rest. Home, Search, Archives and Feed stay out of the bar: the title goes home and the footer links the rest. The page you're on gets a dot.
-- **An index of posts.** Each post is a row: title and date, its details, its tags and its picture. The details come from lines at the top of the post:
+- **Your name, as wide as the page**, in its own font (Title font), under a menu of four columns. With more than four links the fourth becomes More. Home, Search, Archives and Feed live in the footer; the title takes you home.
+- **A strap of details** under the name, from the settings: a tagline, when you meet or open, your address, the year you were founded.
+- **Upcoming events** on the home page, soonest first, with the day as a big numeral and "Tomorrow" or "In 5 days" beside it, and a calendar people can subscribe to (`/calendar.ics`).
+- **Everything else** as a list of rows: title and date, who and where, a summary, tags and a picture.
+- **An announcement band** across the top of every page, when you set one.
 
-      Speaker: Ruth Abernethy
-      Venue: Society Library
-      Summary: One sentence about the evening.
+## Writing posts and pages
 
-- **Tag pages in four layouts.** In the template's settings, under Tag pages, choose rows, a grid of pictures, a list of events with their dates, or a plain list, for each tag. A grid suits a Gallery tag, events a Meetings tag. For an upcoming event, add an `Event:` line (`Event: Tuesday, December 8, 6:30 pm`) and date the post today: the events layout shows it as upcoming, and Blot holds back posts dated in the future.
-- **What's next.** A `Next:` line in your latest post appears under the title on the home page:
+Lines at the top of a file tell the template what a post is. Any of them, in any order:
 
-      Next: Tuesday, December 8, 6:30 pm · The Christmas show and tell
+    Summary: One sentence for lists and the top of the page.
+    Speaker: Ruth Abernethy
+    Venue: Morrow Hall, Riverside Drive
 
-- **Carousels.** Put several pictures on consecutive lines, with no blank line between them, and they become a carousel with a counter, captions and arrows. Drag, swipe, or use the arrow keys.
-- **Questions that open.** Write a question and its answer as `<details><summary>Question</summary>Answer</details>` and it springs open when clicked. Good for a page of questions people ask.
-- **Pages set for reading.** Posts and pages are set in the Text font (EB Garamond to start with) in a wide column, with indented paragraphs.
+**Events.** Add an `Event:` line with the date (and time, in 24-hour form) and the post is an event: it shows in Upcoming until it has happened, in your calendar feed, and to search engines.
+
+    Event: 2026-12-08 18:30
+    Ends: 9 pm
+    Cost: Free, members and guests
+    Booking: https://tickets.example/christmas
+    Action: Reserve a seat
+    Status: Sold out
+
+Date the post itself the day you announce it, not the day of the event: Blot holds back posts dated in the future. `Status:` shows a badge (Sold out, Postponed); Cancelled strikes the title through.
+
+**Pages.** Put the facts first, and they appear as a small table under the title, the address linked to a map:
+
+    Address: East Seventy-ninth Street, New York
+    Hours: Second Tuesday of the month, 6:30–9 pm
+    Phone: 212 555 0100
+    Email: hello@example.org
+    Cost: $12 a year
+    Contents: yes
+
+`Contents: yes` lists the page's sections in its margin and marks the one you're reading. Sections (`##` headings) are numbered I, II, III in the margin.
+
+**Pinned: yes** lifts a post to the top of the home page.
+
+**In the text:**
+
+- Several pictures on consecutive lines become a **carousel**: a counter, captions, arrows; drag, swipe or use the keys.
+- A question and answer as `<details><summary>Question?</summary>Answer</details>` **springs open**; three or more in a row get an Open all button.
+- **Layout tags** at the start of a line put things on the grid: `{<>}` across the whole page, `{|<}` a note in the margin beside what follows, `{||||}` a quarter of the page, four in a row (people, sponsors, partners), `{||}` two halves.
+- **Callouts** (with the Callouts plugin): `> [!note]`, `> [!tip]`, `> [!warning]`.
+- Links to PDFs, documents and spreadsheets are labelled as such. Footnotes, tables and quotes are set to match.
+
+## Tag pages
+
+Each tag can have its own layout, chosen in the settings under Tag pages: **rows**, a **grid** of pictures, **events** (upcoming then past), a **list** of titles, or a **timeline** with years in the margin. To begin with, Gallery and Photos are grids, Events and Meetings are events, Readings, Newsletters and Minutes are lists, and History is a timeline.
 
 ## Settings
 
-Colours; the Font (menu, index and captions), Title font and Text font; a logo (your photo, shown in the bar); the code style; posts per page; tag page layouts; whether the menu stays at the top as you scroll; and an address and email for the footer.
+Colours and an accent colour; the Font (menu, lists, labels), Title font and Text font; a logo; posts per page; tag page layouts; the menu's last link as a button (Join, Donate); upcoming events on the home page; numbered sections; a menu that stays at the top. Under Details: tagline, when you meet, founded, address, email, phone, an announcement and its link, and links to your newsletter, donations and social accounts, which appear in the footer.
 
 ## Try it
 
-Download the demo folder, the New York Stamp Club, to see every one of these in use: each meeting is a post with Speaker, Venue and Summary lines, runs of stamps make carousels, the Visit page has questions that open, and the Meetings, Gallery and Readings tags each have their own layout.
+Download the demo folder, the New York Stamp Club, to see all of this in use. Its Guide page lists every line the template reads.
 
 ## For template authors
 
-`script.js` adds the title sizing, carousels, More and the animated questions; everything works without it (carousels scroll sideways and snap, questions open instantly). Its springs are a trimmed copy of the motion library from the template patterns project. The menu is written twice in `_header.html` so the stylesheet alone can choose which links show. Tag page layouts are partials (`_layout-grid.html`, `_layout-events.html`, `_layout-list.html`, and `_post-row.html` for rows) chosen in `tagged.html` with `{{#layout_for_tag.grid}}` and its siblings; add a layout by adding a partial, a section in `tagged.html` and its name to `tag_layout_options` in `package.json`.
+The grid is four equal columns everywhere; `--col` and `--step` in `style.css` are one column and one column plus its gap. On posts and pages the text is itself a four-column grid, so Blot's layout tags (`.wide`, `.margin`, `.column.four` ...) land on the columns. Events come from Blot: an `Event:` line that is a date gives an entry `{{#formatEvent}}` and `event.upcoming` / `event.past`, and `{{#upcoming_events}}` lists those still to come. Tag page layouts are partials chosen in `tagged.html` with `{{#layout_for_tag.<name>}}`; add one by adding a partial, a line in `tagged.html` and its name to `tag_layout_options`. `script.js` adds the title sizing, carousels, More, contents, questions and relative dates; everything works without it. Its springs are a trimmed copy of the motion library from the template patterns project.

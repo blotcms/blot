@@ -1,11 +1,15 @@
 Link: /credits
+Page: yes
 Menu: no
+Summary: Where the stamps, photographs and essays on this site come from.
 
 # Credits
 
-The stamps on this site are public-domain works. These are their sources, creators and terms.
+The New York Stamp Club is invented: its members, its meetings, Morrow Hall and the Gramercy Room exist only on this site. What is real is everything you can look at. The stamps are scans of public-domain stamps, the photographs of events are public-domain photographs standing in for the club's own, and the readings are essays from *Household Words*, out of copyright for well over a century. These are their sources, creators and terms.
 
-## [Wikimedia Commons](<https://commons.wikimedia.org/>)
+## Stamps
+
+### [Wikimedia Commons](<https://commons.wikimedia.org/>)
 
 - *Traffic Safety* · Richard F. Hurd · 1965 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:Traffic_Safety_5c_1965_issue_U.S._stamp.jpg>)
 - *International Geophysical Year* · Ervine Metzl · 1958 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:Geophysical_Year_3c_1958_issue_U.S._stamp.jpg>)
@@ -82,7 +86,7 @@ The stamps on this site are public-domain works. These are their sources, creato
 - *Olympic Games Munich Bicycling* · Lance Wyman · 1972 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:Olympic_Games_Munich_Bicycling_6c_1972_issue_U.S._stamp.jpg>)
 - *Apollo-Soyuz Test Project* · Robert McCall · 1975 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:The_United_States_1975_Sn_1569_stamp_(Apollo_Soyuz_space_test_project_(Russo-American_cooperation)._Apollo_%26_Soyuz_after_docking,_Earth)_1200dpi.jpg>)
 
-## [National Postal Museum](<https://postalmuseum.si.edu/>)
+### [National Postal Museum](<https://postalmuseum.si.edu/>)
 
 - *$5 Head of Freedom Statue on Capitol building single* · Author not listed · Public domain · [source](<https://postalmuseum.si.edu/object/npm_2005.2001.258>)
 - *30c American Buffalo single* · Author not listed · Public domain · [source](<https://postalmuseum.si.edu/object/npm_2005.2001.254>)
@@ -119,7 +123,7 @@ The stamps on this site are public-domain works. These are their sources, creato
 - *2c Post Rider and Horse re-issue single* · Author not listed · Public domain · [source](<https://postalmuseum.si.edu/object/npm_0.260305.152.65.2>)
 - *24c Curtiss Jenny invert single* · Author not listed · Public domain · [source](<https://postalmuseum.si.edu/object/npm_0.217665.1>)
 
-## [Bureau of Engraving and Printing](<https://www.bep.gov/>)
+### [Bureau of Engraving and Printing](<https://www.bep.gov/>)
 
 - *Coast Guard* · Bureau of Engraving and Printing · 1945 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:Coast_Guard_3c_1945_issue_U.S._stamp.jpg>)
 - *Verrazano-Narrows Bridge* · Bureau of Engraving and Printing · 1964 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:Verrazano-Narrows_Bridge_5c_1964_issue_U.S._stamp.jpg>)
@@ -129,11 +133,13 @@ The stamps on this site are public-domain works. These are their sources, creato
 - *First Navy Jack: Historic Flag Series* · Bureau of Engraving and Printing · 1968 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:First_Navy_Jack_Flag_-_Historic_Flag_Series_-_6c_1968_issue_U.S._stamp.jpg>)
 - *Graf Zeppelin airmail stamp* · Bureau of Engraving and Printing · 1930 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:Graf_Zeppelin_stamp_$2_60_1930_issue.jpg>)
 
-## [The Metropolitan Museum of Art](<https://www.metmuseum.org/>)
+### [The Metropolitan Museum of Art](<https://www.metmuseum.org/>)
 
 - *"Penny Black" postage stamps* · William Wyon (head), Perkins, Bacon and Petch (printers) · 1840 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:%22Penny_Black%22_postage_stamps_MET_DP328201.jpg>). Set on a black mat to match the other scans.
 
-## [Library of Congress](<https://www.loc.gov/>), via [Wikimedia Commons](<https://commons.wikimedia.org/>)
+## Event photographs
+
+### [Library of Congress](<https://www.loc.gov/>), via [Wikimedia Commons](<https://commons.wikimedia.org/>)
 
 Photographs from Library of Congress Life, dedicated to the public domain (CC0). They show events at the Library of Congress, used here to stand in for the club's own.
 
@@ -144,7 +150,7 @@ Photographs from Library of Congress Life, dedicated to the public domain (CC0).
 - *The Pacifica Quartet* · 2024 · CC0 · [source](<https://commons.wikimedia.org/wiki/File:Pacifica_Quartet_2024.jpg>)
 - *The Coolidge Auditorium from the back* · 2024 · CC0 · [source](<https://commons.wikimedia.org/wiki/File:Around_the_Library_of_Congress_in_the_Fall_and_Winter_of_2024_-_2.jpg>)
 
-## The White House and the National Archives, via [Wikimedia Commons](<https://commons.wikimedia.org/>)
+### The White House and the National Archives, via [Wikimedia Commons](<https://commons.wikimedia.org/>)
 
 Works of the United States government, in the public domain.
 
@@ -154,9 +160,19 @@ Works of the United States government, in the public domain.
 - *Table settings in the State Dining Room* · National Archives · 1975 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:Photograph_of_Table_Settings_in_the_State_Dining_Room_for_a_State_Dinner_in_Honor_of_the_Prime_Minister_of_Israel_-_NARA_-_7518991.jpg>)
 - *Table settings in the State Dining Room* · National Archives · 1976 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:Photograph_of_Table_Settings_and_Colonial_America_Themed_Decorations_in_the_State_Dining_Room_for_a_State_Dinner_Honoring_King_Hussein_of_Jordan_-_NARA_-_7840014.jpg>)
 
-## The United States Navy and Air Force, via [Wikimedia Commons](<https://commons.wikimedia.org/>)
+### The United States Navy and Air Force, via [Wikimedia Commons](<https://commons.wikimedia.org/>)
 
 Works of the United States government, in the public domain.
 
 - *Naval Air Facility Atsugi Navy Ball* · Petty Officer 2nd Class Kegan Kay, US Navy · 2014 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:NAF_Atsugi_Navy_Ball_141009-N-OX321-373.jpg>)
 - *Pathfinders' Air Force ball* · Senior Airman Jason Cochran, US Air Force · 2023 · Public domain · [source](<https://commons.wikimedia.org/wiki/File:Pathfinders,_local_community_celebrate_76_years_with_Air_Force_ball_(8017366).jpg>)
+
+## Readings
+
+Essays from *Household Words*, the weekly magazine edited by Charles Dickens from 1850 to 1859, in the public domain. The texts were transcribed from the scans published by [Dickens Journals Online](<https://www.djo.org.uk/>) and corrected by hand; the spelling is the magazine's own. Attributions follow the magazine's office book.
+
+- *The Queen's Head* · James Hannay and W. H. Wills · No. 100, February 21, 1852 · Public domain · [source](<https://www.djo.org.uk/household-words/volume-iv/page-510.html>)
+- *The Great British Gum Secret* · Sommerville · No. 112, May 15, 1852 · Public domain · [source](<https://www.djo.org.uk/household-words/volume-v/page-202.html>)
+- *What We Do with Our Letters* · Peter Cunningham · No. 135, October 23, 1852 · Public domain · [source](<https://www.djo.org.uk/household-words/volume-vi/page-139.html>)
+- *The Post-Mistress* · Harriet Parr · No. 292, October 27, 1855 · Public domain · [source](<https://www.djo.org.uk/household-words/volume-xii/page-305.html>)
+- *Post to Australia* · Edward Michael Whitty · No. 316, April 12, 1856 · Public domain · [source](<https://www.djo.org.uk/household-words/volume-xiii/page-305.html>)
