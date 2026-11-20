@@ -67,11 +67,22 @@ const waitForFiles = async (blogID, before) => {
   let lastLog = 0;
 
   for (;;) {
-    const now = new Set(await listPaths(rootOf(blogID)));
-    const missing = before.filter((path) => !now.has(path));
-    if (!missing.length) return;
+    // Read the layout again each time: the owner may rename the folder, and
+    // nothing watches it yet. A folder changing under the walk only means
+    // another look
+    let now = null;
+    try {
+      const { root } = await refresh(blogID);
+      if (root) now = new Set(await listPaths(root));
+    } catch (error) {
+      console.error(clfdate(), `Migrating ${blogID}: listing:`, error.message);
+    }
+    const missing = now ? before.filter((path) => !now.has(path)) : before;
+    if (now && !missing.length) return;
 
-    if (now.size !== lastSize) {
+    if (!now) {
+      stableSince = Date.now();
+    } else if (now.size !== lastSize) {
       lastSize = now.size;
       stableSince = Date.now();
     } else if (
