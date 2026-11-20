@@ -16,12 +16,11 @@ var isReadme = require("./util/isReadme");
 module.exports = async function getFullView(blogID, templateID, viewName) {
   ensure(blogID, "string").and(templateID, "string").and(viewName, "string");
 
-  // A README is never rendered (util/isReadme)
-  if (isReadme(viewName)) return null;
-
   const view = await getView(templateID, viewName);
 
-  if (!view) return null;
+  // A README is never rendered (util/isReadme). Checked on the view found,
+  // since a name without an extension can find readme.html
+  if (!view || isReadme(view.name)) return null;
 
   // View has:
   //

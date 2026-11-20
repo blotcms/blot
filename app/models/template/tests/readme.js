@@ -73,4 +73,24 @@ describe("template README", function () {
     );
     expect(fullView[1]["readme.txt"]).toEqual("");
   });
+
+  it("still renders readme.html, found by its name without the extension", async function () {
+    await this.setView({ name: "readme.html", content: "Readme page" });
+    await this.setView({
+      name: "page.html",
+      url: "/page",
+      content: "Page{{> readme}}",
+    });
+
+    const fullView = await Template.getFullView(
+      this.blog.id,
+      this.template.id,
+      "page.html"
+    );
+    expect(fullView[1].readme).toEqual("Readme page");
+
+    expect(
+      await Template.getFullView(this.blog.id, this.template.id, "readme")
+    ).not.toBe(null);
+  });
 });
