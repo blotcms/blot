@@ -2,15 +2,8 @@ const clfdate = require("helper/clfdate");
 const express = require("express");
 const site = new express.Router();
 
-const sync = require("clients/google-drive/sync");
 const database = require("clients/google-drive/database");
-const followUpSync = require("clients/util/followUpSync");
-
-// Syncs a blog, or leaves a follow-up for any process to run once a sync
-// already running (here or in another container) has finished
-const followUps = followUpSync("google-drive", function (blogID) {
-  return sync(blogID, { rethrowLocked: true });
-});
+const followUps = require("clients/google-drive/sync/followUps");
 
 site
   .route("/webhook/changes.watch/:serviceAccountId")
