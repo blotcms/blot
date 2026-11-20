@@ -153,6 +153,16 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   update = update || function () {};
   const onError = options.onError || function () {};
 
+  // With options.detectOnly the walk changes nothing: no folder, mapping or
+  // record writes, no downloads. Wherever it would have changed something it
+  // notes the directory instead, and the sync resolves { changed: [dirIds],
+  // full } (full when the mapping itself has drifted). sync/index.js runs it
+  // outside the folder lock and then applies just those directories under
+  // the lock (#2847). Its decisions are the walk's own, below.
+  const detecting = Boolean(options.detectOnly);
+  const changed = new Set();
+  let needsFull = false;
+
   // Files Drive modified after this moment may just be edits that landed
   // mid-walk, not changes we failed to sync. Callers hold the folder lock,
   // so this is (just after) when it was acquired.
@@ -187,6 +197,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   const drive = await createDriveClient(serviceAccountId);
   const {
     get: getPath,
+    getPaths,
     getByPath,
     getApplied,
     setApplied,
@@ -266,8 +277,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       throw new Error("Missing required arguments for walk");
     }
 
-    // Ensure the dir is stored against the dirId
-    await set(dirId, dir, { isDirectory: true });
+    // Ensure the dir is stored against the dirId. Detecting, a directory
+    // mapped to another path means the mapping has drifted: only a full walk
+    // under the lock can be trusted to put it right.
+    if (!detecting) await set(dirId, dir, { isDirectory: true });
+    else if ((await getPath(dirId)) !== dir) needsFull = true;
 
     const [driveItems, localContents] = await Promise.all([
       listings.take(dirId),
@@ -294,6 +308,14 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       regularFiles.map((item, i) => [item.id, verifiedRecords[i]])
     );
 
+    // Detecting: where the mapping has each item now, in one request
+    const mappedPaths = new Map();
+    if (detecting) {
+      const ids = remoteContents.map((item) => item.id);
+      const paths = await getPaths(ids);
+      ids.forEach((id, i) => mappedPaths.set(id, paths[i]));
+    }
+
     for (const { name, isDirectory: isLocalDirectory } of localContents) {
       const path = join(dir, name);
       // A directory removed in one remove call still accounts for every
@@ -303,6 +325,10 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         : 1;
 
       if (shouldIgnoreFile(path)) {
+        if (detecting) {
+          changed.add(dirId);
+          continue;
+        }
         await checkWeCanContinue();
         progress.publish("Removing ignored", path, false, removedCount);
         await folder.remove(blogID, path);
@@ -314,6 +340,10 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       }
 
       if (!remoteContents.find((item) => item.name === name)) {
+        if (detecting) {
+          changed.add(dirId);
+          continue;
+        }
         await checkWeCanContinue();
         progress.publish("Removing", path, false, removedCount);
         console.log(
@@ -382,7 +412,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
       // Ensure the file is stored in the database (id <-> path mapping);
       // any folders will be stored as they are walked.
-      await set(id, path, { isDirectory, modifiedTime });
+      if (!detecting) await set(id, path, { isDirectory, modifiedTime });
+      else if (mappedPaths.get(id) !== path) changed.add(dirId);
 
       // These do not have a md5Checksum so we fall
       // back to using the modifiedTime
@@ -444,8 +475,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       }
 
       let started = null;
+      const needsUpdate = !existsLocally || !identical;
 
-      if (!existsLocally || !identical) {
+      if (needsUpdate && detecting) {
+        changed.add(dirId);
+      } else if (needsUpdate) {
         started = startDownload(async () => {
           // Nothing starts once the walk is over or can't continue
           if (stopped) return { stop: new Error("Sync stopped") };
@@ -496,6 +530,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         verifiedState,
         isGoogleAppFile,
         started,
+        needsUpdate,
       };
     };
 
@@ -518,6 +553,33 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         const { id, name, isDirectory, modifiedTime, md5Checksum } = entry;
         const path = join(dir, name);
         const existsLocally = localContents.find((item) => item.name === name);
+
+        // Detecting, note the directory wherever the code below would change
+        // something, and only walk on into directories that exist on both
+        // sides: a new one is created and walked whole when it is applied.
+        if (detecting) {
+          if (!isDirectory) {
+            if (existsLocally && existsLocally.isDirectory) {
+              changed.add(dirId);
+              continue;
+            }
+            const planned = plans.has(id)
+              ? await plans.get(id)
+              : await plan(entry);
+            if (
+              planned.needsUpdate ||
+              !planned.applied ||
+              planned.verifiedState?.stale ||
+              planned.appliedState?.stale
+            )
+              changed.add(dirId);
+          } else if (!existsLocally || !existsLocally.isDirectory) {
+            changed.add(dirId);
+          } else {
+            await walk(path, id, true);
+          }
+          continue;
+        }
 
         if (!isDirectory) {
           // e.g. a Drive folder replaced by a Sheet of the same name.
@@ -723,6 +785,16 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     );
   };
 
+  if (detecting) {
+    try {
+      await pass(() => walk("/", folderId));
+      return { changed: [...changed], full: needsFull };
+    } catch (err) {
+      onError(err);
+      return false;
+    }
+  }
+
   // Directory ids taken from options.dirty, put back if the sync fails
   const taken = [];
 
@@ -741,6 +813,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       // Only the full walk makes way, never the targeted pass
       canYield = false;
       if (dirIds.length) await targeted(dirIds);
+
+      // Applying what a detection found (sync/index.js), the full walk runs
+      // only when it was asked for
+      if (options.fullWalk === "if-asked" && !ids.includes(options.dirty.FULL))
+        break;
 
       const before = { ...summary };
       canYield = Boolean(options.dirty) && yields < MAX_YIELDS;

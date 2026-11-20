@@ -21,6 +21,12 @@ function tree() {
 
 const pathOf = (id) => (id === "root" ? "/" : "/d0" + id.replace("dir-", ""));
 
+// The path of a file or directory in tree(): dir-3-a is /d03/a.txt
+const itemPath = (id) => {
+  const file = id.match(/^(dir-\d+)-(\w)$/);
+  return file ? pathOf(file[1]) + "/" + file[2] + ".txt" : pathOf(id);
+};
+
 function harness({
   dirs = tree(),
   local = [],
@@ -28,6 +34,10 @@ function harness({
   count = async () => 0,
   failOn = null,
   rootDelay = 2,
+  // Files the blog folder already holds, verified against Drive
+  upToDate = [],
+  // Ids the mapping has at another path
+  drift = {},
 } = {}) {
   const state = {
     listed: [],
@@ -35,7 +45,11 @@ function harness({
     taken: [],
     takenAt: [],
     putBack: [],
+    writes: [],
+    downloads: [],
   };
+  const fresh = new Set(upToDate);
+  const write = (name) => async (id) => state.writes.push(name + " " + id);
   const queue = [dirty];
 
   const stubs = {
@@ -49,22 +63,40 @@ function harness({
         }),
       },
       folder: () => ({
-        get: async (id) => (id in dirs ? pathOf(id) : null),
+        get: async (id) => drift[id] || (id in dirs ? pathOf(id) : null),
+        getPaths: async (ids) => ids.map((id) => drift[id] || itemPath(id)),
         getByPath: async () => null,
-        set: async () => {},
-        remove: async () => {},
-        getVerifiedContents: async (ids) => ids.map(() => undefined),
-        setVerifiedContent: async () => {},
-        getApplied: async () => null,
-        setApplied: async () => {},
+        set: write("set"),
+        remove: write("remove"),
+        getVerifiedContents: async (ids) =>
+          ids.map((id) =>
+            fresh.has(itemPath(id))
+              ? {
+                  path: itemPath(id),
+                  checksum: "md5-" + id,
+                  size: 1,
+                  modified: 1,
+                }
+              : undefined
+          ),
+        setVerifiedContent: write("setVerifiedContent"),
+        getApplied: async (id) =>
+          fresh.has(itemPath(id))
+            ? { modifiedTime: "2026-01-01T00:00:00Z" }
+            : null,
+        setApplied: write("setApplied"),
       }),
     },
     "../util/localState": {
       stamp: require("../util/localState").stamp,
-      unchanged: async () => null,
+      unchanged: async (blogID, path) =>
+        fresh.has(path) ? { size: 1, modified: 1, sha1: "s" } : null,
       stateOf: async () => ({ size: 1, modified: 1000, sha1: "sha1" }),
     },
-    "../util/download": async () => ({ updated: true }),
+    "../util/download": async (blogID, drive, path) => {
+      state.downloads.push(path);
+      return { updated: true };
+    },
     "../serviceAccount/createDriveClient": async () => ({
       files: { get: async () => ({ data: { name: "root" } }) },
     }),
@@ -100,7 +132,17 @@ function harness({
         .map((path) => ({
           name: path.split("/").pop(),
           isDirectory: true,
-        })),
+        }))
+        .concat(
+          upToDate
+            .filter((path) => path.startsWith(dir === "/" ? "/" : dir + "/"))
+            .filter((path) => !path.slice(dir.length + 1).includes("/"))
+            .map((path) => ({
+              name: path.split("/").pop(),
+              isDirectory: false,
+              size: 1,
+            }))
+        ),
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
     "./util/limiter": require("../sync/util/limiter"),
@@ -137,6 +179,7 @@ function harness({
       }
     );
   state.queue = queue;
+  state.detect = () => module.exports("blog", null, null, { detectOnly: true });
   return state;
 }
 
@@ -240,5 +283,66 @@ describe("google-drive sync() with changed directories", function () {
 
     expect(await h.run()).toBe(false);
     expect(h.putBack).toEqual(["dir-2"]);
+  });
+});
+
+// Every file of tree(), as the blog folder would hold it once synced
+const everyFile = allDirs.flatMap((dir) => [dir + "/a.txt", dir + "/b.txt"]);
+
+describe("google-drive sync() detecting what changed", function () {
+  it("finds nothing in a blog that is up to date, and changes nothing", async function () {
+    const h = harness({ local: allDirs, upToDate: everyFile });
+
+    expect(await h.detect()).toEqual({ changed: [], full: false });
+    expect(h.writes).toEqual([]);
+    expect(h.downloads).toEqual([]);
+    expect(h.updates).toEqual([]);
+  });
+
+  it("notes the directory of a missing file, without downloading it", async function () {
+    const h = harness({
+      local: allDirs,
+      upToDate: everyFile.filter((path) => path !== "/d04/b.txt"),
+    });
+
+    expect(await h.detect()).toEqual({ changed: ["dir-4"], full: false });
+    expect(h.downloads).toEqual([]);
+    expect(h.writes).toEqual([]);
+  });
+
+  it("notes the parent of a new directory, without walking into it", async function () {
+    const h = harness({
+      local: allDirs.filter((path) => path !== "/d06"),
+      upToDate: everyFile.filter((path) => !path.startsWith("/d06/")),
+    });
+
+    // Only the root: d06 is created, and walked whole, when it is applied
+    expect(await h.detect()).toEqual({ changed: ["root"], full: false });
+  });
+
+  it("notes the directory of a file the mapping has elsewhere", async function () {
+    const h = harness({
+      local: allDirs,
+      upToDate: everyFile,
+      drift: { "dir-2-a": "/old/a.txt" },
+    });
+
+    expect(await h.detect()).toEqual({ changed: ["dir-2"], full: false });
+  });
+
+  it("asks for a full walk when a directory's mapping has drifted", async function () {
+    const h = harness({
+      local: allDirs,
+      upToDate: everyFile,
+      drift: { "dir-8": "/elsewhere" },
+    });
+
+    expect((await h.detect()).full).toBe(true);
+  });
+
+  it("resolves false when a listing fails", async function () {
+    const h = harness({ local: allDirs, upToDate: everyFile, failOn: "dir-1" });
+
+    expect(await h.detect()).toBe(false);
   });
 });
