@@ -32,6 +32,9 @@ function harness({
   local = [],
   dirty = [],
   count = async () => 0,
+  // What the dirty set holds while a pass runs; by default something new
+  // whenever count says so
+  members = null,
   failOn = null,
   rootDelay = 2,
   // Files the blog folder already holds, verified against Drive
@@ -177,6 +180,8 @@ function harness({
             return ids;
           },
           count,
+          members:
+            members || (async () => ((await count()) > 0 ? ["recorded"] : [])),
           putBack: async (ids) => {
             state.putBack.push(...ids);
             pending.push(...ids);
@@ -288,6 +293,21 @@ describe("google-drive sync() with changed directories", function () {
     expect(after.slice(0, 3)).toEqual(["dir-5", "dir-1", "dir-2"]);
   });
 
+  it("doesn't make way for the directory it is applying, recorded again", async function () {
+    const h = harness({
+      local: allDirs,
+      dirty: ["dir-1"],
+      // A bulk upload: changes.list keeps recording the same directory
+      members: async () => ["dir-1"],
+      count: async () => 0,
+    });
+    const summary = await h.run();
+
+    expect(summary).toBeTruthy();
+    expect(h.putBack).toEqual([]);
+    expect(h.taken.length).toBe(1);
+  });
+
   it("puts what it took back when the sync fails", async function () {
     const h = harness({ local: allDirs, dirty: ["dir-2"], failOn: "dir-2" });
 
@@ -352,7 +372,7 @@ describe("google-drive sync() detecting what changed", function () {
 
   it("stops when changed directories are recorded while it walks", async function () {
     const h = harness({ local: allDirs, upToDate: everyFile });
-    const result = await h.detect({ count: async () => 1 });
+    const result = await h.detect({ members: async () => ["dir-3"] });
 
     expect(result).toEqual({ yielded: true, changed: [], full: false });
   });
