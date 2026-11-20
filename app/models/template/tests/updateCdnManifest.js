@@ -2,6 +2,7 @@ const setView = require("../index").setView;
 const getMetadata = require("../index").getMetadata;
 const createTemplate = require("../index").create;
 const key = require("../key");
+const generateCdnUrl = require("../util/generateCdnUrl");
 const client = require("models/client");
 const Blog = require("models/blog");
 const renderView = require("blog/render/view");
@@ -74,8 +75,8 @@ describe("updateCdnManifest", function () {
     const imported = await getAsync(key.renderedOutput(after["a.css"]));
 
     expect(after["z.css"]).not.toEqual(before["z.css"]);
-    expect(imported).toContain(after["z.css"]);
-    expect(imported).not.toContain(before["z.css"]);
+    expect(imported).toContain(generateCdnUrl("z.css", after["z.css"]));
+    expect(imported).not.toContain(generateCdnUrl("z.css", before["z.css"]));
   });
 
   it("regenerates manifest hashes after cache-busting to avoid stale full-view cache", async function () {

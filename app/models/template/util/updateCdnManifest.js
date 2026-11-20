@@ -569,11 +569,16 @@ module.exports = async function updateCdnManifest(templateID) {
       }
     }
 
-    const linksAReplacedHash = replaced.some(([target, oldHash]) =>
-      Object.keys(outputs).some(
-        (other) => other !== target && outputs[other].includes(oldHash)
-      )
-    );
+    // A URL splits its hash into directories (util/generateCdnUrl), so look
+    // for the URL's path, whatever host the output links it on
+    const linksAReplacedHash = replaced.some(([target, oldHash]) => {
+      const url = generateCdnUrl(target, oldHash);
+      const urlPath = url.slice(url.indexOf("/template/"));
+
+      return Object.keys(outputs).some(
+        (other) => other !== target && outputs[other].includes(urlPath)
+      );
+    });
 
     if (!linksAReplacedHash) break;
   }

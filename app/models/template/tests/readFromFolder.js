@@ -297,7 +297,7 @@ describe("template", function () {
       await this.put("/style.css", "body {color:red}");
 
       var read = readFromFolderCounting();
-      updateCdnManifest.and.returnValue(Promise.reject(new Error("Redis")));
+      updateCdnManifest.and.callFake(() => Promise.reject(new Error("Redis")));
 
       try {
         await read(this.blog.id, this.dir);
@@ -307,7 +307,7 @@ describe("template", function () {
       }
 
       // Nothing changed since, but the manifest is still out of date
-      updateCdnManifest.and.returnValue(Promise.resolve({}));
+      updateCdnManifest.and.callFake(() => Promise.resolve({}));
       await read(this.blog.id, this.dir);
       expect(updateCdnManifest).toHaveBeenCalledTimes(2);
 
