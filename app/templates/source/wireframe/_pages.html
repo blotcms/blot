@@ -1,0 +1,6 @@
+{{! The home page's pager, used inside {{#posts.pagination}} }}
+<nav aria-label="Pages">
+  {{#previous}}<a href="/page/{{previous}}">Newer entries</a>{{/previous}}
+  Page {{current}} of {{total}}
+  {{#next}}<a href="/page/{{next}}">Older entries</a>{{/next}}
+</nav>

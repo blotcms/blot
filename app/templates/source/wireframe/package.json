@@ -3,8 +3,6 @@
   "popularity": 8,
   "locals": {
     "page_size": 12,
-    "hide_dates": false,
-    "date_display": "MMMM D, Y",
     "background_color": "#ffffff",
     "text_color": "#111111",
     "link_color": "#111111",
@@ -20,21 +18,7 @@
       "id": "system-mono",
       "font_size": 14
     },
-    "profile_image": {},
-    "navigation_alignment": "left",
-    "navigation_alignment_options": [
-      "left",
-      "right",
-      "center",
-      "justified"
-    ],
-    "sticky_navigation": false,
-    "footer_navigation": false,
-    "show_tags": true,
-    "max_width": 720,
-    "max_width_range": [400, 1200],
-    "spacing": 1,
-    "spacing_range": [0, 5]
+    "profile_image": {}
   },
   "views": {
     "public": {

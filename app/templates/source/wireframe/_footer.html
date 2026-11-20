@@ -1,10 +1,5 @@
-{{#footer_navigation}}
-<footer class="site-footer">
-  <nav>
-    {{#menu}}
-    <a href="{{{url}}}" title="{{label}}">{{label}}</a>
-    {{/menu}}
-  </nav>
+<footer>
+  <p><a href="/archives">Archives</a> <a href="/search">Search</a> <a href="{{{feedURL}}}">Feed</a></p>
 </footer>
-{{/footer_navigation}}
-<script src="{{#cdn}}/script.js{{/cdn}}" type="text/javascript"></script>
+{{! Plugins the blog has turned on (analytics, KaTeX, image zoom...) add their JavaScript here. The template itself has none. }}
+<script src="{{#cdn}}/script.js{{/cdn}}"></script>

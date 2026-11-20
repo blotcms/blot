@@ -1,7 +1,6 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="robots" content="index, follow">
   <meta property="og:site_name" content="{{title}}">
 
   <title>{{> title}}</title>
@@ -34,29 +33,20 @@
   <meta property="og:image:width" content="{{width}}">
   <meta property="og:image:height" content="{{height}}">
   {{/thumbnail.large}}
-  {{^thumbnail.large}}
-  {{#profile_image.thumbnails.large}}
-  <meta property="og:image" content="{{{url}}}">
-  <meta property="og:image:width" content="{{width}}">
-  <meta property="og:image:height" content="{{height}}">
-  {{/profile_image.thumbnails.large}}
-  {{/thumbnail.large}}
-  <meta property="og:type" content="article">
+  {{#page}}<meta property="og:type" content="website">{{/page}}
+  {{^page}}<meta property="og:type" content="article">{{/page}}
   {{#thumbnail.large}}<meta name="twitter:card" content="summary_large_image">{{/thumbnail.large}}{{^thumbnail.large}}<meta name="twitter:card" content="summary">{{/thumbnail.large}}
   <meta name="twitter:title" content="{{title}}">
   {{#summary}}<meta name="twitter:description" content="{{summary}}">{{/summary}}{{^summary}}<meta name="twitter:description" content="{{title}}">{{/summary}}
   {{#thumbnail.large}}<meta name="twitter:image" content="{{{url}}}">{{/thumbnail.large}}
-  {{^thumbnail.large}}
-  {{#profile_image.thumbnails.large}}
-  <meta name="twitter:image" content="{{{url}}}">
-  {{/profile_image.thumbnails.large}}
-  {{/thumbnail.large}}
+  {{^page}}
   <meta property="article:author" content="{{{siteURL}}}">
   <meta property="article:published_time" content="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">
   <meta property="article:modified_time" content="{{#formatUpdated}}YYYY-MM-DDTHH:mm:ssZ{{/formatUpdated}}">
   {{#tags}}
   <meta property="article:tag" content="{{name}}">
   {{/tags}}
+  {{/page}}
   {{/entry}}
 
   {{^entry}}
@@ -67,10 +57,5 @@
   {{/url}}
   <meta property="og:title" content="{{> title}}">
   <meta property="og:description" content="{{> description}}">
-  {{#profile_image.thumbnails.large}}
-  <meta property="og:image" content="{{{url}}}">
-  <meta property="og:image:width" content="{{width}}">
-  <meta property="og:image:height" content="{{height}}">
-  {{/profile_image.thumbnails.large}}
   {{/entry}}
 </head>

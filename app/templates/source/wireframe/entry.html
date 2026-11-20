@@ -1,37 +1,65 @@
 <!DOCTYPE html>
-<html>
+<html dir="auto">
   {{> head}}
-
   <body>
     {{> header}}
-    <div class="container">
+    <main>
       {{#entry}}
-
+      <article>
+        {{! html includes the entry's own title heading, if it has one (titleTag). A photo or a file without a heading gets one here. }}
+        {{^titleTag}}<h1>{{title}}</h1>{{/titleTag}}
         {{{html}}}
 
+        <footer>
+          {{#date}}
+          <p>
+            Published <time datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{date}}</time>.
+            Updated <time datetime="{{#formatUpdated}}YYYY-MM-DD{{/formatUpdated}}">{{#formatUpdated}}MMMM D, YYYY{{/formatUpdated}}</time>.
+          </p>
+          {{/date}}
 
-        {{#date}}
+          {{#tags.length}}
+          <h2>Tagged</h2>
+          <ul>
+            {{#tags}}<li><a href="/tagged/{{slug}}">{{name}}</a></li>{{/tags}}
+          </ul>
+          {{/tags.length}}
 
-          <hr />
+          {{! exif is set for an image entry, and only lists what the camera recorded }}
+          {{#exif}}{{#Make}}
+          <h2>Camera</h2>
+          <ul>
+            <li>{{Model}}</li>
+            {{#LensModel}}<li>{{LensModel}}</li>{{/LensModel}}
+            {{#ISO}}<li>ISO {{ISO}}</li>{{/ISO}}
+            {{#FocalLength}}<li>{{FocalLength}} mm</li>{{/FocalLength}}
+            {{#FNumber}}<li>ƒ{{FNumber}}</li>{{/FNumber}}
+            {{#ExposureTime}}<li>{{ExposureTime}} s</li>{{/ExposureTime}}
+          </ul>
+          {{/Make}}{{/exif}}
 
-          <p>Published on {{date}}.</p>
-        {{/date}}
+          {{#backlinks.length}}
+          <h2>Links to this page</h2>
+          <ul>
+            {{#backlinks}}<li><a href="{{{url}}}">{{title}}</a></li>{{/backlinks}}
+          </ul>
+          {{/backlinks.length}}
 
-        {{#show_tags}}
-        {{#tags.length}}
-          <p>Tagged:
-          {{#tags}}
-           <a href="/tagged/{{slug}}">{{name}}</a> &nbsp;
-          {{/tags}}</p>
-        {{/tags.length}}
-        {{/show_tags}}
+          {{#adjacent}}
+          <nav aria-label="Newer and older entries">
+            <ul>
+              {{#next}}<li>Newer: <a href="{{{url}}}">{{title}}</a></li>{{/next}}
+              {{#previous}}<li>Older: <a href="{{{url}}}">{{title}}</a></li>{{/previous}}
+            </ul>
+          </nav>
+          {{/adjacent}}
+        </footer>
+      </article>
 
-        <br>
-
-        {{> pluginHTML}}
-
+      {{! Plugins the blog has turned on, such as comments, add their HTML here. }}
+      {{> pluginHTML}}
       {{/entry}}
-    </div>
+    </main>
     {{> footer}}
   </body>
 </html>

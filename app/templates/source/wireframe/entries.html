@@ -1,36 +1,23 @@
 <!DOCTYPE html>
-<html>
+<html dir="auto">
   {{> head}}
   <body>
-
     {{> header}}
+    <main>
+      <h1>Entries</h1>
 
-    <div class="container">
-    <p>All entries:</p>
+      {{#posts.length}}
+      <ul>
+        {{#posts}}{{> entry-item}}{{/posts}}
+      </ul>
+      {{/posts.length}}
+      {{^posts.length}}
+      <p>Nothing has been published yet.</p>
+      {{/posts.length}}
 
-    <p>
-    {{#posts}}
-    <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
-    {{/posts}}
-    </p>
-
-    {{#posts.length}}
-    {{#posts.pagination}}
-    <div class="pagination">
-      {{#previous}}
-      <a href="/page/{{previous}}">&larr; Previous</a>
-      {{/previous}}
-      Page {{current}} of {{total}}
-      {{#next}}
-      <a href="/page/{{next}}">Next &rarr;</a>
-      {{/next}}
-    </div>
-    {{/posts.pagination}}
-    {{/posts.length}}
-    </div>
-
-    <br><br>
-
+      {{! Shown only when there is a newer or an older page }}
+      {{#posts.pagination}}{{#next}}{{> pages}}{{/next}}{{^next}}{{#previous}}{{> pages}}{{/previous}}{{/next}}{{/posts.pagination}}
+    </main>
     {{> footer}}
   </body>
 </html>

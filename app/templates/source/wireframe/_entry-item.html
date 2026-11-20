@@ -1,0 +1,7 @@
+{{! One entry in a list (home page, tag pages, search, archives): used inside a section over entries, so title, url, date, tags and thumbnail are the entry's. }}
+<li>
+  <a href="{{{url}}}">{{title}}</a>
+  {{#date}}<time datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{date}}</time>{{/date}}
+  {{#thumbnail.small}}<br><img src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#thumbnail.medium}}, {{{url}}} {{width}}w{{/thumbnail.medium}}" sizes="160px" width="{{width}}" height="{{height}}" alt="" loading="lazy">{{/thumbnail.small}}
+  {{#tags.length}}<br>Tagged {{#tags}}<a href="/tagged/{{slug}}">{{name}}</a> {{/tags}}{{/tags.length}}
+</li>

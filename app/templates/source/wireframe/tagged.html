@@ -1,29 +1,23 @@
 <!DOCTYPE html>
-<html>
+<html dir="auto">
   {{> head}}
   <body>
     {{> header}}
+    <main>
+      <h1>Tagged “{{tag}}”</h1>
 
-    <div class="container">
-    <h1>Posts tagged “{{tag}}”</h1>
+      {{#entries.length}}
+      <ul>
+        {{#entries}}{{> entry-item}}{{/entries}}
+      </ul>
+      {{/entries.length}}
+      {{^entries.length}}
+      <p>Nothing is tagged “{{tag}}”.</p>
+      {{/entries.length}}
 
-    {{#entries}}
-    <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}} <br>
-    {{/entries}}
-
-    {{#entries.pagination}}
-    <div class="pagination">
-      {{#previous}}
-      <a href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>
-      {{/previous}}
-      Page {{current}} of {{total}}
-      {{#next}}
-      <a href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
-      {{/next}}
-    </div>
-    {{/entries.pagination}}
-    </div>
-
+      {{! Shown only when there is a newer or an older page }}
+      {{#entries.pagination}}{{#next}}{{> tag-pages}}{{/next}}{{^next}}{{#previous}}{{> tag-pages}}{{/previous}}{{/next}}{{/entries.pagination}}
+    </main>
     {{> footer}}
   </body>
 </html>
