@@ -161,4 +161,34 @@ describe("google drive pollRecentFolders", function () {
     expect(Object.keys(drive.files)).toEqual([]);
     expect(await drive.files.list()).toEqual({ data: { files: [] } });
   });
+
+  it("gives up on a listing that hangs, and lists again next round", async function () {
+    const controller = new AbortController();
+    let round = 0;
+    const file = { id: "a", name: "a.md", mimeType: "text/plain" };
+    const changed = [];
+    const poll = load(async () => {
+      if (++round > 4) {
+        controller.abort();
+        return [];
+      }
+      return [{ blogID: "blog_a", dirId: "posts" }];
+    });
+
+    await poll("sa", {}, controller.signal, {
+      everyMs: 1,
+      listingTimeoutMs: 20,
+      // The second listing never answers; the third and fourth differ
+      readdir: async () =>
+        round === 2
+          ? new Promise(() => {})
+          : round === 4
+            ? [file, { ...file, id: "b", name: "b.md" }]
+            : [file],
+      onChanged: async (sa, list) => changed.push(...list),
+    });
+
+    expect(round).toBe(5);
+    expect(changed.length).toBe(1);
+  });
 });
