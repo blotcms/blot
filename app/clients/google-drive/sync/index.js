@@ -81,7 +81,7 @@ module.exports = async function (
       let walks = 0;
       do {
         await client.del(rewalkKey(blogID));
-        result = await detectAndApply(blogID, sync, trigger);
+        result = await detectAndApply(blogID, sync, trigger, account);
         walks += 1;
       } while (
         result !== false &&
@@ -117,7 +117,7 @@ const detect = (blogID, sync, canYield) =>
 
 // Resolves to the apply's summary, a truthy summary of the detection when
 // nothing needed applying, or false if the sync failed
-async function detectAndApply(blogID, sync, trigger) {
+async function detectAndApply(blogID, sync, trigger, account) {
   // Directories changes.list and the search already saw change are applied
   // before walking, and whenever more are recorded while it walks: the walk
   // takes seconds on a large folder, and they don't need it to be found
@@ -154,7 +154,7 @@ async function detectAndApply(blogID, sync, trigger) {
     `paths=${JSON.stringify((detected.paths || []).slice(0, 20))}`
   );
 
-  await markDirty(blogID, detected, `walk:${trigger}`);
+  await markDirty(blogID, detected, `walk:${trigger}`, account);
   if (!(await database.dirty.count(blogID))) {
     return known || { downloaded: 0, removed: 0, createdDirs: 0, detected: 0 };
   }
@@ -172,17 +172,24 @@ async function detectAndApply(blogID, sync, trigger) {
       blogID,
       `still differs after apply changed=${check.changed.length} full=${check.full} again=${again.length}`
     );
-    await markDirty(blogID, check, `check:${trigger}`);
+    await markDirty(blogID, check, `check:${trigger}`, account);
     return applyLocked(blogID, sync);
   }
 
   return applied;
 }
 
-// source names the walk and what started it, for the live line (#2847)
-async function markDirty(blogID, { changed, full }, source) {
+// source names the walk and what started it, for the live line (#2847).
+// The directories are listed again and again for the next few minutes too
+// (serviceAccount/pollRecentFolders.js).
+async function markDirty(blogID, { changed, full }, source, account) {
   if (full) await database.dirty.add(blogID, [database.dirty.FULL]);
-  else if (changed.length) await database.dirty.add(blogID, changed, source);
+  else if (changed.length) {
+    await database.dirty.add(blogID, changed, source);
+    await database.recent
+      .touch(account?.serviceAccountId, blogID, changed)
+      .catch((err) => log(blogID, "recent touch failed", err.message));
+  }
 }
 
 // Under the folder lock, applies the directories in the dirty set, and walks

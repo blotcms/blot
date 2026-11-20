@@ -102,8 +102,20 @@ module.exports = async function syncChanges(
   }
   for (const [blogID, ids] of dirty) {
     await database.dirty.add(blogID, [...ids], source);
+    // So pollRecentFolders.js lists them for the next few minutes
+    await logFailure(
+      database.recent.touch(serviceAccountId, blogID, [...ids]),
+      "recent touch failed",
+      blogID
+    );
   }
 
+  await runSyncs(serviceAccountId, blogs, source);
+};
+
+// Arms each blog's follow-up, then runs its sync without waiting for it.
+// blogs: blogID -> the number of changes, for the log.
+async function runSyncs(serviceAccountId, blogs, source) {
   const armed = new Map();
   for (const blogID of blogs.keys()) {
     armed.set(blogID, await followUps.arm(blogID));
@@ -116,4 +128,40 @@ module.exports = async function syncChanges(
     );
     logFailure(followUps.run(blogID, armed.get(blogID)), "sync failed", blogID);
   }
+}
+
+// Syncs the blogs whose recently changed directories pollRecentFolders.js
+// found listed differently (changed: [{ blogID, dirId, folders }]). Logs each
+// directory with its path, so the source-race analysis can match it.
+module.exports.syncDirectories = async function syncDirectories(
+  serviceAccountId,
+  changed
+) {
+  const blogs = new Map();
+  for (const { blogID, dirId, folders } of changed) {
+    blogs.set(blogID, (blogs.get(blogID) || 0) + 1);
+    const account = await database.blog.get(blogID);
+    const path =
+      account?.folderId === dirId
+        ? "/"
+        : account?.folderId
+          ? await database.folder(account.folderId, blogID).get(dirId)
+          : null;
+    console.log(
+      prefix(),
+      `client_id=${serviceAccountId}`,
+      "source=recent",
+      `blog=${blogID}`,
+      `dir=${dirId}`,
+      `path=${JSON.stringify(path || "")}`
+    );
+    await database.dirty.add(blogID, [dirId], "recent");
+    await logFailure(
+      database.recent.touch(serviceAccountId, blogID, [dirId, ...folders]),
+      "recent touch failed",
+      blogID
+    );
+  }
+
+  await runSyncs(serviceAccountId, blogs, "recent");
 };

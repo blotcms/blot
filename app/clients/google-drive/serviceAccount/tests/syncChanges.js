@@ -7,13 +7,16 @@ describe("google drive syncChanges", function () {
   // Loads syncChanges.js with its collaborators stubbed
   function load({ run = async () => {} } = {}) {
     const calls = [];
+    const sources = [];
+    const touched = [];
     const stubs = {
       "helper/clfdate": () => "[date]",
       "../database": {
         dirty: {
           FULL: "*",
-          add: async (blogID, ids) => {
+          add: async (blogID, ids, source) => {
             calls.push("dirty " + blogID + " " + ids.join(","));
+            sources.push(source);
           },
           hintMoves: async (blogID, moves) => {
             calls.push(
@@ -24,9 +27,17 @@ describe("google drive syncChanges", function () {
             );
           },
         },
+        recent: {
+          touch: async (sa, blogID, ids) =>
+            touched.push(blogID + " " + ids.join(",")),
+        },
+        blog: {
+          get: async (blogID) => ({ folderId: "folder-" + blogID }),
+        },
         folder: () => ({
           getByPath: async (path) =>
             ({ "/": "root", "/posts": "posts" })[path] || null,
+          get: async (id) => ({ posts: "/posts" })[id] || null,
         }),
       },
       "../sync/followUps": {
@@ -56,7 +67,7 @@ describe("google drive syncChanges", function () {
         require: (name) => (name in stubs ? stubs[name] : require(name)),
       }
     );
-    return { syncChanges: module.exports, calls };
+    return { syncChanges: module.exports, calls, sources, touched };
   }
 
   const entry = (blogID, fileId, file = {}, place = {}) => ({
@@ -173,5 +184,30 @@ describe("google drive syncChanges", function () {
     ]);
 
     expect(finished).toBe(true);
+  });
+
+  it("lists the directories it marks for the next few minutes, recording the source", async function () {
+    const { syncChanges, sources, touched } = load();
+
+    await syncChanges("sa", [entry("blog_a", "1")], "search");
+
+    expect(sources).toEqual(["search"]);
+    expect(touched).toEqual(["blog_a posts"]);
+  });
+
+  it("syncs the blogs whose recent folders listed differently, keeping new folders in them recent", async function () {
+    const { syncChanges, calls, sources, touched } = load();
+
+    await syncChanges.syncDirectories("sa", [
+      { blogID: "blog_a", dirId: "posts", folders: ["sub"] },
+    ]);
+
+    expect(sources).toEqual(["recent"]);
+    expect(touched).toEqual(["blog_a posts,sub"]);
+    expect(calls).toEqual([
+      "dirty blog_a posts",
+      "arm blog_a",
+      "run blog_a token-blog_a",
+    ]);
   });
 });
