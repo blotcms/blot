@@ -41,14 +41,21 @@ module.exports = async function augment(
   // come. A line that isn't a date is left for the template to show as it is.
   const event = eventDate(entry.metadata, req.blog.timeZone);
   if (event) {
-    const upcoming = eventDate.isUpcoming(event, Date.now(), req.blog.timeZone);
-    entry.formatEvent = FormatDate(event.stamp, req.blog.timeZone);
+    // A repeating event is shown at its next occurrence
+    const nextStamp = eventDate.next(event, Date.now(), req.blog.timeZone);
+    const stamp = nextStamp !== null ? nextStamp : event.stamp;
+    entry.formatEvent = FormatDate(stamp, req.blog.timeZone);
+    if (event.endsDay)
+      entry.formatEnds = FormatDate(event.endsDay, req.blog.timeZone);
     entry.event = {
-      stamp: event.stamp,
+      stamp,
       allDay: event.allDay,
       timed: !event.allDay,
-      upcoming,
-      past: !upcoming,
+      multiDay: !!event.endsDay,
+      repeats: event.repeats || false,
+      rrule: eventDate.rrule(event, req.blog.timeZone),
+      upcoming: nextStamp !== null,
+      past: nextStamp === null,
     };
   }
 

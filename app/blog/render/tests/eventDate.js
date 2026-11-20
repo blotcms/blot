@@ -35,4 +35,55 @@ describe("eventDate", function () {
     expect(eventDate.isUpcoming(parsed, evening, zone)).toBe(true);
     expect(eventDate.isUpcoming(parsed, nextDay, zone)).toBe(false);
   });
+
+  it("finds the next occurrence of a monthly event on the same weekday", function () {
+    const parsed = eventDate(
+      { event: "2026-01-13 18:30", repeats: "monthly" },
+      "UTC"
+    );
+    const next = eventDate.next(
+      parsed,
+      Date.parse("2026-11-20T00:00:00Z"),
+      "UTC"
+    );
+    expect(new Date(next).toISOString()).toEqual("2026-12-08T18:30:00.000Z");
+    expect(eventDate.rrule(parsed, "UTC")).toEqual("FREQ=MONTHLY;BYDAY=2TU");
+  });
+
+  it("falls back to the last weekday in a month without a fifth", function () {
+    const parsed = eventDate(
+      { event: "2026-01-29 10:00", repeats: "monthly" },
+      "UTC"
+    );
+    const next = eventDate.next(
+      parsed,
+      Date.parse("2026-02-01T00:00:00Z"),
+      "UTC"
+    );
+    expect(new Date(next).toISOString()).toEqual("2026-02-26T10:00:00.000Z");
+  });
+
+  it("stops repeating after Until", function () {
+    const parsed = eventDate(
+      { event: "2026-11-01 10:00", repeats: "weekly", until: "2026-11-15" },
+      "UTC"
+    );
+    expect(
+      eventDate.next(parsed, Date.parse("2026-11-20T00:00:00Z"), "UTC")
+    ).toBe(null);
+    expect(eventDate.rrule(parsed, "UTC")).toContain("UNTIL=20261115");
+  });
+
+  it("keeps a multi-day event upcoming until its last day ends", function () {
+    const parsed = eventDate(
+      { event: "2027-02-20", ends: "2027-02-21" },
+      "UTC"
+    );
+    expect(
+      eventDate.isUpcoming(parsed, Date.parse("2027-02-21T20:00:00Z"), "UTC")
+    ).toBe(true);
+    expect(
+      eventDate.isUpcoming(parsed, Date.parse("2027-02-22T01:00:00Z"), "UTC")
+    ).toBe(false);
+  });
 });

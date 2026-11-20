@@ -6,8 +6,14 @@ require("moment-timezone");
 //   Event: 2026-12-08 18:30
 //   Event: 2026-12-08            (a whole day)
 //
-// Returns { stamp, allDay } or null when the line is missing or isn't a
-// date in one of these forms (a template then shows the line as written).
+// and, optionally, how it repeats from there:
+//
+//   Repeats: weekly | fortnightly | monthly | yearly
+//   Until: 2027-06-30
+//
+// Monthly repeats keep the weekday of the month (the second Tuesday). Returns
+// { stamp, allDay, repeats, until } or null when the line is missing or isn't
+// a date in one of these forms (a template then shows the line as written).
 const FORMATS = [
   "YYYY-MM-DD HH:mm",
   "YYYY-MM-DDTHH:mm",
@@ -16,31 +22,153 @@ const FORMATS = [
   "YYYY-MM-DD h:mma",
 ];
 
-module.exports = function eventDate(metadata, timeZone) {
-  const value = metadata && (metadata.event || metadata.Event);
-  if (typeof value !== "string" || !value.trim()) return null;
+const REPEATS = {
+  weekly: "weekly",
+  "every week": "weekly",
+  fortnightly: "fortnightly",
+  "every two weeks": "fortnightly",
+  "every other week": "fortnightly",
+  biweekly: "fortnightly",
+  monthly: "monthly",
+  "every month": "monthly",
+  yearly: "yearly",
+  annually: "yearly",
+  "every year": "yearly",
+};
 
-  const text = value.trim();
+function read(metadata, key) {
+  if (!metadata) return undefined;
+  const value = metadata[key] || metadata[key[0].toUpperCase() + key.slice(1)];
+  return typeof value === "string" ? value.trim() : undefined;
+}
+
+function eventDate(metadata, timeZone) {
+  const text = read(metadata, "event");
+  if (!text) return null;
+
   const zone = timeZone || "UTC";
+  let parsed = null;
 
   const timed = moment.tz(text, FORMATS, true, zone);
-  if (timed.isValid()) return { stamp: timed.valueOf(), allDay: false };
+  if (timed.isValid()) parsed = { stamp: timed.valueOf(), allDay: false };
 
-  const day = moment.tz(text, "YYYY-MM-DD", true, zone);
-  if (day.isValid()) return { stamp: day.valueOf(), allDay: true };
+  if (!parsed) {
+    const day = moment.tz(text, "YYYY-MM-DD", true, zone);
+    if (day.isValid()) parsed = { stamp: day.valueOf(), allDay: true };
+  }
+
+  if (!parsed) return null;
+
+  // Ends: a date makes a multi-day event (Ends: 2027-02-21), upcoming until
+  // that day is over. A time (Ends: 9 pm) is left for the template to show.
+  const ends = moment.tz(
+    read(metadata, "ends") || "",
+    "YYYY-MM-DD",
+    true,
+    zone
+  );
+  if (ends.isValid() && ends.valueOf() >= parsed.stamp) {
+    parsed.endsDay = ends.valueOf();
+  }
+
+  const repeats = REPEATS[(read(metadata, "repeats") || "").toLowerCase()];
+  if (repeats) {
+    parsed.repeats = repeats;
+    const until = moment.tz(
+      read(metadata, "until") || "",
+      "YYYY-MM-DD",
+      true,
+      zone
+    );
+    if (until.isValid()) parsed.until = until.endOf("day").valueOf();
+  }
+
+  return parsed;
+}
+
+// The end of an occurrence, for deciding whether it is still to come: a
+// timed event ends when it starts, a whole-day event at the end of its day.
+function endOf(stamp, allDay, zone) {
+  return allDay ? moment.tz(stamp, zone).endOf("day").valueOf() : stamp;
+}
+
+// When an event (not a repeating one) stops being upcoming: the end of its
+// last day for a multi-day event, else as endOf.
+function lastMoment(parsed, zone) {
+  if (parsed.endsDay)
+    return moment.tz(parsed.endsDay, zone).endOf("day").valueOf();
+  return endOf(parsed.stamp, parsed.allDay, zone);
+}
+
+// The occurrence of a repeating event `step` repeats after its first.
+function occurrence(parsed, step, zone) {
+  const first = moment.tz(parsed.stamp, zone);
+  if (parsed.repeats === "weekly") return first.clone().add(step, "weeks");
+  if (parsed.repeats === "fortnightly")
+    return first.clone().add(step * 2, "weeks");
+  if (parsed.repeats === "yearly") return first.clone().add(step, "years");
+
+  // Monthly: the same weekday of the month (the second Tuesday), or the last
+  // one in a month that has fewer (a fifth Thursday).
+  const nth = Math.ceil(first.date() / 7);
+  const month = first.clone().startOf("month").add(step, "months");
+  const firstMatch = 1 + ((first.day() - month.day() + 7) % 7);
+  let date = firstMatch + 7 * (nth - 1);
+  if (date > month.daysInMonth()) date -= 7;
+  return month.date(date).set({
+    hour: first.hour(),
+    minute: first.minute(),
+    second: 0,
+    millisecond: 0,
+  });
+}
+
+// The next time an event happens at or after `now`: the event itself if it
+// is still to come, else for a repeating one its next occurrence (until its
+// Until date). Returns a stamp, or null when it has all happened.
+function next(parsed, now, timeZone) {
+  if (!parsed) return null;
+  const zone = timeZone || "UTC";
+
+  if (lastMoment(parsed, zone) >= now) return parsed.stamp;
+  if (!parsed.repeats) return null;
+
+  for (let step = 1; step < 5000; step++) {
+    const stamp = occurrence(parsed, step, zone).valueOf();
+    if (parsed.until && stamp > parsed.until) return null;
+    if (endOf(stamp, parsed.allDay, zone) >= now) return stamp;
+  }
 
   return null;
+}
+
+// An iCalendar RRULE for a repeating event, e.g. FREQ=MONTHLY;BYDAY=2TU.
+function rrule(parsed, timeZone) {
+  if (!parsed || !parsed.repeats) return "";
+  const first = moment.tz(parsed.stamp, timeZone || "UTC");
+  const days = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
+  let rule =
+    parsed.repeats === "weekly"
+      ? "FREQ=WEEKLY"
+      : parsed.repeats === "fortnightly"
+        ? "FREQ=WEEKLY;INTERVAL=2"
+        : parsed.repeats === "yearly"
+          ? "FREQ=YEARLY"
+          : "FREQ=MONTHLY;BYDAY=" +
+            Math.ceil(first.date() / 7) +
+            days[first.day()];
+  if (parsed.until)
+    rule += ";UNTIL=" + moment.utc(parsed.until).format("YYYYMMDD[T]HHmmss[Z]");
+  return rule;
+}
+
+module.exports = eventDate;
+
+// Whether an event is still to come (a repeating one: whether any occurrence
+// is), as of `now`.
+module.exports.isUpcoming = function isUpcoming(parsed, now, timeZone) {
+  return next(parsed, now, timeZone) !== null;
 };
 
-// Whether an event is still to come: a timed event until it starts, a
-// whole-day event until the end of its day.
-module.exports.isUpcoming = function isUpcoming(parsed, now, timeZone) {
-  if (!parsed) return false;
-  if (!parsed.allDay) return parsed.stamp >= now;
-  return (
-    moment
-      .tz(parsed.stamp, timeZone || "UTC")
-      .endOf("day")
-      .valueOf() >= now
-  );
-};
+module.exports.next = next;
+module.exports.rrule = rrule;

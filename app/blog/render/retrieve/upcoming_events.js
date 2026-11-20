@@ -2,8 +2,11 @@ const { LRUCache } = require("lru-cache");
 const getAllCached = require("./helpers/getAllCached");
 const asRetriever = require("../../lib/asRetriever");
 const eventDate = require("../load/eventDate");
+const augment = require("../load/augment");
+const { normalize } = require("models/tags");
 
-// Posts whose Event line is a date still to come, soonest first:
+// Posts whose Event line is a date still to come, soonest first (a repeating
+// event at its next occurrence; on a tag page, only that tag's):
 //
 //   Event: 2026-12-08 18:30
 //
@@ -37,6 +40,8 @@ const LIGHT_FIELDS = [
 ];
 
 const DEFAULT_LIMIT = 12;
+// all_upcoming_events (a calendar feed): every one, within reason
+const ALL_LIMIT = 500;
 
 const eventsCache = new LRUCache({ max: 500 });
 
@@ -63,30 +68,51 @@ async function eventsFor(req) {
     events.push({ parsed, entry: light(entry) });
   }
 
-  events.sort((a, b) => a.parsed.stamp - b.parsed.stamp);
   eventsCache.set(key, events);
   return events;
 }
 
-async function upcomingEvents(req, res, now = Date.now()) {
+async function upcomingEvents(req, res, now = Date.now(), unlimited = false) {
   const locals = (req.template && req.template.locals) || {};
-  const limit =
-    parseInt(locals.upcoming_events_limit, 10) > 0
+  const limit = unlimited
+    ? ALL_LIMIT
+    : parseInt(locals.upcoming_events_limit, 10) > 0
       ? parseInt(locals.upcoming_events_limit, 10)
       : DEFAULT_LIMIT;
 
   const events = await eventsFor(req);
 
-  return events
-    .filter((event) =>
-      eventDate.isUpcoming(event.parsed, now, req.blog.timeZone)
+  // On a tag page, only that tag's events
+  const tag = req.params && req.params.tag ? normalize(req.params.tag) : null;
+
+  const upcoming = events
+    .filter(
+      (event) =>
+        !tag || (event.entry.tags || []).some((name) => normalize(name) === tag)
     )
+    .map((event) => ({
+      event,
+      next: eventDate.next(event.parsed, now, req.blog.timeZone),
+    }))
+    .filter((item) => item.next !== null)
+    .sort((a, b) => a.next - b.next)
     .slice(0, limit)
-    .map((event) => JSON.parse(JSON.stringify(event.entry)));
+    .map((item) => JSON.parse(JSON.stringify(item.event.entry)));
+
+  // Augmented here, as the list locals are, so each gets formatEvent,
+  // formatDate, its tags and the rest (render/load/augment.js).
+  if (res && res.locals) {
+    for (const entry of upcoming) await augment(req, res, entry);
+  }
+
+  return upcoming;
 }
 
 module.exports = asRetriever(upcomingEvents);
 module.exports._upcomingEvents = upcomingEvents;
+module.exports.all = asRetriever((req, res) =>
+  upcomingEvents(req, res, Date.now(), true)
+);
 module.exports._clear = function () {
   eventsCache.clear();
 };
