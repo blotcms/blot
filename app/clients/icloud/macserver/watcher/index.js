@@ -410,7 +410,9 @@ const materialiseLater = (blogID, pathInBlogDirectory) => {
 
   const timer = setTimeout(async () => {
     const parent = path.dirname(buildBlogPath(blogID, pathInBlogDirectory));
-    await fs.readdir(parent).catch(() => {});
+    // ls, not readdir: listing through ls is what makes iCloud put the
+    // folder's new entries on disk (see brctl/ls.js and monitorer.js)
+    await brctl.ls(parent).catch(() => {});
     const there = await fs.pathExists(
       buildBlogPath(blogID, pathInBlogDirectory)
     );

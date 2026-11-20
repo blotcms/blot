@@ -142,8 +142,39 @@ const apply = (rows, report) => {
   }
 };
 
+// Prepared on the shared connection (birdState.js), which birdState closes
+// and reopens when a lookup fails: the journal then prepares them again
+const prepare = (db) => ({
+  all: db.prepare(`select ${COLUMNS} from client_items`),
+  since: db.prepare(
+    `select ${COLUMNS} from client_items where item_notifs_rank > ? order by item_notifs_rank limit 5000`
+  ),
+  children: db.prepare(
+    `select ${COLUMNS} from client_items where item_parent_zone_rowid = ? and item_parent_id = unhex(?)`
+  ),
+  max: db.prepare("select max(item_notifs_rank) m from client_items"),
+});
+
+const reconnect = async () => {
+  const db = await database();
+  if (!db) return false;
+  statements = prepare(db);
+  console.log(clfdate(), "journal: reconnected to bird's database");
+  return true;
+};
+
+let broken = false;
+
 const poll = async () => {
-  if (!statements || !onChange) return;
+  if (!onChange) return;
+  if (broken) {
+    try {
+      if (!(await reconnect())) return;
+      broken = false;
+    } catch (error) {
+      return;
+    }
+  }
   if (polling) {
     pollAgain = true;
     return;
@@ -163,7 +194,9 @@ const poll = async () => {
     } while (pollAgain);
     await saveState();
   } catch (error) {
+    // most likely the connection was closed under us; prepare again next poll
     console.error(clfdate(), "journal: poll failed:", error.message);
+    broken = true;
   } finally {
     polling = false;
   }
@@ -179,16 +212,7 @@ const openJournal = async () => {
   if (!db) return null;
 
   try {
-    statements = {
-      all: db.prepare(`select ${COLUMNS} from client_items`),
-      since: db.prepare(
-        `select ${COLUMNS} from client_items where item_notifs_rank > ? order by item_notifs_rank limit 5000`
-      ),
-      children: db.prepare(
-        `select ${COLUMNS} from client_items where item_parent_zone_rowid = ? and item_parent_id = unhex(?)`
-      ),
-      max: db.prepare("select max(item_notifs_rank) m from client_items"),
-    };
+    statements = prepare(db);
 
     const started = Date.now();
     for (const row of statements.all.all()) index(row);
