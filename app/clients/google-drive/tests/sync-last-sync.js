@@ -63,6 +63,8 @@ function load({
         events.push("detect");
         const found = detections[detectCount++];
         if (found === false) return false;
+        // A detection that made way: changes.list recorded a directory
+        if (found && found.yielded) dirty.add("recorded_meanwhile");
         return found || { changed: [], full: false };
       }
       events.push("apply");
@@ -135,6 +137,26 @@ describe("google drive sync entry point", function () {
     expect(events).toEqual([
       "store",
       "walk-lock",
+      "lock",
+      "apply",
+      "release",
+      "detect",
+      "walk-release",
+    ]);
+  });
+
+  it("applies directories recorded during a detection, then detects again", async function () {
+    const { sync, events } = load({
+      account: folder,
+      detections: [{ yielded: true }],
+    });
+
+    await sync("blog_a");
+
+    expect(events).toEqual([
+      "store",
+      "walk-lock",
+      "detect",
       "lock",
       "apply",
       "release",

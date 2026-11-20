@@ -21,10 +21,12 @@ async function logFailure(promise, ...context) {
 // The Drive directories of the blog to list again for one change: the one the
 // file was in (from the blog's folder mapping), so a rename, trash or move
 // out is applied, and the one it is in now, so a new file or a move in is.
-// The blog's own folder changing (renamed, trashed) asks for a full walk, as
-// does a mapped file whose directory the mapping has lost.
+// A change to the blog's own folder lists it again: Drive records one each
+// time something is added at the top, and a rename or trash of the folder is
+// caught by the check every sync starts with. A mapped file whose directory
+// the mapping has lost asks for a full walk.
 async function dirtyDirectories({ change, blogID, folderId, path, parentId }) {
-  if (change.fileId === folderId) return [database.dirty.FULL];
+  if (change.fileId === folderId) return [folderId];
 
   const ids = [];
   if (path) {

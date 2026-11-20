@@ -96,20 +96,46 @@ module.exports = async function (blogID, { rethrowLocked = false } = {}) {
   }
 };
 
+// A detection that makes way for directories changes.list recorded meanwhile
+// restarts after applying them, at most this many times before it walks to
+// the end regardless
+const MAX_DETECT_YIELDS = 5;
+
+// Walks without the folder lock and resolves { changed, full } (sync.js with
+// detectOnly), { yielded: true } when it stopped to let recorded directories
+// go first, or false if it failed
+const detect = (blogID, sync, canYield) =>
+  sync(blogID, null, null, {
+    detectOnly: true,
+    ...(canYield
+      ? { dirty: { count: () => database.dirty.count(blogID) } }
+      : {}),
+  });
+
 // Resolves to the apply's summary, a truthy summary of the detection when
 // nothing needed applying, or false if the sync failed
 async function detectAndApply(blogID, sync) {
   // Directories changes.list and the search already saw change are applied
-  // before walking: the walk takes seconds on a large folder, and they don't
-  // need it to be found (#2847)
+  // before walking, and whenever more are recorded while it walks: the walk
+  // takes seconds on a large folder, and they don't need it to be found
+  // (#2847). A webhook usually starts the walk a moment before changes.list
+  // has the change.
   let known = null;
-  if (await database.dirty.count(blogID)) {
-    known = await applyLocked(blogID, sync);
-    if (known === false) return false;
+  let detected;
+  let startedAt;
+  for (let yields = 0; ; yields++) {
+    if (await database.dirty.count(blogID)) {
+      known = await applyLocked(blogID, sync);
+      if (known === false) return false;
+    }
+    startedAt = Date.now();
+    detected = await detect(blogID, sync, yields < MAX_DETECT_YIELDS);
+    if (!detected || !detected.yielded) break;
+    log(
+      blogID,
+      `detection yielded n=${yields + 1} ms=${Date.now() - startedAt}`
+    );
   }
-
-  const startedAt = Date.now();
-  const detected = await sync(blogID, null, null, { detectOnly: true });
 
   if (detected === false) {
     log(blogID, "detection failed, walking under the folder lock");
@@ -129,9 +155,11 @@ async function detectAndApply(blogID, sync) {
   const applied = await applyLocked(blogID, sync);
   if (applied === false) return false;
 
-  // Check, outside the lock, that the apply left nothing different
-  const check = await sync(blogID, null, null, { detectOnly: true });
-  if (check && (check.full || check.changed.length)) {
+  // Check, outside the lock, that the apply left nothing different. A check
+  // that makes way leaves the new directories to the next walk, which the
+  // request that recorded them asked for (the rewalk flag).
+  const check = await detect(blogID, sync, true);
+  if (check && !check.yielded && (check.full || check.changed.length)) {
     const again = check.changed.filter((id) => detected.changed.includes(id));
     log(
       blogID,

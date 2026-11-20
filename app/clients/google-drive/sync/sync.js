@@ -754,10 +754,13 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     }
   };
 
-  // Brings just the given directories up to date, parents first. A directory
-  // the mapping no longer has was removed with its parent, which is dirty
-  // too, so it is skipped.
-  const targeted = async (dirIds) => {
+  // Brings just the given directories up to date, parents first, except
+  // that directories an earlier pass made way in the middle of (resume) come
+  // after the rest. A directory the mapping no longer has was removed with
+  // its parent, which is dirty too, so it is skipped. If the pass makes way
+  // (YIELD), interrupted holds the directories it hadn't finished.
+  let interrupted = [];
+  const targeted = async (dirIds, resume = new Set()) => {
     const startedAt = Date.now();
     const paths = new Map();
     for (const id of dirIds) {
@@ -767,17 +770,25 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       .filter((id) => paths.get(id))
       .sort(
         (a, b) =>
+          resume.has(a) - resume.has(b) ||
           paths.get(a).split("/").length - paths.get(b).split("/").length
       );
-    await pass(
-      async () => {
-        for (const id of ordered) {
-          const path = id === folderId ? "/" : await getPath(id);
-          if (path) await walk(path, id, false);
-        }
-      },
-      { ahead: false }
-    );
+    const done = new Set();
+    try {
+      await pass(
+        async () => {
+          for (const id of ordered) {
+            const path = id === folderId ? "/" : await getPath(id);
+            if (path) await walk(path, id, false);
+            done.add(id);
+          }
+        },
+        { ahead: false }
+      );
+    } catch (err) {
+      if (err === YIELD) interrupted = ordered.filter((id) => !done.has(id));
+      throw err;
+    }
     console.log(
       "Google Drive Sync:",
       blogID,
@@ -786,10 +797,14 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   };
 
   if (detecting) {
+    // A detection makes way too, so directories changes.list records while
+    // it walks are applied without waiting for it (sync/index.js)
+    canYield = Boolean(options.dirty);
     try {
       await pass(() => walk("/", folderId));
       return { changed: [...changed], full: needsFull };
     } catch (err) {
+      if (err === YIELD) return { yielded: true, changed: [], full: false };
       onError(err);
       return false;
     }
@@ -805,19 +820,49 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     // walk still follows, as before, and logs anything the targeted pass
     // missed. While it runs, directories that change make it stop and start
     // again after them, up to MAX_YIELDS times.
+    //
+    // A targeted pass makes way too: a large directory (a bulk upload) can
+    // take tens of seconds to apply, and a change recorded meanwhile goes
+    // first. What it hadn't finished is put back and done after the new
+    // directories. MAX_YIELDS counts every pass's yields together.
     let yields = 0;
+    let wantFull = false;
+    let resume = new Set();
     for (;;) {
       const ids = options.dirty ? await options.dirty.take() : [];
       taken.push(...ids);
+      if (ids.includes(options.dirty?.FULL)) wantFull = true;
       const dirIds = ids.filter((id) => id !== options.dirty?.FULL);
-      // Only the full walk makes way, never the targeted pass
-      canYield = false;
-      if (dirIds.length) await targeted(dirIds);
+
+      canYield = Boolean(options.dirty) && yields < MAX_YIELDS;
+      if (dirIds.length) {
+        try {
+          await targeted(dirIds, resume);
+          resume = new Set();
+        } catch (err) {
+          if (err !== YIELD) throw err;
+          yields += 1;
+          resume = new Set(interrupted);
+          await options.dirty.putBack(interrupted);
+          console.log(
+            "Google Drive Sync:",
+            blogID,
+            `targeted pass yielded n=${yields} left=${interrupted.length}`
+          );
+          continue;
+        }
+      }
 
       // Applying what a detection found (sync/index.js), the full walk runs
-      // only when it was asked for
-      if (options.fullWalk === "if-asked" && !ids.includes(options.dirty.FULL))
+      // only when it was asked for. Directories recorded while the targeted
+      // pass ran are applied first.
+      if (options.fullWalk === "if-asked" && !wantFull) {
+        if (yields < MAX_YIELDS && (await options.dirty.count()) > 0) {
+          yields += 1;
+          continue;
+        }
         break;
+      }
 
       const before = { ...summary };
       canYield = Boolean(options.dirty) && yields < MAX_YIELDS;

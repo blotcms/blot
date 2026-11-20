@@ -87,13 +87,13 @@ describe("google drive syncChanges", function () {
       entry("blog_a", "1", {}, { path: "/posts/a.md", parentId: "root" }),
       // A file whose directory the mapping lost asks for a full walk
       entry("blog_b", "2", {}, { path: "/lost/b.md", parentId: null }),
-      // The blog's own folder changed
+      // The blog's own folder changed: listed again, not a full walk
       entry("blog_c", "folder-blog_c", {}, { path: "/", parentId: null }),
     ]);
 
     expect(calls).toContain("dirty blog_a posts,root");
     expect(calls).toContain("dirty blog_b *");
-    expect(calls).toContain("dirty blog_c *");
+    expect(calls).toContain("dirty blog_c folder-blog_c");
   });
 
   it("ignores changes no blog holds", async function () {
