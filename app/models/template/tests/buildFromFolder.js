@@ -13,6 +13,7 @@ describe("template", function () {
   } = require("../index");
 
   const folderRenames = require("../folderRenames");
+  const key = require("../key");
 
   const getBlog = (by) => Blog.get(by);
   const setBlog = (blogID, updates) => Blog.set(blogID, updates);
@@ -531,6 +532,50 @@ describe("template", function () {
 
     expect(await exists(makeID(blogID, "alpha"))).toEqual(true);
     expect(await exists(makeID(blogID, "beta"))).toEqual(false);
+  });
+
+  // Templates made before create() kept slug and id in step can have a slug
+  // whose makeID is another id: the folder named after the slug is read back
+  // as that other template, and the old one is left without a folder
+  it("drops a template whose slug maps to another id, not the one its folder builds", async function () {
+    const blogID = this.blog.id;
+    const legacyID = blogID + ":legacy copy";
+    const folderID = makeID(blogID, "legacy-copy");
+
+    expect(legacyID).not.toEqual(folderID);
+
+    await client.sAdd(key.blogTemplates(blogID), legacyID);
+    await setMetadata(legacyID, {
+      id: legacyID,
+      name: "Legacy copy",
+      slug: "legacy-copy",
+      owner: blogID,
+      locals: {},
+      cdn: {},
+      description: "",
+      thumb: "",
+      localEditing: true,
+      previewPath: "/",
+      shareID: "",
+    });
+    await folder.write(
+      blogID,
+      templatesDir(this) + "/legacy-copy/entries.html",
+      "<h1>Legacy</h1>"
+    );
+
+    await buildFromFolder(blogID);
+
+    expect(await exists(legacyID)).toEqual(false);
+    expect(await exists(folderID)).toEqual(true);
+
+    // Dropping by slug deleted the folder's template on every build
+    await buildFromFolder(blogID);
+
+    expect(await exists(folderID)).toEqual(true);
+    expect(
+      Boolean(await client.sIsMember(key.blogTemplates(blogID), legacyID))
+    ).toBe(false);
   });
 
   it("keeps a template whose folder reappears within the window", async function () {

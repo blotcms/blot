@@ -67,6 +67,52 @@ describe("models/redis-cache", function () {
     ).toEqual(["CLIENT", "TRACKING", "ON", "OPTIN"]);
   });
 
+  it("names a key's pattern without its IDs, paths or handles", function () {
+    const cases = {
+      "blog:b1:info": "blog:*:info",
+      "blog:b1:entry:/a/b:c": "blog:*:entry:*",
+      "blog:b1:url:/x": "blog:*:url:*",
+      "blog:b1:dropbox:account": "blog:*:dropbox:account",
+      "user:u1:info": "user:*:info",
+      "template:owner:slug:url_patterns": "template:*:url_patterns",
+      "handle:bob": "handle:*",
+      "sess:abc": "sess:*",
+      "domain:example.com": "domain:*",
+      last_build: "last_build",
+      abc123: "*",
+    };
+    for (const [key, pattern] of Object.entries(cases))
+      expect([key, Cache.keyPattern(key)]).toEqual([key, pattern]);
+  });
+
+  it("counts writes by command and first key, scripts by their first key", function () {
+    const c = new Cache({ ttl: 0, maxEntries: 10, evictPolicy: "LRU" });
+    c.forgetWrittenKeys(["HSET", "blog:b1:info", "title", "a"]);
+    c.forgetWrittenKeys(["HSET", "blog:b2:info", "title", "b"]);
+    c.forgetWrittenKeys(["EVALSHA", "sha", "1", "blog:b1:entry:/a"]);
+    c.forgetWrittenKeys(["EVALSHA", "sha", "0"]);
+    c.forgetWrittenKeys(["SCAN", "0"]);
+    expect([...c.writePatterns]).toEqual([
+      ["HSET|blog:*:info", { count: 2, bytes: 0 }],
+      ["EVALSHA|blog:*:entry:*", { count: 1, bytes: 0 }],
+    ]);
+  });
+
+  it("sizes what each class holds, values only", function () {
+    const c = new Cache({ ttl: 0, maxEntries: 10, evictPolicy: "LRU" });
+    const value = { title: "x".repeat(1000) };
+    c.set("GET blog:b1:info", c.createValueEntry(null, value), [
+      "blog:b1:info",
+    ]);
+    c.set("GET sess:a", c.createPromiseEntry(null, new Promise(() => {})), [
+      "sess:a",
+    ]);
+    const sizes = c.classSizes();
+    expect(sizes.info.entries).toBe(1);
+    expect(sizes.info.bytes).toBeGreaterThan(1000);
+    expect(sizes.session).toEqual({ entries: 1, bytes: 0 });
+  });
+
   describe("per-class caps", function () {
     function cache(classCaps) {
       return new Cache({
@@ -190,6 +236,21 @@ describe("models/redis-cache", function () {
         bypass: 2,
         evictions: 0,
       });
+
+      // The live stats: what the cache holds, the uncached reads and the
+      // writes, each by key pattern
+      const stats = createRedisClient.getClientSideCacheStats(client);
+      expect(stats.classSizes.info.entries).toBe(1);
+      expect(stats.classSizes.info.bytes).toBeGreaterThan(0);
+      const bypass = stats.bypassPatterns.find(
+        (p) => p.pattern === "GET|blog:*:entry:*"
+      );
+      expect(bypass.count).toBe(2);
+      expect(bypass.bytes).toBeGreaterThan(0);
+      const writes = stats.writePatterns.find(
+        (p) => p.pattern === "SET|blog:*:entry:*"
+      );
+      expect(writes.count).toBe(1);
 
       // The server only tracks the key if CACHING YES reached it right
       // before the read, so a write must invalidate the cached value.

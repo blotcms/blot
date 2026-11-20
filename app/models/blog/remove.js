@@ -76,7 +76,7 @@ async function dropTemplates(blog) {
       if (templateID.indexOf(prefix) !== 0)
         throw new Error("Template is not owned by the blog");
 
-      await dropTemplate(blog.id, templateID.slice(prefix.length));
+      await dropTemplate.byID(blog.id, templateID);
     } catch (err) {
       console.error("Error dropping template", templateID, err);
     }

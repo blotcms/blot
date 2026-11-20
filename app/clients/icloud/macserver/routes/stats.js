@@ -6,6 +6,10 @@ import { iCloudDriveDirectory } from "../config.js";
 import clfdate from "../util/clfdate.js";
 import processStats from "../util/processStats.js";
 import availableMemory from "../util/availableMemory.js";
+import { backlog } from "../pathOrder.js";
+import { journalStatus } from "../journal.js";
+import { waitingForFileProvider } from "../watcher/index.js";
+import { lastDeliveryFromiCloud } from "../birdZones.js";
 
 const statfs = promisify(statfsSync);
 
@@ -72,6 +76,32 @@ export default async (req, res) => {
       clfdate(),
       `Error getting number of blogs connected: ${error}`
     );
+  }
+
+  // How far behind the macserver is, for Blot's delay alert
+  // (clients/icloud/util/syncDelays.js)
+  try {
+    const queue = backlog();
+    result.actions_pending = queue.pending;
+    result.actions_oldest_ms = queue.oldestMs;
+    result.actions_busiest_blog = queue.busiest?.blogID || null;
+    result.actions_busiest_pending = queue.busiest?.pending || 0;
+
+    const journal = journalStatus();
+    result.journal_running = journal.running;
+    result.journal_poll_age_ms = journal.pollAgeMs;
+    result.journal_behind = journal.behind;
+
+    const waiting = waitingForFileProvider();
+    result.fileprovider_waiting = waiting.count;
+    result.fileprovider_oldest_ms = waiting.oldestMs;
+    result.fileprovider_gave_up_15m = waiting.gaveUpRecently;
+
+    const delivered = await lastDeliveryFromiCloud();
+    result.icloud_last_delivery_age_ms =
+      delivered === null ? null : Date.now() - delivered;
+  } catch (error) {
+    console.error(clfdate(), `Error getting sync backlog: ${error}`);
   }
 
   console.log(clfdate(), "Sending stats:", result);

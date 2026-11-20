@@ -6,7 +6,11 @@
 # OpenResty's summed RSS with its most processes, and git's summed RSS with its
 # most processes at once (each where the log has them), max oom_kill, the cgroup's peak where
 # it has one, and the five non-node processes with the highest peak RSS; and
-# the host's lowest mem_available. For blot-sandbox-<unit> lines (the units'
+# the host's lowest mem_available. Where lines have them, it also adds up how
+# much the limit squeezed the page cache over the window: file pages read
+# back in, time waiting on memory and times at the limit. Those counters are
+# cumulative per container, so it sums their rises, starting again when a new
+# container's counter restarts lower. For blot-sandbox-<unit> lines (the units'
 # sandbox jobs) peak and oom_kill are the numbers to read, against limit.
 # With no argument it reads the live log and the daily copies logrotate keeps
 # in /var/lib/blot-unit-mem (oldest first), so it reaches back before a reboot.
@@ -65,6 +69,15 @@ function mib(b) { return sprintf("%.0f MiB", b / 1048576) }
   if (f["git_n"] + 0 > gitn[name]) gitn[name] = f["git_n"] + 0
   if (f["oom_kill"] + 0 > oom[name]) oom[name] = f["oom_kill"] + 0
   if (f["peak"] + 0 > peakmem[name]) peakmem[name] = f["peak"] + 0
+  if ("refault" in f) {
+    squeeze_[name] = 1
+    split("refault pressure_some pressure_full at_max", counters, " ")
+    for (j in counters) {
+      c = counters[j]; v = f[c] + 0; k = name SUBSEP c
+      if (k in prev) rise[k] += (v >= prev[k]) ? v - prev[k] : v
+      prev[k] = v
+    }
+  }
   limit[name] = f["limit"] + 0
   t = f["top"]; c = match(t, /:[0-9]+$/)
   if (c && t != "-:0" && substr(t, 1, c - 1) != "-") {
@@ -86,6 +99,7 @@ END {
     if (split_[name]) printf "  node-a max %s, node-b max %s, other node max %s; git max %s in up to %d processes\n", mib(nodea[name]), mib(nodeb[name]), mib(nodeo[name]), mib(gitmax[name]), gitn[name]
     if (sandbox_[name]) printf "  broker max %s p99 %s, proxy jail max %s p99 %s, openresty max %s p99 %s in up to %d processes\n", mib(brokermax[name]), mib(p99[name "|broker"]), mib(proxymax[name]), mib(p99[name "|proxy"]), mib(ormax[name]), mib(p99[name "|openresty"]), orn[name]
     if (peakmem[name]) printf "  cgroup peak %s of limit %s\n", mib(peakmem[name]), mib(limit[name])
+    if (squeeze_[name]) printf "  page cache: %s re-read (refaults), waited on memory %.1f s (some) %.1f s (full), at the limit %d times\n", mib(rise[name SUBSEP "refault"] * 4096), rise[name SUBSEP "pressure_some"] / 1e6, rise[name SUBSEP "pressure_full"] / 1e6, rise[name SUBSEP "at_max"]
     cmd = "sort -k1,1nr | head -5"; fflush()
     for (key in seen) { split(key, kp, SUBSEP); if (kp[1] == name) print peak[key], kp[2] | cmd }
     close(cmd)

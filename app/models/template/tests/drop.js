@@ -16,6 +16,26 @@ describe("template", function () {
     await drop(this.blog.id, this.template.name);
   });
 
+  it("drops a template by its id", async function () {
+    await drop.byID(this.blog.id, this.template.id);
+    expect(await client.exists(key.metadata(this.template.id))).toEqual(0);
+  });
+
+  it("refuses to drop a template by id that the owner doesn't own", async function () {
+    var siteID = "SITE:blog";
+    var before = await client.exists(key.metadata(siteID));
+    var error;
+
+    try {
+      await drop.byID(this.blog.id, siteID);
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error).toEqual(jasmine.any(Error));
+    expect(await client.exists(key.metadata(siteID))).toEqual(before);
+  });
+
   it("drop removes a template from the list of templates", async function () {
     var test = this;
     const templates = await getTemplateList(test.blog.id);

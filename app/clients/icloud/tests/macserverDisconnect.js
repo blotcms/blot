@@ -293,6 +293,28 @@ describe("icloud macserver disconnect handling", function () {
       await Promise.all([mkdir, upload, sibling, remove]);
     });
 
+    it("reports its backlog: how many wait, the oldest, and the busiest blog", async function () {
+      const pathOrder = await load("pathOrder.js");
+      const blogID = newBlogID();
+      const { started, open } = gated();
+      const results = ["/x.md", "/x.md", "/y.md"].map((p) =>
+        actions.performAction(blogID, p, "upload")
+      );
+      await until(() => started.length === 2);
+
+      const busy = pathOrder.backlog(Date.now() + 1000);
+      expect(busy.pending).toBeGreaterThanOrEqual(3);
+      expect(busy.oldestMs).toBeGreaterThanOrEqual(1000);
+      expect(busy.busiest.blogID).toBe(blogID);
+
+      open("upload /x.md");
+      await until(() => started.length === 3);
+      open("upload /x.md");
+      open("upload /y.md");
+      await Promise.all(results);
+      expect(pathOrder.pendingTurns(blogID)).toBe(0);
+    });
+
     it("lets later changes to a path through after one fails", async function () {
       const blogID = newBlogID();
       globalThis.__macserverMocks.remove.and.callFake(async () => {

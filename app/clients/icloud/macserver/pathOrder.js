@@ -58,7 +58,10 @@ const takeTurn = (blogID, path) => {
   collect(blog.under.get(key));
 
   let finish;
-  const turn = { finished: new Promise((resolve) => (finish = resolve)) };
+  const turn = {
+    finished: new Promise((resolve) => (finish = resolve)),
+    since: Date.now(),
+  };
 
   addTo(blog.at, key, turn);
   for (const ancestor of ancestors) addTo(blog.under, ancestor, turn);
@@ -81,4 +84,26 @@ const takeTurn = (blogID, path) => {
 // for specs
 const pendingTurns = (blogID) => blogs.get(blogID)?.pending || 0;
 
-export { takeTurn, pendingTurns, keyOf };
+// Every action waiting for its turn or running, for /stats: how many, how
+// long the oldest has waited, and the blog with the most. A turn is listed
+// once under its own path (blog.at), so this counts each action once.
+const backlog = (now = Date.now()) => {
+  let pending = 0;
+  let oldest = null;
+  let busiest = null;
+  for (const [blogID, blog] of blogs) {
+    pending += blog.pending;
+    if (!busiest || blog.pending > busiest.pending)
+      busiest = { blogID, pending: blog.pending };
+    for (const turns of blog.at.values())
+      for (const turn of turns)
+        if (oldest === null || turn.since < oldest) oldest = turn.since;
+  }
+  return {
+    pending,
+    oldestMs: oldest === null ? 0 : now - oldest,
+    busiest: busiest && busiest.pending ? busiest : null,
+  };
+};
+
+export { takeTurn, pendingTurns, backlog, keyOf };
