@@ -25,7 +25,6 @@ A file starts with a few lines of the form `Key: value`, then a blank line, then
 - `Venue: The members' room, Society Library` says where.
 - `Source: Household Words, No. 100, 21 February 1852` says where a reading was first printed.
 - `Pinned: yes` lifts a post to the top of the list on the home page. Use it for one notice at a time.
-- `Goal: 600` and `Raised: 410`, as plain numbers, draw a bar showing how far an appeal has got. Pair them with `Booking:` and `Action:` (see below) for a button to give.
 - `File: /_files/accounts-2026.pdf` adds a download link for a document that goes with the post, such as the accounts with the minutes.
 
 ## Events
@@ -58,7 +57,7 @@ Each tag has its own page, laid out to suit what it holds:
 A file with `Page: yes` is a page rather than a post. It isn't in the lists, and it has an address of its own.
 
 - `Link: /visit` sets the page's address.
-- `Menu: no` keeps a page out of the menu. You can still link to it. Here, About, Members, Visit and Join are in the menu; Rules, Contact, Support, Credits and this guide are linked from other pages instead.
+- `Menu: no` keeps a page out of the menu. You can still link to it. Here, About, Members, Visit and Join are in the menu; Rules, Contact, Credits and this guide are linked from other pages instead.
 - `Contents: yes` builds a table of contents in the margin from the page's `##` headings, and numbers them I, II, III, so don't number the headings yourself. The [Rules](/rules) page is written this way.
 - `Address:`, `Hours:`, `Phone:`, `Email:` and `Cost:` at the top of a page are shown as a short list of facts under its title, in that order. For example, `Hours: Second Tuesday of the month, 6:30–9 pm`.
 
@@ -84,12 +83,13 @@ The text is written in Markdown. Beyond the usual headings, lists and links:
 
 A line of three colons and a name, then some text, then three colons again, gives that text a style of its own:
 
-- `::: buttons` turns the links inside into buttons, the first one filled. `::: {.buttons .big}` makes them as large as the text, for the one thing a page asks, as on [Support](/support).
+- `::: buttons` turns the links inside into buttons, the first one filled, as on [Join](/join).
 - `::: steps` turns a numbered list into steps with large numerals, as on [Join](/join).
+- `::: download` around a list of links to files sets them as a list of downloads, each with its kind, as at the end of the [2026 minutes](/annual-meeting-2026).
 - `::: figures` turns a list like `- **1951** the first meeting` into a row of large figures, as on [About](/about).
 - `::: lead` sets an opening paragraph larger.
 - `::: note`, `::: tip`, `::: warning`, `::: info` and `::: success` box a short note, as on [Visit](/visit).
-- A single link can be a button anywhere: `[Give](/support){.button}`.
+- A single link can be a button anywhere: `[Join](/join){.button}`.
 
 Tables can go anywhere too: the dues on [Join](/join), the year's meetings on [Visit](/visit), the timetable of the stamp fair and the accounts in the 2026 minutes.
 

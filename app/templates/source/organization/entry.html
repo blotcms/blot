@@ -25,7 +25,6 @@
           </div>
           <h1>{{title}}</h1>
           {{#metadata.summary}}<p class="dek">{{metadata.summary}}</p>{{/metadata.summary}}
-          {{> progress}}
           {{! The facts: where (Venue and Address together, the address linked to a map), Hours, Phone, Email and Cost lines, any of them }}
           <dl class="facts">
             {{#metadata.venue}}<div><dt>Where</dt><dd>{{metadata.venue}}{{#metadata.address}}<br><a href="https://www.openstreetmap.org/search?query={{#encode_uri_component}}{{metadata.address}}{{/encode_uri_component}}">{{metadata.address}}</a>{{/metadata.address}}</dd></div>{{/metadata.venue}}

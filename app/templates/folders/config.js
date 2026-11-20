@@ -29,7 +29,7 @@ module.exports = {
     title: "New York Stamp Club",
     template: "SITE:organization",
     menu: [
-      { url: "/", label: "Meetings", id: "meetings" },
+      { url: "/", label: "Home", id: "front" },
       { url: "/about", label: "About", id: "/Pages/About.txt" },
       { url: "/visit", label: "Visit", id: "/Pages/Visit.txt" },
       { url: "/join", label: "Join", id: "/Pages/Join.txt" },

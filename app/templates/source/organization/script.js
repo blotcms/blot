@@ -130,6 +130,20 @@
     resize();
   });
 
+  // The tags in the menu: one the menu already links to goes, and the one
+  // whose page you're on gets the dot. (The menu's own links are marked by
+  // Blot.)
+  var menuPaths = {};
+  document.querySelectorAll(".bar .is-menu a").forEach(function (link) {
+    menuPaths[link.pathname.replace(/\/$/, "")] = true;
+  });
+  var here = window.location.pathname.replace(/\/page\/\d+\/?$/, "");
+  document.querySelectorAll(".bar .is-tag a").forEach(function (link) {
+    var path = link.pathname.replace(/\/$/, "");
+    if (menuPaths[path]) return link.parentNode.remove();
+    if (decodeURI(here) === decodeURI(path)) link.classList.add("is-current");
+  });
+
   // More in the menu closes when you click elsewhere or press Escape.
   document.querySelectorAll(".bar-more details").forEach(function (more) {
     document.addEventListener("click", function (event) {
@@ -444,7 +458,11 @@
       if (el.tagName !== "DETAILS") return;
       if (i > 0 && children[i - 1].tagName === "DETAILS") return;
       var run = [];
-      for (var j = i; j < children.length && children[j].tagName === "DETAILS"; j++)
+      for (
+        var j = i;
+        j < children.length && children[j].tagName === "DETAILS";
+        j++
+      )
         run.push(children[j]);
       if (run.length < 3) return;
 
@@ -467,7 +485,11 @@
   // where it's read, so it is right whatever day the page was published.
   var day = 24 * 60 * 60 * 1000;
   var startOf = function (date) {
-    return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    return new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate()
+    ).getTime();
   };
   document.querySelectorAll("time.relative[datetime]").forEach(function (time) {
     var when = new Date(time.getAttribute("datetime"));
@@ -475,15 +497,24 @@
     var days = Math.round((startOf(when) - startOf(new Date())) / day);
     if (days < 0) return;
     time.textContent =
-      days === 0 ? "Today" : days === 1 ? "Tomorrow" : days < 14 ? "In " + days + " days" : "";
+      days === 0
+        ? "Today"
+        : days === 1
+          ? "Tomorrow"
+          : days < 14
+            ? "In " + days + " days"
+            : "";
   });
 
   // Timeline: each year once, in the margin.
   var lastYear = null;
   // The list is shown oldest first (style.css reverses it), so walk it backwards
-  Array.prototype.slice.call(document.querySelectorAll(".timeline-item")).reverse().forEach(function (item) {
-    var year = item.getAttribute("data-year");
-    if (year === lastYear) item.classList.add("is-same-year");
-    lastYear = year;
-  });
+  Array.prototype.slice
+    .call(document.querySelectorAll(".timeline-item"))
+    .reverse()
+    .forEach(function (item) {
+      var year = item.getAttribute("data-year");
+      if (year === lastYear) item.classList.add("is-same-year");
+      lastYear = year;
+    });
 })();

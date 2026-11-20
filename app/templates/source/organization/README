@@ -41,7 +41,7 @@ Date the post itself the day you announce it, not the day of the event: Blot hol
 
 `Contents: yes` lists the page's sections in its margin and marks the one you're reading. Sections (`##` headings) are numbered I, II, III in the margin.
 
-**Pinned: yes** lifts a post to the top of the home page. **Appeals**: `Goal: 600` and `Raised: 410` (plain numbers) draw a progress bar; with `Booking:` and `Action: Give to the fund`, a button. **Documents**: `File: /_files/minutes.pdf` adds a download link.
+**Pinned: yes** lifts a post to the top of the home page. **Documents**: `File: /_files/minutes.pdf` adds a download link.
 
 **In the text:**
 
@@ -49,7 +49,7 @@ Date the post itself the day you announce it, not the day of the event: Blot hol
 - A question and answer as `<details><summary>Question?</summary>Answer</details>` **springs open**; three or more in a row get an Open all button.
 - **Layout tags** at the start of a line put things on the grid: `{<>}` across the whole page, `{<<}` and `{>>}` wide to one side, `{|<}` a note in the margin beside what follows, `{<}` and `{>}` a picture in the margin, `{||}` two halves, `{|||}` thirds, `{||||}` a quarter of the page, four in a row (people, sponsors, partners).
 - **Callouts** (with the Callouts plugin): `> [!note]`, `> [!tip]`, `> [!warning]`.
-- **Fenced divs**, three colons and a name around some text: `::: buttons` (its links as buttons; `::: {.buttons .big}` for a large one, like a Donate button), `::: steps`, `::: figures` (a row of large numbers), `::: lead`, and `::: note`, `tip`, `warning`, `info`, `success`. A single link becomes a button with `{.button}` after it.
+- **Fenced divs**, three colons and a name around some text: `::: buttons` (its links as buttons), `::: download` (links to files as a list of downloads), `::: steps`, `::: figures` (a row of large numbers), `::: lead`, and `::: note`, `tip`, `warning`, `info`, `success`. A single link becomes a button with `{.button}` after it.
 - **Tables** have a heavier rule under the header, scroll sideways on a phone, and fill the page inside `{<>}`.
 - Links to PDFs, documents and spreadsheets are labelled as such. Checklists, highlights, code, mathematics, citations, footnotes, tables, quotes, embedded videos and posts made from Word, HTML, Org, bookmark and image files are all set to match; the demo folder's Guide page shows each one.
 
@@ -59,7 +59,7 @@ Each tag can have its own layout, chosen in the settings under Tag pages: **rows
 
 ## Settings
 
-Colours and an accent colour; the Font (menu, lists, labels), Title font and Text font; a logo; posts per page; tag page layouts; the menu's last link as a button (Join, Donate); upcoming events on the home page; numbered sections; a menu that stays at the top. Under Details: tagline, when you meet, founded, address, email, phone, an announcement and its link, and links to your newsletter, donations and social accounts, which appear in the footer.
+Colours and an accent colour; the Font (menu, lists, labels), Title font and Text font; a logo; posts per page; tag page layouts; the menu's last link as a button (Join, say); upcoming events on the home page; numbered sections; a menu that stays at the top. Under Details: tagline, when you meet, founded, address, email, phone, an announcement and its link, and links to your newsletter, donations and social accounts, which appear in the footer.
 
 ## Try it
 

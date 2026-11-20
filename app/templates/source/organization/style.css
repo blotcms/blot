@@ -251,14 +251,20 @@ video {
 .bar-more ul {
   position: absolute;
   top: calc(100% + 9px);
-  left: -0.75rem;
-  min-width: 100%;
+  /* Lined up with the page's right edge, as wide as its longest link */
+  right: 0;
+  width: max-content;
+  min-width: calc(100% + 1.5rem);
+  max-width: min(20rem, 100vw - 2 * var(--pad));
+  overflow-wrap: normal;
   margin: 0;
   padding: 0.5rem 0.75rem;
   background: var(--paper);
   border: 1px solid var(--rule);
   list-style: none;
   line-height: var(--leading-m);
+  max-height: min(70vh, 30rem);
+  overflow-y: auto;
 }
 
 .bar-more li:is(:nth-child(1 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))), :nth-child(2 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]))), :nth-child(3 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) {
@@ -277,6 +283,13 @@ video {
 
 .bar-more ul a.is-current {
   text-decoration: underline;
+}
+
+/* A rule between the menu's links and the tags, when both are in More */
+.bar-more li.is-tag:is(:nth-child(n + 5 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))):is(.is-menu + *) {
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
+  border-top: 1px solid var(--rule);
 }
 
 .bar a {
@@ -1163,7 +1176,7 @@ nav[aria-label="Pages"] {
      ::: note, ::: tip, ::: warning, ::: info, ::: success
                      a boxed note, like a callout
 
-   A single link can be a button too: [Give](/support){.button} */
+   A single link can be a button too: [Join](/join){.button} */
 .text > .buttons p {
   display: flex;
   flex-wrap: wrap;
@@ -1197,12 +1210,6 @@ nav[aria-label="Pages"] {
 
 .text > .buttons {
   margin-block: var(--leading-serif-l);
-}
-
-/* ::: {.buttons .big}: the size of the text, for the one thing a page asks */
-.text .buttons.big a {
-  padding: 0.6em 1.4em;
-  font-size: var(--size-serif-l);
 }
 
 .text > .lead p {
@@ -1682,7 +1689,7 @@ nav[aria-label="Pages"] {
 /* Booking: and Action: on an event, and the menu's call to action (Last
    menu link as a button, in the settings) */
 .button,
-.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) a {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .is-menu)) a {
   display: inline-block;
   justify-self: start;
   padding: 4px 10px;
@@ -1699,23 +1706,42 @@ nav[aria-label="Pages"] {
 }
 
 .button:hover,
-.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) a:hover {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .is-menu)) a:hover {
   text-decoration: none;
   opacity: 0.85;
 }
 
-.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .is-menu)) {
   justify-self: start;
   margin-top: -4px;
   margin-bottom: -4px;
 }
 
-.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) .dot {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .is-menu)) .dot {
   display: none;
 }
 
-.bar.has-button .bar-item:is(:nth-last-child(1 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) a.is-current .label {
+.bar.has-button .bar-item:is(:nth-last-child(1 of .is-menu)) a.is-current .label {
   transform: none;
+}
+
+/* With tags after it, the button would be pushed into More: it keeps the
+   fourth column, and More takes the third */
+.bar.has-button nav > ul:has(> :nth-child(5 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) > :is(:nth-child(3 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) {
+  display: none;
+}
+
+.bar.has-button nav > ul:has(> :nth-child(5 of .bar-item:not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) > .bar-item:is(:nth-last-child(1 of .is-menu)) {
+  display: block;
+  order: 1;
+}
+
+.bar.has-button .bar-more li:is(:nth-child(3 of :not(:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"])))) {
+  display: block;
+}
+
+.bar.has-button .bar-more li:is(:nth-last-child(1 of .is-menu)) {
+  display: none;
 }
 
 /* Today, Tomorrow, In 5 days (script.js), beside an upcoming event's date */
@@ -1853,44 +1879,47 @@ nav[aria-label="Pages"] {
   grid-column: 2 / 4;
 }
 
-/* Goal: and Raised: */
-.progress {
-  display: block;
-  max-width: 24em;
-  margin: 0.5rem 0;
-}
-
-.project-header .progress {
-  grid-column: 2 / 5;
-}
-
-.progress progress {
-  display: block;
-  width: 100%;
-  height: 6px;
-  margin-bottom: 0.25em;
-  border: 0;
-  border-radius: 0;
-  background: var(--rule);
-  accent-color: var(--accent);
-  appearance: none;
-}
-
-.progress progress::-webkit-progress-bar {
-  background: var(--rule);
-}
-
-.progress progress::-webkit-progress-value {
-  background: var(--accent);
-}
-
-.progress progress::-moz-progress-bar {
-  background: var(--accent);
-}
-
 /* File: a download link */
-.download::before {
+a.download::before {
   content: "↓ ";
+}
+
+/* ::: download around links to files: a ruled list, one file a row, its
+   kind (PDF, SHEET ...) at the end */
+.text > .download {
+  margin-block: var(--leading-serif-l);
+  border-top: 1px solid var(--ink);
+  font: var(--size-m) / var(--leading-m) var(--font-sans);
+}
+
+.text > .download :is(p, ul, ol, li) {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  text-indent: 0;
+}
+
+.text > .download a {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6em;
+  padding: 0.6em 0;
+  border-bottom: 1px solid var(--rule);
+  color: inherit;
+  text-decoration: none;
+}
+
+.text > .download a::before {
+  content: "↓";
+  color: var(--accent);
+}
+
+.text > .download a:hover {
+  color: var(--accent);
+}
+
+.text > .download a::after {
+  margin-left: auto;
 }
 
 /* People (a tag page layout): cards on the columns */
