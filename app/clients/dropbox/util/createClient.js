@@ -6,6 +6,7 @@ const { Dropbox } = require("dropbox");
 const database = require("../database");
 const config = require("config");
 const accessTokenCache = require("./accessTokenCache");
+const fetch = require("./fetch");
 
 // Resolves to { error, client, account } and never rejects, since the caller
 // sometimes needs the account even when there is an error with the client
@@ -27,7 +28,7 @@ module.exports = async function createClient(blogID) {
     };
   }
 
-  const client = new Dropbox();
+  const client = new Dropbox({ fetch });
 
   client.auth.setAccessToken(account.access_token);
 
