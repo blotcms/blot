@@ -197,7 +197,7 @@ function watchLateArrival(blogID, initialDirNames, outcome) {
  */
 const setupBlog = setupLimiter.wrap(async (blogID, sharingLink, progress) => {
   try {
-    await setupFolder(blogID, sharingLink, progress);
+    return await setupFolder(blogID, sharingLink, progress);
   } catch (error) {
     // Record what is on screen before the reset wipes it
     await recordDiagnostics(
@@ -385,7 +385,8 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
       );
       watchRename(newDirName, newPath, blogID);
       progress("Joined your folder");
-      return; // Setup is complete, exit the loop
+      // The name the owner gave the folder, for the dashboard
+      return { folderName: newDirName };
     }
 
     if (Date.now() - lastProgress > 10000) {
@@ -794,12 +795,13 @@ export default async (req, res) => {
   progress("Starting");
 
   setupBlog(blogID, sharingLink, progress)
-    .then(() => {
+    .then((result) => {
       console.log(clfdate(), `Setup complete for blogID: ${blogID}`);
       return reportStatus({
         acceptedSharingLink: true,
         error: null,
         setupErrorReason: null,
+        folderName: (result && result.folderName) || null,
       });
     })
     .catch((error) => {
