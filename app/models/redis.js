@@ -78,15 +78,21 @@ function forgetOwnWrites(client, cache) {
 // caching" in config/redis/README.md.
 // Pass { clientSideCache: false } for a client which never reads cacheable
 // keys (the pubsub subscriber), so Redis does not track anything for it.
+// Entries the client cache keeps beside its capped classes, for the
+// uncapped blog, domain, handle and template keys
+const BLOG_KEY_ROOM = 6500;
+const CAPPED_ENTRIES = Object.values(
+  AllowlistClientSideCache.CLASS_CAPS
+).reduce((sum, cap) => sum + cap, 0);
+
 function createRedisClient({ clientSideCache: useCache = true } = {}) {
   const clientSideCache = useCache
     ? new AllowlistClientSideCache({
         ttl: 0,
-        // Above the capped classes' shares (CLASS_CAPS in models/redis-cache)
-        // plus a few hot keys for every blog (its handle or domain, info,
+        // The capped classes' shares (CLASS_CAPS in models/redis-cache) plus
+        // room for a few hot keys for every blog (its handle or domain, info,
         // template and patterns), so the blog keys are never evicted to make
-        // room. Raised from 10,000 by the view and views caps when those
-        // were added (20 Nov 2026), so the keys already cached keep theirs.
+        // room, however the caps change.
         //
         // Memory, measured 3 Nov 2026: a cached entry costs about its value's
         // size in the heap plus about 300 bytes of bookkeeping (patterns and
@@ -99,7 +105,7 @@ function createRedisClient({ clientSideCache: useCache = true } = {}) {
         // each class's cap (read-only); then locally fill this cache with
         // values of those sizes built from flat strings (random bytes, not
         // padEnd, which V8 can share) and compare heapUsed after gc().
-        maxEntries: 12500,
+        maxEntries: CAPPED_ENTRIES + BLOG_KEY_ROOM,
         evictPolicy: "LRU",
       })
     : undefined;

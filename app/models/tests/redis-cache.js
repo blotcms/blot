@@ -289,7 +289,7 @@ describe("models/redis-cache", function () {
       const client = createRedisClient();
       const { maxEntries } = createRedisClient.getClientSideCacheStats(client);
       const capped = Object.values(Cache.CLASS_CAPS).reduce((a, b) => a + b, 0);
-      expect(maxEntries).toBeGreaterThan(capped * 2);
+      expect(maxEntries - capped).toBeGreaterThanOrEqual(6000);
     });
   });
 
