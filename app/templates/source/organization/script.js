@@ -144,6 +144,12 @@
     if (decodeURI(here) === decodeURI(path)) link.classList.add("is-current");
   });
 
+  // Checklists are for reading: their boxes can't be ticked from the
+  // keyboard either (style.css stops clicks)
+  document.querySelectorAll(".task-list input").forEach(function (box) {
+    box.disabled = true;
+  });
+
   // More in the menu closes when you click elsewhere or press Escape.
   document.querySelectorAll(".bar-more details").forEach(function (more) {
     document.addEventListener("click", function (event) {

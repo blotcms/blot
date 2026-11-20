@@ -1077,10 +1077,35 @@ nav[aria-label="Pages"] {
   list-style: none;
 }
 
+/* A checklist is for reading, not ticking: each box is a circle, filled
+   with the accent and a tick when it's done */
+.text .task-list label {
+  display: block;
+  position: relative;
+  padding-left: 1.6em;
+  pointer-events: none;
+}
+
 .text .task-list input {
-  margin: 0 0.6em 0 0;
-  accent-color: var(--accent);
-  vertical-align: 0.05em;
+  position: absolute;
+  /* Centred on the first line */
+  top: calc((1lh - 0.95em) / 2);
+  left: 0;
+  width: 0.95em;
+  height: 0.95em;
+  font-size: inherit;
+  margin: 0;
+  border: 1.5px solid var(--quiet);
+  border-radius: 50%;
+  background: transparent center / 70% no-repeat;
+  appearance: none;
+  pointer-events: none;
+}
+
+.text .task-list input:checked {
+  border-color: var(--accent);
+  background-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.3 5 8.7l4.5-5' fill='none' stroke='%23fff' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 /* Maths: a long equation scrolls rather than widening the page */
