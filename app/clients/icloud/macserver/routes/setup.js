@@ -277,7 +277,17 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
 
   progress("Opening the sharing link");
   console.log(clfdate(), "running the acceptSharingLink script");
-  const outcome = await acceptSharingLink(sharingLink);
+  // The script can take a while to see how Finder answers; say so meanwhile
+  const stillOpening = setInterval(
+    () => progress("Still opening the sharing link"),
+    8000
+  );
+  let outcome;
+  try {
+    outcome = await acceptSharingLink(sharingLink);
+  } finally {
+    clearInterval(stillOpening);
+  }
   lap("acceptSharingLink");
 
   if (SETUP_ERRORS[outcome] && outcome !== "TIMEOUT") {
