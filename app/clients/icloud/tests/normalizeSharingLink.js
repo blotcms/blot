@@ -41,4 +41,10 @@ describe("normalizeSharingLink", function () {
     );
     expect(normalizeSharingLink("link@blot.im")).toBe(null);
   });
+  it("stays quick on long runs of quote marks", function () {
+    const start = Date.now();
+    expect(normalizeSharingLink('"'.repeat(100000) + "x")).toBe(null);
+    expect(normalizeSharingLink("x" + '"'.repeat(100000))).toBe(null);
+    expect(Date.now() - start).toBeLessThan(500);
+  });
 });

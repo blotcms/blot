@@ -111,7 +111,7 @@
           {{/setup.linked}}
         </li>
 
-        <li class="{{^setup.linked}}todo{{/setup.linked}}{{#setup.working}}active{{/setup.working}}{{#setup.stuck}}problem{{/setup.stuck}}">
+        <li class="{{^setup.linked}}todo{{/setup.linked}}{{#setup.working}}active{{/setup.working}}{{#setup.stuck}}problem{{/setup.stuck}}"{{#setup.joining}}{{^setup.slow}} data-slow-in="{{setup.slowInMs}}"{{/setup.slow}}{{/setup.joining}}>
           {{#setup.working}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.working}}
           {{#setup.stuck}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.stuck}}
           <span class="step-title">Blot sets up the folder</span>
@@ -130,13 +130,19 @@
           {{#setup.transferFailed}}
           <span class="step-problem">Blot joined your folder but couldn’t finish copying your site’s files into it. Nothing was removed.{{#setup.transferDetail}} ({{setup.transferDetail}}){{/setup.transferDetail}}</span>
           {{/setup.transferFailed}}
-          {{#setup.stuck}}
+          {{#setup.slow}}
           <form action="{{{base}}}/set-up-folder" method="post" class="icloud-retry">
             <input type="hidden" name="_csrf" value="{{csrftoken}}">
             <input type="hidden" name="sharingLink" value="{{setup.sharingLink}}">
             <div class="buttons"><button type="submit">Try again</button></div>
           </form>
-          {{/setup.stuck}}
+          {{/setup.slow}}
+          {{#setup.transferFailed}}
+          <form action="{{{base}}}/retry-transfer" method="post" class="icloud-retry">
+            <input type="hidden" name="_csrf" value="{{csrftoken}}">
+            <div class="buttons"><button type="submit">Try again</button></div>
+          </form>
+          {{/setup.transferFailed}}
         </li>
 
       </ol>
@@ -154,6 +160,24 @@
 {{/setup.complete}}
 
 </div>
+
+<script>
+  // Re-render once a join has run long enough to say so: the live updates
+  // only come with status messages, and a lost answer sends none
+  (function () {
+    var seen = null;
+    var due = 0;
+    setInterval(function () {
+      var step = document.querySelector("[data-slow-in]");
+      if (!step) return (seen = null);
+      if (step !== seen) {
+        seen = step;
+        due = Date.now() + Number(step.getAttribute("data-slow-in")) + 1000;
+      }
+      if (Date.now() > due) location.reload();
+    }, 5000);
+  })();
+</script>
 
 <style>
 .icloud-note {

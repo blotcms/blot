@@ -114,6 +114,18 @@ module.exports = function setupState(account, options = {}) {
     typeof account.setupStartedAt === "number" &&
     (options.now || Date.now()) - account.setupStartedAt > SLOW_JOIN_MS;
 
+  // How long until the note above is due, so the page can re-render then:
+  // nothing else would, if the macserver's answer never comes
+  state.slowInMs =
+    stage === "joining" &&
+    !state.slow &&
+    typeof account.setupStartedAt === "number"
+      ? Math.max(
+          0,
+          account.setupStartedAt + SLOW_JOIN_MS - (options.now || Date.now())
+        )
+      : null;
+
   // Step 3: Blot is busy (spinner), or stuck and needs a retry
   state.working = (state.joining && !state.slow) || state.copying;
   state.stuck = state.slow || state.transferFailed;

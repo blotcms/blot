@@ -4,6 +4,7 @@ const express = require("express");
 const fetch = require("../util/rateLimitedFetchWithRetriesAndTimeout");
 const normalizeSharingLink = require("../util/normalizeSharingLink");
 const setupState = require("../util/setupState");
+const initialTransfer = require("../sync/initialTransfer");
 const dashboard = new express.Router();
 const parseBody = require("helper/bodyParser").urlencoded({ extended: false });
 const config = require("config"); // For accessing configuration values
@@ -236,6 +237,34 @@ dashboard
       next(error); // Pass the error to the error handler
     }
   });
+
+// Copy the site's files into a folder Blot already joined, after that copy
+// failed. Setting up again wouldn't help: the macserver already has the
+// folder, so accepting the same link again brings no new folder to claim
+dashboard.post("/retry-transfer", async function (req, res) {
+  const account = res.locals.account;
+
+  if (
+    !account ||
+    account.acceptedSharingLink !== true ||
+    account.setupComplete === true
+  ) {
+    return res.redirect(req.baseUrl);
+  }
+
+  res.redirect(req.baseUrl);
+
+  // It takes the sync lock and records its own progress and failure, which
+  // the checklist shows
+  try {
+    await initialTransfer(req.blog.id);
+  } catch (error) {
+    console.error(
+      `iCloud transfer retry failed for blogID: ${req.blog.id}`,
+      error.message
+    );
+  }
+});
 
 dashboard.post("/cancel", async function (req, res, next) {
   try {

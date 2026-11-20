@@ -131,4 +131,13 @@ describe("icloud setupState", function () {
       true
     );
   });
+  it("says how long until the slow note is due", function () {
+    const account = { sharingLink: link, setupStartedAt: 1000 };
+    expect(setupState(account, { email, now: 1000 + 30 * 1000 }).slowInMs).toBe(
+      90 * 1000
+    );
+    expect(
+      setupState(account, { email, now: 1000 + 3 * 60 * 1000 }).slowInMs
+    ).toBe(null);
+  });
 });
