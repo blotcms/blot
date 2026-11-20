@@ -691,7 +691,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
               changed.set(dirId, dir);
           } else if (!existsLocally || !existsLocally.isDirectory) {
             changed.set(dirId, dir);
-          } else {
+          } else if (recurse) {
             await walk(path, id, true);
           }
           continue;
@@ -949,7 +949,25 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     // it walks are applied without waiting for it (sync/index.js)
     canYield = Boolean(options.dirty);
     try {
-      await pass(() => walk("/", folderId));
+      // With options.only, just those directories, not below them: the
+      // directories that changed in the last few minutes, checked beside the
+      // full detection so a change in one is found in one listing. The
+      // directories are listed side by side (the walk changes nothing
+      // here, so they can't get in each other's way)
+      if (options.only) {
+        await pass(
+          () =>
+            Promise.all(
+              options.only.map(async (id) => {
+                const path = id === folderId ? "/" : await getPath(id);
+                if (path) await walk(path, id, false);
+              })
+            ),
+          { ahead: false }
+        );
+      } else {
+        await pass(() => walk("/", folderId));
+      }
       return {
         changed: [...changed.keys()],
         paths: [...changed.values()],

@@ -228,6 +228,8 @@ function harness({
     );
   state.detect = (dirty) =>
     module.exports("blog", null, null, { detectOnly: true, dirty });
+  state.detectOnly = (only) =>
+    module.exports("blog", null, null, { detectOnly: true, only });
   return state;
 }
 
@@ -462,5 +464,23 @@ describe("google-drive sync() detecting what changed", function () {
     expect(options.seenAt).toBe(1234);
     expect(options.seenBy).toBe("changes");
     expect(options.downloadedAt).not.toBeLessThan(before);
+  });
+
+  it("checks just the given directories, not below them, with only", async function () {
+    const h = harness({
+      local: allDirs,
+      upToDate: everyFile.filter(
+        (path) => path !== "/d04/b.txt" && path !== "/d07/a.txt"
+      ),
+    });
+
+    expect(await h.detectOnly(["dir-4", "root"])).toEqual({
+      changed: ["dir-4"],
+      paths: ["/d04"],
+      full: false,
+    });
+    // d07 differs too, but only a full detection reaches it
+    expect(h.listed.sort()).toEqual(["dir-4", "root"]);
+    expect(h.downloads).toEqual([]);
   });
 });
