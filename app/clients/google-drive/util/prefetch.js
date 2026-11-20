@@ -68,6 +68,9 @@ function start(drive, { id, md5Checksum, size }) {
   const entry = { bytes };
   held += bytes;
   entry.promise = limited(async () => {
+    // Taken before its turn came: the apply downloads it itself
+    if (entry.cancelled) return null;
+    entry.started = true;
     const tempPath = join(tempDir, guid());
     try {
       const res = await drive.files.get(
@@ -93,15 +96,23 @@ function start(drive, { id, md5Checksum, size }) {
   entries.set(key, entry);
 }
 
-// The downloaded file, { tempPath, hashes, downloadedAt }, now the caller's to move or
-// remove, waiting for a download still running; or null when there is none
-// or it failed, and the caller downloads it as before
+// The downloaded file, { tempPath, hashes, downloadedAt }, now the caller's
+// to move or remove, waiting for a download already running; or null when
+// there is none, it hasn't started, or it failed, and the caller downloads it
+// as before
 async function take(id, md5Checksum) {
   if (!id || !md5Checksum) return null;
   const key = keyOf(id, md5Checksum);
   const entry = entries.get(key);
   if (!entry) return null;
   forget(key, entry);
+  // Still queued behind other prefetches (another blog's bulk upload, say):
+  // the caller holds a folder lock, so it downloads the file itself rather
+  // than wait for them
+  if (!entry.started) {
+    entry.cancelled = true;
+    return null;
+  }
   try {
     return await entry.promise;
   } catch (err) {
@@ -109,11 +120,21 @@ async function take(id, md5Checksum) {
   }
 }
 
-// Forgets and deletes everything held, for the specs
+// Forgets everything held, for the specs. Queued downloads won't start, and
+// finished ones are deleted; one still running is deleted once it finishes.
 async function clear() {
   const all = [...entries];
-  for (const [key, entry] of all) forget(key, entry);
-  await Promise.all(all.map(([, entry]) => discard(entry)));
+  for (const [key, entry] of all) {
+    forget(key, entry);
+    entry.cancelled = true;
+  }
+  const settled = (entry) =>
+    Promise.race([entry.promise, Promise.resolve("running")]);
+  for (const [, entry] of all) {
+    if ((await settled(entry).catch(() => null)) !== "running")
+      await discard(entry);
+    else discard(entry);
+  }
 }
 
 module.exports = { start, take, clear, MAX_BYTES, MAX_ENTRIES };

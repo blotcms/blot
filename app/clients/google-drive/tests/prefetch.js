@@ -97,4 +97,26 @@ describe("google drive prefetch", function () {
     expect(await prefetch.take("a", md5("x"))).toBe(null);
     expect(fetched).toEqual([]);
   });
+
+  it("hands over nothing for a prefetch still queued, and never starts it", async function () {
+    // Four downloads that never finish fill every slot
+    const stuck = {
+      files: {
+        get: async ({ fileId }) => {
+          fetched.push(fileId);
+          return new Promise(() => {});
+        },
+      },
+    };
+    for (const id of ["a", "b", "c", "d"])
+      prefetch.start(stuck, { id, md5Checksum: md5(id) });
+    prefetch.start(drive({ e: "small" }), {
+      id: "e",
+      md5Checksum: md5("small"),
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(await prefetch.take("e", md5("small"))).toBe(null);
+    expect(fetched).toEqual(["a", "b", "c", "d"]);
+  });
 });
