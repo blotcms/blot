@@ -14,7 +14,7 @@ describe("template source editor save", function () {
   const LIMIT = 5 * 1024 * 1024;
 
   beforeEach(async function () {
-    this.template = await Template.create(this.blog.id, "gzip-test");
+    this.template = await Template.create(this.blog.id, "gzip-test", {});
     await Template.setView(this.template.id, {
       name: "script.js",
       url: "/script.js",
