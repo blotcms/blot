@@ -76,7 +76,7 @@ needs the maintainer's go-ahead; `blot-node-<slot>` for a local preview):
     node scripts/discover/profile.js <site> --name … --bio … --avatar <URL or file>
 
 `set-text` replaces the post's own text and title on its card with the text
-given: above the photos, or as the excerpt of a card without them. `""` goes back
+given, with a blank line between paragraphs: above the photos, or as the excerpt of a card without them. `""` goes back
 to the post's. Re-adding the post keeps it.
 
 `add.js` puts each post on Discover with up to 3 of its photos (`--photos 0`

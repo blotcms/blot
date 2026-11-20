@@ -188,6 +188,14 @@ describe("models/discover", function () {
     expect((await Discover.list()).posts[0].text).toEqual([
       "Written for the card",
     ]);
+
+    await Discover.setText(id, "One\nparagraph.\n \n\nAnother one.");
+    expect((await Discover.list()).posts[0].text).toEqual([
+      "One paragraph.",
+      "Another one.",
+    ]);
+
+    await Discover.setText(id, "  Written   for the card ");
     expect((await Discover.list()).posts[0].ownText).toBe(true);
 
     await Discover.add(blogID, post.id, await derive());

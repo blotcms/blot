@@ -38,7 +38,7 @@ function paragraphs(entry) {
 // The paragraphs above a card's photos: the text the maintainer wrote for it,
 // or the post's own when the card shows it
 function cardText(record, entry) {
-  if (record.text) return [record.text];
+  if (record.text) return record.text.split("\n\n");
   return record.showText ? paragraphs(entry) : [];
 }
 
@@ -147,7 +147,10 @@ function card(record, blog, entry) {
       height: photo.height,
       first: index === 0,
     })),
-    excerpt: shown.length ? "" : record.text || excerpt(entry && entry.summary),
+    excerpt: shown.length
+      ? ""
+      : (record.text || "").replace(/\n\n/g, " ") ||
+        excerpt(entry && entry.summary),
     showText: record.showText,
     // The card's own text stands alone, without the post's title above it
     ownText: !!record.text,
