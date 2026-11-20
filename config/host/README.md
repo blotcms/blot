@@ -524,7 +524,7 @@ come back with `--bans-file`.
   backup and restore"). `host/setup.sh` installs `rclone` (from the Amazon
   Linux 2023 repository), the scripts in `config/storage-bucket/bin` at
   `/usr/local/lib/blot-storage/`, `blot-storage-offsite.service` (as
-  `ec2-user`, `MemoryMax=768M` (two blogs at a time), `OOMPolicy=continue`, low CPU and IO priority, logging to
+  `ec2-user`, `MemoryMax=512M` (one blog at a time), `OOMPolicy=continue`, low CPU and IO priority, logging to
   `~ec2-user/storage-offsite.log`, rotated monthly by
   `/etc/logrotate.d/blot-storage-offsite`) and `blot-storage-offsite.timer`
   (daily at 02:10 UTC, enabled on every host). It does nothing until the host
