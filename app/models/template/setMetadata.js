@@ -10,7 +10,10 @@ var updateCdnManifest = require("./util/updateCdnManifest");
 var cacheID = require("./util/cacheID");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 
-module.exports = async function setMetadata(id, updates) {
+// Resolves to whether anything changed. The template's CDN manifest is
+// updated afterwards, changed or not, unless options.skipManifest (for a
+// caller which updates it once it has saved everything, see readFromFolder).
+module.exports = async function setMetadata(id, updates, options = {}) {
   ensure(id, "string").and(updates, "object");
 
   var metadata;
@@ -57,7 +60,7 @@ module.exports = async function setMetadata(id, updates) {
 
   if (changes) await cacheID.bumpBlogIfInstalled(owner, id);
 
-  await updateCdnManifest(id);
+  if (!options.skipManifest) await updateCdnManifest(id);
 
   return changes;
 };

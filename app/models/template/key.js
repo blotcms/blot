@@ -32,6 +32,12 @@ module.exports = {
     return "template:" + name + ":view_sources";
   },
 
+  // Set while readFromFolder updates the template's CDN manifest, so a failed
+  // update is retried by the next build even if nothing else changed
+  manifestPending: function manifestPending(name) {
+    return "template:" + name + ":manifest_pending";
+  },
+
   blogTemplates: function blogTemplates(blogID) {
     return "template:owned_by:" + blogID;
   },

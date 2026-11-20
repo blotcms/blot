@@ -5,6 +5,7 @@ var setMetadata = require("./setMetadata");
 var getView = require("./getView");
 var makeID = require("./util/makeID");
 var setView = require("./setView");
+var updateCdnManifest = require("./util/updateCdnManifest");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var MAX_SIZE = 2.5 * 1000 * 1000; // 2.5mb
 var PACKAGE = "package.json";
@@ -135,7 +136,7 @@ module.exports = async function readFromFolder(blogID, dir) {
     view.url = view.url || "/" + view.name;
 
     try {
-      await setView(id, view, { source });
+      await setView(id, view, { source, skipManifest: true });
     } catch (err) {
       // we expose this error to the developer on
       // the preview subdomain
@@ -147,13 +148,32 @@ module.exports = async function readFromFolder(blogID, dir) {
   // or without a package.json: every sync rebuilds it from these
   // files, so dashboard saves must be written back to them
   // (dashboard/site/template/save/writeChangeToFolder.js)
-  await setMetadata(id, { errors, localEditing: true });
+  await setMetadata(id, { errors, localEditing: true }, { skipManifest: true });
 
   if (enabled === true) {
     await Blog.set(blogID, { template: id });
   }
 
-  return getMetadata(id);
+  // The CDN manifest renders and minifies every view it links, so it is
+  // updated once, here, rather than after each view saved. setView and
+  // setMetadata give the template a new cacheID whenever they change it. An
+  // update that fails leaves its key behind, so the next build updates the
+  // manifest again even when nothing else has changed by then.
+  var after = await getMetadata(id);
+  var pendingKey = key.manifestPending(id);
+
+  if (
+    !template ||
+    after.cacheID !== template.cacheID ||
+    (await client.exists(pendingKey)) > 0
+  ) {
+    await client.set(pendingKey, "1");
+    await updateCdnManifest(id);
+    await client.del(pendingKey);
+    after = await getMetadata(id);
+  }
+
+  return after;
 };
 
 // The file's bytes (its SHA-1, from the folder's index) and the view's
@@ -192,7 +212,7 @@ async function loadPackage(blogID, id, dir) {
   }
 
   try {
-    var views = await savePackage(id, metadata);
+    var views = await savePackage(id, metadata, { skipManifest: true });
     return { views: views, enabled: metadata.enabled };
   } catch (err) {
     return { error: err, views: err.views, enabled: metadata.enabled };
