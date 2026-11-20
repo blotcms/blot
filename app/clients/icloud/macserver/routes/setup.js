@@ -359,18 +359,10 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
       // finderLimiter
       if (await fs.pathExists(newPath)) {
         const earlier = await refreshBlogFolder(blogID);
-        console.error(
-          clfdate(),
-          `Replacing existing ${earlier.nested ? "nested " : ""}folder for ${blogID}`
-        );
-        if (earlier.nested) {
-          if (earlier.root)
-            await leaveFolder(earlier.root, { root: iCloudDriveDirectory });
-          await removeContainer(blogID);
-        } else {
-          console.error(clfdate(), `share: ${await shareInfo(newPath)}`);
-          await leaveFolder(newPath, { root: iCloudDriveDirectory });
-        }
+        console.error(clfdate(), `Replacing existing folder for ${blogID}`);
+        if (earlier.root)
+          await leaveFolder(earlier.root, { root: iCloudDriveDirectory });
+        await removeContainer(blogID);
       }
 
       // Nest the folder in blog_<id> under the owner's name, rather than
@@ -840,6 +832,3 @@ export default async (req, res) => {
 
   return res.status(202).json({ accepted: true });
 };
-
-// For the migration to the nested layout (routes/migrate.js)
-export { setupBlog, shareInfo };
