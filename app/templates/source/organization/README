@@ -47,9 +47,9 @@ Date the post itself the day you announce it, not the day of the event: Blot hol
 
 - Several pictures on consecutive lines become a **carousel**: a counter, captions, arrows; drag, swipe or use the keys.
 - A question and answer as `<details><summary>Question?</summary>Answer</details>` **springs open**; three or more in a row get an Open all button.
-- **Layout tags** at the start of a line put things on the grid: `{<>}` across the whole page, `{|<}` a note in the margin beside what follows, `{||||}` a quarter of the page, four in a row (people, sponsors, partners), `{||}` two halves.
+- **Layout tags** at the start of a line put things on the grid: `{<>}` across the whole page, `{<<}` and `{>>}` wide to one side, `{|<}` a note in the margin beside what follows, `{<}` and `{>}` a picture in the margin, `{||}` two halves, `{|||}` thirds, `{||||}` a quarter of the page, four in a row (people, sponsors, partners).
 - **Callouts** (with the Callouts plugin): `> [!note]`, `> [!tip]`, `> [!warning]`.
-- Links to PDFs, documents and spreadsheets are labelled as such. Footnotes, tables and quotes are set to match.
+- Links to PDFs, documents and spreadsheets are labelled as such. Checklists, highlights, code, mathematics, citations, footnotes, tables, quotes, embedded videos and posts made from Word, HTML, Org, bookmark and image files are all set to match; the demo folder's Guide page shows each one.
 
 ## Tag pages
 

@@ -78,6 +78,35 @@ The text is written in Markdown. Beyond the usual headings, lists and links:
 - `[^1]` in the text, and `[^1]: The note.` at the end, makes a footnote.
 - Tables are written with pipes and dashes, as in the [Contact](/contact) page.
 - A link to a PDF or other document, such as `[the accounts (PDF)](/_files/accounts-2026.pdf)`, gets a small label saying what kind of file it is.
+- `{<<}` and `{>>}` make a picture wider than the text, out to the left or the right. `{<}` and `{>}` put a picture in the margin beside the next paragraph. `{|||}` makes a third of the page, three to a row. [New in the library](/new-in-the-library) uses all of them.
+
+## More Markdown
+
+Two posts use the rest of what Markdown can do: [Getting ready for the show and tell](/getting-ready-for-the-show-and-tell) and [Counting holes](/counting-holes). Between them:
+
+- `- [ ] Bring a stamp` and `- [x] Book the room` make a checklist.
+- `~~Thursday~~` strikes words out, and `==important==` highlights them.
+- Lists can count in other ways: `i.` for roman numerals, `A.` (with two spaces after the full stop) for letters, and `9)` to start at nine.
+- `[[The Christmas show and tell]]` links to another post by its title, and `[[#How the vote works]]` to a heading on the same page. `![[/Pages/Bring and buy.txt]]` shows the whole of another page in this one.
+- `$\ell$` in a sentence, or `$$` on lines of their own, sets mathematics.
+- Three backticks and a language name, as in `` ```python ``, start a block of code, coloured to suit. Indenting by four spaces makes a plain one, and `backticks` mark code in a sentence.
+- `Bibliography: /_files/references.bib` at the top, and `[@queenshead]` in the text, cite a source and list it at the end.
+- `^[A note.]` makes a footnote without numbering it yourself.
+- `::: {.wide}` on a line, then text, then `:::`, puts a block on the grid like a layout tag. `[Perforation]{.smallcaps}` sets a word in small capitals.
+- A YouTube, Vimeo or Bandcamp link on a line of its own becomes a player, as in [The Swingin' Six and the ZIP code](/the-swingin-six-and-the-zip-code).
+- Any HTML works too, such as `<kbd>Ctrl</kbd>`.
+
+## Other kinds of file
+
+Not every post has to be a text file:
+
+- A Word document is a post, like the 2023 minutes in `Minutes`. Put the `Date:` and `Tags:` lines at the top of the document.
+- An HTML file is a post or page, like the [membership card](/card).
+- An Org file (`.org`), for people who write in Emacs, like the summer swap in `Meetings`.
+- A bookmark (a `.webloc` or `.url` file, dragged from a browser's address bar) is a post that links somewhere else, like the Penny Black in `Readings`.
+- An image is a post of its own, captioned with its file name, as in the `Gallery` folder.
+- A folder whose name ends in a plus sign, such as `The Perforation, No. 147 +`, is one post made of every file inside it, in order.
+- A folder name in square brackets, such as `[Gallery]`, tags every file inside it. That is how the bookmark and the images, which have no lines at the top, get their tags.
 
 ## Settings that are not files
 

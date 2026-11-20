@@ -658,7 +658,9 @@ nav[aria-label="Pages"] {
    so Blot's layout tags land on the columns:
 
      {<>} wide          all four columns
+     {<<} {>>}          columns 1-3 or 2-4
      {>|} {|<} margin   column 1, beside what follows it
+     {<} {>} inside     column 1 too: there is no floating on a grid
      {||} two column    halves of the page
      {|||} three column columns 2, 3 and 4
      {||||} four column a column each, four to a row (people, cards)
@@ -854,6 +856,18 @@ nav[aria-label="Pages"] {
 
 .text pre {
   overflow-x: auto;
+  line-height: 1.5;
+}
+
+.text pre code {
+  line-height: inherit;
+}
+
+/* ==Highlighted== text: a wash of the accent colour */
+.text mark {
+  padding: 0 0.1em;
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: inherit;
 }
 
 .text pre,
@@ -974,6 +988,93 @@ nav[aria-label="Pages"] {
 
 .text > :not(.column.three) + .column.three {
   grid-column: 2 / span 1;
+}
+
+/* {<} and {>} float a picture inside the text. On this grid there is no
+   floating, so both put it in the margin column beside the next paragraph,
+   at the margin's full width. */
+.text > .inside {
+  grid-column: 1;
+  align-self: start;
+  max-width: none;
+  margin-top: 0.3em;
+  font: var(--size-s) / var(--leading-m) var(--font-sans);
+}
+
+.text > .inside img {
+  width: 100%;
+}
+
+.text > p:empty {
+  display: none;
+}
+
+/* Checklists (- [ ] and - [x]) */
+.text .task-list {
+  padding-left: 0;
+  list-style: none;
+}
+
+.text .task-list input {
+  margin: 0 0.6em 0 0;
+  accent-color: var(--accent);
+  vertical-align: 0.05em;
+}
+
+/* Maths: a long equation scrolls rather than widening the page */
+.text .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.text .smallcaps {
+  font-variant: small-caps;
+}
+
+.text kbd {
+  padding: 0.05em 0.35em;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  font: var(--size-s) var(--font-sans);
+}
+
+/* A bookmark (a .webloc or .url file) is a post that is one link */
+.text .bookmark {
+  font: 700 var(--size-m) / var(--leading-m) var(--font-sans);
+}
+
+.text .bookmark::after {
+  content: " \2197";
+}
+
+/* Citations: the reference list at the end, hanging */
+.text .references {
+  font: var(--size-s) / var(--leading-m) var(--font-sans);
+  margin-top: var(--leading-serif-l);
+}
+
+.text .csl-entry {
+  padding-left: 1.5em;
+  text-indent: -1.5em;
+}
+
+.text .csl-entry + .csl-entry {
+  margin-top: 0.4em;
+}
+
+/* Embedded videos (a YouTube or Vimeo link on its own line) */
+.text .videoContainer {
+  position: relative;
+  height: 0;
+  margin-block: var(--leading-serif-l);
+}
+
+.text .videoContainer iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
 }
 
 /* Callouts (the Callouts plugin: > [!note] ...) */
@@ -1293,6 +1394,10 @@ nav[aria-label="Pages"] {
 
   .text > .column.four {
     grid-column: auto / span 1;
+  }
+
+  .text > .inside {
+    grid-column: 1 / span 1;
   }
 
   .has-contents .text > .margin {

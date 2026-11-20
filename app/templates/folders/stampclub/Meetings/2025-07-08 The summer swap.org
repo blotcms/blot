@@ -1,0 +1,28 @@
+Date: 2025-07-09
+Event: 2025-07-08 18:30
+Ends: 8:30 pm
+Tags: Meetings
+Venue: The members' room, Society Library
+Summary: No talk in July: everyone brought their doubles, and nobody went home with what they came with.
+
+* The summer swap
+
+July is too hot for a lecture, so July is the swap. Everyone brings their doubles in a shoebox, and the boxes go round the table until the kettle boils.
+
+** What changed hands
+
+- A strip of /Lindbergh Flight/ airmails, for a run of *postage dues*
+- Most of a box of Christmas stamps, for nothing at all
+- One Graf Zeppelin, after a negotiation that took the whole evening
+
+** Notes for next year
+
+1. Label the shoeboxes. Two people went home with the wrong one.
+2. Open the window /before/ people arrive.
+3. Keep =the good stamps= out of the shoebox until the end.
+
+#+BEGIN_QUOTE
+"A double is just a stamp that hasn't met its owner yet." --- Teddy Marchetti
+#+END_QUOTE
+
+This file is written in Org mode, for the members who keep their notes in Emacs.
