@@ -122,8 +122,7 @@ Contains the remote macOS helper service (separate from this Node.js process). I
 ### `/views`
 
 HTML templates for the dashboard UI:
-- `index.html` - Main status page.
-- `connect.html` - Sharing link entry form.
+- `index.html` - The setup checklist (share a folder with Blot, paste its link, Blot sets the folder up: joins it, then copies the site's files in), then the folder's status once set up. `util/setupState.js` works out which step the account is on and puts each setup failure on the step that fixes it.
 - `disconnect.html` - Disconnection confirmation.
 
 ## Public API

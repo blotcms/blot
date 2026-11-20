@@ -1,50 +1,689 @@
 {{> message}}
 
-{{#account}}
 <div class="live-updates">
 
-{{> status-line}}
+{{#account}}{{> status-line}}{{/account}}
 
-{{#setupFailed}}
-<p class="error">iCloud setup didn't finish: {{error}}. Retry setup to share a folder with Blot again, or cancel to disconnect iCloud.</p>
-
-<form action="{{{base}}}/disconnect" method="post">
-  <input type="hidden" name="_csrf" value="{{csrftoken}}">
-  <div class="buttons">
-    <a href="{{{base}}}/setup">Retry setup</a>
-    <button type="submit">Cancel</button>
-  </div>
-</form>
-{{/setupFailed}}
-
-{{^setupFailed}}
-
-{{#sharingLink}}
-{{^error}}
+{{#setup.complete}}
 <div class="line">
   <span class="label">Folder</span>
   <span class="center">
-    
-    {{#setupComplete}}
-    Set up complete
-    <span style="color:rgb(158, 154, 152);max-width:500px;display: block;margin-top: 10px;font-size: 14px;">
-    You can rename, move or make changes to your site’s folder in iCloud.</span>
-    {{/setupComplete}}
-    {{^setupComplete}}
-    Transferring files to iCloud   
-    <span style="color:rgb(158, 154, 152);max-width:500px;display: block;margin-top: 10px;font-size: 14px;">
-      Do not make changes to your site’s folder in iCloud until the transfer is complete.</span>
-    {{/setupComplete}}
-
-  </span>  
+    Setup complete
+    <span class="icloud-note">You can rename or move the folder.</span>
+  </span>
 </div>
-{{/error}}
-{{/sharingLink}}
 
 {{> disconnect-line}}
+{{/setup.complete}}
 
-{{/setupFailed}}
+{{^setup.complete}}
+
+{{#setup.share}}
+{{#blog.healthIssue}}
+<p class="error">{{message}}</p>
+<p>Share a folder again below. Nothing will be lost.</p>
+{{/blog.healthIssue}}
+{{/setup.share}}
+
+{{#setup.otherProblem}}
+<p class="error">iCloud setup didn’t finish: {{setup.otherProblem}}</p>
+{{/setup.otherProblem}}
+
+<div class="line icloud-setup-line">
+  <span class="label">Set up folder</span>
+  <div class="center">
+    <div class="steps icloud-steps">
+      {{^setup.linked}}
+      <ol>
+
+        <li>
+          <span class="step-title">Create a folder in iCloud Drive</span>
+        </li>
+
+        <li class="{{#setup.shareProblem}}problem{{/setup.shareProblem}}">
+          {{#setup.shareProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.shareProblem}}
+          <span class="step-title">Share it with Blot</span>
+          {{#setup.shareProblem}}<span class="step-problem">{{setup.shareProblem}}</span>{{/setup.shareProblem}}
+          <span class="icloud-address">
+            <span class="icloud-email">{{blotiCloudAccount}}</span>
+            <button class="copy" data-copy="{{blotiCloudAccount}}"><span class="icon-copy"></span> Copy</button>
+          </span>
+
+          <ol class="icloud-howto">
+            <li>Right-click the folder in Finder and choose <span class="ui-label">Share…</span></li>
+            <li>Choose <span class="ui-label">Collaborate</span>, then <span class="ui-label">Invite with Link</span>.</li>
+            <li>Add the address in <span class="ui-label">To</span>, then click <span class="ui-label">Copy Link</span>.</li>
+          </ol>
+
+          <details class="icloud-show-me">
+            <summary><span class="icon-small-chevron-right"></span>Show me</summary>
+            <div class="mac-demo" aria-hidden="true">
+              <figure class="mac-step">
+                <div class="mac-popover">
+                  <div class="mac-head">
+                    <span class="mac-folder"></span>
+                    <span class="mac-head-text"><b>My site</b><small>Folder</small></span>
+                  </div>
+                  <div class="mac-popup">Collaborate<span class="mac-popup-btn"></span></div>
+                  <div class="mac-note">Only invited people can edit.<span>›</span></div>
+                  <div class="mac-sep"></div>
+                  <div class="mac-item mac-faded"><span class="mac-app mac-app-messages"></span>Messages</div>
+                  <div class="mac-item mac-hl"><span class="mac-app mac-app-link"></span>Invite with Link</div>
+                  <div class="mac-item mac-faded"><span class="mac-app mac-app-notes"></span>Notes</div>
+                </div>
+              </figure>
+              <figure class="mac-step">
+                <div class="mac-sheet">
+                  <div class="mac-sheet-title"><span class="mac-app mac-app-link"></span>Create Link</div>
+                  <div class="mac-to">To:<span class="mac-token">{{blotiCloudAccount}}</span></div>
+                  <div class="mac-sheet-foot">
+                    <span class="mac-btn">Cancel</span>
+                    <span class="mac-btn mac-btn-primary">Copy Link</span>
+                  </div>
+                </div>
+                <figcaption><span class="ui-label">Copy Link</span> stays grey until Blot’s iCloud account is in <span class="ui-label">To</span>.</figcaption>
+              </figure>
+            </div>
+          </details>
+
+        </li>
+
+        <li class="{{#setup.linkProblem}}problem{{/setup.linkProblem}}">
+          {{#setup.linkProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.linkProblem}}
+          <span class="step-title">Paste the link</span>
+          {{#setup.linkProblem}}<span class="step-problem">{{setup.linkProblem}}</span>{{/setup.linkProblem}}
+          <form class="dashboard-form icloud-link-form" action="{{{base}}}/set-up-folder" method="post">
+            <input type="hidden" name="_csrf" value="{{csrftoken}}">
+            <input type="text" name="sharingLink" aria-label="iCloud folder link" placeholder="icloud.com/iclouddrive/…" value="{{setup.sharingLink}}" autocomplete="off" spellcheck="false">
+            <div class="buttons">
+              <button type="submit">Connect folder</button>
+              {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
+              {{#blog.client}}<button type="submit" name="cancel" value="true">Cancel</button>{{/blog.client}}
+            </div>
+          </form>
+        </li>
+
+      </ol>
+      {{/setup.linked}}
+
+      {{#setup.linked}}
+      <ol>
+
+        <li class="{{#setup.copying}}done{{/setup.copying}}{{#setup.transferFailed}}done{{/setup.transferFailed}}{{#setup.joining}}{{^setup.slow}}active{{/setup.slow}}{{#setup.slow}}problem{{/setup.slow}}{{/setup.joining}}"{{#setup.joining}}{{^setup.slow}} data-slow-in="{{setup.slowInMs}}"{{/setup.slow}}{{/setup.joining}}>
+          {{#setup.copying}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.copying}}
+          {{#setup.transferFailed}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.transferFailed}}
+          {{#setup.joining}}{{^setup.slow}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.slow}}{{#setup.slow}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.slow}}{{/setup.joining}}
+          <span class="step-title">Blot joins your folder</span>
+          {{#setup.joining}}
+          {{^setup.slow}}
+          <span class="step-text">Usually takes under 30 seconds.</span>
+          {{/setup.slow}}
+          {{#setup.slow}}
+          <span class="step-problem">This is taking too long. Try again, or <a href="/contact">contact us</a>.</span>
+          <form action="{{{base}}}/set-up-folder" method="post" class="icloud-retry">
+            <input type="hidden" name="_csrf" value="{{csrftoken}}">
+            <input type="hidden" name="sharingLink" value="{{setup.sharingLink}}">
+            <div class="buttons">
+              <button type="submit">Try again</button>
+              <button type="submit" form="icloud-cancel-form">Cancel setup</button>
+            </div>
+          </form>
+          {{/setup.slow}}
+          {{/setup.joining}}
+        </li>
+
+        <li class="{{#setup.joining}}todo{{/setup.joining}}{{#setup.copying}}active{{/setup.copying}}{{#setup.transferFailed}}problem{{/setup.transferFailed}}">
+          {{#setup.copying}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.copying}}
+          {{#setup.transferFailed}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.transferFailed}}
+          <span class="step-title">Blot copies your site’s files into it</span>
+          {{#setup.copying}}
+          <span class="step-text">Don’t change the folder until this finishes.</span>
+          <span class="step-text icloud-progress">{{> sync-status}}</span>
+          {{/setup.copying}}
+          {{#setup.transferFailed}}
+          <span class="step-problem">Copying didn’t finish. Nothing was removed.{{#setup.transferDetail}} ({{setup.transferDetail}}){{/setup.transferDetail}}</span>
+          <form action="{{{base}}}/retry-transfer" method="post" class="icloud-retry">
+            <input type="hidden" name="_csrf" value="{{csrftoken}}">
+            <div class="buttons">
+              <button type="submit">Try again</button>
+              <button type="submit" form="icloud-cancel-form">Cancel setup</button>
+            </div>
+          </form>
+          {{/setup.transferFailed}}
+        </li>
+
+      </ol>
+      {{/setup.linked}}
+    </div>
+
+    {{#setup.linked}}
+    <form action="{{{base}}}/disconnect" method="post" class="icloud-cancel" id="icloud-cancel-form">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      {{#setup.working}}<div class="buttons"><button type="submit">Cancel setup</button></div>{{/setup.working}}
+    </form>
+    {{/setup.linked}}
+  </div>
+</div>
+
+{{/setup.complete}}
 
 </div>
-<br><br>
-{{/account}}
+
+<script>
+  // Re-render once a join has run long enough to say so: the live updates
+  // only come with status messages, and a lost answer sends none
+  (function () {
+    var seen = null;
+    var due = 0;
+    setInterval(function () {
+      var step = document.querySelector("[data-slow-in]");
+      if (!step) return (seen = null);
+      if (step !== seen) {
+        seen = step;
+        due = Date.now() + Number(step.getAttribute("data-slow-in")) + 1000;
+      }
+      if (Date.now() > due) location.reload();
+    }, 5000);
+  })();
+</script>
+
+<style>
+.icloud-note {
+  color: var(--medium-text-color);
+  max-width: 500px;
+  display: block;
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+/* Beside its label like every other line, and above the steps on a phone */
+.icloud-setup-line .label {
+  flex-basis: 30%;
+}
+
+.icloud-setup-line .center {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .icloud-setup-line .label,
+  .icloud-setup-line .center {
+    flex-basis: 100%;
+  }
+}
+
+/* On a first visit there is no status line above to draw the top rule */
+.live-updates > .icloud-setup-line:first-child {
+  border-top: 1px solid var(--border-color);
+}
+
+.icloud-steps ol li {
+  margin-bottom: 1.1em;
+}
+
+/* Keeps the connector between finished steps from shrinking to a stub */
+.icloud-steps ol li.done {
+  min-height: 1.6em;
+}
+
+/* Hierarchy by size and colour rather than weight: the address is the only
+   bold text in the steps */
+.icloud-steps .step-title {
+  display: block;
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--text-color);
+}
+
+.icloud-steps .step-text,
+.icloud-steps .step-problem {
+  display: block;
+  margin-top: 4px;
+  font-size: 14px;
+  color: var(--medium-text-color);
+  max-width: 520px;
+}
+
+.icloud-steps .step-problem {
+  color: #c25e00;
+  margin: 4px 0 10px;
+  max-width: 480px;
+  text-wrap: pretty;
+}
+
+/* A finished or failing step shows an icon in place of its number */
+.icloud-steps ol li.done::before,
+.icloud-steps ol li.active::before,
+.icloud-steps ol li.problem::before {
+  visibility: hidden;
+}
+
+.icloud-steps .step-icon {
+  position: absolute;
+  top: 0;
+  left: -32px;
+  width: 1.25rem;
+  height: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.icloud-steps .step-icon.done {
+  color: green;
+}
+
+.icloud-steps .step-icon.problem {
+  color: #c25e00;
+}
+
+.icloud-steps .step-icon.done,
+.icloud-steps .step-icon.problem {
+  font-size: 16px;
+}
+
+.icloud-steps ol li.done .step-title {
+  color: var(--medium-text-color);
+}
+
+.icloud-steps ol li.todo,
+.icloud-steps ol li.todo .step-title {
+  color: var(--light-text-color);
+}
+
+/* The one value to carry over to Finder */
+.icloud-address {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: 8px 0 2px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--light-background-color);
+  max-width: 100%;
+}
+
+.icloud-email {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.icloud-address .copy {
+  margin: 0;
+}
+
+.icloud-steps ol.icloud-howto {
+  list-style: decimal;
+  counter-reset: none;
+  padding-left: 20px;
+  margin: 10px 0 6px;
+  font-size: 14px;
+  color: var(--medium-text-color);
+}
+
+/* Finder's own labels: darker than the sentence around them */
+.icloud-steps .ui-label {
+  color: var(--text-color);
+}
+
+.icloud-steps ol.icloud-howto li {
+  counter-increment: none;
+  margin: 0 0 4px;
+}
+
+.icloud-steps ol.icloud-howto li::before,
+.icloud-steps ol.icloud-howto li::after {
+  display: none;
+}
+
+.icloud-steps form.icloud-link-form {
+  margin-top: 8px;
+  width: auto;
+  max-width: 520px;
+}
+
+.icloud-steps form.icloud-link-form .buttons {
+  margin: 12px 0 0;
+}
+
+.icloud-steps form.icloud-link-form input[name="sharingLink"] {
+  width: 100%;
+  max-width: 100%;
+}
+
+.icloud-show-me {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--medium-text-color);
+}
+
+.icloud-show-me summary {
+  cursor: pointer;
+  user-select: none;
+  color: var(--accent-color);
+  list-style: none;
+}
+
+.icloud-show-me summary::-webkit-details-marker {
+  display: none;
+}
+
+.icloud-show-me summary .icon-small-chevron-right {
+  width: 10px;
+  height: 10px;
+  mask-size: 10px;
+  margin-right: 4px;
+  vertical-align: 0;
+  transition: transform 0.15s;
+}
+
+.icloud-show-me[open] summary .icon-small-chevron-right {
+  transform: rotate(90deg);
+}
+
+
+/* "Show me": Finder's Share menu and Create Link window, drawn in Finder's
+   own light-mode colours and sizes but trimmed to the items that matter */
+.mac-demo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: stretch;
+  margin: 10px 0 4px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--light-background-color);
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  line-height: 16px;
+  color: #222;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mac-step {
+  margin: 0;
+  width: 212px;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 600px) {
+  .mac-step {
+    width: 100%;
+    max-width: 300px;
+  }
+}
+
+.mac-step figcaption {
+  margin-top: auto;
+  padding-top: 8px;
+  font-family: var(--font-family);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--medium-text-color);
+}
+
+.mac-popover,
+.mac-sheet {
+  border-radius: 10px;
+  border: 0.5px solid rgba(0, 0, 0, 0.14);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.mac-popover {
+  background: #e5e5e5;
+  padding: 10px 6px 6px;
+}
+
+.mac-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 10px;
+}
+
+.mac-folder {
+  position: relative;
+  width: 36px;
+  height: 27px;
+  margin-top: 4px;
+  border-radius: 3px;
+  background: linear-gradient(#8ac9f7, #6ab6f2);
+}
+
+.mac-folder::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 0;
+  width: 15px;
+  height: 6px;
+  border-radius: 3px 3px 0 0;
+  background: #5aa9eb;
+}
+
+.mac-head-text b {
+  display: block;
+  font-weight: 600;
+}
+
+.mac-head-text small {
+  display: block;
+  font-size: 11px;
+  line-height: 14px;
+  color: #808080;
+}
+
+.mac-popup {
+  position: relative;
+  margin: 0 6px;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: #cbcbcb;
+}
+
+.mac-popup-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: #3f84f7;
+}
+
+.mac-popup-btn::before,
+.mac-popup-btn::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  width: 4px;
+  height: 4px;
+  border: solid #fff;
+  border-width: 1.5px 0 0 1.5px;
+}
+
+.mac-popup-btn::before {
+  top: 4px;
+  transform: rotate(45deg);
+}
+
+.mac-popup-btn::after {
+  bottom: 4px;
+  transform: rotate(225deg);
+}
+
+.mac-note {
+  display: flex;
+  justify-content: space-between;
+  margin: 5px 6px 0;
+  padding: 0 2px 8px;
+  font-size: 11px;
+  line-height: 14px;
+  color: #666;
+  border-bottom: 1px solid #ccc;
+}
+
+.mac-sep {
+  height: 6px;
+}
+
+.mac-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 5px;
+  color: #333;
+}
+
+.mac-faded {
+  opacity: 0.4;
+}
+
+.mac-hl {
+  background: #c1c2c3;
+  box-shadow: 0 0 0 2px var(--accent-color);
+}
+
+.mac-app {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15);
+}
+
+.mac-app-messages {
+  background: linear-gradient(#6fe06a, #2ec42a);
+}
+
+.mac-app-notes {
+  background: linear-gradient(#fff 0 30%, #fbd75b 30% 38%, #fff 38%);
+}
+
+.mac-app-link {
+  position: relative;
+  background: linear-gradient(#a7a7a7, #8d8d8d);
+}
+
+.mac-app-link::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 3px;
+  width: 9px;
+  height: 5px;
+  border: 1.5px solid #fff;
+  border-radius: 4px;
+  transform: rotate(-45deg);
+}
+
+.mac-sheet {
+  background: #fff;
+  padding: 10px 14px 12px;
+}
+
+.mac-sheet-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.mac-sheet-title .mac-app {
+  width: 18px;
+  height: 18px;
+}
+
+.mac-to {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.mac-token {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #c3d7fd;
+  color: #1d3d84;
+}
+
+.mac-sheet-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.mac-btn {
+  height: 20px;
+  line-height: 20px;
+  padding: 0 10px;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.2), 0 1px 1px rgba(0, 0, 0, 0.08);
+}
+
+.mac-btn-primary {
+  background: #3a82f7;
+  color: #fff;
+  box-shadow: none;
+}
+
+.icloud-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--accent-color);
+  border-radius: 50%;
+  vertical-align: -1px;
+  animation: icloud-spin 0.8s linear infinite;
+}
+
+.icloud-steps .step-icon .icloud-spinner {
+  width: 10px;
+  height: 10px;
+}
+
+@keyframes icloud-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.icloud-retry .buttons,
+.icloud-cancel .buttons {
+  margin: 10px 0 0;
+}
+
+/* While copying, show the status line only for progress: an idle "Synced"
+   before the copy starts would read as done */
+.icloud-progress .sync-status.synced {
+  display: none;
+}
+
+/* Under the step text, at its natural width: a quiet way out while it runs */
+.icloud-cancel {
+  margin-left: 32px;
+}
+
+.icloud-cancel .buttons > * {
+  flex-grow: 0;
+  white-space: nowrap;
+}
+</style>
