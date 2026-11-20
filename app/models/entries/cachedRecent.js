@@ -22,9 +22,8 @@ const recentEntriesCache = createRenderCache("recentEntries", {
   max: 1000,
   // 31 entries per blog, but still byte-capped so a burst of distinct blogs
   // cannot fill the process by item count alone. Doubled from 20 MB on 20
-  // Nov 2026: at 20 MB it held only about 60 blogs (their recent entries
-  // average about 350 KB) and half its misses were for blogs it had just
-  // evicted (#2795).
+  // Nov 2026: the byte cap held it far below its entry cap, and about half
+  // its misses were for blogs it had just evicted (#2795).
   maxSize: 40 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
   // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
