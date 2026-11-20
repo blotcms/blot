@@ -45,8 +45,16 @@ module.exports = async function augment(
     const nextStamp = eventDate.next(event, Date.now(), req.blog.timeZone);
     const stamp = nextStamp !== null ? nextStamp : event.stamp;
     entry.formatEvent = FormatDate(stamp, req.blog.timeZone);
-    if (event.endsDay)
-      entry.formatEnds = FormatDate(event.endsDay, req.blog.timeZone);
+    // A multi-day event's last day, moved along with a repeating one, and
+    // the day after it, which calendar feeds use as the (exclusive) end
+    const endsDay = eventDate.endsOn(event, stamp, req.blog.timeZone);
+    if (endsDay !== null) {
+      entry.formatEnds = FormatDate(endsDay, req.blog.timeZone);
+      entry.formatEndsAfter = FormatDate(
+        moment.tz(endsDay, req.blog.timeZone).add(1, "day").valueOf(),
+        req.blog.timeZone
+      );
+    }
     entry.event = {
       stamp,
       allDay: event.allDay,

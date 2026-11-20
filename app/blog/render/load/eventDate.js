@@ -36,9 +36,15 @@ const REPEATS = {
   "every year": "yearly",
 };
 
+// Metadata keys are matched in any case (Event, EVENT, event), as the rest
+// of Blot matches them
 function read(metadata, key) {
-  if (!metadata) return undefined;
-  const value = metadata[key] || metadata[key[0].toUpperCase() + key.slice(1)];
+  if (!metadata || typeof metadata !== "object") return undefined;
+  let value = metadata[key];
+  if (value === undefined) {
+    const match = Object.keys(metadata).find((k) => k.toLowerCase() === key);
+    if (match) value = metadata[match];
+  }
   return typeof value === "string" ? value.trim() : undefined;
 }
 
@@ -92,12 +98,35 @@ function endOf(stamp, allDay, zone) {
   return allDay ? moment.tz(stamp, zone).endOf("day").valueOf() : stamp;
 }
 
-// When an event (not a repeating one) stops being upcoming: the end of its
-// last day for a multi-day event, else as endOf.
-function lastMoment(parsed, zone) {
+// How many days after its first day a multi-day event ends (0 otherwise)
+function extraDays(parsed, zone) {
+  if (!parsed.endsDay) return 0;
+  return moment
+    .tz(parsed.endsDay, zone)
+    .diff(moment.tz(parsed.stamp, zone).startOf("day"), "days");
+}
+
+// The last day of the occurrence that starts at stamp: a repeating
+// multi-day event keeps its length each time. Null for a one-day event.
+function endsOn(parsed, stamp, timeZone) {
+  if (!parsed || !parsed.endsDay) return null;
+  const zone = timeZone || "UTC";
+  return moment
+    .tz(stamp, zone)
+    .startOf("day")
+    .add(extraDays(parsed, zone), "days")
+    .valueOf();
+}
+
+// When the occurrence that starts at stamp stops being upcoming: the end of
+// its last day for a multi-day event, else as endOf.
+function occurrenceEnd(parsed, stamp, zone) {
   if (parsed.endsDay)
-    return moment.tz(parsed.endsDay, zone).endOf("day").valueOf();
-  return endOf(parsed.stamp, parsed.allDay, zone);
+    return moment
+      .tz(endsOn(parsed, stamp, zone), zone)
+      .endOf("day")
+      .valueOf();
+  return endOf(stamp, parsed.allDay, zone);
 }
 
 // The occurrence of a repeating event `step` repeats after its first.
@@ -130,16 +159,33 @@ function next(parsed, now, timeZone) {
   if (!parsed) return null;
   const zone = timeZone || "UTC";
 
-  if (lastMoment(parsed, zone) >= now) return parsed.stamp;
+  if (occurrenceEnd(parsed, parsed.stamp, zone) >= now) return parsed.stamp;
   if (!parsed.repeats) return null;
 
   for (let step = 1; step < 5000; step++) {
     const stamp = occurrence(parsed, step, zone).valueOf();
     if (parsed.until && stamp > parsed.until) return null;
-    if (endOf(stamp, parsed.allDay, zone) >= now) return stamp;
+    if (occurrenceEnd(parsed, stamp, zone) >= now) return stamp;
   }
 
   return null;
+}
+
+// The next moment, after now, at which what a page says about this event
+// changes: just after the occurrence it would show ends. Null once it has
+// all happened.
+function nextChange(parsed, now, timeZone) {
+  const zone = timeZone || "UTC";
+  const stamp = next(parsed, now, zone);
+  if (stamp === null) return null;
+  return occurrenceEnd(parsed, stamp, zone) + 1;
+}
+
+// Which weekday of the month, for BYDAY: 1 to 4, or -1 (the last) for a
+// fifth, which occurrence() moves to the last in a month without one
+function monthlyOrdinal(first) {
+  const nth = Math.ceil(first.date() / 7);
+  return nth === 5 ? -1 : nth;
 }
 
 // An iCalendar RRULE for a repeating event, e.g. FREQ=MONTHLY;BYDAY=2TU.
@@ -154,9 +200,7 @@ function rrule(parsed, timeZone) {
         ? "FREQ=WEEKLY;INTERVAL=2"
         : parsed.repeats === "yearly"
           ? "FREQ=YEARLY"
-          : "FREQ=MONTHLY;BYDAY=" +
-            Math.ceil(first.date() / 7) +
-            days[first.day()];
+          : "FREQ=MONTHLY;BYDAY=" + monthlyOrdinal(first) + days[first.day()];
   if (parsed.until)
     rule += ";UNTIL=" + moment.utc(parsed.until).format("YYYYMMDD[T]HHmmss[Z]");
   return rule;
@@ -171,4 +215,6 @@ module.exports.isUpcoming = function isUpcoming(parsed, now, timeZone) {
 };
 
 module.exports.next = next;
+module.exports.nextChange = nextChange;
+module.exports.endsOn = endsOn;
 module.exports.rrule = rrule;

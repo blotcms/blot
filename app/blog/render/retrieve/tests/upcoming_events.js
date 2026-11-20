@@ -1,5 +1,6 @@
 const Entries = require("models/entries");
 const upcoming = require("../upcoming_events");
+const eventAlarm = require("../../eventAlarm");
 
 describe("upcoming_events", function () {
   const blog = { id: "blog-events", cacheID: 1, timeZone: "UTC" };
@@ -14,6 +15,7 @@ describe("upcoming_events", function () {
 
   beforeEach(function () {
     upcoming._clear();
+    spyOn(eventAlarm, "arm").and.returnValue(Promise.resolve());
     spyOn(Entries, "getCatalog").and.callFake(async () => [
       entry("later", "2027-01-12 19:00"),
       entry("sooner", "2026-12-08 18:30"),
@@ -57,5 +59,14 @@ describe("upcoming_events", function () {
     first[0].title = "changed";
     const second = await upcoming._upcomingEvents(req, {}, now);
     expect(second[0].title).toEqual("sooner");
+  });
+
+  it("arms an alarm for when the soonest event ends", async function () {
+    spyOn(Date, "now").and.returnValue(now);
+    await upcoming._upcomingEvents({ blog, template: { locals: {} } }, {}, now);
+    expect(eventAlarm.arm).toHaveBeenCalledTimes(1);
+    const [blogID, when] = eventAlarm.arm.calls.mostRecent().args;
+    expect(blogID).toEqual("blog-events");
+    expect(when).toEqual(Date.parse("2026-12-08T18:30:00Z") + 1);
   });
 });

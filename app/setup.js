@@ -102,6 +102,21 @@ async function runPostListenTasks() {
   }
 
   try {
+    // Every container polls for blogs whose listed events have changed (an
+    // occurrence ended), to bump their cacheID
+    log("Starting event change alarms asynchronously");
+    const { alarm } = require("blog/render/eventAlarm");
+    alarm.start();
+    require("helper/drain").onStart(() => {
+      alarm
+        .stop()
+        .catch((err) => logError("Failed to stop event change alarms", err));
+    });
+  } catch (err) {
+    logError("Failed to start event change alarms", err);
+  }
+
+  try {
     // Any container may claim a due alarm, so every container polls
     log("Starting welcome email alarm");
     const welcomeEmailAlarm = require("models/user/scheduleWelcomeEmail").alarm;

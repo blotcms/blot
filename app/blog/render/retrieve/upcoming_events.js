@@ -3,6 +3,7 @@ const getAllCached = require("./helpers/getAllCached");
 const asRetriever = require("../../lib/asRetriever");
 const eventDate = require("../load/eventDate");
 const augment = require("../load/augment");
+const eventAlarm = require("../eventAlarm");
 const { normalize } = require("models/tags");
 
 // Posts whose Event line is a date still to come, soonest first (a repeating
@@ -69,6 +70,24 @@ async function eventsFor(req) {
   }
 
   eventsCache.set(key, events);
+
+  // Cached pages list these events until the blog's cacheID changes, so
+  // arm an alarm to bump it when the first of them next changes (an
+  // occurrence ends). Once per cacheID, like the read above; a failure only
+  // means pages may lag until the next publish, so it doesn't fail the page.
+  const now = Date.now();
+  let when = null;
+  for (const event of events) {
+    const change = eventDate.nextChange(event.parsed, now, req.blog.timeZone);
+    if (change !== null && (when === null || change < when)) when = change;
+  }
+  try {
+    await eventAlarm.arm(req.blog.id, when);
+  } catch (err) {
+    if (typeof req.log === "function")
+      req.log("Could not arm event alarm", err && err.message);
+  }
+
   return events;
 }
 

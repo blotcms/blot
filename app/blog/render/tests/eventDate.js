@@ -86,4 +86,48 @@ describe("eventDate", function () {
       eventDate.isUpcoming(parsed, Date.parse("2027-02-22T01:00:00Z"), "UTC")
     ).toBe(false);
   });
+
+  it("reads its lines in any case", function () {
+    const parsed = eventDate(
+      { EVENT: "2026-12-08", REPEATS: "Weekly", UNTIL: "2026-12-31" },
+      "UTC"
+    );
+    expect(parsed.allDay).toBe(true);
+    expect(parsed.repeats).toEqual("weekly");
+    expect(parsed.until).toBeDefined();
+  });
+
+  it("keeps a repeating multi-day event's length each time", function () {
+    const parsed = eventDate(
+      { event: "2026-11-07", ends: "2026-11-08", repeats: "weekly" },
+      "UTC"
+    );
+    const now = Date.parse("2026-11-15T12:00:00Z");
+    const next = eventDate.next(parsed, now, "UTC");
+    expect(new Date(next).toISOString()).toEqual("2026-11-14T00:00:00.000Z");
+    expect(
+      new Date(eventDate.endsOn(parsed, next, "UTC")).toISOString()
+    ).toEqual("2026-11-15T00:00:00.000Z");
+  });
+
+  it("changes just after the occurrence it shows ends", function () {
+    const parsed = eventDate(
+      { event: "2027-02-20", ends: "2027-02-21" },
+      "UTC"
+    );
+    expect(
+      eventDate.nextChange(parsed, Date.parse("2027-02-01T00:00:00Z"), "UTC")
+    ).toEqual(Date.parse("2027-02-22T00:00:00Z"));
+    expect(
+      eventDate.nextChange(parsed, Date.parse("2027-03-01T00:00:00Z"), "UTC")
+    ).toBe(null);
+  });
+
+  it("writes a fifth weekday as the last in the calendar rule", function () {
+    const parsed = eventDate(
+      { event: "2026-01-29 10:00", repeats: "monthly" },
+      "UTC"
+    );
+    expect(eventDate.rrule(parsed, "UTC")).toEqual("FREQ=MONTHLY;BYDAY=-1TH");
+  });
 });
