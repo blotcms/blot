@@ -9,6 +9,7 @@ describe("google drive syncChanges", function () {
     const calls = [];
     const sources = [];
     const touched = [];
+    const prefetched = [];
     const stubs = {
       "helper/clfdate": () => "[date]",
       "../database": {
@@ -56,6 +57,10 @@ describe("google drive syncChanges", function () {
         },
       },
       "./readChanges": { logChanges: () => {} },
+      "./createDriveClient": async () => "drive",
+      "../util/prefetch": {
+        start: (drive, file) => prefetched.push(file.id),
+      },
     };
     const module = { exports: {} };
     vm.runInNewContext(
@@ -67,7 +72,7 @@ describe("google drive syncChanges", function () {
         require: (name) => (name in stubs ? stubs[name] : require(name)),
       }
     );
-    return { syncChanges: module.exports, calls, sources, touched };
+    return { syncChanges: module.exports, calls, sources, touched, prefetched };
   }
 
   const entry = (blogID, fileId, file = {}, place = {}) => ({
@@ -209,5 +214,19 @@ describe("google drive syncChanges", function () {
       "arm blog_a",
       "run blog_a token-blog_a",
     ]);
+  });
+
+  it("starts downloading changed files with a checksum, but not Docs, folders or trashed files", async function () {
+    const { syncChanges, prefetched } = load();
+
+    await syncChanges("sa", [
+      entry("blog_a", "file", { md5Checksum: "m", size: "5" }),
+      entry("blog_a", "doc", { mimeType: DOCUMENT }),
+      entry("blog_a", "gone", { md5Checksum: "m", trashed: true }),
+      entry("blog_a", "nosum"),
+    ]);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(prefetched).toEqual(["file"]);
   });
 });

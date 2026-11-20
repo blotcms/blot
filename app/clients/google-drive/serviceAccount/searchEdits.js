@@ -21,7 +21,7 @@ const BLOGS_TTL_MS = 30 * 1000;
 const RATE_LIMIT_BACKOFF_MS = 10 * 1000;
 
 const FIELDS =
-  "files(id,name,mimeType,parents,trashed,modifiedTime,md5Checksum)";
+  "files(id,name,mimeType,parents,trashed,modifiedTime,md5Checksum,size)";
 
 const prefix = () => `${clfdate()} Google Drive search:`;
 
