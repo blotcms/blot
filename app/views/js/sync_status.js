@@ -45,11 +45,28 @@ function parseSyncStatusMessage(message) {
   };
 }
 
+// Status messages that name a file carry its whole path; the status line
+// shows just the file's name, with a plainer verb where the message has
+// one. The activity log keeps the full message.
+var SHORT_VERBS = [
+  ["Transferring to iCloud ", "Copying "],
+  ["Creating directory in iCloud ", "Creating folder "],
+  ["Removing from iCloud ", "Removing "],
+  ["Removing local item ", "Removing "],
+  ["Syncing ", "Syncing "],
+  ["Transferring ", "Copying "],
+  ["Downloading ", "Downloading "],
+  ["Checking ", "Checking "],
+  ["Removing ", "Removing "],
+];
+
 function shortenSyncingFilename(message) {
-  if (message.startsWith("Syncing /")) {
-    var path = message.slice("Syncing ".length);
-    var filename = path.split("/").pop();
-    return "Syncing " + filename;
+  for (var i = 0; i < SHORT_VERBS.length; i++) {
+    var prefix = SHORT_VERBS[i][0];
+    if (message.startsWith(prefix + "/")) {
+      var path = message.slice(prefix.length).replace(/\/+$/, "");
+      return SHORT_VERBS[i][1] + path.split("/").pop();
+    }
   }
 
   return message;
