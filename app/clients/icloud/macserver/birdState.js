@@ -38,7 +38,7 @@ const open = async () => {
         "select zone_rowid z, item_id id from client_items where item_filename = ? and item_parent_zone_rowid != zone_rowid"
       ),
       child: db.prepare(
-        "select zone_rowid z, item_id id, item_type type, version_size size, version_mtime mtime, hex(version_content_signature) sig from client_items where item_parent_zone_rowid = ? and item_parent_id = ? and item_filename = ?"
+        "select zone_rowid z, item_id id, item_type type, item_state state, version_size size, version_mtime mtime, hex(version_content_signature) sig from client_items where item_parent_zone_rowid = ? and item_parent_id = ? and item_filename = ?"
       ),
     };
     console.log(clfdate(), "birdState: reading bird's database");
@@ -109,9 +109,27 @@ const fileVersion = async (blogID, pathInBlogDirectory) => {
   }
 };
 
+// True when bird has a file or folder at the path. False when it has none or
+// the database can't be read, so callers fall back to what the disk says.
+const itemAt = async (blogID, pathInBlogDirectory) => {
+  const s = await open();
+  if (!s) return false;
+
+  try {
+    const row = lookup(s, blogID, pathInBlogDirectory);
+    return Boolean(row && row.state === 0);
+  } catch (error) {
+    reset(error);
+    return false;
+  }
+};
+
+// The open database, for journal.js, or null
+const database = async () => ((await open()) ? db : null);
+
 // True when the file on disk (an fs.Stats) is the version bird has
 const diskMatches = (version, stat) =>
   stat.size === version.size &&
   Math.floor(stat.mtimeMs / 1000) === version.mtime;
 
-export { fileVersion, diskMatches };
+export { fileVersion, diskMatches, itemAt, database };

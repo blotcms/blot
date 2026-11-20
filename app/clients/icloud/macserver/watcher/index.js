@@ -7,6 +7,7 @@ import {
 import clfdate from "../util/clfdate.js";
 import {
   forgetBlog,
+  forgetPath,
   isKnownDirectory,
   isUnchanged,
   recordDirectory,
@@ -18,6 +19,8 @@ import {
 import { iCloudDriveDirectory } from "../config.js";
 import { join } from "path";
 import * as brctl from "../brctl/index.js";
+import { itemAt } from "../birdState.js";
+import { openJournal, startJournal } from "../journal.js";
 import status from "../httpClient/status.js";
 import { performAction } from "./actions.js";
 import {
@@ -378,6 +381,53 @@ const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
   }
 };
 
+// Lists the folder above a path bird has but the disk doesn't, which asks
+// FileProvider for its contents, then looks at the path again. The `ls` of
+// whole blogs the monitorer used to run did this for everything; now it is
+// done for the one folder that needs it.
+const MATERIALISE_ATTEMPTS = 5;
+const MATERIALISE_EVERY_MS = 3_000;
+const materialising = new Map(); // `${blogID}:${path}` -> attempts
+
+const materialiseLater = (blogID, pathInBlogDirectory) => {
+  const key = `${blogID}:${pathInBlogDirectory}`;
+  const attempts = (materialising.get(key) || 0) + 1;
+
+  if (attempts > MATERIALISE_ATTEMPTS) {
+    materialising.delete(key);
+    console.warn(
+      clfdate(),
+      `bird has ${blogID}/${pathInBlogDirectory} but it never reached the disk; leaving it for the sweep and validation`
+    );
+    return;
+  }
+
+  materialising.set(key, attempts);
+  console.log(
+    clfdate(),
+    `bird has ${blogID}/${pathInBlogDirectory} but the disk doesn't yet, listing its folder (${attempts}/${MATERIALISE_ATTEMPTS})`
+  );
+
+  const timer = setTimeout(async () => {
+    const parent = path.dirname(buildBlogPath(blogID, pathInBlogDirectory));
+    // ls, not readdir: listing through ls is what makes iCloud put the
+    // folder's new entries on disk (see brctl/ls.js and monitorer.js)
+    await brctl.ls(parent).catch(() => {});
+    const there = await fs.pathExists(
+      buildBlogPath(blogID, pathInBlogDirectory)
+    );
+    if (there) materialising.delete(key);
+    reconcileFsWatchEvent(blogID, pathInBlogDirectory).catch((error) =>
+      console.error(
+        clfdate(),
+        `Reconcile failed (${blogID}, ${pathInBlogDirectory}):`,
+        error
+      )
+    );
+  }, MATERIALISE_EVERY_MS);
+  timer.unref?.();
+};
+
 const reconcilePath = async (blogID, pathInBlogDirectory) => {
   const fullPath = buildBlogPath(blogID, pathInBlogDirectory);
   let action = null;
@@ -406,6 +456,18 @@ const reconcilePath = async (blogID, pathInBlogDirectory) => {
   }
 
   if (!action) return;
+
+  // bird still has the path, so it has not gone: FileProvider hasn't put it
+  // on disk yet (a folder whose contents were never listed, or a move in
+  // progress). Sending a removal would delete it from Blot.
+  if (
+    action === "remove" &&
+    stats === null &&
+    (await itemAt(blogID, pathInBlogDirectory))
+  ) {
+    materialiseLater(blogID, pathInBlogDirectory);
+    return;
+  }
 
   // FSEvents also reports a file evicted or downloaded again, which leaves
   // its size and mtime alone. The upload skips it (after checking bird's
@@ -595,6 +657,10 @@ const initialize = async () => {
     });
   });
 
+  // bird's journal, loaded before the blogs are scanned: it knows which
+  // paths changed while the macserver was stopped
+  const replay = await openJournal();
+
   // FSEvents first, so nothing that changes while the blogs are scanned is
   // missed; events for a blog are dropped until its scan is done
   startFsWatch();
@@ -621,6 +687,33 @@ const initialize = async () => {
       }
     }
   }
+
+  // The scan took every file on disk to be in sync. Files that changed while
+  // the macserver was stopped are forgotten again so they are pushed.
+  if (replay && replay.length) {
+    for (const { blogID, path: p, isFile } of replay) {
+      if (isFile) forgetPath(blogID, p);
+    }
+    console.log(
+      clfdate(),
+      `journal: pushing ${replay.length} path(s) changed while stopped`
+    );
+    for (const { blogID, path: p } of replay) {
+      reconcileFsWatchEvent(blogID, p).catch((error) =>
+        console.error(clfdate(), `Replay failed (${blogID}, ${p}):`, error)
+      );
+    }
+  }
+
+  startJournal((blogID, p) => {
+    reconcileFsWatchEvent(blogID, p).catch((error) =>
+      console.error(
+        clfdate(),
+        `Journal reconcile failed (${blogID}, ${p}):`,
+        error
+      )
+    );
+  });
 
   startSweepLoop();
 };
