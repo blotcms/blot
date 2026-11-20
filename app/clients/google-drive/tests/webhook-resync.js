@@ -32,12 +32,26 @@ function load({ blogIDs, sync = jasmine.createSpy("sync"), run, lookupError }) {
               return router;
             },
           };
-        if (name === "clients/google-drive/sync") return sync;
-        if (name === "clients/util/followUpSync") {
-          return function (followUpName, fn) {
-            syncBlog = fn;
-            return { run };
-          };
+        // The real follow-up queue module, over a stubbed followUpSync
+        if (name === "clients/google-drive/sync/followUps") {
+          const followUps = { exports: {} };
+          vm.runInNewContext(
+            fs.readFileSync(require.resolve("../sync/followUps"), "utf8"),
+            {
+              module: followUps,
+              exports: followUps.exports,
+              require: function (name) {
+                if (name === "clients/google-drive/sync") return sync;
+                if (name === "clients/util/followUpSync")
+                  return function (followUpName, fn) {
+                    syncBlog = fn;
+                    return { run };
+                  };
+                return require(name);
+              },
+            }
+          );
+          return followUps.exports;
         }
         if (name === "clients/google-drive/database") {
           return {
