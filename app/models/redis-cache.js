@@ -50,10 +50,13 @@ const ALLOWED = new Set([
 // a set for every template, installed or not, so previews could flood it.
 // Views are a few KB on average but unbounded (a view can inline a whole
 // stylesheet), so their class is bounded by bytes too (CLASS_BYTE_CAPS).
+// Each fill reads many views, partial lookups and names which don't exist
+// (cached empty), so their cap is generous: at 2,000 the class was full
+// within the hour and evicting while it held under a fifth of its bytes.
 const CLASS_CAPS = {
   patterns: 2000,
   owners: 500,
-  view: 2000,
+  view: 8000,
   views: 500,
   session: 500,
   user: 500,
