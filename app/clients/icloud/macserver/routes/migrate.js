@@ -76,6 +76,7 @@ const waitForFiles = async (blogID, before) => {
   let lastSize = -1;
   let stableSince = start;
   let lastLog = 0;
+  let turn = 0;
 
   for (;;) {
     // Read the layout again each time: the owner may rename the folder, and
@@ -100,9 +101,15 @@ const waitForFiles = async (blogID, before) => {
           ? path.slice(0, path.lastIndexOf("/"))
           : "";
         if (parent === "" || now.has(parent)) parents.add(parent);
-        if (parents.size >= MATERIALISE_PER_POLL) break;
       }
-      for (const parent of parents)
+      // Take turns, so parents of files the owner removed (which never come
+      // back) can't keep the others from being listed
+      const queue = [...parents];
+      const batch = [];
+      for (let i = 0; i < Math.min(queue.length, MATERIALISE_PER_POLL); i++)
+        batch.push(queue[(turn + i) % queue.length]);
+      turn += MATERIALISE_PER_POLL;
+      for (const parent of batch)
         await brctl.ls(parent ? join(root, parent) : root).catch(() => {});
     }
 
