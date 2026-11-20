@@ -33,9 +33,8 @@ module.exports = {
   },
 
   async take(blogID) {
-    const ids = await client.sPop(key(blogID), TAKE);
-    if (Array.isArray(ids)) return ids;
-    return ids ? [ids] : [];
+    // sPop would ignore a count: SPOP with one is sPopCount in node-redis
+    return (await client.sPopCount(key(blogID), TAKE)) || [];
   },
 
   async count(blogID) {
