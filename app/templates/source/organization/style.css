@@ -1331,13 +1331,13 @@ nav[aria-label="Pages"] {
   font-style: normal;
 }
 
-.status + .label,
-.label + .label {
+.status + .badge,
+.badge + .badge {
   margin-left: 0.4em;
 }
 
 /* For: and Access: on an event */
-.label {
+.badge {
   display: inline-block;
   margin: 0.25em 0;
   padding: 1px 6px;
@@ -1348,9 +1348,7 @@ nav[aria-label="Pages"] {
   font-style: normal;
 }
 
-.status + .label {
-  margin-left: 0.4em;
-}
+
 
 :is(.row, .event, .upcoming-item, .project):has(.status[data-status="cancelled" i]) :is(.row-title, .event-title, h1) {
   text-decoration: line-through;

@@ -25,7 +25,10 @@ Lines at the top of a file tell the template what a post is. Any of them, in any
     Action: Reserve a seat
     Status: Sold out
 
-Date the post itself the day you announce it, not the day of the event: Blot holds back posts dated in the future. `Status:` shows a badge (Sold out, Postponed); Cancelled strikes the title through.
+Date the post itself the day you announce it, not the day of the event: Blot holds back posts dated in the future. `Status:` shows a badge (Sold out, Postponed); Cancelled strikes the title through. `For: All ages` and `Access: Step-free entrance` show as labels.
+
+- **Repeating events**: `Repeats: weekly`, `fortnightly`, `monthly` (the same weekday of the month, like the second Tuesday) or `yearly`, and optionally `Until: 2027-06-30`. One file covers the lot: the site always shows the next one, and calendars repeat it.
+- **Several days**: `Ends: 2027-02-21` (a date rather than a time) and the event stays upcoming until its last day is over.
 
 **Pages.** Put the facts first, and they appear as a small table under the title, the address linked to a map:
 
@@ -38,7 +41,7 @@ Date the post itself the day you announce it, not the day of the event: Blot hol
 
 `Contents: yes` lists the page's sections in its margin and marks the one you're reading. Sections (`##` headings) are numbered I, II, III in the margin.
 
-**Pinned: yes** lifts a post to the top of the home page.
+**Pinned: yes** lifts a post to the top of the home page. **Appeals**: `Goal: 600` and `Raised: 410` (plain numbers) draw a progress bar; with `Booking:` and `Action: Give to the fund`, a button. **Documents**: `File: /_files/minutes.pdf` adds a download link.
 
 **In the text:**
 
@@ -50,7 +53,7 @@ Date the post itself the day you announce it, not the day of the event: Blot hol
 
 ## Tag pages
 
-Each tag can have its own layout, chosen in the settings under Tag pages: **rows**, a **grid** of pictures, **events** (upcoming then past), a **list** of titles, or a **timeline** with years in the margin. To begin with, Gallery and Photos are grids, Events and Meetings are events, Readings, Newsletters and Minutes are lists, and History is a timeline.
+Each tag can have its own layout, chosen in the settings under Tag pages: **rows**, a **grid** of pictures, **events** (that tag's upcoming events, then the past), a **list** of titles, a **timeline** with years in the margin, or **people** (a card for each post, with its picture, `Role:`, `Email:` and `Phone:`, for a staff, board or committee). To begin with, Gallery and Photos are grids, Events and Meetings are events, Readings, Newsletters and Minutes are lists, History is a timeline, and People, Staff, Board, Team and Committee are people.
 
 ## Settings
 
