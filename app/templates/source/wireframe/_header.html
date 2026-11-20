@@ -1,10 +1,9 @@
 <header>
-  <p><a href="/">{{#profile_image.thumbnails.small}}<img class="profile-photo" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="32px" width="{{width}}" height="{{height}}" alt=""> {{/profile_image.thumbnails.small}}{{title}}{{^title}}Home{{/title}}</a></p>
-  {{#menu.length}}
+  {{! The site title then the menu, on one line that wraps. The two non-breaking spaces set the title apart from the menu. }}
   <nav aria-label="Menu">
+    <a href="/">{{#profile_image.thumbnails.small}}<img class="profile-photo" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="32px" width="{{width}}" height="{{height}}" alt=""> {{/profile_image.thumbnails.small}}{{title}}{{^title}}Home{{/title}}</a>&nbsp;&nbsp;
     {{#menu}}
     <a href="{{{url}}}">{{label}}</a>
     {{/menu}}
   </nav>
-  {{/menu.length}}
 </header>
