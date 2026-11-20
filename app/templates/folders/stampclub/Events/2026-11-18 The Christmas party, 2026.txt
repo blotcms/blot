@@ -2,6 +2,7 @@ Date: 2026-11-18 09:10
 Event: 2026-12-15 18:00
 Ends: 9 pm
 Status: Sold out
+For: Members and guests
 Tags: Events
 Venue: The members' room, Society Library
 Cost: $10, members and their guests

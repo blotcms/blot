@@ -8,6 +8,8 @@ Address: Riverside Drive, New York
 Cost: Free
 Booking: https://nystampclub.example/pony-express
 Action: Reserve a seat
+For: All ages
+Access: Step-free entrance and hearing loop
 Summary: Eighteen months, nearly two thousand miles, and the covers that survived the ride: a free public lecture in place of the January meeting.
 
 # Winter lecture: the Pony Express

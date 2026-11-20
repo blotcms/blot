@@ -3,8 +3,8 @@ VERSION:2.0
 PRODID:-//Blot//Organization template//EN
 CALSCALE:GREGORIAN
 X-WR-CALNAME:{{{title}}}
-{{! Every event still to come (upcoming_events). Times are written without a zone, so calendar apps read them as local time. }}
-{{#upcoming_events}}
+{{! Every event still to come (all_upcoming_events). Times are written without a zone, so calendar apps read them as local time. }}
+{{#all_upcoming_events}}
 BEGIN:VEVENT
 UID:{{{id}}}
 DTSTAMP:{{#formatDate}}YYYYMMDD[T]HHmmss{{/formatDate}}
@@ -23,5 +23,5 @@ LOCATION:{{{metadata.venue}}}
 {{/metadata.venue}}
 URL:{{{absoluteURL}}}
 END:VEVENT
-{{/upcoming_events}}
+{{/all_upcoming_events}}
 END:VCALENDAR

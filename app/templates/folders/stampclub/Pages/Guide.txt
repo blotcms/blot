@@ -10,7 +10,7 @@ Every page on this site is a plain text file in a folder. If you have downloaded
 
 ## Folders
 
-Folders are for your own convenience: Meetings, Events, Readings, Newsletters, Minutes, History and Pages. The site doesn't care which folder a file is in. It cares about the lines at the top of the file.
+Folders are for your own convenience: Meetings, Events, Readings, Newsletters, Minutes, History, People and Pages. The site doesn't care which folder a file is in. It cares about the lines at the top of the file.
 
 Images live in folders whose names start with an underscore, such as `_stamps` and `_events`, so that they are not published as posts of their own. Documents such as PDFs live in `_files`.
 
@@ -18,24 +18,29 @@ Images live in folders whose names start with an underscore, such as `_stamps` a
 
 A file starts with a few lines of the form `Key: value`, then a blank line, then the text. These work on any post:
 
-- `Date: 2026-11-18` is the day the post was written or announced. A post dated in the future stays hidden until that day, so date an announcement on the day you make it, not on the day of the event.
+- `Date: 2026-11-18` is the day the post was written or announced. A post dated in the future stays hidden until that day, so date an announcement on the day you make it, not on the day of the event. Add a time, as in `Date: 2026-11-18 09:15`, to put posts written on the same day in the order you want.
 - `Tags: Meetings, Gallery` files the post under one or more tags, separated by commas.
 - `Summary: Bring the best thing you found this year.` is the one sentence shown in lists.
 - `Speaker: Ruth Abernethy` or `Author: Leonard Frisch` names the person, shown in lists and beside the post.
 - `Venue: The members' room, Society Library` says where.
 - `Source: Household Words, No. 100, 21 February 1852` says where a reading was first printed.
 - `Pinned: yes` lifts a post to the top of the list on the home page. Use it for one notice at a time.
+- `Goal: 600` and `Raised: 410`, as plain numbers, draw a bar showing how far an appeal has got. Pair them with `Booking:` and `Action:` (see below) for a button to give.
+- `File: /_files/accounts-2026.pdf` adds a download link for a document that goes with the post, such as the accounts with the minutes.
 
 ## Events
 
-Any post with an `Event:` line is an event. It appears in the list of what's coming up until the day has passed, then moves to the past events, and the home page always knows which is next.
+Any post with an `Event:` line is an event. It appears in the list of what's coming up until the day has passed, then moves to the past events, and the home page always knows which is next. Every meeting in this folder carries an `Event:` line too, even long after it happened, so that the lists show when it was held.
 
 - `Event: 2026-12-08 18:30` is the date and the starting time, in 24-hour form, always with the year. For a whole day, leave out the time: `Event: 2027-02-20`.
-- `Ends: 9 pm` is when it finishes, written as you would say it, and shown after the starting time.
+- `Ends: 9 pm` is when it finishes, written as you would say it, and shown after the starting time. For an event that runs over more than one day, give the last day as a date instead: `Ends: 2027-02-21`.
+- `Repeats: monthly` makes the event recur, and the site shows the next time it happens. It can also be `weekly`, `fortnightly` or `yearly`. Add `Until: 2027-06-30` to say when it stops. The first `Event:` date sets the day and time.
 - `Cost: $5, members free` or `Cost: Free` says what it costs.
 - `Address: Riverside Drive, New York` adds a street address under the venue.
 - `Booking: https://nystampclub.example/pony-express` adds a button that goes to that address.
 - `Action: Reserve a seat` changes the button's words, which are otherwise "Book a place".
+- `For: Ages 8 to 14` says who the event is for.
+- `Access: Step-free entrance and hearing loop` says how easy it is to get in and take part.
 - `Status: Sold out`, `Status: Postponed` or `Status: Cancelled` adds a label to the event. Cancelled also strikes through the title. Say why in the text.
 
 ## Tags and how they look
@@ -46,14 +51,15 @@ Each tag has its own page, laid out to suit what it holds:
 - `Readings`, `Newsletters` and `Minutes` are plain lists of titles.
 - `Gallery` is a grid of pictures. Use it on posts where the photographs are the point.
 - `History` is a timeline, with posts listed under their years. Give a history post the date it is about, such as `Date: 1951-04-10`.
+- `People` is a set of cards, one for each person. Title the post with the person's name, and add `Role: Treasurer` and `Email: treasurer@nystampclub.example` at the top, with one image in the text.
 
 ## Pages
 
 A file with `Page: yes` is a page rather than a post. It isn't in the lists, and it has an address of its own.
 
 - `Link: /visit` sets the page's address.
-- `Menu: no` keeps a page out of the menu. You can still link to it.
-- `Contents: yes` builds a table of contents in the margin from the page's `##` headings, and numbers them.
+- `Menu: no` keeps a page out of the menu. You can still link to it. Here, About, Members, Visit and Join are in the menu; Rules, Contact, Support, Credits and this guide are linked from other pages instead.
+- `Contents: yes` builds a table of contents in the margin from the page's `##` headings, and numbers them I, II, III, so don't number the headings yourself. The [Rules](/rules) page is written this way.
 - `Address:`, `Hours:`, `Phone:`, `Email:` and `Cost:` at the top of a page are shown as a short list of facts under its title, in that order. For example, `Hours: Second Tuesday of the month, 6:30–9 pm`.
 
 ## In the text

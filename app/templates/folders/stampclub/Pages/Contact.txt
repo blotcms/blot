@@ -2,12 +2,13 @@ Link: /contact
 Page: yes
 Menu: no
 Address: Post Office Box 1951, New York, New York
+Phone: (212) 555-0151
 Email: hello@nystampclub.example
 Summary: Who to write to about what, and where to send a letter.
 
 # Contact
 
-The quickest way to reach the club is to come on a second Tuesday. The next quickest is to write to hello@nystampclub.example, which Leonard reads on Sunday evenings. If you know who you want, write to them directly.
+The quickest way to reach the club is to come on a second Tuesday. The next quickest is to write to hello@nystampclub.example, which Leonard reads on Sunday evenings. If you know who you want, write to them directly; there is more about [the officers](/tagged/people) on their own pages. The phone above is an answering machine in Leonard's hall, and he returns calls on Sundays too.
 
 | Who | What about | Address |
 | --- | --- | --- |

@@ -1,5 +1,6 @@
 Date: 2026-11-19 09:20
-Event: 2027-02-20
+Event: 2027-02-20 10:00
+Ends: 2027-02-21
 Tags: Events
 Venue: The Gramercy Room
 Cost: $5, members free
