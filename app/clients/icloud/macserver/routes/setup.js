@@ -7,13 +7,16 @@ import { iCloudDriveDirectory } from "../config.js";
 import clfdate from "../util/clfdate.js";
 import leaveFolder from "../util/leaveFolder.js";
 import finderLimiter from "../util/finderLimiter.js";
+import sharePermission from "../util/sharePermission.js";
 
 // Only one setup can run at a time otherwise the apple script might not work
 // correctly or accept the wrong sharing link, and none while leaveFolder drives
 // Finder for a disconnect
 const setupLimiter = finderLimiter;
 
-// What the dashboard shows for each way accepting the sharing link can fail
+// Each way accepting the sharing link can fail. The key goes to Blot as
+// setupErrorReason, which the dashboard uses to put the problem on the step
+// that fixes it; the text is for logs and for a dashboard that predates it.
 const SETUP_ERRORS = {
   NO_ACCESS:
     "iCloud is asking for access to this folder. Share it with Blot's iCloud account, or allow anyone with the link to access it, then retry",
@@ -22,7 +25,12 @@ const SETUP_ERRORS = {
   INVALID_LINK: "Invalid sharing link",
   TIMEOUT:
     "Timed out waiting for iCloud to share the folder. Check the sharing link is valid and retry",
+  READ_ONLY:
+    "Blot can only view this folder. Give Blot's iCloud account permission to make changes, then retry",
 };
+
+const setupError = (reason) =>
+  Object.assign(new Error(SETUP_ERRORS[reason]), { reason });
 
 // How long to wait after removing stale folders before reading the initial
 // state, so a removal iCloud undoes straight away is seen
@@ -269,7 +277,7 @@ async function setupFolder(blogID, sharingLink) {
   lap("acceptSharingLink");
 
   if (SETUP_ERRORS[outcome] && outcome !== "TIMEOUT") {
-    throw new Error(SETUP_ERRORS[outcome]);
+    throw setupError(outcome);
   }
 
   // Time the wait from here so the reset and the AppleScript don't eat into it
@@ -338,6 +346,17 @@ async function setupFolder(blogID, sharingLink) {
       // Rename the folder
       await fs.rename(oldPath, newPath);
       console.log(clfdate(), `Renamed folder from ${newDirName} to ${blogID}`);
+
+      // Writes to a view-only share succeed here but never reach iCloud, so
+      // turn one down now rather than let the transfer report success. Take
+      // the folder off this Mac so a retry with the fixed share starts clean
+      const permission = await sharePermission(newPath);
+      lap("permission");
+      console.log(clfdate(), `Share permission for ${blogID}: ${permission}`);
+      if (permission === "readOnly") {
+        await leaveFolder(newPath, { root: iCloudDriveDirectory });
+        throw setupError("READ_ONLY");
+      }
       console.log(
         clfdate(),
         `Setup timings: ${Object.entries(timings)
@@ -352,7 +371,7 @@ async function setupFolder(blogID, sharingLink) {
       lastAskForAccessCheck = Date.now();
       if (await dismissAskForAccess()) {
         console.error(clfdate(), "Finder showed the Ask for Access sheet");
-        throw new Error(SETUP_ERRORS.NO_ACCESS);
+        throw setupError("NO_ACCESS");
       }
     }
 
@@ -366,9 +385,9 @@ async function setupFolder(blogID, sharingLink) {
   );
 
   // One last look; the screen is recorded by setupBlog when this throws
-  if (await dismissAskForAccess()) throw new Error(SETUP_ERRORS.NO_ACCESS);
+  if (await dismissAskForAccess()) throw setupError("NO_ACCESS");
   watchLateArrival(blogID, initialDirNames, outcome);
-  throw new Error(SETUP_ERRORS.TIMEOUT);
+  throw setupError("TIMEOUT");
 }
 
 const escapeAppleScriptString = (value) =>
@@ -738,7 +757,11 @@ export default async (req, res) => {
   setupBlog(blogID, sharingLink)
     .then(() => {
       console.log(clfdate(), `Setup complete for blogID: ${blogID}`);
-      return reportStatus({ acceptedSharingLink: true, error: null });
+      return reportStatus({
+        acceptedSharingLink: true,
+        error: null,
+        setupErrorReason: null,
+      });
     })
     .catch((error) => {
       console.error(clfdate(), `Setup failed for blogID (${blogID}):`, error);
@@ -747,6 +770,9 @@ export default async (req, res) => {
         error: error.message,
         // Not a health issue: the dashboard shows it with retry/cancel
         errorCode: "SETUP_FAILED",
+        // Which check failed (SETUP_ERRORS), so the dashboard can say which
+        // step to fix. Null for anything unexpected
+        setupErrorReason: error.reason || null,
       });
     });
 
