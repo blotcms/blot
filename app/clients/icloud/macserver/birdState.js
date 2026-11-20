@@ -38,7 +38,7 @@ const open = async () => {
         "select zone_rowid z, item_id id from client_items where item_filename = ? and item_parent_zone_rowid != zone_rowid"
       ),
       child: db.prepare(
-        "select zone_rowid z, item_id id, item_type type, item_state state, version_size size, version_mtime mtime, hex(version_content_signature) sig from client_items where item_parent_zone_rowid = ? and item_parent_id = ? and item_filename = ?"
+        "select zone_rowid z, item_id id, item_type type, item_state state, item_localsyncupstate up, item_local_diffs diffs, version_size size, version_mtime mtime, hex(version_content_signature) sig from client_items where item_parent_zone_rowid = ? and item_parent_id = ? and item_filename = ?"
       ),
     };
     console.log(clfdate(), "birdState: reading bird's database");
@@ -124,6 +124,24 @@ const itemAt = async (blogID, pathInBlogDirectory) => {
   }
 };
 
+// Whether bird has finished uploading the file at the path, in the given
+// size: true or false, or null when it doesn't know the file or the database
+// can't be read. An item with nothing left to send has a sync-up state and
+// local diffs of 0; a file still uploading, or edited since, has neither.
+const syncedUp = async (blogID, pathInBlogDirectory, size) => {
+  const s = await open();
+  if (!s) return null;
+
+  try {
+    const row = lookup(s, blogID, pathInBlogDirectory);
+    if (!row || row.type !== 1 || row.state !== 0) return null;
+    return row.up === 0 && row.diffs === 0 && row.size === size;
+  } catch (error) {
+    reset(error);
+    return null;
+  }
+};
+
 // The open database, for journal.js, or null
 const database = async () => ((await open()) ? db : null);
 
@@ -132,4 +150,4 @@ const diskMatches = (version, stat) =>
   stat.size === version.size &&
   Math.floor(stat.mtimeMs / 1000) === version.mtime;
 
-export { fileVersion, diskMatches, itemAt, database };
+export { fileVersion, diskMatches, itemAt, syncedUp, database };

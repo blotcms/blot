@@ -6,10 +6,6 @@ Sync latency follow-ups from #2814 (20 Nov 2026):
 
 Deploy: on 20 Nov 2026 00:17 UTC (run https://github.com/blotcms/blot/actions/runs/44643019427, 2e49c7493) replacing blot-green failed the custom-domain certificate sweep (`cert_sweep` in proxy/deploy/common.sh): 69 domains in a row, all starting with "n", came back with no certificate, so a stretch of the 16-way `openssl s_client` handshakes timed out together for ~20 s. Blue had passed the same sweep on the same image two minutes before, there was no memory pressure, and a re-run passed. Find what stalls the handshakes (a new unit's auto-ssl lookups while its cache warms? Redis?), or retry a domain that times out once before counting it as changed.
 
-iCloud follow-ups from #2808 (20 Nov 2026):
-- macserver: files Blot writes to iCloud (`routes/upload.js`) stay downloaded, so a customer's next edit to one of them takes 3-47s to reach the disk instead of a tenth of a second. Evict them once iCloud has uploaded them
-- CodeQL: path-injection and type-confusion alerts on the macserver's routes and watcher reappeared on the lines #2825 and #2829 moved (routes already confine paths to the blog folder, /upload checks the body is a Buffer, watch() validates the blog ID). Review and dismiss as before, or find a check CodeQL accepts
-
 Sandbox image jobs, from a stress run on the test blogs (19 Nov 2026, #2795):
 - A 200-frame 1000x1000 GIF (a 72 MB file) peaked at 246 MiB in `exif` and 200 MiB in `thumbnail`, against ~100 MiB for a 90 MP JPEG. The thumbnail job does fall back to the first frame for it (200M frame-pixels is over `DECODE_BUDGET`); what costs is the file itself, held whole in the job and in transit. Check the largest input a sandbox image job accepts, and whether `exif` and `thumbnail` need the whole file (EXIF sits at the start of a file). A big input beside pandoc can use most of the sandbox's 512M.
 - `car.heic` in a post stayed a plain folder file (`/folder/v-.../car.heic`) rather than an `_image_cache` copy, although `to-png` and `resize` jobs ran for it. Check whether the converted image is dropped somewhere after the jobs.
