@@ -1,6 +1,9 @@
 const { drive, auth: googleAuth } = require("@googleapis/drive");
 const config = require("config");
+const cachedAuth = require("./cachedAuth");
 const retryConfig = require("./retryConfig");
+
+const clients = new Map();
 
 module.exports = async (serviceAccountId) => {
   const credentials = config.google_drive.service_accounts.find(
@@ -13,10 +16,12 @@ module.exports = async (serviceAccountId) => {
     );
   }
 
-  const auth = new googleAuth.GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/drive"],
-  });
+  const auth = cachedAuth(googleAuth.GoogleAuth, credentials, [
+    "https://www.googleapis.com/auth/drive",
+  ]);
 
-  return drive({ version: "v3", auth, retryConfig });
+  // One client per auth, so every sync shares its token (cachedAuth.js)
+  if (!clients.has(auth))
+    clients.set(auth, drive({ version: "v3", auth, retryConfig }));
+  return clients.get(auth);
 };

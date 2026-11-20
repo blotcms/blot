@@ -3,6 +3,7 @@ const {
   auth: googleAuth,
 } = require("@googleapis/driveactivity");
 const config = require("config");
+const cachedAuth = require("./cachedAuth");
 
 module.exports = async (serviceAccountId) => {
   const credentials = config.google_drive.service_accounts.find(
@@ -15,10 +16,9 @@ module.exports = async (serviceAccountId) => {
     );
   }
 
-  const auth = new googleAuth.GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/drive.activity.readonly"],
-  });
+  const auth = cachedAuth(googleAuth.GoogleAuth, credentials, [
+    "https://www.googleapis.com/auth/drive.activity.readonly",
+  ]);
 
   return driveactivity({
     version: "v2",
