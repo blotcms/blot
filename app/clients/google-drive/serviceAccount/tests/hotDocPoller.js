@@ -280,9 +280,9 @@ describe("google drive hotDocPoller", function () {
     it("retries a change whose export failed", async function () {
       await enqueue();
       revision = "rev-2";
-      poller.applyChange.and.returnValue(
-        Promise.reject(new Error("export failed"))
-      );
+      poller.applyChange.and.callFake(async () => {
+        throw new Error("export failed");
+      });
 
       const untilNext = await pollOnce();
 
@@ -416,7 +416,9 @@ describe("google drive hotDocPoller", function () {
     });
 
     it("releases the lock and rejects when the export fails", async function () {
-      poller.download.and.returnValue(Promise.reject(new Error("boom")));
+      poller.download.and.callFake(async () => {
+        throw new Error("boom");
+      });
 
       await expectAsync(poller.applyChange(item)).toBeRejected();
       expect(lock.done).toHaveBeenCalledTimes(1);
@@ -432,9 +434,9 @@ describe("google drive hotDocPoller", function () {
     });
 
     it("waits for the next poll when another sync takes the lock first", async function () {
-      poller.lockFolder.and.returnValue(
-        Promise.reject(new Error("Failed to acquire folder lock"))
-      );
+      poller.lockFolder.and.callFake(async () => {
+        throw new Error("Failed to acquire folder lock");
+      });
 
       expect(await poller.applyChange(item)).toEqual("locked");
       expect(poller.fullSync).not.toHaveBeenCalled();
@@ -488,9 +490,9 @@ describe("google drive hotDocPoller", function () {
     });
 
     it("falls back to a full sync when Drive no longer has the Doc", async function () {
-      drive.files.get.and.returnValue(
-        Promise.reject(Object.assign(new Error("Not found"), { code: 404 }))
-      );
+      drive.files.get.and.callFake(async () => {
+        throw Object.assign(new Error("Not found"), { code: 404 });
+      });
       await expectFullSync("not-found");
     });
 
