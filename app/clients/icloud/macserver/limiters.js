@@ -10,11 +10,12 @@ const limiters = new Map();
 const stoppedLimiters = new Map();
 
 // How many of one blog's actions run at once. Most of an upload is waiting
-// for iCloud: an evicted file takes one to four seconds to download, so a
-// batch of files saved together is downloaded side by side. pathOrder.js keeps
-// changes to one path in order, and pushInTurn sends one request to Blot at a
-// time.
-const ACTIONS_PER_BLOG = 4;
+// for iCloud: an evicted or new file takes one to four seconds to download,
+// so a batch of files saved together is downloaded side by side. Fifty
+// evicted files came back in about 4s twelve at a time, against 10-12s four
+// at a time. pathOrder.js keeps changes to one path in order, and pushInTurn
+// sends one request to Blot at a time.
+const ACTIONS_PER_BLOG = 12;
 
 /**
  * Get or create a Bottleneck limiter for a specific blogID.

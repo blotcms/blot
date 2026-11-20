@@ -229,7 +229,11 @@ describe("icloud macserver disconnect handling", function () {
     it("runs one blog's actions on different files side by side", async function () {
       const blogID = newBlogID();
       const { started, open } = gated();
-      const paths = ["/a.md", "/b.md", "/c.md", "/d.md", "/e.md"];
+      // one more than the limit, so the last waits for a slot
+      const paths = Array.from(
+        { length: limiters.ACTIONS_PER_BLOG + 1 },
+        (_, i) => `/${String.fromCharCode(97 + i)}.md`
+      );
       const results = paths.map((p) =>
         actions.performAction(blogID, p, "upload")
       );
