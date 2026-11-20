@@ -1,6 +1,7 @@
 import { remoteServer, Authorization } from "../config.js";
 import fetch from "./rateLimitedFetchWithRetriesAndTimeout.js";
 import clfdate from "../util/clfdate.js";
+import { pushInTurn } from "../limiters.js";
 
 export default async (...args) => {
   const [blogID, path] = args;
@@ -41,14 +42,16 @@ export default async (...args) => {
   let response;
 
   try {
-    response = await fetch(`${remoteServer}/mkdir`, {
-      method: "POST",
-      headers: {
-        Authorization, // Use the Authorization header
-        blogID,
-        pathBase64,
-      },
-    });
+    response = await pushInTurn(blogID, () =>
+      fetch(`${remoteServer}/mkdir`, {
+        method: "POST",
+        headers: {
+          Authorization, // Use the Authorization header
+          blogID,
+          pathBase64,
+        },
+      })
+    );
   } catch (error) {
     console.error(
       clfdate(),

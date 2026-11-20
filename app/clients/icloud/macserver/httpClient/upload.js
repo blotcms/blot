@@ -12,6 +12,7 @@ import { isUnchanged, recordPushed } from "../pushedFiles.js";
 import { fileVersion, diskMatches } from "../birdState.js";
 import downloadBirdsVersion from "../downloadBirdsVersion.js";
 import { join } from "path";
+import { pushInTurn } from "../limiters.js";
 
 class FileTooLargeError extends Error {
   constructor({ path, size, maxFileSize, mtime }) {
@@ -81,18 +82,20 @@ export default async (blogID, path) => {
 
     let response;
     try {
-      response = await fetch(`${remoteServer}/upload`, {
-        timeout: 60 * 1000,
-        method: "POST",
-        headers: {
-          Authorization,
-          blogID,
-          pathBase64,
-          modifiedTime,
-          "x-placeholder": "true",
-          "x-original-size": String(size),
-        },
-      });
+      response = await pushInTurn(blogID, () =>
+        fetch(`${remoteServer}/upload`, {
+          timeout: 60 * 1000,
+          method: "POST",
+          headers: {
+            Authorization,
+            blogID,
+            pathBase64,
+            modifiedTime,
+            "x-placeholder": "true",
+            "x-original-size": String(size),
+          },
+        })
+      );
     } catch (error) {
       console.error(
         clfdate(),
@@ -196,55 +199,66 @@ export default async (blogID, path) => {
 
   const modifiedTime = stat.mtime.toISOString();
 
-  // Read entire file into memory
-  console.log(clfdate(), `Reading file into memory: ${filePath}`);
+  // Read in its turn to push, so a blog holds one file in memory however
+  // many it is downloading. Beware: if you try and rewrite this to use streams
+  // you also have to update rateLimitedFetchWithRetriesAndTimeout to re-create
+  // the stream correctly for subsequent retries otherwise the stream will be
+  // in a bad state and will not work correctly
+  const response = await pushInTurn(blogID, async () => {
+    console.log(clfdate(), `Reading file into memory: ${filePath}`);
 
-  // Beware: if you try and rewrite this to use streams you also have to
-  // update rateLimitedFetchWithRetriesAndTimeout to re-create the stream
-  // correctly for subsequent retries otherwise the stream will be in a
-  // bad state and will not work correctly
-  let fileBuffer;
-  try {
-    fileBuffer = await fs.readFile(filePath);
-  } catch (error) {
-    if (isMissingCode(error)) throw new FileMissingError(path);
-    console.error(
+    let fileBuffer;
+    try {
+      fileBuffer = await fs.readFile(filePath);
+    } catch (error) {
+      if (isMissingCode(error)) throw new FileMissingError(path);
+      console.error(
+        clfdate(),
+        `Failed to read file for upload: ${filePath}`,
+        error
+      );
+      throw new Error(`Failed to read file: ${error.message}`, {
+        cause: error,
+      });
+    }
+
+    // The file changed between the download and its turn: retried from the
+    // start (see withRetries in watcher/actions.js), which downloads it again
+    if (fileBuffer.length !== stat.size) {
+      throw new Error(
+        `File changed while waiting to push: ${filePath} (${stat.size} bytes downloaded, ${fileBuffer.length} read)`
+      );
+    }
+
+    console.log(
       clfdate(),
-      `Failed to read file for upload: ${filePath}`,
-      error
+      `Issuing HTTP /upload request to remote server: ${path}`
     );
-    throw new Error(`Failed to read file: ${error.message}`, { cause: error });
-  }
 
-  console.log(
-    clfdate(),
-    `Issuing HTTP /upload request to remote server: ${path}`
-  );
-
-  let response;
-  try {
-    response = await fetch(`${remoteServer}/upload`, {
-      // we use a larger timeout for uploads since they involve building a potentially expensive entry
-      // even if the upload itself is fast
-      timeout: 60 * 1000,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        Authorization,
-        blogID,
-        pathBase64,
-        modifiedTime,
-      },
-      body: fileBuffer,
-    });
-  } catch (error) {
-    console.error(
-      clfdate(),
-      `Failed to upload file to remote server: ${filePath}`,
-      error
-    );
-    throw error;
-  }
+    try {
+      return await fetch(`${remoteServer}/upload`, {
+        // we use a larger timeout for uploads since they involve building a potentially expensive entry
+        // even if the upload itself is fast
+        timeout: 60 * 1000,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          Authorization,
+          blogID,
+          pathBase64,
+          modifiedTime,
+        },
+        body: fileBuffer,
+      });
+    } catch (error) {
+      console.error(
+        clfdate(),
+        `Failed to upload file to remote server: ${filePath}`,
+        error
+      );
+      throw error;
+    }
+  });
 
   const text = await response.text();
 

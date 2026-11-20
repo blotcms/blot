@@ -156,6 +156,9 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
 const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
   let entries;
   let interrupted = false;
+  // a folder's files are pushed side by side (see limiters.js), its
+  // subfolders one after another
+  const uploads = [];
 
   try {
     entries = await fs.readdir(buildBlogPath(blogID, pathInBlogDirectory), {
@@ -208,20 +211,28 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
           clfdate(),
           `Directory contents: upload, blogID: ${blogID}, path: ${childPath}`
         );
-        await performAction(blogID, childPath, "upload");
+        uploads.push(
+          performAction(blogID, childPath, "upload").catch((error) =>
+            logWalkError(blogID, childPath, error)
+          )
+        );
       }
     } catch (error) {
-      // performAction has already requested a resync, carry on with the rest
-      console.error(
-        clfdate(),
-        `Error syncing directory contents (${blogID}, ${childPath}):`,
-        error
-      );
+      logWalkError(blogID, childPath, error);
     }
   }
 
+  await Promise.all(uploads);
   return interrupted;
 };
+
+// performAction has already requested a resync, carry on with the rest
+const logWalkError = (blogID, childPath, error) =>
+  console.error(
+    clfdate(),
+    `Error syncing directory contents (${blogID}, ${childPath}):`,
+    error
+  );
 
 // Walk every directory the watcher reports, not only ones Blot did not already
 // have: a child upload or mkdir can create the folder on Blot first, which

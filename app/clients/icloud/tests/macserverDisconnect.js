@@ -122,19 +122,24 @@ describe("icloud macserver disconnect handling", function () {
       let release;
       const ran = [];
 
-      const running = limiter.schedule(
-        () => new Promise((resolve) => (release = () => resolve("done")))
+      // fill every slot, so the next two wait
+      const releases = [];
+      const running = Array.from({ length: limiters.ACTIONS_PER_BLOG }, () =>
+        limiter.schedule(
+          () => new Promise((resolve) => releases.push(() => resolve("done")))
+        )
       );
+      release = () => releases.forEach((fn) => fn());
       const waiting = [1, 2].map((n) =>
         limiter.schedule(async () => ran.push(n)).catch((error) => error)
       );
 
-      await until(() => release);
+      await until(() => releases.length === limiters.ACTIONS_PER_BLOG);
 
       limiters.removeLimiterForBlogID(blogID);
       release();
 
-      expect(await running).toBe("done");
+      expect(await Promise.all(running)).toEqual(running.map(() => "done"));
       const errors = await Promise.all(waiting);
       expect(errors.every(limiters.isLimiterStoppedError)).toBe(true);
       expect(ran).toEqual([]);
@@ -153,10 +158,11 @@ describe("icloud macserver disconnect handling", function () {
         () => new Promise((resolve) => (release = resolve))
       );
 
+      // one path, so the second and third wait for the first
       const results = [
         actions.performAction(blogID, "/a.txt", "remove"),
-        actions.performAction(blogID, "/b.txt", "remove"),
-        actions.performAction(blogID, "/c.txt", "remove"),
+        actions.performAction(blogID, "/a.txt", "remove"),
+        actions.performAction(blogID, "/a.txt", "remove"),
       ];
       await until(() => release);
 
@@ -198,6 +204,133 @@ describe("icloud macserver disconnect handling", function () {
 
       expect(caught).toBe(failure);
       expect(globalThis.__macserverMocks.resync).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("ordering", function () {
+    // Each call gets a gate: the mocked action waits until it is opened
+    const gated = () => {
+      const started = [];
+      const gates = new Map();
+      const fake = (name) => (blogID, p) =>
+        new Promise((resolve) => {
+          started.push(`${name} ${p}`);
+          gates.set(`${name} ${p}`, resolve);
+        });
+      globalThis.__macserverMocks.upload.and.callFake(fake("upload"));
+      globalThis.__macserverMocks.remove.and.callFake(fake("remove"));
+      globalThis.__macserverMocks.mkdir.and.callFake(fake("mkdir"));
+      const open = (label) => gates.get(label)(true);
+      return { started, open };
+    };
+
+    const settle = () => new Promise((resolve) => setTimeout(resolve, 50));
+
+    it("runs one blog's actions on different files side by side", async function () {
+      const blogID = newBlogID();
+      const { started, open } = gated();
+      const paths = ["/a.md", "/b.md", "/c.md", "/d.md", "/e.md"];
+      const results = paths.map((p) =>
+        actions.performAction(blogID, p, "upload")
+      );
+
+      await until(() => started.length === limiters.ACTIONS_PER_BLOG);
+      await settle();
+      expect(started.length).toBe(limiters.ACTIONS_PER_BLOG);
+
+      open("upload /a.md");
+      await until(() => started.length === paths.length);
+      paths.slice(1).forEach((p) => open(`upload ${p}`));
+      await Promise.all(results);
+    });
+
+    it("keeps changes to one file in order, ignoring case", async function () {
+      const blogID = newBlogID();
+      const { started, open } = gated();
+      const first = actions.performAction(blogID, "/Post.md", "upload");
+      const second = actions.performAction(blogID, "/post.md", "remove");
+      const other = actions.performAction(blogID, "/other.md", "upload");
+
+      await until(() => started.length === 2);
+      await settle();
+      expect(started).toEqual(["upload /Post.md", "upload /other.md"]);
+
+      open("upload /Post.md");
+      await until(() => started.length === 3);
+      expect(started[2]).toBe("remove /post.md");
+      open("remove /post.md");
+      open("upload /other.md");
+      await Promise.all([first, second, other]);
+    });
+
+    it("keeps a folder's changes in order with the files inside it", async function () {
+      const blogID = newBlogID();
+      const { started, open } = gated();
+      const mkdir = actions.performAction(blogID, "/dir", "mkdir");
+      const upload = actions.performAction(blogID, "/dir/a.md", "upload");
+      const sibling = actions.performAction(blogID, "/dir2/a.md", "upload");
+
+      await until(() => started.length === 2);
+      await settle();
+      expect(started).toEqual(["mkdir /dir", "upload /dir2/a.md"]);
+
+      // the folder's removal waits for the upload inside it
+      const remove = actions.performAction(blogID, "/dir", "remove");
+      open("mkdir /dir");
+      await until(() => started.length === 3);
+      await settle();
+      expect(started[2]).toBe("upload /dir/a.md");
+
+      open("upload /dir/a.md");
+      await until(() => started.length === 4);
+      expect(started[3]).toBe("remove /dir");
+      open("remove /dir");
+      open("upload /dir2/a.md");
+      await Promise.all([mkdir, upload, sibling, remove]);
+    });
+
+    it("lets later changes to a path through after one fails", async function () {
+      const blogID = newBlogID();
+      globalThis.__macserverMocks.remove.and.callFake(async () => {
+        throw new Error("boom");
+      });
+      const failed = actions
+        .performAction(blogID, "/a.md", "remove")
+        .catch((error) => error);
+      const next = actions.performAction(blogID, "/a.md", "upload");
+
+      expect((await failed).message).toBe("boom");
+      await next;
+      expect(globalThis.__macserverMocks.upload).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe("pushInTurn", function () {
+    it("sends one blog's requests one at a time, carrying on after a failure", async function () {
+      const blogID = newBlogID();
+      const log = [];
+      let release;
+      const first = limiters.pushInTurn(blogID, async () => {
+        log.push("first");
+        await new Promise((resolve) => (release = resolve));
+        throw new Error("boom");
+      });
+      const second = limiters.pushInTurn(blogID, async () => {
+        log.push("second");
+        return 2;
+      });
+      const otherBlog = limiters.pushInTurn(newBlogID(), async () => {
+        log.push("other blog");
+      });
+
+      await otherBlog;
+      await until(() => release);
+      expect(log).toEqual(["first", "other blog"]);
+
+      release();
+      expect((await first.catch((error) => error)).message).toBe("boom");
+      expect(await second).toBe(2);
+      expect(log).toEqual(["first", "other blog", "second"]);
     });
   });
 
