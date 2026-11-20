@@ -1,6 +1,6 @@
 const comparePaths = require("./util/comparePaths");
 const folder = require("storage/folder");
-const { join, dirname } = require("path");
+const { join, dirname, basename } = require("path");
 const database = require("../database");
 const {
   MESSAGES,
@@ -289,6 +289,16 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   // posts). Resolves false, having changed nothing, whenever it can't be sure:
   // something already at the destination, a destination inside the folder
   // itself, an ignored name, or a parent that isn't there.
+  // The local listing of each directory a walk is in the middle of, so a move
+  // can take the folder out of the listing it left: otherwise a new folder
+  // created at its old name in the same pass would look present already
+  const listingsInProgress = new Map();
+  const forgetLocal = (path) => {
+    const listing = listingsInProgress.get(dirname(path));
+    const entry = listing?.find((item) => item.name === basename(path));
+    if (entry) entry.name = undefined;
+  };
+
   const moveDirectory = async (from, to, id) => {
     if (!id || from === to || from === "/" || to.startsWith(from + "/"))
       return false;
@@ -305,9 +315,18 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     console.log("Moving directory", from, "to", to, "as it moved in Drive");
     await folder.move(blogID, from, to);
     await moveMapping(id, to);
+    forgetLocal(from);
 
-    // Verified records name the path they were verified at
     const movedPaths = descendants.map((path) => to + path.slice(from.length));
+    await update(from);
+    for (const path of descendants) await update(path);
+    await update(to);
+    for (const path of movedPaths) await update(path);
+
+    // Verified records name the path they were verified at. Rewritten only
+    // once every path above is updated: if an update fails, the records still
+    // name the old paths, so a retry checks the files at the new ones (their
+    // md5 matches, so nothing is downloaded) and rebuilds them.
     const ids = (await getIds(movedPaths)).filter(Boolean);
     const records = await getVerifiedContents(ids);
     for (let i = 0; i < ids.length; i++) {
@@ -320,10 +339,6 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       }
     }
 
-    await update(from);
-    for (const path of descendants) await update(path);
-    await update(to);
-    for (const path of movedPaths) await update(path);
     summary.moved = (summary.moved || 0) + 1;
     return true;
   };
@@ -359,6 +374,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       listings.take(dirId),
       localReaddir(blogID, dir),
     ]);
+    listingsInProgress.set(dir, localContents);
 
     // We handle file name deduplication and the mapping of
     // google docs to .gdoc files here. Shortcuts are skipped: Blot can't
@@ -388,7 +404,9 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       ids.forEach((id, i) => mappedPaths.set(id, paths[i]));
     }
 
-    for (const { name, isDirectory: isLocalDirectory } of localContents) {
+    for (const local of localContents) {
+      const { name, isDirectory: isLocalDirectory } = local;
+      if (name === undefined) continue;
       const path = join(dir, name);
       // A directory removed in one remove call still accounts for every
       // file total counted inside it, so current must advance by that many.
@@ -430,8 +448,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             if (parentId) to = await pathInDrive(parentId, id);
           }
           if (to && (await moveDirectory(path, to, id))) {
-            if (here)
-              localContents.push({ name: here.name, isDirectory: true });
+            // Renamed here: this listing has it under the new name now
+            if (here) local.name = here.name;
             continue;
           }
         }
@@ -837,6 +855,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         }
       }
     } finally {
+      listingsInProgress.delete(dir);
       // Downloads not started yet must not start now
       stopped = true;
       // Downloads already running write into the blog folder. Wait for them

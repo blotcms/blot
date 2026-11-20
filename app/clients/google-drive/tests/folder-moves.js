@@ -6,7 +6,7 @@ const FOLDER = "application/vnd.google-apps.folder";
 // Runs the real sync.js against an in-memory blog folder and folder mapping.
 // remote: Drive as { dirId: [items] }; local: the blog folder's paths (a
 // trailing "/" marks a directory); mapping: id -> path.
-function harness({ remote, local, mapping, hints = {} }) {
+function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
   const files = new Set(local);
   const paths = new Map(Object.entries(mapping));
   const verified = new Map();
@@ -163,7 +163,10 @@ function harness({ remote, local, mapping, hints = {} }) {
     };
   };
 
-  const update = async (path) => state.updates.push(path);
+  const update = async (path) => {
+    if (path === failUpdate) throw new Error("Redis went away");
+    state.updates.push(path);
+  };
   // A targeted pass of the given directories, as sync/index.js runs one
   state.apply = (ids) =>
     module.exports("blog", () => {}, update, {
@@ -258,6 +261,42 @@ describe("google-drive sync() folder renames and moves", function () {
 
     expect(h.moves).toEqual([["/old", "/new"]]);
     expect(h.downloads).toEqual([]);
+  });
+
+  it("creates a new folder at the old name of one renamed in the same pass", async function () {
+    const h = harness({
+      remote: {
+        root: [folderItem("F", "a"), folderItem("G", "z")],
+        F: [fileItem("x", "x.md")],
+        G: [fileItem("y", "y.md")],
+      },
+      local: ["/z/", "/z/x.md"],
+      mapping: { root: "/", F: "/z", x: "/z/x.md" },
+    });
+
+    expect(await h.apply(["root"])).toBeTruthy();
+
+    expect(h.moves).toEqual([["/z", "/a"]]);
+    expect(h.files.has("/a/x.md")).toBe(true);
+    expect(h.files.has("/z/")).toBe(true);
+    expect(h.downloads).toEqual(["/z/y.md"]);
+  });
+
+  it("leaves the verified records at the old paths when an update fails, so a retry rebuilds the moved files", async function () {
+    const h = harness({
+      remote: {
+        root: [folderItem("F", "new")],
+        F: [fileItem("a", "a.md")],
+      },
+      local: ["/old/", "/old/a.md"],
+      mapping: { root: "/", F: "/old", a: "/old/a.md" },
+      failUpdate: "/new/a.md",
+    });
+
+    expect(await h.apply(["root"])).toBe(false);
+
+    expect(h.files.has("/new/a.md")).toBe(true);
+    expect(h.verified.get("a").path).toBe("/old/a.md");
   });
 
   it("still removes a folder that is gone from Drive", async function () {
