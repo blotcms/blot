@@ -1,5 +1,5 @@
 import readline from "readline";
-import { iCloudDriveDirectory } from "./config.js";
+import { rootOf } from "./blogFolder.js";
 import { spawn } from "child_process";
 import recursiveList from "./util/recursiveList.js";
 import clfdate from "./util/clfdate.js";
@@ -56,7 +56,7 @@ export default () => {
           return;
         }
 
-        recursiveList(`${iCloudDriveDirectory}/${blogId}`, 0).catch((error) => {
+        recursiveList(rootOf(blogId), 0).catch((error) => {
           console.error(
             clfdate(),
             `Failed to recursively list contents of ${blogId}:`,

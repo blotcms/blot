@@ -8,6 +8,12 @@ import clfdate from "../util/clfdate.js";
 import leaveFolder from "../util/leaveFolder.js";
 import finderLimiter from "../util/finderLimiter.js";
 import sharePermission from "../util/sharePermission.js";
+import {
+  nest as nestBlogFolder,
+  refresh as refreshBlogFolder,
+  removeContainer,
+} from "../blogFolder.js";
+import { forgetRoot } from "../birdState.js";
 
 // Only one setup can run at a time otherwise the apple script might not work
 // correctly or accept the wrong sharing link, and none while leaveFolder drives
@@ -347,33 +353,48 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
         `New folder ${newDirName} share: ${await shareInfo(oldPath)}`
       );
 
-      // If there is already a folder with the blogID (an earlier share of a
+      // If there is already a folder for this blog (an earlier share of a
       // reconnected blog), take it off this Mac without deleting the earlier
       // share's files for its owner (util/leaveFolder.js). Setup already holds
       // finderLimiter
       if (await fs.pathExists(newPath)) {
-        const existing = (await fs.readdir(newPath)).length;
+        const earlier = await refreshBlogFolder(blogID);
         console.error(
           clfdate(),
-          `Replacing existing folder for ${blogID} (${existing} entries), share: ${await shareInfo(newPath)}`
+          `Replacing existing ${earlier.nested ? "nested " : ""}folder for ${blogID}`
         );
-        await leaveFolder(newPath, { root: iCloudDriveDirectory });
+        if (earlier.nested) {
+          if (earlier.root)
+            await leaveFolder(earlier.root, { root: iCloudDriveDirectory });
+          await removeContainer(blogID);
+        } else {
+          console.error(clfdate(), `share: ${await shareInfo(newPath)}`);
+          await leaveFolder(newPath, { root: iCloudDriveDirectory });
+        }
       }
 
-      // Rename the folder
+      // Nest the folder in blog_<id> under the owner's name, rather than
+      // renaming it: a renamed share no longer follows the owner's renames
+      // (blogFolder.js, #2874)
       progress("Linking the folder to your site");
-      await fs.rename(oldPath, newPath);
-      console.log(clfdate(), `Renamed folder from ${newDirName} to ${blogID}`);
+      const layout = await nestBlogFolder(blogID, oldPath);
+      forgetRoot(blogID);
+      const sharedPath = layout.root;
+      console.log(
+        clfdate(),
+        `Nested folder ${newDirName} in ${blogID} as "${layout.name}"`
+      );
 
       // Writes to a view-only share succeed here but never reach iCloud, so
       // turn one down now rather than let the transfer report success. Take
       // the folder off this Mac so a retry with the fixed share starts clean
       progress("Checking permission to make changes");
-      const permission = await sharePermission(newPath);
+      const permission = await sharePermission(sharedPath);
       lap("permission");
       console.log(clfdate(), `Share permission for ${blogID}: ${permission}`);
       if (permission === "readOnly") {
-        await leaveFolder(newPath, { root: iCloudDriveDirectory });
+        await leaveFolder(sharedPath, { root: iCloudDriveDirectory });
+        await removeContainer(blogID);
         throw setupError("READ_ONLY");
       }
       progress("Permission to make changes confirmed");
@@ -383,10 +404,10 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
           .map(([name, ms]) => `${name} ${ms}ms`)
           .join(", ")}`
       );
-      watchRename(newDirName, newPath, blogID);
+      watchRename(newDirName, sharedPath, blogID);
       progress("Joined your folder");
       // The name the owner gave the folder, for the dashboard
-      return { folderName: newDirName };
+      return { folderName: layout.name };
     }
 
     if (Date.now() - lastProgress > 10000) {

@@ -37,6 +37,14 @@ const open = async () => {
       root: db.prepare(
         "select zone_rowid z, item_id id from client_items where item_filename = ? and item_parent_zone_rowid != zone_rowid"
       ),
+      // nested (blogFolder.js): blog_<id> is a plain folder in the account's
+      // zone, and the shared folder is the root of its own zone inside it
+      container: db.prepare(
+        "select zone_rowid z, item_id id from client_items where item_filename = ? and item_parent_zone_rowid = zone_rowid"
+      ),
+      nestedRoot: db.prepare(
+        "select zone_rowid z, item_id id from client_items where item_parent_zone_rowid = ? and item_parent_id = ? and zone_rowid != item_parent_zone_rowid and item_type in (0, 9)"
+      ),
       child: db.prepare(
         "select zone_rowid z, item_id id, item_type type, item_state state, item_localsyncupstate up, item_local_diffs diffs, version_size size, version_mtime mtime, hex(version_content_signature) sig from client_items where item_parent_zone_rowid = ? and item_parent_id = ? and item_filename = ?"
       ),
@@ -72,11 +80,20 @@ const reset = (error) => {
   roots.clear();
 };
 
+// A blog's folder changed (nested, or rejoined): look its root up again
+const forgetRoot = (blogID) => roots.delete(blogID);
+
 const lookup = (s, blogID, pathInBlogDirectory) => {
   let node = roots.get(blogID);
   if (!node) {
     node = s.root.get(blogID);
-    if (!node) return null;
+    if (!node) {
+      const container = s.container.get(blogID);
+      const shared = container && s.nestedRoot.all(container.z, container.id);
+      // exactly one shared folder inside, as blogFolder.js expects
+      if (!shared || shared.length !== 1) return null;
+      node = shared[0];
+    }
     roots.set(blogID, node);
   }
 
@@ -150,4 +167,4 @@ const diskMatches = (version, stat) =>
   stat.size === version.size &&
   Math.floor(stat.mtimeMs / 1000) === version.mtime;
 
-export { fileVersion, diskMatches, itemAt, syncedUp, database };
+export { fileVersion, diskMatches, itemAt, syncedUp, database, forgetRoot };

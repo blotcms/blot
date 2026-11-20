@@ -61,6 +61,43 @@ describe("icloud macserver leaveFolder", function () {
         );
       });
     });
+
+    describe("a nested blog folder", function () {
+      beforeEach(async function () {
+        await fs.outputFile(path.join(root, "blog_nest", ".blot-nested"), "");
+        await fs.outputFile(
+          path.join(root, "blog_nest", "My site", "post.md"),
+          "hello"
+        );
+      });
+
+      it("accepts the shared folder inside it", function () {
+        expect(checkPath(path.join(root, "blog_nest", "My site"), root)).toBe(
+          path.join(root, "blog_nest", "My site")
+        );
+      });
+
+      it("refuses blog_<id> itself, which holds the shared folder", function () {
+        expect(() =>
+          checkPath(path.join(root, "blog_nest"), root)
+        ).toThrowError(/Refusing to remove/);
+      });
+
+      it("refuses the marker and anything deeper", function () {
+        expect(() =>
+          checkPath(path.join(root, "blog_nest", ".blot-nested"), root)
+        ).toThrowError(/Refusing to remove/);
+        expect(() =>
+          checkPath(path.join(root, "blog_nest", "My site", "posts"), root)
+        ).toThrowError(/Refusing to remove/);
+      });
+
+      it("refuses a folder inside a blog_ folder without the marker", function () {
+        expect(() =>
+          checkPath(path.join(root, "blog_abc", "drafts"), root)
+        ).toThrowError(/Refusing to remove/);
+      });
+    });
   });
 
   it("refuses a bad path before running anything", async function () {

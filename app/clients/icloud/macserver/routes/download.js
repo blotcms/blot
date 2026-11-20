@@ -1,5 +1,5 @@
 import { join, resolve, sep } from "path";
-import { iCloudDriveDirectory } from "../config.js";
+import { rootOf } from "../blogFolder.js";
 import * as brctl from "../brctl/index.js";
 import clfdate from "../util/clfdate.js";
 import normalizeMacserverPath from "./normalizeMacserverPath.js";
@@ -24,7 +24,7 @@ export default async (req, res) => {
   );
 
   try {
-    const basePath = resolve(join(iCloudDriveDirectory, blogID));
+    const basePath = resolve(rootOf(blogID));
     const filePath = resolve(join(basePath, normalizedPath));
 
     if (filePath !== basePath && !filePath.startsWith(`${basePath}${sep}`)) {
