@@ -186,12 +186,18 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
   // Walks node-redis's debugging iterators, which neither touch the LRU order
   // nor copy values; about 10,000 entries, once a minute.
   classSizes() {
+    // Internal to node-redis: an upgrade without them loses only this figure
+    const sizes = {};
+    if (
+      typeof this.keySetEntries !== "function" ||
+      typeof this.entryEntries !== "function"
+    )
+      return sizes;
     const classOf = new Map();
     for (const [key, cacheKeys] of this.keySetEntries()) {
       const className = classify(key);
       for (const cacheKey of cacheKeys) classOf.set(cacheKey, className);
     }
-    const sizes = {};
     for (const [cacheKey, entry] of this.entryEntries()) {
       const className = classOf.get(cacheKey) || "other";
       const size =
