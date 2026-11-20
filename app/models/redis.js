@@ -85,7 +85,8 @@ function createRedisClient({ clientSideCache: useCache = true } = {}) {
         // Above the capped classes' shares (CLASS_CAPS in models/redis-cache)
         // plus a few hot keys for every blog (its handle or domain, info,
         // template and patterns), so the blog keys are never evicted to make
-        // room.
+        // room. Raised from 10,000 by the view and views caps when those
+        // were added (20 Nov 2026), so the keys already cached keep theirs.
         //
         // Memory, measured 3 Nov 2026: a cached entry costs about its value's
         // size in the heap plus about 300 bytes of bookkeeping (patterns and
@@ -98,7 +99,7 @@ function createRedisClient({ clientSideCache: useCache = true } = {}) {
         // each class's cap (read-only); then locally fill this cache with
         // values of those sizes built from flat strings (random bytes, not
         // padEnd, which V8 can share) and compare heapUsed after gc().
-        maxEntries: 10000,
+        maxEntries: 12500,
         evictPolicy: "LRU",
       })
     : undefined;

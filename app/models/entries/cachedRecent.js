@@ -21,8 +21,10 @@ const blogKey = require("models/blog/key");
 const recentEntriesCache = createRenderCache("recentEntries", {
   max: 1000,
   // 31 entries per blog, but still byte-capped so a burst of distinct blogs
-  // cannot fill the process by item count alone.
-  maxSize: 20 * 1024 * 1024,
+  // cannot fill the process by item count alone. Doubled from 20 MB on 20
+  // Nov 2026: the byte cap held it far below its entry cap, and about half
+  // its misses were for blogs it had just evicted (#2795).
+  maxSize: 40 * 1024 * 1024,
   sizeCalculation: (value) => value.size,
   // Without this, an in-flight fetch evicted by LRU/size pressure aborts and
   // every request coalesced onto it rejects with "Error: evicted" instead

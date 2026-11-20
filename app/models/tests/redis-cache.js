@@ -8,10 +8,12 @@ describe("models/redis-cache", function () {
       "handle:david": "handle",
       "template:SITE:blog:info": "template",
       "template:blog_123:my-theme:info": "template",
-      "template:SITE:blog:view:entry.html": "other",
+      "template:SITE:blog:view:entry.html": "view",
+      "template:blog_123:my-theme:view:style.css": "view",
       "template:SITE:blog:url_patterns": "patterns",
       "template:SITE:blog:url:/": "other",
-      "template:SITE:blog:all_views": "other",
+      "template:SITE:blog:all_views": "views",
+      "template:SITE:blog:view_sources": "other",
       "template:owned_by:SITE": "owners",
       "template:owned_by:blog_123": "owners",
       "sess:abc123": "session",
@@ -43,6 +45,8 @@ describe("models/redis-cache", function () {
     [
       "template:SITE:blog:url_patterns",
       "template:owned_by:SITE",
+      "template:SITE:blog:view:entry.html",
+      "template:SITE:blog:all_views",
       "sess:abc",
       "user:user_1:info",
     ].forEach(function (key) {
@@ -50,7 +54,7 @@ describe("models/redis-cache", function () {
     });
     [
       "template:SITE:blog:url:/wp-login.php",
-      "template:SITE:blog:view:entry.html",
+      "template:SITE:blog:view_sources",
       "blog:x:redirect:/a",
     ].forEach(function (key) {
       expect(Cache.classifyKeys([key]).cache).toBe(false, key);
@@ -199,6 +203,85 @@ describe("models/redis-cache", function () {
       store(c, "sess:d");
       expect(c.has("GET sess:c")).toBe(true);
       expect(c.has("GET sess:d")).toBe(true);
+    });
+
+    describe("by bytes", function () {
+      function viewCache(classByteCaps) {
+        return new Cache({
+          ttl: 0,
+          maxEntries: 100,
+          evictPolicy: "LRU",
+          classCaps: { view: 50 },
+          classByteCaps,
+        });
+      }
+
+      function storeView(c, name, bytes) {
+        const key = "template:SITE:blog:view:" + name;
+        const cacheKey = "HGETALL " + key;
+        c.set(cacheKey, c.createPromiseEntry(null, new Promise(() => {})), [
+          key,
+        ]);
+        c.set(cacheKey, c.createValueEntry(null, "x".repeat(bytes)), [key]);
+        return cacheKey;
+      }
+
+      it("evicts a class's oldest entries once its bytes pass the cap", function () {
+        const c = viewCache({ view: 2500 });
+        const a = storeView(c, "a.html", 1000);
+        const b = storeView(c, "b.html", 1000);
+        store(c, "blog:b1:info");
+        const d = storeView(c, "d.html", 1000);
+
+        expect(c.has(a)).toBe(false);
+        expect(c.has(b)).toBe(true);
+        expect(c.has(d)).toBe(true);
+        expect(c.has("GET blog:b1:info")).toBe(true);
+        expect(c.classStats.view.evictions).toBe(1);
+      });
+
+      it("evicts an entry bigger than the whole cap", function () {
+        const c = viewCache({ view: 2500 });
+        const a = storeView(c, "a.html", 1000);
+        const huge = storeView(c, "huge.html", 5000);
+
+        expect(c.has(a)).toBe(false);
+        expect(c.has(huge)).toBe(false);
+        expect(c.classBytes.get("view")).toBe(0);
+      });
+
+      it("stops counting the bytes of entries the cache dropped", function () {
+        const c = viewCache({ view: 2500 });
+        const a = storeView(c, "a.html", 1000);
+        const b = storeView(c, "b.html", 1000);
+        c.invalidate("template:SITE:blog:view:a.html");
+        const d = storeView(c, "d.html", 1000);
+
+        expect(c.has(a)).toBe(false);
+        expect(c.has(b)).toBe(true);
+        expect(c.has(d)).toBe(true);
+        expect((c.classStats.view || {}).evictions || 0).toBe(0);
+      });
+
+      it("counts an entry's bytes once when its value replaces its promise", function () {
+        const c = viewCache({ view: 2500 });
+        const a = storeView(c, "a.html", 1000);
+        c.set(a, c.createValueEntry(null, "x".repeat(1000)), [
+          "template:SITE:blog:view:a.html",
+        ]);
+        expect(c.classBytes.get("view")).toBe(1016);
+      });
+
+      it("forgets its bytes when an entry is deleted or the cache cleared", function () {
+        const c = viewCache({ view: 2500 });
+        const a = storeView(c, "a.html", 1000);
+        storeView(c, "b.html", 1000);
+        c.delete(a);
+        expect(c.classBytes.get("view")).toBe(1016);
+        c.clear();
+        expect(c.classBytes.size).toBe(0);
+        expect(c.entryBytes.size).toBe(0);
+      });
     });
 
     it("leaves room above the caps for the blog keys", function () {
