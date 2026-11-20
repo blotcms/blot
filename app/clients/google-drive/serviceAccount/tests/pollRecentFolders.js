@@ -129,4 +129,36 @@ describe("google drive pollRecentFolders", function () {
     expect(calls).toBe(24);
     expect(rounds[1] - rounds[0]).toBeGreaterThanOrEqual(1400);
   });
+
+  it("never changes the Drive client it was given", async function () {
+    const controller = new AbortController();
+    let rounds = 0;
+    const poll = load(async () => {
+      if (++rounds > 1) {
+        controller.abort();
+        return [];
+      }
+      return [{ blogID: "blog_a", dirId: "posts" }];
+    });
+
+    // Like googleapis: files can't be replaced, and list is on a prototype
+    class Files {
+      async list() {
+        return { data: { files: [] } };
+      }
+    }
+    const drive = {};
+    Object.defineProperty(drive, "files", { value: new Files() });
+    const list = drive.files.list;
+
+    await poll("sa", drive, controller.signal, {
+      everyMs: 1,
+      readdir: async (counted) => counted.files.list({}),
+      onChanged: async () => {},
+    });
+
+    expect(drive.files.list).toBe(list);
+    expect(Object.keys(drive.files)).toEqual([]);
+    expect(await drive.files.list()).toEqual({ data: { files: [] } });
+  });
 });
