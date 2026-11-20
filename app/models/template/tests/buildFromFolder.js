@@ -490,6 +490,49 @@ describe("template", function () {
     expect(await exists(this.template.id)).toEqual(false);
   });
 
+  it("reads only the templates named in options.only and keeps the others", async function () {
+    const blogID = this.blog.id;
+    const write = (name, content) =>
+      folder.write(
+        blogID,
+        templatesDir(this) + "/" + name + "/entries.html",
+        content
+      );
+
+    await write("Alpha", "<p>one</p>");
+    await write("beta", "<p>one</p>");
+    await buildFromFolder(blogID);
+
+    await write("Alpha", "<p>two</p>");
+    await write("beta", "<p>two</p>");
+    await buildFromFolder(blogID, { only: new Set(["alpha"]) });
+
+    const getView = require("../index").getView;
+    const content = async (name) =>
+      (await getView(makeID(blogID, name), "entries.html")).content;
+
+    expect(await content("Alpha")).toEqual("<p>two</p>");
+    expect(await content("beta")).toEqual("<p>one</p>");
+
+    await buildFromFolder(blogID);
+
+    expect(await content("beta")).toEqual("<p>two</p>");
+  });
+
+  it("still removes a template whose folder is gone when reading only others", async function () {
+    const blogID = this.blog.id;
+
+    await folder.write(blogID, templatesDir(this) + "/alpha/entries.html", "a");
+    await folder.write(blogID, templatesDir(this) + "/beta/entries.html", "b");
+    await buildFromFolder(blogID);
+
+    await folder.remove(blogID, templatesDir(this) + "/beta");
+    await buildFromFolder(blogID, { only: new Set(["beta"]) });
+
+    expect(await exists(makeID(blogID, "alpha"))).toEqual(true);
+    expect(await exists(makeID(blogID, "beta"))).toEqual(false);
+  });
+
   it("keeps a template whose folder reappears within the window", async function () {
     await installLocalTemplate(this);
     await buildFromFolder(this.blog.id);
