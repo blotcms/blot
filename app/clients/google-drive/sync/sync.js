@@ -1,6 +1,6 @@
 const comparePaths = require("./util/comparePaths");
 const folder = require("storage/folder");
-const { join } = require("path");
+const { join, dirname } = require("path");
 const database = require("../database");
 const {
   MESSAGES,
@@ -200,6 +200,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     get: getPath,
     getPaths,
     getByPath,
+    getIds,
+    move: moveMapping,
     getApplied,
     setApplied,
     set,
@@ -276,6 +278,70 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     if (waiting.some((id) => !busy.has(id))) throw YIELD;
   };
 
+  // Folder renames and moves (#2847). Drive keeps a folder's id when it is
+  // renamed or moved, so instead of removing the folder and downloading
+  // everything in it again under its new name (27s for 100 files on
+  // drivetest, with its posts gone from the site meanwhile), the folder is
+  // moved in the blog folder. storage/folder.move keeps each file's records,
+  // so the files are unchanged where they land and nothing is downloaded; the
+  // mapping and the verified records follow, and every old and new path is
+  // updated, so posts move (and Blot's rename detection keeps them the same
+  // posts). Resolves false, having changed nothing, whenever it can't be sure:
+  // something already at the destination, a destination inside the folder
+  // itself, an ignored name, or a parent that isn't there.
+  const moveDirectory = async (from, to, id) => {
+    if (!id || from === to || from === "/" || to.startsWith(from + "/"))
+      return false;
+    if (shouldIgnoreFile(to)) return false;
+    const mappedThere = await getByPath(to);
+    if (mappedThere && mappedThere !== id) return false;
+    if (await folder.exists(blogID, to)) return false;
+    if (dirname(to) !== "/" && !(await folder.exists(blogID, dirname(to))))
+      return false;
+
+    await checkWeCanContinue();
+    const descendants = await localDescendants(blogID, from);
+    publish("Moving", from);
+    console.log("Moving directory", from, "to", to, "as it moved in Drive");
+    await folder.move(blogID, from, to);
+    await moveMapping(id, to);
+
+    // Verified records name the path they were verified at
+    const movedPaths = descendants.map((path) => to + path.slice(from.length));
+    const ids = (await getIds(movedPaths)).filter(Boolean);
+    const records = await getVerifiedContents(ids);
+    for (let i = 0; i < ids.length; i++) {
+      const record = records[i];
+      if (record && record.path.startsWith(from + "/")) {
+        await setVerifiedContent(ids[i], {
+          ...record,
+          path: to + record.path.slice(from.length),
+        });
+      }
+    }
+
+    await update(from);
+    for (const path of descendants) await update(path);
+    await update(to);
+    for (const path of movedPaths) await update(path);
+    summary.moved = (summary.moved || 0) + 1;
+    return true;
+  };
+
+  // Where Drive has a folder now, as a walk of its new parent would name it,
+  // or null if that parent isn't in the blog's folder
+  const pathInDrive = async (parentId, id) => {
+    const parentPath = parentId === folderId ? "/" : await getPath(parentId);
+    if (!parentPath) return null;
+    const items = transformDriveItems(
+      (await driveReaddir(drive, parentId)).filter(
+        (item) => item.mimeType !== SHORTCUT
+      )
+    );
+    const item = items.find((each) => each.id === id && each.isDirectory);
+    return item ? join(parentPath, item.name) : null;
+  };
+
   // With recurse false, only the directory itself is brought up to date, and
   // only directories it creates are walked below it
   const walk = async (dir, dirId, recurse = true) => {
@@ -350,6 +416,26 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           changed.set(dirId, dir);
           continue;
         }
+
+        // A folder renamed here (the listing has its id under another name)
+        // or, by changes.list's hint, moved to another folder of the blog
+        if (isLocalDirectory) {
+          const id = await getByPath(path);
+          const here = id
+            ? remoteContents.find((item) => item.id === id && item.isDirectory)
+            : null;
+          let to = here ? join(dir, here.name) : null;
+          if (!to && id && options.dirty?.moveHint) {
+            const parentId = await options.dirty.moveHint(id);
+            if (parentId) to = await pathInDrive(parentId, id);
+          }
+          if (to && (await moveDirectory(path, to, id))) {
+            if (here)
+              localContents.push({ name: here.name, isDirectory: true });
+            continue;
+          }
+        }
+
         await checkWeCanContinue();
         progress.publish("Removing", path, false, removedCount);
         console.log(
@@ -712,6 +798,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             }
           }
         } else {
+          let moved = false;
           const created = !existsLocally || !existsLocally.isDirectory;
           if (existsLocally && !existsLocally.isDirectory) {
             await checkWeCanContinue();
@@ -724,15 +811,29 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             summary.createdDirs += 1;
             await update(path);
           } else if (!existsLocally) {
-            await checkWeCanContinue();
-            publish("Creating directory", path);
-            console.log("Creating directory locally", path);
-            await folder.mkdir(blogID, path);
-            summary.createdDirs += 1;
-            await update(path);
+            // A folder moved here from elsewhere in the blog, which this
+            // walk reached before the folder it left: move it, contents and
+            // all, rather than create it empty and download everything
+            const from = await getPath(id);
+            if (
+              from &&
+              from !== path &&
+              (await folder.exists(blogID, from)) &&
+              (await moveDirectory(from, path, id))
+            ) {
+              moved = true;
+            } else {
+              await checkWeCanContinue();
+              publish("Creating directory", path);
+              console.log("Creating directory locally", path);
+              await folder.mkdir(blogID, path);
+              summary.createdDirs += 1;
+              await update(path);
+            }
           }
 
-          if (recurse || created) await walk(path, id, true);
+          // A folder moved here brought its contents with it
+          if (recurse || (created && !moved)) await walk(path, id, true);
         }
       }
     } finally {

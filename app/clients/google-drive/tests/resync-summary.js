@@ -29,6 +29,7 @@ function harness(files) {
         }),
       },
       folder: () => ({
+        get: async () => null,
         getByPath: async () => null,
         set: async () => {},
         remove: async () => {},

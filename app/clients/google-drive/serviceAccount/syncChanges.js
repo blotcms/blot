@@ -6,6 +6,7 @@ const hotDocPoller = require("./hotDocPoller");
 const { logChanges } = require("./readChanges");
 
 const DOCUMENT = "application/vnd.google-apps.document";
+const FOLDER = "application/vnd.google-apps.folder";
 
 const prefix = () => `${clfdate()} Google Drive changes:`;
 
@@ -61,12 +62,26 @@ module.exports = async function syncChanges(
 
   const blogs = new Map();
   const dirty = new Map();
+  const moves = new Map();
   for (const entry of placed) {
     const { change, blogID, folderId } = entry;
     if (!blogID) continue;
     blogs.set(blogID, (blogs.get(blogID) || 0) + 1);
     if (!dirty.has(blogID)) dirty.set(blogID, new Set());
     for (const id of await dirtyDirectories(entry)) dirty.get(blogID).add(id);
+
+    // A folder the blog holds, now in a folder the blog holds: the sync can
+    // move it rather than remove it and download it again
+    if (
+      change.file?.mimeType === FOLDER &&
+      !change.file?.trashed &&
+      entry.path &&
+      entry.parentId &&
+      change.fileId !== folderId
+    ) {
+      if (!moves.has(blogID)) moves.set(blogID, []);
+      moves.get(blogID).push({ id: change.fileId, parentId: entry.parentId });
+    }
 
     if (change.file?.mimeType === DOCUMENT && !change.file?.trashed) {
       logFailure(
@@ -82,6 +97,9 @@ module.exports = async function syncChanges(
   }
 
   // Recorded before the syncs start, so the sync that runs finds them
+  for (const [blogID, list] of moves) {
+    await database.dirty.hintMoves(blogID, list);
+  }
   for (const [blogID, ids] of dirty) {
     await database.dirty.add(blogID, [...ids]);
   }

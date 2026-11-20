@@ -94,6 +94,7 @@ function harness(count = 1) {
         }),
       },
       folder: () => ({
+        get: async () => null,
         getByPath: async () => null,
         getApplied: async (id) => metadata.get(id) || null,
         setApplied: async (id, value) => {

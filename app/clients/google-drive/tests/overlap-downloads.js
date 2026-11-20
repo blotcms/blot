@@ -41,6 +41,7 @@ function harness(count, { canContinue = async () => {} } = {}) {
         }),
       },
       folder: () => ({
+        get: async () => null,
         getByPath: async () => null,
         set: async () => {},
         remove: async () => {},
