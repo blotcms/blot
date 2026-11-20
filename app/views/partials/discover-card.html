@@ -19,7 +19,7 @@
     {{#text.length}}
     <a class="discover-text" href="{{{url}}}" target="_blank" rel="noopener">
       <span class="discover-text-clip">
-        <p>{{title}}</p>
+        {{^ownText}}<p>{{title}}</p>{{/ownText}}
         {{#text}}<p>{{.}}</p>{{/text}}
       </span>
       <span class="discover-see-more">See more</span>

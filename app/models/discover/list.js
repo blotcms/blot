@@ -149,6 +149,8 @@ function card(record, blog, entry) {
     })),
     excerpt: shown.length ? "" : record.text || excerpt(entry && entry.summary),
     showText: record.showText,
+    // The card's own text stands alone, without the post's title above it
+    ownText: !!record.text,
     text: shown.length ? cardText(record, entry) : [],
   };
 }
