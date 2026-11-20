@@ -1,8 +1,8 @@
-{{! Events: the date large, then title, place and summary. A post's Event line (e.g. "Event: 2026-12-08 18:30") sets the date shown; without one, its publish date. }}
+{{! Events: the date large, then title, place and summary. A post's Event line (e.g. "Event: Tuesday, December 8, 6:30 pm") marks it as upcoming and is shown instead of its date. Date an upcoming event's post today, not on the day: Blot holds back posts dated in the future. }}
 <div class="events">
   {{#posts}}
   <article class="event">
-    <p class="event-date">{{#metadata.event}}{{metadata.event}}{{/metadata.event}}{{^metadata.event}}{{#date}}<time datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D{{/formatDate}}<span class="quiet"> {{#formatDate}}YYYY{{/formatDate}}</span></time>{{/date}}{{/metadata.event}}</p>
+    <p class="event-date{{#metadata.event}} is-upcoming{{/metadata.event}}">{{#metadata.event}}<span class="quiet">Upcoming</span> {{metadata.event}}{{/metadata.event}}{{^metadata.event}}{{#date}}<time datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D{{/formatDate}}<span class="quiet"> {{#formatDate}}YYYY{{/formatDate}}</span></time>{{/date}}{{/metadata.event}}</p>
     <div class="event-details">
       <h2 class="row-title"><a href="{{{url}}}">{{title}}</a></h2>
       {{#metadata.venue}}<div><i>{{metadata.venue}}</i></div>{{/metadata.venue}}

@@ -426,6 +426,16 @@ video {
   font-variant-numeric: tabular-nums;
 }
 
+.event-date.is-upcoming {
+  font-size: calc(var(--size-h1) * 0.6);
+  line-height: 1.1;
+}
+
+.event-date.is-upcoming .quiet {
+  display: block;
+  font: var(--size-m) / var(--leading-m) var(--font-sans);
+}
+
 .event-details {
   grid-column: 2 / 5;
   max-width: 40rem;

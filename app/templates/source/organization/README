@@ -10,7 +10,7 @@ The _Organization_ template is for clubs, societies, studios and small instituti
       Venue: Society Library
       Summary: One sentence about the evening.
 
-- **Tag pages in four layouts.** In the template's settings, under Tag pages, choose rows, a grid of pictures, a list of events with their dates, or a plain list, for each tag. A grid suits a Gallery tag, events a Meetings tag.
+- **Tag pages in four layouts.** In the template's settings, under Tag pages, choose rows, a grid of pictures, a list of events with their dates, or a plain list, for each tag. A grid suits a Gallery tag, events a Meetings tag. For an upcoming event, add an `Event:` line (`Event: Tuesday, December 8, 6:30 pm`) and date the post today: the events layout shows it as upcoming, and Blot holds back posts dated in the future.
 - **What's next.** A `Next:` line in your latest post appears under the title on the home page:
 
       Next: Tuesday, December 8, 6:30 pm · The Christmas show and tell
