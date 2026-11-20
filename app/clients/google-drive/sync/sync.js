@@ -31,6 +31,104 @@ const transformDriveItems = require("./util/transformDriveItems");
 const DOWNLOAD_CONCURRENCY = 4;
 
 const SHORTCUT = "application/vnd.google-apps.shortcut";
+const FOLDER = "application/vnd.google-apps.folder";
+
+// The walk lists Drive directories ahead of itself, this many at once (#2847).
+// Listing one directory takes 0.2-0.3s whatever its size, so a walk that
+// lists them one after another spends most of its time waiting on Drive: on
+// a 3,035-item folder in 31 directories, 8.7-9.3s listing one at a time,
+// 2.8s four at once, 1.7s eight, 1.15-1.3s sixteen (measured in production,
+// 20 Nov 2026). Putting several directories in one query ('a' in parents or
+// 'b' in parents) was no faster. Drive allows far more requests per second
+// per service account than this uses.
+const LISTING_CONCURRENCY = 16;
+
+// Listings fetched ahead but not walked yet are held in memory. Stop listing
+// ahead while they hold this many items, so a huge folder can't fill memory
+// faster than the walk applies it.
+const MAX_PREFETCHED_ITEMS = 20000;
+
+// Lists directories ahead of the walk. take(dirId) gives a directory's
+// listing (fetched already, in flight, or fetched now), and queues its
+// subdirectories at the front, since the depth-first walk needs them next.
+// Listings that finish ahead of the walk queue their own subdirectories at
+// the back, so the whole tree is listed while the walk works through it.
+//
+// A listing can be a few seconds older than when the walk reaches it, as with
+// any walk: a change Drive records after the listing is picked up by the sync
+// its webhook or poll starts, which waits for this one (followUpSync).
+function prefetchListings(list) {
+  const listings = new Map();
+  const started = new Set();
+  const queue = [];
+  let active = 0;
+  let buffered = 0;
+  let stopped = false;
+
+  const subdirectories = (items) =>
+    items
+      .filter((item) => item.mimeType === FOLDER)
+      .map((item) => item.id)
+      .filter((id) => !started.has(id));
+
+  const fetch = (dirId) => {
+    started.add(dirId);
+    const entry = { size: 0, counted: false, taken: false };
+    entry.promise = list(dirId).then((items) => {
+      if (!entry.taken) {
+        entry.size = items.length;
+        entry.counted = true;
+        buffered += items.length;
+        queue.push(...subdirectories(items));
+      }
+      return items;
+    });
+    // A failed listing rejects when the walk takes it, as listing it in the
+    // walk would have; until then it mustn't be unhandled.
+    entry.promise.catch(() => {});
+    listings.set(dirId, entry);
+    return entry;
+  };
+
+  const pump = () => {
+    // One slot is kept for the walk's own listing, which never waits
+    while (
+      !stopped &&
+      active < LISTING_CONCURRENCY - 1 &&
+      queue.length &&
+      buffered < MAX_PREFETCHED_ITEMS
+    ) {
+      const dirId = queue.shift();
+      if (started.has(dirId)) continue;
+      active += 1;
+      fetch(dirId)
+        .promise.catch(() => {})
+        .then(() => {
+          active -= 1;
+          pump();
+        });
+    }
+  };
+
+  const take = async (dirId) => {
+    const entry = listings.get(dirId) || fetch(dirId);
+    listings.delete(dirId);
+    entry.taken = true;
+    if (entry.counted) buffered -= entry.size;
+    const items = await entry.promise;
+    queue.unshift(...subdirectories(items));
+    pump();
+    return items;
+  };
+
+  const stop = () => {
+    stopped = true;
+    queue.length = 0;
+    listings.clear();
+  };
+
+  return { take, stop };
+}
 
 // The fields of a record which describe the file Blot holds
 const stateFields = ({ size, modified, sha1 }) => ({ size, modified, sha1 });
@@ -135,6 +233,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       .reset({ preserveVerifiedContent: true });
   }
 
+  const listings = prefetchListings((dirId) => driveReaddir(drive, dirId));
+
   const walk = async (dir, dirId) => {
     if (!dir || !dirId) {
       throw new Error("Missing required arguments for walk");
@@ -144,7 +244,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     await set(dirId, dir, { isDirectory: true });
 
     const [driveItems, localContents] = await Promise.all([
-      driveReaddir(drive, dirId),
+      listings.take(dirId),
       localReaddir(blogID, dir),
     ]);
 
@@ -558,5 +658,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     publish("Sync failed", err.message);
     onError(err);
     return false;
+  } finally {
+    // Nothing more is listed once the walk is over
+    listings.stop();
   }
 };
