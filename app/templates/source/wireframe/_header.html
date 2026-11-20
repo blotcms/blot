@@ -1,9 +1,9 @@
 <header>
-  {{! The site title then the menu, on one line that wraps. The two non-breaking spaces set the title apart from the menu. }}
+  {{! The site title then the menu, on one line that wraps. Non-breaking spaces widen the gaps, which HTML would otherwise collapse to one space: two between menu links, four after the title to set it apart. }}
   <nav aria-label="Menu">
-    <a href="/">{{#profile_image.thumbnails.small}}<img class="profile-photo" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="32px" width="{{width}}" height="{{height}}" alt=""> {{/profile_image.thumbnails.small}}{{title}}{{^title}}Home{{/title}}</a>&nbsp;&nbsp;
+    <a href="/">{{#profile_image.thumbnails.small}}<img class="profile-photo" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="32px" width="{{width}}" height="{{height}}" alt=""> {{/profile_image.thumbnails.small}}{{title}}{{^title}}Home{{/title}}</a>&nbsp;&nbsp;&nbsp;
     {{#menu}}
-    <a href="{{{url}}}">{{label}}</a>
+    <a href="{{{url}}}">{{label}}</a>&nbsp;
     {{/menu}}
   </nav>
 </header>
