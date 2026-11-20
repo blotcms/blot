@@ -2,9 +2,9 @@ const health = require("clients/health");
 const { isSetupError } = require("../error");
 
 // Where an iCloud setup has got to, for the dashboard's checklist
-// (views/index.html). Steps 1-3 are the person's: create a folder, share it
-// with Blot, paste its link. Step 4 is Blot's Mac joining the folder, step 5
-// copying the site's files into it.
+// (views/index.html). Steps 1 and 2 are the person's: share a folder with
+// Blot, paste its link. Step 3 is Blot's: its Mac joins the folder
+// ("joining"), then the site's files are copied in ("copying").
 //
 // A failed setup puts its message on the step that fixes it. The macserver
 // says which check failed (setupErrorReason, from routes/setup.js); one that
@@ -12,9 +12,9 @@ const { isSetupError } = require("../error");
 
 const SHARE_PROBLEMS = {
   PRIVATE:
-    "Blot couldn’t open this folder because it isn’t shared with Blot. Share it with {email} as shown below, copy the link again and paste it in step 3.",
+    "Blot couldn’t open this folder because it isn’t shared with Blot. Share it with {email} as shown below, copy the link again and paste it in step 2.",
   NO_ACCESS:
-    "Blot couldn’t open this folder because it isn’t shared with Blot. Share it with {email} as shown below, copy the link again and paste it in step 3.",
+    "Blot couldn’t open this folder because it isn’t shared with Blot. Share it with {email} as shown below, copy the link again and paste it in step 2.",
   READ_ONLY:
     "Blot can only view this folder, so it couldn’t add your site’s files. In Finder, choose Share › Manage Shared Folder, set Permissions to “Can make changes”, then try again.",
 };
@@ -113,6 +113,10 @@ module.exports = function setupState(account, options = {}) {
     stage === "joining" &&
     typeof account.setupStartedAt === "number" &&
     (options.now || Date.now()) - account.setupStartedAt > SLOW_JOIN_MS;
+
+  // Step 3: Blot is busy (spinner), or stuck and needs a retry
+  state.working = (state.joining && !state.slow) || state.copying;
+  state.stuck = state.slow || state.transferFailed;
 
   state.problem = !!(
     state.shareProblem ||

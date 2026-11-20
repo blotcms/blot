@@ -35,21 +35,13 @@
     <div class="steps icloud-steps">
       <ol>
 
-        <li class="{{#setup.linked}}done{{/setup.linked}}">
-          {{#setup.linked}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.linked}}
-          <span class="step-title">Create a folder in iCloud Drive</span>
-          {{^setup.linked}}
-          <span class="step-text">Give it any name. If it already holds files, Blot adds your site’s files beside them and removes nothing.</span>
-          {{/setup.linked}}
-        </li>
-
         <li class="{{#setup.linked}}done{{/setup.linked}}{{#setup.shareProblem}} problem{{/setup.shareProblem}}">
           {{#setup.linked}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.linked}}
           {{#setup.shareProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.shareProblem}}
-          <span class="step-title">Share it with Blot</span>
+          <span class="step-title">Share a folder with Blot</span>
           {{#setup.shareProblem}}<span class="step-problem">{{setup.shareProblem}}</span>{{/setup.shareProblem}}
           {{^setup.linked}}
-          <span class="step-text">Blot’s iCloud account:</span>
+          <span class="step-text">Make a folder in iCloud Drive for your site, with any name. Files already in it are kept. Then share it with Blot’s iCloud account:</span>
           <span class="icloud-email">{{blotiCloudAccount}}</span>
           <button class="copy" data-copy="{{blotiCloudAccount}}"><span class="icon-copy"></span> Copy</button>
 
@@ -85,7 +77,7 @@
         <li class="{{#setup.linked}}done{{/setup.linked}}{{#setup.linkProblem}} problem{{/setup.linkProblem}}">
           {{#setup.linked}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.linked}}
           {{#setup.linkProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.linkProblem}}
-          <span class="step-title">Paste the link</span>
+          <span class="step-title">Paste its link</span>
           {{#setup.linked}}
           <span class="step-text icloud-link">{{setup.sharingLink}}</span>
           {{/setup.linked}}
@@ -103,42 +95,32 @@
           {{/setup.linked}}
         </li>
 
-        <li class="{{^setup.linked}}todo{{/setup.linked}}{{#setup.copying}}done{{/setup.copying}}{{#setup.transferFailed}}done{{/setup.transferFailed}}{{#setup.joining}}{{^setup.slow}}active{{/setup.slow}}{{#setup.slow}}problem{{/setup.slow}}{{/setup.joining}}">
-          {{#setup.joining}}{{^setup.slow}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.slow}}{{#setup.slow}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.slow}}{{/setup.joining}}
-          {{#setup.copying}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.copying}}
-          {{#setup.transferFailed}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.transferFailed}}
-          <span class="step-title">Blot joins the folder</span>
+        <li class="{{^setup.linked}}todo{{/setup.linked}}{{#setup.working}}active{{/setup.working}}{{#setup.stuck}}problem{{/setup.stuck}}">
+          {{#setup.working}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.working}}
+          {{#setup.stuck}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.stuck}}
+          <span class="step-title">Blot sets up the folder</span>
           {{#setup.joining}}
           {{^setup.slow}}
           <span class="step-text">Joining your folder. This usually takes under 30 seconds.</span>
           {{/setup.slow}}
           {{#setup.slow}}
-          <span class="step-problem">This is taking longer than usual. Try again, and if it still doesn’t finish, contact us.</span>
-          <form action="{{{base}}}/set-up-folder" method="post" class="icloud-retry">
-            <input type="hidden" name="_csrf" value="{{csrftoken}}">
-            <input type="hidden" name="sharingLink" value="{{setup.sharingLink}}">
-            <div class="buttons"><button type="submit">Try again</button></div>
-          </form>
+          <span class="step-problem">Joining your folder is taking longer than usual. Try again, and if it still doesn’t finish, contact us.</span>
           {{/setup.slow}}
           {{/setup.joining}}
-        </li>
-
-        <li class="{{^setup.copying}}{{^setup.transferFailed}}todo{{/setup.transferFailed}}{{/setup.copying}}{{#setup.transferFailed}} problem{{/setup.transferFailed}}{{#setup.copying}}active{{/setup.copying}}">
-          {{#setup.copying}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.copying}}
-          {{#setup.transferFailed}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.transferFailed}}
-          <span class="step-title">Blot copies your site’s files into it</span>
           {{#setup.copying}}
+          <span class="step-text">Copying your site’s files into the folder. Please don’t change it until this finishes.</span>
           <span class="step-text icloud-progress">{{> sync-status}}</span>
-          <span class="step-text">Please don’t change the folder until this finishes.</span>
           {{/setup.copying}}
           {{#setup.transferFailed}}
-          <span class="step-problem">Blot couldn’t finish copying your site’s files into the folder. Nothing was removed.{{#setup.transferDetail}} ({{setup.transferDetail}}){{/setup.transferDetail}}</span>
+          <span class="step-problem">Blot joined your folder but couldn’t finish copying your site’s files into it. Nothing was removed.{{#setup.transferDetail}} ({{setup.transferDetail}}){{/setup.transferDetail}}</span>
+          {{/setup.transferFailed}}
+          {{#setup.stuck}}
           <form action="{{{base}}}/set-up-folder" method="post" class="icloud-retry">
             <input type="hidden" name="_csrf" value="{{csrftoken}}">
             <input type="hidden" name="sharingLink" value="{{setup.sharingLink}}">
             <div class="buttons"><button type="submit">Try again</button></div>
           </form>
-          {{/setup.transferFailed}}
+          {{/setup.stuck}}
         </li>
 
       </ol>
@@ -317,6 +299,12 @@
 
 .icloud-retry {
   margin-top: 8px;
+}
+
+/* While copying, show the status line only for progress: an idle "Synced"
+   before the copy starts would read as done */
+.icloud-progress .sync-status.synced {
+  display: none;
 }
 
 .icloud-cancel {
