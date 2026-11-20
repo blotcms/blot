@@ -89,12 +89,18 @@ module.exports = async function pollRecentFolders(
 
   // Counts each files.list call, every page included, for the rate
   let calls = 0;
-  // googleapis puts the methods on prototypes, so these inherit them
-  const counted = Object.create(drive);
-  counted.files = Object.create(drive.files || {});
-  counted.files.list = (...args) => {
-    calls += 1;
-    return drive.files.list(...args);
+  // Its own object, passed to readdir in place of the client. It must never
+  // change the client itself: that is shared by every sync in the process
+  // (cachedAuth.js), and googleapis won't let files be replaced on a copy, so
+  // assigning a wrapper there once replaced every files.list in the process
+  // with one that called itself. driveReaddir only calls files.list.
+  const counted = {
+    files: {
+      list: (...args) => {
+        calls += 1;
+        return drive.files.list(...args);
+      },
+    },
   };
 
   while (!signal.aborted) {
