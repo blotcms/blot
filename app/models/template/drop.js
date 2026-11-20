@@ -81,6 +81,7 @@ async function dropByID(owner, templateID) {
   multi.del(key.metadata(templateID));
   multi.del(key.urlPatterns(templateID));
   multi.del(key.allViews(templateID));
+  multi.del(key.viewSources(templateID));
 
   if (metadata && metadata.shareID) {
     multi.del(key.share(metadata.shareID));

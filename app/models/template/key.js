@@ -25,6 +25,13 @@ module.exports = {
     return "template:" + name + ":all_views";
   },
 
+  // A HASH of view name to the fingerprint of the folder file the view was
+  // last read from (readFromFolder), so a build can skip files which haven't
+  // changed. Cleared for a view whenever it is saved or dropped otherwise.
+  viewSources: function viewSources(name) {
+    return "template:" + name + ":view_sources";
+  },
+
   blogTemplates: function blogTemplates(blogID) {
     return "template:owned_by:" + blogID;
   },
