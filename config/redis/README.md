@@ -445,22 +445,27 @@ on `hourly/*`, `daily/*` and `weekly/*` (restore), and `s3:PutObject` on the sam
 The app's shared client (`app/models/redis.js`) keeps a small client-side cache
 of an allowlist of keys, using RESP3 `CLIENT TRACKING` in OPTIN mode
 (`app/models/redis-cache.js`): blog info, domain, handle, template metadata
-and URL patterns, template owner sets, dashboard sessions and user records.
+and URL patterns, template owner sets, template views and their lists,
+dashboard sessions and user records.
 The render path reads the blog record, the template metadata and URL patterns,
 and the cacheIDs the render caches are keyed on, on every blog request; the
 dashboard reads the session and the user on every request. Most of those reads
 are served locally. A write through the same client drops the keys it names
 from that client's cache as it is sent, because Redis pushes the
 invalidation after the write's reply; every other process's cache learns of
-the write from that push. Keys named after a request path (entries, entry and
+the write from that push. Template views are read only when a render cache
+misses (`fullView`), but then a dozen times one after another on the request
+that missed. Keys named after a request path (entries, entry and
 template URLs, redirects) stay out: Redis tracks every key a client reads,
 even a missing one, until it is written, so crawler and scanner paths would
 refill the tracking table.
 
 The cache is bounded by entry count, so the classes share its room in a way
-that keeps the blog keys in: URL patterns, template owner sets, sessions and
-users each have their own cap (`CLASS_CAPS` in `app/models/redis-cache.js`) and
-evict only their own least recently used entries, and the cache's `maxEntries`
+that keeps the blog keys in: URL patterns, template owner sets, template views
+and view lists, sessions and users each have their own cap (`CLASS_CAPS` in
+`app/models/redis-cache.js`) and evict only their own least recently used
+entries; views, whose size is unbounded, are capped by rough bytes too
+(`CLASS_BYTE_CAPS`), and the cache's `maxEntries`
 leaves room above those caps for a few hot keys per blog (its handle or domain,
 info, template metadata). A full capped class then never makes the cache evict
 a blog record. The `[STATS]` lines log each class's evictions

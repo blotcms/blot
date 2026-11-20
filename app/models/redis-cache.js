@@ -9,6 +9,8 @@ const CLASSES = [
   ["template", /^template:[^:]+:[^:]+:info$/], // template IDs are owner:slug
   ["patterns", /^template:[^:]+:[^:]+:url_patterns$/],
   ["owners", /^template:owned_by:[^:]+$/],
+  ["view", /^template:[^:]+:[^:]+:view:/],
+  ["views", /^template:[^:]+:[^:]+:all_views$/],
   ["session", /^sess:/],
   ["user", /^user:[^:]+:info$/],
   ["url", /^blog:[^:]+:url:/],
@@ -19,6 +21,9 @@ const CLASSES = [
 
 // Small, hot keys read on nearly every blog or dashboard request, rarely
 // written, and no more numerous than blogs, templates, users or sessions.
+// Template views and their lists are read on every fullView fill (several
+// round trips, one after another, on the request that misses), written only
+// when a template is built, and named by template files, never by requests.
 // Keys named after a request path (entries, entry and template URLs,
 // redirects) are left out: crawlers and scanners would flood the cache and
 // evict these, and Redis tracks every key read, even a missing one, until it
@@ -30,6 +35,8 @@ const ALLOWED = new Set([
   "template",
   "patterns",
   "owners",
+  "view",
+  "views",
   "session",
   "user",
 ]);
@@ -41,11 +48,21 @@ const ALLOWED = new Set([
 // plus every blog's hot keys, so a full capped class never makes the cache
 // evict anything else. URL patterns are read on every render too, but there is
 // a set for every template, installed or not, so previews could flood it.
+// Views are a few KB on average but unbounded (a view can inline a whole
+// stylesheet), so their class is bounded by bytes too (CLASS_BYTE_CAPS).
 const CLASS_CAPS = {
   patterns: 2000,
   owners: 500,
+  view: 2000,
+  views: 500,
   session: 500,
   user: 500,
+};
+
+// Rough value bytes (approxBytes) a capped class may hold before it evicts
+// its least recently used entries, whatever its entry count
+const CLASS_BYTE_CAPS = {
+  view: 16 * 1024 * 1024,
 };
 
 function classify(key) {
@@ -172,6 +189,11 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
     // True while a read is being sent, so it is not mistaken for a write
     this.sendingRead = false;
     this.classCaps = (options && options.classCaps) || CLASS_CAPS;
+    this.classByteCaps = (options && options.classByteCaps) || CLASS_BYTE_CAPS;
+    // Per byte-capped class, its listed entries' rough bytes in total, and
+    // each listed cache key's bytes
+    this.classBytes = new Map();
+    this.entryBytes = new Map();
     // Per capped class, its cache keys from least to most recently used,
     // and each listed cache key's class
     this.cappedOrder = new Map();
@@ -229,6 +251,43 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
     order.delete(cacheKey);
     order.set(cacheKey, true);
     this.cappedClassOf.set(cacheKey, className);
+
+    // The base class sets a promise entry as it sends the read, then the
+    // value entry once the reply is in: only the value has a size
+    const byteCap = this.classByteCaps[className];
+    if (byteCap) {
+      const bytes = "value" in cacheEntry ? approxBytes(cacheEntry.value) : 0;
+      this.addBytes(className, cacheKey, bytes);
+      if (this.classBytes.get(className) > byteCap)
+        this.trimClassBytes(className, order, byteCap);
+    }
+  }
+
+  addBytes(className, cacheKey, bytes) {
+    const before = this.entryBytes.get(cacheKey) || 0;
+    if (bytes) this.entryBytes.set(cacheKey, bytes);
+    else this.entryBytes.delete(cacheKey);
+    this.classBytes.set(
+      className,
+      (this.classBytes.get(className) || 0) + bytes - before
+    );
+  }
+
+  // Forgets entries the base class already dropped (see trimClass), then
+  // evicts the class's least recently used entries until it fits. An entry
+  // bigger than the whole cap is evicted too, once everything older is gone.
+  trimClassBytes(className, order, byteCap) {
+    for (const cacheKey of order.keys()) {
+      if (this.has(cacheKey)) continue;
+      order.delete(cacheKey);
+      this.cappedClassOf.delete(cacheKey);
+      this.addBytes(className, cacheKey, 0);
+    }
+    while (this.classBytes.get(className) > byteCap && order.size) {
+      this.delete(order.keys().next().value);
+      this.recordEvictions(1);
+      this.count(className, "evictions");
+    }
   }
 
   get(cacheKey) {
@@ -248,12 +307,15 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
     if (!className) return;
     this.cappedOrder.get(className).delete(cacheKey);
     this.cappedClassOf.delete(cacheKey);
+    if (this.entryBytes.has(cacheKey)) this.addBytes(className, cacheKey, 0);
   }
 
   clear(resetStats) {
     super.clear(resetStats);
     this.cappedOrder.clear();
     this.cappedClassOf.clear();
+    this.classBytes.clear();
+    this.entryBytes.clear();
   }
 
   // Entries the base class dropped without going through delete() (an
@@ -265,6 +327,7 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
       if (this.has(cacheKey)) continue;
       order.delete(cacheKey);
       this.cappedClassOf.delete(cacheKey);
+      if (this.entryBytes.has(cacheKey)) this.addBytes(className, cacheKey, 0);
     }
     while (order.size > cap) {
       this.delete(order.keys().next().value);
@@ -379,6 +442,7 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
 AllowlistClientSideCache.classify = classify;
 AllowlistClientSideCache.classifyKeys = classifyKeys;
 AllowlistClientSideCache.CLASS_CAPS = CLASS_CAPS;
+AllowlistClientSideCache.CLASS_BYTE_CAPS = CLASS_BYTE_CAPS;
 AllowlistClientSideCache.keyPattern = keyPattern;
 AllowlistClientSideCache.approxBytes = approxBytes;
 
