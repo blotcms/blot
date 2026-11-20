@@ -19,14 +19,15 @@ const setupLimiter = finderLimiter;
 // that fixes it; the text is for logs and for a dashboard that predates it.
 const SETUP_ERRORS = {
   NO_ACCESS:
-    "iCloud is asking for access to this folder. Share it with Blot's iCloud account, or allow anyone with the link to access it, then retry",
+    "This folder isn’t shared with Blot’s iCloud account. Share it, then try again.",
   PRIVATE:
-    "This sharing link is private. Share the folder with Blot's iCloud account, or allow anyone with the link to access it, then retry",
-  INVALID_LINK: "Invalid sharing link",
+    "This folder isn’t shared with Blot’s iCloud account. Share it, then try again.",
+  INVALID_LINK:
+    "This link doesn’t open an iCloud Drive folder. Copy it again from Finder, then try again.",
   TIMEOUT:
-    "Timed out waiting for iCloud to share the folder. Check the sharing link is valid and retry",
+    "iCloud took too long to share the folder with Blot. Check the link, then try again.",
   READ_ONLY:
-    "Blot can only view this folder. Give Blot's iCloud account permission to make changes, then retry",
+    "Blot can only view this folder. Give Blot’s iCloud account permission to make changes, then try again.",
 };
 
 const setupError = (reason) =>

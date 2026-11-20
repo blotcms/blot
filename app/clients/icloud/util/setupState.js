@@ -12,26 +12,26 @@ const { isSetupError } = require("../error");
 
 const SHARE_PROBLEMS = {
   PRIVATE:
-    "Blot couldn’t open this folder because it isn’t shared with Blot. Share it with {email} as shown below, copy the link again and paste it in step 2.",
+    "This folder isn’t shared with {email}. Share it as shown below, then copy the link again and paste it in step 2.",
   NO_ACCESS:
-    "Blot couldn’t open this folder because it isn’t shared with Blot. Share it with {email} as shown below, copy the link again and paste it in step 2.",
+    "This folder isn’t shared with {email}. Share it as shown below, then copy the link again and paste it in step 2.",
   READ_ONLY:
-    "Blot can only view this folder, so it couldn’t add your site’s files. In Finder, choose Share › Manage Shared Folder, set Permissions to “Can make changes”, then try again.",
+    "Blot can only view this folder, so it can’t add your site’s files. In Finder, choose Share… › Manage Shared Folder, set Blot’s iCloud account to “Can make changes”, then click Connect folder.",
 };
 
 const LINK_PROBLEMS = {
   INVALID_LINK:
-    "iCloud says this link doesn’t lead to a folder. Copy it again from Finder (Share › Copy Link) and paste it below.",
+    "This link doesn’t open a shared folder. Copy it again in Finder (Share… › Copy Link) and paste it below.",
   TIMEOUT:
-    "iCloud didn’t hand the folder to Blot in time. Check this is the link of the folder you shared, then try again.",
+    "iCloud took too long to give Blot the folder. Check this is the link to the folder you shared, then click Connect folder.",
 };
 
 const FORMAT_PROBLEM =
-  "That isn’t an iCloud Drive folder link. It starts with https://www.icloud.com/iclouddrive/";
+  "That isn’t an iCloud Drive folder link. Use Copy Link in Finder; the link starts with https://www.icloud.com/iclouddrive/";
 
 const SLOW_JOIN_MS = 2 * 60 * 1000;
 
-const EMPTY_PROBLEM = "Paste the folder’s link from Finder first.";
+const EMPTY_PROBLEM = "Paste the folder’s link first.";
 
 // What an older macserver sends, matched to the reasons above
 const reasonFromMessage = (message) => {
@@ -45,7 +45,7 @@ const reasonFromMessage = (message) => {
 };
 
 // account: the stored iCloud account, or null
-// options.share: show steps 1-3 whatever the account says (the setup page)
+// options.share: show steps 1 and 2 whatever the account says (the setup page)
 // options.linkError: "empty" or "format", from a link the form turned down
 // options.sharingLink: what was pasted, to put back in the box
 // options.email: Blot's iCloud account
@@ -82,7 +82,7 @@ module.exports = function setupState(account, options = {}) {
     copying: stage === "copying",
     transferFailed: stage === "transferFailed",
     complete: stage === "complete",
-    // In progress: steps 1-3 are done
+    // In progress: steps 1 and 2 are done
     linked: stage === "joining" || stage === "copying" || transferFailed,
     sharingLink:
       options.sharingLink !== undefined
@@ -104,7 +104,7 @@ module.exports = function setupState(account, options = {}) {
     else state.otherProblem = account.error;
   }
 
-  // What went wrong copying, as reported, shown under step 5
+  // What went wrong copying, as reported, shown under step 3
   state.transferDetail = transferFailed ? account.error : null;
 
   // The macserver reports back within a minute either way, so a join that
