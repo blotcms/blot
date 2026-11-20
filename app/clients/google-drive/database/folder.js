@@ -146,6 +146,12 @@ function folder(folderId, blogID) {
     return await client.hGet(this.key, id);
   };
 
+  // The paths of several IDs in one request, null for one not mapped
+  this.getPaths = async (ids) => {
+    if (!ids.length) return [];
+    return await client.hmGet(this.key, ids);
+  };
+
   // Get the ID for a given path
   this.getByPath = async (path) => {
     if (!path) return null;
