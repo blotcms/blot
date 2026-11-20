@@ -19,6 +19,7 @@ const TTL_SECONDS = 24 * 60 * 60;
 const TAKE = 1000;
 
 const key = (blogID) => `${PREFIX}dirty-dirs:${blogID}`;
+const movesKey = (blogID) => `${PREFIX}moved-folders:${blogID}`;
 
 module.exports = {
   FULL,
@@ -46,5 +47,22 @@ module.exports = {
     return await client.sMembers(key(blogID));
   },
 
+  // Folders changes.list saw move (or be renamed), id -> the id of the
+  // folder it is in now, so the sync that finds one missing from where it was
+  // can move it there instead of removing it and downloading it all again
+  // (#2847). Kept an hour.
+  async hintMoves(blogID, moves) {
+    if (!moves.length) return;
+    const multi = client.multi();
+    for (const { id, parentId } of moves)
+      multi.hSet(movesKey(blogID), id, parentId);
+    await multi.expire(movesKey(blogID), 60 * 60).exec();
+  },
+
+  async moveHint(blogID, id) {
+    return await client.hGet(movesKey(blogID), id);
+  },
+
   key,
+  movesKey,
 };

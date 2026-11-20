@@ -197,6 +197,7 @@ async function applyLocked(blogID, sync, { full = false } = {}) {
         take: () => database.dirty.take(blogID),
         count: () => database.dirty.count(blogID),
         members: () => database.dirty.members(blogID),
+        moveHint: (id) => database.dirty.moveHint(blogID, id),
         putBack: (ids) => database.dirty.add(blogID, ids),
       },
     });

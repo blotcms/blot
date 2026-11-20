@@ -51,6 +51,9 @@ function harness(options) {
       },
       folder: function () {
         return {
+          get: async function () {
+            return null;
+          },
           getByPath: async function (path) {
             return mappings[path] || null;
           },

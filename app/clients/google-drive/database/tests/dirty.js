@@ -5,7 +5,15 @@ describe("google drive dirty directories", function () {
   const BLOG = "blog_dirty_test";
 
   afterEach(async function () {
-    await client.del(dirty.key(BLOG));
+    await client.del([dirty.key(BLOG), dirty.movesKey(BLOG)]);
+  });
+
+  it("keeps where moved folders went, for an hour", async function () {
+    await dirty.hintMoves(BLOG, [{ id: "F", parentId: "P" }]);
+
+    expect(await dirty.moveHint(BLOG, "F")).toBe("P");
+    expect(await dirty.moveHint(BLOG, "G")).toBe(null);
+    expect(await client.ttl(dirty.movesKey(BLOG))).toBeGreaterThan(3500);
   });
 
   it("takes every directory added, once", async function () {

@@ -53,6 +53,7 @@ function harness(dirs, { listDelay = 5, failOn = null } = {}) {
         }),
       },
       folder: () => ({
+        get: async () => null,
         getByPath: async () => null,
         set: async () => {},
         remove: async () => {},

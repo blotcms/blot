@@ -15,6 +15,14 @@ describe("google drive syncChanges", function () {
           add: async (blogID, ids) => {
             calls.push("dirty " + blogID + " " + ids.join(","));
           },
+          hintMoves: async (blogID, moves) => {
+            calls.push(
+              "moves " +
+                blogID +
+                " " +
+                moves.map((m) => m.id + ">" + m.parentId).join(",")
+            );
+          },
         },
         folder: () => ({
           getByPath: async (path) =>
@@ -94,6 +102,37 @@ describe("google drive syncChanges", function () {
     expect(calls).toContain("dirty blog_a posts,root");
     expect(calls).toContain("dirty blog_b *");
     expect(calls).toContain("dirty blog_c folder-blog_c");
+  });
+
+  it("hints where a folder the blog holds has moved to, but not a file, a trashed folder or a move out", async function () {
+    const FOLDER = "application/vnd.google-apps.folder";
+    const { syncChanges, calls } = load();
+
+    await syncChanges("sa", [
+      entry(
+        "blog_a",
+        "F",
+        { mimeType: FOLDER },
+        { path: "/posts/f", parentId: "root" }
+      ),
+      entry(
+        "blog_a",
+        "G",
+        { mimeType: FOLDER, trashed: true },
+        { path: "/g", parentId: "root" }
+      ),
+      entry(
+        "blog_a",
+        "H",
+        { mimeType: FOLDER },
+        { path: "/h", parentId: null }
+      ),
+      entry("blog_a", "file", {}, { path: "/posts/a.md", parentId: "root" }),
+    ]);
+
+    expect(calls.filter((c) => c.startsWith("moves"))).toEqual([
+      "moves blog_a F>root",
+    ]);
   });
 
   it("ignores changes no blog holds", async function () {
