@@ -19,6 +19,12 @@
 // remove the files not listed yet from the site. The macserver's resync
 // request at the end gets "locked" and retries until the lock is released.
 //
+// A blog a failed migration quarantined (its folder left, "Folder missing" on
+// the dashboard) is rejoined with --rejoin, from the snapshot the macserver
+// kept of its share and files:
+//
+//   node scripts/icloud/migrate-nested.js --apply --rejoin --blog <id>
+//
 // --apply stops at the first failure: a failed rejoin may leave that blog
 // without its folder on the macserver until it is set up again.
 
@@ -39,6 +45,7 @@ const option = (name) => {
   return i === -1 ? null : args[i + 1];
 };
 const onlyBlog = option("--blog");
+const rejoin = args.includes("--rejoin");
 const limit = parseInt(option("--limit") || "0", 10) || Infinity;
 // Time for each blog's resync before the next blog is moved
 const pauseMs = parseInt(option("--pause") || "60000", 10);
@@ -56,6 +63,8 @@ const macserver = async (method, path, headers, timeout) => {
 };
 
 const main = async () => {
+  if (rejoin && (!onlyBlog || !apply))
+    throw new Error("--rejoin needs --apply and --blog");
   let only = null;
   if (onlyBlog) {
     const blog =
@@ -78,19 +87,26 @@ const main = async () => {
   for (const { blogID, account } of candidates) {
     if (moved >= limit) break;
 
-    if (shouldSkipBackgroundSync(account) || !account.sharingLink) {
+    if (rejoin) {
+      // Only a blog quarantined by a migration: its folder is gone
+      if (account.errorCode !== "SOURCE_MISSING" || !account.sharingLink) {
+        count("skipped: not quarantined");
+        continue;
+      }
+    } else if (shouldSkipBackgroundSync(account) || !account.sharingLink) {
       count("skipped: not set up, or an error stored");
       continue;
     }
 
-    let layout;
-    try {
-      layout = await macserver("GET", "/layout", { blogID }, 30000);
-    } catch (error) {
-      console.error(`${blogID}: could not read its layout:`, error.message);
-      count("skipped: layout unreadable");
-      continue;
-    }
+    let layout = { exists: true, nested: false, permission: "readWrite" };
+    if (!rejoin)
+      try {
+        layout = await macserver("GET", "/layout", { blogID }, 30000);
+      } catch (error) {
+        console.error(`${blogID}: could not read its layout:`, error.message);
+        count("skipped: layout unreadable");
+        continue;
+      }
 
     if (!layout.exists) {
       count("skipped: no folder on the macserver");
@@ -120,11 +136,19 @@ const main = async () => {
         macserver(
           "POST",
           "/migrate",
-          { blogID, sharingLink: account.sharingLink },
+          Object.assign(
+            { blogID, sharingLink: account.sharingLink },
+            rejoin ? { rejoin: "true" } : {}
+          ),
           // the macserver retries the rejoin for about four minutes, then
-          // waits up to 30 minutes for the folder's files to be listed
-          45 * 60 * 1000
-        )
+          // waits for the folder's files to be listed: up to four hours
+          5 * 60 * 60 * 1000
+        ).then(async (result) => {
+          // Rejoined: clear the quarantine before the lock is released, so
+          // the macserver's resync request, waiting on the lock, goes ahead
+          if (rejoin) await database.store(blogID, { error: null });
+          return result;
+        })
       );
     } catch (error) {
       // A sync was running: nothing was changed, so try the next blog

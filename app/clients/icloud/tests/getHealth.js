@@ -36,7 +36,7 @@ describe("icloud getHealth", function () {
     expect(await getHealth(this.blog.id)).toEqual(health.syncing());
   });
 
-  it("reports sync paused while the folder is migrated, until an hour has passed", async function () {
+  it("reports sync paused while the folder is migrated, until six hours have passed", async function () {
     const since = Date.now() - 1000;
     await database.store(this.blog.id, {
       setupComplete: true,
@@ -49,7 +49,7 @@ describe("icloud getHealth", function () {
     expect(result.issues[0].since).toBe(since);
 
     await database.store(this.blog.id, {
-      migratingSince: Date.now() - 2 * 60 * 60 * 1000,
+      migratingSince: Date.now() - 7 * 60 * 60 * 1000,
     });
     expect(await getHealth(this.blog.id)).toEqual(health.ok());
 

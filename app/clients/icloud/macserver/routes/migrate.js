@@ -1,5 +1,6 @@
 import fs from "fs-extra";
 import { join } from "path";
+import { homedir } from "os";
 import { iCloudDriveDirectory } from "../config.js";
 import { refresh, removeContainer, rootOf } from "../blogFolder.js";
 import sharePermission from "../util/sharePermission.js";
@@ -33,13 +34,30 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // How long to wait, after the rejoin, for iCloud to list the folder's files
 // again. Until it has, a walk of the folder would remove from the site every
-// file not listed yet
-const SETTLE_TIMEOUT_MS = 30 * 60_000;
+// file not listed yet. A large folder can take well over half an hour (seen:
+// 2,000 paths, 57% listed after 30 minutes, coming in bursts minutes apart),
+// so the wait only gives up once no more have appeared for SETTLE_STALL_MS,
+// or after SETTLE_MAX_MS in all
+const SETTLE_STALL_MS = 20 * 60_000;
+const SETTLE_MAX_MS = 4 * 60 * 60_000;
 const SETTLE_POLL_MS = 5_000;
 // The owner may remove a few files meanwhile, which never come back: once no
 // more have appeared for this long, that many missing is accepted, and the
 // resync removes them from the site
 const SETTLE_STABLE_MS = 60_000;
+
+// What a migration needs to rejoin a blog it had to quarantine (rejoin mode,
+// below): the share's collaboration ID and the paths the folder held, kept
+// on this Mac from just before the leave until the blog is migrated
+const SNAPSHOTS = join(homedir(), "blot-migrate");
+const snapshotPath = (blogID) => join(SNAPSHOTS, `${blogID}.json`);
+const saveSnapshot = async (blogID, snapshot) => {
+  await fs.mkdirp(SNAPSHOTS);
+  await fs.writeJson(snapshotPath(blogID), snapshot);
+};
+const loadSnapshot = (blogID) =>
+  fs.readJson(snapshotPath(blogID)).catch(() => null);
+const removeSnapshot = (blogID) => fs.remove(snapshotPath(blogID));
 
 // Every file and folder in a blog folder, as paths inside it. Dot-names are
 // left out: Finder's .DS_Store comes and goes
@@ -62,8 +80,8 @@ const MATERIALISE_PER_POLL = 50;
 
 // Resolves to the folder's name (the owner may rename it meanwhile) once the
 // rejoined folder lists every path it held before the leave, or all but a
-// few (about 1%) and nothing new has appeared for a minute. Rejects after
-// SETTLE_TIMEOUT_MS.
+// few (about 1%) and nothing new has appeared for a minute. Rejects once
+// no more have appeared for SETTLE_STALL_MS, or after SETTLE_MAX_MS.
 //
 // readdir alone may never show the entries of a directory iCloud hasn't
 // enumerated yet, and nothing watches the folder now to do it (watcher and
@@ -75,6 +93,8 @@ const waitForFiles = async (blogID, before) => {
   const start = Date.now();
   let lastSize = -1;
   let stableSince = start;
+  let fewestMissing = Infinity;
+  let lastProgress = start;
   let lastLog = 0;
   let turn = 0;
 
@@ -129,9 +149,16 @@ const waitForFiles = async (blogID, before) => {
       return name;
     }
 
-    if (Date.now() - start > SETTLE_TIMEOUT_MS)
+    if (now && missing.length < fewestMissing) {
+      fewestMissing = missing.length;
+      lastProgress = Date.now();
+    }
+    if (
+      Date.now() - lastProgress > SETTLE_STALL_MS ||
+      Date.now() - start > SETTLE_MAX_MS
+    )
       throw new Error(
-        `${missing.length} of ${before.length} paths still missing after ${SETTLE_TIMEOUT_MS / 60_000} minutes`
+        `${missing.length} of ${before.length} paths still missing after ${Math.round((Date.now() - start) / 60_000)} minutes`
       );
 
     if (Date.now() - lastLog > 30_000) {
@@ -190,45 +217,71 @@ export default async (req, res) => {
   if (!sharingLink) return res.status(400).send("Missing sharingLink");
 
   const container = join(iCloudDriveDirectory, blogID);
-  if (!(await fs.pathExists(container)))
-    return res.status(404).send("No folder for this blog");
 
-  const layout = await refresh(blogID);
-  if (layout.nested) return res.status(409).send("Already nested");
+  // Rejoin mode: a blog this route quarantined (left, no folder here) is
+  // rejoined from the snapshot taken before its leave, so the same checks
+  // apply: the same share must come back, with all its files
+  const rejoin = req.header("rejoin") === "true";
+  let before;
+  let paths;
 
-  const permission = await sharePermission(container, { attempts: 2 });
-  if (permission !== "readWrite")
-    return res.status(409).send(`Share permission is ${permission}`);
-
-  const before = await collaborationID(container);
-  if (!before || before === "(none)")
-    return res.status(409).send("Not a shared folder");
-
-  // What iCloud must list again after the rejoin before anything walks the
-  // folder (waitForFiles)
-  const paths = await listPaths(container);
-
-  console.log(
-    clfdate(),
-    `Migrating ${blogID} to the nested layout (${paths.length} paths)`
-  );
-
-  // Not watched meanwhile: the folder is briefly gone, which the watcher
-  // would otherwise report to Blot as deleted
-  await unwatch(blogID);
-
-  // Leave the share first: opening a link to a share this Mac is still in
-  // brings no new folder for setup to find. Through the Finder queue setup
-  // uses too, so the two never drive Finder at once
-  try {
-    await finderLimiter.schedule(() =>
-      leaveFolder(container, { root: iCloudDriveDirectory })
+  if (rejoin) {
+    if (await fs.pathExists(container))
+      return res.status(409).send("This blog has a folder: nothing to rejoin");
+    const snapshot = await loadSnapshot(blogID);
+    if (!snapshot) return res.status(404).send("No snapshot for this blog");
+    ({ collaborationID: before, paths } = snapshot);
+    console.log(
+      clfdate(),
+      `Rejoining ${blogID} in the nested layout (${paths.length} paths)`
     );
-  } catch (error) {
-    // Nothing changed: carry on as before
-    console.error(clfdate(), `Migration of ${blogID} could not leave:`, error);
-    await watch(blogID);
-    return res.status(500).send(`Leave failed: ${error.message}`);
+  } else {
+    if (!(await fs.pathExists(container)))
+      return res.status(404).send("No folder for this blog");
+
+    const layout = await refresh(blogID);
+    if (layout.nested) return res.status(409).send("Already nested");
+
+    const permission = await sharePermission(container, { attempts: 2 });
+    if (permission !== "readWrite")
+      return res.status(409).send(`Share permission is ${permission}`);
+
+    before = await collaborationID(container);
+    if (!before || before === "(none)")
+      return res.status(409).send("Not a shared folder");
+
+    // What iCloud must list again after the rejoin before anything walks
+    // the folder (waitForFiles)
+    paths = await listPaths(container);
+    await saveSnapshot(blogID, { collaborationID: before, paths });
+
+    console.log(
+      clfdate(),
+      `Migrating ${blogID} to the nested layout (${paths.length} paths)`
+    );
+
+    // Not watched meanwhile: the folder is briefly gone, which the watcher
+    // would otherwise report to Blot as deleted
+    await unwatch(blogID);
+
+    // Leave the share first: opening a link to a share this Mac is still in
+    // brings no new folder for setup to find. Through the Finder queue setup
+    // uses too, so the two never drive Finder at once
+    try {
+      await finderLimiter.schedule(() =>
+        leaveFolder(container, { root: iCloudDriveDirectory })
+      );
+    } catch (error) {
+      // Nothing changed: carry on as before
+      console.error(
+        clfdate(),
+        `Migration of ${blogID} could not leave:`,
+        error
+      );
+      await removeSnapshot(blogID);
+      await watch(blogID);
+      return res.status(500).send(`Leave failed: ${error.message}`);
+    }
   }
 
   // Right after a participant leaves, iCloud turns the share's link away for
@@ -287,6 +340,7 @@ export default async (req, res) => {
     return res.status(500).send(`Files did not come back: ${error.message}`);
   }
 
+  await removeSnapshot(blogID);
   await watch(blogID);
   await status(blogID, { folderName }).catch((error) =>
     console.error(clfdate(), `folderName for ${blogID}:`, error.message)
