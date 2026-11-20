@@ -221,20 +221,21 @@ describe("template", function () {
     });
 
     it("is read again when its settings in package.json change", async function () {
-      const pkg = (url) =>
+      const pkg = (colour) =>
         this.put(
           "/package.json",
-          JSON.stringify({ views: { "style.css": { url } } })
+          JSON.stringify({ views: { "style.css": { locals: { colour } } } })
         );
 
-      await this.put("/style.css", "body {color:pink}");
-      await pkg("/one");
+      await this.put("/style.css", "body {color:{{colour}}}");
+      await pkg("pink");
       await readFromFolder(this.blog.id, this.dir);
-      await pkg("/two");
+      await pkg("red");
 
       var template = await readFromFolder(this.blog.id, this.dir);
-      var result = await getViewByURL(template.id, "/two");
-      expect(result.viewName).toEqual("style.css");
+      expect((await get(template.id, "style.css")).locals.colour).toEqual(
+        "red"
+      );
     });
   });
 
