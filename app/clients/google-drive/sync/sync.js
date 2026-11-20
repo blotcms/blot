@@ -863,14 +863,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
       // Applying what a detection found (sync/index.js), the full walk runs
       // only when it was asked for. Directories recorded while the targeted
-      // pass ran are applied first.
-      if (options.fullWalk === "if-asked" && !wantFull) {
-        if (yields < MAX_YIELDS && (await options.dirty.count()) > 0) {
-          yields += 1;
-          continue;
-        }
-        break;
-      }
+      // pass ran are left to the next apply, which sync/index.js runs
+      // straight after: releasing the folder lock between them lets the hot
+      // doc poller and other writers in during a long bulk upload, which keeps
+      // recording the same directory again.
+      if (options.fullWalk === "if-asked" && !wantFull) break;
 
       const before = { ...summary };
       canYield = Boolean(options.dirty) && yields < MAX_YIELDS;
