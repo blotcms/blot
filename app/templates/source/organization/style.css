@@ -341,7 +341,9 @@ video {
   /* A little wider than the columns: the capitals' side bearings bring
      their edges back in line with them */
   margin: 1.25rem calc(-0.25 * var(--pad)) 0;
-  overflow: hidden;
+  /* Sideways only: the line is shorter than the capitals, which would
+     otherwise lose their tops */
+  overflow-x: clip;
 }
 
 .site-title a {
