@@ -20,14 +20,17 @@ const log = (...args) => console.log(clfdate(), "Google Drive Sync:", ...args);
 
 // Syncs a blog with its Drive folder (#2847):
 //
+// 0. Apply, under the folder lock, the directories changes.list and the
+//    search already recorded as changed (database/dirty.js), so a change they
+//    saw doesn't wait for the walk.
 // 1. Walk the whole folder outside the blog's folder lock, changing nothing,
 //    to find the directories that differ (sync.js with detectOnly). Only one
 //    process walks a blog at a time (its own Redis lock). A request that
 //    arrives meanwhile asks the walker to walk once more when it is done, since
 //    its change may be newer than the listing, and rejects as locked, so
 //    followUpSync keeps a follow-up too.
-// 2. If anything differs (or changes.list and the search recorded changed
-//    directories, database/dirty.js), take the folder lock and apply just those
+// 2. If anything differs (or changes.list and the search recorded more changed
+//    directories meanwhile), take the folder lock and apply just those
 //    directories (sync.js's targeted pass). With nothing to change, the folder
 //    lock isn't taken at all.
 // 3. Walk again, outside the lock, and apply anything still different. The
@@ -96,6 +99,15 @@ module.exports = async function (blogID, { rethrowLocked = false } = {}) {
 // Resolves to the apply's summary, a truthy summary of the detection when
 // nothing needed applying, or false if the sync failed
 async function detectAndApply(blogID, sync) {
+  // Directories changes.list and the search already saw change are applied
+  // before walking: the walk takes seconds on a large folder, and they don't
+  // need it to be found (#2847)
+  let known = null;
+  if (await database.dirty.count(blogID)) {
+    known = await applyLocked(blogID, sync);
+    if (known === false) return false;
+  }
+
   const startedAt = Date.now();
   const detected = await sync(blogID, null, null, { detectOnly: true });
 
@@ -111,7 +123,7 @@ async function detectAndApply(blogID, sync) {
 
   await markDirty(blogID, detected);
   if (!(await database.dirty.count(blogID))) {
-    return { downloaded: 0, removed: 0, createdDirs: 0, detected: 0 };
+    return known || { downloaded: 0, removed: 0, createdDirs: 0, detected: 0 };
   }
 
   const applied = await applyLocked(blogID, sync);

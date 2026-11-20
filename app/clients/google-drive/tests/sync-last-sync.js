@@ -10,11 +10,13 @@ function load({
   detections = [],
   walkLocked = false,
   rewalkAfter = 0,
+  // Directories changes.list and the search recorded before the sync
+  recorded = [],
 } = {}) {
   const module = { exports: {} };
   const events = [];
   const stored = [];
-  const dirty = new Set();
+  const dirty = new Set(recorded);
   const applyOptions = [];
   let rewalks = rewalkAfter;
   let detectCount = 0;
@@ -122,6 +124,23 @@ describe("google drive sync entry point", function () {
       "walk-release",
     ]);
     expect(applyOptions[0].fullWalk).toBe("if-asked");
+  });
+
+  it("applies directories already recorded as changed before walking", async function () {
+    const { sync, events } = load({ account: folder, recorded: ["dir_a"] });
+
+    const summary = await sync("blog_a");
+
+    expect(summary.downloaded).toBe(1);
+    expect(events).toEqual([
+      "store",
+      "walk-lock",
+      "lock",
+      "apply",
+      "release",
+      "detect",
+      "walk-release",
+    ]);
   });
 
   it("applies again what still differs after an apply", async function () {
