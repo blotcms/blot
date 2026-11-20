@@ -1,6 +1,6 @@
 import fs from "fs-extra";
 import { resolve, join, sep, dirname } from "path";
-import { iCloudDriveDirectory } from "../config.js";
+import { rootOf } from "../blogFolder.js";
 import { expectBlotChange } from "../blotWrites.js";
 import clfdate from "../util/clfdate.js";
 
@@ -18,7 +18,7 @@ export default async (req, res) => {
   }
 
   // Validate path
-  const basePath = resolve(join(iCloudDriveDirectory, blogID));
+  const basePath = resolve(rootOf(blogID));
   const dirPath = resolve(join(basePath, path));
 
   // Check if the resolved path is inside the allowed directory

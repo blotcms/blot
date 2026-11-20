@@ -6,6 +6,9 @@ import { forgetBlotChanges } from "../blotWrites.js";
 import { unwatch } from "../watcher/index.js";
 import clfdate from "../util/clfdate.js";
 import leaveFolder from "../util/leaveFolder.js";
+import { refresh, removeContainer } from "../blogFolder.js";
+import fs from "fs-extra";
+import { forgetRoot } from "../birdState.js";
 import finderLimiter from "../util/finderLimiter.js";
 
 export default async (req, res) => {
@@ -36,11 +39,25 @@ export default async (req, res) => {
 
   try {
     await unwatch(blogID);
-    await finderLimiter.schedule(() =>
-      leaveFolder(join(iCloudDriveDirectory, blogID), {
-        root: iCloudDriveDirectory,
-      })
-    );
+    const layout = (await fs.pathExists(join(iCloudDriveDirectory, blogID)))
+      ? await refresh(blogID)
+      : { nested: false };
+    if (layout.nested) {
+      // Leave the shared folder inside (if it's still there), then remove
+      // blog_<id>, Blot's own folder, now empty but for the marker
+      if (layout.root)
+        await finderLimiter.schedule(() =>
+          leaveFolder(layout.root, { root: iCloudDriveDirectory })
+        );
+      await removeContainer(blogID);
+    } else {
+      await finderLimiter.schedule(() =>
+        leaveFolder(join(iCloudDriveDirectory, blogID), {
+          root: iCloudDriveDirectory,
+        })
+      );
+    }
+    forgetRoot(blogID);
   } catch (error) {
     console.error(clfdate(), `Failed to disconnect blogID ${blogID}:`, error);
     return res.status(500).send(error.message);

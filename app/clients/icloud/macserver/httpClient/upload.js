@@ -1,12 +1,8 @@
-import {
-  remoteServer,
-  Authorization,
-  iCloudDriveDirectory,
-  maxFileSize,
-} from "../config.js";
+import { remoteServer, Authorization, maxFileSize } from "../config.js";
 import clfdate from "../util/clfdate.js";
 import fs from "fs-extra";
 import * as brctl from "../brctl/index.js";
+import { rootOf } from "../blogFolder.js";
 import fetch from "./rateLimitedFetchWithRetriesAndTimeout.js";
 import { isUnchanged, recordPushed } from "../pushedFiles.js";
 import { fileVersion, diskMatches } from "../birdState.js";
@@ -68,7 +64,7 @@ export default async (blogID, path) => {
     throw new Error("Invalid path");
   }
 
-  const filePath = join(iCloudDriveDirectory, blogID, path);
+  const filePath = join(rootOf(blogID), path);
   const pathBase64 = Buffer.from(path).toString("base64");
 
   console.log(clfdate(), `Preparing to upload file: ${filePath}`);

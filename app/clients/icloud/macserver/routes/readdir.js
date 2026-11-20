@@ -1,6 +1,6 @@
 import fs from "fs-extra";
 import { join, resolve, sep } from "path";
-import { iCloudDriveDirectory } from "../config.js";
+import { rootOf } from "../blogFolder.js";
 import { ls } from "../brctl/index.js";
 import shouldIgnoreFile from "../../../util/shouldIgnoreFile.js";
 import clfdate from "../util/clfdate.js";
@@ -23,7 +23,7 @@ export default async (req, res) => {
     `Received readdir request for blogID: ${blogID}, path: ${path}`
   );
 
-  const basePath = resolve(join(iCloudDriveDirectory, blogID));
+  const basePath = resolve(rootOf(blogID));
   const dirPath = resolve(join(basePath, path));
 
   if (dirPath !== basePath && !dirPath.startsWith(`${basePath}${sep}`)) {
