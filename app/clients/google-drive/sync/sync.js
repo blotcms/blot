@@ -48,6 +48,16 @@ const LISTING_CONCURRENCY = 16;
 // faster than the walk applies it.
 const MAX_PREFETCHED_ITEMS = 20000;
 
+// A full walk stops early when changed directories are waiting (see
+// options.dirty below), so a change made during a long walk or bulk download
+// isn't held behind it: at most this many times per sync, so the walk always
+// gets to finish.
+const MAX_YIELDS = 5;
+// How often a full walk asks whether changed directories are waiting
+const YIELD_CHECK_MS = 250;
+// Thrown to stop a full walk that should make way
+const YIELD = new Error("Making way for changed directories");
+
 // Lists directories ahead of the walk. take(dirId) gives a directory's
 // listing (fetched already, in flight, or fetched now), and queues its
 // subdirectories at the front, since the depth-first walk needs them next.
@@ -57,7 +67,7 @@ const MAX_PREFETCHED_ITEMS = 20000;
 // A listing can be a few seconds older than when the walk reaches it, as with
 // any walk: a change Drive records after the listing is picked up by the sync
 // its webhook or poll starts, which waits for this one (followUpSync).
-function prefetchListings(list) {
+function prefetchListings(list, { ahead = true } = {}) {
   const listings = new Map();
   const started = new Set();
   const queue = [];
@@ -116,8 +126,10 @@ function prefetchListings(list) {
     entry.taken = true;
     if (entry.counted) buffered -= entry.size;
     const items = await entry.promise;
-    queue.unshift(...subdirectories(items));
-    pump();
+    if (ahead) {
+      queue.unshift(...subdirectories(items));
+      pump();
+    }
     return items;
   };
 
@@ -174,6 +186,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
   const drive = await createDriveClient(serviceAccountId);
   const {
+    get: getPath,
     getByPath,
     getApplied,
     setApplied,
@@ -233,9 +246,22 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       .reset({ preserveVerifiedContent: true });
   }
 
-  const listings = prefetchListings((dirId) => driveReaddir(drive, dirId));
+  // Directory listings for the pass under way; each pass makes its own
+  let listings = null;
 
-  const walk = async (dir, dirId) => {
+  // Throws YIELD during a full walk when changed directories are waiting,
+  // asking Redis at most every YIELD_CHECK_MS
+  let canYield = false;
+  let lastYieldCheck = 0;
+  const maybeYield = async () => {
+    if (!canYield || Date.now() - lastYieldCheck < YIELD_CHECK_MS) return;
+    lastYieldCheck = Date.now();
+    if ((await options.dirty.count()) > 0) throw YIELD;
+  };
+
+  // With recurse false, only the directory itself is brought up to date, and
+  // only directories it creates are walked below it
+  const walk = async (dir, dirId, recurse = true) => {
     if (!dir || !dirId) {
       throw new Error("Missing required arguments for walk");
     }
@@ -488,6 +514,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
     try {
       for (const entry of remoteContents) {
+        await maybeYield();
         const { id, name, isDirectory, modifiedTime, md5Checksum } = entry;
         const path = join(dir, name);
         const existsLocally = localContents.find((item) => item.name === name);
@@ -617,6 +644,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             }
           }
         } else {
+          const created = !existsLocally || !existsLocally.isDirectory;
           if (existsLocally && !existsLocally.isDirectory) {
             await checkWeCanContinue();
             progress.publish("Removing file", path);
@@ -636,7 +664,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             await update(path);
           }
 
-          await walk(path, id);
+          if (recurse || created) await walk(path, id, true);
         }
       }
     } finally {
@@ -650,16 +678,110 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     }
   };
 
+  // Runs fn with a fresh set of listings, stopped when it ends
+  const pass = async (fn, listingOptions) => {
+    listings = prefetchListings(
+      (dirId) => driveReaddir(drive, dirId),
+      listingOptions
+    );
+    try {
+      await fn();
+    } finally {
+      // Nothing more is listed once the pass is over
+      listings.stop();
+    }
+  };
+
+  // Brings just the given directories up to date, parents first. A directory
+  // the mapping no longer has was removed with its parent, which is dirty
+  // too, so it is skipped.
+  const targeted = async (dirIds) => {
+    const startedAt = Date.now();
+    const paths = new Map();
+    for (const id of dirIds) {
+      paths.set(id, id === folderId ? "/" : await getPath(id));
+    }
+    const ordered = dirIds
+      .filter((id) => paths.get(id))
+      .sort(
+        (a, b) =>
+          paths.get(a).split("/").length - paths.get(b).split("/").length
+      );
+    await pass(
+      async () => {
+        for (const id of ordered) {
+          const path = id === folderId ? "/" : await getPath(id);
+          if (path) await walk(path, id, false);
+        }
+      },
+      { ahead: false }
+    );
+    console.log(
+      "Google Drive Sync:",
+      blogID,
+      `targeted dirs=${ordered.length} ms=${Date.now() - startedAt}`
+    );
+  };
+
+  // Directory ids taken from options.dirty, put back if the sync fails
+  const taken = [];
+
   try {
-    await walk("/", folderId);
+    // options.dirty (from sync/index.js) holds the directories changes.list
+    // and the search saw change (#2847). They are listed first, so a change
+    // goes live after one listing instead of after the whole walk. The full
+    // walk still follows, as before, and logs anything the targeted pass
+    // missed. While it runs, directories that change make it stop and start
+    // again after them, up to MAX_YIELDS times.
+    let yields = 0;
+    for (;;) {
+      const ids = options.dirty ? await options.dirty.take() : [];
+      taken.push(...ids);
+      const dirIds = ids.filter((id) => id !== options.dirty?.FULL);
+      // Only the full walk makes way, never the targeted pass
+      canYield = false;
+      if (dirIds.length) await targeted(dirIds);
+
+      const before = { ...summary };
+      canYield = Boolean(options.dirty) && yields < MAX_YIELDS;
+      try {
+        await pass(() => walk("/", folderId));
+      } catch (err) {
+        if (err !== YIELD) throw err;
+        yields += 1;
+        console.log(
+          "Google Drive Sync:",
+          blogID,
+          `full walk yielded n=${yields}`
+        );
+        continue;
+      }
+
+      if (dirIds.length) {
+        const missed = ["downloaded", "removed", "createdDirs"]
+          .map((field) => [field, summary[field] - before[field]])
+          .filter(([, n]) => n > 0);
+        if (missed.length)
+          console.log(
+            "Google Drive Sync:",
+            blogID,
+            "full walk after targeted pass changed",
+            missed.map(([field, n]) => `${field}=${n}`).join(" "),
+            `modifiedDuringWalk=${summary.modifiedDuringWalk - before.modifiedDuringWalk}`
+          );
+      }
+      break;
+    }
     progress.finish("Finished processing folder");
     return summary;
   } catch (err) {
+    if (options.dirty && taken.length) {
+      await options.dirty
+        .putBack(taken)
+        .catch((e) => console.error("Google Drive Sync: put back failed", e));
+    }
     publish("Sync failed", err.message);
     onError(err);
     return false;
-  } finally {
-    // Nothing more is listed once the walk is over
-    listings.stop();
   }
 };

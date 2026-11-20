@@ -187,6 +187,8 @@ HTML templates for user-facing pages:
 - If a new activity is detected, it triggers `sync(blogID)`.
 - Rate limiting via Bottleneck respects the Drive API quota (up to 48 calls per minute per service account).
 
+**Changed directories first** (`database/dirty.js`, #2847): `syncChanges.js` records the Drive directories each change touches (the one a file was in, from the blog's folder mapping, and the one it is in now) in a per-blog set. The next sync takes the set and lists just those directories first, descending only into directories it creates, so a change goes live after one listing (0.2-0.3s) instead of after the whole walk. The full walk still follows and logs `full walk after targeted pass changed ...` for anything the targeted pass missed. During the full walk, a newly changed directory makes it stop and start again after that directory, at most five times per sync, so a change made during a long walk or bulk download isn't held behind it. The blog's folder itself changing, or a mapped file whose directory the mapping has lost, asks for the full walk only.
+
 **Sync Algorithm** (`sync/sync.js`):
 - Recursively walks the remote folder tree. It lists Drive directories ahead of itself, 16 at a time, and applies them in the same depth-first order as before: listing one directory takes 0.2-0.3s whatever its size, so on a 3,035-item folder in 31 directories the walk's listing went from about 9s to about 1.3s (#2847).
 - For each remote file/folder:

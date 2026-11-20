@@ -1,4 +1,6 @@
+const { dirname } = require("path").posix;
 const clfdate = require("helper/clfdate");
+const database = require("../database");
 const followUps = require("../sync/followUps");
 const hotDocPoller = require("./hotDocPoller");
 const { logChanges } = require("./readChanges");
@@ -14,6 +16,23 @@ async function logFailure(promise, ...context) {
   } catch (error) {
     console.error(prefix(), ...context, error.message);
   }
+}
+
+// The Drive directories of the blog to list again for one change: the one the
+// file was in (from the blog's folder mapping), so a rename, trash or move
+// out is applied, and the one it is in now, so a new file or a move in is.
+// The blog's own folder changing (renamed, trashed) asks for a full walk, as
+// does a mapped file whose directory the mapping has lost.
+async function dirtyDirectories({ change, blogID, folderId, path, parentId }) {
+  if (change.fileId === folderId) return [database.dirty.FULL];
+
+  const ids = [];
+  if (path) {
+    const id = await database.folder(folderId, blogID).getByPath(dirname(path));
+    ids.push(id || database.dirty.FULL);
+  }
+  if (parentId) ids.push(parentId);
+  return ids;
 }
 
 // Syncs the blogs a batch of changes belongs to (placed, from readChanges'
@@ -39,9 +58,13 @@ module.exports = async function syncChanges(
   logChanges(serviceAccountId, placed, source);
 
   const blogs = new Map();
-  for (const { change, blogID, folderId } of placed) {
+  const dirty = new Map();
+  for (const entry of placed) {
+    const { change, blogID, folderId } = entry;
     if (!blogID) continue;
     blogs.set(blogID, (blogs.get(blogID) || 0) + 1);
+    if (!dirty.has(blogID)) dirty.set(blogID, new Set());
+    for (const id of await dirtyDirectories(entry)) dirty.get(blogID).add(id);
 
     if (change.file?.mimeType === DOCUMENT && !change.file?.trashed) {
       logFailure(
@@ -54,6 +77,11 @@ module.exports = async function syncChanges(
         "hot doc enqueue failed"
       );
     }
+  }
+
+  // Recorded before the syncs start, so the sync that runs finds them
+  for (const [blogID, ids] of dirty) {
+    await database.dirty.add(blogID, [...ids]);
   }
 
   const armed = new Map();
