@@ -3,12 +3,16 @@ const fromiCloud = require("clients/icloud/sync/fromiCloud");
 const establishSyncLock = require("sync/establishSyncLock");
 const database = require("clients/icloud/database");
 const fix = require("sync/fix");
+const getHealth = require("clients/icloud/getHealth");
+const { shouldSkipBackgroundSync } = require("clients/icloud/error");
+const syncReport = require("clients/util/syncReport");
 
 const PROGRESS_INTERVAL_MS = 30000;
 
 let totalIcloudBlogs = 0;
 let successfulResyncs = 0;
 let failedResyncs = 0;
+let skippedResyncs = 0;
 const errors = [];
 let progressInterval;
 
@@ -33,6 +37,22 @@ const stopProgress = () => {
   if (progressInterval) clearInterval(progressInterval);
 };
 
+// Why the blog must not be resynced, or null. The same checks as the client's
+// hourly validation: a resync removes local files iCloud doesn't have, so it
+// must not run when the folder is gone, setup or the initial transfer isn't
+// finished, or the account has a stored error.
+const skipReason = async (blogID, account) => {
+  if (await syncReport.hasUserSideIssue(blogID, getHealth)) {
+    return "folder deleted, unshared or iCloud storage full";
+  }
+
+  if (shouldSkipBackgroundSync(account)) {
+    return "setup incomplete, initial transfer running or stored error";
+  }
+
+  return null;
+};
+
 const processBlog = async (blog) => {
   if (blog.client !== "icloud") return;
 
@@ -46,8 +66,10 @@ const processBlog = async (blog) => {
   try {
     const account = await database.get(blog.id);
 
-    if (account.setupComplete !== true) {
-      console.log(`INFO: Skipping iCloud blog not setupComplete: ${blog.id}`);
+    const reason = await skipReason(blog.id, account);
+    if (reason) {
+      skippedResyncs++;
+      console.log(`INFO: Skipping iCloud blog ${blog.id}: ${reason}`);
       return;
     }
 
@@ -56,6 +78,15 @@ const processBlog = async (blog) => {
     const syncLock = await establishSyncLock(blog.id);
     folder = syncLock.folder;
     done = syncLock.done;
+
+    // The account may have changed while waiting for the lock.
+    const lockedReason = await skipReason(blog.id, await database.get(blog.id));
+    if (lockedReason) {
+      totalIcloudBlogs--;
+      skippedResyncs++;
+      console.log(`INFO: Skipping iCloud blog ${blog.id}: ${lockedReason}`);
+      return;
+    }
 
     await fromiCloud(blog.id, folder.status, folder.update);
 
@@ -105,6 +136,7 @@ const summarize = () => {
   console.log(`  Total iCloud blogs processed: ${totalIcloudBlogs}`);
   console.log(`  Successful resyncs: ${successfulResyncs}`);
   console.log(`  Failed resyncs: ${failedResyncs}`);
+  console.log(`  Skipped blogs: ${skippedResyncs}`);
 
   if (errors.length > 0) {
     console.log("\nErrors:");
@@ -126,6 +158,8 @@ const summarize = () => {
     console.log("\nINFO: No iCloud blogs were processed.");
   }
 };
+
+module.exports = { skipReason };
 
 if (require.main === module) {
   startProgress();
