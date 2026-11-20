@@ -1,21 +1,22 @@
-{{! One post in the project index: title and date, details, tags, and its image. Details come from the post's metadata; add or rename them here. }}
+{{! One post in a list: title and date (an event's date, if it has one), its details from the post's metadata, its tags, and its picture. }}
 <article class="row">
   <div class="row-identity">
-    <h2 class="row-title"><a href="{{{url}}}">{{title}}</a></h2>
-    {{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MM–DD–YY{{/formatDate}}</time>{{/date}}
+    <h3 class="row-title"><a href="{{{url}}}">{{title}}</a></h3>
+    {{#event}}<time class="quiet" datetime="{{#formatEvent}}YYYY-MM-DD{{/formatEvent}}">{{#formatEvent}}ddd, MMM D, YYYY{{/formatEvent}}</time>{{/event}}
+    {{^event}}{{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time>{{/date}}{{/event}}
   </div>
   <div class="row-details">
     {{#metadata.speaker}}<div>{{metadata.speaker}}</div>{{/metadata.speaker}}
-    {{#metadata.venue}}<div><i>{{metadata.venue}}</i></div>{{/metadata.venue}}
     {{#metadata.author}}<div>{{metadata.author}}</div>{{/metadata.author}}
+    {{#metadata.venue}}<div><i>{{metadata.venue}}</i></div>{{/metadata.venue}}
     {{#summary}}<div class="quiet">{{summary}}</div>{{/summary}}
   </div>
   <div class="row-tags">
-    {{#tags.length}}<span>Filed under</span>
-    <span class="quiet">{{#tags}}<a href="/tagged/{{slug}}">{{name}}</a> {{/tags}}</span>{{/tags.length}}
+    {{#tags.length}}<span class="quiet">Filed under</span><br>
+    {{#tags}}<a href="/tagged/{{slug}}">{{name}}</a>{{^last}}, {{/last}}{{/tags}}{{/tags.length}}
   </div>
   <div class="row-image">
     {{! Inside a section over a plain value, url is the post's again }}
-    {{#thumbnail.medium.url}}<a href="{{{url}}}" tabindex="-1" aria-hidden="true"><img src="{{{thumbnail.small.url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w" sizes="(min-width: 40rem) 12vw, 40vw" width="{{thumbnail.medium.width}}" height="{{thumbnail.medium.height}}" alt="" loading="lazy"></a>{{/thumbnail.medium.url}}
+    {{#thumbnail.medium.url}}<a href="{{{url}}}" tabindex="-1" aria-hidden="true"><img src="{{{thumbnail.small.url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w" sizes="(min-width: 40rem) 23vw, 48vw" width="{{thumbnail.medium.width}}" height="{{thumbnail.medium.height}}" alt="" loading="lazy"></a>{{/thumbnail.medium.url}}
   </div>
 </article>

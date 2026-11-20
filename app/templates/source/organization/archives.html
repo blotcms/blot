@@ -3,20 +3,20 @@
   {{> head}}
   <body class="index-page">
     {{> header}}
-    <main>
+    <main id="main">
       {{> masthead}}
-      <h1 class="list-heading">Archives{{#total_posts}} <span class="quiet">{{total_posts}}</span>{{/total_posts}}</h1>
+      <h1 class="section-heading">Archives{{#total_posts}} <span class="quiet">· {{total_posts}} posts</span>{{/total_posts}}</h1>
       {{^total_posts}}<p class="empty">Nothing has been published yet.</p>{{/total_posts}}
       {{#archives}}
       {{#months}}
-      <h2 class="list-heading quiet">{{month}} {{year}}</h2>
+      <h2 class="section-heading">{{month}} <span class="quiet">{{year}}</span></h2>
       <div class="rows">
         {{#entries}}{{> post-row}}{{/entries}}
       </div>
       {{/months}}
       {{/archives}}
       {{#all_tags.length}}
-      <h2 class="list-heading">Filed under</h2>
+      <h2 class="section-heading">Filed under</h2>
       <p class="tag-cloud">{{#all_tags}}<a href="/tagged/{{slug}}">{{name}}</a> {{/all_tags}}</p>
       {{/all_tags.length}}
     </main>

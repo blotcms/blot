@@ -1,0 +1,15 @@
+{{! What's coming up: every post whose Event line is a date still to come, soonest first (upcoming_events), with a link to subscribe to them all in a calendar app. }}
+{{#upcoming_events.length}}
+<h2 class="section-heading">Upcoming</h2>
+<div class="upcoming">
+  {{#upcoming_events}}
+  <a class="upcoming-item" href="{{{url}}}">
+    {{> when}}
+    <span class="event-title">{{title}}</span>
+    {{#metadata.venue}}<span class="quiet">{{metadata.venue}}</span>{{/metadata.venue}}
+    {{#metadata.cost}}<span class="quiet"> · {{metadata.cost}}</span>{{/metadata.cost}}
+  </a>
+  {{/upcoming_events}}
+</div>
+<p class="calendar-link quiet"><a href="/calendar.ics">Add these to your calendar</a></p>
+{{/upcoming_events.length}}

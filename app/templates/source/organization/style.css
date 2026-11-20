@@ -30,36 +30,45 @@ pre code.hljs.hljs * {
   width: auto;
 }
 
-/* Type. The interface (menu, index, captions, footer) is set in the font
-   setting at 14/17.5; posts and pages in the text font, which grows with the
-   window from 21px on a phone to its set size at 1440px, then with the
-   window. The site title has its own font. */
+/* ---------------------------------------------------------------------------
+   The system. Everything sits on four equal columns: the menu, the index,
+   posts and pages, the footer. Column 1 of a post or page is its margin, for
+   its facts, contents, section numbers and notes; the text runs in columns
+   2-4. The interface (menu, lists, labels) is set in the Font setting, the
+   reading text in the Text font, the site title in the Title font.
+   ------------------------------------------------------------------------ */
 :root {
   --ink: {{text_color}};
   --paper: {{background_color}};
-  --quiet: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.4);
+  --accent: {{accent_color}};
+  --quiet: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.6);
   --rule: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
+  --tint: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.04);
   --font-sans: {{#font}}{{{stack}}}{{/font}};
   --font-serif: {{#text_font}}{{{stack}}}{{/text_font}};
   --font-title: {{#title_font}}{{{stack}}}{{/title_font}};
-  --pad: 13px;
-  --space: 5rem;
-  --trim-top: -0.18em;
-  --trim-bottom: -0.3em;
+  --pad: 14px;
+  --gap: 1rem;
+  /* One column of the grid, and a column plus its gap */
+  --col: calc((100vw - 2 * var(--pad) - 3 * var(--gap)) / 4);
+  --step: calc(var(--col) + var(--gap));
+  --space: 4rem;
   --vp: calc((100vw - 320px) / 1120);
   --size-m: {{font.font_size}}px;
   --leading-m: calc({{font.font_size}}px * {{font.line_height}});
+  --size-s: calc({{font.font_size}}px * 0.86);
   --size-serif-m: calc({{font.font_size}}px * 16 / 14);
   --leading-serif-m: calc(var(--size-serif-m) * 1.25);
   --size-serif-l: calc({{text_font.font_size}}px * 0.84 + {{text_font.font_size}} * 0.16 * var(--vp));
   --leading-serif-l: calc(var(--size-serif-l) * {{text_font.line_height}});
   --size-h1: 40px;
-  /* The width of a post: tall windows give a wider column, as in a book. */
-  --w: min((100vh - 2 * var(--space)) / 0.8, 100vw - 2rem);
+  --size-numeral: 64px;
 }
 
 @media (min-width: 80rem) {
-  :root { --pad: 20px; }
+  :root {
+    --pad: 20px;
+  }
 }
 
 @media (min-width: 1440px) {
@@ -68,11 +77,16 @@ pre code.hljs.hljs * {
     --leading-m: calc({{font.font_size}} * {{font.line_height}} * 100 / 1440 * 1vw);
     --size-serif-l: calc({{text_font.font_size}} * 100 / 1440 * 1vw);
     --size-h1: calc(40 * 100 / 1440 * 1vw);
+    --size-numeral: calc(64 * 100 / 1440 * 1vw);
   }
 }
 
 * {
   box-sizing: border-box;
+}
+
+html {
+  scrollbar-gutter: stable;
 }
 
 body {
@@ -82,7 +96,8 @@ body {
   color: var(--ink);
   font: var(--size-m) / var(--leading-m) var(--font-sans);
   font-kerning: normal;
-  letter-spacing: 0.02em;
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: 0.01em;
   -webkit-font-smoothing: antialiased;
   overflow-wrap: anywhere;
 }
@@ -100,8 +115,9 @@ a:hover {
 
 a:focus-visible,
 button:focus-visible,
-summary:focus-visible {
-  outline: 2px solid var(--ink);
+summary:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
 
@@ -130,25 +146,59 @@ video {
   white-space: nowrap;
 }
 
-/* The menu bar: four equal columns, fixed to the top when that setting is on. */
+.skip-link {
+  position: absolute;
+  top: 0;
+  left: var(--pad);
+  z-index: 100;
+  padding: 6px 10px;
+  background: var(--ink);
+  color: var(--paper);
+  transform: translateY(-120%);
+}
+
+.skip-link:focus {
+  transform: none;
+}
+
+/* The announcement, from the template's settings: a band above everything. */
+.notice {
+  margin: 0;
+  padding: 8px var(--pad);
+  background: var(--accent);
+  color: var(--paper);
+  text-align: center;
+}
+
+.notice a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-thickness: from-font;
+}
+
+/* ---------------------------------------------------------------------------
+   The menu bar: four equal columns. Home, Search, Archives and Feed are left
+   to the title and the footer. With more than four other links the first
+   three stay and More opens the rest.
+   ------------------------------------------------------------------------ */
 .bar {
   position: relative;
   z-index: 50;
-  padding: 5px var(--pad);
+  padding: 8px var(--pad);
   background: var(--paper);
+  border-bottom: 1px solid var(--rule);
   line-height: 1;
 }
 
-/* Sticky rather than fixed, so a menu that wraps onto more lines never covers the page. */
+/* Sticky rather than fixed, so a bar never covers the page. */
 .bar.is-fixed {
   position: sticky;
   top: 0;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
 }
 
 .bar nav {
   display: flex;
-  gap: 1rem;
+  gap: var(--gap);
   align-items: center;
 }
 
@@ -156,15 +206,12 @@ video {
   display: grid;
   flex: 1;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 0 1rem;
+  gap: 0 var(--gap);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
-/* Home, Search, Archives and Feed stay out of the bar: the title links home
-   and the footer has the rest. With more than four other links, the first
-   three stay and More opens the rest. */
 .bar-item:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]),
 .bar-more li:is([data-menu="home"], [data-menu="search"], [data-menu="archives"], [data-menu="feed"]) {
   display: none;
@@ -198,13 +245,13 @@ video {
 
 .bar-more ul {
   position: absolute;
-  top: calc(100% + 5px);
+  top: calc(100% + 9px);
   left: -0.75rem;
   min-width: 100%;
   margin: 0;
   padding: 0.5rem 0.75rem;
   background: var(--paper);
-  box-shadow: 0 2px 6px rgb(0 0 0 / 0.12);
+  border: 1px solid var(--rule);
   list-style: none;
   line-height: var(--leading-m);
 }
@@ -248,7 +295,7 @@ video {
   width: 12px;
   height: 12px;
   border-radius: 50%;
-  background: currentColor;
+  background: var(--accent);
   opacity: 0;
 }
 
@@ -260,7 +307,6 @@ video {
   opacity: 0.6;
 }
 
-/* The link to the page you're on: a dot, and the label moved right to make room. */
 .bar a.is-current .dot {
   opacity: 1;
 }
@@ -269,11 +315,14 @@ video {
   transform: translateX(20px);
 }
 
-/* The site title, as wide as the page. */
+/* ---------------------------------------------------------------------------
+   The masthead: the site title as wide as the page (script.js fits it; a
+   size relative to the page otherwise), then a strap of the organization's
+   details from the settings, on the four columns.
+   ------------------------------------------------------------------------ */
 .site-title {
   container-type: inline-size;
-  margin: 1.25rem calc(-1 * var(--pad)) 1.5rem;
-  padding: 0;
+  margin: 1.25rem calc(-1 * var(--pad)) 0;
   overflow: hidden;
 }
 
@@ -295,25 +344,46 @@ video {
   text-box: trim-both cap alphabetic;
 }
 
-/* What's next, from the latest post's Next line. */
-.next {
-  position: relative;
-  margin: 0 0 1.5rem;
-  padding-left: 20px;
+.strap {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem var(--gap);
+  margin: 0.75rem 0 2rem;
+  padding: 0;
+  list-style: none;
 }
 
-.next .dot {
-  top: 0.15em;
-  opacity: 1;
+@media (min-width: 40rem) {
+  .strap {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 }
 
-.next .quiet {
-  margin-right: 0.5em;
+.strap li {
+  min-width: 0;
 }
 
-/* Lists of posts: one row each, in four columns, with a rule between. */
+/* ---------------------------------------------------------------------------
+   Lists of posts (home, archives, search, tag pages): a row each, on the
+   four columns, with a rule between.
+   ------------------------------------------------------------------------ */
 .index-page main {
   padding: 0 var(--pad);
+}
+
+.section-heading {
+  margin: 2rem 0 0;
+  padding-bottom: 0.5em;
+  font: inherit;
+  font-weight: 700;
+}
+
+.section-heading a {
+  color: inherit;
+}
+
+.section-heading .quiet {
+  font-weight: 400;
 }
 
 .rows {
@@ -323,13 +393,9 @@ video {
 .row {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.75em 1rem;
+  gap: 0.75em var(--gap);
   padding: 0.5em var(--pad) var(--pad);
   border-top: 1px solid var(--rule);
-}
-
-.row:first-child {
-  border-top: 0;
 }
 
 @media (min-width: 40rem) {
@@ -346,6 +412,7 @@ video {
   margin: 0;
   font: inherit;
   font-weight: 700;
+  text-wrap: balance;
 }
 
 .row-title a {
@@ -354,19 +421,13 @@ video {
 
 .row time {
   display: block;
-  font-variant-numeric: tabular-nums;
 }
 
-/* Long summaries stop after four lines. */
 .row-details .quiet {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 4;
   overflow: hidden;
-}
-
-.row-tags > span {
-  display: block;
 }
 
 .row-tags a {
@@ -378,12 +439,148 @@ video {
   width: 100%;
 }
 
-/* Tag page layouts (Tag pages in the template's settings). */
+.list-heading {
+  margin: 2rem 0 0.5rem;
+  font: inherit;
+  font-weight: 700;
+}
+
+.tag-cloud a {
+  margin-right: 0.75em;
+}
+
+.empty {
+  margin: 2rem 0;
+}
+
+nav[aria-label="Pages"] {
+  display: flex;
+  gap: var(--gap);
+  margin: 2rem 0;
+}
+
+.search {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin: 2rem 0;
+}
+
+.search input,
+.search button,
+.faq-toggle {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.search input {
+  flex: 1;
+  max-width: 24rem;
+  padding: 4px 6px;
+  border: 1px solid var(--rule);
+  background: var(--paper);
+  color: inherit;
+}
+
+/* ---------------------------------------------------------------------------
+   Events. A date is an object: the day as a large numeral, the weekday,
+   month and time beside it. Upcoming events come first, soonest first, in
+   the accent colour; past events are quieter.
+   ------------------------------------------------------------------------ */
+.upcoming {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  margin: 0 0 1rem;
+}
+
+@media (min-width: 40rem) {
+  .upcoming {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.upcoming-item {
+  display: block;
+  padding-top: 0.5em;
+  border-top: 2px solid var(--accent);
+  color: inherit;
+}
+
+.upcoming-item:hover {
+  text-decoration: none;
+}
+
+.upcoming-item:hover .event-title {
+  text-decoration: underline;
+}
+
+.when {
+  display: flex;
+  gap: 0.6em;
+  align-items: flex-start;
+  margin: 0 0 0.5em;
+}
+
+.when-day {
+  color: var(--accent);
+  font: var(--size-numeral) / 0.8 var(--font-serif);
+  font-variant-numeric: lining-nums;
+}
+
+.when-rest {
+  display: flex;
+  flex-direction: column;
+  padding-top: 0.15em;
+}
+
+.event-title {
+  display: block;
+  font-weight: 700;
+  text-wrap: balance;
+}
+
+.calendar-link {
+  margin: 0 0 2rem;
+}
+
+.events {
+  margin: 0 calc(-1 * var(--pad));
+}
+
+.event {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--gap);
+  padding: 0.5em var(--pad) var(--pad);
+  border-top: 1px solid var(--rule);
+}
+
+@media (min-width: 40rem) {
+  .event {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .event-details {
+    grid-column: 2 / 4;
+  }
+}
+
+.event.is-past .when-day {
+  color: var(--quiet);
+  font-size: calc(var(--size-numeral) * 0.6);
+}
+
+.event-details .row-title {
+  margin-bottom: 0.25em;
+}
+
+/* Tag page layouts: grid and list */
 .grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 2rem 1rem;
-  align-items: end;
+  gap: 2rem var(--gap);
+  align-items: start;
   margin: 1rem 0 2rem;
 }
 
@@ -404,41 +601,8 @@ video {
   margin-bottom: 0.5em;
 }
 
-.events {
-  margin: 0 calc(-1 * var(--pad));
-}
-
-.event {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 1rem;
-  padding: 0.5em var(--pad) var(--pad);
-  border-top: 1px solid var(--rule);
-}
-
-.event:first-child {
-  border-top: 0;
-}
-
-.event-date {
-  margin: 0;
-  font: var(--size-h1) / 1 var(--font-serif);
-  font-variant-numeric: tabular-nums;
-}
-
-.event-date.is-upcoming {
-  font-size: calc(var(--size-h1) * 0.6);
-  line-height: 1.1;
-}
-
-.event-date.is-upcoming .quiet {
+.grid-item .quiet {
   display: block;
-  font: var(--size-m) / var(--leading-m) var(--font-sans);
-}
-
-.event-details {
-  grid-column: 2 / 5;
-  max-width: 40rem;
 }
 
 .list {
@@ -448,128 +612,197 @@ video {
 }
 
 .list li {
-  padding: 0.25em 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gap);
+  padding: 0.35em 0;
   border-top: 1px solid var(--rule);
 }
 
-.list-heading {
-  margin: 2rem 0 0.5rem;
-  font: inherit;
-  font-weight: 700;
+.list li a {
+  grid-column: 1 / 4;
 }
 
-.tag-cloud a {
-  margin-right: 0.75em;
-}
+/* ---------------------------------------------------------------------------
+   A post or page, on the grid. Its header and footer have the facts in
+   column 1 and the title across 2-4; the text is itself a four-column grid
+   so Blot's layout tags land on the columns:
 
-.empty {
-  margin: 2rem 0;
-}
-
-nav[aria-label="Pages"] {
-  display: flex;
-  gap: 1rem;
-  margin: 2rem 0;
-}
-
-.search {
-  display: flex;
-  gap: 0.5rem;
-  align-items: baseline;
-  margin: 2rem 0;
-}
-
-.search input,
-.search button {
-  font: inherit;
-  letter-spacing: inherit;
-}
-
-.search input {
-  flex: 1;
-  max-width: 24rem;
-  padding: 4px 6px;
-  border: 1px solid var(--rule);
-  background: var(--paper);
-  color: inherit;
-}
-
-/* A post or page: a header above a column of serif text, as wide as --w. */
+     {<>} wide          all four columns
+     {>|} {|<} margin   column 1, beside what follows it
+     {||} two column    halves of the page
+     {|||} three column columns 2, 3 and 4
+     {||||} four column a column each, four to a row (people, cards)
+   ------------------------------------------------------------------------ */
 .project {
-  overflow: hidden;
+  padding: 0 var(--pad);
+}
+
+.project-header,
+.project-footer {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gap);
 }
 
 .project-header {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  width: var(--w);
-  margin: 0 auto;
-  padding-top: calc(var(--trim-top) + 1rem);
-  padding-bottom: calc(var(--trim-bottom) + var(--space));
+  padding: 2rem 0 calc(var(--space) * 0.75);
 }
 
-.project-header a {
-  color: inherit;
-  white-space: nowrap;
+.project-header > *,
+.project-footer > * {
+  min-width: 0;
 }
 
-.project-header h1,
-.text > h1:first-child {
+.project-header .meta {
+  grid-column: 1;
+  grid-row: 1 / span 3;
+}
+
+.project-header .meta > * {
+  display: block;
+}
+
+.project-header h1 {
+  grid-column: 2 / 5;
+  max-width: 18em;
   margin: -0.12em 0 0;
-  padding-top: 1rem;
-  font: 400 var(--size-h1) / var(--size-h1) var(--font-serif);
-  letter-spacing: 0.02em;
+  font: 400 var(--size-h1) / 1.05 var(--font-serif);
+  letter-spacing: 0.01em;
+  text-wrap: balance;
+}
+
+.dek {
+  grid-column: 2 / 5;
+  max-width: 34em;
+  margin: 0.5rem 0 0;
+  color: var(--quiet);
+  font: var(--size-serif-m) / var(--leading-serif-m) var(--font-serif);
+}
+
+/* The facts of a page or an event (Address:, Hours:, Cost: ... lines) */
+.facts {
+  grid-column: 2 / 5;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem var(--gap);
+  margin: 1.5rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--rule);
+}
+
+.facts:not(:has(div)) {
+  display: none;
+}
+
+.facts div {
+  min-width: 0;
+}
+
+.facts dt {
+  color: var(--quiet);
+}
+
+.facts dd {
+  margin: 0;
 }
 
 .text {
-  width: var(--w);
-  margin: 0 auto;
-  padding: var(--trim-top) 0 calc(var(--trim-bottom) + var(--space));
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: var(--gap);
+  padding-bottom: var(--space);
   font: var(--size-serif-l) / var(--leading-serif-l) var(--font-serif);
+  font-variant-numeric: oldstyle-nums proportional-nums;
+  counter-reset: section;
 }
 
-.text h2,
-.text h3,
-.text h4 {
-  margin: 0 0 var(--leading-serif-l);
-  font: inherit;
-}
-
-.text h2 {
-  margin-top: var(--leading-serif-l);
-}
-
-.text p,
-.text ul,
-.text ol,
-.text blockquote,
-.text pre,
-.text table {
+.text > * {
+  grid-column: 2 / 5;
+  max-width: 34em;
   margin: 0;
+  min-width: 0;
+}
+
+.text p {
+  hanging-punctuation: first;
+  text-wrap: pretty;
 }
 
 .text p + p {
   text-indent: calc(2 * var(--leading-serif-l));
 }
 
-.text ul,
-.text ol,
-.text blockquote,
-.text pre,
-.text table,
-.text details,
-.text hr {
+.text > :is(ul, ol, blockquote, pre, table, hr, figure, .callout) {
   margin-block: var(--leading-serif-l);
+}
+
+.text :is(h2, h3, h4) + p,
+.text :is(ul, ol, blockquote, table, figure, .carousel, .column, .wide, .margin, details, .callout) + p {
+  text-indent: 0;
+}
+
+/* Sections: the heading in the interface font, a rule above, and a roman
+   numeral in the margin column (Numbered sections in the settings). */
+.text h2 {
+  position: relative;
+  margin-top: calc(1.5 * var(--leading-serif-l));
+  margin-bottom: calc(0.5 * var(--leading-serif-l));
+  padding-top: 0.6em;
+  border-top: 1px solid var(--rule);
+  font: 700 var(--size-m) / var(--leading-m) var(--font-sans);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  counter-increment: section;
+}
+
+.text > h2:first-child {
+  margin-top: 0;
+}
+
+.is-numbered .text h2::before {
+  position: absolute;
+  top: 0.6em;
+  right: calc(100% + var(--gap));
+  width: var(--col);
+  color: var(--quiet);
+  content: counter(section, upper-roman);
+  font-weight: 400;
+  letter-spacing: 0.06em;
+}
+
+.text h3 {
+  margin-top: var(--leading-serif-l);
+  font: italic var(--size-serif-l) / var(--leading-serif-l) var(--font-serif);
+}
+
+.text h4 {
+  margin-top: var(--leading-serif-l);
+  font: 700 var(--size-m) / var(--leading-m) var(--font-sans);
+}
+
+.text h2 + :is(h3, h4) {
+  margin-top: 0;
+}
+
+.text :is(ul, ol) {
+  padding-left: 1.2em;
 }
 
 .text blockquote {
   padding-left: calc(2 * var(--leading-serif-l));
+  font-style: italic;
+}
+
+.text hr {
+  border: 0;
+  border-top: 1px solid var(--rule);
 }
 
 .text table {
   border-collapse: collapse;
   font: var(--size-m) / var(--leading-m) var(--font-sans);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .text th,
@@ -578,6 +811,10 @@ nav[aria-label="Pages"] {
   border-bottom: 1px solid var(--rule);
   text-align: left;
   vertical-align: top;
+}
+
+.text th {
+  font-weight: 700;
 }
 
 .text pre {
@@ -592,34 +829,248 @@ nav[aria-label="Pages"] {
   {{/syntax_highlighter_font}}
 }
 
-.text hr {
-  border: 0;
-  border-top: 1px solid var(--rule);
+.text img {
+  display: block;
 }
 
 .text .caption {
   display: block;
-  margin: calc(var(--trim-top) + 0.5rem) 0 calc(var(--trim-bottom) + 1rem);
-  font: var(--size-serif-m) / var(--leading-serif-m) var(--font-serif);
+  margin: 0.5rem 0 0;
+  font: var(--size-s) / var(--leading-m) var(--font-sans);
+  color: var(--quiet);
   text-indent: 0;
 }
 
-.footnotes {
-  font: var(--size-m) / var(--leading-m) var(--font-sans);
+/* Layout tags (Blot's {<>} {|<} {||} ... Markdown extension) on the grid */
+.text > .clear {
+  display: none;
 }
 
-/* A run of images: a strip that scrolls sideways and snaps to each image.
-   script.js adds the buttons, springs and the "1 / 7" counter. */
+.text > .wide {
+  grid-column: 1 / 5;
+  max-width: none;
+  margin-block: var(--leading-serif-l);
+}
+
+.text > .wide.left {
+  grid-column: 1 / 4;
+}
+
+.text > .wide.right {
+  grid-column: 2 / 5;
+}
+
+.text > .wide img {
+  width: 100%;
+}
+
+.text > .margin {
+  grid-column: 1;
+  align-self: start;
+  max-width: none;
+  margin-top: 0.3em;
+  padding-top: 0.5em;
+  border-top: 1px solid var(--rule);
+  color: var(--quiet);
+  font: var(--size-s) / var(--leading-m) var(--font-sans);
+  font-variant-numeric: lining-nums;
+}
+
+.text > .margin p {
+  text-indent: 0;
+}
+
+.text > .margin p + p {
+  margin-top: 0.5em;
+}
+
+.text > .margin img {
+  margin-bottom: 0.5em;
+}
+
+.text > .column {
+  max-width: none;
+  margin-block: 0 var(--leading-serif-l);
+  font: var(--size-m) / var(--leading-m) var(--font-sans);
+  font-variant-numeric: lining-nums;
+}
+
+.text > .column p {
+  text-indent: 0;
+}
+
+.text > .column p + p {
+  margin-top: 0.5em;
+}
+
+.text > .column img {
+  width: 100%;
+  margin-bottom: 0.5em;
+}
+
+.text > .column.four {
+  grid-column: auto / span 1;
+}
+
+.text > .column.two {
+  grid-column: auto / span 2;
+}
+
+.text > :nth-child(3n + 1 of .column.three) {
+  grid-column: 2;
+}
+
+.text > :nth-child(3n + 2 of .column.three) {
+  grid-column: 3;
+}
+
+.text > :nth-child(3n of .column.three) {
+  grid-column: 4;
+}
+
+/* Callouts (the Callouts plugin: > [!note] ...) */
+.text .callout {
+  padding: 0.75em 1em;
+  border-left: 3px solid var(--accent);
+  background: var(--tint);
+  font: var(--size-m) / var(--leading-m) var(--font-sans);
+  font-style: normal;
+}
+
+.text .callout p {
+  text-indent: 0;
+}
+
+.text .callout-title {
+  font-weight: 700;
+}
+
+/* Footnotes */
+.text .footnotes {
+  margin-top: var(--leading-serif-l);
+  padding-top: 0.5em;
+  border-top: 1px solid var(--rule);
+  font: var(--size-s) / var(--leading-m) var(--font-sans);
+}
+
+.text .footnotes hr {
+  display: none;
+}
+
+.text .footnotes p {
+  text-indent: 0;
+}
+
+/* Contents: the page's sections, in its margin (Contents: yes), kept in view */
+.text > .contents {
+  grid-column: 1;
+  grid-row: 1 / span 999;
+  align-self: start;
+  position: sticky;
+  top: 3rem;
+  max-width: none;
+  margin: 0;
+  font: var(--size-s) / var(--leading-m) var(--font-sans);
+  font-variant-numeric: lining-nums;
+}
+
+.contents ol {
+  margin: 0.25em 0 0;
+  padding: 0;
+  list-style: upper-roman inside;
+}
+
+.contents a {
+  color: inherit;
+}
+
+.contents a.is-current {
+  color: var(--accent);
+}
+
+/* With contents in the margin, margin notes and section numbers give way */
+.has-contents .text > .margin {
+  grid-column: 2 / 5;
+}
+
+.has-contents .text h2::before {
+  content: none !important;
+}
+
+/* Questions (<details>): script.js animates them; Open all comes with three or more */
+.text > details {
+  margin-block: 0;
+  border-top: 1px solid var(--rule);
+}
+
+.text > details:not(:has(+ details)) {
+  border-bottom: 1px solid var(--rule);
+  margin-bottom: var(--leading-serif-l);
+}
+
+.text summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.5rem 0;
+  cursor: pointer;
+  font-style: italic;
+  list-style: none;
+}
+
+.text summary::-webkit-details-marker {
+  display: none;
+}
+
+.text summary::after {
+  flex: none;
+  content: "+";
+  font: var(--size-m) / var(--leading-serif-l) var(--font-sans);
+  transition: transform 0.2s;
+}
+
+.text details[open] > summary::after {
+  transform: rotate(45deg);
+}
+
+.text details > :not(summary) {
+  margin: 0 0 var(--leading-serif-l);
+  text-indent: 0;
+}
+
+.text > .faq-toggle {
+  justify-self: start;
+  margin: var(--leading-serif-l) 0 0.25rem;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--quiet);
+  cursor: pointer;
+  font-size: var(--size-m);
+}
+
+/* A run of images: a strip that scrolls sideways and snaps to each image;
+   script.js adds the buttons, springs and the counter. It runs to the edge
+   of the page. */
 .text p:has(> img + .caption + img),
 .text p:has(> img + img),
 .carousel-track {
   display: flex;
-  gap: 1rem;
+  gap: var(--gap);
   align-items: flex-end;
   overflow-x: auto;
   scroll-snap-type: x mandatory;
   scrollbar-width: none;
   text-indent: 0;
+}
+
+.text > p:has(> img + .caption + img),
+.text > p:has(> img + img),
+.text > .carousel {
+  grid-column: 2 / 5;
+  max-width: none;
+  margin-block: var(--leading-serif-l);
+  margin-right: calc(-1 * var(--pad));
 }
 
 .text p:has(> img + .caption + img) > img,
@@ -633,10 +1084,6 @@ nav[aria-label="Pages"] {
 .text p:has(> img + .caption + img) > .caption,
 .text p:has(> img + img) > .caption {
   display: none;
-}
-
-.carousel {
-  margin-block: var(--leading-serif-l);
 }
 
 .carousel-track {
@@ -657,29 +1104,31 @@ nav[aria-label="Pages"] {
 .carousel-slide img {
   display: block;
   width: auto;
-  max-width: calc(var(--w) * 0.8);
-  height: min(70vh, calc(var(--w) * 0.6));
+  max-width: calc(var(--step) * 2.6);
+  height: min(70vh, calc(var(--col) * 1.6));
   -webkit-user-drag: none;
 }
 
 .carousel figcaption {
   display: flex;
-  gap: 1rem;
+  gap: var(--gap);
   align-items: baseline;
-  min-height: var(--leading-serif-m);
-  margin: calc(var(--trim-top) + 0.5rem) 0 0;
-  font: var(--size-serif-m) / var(--leading-serif-m) var(--font-serif);
+  margin: 0.5rem var(--pad) 0 0;
+  font: var(--size-s) / var(--leading-m) var(--font-sans);
 }
 
 .carousel-count {
   flex: none;
-  font: var(--size-m) / var(--leading-m) var(--font-sans);
   font-variant-numeric: tabular-nums;
+}
+
+.carousel-caption {
+  color: var(--quiet);
 }
 
 .carousel-buttons {
   display: flex;
-  gap: 0.5rem;
+  gap: 0.75rem;
   margin-left: auto;
 }
 
@@ -688,8 +1137,7 @@ nav[aria-label="Pages"] {
   border: 0;
   background: none;
   color: inherit;
-  font: var(--size-m) / var(--leading-m) var(--font-sans);
-  letter-spacing: inherit;
+  font: inherit;
   cursor: pointer;
 }
 
@@ -698,78 +1146,28 @@ nav[aria-label="Pages"] {
   cursor: default;
 }
 
-/* Questions and answers: <details> in a post. script.js animates them open and closed. */
-.text details {
-  border-top: 1px solid var(--rule);
-}
-
-.text details + details {
-  margin-top: calc(-1 * var(--leading-serif-l));
-}
-
-.text details:last-of-type {
-  border-bottom: 1px solid var(--rule);
-}
-
-.text summary {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.5rem 0;
-  cursor: pointer;
-  list-style: none;
-}
-
-.text summary::-webkit-details-marker {
-  display: none;
-}
-
-.text summary::after {
-  content: "+";
-  font-family: var(--font-sans);
-}
-
-.text details[open] > summary::after {
-  content: "–";
-}
-
-.text details > :not(summary) {
-  margin: 0 0 var(--leading-serif-l);
-  text-indent: 0;
-}
-
-/* The details under a post, as in the index: label above value. */
+/* The details under a post: label above value, on the columns. */
 .project-footer {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  width: var(--w);
-  margin: 0 auto var(--space);
-  padding-top: 0.5em;
+  padding: 0.5em 0 var(--space);
   border-top: 1px solid var(--rule);
 }
 
-@media (min-width: 40rem) {
-  .project-footer {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-.project-footer > * > .quiet:first-child {
+.project-footer .quiet:first-child {
   display: block;
 }
 
 .plugins {
-  width: var(--w);
-  margin: 0 auto;
+  padding: 0 var(--pad);
 }
 
+/* The footer: the organization's details from the settings, on the columns. */
 .site-footer {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1rem;
-  padding: var(--pad);
-  color: var(--quiet);
+  gap: 1.5rem var(--gap);
+  margin-top: var(--space);
+  padding: 1rem var(--pad) 2rem;
+  border-top: 1px solid var(--rule);
 }
 
 @media (min-width: 40rem) {
@@ -784,4 +1182,70 @@ nav[aria-label="Pages"] {
 
 .site-footer a {
   color: inherit;
+}
+
+.site-footer .colophon {
+  font-weight: 700;
+}
+
+/* Small screens: the margin column folds into the page. */
+@media (max-width: 40rem) {
+  .project-header,
+  .project-footer {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .project-header .meta,
+  .project-header h1,
+  .dek,
+  .facts {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .project-header .meta {
+    order: 2;
+    margin-top: 0.5rem;
+  }
+
+  .text {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .text > *,
+  .text > .wide,
+  .text > .wide.left,
+  .text > .wide.right,
+  .text > .margin,
+  .text > .contents,
+  .text > .column.two,
+  .text > :nth-child(n of .column.three),
+  .text > p:has(> img + img),
+  .text > p:has(> img + .caption + img),
+  .text > .carousel {
+    grid-column: 1 / -1;
+    grid-row: auto;
+  }
+
+  .text > .column.four {
+    grid-column: auto / span 1;
+  }
+
+  .text > .contents {
+    position: static;
+  }
+
+  .facts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .is-numbered .text h2::before {
+    content: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .text summary::after {
+    transition: none;
+  }
 }

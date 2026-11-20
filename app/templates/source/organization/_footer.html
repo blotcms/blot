@@ -1,7 +1,24 @@
 <footer class="site-footer">
-  <p><a href="/">{{title}}</a>{{#address}}<br>{{address}}{{/address}}{{#email}}<br><a href="mailto:{{email}}">{{email}}</a>{{/email}}</p>
-  <p><a href="/archives">Archives</a><br><a href="/search">Search</a><br><a href="{{{feedURL}}}">Feed</a></p>
-  {{#menu.length}}<p>{{#menu}}<a href="{{{url}}}">{{label}}</a><br>{{/menu}}</p>{{/menu.length}}
+  <div>
+    <p class="colophon"><a href="/">{{title}}</a></p>
+    {{#tagline}}<p class="quiet">{{tagline}}</p>{{/tagline}}
+    {{#founded}}<p class="quiet">Est. {{founded}}</p>{{/founded}}
+  </div>
+  <div>
+    {{#meets}}<p>{{meets}}</p>{{/meets}}
+    {{#address}}<p>{{address}}</p>{{/address}}
+    {{#email}}<p><a href="mailto:{{email}}">{{email}}</a></p>{{/email}}
+    {{#phone}}<p>{{phone}}</p>{{/phone}}
+  </div>
+  <div>
+    {{#menu}}<p><a href="{{{url}}}">{{label}}</a></p>{{/menu}}
+  </div>
+  <div>
+    <p><a href="/archives">Archives</a></p>
+    <p><a href="/search">Search</a></p>
+    <p><a href="/calendar.ics">Calendar</a></p>
+    <p><a href="{{{feedURL}}}">Feed</a></p>
+  </div>
 </footer>
-{{! The template's own script (title sizing, image carousels, animated questions), then the scripts of plugins the blog has turned on. }}
+{{! The template's own script (title sizing, carousels, questions, contents), then the scripts of plugins the blog has turned on. }}
 <script src="{{#cdn}}/script.js{{/cdn}}"></script>

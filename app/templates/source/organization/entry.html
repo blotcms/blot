@@ -3,43 +3,52 @@
   {{> head}}
   <body class="entry-page">
     {{> header}}
-    <main>
+    <main id="main">
       {{#entry}}
-      <article class="project">
+      <article class="project{{#numbered_sections}} is-numbered{{/numbered_sections}}{{#metadata.contents}} has-contents{{/metadata.contents}}"{{#metadata.contents}} data-contents{{/metadata.contents}}>
         <header class="project-header">
-          <div>
-            <span>{{#date}}{{#formatDate}}MM/YYYY{{/formatDate}} {{/date}}{{#metadata.speaker}}{{metadata.speaker}}{{/metadata.speaker}}{{#metadata.author}}{{metadata.author}}{{/metadata.author}}</span>
-            <h1>{{title}}</h1>
+          {{! Column 1: when, who, where and what it costs, from the post's metadata }}
+          <div class="meta">
+            {{#event}}{{> when}}{{/event}}
+            {{^event}}{{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time>{{/date}}{{/event}}
+            {{#metadata.speaker}}<span>{{metadata.speaker}}</span>{{/metadata.speaker}}
+            {{#metadata.author}}<span>{{metadata.author}}</span>{{/metadata.author}}
+            {{#metadata.venue}}<span><i>{{metadata.venue}}</i></span>{{/metadata.venue}}
+            {{#event.upcoming}}
+            {{#metadata.booking}}<a href="{{{metadata.booking}}}">Book a place</a>{{/metadata.booking}}
+            <a href="/calendar.ics" class="quiet">Add to calendar</a>
+            {{/event.upcoming}}
+            {{#event.past}}<span class="quiet">This has happened</span>{{/event.past}}
           </div>
-          <a href="/">{{blog.title}}</a>
+          <h1>{{title}}</h1>
+          {{#metadata.summary}}<p class="dek">{{metadata.summary}}</p>{{/metadata.summary}}
+          {{! The facts of a page: Address, Hours, Phone, Email and Cost lines, any of them }}
+          <dl class="facts">
+            {{#metadata.address}}<div><dt>Address</dt><dd><a href="https://www.openstreetmap.org/search?query={{#encode_uri_component}}{{metadata.address}}{{/encode_uri_component}}">{{metadata.address}}</a></dd></div>{{/metadata.address}}
+            {{#metadata.hours}}<div><dt>Hours</dt><dd>{{metadata.hours}}</dd></div>{{/metadata.hours}}
+            {{#metadata.phone}}<div><dt>Phone</dt><dd><a href="tel:{{metadata.phone}}">{{metadata.phone}}</a></dd></div>{{/metadata.phone}}
+            {{#metadata.email}}<div><dt>Email</dt><dd><a href="mailto:{{metadata.email}}">{{metadata.email}}</a></dd></div>{{/metadata.email}}
+            {{#metadata.cost}}<div><dt>Cost</dt><dd>{{metadata.cost}}</dd></div>{{/metadata.cost}}
+          </dl>
         </header>
 
-        {{! body is the post without its own title heading, which the header above replaces. A run of images on consecutive lines becomes a carousel (script.js); without JavaScript it scrolls sideways. }}
+        {{! body is the post without its own title heading, which the header above replaces. On the grid: layout tags, runs of images (carousels), questions (<details>), callouts and a contents list (Contents: yes) are all styled in style.css. }}
         <div class="text">
           {{{body}}}
         </div>
 
         <footer class="project-footer">
           {{#date}}
-          <div>
-            <span class="quiet">Published</span>
-            <time datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{date}}</time>
-          </div>
+          <div><span class="quiet">Published</span> <time datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time></div>
           {{/date}}
-          {{#metadata.venue}}
-          <div><span class="quiet">Where</span> {{metadata.venue}}</div>
-          {{/metadata.venue}}
+          {{^date}}
+          <div><span class="quiet">Updated</span> <time datetime="{{#formatUpdated}}YYYY-MM-DD{{/formatUpdated}}">{{#formatUpdated}}MMM D, YYYY{{/formatUpdated}}</time></div>
+          {{/date}}
           {{#tags.length}}
-          <div>
-            <span class="quiet">Filed under</span>
-            <span>{{#tags}}<a href="/tagged/{{slug}}">{{name}}</a> {{/tags}}</span>
-          </div>
+          <div><span class="quiet">Filed under</span> <span>{{#tags}}<a href="/tagged/{{slug}}">{{name}}</a>{{^last}}, {{/last}}{{/tags}}</span></div>
           {{/tags.length}}
           {{#backlinks.length}}
-          <div>
-            <span class="quiet">Mentioned in</span>
-            <span>{{#backlinks}}<a href="{{{url}}}">{{title}}</a><br>{{/backlinks}}</span>
-          </div>
+          <div><span class="quiet">Mentioned in</span> <span>{{#backlinks}}<a href="{{{url}}}">{{title}}</a><br>{{/backlinks}}</span></div>
           {{/backlinks.length}}
           {{#adjacent}}
           <nav aria-label="Newer and older posts">

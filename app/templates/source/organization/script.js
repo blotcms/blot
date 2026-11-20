@@ -191,6 +191,7 @@
     var count = document.createElement("span");
     count.className = "carousel-count";
     var text = document.createElement("span");
+    text.className = "carousel-caption";
     var buttons = document.createElement("span");
     buttons.className = "carousel-buttons";
     var previous = document.createElement("button");
@@ -382,6 +383,83 @@
           }
         });
       }
+    });
+  });
+
+  // Contents (Contents: yes on a page): a numbered list of the page's
+  // sections in its margin, which marks the section you're reading.
+  document.querySelectorAll("[data-contents] .text").forEach(function (text) {
+    var headings = Array.prototype.filter.call(text.children, function (el) {
+      return el.tagName === "H2" && el.id;
+    });
+    if (headings.length < 2) return;
+
+    var nav = document.createElement("nav");
+    nav.className = "contents";
+    nav.setAttribute("aria-label", "Contents");
+    var label = document.createElement("span");
+    label.className = "quiet";
+    label.textContent = "Contents";
+    var list = document.createElement("ol");
+    var links = headings.map(function (heading) {
+      var item = document.createElement("li");
+      var link = document.createElement("a");
+      link.href = "#" + heading.id;
+      link.textContent = heading.textContent;
+      item.appendChild(link);
+      list.appendChild(item);
+      return link;
+    });
+    nav.appendChild(label);
+    nav.appendChild(list);
+    text.insertBefore(nav, text.firstChild);
+
+    if (!window.IntersectionObserver) return;
+    var visible = new Set();
+    var observer = new IntersectionObserver(
+      function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) visible.add(entry.target);
+          else visible.delete(entry.target);
+        });
+        var current = headings.filter(function (h) {
+          return visible.has(h);
+        })[0];
+        if (!current) return;
+        links.forEach(function (link, i) {
+          link.classList.toggle("is-current", headings[i] === current);
+        });
+      },
+      { rootMargin: "0px 0px -70% 0px" }
+    );
+    headings.forEach(function (heading) {
+      observer.observe(heading);
+    });
+  });
+
+  // Questions: three or more in a row get an "Open all" button above them.
+  document.querySelectorAll(".text").forEach(function (text) {
+    var children = Array.prototype.slice.call(text.children);
+    children.forEach(function (el, i) {
+      if (el.tagName !== "DETAILS") return;
+      if (i > 0 && children[i - 1].tagName === "DETAILS") return;
+      var run = [];
+      for (var j = i; j < children.length && children[j].tagName === "DETAILS"; j++)
+        run.push(children[j]);
+      if (run.length < 3) return;
+
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "faq-toggle";
+      button.textContent = "Open all";
+      button.addEventListener("click", function () {
+        var open = button.textContent === "Open all";
+        run.forEach(function (details) {
+          if (details.open !== open) details.querySelector("summary").click();
+        });
+        button.textContent = open ? "Close all" : "Open all";
+      });
+      text.insertBefore(button, el);
     });
   });
 })();

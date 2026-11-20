@@ -1,6 +1,6 @@
-{{! List: titles and dates only, for long runs of writing. }}
+{{! List: titles and dates, for long runs of writing (newsletters, minutes, readings). }}
 <ul class="list">
   {{#posts}}
-  <li><a href="{{{url}}}">{{title}}</a>{{#date}} <time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MM–DD–YY{{/formatDate}}</time>{{/date}}</li>
+  <li><a href="{{{url}}}">{{title}}</a>{{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time>{{/date}}</li>
   {{/posts}}
 </ul>

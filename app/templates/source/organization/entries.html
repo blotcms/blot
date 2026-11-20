@@ -3,14 +3,14 @@
   {{> head}}
   <body class="index-page">
     {{> header}}
-    <main>
+    <main id="main">
       {{> masthead}}
-      {{! The latest post's Next line (e.g. "Next: Tuesday, December 8 · Holiday show and tell") announces what's coming. }}
-      {{#latest_entry.metadata.next}}<p class="next"><span class="dot" aria-hidden="true"></span><span class="quiet">Next</span> {{latest_entry.metadata.next}}</p>{{/latest_entry.metadata.next}}
-      <h1 class="visually-hidden">Posts</h1>
+      {{! Upcoming events first (Upcoming events on the home page, in the settings); they leave the list below until they've happened. }}
+      {{#upcoming_on_home}}{{^posts.pagination.previous}}{{> upcoming}}{{/posts.pagination.previous}}{{/upcoming_on_home}}
+      <h2 class="section-heading">Latest</h2>
       {{#posts.length}}
       <div class="rows">
-        {{#posts}}{{> post-row}}{{/posts}}
+        {{#posts}}{{^event.upcoming}}{{> post-row}}{{/event.upcoming}}{{#event.upcoming}}{{^upcoming_on_home}}{{> post-row}}{{/upcoming_on_home}}{{/event.upcoming}}{{/posts}}
       </div>
       {{/posts.length}}
       {{^posts.length}}

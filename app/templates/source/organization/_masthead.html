@@ -1,2 +1,8 @@
-{{! The site title in the title font, as wide as the page: script.js sizes it to fit; without it, a size relative to the page width. }}
+{{! The site title in the title font, as wide as the page: script.js sizes it to fit; without it, a size relative to the page width. Under it, the organization's details from the settings, one to a column. }}
 <div class="site-title"><a href="/"><span class="fit">{{title}}{{^title}}Home{{/title}}</span></a></div>
+<ul class="strap">
+  {{#tagline}}<li>{{tagline}}</li>{{/tagline}}
+  {{#meets}}<li>{{meets}}</li>{{/meets}}
+  {{#address}}<li>{{address}}</li>{{/address}}
+  {{#founded}}<li class="quiet">Est. {{founded}}</li>{{/founded}}
+</ul>

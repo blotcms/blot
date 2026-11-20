@@ -3,9 +3,9 @@
   {{> head}}
   <body class="index-page">
     {{> header}}
-    <main>
+    <main id="main">
       {{> masthead}}
-      <h1 class="list-heading">Filed under <a href="/tagged/{{slug}}">{{tag}}</a> <a class="quiet" href="/">× All</a></h1>
+      <h1 class="section-heading">{{tag}} <a class="quiet" href="/archives">· Everything</a></h1>
       {{! Each tag's layout is chosen in the template's settings, under Tag pages (tag_layouts in package.json); the rest use the default, tag_layout. }}
       {{#posts.length}}
       {{#layout_for_tag.rows}}<div class="rows">{{#posts}}{{> post-row}}{{/posts}}</div>{{/layout_for_tag.rows}}

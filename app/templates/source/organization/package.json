@@ -15,17 +15,21 @@
       "photos": "grid",
       "events": "events",
       "meetings": "events",
-      "readings": "list"
+      "readings": "list",
+      "newsletters": "list",
+      "minutes": "list",
+      "news": "rows"
     },
     "background_color": "#ffffff",
     "text_color": "#000000",
     "link_color": "#000000",
+    "accent_color": "#d4371c",
     "title_font": {
       "id": "system-sans"
     },
     "font": {
       "id": "system-sans",
-      "font_size": 14,
+      "font_size": 15,
       "line_height": 1.25
     },
     "text_font": {
@@ -41,8 +45,34 @@
       "font_size": 14
     },
     "profile_image": {},
+    "tagline": "",
+    "meets": "",
+    "founded": "",
     "address": "",
     "email": "",
+    "phone": "",
+    "announcement": "",
+    "announcement_link": "",
+    "text_inputs": [
+      "tagline",
+      "meets",
+      "founded",
+      "address",
+      "email",
+      "phone",
+      "announcement",
+      "announcement_link"
+    ],
+    "text_input_labels": {
+      "tagline": "Tagline",
+      "meets": "Meetings or opening hours",
+      "founded": "Founded (a year)",
+      "announcement": "Announcement banner",
+      "announcement_link": "Announcement link"
+    },
+    "upcoming_on_home": true,
+    "upcoming_events_limit": 8,
+    "numbered_sections": true,
     "fixed_navigation": true,
     "demo_folder": "stampclub",
     "template_categories": [
@@ -98,6 +128,9 @@
         "title": "Search - {{title}}",
         "description": "Search everything published by {{title}}"
       }
+    },
+    "calendar.ics": {
+      "url": "/calendar.ics"
     }
   }
 }

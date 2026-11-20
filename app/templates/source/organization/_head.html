@@ -49,6 +49,14 @@
   {{/page}}
   {{/entry}}
 
+  {{! An event (a post whose Event line is a date) is described for search engines as one. }}
+  {{#entry.event}}
+  {{#entry}}
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Event","name":"{{#encode_json}}{{{title}}}{{/encode_json}}","url":"{{#encode_json}}{{{absoluteURL}}}{{/encode_json}}",{{#event.timed}}"startDate":"{{#formatEvent}}YYYY-MM-DDTHH:mm:ssZ{{/formatEvent}}"{{/event.timed}}{{#event.allDay}}"startDate":"{{#formatEvent}}YYYY-MM-DD{{/formatEvent}}"{{/event.allDay}}{{#metadata.venue}},"location":{"@type":"Place","name":"{{#encode_json}}{{{metadata.venue}}}{{/encode_json}}"{{#metadata.address}},"address":"{{#encode_json}}{{{metadata.address}}}{{/encode_json}}"{{/metadata.address}}}{{/metadata.venue}}{{#summary}},"description":"{{#encode_json}}{{{summary}}}{{/encode_json}}"{{/summary}},"organizer":{"@type":"Organization","name":"{{#encode_json}}{{{blog.title}}}{{/encode_json}}","url":"{{#encode_json}}{{{siteURL}}}{{/encode_json}}"}}</script>
+  {{/entry}}
+  {{/entry.event}}
+  <link rel="alternate" type="text/calendar" title="{{title}}: events" href="{{{siteURL}}}/calendar.ics">
+
   {{^entry}}
   <meta property="og:type" content="website">
   {{#url}}
