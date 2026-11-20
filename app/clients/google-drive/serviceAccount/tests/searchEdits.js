@@ -76,7 +76,8 @@ describe("google drive searchEdits", function () {
   const t = (s) => new Date(Date.now() - s * 1000).toISOString();
 
   it("only notes what is there on its first search", async function () {
-    const { passed } = await run([[file("a", t(10))], [file("a", t(10))]]);
+    const time = t(10);
+    const { passed } = await run([[file("a", time)], [file("a", time)]]);
 
     expect(passed).toEqual([]);
   });
