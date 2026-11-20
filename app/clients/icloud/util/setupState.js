@@ -46,6 +46,27 @@ const reasonFromMessage = (message) => {
   return null;
 };
 
+// The folder's name: what the macserver reported when it joined the folder
+// (and, once it follows renames, since), else the name iCloud put at the end
+// of the sharing link when it was copied ("#My_site", spaces as
+// underscores). Null when neither is known.
+const folderName = (account) => {
+  if (!account) return null;
+  if (typeof account.folderName === "string" && account.folderName.trim())
+    return account.folderName.trim();
+  const link = String(account.sharingLink || "");
+  const hash = link.indexOf("#");
+  if (hash === -1) return null;
+  let name = link.slice(hash + 1);
+  try {
+    name = decodeURIComponent(name);
+  } catch {
+    // keep it as it is
+  }
+  name = name.replace(/_/g, " ").trim();
+  return name || null;
+};
+
 // account: the stored iCloud account, or null
 // options.share: show steps 1 and 2 whatever the account says (the setup page)
 // options.linkError: "empty" or "format", from a link the form turned down
@@ -128,6 +149,10 @@ module.exports = function setupState(account, options = {}) {
         )
       : null;
 
+  // The folder as the owner names it, and the link that opens it for them
+  state.folderName = folderName(account);
+  state.folderLink = (account && account.sharingLink) || null;
+
   // Step 3: Blot is busy (spinner), or stuck and needs a retry
   state.working = (state.joining && !state.slow) || state.copying;
   state.stuck = state.slow || state.transferFailed;
@@ -142,3 +167,4 @@ module.exports = function setupState(account, options = {}) {
 };
 
 module.exports.reasonFromMessage = reasonFromMessage;
+module.exports.folderName = folderName;

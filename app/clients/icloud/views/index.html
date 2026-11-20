@@ -5,10 +5,13 @@
 {{#account}}{{> status-line}}{{/account}}
 
 {{#setup.complete}}
-<div class="line">
-  <span class="label">Folder</span>
+<div class="line icloud-folder-line">
+  <span class="label">Folder on iCloud Drive</span>
   <span class="center">
-    Setup complete
+    <span class="icloud-folder-name"><span class="icon-folder"></span> {{#setup.folderName}}{{setup.folderName}}{{/setup.folderName}}{{^setup.folderName}}Your shared folder{{/setup.folderName}}</span>
+    {{#setup.folderLink}}
+    <a class="icloud-open" href="{{setup.folderLink}}" target="_blank" rel="noopener">Open in iCloud Drive <span class="icon-small-chevron-right"></span></a>
+    {{/setup.folderLink}}
     <span class="icloud-note">You can rename or move the folder.</span>
   </span>
 </div>
@@ -205,6 +208,39 @@
 </script>
 
 <style>
+.icloud-folder-line .center {
+  display: block;
+}
+
+.icloud-folder-name {
+  display: block;
+}
+
+.icloud-folder-name .icon-folder {
+  margin-right: 4px;
+}
+
+/* Like the Google Drive client's "Open on Google Drive" */
+.icloud-open {
+  display: inline-block;
+  margin: 10px 0 2px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: #e4eafb;
+  color: #2c00ff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.icloud-open .icon-small-chevron-right {
+  width: 10px;
+  height: 10px;
+  mask-size: 10px;
+  margin-left: 2px;
+  vertical-align: 0;
+}
+
 .icloud-note {
   color: var(--medium-text-color);
   max-width: 500px;
