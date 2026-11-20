@@ -104,10 +104,6 @@
         </li>
 
       </ol>
-      {{#setup.stuck}}
-      <!-- Keeps the page listening for status messages, so it follows a retry -->
-      <span class="icloud-listen" hidden>{{> sync-status}}</span>
-      {{/setup.stuck}}
       {{/setup.linked}}
 
       {{#setup.linked}}
@@ -158,6 +154,10 @@
         </li>
 
       </ol>
+      {{#setup.stuck}}
+      <!-- Keeps the page listening for status messages, so it follows a retry -->
+      <span class="icloud-listen" hidden>{{> sync-status}}</span>
+      {{/setup.stuck}}
       {{/setup.linked}}
     </div>
 
