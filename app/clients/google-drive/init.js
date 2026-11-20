@@ -6,6 +6,8 @@ const prefix = () => `${clfdate()} Google Drive client:`;
 const createDriveActivityClient = require("./serviceAccount/createDriveActivityClient");
 const refreshServiceAccounts = require("./serviceAccount/refreshServiceAccounts");
 const pollDriveActivity = require("./serviceAccount/pollDriveActivity");
+const readChanges = require("./serviceAccount/readChanges");
+const createDriveClient = require("./serviceAccount/createDriveClient");
 const hotDocPoller = require("./serviceAccount/hotDocPoller");
 const { restartSetupProcesses } = require("./routes/setup");
 const scheduleValidation = require("./validate");
@@ -31,6 +33,22 @@ const startActivityPolling = () => {
       const driveactivity = await createDriveActivityClient(serviceAccountId);
       console.log(prefix(), "Set up polling for drive activity");
       await pollDriveActivity(serviceAccountId, driveactivity, signal);
+    })
+  );
+
+  drain.onStart(() => Promise.all(leases.map((lease) => lease.stop())));
+
+  return leases;
+};
+
+// One process at a time reads each service account's changes.list (see
+// serviceAccount/readChanges.js), with takeover like the activity polling.
+const startChangesReading = () => {
+  const leases = getServiceAccounts().map(({ client_id: serviceAccountId }) =>
+    lock.lease("google-drive-changes:" + serviceAccountId, async (signal) => {
+      const drive = await createDriveClient(serviceAccountId);
+      console.log(prefix(), "Reading changes for", serviceAccountId);
+      await readChanges(serviceAccountId, drive, signal);
     })
   );
 
@@ -69,6 +87,7 @@ module.exports = async () => {
   hotDocPoller.start();
   scheduleValidation();
   startActivityPolling();
+  startChangesReading();
 };
 
 module.exports.refresh = refresh;

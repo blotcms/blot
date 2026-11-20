@@ -129,6 +129,7 @@ Google Drive API client management and monitoring:
 - `fetchStorageInfo.js` — Queries and stores current storage quota usage; selects the service account with least load for new blogs.
 - `watchChanges.js` — Sets up a `changes.watch` webhook channel on the Drive API; replaces expired channels.
 - `pollDriveActivity.js` — Polls the DriveActivity API for changes as a fallback to webhooks; respects rate limits via Bottleneck.
+- `readChanges.js` — Reads the service account's `changes.list` every second from a page token kept in Redis (one process per account, under a lease, from `init.js`), and works out which blogs each change belongs to through their folder mappings. For now it only logs each change and its lag from Google's change time (`Google Drive changes: ... lag_ms=`), to measure how late `changes.watch` webhooks arrive (#2847).
 - `hotDocPoller.js` — Monitors for changes to Google Docs files; triggers re-export when edits are detected.
 - `request.js` — Generic HTTP request utility for service account authenticated requests.
 - `tests/` — Unit tests.
