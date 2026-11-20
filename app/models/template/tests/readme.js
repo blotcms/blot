@@ -74,6 +74,19 @@ describe("template README", function () {
     expect(fullView[1]["readme.txt"]).toEqual("");
   });
 
+  it("lets a view include a README that mentions itself as a partial", async function () {
+    await this.setView({ name: "README.md", content: "Use {{> README.md}}" });
+
+    await this.setView({
+      name: "page.html",
+      url: "/page",
+      content: "Page{{> README.md}}",
+    });
+
+    const view = await Template.getView(this.template.id, "page.html");
+    expect(view.content).toEqual("Page{{> README.md}}");
+  });
+
   it("still renders readme.html, found by its name without the extension", async function () {
     await this.setView({ name: "readme.html", content: "Readme page" });
     await this.setView({

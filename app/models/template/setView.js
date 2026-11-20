@@ -475,7 +475,9 @@ async function detectInfinitePartialDependency(templateID, view, parseResult) {
       }
     }
 
-    if (!fetchedView) {
+    // A README renders as an empty partial (getPartials), so it has no
+    // dependencies, whatever tags it mentions
+    if (!fetchedView || isReadme(fetchedView.name)) {
       cache[name] = { deps: [], inlinePartials: {}, cacheable: true };
       return cache[name];
     }
