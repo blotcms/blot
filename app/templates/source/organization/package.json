@@ -9,7 +9,8 @@
       "grid",
       "events",
       "list",
-      "timeline"
+      "timeline",
+      "people"
     ],
     "tag_layouts": {
       "gallery": "grid",
@@ -20,7 +21,12 @@
       "newsletters": "list",
       "minutes": "list",
       "news": "rows",
-      "history": "timeline"
+      "history": "timeline",
+      "people": "people",
+      "staff": "people",
+      "board": "people",
+      "team": "people",
+      "committee": "people"
     },
     "background_color": "#ffffff",
     "text_color": "#000000",
@@ -94,7 +100,7 @@
       "youtube": "YouTube link"
     },
     "upcoming_on_home": true,
-    "upcoming_events_limit": 8,
+    "upcoming_events_limit": 4,
     "numbered_sections": true,
     "fixed_navigation": true,
     "menu_button": false,

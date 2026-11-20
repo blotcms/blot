@@ -63,6 +63,8 @@ pre code.hljs.hljs * {
   --leading-serif-l: calc(var(--size-serif-l) * {{text_font.line_height}});
   --size-h1: 40px;
   --size-numeral: 64px;
+  /* The reading measure: about 70 characters of the text font */
+  --measure: calc(var(--size-serif-l) * 32);
 }
 
 @media (min-width: 80rem) {
@@ -385,6 +387,17 @@ video {
   color: inherit;
 }
 
+.section-heading--split {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--gap);
+}
+
+.section-heading--split a {
+  color: var(--quiet);
+  font-weight: 400;
+}
+
 .section-heading .quiet {
   font-weight: 400;
 }
@@ -679,10 +692,10 @@ nav[aria-label="Pages"] {
 
 .dek {
   grid-column: 2 / 5;
-  max-width: 34em;
-  margin: 0.5rem 0 0;
-  color: var(--quiet);
-  font: var(--size-serif-m) / var(--leading-serif-m) var(--font-serif);
+  max-width: 28em;
+  margin: 0.75rem 0 0;
+  font: italic calc(var(--size-serif-l) * 0.85) / 1.3 var(--font-serif);
+  text-wrap: pretty;
 }
 
 /* The facts of a page or an event (Address:, Hours:, Cost: ... lines) */
@@ -724,7 +737,7 @@ nav[aria-label="Pages"] {
 
 .text > * {
   grid-column: 2 / 5;
-  max-width: 34em;
+  max-width: var(--measure);
   margin: 0;
   min-width: 0;
 }
@@ -735,7 +748,13 @@ nav[aria-label="Pages"] {
 }
 
 .text p + p {
-  text-indent: calc(2 * var(--leading-serif-l));
+  text-indent: 1.5em;
+}
+
+/* Pages are for finding things: paragraphs spaced, not indented */
+.is-page .text p + p {
+  margin-top: 0.6em;
+  text-indent: 0;
 }
 
 .text > :is(ul, ol, blockquote, pre, table, hr, figure, .callout) {
@@ -948,19 +967,29 @@ nav[aria-label="Pages"] {
 
 /* Callouts (the Callouts plugin: > [!note] ...) */
 .text .callout {
-  padding: 0.75em 1em;
-  border-left: 3px solid var(--accent);
-  background: var(--tint);
+  padding: 0.5em 0 0;
+  border: 0;
+  border-top: 2px solid var(--accent);
+  border-radius: 0;
+  background: none;
   font: var(--size-m) / var(--leading-m) var(--font-sans);
   font-style: normal;
+}
+
+.text .callout * {
+  border-color: transparent;
 }
 
 .text .callout p {
   text-indent: 0;
 }
 
-.text .callout-title {
+.text .callout-title,
+.text .callout [class*="title"] {
+  color: var(--accent);
   font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 /* Footnotes */
@@ -1009,6 +1038,11 @@ nav[aria-label="Pages"] {
 /* With contents in the margin, margin notes and section numbers give way */
 .has-contents .text > .margin {
   grid-column: 2 / 5;
+  margin-block: 0.25em 0.75em;
+  padding: 0 0 0 1em;
+  border-top: 0;
+  border-left: 2px solid var(--accent);
+  font-size: var(--size-m);
 }
 
 .has-contents .text h2::before {
@@ -1290,11 +1324,32 @@ nav[aria-label="Pages"] {
   padding: 1px 6px;
   border: 1px solid currentColor;
   border-radius: 2px;
-  color: var(--accent);
+  color: var(--ink);
   font: 700 var(--size-s) / 1.4 var(--font-sans);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-style: normal;
+}
+
+.status + .label,
+.label + .label {
+  margin-left: 0.4em;
+}
+
+/* For: and Access: on an event */
+.label {
+  display: inline-block;
+  margin: 0.25em 0;
+  padding: 1px 6px;
+  border-radius: 2px;
+  background: var(--tint);
+  color: var(--quiet);
+  font: var(--size-s) / 1.4 var(--font-sans);
+  font-style: normal;
+}
+
+.status + .label {
+  margin-left: 0.4em;
 }
 
 :is(.row, .event, .upcoming-item, .project):has(.status[data-status="cancelled" i]) :is(.row-title, .event-title, h1) {
@@ -1459,4 +1514,94 @@ nav[aria-label="Pages"] {
     flex-wrap: wrap;
     overflow: visible;
   }
+}
+
+/* A card's picture ({||||}): one height for every card, so names line up */
+.text > .column.four > img,
+.text > .column.four > p > img:first-child {
+  width: 100%;
+  height: calc(var(--col) * 1.15);
+  object-fit: contain;
+  object-position: left bottom;
+}
+
+.timeline-item img {
+  width: auto;
+  max-height: 8em;
+}
+
+/* A row with no picture: the details take its column */
+.row:not(:has(.row-image img)) .row-image {
+  display: none;
+}
+
+.row:not(:has(.row-image img)) .row-details {
+  grid-column: 2 / 4;
+}
+
+/* Goal: and Raised: */
+.progress {
+  display: block;
+  max-width: 24em;
+  margin: 0.5rem 0;
+}
+
+.project-header .progress {
+  grid-column: 2 / 5;
+}
+
+.progress progress {
+  display: block;
+  width: 100%;
+  height: 6px;
+  margin-bottom: 0.25em;
+  border: 0;
+  border-radius: 0;
+  background: var(--rule);
+  accent-color: var(--accent);
+  appearance: none;
+}
+
+.progress progress::-webkit-progress-bar {
+  background: var(--rule);
+}
+
+.progress progress::-webkit-progress-value {
+  background: var(--accent);
+}
+
+.progress progress::-moz-progress-bar {
+  background: var(--accent);
+}
+
+/* File: a download link */
+.download::before {
+  content: "↓ ";
+}
+
+/* People (a tag page layout): cards on the columns */
+.people {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem var(--gap);
+  margin: 1rem 0 2rem;
+}
+
+@media (min-width: 40rem) {
+  .people {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.person img {
+  display: block;
+  width: 100%;
+  height: calc(var(--col) * 1.15);
+  margin-bottom: 0.5em;
+  object-fit: contain;
+  object-position: left bottom;
+}
+
+.project-header .labels:empty {
+  display: none;
 }

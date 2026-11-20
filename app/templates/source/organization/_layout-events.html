@@ -8,7 +8,7 @@
     <div>{{#event}}{{> when}}{{/event}}{{^event}}{{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time>{{/date}}{{/event}}</div>
     <div class="event-details">
       <h3 class="row-title"><a href="{{{url}}}">{{title}}</a></h3>
-      {{> status}}
+      {{> labels}}
       {{#metadata.venue}}<div><i>{{metadata.venue}}</i></div>{{/metadata.venue}}
       {{#metadata.speaker}}<div>{{metadata.speaker}}</div>{{/metadata.speaker}}
       {{#summary}}<div class="quiet">{{summary}}</div>{{/summary}}

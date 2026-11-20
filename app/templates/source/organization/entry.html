@@ -5,28 +5,31 @@
     {{> header}}
     <main id="main">
       {{#entry}}
-      <article class="project{{#numbered_sections}} is-numbered{{/numbered_sections}}{{#metadata.status}} has-status{{/metadata.status}}{{#metadata.contents}} has-contents{{/metadata.contents}}"{{#metadata.contents}} data-contents{{/metadata.contents}}>
+      <article class="project{{#page}} is-page{{/page}}{{#numbered_sections}} is-numbered{{/numbered_sections}}{{#metadata.status}} has-status{{/metadata.status}}{{#metadata.contents}} has-contents{{/metadata.contents}}"{{#metadata.contents}} data-contents{{/metadata.contents}}>
         <header class="project-header">
           {{! Column 1: when, who, where and what it costs, from the post's metadata }}
           <div class="meta">
             {{#event}}{{> when}}{{/event}}
             {{#event.upcoming}}<time class="relative quiet" datetime="{{#formatEvent}}YYYY-MM-DDTHH:mm:ssZ{{/formatEvent}}"></time>{{/event.upcoming}}
-            {{> status}}
             {{^event}}{{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time>{{/date}}{{/event}}
+            <span class="labels">{{> labels}}</span>
             {{#metadata.speaker}}<span>{{metadata.speaker}}</span>{{/metadata.speaker}}
             {{#metadata.author}}<span>{{metadata.author}}</span>{{/metadata.author}}
-            {{#metadata.venue}}<span><i>{{metadata.venue}}</i></span>{{/metadata.venue}}
+            {{#metadata.role}}<span class="quiet">{{metadata.role}}</span>{{/metadata.role}}
             {{#event.upcoming}}
             {{#metadata.booking}}<a class="button" href="{{{metadata.booking}}}">{{#metadata.action}}{{metadata.action}}{{/metadata.action}}{{^metadata.action}}Book a place{{/metadata.action}}</a>{{/metadata.booking}}
-            <a href="/calendar.ics" class="quiet">Add to calendar</a>
+            <a href="/calendar.ics">Add to calendar</a>
             {{/event.upcoming}}
-            {{#event.past}}<span class="quiet">This has happened</span>{{/event.past}}
+            {{^event}}{{#metadata.booking}}<a class="button" href="{{{metadata.booking}}}">{{#metadata.action}}{{metadata.action}}{{/metadata.action}}{{^metadata.action}}Find out more{{/metadata.action}}</a>{{/metadata.booking}}{{/event}}
+            {{#metadata.file}}<a class="download" href="{{{metadata.file}}}">Download</a>{{/metadata.file}}
           </div>
           <h1>{{title}}</h1>
           {{#metadata.summary}}<p class="dek">{{metadata.summary}}</p>{{/metadata.summary}}
-          {{! The facts of a page: Address, Hours, Phone, Email and Cost lines, any of them }}
+          {{> progress}}
+          {{! The facts: where (Venue and Address together, the address linked to a map), Hours, Phone, Email and Cost lines, any of them }}
           <dl class="facts">
-            {{#metadata.address}}<div><dt>Address</dt><dd><a href="https://www.openstreetmap.org/search?query={{#encode_uri_component}}{{metadata.address}}{{/encode_uri_component}}">{{metadata.address}}</a></dd></div>{{/metadata.address}}
+            {{#metadata.venue}}<div><dt>Where</dt><dd>{{metadata.venue}}{{#metadata.address}}<br><a href="https://www.openstreetmap.org/search?query={{#encode_uri_component}}{{metadata.address}}{{/encode_uri_component}}">{{metadata.address}}</a>{{/metadata.address}}</dd></div>{{/metadata.venue}}
+            {{^metadata.venue}}{{#metadata.address}}<div><dt>Address</dt><dd><a href="https://www.openstreetmap.org/search?query={{#encode_uri_component}}{{metadata.address}}{{/encode_uri_component}}">{{metadata.address}}</a></dd></div>{{/metadata.address}}{{/metadata.venue}}
             {{#metadata.hours}}<div><dt>Hours</dt><dd>{{metadata.hours}}</dd></div>{{/metadata.hours}}
             {{#metadata.phone}}<div><dt>Phone</dt><dd><a href="tel:{{metadata.phone}}">{{metadata.phone}}</a></dd></div>{{/metadata.phone}}
             {{#metadata.email}}<div><dt>Email</dt><dd><a href="mailto:{{metadata.email}}">{{metadata.email}}</a></dd></div>{{/metadata.email}}
@@ -40,9 +43,9 @@
         </div>
 
         <footer class="project-footer">
-          {{#date}}
+          {{^event}}{{#date}}
           <div><span class="quiet">Published</span> <time datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time></div>
-          {{/date}}
+          {{/date}}{{/event}}
           {{^date}}
           <div><span class="quiet">Updated</span> <time datetime="{{#formatUpdated}}YYYY-MM-DD{{/formatUpdated}}">{{#formatUpdated}}MMM D, YYYY{{/formatUpdated}}</time></div>
           {{/date}}

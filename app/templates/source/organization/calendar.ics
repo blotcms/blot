@@ -14,6 +14,9 @@ DTSTART:{{#formatEvent}}YYYYMMDD[T]HHmmss{{/formatEvent}}
 {{#event.allDay}}
 DTSTART;VALUE=DATE:{{#formatEvent}}YYYYMMDD{{/formatEvent}}
 {{/event.allDay}}
+{{#event.rrule}}
+RRULE:{{{event.rrule}}}
+{{/event.rrule}}
 SUMMARY:{{{title}}}
 {{#metadata.venue}}
 LOCATION:{{{metadata.venue}}}

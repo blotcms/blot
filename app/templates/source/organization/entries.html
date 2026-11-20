@@ -12,7 +12,8 @@
       <div class="rows">
         {{! Pinned: yes lifts a post to the top of the page it's on }}
         {{#posts}}{{#metadata.pinned}}<div class="is-pinned">{{> post-row}}</div>{{/metadata.pinned}}{{/posts}}
-        {{#posts}}{{^metadata.pinned}}{{> post-row}}{{/metadata.pinned}}{{/posts}}
+        {{! Upcoming events are in the strip above, so they join this list once they have happened (unless the strip is turned off) }}
+        {{#posts}}{{^metadata.pinned}}{{^event.upcoming}}{{> post-row}}{{/event.upcoming}}{{#event.upcoming}}{{^upcoming_on_home}}{{> post-row}}{{/upcoming_on_home}}{{/event.upcoming}}{{/metadata.pinned}}{{/posts}}
       </div>
       {{/posts.length}}
       {{^posts.length}}

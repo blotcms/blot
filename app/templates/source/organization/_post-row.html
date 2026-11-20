@@ -2,7 +2,7 @@
 <article class="row">
   <div class="row-identity">
     <h3 class="row-title"><a href="{{{url}}}">{{title}}</a></h3>
-    {{> status}}
+    {{> labels}}
     {{#event}}<time class="quiet" datetime="{{#formatEvent}}YYYY-MM-DD{{/formatEvent}}">{{#formatEvent}}ddd, MMM D, YYYY{{/formatEvent}}</time>{{/event}}
     {{^event}}{{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time>{{/date}}{{/event}}
   </div>
@@ -11,6 +11,8 @@
     {{#metadata.author}}<div>{{metadata.author}}</div>{{/metadata.author}}
     {{#metadata.venue}}<div><i>{{metadata.venue}}</i></div>{{/metadata.venue}}
     {{#summary}}<div class="quiet">{{summary}}</div>{{/summary}}
+    {{> progress}}
+    {{#metadata.file}}<div><a class="download" href="{{{metadata.file}}}">Download</a></div>{{/metadata.file}}
   </div>
   <div class="row-tags">
     {{#tags.length}}<span class="quiet">Filed under</span><br>
