@@ -9,9 +9,16 @@ const limiters = new Map();
 // disconnected must not create a fresh limiter and push to Blot.
 const stoppedLimiters = new Map();
 
+// How many of one blog's actions run at once. Most of an upload is waiting
+// for iCloud: an evicted file takes one to four seconds to download, so a
+// batch of files saved together is downloaded side by side. pathOrder.js keeps
+// changes to one path in order, and pushInTurn sends one request to Blot at a
+// time.
+const ACTIONS_PER_BLOG = 4;
+
 /**
  * Get or create a Bottleneck limiter for a specific blogID.
- * Each blogID gets its own limiter to ensure events are processed sequentially.
+ * Each blogID gets its own limiter, running up to ACTIONS_PER_BLOG actions.
  * @param {string} blogID - The blog ID for which to get the limiter.
  * @returns {Bottleneck} The Bottleneck limiter for the blogID.
  */
@@ -25,11 +32,8 @@ const getLimiterForBlogID = (blogID) => {
   }
 
   if (!limiters.has(blogID)) {
-    // Create a new limiter for this blogID with concurrency of 1
     console.log(clfdate(), `Creating limiter for blogID: ${blogID}`);
-    const limiter = new Bottleneck({
-      maxConcurrent: 1, // Only one task per blogID can run at a time
-    });
+    const limiter = new Bottleneck({ maxConcurrent: ACTIONS_PER_BLOG });
     limiters.set(blogID, limiter);
   } else {
     console.log(clfdate(), `Using existing limiter for blogID: ${blogID}`);
@@ -81,10 +85,28 @@ const isLimiterStoppedError = (error) =>
 
 const getLimiterCount = () => limiters.size;
 
+// Requests to Blot for one blog, one at a time: Blot takes the blog's sync
+// lock for each, and a second request arriving meanwhile waits at least 0.75s
+// before it tries the lock again. Resolves or rejects as fn does.
+const pushQueues = new Map(); // blogID -> promise of the last request queued
+
+const pushInTurn = (blogID, fn) => {
+  const previous = pushQueues.get(blogID) || Promise.resolve();
+  const request = previous.then(() => fn());
+  const settled = request.catch(() => {});
+  pushQueues.set(blogID, settled);
+  settled.then(() => {
+    if (pushQueues.get(blogID) === settled) pushQueues.delete(blogID);
+  });
+  return request;
+};
+
 export {
   getLimiterForBlogID,
   removeLimiterForBlogID,
   reviveLimiterForBlogID,
   getLimiterCount,
   isLimiterStoppedError,
+  pushInTurn,
+  ACTIONS_PER_BLOG,
 };

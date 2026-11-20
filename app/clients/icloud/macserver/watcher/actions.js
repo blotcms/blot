@@ -1,5 +1,6 @@
 import clfdate from "../util/clfdate.js";
 import { getLimiterForBlogID, isLimiterStoppedError } from "../limiters.js";
+import { takeTurn } from "../pathOrder.js";
 import mkdir from "../httpClient/mkdir.js";
 import remove from "../httpClient/remove.js";
 import resync from "../httpClient/resync.js";
@@ -94,8 +95,20 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
 
   const limiter = getLimiterForBlogID(blogID);
 
-  // resolves to the result of the action; mkdir reports whether Blot created the directory
-  return limiter
+  // Taken before the first await, so turns follow the order of the events
+  const turn = takeTurn(blogID, pathInBlogDirectory);
+
+  try {
+    await turn.ready;
+    return await runAction(limiter, blogID, pathInBlogDirectory, action);
+  } finally {
+    turn.done();
+  }
+};
+
+// resolves to the result of the action; mkdir reports whether Blot created the directory
+const runAction = (limiter, blogID, pathInBlogDirectory, action) =>
+  limiter
     .schedule(async () => {
       try {
         if (action === "upload") {
@@ -161,6 +174,5 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
       if (isLimiterStoppedError(error)) return;
       throw error;
     });
-};
 
 export { performAction };
