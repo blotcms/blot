@@ -534,6 +534,24 @@ nav[aria-label="Pages"] {
   color: inherit;
 }
 
+/* An event's picture: the whole of it, on a pale ground, all the same
+   shape so the dates below line up */
+.upcoming-image {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 4 / 3;
+  margin: 0 0 0.75em;
+  padding: 8%;
+  background: color-mix(in srgb, var(--ink) 5%, var(--paper));
+}
+
+.upcoming-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 .upcoming-item:hover {
   text-decoration: none;
 }
@@ -770,12 +788,12 @@ nav[aria-label="Pages"] {
   text-indent: 0;
 }
 
-.text > :is(ul, ol, blockquote, pre, table, hr, figure, .callout) {
+.text > :is(ul, ol, blockquote, pre, table, hr, figure, .callout, .lead, .steps, .note, .tip, .warning, .info, .success) {
   margin-block: var(--leading-serif-l);
 }
 
 .text :is(h2, h3, h4) + p,
-.text :is(ul, ol, blockquote, table, figure, .carousel, .column, .wide, .margin, details, .callout) + p {
+.text :is(ul, ol, blockquote, table, figure, .carousel, .column, .wide, .margin, details, .callout, .buttons, .lead, .steps, .figures, .note, .tip, .warning, .info, .success) + p {
   text-indent: 0;
 }
 
@@ -852,6 +870,33 @@ nav[aria-label="Pages"] {
 
 .text th {
   font-weight: 700;
+}
+
+.text thead th {
+  border-bottom: 2px solid var(--ink);
+  vertical-align: bottom;
+}
+
+.text tbody tr:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.text caption {
+  padding-bottom: 0.5em;
+  color: var(--quiet);
+  text-align: left;
+  caption-side: top;
+}
+
+/* A long table scrolls sideways rather than widening the page; in a wide
+   block ({<>} or ::: wide) it fills the page */
+.text > table {
+  display: block;
+  overflow-x: auto;
+}
+
+.text > .wide table {
+  width: 100%;
 }
 
 .text pre {
@@ -1104,6 +1149,145 @@ nav[aria-label="Pages"] {
   text-transform: uppercase;
 }
 
+/* Fenced divs: a line of three colons and a name, the text, then three
+   colons again, gives the text that class (Pandoc's ::: name ... :::).
+
+     ::: buttons     its links as buttons, the first one filled
+     ::: lead        a larger opening paragraph
+     ::: steps       a numbered list as steps, with large numerals
+     ::: figures     a list of "**75** years" as large figures, four to a row
+     ::: note, ::: tip, ::: warning, ::: info, ::: success
+                     a boxed note, like a callout
+
+   A single link can be a button too: [Give](/support){.button} */
+.text > .buttons p {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin: 0;
+  text-indent: 0;
+}
+
+.text .buttons a,
+.text a.button {
+  display: inline-block;
+  padding: 0.55em 1.2em;
+  border: 2px solid var(--accent);
+  border-radius: 3px;
+  color: var(--accent);
+  font: 700 var(--size-m) / 1.2 var(--font-sans);
+  text-decoration: none;
+}
+
+.text .buttons a:first-child,
+.text a.button {
+  background: var(--accent);
+  color: var(--paper);
+}
+
+.text .buttons a:hover,
+.text a.button:hover {
+  opacity: 0.85;
+  text-decoration: none;
+}
+
+.text > .buttons {
+  margin-block: var(--leading-serif-l);
+}
+
+/* ::: {.buttons .big}: the size of the text, for the one thing a page asks */
+.text .buttons.big a {
+  padding: 0.6em 1.4em;
+  font-size: var(--size-serif-l);
+}
+
+.text > .lead p {
+  font-size: 1.25em;
+  line-height: 1.35;
+  text-indent: 0;
+}
+
+.text .steps ol {
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+
+.text .steps li {
+  position: relative;
+  min-height: 2.6em;
+  padding: 0.1em 0 0 3.2em;
+  counter-increment: step;
+}
+
+.text .steps li + li {
+  margin-top: 1em;
+}
+
+.text .steps li::before {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 2.2em;
+  color: var(--accent);
+  font: 2.2em / 1 var(--font-serif);
+  font-variant-numeric: lining-nums;
+  content: counter(step);
+}
+
+/* Figures span the whole page, one column each */
+.text > .figures {
+  grid-column: 1 / 5;
+  max-width: none;
+  margin-block: var(--leading-serif-l);
+}
+
+.text .figures ul {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font: var(--size-m) / var(--leading-m) var(--font-sans);
+}
+
+.text .figures li {
+  padding-top: 0.5em;
+  border-top: 2px solid var(--accent);
+}
+
+.text .figures strong {
+  display: block;
+  color: var(--accent);
+  font: 400 var(--size-numeral) / 1 var(--font-serif);
+  font-variant-numeric: lining-nums;
+}
+
+.text :is(.note, .tip, .warning, .info, .success) {
+  padding: 0.5em 0 0;
+  border-top: 2px solid var(--accent);
+  font: var(--size-m) / var(--leading-m) var(--font-sans);
+}
+
+.text :is(.note, .tip, .warning, .info, .success) p {
+  text-indent: 0;
+}
+
+.text :is(.note, .tip, .warning, .info, .success)::before {
+  display: block;
+  color: var(--accent);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.text .note::before { content: "Note"; }
+.text .tip::before { content: "Tip"; }
+.text .warning::before { content: "Warning"; }
+.text .info::before { content: "Information"; }
+.text .success::before { content: "Done"; }
+
 /* Footnotes */
 .text .footnotes {
   margin-top: var(--leading-serif-l);
@@ -1159,6 +1343,10 @@ nav[aria-label="Pages"] {
 
 .has-contents .text h2::before {
   content: none !important;
+}
+
+.has-contents .text > .figures {
+  grid-column: 2 / 5;
 }
 
 /* Questions (<details>): script.js animates them; Open all comes with three or more */
@@ -1394,6 +1582,14 @@ nav[aria-label="Pages"] {
 
   .text > .column.four {
     grid-column: auto / span 1;
+  }
+
+  .text .figures ul {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .has-contents .text > .figures {
+    grid-column: 1 / -1;
   }
 
   .text > .inside {

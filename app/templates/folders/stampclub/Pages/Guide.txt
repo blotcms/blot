@@ -80,6 +80,19 @@ The text is written in Markdown. Beyond the usual headings, lists and links:
 - A link to a PDF or other document, such as `[the accounts (PDF)](/_files/accounts-2026.pdf)`, gets a small label saying what kind of file it is.
 - `{<<}` and `{>>}` make a picture wider than the text, out to the left or the right. `{<}` and `{>}` put a picture in the margin beside the next paragraph. `{|||}` makes a third of the page, three to a row. [New in the library](/new-in-the-library) uses all of them.
 
+## Buttons, steps and figures
+
+A line of three colons and a name, then some text, then three colons again, gives that text a style of its own:
+
+- `::: buttons` turns the links inside into buttons, the first one filled. `::: {.buttons .big}` makes them as large as the text, for the one thing a page asks, as on [Support](/support).
+- `::: steps` turns a numbered list into steps with large numerals, as on [Join](/join).
+- `::: figures` turns a list like `- **1951** the first meeting` into a row of large figures, as on [About](/about).
+- `::: lead` sets an opening paragraph larger.
+- `::: note`, `::: tip`, `::: warning`, `::: info` and `::: success` box a short note, as on [Visit](/visit).
+- A single link can be a button anywhere: `[Give](/support){.button}`.
+
+Tables can go anywhere too: the dues on [Join](/join), the year's meetings on [Visit](/visit), the timetable of the stamp fair and the accounts in the 2026 minutes.
+
 ## More Markdown
 
 Two posts use the rest of what Markdown can do: [Getting ready for the show and tell](/getting-ready-for-the-show-and-tell) and [Counting holes](/counting-holes). Between them:

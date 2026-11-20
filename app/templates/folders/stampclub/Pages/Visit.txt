@@ -18,6 +18,29 @@ The members' room is on the second floor of the Society Library on East Seventy-
 
 A few events are elsewhere: the summer lecture and the winter lecture at Morrow Hall on Riverside Drive, and the annual dinner, the stamp fair and the auction at the Gramercy Room. Each event's page says where it is.
 
+## Meetings in 2027
+
+Every meeting starts at 6:30 pm and ends by nine, in the members' room unless it says otherwise.
+
+| 2027 | What's on |
+| --- | --- |
+| Jan 12 | Winter lecture: the Pony Express, at Morrow Hall |
+| Feb 9 | Reading: *Household Words* |
+| Mar 9 | The annual meeting |
+| Apr 13 | Talk to be announced |
+| May 11 | Results of the spring auction |
+| Jun 8 | Talk to be announced |
+| Jul 13 | The summer swap: bring a shoebox |
+| Aug 10 | The outing, by coach; no meeting in the library |
+| Sep 14 | Talk to be announced |
+| Oct 12 | Talk to be announced |
+| Nov 9 | Talk to be announced |
+| Dec 14 | The Christmas show and tell |
+
+::: tip
+Add the [calendar](/calendar.ics) to your phone and every meeting appears there, and moves if we move it.
+:::
+
 ## Getting in
 
 There is an elevator at the back of the building, past the desk; ask the staff and they will bring it down. The members' room has a step-free doorway, chairs with arms, and a table at a comfortable height for anyone using a wheelchair. If you would like a large-print program or a seat near the front, write to the address above a few days before and we will arrange it.

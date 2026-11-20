@@ -1,11 +1,20 @@
 Link: /about
 Page: yes
 Contents: yes
-Summary: How a back room on Fulton Street became a club of sixty, and what it does on the second Tuesday.
+Summary: How a back room on Fulton Street became a club, and what it does on the second Tuesday.
 
 # About
 
+::: lead
 The New York Stamp Club has met on the second Tuesday of every month since 1951: first in the back room of a stationer's on Fulton Street, and since 1976 in the members' room of the Society Library on East Seventy-ninth Street.
+:::
+
+::: figures
+- **1951** the first meeting, in a stationer's back room
+- **75** years of second Tuesdays
+- **900** meetings, give or take a blizzard
+- **150** issues of *The Perforation*
+:::
 
 ## How it began
 
