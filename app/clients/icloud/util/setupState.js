@@ -1,10 +1,10 @@
 const health = require("clients/health");
 const { isSetupError } = require("../error");
 
-// Where an iCloud setup has got to, for the dashboard's checklist
-// (views/index.html). Steps 1 and 2 are the person's: share a folder with
-// Blot, paste its link. Step 3 is Blot's: its Mac joins the folder
-// ("joining"), then the site's files are copied in ("copying").
+// Where an iCloud setup has got to, for the dashboard (views/index.html).
+// Before the link is sent it shows the person's steps: create a folder,
+// share it with Blot, paste its link. After, it shows Blot's: its Mac joins
+// the folder ("joining"), then the site's files are copied in ("copying").
 //
 // A failed setup puts its message on the step that fixes it. The macserver
 // says which check failed (setupErrorReason, from routes/setup.js); one that
