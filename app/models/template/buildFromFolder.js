@@ -17,8 +17,15 @@ var clfdate = require("helper/clfdate");
 // Resolves { failed }: how many templates in the folder could not be read,
 // plus one if removing those no longer in it failed. The caller retries the
 // build while it is not zero.
-module.exports = async function buildFromFolder(blogID) {
+//
+// options.only, a Set of template directory names (NFC, lowercased, as
+// sync/index.js gets them from the paths it updated), reads just
+// those templates (the ones a sync updated). The rest of the folder is still
+// listed, so templates whose directories are gone are removed as usual.
+module.exports = async function buildFromFolder(blogID, options = {}) {
   ensure(blogID, "string");
+
+  const only = options.only || null;
 
   let failed = 0;
 
@@ -56,6 +63,11 @@ module.exports = async function buildFromFolder(blogID) {
       if (template.startsWith(".") || shouldIgnoreFile(template)) continue;
 
       const dir = templateDir + "/" + template;
+
+      if (only && !only.has(template.normalize().toLowerCase())) {
+        templatesInFolder.push(template);
+        continue;
+      }
 
       console.log(
         clfdate(),

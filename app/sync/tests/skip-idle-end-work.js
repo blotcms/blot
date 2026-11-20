@@ -1,5 +1,7 @@
 // A sync only checks for renames when an update changed something, and only
-// builds templates from the folder when a templates path was updated.
+// builds templates from the folder when a templates path was updated, reading
+// only the templates it updated unless a path may have changed them all or a
+// build failed before.
 describe("sync end-of-sync work", function () {
   const storage = require("storage/folder");
   const template = require("models/template");
@@ -74,10 +76,14 @@ describe("sync end-of-sync work", function () {
     const blogID = this.blog.id;
 
     await sync(blogID, async function (folder) {
-      await folder.update("/Templates/mine/package.json");
+      await folder.update("/Templates/Mine/package.json");
+      await folder.update("/Templates/other/entry.html");
     });
 
-    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID);
+    // Only the templates this sync updated are read
+    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID, {
+      only: new Set(["mine", "other"]),
+    });
   });
 
   it("builds templates when the templates folder itself was updated", async function () {
@@ -87,7 +93,7 @@ describe("sync end-of-sync work", function () {
       await folder.update("/Templates");
     });
 
-    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID);
+    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID, {});
   });
 
   it("retries a build which failed to read a template, then clears the key", async function () {
@@ -102,16 +108,41 @@ describe("sync end-of-sync work", function () {
     expect(template.buildFromFolder).toHaveBeenCalledTimes(1);
     expect(await client.exists(key)).toBe(1);
 
-    // The next sync updates no template path, but still builds
+    // The next sync updates no template path, but still builds, reading
+    // every template
     template.buildFromFolder.and.returnValue(Promise.resolve({ failed: 0 }));
     await sync(blogID, async function () {});
 
     expect(template.buildFromFolder).toHaveBeenCalledTimes(2);
+    expect(template.buildFromFolder.calls.mostRecent().args).toEqual([
+      blogID,
+      {},
+    ]);
     expect(await client.exists(key)).toBe(0);
 
     // and the one after that does not
     await sync(blogID, async function () {});
     expect(template.buildFromFolder).toHaveBeenCalledTimes(2);
+  });
+
+  it("reads every template after a failed build, even when a sync updates one", async function () {
+    const blogID = this.blog.id;
+    template.buildFromFolder.and.returnValue(Promise.resolve({ failed: 1 }));
+
+    await sync(blogID, async function (folder) {
+      await folder.update("/Templates/mine/package.json");
+    });
+
+    template.buildFromFolder.and.returnValue(Promise.resolve({ failed: 0 }));
+    await sync(blogID, async function (folder) {
+      await folder.update("/Templates/other/entry.html");
+    });
+
+    expect(template.buildFromFolder.calls.mostRecent().args).toEqual([
+      blogID,
+      {},
+    ]);
+    expect(await client.exists(templateKey.needsBuild(blogID))).toBe(0);
   });
 
   it("builds templates when the folder root was updated", async function () {
@@ -121,7 +152,7 @@ describe("sync end-of-sync work", function () {
       await folder.update("/");
     });
 
-    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID);
+    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID, {});
   });
 
   it("builds templates when an installed template's removal is pending", async function () {
@@ -134,6 +165,9 @@ describe("sync end-of-sync work", function () {
       await folderRenames.clear(blogID, "SITE_x");
     }
 
-    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID);
+    // Only to finish the removal: no template is read
+    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID, {
+      only: new Set(),
+    });
   });
 });

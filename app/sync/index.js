@@ -3,6 +3,7 @@ const Blog = require("models/blog");
 const Update = require("./update");
 const renames = require("./renames");
 const { isTemplatePath } = require("./update/set");
+const pathNormalizer = require("helper/pathNormalizer");
 const folderRenames = require("models/template/folderRenames");
 const templateKey = require("models/template/key");
 const client = require("models/client");
@@ -21,6 +22,15 @@ const {
 
 // How long the templates-need-building key lasts if nothing clears it
 const NEEDS_BUILD_TTL_SECONDS = 60 * 60 * 24 * 90;
+const ALL_TEMPLATES = Symbol("all templates");
+
+// The lowercased name of the template directory a path in the templates
+// folder is in or is, e.g. "blog" for /Templates/Blog/entry.html, or null for
+// the templates folder itself or the root, which may hold every template
+function templateDirName(path) {
+  const parts = pathNormalizer(path).toLowerCase().split("/");
+  return parts[1] === "templates" && parts[2] ? parts[2] : null;
+}
 
 // Runs async fn(folder) while holding the blog's folder lock, then finishes
 // the sync (renames, templates, CDN manifests, releasing the lock, the cacheID
@@ -128,8 +138,11 @@ async function acquire(blogID) {
 
   // we want to know if folder.update or folder.rename is called
   let changes = false;
-  // and whether any updated path was in the templates folder
+  // and whether any updated path was in the templates folder: the names of
+  // the template directories updated (lowercased), or ALL_TEMPLATES when a
+  // path could have changed every template (the folder itself, or the root)
   let templatesTouched = false;
+  let touchedTemplates = new Set();
   const originalUpdate = new Update(blog, log, status);
   // How long after the change in the source a file went live: the update
   // bumps the blog's cacheID once it has saved a changed file (see
@@ -170,7 +183,12 @@ async function acquire(blogID) {
       let result;
 
       addPendingUpdate(blogID, syncID, path);
-      if (isTemplatePath(path)) templatesTouched = true;
+      if (isTemplatePath(path)) {
+        templatesTouched = true;
+        const name = templateDirName(path);
+        if (name === null) touchedTemplates = ALL_TEMPLATES;
+        else if (touchedTemplates !== ALL_TEMPLATES) touchedTemplates.add(name);
+      }
 
       try {
         result = await originalUpdate(path);
@@ -267,10 +285,24 @@ async function acquire(blogID) {
     // A build which fails to read a template (Redis trouble, say) would not
     // be retried by the next sync, as the client has already saved its cursor,
     // so a path in the templates folder also leaves a key behind, which is
-    // cleared only by a build in which every template was read.
+    // cleared only by a build which read every template it was asked to.
+    //
+    // A build reads only the templates whose directories this sync updated:
+    // the others are as the last build left them. Every template is read
+    // when the key above was already set, since a template that failed to be
+    // read before may be one this sync didn't update, or when a path could
+    // have changed all of them.
     let buildTemplates = templatesTouched;
+    let readAll = touchedTemplates === ALL_TEMPLATES;
 
     if (templatesTouched) {
+      try {
+        if (!readAll)
+          readAll = (await client.exists(templateKey.needsBuild(blogID))) > 0;
+      } catch (err) {
+        readAll = true;
+      }
+
       try {
         await client.set(templateKey.needsBuild(blogID), "1", {
           EX: NEEDS_BUILD_TTL_SECONDS,
@@ -281,18 +313,22 @@ async function acquire(blogID) {
     } else {
       try {
         const pending = await folderRenames.readPending(blogID);
-        buildTemplates =
-          Object.keys(pending).length > 0 ||
-          (await client.exists(templateKey.needsBuild(blogID))) > 0;
+        readAll = (await client.exists(templateKey.needsBuild(blogID))) > 0;
+        buildTemplates = readAll || Object.keys(pending).length > 0;
       } catch (err) {
         buildTemplates = true;
+        readAll = true;
       }
     }
 
     if (buildTemplates) {
       log("Building templates from folder");
       try {
-        const { failed } = (await buildFromFolder(blogID)) || {};
+        const { failed } =
+          (await buildFromFolder(
+            blogID,
+            readAll ? {} : { only: touchedTemplates }
+          )) || {};
 
         if (!failed) {
           await client.del(templateKey.needsBuild(blogID));
