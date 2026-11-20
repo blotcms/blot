@@ -644,6 +644,8 @@ const sweepAll = async () => {
       if (!blogID || !isActive(blogID)) continue;
       blogs++;
       try {
+        // A rename FSEvents missed is found here (and reported to Blot)
+        if (isNested(blogID)) await blogFolderPresent(blogID);
         await sweepBlog(blogID);
       } catch (error) {
         console.error(clfdate(), `Sweep failed for ${blogID}:`, error);
