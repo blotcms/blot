@@ -90,11 +90,11 @@
 
         <li class="{{#setup.linkProblem}}problem{{/setup.linkProblem}}">
           {{#setup.linkProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.linkProblem}}
-          <span class="step-title">Paste the folder’s link</span>
+          <span class="step-title">Paste the link</span>
           {{#setup.linkProblem}}<span class="step-problem">{{setup.linkProblem}}</span>{{/setup.linkProblem}}
           <form class="dashboard-form icloud-link-form" action="{{{base}}}/set-up-folder" method="post">
             <input type="hidden" name="_csrf" value="{{csrftoken}}">
-            <input type="text" name="sharingLink" aria-label="iCloud folder link" placeholder="https://www.icloud.com/iclouddrive/…" value="{{setup.sharingLink}}" autocomplete="off" spellcheck="false">
+            <input type="text" name="sharingLink" aria-label="iCloud folder link" placeholder="icloud.com/iclouddrive/…" value="{{setup.sharingLink}}" autocomplete="off" spellcheck="false">
             <div class="buttons">
               <button type="submit">Connect folder</button>
               {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}

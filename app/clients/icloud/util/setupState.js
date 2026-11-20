@@ -30,7 +30,7 @@ const FORMAT_PROBLEM =
 
 const SLOW_JOIN_MS = 2 * 60 * 1000;
 
-const EMPTY_PROBLEM = "Paste the folder’s link first.";
+const EMPTY_PROBLEM = "Paste the link first.";
 
 // What an older macserver sends, matched to the reasons above
 const reasonFromMessage = (message) => {
