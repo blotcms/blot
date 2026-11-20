@@ -1,7 +1,9 @@
+iCloud follow-ups from #2808 (20 Nov 2026):
+- `scripts/icloud/resync.js` walks every iCloud blog with setupComplete, including ones with a stored SOURCE_MISSING or TRANSFER_INCOMPLETE error, which the client's own resync refuses because the walk would remove files iCloud doesn't have. Give it the same guards (`shouldSkipBackgroundSync`, `hasUserSideIssue`) before anyone runs it for all blogs
+- macserver: files Blot writes to iCloud (`routes/upload.js`) stay downloaded, so a customer's next edit to one of them takes 3-47s to reach the disk instead of a tenth of a second. Evict them once iCloud has uploaded them
+- CodeQL: path-injection and type-confusion alerts on the macserver's routes and watcher reappeared on the lines #2825 and #2829 moved (routes already confine paths to the blog folder, /upload checks the body is a Buffer, watch() validates the blog ID). Review and dismiss as before, or find a check CodeQL accepts
+
 Sandbox image jobs, from a stress run on the test blogs (19 Nov 2026, #2795):
-- `scripts/icloud/resync.js` walks every iCloud blog with setupComplete, including ones with a stored SOURCE_MISSING or TRANSFER_INCOMPLETE error, which the client's own resync refuses because the walk would remove files iCloud doesn't have. Give it the same guards (`shouldSkipBackgroundSync`, `hasUserSideIssue`) before anyone runs it for all blogs (#2808)
-- macserver: files Blot writes to iCloud (`routes/upload.js`) stay downloaded, so a customer's next edit to one of them takes 3-47s to reach the disk instead of a tenth of a second. Evict them once iCloud has uploaded them (#2808)
-- CodeQL: path-injection and type-confusion alerts on the macserver's routes and watcher reappeared on the lines #2825 and #2829 moved (routes already confine paths to the blog folder, /upload checks the body is a Buffer, watch() validates the blog ID). Review and dismiss as before, or find a check CodeQL accepts (#2808)
 - A 200-frame 1000x1000 GIF (200 MP of frames, above #2804's ~40e6 frame-pixel budget) peaked at 246 MiB in `exif` and 200 MiB in `thumbnail`, against ~100 MiB for a 90 MP JPEG, and its cached copy came out the same size as the original. Check whether the first-frame fallback applies to those jobs (and to `exif` at all). Until it does, a big GIF beside pandoc can use most of the sandbox's 512M.
 - `car.heic` in a post stayed a plain folder file (`/folder/v-.../car.heic`) rather than an `_image_cache` copy, although `to-png` and `resize` jobs ran for it. Check whether the converted image is dropped somewhere after the jobs.
 
