@@ -738,6 +738,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       const ids = options.dirty ? await options.dirty.take() : [];
       taken.push(...ids);
       const dirIds = ids.filter((id) => id !== options.dirty?.FULL);
+      // Only the full walk makes way, never the targeted pass
+      canYield = false;
       if (dirIds.length) await targeted(dirIds);
 
       const before = { ...summary };

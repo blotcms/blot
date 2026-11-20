@@ -217,6 +217,24 @@ describe("google-drive sync() with changed directories", function () {
     expect(h.listed.filter((id) => id === "root").length).toBe(6);
   });
 
+  it("never makes way during the targeted pass", async function () {
+    let n = 0;
+    const h = harness({
+      local: allDirs,
+      // Every walk sees a change waiting, and each time one more directory
+      count: async () => {
+        n += 1;
+        h.queue.push(["dir-" + (n % 10)]);
+        return 1;
+      },
+      rootDelay: 300,
+    });
+    const summary = await h.run();
+
+    expect(summary).toBeTruthy();
+    expect(h.putBack).toEqual([]);
+  });
+
   it("puts what it took back when the sync fails", async function () {
     const h = harness({ local: allDirs, dirty: ["dir-2"], failOn: "dir-2" });
 
