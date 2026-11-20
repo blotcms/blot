@@ -12,6 +12,9 @@ function load({
   rewalkAfter = 0,
   // Directories changes.list and the search recorded before the sync
   recorded = [],
+  // The blog's recently changed directories, and which of them differ
+  hot = [],
+  hotChanged = [],
 } = {}) {
   const module = { exports: {} };
   const events = [];
@@ -57,9 +60,16 @@ function load({
         add: async (blogID, ids) => ids.forEach((id) => dirty.add(id)),
         count: async () => dirty.size,
       },
-      recent: { touch: async () => {} },
+      recent: {
+        touch: async () => {},
+        list: async () => hot.map((dirId) => ({ blogID: "blog_a", dirId })),
+      },
     },
     "./sync.js": async (blogID, publish, update, options) => {
+      if (options.only) {
+        events.push("hot " + options.only.join(","));
+        return { changed: hotChanged, paths: [], full: false };
+      }
       if (options.detectOnly) {
         events.push("detect");
         const found = detections[detectCount++];
@@ -264,5 +274,26 @@ describe("google drive sync entry point", function () {
     await sync("blog_a");
 
     expect(events).toEqual([]);
+  });
+
+  it("checks the recently changed directories beside the full detection, and applies what differs", async function () {
+    const { sync, events } = load({
+      account: { folderId: "folder", serviceAccountId: "sa" },
+      hot: ["dir_a", "dir_b"],
+      hotChanged: ["dir_b"],
+    });
+
+    await sync("blog_a");
+
+    // The two run side by side
+    expect(events).toContain("hot dir_a,dir_b");
+    expect(events.indexOf("apply")).toBeGreaterThan(events.indexOf("detect"));
+  });
+
+  it("only runs the full detection when nothing changed recently", async function () {
+    const { sync, events } = load({ account: folder });
+
+    expect(await sync("blog_a")).toBeTruthy();
+    expect(events).toEqual(["store", "walk-lock", "detect", "walk-release"]);
   });
 });

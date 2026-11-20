@@ -104,6 +104,42 @@ module.exports = async function (
 // the end regardless
 const MAX_DETECT_YIELDS = 5;
 
+// The blog's directories that changed in the last few minutes
+// (database/recent.js), at most this many
+const MAX_HOT_DIRS = 16;
+
+// Checks the blog's recently changed directories, one listing each, beside
+// the full detection, and records any that differ, so the full detection
+// makes way for them (#2847). A webhook usually means another change in a
+// folder that just changed, and on a large folder the full walk takes up to
+// 3.4s to reach it. Never rejects: it only ever adds to the full detection.
+async function detectHot(blogID, sync, trigger, account) {
+  try {
+    const hot = (
+      await database.recent.list(account.serviceAccountId, MAX_HOT_DIRS * 4)
+    )
+      .filter((dir) => dir.blogID === blogID)
+      .map((dir) => dir.dirId)
+      .slice(0, MAX_HOT_DIRS);
+    if (!hot.length) return;
+    const startedAt = Date.now();
+    const found = await sync(blogID, null, null, {
+      detectOnly: true,
+      only: hot,
+    });
+    if (!found || !(found.changed.length || found.full)) return;
+    log(
+      blogID,
+      `hot detected changed=${found.changed.length} full=${found.full} ms=${Date.now() - startedAt}`,
+      `trigger=${trigger}`,
+      `paths=${JSON.stringify((found.paths || []).slice(0, 20))}`
+    );
+    await markDirty(blogID, found, `hot:${trigger}`, account);
+  } catch (err) {
+    log(blogID, "hot detection failed", err.message);
+  }
+}
+
 // Walks without the folder lock and resolves { changed, full } (sync.js with
 // detectOnly), { yielded: true } when it stopped to let recorded directories
 // go first, or false if it failed
@@ -132,7 +168,9 @@ async function detectAndApply(blogID, sync, trigger, account) {
       if (known === false) return false;
     }
     startedAt = Date.now();
+    const hot = yields === 0 ? detectHot(blogID, sync, trigger, account) : null;
     detected = await detect(blogID, sync, yields < MAX_DETECT_YIELDS);
+    await hot;
     if (!detected || !detected.yielded) break;
     log(
       blogID,
