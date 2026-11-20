@@ -39,7 +39,7 @@ module.exports = async function renameLocalTemplate(blogID, fromID, toID) {
   // Dropping removes the share link, so we re-point it afterwards
   var shareID = from.shareID;
 
-  await drop(blogID, fromID.split(":").slice(1).join(":"));
+  await drop.byID(blogID, fromID);
 
   if (shareID) {
     await setMetadata(toID, { shareID: shareID });

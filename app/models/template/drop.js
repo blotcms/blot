@@ -7,8 +7,16 @@ var cacheID = require("./util/cacheID");
 var generateCdnUrl = require("./util/generateCdnUrl");
 var purgeQueue = require("cdn/purgeQueue");
 
+// Deletes owner's template named templateName, found by the id makeID gives
+// that name. To delete a template you already have, use drop.byID with its id:
+// an older template's id need not be makeID of its slug.
 module.exports = async function drop(owner, templateName) {
-  var templateID = makeID(owner, templateName);
+  return dropByID(owner, makeID(owner, templateName));
+};
+
+module.exports.byID = dropByID;
+
+async function dropByID(owner, templateID) {
   var multi = client.multi();
 
   ensure(owner, "string").and(templateID, "string");
@@ -88,4 +96,4 @@ module.exports = async function drop(owner, templateName) {
   await cacheID.bumpBlogIfInstalled(ownerID, templateID);
 
   return "Deleted " + templateID;
-};
+}

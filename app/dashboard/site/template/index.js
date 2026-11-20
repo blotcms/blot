@@ -510,7 +510,6 @@ TemplateEditor.route("/:templateSlug/delete")
     res.render("dashboard/template/delete");
   })
   .post(function (req, res, next) {
-    const idSlug = req.template.id.split(":").slice(1).join(":");
     const imageLocals = Object.values(req.template.locals || {})
       .filter((value) => value && value.url)
       .map((value) => ({
@@ -526,7 +525,7 @@ TemplateEditor.route("/:templateSlug/delete")
     Template.removeFromFolder(req.blog.id, req.template.id)
       .catch(function () {})
       .then(function () {
-        Template.drop(req.blog.id, idSlug).then(function () {
+        Template.drop.byID(req.blog.id, req.template.id).then(function () {
           removeTemplateAssetsIfUnreferenced({ blog: req.blog }, imageLocals)
             .then(() => {
               const currentTemplateIDSlug = req.blog.template
@@ -578,7 +577,7 @@ TemplateEditor.route("/:templateSlug/reset")
     };
 
     // work out if this template is currently installed on this site
-    Template.drop(req.blog.id, idSlug).then(function () {
+    Template.drop.byID(req.blog.id, req.template.id).then(function () {
       if (req.blog.template === req.template.id) {
         Blog.set(req.blog.id, { template: "SITE:" + idSlug }).then(function () {
           finishReset();
