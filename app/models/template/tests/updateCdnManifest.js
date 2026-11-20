@@ -51,6 +51,33 @@ describe("updateCdnManifest", function () {
     expect(renderedOutput).toBe("body{color:red}");
   });
 
+  it("renders a target which links another with that target's new hash", async function () {
+    const test = this;
+    const id = test.template.id;
+
+    await setViewAsync(id, {
+      name: "entries.html",
+      content: "{{#cdn}}/a.css{{/cdn}} {{#cdn}}/z.css{{/cdn}}",
+    });
+    // Rendered before z.css, which it links
+    await setViewAsync(id, {
+      name: "a.css",
+      content: "@import url({{#cdn}}/z.css{{/cdn}});",
+    });
+    await setViewAsync(id, { name: "z.css", content: "b{color:red}" });
+
+    const before = (await getMetadataAsync(id)).cdn;
+
+    await setViewAsync(id, { name: "z.css", content: "b{color:blue}" });
+
+    const after = (await getMetadataAsync(id)).cdn;
+    const imported = await getAsync(key.renderedOutput(after["a.css"]));
+
+    expect(after["z.css"]).not.toEqual(before["z.css"]);
+    expect(imported).toContain(after["z.css"]);
+    expect(imported).not.toContain(before["z.css"]);
+  });
+
   it("regenerates manifest hashes after cache-busting to avoid stale full-view cache", async function () {
     const test = this;
 

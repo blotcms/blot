@@ -27,6 +27,10 @@ const {
 
 const hsetAsync = client.hSet.bind(client);
 
+// How many times the targets are rendered when one links another whose hash
+// changed (see below)
+const MAX_PASSES = 3;
+
 // Maximum size for rendered output (2MB)
 const MAX_RENDERED_OUTPUT_SIZE = 2 * 1024 * 1024;
 
@@ -495,60 +499,83 @@ module.exports = async function updateCdnManifest(templateID) {
     folder.dependencies
   );
 
-  // Process each target sequentially
-  for (const target of sortedTargets) {
-    try {
-      let manifestChanged = false;
-      const output = await processTarget(templateID, target);
-      const result = output && output.hash;
-      if (result && typeof result === "string") {
-        const previousHash = inProgressManifest[target];
-        inProgressManifest[target] = result;
+  // Process each target sequentially. A target can link another through
+  // {{#cdn}} (a.css importing z.css), and renders with whatever URL the
+  // manifest held for it at the time, so when a pass gives a target a new
+  // hash while another target's output still has the old one, the targets
+  // are rendered again, up to MAX_PASSES times.
+  for (let pass = 1; pass <= MAX_PASSES; pass++) {
+    const outputs = {};
+    const replaced = [];
 
-        // Write the output and the manifest that references it together,
-        // so a concurrent cleanup of this hash sees both or neither.
-        // If storage fails, keep the target out of the manifest.
-        try {
-          await client
-            .multi()
-            .set(key.renderedOutput(result), output.content)
-            .hSet(
-              key.metadata(templateID),
-              "cdn",
-              JSON.stringify(inProgressManifest)
-            )
-            .exec();
-        } catch (err) {
-          if (previousHash === undefined) delete inProgressManifest[target];
-          else inProgressManifest[target] = previousHash;
-          throw err;
+    for (const target of sortedTargets) {
+      try {
+        let manifestChanged = false;
+        const output = await processTarget(templateID, target);
+        const result = output && output.hash;
+        if (result && typeof result === "string") {
+          const previousHash = inProgressManifest[target];
+          inProgressManifest[target] = result;
+
+          // Write the output and the manifest that references it together,
+          // so a concurrent cleanup of this hash sees both or neither.
+          // If storage fails, keep the target out of the manifest.
+          try {
+            await client
+              .multi()
+              .set(key.renderedOutput(result), output.content)
+              .hSet(
+                key.metadata(templateID),
+                "cdn",
+                JSON.stringify(inProgressManifest)
+              )
+              .exec();
+          } catch (err) {
+            if (previousHash === undefined) delete inProgressManifest[target];
+            else inProgressManifest[target] = previousHash;
+            throw err;
+          }
+
+          manifest[target] = result;
+          outputs[target] = output.content;
+
+          // Clean up the hash it replaced, once the new manifest is saved
+          if (
+            previousHash &&
+            previousHash !== result &&
+            typeof previousHash === "string"
+          ) {
+            staleHashes.push([target, previousHash]);
+            replaced.push([target, previousHash]);
+          }
+        } else {
+          if (
+            Object.prototype.hasOwnProperty.call(inProgressManifest, target)
+          ) {
+            delete inProgressManifest[target];
+            manifestChanged = true;
+          }
         }
 
-        manifest[target] = result;
-
-        // Clean up old hash if it changed
-        const oldHash = oldManifest[target];
-        if (oldHash && oldHash !== result && typeof oldHash === "string") {
-          // Cleaned up once the new manifest is saved, see below
-          staleHashes.push([target, oldHash]);
+        if (manifestChanged) {
+          await hsetAsync(
+            key.metadata(templateID),
+            "cdn",
+            JSON.stringify(inProgressManifest)
+          );
         }
-      } else {
-        if (Object.prototype.hasOwnProperty.call(inProgressManifest, target)) {
-          delete inProgressManifest[target];
-          manifestChanged = true;
-        }
+      } catch (err) {
+        console.error(`Error processing CDN target ${target}:`, err);
       }
-
-      if (manifestChanged) {
-        await hsetAsync(
-          key.metadata(templateID),
-          "cdn",
-          JSON.stringify(inProgressManifest)
-        );
-      }
-    } catch (err) {
-      console.error(`Error processing CDN target ${target}:`, err);
     }
+
+    const linksAReplacedHash = replaced.some(([target, oldHash]) =>
+      Object.keys(outputs).some(
+        (other) => other !== target && outputs[other].includes(oldHash)
+      )
+    );
+
+    if (!linksAReplacedHash) break;
   }
 
   // Clean up rendered outputs for targets that were removed entirely
