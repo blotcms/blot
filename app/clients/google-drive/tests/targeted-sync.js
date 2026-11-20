@@ -51,6 +51,8 @@ function harness({
   const fresh = new Set(upToDate);
   const write = (name) => async (id) => state.writes.push(name + " " + id);
   const queue = [dirty];
+  // What putBack returned, for the next take
+  const pending = [];
 
   const stubs = {
     "storage/folder": { remove: async () => {}, mkdir: async () => {} },
@@ -168,18 +170,23 @@ function harness({
         dirty: {
           FULL: "*",
           take: async () => {
-            const ids = queue.shift() || [];
+            const ids = [...new Set([...(queue.shift() || []), ...pending])];
+            pending.length = 0;
             state.taken.push(ids);
             state.takenAt.push(state.listed.length);
             return ids;
           },
           count,
-          putBack: async (ids) => state.putBack.push(...ids),
+          putBack: async (ids) => {
+            state.putBack.push(...ids);
+            pending.push(...ids);
+          },
         },
       }
     );
   state.queue = queue;
-  state.detect = () => module.exports("blog", null, null, { detectOnly: true });
+  state.detect = (dirty) =>
+    module.exports("blog", null, null, { detectOnly: true, dirty });
   return state;
 }
 
@@ -260,22 +267,25 @@ describe("google-drive sync() with changed directories", function () {
     expect(h.listed.filter((id) => id === "root").length).toBe(6);
   });
 
-  it("never makes way during the targeted pass", async function () {
-    let n = 0;
+  it("makes way during a targeted pass, then finishes it after the new directories", async function () {
+    let changedOnce = false;
     const h = harness({
       local: allDirs,
-      // Every walk sees a change waiting, and each time one more directory
+      dirty: ["dir-1", "dir-2"],
       count: async () => {
-        n += 1;
-        h.queue.push(["dir-" + (n % 10)]);
+        if (changedOnce) return 0;
+        changedOnce = true;
+        h.queue.push(["dir-5"]);
         return 1;
       },
-      rootDelay: 300,
     });
     const summary = await h.run();
 
     expect(summary).toBeTruthy();
-    expect(h.putBack).toEqual([]);
+    // dir-1 was interrupted; dir-5 went first, then dir-1 and dir-2
+    expect(h.putBack).toEqual(["dir-1", "dir-2"]);
+    const after = h.listed.slice(h.takenAt[1]);
+    expect(after.slice(0, 3)).toEqual(["dir-5", "dir-1", "dir-2"]);
   });
 
   it("puts what it took back when the sync fails", async function () {
@@ -338,6 +348,13 @@ describe("google-drive sync() detecting what changed", function () {
     });
 
     expect((await h.detect()).full).toBe(true);
+  });
+
+  it("stops when changed directories are recorded while it walks", async function () {
+    const h = harness({ local: allDirs, upToDate: everyFile });
+    const result = await h.detect({ count: async () => 1 });
+
+    expect(result).toEqual({ yielded: true, changed: [], full: false });
   });
 
   it("resolves false when a listing fails", async function () {
