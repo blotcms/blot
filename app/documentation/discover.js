@@ -42,6 +42,30 @@ function popover(site, featured) {
   };
 }
 
+// Gives each card the name and avatar of a featured site from sites.txt, and
+// the popover. Also used by the confirm page's preview (dashboard/discover).
+function decorate(posts, featuredSites) {
+  const byHost = new Map();
+  for (const site of featuredSites || [])
+    byHost.set(site.host.replace(/^www\./, ""), site);
+
+  for (const post of posts) {
+    const match =
+      post.site.host && byHost.get(post.site.host.replace(/^www\./, ""));
+
+    const custom = post.site.custom || {};
+
+    if (match) {
+      if (!custom.name) post.site.name = match.name;
+      if (!custom.avatar) post.site.featuredImage = match.image;
+    }
+
+    post.popover = popover(post.site, match);
+  }
+
+  return posts;
+}
+
 // Resolves to the set of featured hosts whose site has includeInDiscover on
 async function includedHosts(sites) {
   if (sidebar.hosts && Date.now() - sidebar.at < SIDEBAR_TTL)
@@ -63,7 +87,7 @@ async function includedHosts(sites) {
   return hosts;
 }
 
-module.exports = async function (req, res, next) {
+async function page(req, res, next) {
   try {
     const { posts, next: more } = await Discover.list({
       before: req.query.before,
@@ -75,24 +99,7 @@ module.exports = async function (req, res, next) {
     res.locals.title = "Discover";
     res.locals.description = "Posts from sites on Blot";
     res.locals.fullWidth = true;
-    // A featured site's card shows the name and avatar from sites.txt
-    const byHost = new Map();
-    for (const site of featured.sites || [])
-      byHost.set(site.host.replace(/^www\./, ""), site);
-
-    for (const post of posts) {
-      const match =
-        post.site.host && byHost.get(post.site.host.replace(/^www\./, ""));
-
-      const custom = post.site.custom || {};
-
-      if (match) {
-        if (!custom.name) post.site.name = match.name;
-        if (!custom.avatar) post.site.featuredImage = match.image;
-      }
-
-      post.popover = popover(post.site, match);
-    }
+    decorate(posts, featured.sites);
 
     const sites = (featured.sites || [])
       .filter((site) => hosts.has(site.host))
@@ -116,4 +123,7 @@ module.exports = async function (req, res, next) {
   } catch (err) {
     next(err);
   }
-};
+}
+
+module.exports = page;
+module.exports.decorate = decorate;

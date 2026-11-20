@@ -443,11 +443,28 @@
   text-align: center;
 }
 
+/* The confirm page's preview: the card at the feed's width, between a
+   border above and below as in the feed */
+.discover-preview-section {
+  margin: 2rem 0;
+}
+
+.discover-preview-section h2 {
+  margin-bottom: 0.25rem;
+}
+
+.discover-preview-note {
+  margin-top: 0;
+  color: var(--medium-text-color);
+}
+
 .discover-preview {
-  max-width: 320px;
-  list-style: none;
-  padding: 0;
-  margin: 0 0 2rem;
+  border-top: 1px solid var(--border-color);
+  transition: opacity 0.1s ease;
+}
+
+.discover-preview.updating {
+  opacity: 0.6;
 }
 
 .discover-choose {
