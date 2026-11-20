@@ -41,30 +41,46 @@
           <span class="step-title">Share a folder with Blot</span>
           {{#setup.shareProblem}}<span class="step-problem">{{setup.shareProblem}}</span>{{/setup.shareProblem}}
           {{^setup.linked}}
-          <span class="step-text">Make a folder in iCloud Drive for your site, with any name. Files already in it are kept. Then share it with Blot’s iCloud account:</span>
+          <span class="step-text">Make a folder in iCloud Drive (any name; files already in it are kept) and share it with Blot’s iCloud account:</span>
           <span class="icloud-email">{{blotiCloudAccount}}</span>
           <button class="copy" data-copy="{{blotiCloudAccount}}"><span class="icon-copy"></span> Copy</button>
 
           <ol class="icloud-howto">
-            <li>In Finder, Control-click the folder and choose <b>Share…</b></li>
-            <li>Change <b>Send Copy</b> to <b>Collaborate</b>. Below it, keep <b>Can make changes</b>.</li>
-            <li>Click <b>Invite with Link</b>, type Blot’s account in <b>To</b>, then click <b>Copy Link</b>.</li>
+            <li>In Finder, Control-click the folder › <b>Share…</b></li>
+            <li>Choose <b>Collaborate</b> (not Send Copy), then <b>Invite with Link</b>.</li>
+            <li>Add Blot’s account in <b>To</b> › <b>Copy Link</b>.</li>
           </ol>
 
           <details class="icloud-show-me">
             <summary>Show me</summary>
-            <figure>
-              <img src="{{#cdn}}/images/icloud-setup/collaborate.png{{/cdn}}" width="243" height="114" alt="The Share menu with Collaborate chosen instead of Send Copy">
-              <figcaption>Change <b>Send Copy</b> to <b>Collaborate</b>.</figcaption>
-            </figure>
-            <figure>
-              <img src="{{#cdn}}/images/icloud-setup/invite-with-link.png{{/cdn}}" width="240" height="398" alt="Invite with Link in the Share menu">
-              <figcaption>Keep “Only invited people can edit”, then click <b>Invite with Link</b>.</figcaption>
-            </figure>
-            <figure>
-              <img src="{{#cdn}}/images/icloud-setup/copy-link.png{{/cdn}}" width="420" height="260" alt="The Create Link window with Blot’s account in To and the Copy Link button">
-              <figcaption>Add Blot’s account in <b>To</b>, then <b>Copy Link</b>.</figcaption>
-            </figure>
+            <div class="mac-demo" aria-hidden="true">
+              <figure class="mac-step">
+                <div class="mac-popover">
+                  <div class="mac-head">
+                    <span class="mac-folder"></span>
+                    <span class="mac-head-text"><b>My site</b><small>Folder</small></span>
+                  </div>
+                  <div class="mac-popup">Collaborate<span class="mac-popup-btn"></span></div>
+                  <div class="mac-note">Only invited people can edit.<span>›</span></div>
+                  <div class="mac-sep"></div>
+                  <div class="mac-item mac-faded"><span class="mac-app mac-app-messages"></span>Messages</div>
+                  <div class="mac-item mac-hl"><span class="mac-app mac-app-link"></span>Invite with Link</div>
+                  <div class="mac-item mac-faded"><span class="mac-app mac-app-notes"></span>Notes</div>
+                </div>
+                <figcaption><b>Collaborate</b>, not Send Copy. Then <b>Invite with Link</b>.</figcaption>
+              </figure>
+              <figure class="mac-step">
+                <div class="mac-sheet">
+                  <div class="mac-sheet-title"><span class="mac-app mac-app-link"></span>Create Link</div>
+                  <div class="mac-to">To:<span class="mac-token">{{blotiCloudAccount}}</span></div>
+                  <div class="mac-sheet-foot">
+                    <span class="mac-btn">Cancel</span>
+                    <span class="mac-btn mac-btn-primary">Copy Link</span>
+                  </div>
+                </div>
+                <figcaption>Blot’s account in <b>To</b>, then <b>Copy Link</b>.</figcaption>
+              </figure>
+            </div>
           </details>
 
           <details class="icloud-show-me">
@@ -259,20 +275,248 @@
   color: var(--accent-color);
 }
 
-.icloud-show-me figure {
-  margin: 12px 0;
+
+/* "Show me": Finder's Share menu and Create Link window, drawn in Finder's
+   own light-mode colours and sizes but trimmed to the items that matter */
+.mac-demo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 20px;
+  align-items: flex-start;
+  margin: 10px 0 4px;
+  font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  font-size: 13px;
+  line-height: 16px;
+  color: #222;
+  -webkit-font-smoothing: antialiased;
 }
 
-.icloud-show-me img {
-  max-width: 100%;
-  height: auto;
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
+.mac-step {
+  margin: 0;
+  width: 240px;
+}
+
+.mac-step figcaption {
+  margin-top: 8px;
+  font-family: var(--font-family);
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--medium-text-color);
+}
+
+.mac-popover,
+.mac-sheet {
+  border-radius: 10px;
+  border: 0.5px solid rgba(0, 0, 0, 0.14);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+
+.mac-popover {
+  background: #e5e5e5;
+  padding: 10px 6px 6px;
+}
+
+.mac-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 6px 10px;
+}
+
+.mac-folder {
+  position: relative;
+  width: 36px;
+  height: 27px;
+  margin-top: 4px;
+  border-radius: 3px;
+  background: linear-gradient(#8ac9f7, #6ab6f2);
+}
+
+.mac-folder::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 0;
+  width: 15px;
+  height: 6px;
+  border-radius: 3px 3px 0 0;
+  background: #5aa9eb;
+}
+
+.mac-head-text b {
   display: block;
+  font-weight: 600;
 }
 
-.icloud-show-me figcaption {
-  margin-top: 6px;
+.mac-head-text small {
+  display: block;
+  font-size: 11px;
+  line-height: 14px;
+  color: #808080;
+}
+
+.mac-popup {
+  position: relative;
+  margin: 0 6px;
+  height: 20px;
+  line-height: 20px;
+  padding: 0 8px;
+  border-radius: 5px;
+  background: #cbcbcb;
+}
+
+.mac-popup-btn {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: #3f84f7;
+}
+
+.mac-popup-btn::before,
+.mac-popup-btn::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  width: 4px;
+  height: 4px;
+  border: solid #fff;
+  border-width: 1.5px 0 0 1.5px;
+}
+
+.mac-popup-btn::before {
+  top: 4px;
+  transform: rotate(45deg);
+}
+
+.mac-popup-btn::after {
+  bottom: 4px;
+  transform: rotate(225deg);
+}
+
+.mac-note {
+  display: flex;
+  justify-content: space-between;
+  margin: 5px 6px 0;
+  padding: 0 2px 8px;
+  font-size: 11px;
+  line-height: 14px;
+  color: #666;
+  border-bottom: 1px solid #ccc;
+}
+
+.mac-sep {
+  height: 6px;
+}
+
+.mac-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 5px;
+  color: #333;
+}
+
+.mac-faded {
+  opacity: 0.4;
+}
+
+.mac-hl {
+  background: #c1c2c3;
+}
+
+.mac-app {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  background: #fff;
+  box-shadow: inset 0 0 0 0.5px rgba(0, 0, 0, 0.15);
+}
+
+.mac-app-messages {
+  background: linear-gradient(#6fe06a, #2ec42a);
+}
+
+.mac-app-notes {
+  background: linear-gradient(#fff 0 30%, #fbd75b 30% 38%, #fff 38%);
+}
+
+.mac-app-link {
+  position: relative;
+  background: linear-gradient(#a7a7a7, #8d8d8d);
+}
+
+.mac-app-link::before {
+  content: "";
+  position: absolute;
+  top: 5px;
+  left: 3px;
+  width: 9px;
+  height: 5px;
+  border: 1.5px solid #fff;
+  border-radius: 4px;
+  transform: rotate(-45deg);
+}
+
+.mac-sheet {
+  background: #fff;
+  padding: 10px 14px 12px;
+}
+
+.mac-sheet-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-bottom: 9px;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.mac-sheet-title .mac-app {
+  width: 18px;
+  height: 18px;
+}
+
+.mac-to {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid #e6e6e6;
+}
+
+.mac-token {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #c3d7fd;
+  color: #1d3d84;
+}
+
+.mac-sheet-foot {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.mac-btn {
+  height: 20px;
+  line-height: 20px;
+  padding: 0 10px;
+  border-radius: 5px;
+  background: #fff;
+  box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.2), 0 1px 1px rgba(0, 0, 0, 0.08);
+}
+
+.mac-btn-primary {
+  background: #3a82f7;
+  color: #fff;
+  box-shadow: none;
 }
 
 .icloud-spinner {
