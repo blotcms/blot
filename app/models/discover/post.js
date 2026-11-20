@@ -114,7 +114,12 @@ async function setShowText(id, show) {
 async function setText(id, text) {
   ensure(id, "string").and(text, "string");
   if (!(await client.exists(key.post(id)))) return null;
-  text = text.replace(/\s+/g, " ").trim();
+  // Paragraphs are kept, split by a blank line; other whitespace is folded
+  text = text
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n\n");
   if (text) await client.hSet(key.post(id), "text", text);
   else await client.hDel(key.post(id), "text");
   return get(id);

@@ -260,7 +260,7 @@
 }
 
 /* A post's text above its photos, when the maintainer turned it on: the
-   title and the post's paragraphs, clipped at 4 lines. When clipped
+   title and the post's paragraphs, clipped at 3 lines. When clipped
    (.clamped, set by app/views/js/discover.js) the last line fades into a
    grey "See more", as in the maintainer's reference. */
 .discover-text {
@@ -272,8 +272,8 @@
 .discover-text-clip {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
   overflow: hidden;
 }
 
@@ -392,6 +392,11 @@
   margin-top: 8px;
   border: 1px solid var(--border-color);
   border-radius: 12px;
+  transition: border-color 0.1s ease;
+}
+
+.discover-link-card:hover {
+  border-color: var(--dark-border-color);
 }
 
 /* The site's address, under a rule */
