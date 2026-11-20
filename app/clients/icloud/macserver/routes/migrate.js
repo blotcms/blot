@@ -1,7 +1,7 @@
 import fs from "fs-extra";
 import { join } from "path";
 import { iCloudDriveDirectory } from "../config.js";
-import { refresh, rootOf } from "../blogFolder.js";
+import { refresh, removeContainer, rootOf } from "../blogFolder.js";
 import sharePermission from "../util/sharePermission.js";
 import { setupBlog, shareInfo } from "./setup.js";
 import leaveFolder from "../util/leaveFolder.js";
@@ -31,6 +31,34 @@ const collaborationID = async (path) => {
   } catch {
     return null;
   }
+};
+
+// After a failed rejoin, or a rejoin that brought back some other folder:
+// whatever setup left in blog_<id> is taken off this Mac (only ever the
+// share Blot joined, never anyone's files), and the blog is marked as having
+// lost its folder. Blot's validation and resyncs skip a blog with an error
+// stored, so nothing is synced from or to the wrong folder, and the dashboard
+// asks the owner to share their folder again.
+const quarantine = async (blogID, reason) => {
+  console.error(clfdate(), `MIGRATION FAILED for ${blogID}: ${reason}`);
+  try {
+    const layout = await refresh(blogID);
+    if (layout.nested) {
+      if (layout.root)
+        await finderLimiter.schedule(() =>
+          leaveFolder(layout.root, { root: iCloudDriveDirectory })
+        );
+      await removeContainer(blogID);
+    }
+  } catch (error) {
+    console.error(clfdate(), `Quarantine cleanup for ${blogID}:`, error);
+  }
+  await status(blogID, {
+    error: "Blog directory deleted",
+    errorCode: "SOURCE_MISSING",
+  }).catch((error) =>
+    console.error(clfdate(), `Quarantine status for ${blogID}:`, error.message)
+  );
 };
 
 export default async (req, res) => {
@@ -65,20 +93,24 @@ export default async (req, res) => {
   // Leave the share first: opening a link to a share this Mac is still in
   // brings no new folder for setup to find. Through the Finder queue setup
   // uses too, so the two never drive Finder at once
-  let result;
   try {
     await finderLimiter.schedule(() =>
       leaveFolder(container, { root: iCloudDriveDirectory })
     );
+  } catch (error) {
+    // Nothing changed: carry on as before
+    console.error(clfdate(), `Migration of ${blogID} could not leave:`, error);
+    await watch(blogID);
+    return res.status(500).send(`Leave failed: ${error.message}`);
+  }
+
+  let result;
+  try {
     result = await setupBlog(blogID, sharingLink, (stage) =>
       console.log(clfdate(), `Migrating ${blogID}: ${stage}`)
     );
   } catch (error) {
-    console.error(
-      clfdate(),
-      `MIGRATION FAILED for ${blogID}, its folder may be gone:`,
-      error.message
-    );
+    await quarantine(blogID, `rejoin failed: ${error.message}`);
     return res.status(500).send(`Rejoin failed: ${error.message}`);
   }
 
@@ -93,13 +125,10 @@ export default async (req, res) => {
     // no folder: after stays null
   }
   if (after !== before) {
-    console.error(
-      clfdate(),
-      `MIGRATION for ${blogID} came back with another share (${before} -> ${after}): not watched, not resynced`
-    );
+    await quarantine(blogID, `another share came back (${before} -> ${after})`);
     return res
       .status(500)
-      .send(`Another share came back (${after}); ${blogID} is left unwatched`);
+      .send(`Another share came back (${after}); ${blogID} is quarantined`);
   }
 
   await watch(blogID);
