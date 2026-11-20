@@ -7,6 +7,8 @@ const createDriveActivityClient = require("./serviceAccount/createDriveActivityC
 const refreshServiceAccounts = require("./serviceAccount/refreshServiceAccounts");
 const pollDriveActivity = require("./serviceAccount/pollDriveActivity");
 const readChanges = require("./serviceAccount/readChanges");
+const searchEdits = require("./serviceAccount/searchEdits");
+const syncChanges = require("./serviceAccount/syncChanges");
 const createDriveClient = require("./serviceAccount/createDriveClient");
 const hotDocPoller = require("./serviceAccount/hotDocPoller");
 const { restartSetupProcesses } = require("./routes/setup");
@@ -41,15 +43,29 @@ const startActivityPolling = () => {
   return leases;
 };
 
-// One process at a time reads each service account's changes.list (see
-// serviceAccount/readChanges.js), with takeover like the activity polling.
+// One process at a time reads each service account's changes.list and runs
+// its search for recent edits (serviceAccount/readChanges.js and
+// searchEdits.js), with takeover like the activity polling. Both sync the
+// blogs a change belongs to (serviceAccount/syncChanges.js), beside the
+// changes.watch webhook, which is often seconds late (#2847).
 const startChangesReading = () => {
-  const leases = getServiceAccounts().map(({ client_id: serviceAccountId }) =>
-    lock.lease("google-drive-changes:" + serviceAccountId, async (signal) => {
-      const drive = await createDriveClient(serviceAccountId);
-      console.log(prefix(), "Reading changes for", serviceAccountId);
-      await readChanges(serviceAccountId, drive, signal);
-    })
+  const leases = getServiceAccounts().flatMap(
+    ({ client_id: serviceAccountId }) => [
+      lock.lease("google-drive-changes:" + serviceAccountId, async (signal) => {
+        const drive = await createDriveClient(serviceAccountId);
+        console.log(prefix(), "Reading changes for", serviceAccountId);
+        await readChanges(serviceAccountId, drive, signal, {
+          onChanges: syncChanges,
+        });
+      }),
+      lock.lease("google-drive-search:" + serviceAccountId, async (signal) => {
+        const drive = await createDriveClient(serviceAccountId);
+        console.log(prefix(), "Searching for edits for", serviceAccountId);
+        await searchEdits(serviceAccountId, drive, signal, {
+          onChanges: syncChanges,
+        });
+      }),
+    ]
   );
 
   drain.onStart(() => Promise.all(leases.map((lease) => lease.stop())));

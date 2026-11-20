@@ -14,9 +14,9 @@
 // after a deploy carries on where the last one stopped. init.js runs one
 // reader per service account, under a lease, in one process at a time.
 //
-// For now this only logs each change (with its lag from Google's change time)
-// so the webhook's delay can be measured across every customer; a later step
-// starts syncs from it.
+// Each change is logged with its lag from Google's change time, so the
+// webhook's delay can be measured across every customer, and init.js passes
+// an onChanges which syncs the blogs it belongs to (syncChanges.js).
 const client = require("models/client");
 const clfdate = require("helper/clfdate");
 const database = require("clients/google-drive/database");
@@ -124,13 +124,14 @@ async function placeChanges(blogs, changes) {
 const kindOf = (change) =>
   change.removed ? "removed" : change.file?.trashed ? "trashed" : "changed";
 
-function logChanges(serviceAccountId, placed) {
+function logChanges(serviceAccountId, placed, source = "changes") {
   const now = Date.now();
   for (const { change, blogID, path, parentPath } of placed) {
     const lag = change.time ? now - Date.parse(change.time) : "";
     console.log(
       prefix(),
       `client_id=${serviceAccountId}`,
+      `source=${source}`,
       `file=${change.fileId}`,
       `blog=${blogID || "-"}`,
       `kind=${kindOf(change)}`,
@@ -227,4 +228,6 @@ module.exports = async function readChanges(
 };
 
 module.exports.placeChanges = placeChanges;
+module.exports.blogsOf = blogsOf;
+module.exports.logChanges = logChanges;
 module.exports.tokenKey = tokenKey;
