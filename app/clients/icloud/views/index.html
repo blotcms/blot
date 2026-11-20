@@ -42,7 +42,7 @@
 
         <li class="{{#setup.shareProblem}}problem{{/setup.shareProblem}}">
           {{#setup.shareProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.shareProblem}}
-          <span class="step-title">Share it with Blot</span>
+          <span class="step-title">Share the folder with this address</span>
           {{#setup.shareProblem}}<span class="step-problem">{{setup.shareProblem}}</span>{{/setup.shareProblem}}
           <span class="icloud-address">
             <span class="icloud-email">{{blotiCloudAccount}}</span>
@@ -81,7 +81,7 @@
                     <span class="mac-btn mac-btn-primary">Copy Link</span>
                   </div>
                 </div>
-                <figcaption><span class="ui-label">Copy Link</span> stays grey until Blot’s iCloud account is in <span class="ui-label">To</span>.</figcaption>
+                <figcaption><span class="ui-label">Copy Link</span> stays grey until the address is in <span class="ui-label">To</span>.</figcaption>
               </figure>
             </div>
           </details>
@@ -113,7 +113,7 @@
           {{#setup.copying}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.copying}}
           {{#setup.transferFailed}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.transferFailed}}
           {{#setup.joining}}{{^setup.slow}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.slow}}{{#setup.slow}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.slow}}{{/setup.joining}}
-          <span class="step-title">Blot joins your folder</span>
+          <span class="step-title">Joining your folder</span>
           {{#setup.joining}}
           {{^setup.slow}}
           <span class="step-text icloud-progress icloud-join-progress">{{> sync-status}}</span>
@@ -136,7 +136,7 @@
         <li class="{{#setup.joining}}todo{{/setup.joining}}{{#setup.copying}}active{{/setup.copying}}{{#setup.transferFailed}}problem{{/setup.transferFailed}}">
           {{#setup.copying}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.copying}}
           {{#setup.transferFailed}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.transferFailed}}
-          <span class="step-title">Blot copies your site’s files into it</span>
+          <span class="step-title">Copying your site’s files</span>
           {{#setup.copying}}
           <span class="step-text">Don’t change the folder until this finishes.</span>
           <span class="step-text icloud-progress">{{> sync-status}}</span>

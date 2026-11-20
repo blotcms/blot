@@ -18,16 +18,14 @@ const setupLimiter = finderLimiter;
 // setupErrorReason, which the dashboard uses to put the problem on the step
 // that fixes it; the text is for logs and for a dashboard that predates it.
 const SETUP_ERRORS = {
-  NO_ACCESS:
-    "This folder isn’t shared with Blot’s iCloud account. Share it, then try again.",
-  PRIVATE:
-    "This folder isn’t shared with Blot’s iCloud account. Share it, then try again.",
+  NO_ACCESS: "This folder isn’t shared yet. Share it, then try again.",
+  PRIVATE: "This folder isn’t shared yet. Share it, then try again.",
   INVALID_LINK:
     "This link doesn’t open an iCloud Drive folder. Copy it again from Finder, then try again.",
   TIMEOUT:
-    "iCloud took too long to share the folder with Blot. Check the link, then try again.",
+    "iCloud took too long to share the folder. Check the link, then try again.",
   READ_ONLY:
-    "Blot can only view this folder. Give Blot’s iCloud account permission to make changes, then try again.",
+    "This folder is shared as view only. Allow changes, then try again.",
 };
 
 const setupError = (reason) =>
@@ -370,7 +368,7 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
       // Writes to a view-only share succeed here but never reach iCloud, so
       // turn one down now rather than let the transfer report success. Take
       // the folder off this Mac so a retry with the fixed share starts clean
-      progress("Checking Blot can make changes in the folder");
+      progress("Checking permission to make changes");
       const permission = await sharePermission(newPath);
       lap("permission");
       console.log(clfdate(), `Share permission for ${blogID}: ${permission}`);
@@ -378,7 +376,7 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
         await leaveFolder(newPath, { root: iCloudDriveDirectory });
         throw setupError("READ_ONLY");
       }
-      progress("Blot can make changes in the folder");
+      progress("Permission to make changes confirmed");
       console.log(
         clfdate(),
         `Setup timings: ${Object.entries(timings)
@@ -793,7 +791,7 @@ export default async (req, res) => {
   };
 
   // A setup waits here while another one drives Finder
-  progress("Waiting for Blot’s Mac");
+  progress("Starting");
 
   setupBlog(blogID, sharingLink, progress)
     .then(() => {
