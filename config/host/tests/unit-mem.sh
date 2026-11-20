@@ -25,10 +25,11 @@ ID=abc123
 DIR=$CG/system.slice/docker-$ID.scope
 mkdir -p "$PROC" "$DIR"
 touch "$CG/cgroup.controllers"
-printf 'anon 1048576\nfile 2097152\nshmem 0\n' > "$DIR/memory.stat"
+printf 'anon 1048576\nfile 2097152\nshmem 0\nworkingset_refault_file 256\n' > "$DIR/memory.stat"
+printf 'some avg10=0.00 avg60=0.00 avg300=0.00 total=1500000\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=500000\n' > "$DIR/memory.pressure"
 echo 1073741824 > "$DIR/memory.max"
 echo 4194304 > "$DIR/memory.peak"
-echo "oom_kill 0" > "$DIR/memory.events"
+printf 'max 7\noom_kill 0\n' > "$DIR/memory.events"
 printf 'MemTotal: 1000 kB\nMemAvailable: 500 kB\nSwapTotal: 0 kB\nSwapFree: 0 kB\n' > "$PROC/meminfo"
 
 printf '#!/bin/sh\necho %s\n' "$ID" > "$TMP/docker"
@@ -89,7 +90,7 @@ check "top is the child-process spike" test "$(field top)" = "pandoc:$(bytes 90)
 check "peak is kept" test "$(field peak)" = 4194304
 check "the new fields come after the old ones" \
   test "$(grep ' name=blot-blue ' "$LOG" | head -1 | sed 's/.* top=[^ ]* //')" = \
-  "peak=4194304 broker=$(bytes 300) proxy=0 openresty=$(bytes 60) openresty_n=3"
+  "peak=4194304 broker=$(bytes 300) proxy=0 openresty=$(bytes 60) openresty_n=3 refault=256 pressure_some=1500000 pressure_full=500000 at_max=7"
 
 # An old line has none of the new fields; the summary has to take both.
 echo "2026-11-01T00:00:00Z name=blot-blue anon=1 file=1 shmem=0 limit=0 oom_kill=0 node_max=1 node_sum=1 node_a=1 node_b=0 node_other=0 git=0 git_n=0 top=-:0" >> "$LOG"
@@ -99,6 +100,17 @@ UNIT_MEM_OLD=$TMP/none "$SCRIPTS/unit-mem-summary.sh" "$LOG" > "$OUT"
 check "the summary reports the new fields" \
   grep -q 'broker max 0 MiB p99 0 MiB, proxy jail max 0 MiB p99 0 MiB, openresty max 0 MiB p99 0 MiB in up to 3 processes' "$OUT"
 check "the summary counts every line" grep -q '^blot-blue: 3 samples' "$OUT"
+
+# The page cache counters are cumulative per container: the summary adds up
+# their rises, and a new container's counter starting lower begins again.
+SQ=$TMP/squeeze.log
+for v in "100 1000000 0 1" "356 3000000 500000 4" "50 500000 0 1"; do
+  set -- $v
+  echo "2026-11-03T00:00:00Z name=blot-blue anon=1 file=1 shmem=0 limit=0 oom_kill=0 node_max=1 node_sum=1 node_a=1 node_b=0 node_other=0 git=0 git_n=0 top=-:0 broker=0 proxy=0 openresty=0 openresty_n=0 refault=$1 pressure_some=$2 pressure_full=$3 at_max=$4" >> "$SQ"
+done
+UNIT_MEM_OLD=$TMP/none "$SCRIPTS/unit-mem-summary.sh" "$SQ" > "$OUT"
+check "the summary adds up the page cache squeeze across a restart" \
+  grep -q 'page cache: 1 MiB re-read (refaults), waited on memory 2.5 s (some) 0.5 s (full), at the limit 4 times' "$OUT"
 
 # Bigger values, so MiB are not all zero.
 BIG=$TMP/big.log

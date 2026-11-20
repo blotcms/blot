@@ -70,7 +70,12 @@ to be counted in `node_other`, which is now only the `docker exec` scripts; and
 the proxy jail, retired, so `proxy` reads 0 and is kept to keep the lines'
 shape) and `openresty` and `openresty_n` (the summed RSS and
 count of the unit's nginx/openresty processes). Lines from before these four
-fields lack them. Plus one `name=host` line with `mem_available`, `mem_total`
+fields lack them. Last, on cgroup v2, how hard the limit squeezes the page
+cache, each cumulative for the cgroup: `refault` (file pages read back in after
+the kernel dropped them), `pressure_some` and `pressure_full` (microseconds
+some or all of its tasks waited on memory) and `at_max` (times it reached its
+limit). The summary adds up their rises over the window, so a lower limit that
+starts costing renders disk reads shows there first. Plus one `name=host` line with `mem_available`, `mem_total`
 and `swap_used`. Where the host has a sandbox subtree
 (#2257) there are also `name=blot-sandbox-<unit>` and
 `name=blot-sandbox-<unit>-browser` lines: jobs are short, so read their `peak`
