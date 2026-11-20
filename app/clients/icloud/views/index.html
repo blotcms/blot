@@ -9,7 +9,7 @@
   <span class="label">Folder</span>
   <span class="center">
     Setup complete
-    <span class="icloud-note">You can now rename or move the folder, and edit its files in iCloud Drive.</span>
+    <span class="icloud-note">You can rename or move the folder.</span>
   </span>
 </div>
 
@@ -21,7 +21,7 @@
 {{#setup.share}}
 {{#blog.healthIssue}}
 <p class="error">{{message}}</p>
-<p>Share a folder with Blot again below. Blot will copy your site’s files into it, so nothing is lost.</p>
+<p>Share a folder again below. Nothing will be lost.</p>
 {{/blog.healthIssue}}
 {{/setup.share}}
 
@@ -38,17 +38,18 @@
         <li class="{{#setup.linked}}done{{/setup.linked}}{{#setup.shareProblem}} problem{{/setup.shareProblem}}">
           {{#setup.linked}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.linked}}
           {{#setup.shareProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.shareProblem}}
-          <span class="step-title">Share a folder with Blot</span>
+          <span class="step-title">Share an iCloud Drive folder with Blot</span>
           {{#setup.shareProblem}}<span class="step-problem">{{setup.shareProblem}}</span>{{/setup.shareProblem}}
           {{^setup.linked}}
-          <span class="step-text">Share a folder in iCloud Drive with:</span>
-          <span class="icloud-email">{{blotiCloudAccount}}</span>
-          <button class="copy" data-copy="{{blotiCloudAccount}}"><span class="icon-copy"></span> Copy</button>
+          <span class="icloud-address">
+            <span class="icloud-email">{{blotiCloudAccount}}</span>
+            <button class="copy" data-copy="{{blotiCloudAccount}}"><span class="icon-copy"></span> Copy</button>
+          </span>
 
           <ol class="icloud-howto">
             <li>Control-click the folder in Finder and choose <b>Share…</b></li>
             <li>Choose <b>Collaborate</b>, then <b>Invite with Link</b>.</li>
-            <li>Add the address above in <b>To</b> and click <b>Copy Link</b>.</li>
+            <li>Add the address in <b>To</b>, then click <b>Copy Link</b>.</li>
           </ol>
 
           <details class="icloud-show-me">
@@ -89,9 +90,6 @@
           {{#setup.linked}}<span class="step-icon done"><span class="icon-small-check"></span></span>{{/setup.linked}}
           {{#setup.linkProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.linkProblem}}
           <span class="step-title">Paste the folder’s link</span>
-          {{#setup.linked}}
-          <span class="step-text icloud-link">{{setup.sharingLink}}</span>
-          {{/setup.linked}}
           {{#setup.linkProblem}}<span class="step-problem">{{setup.linkProblem}}</span>{{/setup.linkProblem}}
           {{^setup.linked}}
           <form class="dashboard-form icloud-link-form" action="{{{base}}}/set-up-folder" method="post">
@@ -112,10 +110,10 @@
           <span class="step-title">Blot sets up the folder</span>
           {{#setup.joining}}
           {{^setup.slow}}
-          <span class="step-text">Joining your folder, usually in under 30 seconds.</span>
+          <span class="step-text">Usually takes under 30 seconds.</span>
           {{/setup.slow}}
           {{#setup.slow}}
-          <span class="step-problem">This is taking longer than usual. Click <b>Try again</b>. If it still doesn’t finish, <a href="/contact">contact us</a>.</span>
+          <span class="step-problem">This is taking too long. Try again, or <a href="/contact">contact us</a>.</span>
           {{/setup.slow}}
           {{/setup.joining}}
           {{#setup.copying}}
@@ -123,19 +121,25 @@
           <span class="step-text icloud-progress">{{> sync-status}}</span>
           {{/setup.copying}}
           {{#setup.transferFailed}}
-          <span class="step-problem">Blot couldn’t finish copying your site’s files into the folder. Nothing was removed. Click <b>Try again</b>.{{#setup.transferDetail}} ({{setup.transferDetail}}){{/setup.transferDetail}}</span>
+          <span class="step-problem">Copying didn’t finish. Nothing was removed.{{#setup.transferDetail}} ({{setup.transferDetail}}){{/setup.transferDetail}}</span>
           {{/setup.transferFailed}}
           {{#setup.slow}}
           <form action="{{{base}}}/set-up-folder" method="post" class="icloud-retry">
             <input type="hidden" name="_csrf" value="{{csrftoken}}">
             <input type="hidden" name="sharingLink" value="{{setup.sharingLink}}">
-            <div class="buttons"><button type="submit">Try again</button></div>
+            <div class="buttons">
+              <button type="submit">Try again</button>
+              <button type="submit" form="icloud-cancel-form">Cancel setup</button>
+            </div>
           </form>
           {{/setup.slow}}
           {{#setup.transferFailed}}
           <form action="{{{base}}}/retry-transfer" method="post" class="icloud-retry">
             <input type="hidden" name="_csrf" value="{{csrftoken}}">
-            <div class="buttons"><button type="submit">Try again</button></div>
+            <div class="buttons">
+              <button type="submit">Try again</button>
+              <button type="submit" form="icloud-cancel-form">Cancel setup</button>
+            </div>
           </form>
           {{/setup.transferFailed}}
         </li>
@@ -144,9 +148,9 @@
     </div>
 
     {{#setup.linked}}
-    <form action="{{{base}}}/disconnect" method="post" class="icloud-cancel">
+    <form action="{{{base}}}/disconnect" method="post" class="icloud-cancel" id="icloud-cancel-form">
       <input type="hidden" name="_csrf" value="{{csrftoken}}">
-      <div class="buttons"><button type="submit">Cancel setup</button></div>
+      {{#setup.working}}<div class="buttons"><button type="submit">Cancel setup</button></div>{{/setup.working}}
     </form>
     {{/setup.linked}}
   </div>
@@ -183,12 +187,36 @@
   font-size: 14px;
 }
 
+/* Beside its label like every other line, and above the steps on a phone */
+.icloud-setup-line .label {
+  flex-basis: 30%;
+}
+
 .icloud-setup-line .center {
   display: block;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .icloud-setup-line .label,
+  .icloud-setup-line .center {
+    flex-basis: 100%;
+  }
+}
+
+/* On a first visit there is no status line above to draw the top rule */
+.live-updates > .icloud-setup-line:first-child {
+  border-top: 1px solid var(--border-color);
 }
 
 .icloud-steps ol li {
-  margin-bottom: 1.4em;
+  margin-bottom: 1.1em;
+}
+
+/* Keeps the connector between finished steps from shrinking to a stub */
+.icloud-steps ol li.done {
+  min-height: 1.6em;
 }
 
 .icloud-steps .step-title {
@@ -206,7 +234,10 @@
 }
 
 .icloud-steps .step-problem {
-  color: var(--orange, #c25e00);
+  color: #c25e00;
+  margin: 4px 0 10px;
+  max-width: 480px;
+  text-wrap: pretty;
 }
 
 /* A finished or failing step shows an icon in place of its number */
@@ -218,7 +249,7 @@
 
 .icloud-steps .step-icon {
   position: absolute;
-  top: 2px;
+  top: 0;
   left: -32px;
   width: 1.25rem;
   height: 1.25rem;
@@ -233,7 +264,12 @@
 }
 
 .icloud-steps .step-icon.problem {
-  color: orange;
+  color: #c25e00;
+}
+
+.icloud-steps .step-icon.done,
+.icloud-steps .step-icon.problem {
+  font-size: 16px;
 }
 
 .icloud-steps ol li.done .step-title {
@@ -245,13 +281,31 @@
   color: var(--light-text-color);
 }
 
+/* The one value to carry over to Finder */
+.icloud-address {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: 8px 0 2px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--light-background-color);
+  max-width: 100%;
+}
+
 .icloud-email {
   font-weight: 600;
-  margin-right: 6px;
+  white-space: nowrap;
+}
+
+.icloud-address .copy {
+  margin: 0;
 }
 
 .icloud-steps ol.icloud-howto {
-  list-style: decimal;
+  list-style: lower-alpha;
   counter-reset: none;
   padding-left: 20px;
   margin: 10px 0 6px;
@@ -273,13 +327,19 @@
   overflow-wrap: anywhere;
 }
 
-.icloud-link-form {
+.icloud-steps form.icloud-link-form {
   margin-top: 8px;
+  width: auto;
+  max-width: 520px;
 }
 
-.icloud-link-form input[name="sharingLink"] {
+.icloud-steps form.icloud-link-form .buttons {
+  margin: 12px 0 0;
+}
+
+.icloud-steps form.icloud-link-form input[name="sharingLink"] {
   width: 100%;
-  max-width: 520px;
+  max-width: 100%;
 }
 
 .icloud-show-me {
@@ -318,9 +378,12 @@
 .mac-demo {
   display: flex;
   flex-wrap: wrap;
-  gap: 16px 20px;
-  align-items: flex-start;
+  gap: 12px;
+  align-items: stretch;
   margin: 10px 0 4px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--light-background-color);
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   font-size: 13px;
   line-height: 16px;
@@ -330,11 +393,21 @@
 
 .mac-step {
   margin: 0;
-  width: 240px;
+  width: 212px;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 600px) {
+  .mac-step {
+    width: 100%;
+    max-width: 300px;
+  }
 }
 
 .mac-step figcaption {
-  margin-top: 8px;
+  margin-top: auto;
+  padding-top: 8px;
   font-family: var(--font-family);
   font-size: 13px;
   line-height: 1.4;
@@ -345,7 +418,7 @@
 .mac-sheet {
   border-radius: 10px;
   border: 0.5px solid rgba(0, 0, 0, 0.14);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 .mac-popover {
@@ -464,6 +537,7 @@
 
 .mac-hl {
   background: #c1c2c3;
+  box-shadow: 0 0 0 2px var(--accent-color);
 }
 
 .mac-app {
@@ -568,8 +642,8 @@
 }
 
 .icloud-steps .step-icon .icloud-spinner {
-  width: 14px;
-  height: 14px;
+  width: 10px;
+  height: 10px;
 }
 
 @keyframes icloud-spin {
@@ -578,8 +652,9 @@
   }
 }
 
-.icloud-retry {
-  margin-top: 8px;
+.icloud-retry .buttons,
+.icloud-cancel .buttons {
+  margin: 10px 0 0;
 }
 
 /* While copying, show the status line only for progress: an idle "Synced"
@@ -588,7 +663,12 @@
   display: none;
 }
 
+/* Under the step text, at its natural width: a quiet way out while it runs */
 .icloud-cancel {
-  margin-top: 4px;
+  margin-left: 32px;
+}
+
+.icloud-cancel .buttons > * {
+  flex-grow: 0;
 }
 </style>

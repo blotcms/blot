@@ -92,7 +92,7 @@ describe("icloud setupState", function () {
       linkError: "format",
       sharingLink: "dropbox.com/x",
     });
-    expect(state.linkProblem).toContain("iclouddrive");
+    expect(state.linkProblem).toContain("Copy Link");
     expect(state.sharingLink).toBe("dropbox.com/x");
     expect(setupState(null, { email, linkError: "empty" }).linkProblem).toEqual(
       jasmine.any(String)

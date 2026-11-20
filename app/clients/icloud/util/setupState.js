@@ -12,22 +12,21 @@ const { isSetupError } = require("../error");
 
 const SHARE_PROBLEMS = {
   PRIVATE:
-    "This folder isn’t shared with {email}. Share it as shown below, then copy the link again and paste it in step 2.",
+    "This folder isn’t shared with {email}. Share it as shown below, then paste the new link.",
   NO_ACCESS:
-    "This folder isn’t shared with {email}. Share it as shown below, then copy the link again and paste it in step 2.",
+    "This folder isn’t shared with {email}. Share it as shown below, then paste the new link.",
   READ_ONLY:
-    "Blot can only view this folder, so it can’t add your site’s files. In Finder, choose Share… › Manage Shared Folder, set Blot’s iCloud account to “Can make changes”, then click Connect folder.",
+    "Blot can only view this folder. In Finder, choose Share… › Manage Shared Folder, set Blot to “Can make changes”, then click Connect folder.",
 };
 
 const LINK_PROBLEMS = {
   INVALID_LINK:
-    "This link doesn’t open a shared folder. Copy it again in Finder (Share… › Copy Link) and paste it below.",
-  TIMEOUT:
-    "iCloud took too long to give Blot the folder. Check this is the link to the folder you shared, then click Connect folder.",
+    "This link doesn’t open a shared folder. Copy it again in Finder.",
+  TIMEOUT: "iCloud took too long. Check the link, then click Connect folder.",
 };
 
 const FORMAT_PROBLEM =
-  "That isn’t an iCloud Drive folder link. Use Copy Link in Finder; the link starts with https://www.icloud.com/iclouddrive/";
+  "That isn’t an iCloud Drive folder link. Use Copy Link in Finder.";
 
 const SLOW_JOIN_MS = 2 * 60 * 1000;
 
