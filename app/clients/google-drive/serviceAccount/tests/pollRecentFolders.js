@@ -94,4 +94,39 @@ describe("google drive pollRecentFolders", function () {
     // One round, then the ten second pause
     expect(lists).toBe(1);
   });
+
+  it("paces its rounds by every files.list call, pages included", async function () {
+    const controller = new AbortController();
+    const rounds = [];
+    const poll = load(async () => {
+      rounds.push(Date.now());
+      if (rounds.length > 1) {
+        controller.abort();
+        return [];
+      }
+      return [{ blogID: "blog_a", dirId: "big" }];
+    });
+
+    // One directory that takes 24 pages to list: 1.5s of the budget
+    let calls = 0;
+    const drive = {
+      files: {
+        list: async () => {
+          calls += 1;
+          return { data: { files: [] } };
+        },
+      },
+    };
+    await poll("sa", drive, controller.signal, {
+      everyMs: 1,
+      readdir: async (counted) => {
+        for (let i = 0; i < 24; i++) await counted.files.list({});
+        return [];
+      },
+      onChanged: async () => {},
+    });
+
+    expect(calls).toBe(24);
+    expect(rounds[1] - rounds[0]).toBeGreaterThanOrEqual(1400);
+  });
 });

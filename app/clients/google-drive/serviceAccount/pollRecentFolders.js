@@ -18,8 +18,9 @@
 // seen_by= says when this poller saw it first) and runs the blog's sync.
 //
 // Rate: at most LISTINGS_PER_SECOND files.list calls per service account,
-// the newest MAX_DIRS directories, so a round takes longer than 500ms only
-// when more than 8 directories are recent. Drive allows far more listings
+// counting every page of a large directory, for the newest MAX_DIRS
+// directories, so a round takes longer than 500ms only when it made more
+// than 8 calls. Drive allows far more listings
 // per service account than that (a walk lists 16 directories at once).
 const clfdate = require("helper/clfdate");
 const database = require("../database");
@@ -86,10 +87,21 @@ module.exports = async function pollRecentFolders(
   // "<blogID> <dirId>" -> the fingerprint of its last listing
   const last = new Map();
 
+  // Counts each files.list call, every page included, for the rate
+  let calls = 0;
+  // googleapis puts the methods on prototypes, so these inherit them
+  const counted = Object.create(drive);
+  counted.files = Object.create(drive.files);
+  counted.files.list = (...args) => {
+    calls += 1;
+    return drive.files.list(...args);
+  };
+
   while (!signal.aborted) {
     const startedAt = now();
     let dirs = [];
     let rateLimited = false;
+    calls = 0;
     try {
       dirs = await database.recent.list(serviceAccountId, MAX_DIRS, now());
       const listed = new Set(
@@ -101,7 +113,7 @@ module.exports = async function pollRecentFolders(
       const results = await Promise.all(
         dirs.map(async ({ blogID, dirId }) => {
           try {
-            return { blogID, dirId, items: await readdir(drive, dirId) };
+            return { blogID, dirId, items: await readdir(counted, dirId) };
           } catch (err) {
             if ([403, 429].includes(statusOf(err))) rateLimited = true;
             // A folder gone from Drive is the other sources' to apply
@@ -145,7 +157,7 @@ module.exports = async function pollRecentFolders(
 
     const round = Math.max(
       everyMs,
-      Math.ceil((dirs.length / LISTINGS_PER_SECOND) * 1000)
+      Math.ceil((Math.max(calls, dirs.length) / LISTINGS_PER_SECOND) * 1000)
     );
     await sleep(round - (now() - startedAt), signal);
   }
