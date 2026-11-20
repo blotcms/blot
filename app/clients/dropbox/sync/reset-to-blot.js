@@ -750,6 +750,11 @@ const remoteReaddir = (client, dir) =>
 const createReaddir = async (client, dropboxRoot, publish) => {
   const root = dropboxRoot === "/" ? "" : dropboxRoot.toLowerCase();
   const byParent = new Map();
+  // Folders the listing has, so an empty one can be told apart from one whose
+  // path didn't match (a different lowercasing or Unicode form): an unmatched
+  // folder is listed by itself, never taken for empty, which would remove its
+  // files from Blot
+  const folders = new Set(["/"]);
 
   try {
     const entries = await listPages(
@@ -763,6 +768,7 @@ const createReaddir = async (client, dropboxRoot, publish) => {
       if (!path || !path.startsWith(root + "/")) continue;
       const relative = path.slice(root.length);
       const parent = relative.slice(0, relative.lastIndexOf("/")) || "/";
+      if (entry.is_directory) folders.add(relative);
       if (!byParent.has(parent)) byParent.set(parent, []);
       byParent.get(parent).push(entry);
     }
@@ -775,7 +781,15 @@ const createReaddir = async (client, dropboxRoot, publish) => {
     return (dir) => remoteReaddir(client, join(dropboxRoot, dir));
   }
 
-  return async (dir) => byParent.get(dir.toLowerCase()) || [];
+  return async (dir) => {
+    const key = dir.toLowerCase();
+    if (byParent.has(key)) return byParent.get(key);
+    if (folders.has(key)) return [];
+    return remoteReaddir(client, join(dropboxRoot, dir));
+  };
 };
 
 module.exports = resetToBlot;
+
+// For specs
+module.exports.createReaddir = createReaddir;

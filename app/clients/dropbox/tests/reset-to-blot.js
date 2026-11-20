@@ -1024,4 +1024,70 @@ describe("dropbox resetToBlot", function () {
       expect(saved.length).toEqual(0);
     });
   });
+
+  describe("createReaddir", function () {
+    const folder = (path) => ({
+      ".tag": "folder",
+      name: path.split("/").pop(),
+      path_lower: path.toLowerCase(),
+      path_display: path,
+    });
+    const file = (path) => ({
+      ".tag": "file",
+      name: path.split("/").pop(),
+      path_lower: path.toLowerCase(),
+      path_display: path,
+    });
+
+    function client(entries, perFolder) {
+      return {
+        perFolderCalls: [],
+        filesListFolder: async function (args) {
+          if (args.recursive)
+            return { result: { entries, has_more: false, cursor: "c" } };
+          this.perFolderCalls.push(args.path);
+          return {
+            result: {
+              entries: perFolder[args.path] || [],
+              has_more: false,
+              cursor: "c",
+            },
+          };
+        },
+        filesListFolderContinue: async () => {
+          throw new Error("not paged");
+        },
+      };
+    }
+
+    it("reads folders from one recursive listing, and an empty one as empty", async function () {
+      const { createReaddir } = require("../sync/reset-to-blot");
+      const stub = client(
+        [folder("/A"), file("/A/x.md"), folder("/Empty"), file("/y.md")],
+        {}
+      );
+      const readdir = await createReaddir(stub, "/", () => {});
+
+      expect((await readdir("/")).map((e) => e.name).sort()).toEqual([
+        "A",
+        "Empty",
+        "y.md",
+      ]);
+      expect((await readdir("/A")).map((e) => e.name)).toEqual(["x.md"]);
+      expect(await readdir("/Empty")).toEqual([]);
+      expect(stub.perFolderCalls).toEqual([]);
+    });
+
+    // An unmatched folder taken for empty would have its files removed
+    it("lists a folder by itself when its path isn't in the listing", async function () {
+      const { createReaddir } = require("../sync/reset-to-blot");
+      const stub = client([file("/y.md")], {
+        "/Other": [file("/Other/z.md")],
+      });
+      const readdir = await createReaddir(stub, "/", () => {});
+
+      expect((await readdir("/Other")).map((e) => e.name)).toEqual(["z.md"]);
+      expect(stub.perFolderCalls).toEqual(["/Other"]);
+    });
+  });
 });
