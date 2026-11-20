@@ -451,12 +451,15 @@ describe("dropbox resetToBlot", function () {
   });
 
   it("keeps updates and the old cursor when the walk throws part way", async function () {
-    const resetToBlot = load({
+    // Listed folder by folder, where the missing listing of /sub throws: a
+    // recursive listing would read /sub as an empty folder
+    load({
       "/": [
         file("a.txt"),
         { ".tag": "folder", name: "sub", path_display: "/sub" },
       ],
     });
+    const resetToBlot = refuseRecursiveListing();
     const update = jasmine
       .createSpy("update")
       .and.returnValue(Promise.resolve());
