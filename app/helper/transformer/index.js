@@ -476,6 +476,9 @@ function Transformer(blogID, name) {
     await tx.exec();
   }
 
+  // Stores a result for a file's content hash, as lookup would once it had
+  // transformed the file, for a caller that made the result another way
+  // (build/thumbnail/seed.js). The hash is helper/transformer/hash's of the file.
   async function set(hash, result) {
     ensure(hash, "string").and(result, "object");
 
@@ -497,6 +500,7 @@ function Transformer(blogID, name) {
 
   return {
     lookup: lookup,
+    set: set,
     flush: flush,
   };
 }
