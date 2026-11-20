@@ -190,6 +190,30 @@ function harness({
       }
     );
   state.queue = queue;
+  // As sync/index.js applies what a detection found
+  state.apply = () =>
+    module.exports(
+      "blog",
+      () => {},
+      async (path) => {
+        state.updates.push(path);
+      },
+      {
+        fullWalk: "if-asked",
+        dirty: {
+          FULL: "*",
+          take: async () => {
+            const ids = queue.shift() || [];
+            state.taken.push(ids);
+            return ids;
+          },
+          count,
+          members:
+            members || (async () => ((await count()) > 0 ? ["recorded"] : [])),
+          putBack: async (ids) => state.putBack.push(...ids),
+        },
+      }
+    );
   state.detect = (dirty) =>
     module.exports("blog", null, null, { detectOnly: true, dirty });
   return state;
@@ -306,6 +330,23 @@ describe("google-drive sync() with changed directories", function () {
     expect(summary).toBeTruthy();
     expect(h.putBack).toEqual([]);
     expect(h.taken.length).toBe(1);
+  });
+
+  it("applies what it took and returns, leaving what is recorded meanwhile to the next apply", async function () {
+    const h = harness({
+      local: allDirs,
+      dirty: ["dir-1"],
+      // A bulk upload into dir-1 keeps recording it
+      members: async () => ["dir-1"],
+      count: async () => 1,
+    });
+    h.queue.push(["dir-1"]);
+    const summary = await h.apply();
+
+    expect(summary).toBeTruthy();
+    expect(h.taken).toEqual([["dir-1"]]);
+    // No full walk, and the folder lock (held by the caller) is free again
+    expect(h.listed).toEqual(["dir-1"]);
   });
 
   it("puts what it took back when the sync fails", async function () {
