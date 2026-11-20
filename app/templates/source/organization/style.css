@@ -338,7 +338,9 @@ video {
    ------------------------------------------------------------------------ */
 .site-title {
   container-type: inline-size;
-  margin: 1.25rem calc(-1 * var(--pad)) 0;
+  /* A little wider than the columns: the capitals' side bearings bring
+     their edges back in line with them */
+  margin: 1.25rem calc(-0.25 * var(--pad)) 0;
   overflow: hidden;
 }
 
@@ -543,7 +545,7 @@ nav[aria-label="Pages"] {
   aspect-ratio: 4 / 3;
   margin: 0 0 0.75em;
   padding: 8%;
-  background: color-mix(in srgb, var(--ink) 5%, var(--paper));
+  background: #000;
 }
 
 .upcoming-image img {
@@ -788,12 +790,12 @@ nav[aria-label="Pages"] {
   text-indent: 0;
 }
 
-.text > :is(ul, ol, blockquote, pre, table, hr, figure, .callout, .lead, .steps, .note, .tip, .warning, .info, .success) {
+.text > :is(ul, ol, blockquote, pre, table, hr, figure, p:has(> img), .callout, .lead, .steps, .note, .tip, .warning, .info, .success) {
   margin-block: var(--leading-serif-l);
 }
 
 .text :is(h2, h3, h4) + p,
-.text :is(ul, ol, blockquote, table, figure, .carousel, .column, .wide, .margin, details, .callout, .buttons, .lead, .steps, .figures, .note, .tip, .warning, .info, .success) + p {
+.text :is(ul, ol, blockquote, table, figure, p:has(> img), .carousel, .column, .wide, .margin, details, .callout, .buttons, .lead, .steps, .figures, .note, .tip, .warning, .info, .success) + p {
   text-indent: 0;
 }
 
