@@ -1,5 +1,4 @@
 const v8 = require("v8");
-const { PerformanceObserver, constants } = require("perf_hooks");
 
 // Garbage collection and V8 heap figures for the [STATS] process line
 // (scheduler/render-cache-stats), to size --max-old-space-size and the render
@@ -8,48 +7,62 @@ const { PerformanceObserver, constants } = require("perf_hooks");
 // live set, the memory the process actually needs. Pauses show whether a
 // smaller heap limit would make the collector work harder: render time is
 // what a tighter limit would cost.
+//
+// v8.GCProfiler records the heap as each collection ends, so the figure is
+// not inflated by whatever ran before a callback could (a PerformanceObserver
+// reads the heap only once the event loop gets to it). It keeps a record per
+// collection until stopped, so it is restarted every 10 seconds and its
+// records folded into the counters below.
 const KINDS = {
-  [constants.NODE_PERFORMANCE_GC_MAJOR]: "major",
-  [constants.NODE_PERFORMANCE_GC_MINOR]: "minor",
-  [constants.NODE_PERFORMANCE_GC_INCREMENTAL]: "incremental",
-  [constants.NODE_PERFORMANCE_GC_WEAKCB]: "weakcb",
+  Scavenge: "minor",
+  MinorMarkSweep: "minor",
+  MarkSweepCompact: "major",
+  IncrementalMarking: "incremental",
+  ProcessWeakCallbacks: "weakcb",
 };
+const FOLD_MS = 10 * 1000;
 
 const gc = {};
-for (const kind of Object.values(KINDS))
+for (const kind of new Set(Object.values(KINDS)))
   gc[kind] = { count: 0, ms: 0, maxMs: 0 };
 
 // The heap used after each major collection: the most recent, the highest
 // since the last snapshot, and the highest since the process started
-let afterMajor = { last: 0, sinceSnapshot: 0, ever: 0 };
-let observer;
+const afterMajor = { last: 0, sinceSnapshot: 0, ever: 0 };
+let profiler;
+
+function fold() {
+  if (!profiler) return;
+  const result = profiler.stop();
+  profiler.start();
+  for (const record of (result && result.statistics) || []) {
+    const kind = KINDS[record.gcType] || "weakcb";
+    const stats = gc[kind];
+    const ms = record.cost / 1000; // cost is in microseconds
+    stats.count++;
+    stats.ms += ms;
+    if (ms > stats.maxMs) stats.maxMs = ms;
+    if (kind === "major") {
+      const used = record.afterGC.heapStatistics.usedHeapSize;
+      afterMajor.last = used;
+      if (used > afterMajor.sinceSnapshot) afterMajor.sinceSnapshot = used;
+      if (used > afterMajor.ever) afterMajor.ever = used;
+    }
+  }
+}
 
 function start() {
-  if (observer) return;
-  observer = new PerformanceObserver((list) => {
-    for (const entry of list.getEntries()) {
-      const kind = KINDS[entry.detail && entry.detail.kind] || "weakcb";
-      const stats = gc[kind];
-      stats.count++;
-      stats.ms += entry.duration;
-      if (entry.duration > stats.maxMs) stats.maxMs = entry.duration;
-      if (kind === "major") {
-        // The observer runs soon after the collection, before much new
-        // garbage, so this is close to the live set
-        const used = v8.getHeapStatistics().used_heap_size;
-        afterMajor.last = used;
-        if (used > afterMajor.sinceSnapshot) afterMajor.sinceSnapshot = used;
-        if (used > afterMajor.ever) afterMajor.ever = used;
-      }
-    }
-  });
-  observer.observe({ entryTypes: ["gc"] });
+  if (profiler || typeof v8.GCProfiler !== "function") return;
+  profiler = new v8.GCProfiler();
+  profiler.start();
+  setInterval(fold, FOLD_MS).unref();
 }
 
 // key=value fields: cumulative pause counts and times per kind, the heap
 // after major collections, V8's heap limit and contexts (a detached context
 // that stays is a leak), and each heap space's used bytes
 function fields() {
+  fold();
   const heap = v8.getHeapStatistics();
   const out = [
     "heap_limit=" + heap.heap_size_limit,
