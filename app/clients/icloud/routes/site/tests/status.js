@@ -10,6 +10,7 @@ const fixPath = require.resolve("sync/fix");
 const getHealthPath = require.resolve("../../../getHealth");
 const validateBlogPath = require.resolve("../../../sync/validateBlog");
 const stampLastSyncPath = require.resolve("../stampLastSync");
+const messengerPath = require.resolve("sync/messenger");
 
 describe("icloud status route", function () {
   // The resync email cap counts in Redis, so its counts outlive a spec
@@ -306,6 +307,51 @@ describe("icloud status route", function () {
 
     expect(events[0]).toBe("status: Resync requested");
     expect(events[events.length - 1]).toBe("status: Resync complete");
+  });
+
+  it("puts setup progress on the status line without storing it", async function () {
+    const published = [];
+    mockModule(messengerPath, () => ({
+      status: (line) => published.push(line),
+    }));
+    mockModule(databasePath, {
+      store: async (blogID, status) => stored.push(status),
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        acceptedSharingLink: false,
+      }),
+    });
+    const status = require(statusPath);
+
+    await status(
+      {
+        header: () => "blog_a",
+        body: { setupStage: "Opening the sharing link" },
+      },
+      fakeRes()
+    );
+
+    expect(published).toEqual(["Opening the sharing link"]);
+    expect(stored).toEqual([]);
+  });
+
+  it("drops setup progress once setup is over", async function () {
+    const published = [];
+    mockModule(messengerPath, () => ({
+      status: (line) => published.push(line),
+    }));
+    const status = require(statusPath);
+
+    await status(
+      {
+        header: () => "blog_a",
+        body: { setupStage: "Opening the sharing link" },
+      },
+      fakeRes()
+    );
+
+    expect(published).toEqual([]);
+    expect(stored).toEqual([]);
   });
 
   it("doesn't store the reason on the account", async function () {

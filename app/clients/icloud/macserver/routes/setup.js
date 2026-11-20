@@ -197,9 +197,9 @@ function watchLateArrival(blogID, initialDirNames, outcome) {
  * @param {string} blogID - The blogID to associate with the folder
  * @param {string} sharingLink - The iCloud sharing link for the folder
  */
-const setupBlog = setupLimiter.wrap(async (blogID, sharingLink) => {
+const setupBlog = setupLimiter.wrap(async (blogID, sharingLink, progress) => {
   try {
-    await setupFolder(blogID, sharingLink);
+    await setupFolder(blogID, sharingLink, progress);
   } catch (error) {
     // Record what is on screen before the reset wipes it
     await recordDiagnostics(
@@ -212,7 +212,9 @@ const setupBlog = setupLimiter.wrap(async (blogID, sharingLink) => {
   }
 });
 
-async function setupFolder(blogID, sharingLink) {
+// progress(stage) puts a short message on the dashboard's live status line,
+// so a person waiting can see Blot is working. It never throws.
+async function setupFolder(blogID, sharingLink, progress = () => {}) {
   console.log(
     clfdate(),
     `Waiting for a new folder to set up blogID: ${blogID} using sharingLink: ${sharingLink}`
@@ -273,6 +275,7 @@ async function setupFolder(blogID, sharingLink) {
         : "")
   );
 
+  progress("Opening the sharing link");
   console.log(clfdate(), "running the acceptSharingLink script");
   const outcome = await acceptSharingLink(sharingLink);
   lap("acceptSharingLink");
@@ -281,8 +284,11 @@ async function setupFolder(blogID, sharingLink) {
     throw setupError(outcome);
   }
 
+  progress("Waiting for iCloud to share the folder");
+
   // Time the wait from here so the reset and the AppleScript don't eat into it
   const start = Date.now();
+  let lastProgress = start;
   mark = start;
   let lastAskForAccessCheck = start;
   let loggedSkippedDirs = false;
@@ -351,6 +357,7 @@ async function setupFolder(blogID, sharingLink) {
       // Writes to a view-only share succeed here but never reach iCloud, so
       // turn one down now rather than let the transfer report success. Take
       // the folder off this Mac so a retry with the fixed share starts clean
+      progress("Checking Blot can make changes in the folder");
       const permission = await sharePermission(newPath);
       lap("permission");
       console.log(clfdate(), `Share permission for ${blogID}: ${permission}`);
@@ -366,6 +373,11 @@ async function setupFolder(blogID, sharingLink) {
       );
       watchRename(newDirName, newPath, blogID);
       return; // Setup is complete, exit the loop
+    }
+
+    if (Date.now() - lastProgress > 10000) {
+      lastProgress = Date.now();
+      progress("Still waiting for iCloud to share the folder");
     }
 
     if (Date.now() - lastAskForAccessCheck > askForAccessInterval) {
@@ -755,7 +767,20 @@ export default async (req, res) => {
     }
   };
 
-  setupBlog(blogID, sharingLink)
+  const progress = (setupStage) => {
+    status(blogID, { setupStage }).catch((error) => {
+      console.error(
+        clfdate(),
+        `Failed to report setup progress for blogID (${blogID}):`,
+        error.message
+      );
+    });
+  };
+
+  // A setup waits here while another one drives Finder
+  progress("Waiting for Blot’s Mac");
+
+  setupBlog(blogID, sharingLink, progress)
     .then(() => {
       console.log(clfdate(), `Setup complete for blogID: ${blogID}`);
       return reportStatus({

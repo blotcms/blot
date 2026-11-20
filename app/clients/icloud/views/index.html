@@ -104,6 +104,10 @@
         </li>
 
       </ol>
+      {{#setup.stuck}}
+      <!-- Keeps the page listening for status messages, so it follows a retry -->
+      <span class="icloud-listen" hidden>{{> sync-status}}</span>
+      {{/setup.stuck}}
       {{/setup.linked}}
 
       {{#setup.linked}}
@@ -116,7 +120,8 @@
           <span class="step-title">Blot joins your folder</span>
           {{#setup.joining}}
           {{^setup.slow}}
-          <span class="step-text">Usually takes under 30 seconds.</span>
+          <span class="step-text icloud-progress icloud-join-progress">{{> sync-status}}</span>
+          <span class="step-text icloud-quiet-hint">Still working. This can take up to a minute.</span>
           {{/setup.slow}}
           {{#setup.slow}}
           <span class="step-problem">This is taking too long. Try again, or <a href="/contact">contact us</a>.</span>
@@ -171,10 +176,23 @@
 
 <script>
   // Re-render once a join has run long enough to say so: the live updates
-  // only come with status messages, and a lost answer sends none
+  // only come with status messages, and a lost answer sends none. And while
+  // joining, say Blot is still working if no message has come for a while
   (function () {
     var seen = null;
     var due = 0;
+    var lastText = null;
+    var lastChange = Date.now();
+    setInterval(function () {
+      var text = document.querySelector(".icloud-join-progress .sync-status-text");
+      var current = text ? text.textContent : null;
+      if (current !== lastText) {
+        lastText = current;
+        lastChange = Date.now();
+      }
+      var step = text && text.closest("li");
+      if (step) step.classList.toggle("icloud-quiet", Date.now() - lastChange > 12000);
+    }, 1000);
     setInterval(function () {
       var step = document.querySelector("[data-slow-in]");
       if (!step) return (seen = null);
@@ -671,8 +689,16 @@
   margin: 10px 0 0;
 }
 
-/* While copying, show the status line only for progress: an idle "Synced"
-   before the copy starts would read as done */
+.icloud-steps .icloud-quiet-hint {
+  display: none;
+}
+
+.icloud-steps .icloud-quiet .icloud-quiet-hint {
+  display: block;
+}
+
+/* While joining or copying, show the status line only for progress: an idle
+   "Synced" from before would read as done */
 .icloud-progress .sync-status.synced {
   display: none;
 }
