@@ -951,15 +951,18 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     try {
       // With options.only, just those directories, not below them: the
       // directories that changed in the last few minutes, checked beside the
-      // full detection so a change in one is found in one listing
+      // full detection so a change in one is found in one listing. The
+      // directories are listed side by side (the walk changes nothing
+      // here, so they can't get in each other's way)
       if (options.only) {
         await pass(
-          async () => {
-            for (const id of options.only) {
-              const path = id === folderId ? "/" : await getPath(id);
-              if (path) await walk(path, id, false);
-            }
-          },
+          () =>
+            Promise.all(
+              options.only.map(async (id) => {
+                const path = id === folderId ? "/" : await getPath(id);
+                if (path) await walk(path, id, false);
+              })
+            ),
           { ahead: false }
         );
       } else {

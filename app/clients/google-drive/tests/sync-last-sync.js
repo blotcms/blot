@@ -15,6 +15,8 @@ function load({
   // The blog's recently changed directories, and which of them differ
   hot = [],
   hotChanged = [],
+  // Resolves when the check of the recent directories may finish
+  hotGate = Promise.resolve(),
 } = {}) {
   const module = { exports: {} };
   const events = [];
@@ -68,6 +70,8 @@ function load({
     "./sync.js": async (blogID, publish, update, options) => {
       if (options.only) {
         events.push("hot " + options.only.join(","));
+        await hotGate;
+        events.push("hot done");
         return { changed: hotChanged, paths: [], full: false };
       }
       if (options.detectOnly) {
@@ -295,5 +299,30 @@ describe("google drive sync entry point", function () {
 
     expect(await sync("blog_a")).toBeTruthy();
     expect(events).toEqual(["store", "walk-lock", "detect", "walk-release"]);
+  });
+
+  it("applies what the full detection found without waiting for the recent directories' check", async function () {
+    let open;
+    const hotGate = new Promise((resolve) => (open = resolve));
+    const { sync, events } = load({
+      account: { folderId: "folder", serviceAccountId: "sa" },
+      detections: [{ changed: ["dir_c"], full: false }],
+      hot: ["dir_a"],
+      hotChanged: ["dir_a"],
+      hotGate,
+    });
+
+    const syncing = sync("blog_a");
+    while (!events.includes("apply"))
+      await new Promise((resolve) => setImmediate(resolve));
+    expect(events).not.toContain("hot done");
+    open();
+    await syncing;
+
+    // Then what the check found is applied too
+    expect(events.filter((e) => e === "apply").length).toBe(2);
+    expect(events.indexOf("hot done")).toBeLessThan(
+      events.lastIndexOf("apply")
+    );
   });
 });

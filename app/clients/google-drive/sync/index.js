@@ -162,15 +162,18 @@ async function detectAndApply(blogID, sync, trigger, account) {
   let known = null;
   let detected;
   let startedAt;
+  // The check of the recent directories, started beside the first
+  // detection. Nothing waits for it until what the detection found has been
+  // applied, and then only to apply what it found.
+  let hot = Promise.resolve();
   for (let yields = 0; ; yields++) {
     if (await database.dirty.count(blogID)) {
       known = await applyLocked(blogID, sync);
       if (known === false) return false;
     }
     startedAt = Date.now();
-    const hot = yields === 0 ? detectHot(blogID, sync, trigger, account) : null;
+    if (yields === 0) hot = detectHot(blogID, sync, trigger, account);
     detected = await detect(blogID, sync, yields < MAX_DETECT_YIELDS);
-    await hot;
     if (!detected || !detected.yielded) break;
     log(
       blogID,
@@ -193,12 +196,21 @@ async function detectAndApply(blogID, sync, trigger, account) {
   );
 
   await markDirty(blogID, detected, `walk:${trigger}`, account);
-  if (!(await database.dirty.count(blogID))) {
+  let applied = null;
+  if (await database.dirty.count(blogID)) {
+    applied = await applyLocked(blogID, sync);
+    if (applied === false) return false;
+  }
+  // Anything the recent directories' check found that the apply above
+  // hadn't already taken
+  await hot;
+  if (await database.dirty.count(blogID)) {
+    applied = await applyLocked(blogID, sync);
+    if (applied === false) return false;
+  }
+  if (!applied) {
     return known || { downloaded: 0, removed: 0, createdDirs: 0, detected: 0 };
   }
-
-  const applied = await applyLocked(blogID, sync);
-  if (applied === false) return false;
 
   // Check, outside the lock, that the apply left nothing different. A check
   // that makes way leaves the new directories to the next walk, which the
