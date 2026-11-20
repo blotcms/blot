@@ -158,12 +158,12 @@
         el.tagName !== "BR"
       );
     });
-    if (
-      images.length < 2 ||
-      others.length ||
-      p.textContent.trim().length > images.length * 400
-    )
-      return;
+    // Writing in the paragraph itself (not in a caption) means it isn't a
+    // run of images: converting it would drop the words
+    var words = Array.prototype.some.call(p.childNodes, function (node) {
+      return node.nodeType === 3 && node.nodeValue.trim();
+    });
+    if (images.length < 2 || others.length || words) return;
 
     var figure = document.createElement("figure");
     figure.className = "carousel";

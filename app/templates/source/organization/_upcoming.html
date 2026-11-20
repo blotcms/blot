@@ -3,16 +3,7 @@
 <h2 class="section-heading section-heading--split"><span>Upcoming</span> <a class="quiet" href="/calendar.ics">Add to your calendar</a></h2>
 <div class="upcoming">
   {{#upcoming_events}}
-  <a class="upcoming-item" href="{{{url}}}">
-    {{! The post's picture, when it has one, on a pale ground so a stamp or a logo keeps its edges }}
-    {{#thumbnail.medium.url}}<span class="upcoming-image"><img src="{{{thumbnail.medium.url}}}" width="{{thumbnail.medium.width}}" height="{{thumbnail.medium.height}}" alt=""></span>{{/thumbnail.medium.url}}
-    {{> when}}
-    <time class="relative quiet" datetime="{{#formatEvent}}YYYY-MM-DDTHH:mm:ssZ{{/formatEvent}}"></time>
-    <span class="event-title">{{title}}</span>
-    {{> labels}}
-    {{#metadata.venue}}<span class="quiet">{{metadata.venue}}</span>{{/metadata.venue}}
-    {{#metadata.cost}}<span class="quiet"> · {{metadata.cost}}</span>{{/metadata.cost}}
-  </a>
+  {{> upcoming-item}}
   {{/upcoming_events}}
 </div>
 {{/upcoming_events.length}}

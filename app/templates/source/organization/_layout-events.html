@@ -1,5 +1,13 @@
-{{! Events: what's coming up (every event still to come, soonest first), then this tag's posts, the past ones with their dates. A post is an event when its Event line is a date (Event: 2026-12-08 18:30). }}
-{{^posts.pagination.previous}}{{> upcoming}}{{/posts.pagination.previous}}
+{{! Events: what's coming up (every event of this tag still to come, soonest first), then this tag's posts, the past ones with their dates. A post is an event when its Event line is a date (Event: 2026-12-08 18:30). }}
+{{! Every one of this tag's events still to come, not just the home page's four }}
+{{^posts.pagination.previous}}
+{{#all_upcoming_events.length}}
+<h2 class="section-heading section-heading--split"><span>Upcoming</span> <a class="quiet" href="/calendar.ics">Add to your calendar</a></h2>
+<div class="upcoming">
+  {{#all_upcoming_events}}{{> upcoming-item}}{{/all_upcoming_events}}
+</div>
+{{/all_upcoming_events.length}}
+{{/posts.pagination.previous}}
 <h2 class="section-heading">Past</h2>
 <div class="events">
   {{#posts}}

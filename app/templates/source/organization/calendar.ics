@@ -14,6 +14,15 @@ DTSTART:{{#formatEvent}}YYYYMMDD[T]HHmmss{{/formatEvent}}
 {{#event.allDay}}
 DTSTART;VALUE=DATE:{{#formatEvent}}YYYYMMDD{{/formatEvent}}
 {{/event.allDay}}
+{{! A multi-day event (Ends: a date) ends at the start of the day after its last: exclusive, as iCalendar wants }}
+{{#event.multiDay}}
+{{#event.allDay}}
+DTEND;VALUE=DATE:{{#formatEndsAfter}}YYYYMMDD{{/formatEndsAfter}}
+{{/event.allDay}}
+{{#event.timed}}
+DTEND:{{#formatEndsAfter}}YYYYMMDD[T]HHmmss{{/formatEndsAfter}}
+{{/event.timed}}
+{{/event.multiDay}}
 {{#event.rrule}}
 RRULE:{{{event.rrule}}}
 {{/event.rrule}}
