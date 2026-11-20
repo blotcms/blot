@@ -30,6 +30,77 @@ const REJOIN_DELAYS_MS = [15_000, 15_000, 30_000, 60_000, 120_000];
 const RETRYABLE = ["INVALID_LINK", "TIMEOUT"];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// How long to wait, after the rejoin, for iCloud to list the folder's files
+// again. Until it has, a walk of the folder would remove from the site every
+// file not listed yet
+const SETTLE_TIMEOUT_MS = 30 * 60_000;
+const SETTLE_POLL_MS = 5_000;
+// The owner may remove a few files meanwhile, which never come back: once no
+// more have appeared for this long, that many missing is accepted, and the
+// resync removes them from the site
+const SETTLE_STABLE_MS = 60_000;
+
+// Every file and folder in a blog folder, as paths inside it. Dot-names are
+// left out: Finder's .DS_Store comes and goes
+const listPaths = async (root) => {
+  const paths = [];
+  const walk = async (dir, prefix) => {
+    for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+      if (entry.name.startsWith(".")) continue;
+      const path = prefix ? `${prefix}/${entry.name}` : entry.name;
+      paths.push(path);
+      if (entry.isDirectory()) await walk(join(dir, entry.name), path);
+    }
+  };
+  await walk(root, "");
+  return paths;
+};
+
+// Resolves once the rejoined folder lists every path it held before the
+// leave, or all but a few (about 1%) and nothing new has appeared for a
+// minute. Rejects after SETTLE_TIMEOUT_MS
+const waitForFiles = async (blogID, before) => {
+  const allowance = Math.max(2, Math.floor(before.length / 100));
+  const start = Date.now();
+  let lastSize = -1;
+  let stableSince = start;
+  let lastLog = 0;
+
+  for (;;) {
+    const now = new Set(await listPaths(rootOf(blogID)));
+    const missing = before.filter((path) => !now.has(path));
+    if (!missing.length) return;
+
+    if (now.size !== lastSize) {
+      lastSize = now.size;
+      stableSince = Date.now();
+    } else if (
+      missing.length <= allowance &&
+      Date.now() - stableSince >= SETTLE_STABLE_MS
+    ) {
+      console.log(
+        clfdate(),
+        `Migrating ${blogID}: ${missing.length} path(s) never came back: ${missing.slice(0, 5).join(", ")}`
+      );
+      return;
+    }
+
+    if (Date.now() - start > SETTLE_TIMEOUT_MS)
+      throw new Error(
+        `${missing.length} of ${before.length} paths still missing after ${SETTLE_TIMEOUT_MS / 60_000} minutes`
+      );
+
+    if (Date.now() - lastLog > 30_000) {
+      lastLog = Date.now();
+      console.log(
+        clfdate(),
+        `Migrating ${blogID}: waiting for ${missing.length} of ${before.length} paths`
+      );
+    }
+    await sleep(SETTLE_POLL_MS);
+  }
+};
+
 const collaborationID = async (path) => {
   try {
     return JSON.parse(await shareInfo(path)).CollaborationIdentifier || null;
@@ -89,7 +160,14 @@ export default async (req, res) => {
   if (!before || before === "(none)")
     return res.status(409).send("Not a shared folder");
 
-  console.log(clfdate(), `Migrating ${blogID} to the nested layout`);
+  // What iCloud must list again after the rejoin before anything walks the
+  // folder (waitForFiles)
+  const paths = await listPaths(container);
+
+  console.log(
+    clfdate(),
+    `Migrating ${blogID} to the nested layout (${paths.length} paths)`
+  );
 
   // Not watched meanwhile: the folder is briefly gone, which the watcher
   // would otherwise report to Blot as deleted
@@ -153,6 +231,15 @@ export default async (req, res) => {
     return res
       .status(500)
       .send(`Another share came back (${after}); ${blogID} is quarantined`);
+  }
+
+  // Only then is the folder watched and resynced. Blot's migration script
+  // holds the blog's sync lock meanwhile, so no validation walks it either
+  try {
+    await waitForFiles(blogID, paths);
+  } catch (error) {
+    await quarantine(blogID, `files did not come back: ${error.message}`);
+    return res.status(500).send(`Files did not come back: ${error.message}`);
   }
 
   await watch(blogID);

@@ -14,11 +14,17 @@
 //   node scripts/icloud/migrate-nested.js --apply --blog icloudtest
 //   node scripts/icloud/migrate-nested.js --apply --limit 5
 //
+// Each blog's sync lock is held while it moves: until iCloud lists the
+// rejoined folder's files again, a validation or resync walking it would
+// remove the files not listed yet from the site. The macserver's resync
+// request at the end gets "locked" and retries until the lock is released.
+//
 // --apply stops at the first failure: a failed rejoin may leave that blog
 // without its folder on the macserver until it is set up again.
 
 const config = require("config");
 const Blog = require("models/blog");
+const hold = require("sync/hold");
 const database = require("clients/icloud/database");
 const { shouldSkipBackgroundSync } = require("clients/icloud/error");
 const fetch = require("clients/icloud/util/rateLimitedFetchWithRetriesAndTimeout");
@@ -108,14 +114,23 @@ const main = async () => {
     console.log(`${blogID}: migrating`);
     let result;
     try {
-      result = await macserver(
-        "POST",
-        "/migrate",
-        { blogID, sharingLink: account.sharingLink },
-        // the macserver retries the rejoin for about four minutes
-        10 * 60 * 1000
+      result = await hold(blogID, () =>
+        macserver(
+          "POST",
+          "/migrate",
+          { blogID, sharingLink: account.sharingLink },
+          // the macserver retries the rejoin for about four minutes, then
+          // waits up to 30 minutes for the folder's files to be listed
+          45 * 60 * 1000
+        )
       );
     } catch (error) {
+      // A sync was running: nothing was changed, so try the next blog
+      if (error.message.startsWith("Failed to acquire folder lock")) {
+        console.log(`${blogID}: busy syncing, skipped`);
+        count("skipped: lock busy");
+        continue;
+      }
       console.error(`${blogID}: MIGRATION FAILED:`, error.message);
       console.error(
         "Stopping. Check this blog's folder on the macserver before going on."
