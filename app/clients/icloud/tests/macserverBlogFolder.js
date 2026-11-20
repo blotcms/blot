@@ -5,6 +5,38 @@ const fs = require("fs-extra");
 const os = require("os");
 const path = require("path");
 const { pathToFileURL } = require("url");
+const { register } = require("module");
+
+// The macserver's own dependencies aren't installed in CI: stub dotenv, as
+// the other macserver specs do
+const hooks = `
+export async function resolve(specifier, context, nextResolve) {
+  if (specifier === "dotenv/config") {
+    try {
+      return await nextResolve(specifier, context);
+    } catch (e) {
+      return { url: "data:text/javascript,", shortCircuit: true };
+    }
+  }
+  // blogFolder.js gets a config of its own, so this spec never loads the
+  // real one: config.js is read once per process, and the other macserver
+  // specs set its REMOTE_SERVER
+  if (
+    specifier === "./config.js" &&
+    context.parentURL &&
+    context.parentURL.endsWith("/macserver/blogFolder.js")
+  ) {
+    return {
+      url:
+        "data:text/javascript,export const iCloudDriveDirectory = " +
+        encodeURIComponent(JSON.stringify(${JSON.stringify(os.tmpdir())})) +
+        ";",
+      shortCircuit: true,
+    };
+  }
+  return nextResolve(specifier, context);
+}
+`;
 
 describe("icloud macserver blogFolder", function () {
   // config.js reads these once per process, so this uses the same iCloud
@@ -15,26 +47,10 @@ describe("icloud macserver blogFolder", function () {
   let blogID;
 
   beforeAll(async function () {
-    const env = {
-      REMOTE_SERVER: "http://127.0.0.1:9",
-      ICLOUD_DRIVE_DIRECTORY: root,
-      BLOT_ICLOUD_SERVER_SECRET: "test-secret",
-    };
-    const previous = {};
-    for (const key in env) {
-      previous[key] = process.env[key];
-      if (!process.env[key]) process.env[key] = env[key];
-    }
-    try {
-      blogFolder = await import(
-        pathToFileURL(path.join(__dirname, "../macserver/blogFolder.js")).href
-      );
-    } finally {
-      for (const key in previous) {
-        if (previous[key] === undefined) delete process.env[key];
-        else process.env[key] = previous[key];
-      }
-    }
+    register("data:text/javascript," + encodeURIComponent(hooks));
+    blogFolder = await import(
+      pathToFileURL(path.join(__dirname, "../macserver/blogFolder.js")).href
+    );
   });
 
   beforeEach(function () {

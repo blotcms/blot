@@ -38,7 +38,13 @@ const BLOG_ID = /^blog_[a-zA-Z0-9]+$/;
 const nestedBlogs = new Set();
 const roots = new Map(); // blogID -> absolute path of the shared folder
 
-export const containerPath = (blogID) => join(iCloudDriveDirectory, blogID);
+// Every path here starts from a blog ID checked against BLOG_ID, so no
+// request header can reach outside iCloud Drive or into another folder
+export const containerPath = (blogID) => {
+  if (typeof blogID !== "string" || !BLOG_ID.test(blogID))
+    throw new Error(`Invalid blogID: ${blogID}`);
+  return join(iCloudDriveDirectory, blogID);
+};
 
 // The shared folder: the folder inside blog_<id> for a nested blog, else
 // blog_<id> itself. Throws for a nested blog whose folder is gone, so nothing
