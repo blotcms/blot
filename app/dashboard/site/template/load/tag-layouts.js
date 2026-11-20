@@ -42,16 +42,37 @@ module.exports = async function (req, res, next) {
         ? locals.tag_layouts
         : {};
 
-    const rows = Object.keys(chosen).map((slug) => ({
-      slug,
-      name: names[slug] || decodeSlug(slug),
-      options: layoutOptions(chosen[slug]),
-    }));
+    // Only the blog's own tags are listed. The template's layouts for tags
+    // the blog doesn't have (Staff, Board ...) are kept, unseen, and posted
+    // back with every change, so they apply if the tag turns up later.
+    const defaultLabel = desnake(fallback);
+    const rows = [];
+    const hidden = {};
+
+    for (const slug of Object.keys(chosen)) {
+      if (names[slug]) {
+        rows.push({
+          slug,
+          name: names[slug],
+          options: rowOptions(chosen[slug]),
+        });
+      } else {
+        hidden[slug] = chosen[slug];
+      }
+    }
+
+    rows.sort((a, b) => a.name.localeCompare(b.name));
+
+    function rowOptions(selected) {
+      return [
+        { value: "", label: `Default (${defaultLabel})`, selected: "" },
+      ].concat(layoutOptions(selected));
+    }
 
     res.locals.tag_layouts_control = {
       default: {
         key: "tag_layout",
-        label: "Default",
+        label: rows.length ? "Other tags" : "All tags",
         showLabel: true,
         fullWidth: true,
         isSelect: true,
@@ -63,8 +84,9 @@ module.exports = async function (req, res, next) {
         .filter((tag) => !(tag.slug in chosen))
         .map((tag) => ({ slug: tag.slug, name: tag.name }))
         .sort((a, b) => a.name.localeCompare(b.name)),
-      options: layoutOptions(fallback),
-      json: JSON.stringify(chosen),
+      // A new row starts at the default until a layout is picked
+      options: rowOptions(null),
+      hidden: JSON.stringify(hidden),
     };
 
     next();
@@ -72,11 +94,3 @@ module.exports = async function (req, res, next) {
     next(err);
   }
 };
-
-function decodeSlug(slug) {
-  try {
-    return decodeURIComponent(slug);
-  } catch (e) {
-    return slug;
-  }
-}
