@@ -9,6 +9,7 @@ const email = require("helper/email");
 const notificationCap = require("../../util/notificationCap");
 const syncReport = require("clients/util/syncReport");
 const stampLastSync = require("./stampLastSync");
+const messenger = require("sync/messenger");
 
 const RESYNC_DEDUP_WINDOW_MS = 10 * 1000;
 // Process-local resync deduplication: if multiple Node processes handle requests,
@@ -64,6 +65,27 @@ module.exports = async function (req, res) {
 
   if (!blogID || !status) {
     return res.status(400).send("Missing blogID or status");
+  }
+
+  // Progress while the macserver joins a folder ("Opening the sharing
+  // link", ...): shown on the dashboard's live status line, never stored on
+  // the account. Only while a setup is under way, so a late message can't
+  // reappear after a cancel or a finished setup.
+  if (
+    typeof status.setupStage === "string" &&
+    Object.keys(status).length === 1
+  ) {
+    res.send("ok");
+    try {
+      const account = await database.get(blogID);
+      const blog = await Blog.get({ id: blogID });
+      if (blog && account && account.sharingLink && !account.setupComplete) {
+        messenger(blog).status(status.setupStage.slice(0, 200));
+      }
+    } catch (err) {
+      console.error("Failed to publish setup progress", blogID, err.message);
+    }
+    return;
   }
 
   // Not part of the account: it only goes into the resync report.

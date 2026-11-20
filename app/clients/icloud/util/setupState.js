@@ -16,7 +16,7 @@ const SHARE_PROBLEMS = {
   NO_ACCESS:
     "This folder isn’t shared with {email}. Share it as shown below, then paste the new link.",
   READ_ONLY:
-    "Blot can only view this folder. In Finder, choose Share… › Manage Shared Folder, set Blot to “Can make changes”, then click Connect folder.",
+    "This folder is shared as view only. In Finder, choose Share… › Manage Shared Folder, set {email} to “Can make changes”, then click Connect folder.",
 };
 
 const LINK_PROBLEMS = {
@@ -37,7 +37,10 @@ const reasonFromMessage = (message) => {
   const text = String(message || "").toLowerCase();
   if (text.includes("is private")) return "PRIVATE";
   if (text.includes("asking for access")) return "NO_ACCESS";
-  if (text.includes("only view")) return "READ_ONLY";
+  if (text.includes("only view") || text.includes("view only"))
+    return "READ_ONLY";
+  if (text.includes("isn’t shared") || text.includes("isn't shared"))
+    return "PRIVATE";
   if (text.includes("invalid sharing link")) return "INVALID_LINK";
   if (text.includes("timed out")) return "TIMEOUT";
   return null;
