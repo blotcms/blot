@@ -3,53 +3,74 @@
   "popularity": 25,
   "locals": {
     "page_size": 12,
-    "hide_dates": false,
-    "date_display": "MMMM D, Y",
-    "demo_folder": "lecture",
-    "profile_image": {}
+    "background_color": "#ffffff",
+    "text_color": "#000000",
+    "link_color": "#000000",
+    "title_font": {
+      "id": "system-sans"
+    },
+    "font": {
+      "id": "system-sans",
+      "font_size": 14,
+      "line_height": 1.25
+    },
+    "text_font": {
+      "id": "eb-garamond",
+      "font_size": 25,
+      "line_height": 1.35
+    },
+    "syntax_highlighter": {
+      "id": "stackoverflow-light"
+    },
+    "syntax_highlighter_font": {
+      "id": "system-mono",
+      "font_size": 14
+    },
+    "profile_image": {},
+    "address": "",
+    "email": "",
+    "fixed_navigation": true,
+    "demo_folder": "stampclub",
+    "template_categories": [
+      "design"
+    ]
   },
   "views": {
-    "error": {
-      "partials": {
-        "title": "{{error.title}} - {{title}}",
-        "description": "Error on {{title}}"
-      }
-    },
     "public": {
       "partials": {
         "title": "Index of {{path}}",
         "description": "All the files and folders inside {{path}}"
       }
     },
-    "script": {
+    "style.css": {
+      "url": "/style.css"
+    },
+    "script.js": {
       "url": "/script.js"
-    },
-    "sitemap": {
-      "url": "/sitemap.xml"
-    },
-    "feed": {
-      "url": "/feed.rss"
-    },
-    "robots": {
-      "url": "/robots.txt"
     },
     "archives.html": {
       "url": "/archives",
       "partials": {
         "title": "Archives - {{title}}",
-        "description": "All the entries posted on {{title}}"
+        "description": "Everything published by {{title}}"
       }
     },
     "tagged.html": {
       "partials": {
-        "title": "Entries tagged {{tag}} from {{title}}",
-        "description": "All of the entries posted on {{title}} tagged {{tag}}"
+        "title": "{{tag}} - {{title}}",
+        "description": "Everything {{title}} has published tagged {{tag}}"
       }
     },
     "entries.html": {
       "partials": {
         "title": "{{title}}",
-        "description": "The latest entries posted on {{title}}"
+        "description": "The latest from {{title}}"
+      }
+    },
+    "error.html": {
+      "partials": {
+        "title": "{{error.title}} - {{title}}",
+        "description": "Error on {{title}}"
       }
     },
     "entry.html": {
@@ -61,7 +82,7 @@
     "search.html": {
       "partials": {
         "title": "Search - {{title}}",
-        "description": "Search all the entries posted on {{title}}"
+        "description": "Search everything published by {{title}}"
       }
     }
   }

@@ -1,45 +1,25 @@
 <!DOCTYPE html>
-<html lang="en">
-
-{{> head}}
-
-<body>
-
-  {{> header}}
-
-  <!-- Content -->
-  <main role="main" class="site-content">
-    <div class="container">
-
-      
-      <div class="row mt-3">
-
-        <div class="col-md-8 main-loop">
-
-          <h4 class="font-weight-bold spanborder"><span>Archives</span></h4>
-
-          {{#archives}}
-          {{#months}}
-          {{#entries}}
-          <div class="mb-2 d-flex justify-content-between main-loop-card">
-            <div class="pr-3">
-              <a class="text-dark" href="{{{url}}}">{{title}} <small class="text-muted">{{#date}}{{date}}{{/date}}</small></a>
-            </div>
-          </div>
-          {{/entries}}
-          {{/months}}
-          {{/archives}}
-
-
-        </div>
-
-        
-
+<html dir="auto">
+  {{> head}}
+  <body class="index-page">
+    {{> header}}
+    <main>
+      {{> masthead}}
+      <h1 class="list-heading">Archives{{#total_posts}} <span class="quiet">{{total_posts}}</span>{{/total_posts}}</h1>
+      {{^total_posts}}<p class="empty">Nothing has been published yet.</p>{{/total_posts}}
+      {{#archives}}
+      {{#months}}
+      <h2 class="list-heading quiet">{{month}} {{year}}</h2>
+      <div class="rows">
+        {{#entries}}{{> post-row}}{{/entries}}
       </div>
-
-    </div>
-  </main>
-  {{> footer}}
-</body>
-
+      {{/months}}
+      {{/archives}}
+      {{#all_tags.length}}
+      <h2 class="list-heading">Filed under</h2>
+      <p class="tag-cloud">{{#all_tags}}<a href="/tagged/{{slug}}">{{name}}</a> {{/all_tags}}</p>
+      {{/all_tags.length}}
+    </main>
+    {{> footer}}
+  </body>
 </html>

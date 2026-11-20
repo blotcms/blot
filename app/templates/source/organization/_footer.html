@@ -1,0 +1,7 @@
+<footer class="site-footer">
+  <p><a href="/">{{title}}</a>{{#address}}<br>{{address}}{{/address}}{{#email}}<br><a href="mailto:{{email}}">{{email}}</a>{{/email}}</p>
+  <p><a href="/archives">Archives</a><br><a href="/search">Search</a><br><a href="{{{feedURL}}}">Feed</a></p>
+  {{#menu.length}}<p>{{#menu}}<a href="{{{url}}}">{{label}}</a><br>{{/menu}}</p>{{/menu.length}}
+</footer>
+{{! The template's own script (title sizing, image carousels, animated questions), then the scripts of plugins the blog has turned on. }}
+<script src="{{#cdn}}/script.js{{/cdn}}"></script>

@@ -1,43 +1,26 @@
 <!DOCTYPE html>
-<html lang="en">
-
-{{> head}}
-
-<body>
-
-  {{> header}}
-
-  <!-- Content -->
-  <main role="main" class="site-content">
-    <div class="container">
-
-      
-      <div class="row mt-3">
-
-        <div class="col-md-8 main-loop">
-
-          <h4 class="font-weight-bold spanborder"><span>{{query}}</span></h4>
-
-          {{#query}}{{^entries.length}} No results.{{/entries.length}}{{/query}}
-
-          {{#entries}}
-          <div class="mb-2 d-flex justify-content-between main-loop-card">
-            <div class="pr-3">
-              <a class="text-dark" href="{{{url}}}">{{title}} <small class="text-muted">{{#date}}{{date}}{{/date}}</small></a>
-            </div>
-          </div>
-          {{/entries}}
-
-
-        </div>
-
-        
-
+<html dir="auto">
+  {{> head}}
+  <body class="index-page">
+    {{> header}}
+    <main>
+      {{> masthead}}
+      <form class="search" role="search">
+        <label for="q">Search</label>
+        <input type="search" id="q" name="q" value="{{query}}" placeholder="Search everything">
+        <button type="submit">Go</button>
+      </form>
+      {{#query}}
+      {{#entries.length}}
+      <div class="rows">
+        {{#entries}}{{> post-row}}{{/entries}}
       </div>
-
-    </div>
-  </main>
-  {{> footer}}
-</body>
-
+      {{/entries.length}}
+      {{^entries.length}}
+      <p class="empty">Nothing matches “{{query}}”.</p>
+      {{/entries.length}}
+      {{/query}}
+    </main>
+    {{> footer}}
+  </body>
 </html>

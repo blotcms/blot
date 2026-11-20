@@ -25,6 +25,16 @@ module.exports = {
     title: "Documentation",
     template: "SITE:documentation",
   },
+  stampclub: {
+    title: "New York Stamp Club",
+    template: "SITE:organization",
+    menu: [
+      { url: "/", label: "Meetings", id: "home" },
+      { url: "/about", label: "About", id: "/Pages/About.txt" },
+      { url: "/visit", label: "Visit", id: "/Pages/Visit.txt" },
+      { url: "/join", label: "Join", id: "/Pages/Join.txt" },
+    ],
+  },
   lecture: {
     title: "The Cartography of Solitude",
     template: "SITE:event",

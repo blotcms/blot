@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html dir="auto">
+  {{> head}}
+  <body class="index-page">
+    {{> header}}
+    <main>
+      {{> masthead}}
+      <div class="text">
+        <h1>{{error.title}}</h1>
+        <p>{{error.message}} <a href="/">Go to the home page</a> or <a href="/search">search</a>.</p>
+      </div>
+    </main>
+    {{> footer}}
+  </body>
+</html>

@@ -1,54 +1,21 @@
 <!DOCTYPE html>
-<html lang="en">
-
-{{> head}}
-
-<body>
-
-  {{> header}}
-
-  <!-- Content -->
-  <main role="main" class="site-content">
-    <div class="container">
-
-      
-      <div class="row mt-3">
-
-        <div class="col-md-8 main-loop">
-
-          <h4 class="font-weight-bold spanborder"><span>{{tag}}</span></h4>
-
-
-          {{#entries}}
-          <div class="mb-2 d-flex justify-content-between main-loop-card">
-            <div class="pr-3">
-              <a class="text-dark" href="{{{url}}}">{{title}} <small class="text-muted">{{#date}}{{date}}{{/date}}</small></a>
-            </div>
-          </div>
-          {{/entries}}
-
-          {{#entries.pagination}}
-          <div class="pagination">
-            {{#previous}}
-            <a href="/tagged/{{slug}}/page/{{previous}}">&larr; Previous</a>
-            {{/previous}}
-            Page {{current}} of {{total}}
-            {{#next}}
-            <a href="/tagged/{{slug}}/page/{{next}}">Next &rarr;</a>
-            {{/next}}
-          </div>
-          {{/entries.pagination}}
-
-
-        </div>
-
-        
-
+<html dir="auto">
+  {{> head}}
+  <body class="index-page">
+    {{> header}}
+    <main>
+      {{> masthead}}
+      <h1 class="list-heading">Filed under <a href="/tagged/{{slug}}">{{tag}}</a> <a class="quiet" href="/">× All</a></h1>
+      {{#posts.length}}
+      <div class="rows">
+        {{#posts}}{{> post-row}}{{/posts}}
       </div>
-
-    </div>
-  </main>
-  {{> footer}}
-</body>
-
+      {{/posts.length}}
+      {{^posts.length}}
+      <p class="empty">Nothing is filed under {{tag}}.</p>
+      {{/posts.length}}
+      {{#posts.pagination}}{{#next}}{{> tag-pages}}{{/next}}{{^next}}{{#previous}}{{> tag-pages}}{{/previous}}{{/next}}{{/posts.pagination}}
+    </main>
+    {{> footer}}
+  </body>
 </html>

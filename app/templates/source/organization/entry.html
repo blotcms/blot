@@ -1,68 +1,59 @@
 <!DOCTYPE html>
-<html lang="en">
-
-{{> head}}
-
-<body class="">
-
-  {{> header}}
-
-  <!-- Content -->
-  <main role="main" class="site-content">
-
-    {{#entry}}
-    <div class="container">
-      <div class="jumbotron jumbotron-fluid mb-3 pl-0 pt-0 pb-0 bg-white position-relative">
-        <div class="h-100 tofront">
-          <div class="row  justify-content-between ">
-            <div style="text-align:center" class="w-100  pr-0 pr-md-4 pt-4 pb-4 align-self-center">
-              <p class="text-uppercase font-weight-bold">
-                <span class="catlist">
-
-                  {{#tags}}
-                          <a class="sscroll text-danger" href="/tagged/{{slug}}">{{tag}}</a><span class="sep">, </span>
-                {{/tags}}
-                </span>
-              </p>
-              <h1 class="display-4 mb-4 article-headline">{{title}}</h1>
-              <div class="d-flex align-items-center">
-                <span class="w-100 text-muted d-block mt-1">{{#date}}{{date}}{{/date}}</span>
-              </div>
-            </div>
-
+<html dir="auto">
+  {{> head}}
+  <body class="entry-page">
+    {{> header}}
+    <main>
+      {{#entry}}
+      <article class="project">
+        <header class="project-header">
+          <div>
+            <span>{{#date}}{{#formatDate}}MM/YYYY{{/formatDate}} {{/date}}{{#metadata.speaker}}{{metadata.speaker}}{{/metadata.speaker}}{{#metadata.author}}{{metadata.author}}{{/metadata.author}}</span>
+            <h1>{{title}}</h1>
           </div>
+          <a href="/">{{blog.title}}</a>
+        </header>
+
+        {{! body is the post without its own title heading, which the header above replaces. A run of images on consecutive lines becomes a carousel (script.js); without JavaScript it scrolls sideways. }}
+        <div class="text">
+          {{{body}}}
         </div>
-      </div>
-    </div>
 
-    <div class="container-lg pt-4 pb-4">
-      <div class="row justify-content-center">
-
-        <div class="col-md-12 col-lg-8">
-
-          <!-- Article -->
-          <article class="article-post">
-            {{{body}}}
-          </article>
-
-          <!-- Author Box -->
-
-          
-
-            <!-- Comments -->
-
-            <!--  Don't edit anything here. Set your disqus id in _config.yml -->
-            {{> pluginHTML}}
-
+        <footer class="project-footer">
+          {{#date}}
+          <div>
+            <span class="quiet">Published</span>
+            <time datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{date}}</time>
           </div>
+          {{/date}}
+          {{#metadata.venue}}
+          <div><span class="quiet">Where</span> {{metadata.venue}}</div>
+          {{/metadata.venue}}
+          {{#tags.length}}
+          <div>
+            <span class="quiet">Filed under</span>
+            <span>{{#tags}}<a href="/tagged/{{slug}}">{{name}}</a> {{/tags}}</span>
+          </div>
+          {{/tags.length}}
+          {{#backlinks.length}}
+          <div>
+            <span class="quiet">Mentioned in</span>
+            <span>{{#backlinks}}<a href="{{{url}}}">{{title}}</a><br>{{/backlinks}}</span>
+          </div>
+          {{/backlinks.length}}
+          {{#adjacent}}
+          <nav aria-label="Newer and older posts">
+            {{#previous}}<span class="quiet">Older</span> <a href="{{{url}}}">{{title}}</a><br>{{/previous}}
+            {{#next}}<span class="quiet">Newer</span> <a href="{{{url}}}">{{title}}</a>{{/next}}
+          </nav>
+          {{/adjacent}}
+        </footer>
+      </article>
 
-        </div>
-      </div>
-
+      {{! Plugins the blog has turned on, such as comments, add their HTML here. }}
+      <div class="plugins">{{> pluginHTML}}</div>
       {{/entry}}
-  </main>
-
-  {{> footer}}
-</body>
-
+    </main>
+    {{> footer}}
+  </body>
 </html>

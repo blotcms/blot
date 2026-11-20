@@ -1,0 +1,11 @@
+{{! The menu, in a bar of four equal columns across the page (more items wrap onto further rows). The link to the page you're on gets a dot. }}
+<header class="bar{{#fixed_navigation}} is-fixed{{/fixed_navigation}}">
+  <nav aria-label="Menu">
+    {{#profile_image.thumbnails.small}}<a class="bar-logo" href="/"><img src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}" sizes="24px" width="{{width}}" height="{{height}}" alt="{{title}}"></a>{{/profile_image.thumbnails.small}}
+    <ul>
+      {{#menu}}
+      <li><a href="{{{url}}}" class="{{#active}}is-current{{/active}}"><span class="dot" aria-hidden="true"></span><span class="label">{{label}}</span></a></li>
+      {{/menu}}
+    </ul>
+  </nav>
+</header>
