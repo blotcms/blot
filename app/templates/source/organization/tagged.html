@@ -6,10 +6,12 @@
     <main>
       {{> masthead}}
       <h1 class="list-heading">Filed under <a href="/tagged/{{slug}}">{{tag}}</a> <a class="quiet" href="/">× All</a></h1>
+      {{! Each tag's layout is chosen in the template's settings, under Tag pages (tag_layouts in package.json); the rest use the default, tag_layout. }}
       {{#posts.length}}
-      <div class="rows">
-        {{#posts}}{{> post-row}}{{/posts}}
-      </div>
+      {{#layout_for_tag.rows}}<div class="rows">{{#posts}}{{> post-row}}{{/posts}}</div>{{/layout_for_tag.rows}}
+      {{#layout_for_tag.grid}}{{> layout-grid}}{{/layout_for_tag.grid}}
+      {{#layout_for_tag.events}}{{> layout-events}}{{/layout_for_tag.events}}
+      {{#layout_for_tag.list}}{{> layout-list}}{{/layout_for_tag.list}}
       {{/posts.length}}
       {{^posts.length}}
       <p class="empty">Nothing is filed under {{tag}}.</p>

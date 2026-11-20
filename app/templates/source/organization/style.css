@@ -378,6 +378,70 @@ video {
   width: 100%;
 }
 
+/* Tag page layouts (Tag pages in the template's settings). */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2rem 1rem;
+  align-items: end;
+  margin: 1rem 0 2rem;
+}
+
+@media (min-width: 40rem) {
+  .grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.grid-item {
+  display: block;
+  color: inherit;
+}
+
+.grid-item img {
+  display: block;
+  width: 100%;
+  margin-bottom: 0.5em;
+}
+
+.events {
+  margin: 0 calc(-1 * var(--pad));
+}
+
+.event {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem;
+  padding: 0.5em var(--pad) var(--pad);
+  border-top: 1px solid var(--rule);
+}
+
+.event:first-child {
+  border-top: 0;
+}
+
+.event-date {
+  margin: 0;
+  font: var(--size-h1) / 1 var(--font-serif);
+  font-variant-numeric: tabular-nums;
+}
+
+.event-details {
+  grid-column: 2 / 5;
+  max-width: 40rem;
+}
+
+.list {
+  margin: 1rem 0 2rem;
+  padding: 0;
+  list-style: none;
+}
+
+.list li {
+  padding: 0.25em 0;
+  border-top: 1px solid var(--rule);
+}
+
 .list-heading {
   margin: 2rem 0 0.5rem;
   font: inherit;

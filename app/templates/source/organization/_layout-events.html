@@ -1,0 +1,14 @@
+{{! Events: the date large, then title, place and summary. A post's Event line (e.g. "Event: 2026-12-08 18:30") sets the date shown; without one, its publish date. }}
+<div class="events">
+  {{#posts}}
+  <article class="event">
+    <p class="event-date">{{#metadata.event}}{{metadata.event}}{{/metadata.event}}{{^metadata.event}}{{#date}}<time datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D{{/formatDate}}<span class="quiet"> {{#formatDate}}YYYY{{/formatDate}}</span></time>{{/date}}{{/metadata.event}}</p>
+    <div class="event-details">
+      <h2 class="row-title"><a href="{{{url}}}">{{title}}</a></h2>
+      {{#metadata.venue}}<div><i>{{metadata.venue}}</i></div>{{/metadata.venue}}
+      {{#metadata.speaker}}<div>{{metadata.speaker}}</div>{{/metadata.speaker}}
+      {{#summary}}<div class="quiet">{{summary}}</div>{{/summary}}
+    </div>
+  </article>
+  {{/posts}}
+</div>

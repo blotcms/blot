@@ -1,0 +1,9 @@
+{{! Grid: each post's image at its own proportions, four to a row, with its title. Posts without an image show their title alone. }}
+<div class="grid">
+  {{#posts}}
+  <a class="grid-item" href="{{{url}}}">
+    {{#thumbnail.medium.url}}<img src="{{{thumbnail.medium.url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w, {{{thumbnail.large.url}}} {{thumbnail.large.width}}w" sizes="(min-width: 40rem) 25vw, 50vw" width="{{thumbnail.medium.width}}" height="{{thumbnail.medium.height}}" alt="" loading="lazy">{{/thumbnail.medium.url}}
+    <span class="grid-title">{{title}}</span>
+  </a>
+  {{/posts}}
+</div>

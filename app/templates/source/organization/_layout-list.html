@@ -1,0 +1,6 @@
+{{! List: titles and dates only, for long runs of writing. }}
+<ul class="list">
+  {{#posts}}
+  <li><a href="{{{url}}}">{{title}}</a>{{#date}} <time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MM–DD–YY{{/formatDate}}</time>{{/date}}</li>
+  {{/posts}}
+</ul>

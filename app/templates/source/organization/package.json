@@ -3,6 +3,20 @@
   "popularity": 25,
   "locals": {
     "page_size": 12,
+    "tag_layout": "rows",
+    "tag_layout_options": [
+      "rows",
+      "grid",
+      "events",
+      "list"
+    ],
+    "tag_layouts": {
+      "gallery": "grid",
+      "photos": "grid",
+      "events": "events",
+      "meetings": "events",
+      "readings": "list"
+    },
     "background_color": "#ffffff",
     "text_color": "#000000",
     "link_color": "#000000",
