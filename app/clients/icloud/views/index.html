@@ -50,9 +50,9 @@
           </span>
 
           <ol class="icloud-howto">
-            <li>Right-click the folder in Finder and choose <b>Share…</b></li>
-            <li>Choose <b>Collaborate</b>, then <b>Invite with Link</b>.</li>
-            <li>Add the address in <b>To</b>, then click <b>Copy Link</b>.</li>
+            <li>Right-click the folder in Finder and choose <span class="ui-label">Share…</span></li>
+            <li>Choose <span class="ui-label">Collaborate</span>, then <span class="ui-label">Invite with Link</span>.</li>
+            <li>Add the address in <span class="ui-label">To</span>, then click <span class="ui-label">Copy Link</span>.</li>
           </ol>
 
           <details class="icloud-show-me">
@@ -81,7 +81,7 @@
                     <span class="mac-btn mac-btn-primary">Copy Link</span>
                   </div>
                 </div>
-                <figcaption><b>Copy Link</b> stays grey until Blot’s iCloud account is in <b>To</b>.</figcaption>
+                <figcaption><span class="ui-label">Copy Link</span> stays grey until Blot’s iCloud account is in <span class="ui-label">To</span>.</figcaption>
               </figure>
             </div>
           </details>
@@ -228,9 +228,13 @@
   min-height: 1.6em;
 }
 
+/* Hierarchy by size and colour rather than weight: the address is the only
+   bold text in the steps */
 .icloud-steps .step-title {
   display: block;
-  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.25;
+  color: var(--text-color);
 }
 
 .icloud-steps .step-text,
@@ -282,11 +286,11 @@
 }
 
 .icloud-steps ol li.done .step-title {
-  font-weight: 400;
   color: var(--medium-text-color);
 }
 
-.icloud-steps ol li.todo {
+.icloud-steps ol li.todo,
+.icloud-steps ol li.todo .step-title {
   color: var(--light-text-color);
 }
 
@@ -319,6 +323,11 @@
   padding-left: 20px;
   margin: 10px 0 6px;
   font-size: 14px;
+  color: var(--medium-text-color);
+}
+
+/* Finder's own labels: darker than the sentence around them */
+.icloud-steps .ui-label {
   color: var(--text-color);
 }
 
