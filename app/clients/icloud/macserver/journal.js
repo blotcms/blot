@@ -164,6 +164,7 @@ const reconnect = async () => {
 };
 
 let broken = false;
+let lastPollAt = 0; // when a poll last read bird's database without failing
 
 const poll = async () => {
   if (!onChange) return;
@@ -192,6 +193,7 @@ const poll = async () => {
       );
       for (const { blogID, path } of touched.values()) onChange(blogID, path);
     } while (pollAgain);
+    lastPollAt = Date.now();
     await saveState();
   } catch (error) {
     // most likely the connection was closed under us; prepare again next poll
@@ -261,4 +263,23 @@ const startJournal = (handler) => {
 
 const journalRunning = () => Boolean(timer);
 
-export { openJournal, startJournal, journalRunning };
+// For /stats: whether the journal is following bird, how long since a poll
+// last read its database, and how many changes bird has made since the
+// position the journal has reached (0 when it is keeping up)
+const journalStatus = (now = Date.now()) => {
+  const status = {
+    running: journalRunning(),
+    pollAgeMs: lastPollAt ? now - lastPollAt : null,
+    behind: null,
+  };
+  if (!status.running || broken || !statements) return status;
+  try {
+    const { m } = statements.max.get();
+    status.behind = Math.max(0, (m || 0) - lastRank);
+  } catch {
+    // reported as unknown; the next poll reconnects
+  }
+  return status;
+};
+
+export { openJournal, startJournal, journalRunning, journalStatus };

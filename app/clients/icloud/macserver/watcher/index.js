@@ -398,14 +398,18 @@ const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
 // done for the one folder that needs it.
 const MATERIALISE_ATTEMPTS = 5;
 const MATERIALISE_EVERY_MS = 3_000;
-const materialising = new Map(); // `${blogID}:${path}` -> attempts
+const materialising = new Map(); // `${blogID}:${path}` -> { attempts, since }
+const gaveUp = []; // when a path was given up on, oldest first
 
 const materialiseLater = (blogID, pathInBlogDirectory) => {
   const key = `${blogID}:${pathInBlogDirectory}`;
-  const attempts = (materialising.get(key) || 0) + 1;
+  const attempts = (materialising.get(key)?.attempts || 0) + 1;
+  const since = materialising.get(key)?.since || Date.now();
 
   if (attempts > MATERIALISE_ATTEMPTS) {
     materialising.delete(key);
+    gaveUp.push(Date.now());
+    if (gaveUp.length > 1000) gaveUp.splice(0, gaveUp.length - 1000);
     console.warn(
       clfdate(),
       `bird has ${blogID}/${pathInBlogDirectory} but it never reached the disk; leaving it for the sweep and validation`
@@ -413,7 +417,7 @@ const materialiseLater = (blogID, pathInBlogDirectory) => {
     return;
   }
 
-  materialising.set(key, attempts);
+  materialising.set(key, { attempts, since });
   console.log(
     clfdate(),
     `bird has ${blogID}/${pathInBlogDirectory} but the disk doesn't yet, listing its folder (${attempts}/${MATERIALISE_ATTEMPTS})`
@@ -479,6 +483,9 @@ const reconcilePath = async (blogID, pathInBlogDirectory) => {
     materialiseLater(blogID, pathInBlogDirectory);
     return;
   }
+
+  // the disk has caught up with bird, or bird no longer has the path either
+  materialising.delete(`${blogID}:${pathInBlogDirectory}`);
 
   // FSEvents also reports a file evicted or downloaded again, which leaves
   // its size and mtime alone. The upload skips it (after checking bird's
@@ -780,4 +787,28 @@ const unwatch = async (blogID) => {
   markInactive(blogID);
 };
 
-export { initialize, unwatch, watch, startFsWatch, stopFsWatch };
+// For /stats: paths bird has that FileProvider hasn't put on disk yet, and
+// how long the oldest has waited. A stalled FileProvider shows up here first.
+// Paths are given up on after MATERIALISE_ATTEMPTS listings, so the oldest
+// wait stays short even when FileProvider is stuck; how many were given up on
+// in the last 15 minutes is what climbs.
+const GAVE_UP_WINDOW_MS = 15 * 60_000;
+const waitingForFileProvider = (now = Date.now()) => {
+  let oldest = null;
+  for (const { since } of materialising.values())
+    if (oldest === null || since < oldest) oldest = since;
+  return {
+    count: materialising.size,
+    oldestMs: oldest === null ? 0 : now - oldest,
+    gaveUpRecently: gaveUp.filter((t) => now - t < GAVE_UP_WINDOW_MS).length,
+  };
+};
+
+export {
+  initialize,
+  unwatch,
+  watch,
+  startFsWatch,
+  stopFsWatch,
+  waitingForFileProvider,
+};

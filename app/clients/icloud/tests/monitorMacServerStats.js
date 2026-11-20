@@ -5,6 +5,7 @@
 describe("icloud monitorMacServerStats", function () {
   const paths = {
     monitor: require.resolve("../util/monitorMacServerStats"),
+    liveLag: require.resolve("../util/liveLag"),
     fetch: require.resolve("../util/rateLimitedFetchWithRetriesAndTimeout"),
     email: require.resolve("helper/email"),
     redis: require.resolve("models/client"),
@@ -14,7 +15,7 @@ describe("icloud monitorMacServerStats", function () {
   const originals = {};
   const config = require("config");
 
-  let keys, sent, response;
+  let keys, sent, response, lagRows;
 
   const stub = (name, exports) => {
     require.cache[paths[name]] = {
@@ -33,9 +34,14 @@ describe("icloud monitorMacServerStats", function () {
     sent = [];
     response = null;
 
-    // Fake of the two Redis commands used: SET NX and DEL
+    // Fake of the Redis commands used: DEL, EXISTS, SET and the live lag
+    // list (empty unless a spec fills lagRows)
+    lagRows = [];
     stub("redis", {
       del: async (key) => (keys.delete(key) ? 1 : 0),
+      exists: async (key) => (keys.has(key) ? 1 : 0),
+      set: async (key) => keys.add(key),
+      lRange: async () => lagRows,
     });
     stub("lockHelper", {
       once: async (key) => {
@@ -60,10 +66,14 @@ describe("icloud monitorMacServerStats", function () {
       ICLOUD_APPROACHING_DISK_LIMIT: record("disk-warning"),
       ICLOUD_QUOTA_LIMIT: record("quota-limit"),
       ICLOUD_APPROACHING_QUOTA_LIMIT: record("quota-warning"),
+      ICLOUD_SYNC_DELAYED: record("delayed"),
+      ICLOUD_SYNC_RECOVERED: record("caught-up"),
     });
 
     delete require.cache[paths.monitor];
+    delete require.cache[paths.liveLag];
     spyOn(console, "log");
+    spyOn(console, "warn");
     spyOn(console, "error");
   });
 
@@ -159,12 +169,48 @@ describe("icloud monitorMacServerStats", function () {
       },
     });
     delete require.cache[paths.monitor];
+    delete require.cache[paths.liveLag];
     const monitor = require("../util/monitorMacServerStats");
     response = healthy();
 
     await monitor.check();
 
     expect(sent).toEqual([]);
+  });
+
+  it("emails a sync delay once, its recovery once, and stays quiet for an hour after", async function () {
+    const { check } = require(paths.monitor);
+    const stuck = () => ({
+      ...healthy(),
+      actions_pending: 3,
+      actions_oldest_ms: 6 * 60 * 1000,
+      actions_busiest_blog: "blog_a",
+      actions_busiest_pending: 3,
+    });
+
+    response = stuck();
+    await check();
+    await check();
+    expect(sent).toEqual(["delayed"]);
+
+    response = healthy();
+    await check();
+    await check();
+    expect(sent).toEqual(["delayed", "caught-up"]);
+
+    // within the quiet hour a new delay isn't announced
+    response = stuck();
+    await check();
+    expect(sent).toEqual(["delayed", "caught-up"]);
+  });
+
+  it("emails a delay when recent pushes are slow", async function () {
+    const { check } = require(paths.monitor);
+    const now = Date.now();
+    lagRows = [1, 2, 3, 4, 5].map((i) => `${now - i * 1000}:${180 * 1000}`);
+    response = healthy();
+    await check();
+    expect(sent).toEqual(["delayed"]);
   });
 
   it("registers a per-minute cron job", function () {
@@ -176,6 +222,7 @@ describe("icloud monitorMacServerStats", function () {
       },
     });
     delete require.cache[paths.monitor];
+    delete require.cache[paths.liveLag];
 
     require("../util/monitorMacServerStats")();
 

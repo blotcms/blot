@@ -1,0 +1,9 @@
+iCloud sync is delayed
+
+iCloud sync has fallen behind:
+
+{{#reasons}}
+- {{.}}
+{{/reasons}}
+
+Check the macserver's log (`ssh macserver`, then `tail -f ~/.pm2/logs/macserver-out.log`) and `scripts/prod/read.sh app-log --since 30m | grep "client=icloud"`. A burst of uploads to one blog can account for a long queue; a stuck queue or journal usually needs `pm2 restart macserver`. You'll get one more email when it has caught up.
