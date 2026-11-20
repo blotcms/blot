@@ -113,6 +113,8 @@ const main = async () => {
 
     console.log(`${blogID}: migrating`);
     let result;
+    // Shown on the dashboard as "Sync paused" meanwhile (getHealth.js)
+    await database.store(blogID, { migratingSince: Date.now() });
     try {
       result = await hold(blogID, () =>
         macserver(
@@ -127,10 +129,12 @@ const main = async () => {
     } catch (error) {
       // A sync was running: nothing was changed, so try the next blog
       if (error.message.startsWith("Failed to acquire folder lock")) {
+        await database.store(blogID, { migratingSince: null });
         console.log(`${blogID}: busy syncing, skipped`);
         count("skipped: lock busy");
         continue;
       }
+      await database.store(blogID, { migratingSince: null });
       console.error(`${blogID}: MIGRATION FAILED:`, error.message);
       console.error(
         "Stopping. Check this blog's folder on the macserver before going on."
@@ -139,6 +143,7 @@ const main = async () => {
       break;
     }
 
+    await database.store(blogID, { migratingSince: null });
     console.log(
       `${blogID}: nested as "${result.folderName}"${result.sameShare ? "" : " — ANOTHER SHARE CAME BACK, check it"}`
     );
