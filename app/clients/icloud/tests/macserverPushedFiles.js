@@ -1,7 +1,7 @@
 // The macserver skips pushing a file whose size and mtime haven't changed since
 // it was last pushed (iCloud evicting or re-materialising a file is reported
 // as a change). Like macserverDisconnect.js, a resolve hook stubs dotenv and,
-// for httpClient/upload.js and downloadBirdsVersion.js only, swaps brctl,
+// for httpClient/upload.js, downloadBirdsVersion.js and evictWhenUploaded.js only, swaps brctl,
 // bird's database and fetch for spies held on globalThis.__pushedFilesMocks
 // and config.js for a stub, so this spec never caches the config.js other
 // specs set up through process.env.
@@ -24,11 +24,12 @@ const hooks = `
 const ICLOUD_DRIVE_DIRECTORY = ${JSON.stringify(iCloudDriveDirectory)};
 const BRCTL = "data:text/javascript," + encodeURIComponent(
   "export const download = (...args) => globalThis.__pushedFilesMocks.download(...args);" +
-  "export const evict = async () => {};"
+  "export const evict = (...args) => (globalThis.__pushedFilesMocks.evict || (async () => {}))(...args);"
 );
 const BIRD = "data:text/javascript," + encodeURIComponent(
   "export const fileVersion = async (...args) => (globalThis.__pushedFilesMocks.fileVersion || (() => null))(...args);" +
-  "export const diskMatches = (v, s) => s.size === v.size && Math.floor(s.mtimeMs / 1000) === v.mtime;"
+  "export const diskMatches = (v, s) => s.size === v.size && Math.floor(s.mtimeMs / 1000) === v.mtime;" +
+  "export const syncedUp = async (...args) => (globalThis.__pushedFilesMocks.syncedUp || (() => null))(...args);"
 );
 export async function resolve(specifier, context, nextResolve) {
   if (specifier === "dotenv/config") {
@@ -63,7 +64,7 @@ export async function resolve(specifier, context, nextResolve) {
       };
     }
   }
-  if (context.parentURL && context.parentURL.endsWith("/downloadBirdsVersion.js")) {
+  if (context.parentURL && (context.parentURL.endsWith("/downloadBirdsVersion.js") || context.parentURL.endsWith("/evictWhenUploaded.js"))) {
     if (specifier === "./brctl/index.js") {
       return { url: BRCTL, shortCircuit: true };
     }
@@ -78,6 +79,7 @@ export async function resolve(specifier, context, nextResolve) {
 describe("icloud macserver pushed files", function () {
   let pushedFiles;
   let upload;
+  let evictWhenUploaded;
   let blogCounter = 0;
 
   const newBlogID = () => `blog_pushed_${process.pid}_${blogCounter++}`;
@@ -89,6 +91,7 @@ describe("icloud macserver pushed files", function () {
     globalThis.__pushedFilesMocks = {};
     pushedFiles = await load("pushedFiles.js");
     upload = (await load("httpClient/upload.js")).default;
+    evictWhenUploaded = (await load("evictWhenUploaded.js")).default;
   });
 
   afterAll(async function () {
@@ -330,6 +333,102 @@ describe("icloud macserver pushed files", function () {
       await upload(blogID, "post.md");
 
       expect(fetch).toHaveBeenCalledTimes(2);
+    });
+  });
+  describe("evictWhenUploaded", function () {
+    let blogID;
+    let filePath;
+    let evict;
+    const fast = { pollMs: 5, maxWaitMs: 2000 };
+
+    beforeEach(async function () {
+      blogID = newBlogID();
+      filePath = path.join(iCloudDriveDirectory, blogID, "Templates/a.css");
+      await fs.outputFile(filePath, "body {}");
+      evict = jasmine.createSpy("evict").and.callFake(async () => {});
+      globalThis.__pushedFilesMocks.evict = evict;
+    });
+
+    afterEach(async function () {
+      delete globalThis.__pushedFilesMocks.evict;
+      delete globalThis.__pushedFilesMocks.syncedUp;
+      await fs.remove(path.join(iCloudDriveDirectory, blogID));
+    });
+
+    it("evicts once bird has uploaded the file", async function () {
+      let checks = 0;
+      globalThis.__pushedFilesMocks.syncedUp = async () => ++checks >= 3;
+      await evictWhenUploaded(
+        blogID,
+        "Templates/a.css",
+        filePath,
+        await fs.stat(filePath),
+        fast
+      );
+      expect(checks).toBe(3);
+      expect(evict.calls.allArgs()).toEqual([[filePath]]);
+    });
+
+    it("leaves the file alone when bird's database can't say", async function () {
+      await evictWhenUploaded(
+        blogID,
+        "Templates/a.css",
+        filePath,
+        await fs.stat(filePath),
+        fast
+      );
+      expect(evict).not.toHaveBeenCalled();
+    });
+
+    it("leaves the file alone once it has changed", async function () {
+      const written = await fs.stat(filePath);
+      globalThis.__pushedFilesMocks.syncedUp = async () => {
+        await fs.outputFile(filePath, "body { color: red }");
+        return false;
+      };
+      await evictWhenUploaded(
+        blogID,
+        "Templates/a.css",
+        filePath,
+        written,
+        fast
+      );
+      expect(evict).not.toHaveBeenCalled();
+    });
+
+    it("gives way to a later write of the same path", async function () {
+      globalThis.__pushedFilesMocks.syncedUp = async () => false;
+      const stat = await fs.stat(filePath);
+      const first = evictWhenUploaded(
+        blogID,
+        "Templates/a.css",
+        filePath,
+        stat,
+        fast
+      );
+      globalThis.__pushedFilesMocks.syncedUp = async () => true;
+      const second = evictWhenUploaded(
+        blogID,
+        "Templates/a.css",
+        filePath,
+        stat,
+        fast
+      );
+      await Promise.all([first, second]);
+      expect(evict).toHaveBeenCalledTimes(1);
+    });
+
+    it("gives up if iCloud never takes the file", async function () {
+      globalThis.__pushedFilesMocks.syncedUp = async () => false;
+      await evictWhenUploaded(
+        blogID,
+        "Templates/a.css",
+        filePath,
+        await fs.stat(filePath),
+        { pollMs: 5, maxWaitMs: 50 }
+      );
+      expect(evict).not.toHaveBeenCalled();
+      expect(console.warn).toHaveBeenCalled();
     });
   });
 });

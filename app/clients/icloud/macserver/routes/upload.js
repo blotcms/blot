@@ -5,6 +5,7 @@ import { dirname, join, resolve, sep } from "path";
 import { iCloudDriveDirectory } from "../config.js";
 import { expectBlotChange } from "../blotWrites.js";
 import { recordPushed } from "../pushedFiles.js";
+import evictWhenUploaded from "../evictWhenUploaded.js";
 import clfdate from "../util/clfdate.js";
 import normalizeMacserverPath from "./normalizeMacserverPath.js";
 
@@ -111,6 +112,7 @@ export default async (req, res) => {
       const stat = await writeAtomically(filePath, req.body, modifiedTimeDate);
       recordPushed(blogID, normalizedPath, stat);
       console.log(clfdate(), `Wrote file: ${filePath}`);
+      evictWhenUploaded(blogID, normalizedPath, filePath, stat);
       return res.sendStatus(200);
     } catch (error) {
       console.error(clfdate(), `Failed to write file (${filePath}):`, error);
