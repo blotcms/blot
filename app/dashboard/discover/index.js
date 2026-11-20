@@ -49,9 +49,12 @@ function refusal(loaded) {
 // The photos chosen in a form or query, in the order they appear in the
 // post, without duplicates or any that aren't the post's
 function chosen(value, candidates) {
-  let list = value || [];
-  if (!Array.isArray(list)) list = [list];
-  return candidates.filter((source) => list.indexOf(source) !== -1);
+  const list = new Set(
+    (Array.isArray(value) ? value : [value]).filter(
+      (item) => typeof item === "string"
+    )
+  );
+  return candidates.filter((source) => list.has(source));
 }
 
 function expired(res) {
