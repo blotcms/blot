@@ -54,3 +54,5 @@ module.exports = async function (req, res, next) {
     next(err);
   }
 };
+
+module.exports.load = loadFeatured;

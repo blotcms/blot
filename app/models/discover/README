@@ -51,14 +51,16 @@ Set them with
 
 ## Tokens
 
-`token.create` is called by the daily update email for each new post from a
-site with the setting on. `token.read` does not use the token up, because
+`token.create` is called by the daily update email for each new post. The
+confirm page says when the post is already on Discover or its site has the
+setting off; adding the post turns the setting on, as `add.js` does. `token.read` does not use the token up, because
 mail scanners open links; `token.consume` deletes it with `GETDEL`, so only
 one request can add the post.
 
 ## Adding and editing posts
 
-The daily email's "Add to Discover" links are the only page for it. Anything
+The daily email's "Add to Discover" links are the only page for it. Its
+preview is the card as `/discover` renders it, updated as photos are chosen. Anything
 else is done by an agent running these in the node container
 (`docker exec -u 1000 blot-blue …` on production, a production command which
 needs the maintainer's go-ahead; `blot-node-<slot>` for a local preview):

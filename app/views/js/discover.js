@@ -250,3 +250,73 @@ if (document.readyState === "loading") {
 } else {
   markClamped();
 }
+
+// The live preview on the "Add to Discover" confirm page
+// (app/dashboard/discover). As the photos or the text option change, fetch
+// the page for those choices and swap in its preview, so the card is the one
+// the server renders for /discover. Without JavaScript, the "Update preview"
+// button loads the same page.
+function initPreview() {
+  const form = document.getElementById("discover-add-form");
+  const section = document.getElementById("discover-preview-section");
+  if (!form || !section || !window.fetch) return;
+
+  const button = form.querySelector(".discover-update-preview");
+  if (button) button.hidden = true;
+
+  let latest = 0;
+
+  function query() {
+    const params = new URLSearchParams();
+    params.set("preview", "1");
+    for (const [name, value] of new FormData(form)) {
+      if (name === "photo" || name === "showText") params.append(name, value);
+    }
+    return params.toString();
+  }
+
+  async function update() {
+    const request = ++latest;
+    const url = window.location.pathname + "?" + query();
+    const list = section.querySelector(".discover-preview");
+    if (list) list.classList.add("updating");
+
+    try {
+      const response = await fetch(url, { headers: { Accept: "text/html" } });
+      if (!response.ok) throw new Error("HTTP " + response.status);
+
+      const page = new DOMParser().parseFromString(
+        await response.text(),
+        "text/html"
+      );
+
+      // A later change has already asked for a newer preview
+      if (request !== latest) return;
+
+      const fresh = page.getElementById("discover-preview-section");
+      if (!fresh) throw new Error("No preview");
+
+      // Copied first: moving each node out of fresh changes its childNodes
+      section.replaceChildren(...Array.from(fresh.childNodes));
+      window.history.replaceState(null, "", url);
+      updateAllArrows();
+      markClamped();
+    } catch (err) {
+      // Leave the old preview, and the button to load the page instead
+      if (request !== latest) return;
+      if (list) list.classList.remove("updating");
+      if (button) button.hidden = false;
+    }
+  }
+
+  form.addEventListener("change", (event) => {
+    if (event.target.name === "photo" || event.target.name === "showText")
+      update();
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", initPreview);
+} else {
+  initPreview();
+}
