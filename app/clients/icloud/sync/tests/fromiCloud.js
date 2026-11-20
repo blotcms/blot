@@ -722,4 +722,216 @@ describe("icloud fromiCloud sync", function () {
       });
     });
   });
+
+  describe("downloads", () => {
+    const file = (name, size = 1) => ({ name, size, isDirectory: false });
+
+    // Each download waits until the spec lets it finish, so the spec can see
+    // how many run at once
+    function mockDownloads(remoteContents) {
+      const downloads = { running: 0, maxRunning: 0, started: [], waiting: [] };
+      mockModule(remoteRecursiveListPath, async () => {});
+      mockModule(remoteReaddirPath, async (_, path) =>
+        typeof remoteContents === "function"
+          ? remoteContents(path)
+          : remoteContents
+      );
+      mockModule(downloadPath, async (_, path) => {
+        downloads.started.push(path);
+        downloads.running += 1;
+        downloads.maxRunning = Math.max(
+          downloads.maxRunning,
+          downloads.running
+        );
+        await new Promise((resolve) => downloads.waiting.push(resolve));
+        downloads.running -= 1;
+        if (path.endsWith("fails.txt")) throw new Error("download failed");
+      });
+      mockModule(checkWeCanContinuePath, () => async () => {});
+      mockModule(databasePath, {
+        store: async () => {},
+        get: async () => ({}),
+      });
+      return downloads;
+    }
+
+    // Finishes the waiting downloads one at a time until the walk is done
+    async function drain(downloads, walking) {
+      let done = false;
+      walking.then(
+        () => (done = true),
+        () => (done = true)
+      );
+      while (!done) {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        const next = downloads.waiting.shift();
+        if (next) next();
+      }
+      return walking;
+    }
+
+    it("downloads several files at once, applying them in order", async () => {
+      await folder.write(blogID, "/gone.txt", "x");
+      const names = ["a", "b", "c", "d", "e", "f", "g"].map((n) => n + ".txt");
+      const downloads = mockDownloads(names.map((name) => file(name)));
+      const updated = [];
+      let removedBeforeDownloads = null;
+
+      const walking = require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async (path) => {
+          if (path === "/gone.txt")
+            removedBeforeDownloads = downloads.started.length === 0;
+          updated.push(path);
+        }
+      );
+      const summary = await drain(downloads, walking);
+
+      expect(downloads.maxRunning).toBe(4);
+      expect(downloads.started).toEqual(names.map((name) => "/" + name));
+      expect(updated).toEqual(["/gone.txt", ...names.map((n) => "/" + n)]);
+      expect(removedBeforeDownloads).toBe(true);
+      expect(summary.downloaded).toBe(7);
+      expect(summary.removed).toBe(1);
+      expect(summary.failed).toBe(0);
+    });
+
+    it("downloads a directory's files while it walks a subdirectory", async () => {
+      const downloads = mockDownloads((path) =>
+        path === "/"
+          ? [{ name: "sub", isDirectory: true }, file("a.txt"), file("b.txt")]
+          : [file("c.txt"), file("d.txt")]
+      );
+      const updated = [];
+
+      const walking = require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async (path) => updated.push(path)
+      );
+      const summary = await drain(downloads, walking);
+
+      expect(downloads.maxRunning).toBe(4);
+      // The directory is created before anything is written into it
+      expect(updated).toEqual([
+        "/sub",
+        "/sub/c.txt",
+        "/sub/d.txt",
+        "/a.txt",
+        "/b.txt",
+      ]);
+      expect(summary.createdDirs).toBe(1);
+      expect(summary.downloaded).toBe(4);
+    });
+
+    it("counts a failed download in its place, without stopping the others", async () => {
+      const downloads = mockDownloads([
+        file("a.txt"),
+        file("fails.txt"),
+        file("c.txt"),
+      ]);
+      const updated = [];
+
+      const walking = require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async (path) => updated.push(path)
+      );
+      const summary = await drain(downloads, walking);
+
+      expect(updated).toEqual(["/a.txt", "/c.txt"]);
+      expect(summary.downloaded).toBe(2);
+      expect(summary.failed).toBe(1);
+      expect(summary.firstError).toBe("download failed");
+    });
+
+    it("waits for running downloads before returning from a failed walk", async () => {
+      const downloads = mockDownloads((path) => {
+        if (path === "/broken") throw new Error("listing failed");
+        return [
+          { name: "broken", isDirectory: true },
+          file("a.txt"),
+          file("b.txt"),
+        ];
+      });
+
+      const walking = require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {}
+      );
+      const summary = await drain(downloads, walking);
+
+      expect(downloads.running).toBe(0);
+      expect(summary.firstError).toBe("listing failed");
+      // Not applied: the walk stopped at the directory before them
+      expect(summary.downloaded).toBe(0);
+    });
+
+    it("downloads a file too large to share the limit on its own", async () => {
+      const downloads = mockDownloads([
+        file("a.txt"),
+        file("big.mov", 50 * 1000 * 1000),
+        file("c.txt"),
+      ]);
+      const runningWithBig = [];
+      const original = require.cache[downloadPath].exports;
+      mockModule(downloadPath, async (blog, path) => {
+        if (path === "/big.mov") runningWithBig.push(downloads.running);
+        return original(blog, path);
+      });
+
+      const walking = require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {}
+      );
+      const summary = await drain(downloads, walking);
+
+      expect(runningWithBig).toEqual([0]);
+      expect(summary.downloaded).toBe(3);
+    });
+  });
+
+  describe("folder tree listing", () => {
+    afterEach(() => jasmine.clock().uninstall());
+
+    it("says the listing is still going while it waits", async () => {
+      let listed;
+      let listing;
+      const listingStarted = new Promise((resolve) => (listing = resolve));
+      mockModule(remoteRecursiveListPath, () => {
+        listing();
+        return new Promise((resolve) => (listed = resolve));
+      });
+      mockModule(remoteReaddirPath, async () => []);
+      mockModule(downloadPath, async () => {});
+      mockModule(checkWeCanContinuePath, () => async () => {});
+      mockModule(databasePath, {
+        store: async () => {},
+        get: async () => ({}),
+      });
+
+      const published = [];
+      jasmine.clock().install();
+      const walking = require(fromiCloudPath)(
+        blogID,
+        (...args) => published.push(args.join(" ")),
+        async () => {}
+      );
+      await listingStarted;
+      jasmine.clock().tick(11 * 1000);
+      listed();
+      jasmine.clock().uninstall();
+      await walking;
+
+      expect(published.slice(0, 4)).toEqual([
+        "Syncing folder tree",
+        "Syncing folder tree (5s)",
+        "Syncing folder tree (10s)",
+        "Synced folder tree",
+      ]);
+    });
+  });
 });
