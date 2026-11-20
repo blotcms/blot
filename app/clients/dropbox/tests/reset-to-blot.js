@@ -10,6 +10,9 @@ describe("dropbox resetToBlot", function () {
   const originals = {};
   let saved;
   let revisionCalls;
+  // Every filesListFolder and filesListFolderContinue call of the walk
+  // (not the delta's), as { recursive, path } or { cursor }
+  let listCalls;
 
   beforeEach(async function () {
     saved = [];
@@ -33,8 +36,34 @@ describe("dropbox resetToBlot", function () {
   // list_revisions says for each Dropbox path, a result or an Error to throw;
   // omit it for a client with no such method at all. revisionCalls records
   // the paths it was asked about.
-  function load(remote, { delta, account = {}, revisions } = {}) {
+  // pageSize: entries a recursive listing returns per page (default: all)
+  function load(
+    remote,
+    { delta, account = {}, revisions, pageSize = Infinity } = {}
+  ) {
     revisionCalls = [];
+    listCalls = [];
+    // What a recursive listing of the blog folder returns: every entry of
+    // `remote`, with the path_lower Dropbox gives it
+    const recursiveEntries = () =>
+      Object.entries(remote).flatMap(([dir, entries]) =>
+        entries.map((entry) => ({
+          ...entry,
+          path_lower: (
+            "/blog folder" +
+            (dir === "/" ? "" : dir) +
+            "/" +
+            entry.name
+          ).toLowerCase(),
+        }))
+      );
+    const page = (all, start) => ({
+      result: {
+        entries: all.slice(start, start + pageSize),
+        has_more: start + pageSize < all.length,
+        cursor: "page-" + (start + pageSize),
+      },
+    });
     require.cache[createClientPath] = {
       exports: async function () {
         return {
@@ -55,13 +84,19 @@ describe("dropbox resetToBlot", function () {
             filesListFolderGetLatestCursor: async () => ({
               result: { cursor: "new-cursor" },
             }),
-            filesListFolder: async ({ path }) => {
+            filesListFolder: async ({ path, recursive }) => {
+              listCalls.push({ recursive: Boolean(recursive), path });
+              if (recursive) return page(recursiveEntries(), 0);
               // The walk asks for the blog folder root as "/Blog Folder/"
               const entries = remote[(path || "/").replace(/(.)\/$/, "$1")];
               if (!entries) throw new Error("Dropbox unavailable");
               return { result: { entries, has_more: false, cursor: "c" } };
             },
             filesListFolderContinue: async ({ cursor }) => {
+              if (/^page-/.test(cursor)) {
+                listCalls.push({ cursor });
+                return page(recursiveEntries(), Number(cursor.slice(5)));
+              }
               if (cursor !== "new-cursor" || !delta)
                 throw new Error("Dropbox unavailable");
               return {
@@ -89,6 +124,33 @@ describe("dropbox resetToBlot", function () {
     return require("../sync/reset-to-blot");
   }
 
+  // Dropbox's 409 for a folder it won't list recursively
+  const refuseRecursive = () =>
+    Object.assign(new Error("Response failed with a 409 code"), {
+      status: 409,
+      error: { error_summary: "path/too_many_files/.." },
+    });
+
+  // Make the recursive listing fail as Dropbox would for a folder it won't
+  // list recursively, so the walk lists each folder
+  function refuseRecursiveListing() {
+    const inner = require.cache[createClientPath].exports;
+    require.cache[createClientPath].exports = async function (id) {
+      const result = await inner(id);
+      const real = result.client.filesListFolder;
+      result.client.filesListFolder = async (args) => {
+        if (args.recursive) {
+          listCalls.push({ recursive: true, path: args.path });
+          throw refuseRecursive();
+        }
+        return real(args);
+      };
+      return result;
+    };
+    delete require.cache[resetPath];
+    return require("../sync/reset-to-blot");
+  }
+
   const file = (name) => ({
     ".tag": "file",
     name,
@@ -111,6 +173,88 @@ describe("dropbox resetToBlot", function () {
     expect(saved.some((values) => values.cursor === "new-cursor")).toEqual(
       true
     );
+  });
+
+  describe("listing the folder in Dropbox", function () {
+    const folder = (name) => ({
+      ".tag": "folder",
+      name,
+      path_display: "/" + name,
+    });
+
+    const tree = () => ({
+      "/": [folder("sub"), folder("Empty"), file("a.txt")],
+      "/sub": [folder("deep"), file("b.txt")],
+      "/sub/deep": [file("c.txt")],
+      "/Empty": [],
+    });
+
+    async function walkTree(resetToBlot) {
+      const updated = [];
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async (path) => {
+          updated.push(path);
+        }
+      );
+      return { summary, updated: updated.sort() };
+    }
+
+    it("lists the whole tree once, in pages, instead of once per folder", async function () {
+      const { summary, updated } = await walkTree(
+        load(tree(), { pageSize: 2 })
+      );
+
+      // 6 entries, 2 to a page: the listing, then its two continuations
+      expect(listCalls).toEqual([
+        { recursive: true, path: "/Blog Folder" },
+        { cursor: "page-2" },
+        { cursor: "page-4" },
+      ]);
+      expect(summary.downloaded).toEqual(3);
+      expect(summary.createdDirs).toEqual(3);
+      expect(updated).toContain("/sub/deep/c.txt");
+    });
+
+    it("gives the same result as listing each folder", async function () {
+      const recursive = await walkTree(load(tree()));
+      await storage.removeAll(blogID);
+
+      const perFolder = await walkTree(refuseRecursiveListing());
+
+      // the recursive attempt, then root, sub, deep and Empty
+      expect(listCalls.filter((call) => !call.recursive).length).toEqual(4);
+      expect(perFolder.summary.downloaded).toEqual(
+        recursive.summary.downloaded
+      );
+      expect(perFolder.summary.createdDirs).toEqual(
+        recursive.summary.createdDirs
+      );
+      expect(perFolder.updated).toEqual(recursive.updated);
+    });
+
+    it("removes what the listing no longer has, in a folder and in an empty one", async function () {
+      await storage.write(blogID, "/sub/gone.txt", "x");
+      await storage.write(blogID, "/Empty/gone.txt", "x");
+
+      const { summary } = await walkTree(load(tree()));
+
+      expect(summary.removed).toEqual(2);
+    });
+
+    it("lists each folder when Dropbox refuses the recursive listing", async function () {
+      load(tree());
+      const messages = [];
+      const summary = await refuseRecursiveListing()(
+        blogID,
+        (...args) => messages.push(args.join(" ")),
+        async () => {}
+      );
+
+      expect(summary.downloaded).toEqual(3);
+      expect(messages.some((m) => /listing each folder/.test(m))).toEqual(true);
+    });
   });
 
   describe("comparing a file with Dropbox's", function () {
@@ -343,6 +487,9 @@ describe("dropbox resetToBlot", function () {
         const client = result.client;
         const real = client.filesListFolder;
         client.filesListFolder = async (args) => {
+          // A recursive listing would not show a folder vanishing, so Dropbox
+          // refuses it here and the walk lists each folder
+          if (args.recursive) throw refuseRecursive();
           if (args.path === path)
             throw Object.assign(new Error("Response failed with a 409 code"), {
               status: 409,

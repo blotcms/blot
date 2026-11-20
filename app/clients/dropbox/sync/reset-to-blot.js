@@ -216,6 +216,8 @@ async function resetToBlotWithClient(
 
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
 
+  const readdir = await createReaddir(client, dropboxRoot, publish);
+
   await walk(
     blogID,
     client,
@@ -224,7 +226,8 @@ async function resetToBlotWithClient(
     dropboxRoot,
     "/",
     summary,
-    progress
+    progress,
+    readdir
   );
 
   const changed =
@@ -282,16 +285,15 @@ const walk = async (
   dropboxRoot,
   dir,
   summary,
-  progress
+  progress,
+  readdir
 ) => {
   publish("Checking", dir);
-  const remoteReading = remoteReaddir(client, join(dropboxRoot, dir)).catch(
-    (err) => {
-      if (dir === "/" || !vanishedFolder(err)) throw err;
-      summary.vanished.push({ dir, tag: dropboxTag(err) });
-      return null;
-    }
-  );
+  const remoteReading = readdir(dir).catch((err) => {
+    if (dir === "/" || !vanishedFolder(err)) throw err;
+    summary.vanished.push({ dir, tag: dropboxTag(err) });
+    return null;
+  });
   const [remoteContents, localContents] = await Promise.all([
     remoteReading,
     localReaddir(blogID, dir, remoteReading),
@@ -416,7 +418,8 @@ const walk = async (
         dropboxRoot,
         join(dir, name),
         summary,
-        progress
+        progress,
+        readdir
       );
     } else {
       if (hasUnsupportedExtension(pathOnDropbox)) {
@@ -703,33 +706,76 @@ const vanishedFolder = (err) =>
   err.status === 409 &&
   /^path\/(not_found|not_folder)\b/.test(dropboxTag(err));
 
-const remoteReaddir = async (client, dir) => {
-  let items = [];
+// Lists a folder in Dropbox, following the cursor until has_more is false.
+// args are the filesListFolder arguments. Each entry gets is_directory.
+const listPages = async (client, args, label) => {
+  const items = [];
   let cursor;
   let has_more;
-
-  //path: Specify the root folder as an empty string rather than as "/".'
-  if (dir === "/") dir = "";
 
   do {
     const { result } = await retryRequest(
       () =>
         cursor
           ? client.filesListFolderContinue({ cursor })
-          : client.filesListFolder({ path: dir }),
-      "remoteReaddir"
+          : client.filesListFolder(args),
+      label
     );
     has_more = result.has_more;
     cursor = result.cursor;
-    items = items.concat(
-      result.entries.map((i) => {
-        i.is_directory = i[".tag"] === "folder";
-        return i;
-      })
-    );
+    for (const entry of result.entries) {
+      entry.is_directory = entry[".tag"] === "folder";
+      items.push(entry);
+    }
   } while (has_more);
 
   return items;
+};
+
+const remoteReaddir = (client, dir) =>
+  //path: Specify the root folder as an empty string rather than as "/".'
+  listPages(client, { path: dir === "/" ? "" : dir }, "remoteReaddir");
+
+// Returns readdir(dir), which resolves to the listing of a folder in Dropbox
+// (dir is a path on Blot: "/" or "/Sub/Folder"). A big blog has over a
+// thousand folders, so a request per folder holds its lock for minutes. The
+// whole tree is listed once instead, recursively, and each folder's listing is
+// read from that, grouped by parent folder (path_lower, as Dropbox's paths are
+// case insensitive). Dropbox returns at most 2,000 entries a page, and the
+// entries are held for the walk, a few hundred bytes each. It is a snapshot,
+// so a folder deleted since is still listed, as an edit made during the walk
+// is anyway (see excuseRecentChanges).
+// If Dropbox answers the recursive listing with a 409 (a folder it won't list
+// recursively, or a cursor that expired), each folder is listed as before.
+const createReaddir = async (client, dropboxRoot, publish) => {
+  const root = dropboxRoot === "/" ? "" : dropboxRoot.toLowerCase();
+  const byParent = new Map();
+
+  try {
+    const entries = await listPages(
+      client,
+      { path: root, recursive: true, limit: 2000 },
+      "remoteReaddir recursive"
+    );
+
+    for (const entry of entries) {
+      const path = entry.path_lower;
+      if (!path || !path.startsWith(root + "/")) continue;
+      const relative = path.slice(root.length);
+      const parent = relative.slice(0, relative.lastIndexOf("/")) || "/";
+      if (!byParent.has(parent)) byParent.set(parent, []);
+      byParent.get(parent).push(entry);
+    }
+  } catch (err) {
+    if (!err || err.status !== 409) throw err;
+    publish(
+      "Could not list the folder recursively, listing each folder",
+      dropboxTag(err)
+    );
+    return (dir) => remoteReaddir(client, join(dropboxRoot, dir));
+  }
+
+  return async (dir) => byParent.get(dir.toLowerCase()) || [];
 };
 
 module.exports = resetToBlot;
