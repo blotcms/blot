@@ -680,7 +680,13 @@ const initialize = async () => {
   checkDiskSpace(async (blogID) => {
     // Get the limiter for this specific blogID
     const limiter = getLimiterForBlogID(blogID);
-    const blogPath = rootOf(blogID);
+    let blogPath;
+    try {
+      blogPath = rootOf(blogID);
+    } catch (error) {
+      console.error(clfdate(), `Not evicting ${blogID}:`, error.message);
+      return;
+    }
     const pathInBlogDirectory = EVICTION_SUPPRESSION_BLOG_SCOPE;
 
     // Schedule the event handler to run within the limiter
@@ -707,8 +713,18 @@ const initialize = async () => {
     });
   });
 
-  // Where each blog's folder is: blog_<id> itself, or nested inside it
-  await refreshAllBlogFolders();
+  // Where each blog's folder is: blog_<id> itself, or nested inside it. The
+  // nested folders' names go to Blot, which keeps the one it last heard: a
+  // rename made while the macserver was stopped is reported here
+  for (const { blogID, name } of await refreshAllBlogFolders()) {
+    status(blogID, { folderName: name }).catch((error) =>
+      console.error(
+        clfdate(),
+        `Failed to report the folder's name for ${blogID}:`,
+        error.message
+      )
+    );
+  }
 
   // bird's journal, loaded before the blogs are scanned: it knows which
   // paths changed while the macserver was stopped

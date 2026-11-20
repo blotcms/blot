@@ -111,7 +111,12 @@ describe("icloud macserver blogFolder", function () {
     let layout = await blogFolder.refresh(blogID);
     expect(layout.nested).toBe(true);
     expect(layout.root).toBe(null);
-    expect(blogFolder.isNested(blogID)).toBe(false);
+    // still nested: its files must not go to blog_<id> in the folder's place
+    expect(blogFolder.isNested(blogID)).toBe(true);
+    expect(() => blogFolder.rootOf(blogID)).toThrowError(/gone/);
+    expect(
+      blogFolder.locate(path.join(container(), "Old name", "post.md"))
+    ).toEqual({ blogID, path: "" });
 
     await fs.mkdirp(path.join(container(), "One"));
     await fs.mkdirp(path.join(container(), "Two"));
@@ -126,6 +131,26 @@ describe("icloud macserver blogFolder", function () {
 
     await expectAsync(blogFolder.nest(blogID, shared)).toBeRejected();
     expect(await fs.pathExists(shared)).toBe(true);
+  });
+
+  it("clears Finder's dot-files when removing a nested blog_<id>", async function () {
+    await fs.outputFile(path.join(container(), blogFolder.MARKER), "");
+    await fs.outputFile(path.join(container(), ".DS_Store"), "x");
+    await blogFolder.refresh(blogID);
+
+    expect(await blogFolder.removeContainer(blogID)).toBe(true);
+    expect(await fs.pathExists(container())).toBe(false);
+    expect(blogFolder.isNested(blogID)).toBe(false);
+  });
+
+  it("lists nested blogs' names at startup", async function () {
+    const shared = path.join(root, "My site " + blogID);
+    await fs.mkdirp(shared);
+    await blogFolder.nest(blogID, shared);
+    blogFolder._reset();
+
+    const found = await blogFolder.refreshAll();
+    expect(found).toContain({ blogID, name: "My site " + blogID });
   });
 
   it("removes an empty nested blog_<id>, and refuses one that isn't", async function () {

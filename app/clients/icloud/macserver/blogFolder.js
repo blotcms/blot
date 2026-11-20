@@ -31,20 +31,30 @@ export const MARKER = ".blot-nested";
 
 const BLOG_ID = /^blog_[a-zA-Z0-9]+$/;
 
-// blogID -> absolute path of the shared folder, for nested blogs only
-const nested = new Map();
+// Nested blogs (their blog_<id> holds the marker), and where each one's
+// shared folder is now. Kept apart: a nested blog whose folder has gone
+// (left, unshared, deleted) is still nested, and must not fall back to
+// blog_<id>, Blot's own folder, for its files.
+const nestedBlogs = new Set();
+const roots = new Map(); // blogID -> absolute path of the shared folder
 
 export const containerPath = (blogID) => join(iCloudDriveDirectory, blogID);
 
 // The shared folder: the folder inside blog_<id> for a nested blog, else
-// blog_<id> itself
-export const rootOf = (blogID) => nested.get(blogID) || containerPath(blogID);
+// blog_<id> itself. Throws for a nested blog whose folder is gone, so nothing
+// is read from or written to blog_<id> in its place.
+export const rootOf = (blogID) => {
+  if (!nestedBlogs.has(blogID)) return containerPath(blogID);
+  const root = roots.get(blogID);
+  if (!root) throw new Error(`The shared folder of ${blogID} is gone`);
+  return root;
+};
 
-export const isNested = (blogID) => nested.has(blogID);
+export const isNested = (blogID) => nestedBlogs.has(blogID);
 
 // The owner's name for a nested blog's folder, or null
 export const folderNameOf = (blogID) => {
-  const root = nested.get(blogID);
+  const root = roots.get(blogID);
   return root ? root.slice(containerPath(blogID).length + 1) : null;
 };
 
@@ -66,9 +76,12 @@ export const refresh = async (blogID) => {
   const before = folderNameOf(blogID);
 
   if (!(await fs.pathExists(join(container, MARKER)))) {
-    nested.delete(blogID);
+    nestedBlogs.delete(blogID);
+    roots.delete(blogID);
     return { nested: false, root: container, name: null, renamedFrom: null };
   }
+
+  nestedBlogs.add(blogID);
 
   const folders = await foldersIn(container);
   if (folders.length !== 1) {
@@ -77,12 +90,12 @@ export const refresh = async (blogID) => {
         clfdate(),
         `blogFolder: ${blogID} holds ${folders.length} folders: ${folders.join(", ")}`
       );
-    nested.delete(blogID);
+    roots.delete(blogID);
     return { nested: true, root: null, name: null, renamedFrom: null };
   }
 
   const name = folders[0];
-  nested.set(blogID, join(container, name));
+  roots.set(blogID, join(container, name));
   return {
     nested: true,
     root: join(container, name),
@@ -91,8 +104,11 @@ export const refresh = async (blogID) => {
   };
 };
 
-// Reads every blog's layout, at startup
+// Reads every blog's layout, at startup. Resolves to the nested blogs'
+// { blogID, name }, so their current names can be sent to Blot: a rename
+// made while the macserver was stopped is otherwise never reported.
 export const refreshAll = async () => {
+  const found = [];
   const entries = await fs.readdir(iCloudDriveDirectory, {
     withFileTypes: true,
   });
@@ -100,7 +116,9 @@ export const refreshAll = async () => {
   for (const entry of entries) {
     if (!entry.isDirectory() || !BLOG_ID.test(entry.name)) continue;
     try {
-      if ((await refresh(entry.name)).nested) count++;
+      const layout = await refresh(entry.name);
+      if (layout.nested) count++;
+      if (layout.name) found.push({ blogID: entry.name, name: layout.name });
     } catch (error) {
       console.error(
         clfdate(),
@@ -110,6 +128,7 @@ export const refreshAll = async () => {
     }
   }
   console.log(clfdate(), `blogFolder: ${count} nested blog folder(s)`);
+  return found;
 };
 
 // The blog and the path inside its shared folder for a path on disk.
@@ -121,6 +140,10 @@ export const locate = (fullPath) => {
   const relative = fullPath.slice(iCloudDriveDirectory.length + 1);
   const [blogID] = relative.split("/");
   if (!blogID || !blogID.startsWith("blog_")) return null;
+
+  // a nested blog whose folder is gone: all of blog_<id> is "the folder"
+  if (nestedBlogs.has(blogID) && !roots.has(blogID))
+    return { blogID, path: "" };
 
   const root = rootOf(blogID);
   if (fullPath === root) return { blogID, path: "" };
@@ -150,19 +173,46 @@ export const nest = async (blogID, from) => {
   return refresh(blogID);
 };
 
-// Removes an empty nested blog_<id> (its folder already left): the marker,
-// then the folder, which is Blot's own and holds nothing of the owner's
+// Removes an empty nested blog_<id> (its folder already left), which is
+// Blot's own and holds nothing of the owner's: Finder's dot-files (a
+// .DS_Store from leaveFolder's window), then the marker, then the folder. The
+// marker goes last and comes back if the folder can't be removed, so a retry
+// still knows the layout.
 export const removeContainer = async (blogID) => {
   if (!BLOG_ID.test(blogID)) throw new Error(`Invalid blogID: ${blogID}`);
   const container = containerPath(blogID);
-  nested.delete(blogID);
-  if (!(await fs.pathExists(join(container, MARKER)))) return false;
-  if ((await foldersIn(container)).length)
-    throw new Error(`${container} still holds a folder`);
+  if (!(await fs.pathExists(join(container, MARKER)))) {
+    nestedBlogs.delete(blogID);
+    roots.delete(blogID);
+    return false;
+  }
+
+  const entries = await fs.readdir(container, { withFileTypes: true });
+  const other = entries.filter(
+    (entry) =>
+      entry.name !== MARKER && !(entry.isFile() && entry.name.startsWith("."))
+  );
+  if (other.length)
+    throw new Error(
+      `${container} still holds ${other.map((entry) => entry.name).join(", ")}`
+    );
+
+  for (const entry of entries)
+    if (entry.name !== MARKER) await fs.remove(join(container, entry.name));
   await fs.remove(join(container, MARKER));
-  await fs.rmdir(container);
+  try {
+    await fs.rmdir(container);
+  } catch (error) {
+    await fs.writeFile(join(container, MARKER), "");
+    throw error;
+  }
+  nestedBlogs.delete(blogID);
+  roots.delete(blogID);
   return true;
 };
 
 // For specs
-export const _reset = () => nested.clear();
+export const _reset = () => {
+  nestedBlogs.clear();
+  roots.clear();
+};

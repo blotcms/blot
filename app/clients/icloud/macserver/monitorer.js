@@ -56,7 +56,14 @@ export default () => {
           return;
         }
 
-        recursiveList(rootOf(blogId), 0).catch((error) => {
+        let root;
+        try {
+          root = rootOf(blogId);
+        } catch (error) {
+          console.error(clfdate(), error.message);
+          return;
+        }
+        recursiveList(root, 0).catch((error) => {
           console.error(
             clfdate(),
             `Failed to recursively list contents of ${blogId}:`,
