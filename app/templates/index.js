@@ -459,24 +459,20 @@ var SYNTAX_HIGHLIGHTER_VOLATILE_PROPS = [
   "colors",
 ];
 
-// injectLocals overwrites every `font`/`*_font` local's `styles` with the
-// canonical @font-face CSS from blog/static/fonts/index.json, Mustache-rendered
-// with the real config.cdn.origin, on every setMetadata write. The on-disk
-// source keeps the raw `{{{config.cdn.origin}}}` token or (post the woff2
-// migration) omits `styles` entirely, so the two representations never compare
-// equal and a template with a non-system font (et-book, source-serif, ...)
-// drops/recreates on every startup.
-//
-// `styles` is fully derived from the font `id` and the local's key, so on the
-// *disk* snapshot we render it from the registry exactly as injectLocals would
-// (injectLocals.fontStylesFor) - making the
-// snapshot represent the desired stored state. The *stored* snapshot is left
-// as-is. Result: a genuine registry change (e.g. .eot/.ttf -> .woff2) is a
-// real diff and triggers exactly one rebuild that refreshes the stored CSS;
-// once stored matches the registry, subsequent startups compare equal and
-// there is no rebuild loop.
-function normalizeLocalsForComparison(locals, renderFontStyles) {
+// setMetadata runs injectLocals on every template's locals before storing
+// them: each `font`/`*_font` local gets the registry's name, stack and
+// Mustache-rendered styles, and each syntax highlighter its theme. The on-disk
+// source holds neither (the build only merges the System sans-serif defaults
+// into each font), so comparing it with what is stored would never match for a
+// template with a font other than System sans-serif, or a font it overrides,
+// and the template would drop and rebuild at every startup, with a new
+// cacheID. So the on-disk locals go through injectLocals too, giving the
+// locals that would be stored. A genuine registry change is then a real diff,
+// and triggers one rebuild that refreshes what is stored.
+function normalizeLocalsForComparison(locals, inject) {
   var normalized = _.cloneDeep(locals || {});
+
+  if (inject) injectLocals(normalized);
 
   if (
     normalized.syntax_highlighter &&
@@ -484,21 +480,6 @@ function normalizeLocalsForComparison(locals, renderFontStyles) {
   ) {
     SYNTAX_HIGHLIGHTER_VOLATILE_PROPS.forEach(function (prop) {
       delete normalized.syntax_highlighter[prop];
-    });
-  }
-
-  if (renderFontStyles) {
-    Object.keys(normalized).forEach(function (key) {
-      if (key !== "font" && key.indexOf("_font") === -1) return;
-
-      var local = normalized[key];
-      if (!local || typeof local !== "object" || !local.id) return;
-
-      var registryFont = fonts.find(function (f) {
-        return f.id === local.id;
-      });
-      if (registryFont)
-        local.styles = injectLocals.fontStylesFor(key, registryFont);
     });
   }
 
