@@ -50,7 +50,6 @@ describe("dropbox resetToBlot", function () {
         entries.map((entry) => ({
           ...entry,
           path_lower: (
-            "/blog folder" +
             (dir === "/" ? "" : dir) +
             "/" +
             entry.name
@@ -70,7 +69,10 @@ describe("dropbox resetToBlot", function () {
           error: null,
           client: {
             filesGetMetadata: async () => ({
-              result: { path_display: "/Blog Folder" },
+              result: {
+                path_display: "/Blog Folder",
+                path_lower: "/blog folder",
+              },
             }),
             ...(revisions && {
               filesListRevisions: async ({ path, mode, limit }) => {
@@ -1066,15 +1068,15 @@ describe("dropbox resetToBlot", function () {
         [folder("/A"), file("/A/x.md"), folder("/Empty"), file("/y.md")],
         {}
       );
-      const readdir = await createReaddir(stub, "/", () => {});
+      const readdir = await createReaddir(stub, "/", "", () => {});
 
-      expect((await readdir("/")).map((e) => e.name).sort()).toEqual([
+      expect((await readdir("/", "/")).map((e) => e.name).sort()).toEqual([
         "A",
         "Empty",
         "y.md",
       ]);
-      expect((await readdir("/A")).map((e) => e.name)).toEqual(["x.md"]);
-      expect(await readdir("/Empty")).toEqual([]);
+      expect((await readdir("/A", "/a")).map((e) => e.name)).toEqual(["x.md"]);
+      expect(await readdir("/Empty", "/empty")).toEqual([]);
       expect(stub.perFolderCalls).toEqual([]);
     });
 
@@ -1084,9 +1086,11 @@ describe("dropbox resetToBlot", function () {
       const stub = client([file("/y.md")], {
         "/Other": [file("/Other/z.md")],
       });
-      const readdir = await createReaddir(stub, "/", () => {});
+      const readdir = await createReaddir(stub, "/", "", () => {});
 
-      expect((await readdir("/Other")).map((e) => e.name)).toEqual(["z.md"]);
+      expect((await readdir("/Other", "/other")).map((e) => e.name)).toEqual([
+        "z.md",
+      ]);
       expect(stub.perFolderCalls).toEqual(["/Other"]);
     });
   });

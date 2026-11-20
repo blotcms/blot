@@ -134,6 +134,9 @@ async function resetToBlotWithClient(
   }
 
   let dropboxRoot = "/";
+  // The root's path as Dropbox lowercases it, which the recursive listing's
+  // path_lower values start with. Null if Dropbox didn't give one.
+  let rootLower = "";
 
   // Load the path to the blog folder root position in Dropbox
   if (account.folder_id) {
@@ -144,7 +147,8 @@ async function resetToBlotWithClient(
         "filesGetMetadata"
       )
     );
-    const { path_display } = result;
+    const { path_display, path_lower } = result;
+    rootLower = path_lower || null;
     if (path_display) {
       dropboxRoot = path_display;
       await set(blogID, { folder: path_display });
@@ -216,7 +220,7 @@ async function resetToBlotWithClient(
 
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
 
-  const readdir = await createReaddir(client, dropboxRoot, publish);
+  const readdir = await createReaddir(client, dropboxRoot, rootLower, publish);
 
   await walk(
     blogID,
@@ -227,7 +231,8 @@ async function resetToBlotWithClient(
     "/",
     summary,
     progress,
-    readdir
+    readdir,
+    "/"
   );
 
   const changed =
@@ -286,10 +291,11 @@ const walk = async (
   dir,
   summary,
   progress,
-  readdir
+  readdir,
+  key
 ) => {
   publish("Checking", dir);
-  const remoteReading = readdir(dir).catch((err) => {
+  const remoteReading = readdir(dir, key).catch((err) => {
     if (dir === "/" || !vanishedFolder(err)) throw err;
     summary.vanished.push({ dir, tag: dropboxTag(err) });
     return null;
@@ -419,7 +425,8 @@ const walk = async (
         join(dir, name),
         summary,
         progress,
-        readdir
+        readdir,
+        remoteItem.path_lower
       );
     } else {
       if (hasUnsupportedExtension(pathOnDropbox)) {
@@ -736,37 +743,46 @@ const remoteReaddir = (client, dir) =>
   //path: Specify the root folder as an empty string rather than as "/".'
   listPages(client, { path: dir === "/" ? "" : dir }, "remoteReaddir");
 
-// Returns readdir(dir), which resolves to the listing of a folder in Dropbox
-// (dir is a path on Blot: "/" or "/Sub/Folder"). A big blog has over a
-// thousand folders, so a request per folder holds its lock for minutes. The
-// whole tree is listed once instead, recursively, and each folder's listing is
-// read from that, grouped by parent folder (path_lower, as Dropbox's paths are
-// case insensitive). Dropbox returns at most 2,000 entries a page, and the
-// entries are held for the walk, a few hundred bytes each. It is a snapshot,
-// so a folder deleted since is still listed, as an edit made during the walk
-// is anyway (see excuseRecentChanges).
+// Returns readdir(dir, pathLower), which resolves to the listing of a folder
+// in Dropbox: dir is its path on Blot ("/" or "/Sub/Folder"), and pathLower
+// the folder's path_lower as Dropbox gave it ("/" for the root). A big blog has
+// over a thousand folders, so a request per folder holds its lock for minutes.
+// The whole tree is listed once instead, recursively, and each folder's
+// listing is read from that, grouped by parent folder through Dropbox's own
+// path_lower values. JavaScript's lowercasing is never used to match them: it
+// differs from Dropbox's (a final sigma, say), so it could match a different
+// folder. A folder that can't be matched is listed by itself, never taken for
+// empty, which would remove its files from Blot. Dropbox returns at most 2,000
+// entries a page, and the entries are held for the walk, a few hundred bytes
+// each. It is a snapshot, so a folder deleted since is still listed, as an
+// edit made during the walk is anyway (see excuseRecentChanges).
 // If Dropbox answers the recursive listing with a 409 (a folder it won't list
-// recursively, or a cursor that expired), each folder is listed as before.
-const createReaddir = async (client, dropboxRoot, publish) => {
-  const root = dropboxRoot === "/" ? "" : dropboxRoot.toLowerCase();
+// recursively, or a cursor that expired), or the root's path_lower is unknown,
+// each folder is listed as before.
+const createReaddir = async (client, dropboxRoot, rootLower, publish) => {
+  const perFolder = (dir) => remoteReaddir(client, join(dropboxRoot, dir));
+
+  if (rootLower === null || rootLower === undefined) return perFolder;
+
   const byParent = new Map();
-  // Folders the listing has, so an empty one can be told apart from one whose
-  // path didn't match (a different lowercasing or Unicode form): an unmatched
-  // folder is listed by itself, never taken for empty, which would remove its
-  // files from Blot
   const folders = new Set(["/"]);
 
   try {
     const entries = await listPages(
       client,
-      { path: root, recursive: true, limit: 2000 },
+      // The path as Dropbox gave it, not lowercased here
+      {
+        path: dropboxRoot === "/" ? "" : dropboxRoot,
+        recursive: true,
+        limit: 2000,
+      },
       "remoteReaddir recursive"
     );
 
     for (const entry of entries) {
       const path = entry.path_lower;
-      if (!path || !path.startsWith(root + "/")) continue;
-      const relative = path.slice(root.length);
+      if (!path || !path.startsWith(rootLower + "/")) continue;
+      const relative = path.slice(rootLower.length);
       const parent = relative.slice(0, relative.lastIndexOf("/")) || "/";
       if (entry.is_directory) folders.add(relative);
       if (!byParent.has(parent)) byParent.set(parent, []);
@@ -778,14 +794,20 @@ const createReaddir = async (client, dropboxRoot, publish) => {
       "Could not list the folder recursively, listing each folder",
       dropboxTag(err)
     );
-    return (dir) => remoteReaddir(client, join(dropboxRoot, dir));
+    return perFolder;
   }
 
-  return async (dir) => {
-    const key = dir.toLowerCase();
-    if (byParent.has(key)) return byParent.get(key);
-    if (folders.has(key)) return [];
-    return remoteReaddir(client, join(dropboxRoot, dir));
+  return async (dir, pathLower) => {
+    const key =
+      pathLower === "/"
+        ? "/"
+        : typeof pathLower === "string" && pathLower.startsWith(rootLower + "/")
+          ? pathLower.slice(rootLower.length)
+          : null;
+
+    if (key !== null && byParent.has(key)) return byParent.get(key);
+    if (key !== null && folders.has(key)) return [];
+    return perFolder(dir);
   };
 };
 
