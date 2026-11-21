@@ -1,0 +1,73 @@
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta property="og:site_name" content="{{title}}">
+
+  <title>{{> title}}</title>
+  {{#entry}}
+  {{#summary}}<meta name="description" content="{{summary}}">{{/summary}}
+  {{^summary}}<meta name="description" content="{{title}}">{{/summary}}
+  {{/entry}}
+  {{^entry}}<meta name="description" content="{{> description}}">{{/entry}}
+
+  <link rel="alternate" type="application/rss+xml" title="RSS Feed for {{title}}" href="{{{siteURL}}}{{{feedURL}}}">
+  {{#favicon}}
+  <link rel="icon" href="{{{ico}}}" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="{{{png32}}}">
+  <link rel="icon" type="image/png" sizes="16x16" href="{{{png16}}}">
+  <link rel="apple-touch-icon" sizes="180x180" href="{{{appleTouch}}}">
+  {{/favicon}}
+  {{^favicon}}{{#profile_image.thumbnails.square}}<link rel="icon" href="{{{url}}}">{{/profile_image.thumbnails.square}}{{/favicon}}
+  <link rel="preconnect" href="{{{cdn}}}" />
+  <link rel="stylesheet" href="{{#cdn}}/style.css{{/cdn}}">
+
+  {{#entry}}
+  {{#absoluteURL}}
+  <link rel="canonical" href="{{{absoluteURL}}}">
+  <meta property="og:url" content="{{{absoluteURL}}}">
+  {{/absoluteURL}}
+  <meta property="og:title" content="{{title}}">
+  {{#summary}}<meta property="og:description" content="{{summary}}">{{/summary}}{{^summary}}<meta property="og:description" content="{{title}}">{{/summary}}
+  {{#thumbnail.large}}
+  <meta property="og:image" content="{{{url}}}">
+  <meta property="og:image:width" content="{{width}}">
+  <meta property="og:image:height" content="{{height}}">
+  {{/thumbnail.large}}
+  {{#page}}<meta property="og:type" content="website">{{/page}}
+  {{^page}}<meta property="og:type" content="article">{{/page}}
+  {{#thumbnail.large}}<meta name="twitter:card" content="summary_large_image">{{/thumbnail.large}}{{^thumbnail.large}}<meta name="twitter:card" content="summary">{{/thumbnail.large}}
+  <meta name="twitter:title" content="{{title}}">
+  {{#summary}}<meta name="twitter:description" content="{{summary}}">{{/summary}}{{^summary}}<meta name="twitter:description" content="{{title}}">{{/summary}}
+  {{#thumbnail.large}}<meta name="twitter:image" content="{{{url}}}">{{/thumbnail.large}}
+  {{^page}}
+  <meta property="article:author" content="{{{siteURL}}}">
+  <meta property="article:published_time" content="{{#formatDate}}YYYY-MM-DDTHH:mm:ssZ{{/formatDate}}">
+  <meta property="article:modified_time" content="{{#formatUpdated}}YYYY-MM-DDTHH:mm:ssZ{{/formatUpdated}}">
+  {{#tags}}
+  <meta property="article:tag" content="{{name}}">
+  {{/tags}}
+  {{/page}}
+  {{/entry}}
+
+  {{! An event (a post whose Event line is a date) is described for search engines as one. }}
+  {{#entry.event}}
+  {{#entry}}
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Event","name":"{{#encode_json}}{{{title}}}{{/encode_json}}","url":"{{#encode_json}}{{{absoluteURL}}}{{/encode_json}}",{{#event.timed}}"startDate":"{{#formatEvent}}YYYY-MM-DDTHH:mm:ssZ{{/formatEvent}}"{{/event.timed}}{{#event.allDay}}"startDate":"{{#formatEvent}}YYYY-MM-DD{{/formatEvent}}"{{/event.allDay}}{{#metadata.venue}},"location":{"@type":"Place","name":"{{#encode_json}}{{{metadata.venue}}}{{/encode_json}}"{{#metadata.address}},"address":"{{#encode_json}}{{{metadata.address}}}{{/encode_json}}"{{/metadata.address}}}{{/metadata.venue}}{{#summary}},"description":"{{#encode_json}}{{{summary}}}{{/encode_json}}"{{/summary}},"organizer":{"@type":"Organization","name":"{{#encode_json}}{{{blog.title}}}{{/encode_json}}","url":"{{#encode_json}}{{{siteURL}}}{{/encode_json}}"}}</script>
+  {{/entry}}
+  {{/entry.event}}
+  <link rel="alternate" type="text/calendar" title="{{title}}: events" href="{{{siteURL}}}/calendar.ics">
+
+  {{! The organization itself, on every list page, for search engines }}
+  {{^entry}}
+  <script type="application/ld+json">{"@context":"https://schema.org","@type":"Organization","name":"{{#encode_json}}{{{title}}}{{/encode_json}}","url":"{{#encode_json}}{{{siteURL}}}{{/encode_json}}"{{#tagline}},"description":"{{#encode_json}}{{{tagline}}}{{/encode_json}}"{{/tagline}}{{#address}},"address":"{{#encode_json}}{{{address}}}{{/encode_json}}"{{/address}}{{#email}},"email":"{{#encode_json}}{{{email}}}{{/encode_json}}"{{/email}}{{#phone}},"telephone":"{{#encode_json}}{{{phone}}}{{/encode_json}}"{{/phone}}{{#founded}},"foundingDate":"{{#encode_json}}{{{founded}}}{{/encode_json}}"{{/founded}}}</script>
+  {{/entry}}
+  {{^entry}}
+  <meta property="og:type" content="website">
+  {{#url}}
+  <link rel="canonical" href="{{{url}}}">
+  <meta property="og:url" content="{{{url}}}">
+  {{/url}}
+  <meta property="og:title" content="{{> title}}">
+  <meta property="og:description" content="{{> description}}">
+  {{/entry}}
+</head>

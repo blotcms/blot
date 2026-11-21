@@ -1,0 +1,12 @@
+{{! People: a card for each post, its picture, name (the title), role and email. For a staff, board, committee or teachers' tag: write one post per person with Role: and Email: lines and a picture. }}
+<div class="people">
+  {{#posts}}
+  <article class="person">
+    <a href="{{{url}}}" tabindex="-1" aria-hidden="true">{{#thumbnail.medium.url}}<img src="{{{thumbnail.medium.url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w" sizes="(min-width: 40rem) 23vw, 48vw" width="{{thumbnail.medium.width}}" height="{{thumbnail.medium.height}}" alt="" loading="lazy">{{/thumbnail.medium.url}}</a>
+    <h3 class="row-title"><a href="{{{url}}}">{{title}}</a></h3>
+    {{#metadata.role}}<div class="quiet">{{metadata.role}}</div>{{/metadata.role}}
+    {{#metadata.email}}<div><a href="mailto:{{metadata.email}}">{{metadata.email}}</a></div>{{/metadata.email}}
+    {{#metadata.phone}}<div>{{metadata.phone}}</div>{{/metadata.phone}}
+  </article>
+  {{/posts}}
+</div>

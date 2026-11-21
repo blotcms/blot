@@ -1,0 +1,26 @@
+Date: 2026-11-19 09:20
+Event: 2027-02-20 10:00
+Ends: 2027-02-21
+Tags: Events
+Venue: The Gramercy Room
+Cost: $5, members free
+Booking: https://nystampclub.example/fair
+Action: Book a dealer's table
+Summary: Two days of dealers, a free valuation table, and the spring auction's lots on view.
+
+# The stamp fair
+
+The stamp fair is on Saturday and Sunday, February 20 and 21, from ten until five both days. Twenty dealers take tables in the Gramercy Room, from the man with the shoeboxes to the woman with the white gloves, and the club runs a valuation table where members will tell you, for free and at length, what you have.
+
+The juniors' table will be there all weekend, with Marguerite Fong and the box of duplicates, and anyone under eighteen gets in free and goes home with a starter album. The lots for the spring auction in March will be on view on Sunday afternoon.
+
+| | Saturday 20 | Sunday 21 |
+| --- | --- | --- |
+| 10 am | Doors open; dealers' tables | Doors open; dealers' tables |
+| 11 am | Valuation table opens | Valuation table opens |
+| 2 pm | Juniors' treasure hunt | Auction lots on view |
+| 5 pm | Doors close | Doors close |
+
+Dealers can book a table through the link on this page. Visitors just come; the five dollars goes to the kettle fund.
+
+![Plant for more beautiful streets: the fair is the club's first sign of spring](/_stamps/Beautification of America Streets.jpg)

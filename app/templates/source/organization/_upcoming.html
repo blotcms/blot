@@ -1,0 +1,9 @@
+{{! What's coming up, soonest first (upcoming_events: on a tag page, only that tag's), at most four, with a link to subscribe to them all in a calendar app. }}
+{{#upcoming_events.length}}
+<h2 class="section-heading section-heading--split"><span>Upcoming</span> <a class="quiet" href="/calendar.ics">Add to your calendar</a></h2>
+<div class="upcoming">
+  {{#upcoming_events}}
+  {{> upcoming-item}}
+  {{/upcoming_events}}
+</div>
+{{/upcoming_events.length}}

@@ -1,0 +1,49 @@
+Link: /join
+Page: yes
+Cost: $12 a year
+Email: join@nystampclub.example
+Summary: Twelve dollars a year, payable in cash or, by tradition, in stamps.
+
+# Join
+
+Membership is twelve dollars a year, payable in cash or, by a tradition older than anyone present, in mint commemoratives of equal face value. A dozen one-dollar stamps will do; so will two sixes. The treasurer is fair about change, and has opinions about which commemoratives.
+
+{||} **Members** pay $12 a year. They get a seat at every meeting and a vote at the annual one in March; the use of the loupe, the tongs and the good lamp; *The Perforation*, our newsletter, twice a year on paper; a place at the outing, the Christmas party and the annual dinner; and a say in what we read.
+
+{||} **Guests** pay nothing, though the hat goes round. They get a seat at any meeting, as often as they like; tea, and the loupe when it comes round; the summer and winter lectures, which are open to everyone; and no vote, which means no one will ask them to serve on anything.
+
+## What it costs
+
+| | Members | Juniors, under 18 | Guests |
+| --- | :---: | :---: | :---: |
+| Dues, a year | $12 | Free | Free |
+| Every meeting | Yes | Yes | Yes |
+| A vote in March | Yes | No | No |
+| *The Perforation* by post | Yes | Yes | No |
+| The Christmas party | $10 | Free | $10 |
+| A table at the stamp fair | Half price | Free | Full price |
+
+## How to sign up
+
+::: steps
+1. **Come to a meeting.** Any second Tuesday, at 6:30 in the members' room of the Society Library. Come twice if you like; most people do.
+2. **Find the treasurer.** Priya Venkataraman sits at the table by the door. She will take your twelve dollars, or its equivalent in stamps.
+3. **Sign the book.** Your name goes in the members' book, in ink, and on the list for *The Perforation*.
+:::
+
+If you can't come in person, write to join@nystampclub.example with your name, your address and a sentence about what you collect, even if it is nothing yet. We will write back with the details and a place to send your dues.
+
+::: buttons
+[Come to a meeting](/visit) [Write to join](mailto:join@nystampclub.example)
+:::
+
+> [!tip] Come twice first
+> Most members came as guests two or three times before they joined, and we recommend it. You will know by the second evening whether the arguments are your kind of arguments.
+
+Membership is governed by Article III of the club's [rules](/rules), which is short.
+
+## Questions
+
+<details><summary>When does my membership run?</summary>For the calendar year, January to December. If you join after September, your dues cover the rest of this year and all of the next. Priya will remind you, in person, in December.</details>
+<details><summary>Do children pay?</summary>No. Members under eighteen join free, and the kettle fund pays their dues. Marguerite Fong runs the juniors' table and will find them something to start with.</details>
+<details><summary>I stopped collecting in 1974. Can I still join?</summary>Yes. Several members did the same, and they are the ones who know what everything used to cost.</details>

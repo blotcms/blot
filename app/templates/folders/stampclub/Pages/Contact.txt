@@ -1,0 +1,33 @@
+Link: /contact
+Page: yes
+Menu: no
+Address: Post Office Box 1951, New York, New York
+Phone: (212) 555-0151
+Email: hello@nystampclub.example
+Summary: Who to write to about what, and where to send a letter.
+
+# Contact
+
+The quickest way to reach the club is to come on a second Tuesday. The next quickest is to write to hello@nystampclub.example, which Leonard reads on Sunday evenings. If you know who you want, write to them directly; there is more about [the officers](/tagged/people) on their own pages. The phone above is an answering machine in Leonard's hall, and he returns calls on Sundays too.
+
+| Who | What about | Address |
+| --- | --- | --- |
+| Ruth Abernethy, president | Talks, the club in general, complaints | president@nystampclub.example |
+| Priya Venkataraman, treasurer | Dues, the kettle fund, receipts | treasurer@nystampclub.example |
+| Leonard Frisch, secretary | Minutes, *The Perforation*, this website | secretary@nystampclub.example |
+| Constance Whitlock, librarian | The reading list, the maps, the loupe | library@nystampclub.example |
+| Walter Dziedzic | The August outing | outings@nystampclub.example |
+| Oscar Bellamy | Lots for the spring auction | auction@nystampclub.example |
+| Marguerite Fong | The juniors' table, school visits | juniors@nystampclub.example |
+
+Inez Calloway has no email address and does not want one. You will find her at the door.
+
+## By post
+
+We are a stamp club, so we do read letters, and we read the envelopes first.
+
+New York Stamp Club\
+Post Office Box 1951\
+New York, New York
+
+The box is emptied on meeting days. Please use a commemorative.

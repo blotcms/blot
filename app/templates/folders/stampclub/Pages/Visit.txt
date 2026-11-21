@@ -1,0 +1,61 @@
+Link: /visit
+Page: yes
+Contents: yes
+Address: East Seventy-ninth Street, New York
+Hours: Second Tuesday of the month, 6:30–9 pm
+Email: hello@nystampclub.example
+Summary: Where we meet, how to get in, what to bring, and what people usually ask.
+
+# Visit
+
+Visitors are welcome at any meeting, and nobody will ask you to join. Meetings start at half past six and end when the library closes, at nine. Bring a stamp you can't identify.
+
+## Where
+
+{|<} Lost? The members' room is the one with the green lamps. If you reach the periodicals, you have gone a floor too far.
+
+The members' room is on the second floor of the Society Library on East Seventy-ninth Street, a short walk from the Lexington Avenue subway. Come in through the front door (if the desk is closed, ring the bell marked Members) and take the stairs on the left. The room is at the top, with the long table and the green lamps.
+
+A few events are elsewhere: the summer lecture and the winter lecture at Morrow Hall on Riverside Drive, and the annual dinner, the stamp fair and the auction at the Gramercy Room. Each event's page says where it is.
+
+## Meetings in 2027
+
+Every meeting starts at 6:30 pm and ends by nine, in the members' room unless it says otherwise.
+
+| 2027 | What's on |
+| --- | --- |
+| Jan 12 | Winter lecture: the Pony Express, at Morrow Hall |
+| Feb 9 | Reading: *Household Words* |
+| Mar 9 | The annual meeting |
+| Apr 13 | Talk to be announced |
+| May 11 | Results of the spring auction |
+| Jun 8 | Talk to be announced |
+| Jul 13 | The summer swap: bring a shoebox |
+| Aug 10 | The outing, by coach; no meeting in the library |
+| Sep 14 | Talk to be announced |
+| Oct 12 | Talk to be announced |
+| Nov 9 | Talk to be announced |
+| Dec 14 | The Christmas show and tell |
+
+::: tip
+Add the [calendar](/calendar.ics) to your phone and every meeting appears there, and moves if we move it.
+:::
+
+## Getting in
+
+There is an elevator at the back of the building, past the desk; ask the staff and they will bring it down. The members' room has a step-free doorway, chairs with arms, and a table at a comfortable height for anyone using a wheelchair. If you would like a large-print program or a seat near the front, write to the address above a few days before and we will arrange it.
+
+## What to bring
+
+- A stamp, an envelope or a shoebox that you would like identified.
+- A magnifier, if you own one. We have a loupe, but it is in demand.
+- A cookie, if you feel generous. Keep it away from the albums.
+
+## Questions
+
+<details><summary>Do I need to be a member to come?</summary>No. Anyone may come to a meeting as a guest, and most of our members started that way. We only ask that you sign the visitors' book at the door.</details>
+<details><summary>Is there a charge?</summary>No. Tea is free, and a hat goes round at the end for the kettle fund. Put in what you like, including nothing.</details>
+<details><summary>I know nothing about stamps. Is that a problem?</summary>It helps. The best questions come from people who have not read the catalog, and our members are happy to answer them at length.</details>
+<details><summary>Can I bring my own collection?</summary>Please do. Put it on the long table before the talk and someone will find it. If you want to sell it, we will tell you honestly what we think, and then send you to a dealer.</details>
+<details><summary>Can children come?</summary>Yes, with a grown-up. Marguerite Fong keeps a box of duplicates at the juniors' table for first-time collectors under twelve, and they may take three home.</details>
+<details><summary>What if it rains?</summary>The meeting happens. The tea happens. The stamps stay in their sleeves, and the umbrellas go in the stand by the door.</details>

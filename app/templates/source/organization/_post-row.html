@@ -1,0 +1,24 @@
+{{! One post in a list: title and date (an event's date, if it has one), its details from the post's metadata, its tags, and its picture. }}
+<article class="row">
+  <div class="row-identity">
+    <h3 class="row-title"><a href="{{{url}}}">{{title}}</a></h3>
+    {{> labels}}
+    {{#event}}<time class="quiet" datetime="{{#formatEvent}}YYYY-MM-DD{{/formatEvent}}">{{#formatEvent}}ddd, MMM D, YYYY{{/formatEvent}}</time>{{/event}}
+    {{^event}}{{#date}}<time class="quiet" datetime="{{#formatDate}}YYYY-MM-DD{{/formatDate}}">{{#formatDate}}MMM D, YYYY{{/formatDate}}</time>{{/date}}{{/event}}
+  </div>
+  <div class="row-details">
+    {{#metadata.speaker}}<div>{{metadata.speaker}}</div>{{/metadata.speaker}}
+    {{#metadata.author}}<div>{{metadata.author}}</div>{{/metadata.author}}
+    {{#metadata.venue}}<div><i>{{metadata.venue}}</i></div>{{/metadata.venue}}
+    {{#summary}}<div class="quiet">{{summary}}</div>{{/summary}}
+    {{#metadata.file}}<div><a class="download" href="{{{metadata.file}}}">Download</a></div>{{/metadata.file}}
+  </div>
+  <div class="row-tags">
+    {{#tags.length}}<span class="quiet">Filed under</span><br>
+    {{#tags}}<a href="/tagged/{{slug}}">{{name}}</a>{{^last}}, {{/last}}{{/tags}}{{/tags.length}}
+  </div>
+  <div class="row-image">
+    {{! Inside a section over a plain value, url is the post's again }}
+    {{#thumbnail.medium.url}}<a href="{{{url}}}" tabindex="-1" aria-hidden="true"><img src="{{{thumbnail.small.url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w" sizes="(min-width: 40rem) 23vw, 48vw" width="{{thumbnail.medium.width}}" height="{{thumbnail.medium.height}}" alt="" loading="lazy"></a>{{/thumbnail.medium.url}}
+  </div>
+</article>

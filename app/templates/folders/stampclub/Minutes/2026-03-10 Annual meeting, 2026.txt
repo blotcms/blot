@@ -1,0 +1,31 @@
+Date: 2026-03-11
+Tags: Minutes
+Author: Leonard Frisch
+Summary: Accounts approved, the loupe given a direction of travel, and the shortest annual meeting on record.
+
+# Annual meeting, 2026
+
+::: download
+- [The accounts for the year](/_files/accounts-2026.pdf)
+- [The accounts, as a spreadsheet](/_files/accounts-2026.csv)
+:::
+
+*Minutes of the annual meeting of the New York Stamp Club, held in the members' room of the Society Library on Tuesday, March 10, 2026, at 6:30 pm.*
+
+**Present:** 33 members. **In the chair:** Ruth Abernethy, president. **Apologies:** Oscar Bellamy, who was arranging lots for Saturday's auction, and sent his apologies by Walter.
+
+1. **The minutes** of the 2025 meeting were approved.
+2. **The treasurer's report.** Priya Venkataraman presented [the accounts for the year (PDF)](/_files/accounts-2026.pdf), examined by Oscar Bellamy. Both accounts are in credit. A member asked why the juniors' dues appear as an expense. The treasurer explained that the kettle fund pays them. The member said that was very decent. The accounts were approved.
+
+    | Year to February 28 | Dues | Kettle fund |
+    | --- | ---: | ---: |
+    | Brought forward | $412.50 | $412.15 |
+    | Received | $648.00 | $611.75 |
+    | Spent | $788.40 | $648.99 |
+    | Carried forward | $272.10 | $374.91 |
+
+3. **Elections.** The four officers were re-elected unopposed for two years.
+4. **Amendment to Article VII of the [rules](/rules):** that the loupe go round the room clockwise and return to the librarian. Proposed by Constance Whitlock, seconded by Teddy Marchetti. An amendment from the floor, that it go counter-clockwise, was defeated. The motion was carried, 31 to 2.
+5. **Any other business.** None. Inez Calloway reported that the radiator had been looked at, and that it was now too hot.
+
+The meeting closed at 6:52 pm, so that the reading could begin.

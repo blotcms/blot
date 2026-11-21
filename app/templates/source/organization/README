@@ -1,0 +1,70 @@
+The _Organization_ template is for clubs, societies, studios, community groups and small institutions: your name across the top of the page, what's coming up, what you've done, and pages set like a well-made book, all on one four-column grid.
+
+## The page
+
+- **Your name, as wide as the page**, in its own font (Title font), under a menu of four columns. With more than four links the fourth becomes More. Home, Search, Archives and Feed live in the footer; the title takes you home.
+- **A strap of details** under the name, from the settings: a tagline, when you meet or open, your address, the year you were founded.
+- **Upcoming events** on the home page, soonest first, each with its picture if it has one, the day as a big numeral and "Tomorrow" or "In 5 days" beside it, and a calendar people can subscribe to (`/calendar.ics`).
+- **Everything else** as a list of rows: title and date, who and where, a summary, tags and a picture.
+- **An announcement band** across the top of every page, when you set one.
+
+## Writing posts and pages
+
+Lines at the top of a file tell the template what a post is. Any of them, in any order:
+
+    Summary: One sentence for lists and the top of the page.
+    Speaker: Ruth Abernethy
+    Venue: Morrow Hall, Riverside Drive
+
+**Events.** Add an `Event:` line with the date (and time, in 24-hour form) and the post is an event: it shows in Upcoming until it has happened, in your calendar feed, and to search engines.
+
+    Event: 2026-12-08 18:30
+    Ends: 9 pm
+    Cost: Free, members and guests
+    Booking: https://tickets.example/christmas
+    Action: Reserve a seat
+    Status: Sold out
+
+Date the post itself the day you announce it, not the day of the event: Blot holds back posts dated in the future. `Status:` shows a badge (Sold out, Postponed); Cancelled strikes the title through. `For: All ages` and `Access: Step-free entrance` show as labels.
+
+- **Repeating events**: `Repeats: weekly`, `fortnightly`, `monthly` (the same weekday of the month, like the second Tuesday) or `yearly`, and optionally `Until: 2027-06-30`. One file covers the lot: the site always shows the next one, and calendars repeat it.
+- **Several days**: `Ends: 2027-02-21` (a date rather than a time) and the event stays upcoming until its last day is over.
+
+**Pages.** Put the facts first, and they appear as a small table under the title, the address linked to a map:
+
+    Address: East Seventy-ninth Street, New York
+    Hours: Second Tuesday of the month, 6:30–9 pm
+    Phone: 212 555 0100
+    Email: hello@example.org
+    Cost: $12 a year
+    Contents: yes
+
+`Contents: yes` lists the page's sections in its margin and marks the one you're reading. Sections (`##` headings) are numbered I, II, III in the margin.
+
+**Pinned: yes** lifts a post to the top of the home page. **Documents**: `File: /_files/minutes.pdf` adds a download link.
+
+**In the text:**
+
+- Several pictures on consecutive lines become a **carousel**: a counter, captions, arrows; drag, swipe or use the keys.
+- A question and answer as `<details><summary>Question?</summary>Answer</details>` **springs open**; three or more in a row get an Open all button.
+- **Layout tags** at the start of a line put things on the grid: `{<>}` across the whole page, `{<<}` and `{>>}` wide to one side, `{|<}` a note in the margin beside what follows, `{<}` and `{>}` a picture in the margin, `{||}` two halves, `{|||}` thirds, `{||||}` a quarter of the page, four in a row (people, sponsors, partners).
+- **Callouts** (with the Callouts plugin): `> [!note]`, `> [!tip]`, `> [!warning]`.
+- **Fenced divs**, three colons and a name around some text: `::: buttons` (its links as buttons), `::: download` (links to files as a list of downloads), `::: steps`, `::: figures` (a row of large numbers), `::: lead`, and `::: note`, `tip`, `warning`, `info`, `success`. A single link becomes a button with `{.button}` after it.
+- **Tables** have a heavier rule under the header, scroll sideways on a phone, and fill the page inside `{<>}`.
+- Links to PDFs, documents and spreadsheets are labelled as such. Checklists, highlights, code, mathematics, citations, footnotes, tables, quotes, embedded videos and posts made from Word, HTML, Org, bookmark and image files are all set to match; the demo folder's Guide page shows each one.
+
+## Tag pages
+
+Each tag can have its own layout, chosen in the settings under Tag pages: **rows**, a **grid** of pictures, **events** (that tag's upcoming events, then the past), a **list** of titles, a **timeline** with years in the margin, or **people** (a card for each post, with its picture, `Role:`, `Email:` and `Phone:`, for a staff, board or committee). To begin with, Gallery and Photos are grids, Events and Meetings are events, Readings, Newsletters and Minutes are lists, History is a timeline, and People, Staff, Board, Team and Committee are people.
+
+## Settings
+
+Colours and an accent colour; the Font (menu, lists, labels), Title font and Text font; a logo; posts per page; tag page layouts; the menu's last link as a button (Join, say); upcoming events on the home page; numbered sections; a menu that stays at the top. Under Details: tagline, when you meet, founded, address, email, phone, an announcement and its link, and links to your newsletter, donations and social accounts, which appear in the footer.
+
+## Try it
+
+Download the demo folder, the New York Stamp Club, to see all of this in use. Its Guide page lists every line the template reads.
+
+## For template authors
+
+The grid is four equal columns everywhere; `--col` and `--step` in `style.css` are one column and one column plus its gap. On posts and pages the text is itself a four-column grid, so Blot's layout tags (`.wide`, `.margin`, `.column.four` ...) land on the columns. Events come from Blot: an `Event:` line that is a date gives an entry `{{#formatEvent}}` and `event.upcoming` / `event.past`, and `{{#upcoming_events}}` lists those still to come. Tag page layouts are partials chosen in `tagged.html` with `{{#layout_for_tag.<name>}}`; add one by adding a partial, a line in `tagged.html` and its name to `tag_layout_options`. `script.js` adds the title sizing, carousels, More, contents, questions and relative dates; everything works without it. Its springs are a trimmed copy of the motion library from the template patterns project.

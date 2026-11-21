@@ -1,0 +1,126 @@
+Link: /guide
+Page: yes
+Menu: no
+Contents: yes
+Summary: How this site is made from a folder of text files, for anyone who has downloaded it to make their own.
+
+# How this site works
+
+Every page on this site is a plain text file in a folder. If you have downloaded the folder to make a site for your own club, this page lists everything the files can say, with an example of each. Open any file in the folder to see them in use.
+
+## Folders
+
+Folders are for your own convenience: Meetings, Events, Readings, Newsletters, Minutes, History, People and Pages. The site doesn't care which folder a file is in. It cares about the lines at the top of the file.
+
+Images live in folders whose names start with an underscore, such as `_stamps` and `_events`, so that they are not published as posts of their own. Documents such as PDFs live in `_files`.
+
+## The lines at the top
+
+A file starts with a few lines of the form `Key: value`, then a blank line, then the text. These work on any post:
+
+- `Date: 2026-11-18` is the day the post was written or announced. A post dated in the future stays hidden until that day, so date an announcement on the day you make it, not on the day of the event. Add a time, as in `Date: 2026-11-18 09:15`, to put posts written on the same day in the order you want.
+- `Tags: Meetings, Gallery` files the post under one or more tags, separated by commas.
+- `Summary: Bring the best thing you found this year.` is the one sentence shown in lists.
+- `Speaker: Ruth Abernethy` or `Author: Leonard Frisch` names the person, shown in lists and beside the post.
+- `Venue: The members' room, Society Library` says where.
+- `Source: Household Words, No. 100, 21 February 1852` says where a reading was first printed.
+- `Pinned: yes` lifts a post to the top of the list on the home page. Use it for one notice at a time.
+- `File: /_files/accounts-2026.pdf` adds a download link for one document that goes with a post, beside its date and in lists. For several, put a `::: download` list at the top of the text instead, as the [2026 minutes](/annual-meeting-2026) do.
+
+## Events
+
+Any post with an `Event:` line is an event. It appears in the list of what's coming up until the day has passed, then moves to the past events, and the home page always knows which is next. Every meeting in this folder carries an `Event:` line too, even long after it happened, so that the lists show when it was held.
+
+- `Event: 2026-12-08 18:30` is the date and the starting time, in 24-hour form, always with the year. For a whole day, leave out the time: `Event: 2027-02-20`.
+- `Ends: 9 pm` is when it finishes, written as you would say it, and shown after the starting time. For an event that runs over more than one day, give the last day as a date instead: `Ends: 2027-02-21`.
+- `Repeats: monthly` makes the event recur, and the site shows the next time it happens. It can also be `weekly`, `fortnightly` or `yearly`. Add `Until: 2027-06-30` to say when it stops. The first `Event:` date sets the day and time.
+- `Cost: $5, members free` or `Cost: Free` says what it costs.
+- `Address: Riverside Drive, New York` adds a street address under the venue.
+- `Booking: https://nystampclub.example/pony-express` adds a button that goes to that address.
+- `Action: Reserve a seat` changes the button's words, which are otherwise "Book a place".
+- `For: Ages 8 to 14` says who the event is for.
+- `Access: Step-free entrance and hearing loop` says how easy it is to get in and take part.
+- `Status: Sold out`, `Status: Postponed` or `Status: Cancelled` adds a label to the event. Cancelled also strikes through the title. Say why in the text.
+
+## Tags and how they look
+
+Each tag has its own page, laid out to suit what it holds:
+
+- `Meetings` and `Events` list events, upcoming first.
+- `Readings`, `Newsletters` and `Minutes` are plain lists of titles.
+- `Gallery` is a grid of pictures. Use it on posts where the photographs are the point.
+- `History` is a timeline, with posts listed under their years. Give a history post the date it is about, such as `Date: 1951-04-10`.
+- `People` is a set of cards, one for each person. Title the post with the person's name, and add `Role: Treasurer` and `Email: treasurer@nystampclub.example` at the top, with one image in the text.
+
+## Pages
+
+A file with `Page: yes` is a page rather than a post. It isn't in the lists, and it has an address of its own.
+
+- `Link: /visit` sets the page's address.
+- `Menu: no` keeps a page out of the menu. You can still link to it. Here, About, Members, Visit and Join are in the menu; Rules, Contact, Credits and this guide are linked from other pages instead.
+- `Contents: yes` builds a table of contents in the margin from the page's `##` headings, and numbers them I, II, III, so don't number the headings yourself. The [Rules](/rules) page is written this way.
+- `Address:`, `Hours:`, `Phone:`, `Email:` and `Cost:` at the top of a page are shown as a short list of facts under its title, in that order. For example, `Hours: Second Tuesday of the month, 6:30–9 pm`.
+
+## In the text
+
+The text is written in Markdown. Beyond the usual headings, lists and links:
+
+- One image on its own line is shown as a figure, and its description becomes the caption: `![The hall from the back](/_events/auditorium-from-the-back.jpg)`.
+- Several images on consecutive lines, with no blank line between them, become a carousel you can step through.
+- `{<>}` at the start of a line makes what follows wide, across the whole page. Use it for one big photograph.
+- `{|<}` at the start of a line puts what follows in the margin beside the next paragraph, for an aside, a source or a "see also".
+- `{||}` at the start of a line makes a half-width column. Two in a row sit side by side.
+- `{||||}` at the start of a line makes a quarter-width column. Four in a row make a row of cards, as on the [Members](/members) page: an image, a **name**, an *italic role*, and two short lines.
+- Lines indented by four spaces under a `{…}` line belong to the same block.
+- `> [!note] A title`, `> [!tip]` or `> [!warning]` on the first line of a quotation turns it into a boxed note, tip or warning. The lines after it start with `>` too.
+- `<details><summary>A question?</summary>The answer.</details>`, one to a line, makes a list of questions that open when clicked, as on the [Visit](/visit) page.
+- `[^1]` in the text, and `[^1]: The note.` at the end, makes a footnote.
+- Tables are written with pipes and dashes, as in the [Contact](/contact) page.
+- A link to a PDF or other document, such as `[the accounts (PDF)](/_files/accounts-2026.pdf)`, gets a small label saying what kind of file it is.
+- `{<<}` and `{>>}` make a picture wider than the text, out to the left or the right. `{<}` and `{>}` put a picture in the margin beside the next paragraph. `{|||}` makes a third of the page, three to a row. [New in the library](/new-in-the-library) uses all of them.
+
+## Buttons, steps and figures
+
+A line of three colons and a name, then some text, then three colons again, gives that text a style of its own:
+
+- `::: buttons` turns the links inside into buttons, the first one filled, as on [Join](/join).
+- `::: steps` turns a numbered list into steps with large numerals, as on [Join](/join).
+- `::: download` around a list of links to files sets them as a list of downloads, each with its kind, as at the end of the [2026 minutes](/annual-meeting-2026).
+- `::: figures` turns a list like `- **1951** the first meeting` into a row of large figures, as on [About](/about).
+- `::: lead` sets an opening paragraph larger.
+- `::: note`, `::: tip`, `::: warning`, `::: info` and `::: success` box a short note, as on [Visit](/visit).
+- A single link can be a button anywhere: `[Join](/join){.button}`.
+
+Tables can go anywhere too: the dues on [Join](/join), the year's meetings on [Visit](/visit), the timetable of the stamp fair and the accounts in the 2026 minutes.
+
+## More Markdown
+
+Two posts use the rest of what Markdown can do: [Getting ready for the show and tell](/getting-ready-for-the-show-and-tell) and [Counting holes](/counting-holes). Between them:
+
+- `- [ ] Bring a stamp` and `- [x] Book the room` make a checklist.
+- `~~Thursday~~` strikes words out, and `==important==` highlights them.
+- Lists can count in other ways: `i.` for roman numerals, `A.` (with two spaces after the full stop) for letters, and `9)` to start at nine.
+- `[[The Christmas show and tell]]` links to another post by its title, and `[[#How the vote works]]` to a heading on the same page. `![[/Pages/Bring and buy.txt]]` shows the whole of another page in this one.
+- `$\ell$` in a sentence, or `$$` on lines of their own, sets mathematics.
+- Three backticks and a language name, as in `` ```python ``, start a block of code, coloured to suit. Indenting by four spaces makes a plain one, and `backticks` mark code in a sentence.
+- `Bibliography: /_files/references.bib` at the top, and `[@queenshead]` in the text, cite a source and list it at the end.
+- `^[A note.]` makes a footnote without numbering it yourself.
+- `::: {.wide}` on a line, then text, then `:::`, puts a block on the grid like a layout tag. `[Perforation]{.smallcaps}` sets a word in small capitals.
+- A YouTube, Vimeo or Bandcamp link on a line of its own becomes a player, as in [The Swingin' Six and the ZIP code](/the-swingin-six-and-the-zip-code).
+- Any HTML works too, such as `<kbd>Ctrl</kbd>`.
+
+## Other kinds of file
+
+Not every post has to be a text file:
+
+- A Word document is a post, like the 2023 minutes in `Minutes`. Put the `Date:` and `Tags:` lines at the top of the document.
+- An HTML file is a post or page, like the [membership card](/card).
+- An Org file (`.org`), for people who write in Emacs, like the summer swap in `Meetings`.
+- A bookmark (a `.webloc` or `.url` file, dragged from a browser's address bar) is a post that links somewhere else, like the Penny Black in `Readings`.
+- An image is a post of its own, captioned with its file name, as in the `Gallery` folder.
+- A folder whose name ends in a plus sign, such as `The Perforation, No. 147 +`, is one post made of every file inside it, in order.
+- A folder name in square brackets, such as `[Gallery]`, tags every file inside it. That is how the bookmark and the images, which have no lines at the top, get their tags.
+
+## Settings that are not files
+
+The club's tagline, its founding year, its address and email, its meeting times, an announcement banner and its social links are set in the template's settings on Blot, not in this folder. Posts don't depend on them, so you can change them without editing anything here.

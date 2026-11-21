@@ -1,0 +1,18 @@
+Date: 2026-11-18 09:10
+Event: 2026-12-15 18:00
+Ends: 9 pm
+Status: Sold out
+For: Members and guests
+Tags: Events
+Venue: The members' room, Society Library
+Cost: $10, members and their guests
+Booking: https://nystampclub.example/christmas-party
+Summary: The exchange of unwanted stamps, the punch bowl, and two trees.
+
+# The Christmas party, 2026
+
+The annual exchange is back. Bring one stamp, wrapped, that you would be glad to see the back of; leave with someone else's. Members and their guests only, and please, no more framed smudges.
+
+The members' room holds sixty, and this year sixty people said yes inside a week. If you have a place and can't use it, tell Priya, and she will give it to the first name on the waiting list.
+
+![A Currier and Ives winter scene, from a Christmas issue of the 1970s](/_stamps/Christmas- Currier and Ives winter scene.jpg)

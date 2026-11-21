@@ -1,0 +1,74 @@
+Date: 2026-11-19
+Tags: Newsletters
+Author: Leonard Frisch
+Summary: A checklist for the Christmas show and tell, the running order, and a correction.
+
+# Getting ready for the show and tell
+
+The [[The Christmas show and tell|Christmas show and tell]] is on ~~Thursday 10 December~~ **Tuesday 8 December**, the second Tuesday as always. The last bulletin had the wrong day, and three of you have already told me so.
+
+## Before you come
+
+Ruth asked for a list. Here it is, with what the committee has already done ticked off:
+
+- [x] Book the members' room
+- [x] Order the mince pies
+- [ ] Choose **one** stamp, cover or oddity
+- [ ] Put it in a sleeve or a mount, not loose in an envelope
+- [ ] Write its name and your own on a slip of card
+- [ ] Practise saying it all in two minutes
+
+## The running order
+
+The evening runs in the same order as every year:
+
+i. Mince pies, and the kettle
+ii. The show and tell, in the order you arrive
+iii. The bring and buy table
+iv. The vote for the best find
+
+Ruth keeps time with the bell, and the vote works [[#How the vote works|as below]]. After the bell you have to stop, though you may finish your sentence if it is a short one.
+
+## How the vote works
+
+We vote by putting a penny in a cup beside each find. The rules have it as rule 9 onwards, which for the avoidance of doubt says:
+
+ 9) Each member present has one vote.
+10) Guests may vote, but not for themselves.
+11) The President counts the pennies and her count is final.
+
+The winner chooses the first mince pie next year and keeps the Penny Black block of four[^block] in their album until the next show and tell. The prizes, from first to third:
+
+A.  The block of four, for a year
+B.  A packet of mounts from Constance's own drawer
+C.  A year's subscription to *The Perforation*
+
+[^block]: A facsimile, framed. The real one is in a museum and has not been offered to us.
+
+[![The Penny Black block of four, the prize for the best find](/_stamps/Penny Black block of four.jpg)](/the-queens-head)
+
+## The bring and buy table
+
+![[/Pages/Bring and buy.txt]]
+
+---
+
+## Questions we have been asked
+
+> [!question]- Can I bring more than one thing?
+> One. If you cannot choose, bring the one with the better story.
+
+> [!question]- What if my find is not a stamp?
+> Postcards, covers, postmarks, a letter scale, a rubber stamp from a post office that has closed: all have won before. The rule is only that it went through the post, or helped something to.
+
+> [!success] Already found the best thing of the year?
+> Tell [Leonard](mailto:secretary@nystampclub.example) what it is, and he will put you on first.
+
+> [!danger] Please don't
+> Bring anything you would mind a child touching. The juniors' table comes to the show and tell too.
+
+The [[Rules|club's rules]] still apply on the night, mince pies or no mince pies. See you on the 8th.
+
+::: {.wide}
+*The* [Perforation]{.smallcaps} *goes to members by post and by email. Back numbers are in the library, in the blue box files on the second shelf.*
+:::

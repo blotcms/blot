@@ -1,0 +1,36 @@
+BEGIN:VCALENDAR
+VERSION:2.0
+PRODID:-//Blot//Organization template//EN
+CALSCALE:GREGORIAN
+X-WR-CALNAME:{{{title}}}
+{{! Every event still to come (all_upcoming_events). Times are written without a zone, so calendar apps read them as local time. }}
+{{#all_upcoming_events}}
+BEGIN:VEVENT
+UID:{{{id}}}
+DTSTAMP:{{#formatDate}}YYYYMMDD[T]HHmmss{{/formatDate}}
+{{#event.timed}}
+DTSTART:{{#formatEvent}}YYYYMMDD[T]HHmmss{{/formatEvent}}
+{{/event.timed}}
+{{#event.allDay}}
+DTSTART;VALUE=DATE:{{#formatEvent}}YYYYMMDD{{/formatEvent}}
+{{/event.allDay}}
+{{! A multi-day event (Ends: a date) ends at the start of the day after its last: exclusive, as iCalendar wants }}
+{{#event.multiDay}}
+{{#event.allDay}}
+DTEND;VALUE=DATE:{{#formatEndsAfter}}YYYYMMDD{{/formatEndsAfter}}
+{{/event.allDay}}
+{{#event.timed}}
+DTEND:{{#formatEndsAfter}}YYYYMMDD[T]HHmmss{{/formatEndsAfter}}
+{{/event.timed}}
+{{/event.multiDay}}
+{{#event.rrule}}
+RRULE:{{{event.rrule}}}
+{{/event.rrule}}
+SUMMARY:{{{title}}}
+{{#metadata.venue}}
+LOCATION:{{{metadata.venue}}}
+{{/metadata.venue}}
+URL:{{{absoluteURL}}}
+END:VEVENT
+{{/all_upcoming_events}}
+END:VCALENDAR
