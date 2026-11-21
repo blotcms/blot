@@ -42,6 +42,7 @@ module.exports = function () {
     // The render caches' own byte counts summed. Production's heap has run
     // at about twice this (#2795), so it undercounts what they hold.
     const cacheBytes = all.reduce((sum, c) => sum + (c.calculatedSize || 0), 0);
+    const cacheHeapBytes = all.reduce((sum, c) => sum + (c.heapBytes || 0), 0);
 
     console.log(
       clfdate(),
@@ -52,6 +53,7 @@ module.exports = function () {
       "process_external=" + mem.external,
       "process_arrayBuffers=" + mem.arrayBuffers,
       "render_cache_totalBytes=" + cacheBytes,
+      "render_cache_totalHeapBytes=" + cacheHeapBytes,
       ...heapStats.fields()
     );
 
@@ -65,6 +67,8 @@ module.exports = function () {
         "render_cache_max=" + cache.max,
         "render_cache_calculatedSize=" + cache.calculatedSize,
         "render_cache_maxSize=" + cache.maxSize,
+        "render_cache_heapBytes=" + (cache.heapBytes || 0),
+        "render_cache_twoByteBytes=" + (cache.twoByteBytes || 0),
         ...(c
           ? [
               "render_cache_hits=" + c.hit,
