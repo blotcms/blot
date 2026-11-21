@@ -25,6 +25,11 @@ const movesKey = (blogID) => `${PREFIX}moved-folders:${blogID}`;
 module.exports = {
   FULL,
 
+  // Deletes the blog's dirty directories, first sightings and move hints
+  async forget(blogID) {
+    await client.del([key(blogID), seenKey(blogID), movesKey(blogID)]);
+  },
+
   // source names what saw the directories change (changes, search,
   // walk:<trigger>), for the live line's stage timings (#2847). The first
   // sighting of each directory is kept until a sync takes it (seen below);

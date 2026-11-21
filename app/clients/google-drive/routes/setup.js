@@ -31,7 +31,7 @@ const timedOut = (account, now = Date.now()) =>
 async function storeIfAccountExists(blogID, data) {
   const account = await database.blog.get(blogID);
   if (!account) return null;
-  await database.blog.store(blogID, data);
+  if (!(await database.blog.update(blogID, data))) return null;
   return account;
 }
 
@@ -148,17 +148,13 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
       error = null;
     }
 
-    // check that the blog still exists in the database
-    const existingBlog = await database.blog.get(blog.id);
-
-    if (existingBlog) {
-      await database.blog.store(blog.id, {
-        error,
-        folderId: null,
-        folderName: null,
-        ...clearHealthErrorFields(),
-      });
-    }
+    // Only if the account still exists: a disconnect meanwhile deleted it
+    await database.blog.update(blog.id, {
+      error,
+      folderId: null,
+      folderName: null,
+      ...clearHealthErrorFields(),
+    });
   } finally {
     if (sync && typeof sync.done === "function") {
       await sync.done(null);

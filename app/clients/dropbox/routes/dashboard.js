@@ -11,7 +11,7 @@ const moment = require("moment");
 const { Dropbox } = require("dropbox");
 const views = __dirname + "/../views/";
 const client = require("models/client");
-const Blog = require("models/blog");
+const setClient = require("clients/util/setClient");
 
 dashboard.use(async function loadDropboxAccount(req, res, next) {
   try {
@@ -359,7 +359,7 @@ async function authenticate(req, res, next) {
   // this the first time the user has visited this page
   req.session.dropbox = account;
 
-  await Blog.set(req.blog.id, { client: "dropbox" });
+  await setClient(req.blog, "dropbox");
 
   setup(account, req.session).catch(function (err) {
     console.log("err setting up", err);

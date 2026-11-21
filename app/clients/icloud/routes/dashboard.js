@@ -10,7 +10,7 @@ const parseBody = require("helper/bodyParser").urlencoded({ extended: false });
 const config = require("config"); // For accessing configuration values
 const establishSyncLock = require("sync/establishSyncLock");
 const { handleSyncLockError } = require("./lock");
-const Blog = require("models/blog");
+const setClient = require("clients/util/setClient");
 const health = require("clients/health");
 const { SETUP_FAILED, isSetupInProgress } = require("../error");
 
@@ -134,7 +134,7 @@ dashboard
       }
 
       try {
-        await Blog.set(req.blog.id, { client: "icloud" });
+        await setClient(req.blog, "icloud");
       } catch (setClientError) {
         return next(setClientError);
       }

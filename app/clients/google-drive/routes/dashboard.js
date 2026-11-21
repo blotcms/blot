@@ -1,10 +1,11 @@
 const clfdate = require("helper/clfdate");
 const database = require("../database");
 const disconnect = require("../disconnect");
+const { forgetFolder } = require("../forget");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const requestServiceAccount = require("clients/google-drive/serviceAccount/request");
 const parseBody = require("helper/bodyParser").urlencoded({ extended: false });
-const Blog = require("models/blog");
+const setClient = require("clients/util/setClient");
 
 const express = require("express");
 const dashboard = new express.Router();
@@ -165,12 +166,15 @@ dashboard
         return res.message(req.baseUrl, "Please enter a valid email address");
       }
 
-      await Blog.set(req.blog.id, { client: "google-drive" });
+      await setClient(req.blog, "google-drive");
 
       // Determine the service account ID we'll use to sync this blog.
       const serviceAccountId = await requestServiceAccount();
       const blog = req.blog;
       const email = req.body.email;
+
+      // A new setup replaces the folder: the old one's records go with it
+      await forgetFolder(req.blog.id, existingAccount?.folderId);
 
       await database.blog.store(req.blog.id, {
         email,

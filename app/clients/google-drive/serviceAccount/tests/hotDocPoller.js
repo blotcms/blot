@@ -327,7 +327,7 @@ describe("google drive hotDocPoller", function () {
       spyOn(database.blog, "get").and.returnValue(
         Promise.resolve({ folderId, serviceAccountId })
       );
-      spyOn(database.blog, "store").and.returnValue(Promise.resolve());
+      spyOn(database.blog, "update").and.returnValue(Promise.resolve(true));
 
       lock = {
         folder: {
@@ -398,7 +398,7 @@ describe("google drive hotDocPoller", function () {
       expect(applied.modifiedTime).toEqual(modifiedTime);
       expect(lock.done).toHaveBeenCalledTimes(1);
       expect(poller.fullSync).not.toHaveBeenCalled();
-      expect(database.blog.store).toHaveBeenCalledWith(blogID, {
+      expect(database.blog.update).toHaveBeenCalledWith(blogID, {
         lastSync: jasmine.any(Number),
       });
     });

@@ -309,6 +309,12 @@ function folder(folderId, blogID) {
     await multi.exec();
   };
 
+  // Deletes only this blog's checksums of the folder's files, leaving the
+  // mapping, which another blog on the same folder still uses
+  this.forgetOwn = async () => {
+    await client.del([this.contentKey, this.appliedKey]);
+  };
+
   this.readdir = async (dir) => {
     if (!dir || typeof dir !== "string") {
       throw new Error("Directory path must be a non-empty string");
