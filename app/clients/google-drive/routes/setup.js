@@ -12,6 +12,14 @@ const config = require("config");
 // before aborting and requiring them to start again
 const SETUP_TIMEOUT = 1000 * 60 * 60 * 2; // 2 hours
 
+// Whether a setup has run for longer than SETUP_TIMEOUT. A setup that timed
+// out keeps preparing: true beside its stored error (the dashboard shows the
+// failure from that pair), so restartSetupProcesses must skip it: restarted,
+// it would only time out again, on every start of every process.
+const timedOut = (account, now = Date.now()) =>
+  Boolean(account?.startedSetup) &&
+  now - Number(account.startedSetup) > SETUP_TIMEOUT;
+
 // Cancelling setup (disconnect) deletes the account hash outright. The
 // background polling loop below writes status fields (nonEmptyFolderShared,
 // folderId, etc.) after awaiting slow Drive API calls, so without this guard
@@ -47,7 +55,7 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
     if (!preparing) throw new Error("Permission to set up revoked");
 
     // if the setup process has been running for too long then abort
-    if (startedSetup && Date.now() - startedSetup > SETUP_TIMEOUT) {
+    if (timedOut({ startedSetup })) {
       throw new Error("Setup timed out");
     }
 
@@ -392,7 +400,9 @@ async function restartSetupProcesses() {
         // And it has a service account ID
         account?.serviceAccountId &&
         // And it doesn't have a folder ID yet
-        !account?.folderId
+        !account?.folderId &&
+        // And it hasn't already run out of time
+        !timedOut(account)
       ) {
         blogsToRestart.push({ blogID, account });
       }
@@ -485,3 +495,4 @@ async function restartSetupProcesses() {
 
 module.exports = finishSetup;
 module.exports.restartSetupProcesses = restartSetupProcesses;
+module.exports.timedOut = timedOut;

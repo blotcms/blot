@@ -25,8 +25,6 @@ Sandbox image jobs, from a stress run on the test blogs (19 Nov 2026, #2795):
 - A 200-frame 1000x1000 GIF (a 72 MB file) peaked at 246 MiB in `exif` and 200 MiB in `thumbnail`, against ~100 MiB for a 90 MP JPEG. The thumbnail job does fall back to the first frame for it (200M frame-pixels is over `DECODE_BUDGET`); what costs is the file itself, held whole in the job and in transit. Check the largest input a sandbox image job accepts, and whether `exif` and `thumbnail` need the whole file (EXIF sits at the start of a file). A big input beside pandoc can use most of the sandbox's 512M.
 - `car.heic` in a post stayed a plain folder file (`/folder/v-.../car.heic`) rather than an `_image_cache` copy, although `to-png` and `resize` jobs ran for it. Check whether the converted image is dropped somewhere after the jobs.
 
-Google Drive: every time blot-blue starts, it logs 4 `Google Drive Client Error: Setup timed out` lines (app/clients/google-drive/routes/setup.js:51, `checkWeCanContinue`), at each deploy on 19 Nov 2026. Probably one blog's setup that never finished is resumed at startup and times out every time. Find the blog, then either finish or clear its stale setup state, so it stops retrying on every start.
-
 Noticed while fixing the flaky specs, 19 Nov 2026
 - Specs that hard-code a date beside `Date.now()` break once the real clock passes it, as `app/storage/tests/sweepGenerated.js`'s start window did on 18 Nov (#2790). `grep -rn "Date.UTC(20" app --include=*.js` under `tests/` finds the others; build such times from the spec's clock.
 - `app/models/template/readFromFolder.js` `continue`s when `folder.stat` or `folder.read` fails, so a view it couldn't read just goes missing and the read looks successful. Report them in `errors` instead.
@@ -95,7 +93,6 @@ Noticed while fixing the flaky specs, 7 Nov 2026
 
 Noticed in the first app.log after #2628, 7 Nov 2026
 - `dropbox:retry` (`app/clients/dropbox/util/retry.js`) logs every error its filter sees, including the ones `isRetryable` turns down (401 needing a reconnect, 409 folder missing, 507). So each deploy, whose startup syncs touch every Dropbox blog, logs one such line per blog that needs reconnecting. Log only errors it will retry, or log once when the last attempt fails.
-- Google Drive: a few `Google Drive Client Error: Setup timed out` per deploy, at `checkWeCanContinue` < `finishSetup`. Find which setups time out after a restart and whether they recover on their own.
 - Two deprecation warnings at startup: Node's `url.parse()` (DEP0169) and moment's "value provided is not in a recognized RFC2822 or ISO format". Find the callers and move them to the WHATWG `URL` API and to an explicit moment format.
 - `opensock: Could not establish a connection to 169.254.169.254:80` at unit start: something, probably in the sandbox, tries the instance metadata address and the firewall refuses it. Find what makes the call and stop it, rather than leave a refused connection on every start.
 - With openresty's `error.log` at `notice` (#2628), auto-ssl's "domain not allowed - using fallback" notices are most of what is left. If they are not worth reading, log them at `info`.
