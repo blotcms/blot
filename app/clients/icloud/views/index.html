@@ -293,9 +293,6 @@
 </script>
 
 <style>
-.icloud-folder-line .center {
-  display: block;
-}
 
 .icloud-folder-name {
   display: block;
@@ -334,12 +331,16 @@
   font-size: 14px;
 }
 
-/* Beside its label like every other line, and above the steps on a phone */
-.icloud-setup-line .label {
+/* Beside its label like every other line, and above it on a phone. Without
+   a zero basis the folder line's note is wider than the space beside the
+   label, so the whole column wrapped under it */
+.icloud-setup-line .label,
+.icloud-folder-line .label {
   flex-basis: 30%;
 }
 
-.icloud-setup-line .center {
+.icloud-setup-line .center,
+.icloud-folder-line .center {
   display: block;
   flex: 1 1 0;
   min-width: 0;
@@ -347,7 +348,9 @@
 
 @media (max-width: 600px) {
   .icloud-setup-line .label,
-  .icloud-setup-line .center {
+  .icloud-setup-line .center,
+  .icloud-folder-line .label,
+  .icloud-folder-line .center {
     flex-basis: 100%;
   }
 }
