@@ -5,7 +5,7 @@ describe("google drive setup timeout", function () {
 
   it("counts a setup started over two hours ago as timed out", function () {
     expect(timedOut({ startedSetup: now - 3 * HOUR }, now)).toBe(true);
-    // Redis returns the stored number as a string
+    // A start time stored as a string still counts
     expect(timedOut({ startedSetup: String(now - 3 * HOUR) }, now)).toBe(true);
   });
 

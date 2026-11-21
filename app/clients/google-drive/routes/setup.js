@@ -4,6 +4,7 @@ const {
   SETUP_ERROR,
   clearAllErrorFields,
   clearHealthErrorFields,
+  isSetupError,
 } = require("../database/error");
 const clfdate = require("helper/clfdate");
 const config = require("config");
@@ -14,8 +15,10 @@ const SETUP_TIMEOUT = 1000 * 60 * 60 * 2; // 2 hours
 
 // Whether a setup has run for longer than SETUP_TIMEOUT. A setup that timed
 // out keeps preparing: true beside its stored error (the dashboard shows the
-// failure from that pair), so restartSetupProcesses must skip it: restarted,
-// it would only time out again, on every start of every process.
+// failure from that pair), so restartSetupProcesses skips it: restarted, it
+// would only time out again, on every start of every process. One that ran
+// out of time with no error stored (its process died mid-setup) is restarted
+// once, so it fails and the dashboard says so.
 const timedOut = (account, now = Date.now()) =>
   Boolean(account?.startedSetup) &&
   now - Number(account.startedSetup) > SETUP_TIMEOUT;
@@ -401,8 +404,8 @@ async function restartSetupProcesses() {
         account?.serviceAccountId &&
         // And it doesn't have a folder ID yet
         !account?.folderId &&
-        // And it hasn't already run out of time
-        !timedOut(account)
+        // And it hasn't already run out of time and failed
+        !(timedOut(account) && isSetupError(account.error))
       ) {
         blogsToRestart.push({ blogID, account });
       }
