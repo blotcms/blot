@@ -1,3 +1,5 @@
+- Distributed crawl, 21 Nov 21:36-21:38 UTC: 7,160 requests in two minutes from 6,253 IPs (no /24 above 27, the blog's own URL as referer) for one customer's two blogs' `/tag.rss?name=<tag>` and `/tagged/<tag>` pages, plus the homepage. The rate limit answered 4,348 with 429; the ~175 that reached node-a each missed the tagged cache, took 5-21s, and between them stalled all four node processes (blue node-a 13.7s); 63 got 504. The blogs are in that hour's access log. Banning ranges can't stop this; look at a per-blog limit on uncached tag pages, and at why a 404 for an unknown tag in `tag.rss` loads the archives first. (22 Nov 2026)
+
 - Reminder for the maintainer (21 Nov 2026): send the two drafted emails to the customers whose iCloud folders were shared with Blot "View only" and were disconnected during the #2874 migration (the blog IDs are in the gitignored `data/icloud-readonly-shares-2026-11-20.txt`; the drafts were written on 21 Nov).
 - Reminder for the maintainer (21 Nov 2026): dismiss CodeQL alerts 1018, 1053 and 1054 (triaged in the iCloud session on 21 Nov).
 
