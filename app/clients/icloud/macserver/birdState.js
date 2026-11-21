@@ -32,13 +32,8 @@ const open = async () => {
     const { DatabaseSync } = await import("node:sqlite");
     db = new DatabaseSync(DB_PATH, { readOnly: true });
     statements = {
-      // a blog folder is the root of its own shared zone, listed under the
-      // account's zone
-      root: db.prepare(
-        "select zone_rowid z, item_id id from client_items where item_filename = ? and item_parent_zone_rowid != zone_rowid"
-      ),
-      // nested (blogFolder.js): blog_<id> is a plain folder in the account's
-      // zone, and the shared folder is the root of its own zone inside it
+      // blog_<id> is a plain folder in the account's zone (blogFolder.js),
+      // and the shared folder is the root of its own zone inside it
       container: db.prepare(
         "select zone_rowid z, item_id id from client_items where item_filename = ? and item_parent_zone_rowid = zone_rowid"
       ),
@@ -80,20 +75,17 @@ const reset = (error) => {
   roots.clear();
 };
 
-// A blog's folder changed (nested, or rejoined): look its root up again
+// A blog's folder changed (nested by setup, or left): look its root up again
 const forgetRoot = (blogID) => roots.delete(blogID);
 
 const lookup = (s, blogID, pathInBlogDirectory) => {
   let node = roots.get(blogID);
   if (!node) {
-    node = s.root.get(blogID);
-    if (!node) {
-      const container = s.container.get(blogID);
-      const shared = container && s.nestedRoot.all(container.z, container.id);
-      // exactly one shared folder inside, as blogFolder.js expects
-      if (!shared || shared.length !== 1) return null;
-      node = shared[0];
-    }
+    const container = s.container.get(blogID);
+    const shared = container && s.nestedRoot.all(container.z, container.id);
+    // exactly one shared folder inside, as blogFolder.js expects
+    if (!shared || shared.length !== 1) return null;
+    node = shared[0];
     roots.set(blogID, node);
   }
 

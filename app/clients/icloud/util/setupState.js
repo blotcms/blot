@@ -107,6 +107,11 @@ module.exports = function setupState(account, options = {}) {
     complete: stage === "complete",
     // In progress: steps 1 and 2 are done
     linked: stage === "joining" || stage === "copying" || transferFailed,
+    // Blot's Mac has the folder, so the page shows the lines it will show
+    // once setup is done (the folder, then the status) in place of the
+    // checklist, and adds the rest when the copy finishes
+    joined:
+      stage === "copying" || stage === "transferFailed" || stage === "complete",
     sharingLink:
       options.sharingLink !== undefined
         ? options.sharingLink

@@ -19,6 +19,25 @@ const health = require("clients/health");
 const { resolveCode } = require("../error");
 const config = require("config");
 const maxFileSize = config.icloud.maxFileSize; // Maximum file size for iCloud uploads in bytes
+const createDownloadLimiter = require("./util/downloadLimiter");
+
+// How many files the walk downloads at once. One at a time, reconnecting a
+// folder of 308 small files took about 4.5 minutes (1 to 2.5 files a
+// second), mostly waiting on the macserver. Every request to the macserver
+// from this process shares one limiter (5 at once, one starting every 200ms,
+// util/rateLimitedFetchWithRetriesAndTimeout.js), and the macserver may run
+// `brctl download` for each evicted file before it answers, so 4 leaves room
+// for other blogs' requests and doesn't pile work on the macserver.
+const DOWNLOAD_CONCURRENCY = 4;
+
+// download() holds each file in memory until it is written, so files run
+// side by side only while their sizes add up to no more than this. A larger
+// file (up to maxFileSize) downloads on its own.
+const MAX_DOWNLOAD_BYTES_IN_FLIGHT = 32 * 1000 * 1000;
+
+// The macserver answers the folder tree listing only once it has listed the
+// whole folder (about 22s for a few hundred files), so say it's still going.
+const LISTING_HEARTBEAT_SECONDS = 5;
 
 module.exports = async (blogID, publish, update) => {
   if (!publish)
@@ -69,6 +88,13 @@ module.exports = async (blogID, publish, update) => {
     }
   };
 
+  let listingSeconds = 0;
+  const listingHeartbeat = setInterval(() => {
+    listingSeconds += LISTING_HEARTBEAT_SECONDS;
+    publish(`Syncing folder tree (${listingSeconds}s)`);
+  }, LISTING_HEARTBEAT_SECONDS * 1000);
+  if (listingHeartbeat.unref) listingHeartbeat.unref();
+
   try {
     publish("Syncing folder tree");
     await remoteRecursiveList(blogID, "/");
@@ -79,7 +105,16 @@ module.exports = async (blogID, publish, update) => {
     });
     publish("Failed to sync folder tree");
     fail(error);
+  } finally {
+    clearInterval(listingHeartbeat);
   }
+
+  // Shared by every directory of the walk, so a tree of small directories
+  // downloads several files at once too
+  const limitDownload = createDownloadLimiter({
+    maxConcurrent: DOWNLOAD_CONCURRENCY,
+    maxBytes: MAX_DOWNLOAD_BYTES_IN_FLIGHT,
+  });
 
   // dirModifiedTime is the directory's own mtime, from its entry in its
   // parent's listing. The root has no such entry, so changes made directly
@@ -149,6 +184,76 @@ module.exports = async (blogID, publish, update) => {
     ).length;
     progress.discover(newFileCount);
 
+    // Start this directory's downloads (a few at a time, see
+    // DOWNLOAD_CONCURRENCY) before the loop below, which goes through the
+    // entries in order and applies each result: the summary, update() and
+    // the messages for each file still happen one file at a time, in order.
+    // The removals above are done by now, and this directory exists locally
+    // (walk() is called once it is created). Oversized files, and files with
+    // a local directory in their way, are left to the loop as before.
+    let stopped = false;
+    const downloads = [];
+    const started = new Map();
+
+    for (const { name, size, isDirectory } of remoteContents) {
+      if (isDirectory || size > maxFileSize) continue;
+      const path = join(dir, name);
+      const existsLocally = localContents.find(
+        (item) => item.name.normalize("NFC") === name.normalize("NFC")
+      );
+      if (existsLocally && existsLocally.isDirectory) continue;
+
+      // We could compare modified time but this seems to bug out on some sites
+      // A placeholder isn't identical to a file which is now really empty
+      const identicalOnRemote =
+        existsLocally &&
+        existsLocally.size === size &&
+        !(size === 0 && (await folder.isPlaceholder(blogID, path)));
+      if (identicalOnRemote) continue;
+
+      // Never rejects: resolves with the error, or with stop once the walk
+      // of this directory is over
+      const pending = limitDownload(size, async () => {
+        if (stopped) return { stop: true };
+        try {
+          await checkWeCanContinue();
+          progress.publish("Downloading", path, false);
+          await download(blogID, path);
+          return {};
+        } catch (error) {
+          return { error };
+        }
+      });
+      downloads.push(pending);
+      started.set(path, pending);
+    }
+
+    try {
+      await applyRemoteContents(
+        dir,
+        remoteContents,
+        localContents,
+        dirChangedDuringWalk,
+        createdLive,
+        started
+      );
+    } finally {
+      // Downloads not started yet must not start now, and those running
+      // write into the blog folder: wait for them before the walk returns or
+      // rethrows, so none writes after the folder lock is released
+      stopped = true;
+      await Promise.all(downloads);
+    }
+  };
+
+  const applyRemoteContents = async (
+    dir,
+    remoteContents,
+    localContents,
+    dirChangedDuringWalk,
+    createdLive,
+    started
+  ) => {
     for (const { name, size, isDirectory, modifiedTime } of remoteContents) {
       const path = join(dir, name);
       const existsLocally = localContents.find(
@@ -163,7 +268,7 @@ module.exports = async (blogID, publish, update) => {
           await folder.remove(blogID, path);
           summary.removed += 1;
           if (dirChangedDuringWalk) summary.changedDuringWalk += 1;
-          publish("Creating directory", path);
+          progress.note("Creating directory", path);
           await folder.mkdir(blogID, path);
           summary.createdDirs += 1;
           if (dirChangedDuringWalk || createdLive) {
@@ -173,7 +278,7 @@ module.exports = async (blogID, publish, update) => {
           await update(path);
         } else if (!existsLocally) {
           await checkWeCanContinue();
-          publish("Creating directory", path);
+          progress.note("Creating directory", path);
           await folder.mkdir(blogID, path);
           summary.createdDirs += 1;
           if (dirChangedDuringWalk || createdLive) {
@@ -184,6 +289,24 @@ module.exports = async (blogID, publish, update) => {
         }
 
         await walk(path, modifiedTime, walkedDirCreatedLive);
+      } else if (started.has(path)) {
+        // Started above, and done by now or still running: applied here, in
+        // order. A failed check that we can continue fails just this file,
+        // as it did when the download ran here.
+        const outcome = await started.get(path);
+        try {
+          if (outcome.error) throw outcome.error;
+          summary.downloaded += 1;
+          if (modifiedSince(modifiedTime, startedAt)) {
+            summary.modifiedDuringWalk += 1;
+          } else if (createdLive) {
+            summary.changedDuringWalk += 1;
+          }
+          await update(path);
+        } catch (e) {
+          progress.note("Failed to download", path, e);
+          fail(e);
+        }
       } else {
         // We could compare modified time but this seems to bug out on some sites
         // A placeholder isn't identical to a file which is now really empty
@@ -244,13 +367,17 @@ module.exports = async (blogID, publish, update) => {
                   limit: maxFileSize,
                 });
                 summary.placeholdersCreated += 1;
-                publish("Created placeholder for oversized file", path);
+                progress.note("Created placeholder for oversized file", path);
                 // Register it, as the /upload placeholder route does, so an
                 // entry built from the old bytes is dropped.
                 await update(path);
                 for (const descendant of descendants) await update(descendant);
               } catch (err) {
-                publish("Failed to create placeholder", path, err.message);
+                progress.note(
+                  "Failed to create placeholder",
+                  path,
+                  err.message
+                );
                 fail(err);
               }
 
@@ -273,7 +400,7 @@ module.exports = async (blogID, publish, update) => {
             }
             await update(path);
           } catch (e) {
-            publish("Failed to download", path, e);
+            progress.note("Failed to download", path, e);
             fail(e);
           }
         }

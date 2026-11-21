@@ -7,6 +7,10 @@ const remoteDelete = require("./util/remoteDelete");
 const localReaddir = require("./util/localReaddir");
 const remoteReaddir = require("./util/remoteReaddir");
 const folder = require("storage/folder");
+const {
+  countLocalFiles,
+  createProgress,
+} = require("clients/util/resyncProgress");
 
 const config = require("config");
 
@@ -32,13 +36,32 @@ module.exports = async (
   blogID,
   publish,
   update,
-  { skipDeletions = false, abortOnError = false } = {}
+  { skipDeletions = false, abortOnError = false, check = false } = {}
 ) => {
   publish = publish || function () {};
 
   const checkWeCanContinue = CheckWeCanContinue(blogID);
 
   let skippedPlaceholders = 0;
+
+  // Messages carry the count ("(12/340) Transferring to iCloud /a.txt"),
+  // which the dashboard's status line shows as a progress bar. Every local
+  // file advances it, copied or not, so it ends at the total however many
+  // files iCloud already had
+  // The check pass after the copy (check) goes over the same files again in
+  // seconds: its messages go without the count, so the bar the copy filled
+  // isn't emptied and filled a second time
+  const total = await countLocalFiles(blogID, "/").catch(() => 0);
+  const progress = createProgress(
+    total,
+    check
+      ? (message) => publish(String(message).replace(/^\(\d+\/\d+\) /, ""))
+      : publish
+  );
+  // Shows the bar at 0 as soon as the total is known
+  if (check) publish("Checking the copy");
+  else if (total > 0) progress.note("Copying your files");
+  else publish("Copying your files");
 
   const walk = async (dir) => {
     const [remoteContents, localContents] = await Promise.all([
@@ -54,11 +77,11 @@ module.exports = async (
       if (!localItem && !skipDeletions) {
         const path = join(dir, name);
         await checkWeCanContinue();
-        publish("Removing from iCloud", join(dir, name));
+        progress.note("Removing from iCloud", path);
         try {
           await retry(remoteDelete, blogID, path);
         } catch (e) {
-          publish("Failed to remove", path);
+          progress.note("Failed to remove", path);
           console.log(prefix(), "Failed to remove", path, e);
           if (abortOnError) throw e;
         }
@@ -74,11 +97,11 @@ module.exports = async (
       if (isDirectory) {
         if (!remoteItem || (remoteItem && !remoteItem.isDirectory)) {
           await checkWeCanContinue();
-          publish("Creating directory in iCloud", path);
+          progress.note("Creating directory in iCloud", path);
           try {
             await retry(remoteMkdir, blogID, path);
           } catch (e) {
-            publish("Failed to create directory", path);
+            progress.note("Failed to create directory", path);
             console.log(prefix(), "Failed to create directory", path, e);
             if (abortOnError) throw e;
             continue;
@@ -96,6 +119,7 @@ module.exports = async (
           if (await folder.isPlaceholder(blogID, path)) {
             console.log(prefix(), "Skipping placeholder", blogID, path);
             skippedPlaceholders += 1;
+            progress.publishThrottled("Checking", path);
             continue;
           }
 
@@ -106,6 +130,7 @@ module.exports = async (
               blogID,
               path
             );
+            progress.publishThrottled("Checking", path);
             continue;
           }
         }
@@ -115,7 +140,7 @@ module.exports = async (
         if (!remoteItem || !identicalOnRemote) {
           await checkWeCanContinue();
           if (size > maxFileSize) {
-            publish("Skipping file which is too large", path);
+            progress.publish("Skipping file which is too large", path);
             console.log(prefix(), "Skipping file size=" + size, path);
             // it's important to throw an error here to prevent data loss
             // down the line, if the assumpation after this process runs
@@ -123,14 +148,16 @@ module.exports = async (
             if (abortOnError) throw new Error("File is too large: " + path);
             continue;
           }
-          publish("Transferring to iCloud", path);
+          progress.publish("Transferring to iCloud", path);
           try {
             await retry(remoteUpload, blogID, path);
           } catch (e) {
-            publish("Failed to upload", path, e);
+            progress.note("Failed to upload", path, e);
             console.log(prefix(), "Failed to upload", path, e);
             if (abortOnError) throw e;
           }
+        } else {
+          progress.publishThrottled("Checking", path);
         }
       }
     }
@@ -139,7 +166,7 @@ module.exports = async (
   try {
     await walk("/");
     if (skippedPlaceholders > 0) {
-      publish(
+      progress.note(
         "Skipped " +
           skippedPlaceholders +
           " placeholder" +
@@ -147,7 +174,7 @@ module.exports = async (
           " for files Blot could not download"
       );
     }
-    publish("Sync complete");
+    progress.finish(check ? "Checked the copy" : "Copied your files");
   } catch (e) {
     publish("Sync failed");
     console.log(prefix(), "Sync failed", e);

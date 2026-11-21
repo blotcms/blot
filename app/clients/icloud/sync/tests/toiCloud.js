@@ -8,7 +8,9 @@ describe("icloud toiCloud empty files and placeholders", function () {
     localReaddir: require.resolve("../util/localReaddir"),
     remoteReaddir: require.resolve("../util/remoteReaddir"),
     folder: require.resolve("storage/folder"),
+    resyncProgress: require.resolve("clients/util/resyncProgress"),
   };
+  const { createProgress } = require("clients/util/resyncProgress");
   const originals = new Map();
   let uploads;
   let messages;
@@ -32,6 +34,11 @@ describe("icloud toiCloud empty files and placeholders", function () {
     mock(modules.remoteReaddir, async () => remote);
     mock(modules.folder, {
       isPlaceholder: async (_blogID, path) => placeholders.includes(path),
+    });
+    mock(modules.resyncProgress, {
+      countLocalFiles: async () =>
+        local.filter((item) => !item.isDirectory).length,
+      createProgress,
     });
     delete require.cache[toiCloudPath];
     return require(toiCloudPath);
@@ -68,5 +75,31 @@ describe("icloud toiCloud empty files and placeholders", function () {
 
     expect(uploads.sort()).toEqual(["/empty.txt", "/post.txt"]);
     expect(messages.some((m) => /Skipped 1 placeholder /.test(m))).toBe(true);
+  });
+
+  it("counts every local file, copied or not, for the progress bar", async function () {
+    const toiCloud = load(local, remote, ["/placeholder.pdf"]);
+
+    await toiCloud("blog", (...args) => messages.push(args.join(" ")), null, {
+      skipDeletions: true,
+    });
+
+    expect(messages).toContain("(2/4) Transferring to iCloud /empty.txt");
+    expect(messages).toContain("(4/4) Transferring to iCloud /post.txt");
+    expect(messages[0]).toBe("(0/4) Copying your files");
+    expect(messages[messages.length - 1]).toBe("(4/4) Copied your files");
+  });
+
+  it("sends the check pass's messages without the count", async function () {
+    const toiCloud = load(local, remote, ["/placeholder.pdf"]);
+
+    await toiCloud("blog", (...args) => messages.push(args.join(" ")), null, {
+      skipDeletions: true,
+      check: true,
+    });
+
+    expect(messages[0]).toBe("Checking the copy");
+    expect(messages[messages.length - 1]).toBe("Checked the copy");
+    expect(messages.some((m) => /^\(\d+\/\d+\)/.test(m))).toBe(false);
   });
 });
