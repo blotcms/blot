@@ -6,8 +6,9 @@
 // Measuring walks a value's whole graph, so it never runs on the request
 // path: the stats job calls measureSome() once a minute, and it measures each
 // cached value once (remembered in a WeakMap), in slices of SLICE_MS with the
-// event loop free in between, up to BUDGET_MS of work a call. Values not yet
-// measured are extrapolated from the measured ones' ratio to their size.
+// event loop free in between, up to BUDGET_MS of work a call; a value too big
+// for one call carries on in the next. Values not yet measured are
+// extrapolated from the measured ones' ratio to their size.
 //
 // What the walk counts: a string a 16-byte header plus one byte per
 // character, or two once it holds a character above U+00FF (V8 then stores
@@ -74,38 +75,61 @@ function* walk(root) {
   return { heap, twoByteBytes, wideObjects };
 }
 
+// Render caches hold { payload, size } envelopes (./clone). Mustache's
+// template cache holds bare token arrays: each one counts as one unit of
+// size, so unmeasured ones are extrapolated per value instead of per byte.
 function measurable(value) {
-  return value && typeof value === "object" && typeof value.size === "number";
+  return value !== null && typeof value === "object";
+}
+
+function payloadOf(value) {
+  return typeof value.size === "number" && "payload" in value
+    ? value.payload
+    : value;
+}
+
+function sizeOf(value) {
+  return typeof value.size === "number" && "payload" in value ? value.size : 1;
 }
 
 const nextTick = () => new Promise((resolve) => setImmediate(resolve));
 
-// Measures values not yet measured, in slices, until the budget is spent.
-// One call at a time; a value evicted mid-walk is simply dropped.
-async function measureSome() {
+// A walk cut short by the budget, resumed by the next call.
+let pending = null;
+
+// Measures values not yet measured, in slices, until the budget is spent;
+// a value too big for one call's budget carries on in the next. One call at
+// a time; a value evicted mid-walk is simply dropped.
+async function measureSome({ budgetMs = BUDGET_MS } = {}) {
   if (running) return;
   running = true;
   try {
     let spent = 0;
-    for (const cache of tracked) {
-      for (const value of [...cache.values()]) {
-        if (spent >= BUDGET_MS) return;
-        if (!measurable(value) || measured.has(value)) continue;
-        const walker = walk(value.payload);
-        let result;
-        for (;;) {
-          const startedAt = performance.now();
-          let step;
-          do step = walker.next();
-          while (!step.done && performance.now() - startedAt < SLICE_MS);
-          spent += performance.now() - startedAt;
-          if (step.done) {
-            result = step.value;
-            break;
-          }
-          await nextTick();
+    const queue = function* () {
+      if (pending) yield pending;
+      for (const cache of tracked)
+        for (const value of [...cache.values()])
+          if (measurable(value) && !measured.has(value))
+            yield { value, walker: walk(payloadOf(value)) };
+    };
+    for (const job of queue()) {
+      if (job !== pending && measured.has(job.value)) continue;
+      pending = null;
+      for (;;) {
+        if (spent >= budgetMs) {
+          pending = job;
+          return;
         }
-        measured.set(value, result);
+        const startedAt = performance.now();
+        let step;
+        do step = job.walker.next();
+        while (!step.done && performance.now() - startedAt < SLICE_MS);
+        spent += performance.now() - startedAt;
+        if (step.done) {
+          measured.set(job.value, step.value);
+          break;
+        }
+        await nextTick();
       }
     }
   } finally {
@@ -125,13 +149,13 @@ function estimate(cache) {
     if (!measurable(value)) continue;
     const m = measured.get(value);
     if (!m) {
-      unmeasuredSize += value.size;
+      unmeasuredSize += sizeOf(value);
       continue;
     }
     heap += m.heap;
     twoByteBytes += m.twoByteBytes;
     wideObjects += m.wideObjects;
-    measuredSize += value.size;
+    measuredSize += sizeOf(value);
   }
   const ratio = measuredSize ? heap / measuredSize : 0;
   const total = measuredSize + unmeasuredSize;

@@ -53,4 +53,34 @@ describe("heapEstimate", function () {
     expect(estimate.heapBytes).toBeGreaterThan(cache.calculatedSize);
     expect(estimate.twoByteBytes).toBeGreaterThanOrEqual(2000);
   });
+
+  it("carries a walk the budget cuts short over to the next call", async function () {
+    const cache = new LRUCache({ max: 10 });
+    heapEstimate.track(cache);
+    const big = Array.from({ length: 200000 }, (_, i) => ({ i: i + 0.5 }));
+    cache.set("big", prepareCacheValue(big));
+
+    await heapEstimate.measureSome({ budgetMs: 1 });
+    expect(heapEstimate.estimate(cache).measuredShare).toBe(0);
+
+    for (
+      let i = 0;
+      i < 1000 && heapEstimate.estimate(cache).measuredShare < 1;
+      i++
+    )
+      await heapEstimate.measureSome({ budgetMs: 5 });
+    expect(heapEstimate.estimate(cache).measuredShare).toBe(1);
+    expect(heapEstimate.estimate(cache).heapBytes).toBeGreaterThan(200000 * 56);
+  });
+
+  it("measures values that aren't envelopes, such as Mustache's token arrays", async function () {
+    const cache = new LRUCache({ max: 10 });
+    heapEstimate.track(cache);
+    cache.set("tokens", [["text", "x".repeat(500), 0, 500]]);
+
+    await heapEstimate.measureSome();
+    const estimate = heapEstimate.estimate(cache);
+    expect(estimate.measuredShare).toBe(1);
+    expect(estimate.heapBytes).toBeGreaterThan(500);
+  });
 });
