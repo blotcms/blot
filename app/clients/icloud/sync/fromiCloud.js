@@ -304,7 +304,7 @@ module.exports = async (blogID, publish, update) => {
           }
           await update(path);
         } catch (e) {
-          publish("Failed to download", path, e);
+          progress.note("Failed to download", path, e);
           fail(e);
         }
       } else {
