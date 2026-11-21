@@ -28,23 +28,23 @@
 
           <li data-step="clone">
             <span class="step-title">Clone it to your computer</span>
-            <span class="git-command">
-              <code id="repo_url">git clone https://{{host}}/clients/git/end/{{blog.handle}}.git</code>
+            <span class="copy-box">
+              <span class="copy-box-value git-code" id="repo_url">git clone https://{{host}}/clients/git/end/{{blog.handle}}.git</span>
               <button class="copy" data-copy="git clone https://{{host}}/clients/git/end/{{blog.handle}}.git"><span class="icon-copy"></span> Copy</button>
             </span>
             <span class="step-text git-instruction">Git asks for a username and password the first time:</span>
             <dl class="git-credentials">
               <div class="git-credential">
                 <dt>Username</dt>
-                <dd>
-                  <code id="repo_username">{{user.email}}</code>
+                <dd class="copy-box">
+                  <span class="copy-box-value git-code" id="repo_username">{{user.email}}</span>
                   <button class="copy" data-copy="{{user.email}}"><span class="icon-copy"></span> Copy</button>
                 </dd>
               </div>
               <div class="git-credential">
                 <dt>Password</dt>
-                <dd>
-                  <code id="repo_password">{{token}}</code>
+                <dd class="copy-box">
+                  <span class="copy-box-value git-code" id="repo_password">{{token}}</span>
                   <button class="copy" data-copy="{{token}}"><span class="icon-copy"></span> Copy</button>
                   <a class="git-reset" href="{{{base}}}/reset-password">Reset</a>
                 </dd>
@@ -55,16 +55,16 @@
           <li data-step="add">
             <span class="step-title">Add your files</span>
             <span class="step-text git-instruction">Put your posts, pages and images in the folder Git made, then commit them:</span>
-            <span class="git-command">
-              <code>git add -A &amp;&amp; git commit -m "First post"</code>
+            <span class="copy-box">
+              <span class="copy-box-value git-code">git add -A &amp;&amp; git commit -m "First post"</span>
               <button class="copy" data-copy='git add -A &amp;&amp; git commit -m "First post"'><span class="icon-copy"></span> Copy</button>
             </span>
           </li>
 
           <li data-step="push">
             <span class="step-title">Push to publish</span>
-            <span class="git-command">
-              <code>git push origin master</code>
+            <span class="copy-box">
+              <span class="copy-box-value git-code">git push origin master</span>
               <button class="copy" data-copy="git push origin master"><span class="icon-copy"></span> Copy</button>
             </span>
             <span class="step-text git-instruction">Blot publishes your changes each time you push to the <code>master</code> branch.</span>
@@ -104,36 +104,23 @@
   color: var(--text-color);
 }
 
-/* A command or credential to copy: a box like the iCloud page's address */
-.git-command,
-.git-credential dd {
-  display: inline-flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-  max-width: 100%;
-  box-sizing: border-box;
-  padding: 6px 6px 6px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  background: var(--background-color);
+/* Commands and credentials wrap on a phone rather than run off the page */
+.git-steps .copy-box {
+  flex-wrap: nowrap;
 }
 
-.git-command {
-  margin: 8px 0 2px;
+.git-steps .copy-box .copy {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.git-command code,
-.git-credential code {
+.git-steps .copy-box-value.git-code {
+  font-family: ui-monospace, Menlo, monospace;
   font-size: 13px;
+  font-weight: normal;
+  white-space: normal;
   overflow-wrap: anywhere;
   min-width: 0;
-  flex: 0 1 auto;
-}
-
-.git-command .copy,
-.git-credential .copy {
-  margin: 0;
 }
 
 .git-credentials {
@@ -153,7 +140,7 @@
   color: var(--medium-text-color);
 }
 
-.git-credential dd {
+.git-credential dd.copy-box {
   margin: 0;
   justify-self: start;
 }
