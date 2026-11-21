@@ -20,6 +20,7 @@ describe("google drive pollRecentFolders", function () {
         console: { log() {}, error() {} },
         setTimeout,
         clearTimeout,
+        AbortController,
         require: (name) => (name in stubs ? stubs[name] : require(name)),
       }
     );
