@@ -9,7 +9,8 @@
    - done: a check in a filled ring, text at full strength
    - problem: <span class="step-icon problem"><span
      class="icon-small-alert"></span></span> in place of its ring
-   Inside a step: .step-title, then .step-text or .step-problem.
+   Inside a step: .step-title, then .step-text or .step-problem. An
+   instruction's .step-text is full strength; a status step's is quieter.
 
    Give each <li> a data-step name and js/steps-progress.js animates a step
    that has finished since the page last showed it (the check fades in, the
@@ -77,6 +78,14 @@
   margin: 4px 0 10px;
   max-width: 480px;
   text-wrap: pretty;
+}
+
+/* An instruction step (no state class): its detail is read and followed */
+.steps-progress
+  > ol
+  > li:not(.todo):not(.active):not(.done):not(.problem)
+  .step-text {
+  color: var(--text-color);
 }
 
 /* Waiting and running steps are faint until they finish */
@@ -165,7 +174,9 @@
 
 /* A value to carry somewhere else, with its Copy button:
    <span class="copy-box"><span class="copy-box-value">…</span>
-   <button class="copy" data-copy="…">…</button></span> */
+   <button class="copy" data-copy="…">…</button></span>
+   For a command or URL, .copy-box-value.code is monospace and wraps, with
+   Copy kept beside it */
 .copy-box {
   display: inline-flex;
   align-items: center;
@@ -186,4 +197,18 @@
 
 .copy-box .copy {
   margin: 0;
+  flex-shrink: 0;
+}
+
+.copy-box:has(.copy-box-value.code) {
+  flex-wrap: nowrap;
+}
+
+.copy-box-value.code {
+  min-width: 0;
+  font-family: "IA Writer Duospace", Consolas, monaco, monospace;
+  font-size: 13px;
+  font-weight: normal;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
