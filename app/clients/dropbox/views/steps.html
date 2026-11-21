@@ -1,0 +1,126 @@
+<div class="steps steps-progress dropbox-steps" data-steps-key="dropbox-setup:{{blog.handle}}">
+  <ol>
+
+    <li data-step="access" class="{{setup.steps.access.className}}">
+      <span class="step-title">Choose what Blot can open</span>
+      {{#setup.running}}
+      <span class="step-text">{{#setup.fullAccess}}Your whole Dropbox{{/setup.fullAccess}}{{^setup.fullAccess}}An app folder only{{/setup.fullAccess}}</span>
+      {{/setup.running}}
+      {{^setup.running}}
+      <span class="dropbox-access">
+        <label>
+          <input type="radio" name="full_access" value=""{{^setup.fullAccess}} checked{{/setup.fullAccess}}>
+          <span>
+            <span class="dropbox-access-name">An app folder</span>
+            <span class="dropbox-access-note">Blot can open only its own folder, in Apps › Blot.</span>
+          </span>
+        </label>
+        <label>
+          <input type="radio" name="full_access" value="true"{{#setup.fullAccess}} checked{{/setup.fullAccess}}>
+          <span>
+            <span class="dropbox-access-name">Your whole Dropbox</span>
+            <span class="dropbox-access-note">Lets you move the folder anywhere and share it with other people.</span>
+          </span>
+        </label>
+      </span>
+      {{/setup.running}}
+    </li>
+
+    {{#setup.steps.signIn}}
+    <li data-step="sign-in" class="{{className}}">
+      {{#active}}<span class="step-icon"><span class="steps-spinner" aria-hidden="true"></span></span>{{/active}}
+      {{#problem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/problem}}
+      <span class="step-title">Sign in to Dropbox</span>
+      {{#problem}}<span class="step-problem">{{problem}}</span>{{/problem}}
+      {{#done}}<span class="step-text">{{setup.email}}</span>{{/done}}
+      {{^setup.running}}
+      <div class="buttons">
+        <button type="submit">Sign in to Dropbox</button>
+        {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
+        {{#blog.client}}<button type="submit" form="dropbox-cancel-form">Cancel</button>{{/blog.client}}
+      </div>
+      {{/setup.running}}
+    </li>
+    {{/setup.steps.signIn}}
+
+    {{#setup.steps.folder}}
+    <li data-step="folder" class="{{className}}">
+      {{#active}}<span class="step-icon"><span class="steps-spinner" aria-hidden="true"></span></span>{{/active}}
+      <span class="step-title">{{#done}}Your site’s folder{{/done}}{{^done}}Creating your site’s folder{{/done}}</span>
+      {{#done}}<span class="step-text">{{#dropboxBreadcrumbs}}{{name}}{{^last}} › {{/last}}{{/dropboxBreadcrumbs}}</span>{{/done}}
+    </li>
+    {{/setup.steps.folder}}
+
+    {{#setup.steps.copy}}
+    <li data-step="copy" class="{{className}}">
+      {{#active}}<span class="step-icon"><span class="steps-spinner" aria-hidden="true"></span></span>{{/active}}
+      <span class="step-title">Copying your site’s files</span>
+    </li>
+    {{/setup.steps.copy}}
+
+  </ol>
+</div>
+
+<style>
+/* Beside its label like every other line, and above it on a phone */
+.dropbox-setup-line .center {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .dropbox-setup-line .center {
+    flex-basis: 100%;
+  }
+}
+
+.dropbox-setup-form {
+  width: auto;
+  margin: 0;
+}
+
+.dropbox-access {
+  display: block;
+  margin: 10px 0 4px;
+  max-width: 520px;
+}
+
+.dropbox-access label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.dropbox-access label:has(input:checked) {
+  border-color: var(--accent-color);
+}
+
+.dropbox-access input {
+  margin: 2px 0 0;
+  flex-shrink: 0;
+}
+
+.dropbox-access-name {
+  display: block;
+  font-size: 14px;
+  color: var(--text-color);
+}
+
+.dropbox-access-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--medium-text-color);
+}
+
+.dropbox-steps .buttons {
+  margin: 12px 0 0;
+  max-width: 520px;
+}
+</style>

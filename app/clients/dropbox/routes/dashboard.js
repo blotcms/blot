@@ -10,8 +10,11 @@ const join = require("path").join;
 const moment = require("moment");
 const { Dropbox } = require("dropbox");
 const views = __dirname + "/../views/";
+// The setup checklist, on the setup page and the settings page while it runs
+const partials = { "dropbox-steps": views + "steps.html" };
 const client = require("models/client");
 const setClient = require("clients/util/setClient");
+const setupState = require("clients/dropbox/util/setupState");
 
 dashboard.use(async function loadDropboxAccount(req, res, next) {
   try {
@@ -42,9 +45,10 @@ dashboard.get("/", function (req, res) {
     return res.redirect(req.baseUrl + "/setup" + query);
   }
 
+  res.locals.setup = setupState(req.session.dropbox);
+
   if (req.session.dropbox) {
     res.locals.account = req.session.dropbox;
-    res.locals.preparing = true;
     // Just in case we haven't acquired the sync lock
     // the first time this page is loaded, we set the
     // state of the blog to syncing...
@@ -133,14 +137,24 @@ dashboard.get("/", function (req, res) {
     }
   }
 
-  res.render(views + "index");
+  res.render(views + "index", { partials });
 });
 
 // Explains to the user what will happen when they authenticate
 // then provides them with a link to the dropbox redirect
 dashboard.get("/setup", function (req, res) {
-  res.render(views + "authenticate");
+  renderSetup(req, res);
 });
+
+// The setup page's checklist: choose the access and sign in, with Blot's
+// steps waiting. error is why the last sign-in didn't work
+function renderSetup(req, res, error) {
+  res.locals.setup = setupState(null, {
+    fullAccess: !!(req.account && req.account.full_access),
+    error,
+  });
+  res.render(views + "authenticate", { partials });
+}
 
 // Allows the user to choose a new Dropbox account to connect
 // then provides them with a link to the dropbox redirect
@@ -325,12 +339,13 @@ async function authenticate(req, res, next) {
     return req.session.save(function () {
       restorePriorError()
         .then(function () {
-          res.locals.error =
+          renderSetup(
+            req,
+            res,
             error === "access_denied"
-              ? "You cancelled Dropbox authorization, so Blot can't access your folder. Try again to connect."
-              : "Something went wrong connecting to Dropbox. Try again to connect.";
-
-          res.render(views + "authenticate");
+              ? "You cancelled signing in, so Blot can’t open your folder. Sign in again to connect."
+              : "Something went wrong signing in to Dropbox. Sign in again to connect."
+          );
         })
         .catch(next);
     });
