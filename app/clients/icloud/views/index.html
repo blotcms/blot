@@ -74,11 +74,11 @@
       {{^setup.linked}}
       <ol>
 
-        <li>
+        <li data-step="create">
           <span class="step-title">Create a folder in iCloud</span>
         </li>
 
-        <li class="{{#setup.shareProblem}}problem{{/setup.shareProblem}}">
+        <li data-step="share" class="{{#setup.shareProblem}}problem{{/setup.shareProblem}}">
           {{#setup.shareProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.shareProblem}}
           <span class="step-title">Share the folder with this address</span>
           {{#setup.shareProblem}}<span class="step-problem">{{setup.shareProblem}}</span>{{/setup.shareProblem}}
@@ -126,7 +126,7 @@
 
         </li>
 
-        <li class="{{#setup.linkProblem}}problem{{/setup.linkProblem}}">
+        <li data-step="link" class="{{#setup.linkProblem}}problem{{/setup.linkProblem}}">
           {{#setup.linkProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.linkProblem}}
           <span class="step-title">Paste the link</span>
           {{#setup.linkProblem}}<span class="step-problem">{{setup.linkProblem}}</span>{{/setup.linkProblem}}
@@ -147,7 +147,11 @@
       {{#setup.linked}}
       <ol>
 
-        <li class="{{^setup.slow}}active{{/setup.slow}}{{#setup.slow}}problem{{/setup.slow}}"{{^setup.slow}} data-slow-in="{{setup.slowInMs}}"{{/setup.slow}}>
+        <li class="done" data-step="create"><span class="step-title">Create a folder in iCloud</span></li>
+        <li class="done" data-step="share"><span class="step-title">Share the folder</span></li>
+        <li class="done" data-step="link"><span class="step-title">Paste the link</span></li>
+
+        <li data-step="join" class="{{^setup.slow}}active{{/setup.slow}}{{#setup.slow}}problem{{/setup.slow}}"{{^setup.slow}} data-slow-in="{{setup.slowInMs}}"{{/setup.slow}}>
           {{^setup.slow}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.slow}}
           {{#setup.slow}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.slow}}
           <span class="step-title">Joining your folder</span>
@@ -167,7 +171,7 @@
           {{/setup.slow}}
         </li>
 
-        <li class="todo">
+        <li class="todo" data-step="copy">
           <span class="step-title">Copying your site’s files</span>
         </li>
 
@@ -226,6 +230,54 @@
       }
       if (Date.now() > due) location.reload();
     }, 5000);
+  })();
+</script>
+
+<script>
+  // Animates a step that has finished since the page last showed it, across
+  // live re-renders and the reload after pasting the link. Steps already done
+  // when first seen are left still, so a re-render doesn't replay them
+  (function icloudStepsAnimate() {
+    var KEY = "icloud-steps:" + location.pathname;
+    var known = null;
+
+    try {
+      known = JSON.parse(sessionStorage.getItem(KEY));
+    } catch (e) {}
+
+    function update() {
+      var steps = document.querySelectorAll(".icloud-steps > ol > li[data-step]");
+      var next = {};
+      var delay = 0;
+
+      for (var i = 0; i < steps.length; i++) {
+        var step = steps[i];
+        var name = step.getAttribute("data-step");
+        var done = step.classList.contains("done");
+        next[name] = done;
+
+        if (done && known && known[name] === false) {
+          step.style.setProperty("--step-delay", delay + "s");
+          step.classList.add("became-done");
+          delay += 0.12;
+        }
+      }
+
+      known = next;
+      try {
+        sessionStorage.setItem(KEY, JSON.stringify(next));
+      } catch (e) {}
+    }
+
+    update();
+
+    var live = document.querySelector(".live-updates");
+    if (live && window.MutationObserver)
+      new MutationObserver(function (records) {
+        for (var i = 0; i < records.length; i++)
+          if (records[i].type === "childList" && records[i].target === live)
+            return update();
+      }).observe(live, { childList: true });
   })();
 </script>
 
@@ -298,6 +350,39 @@
   margin-bottom: 1.1em;
 }
 
+/* Each step has a ring rather than a number, joined to the next by a dotted
+   line. A running step spins an arc around its ring; a finished one fills
+   with a check and its text comes up to full strength */
+.icloud-steps > ol > li::before {
+  content: "";
+  box-sizing: border-box;
+  top: 1px;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid var(--border-color);
+  background: var(--background-color) center / 12px no-repeat;
+}
+
+.icloud-steps > ol > li {
+  margin-bottom: 1.5em;
+}
+
+.icloud-steps > ol > li::after {
+  left: calc(9px - 32px);
+  top: 26px;
+  bottom: calc(-1.5em + 5px);
+  width: 0;
+  background: none;
+  border-left: 2px dotted
+    color-mix(in srgb, var(--light-text-color) 45%, transparent);
+}
+
+.icloud-steps > ol > li.done::before {
+  border-color: var(--accent-color);
+  background-color: var(--accent-color);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-4.9' fill='none' stroke='white' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
 /* Keeps the connector between finished steps from shrinking to a stub */
 .icloud-steps ol li.done {
   min-height: 1.6em;
@@ -328,45 +413,69 @@
   text-wrap: pretty;
 }
 
-/* A finished or failing step shows an icon in place of its number */
-.icloud-steps ol li.done::before,
-.icloud-steps ol li.active::before,
-.icloud-steps ol li.problem::before {
+/* Waiting and running steps are faint until they finish */
+.icloud-steps > ol > li.todo .step-title,
+.icloud-steps > ol > li.active .step-title {
+  color: var(--light-text-color);
+}
+
+.icloud-steps > ol > li.todo .step-text {
+  color: var(--light-text-color);
+}
+
+/* A failing step shows an alert in place of its ring */
+.icloud-steps > ol > li.problem::before {
   visibility: hidden;
 }
 
 .icloud-steps .step-icon {
   position: absolute;
-  top: 0;
+  top: 1px;
   left: -32px;
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-}
-
-.icloud-steps .step-icon.done {
-  color: green;
+  font-size: 16px;
 }
 
 .icloud-steps .step-icon.problem {
   color: #c25e00;
 }
 
-.icloud-steps .step-icon.done,
-.icloud-steps .step-icon.problem {
-  font-size: 16px;
+/* A step that finished since the page last showed it: the check fades in and
+   the text comes up from faint (icloudStepsAnimate below) */
+.icloud-steps > ol > li.became-done::before {
+  animation: icloud-check-in 0.25s ease-out both;
+  animation-delay: var(--step-delay, 0s);
 }
 
-.icloud-steps ol li.done .step-title {
-  color: var(--medium-text-color);
+.icloud-steps > ol > li.became-done .step-title {
+  animation: icloud-text-in 0.4s ease-out both;
+  animation-delay: var(--step-delay, 0s);
 }
 
-.icloud-steps ol li.todo,
-.icloud-steps ol li.todo .step-title {
-  color: var(--light-text-color);
+@keyframes icloud-check-in {
+  from {
+    border-color: var(--border-color);
+    background-color: var(--background-color);
+    background-size: 0;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes icloud-text-in {
+  from {
+    color: var(--light-text-color);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .icloud-steps > ol > li.became-done::before,
+  .icloud-steps > ol > li.became-done .step-title {
+    animation: none;
+  }
 }
 
 /* The one value to carry over to Finder */
@@ -730,9 +839,15 @@
   animation: icloud-spin 0.8s linear infinite;
 }
 
+/* In a step, the spinner is an arc running round the step's ring */
 .icloud-steps .step-icon .icloud-spinner {
-  width: 10px;
-  height: 10px;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--accent-color);
+  border-right-color: var(--accent-color);
+  vertical-align: 0;
 }
 
 @keyframes icloud-spin {
