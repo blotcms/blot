@@ -35,7 +35,7 @@
       {{#done}}<span class="step-text">{{setup.email}}</span>{{/done}}
       {{^setup.running}}
       <div class="buttons">
-        <button type="submit">Sign in to Dropbox</button>
+        <button type="submit">Sign in</button>
         {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
         {{#blog.client}}<button type="submit" form="dropbox-cancel-form">Cancel</button>{{/blog.client}}
       </div>
@@ -122,5 +122,11 @@
 .dropbox-steps .buttons {
   margin: 12px 0 0;
   max-width: 520px;
+}
+
+/* Sign in at its natural width, with Cancel beside it */
+.dropbox-steps .buttons > * {
+  flex-grow: 0;
+  white-space: nowrap;
 }
 </style>
