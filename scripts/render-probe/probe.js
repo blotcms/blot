@@ -64,7 +64,7 @@ const OPTIONS = {
   },
   upstream: {
     value: "HOST:PORT",
-    help: "replay: the container's upstream (default the old yellow port, for logs from before the units)",
+    help: "replay: the upstreams to replay, comma-separated (default both units' node-a; 127.0.0.1:8090 for logs from before the units)",
   },
   timeout: { value: "S", help: "per-request timeout (default 120)" },
   "snapshot-at-end": {
@@ -352,13 +352,15 @@ async function runUrls(port, urls) {
 }
 
 // Access log lines look like:
-// [01/Oct/2026:10:03:27 +0000] <id> <status> <secs> <bytes> <url>  cache=... up=127.0.0.1:8090 ...
+// [01/Oct/2026:10:03:27 +0000] <id> <status> <secs> <bytes> <url>  cache=... up=unix:/run/blot/blue-a.sock ...
 const ACCESS_LINE =
   /^\[(\d\d)\/(\w{3})\/(\d{4}):(\d\d:\d\d:\d\d) [+-]\d{4}\] \S+ \S+ (\S+) \S+ (https?:\/\/\S+)/;
 const MONTHS = "JanFebMarAprMayJunJulAugSepOctNovDec";
 
 async function readReplay(file) {
-  const upstream = args.upstream || "127.0.0.1:8090";
+  const upstream =
+    args.upstream || "unix:/run/blot/blue-a.sock,unix:/run/blot/green-a.sock";
+  const upstreams = upstream.split(",").map((u) => "up=" + u + " ");
   const { from, to } = args;
   if (!from || !to)
     throw new Error(
@@ -376,7 +378,7 @@ async function readReplay(file) {
   const requests = [];
   const lines = readline.createInterface({ input, crlfDelay: Infinity });
   for await (const line of lines) {
-    if (!line.includes("up=" + upstream)) continue;
+    if (!upstreams.some((u) => line.includes(u))) continue;
     const match = ACCESS_LINE.exec(line);
     if (!match) continue;
     const [, day, mon, year, time, secs, url] = match;
@@ -900,6 +902,9 @@ async function main() {
     const file = require("v8").writeHeapSnapshot(
       require("path").join(out.dir, "end.heapsnapshot")
     );
+    // V8 writes it 0600 as the container's user; the launcher copies /out
+    // back as the ssh user, and removes it from the host once copied.
+    fs.chmodSync(file, 0o644);
     console.log(`probe: wrote ${file}`);
   }
   console.log(
