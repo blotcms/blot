@@ -8,7 +8,7 @@
 
         <li data-step="create">
           <span class="step-title">Create a repository on Blot</span>
-          <span class="step-text git-instruction">Blot makes a Git repository from your site’s folder, with a username and password to clone it.</span>
+          <span class="step-text">Blot makes a Git repository from your site’s folder, with a username and password to clone it.</span>
           <form method="post" class="dashboard-form git-create-form">
             <input type="hidden" name="_csrf" value="{{csrftoken}}">
             <div class="buttons">
@@ -54,10 +54,6 @@
   .git-setup-line .center {
     flex-basis: 100%;
   }
-}
-
-.git-steps .git-instruction {
-  color: var(--text-color);
 }
 
 .git-steps form.git-create-form {
