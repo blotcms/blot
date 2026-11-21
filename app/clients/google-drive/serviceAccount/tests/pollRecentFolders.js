@@ -191,4 +191,39 @@ describe("google drive pollRecentFolders", function () {
     expect(round).toBe(5);
     expect(changed.length).toBe(1);
   });
+
+  it("cancels the request of a listing that hangs", async function () {
+    const controller = new AbortController();
+    let round = 0;
+    const signals = [];
+    const poll = load(async () => {
+      if (++round > 1) {
+        controller.abort();
+        return [];
+      }
+      return [{ blogID: "blog_a", dirId: "posts" }];
+    });
+    // Like googleapis: rejects once the request's signal aborts
+    const drive = {
+      files: {
+        list: (params, { signal }) =>
+          new Promise((resolve, reject) => {
+            signals.push(signal);
+            signal.addEventListener("abort", () =>
+              reject(new Error("The operation was aborted"))
+            );
+          }),
+      },
+    };
+
+    await poll("sa", drive, controller.signal, {
+      everyMs: 1,
+      listingTimeoutMs: 20,
+      readdir: async (client) => client.files.list({}),
+      onChanged: async () => {},
+    });
+
+    expect(signals.length).toBe(1);
+    expect(signals[0].aborted).toBe(true);
+  });
 });
