@@ -29,7 +29,7 @@ const BLOGS_TTL_MS = 30 * 1000;
 const RATE_LIMIT_BACKOFF_MS = 10 * 1000;
 
 const FIELDS =
-  "nextPageToken,newStartPageToken,changes(fileId,removed,time,file(name,mimeType,parents,trashed))";
+  "nextPageToken,newStartPageToken,changes(fileId,removed,time,file(name,mimeType,parents,trashed,md5Checksum,size))";
 
 const tokenKey = (serviceAccountId) =>
   `${PREFIX}changes-page-token:${serviceAccountId}`;
