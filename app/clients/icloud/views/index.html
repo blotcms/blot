@@ -501,10 +501,12 @@
   margin: 0;
 }
 
+/* The numbers start where the address in the box above does (its 1px
+   border and 12px padding), with the text after them */
 .icloud-steps ol.icloud-howto {
-  list-style: decimal;
-  counter-reset: none;
-  padding-left: 26px;
+  list-style: none;
+  counter-reset: howto;
+  padding-left: calc(13px + 18px);
   margin: 10px 0 6px;
   font-size: 14px;
   color: var(--text-color);
@@ -574,11 +576,24 @@
 }
 
 .icloud-steps ol.icloud-howto li {
-  counter-increment: none;
+  counter-increment: howto;
   margin: 0 0 4px;
 }
 
-.icloud-steps ol.icloud-howto li::before,
+.icloud-steps ol.icloud-howto li::before {
+  content: counter(howto) ".";
+  display: block;
+  left: -18px;
+  top: 0;
+  width: auto;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  font: inherit;
+  line-height: inherit;
+  color: inherit;
+}
+
 .icloud-steps ol.icloud-howto li::after {
   display: none;
 }
@@ -604,7 +619,9 @@
   color: var(--medium-text-color);
 }
 
+/* Its chevron in line with the numbers above */
 .icloud-show-me summary {
+  margin-left: 13px;
   cursor: pointer;
   user-select: none;
   color: var(--accent-color);
