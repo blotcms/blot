@@ -2,6 +2,7 @@ import { iCloudDriveDirectory } from "../config.js";
 import fs from "fs-extra";
 import exec from "../exec.js";
 import clfdate from "../util/clfdate.js";
+import enclosingPackages from "./enclosingPackages.js";
 
 // 15 seconds, plus 2 seconds a megabyte: a fixed 15 seconds timed out (and
 // retried) on multi-megabyte photos
@@ -14,6 +15,27 @@ const timeoutFor = (size) =>
   Math.min(MAX_TIMEOUT, BASE_TIMEOUT + (size / 1e6) * TIMEOUT_PER_MB);
 
 const BLOCK_SIZE = 512;
+
+// iCloud keeps a package (a folder macOS shows as one file, such as a BBEdit
+// .bbprojectd) as a single item, so brctl can't download a file inside one:
+// it answers that the file "doesn't exist" (NSCocoaErrorDomain Code=4). It
+// can download the package, which brings the file with it.
+const isUnknownItem = (error) =>
+  /NSCocoaErrorDomain Code=4\b/.test((error && error.message) || "");
+
+const brctlDownload = async (pathInDrive) => {
+  const { stdout, stderr } = await exec("brctl", ["download", pathInDrive], {
+    cwd: iCloudDriveDirectory,
+  });
+
+  if (stdout !== "") {
+    throw new Error(`Unexpected stdout: ${stdout}`);
+  }
+
+  if (stderr !== "") {
+    throw new Error(`Unexpected stderr: ${stderr}`);
+  }
+};
 
 // { force: true } issues the download even when the file looks downloaded:
 // a downloaded file whose newer version bird already has keeps its old
@@ -56,16 +78,20 @@ export default async (path, { force = false } = {}) => {
   const request = async () => {
     console.log(clfdate(), `Issuing brctl download for path: ${pathInDrive}`);
 
-    const { stdout, stderr } = await exec("brctl", ["download", pathInDrive], {
-      cwd: iCloudDriveDirectory,
-    });
-
-    if (stdout !== "") {
-      throw new Error(`Unexpected stdout: ${stdout}`);
-    }
-
-    if (stderr !== "") {
-      throw new Error(`Unexpected stderr: ${stderr}`);
+    try {
+      await brctlDownload(pathInDrive);
+    } catch (error) {
+      if (!isUnknownItem(error)) throw error;
+      for (const pkg of enclosingPackages(pathInDrive)) {
+        try {
+          await brctlDownload(pkg);
+          console.log(clfdate(), `Downloaded the package around it: ${pkg}`);
+          return;
+        } catch (packageError) {
+          if (!isUnknownItem(packageError)) throw packageError;
+        }
+      }
+      throw error;
     }
   };
 
