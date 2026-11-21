@@ -1,11 +1,18 @@
-// Deletes the Google Drive records Blot still keeps for blogs that no longer
-// exist. Blog.remove only ran the client's disconnect, and only for the
-// blog's client at the time, so a Drive account record (and its folder
-// mapping) could outlive its blog; since this script's PR, Blog.remove calls
-// clients/google-drive/forget.js for every deleted blog.
+// One-time backfill: deletes the Google Drive records Blot still keeps for
+// blogs no longer connected to Google Drive, because they were deleted or
+// moved to another client. Drive's disconnect (clients/google-drive/
+// forget.js) now deletes all of a blog's Drive data, and deleting a blog
+// connected to Drive disconnects it, so new ones shouldn't appear; these were
+// left by earlier disconnects, which deleted only the account record and the
+// folder mapping, or by one that failed part way.
 //
-// A blog counts as deleted only when all three agree: Blog.get finds nothing,
-// the blog is not in the set of blog ids, and it has no info key.
+// A record is dangling when its blog:
+//   - is deleted: Blog.get finds nothing, the blog is not in the set of blog
+//     ids, and it has no info key (all three must agree; a blog where they
+//     disagree is reported and left alone); or
+//   - exists, but its client is not google-drive. Connecting sets the client
+//     before the account record is written, so a record beside another
+//     client is never a setup in progress.
 //
 // Looks for blog ids in:
 //   - blot:google-drive:blogs (the set of Drive accounts), and every
@@ -16,16 +23,16 @@
 //     <folderId>:applied-modified-time:<blogID>.
 // It checks each key's TYPE before reading it.
 //
-// For a deleted blog, --apply runs forget.js (the account hash, its set
-// memberships, the dirty keys, and the folder's mapping unless a live
-// account names the same folder), removes the blog from every account set,
-// and deletes its per-blog checksum hashes under any folder. Nothing in
-// Drive is touched. Every step can run again, so a run that stops part way
-// is finished by running it again.
+// For each dangling blog, --apply runs forget.js (the account hash, its set
+// memberships, the dirty keys, and the folder's mapping unless an account
+// that stays names the same folder), removes the blog from every account
+// set, and deletes its per-blog checksum hashes under any folder. Nothing in
+// Drive, and nothing in the blog's folder, is touched. Every step can run
+// again, so a run that stops part way is finished by running it again.
 //
 // Usage:
-//   node scripts/google-drive/purge-deleted-blogs.js           # dry run
-//   node scripts/google-drive/purge-deleted-blogs.js --apply
+//   node scripts/google-drive/purge-dangling-records.js           # dry run
+//   node scripts/google-drive/purge-dangling-records.js --apply
 const apply = process.argv.slice(2).includes("--apply");
 
 const client = require("models/client");
@@ -59,13 +66,17 @@ async function scan(pattern, type) {
   return typed;
 }
 
-async function isDeleted(blogID) {
+// "deleted", "on <client>", "connected", or "unclear" when the three
+// checks for a deleted blog disagree
+async function stateOf(blogID) {
   const [blog, member, info] = await Promise.all([
     Blog.get({ id: blogID }),
     client.sIsMember(blogKey.ids, blogID),
     client.exists(blogKey.info(blogID)),
   ]);
-  return !blog && !member && !info;
+  if (!blog) return !member && !info ? "deleted" : "unclear";
+  if (blog.client === "google-drive") return "connected";
+  return `on ${blog.client || "no client"}`;
 }
 
 async function main() {
@@ -106,22 +117,33 @@ async function main() {
     }
   }
 
-  // Folders named by live accounts, whose mapping must stay
+  const states = new Map();
+  for (const blogID of found.keys()) states.set(blogID, await stateOf(blogID));
+  const dangling = [...states]
+    .filter(([, state]) => state === "deleted" || state.startsWith("on "))
+    .map(([blogID]) => blogID);
+
+  // Folders named by accounts that stay, whose mapping must stay too
   const liveFolders = new Set();
-  const deleted = [];
-  for (const blogID of found.keys()) {
-    if (await isDeleted(blogID)) deleted.push(blogID);
-  }
   await database.blog.iterate(async (blogID, account) => {
-    if (!deleted.includes(blogID) && account.folderId)
+    if (!dangling.includes(blogID) && account.folderId)
       liveFolders.add(account.folderId);
   });
 
+  const counts = {};
+  for (const state of states.values()) counts[state] = (counts[state] || 0) + 1;
   console.log(
-    `${found.size} blog ids referred to by Google Drive records, ${deleted.length} of them deleted\n`
+    `${found.size} blog ids referred to by Google Drive records:`,
+    JSON.stringify(counts),
+    "\n"
   );
+  for (const [blogID, state] of states)
+    if (state === "unclear")
+      console.log(
+        `${blogID}: left alone, the checks for a deleted blog disagree`
+      );
 
-  for (const blogID of deleted) {
+  for (const blogID of dangling) {
     const account = await database.blog.get(blogID);
     const folder = account?.folderId
       ? liveFolders.has(account.folderId)
@@ -129,7 +151,7 @@ async function main() {
         : "folder mapping deleted"
       : "no folder";
     console.log(
-      `${blogID}: ${account ? "account record" : "no account record"}` +
+      `${blogID} (${states.get(blogID)}): ${account ? "account record" : "no account record"}` +
         (account?.preparing ? ", setup never finished" : "") +
         `, ${folder}`
     );
@@ -148,7 +170,7 @@ async function main() {
   }
 
   console.log(
-    `\n${apply ? "Deleted" : "Dry run: would delete"} the records of ${deleted.length} deleted blogs`
+    `\n${apply ? "Deleted" : "Dry run: would delete"} the Google Drive records of ${dangling.length} blogs`
   );
 }
 

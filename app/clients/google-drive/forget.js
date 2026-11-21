@@ -6,10 +6,10 @@ const database = require("./database");
 // be synced. Nothing in Drive is touched. Safe to call for a blog with no
 // Drive connection, and to call again.
 //
-// Blog.remove calls this for every deleted blog, whatever its client is now:
-// a record can outlive the connection (a disconnect that failed part way, a
-// blog that moved to another client), and it then holds the person's folder
-// against connecting it again and makes every start try to resume its setup.
+// Used by disconnect, which Blog.remove calls when a blog connected to
+// Google Drive is deleted, so a disconnected blog leaves no Drive data
+// behind. A record left by an earlier disconnect is purged by
+// scripts/google-drive/purge-dangling-records.js.
 //
 // The folder's mapping is keyed by the Drive folder alone, so it is kept if
 // another blog's account names the same folder.
