@@ -1,24 +1,70 @@
-
-
-<div class="inset">
-
 {{#folderLost}}
 <p class="error">{{account.error}}</p>
 <p>Confirm your Google Drive account below, then share a new, empty folder with Blot. Blot will copy your site's files into it, so nothing is lost.</p>
 {{/folderLost}}
-{{^folderLost}}
-<p>Enter the email for your Google Drive account to link your folder.</p>
-{{/folderLost}}
 
-  <form class="dashboard-form" action="{{{base}}}/set-up-folder" method="post">
-    <input type="hidden" name="_csrf" value="{{csrftoken}}">
-    <label for="email">Google Drive account:</label>
-    <input type="text" name="email" value="{{suggestedEmail}}">
-    <div class="buttons">
-      <button type="submit">{{#folderLost}}Continue{{/folderLost}}{{^folderLost}}Add email{{/folderLost}}</button>
-      {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
-      {{#blog.client}}<button type="submit" name="cancel" value="true">Cancel</button>{{/blog.client}}
+<div class="line drive-setup-line">
+  <span class="label">Folder on Google Drive</span>
+  <div class="center">
+    <div class="steps steps-progress">
+      <ol>
+
+        <li data-step="account">
+          <span class="step-title">Add your Google account</span>
+          <form class="dashboard-form drive-account-form" action="{{{base}}}/set-up-folder" method="post">
+            <input type="hidden" name="_csrf" value="{{csrftoken}}">
+            <label for="email">The email address you use for Google Drive:</label>
+            <input type="text" id="email" name="email" value="{{suggestedEmail}}">
+            <div class="buttons">
+              <button type="submit">{{#folderLost}}Continue{{/folderLost}}{{^folderLost}}Add account{{/folderLost}}</button>
+              {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
+              {{#blog.client}}<button type="submit" name="cancel" value="true">Cancel</button>{{/blog.client}}
+            </div>
+          </form>
+        </li>
+
+        <li data-step="share" class="todo">
+          <span class="step-title">Share an empty folder with Blot</span>
+        </li>
+
+        <li data-step="folder" class="todo">
+          <span class="step-title">Set up the folder</span>
+        </li>
+
+        <li data-step="copy" class="todo">
+          <span class="step-title">Copy your site’s files</span>
+        </li>
+
+      </ol>
     </div>
-  </form>
-
+  </div>
 </div>
+
+<style>
+.drive-setup-line .label {
+  flex-basis: 30%;
+}
+
+.drive-setup-line .center {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .drive-setup-line .label,
+  .drive-setup-line .center {
+    flex-basis: 100%;
+  }
+}
+
+/* On the setup page there is no status line above to draw the top rule */
+.drive-setup-line:first-of-type {
+  border-top: 1px solid var(--border-color);
+}
+
+.drive-account-form {
+  margin-top: 8px;
+  font-size: 14px;
+}
+</style>
