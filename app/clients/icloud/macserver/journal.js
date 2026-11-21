@@ -52,12 +52,9 @@ const index = (row) => {
   const parent = key(row.pz, row.pid);
   if (!children.has(parent)) children.set(parent, new Set());
   children.get(parent).add(k);
-  if (row.name && row.name.startsWith("blog_") && row.pz !== row.z) {
-    roots.set(k, row.name);
-  }
-  // Nested (blogFolder.js): blog_<id> is a plain folder in the account's
-  // zone, and the blog's root is the shared folder inside it, the root of its
-  // own zone, under the owner's name. Either can be indexed first.
+  // blog_<id> is a plain folder in the account's zone (blogFolder.js), and
+  // the blog's root is the shared folder inside it, the root of its own
+  // zone, under the owner's name. Either can be indexed first.
   if (row.pz !== row.z) {
     const parent = items.get(key(row.pz, row.pid));
     if (isContainer(parent)) roots.set(k, parent.name);

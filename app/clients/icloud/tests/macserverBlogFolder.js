@@ -1,6 +1,6 @@
-// blogFolder.js says where each blog's shared folder is: blog_<id> itself
-// (the old layout) or the folder nested inside it under the owner's name,
-// which follows the owner's renames (#2874).
+// blogFolder.js says where each blog's shared folder is: the folder nested
+// inside blog_<id> under the owner's name, which follows the owner's renames
+// (#2874).
 const fs = require("fs-extra");
 const os = require("os");
 const path = require("path");
@@ -65,17 +65,20 @@ describe("icloud macserver blogFolder", function () {
 
   const container = () => path.join(blogFolder.containerPath(blogID));
 
-  it("treats blog_<id> without the marker as the shared folder itself", async function () {
+  it("keeps no root for a blog_<id> without the marker", async function () {
+    spyOn(console, "error");
+    // not read yet
+    expect(() => blogFolder.rootOf(blogID)).toThrowError(/gone/);
+
     await fs.outputFile(path.join(container(), "post.md"), "hello");
     const layout = await blogFolder.refresh(blogID);
 
-    expect(layout.nested).toBe(false);
-    expect(blogFolder.rootOf(blogID)).toBe(container());
+    expect(layout.root).toBe(null);
+    expect(() => blogFolder.rootOf(blogID)).toThrowError(/gone/);
     expect(blogFolder.locate(path.join(container(), "a/post.md"))).toEqual({
       blogID,
-      path: "a/post.md",
+      path: "",
     });
-    expect(blogFolder.locate(container())).toEqual({ blogID, path: "" });
   });
 
   it("nests a shared folder under its owner's name", async function () {
@@ -122,13 +125,12 @@ describe("icloud macserver blogFolder", function () {
     expect((await blogFolder.refresh(blogID)).renamedFrom).toBe(null);
   });
 
-  it("keeps no root when a nested blog_<id> holds no folder, or several", async function () {
+  it("keeps no root when blog_<id> holds no folder, or several", async function () {
+    spyOn(console, "error");
     await fs.outputFile(path.join(container(), blogFolder.MARKER), "");
     let layout = await blogFolder.refresh(blogID);
-    expect(layout.nested).toBe(true);
     expect(layout.root).toBe(null);
-    // still nested: its files must not go to blog_<id> in the folder's place
-    expect(blogFolder.isNested(blogID)).toBe(true);
+    // its files must not go to blog_<id> in the folder's place
     expect(() => blogFolder.rootOf(blogID)).toThrowError(/gone/);
     expect(
       blogFolder.locate(path.join(container(), "Old name", "post.md"))
@@ -140,7 +142,7 @@ describe("icloud macserver blogFolder", function () {
     expect(layout.root).toBe(null);
   });
 
-  it("won't nest into an old blog folder or one that holds a folder", async function () {
+  it("won't nest into a blog_<id> without the marker", async function () {
     await fs.outputFile(path.join(container(), "post.md"), "hello");
     const shared = path.join(root, "My site " + blogID);
     await fs.mkdirp(shared);
@@ -149,17 +151,16 @@ describe("icloud macserver blogFolder", function () {
     expect(await fs.pathExists(shared)).toBe(true);
   });
 
-  it("clears Finder's dot-files when removing a nested blog_<id>", async function () {
+  it("clears Finder's dot-files when removing blog_<id>", async function () {
     await fs.outputFile(path.join(container(), blogFolder.MARKER), "");
     await fs.outputFile(path.join(container(), ".DS_Store"), "x");
     await blogFolder.refresh(blogID);
 
     expect(await blogFolder.removeContainer(blogID)).toBe(true);
     expect(await fs.pathExists(container())).toBe(false);
-    expect(blogFolder.isNested(blogID)).toBe(false);
   });
 
-  it("lists nested blogs' names at startup", async function () {
+  it("lists blogs' folder names at startup", async function () {
     const shared = path.join(root, "My site " + blogID);
     await fs.mkdirp(shared);
     await blogFolder.nest(blogID, shared);
@@ -169,7 +170,7 @@ describe("icloud macserver blogFolder", function () {
     expect(found).toContain({ blogID, name: "My site " + blogID });
   });
 
-  it("removes an empty nested blog_<id>, and refuses one that isn't", async function () {
+  it("removes an empty blog_<id>, and refuses one that isn't", async function () {
     const shared = path.join(root, "My site " + blogID);
     await fs.mkdirp(shared);
     const { root: nestedRoot } = await blogFolder.nest(blogID, shared);

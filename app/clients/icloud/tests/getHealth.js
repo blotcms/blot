@@ -36,27 +36,6 @@ describe("icloud getHealth", function () {
     expect(await getHealth(this.blog.id)).toEqual(health.syncing());
   });
 
-  it("reports sync paused while the folder is migrated, until six hours have passed", async function () {
-    const since = Date.now() - 1000;
-    await database.store(this.blog.id, {
-      setupComplete: true,
-      migratingSince: since,
-    });
-
-    const result = await getHealth(this.blog.id);
-    expect(result.state).toBe(health.STATES.ERROR);
-    expect(result.issues[0].code).toBe(health.CODES.SYNC_PAUSED);
-    expect(result.issues[0].since).toBe(since);
-
-    await database.store(this.blog.id, {
-      migratingSince: Date.now() - 7 * 60 * 60 * 1000,
-    });
-    expect(await getHealth(this.blog.id)).toEqual(health.ok());
-
-    await database.store(this.blog.id, { migratingSince: null });
-    expect(await getHealth(this.blog.id)).toEqual(health.ok());
-  });
-
   it("reports SOURCE_MISSING for a deleted blog directory", async function () {
     await database.store(this.blog.id, {
       setupComplete: true,

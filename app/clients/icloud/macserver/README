@@ -11,12 +11,9 @@ ssh macserver
 
 ### Blog folders in iCloud Drive
 
-Each blog's shared folder lives in one of two layouts (`blogFolder.js`):
+Each blog's shared folder is nested in a folder of Blot's own (`blogFolder.js`, #2874): `iCloud Drive/blog_<id>/<the owner's name>`. `blog_<id>` is a plain folder holding the shared folder and a `.blot-nested` marker. The shared folder keeps the owner's name, so iCloud passes the owner's renames on; the watcher reports a new name to Blot as `folderName`. (Renaming the shared folder itself to `blog_<id>`, as setup once did, cuts it off from the owner's renames for good.)
 
-- **Nested** (new setups, #2874): `iCloud Drive/blog_<id>/<the owner's name>`. `blog_<id>` is a plain folder of Blot's own, holding the shared folder and a `.blot-nested` marker. The shared folder keeps the owner's name, so iCloud passes the owner's renames on; the watcher reports a new name to Blot as `folderName`.
-- **Old**: `iCloud Drive/blog_<id>` is the shared folder itself, renamed by setup. A renamed share no longer follows the owner's renames.
-
-Every path for a blog goes through `rootOf(blogID)`. Never send a nested `blog_<id>` to the Trash: `util/leaveFolder.js` refuses it and leaves only the shared folder inside.
+A `blog_<id>` without the marker, or holding no folder or more than one, has no shared folder: `rootOf(blogID)` throws for it rather than read or write anything in `blog_<id>` itself. Every path for a blog goes through `rootOf(blogID)`. Never send a `blog_<id>` to the Trash: `util/leaveFolder.js` refuses it and leaves only the shared folder inside.
 
 ### Step 1: Create an `.env` File
 

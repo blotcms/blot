@@ -15,8 +15,6 @@ import recursiveListRoute from "./routes/recursiveList.js";
 import downloadRoute from "./routes/download.js";
 import statsRoute from "./routes/stats.js";
 import setupRoute from "./routes/setup.js";
-import layoutRoute from "./routes/layout.js";
-import migrateRoute from "./routes/migrate.js";
 import foldersRoute from "./routes/folders.js";
 
 const asyncHandler = (handler) => (req, res, next) =>
@@ -69,10 +67,6 @@ const startServer = async () => {
   app.get("/folders", asyncHandler(foldersRoute));
 
   app.post("/setup", asyncHandler(setupRoute));
-
-  app.get("/layout", asyncHandler(layoutRoute));
-
-  app.post("/migrate", asyncHandler(migrateRoute));
 
   app.use((err, req, res, next) => {
     console.error(clfdate(), "Macserver error:", err);
