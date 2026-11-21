@@ -11,6 +11,7 @@ const express = require("express");
 const dashboard = new express.Router();
 
 const finishSetup = require("./setup");
+const setupState = require("../util/setupState");
 const health = require("clients/health");
 const {
   classify,
@@ -53,6 +54,7 @@ dashboard.get("/", function (req, res) {
   // the prose here instead so the user isn't left looking at a "syncing"
   // badge with no explanation of what's stuck.
   res.locals.account.setupFailed = isSetupError(res.locals.account.error);
+  res.locals.setup = setupState(res.locals.account);
 
   if (
     res.locals.account.preparing &&
