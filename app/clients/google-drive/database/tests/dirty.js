@@ -5,7 +5,19 @@ describe("google drive dirty directories", function () {
   const BLOG = "blog_dirty_test";
 
   afterEach(async function () {
-    await client.del(dirty.key(BLOG));
+    await client.del([
+      dirty.key(BLOG),
+      dirty.movesKey(BLOG),
+      dirty.seenKey(BLOG),
+    ]);
+  });
+
+  it("keeps where moved folders went, for an hour", async function () {
+    await dirty.hintMoves(BLOG, [{ id: "F", parentId: "P" }]);
+
+    expect(await dirty.moveHint(BLOG, "F")).toBe("P");
+    expect(await dirty.moveHint(BLOG, "G")).toBe(null);
+    expect(await client.ttl(dirty.movesKey(BLOG))).toBeGreaterThan(3500);
   });
 
   it("takes every directory added, once", async function () {
@@ -43,5 +55,26 @@ describe("google drive dirty directories", function () {
     await dirty.add(BLOG, []);
 
     expect(await client.exists(dirty.key(BLOG))).toBe(0);
+  });
+
+  it("keeps the first sighting of each directory until it is read", async function () {
+    const before = Date.now();
+    await dirty.add(BLOG, ["a"], "changes");
+    await dirty.add(BLOG, ["a", "b"], "walk:webhook");
+
+    const seen = await dirty.seen(BLOG, ["a", "b", "c"]);
+    expect(seen.a.source).toBe("changes");
+    expect(seen.a.at).not.toBeLessThan(before);
+    expect(seen.b.source).toBe("walk:webhook");
+    expect(seen.c).toBeUndefined();
+
+    // Read once: the next change is timed afresh
+    expect(await dirty.seen(BLOG, ["a"])).toEqual({});
+  });
+
+  it("records no sighting for a put back", async function () {
+    await dirty.add(BLOG, ["a"]);
+
+    expect(await dirty.seen(BLOG, ["a"])).toEqual({});
   });
 });

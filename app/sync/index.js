@@ -155,7 +155,16 @@ async function acquire(blogID) {
   // The lag includes the provider's delay in telling Blot, any wait for the
   // lock and the files built before this one in the same sync. Grep for
   // "live lag_ms=" to measure it.
-  function logLag(path, options) {
+  //
+  // Where that time went, as far as is known, each from the source's time:
+  //   seen_ms      when a change source first saw it (options.seenAt), and
+  //   seen_by      which source (options.seenBy)
+  //   lock_ms      when this sync took the folder lock (negative when it
+  //                held the lock already before the change)
+  //   download_ms  when the client had the file (options.downloadedAt)
+  //   build_ms     how long the update itself took, not from the source's time
+  // The rest of lag_ms is waiting between them.
+  function logLag(path, options, updateStartedAt) {
     if (!options || options.modified === undefined) return;
 
     const modified =
@@ -165,9 +174,19 @@ async function acquire(blogID) {
 
     if (!Number.isFinite(modified)) return;
 
+    const since = (at) => (Number.isFinite(at) ? at - modified : null);
+    const stages = [
+      ["seen_ms", since(options.seenAt)],
+      ["seen_by", options.seenBy || null],
+      ["lock_ms", since(lockAcquiredAt)],
+      ["download_ms", since(options.downloadedAt)],
+      ["build_ms", Date.now() - updateStartedAt],
+    ].filter(([, value]) => value !== null);
+
     log(
       path,
-      `live lag_ms=${Date.now() - modified} since=${options.since || "modified"}`
+      `live lag_ms=${Date.now() - modified} since=${options.since || "modified"}`,
+      ...stages.map(([name, value]) => `${name}=${value}`)
     );
   }
 
@@ -190,6 +209,7 @@ async function acquire(blogID) {
         else if (touchedTemplates !== ALL_TEMPLATES) touchedTemplates.add(name);
       }
 
+      const updateStartedAt = Date.now();
       try {
         result = await originalUpdate(path);
       } catch (err) {
@@ -201,7 +221,7 @@ async function acquire(blogID) {
       removePendingUpdate(blogID, syncID, path);
       if (!result || result.changed !== false) {
         changes = true;
-        if (!result || !result.error) logLag(path, options);
+        if (!result || !result.error) logLag(path, options, updateStartedAt);
       }
       return result;
     },

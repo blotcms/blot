@@ -1,5 +1,6 @@
 import { join } from "path";
 import { iCloudDriveDirectory } from "../config.js";
+import { locate, rootOf } from "../blogFolder.js";
 
 const extractBlogID = (filePath) => {
   if (!filePath.startsWith(iCloudDriveDirectory)) {
@@ -15,13 +16,12 @@ const extractBlogID = (filePath) => {
   return blogID;
 };
 
+// The path inside the blog's shared folder, which is blog_<id> or, nested,
+// the folder inside it (blogFolder.js). "" for the folder itself, or for
+// anything else inside a nested blog_<id>; null outside every blog folder.
 const extractPathInBlogDirectory = (filePath) => {
-  if (!filePath.startsWith(iCloudDriveDirectory)) {
-    return null;
-  }
-  const relativePath = filePath.replace(`${iCloudDriveDirectory}/`, "");
-  const [, ...restPath] = relativePath.split("/");
-  return restPath.join("/");
+  const at = locate(filePath);
+  return at ? at.path : null;
 };
 
 const validActions = ["upload", "remove", "mkdir"];
@@ -33,7 +33,7 @@ const assertValidAction = (action) => {
 };
 
 const buildBlogPath = (blogID, pathInBlogDirectory) =>
-  join(iCloudDriveDirectory, blogID, pathInBlogDirectory);
+  join(rootOf(blogID), pathInBlogDirectory);
 
 export {
   extractBlogID,

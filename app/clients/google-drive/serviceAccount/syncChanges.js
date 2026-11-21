@@ -3,9 +3,12 @@ const clfdate = require("helper/clfdate");
 const database = require("../database");
 const followUps = require("../sync/followUps");
 const hotDocPoller = require("./hotDocPoller");
+const createDriveClient = require("./createDriveClient");
+const prefetch = require("../util/prefetch");
 const { logChanges } = require("./readChanges");
 
 const DOCUMENT = "application/vnd.google-apps.document";
+const FOLDER = "application/vnd.google-apps.folder";
 
 const prefix = () => `${clfdate()} Google Drive changes:`;
 
@@ -37,6 +40,24 @@ async function dirtyDirectories({ change, blogID, folderId, path, parentId }) {
   return ids;
 }
 
+// Starts downloading a changed file as soon as changes.list or the search
+// lists it (util/prefetch.js), so the sync that applies it, once it has the
+// folder lock and has listed the directory again, finds it downloaded. In
+// trials on a 3,035-item folder that took 1.2-2s after the lock, even for a
+// small file (#2847). Only files Drive gives an md5Checksum for, so a Doc or
+// a folder never is.
+async function prefetchFile(serviceAccountId, change) {
+  const file = change.file;
+  if (change.removed || !file || file.trashed || !file.md5Checksum) return;
+  if (file.mimeType?.startsWith("application/vnd.google-apps.")) return;
+  const drive = await createDriveClient(serviceAccountId);
+  prefetch.start(drive, {
+    id: change.fileId,
+    md5Checksum: file.md5Checksum,
+    size: file.size,
+  });
+}
+
 // Syncs the blogs a batch of changes belongs to (placed, from readChanges'
 // placeChanges). Used for changes.list and for the search (#2847), beside the
 // changes.watch webhook, which still syncs every blog on the account.
@@ -61,12 +82,28 @@ module.exports = async function syncChanges(
 
   const blogs = new Map();
   const dirty = new Map();
+  const moves = new Map();
   for (const entry of placed) {
     const { change, blogID, folderId } = entry;
     if (!blogID) continue;
     blogs.set(blogID, (blogs.get(blogID) || 0) + 1);
     if (!dirty.has(blogID)) dirty.set(blogID, new Set());
     for (const id of await dirtyDirectories(entry)) dirty.get(blogID).add(id);
+
+    // A folder the blog holds, now in a folder the blog holds: the sync can
+    // move it rather than remove it and download it again
+    if (
+      change.file?.mimeType === FOLDER &&
+      !change.file?.trashed &&
+      entry.path &&
+      entry.parentId &&
+      change.fileId !== folderId
+    ) {
+      if (!moves.has(blogID)) moves.set(blogID, []);
+      moves.get(blogID).push({ id: change.fileId, parentId: entry.parentId });
+    }
+
+    logFailure(prefetchFile(serviceAccountId, change), "prefetch failed");
 
     if (change.file?.mimeType === DOCUMENT && !change.file?.trashed) {
       logFailure(
@@ -82,10 +119,25 @@ module.exports = async function syncChanges(
   }
 
   // Recorded before the syncs start, so the sync that runs finds them
+  for (const [blogID, list] of moves) {
+    await database.dirty.hintMoves(blogID, list);
+  }
   for (const [blogID, ids] of dirty) {
-    await database.dirty.add(blogID, [...ids]);
+    await database.dirty.add(blogID, [...ids], source);
+    // So pollRecentFolders.js lists them for the next few minutes
+    await logFailure(
+      database.recent.touch(serviceAccountId, blogID, [...ids]),
+      "recent touch failed",
+      blogID
+    );
   }
 
+  await runSyncs(serviceAccountId, blogs, source);
+};
+
+// Arms each blog's follow-up, then runs its sync without waiting for it.
+// blogs: blogID -> the number of changes, for the log.
+async function runSyncs(serviceAccountId, blogs, source) {
   const armed = new Map();
   for (const blogID of blogs.keys()) {
     armed.set(blogID, await followUps.arm(blogID));
@@ -98,4 +150,40 @@ module.exports = async function syncChanges(
     );
     logFailure(followUps.run(blogID, armed.get(blogID)), "sync failed", blogID);
   }
+}
+
+// Syncs the blogs whose recently changed directories pollRecentFolders.js
+// found listed differently (changed: [{ blogID, dirId, folders }]). Logs each
+// directory with its path, so the source-race analysis can match it.
+module.exports.syncDirectories = async function syncDirectories(
+  serviceAccountId,
+  changed
+) {
+  const blogs = new Map();
+  for (const { blogID, dirId, folders } of changed) {
+    blogs.set(blogID, (blogs.get(blogID) || 0) + 1);
+    const account = await database.blog.get(blogID);
+    const path =
+      account?.folderId === dirId
+        ? "/"
+        : account?.folderId
+          ? await database.folder(account.folderId, blogID).get(dirId)
+          : null;
+    console.log(
+      prefix(),
+      `client_id=${serviceAccountId}`,
+      "source=recent",
+      `blog=${blogID}`,
+      `dir=${dirId}`,
+      `path=${JSON.stringify(path || "")}`
+    );
+    await database.dirty.add(blogID, [dirId], "recent");
+    await logFailure(
+      database.recent.touch(serviceAccountId, blogID, [dirId, ...folders]),
+      "recent touch failed",
+      blogID
+    );
+  }
+
+  await runSyncs(serviceAccountId, blogs, "recent");
 };

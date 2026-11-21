@@ -54,6 +54,14 @@ export async function resolve(specifier, context, nextResolve) {
     if (specifier === "../brctl/index.js") {
       return { url: BRCTL, shortCircuit: true };
     }
+    if (specifier === "../blogFolder.js") {
+      return {
+        url: "data:text/javascript," + encodeURIComponent(
+          "export const rootOf = (blogID) => " + JSON.stringify(ICLOUD_DRIVE_DIRECTORY) + " + '/' + blogID;"
+        ),
+        shortCircuit: true,
+      };
+    }
     if (specifier === "../birdState.js") {
       return { url: BIRD, shortCircuit: true };
     }

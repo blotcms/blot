@@ -1,6 +1,6 @@
 const comparePaths = require("./util/comparePaths");
 const folder = require("storage/folder");
-const { join } = require("path");
+const { join, dirname, basename } = require("path");
 const database = require("../database");
 const {
   MESSAGES,
@@ -9,6 +9,7 @@ const {
   sourceMissingFields,
 } = require("../database/error");
 const download = require("../util/download");
+const prefetch = require("../util/prefetch");
 const localState = require("../util/localState");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
@@ -160,7 +161,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   // outside the folder lock and then applies just those directories under
   // the lock (#2847). Its decisions are the walk's own, below.
   const detecting = Boolean(options.detectOnly);
-  const changed = new Set();
+  // Directory id -> its path, for the log
+  const changed = new Map();
   let needsFull = false;
 
   // Files Drive modified after this moment may just be edits that landed
@@ -199,6 +201,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     get: getPath,
     getPaths,
     getByPath,
+    getIds,
+    move: moveMapping,
     getApplied,
     setApplied,
     set,
@@ -260,6 +264,10 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   // Directory listings for the pass under way; each pass makes its own
   let listings = null;
 
+  // Directory id -> when a change source first saw it change, and which
+  // ({ at, source }, from options.dirty.seen), for the live line (#2847)
+  const seenDirs = new Map();
+
   // Throws YIELD when changed directories are waiting, other than the ones
   // the pass is applying (busy), asking Redis at most every YIELD_CHECK_MS.
   // During a bulk upload changes.list records the same directory again with
@@ -273,6 +281,85 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     lastYieldCheck = Date.now();
     const waiting = await options.dirty.members();
     if (waiting.some((id) => !busy.has(id))) throw YIELD;
+  };
+
+  // Folder renames and moves (#2847). Drive keeps a folder's id when it is
+  // renamed or moved, so instead of removing the folder and downloading
+  // everything in it again under its new name (27s for 100 files on
+  // drivetest, with its posts gone from the site meanwhile), the folder is
+  // moved in the blog folder. storage/folder.move keeps each file's records,
+  // so the files are unchanged where they land and nothing is downloaded; the
+  // mapping and the verified records follow, and every old and new path is
+  // updated, so posts move (and Blot's rename detection keeps them the same
+  // posts). Resolves false, having changed nothing, whenever it can't be sure:
+  // something already at the destination, a destination inside the folder
+  // itself, an ignored name, or a parent that isn't there.
+  // The local listing of each directory a walk is in the middle of, so a move
+  // can take the folder out of the listing it left: otherwise a new folder
+  // created at its old name in the same pass would look present already
+  const listingsInProgress = new Map();
+  const forgetLocal = (path) => {
+    const listing = listingsInProgress.get(dirname(path));
+    const entry = listing?.find((item) => item.name === basename(path));
+    if (entry) entry.name = undefined;
+  };
+
+  const moveDirectory = async (from, to, id) => {
+    if (!id || from === to || from === "/" || to.startsWith(from + "/"))
+      return false;
+    if (shouldIgnoreFile(to)) return false;
+    const mappedThere = await getByPath(to);
+    if (mappedThere && mappedThere !== id) return false;
+    if (await folder.exists(blogID, to)) return false;
+    if (dirname(to) !== "/" && !(await folder.exists(blogID, dirname(to))))
+      return false;
+
+    await checkWeCanContinue();
+    const descendants = await localDescendants(blogID, from);
+    publish("Moving", from);
+    console.log("Moving directory", from, "to", to, "as it moved in Drive");
+    await folder.move(blogID, from, to);
+    await moveMapping(id, to);
+    forgetLocal(from);
+
+    const movedPaths = descendants.map((path) => to + path.slice(from.length));
+    await update(from);
+    for (const path of descendants) await update(path);
+    await update(to);
+    for (const path of movedPaths) await update(path);
+
+    // Verified records name the path they were verified at. Rewritten only
+    // once every path above is updated: if an update fails, the records still
+    // name the old paths, so a retry checks the files at the new ones (their
+    // md5 matches, so nothing is downloaded) and rebuilds them.
+    const ids = (await getIds(movedPaths)).filter(Boolean);
+    const records = await getVerifiedContents(ids);
+    for (let i = 0; i < ids.length; i++) {
+      const record = records[i];
+      if (record && record.path.startsWith(from + "/")) {
+        await setVerifiedContent(ids[i], {
+          ...record,
+          path: to + record.path.slice(from.length),
+        });
+      }
+    }
+
+    summary.moved = (summary.moved || 0) + 1;
+    return true;
+  };
+
+  // Where Drive has a folder now, as a walk of its new parent would name it,
+  // or null if that parent isn't in the blog's folder
+  const pathInDrive = async (parentId, id) => {
+    const parentPath = parentId === folderId ? "/" : await getPath(parentId);
+    if (!parentPath) return null;
+    const items = transformDriveItems(
+      (await driveReaddir(drive, parentId)).filter(
+        (item) => item.mimeType !== SHORTCUT
+      )
+    );
+    const item = items.find((each) => each.id === id && each.isDirectory);
+    return item ? join(parentPath, item.name) : null;
   };
 
   // With recurse false, only the directory itself is brought up to date, and
@@ -292,6 +379,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       listings.take(dirId),
       localReaddir(blogID, dir),
     ]);
+    listingsInProgress.set(dir, localContents);
 
     // We handle file name deduplication and the mapping of
     // google docs to .gdoc files here. Shortcuts are skipped: Blot can't
@@ -321,7 +409,9 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       ids.forEach((id, i) => mappedPaths.set(id, paths[i]));
     }
 
-    for (const { name, isDirectory: isLocalDirectory } of localContents) {
+    for (const local of localContents) {
+      const { name, isDirectory: isLocalDirectory } = local;
+      if (name === undefined) continue;
       const path = join(dir, name);
       // A directory removed in one remove call still accounts for every
       // file total counted inside it, so current must advance by that many.
@@ -331,7 +421,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
       if (shouldIgnoreFile(path)) {
         if (detecting) {
-          changed.add(dirId);
+          changed.set(dirId, dir);
           continue;
         }
         await checkWeCanContinue();
@@ -346,9 +436,29 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
       if (!remoteContents.find((item) => item.name === name)) {
         if (detecting) {
-          changed.add(dirId);
+          changed.set(dirId, dir);
           continue;
         }
+
+        // A folder renamed here (the listing has its id under another name)
+        // or, by changes.list's hint, moved to another folder of the blog
+        if (isLocalDirectory) {
+          const id = await getByPath(path);
+          const here = id
+            ? remoteContents.find((item) => item.id === id && item.isDirectory)
+            : null;
+          let to = here ? join(dir, here.name) : null;
+          if (!to && id && options.dirty?.moveHint) {
+            const parentId = await options.dirty.moveHint(id);
+            if (parentId) to = await pathInDrive(parentId, id);
+          }
+          if (to && (await moveDirectory(path, to, id))) {
+            // Renamed here: this listing has it under the new name now
+            if (here) local.name = here.name;
+            continue;
+          }
+        }
+
         await checkWeCanContinue();
         progress.publish("Removing", path, false, removedCount);
         console.log(
@@ -418,7 +528,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       // Ensure the file is stored in the database (id <-> path mapping);
       // any folders will be stored as they are walked.
       if (!detecting) await set(id, path, { isDirectory, modifiedTime });
-      else if (mappedPaths.get(id) !== path) changed.add(dirId);
+      else if (mappedPaths.get(id) !== path) changed.set(dirId, dir);
 
       // These do not have a md5Checksum so we fall
       // back to using the modifiedTime
@@ -483,7 +593,16 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       const needsUpdate = !existsLocally || !identical;
 
       if (needsUpdate && detecting) {
-        changed.add(dirId);
+        changed.set(dirId, dir);
+        // Started now, so the apply under the lock finds it downloaded. Not
+        // for a file Blot has at the same size, which download() usually
+        // finds identical and leaves as it is.
+        if (
+          !isGoogleAppFile &&
+          options.prefetch &&
+          !(existsLocally && existsLocally.size === size)
+        )
+          prefetch.start(drive, { id, md5Checksum, size });
       } else if (needsUpdate) {
         started = startDownload(async () => {
           // Nothing starts once the walk is over or can't continue
@@ -522,6 +641,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                 { id, md5Checksum, mimeType, modifiedTime },
                 { serviceAccountId, folderId, publish: publishToFolder }
               ),
+              // For the live line's stage timings
+              downloadedAt: Date.now(),
             };
           } catch (error) {
             return { error };
@@ -565,7 +686,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         if (detecting) {
           if (!isDirectory) {
             if (existsLocally && existsLocally.isDirectory) {
-              changed.add(dirId);
+              changed.set(dirId, dir);
               continue;
             }
             const planned = plans.has(id)
@@ -577,10 +698,10 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
               planned.verifiedState?.stale ||
               planned.appliedState?.stale
             )
-              changed.add(dirId);
+              changed.set(dirId, dir);
           } else if (!existsLocally || !existsLocally.isDirectory) {
-            changed.add(dirId);
-          } else {
+            changed.set(dirId, dir);
+          } else if (recurse) {
             await walk(path, id, true);
           }
           continue;
@@ -643,10 +764,15 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                 (!isGoogleAppFile && result?.verifiedContent)
               ) {
                 // Drive's modifiedTime, so the sync can log how long the
-                // change took to go live
+                // change took to go live, and when it was first seen and
+                // downloaded, so the log shows where that time went
+                const sighting = seenDirs.get(dirId);
                 await update(path, {
                   modified: modifiedTime,
                   since: "drive-modified",
+                  seenAt: sighting?.at,
+                  seenBy: sighting?.source,
+                  downloadedAt: result?.downloadedAt || outcome.downloadedAt,
                 });
               }
               if (!isGoogleAppFile && result?.verifiedContent) {
@@ -711,6 +837,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             }
           }
         } else {
+          let moved = false;
           const created = !existsLocally || !existsLocally.isDirectory;
           if (existsLocally && !existsLocally.isDirectory) {
             await checkWeCanContinue();
@@ -723,18 +850,33 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             summary.createdDirs += 1;
             await update(path);
           } else if (!existsLocally) {
-            await checkWeCanContinue();
-            publish("Creating directory", path);
-            console.log("Creating directory locally", path);
-            await folder.mkdir(blogID, path);
-            summary.createdDirs += 1;
-            await update(path);
+            // A folder moved here from elsewhere in the blog, which this
+            // walk reached before the folder it left: move it, contents and
+            // all, rather than create it empty and download everything
+            const from = await getPath(id);
+            if (
+              from &&
+              from !== path &&
+              (await folder.exists(blogID, from)) &&
+              (await moveDirectory(from, path, id))
+            ) {
+              moved = true;
+            } else {
+              await checkWeCanContinue();
+              publish("Creating directory", path);
+              console.log("Creating directory locally", path);
+              await folder.mkdir(blogID, path);
+              summary.createdDirs += 1;
+              await update(path);
+            }
           }
 
-          if (recurse || created) await walk(path, id, true);
+          // A folder moved here brought its contents with it
+          if (recurse || (created && !moved)) await walk(path, id, true);
         }
       }
     } finally {
+      listingsInProgress.delete(dir);
       // Downloads not started yet must not start now
       stopped = true;
       // Downloads already running write into the blog folder. Wait for them
@@ -778,6 +920,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           resume.has(a) - resume.has(b) ||
           paths.get(a).split("/").length - paths.get(b).split("/").length
       );
+    if (options.dirty?.seen) {
+      const seen = await options.dirty.seen(ordered).catch(() => ({}));
+      for (const [id, sighting] of Object.entries(seen))
+        seenDirs.set(id, sighting);
+    }
     const done = new Set();
     busy = new Set(ordered);
     try {
@@ -800,7 +947,10 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     console.log(
       "Google Drive Sync:",
       blogID,
-      `targeted dirs=${ordered.length} ms=${Date.now() - startedAt}`
+      `targeted dirs=${ordered.length} ms=${Date.now() - startedAt}`,
+      // Which directories, so each can be matched with the source that saw
+      // it change first (#2847)
+      `paths=${JSON.stringify(ordered.map((id) => paths.get(id)).slice(0, 20))}`
     );
   };
 
@@ -809,8 +959,30 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     // it walks are applied without waiting for it (sync/index.js)
     canYield = Boolean(options.dirty);
     try {
-      await pass(() => walk("/", folderId));
-      return { changed: [...changed], full: needsFull };
+      // With options.only, just those directories, not below them: the
+      // directories that changed in the last few minutes, checked beside the
+      // full detection so a change in one is found in one listing. The
+      // directories are listed side by side (the walk changes nothing
+      // here, so they can't get in each other's way)
+      if (options.only) {
+        await pass(
+          () =>
+            Promise.all(
+              options.only.map(async (id) => {
+                const path = id === folderId ? "/" : await getPath(id);
+                if (path) await walk(path, id, false);
+              })
+            ),
+          { ahead: false }
+        );
+      } else {
+        await pass(() => walk("/", folderId));
+      }
+      return {
+        changed: [...changed.keys()],
+        paths: [...changed.values()],
+        full: needsFull,
+      };
     } catch (err) {
       if (err === YIELD) return { yielded: true, changed: [], full: false };
       onError(err);
@@ -863,14 +1035,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
       // Applying what a detection found (sync/index.js), the full walk runs
       // only when it was asked for. Directories recorded while the targeted
-      // pass ran are applied first.
-      if (options.fullWalk === "if-asked" && !wantFull) {
-        if (yields < MAX_YIELDS && (await options.dirty.count()) > 0) {
-          yields += 1;
-          continue;
-        }
-        break;
-      }
+      // pass ran are left to the next apply, which sync/index.js runs
+      // straight after: releasing the folder lock between them lets the hot
+      // doc poller and other writers in during a long bulk upload, which keeps
+      // recording the same directory again.
+      if (options.fullWalk === "if-asked" && !wantFull) break;
 
       const before = { ...summary };
       canYield = Boolean(options.dirty) && yields < MAX_YIELDS;

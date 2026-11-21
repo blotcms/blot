@@ -140,4 +140,32 @@ describe("icloud setupState", function () {
       setupState(account, { email, now: 1000 + 3 * 60 * 1000 }).slowInMs
     ).toBe(null);
   });
+  it("names the folder from the macserver, else from the link", function () {
+    expect(
+      setupState({ sharingLink: link, folderName: "My site" }, { email })
+        .folderName
+    ).toBe("My site");
+    expect(
+      setupState(
+        { sharingLink: "https://www.icloud.com/iclouddrive/0abc#iCloud_test" },
+        { email }
+      ).folderName
+    ).toBe("iCloud test");
+    expect(
+      setupState(
+        {
+          sharingLink:
+            "https://www.icloud.com/iclouddrive/0abc#Caf%C3%A9_notes",
+        },
+        { email }
+      ).folderName
+    ).toBe("Café notes");
+    expect(
+      setupState(
+        { sharingLink: "https://www.icloud.com/iclouddrive/0abc" },
+        { email }
+      ).folderName
+    ).toBe(null);
+    expect(setupState({ sharingLink: link }, { email }).folderLink).toBe(link);
+  });
 });

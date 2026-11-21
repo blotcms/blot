@@ -12,6 +12,23 @@ module.exports = async function getHealth(blogID) {
   const issue = resolveIssue(account);
   if (issue) return health.error([issue]);
 
+  // scripts/icloud/migrate-nested.js is moving this blog's folder on the
+  // macserver (#2874): nothing syncs until it's done, so say so. Six hours
+  // on (the longest a migration waits is about four), the script has died
+  // without clearing it, and it no longer applies
+  if (
+    account.migratingSince &&
+    Date.now() - account.migratingSince < 6 * 60 * 60 * 1000
+  )
+    return health.error([
+      {
+        code: health.CODES.SYNC_PAUSED,
+        message:
+          "Syncing is paused for a few minutes while Blot updates how it connects to your folder. Changes you make meanwhile will sync once it's done.",
+        since: account.migratingSince,
+      },
+    ]);
+
   if (isSetupInProgress(account)) return health.syncing();
 
   return health.ok();

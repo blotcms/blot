@@ -34,6 +34,8 @@ describe("google drive client retryConfig", function () {
     await require(createDriveClient)("x");
 
     expect(options.retryConfig).toBe(retryConfig);
+    // Its auth is kept, so syncs share one access token
+    expect(options.auth).toBeTruthy();
     expect(retryConfig.retry).toBe(5);
     expect(retryConfig.retryDelay).toBe(500);
     expect(retryConfig.maxRetryDelay).toBe(8000);

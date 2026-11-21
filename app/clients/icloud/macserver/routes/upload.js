@@ -2,7 +2,7 @@ import fs from "fs-extra";
 import { randomUUID } from "crypto";
 import { tmpdir } from "os";
 import { dirname, join, resolve, sep } from "path";
-import { iCloudDriveDirectory } from "../config.js";
+import { rootOf } from "../blogFolder.js";
 import { expectBlotChange } from "../blotWrites.js";
 import { recordPushed } from "../pushedFiles.js";
 import evictWhenUploaded from "../evictWhenUploaded.js";
@@ -77,7 +77,7 @@ export default async (req, res) => {
     return res.status(400).send("Expected an application/octet-stream body");
   }
 
-  const basePath = resolve(join(iCloudDriveDirectory, blogID));
+  const basePath = resolve(rootOf(blogID));
   const filePath = resolve(join(basePath, normalizedPath));
 
   if (filePath !== basePath && !filePath.startsWith(`${basePath}${sep}`)) {

@@ -29,6 +29,12 @@ import {
 } from "./fswatch.js";
 import { buildBlogPath, extractBlogID } from "./pathUtils.js";
 import {
+  isNested,
+  refresh as refreshBlogFolder,
+  refreshAll as refreshAllBlogFolders,
+  rootOf,
+} from "../blogFolder.js";
+import {
   EVICTION_SUPPRESSION_BLOG_SCOPE,
   markEvictionSuppressed,
   extendEvictionSuppression,
@@ -330,15 +336,39 @@ const handleBlogFolderRemoved = async (blogID) => {
 const BLOG_FOLDER_RECHECK_MS = 5_000;
 const blogFolderChecks = new Set();
 
+// Whether the blog's shared folder is there. For a nested blog this reads
+// its blog_<id> again first, so a folder the owner renamed is found under its
+// new name, and Blot is told the name
+const blogFolderPresent = async (blogID) => {
+  if (!isNested(blogID))
+    return fs.pathExists(join(iCloudDriveDirectory, blogID));
+
+  const layout = await refreshBlogFolder(blogID);
+  if (layout.renamedFrom) {
+    console.log(
+      clfdate(),
+      `Folder for ${blogID} renamed from "${layout.renamedFrom}" to "${layout.name}"`
+    );
+    status(blogID, { folderName: layout.name }).catch((error) =>
+      console.error(
+        clfdate(),
+        `Failed to report the folder's new name for ${blogID}:`,
+        error.message
+      )
+    );
+  }
+  return Boolean(layout.root) && fs.pathExists(layout.root);
+};
+
 const reconcileBlogFolderEvent = async (blogID) => {
   if (!isActive(blogID) || blogFolderChecks.has(blogID)) return;
-  if (await fs.pathExists(join(iCloudDriveDirectory, blogID))) return;
+  if (await blogFolderPresent(blogID)) return;
 
   blogFolderChecks.add(blogID);
   try {
     await delay(BLOG_FOLDER_RECHECK_MS);
     if (!isActive(blogID)) return;
-    if (await fs.pathExists(join(iCloudDriveDirectory, blogID))) return;
+    if (await blogFolderPresent(blogID)) return;
     await handleBlogFolderRemoved(blogID);
   } finally {
     blogFolderChecks.delete(blogID);
@@ -614,6 +644,8 @@ const sweepAll = async () => {
       if (!blogID || !isActive(blogID)) continue;
       blogs++;
       try {
+        // A rename FSEvents missed is found here (and reported to Blot)
+        if (isNested(blogID)) await blogFolderPresent(blogID);
         await sweepBlog(blogID);
       } catch (error) {
         console.error(clfdate(), `Sweep failed for ${blogID}:`, error);
@@ -648,7 +680,13 @@ const initialize = async () => {
   checkDiskSpace(async (blogID) => {
     // Get the limiter for this specific blogID
     const limiter = getLimiterForBlogID(blogID);
-    const blogPath = join(iCloudDriveDirectory, blogID);
+    let blogPath;
+    try {
+      blogPath = rootOf(blogID);
+    } catch (error) {
+      console.error(clfdate(), `Not evicting ${blogID}:`, error.message);
+      return;
+    }
     const pathInBlogDirectory = EVICTION_SUPPRESSION_BLOG_SCOPE;
 
     // Schedule the event handler to run within the limiter
@@ -674,6 +712,19 @@ const initialize = async () => {
       await watch(blogID);
     });
   });
+
+  // Where each blog's folder is: blog_<id> itself, or nested inside it. The
+  // nested folders' names go to Blot, which keeps the one it last heard: a
+  // rename made while the macserver was stopped is reported here
+  for (const { blogID, name } of await refreshAllBlogFolders()) {
+    status(blogID, { folderName: name }).catch((error) =>
+      console.error(
+        clfdate(),
+        `Failed to report the folder's name for ${blogID}:`,
+        error.message
+      )
+    );
+  }
 
   // bird's journal, loaded before the blogs are scanned: it knows which
   // paths changed while the macserver was stopped

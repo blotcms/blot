@@ -41,10 +41,13 @@ function harness({
   upToDate = [],
   // Ids the mapping has at another path
   drift = {},
+  // Directory id -> { at, source }, as the dirty set's sightings
+  seen = null,
 } = {}) {
   const state = {
     listed: [],
     updates: [],
+    updateOptions: [],
     taken: [],
     takenAt: [],
     putBack: [],
@@ -190,8 +193,43 @@ function harness({
       }
     );
   state.queue = queue;
+  // As sync/index.js applies what a detection found
+  state.apply = () =>
+    module.exports(
+      "blog",
+      () => {},
+      async (path, options) => {
+        state.updates.push(path);
+        state.updateOptions.push(options);
+      },
+      {
+        fullWalk: "if-asked",
+        dirty: {
+          FULL: "*",
+          take: async () => {
+            const ids = queue.shift() || [];
+            state.taken.push(ids);
+            return ids;
+          },
+          count,
+          members:
+            members || (async () => ((await count()) > 0 ? ["recorded"] : [])),
+          putBack: async (ids) => state.putBack.push(...ids),
+          ...(seen
+            ? {
+                seen: async (ids) =>
+                  Object.fromEntries(
+                    ids.filter((id) => seen[id]).map((id) => [id, seen[id]])
+                  ),
+              }
+            : {}),
+        },
+      }
+    );
   state.detect = (dirty) =>
     module.exports("blog", null, null, { detectOnly: true, dirty });
+  state.detectOnly = (only) =>
+    module.exports("blog", null, null, { detectOnly: true, only });
   return state;
 }
 
@@ -308,6 +346,23 @@ describe("google-drive sync() with changed directories", function () {
     expect(h.taken.length).toBe(1);
   });
 
+  it("applies what it took and returns, leaving what is recorded meanwhile to the next apply", async function () {
+    const h = harness({
+      local: allDirs,
+      dirty: ["dir-1"],
+      // A bulk upload into dir-1 keeps recording it
+      members: async () => ["dir-1"],
+      count: async () => 1,
+    });
+    h.queue.push(["dir-1"]);
+    const summary = await h.apply();
+
+    expect(summary).toBeTruthy();
+    expect(h.taken).toEqual([["dir-1"]]);
+    // No full walk, and the folder lock (held by the caller) is free again
+    expect(h.listed).toEqual(["dir-1"]);
+  });
+
   it("puts what it took back when the sync fails", async function () {
     const h = harness({ local: allDirs, dirty: ["dir-2"], failOn: "dir-2" });
 
@@ -323,7 +378,7 @@ describe("google-drive sync() detecting what changed", function () {
   it("finds nothing in a blog that is up to date, and changes nothing", async function () {
     const h = harness({ local: allDirs, upToDate: everyFile });
 
-    expect(await h.detect()).toEqual({ changed: [], full: false });
+    expect(await h.detect()).toEqual({ changed: [], paths: [], full: false });
     expect(h.writes).toEqual([]);
     expect(h.downloads).toEqual([]);
     expect(h.updates).toEqual([]);
@@ -335,7 +390,11 @@ describe("google-drive sync() detecting what changed", function () {
       upToDate: everyFile.filter((path) => path !== "/d04/b.txt"),
     });
 
-    expect(await h.detect()).toEqual({ changed: ["dir-4"], full: false });
+    expect(await h.detect()).toEqual({
+      changed: ["dir-4"],
+      paths: ["/d04"],
+      full: false,
+    });
     expect(h.downloads).toEqual([]);
     expect(h.writes).toEqual([]);
   });
@@ -347,7 +406,11 @@ describe("google-drive sync() detecting what changed", function () {
     });
 
     // Only the root: d06 is created, and walked whole, when it is applied
-    expect(await h.detect()).toEqual({ changed: ["root"], full: false });
+    expect(await h.detect()).toEqual({
+      changed: ["root"],
+      paths: ["/"],
+      full: false,
+    });
   });
 
   it("notes the directory of a file the mapping has elsewhere", async function () {
@@ -357,7 +420,11 @@ describe("google-drive sync() detecting what changed", function () {
       drift: { "dir-2-a": "/old/a.txt" },
     });
 
-    expect(await h.detect()).toEqual({ changed: ["dir-2"], full: false });
+    expect(await h.detect()).toEqual({
+      changed: ["dir-2"],
+      paths: ["/d02"],
+      full: false,
+    });
   });
 
   it("asks for a full walk when a directory's mapping has drifted", async function () {
@@ -381,5 +448,39 @@ describe("google-drive sync() detecting what changed", function () {
     const h = harness({ local: allDirs, upToDate: everyFile, failOn: "dir-1" });
 
     expect(await h.detect()).toBe(false);
+  });
+
+  it("passes each file's sighting and download time to the update", async function () {
+    const h = harness({
+      local: allDirs,
+      dirty: ["dir-5"],
+      seen: { "dir-5": { at: 1234, source: "changes" } },
+    });
+    const before = Date.now();
+    await h.apply();
+
+    expect(h.updates[0]).toBe("/d05/a.txt");
+    const options = h.updateOptions[0];
+    expect(options.seenAt).toBe(1234);
+    expect(options.seenBy).toBe("changes");
+    expect(options.downloadedAt).not.toBeLessThan(before);
+  });
+
+  it("checks just the given directories, not below them, with only", async function () {
+    const h = harness({
+      local: allDirs,
+      upToDate: everyFile.filter(
+        (path) => path !== "/d04/b.txt" && path !== "/d07/a.txt"
+      ),
+    });
+
+    expect(await h.detectOnly(["dir-4", "root"])).toEqual({
+      changed: ["dir-4"],
+      paths: ["/d04"],
+      full: false,
+    });
+    // d07 differs too, but only a full detection reaches it
+    expect(h.listed.sort()).toEqual(["dir-4", "root"]);
+    expect(h.downloads).toEqual([]);
   });
 });

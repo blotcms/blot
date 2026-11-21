@@ -8,6 +8,7 @@ const refreshServiceAccounts = require("./serviceAccount/refreshServiceAccounts"
 const pollDriveActivity = require("./serviceAccount/pollDriveActivity");
 const readChanges = require("./serviceAccount/readChanges");
 const searchEdits = require("./serviceAccount/searchEdits");
+const pollRecentFolders = require("./serviceAccount/pollRecentFolders");
 const syncChanges = require("./serviceAccount/syncChanges");
 const createDriveClient = require("./serviceAccount/createDriveClient");
 const hotDocPoller = require("./serviceAccount/hotDocPoller");
@@ -43,9 +44,10 @@ const startActivityPolling = () => {
   return leases;
 };
 
-// One process at a time reads each service account's changes.list and runs
-// its search for recent edits (serviceAccount/readChanges.js and
-// searchEdits.js), with takeover like the activity polling. Both sync the
+// One process at a time reads each service account's changes.list, runs
+// its search for recent edits and lists its recently changed folders
+// (serviceAccount/readChanges.js, searchEdits.js and pollRecentFolders.js),
+// with takeover like the activity polling. Each syncs the
 // blogs a change belongs to (serviceAccount/syncChanges.js), beside the
 // changes.watch webhook, which is often seconds late (#2847).
 const startChangesReading = () => {
@@ -63,6 +65,13 @@ const startChangesReading = () => {
         console.log(prefix(), "Searching for edits for", serviceAccountId);
         await searchEdits(serviceAccountId, drive, signal, {
           onChanges: syncChanges,
+        });
+      }),
+      lock.lease("google-drive-recent:" + serviceAccountId, async (signal) => {
+        const drive = await createDriveClient(serviceAccountId);
+        console.log(prefix(), "Listing recent folders for", serviceAccountId);
+        await pollRecentFolders(serviceAccountId, drive, signal, {
+          onChanged: syncChanges.syncDirectories,
         });
       }),
     ]

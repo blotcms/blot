@@ -384,10 +384,14 @@ describe("google drive hotDocPoller", function () {
       expect(file).toEqual({ id: fileId, mimeType: GOOGLE_DOC, modifiedTime });
       expect(options.skipHotEnqueue).toBe(true);
 
-      expect(lock.folder.update).toHaveBeenCalledWith("/Post.gdoc", {
-        modified: modifiedTime,
-        since: "drive-modified",
-      });
+      expect(lock.folder.update).toHaveBeenCalledWith(
+        "/Post.gdoc",
+        jasmine.objectContaining({
+          modified: modifiedTime,
+          since: "drive-modified",
+          seenBy: "hotdoc",
+        })
+      );
       const applied = await database
         .folder(folderId, blogID)
         .getApplied(fileId);

@@ -15,6 +15,7 @@ const cheerio = require("cheerio");
 const sandbox = require("sandbox");
 const hotDocPoller = require("../serviceAccount/hotDocPoller");
 const database = require("../database");
+const prefetch = require("./prefetch");
 
 const isExportSizeLimitError = (err) => {
   // Try to parse err.message if it's a JSON string
@@ -410,6 +411,38 @@ module.exports = async (
         // already handled here
         return Promise.reject(err);
       }
+    }
+
+    // Downloaded already, outside the folder lock, by the detection walk
+    // (util/prefetch.js): the same bytes, checked against the same md5
+    const prefetched =
+      mimeType !== "application/vnd.google-apps.document"
+        ? await prefetch.take(id, md5Checksum)
+        : null;
+    if (prefetched) {
+      console.log(
+        "Google Drive Sync: using the prefetched download of",
+        path,
+        `ms_ago=${Date.now() - prefetched.downloadedAt}`
+      );
+      try {
+        await publish(() =>
+          folder.writeFrom(blogID, path, prefetched.tempPath, { move: true })
+        );
+      } finally {
+        await fs.remove(prefetched.tempPath).catch(() => {});
+      }
+      const verified = await verifyPublished(
+        blogID,
+        path,
+        prefetched.hashes
+      ).catch(() => null);
+      return {
+        updated: true,
+        verifiedContent: verified,
+        prefetched: true,
+        downloadedAt: prefetched.downloadedAt,
+      };
     }
 
     debug("getting file from Drive");

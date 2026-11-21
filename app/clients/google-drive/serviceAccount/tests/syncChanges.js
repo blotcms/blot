@@ -7,18 +7,38 @@ describe("google drive syncChanges", function () {
   // Loads syncChanges.js with its collaborators stubbed
   function load({ run = async () => {} } = {}) {
     const calls = [];
+    const sources = [];
+    const touched = [];
+    const prefetched = [];
     const stubs = {
       "helper/clfdate": () => "[date]",
       "../database": {
         dirty: {
           FULL: "*",
-          add: async (blogID, ids) => {
+          add: async (blogID, ids, source) => {
             calls.push("dirty " + blogID + " " + ids.join(","));
+            sources.push(source);
           },
+          hintMoves: async (blogID, moves) => {
+            calls.push(
+              "moves " +
+                blogID +
+                " " +
+                moves.map((m) => m.id + ">" + m.parentId).join(",")
+            );
+          },
+        },
+        recent: {
+          touch: async (sa, blogID, ids) =>
+            touched.push(blogID + " " + ids.join(",")),
+        },
+        blog: {
+          get: async (blogID) => ({ folderId: "folder-" + blogID }),
         },
         folder: () => ({
           getByPath: async (path) =>
             ({ "/": "root", "/posts": "posts" })[path] || null,
+          get: async (id) => ({ posts: "/posts" })[id] || null,
         }),
       },
       "../sync/followUps": {
@@ -37,6 +57,10 @@ describe("google drive syncChanges", function () {
         },
       },
       "./readChanges": { logChanges: () => {} },
+      "./createDriveClient": async () => "drive",
+      "../util/prefetch": {
+        start: (drive, file) => prefetched.push(file.id),
+      },
     };
     const module = { exports: {} };
     vm.runInNewContext(
@@ -48,7 +72,7 @@ describe("google drive syncChanges", function () {
         require: (name) => (name in stubs ? stubs[name] : require(name)),
       }
     );
-    return { syncChanges: module.exports, calls };
+    return { syncChanges: module.exports, calls, sources, touched, prefetched };
   }
 
   const entry = (blogID, fileId, file = {}, place = {}) => ({
@@ -96,6 +120,37 @@ describe("google drive syncChanges", function () {
     expect(calls).toContain("dirty blog_c folder-blog_c");
   });
 
+  it("hints where a folder the blog holds has moved to, but not a file, a trashed folder or a move out", async function () {
+    const FOLDER = "application/vnd.google-apps.folder";
+    const { syncChanges, calls } = load();
+
+    await syncChanges("sa", [
+      entry(
+        "blog_a",
+        "F",
+        { mimeType: FOLDER },
+        { path: "/posts/f", parentId: "root" }
+      ),
+      entry(
+        "blog_a",
+        "G",
+        { mimeType: FOLDER, trashed: true },
+        { path: "/g", parentId: "root" }
+      ),
+      entry(
+        "blog_a",
+        "H",
+        { mimeType: FOLDER },
+        { path: "/h", parentId: null }
+      ),
+      entry("blog_a", "file", {}, { path: "/posts/a.md", parentId: "root" }),
+    ]);
+
+    expect(calls.filter((c) => c.startsWith("moves"))).toEqual([
+      "moves blog_a F>root",
+    ]);
+  });
+
   it("ignores changes no blog holds", async function () {
     const { syncChanges, calls } = load();
 
@@ -134,5 +189,44 @@ describe("google drive syncChanges", function () {
     ]);
 
     expect(finished).toBe(true);
+  });
+
+  it("lists the directories it marks for the next few minutes, recording the source", async function () {
+    const { syncChanges, sources, touched } = load();
+
+    await syncChanges("sa", [entry("blog_a", "1")], "search");
+
+    expect(sources).toEqual(["search"]);
+    expect(touched).toEqual(["blog_a posts"]);
+  });
+
+  it("syncs the blogs whose recent folders listed differently, keeping new folders in them recent", async function () {
+    const { syncChanges, calls, sources, touched } = load();
+
+    await syncChanges.syncDirectories("sa", [
+      { blogID: "blog_a", dirId: "posts", folders: ["sub"] },
+    ]);
+
+    expect(sources).toEqual(["recent"]);
+    expect(touched).toEqual(["blog_a posts,sub"]);
+    expect(calls).toEqual([
+      "dirty blog_a posts",
+      "arm blog_a",
+      "run blog_a token-blog_a",
+    ]);
+  });
+
+  it("starts downloading changed files with a checksum, but not Docs, folders or trashed files", async function () {
+    const { syncChanges, prefetched } = load();
+
+    await syncChanges("sa", [
+      entry("blog_a", "file", { md5Checksum: "m", size: "5" }),
+      entry("blog_a", "doc", { mimeType: DOCUMENT }),
+      entry("blog_a", "gone", { md5Checksum: "m", trashed: true }),
+      entry("blog_a", "nosum"),
+    ]);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    expect(prefetched).toEqual(["file"]);
   });
 });

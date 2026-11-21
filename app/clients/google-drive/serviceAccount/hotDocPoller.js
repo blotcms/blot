@@ -205,7 +205,7 @@ class HotDocPoller {
     // follow-up queue (not the webhook's), so it runs once a sync already
     // running has finished, in any process.
     this.followUps = followUpSync("google-drive-hot-docs", (blogID) =>
-      sync(blogID, { rethrowLocked: true })
+      sync(blogID, { rethrowLocked: true, trigger: "hotdoc" })
     );
 
     // Caps this process's concurrent docs.get calls; the per service account
@@ -690,6 +690,9 @@ class HotDocPoller {
     await this.saveItem(item.id, { lastChanged: String(detectedAt) });
     await this.touch(item.id, item.serviceAccountId, detectedAt);
 
+    // For the live line: an open Doc's modifiedTime lags its edits, so for
+    // a Doc the gaps between seen_ms, download_ms and lag_ms are what matter
+    item.detectedAt = detectedAt;
     const outcome = await this.applyChange(item);
 
     this.log("change-handled", {
@@ -900,10 +903,14 @@ class HotDocPoller {
       folder.status("Skipped oversized Google Doc", path);
     }
 
+    const downloadedAt = Date.now();
     if (result?.updated) {
       await folder.update(path, {
         modified: modifiedTime,
         since: "drive-modified",
+        seenAt: item.detectedAt,
+        seenBy: "hotdoc",
+        downloadedAt,
       });
     }
 

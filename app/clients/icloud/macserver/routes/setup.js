@@ -8,6 +8,12 @@ import clfdate from "../util/clfdate.js";
 import leaveFolder from "../util/leaveFolder.js";
 import finderLimiter from "../util/finderLimiter.js";
 import sharePermission from "../util/sharePermission.js";
+import {
+  nest as nestBlogFolder,
+  refresh as refreshBlogFolder,
+  removeContainer,
+} from "../blogFolder.js";
+import { forgetRoot } from "../birdState.js";
 
 // Only one setup can run at a time otherwise the apple script might not work
 // correctly or accept the wrong sharing link, and none while leaveFolder drives
@@ -107,23 +113,57 @@ async function shareInfo(path) {
 
 // iCloud can undo a rename of a shared folder (the folder comes back under
 // its old name, empty). Check a little after the rename and shout if so.
+// iCloud has been seen to undo the move into blog_<id> about 30 s after it
+// (once in the first 72 migrations, #2874): the folder reappears at the top
+// of iCloud Drive under its old name and blog_<id> is left empty. So check a
+// few times, and when that happens move the folder back, but only if it is
+// still the same share. The watcher's sweep then finds it in place.
+const RENAME_CHECKS_MS = [5_000, 30_000, 90_000, 300_000];
+
+// Null when the lookup failed: shareInfo() writes "(none)" then, and two
+// failed lookups must never count as the same share
+async function collaborationIDOf(path) {
+  try {
+    const id = JSON.parse(await shareInfo(path)).CollaborationIdentifier;
+    return id && id !== "(none)" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 function watchRename(oldName, newPath, blogID) {
-  for (const delay of [5000, 30000]) {
+  const shareID = collaborationIDOf(newPath);
+  for (const delay of RENAME_CHECKS_MS) {
     setTimeout(async () => {
       try {
         const exists = await fs.pathExists(newPath);
         const entries = exists ? (await fs.readdir(newPath)).length : 0;
-        const oldBack = await fs.pathExists(
-          join(iCloudDriveDirectory, oldName)
-        );
+        const oldPath = join(iCloudDriveDirectory, oldName);
+        const oldBack = await fs.pathExists(oldPath);
         const message = `Rename check after ${delay / 1000}s for ${blogID}: folder ${
           exists ? `present (${entries} entries)` : "MISSING"
         }, ${oldName} ${oldBack ? "has reappeared" : "not present"}`;
-        if (!exists || oldBack) {
-          console.error(clfdate(), `RENAME REVERTED? ${message}`);
-        } else {
-          console.log(clfdate(), message);
+        if (exists || !oldBack) {
+          if (!exists) console.error(clfdate(), `RENAME REVERTED? ${message}`);
+          else console.log(clfdate(), message);
+          return;
         }
+        console.error(clfdate(), `RENAME REVERTED: ${message}`);
+
+        const expected = await shareID;
+        const found = await collaborationIDOf(oldPath);
+        const layout = await refreshBlogFolder(blogID);
+        if (!expected || found !== expected || layout.root) {
+          console.error(
+            clfdate(),
+            `Not moving ${oldName} back into ${blogID}: share ${found} (expected ${expected}), root ${layout.root}`
+          );
+          return;
+        }
+        await fs.rename(oldPath, newPath);
+        await refreshBlogFolder(blogID);
+        forgetRoot(blogID);
+        console.error(clfdate(), `Moved ${oldName} back into ${blogID}`);
       } catch (error) {
         console.error(clfdate(), "Rename check failed", error);
       }
@@ -197,7 +237,7 @@ function watchLateArrival(blogID, initialDirNames, outcome) {
  */
 const setupBlog = setupLimiter.wrap(async (blogID, sharingLink, progress) => {
   try {
-    await setupFolder(blogID, sharingLink, progress);
+    return await setupFolder(blogID, sharingLink, progress);
   } catch (error) {
     // Record what is on screen before the reset wipes it
     await recordDiagnostics(
@@ -347,33 +387,48 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
         `New folder ${newDirName} share: ${await shareInfo(oldPath)}`
       );
 
-      // If there is already a folder with the blogID (an earlier share of a
+      // If there is already a folder for this blog (an earlier share of a
       // reconnected blog), take it off this Mac without deleting the earlier
       // share's files for its owner (util/leaveFolder.js). Setup already holds
       // finderLimiter
       if (await fs.pathExists(newPath)) {
-        const existing = (await fs.readdir(newPath)).length;
+        const earlier = await refreshBlogFolder(blogID);
         console.error(
           clfdate(),
-          `Replacing existing folder for ${blogID} (${existing} entries), share: ${await shareInfo(newPath)}`
+          `Replacing existing ${earlier.nested ? "nested " : ""}folder for ${blogID}`
         );
-        await leaveFolder(newPath, { root: iCloudDriveDirectory });
+        if (earlier.nested) {
+          if (earlier.root)
+            await leaveFolder(earlier.root, { root: iCloudDriveDirectory });
+          await removeContainer(blogID);
+        } else {
+          console.error(clfdate(), `share: ${await shareInfo(newPath)}`);
+          await leaveFolder(newPath, { root: iCloudDriveDirectory });
+        }
       }
 
-      // Rename the folder
+      // Nest the folder in blog_<id> under the owner's name, rather than
+      // renaming it: a renamed share no longer follows the owner's renames
+      // (blogFolder.js, #2874)
       progress("Linking the folder to your site");
-      await fs.rename(oldPath, newPath);
-      console.log(clfdate(), `Renamed folder from ${newDirName} to ${blogID}`);
+      const layout = await nestBlogFolder(blogID, oldPath);
+      forgetRoot(blogID);
+      const sharedPath = layout.root;
+      console.log(
+        clfdate(),
+        `Nested folder ${newDirName} in ${blogID} as "${layout.name}"`
+      );
 
       // Writes to a view-only share succeed here but never reach iCloud, so
       // turn one down now rather than let the transfer report success. Take
       // the folder off this Mac so a retry with the fixed share starts clean
       progress("Checking permission to make changes");
-      const permission = await sharePermission(newPath);
+      const permission = await sharePermission(sharedPath);
       lap("permission");
       console.log(clfdate(), `Share permission for ${blogID}: ${permission}`);
       if (permission === "readOnly") {
-        await leaveFolder(newPath, { root: iCloudDriveDirectory });
+        await leaveFolder(sharedPath, { root: iCloudDriveDirectory });
+        await removeContainer(blogID);
         throw setupError("READ_ONLY");
       }
       progress("Permission to make changes confirmed");
@@ -383,9 +438,10 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
           .map(([name, ms]) => `${name} ${ms}ms`)
           .join(", ")}`
       );
-      watchRename(newDirName, newPath, blogID);
+      watchRename(newDirName, sharedPath, blogID);
       progress("Joined your folder");
-      return; // Setup is complete, exit the loop
+      // The name the owner gave the folder, for the dashboard
+      return { folderName: layout.name };
     }
 
     if (Date.now() - lastProgress > 10000) {
@@ -794,12 +850,13 @@ export default async (req, res) => {
   progress("Starting");
 
   setupBlog(blogID, sharingLink, progress)
-    .then(() => {
+    .then((result) => {
       console.log(clfdate(), `Setup complete for blogID: ${blogID}`);
       return reportStatus({
         acceptedSharingLink: true,
         error: null,
         setupErrorReason: null,
+        folderName: (result && result.folderName) || null,
       });
     })
     .catch((error) => {
@@ -817,3 +874,6 @@ export default async (req, res) => {
 
   return res.status(202).json({ accepted: true });
 };
+
+// For the migration to the nested layout (routes/migrate.js)
+export { setupBlog, shareInfo };

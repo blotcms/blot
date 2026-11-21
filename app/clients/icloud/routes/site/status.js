@@ -88,6 +88,24 @@ module.exports = async function (req, res) {
     return;
   }
 
+  // The folder's new name, after the owner renamed it (macserver's watcher).
+  // Only for a blog still connected: storing it would otherwise bring back
+  // an account that was just disconnected.
+  if (
+    typeof status.folderName === "string" &&
+    Object.keys(status).length === 1
+  ) {
+    try {
+      const account = await database.get(blogID);
+      if (account && account.sharingLink) {
+        await database.store(blogID, { folderName: status.folderName });
+      }
+    } catch (err) {
+      return handle("Failed to store the folder's name", err);
+    }
+    return res.send("ok");
+  }
+
   // Not part of the account: it only goes into the resync report.
   const { reason: reportedReason, ...accountStatus } = status;
   const reason =

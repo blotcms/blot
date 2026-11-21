@@ -1,5 +1,5 @@
 import { join, resolve, sep } from "path";
-import { iCloudDriveDirectory } from "../config.js";
+import { rootOf } from "../blogFolder.js";
 import recursiveList from "../util/recursiveList.js";
 import clfdate from "../util/clfdate.js";
 
@@ -16,7 +16,7 @@ export default async (req, res) => {
   }
 
   // Validate path
-  const basePath = resolve(join(iCloudDriveDirectory, blogID));
+  const basePath = resolve(rootOf(blogID));
   const normalizedPath = path.startsWith("/") ? path.slice(1) : path;
   const dirPath = resolve(join(basePath, normalizedPath));
 

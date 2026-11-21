@@ -75,7 +75,7 @@ module.exports = async (
           console.log(prefix(), "starting sync");
           let succeeded = false;
           try {
-            succeeded = (await sync(blogID)) !== false;
+            succeeded = (await sync(blogID, { trigger: "activity" })) !== false;
           } catch (e) {
             console.error(prefix(), "sync failed", e.message);
           }
