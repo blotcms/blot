@@ -38,6 +38,8 @@ describe("icloud loadAccount middleware", function () {
   const run = async ({ account: stored, blog }) => {
     mockModule(databasePath, { get: async () => stored });
     mockModule(blogPath, { get: async () => blog });
+    // Another spec may have loaded it with the real database
+    delete require.cache[loadAccountPath];
     const loadAccount = require(loadAccountPath);
 
     const req = { header: (name) => (name === "blogID" ? "blog_a" : null) };
