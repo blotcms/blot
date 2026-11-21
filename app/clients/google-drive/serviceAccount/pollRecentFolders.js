@@ -30,6 +30,13 @@ const EVERY_MS = 500;
 const LISTINGS_PER_SECOND = 16;
 const MAX_DIRS = 16;
 const RATE_LIMIT_BACKOFF_MS = 10 * 1000;
+// A listing that takes longer is cancelled and given up on for this round,
+// so one slow or hung request can't stall the poller:
+// googleapis sets no timeout, and single listings of a 100-item directory
+// took 6-8s in production (20 Nov 2026)
+const LISTING_TIMEOUT_MS = 5 * 1000;
+// How often each service account's poller logs what it has done
+const STATS_EVERY_MS = 60 * 1000;
 
 const FOLDER = "application/vnd.google-apps.folder";
 
@@ -49,6 +56,51 @@ const sleep = (ms, signal) =>
 
 const statusOf = (err) =>
   Number(err?.code || err?.status || err?.response?.status) || null;
+
+// Lists a directory through its own object in place of the client, counting
+// each files.list call (every page included, for the rate) and cancelling the
+// request once ms have passed. That object must never change the client
+// itself: it is shared by every sync in the process (cachedAuth.js), and
+// googleapis won't let files be replaced on a copy, so assigning a wrapper
+// there once replaced every files.list in the process with one that called
+// itself. driveReaddir only calls files.list. The cancelled request stops, so
+// no later pages are fetched; the race gives up on a readdir that ignores
+// the signal.
+const listWithin = async (readdir, drive, dirId, ms, count) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  timer.unref?.();
+  const client = {
+    files: {
+      list: (params, options = {}) => {
+        count();
+        return drive.files.list(params, {
+          ...options,
+          signal: controller.signal,
+        });
+      },
+    },
+  };
+  const timedOut = new Promise((resolve, reject) =>
+    controller.signal.addEventListener(
+      "abort",
+      () =>
+        reject(
+          Object.assign(new Error("Listing timed out"), { timedOut: true })
+        ),
+      { once: true }
+    )
+  );
+  timedOut.catch(() => {});
+  try {
+    return await Promise.race([readdir(client, dirId), timedOut]);
+  } catch (err) {
+    if (controller.signal.aborted) err.timedOut = true;
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+};
 
 // What a listing says, to tell when it changes
 const fingerprint = (items) =>
@@ -78,6 +130,8 @@ module.exports = async function pollRecentFolders(
     everyMs = EVERY_MS,
     readdir = driveReaddir,
     now = () => Date.now(),
+    listingTimeoutMs = LISTING_TIMEOUT_MS,
+    statsEveryMs = STATS_EVERY_MS,
   } = {}
 ) {
   if (!serviceAccountId || !drive || !onChanged) {
@@ -89,22 +143,36 @@ module.exports = async function pollRecentFolders(
 
   // Counts each files.list call, every page included, for the rate
   let calls = 0;
-  // Its own object, passed to readdir in place of the client. It must never
-  // change the client itself: that is shared by every sync in the process
-  // (cachedAuth.js), and googleapis won't let files be replaced on a copy, so
-  // assigning a wrapper there once replaced every files.list in the process
-  // with one that called itself. driveReaddir only calls files.list.
-  const counted = {
-    files: {
-      list: (...args) => {
-        calls += 1;
-        return drive.files.list(...args);
-      },
-    },
+  const count = () => {
+    calls += 1;
+  };
+  // Directories whose last listing failed, so a folder that keeps failing
+  // (gone, or shared no longer) logs once, not every round
+  const failing = new Set();
+
+  // Logged every statsEveryMs, then reset
+  const stats = {
+    rounds: 0,
+    listings: 0,
+    changed: 0,
+    errors: 0,
+    timeouts: 0,
+    slowestMs: 0,
+  };
+  let statsAt = now();
+  const logStats = () => {
+    console.log(
+      prefix(),
+      `client_id=${serviceAccountId}`,
+      ...Object.entries(stats).map(([name, value]) => `${name}=${value}`)
+    );
+    for (const name of Object.keys(stats)) stats[name] = 0;
+    statsAt = now();
   };
 
   while (!signal.aborted) {
     const startedAt = now();
+    stats.rounds += 1;
     let dirs = [];
     let rateLimited = false;
     calls = 0;
@@ -115,14 +183,42 @@ module.exports = async function pollRecentFolders(
       );
       for (const member of last.keys())
         if (!listed.has(member)) last.delete(member);
+      for (const member of failing)
+        if (!listed.has(member)) failing.delete(member);
 
       const results = await Promise.all(
         dirs.map(async ({ blogID, dirId }) => {
+          const listingStartedAt = now();
           try {
-            return { blogID, dirId, items: await readdir(counted, dirId) };
+            const items = await listWithin(
+              readdir,
+              drive,
+              dirId,
+              listingTimeoutMs,
+              count
+            );
+            failing.delete(blogID + " " + dirId);
+            stats.listings += 1;
+            stats.slowestMs = Math.max(
+              stats.slowestMs,
+              now() - listingStartedAt
+            );
+            return { blogID, dirId, items };
           } catch (err) {
             if ([403, 429].includes(statusOf(err))) rateLimited = true;
-            // A folder gone from Drive is the other sources' to apply
+            if (err.timedOut) stats.timeouts += 1;
+            else {
+              // A folder gone from Drive is the other sources' to apply
+              stats.errors += 1;
+              const member = blogID + " " + dirId;
+              if (!failing.has(member))
+                console.error(
+                  prefix(),
+                  `client_id=${serviceAccountId} blog=${blogID} dir=${dirId} listing failed:`,
+                  err.message
+                );
+              failing.add(member);
+            }
             return null;
           }
         })
@@ -146,6 +242,7 @@ module.exports = async function pollRecentFolders(
         });
       }
 
+      stats.changed += changed.length;
       if (changed.length) await onChanged(serviceAccountId, changed);
     } catch (err) {
       console.error(
@@ -154,6 +251,8 @@ module.exports = async function pollRecentFolders(
         err.message
       );
     }
+
+    if (now() - statsAt >= statsEveryMs) logStats();
 
     if (rateLimited) {
       console.error(prefix(), `client_id=${serviceAccountId} rate limited`);
@@ -167,6 +266,9 @@ module.exports = async function pollRecentFolders(
     );
     await sleep(round - (now() - startedAt), signal);
   }
+
+  // What the last part of a minute did, once the lease is lost
+  if (stats.rounds) logStats();
 };
 
 module.exports.fingerprint = fingerprint;
