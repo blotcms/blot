@@ -18,7 +18,7 @@ module.exports = function setupState(pending, options = {}) {
   const running = !!pending;
 
   let stage;
-  if (!running) stage = "choose";
+  if (!running) stage = "start";
   else if (!pending.email) stage = "signIn";
   else if (typeof pending.folder !== "string") stage = "folder";
   else stage = "copy";

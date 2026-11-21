@@ -146,7 +146,7 @@ dashboard.get("/setup", function (req, res) {
   renderSetup(req, res);
 });
 
-// The setup page's checklist: choose the access and sign in, with Blot's
+// The setup page's checklist: the person signs in, with Blot's
 // steps waiting. error is why the last sign-in didn't work
 function renderSetup(req, res, error) {
   res.locals.setup = setupState(null, {

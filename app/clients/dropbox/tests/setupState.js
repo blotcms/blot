@@ -10,7 +10,7 @@ describe("dropbox setupState", function () {
   it("leaves signing in to the person before Dropbox sends them back", function () {
     const state = setupState(null);
     expect(state.running).toBe(false);
-    expect(state.stage).toBe("choose");
+    expect(state.stage).toBe("start");
     expect(classes(state)).toEqual({
       signIn: "",
       folder: "todo",
