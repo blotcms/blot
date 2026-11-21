@@ -132,4 +132,24 @@ describe("icloud getHealth", function () {
 
     expect(await getHealth(this.blog.id)).toEqual(health.syncing());
   });
+
+  it("reports VIEW_ONLY for a folder shared View only, until it can make changes again", async function () {
+    await database.store(this.blog.id, {
+      setupComplete: true,
+      error: null,
+      permission: "readOnly",
+      permissionSince: 1000,
+    });
+
+    expect(await getHealth(this.blog.id)).toEqual(
+      health.error([{ code: health.CODES.VIEW_ONLY, since: 1000 }])
+    );
+    expect(health.action("VIEW_ONLY")).toBeUndefined();
+
+    await database.store(this.blog.id, {
+      permission: null,
+      permissionSince: null,
+    });
+    expect(await getHealth(this.blog.id)).toEqual(health.ok());
+  });
 });

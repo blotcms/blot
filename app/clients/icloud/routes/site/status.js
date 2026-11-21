@@ -106,6 +106,34 @@ module.exports = async function (req, res) {
     return res.send("ok");
   }
 
+  // The share's permission (macserver/permissionCheck.js): "readOnly" when
+  // the owner shares the folder View only. Only for a blog still connected,
+  // as with folderName.
+  if (
+    typeof status.permission === "string" &&
+    Object.keys(status).length === 1
+  ) {
+    try {
+      const account = await database.get(blogID);
+      if (account && account.sharingLink) {
+        const readOnly = status.permission === "readOnly";
+        if (readOnly && account.permission !== "readOnly")
+          await database.store(blogID, {
+            permission: "readOnly",
+            permissionSince: Date.now(),
+          });
+        else if (!readOnly && account.permission)
+          await database.store(blogID, {
+            permission: null,
+            permissionSince: null,
+          });
+      }
+    } catch (err) {
+      return handle("Failed to store the share's permission", err);
+    }
+    return res.send("ok");
+  }
+
   // Not part of the account: it only goes into the resync report.
   const { reason: reportedReason, ...accountStatus } = status;
   const reason =

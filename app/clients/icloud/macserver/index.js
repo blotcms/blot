@@ -5,6 +5,7 @@ import { initialize } from "./watcher/index.js";
 import notifyServerStarted from "./httpClient/notifyServerStarted.js";
 import clfdate from "./util/clfdate.js";
 import monitorer from "./monitorer.js";
+import permissionCheck from "./permissionCheck.js";
 import uploadRoute from "./routes/upload.js";
 import deleteRoute from "./routes/delete.js";
 import mkdirRoute from "./routes/mkdir.js";
@@ -103,6 +104,9 @@ const startServer = async () => {
     // Start the monitorer to keep iCloud in sync
     console.log(clfdate(), "Starting iCloud monitorer...");
     monitorer();
+
+    // Report folders shared View only after setup (permissionCheck.js)
+    permissionCheck();
 
     console.log(clfdate(), "Macserver started successfully");
   } catch (error) {
