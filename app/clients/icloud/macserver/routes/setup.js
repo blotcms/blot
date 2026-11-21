@@ -113,23 +113,57 @@ async function shareInfo(path) {
 
 // iCloud can undo a rename of a shared folder (the folder comes back under
 // its old name, empty). Check a little after the rename and shout if so.
+// iCloud has been seen to undo the move into blog_<id> about 30 s after it
+// (once in the first 72 migrations, #2874): the folder reappears at the top
+// of iCloud Drive under its old name and blog_<id> is left empty. So check a
+// few times, and when that happens move the folder back, but only if it is
+// still the same share. The watcher's sweep then finds it in place.
+const RENAME_CHECKS_MS = [5_000, 30_000, 90_000, 300_000];
+
+// Null when the lookup failed: shareInfo() writes "(none)" then, and two
+// failed lookups must never count as the same share
+async function collaborationIDOf(path) {
+  try {
+    const id = JSON.parse(await shareInfo(path)).CollaborationIdentifier;
+    return id && id !== "(none)" ? id : null;
+  } catch {
+    return null;
+  }
+}
+
 function watchRename(oldName, newPath, blogID) {
-  for (const delay of [5000, 30000]) {
+  const shareID = collaborationIDOf(newPath);
+  for (const delay of RENAME_CHECKS_MS) {
     setTimeout(async () => {
       try {
         const exists = await fs.pathExists(newPath);
         const entries = exists ? (await fs.readdir(newPath)).length : 0;
-        const oldBack = await fs.pathExists(
-          join(iCloudDriveDirectory, oldName)
-        );
+        const oldPath = join(iCloudDriveDirectory, oldName);
+        const oldBack = await fs.pathExists(oldPath);
         const message = `Rename check after ${delay / 1000}s for ${blogID}: folder ${
           exists ? `present (${entries} entries)` : "MISSING"
         }, ${oldName} ${oldBack ? "has reappeared" : "not present"}`;
-        if (!exists || oldBack) {
-          console.error(clfdate(), `RENAME REVERTED? ${message}`);
-        } else {
-          console.log(clfdate(), message);
+        if (exists || !oldBack) {
+          if (!exists) console.error(clfdate(), `RENAME REVERTED? ${message}`);
+          else console.log(clfdate(), message);
+          return;
         }
+        console.error(clfdate(), `RENAME REVERTED: ${message}`);
+
+        const expected = await shareID;
+        const found = await collaborationIDOf(oldPath);
+        const layout = await refreshBlogFolder(blogID);
+        if (!expected || found !== expected || layout.root) {
+          console.error(
+            clfdate(),
+            `Not moving ${oldName} back into ${blogID}: share ${found} (expected ${expected}), root ${layout.root}`
+          );
+          return;
+        }
+        await fs.rename(oldPath, newPath);
+        await refreshBlogFolder(blogID);
+        forgetRoot(blogID);
+        console.error(clfdate(), `Moved ${oldName} back into ${blogID}`);
       } catch (error) {
         console.error(clfdate(), "Rename check failed", error);
       }
@@ -359,18 +393,10 @@ async function setupFolder(blogID, sharingLink, progress = () => {}) {
       // finderLimiter
       if (await fs.pathExists(newPath)) {
         const earlier = await refreshBlogFolder(blogID);
-        console.error(
-          clfdate(),
-          `Replacing existing ${earlier.nested ? "nested " : ""}folder for ${blogID}`
-        );
-        if (earlier.nested) {
-          if (earlier.root)
-            await leaveFolder(earlier.root, { root: iCloudDriveDirectory });
-          await removeContainer(blogID);
-        } else {
-          console.error(clfdate(), `share: ${await shareInfo(newPath)}`);
-          await leaveFolder(newPath, { root: iCloudDriveDirectory });
-        }
+        console.error(clfdate(), `Replacing existing folder for ${blogID}`);
+        if (earlier.root)
+          await leaveFolder(earlier.root, { root: iCloudDriveDirectory });
+        await removeContainer(blogID);
       }
 
       // Nest the folder in blog_<id> under the owner's name, rather than
@@ -840,6 +866,3 @@ export default async (req, res) => {
 
   return res.status(202).json({ accepted: true });
 };
-
-// For the migration to the nested layout (routes/migrate.js)
-export { setupBlog, shareInfo };

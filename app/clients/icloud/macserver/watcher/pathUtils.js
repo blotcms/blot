@@ -16,9 +16,9 @@ const extractBlogID = (filePath) => {
   return blogID;
 };
 
-// The path inside the blog's shared folder, which is blog_<id> or, nested,
-// the folder inside it (blogFolder.js). "" for the folder itself, or for
-// anything else inside a nested blog_<id>; null outside every blog folder.
+// The path inside the blog's shared folder, the folder inside blog_<id>
+// (blogFolder.js). "" for the folder itself, or for anything else inside
+// blog_<id>; null outside every blog folder.
 const extractPathInBlogDirectory = (filePath) => {
   const at = locate(filePath);
   return at ? at.path : null;
