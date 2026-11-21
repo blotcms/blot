@@ -9,9 +9,10 @@
   width: 100%;
 }
 
-/* Progress bar already shows activity — hide the blinking syncing dot. */
+/* Progress bar already shows activity — hide the blinking syncing dot, but
+   keep its room, so the text stays put as the bar comes and goes */
 .sync-status.has-progress .sync-status-icon {
-  display: none;
+  visibility: hidden;
 }
 
 .sync-status-body {
@@ -83,6 +84,7 @@
   }
 
   .line.sync-status-line > .center {
+    flex-basis: 100%;
     min-width: 0;
     max-width: 100%;
   }

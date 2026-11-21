@@ -14,7 +14,7 @@
     {{#setup.folderLink}}
     <a class="icloud-open" href="{{setup.folderLink}}" target="_blank" rel="noopener">Open in iCloud Drive <span class="icon-small-chevron-right"></span></a>
     {{/setup.folderLink}}
-    <span class="icloud-note">You can rename or move the folder.</span>
+    <span class="icloud-note">{{#setup.copying}}Files appear here as Blot copies them. This can take a few minutes, and you can leave this page.{{/setup.copying}}{{^setup.copying}}You can rename or move the folder.{{/setup.copying}}</span>
   </span>
 </div>
 {{/setup.joined}}
@@ -27,15 +27,11 @@
 {{#setup.copying}}
 <a class="line sync-status-line" href="{{{dashboardBase}}}/client/activity">
   <span class="label">Status</span>
-  <span class="center sync-status-center icloud-progress" data-progress-files>
+  <span class="center sync-status-center icloud-progress">
     {{> sync-status}}
   </span>
 </a>
 
-<form action="{{{base}}}/disconnect" method="post" class="icloud-cancel" id="icloud-cancel-form">
-  <input type="hidden" name="_csrf" value="{{csrftoken}}">
-  <div class="buttons"><button type="submit">Cancel setup</button></div>
-</form>
 {{/setup.copying}}
 
 {{#setup.transferFailed}}
@@ -43,12 +39,12 @@
   <span class="label">Status</span>
   <span class="center">
     <span class="icloud-problem"><span class="icon-small-alert"></span> Copying didn’t finish</span>
-    <span class="icloud-problem-detail">Nothing was removed.{{#setup.transferDetail}} ({{setup.transferDetail}}){{/setup.transferDetail}}</span>
+    <span class="icloud-problem-detail">Nothing was removed from your folder or your site.</span>
     <form action="{{{base}}}/retry-transfer" method="post" class="icloud-retry">
       <input type="hidden" name="_csrf" value="{{csrftoken}}">
       <div class="buttons">
         <button type="submit">Try again</button>
-        <button type="submit" form="icloud-cancel-form">Cancel setup</button>
+        <a href="{{{dashboardBase}}}/client/activity">View activity</a>
       </div>
     </form>
     <!-- Keeps the page listening for status messages, so it follows a retry -->
@@ -56,9 +52,6 @@
   </span>
 </div>
 
-<form action="{{{base}}}/disconnect" method="post" id="icloud-cancel-form" hidden>
-  <input type="hidden" name="_csrf" value="{{csrftoken}}">
-</form>
 {{/setup.transferFailed}}
 
 {{^setup.joined}}
@@ -169,7 +162,6 @@
             <input type="hidden" name="sharingLink" value="{{setup.sharingLink}}">
             <div class="buttons">
               <button type="submit">Try again</button>
-              <button type="submit" form="icloud-cancel-form">Cancel setup</button>
             </div>
           </form>
           {{/setup.slow}}
@@ -187,16 +179,22 @@
       {{/setup.linked}}
     </div>
 
-    {{#setup.linked}}
-    <form action="{{{base}}}/disconnect" method="post" class="icloud-cancel icloud-steps-cancel" id="icloud-cancel-form">
-      <input type="hidden" name="_csrf" value="{{csrftoken}}">
-      {{#setup.working}}<div class="buttons"><button type="submit">Cancel setup</button></div>{{/setup.working}}
-    </form>
-    {{/setup.linked}}
   </div>
 </div>
 
+
 {{/setup.joined}}
+
+{{! Cancel setup goes where Disconnect will be once setup is done }}
+{{#setup.linked}}
+<form action="{{{base}}}/disconnect" method="post" id="icloud-cancel-form">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}">
+  <button type="submit" class="line icloud-cancel-line">
+    <span class="label">Disconnect</span>
+    <span class="link">Cancel setup</span>
+  </button>
+</form>
+{{/setup.linked}}
 
 </div>
 
@@ -743,9 +741,37 @@
   }
 }
 
-.icloud-retry .buttons,
-.icloud-cancel .buttons {
+.icloud-retry .buttons {
   margin: 10px 0 0;
+}
+
+/* Try again at its natural width, with View activity beside it */
+.icloud-retry .buttons > * {
+  flex-grow: 0;
+  white-space: nowrap;
+}
+
+/* "Disconnect: Cancel setup", a line like the finished page's Disconnect
+   line, which posts rather than links */
+.icloud-cancel-line {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+}
+
+.icloud-cancel-line:hover {
+  background: var(--light-background-color);
+}
+
+.icloud-cancel-line:hover .link {
+  text-decoration: underline;
 }
 
 .icloud-steps .icloud-quiet-hint {
@@ -761,11 +787,6 @@
    it ends with, until the page switches to the finished settings */
 .icloud-join-progress .sync-status.synced {
   display: none;
-}
-
-/* Under the step text, at its natural width: a quiet way out while it runs */
-.icloud-steps-cancel {
-  margin-left: 32px;
 }
 
 /* A failed copy, laid out like the status line's health issues */
@@ -789,10 +810,5 @@
   color: var(--medium-text-color);
   font-size: 14px;
   text-wrap: pretty;
-}
-
-.icloud-cancel .buttons > * {
-  flex-grow: 0;
-  white-space: nowrap;
 }
 </style>

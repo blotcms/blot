@@ -86,6 +86,20 @@ describe("icloud toiCloud empty files and placeholders", function () {
 
     expect(messages).toContain("(2/4) Transferring to iCloud /empty.txt");
     expect(messages).toContain("(4/4) Transferring to iCloud /post.txt");
-    expect(messages[messages.length - 1]).toBe("(4/4) Sync complete");
+    expect(messages[0]).toBe("(0/4) Copying your files");
+    expect(messages[messages.length - 1]).toBe("(4/4) Copied your files");
+  });
+
+  it("sends the check pass's messages without the count", async function () {
+    const toiCloud = load(local, remote, ["/placeholder.pdf"]);
+
+    await toiCloud("blog", (...args) => messages.push(args.join(" ")), null, {
+      skipDeletions: true,
+      check: true,
+    });
+
+    expect(messages[0]).toBe("Checking the copy");
+    expect(messages[messages.length - 1]).toBe("Checked the copy");
+    expect(messages.some((m) => /^\(\d+\/\d+\)/.test(m))).toBe(false);
   });
 });

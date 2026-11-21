@@ -113,13 +113,15 @@ function renderSyncStatusMessage(message) {
 
     statusContainer.classList.add("has-progress");
     if (progressBar) setProgressWidth(progressBar, roundedPercent);
+    // The bar shows the proportion; the label says how much work that is
     if (progressLabel)
-      progressLabel.innerText = statusContainer.closest("[data-progress-files]")
-        ? parsed.current.toLocaleString() +
-          " of " +
-          parsed.total.toLocaleString() +
-          (parsed.total === 1 ? " file" : " files")
-        : roundedPercent + "% complete";
+      progressLabel.innerText =
+        parsed.total > 0
+          ? parsed.current.toLocaleString() +
+            " of " +
+            parsed.total.toLocaleString() +
+            (parsed.total === 1 ? " file" : " files")
+          : "";
   } else {
     statusContainer.classList.remove("has-progress");
     if (progressBar) progressBar.style.width = "0%";

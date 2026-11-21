@@ -36,7 +36,7 @@ module.exports = async (
   blogID,
   publish,
   update,
-  { skipDeletions = false, abortOnError = false } = {}
+  { skipDeletions = false, abortOnError = false, check = false } = {}
 ) => {
   publish = publish || function () {};
 
@@ -48,10 +48,20 @@ module.exports = async (
   // which the dashboard's status line shows as a progress bar. Every local
   // file advances it, copied or not, so it ends at the total however many
   // files iCloud already had
+  // The check pass after the copy (check) goes over the same files again in
+  // seconds: its messages go without the count, so the bar the copy filled
+  // isn't emptied and filled a second time
+  const total = await countLocalFiles(blogID, "/").catch(() => 0);
   const progress = createProgress(
-    await countLocalFiles(blogID, "/").catch(() => 0),
-    publish
+    total,
+    check
+      ? (message) => publish(String(message).replace(/^\(\d+\/\d+\) /, ""))
+      : publish
   );
+  // Shows the bar at 0 as soon as the total is known
+  if (check) publish("Checking the copy");
+  else if (total > 0) progress.note("Copying your files");
+  else publish("Copying your files");
 
   const walk = async (dir) => {
     const [remoteContents, localContents] = await Promise.all([
@@ -164,7 +174,7 @@ module.exports = async (
           " for files Blot could not download"
       );
     }
-    progress.finish("Sync complete");
+    progress.finish(check ? "Checked the copy" : "Copied your files");
   } catch (e) {
     publish("Sync failed");
     console.log(prefix(), "Sync failed", e);
