@@ -2,25 +2,23 @@ const setupState = require("../util/setupState");
 
 describe("dropbox setupState", function () {
   const classes = (state) => ({
-    access: state.steps.access.className,
     signIn: state.steps.signIn.className,
     folder: state.steps.folder.className,
     copy: state.steps.copy.className,
   });
 
-  it("leaves choosing and signing in to the person before Dropbox sends them back", function () {
+  it("leaves signing in to the person before Dropbox sends them back", function () {
     const state = setupState(null);
     expect(state.running).toBe(false);
     expect(state.stage).toBe("choose");
     expect(classes(state)).toEqual({
-      access: "",
       signIn: "",
       folder: "todo",
       copy: "todo",
     });
   });
 
-  it("preselects full access for an account that has it", function () {
+  it("keeps the full access an account has when signing in again", function () {
     expect(setupState(null, { fullAccess: true }).fullAccess).toBe(true);
     expect(setupState(null).fullAccess).toBe(false);
   });
@@ -35,7 +33,6 @@ describe("dropbox setupState", function () {
     const state = setupState({ full_access: false, preparing: true });
     expect(state.stage).toBe("signIn");
     expect(classes(state)).toEqual({
-      access: "done",
       signIn: "active",
       folder: "todo",
       copy: "todo",
@@ -48,7 +45,6 @@ describe("dropbox setupState", function () {
     expect(state.fullAccess).toBe(true);
     expect(state.email).toBe("a@example.com");
     expect(classes(state)).toEqual({
-      access: "done",
       signIn: "done",
       folder: "active",
       copy: "todo",
@@ -60,7 +56,6 @@ describe("dropbox setupState", function () {
       const state = setupState({ email: "a@example.com", folder });
       expect(state.stage).toBe("copy");
       expect(classes(state)).toEqual({
-        access: "done",
         signIn: "done",
         folder: "done",
         copy: "active",

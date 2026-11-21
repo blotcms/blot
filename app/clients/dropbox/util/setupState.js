@@ -1,6 +1,5 @@
 // Where a Dropbox setup has got to, for the dashboard's checklist
 // (views/authenticate.html and views/index.html). The steps are:
-//   access: choose what Blot can open, an app folder or the whole Dropbox
 //   signIn: sign in to Dropbox, until Blot has the account (getAccount)
 //   folder: Blot creates or finds the site's folder (createFolder)
 //   copy:   Blot copies the site's files into it (resetFromBlot)
@@ -12,7 +11,9 @@
 // It removes it once the setup ends, whether the copy finished or not.
 //
 // Before Dropbox sends the person back, there is no pending setup: the
-// person chooses and signs in, and Blot's steps wait.
+// person signs in, and Blot's steps wait. A first setup is always for an app
+// folder; the permission page (views/permission.html) switches to the whole
+// Dropbox once connected. Signing in again keeps the access the site has.
 module.exports = function setupState(pending, options = {}) {
   const running = !!pending;
 
@@ -27,7 +28,7 @@ module.exports = function setupState(pending, options = {}) {
 
   // The class each of Blot's steps takes: done, active (with a spinner) or
   // todo. Before Dropbox sends the person back, signing in is theirs to do,
-  // so it has no class, like choosing
+  // so it has no class
   const step = (name) => {
     const index = order.indexOf(name);
     const className = !running
@@ -64,7 +65,6 @@ module.exports = function setupState(pending, options = {}) {
     fullAccess: running ? pending.full_access === true : !!options.fullAccess,
     email: (running && pending.email) || "",
     steps: {
-      access: { className: running ? "done" : "", done: running },
       signIn,
       folder: step("folder"),
       copy: step("copy"),

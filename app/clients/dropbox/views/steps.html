@@ -1,31 +1,6 @@
 <div class="steps steps-progress dropbox-steps" data-steps-key="dropbox-setup:{{blog.handle}}">
   <ol>
 
-    <li data-step="access" class="{{setup.steps.access.className}}">
-      <span class="step-title">Choose what Blot can open</span>
-      {{#setup.running}}
-      <span class="step-text">{{#setup.fullAccess}}Your whole Dropbox{{/setup.fullAccess}}{{^setup.fullAccess}}An app folder only{{/setup.fullAccess}}</span>
-      {{/setup.running}}
-      {{^setup.running}}
-      <span class="dropbox-access">
-        <label>
-          <input type="radio" name="full_access" value=""{{^setup.fullAccess}} checked{{/setup.fullAccess}}>
-          <span>
-            <span class="dropbox-access-name">An app folder</span>
-            <span class="dropbox-access-note">Blot can open only its own folder, in Apps › Blot.</span>
-          </span>
-        </label>
-        <label>
-          <input type="radio" name="full_access" value="true"{{#setup.fullAccess}} checked{{/setup.fullAccess}}>
-          <span>
-            <span class="dropbox-access-name">Your whole Dropbox</span>
-            <span class="dropbox-access-note">Lets you move the folder anywhere and share it with other people.</span>
-          </span>
-        </label>
-      </span>
-      {{/setup.running}}
-    </li>
-
     {{#setup.steps.signIn}}
     <li data-step="sign-in" class="{{className}}">
       {{#active}}<span class="step-icon"><span class="steps-spinner" aria-hidden="true"></span></span>{{/active}}
@@ -34,8 +9,9 @@
       {{#problem}}<span class="step-problem">{{problem}}</span>{{/problem}}
       {{#done}}<span class="step-text">{{setup.email}}</span>{{/done}}
       {{^setup.running}}
+      {{^problem}}{{^setup.fullAccess}}<span class="step-text">Blot gets a folder of its own in Apps › Blot, and can’t open anything else in your Dropbox.</span>{{/setup.fullAccess}}{{/problem}}
       <div class="buttons">
-        <button type="submit">Sign in</button>
+        <a href="{{{base}}}/redirect{{#setup.fullAccess}}?full_access=true{{/setup.fullAccess}}">Sign in</a>
         {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
         {{#blog.client}}<button type="submit" form="dropbox-cancel-form">Cancel</button>{{/blog.client}}
       </div>
@@ -73,50 +49,6 @@
   .dropbox-setup-line .center {
     flex-basis: 100%;
   }
-}
-
-.dropbox-setup-form {
-  width: auto;
-  margin: 0;
-}
-
-.dropbox-access {
-  display: block;
-  margin: 10px 0 4px;
-  max-width: 520px;
-}
-
-.dropbox-access label {
-  display: flex;
-  gap: 10px;
-  align-items: flex-start;
-  padding: 10px 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  margin-bottom: 8px;
-  cursor: pointer;
-}
-
-.dropbox-access label:has(input:checked) {
-  border-color: var(--accent-color);
-}
-
-.dropbox-access input {
-  margin: 2px 0 0;
-  flex-shrink: 0;
-}
-
-.dropbox-access-name {
-  display: block;
-  font-size: 14px;
-  color: var(--text-color);
-}
-
-.dropbox-access-note {
-  display: block;
-  margin-top: 2px;
-  font-size: 13px;
-  color: var(--medium-text-color);
 }
 
 .dropbox-steps .buttons {
