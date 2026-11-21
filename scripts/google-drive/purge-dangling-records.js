@@ -99,7 +99,15 @@ const settingUp = (account) =>
   Boolean(account?.preparing) &&
   Date.now() - Number(account.startedSetup || 0) < SETUP_TIMEOUT_MS;
 
-const when = (ms) => (ms ? new Date(Number(ms)).toISOString() : "never");
+// A stored time as ISO, or as stored when it isn't one (old records hold
+// strings)
+const when = (value) => {
+  if (!value) return "never";
+  const date = new Date(Number.isFinite(Number(value)) ? Number(value) : value);
+  return Number.isNaN(date.getTime())
+    ? JSON.stringify(value)
+    : date.toISOString();
+};
 
 async function main() {
   // blogID -> what refers to it
@@ -194,7 +202,8 @@ async function main() {
       console.log(
         `  folderId=${account.folderId || "none"} serviceAccountId=${account.serviceAccountId || "none"}` +
           ` preparing=${Boolean(account.preparing)} startedSetup=${when(account.startedSetup)}` +
-          ` lastSync=${when(account.lastSync)} latestDriveActivity=${when(account.latestDriveActivityTimestamp)}`
+          ` lastSync=${when(account.lastSync)} latestDriveActivity=${when(account.latestDriveActivityTimestamp)}` +
+          ` fields=${Object.keys(account).sort().join(",")}`
       );
     for (const what of found.get(blogID)) console.log(`  ${what}`);
 
