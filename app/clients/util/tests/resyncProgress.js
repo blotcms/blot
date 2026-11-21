@@ -73,6 +73,20 @@ describe("resync progress", function () {
     ]);
   });
 
+  it("keeps the count on a note without advancing it", function () {
+    const messages = [];
+    const progress = createProgress(2, (message) => messages.push(message));
+
+    progress.publish("Checking", "/one.txt");
+    progress.note("Creating directory", "/Drafts");
+
+    expect(messages).toEqual([
+      "(1/2) Checking /one.txt",
+      "(1/2) Creating directory /Drafts",
+    ]);
+    expect(progress.current).toBe(1);
+  });
+
   it("throttles high-volume updates without losing progress accounting", function () {
     const messages = [];
     const progress = createProgress(3, (message) => messages.push(message));

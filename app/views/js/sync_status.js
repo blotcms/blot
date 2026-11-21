@@ -112,8 +112,16 @@ function renderSyncStatusMessage(message) {
     var roundedPercent = Math.round(Math.max(0, Math.min(100, parsed.percent)));
 
     statusContainer.classList.add("has-progress");
-    if (progressBar) progressBar.style.width = roundedPercent + "%";
-    if (progressLabel) progressLabel.innerText = roundedPercent + "% complete";
+    if (progressBar) setProgressWidth(progressBar, roundedPercent);
+    // The bar shows the proportion; the label says how much work that is
+    if (progressLabel)
+      progressLabel.innerText =
+        parsed.total > 0
+          ? parsed.current.toLocaleString() +
+            " of " +
+            parsed.total.toLocaleString() +
+            (parsed.total === 1 ? " file" : " files")
+          : "";
   } else {
     statusContainer.classList.remove("has-progress");
     if (progressBar) progressBar.style.width = "0%";
@@ -121,6 +129,22 @@ function renderSyncStatusMessage(message) {
   }
 
   updateContainerClass();
+}
+
+// A bar the page has just swapped in (a live re-render) starts at 0%; put it
+// straight at its width, so it doesn't slide up from nothing on every
+// re-render, and animate only the moves after that
+function setProgressWidth(bar, percent) {
+  if (!bar.hasAttribute("data-shown")) {
+    bar.setAttribute("data-shown", "");
+    bar.style.transition = "none";
+    bar.style.width = percent + "%";
+    void bar.offsetWidth;
+    bar.style.transition = "";
+    return;
+  }
+
+  bar.style.width = percent + "%";
 }
 
 function updateContainerClass() {

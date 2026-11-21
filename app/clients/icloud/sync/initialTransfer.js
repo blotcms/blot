@@ -28,16 +28,14 @@ module.exports = async function initialTransfer(blogID, options = {}) {
   const { folder, done } = await establishSyncLock(blogID);
 
   try {
-    folder.status("Setting up iCloud sync");
+    folder.status("Getting ready");
     await database.store(blogID, { transferringToiCloud: true, error: null });
-    folder.status("Resolving case conflicts");
     await resolveCaseConflicts(blogID, folder.status, folder.update);
 
     // 'skipDeletions' sync does not remove
     // files from the iCloud folder if they do not exist on Blot.
     // this lets the user set up a folder which contains files and
     // which will be merged with the Blot folder.
-    folder.status("Transferring files to iCloud");
     await syncToiCloud(blogID, folder.status, folder.update, {
       skipDeletions: true,
     });
@@ -45,27 +43,27 @@ module.exports = async function initialTransfer(blogID, options = {}) {
     // we run the sync again to verify the transfer succeeded
     // it's important to abort on error here so we can surface the error to the user
     // and avoid data loss by continuing to sync down from iCloud
-    folder.status("Verifying transfer");
     for (let attempt = 0; ; attempt++) {
       try {
         await syncToiCloud(blogID, folder.status, folder.update, {
           skipDeletions: true,
           abortOnError: true,
+          check: true,
         });
         break;
       } catch (error) {
         if (attempt >= VERIFY_EXTRA_ATTEMPTS) throw error;
-        folder.status("Verifying transfer (retrying)");
+        folder.status("Checking again in a minute");
         await sleep(verifyRetryDelayMs);
       }
     }
 
     // then run a sync from iCloud to pull down any files which
     // were added to the iCloud folder after the transfer.
-    folder.status("Syncing from iCloud");
+    folder.status("Looking for files already in your folder");
     await syncFromiCloud(blogID, folder.status, folder.update);
 
-    folder.status("Transfer complete");
+    folder.status("Finishing up");
 
     // Now that the transfer is complete, notify the Macserver to begin watching the iCloud folder
     // for changes. This will let us know when the user has changed their folder on iCloud.

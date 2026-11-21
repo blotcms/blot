@@ -67,6 +67,12 @@ function createProgress(total, publish) {
     publish(`(${progress.current}/${progress.total}) ${message} ${path}`);
   };
 
+  // A message between files ("Creating directory /Drafts", a failure) with
+  // the count so far, so the status line keeps its progress bar for it
+  progress.note = function (...parts) {
+    publish(`(${progress.current}/${progress.total}) ${parts.join(" ")}`);
+  };
+
   progress.finish = function (message) {
     progress.current = progress.total;
     publish(`(${progress.current}/${progress.total}) ${message}`);
