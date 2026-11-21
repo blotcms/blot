@@ -1,21 +1,14 @@
-{{#error}}
-<p class="error">{{error}}</p>
-{{/error}}
+{{> status-line}}
 
-<p>
-  Sync folder with <strong>Dropbox</strong>
-</p>
-<ul>
-  <li>Blot will create a new folder in Dropbox for this site.</li>
-  <li>Blot will only have access to this folder.</li>
-  <li>You can switch from Dropbox to another sync method at any time.</li>
-</ul>
-
-<form class="dashboard-form" action="{{{base}}}/disconnect" method="post">
-  <input type="hidden" name="_csrf" value="{{csrftoken}}">
-  <div class="buttons">
-    <a href="{{{base}}}/redirect{{#account.full_access}}?full_access=true{{/account.full_access}}">Sync with Dropbox</a>
-    {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
-    {{#blog.client}}<button type="submit">Cancel</button>{{/blog.client}}
+<div class="line dropbox-setup-line">
+  <span class="label">Folder on Dropbox</span>
+  <div class="center">
+    {{> dropbox-steps}}
   </div>
+</div>
+
+{{#blog.client}}
+<form action="{{{base}}}/disconnect" method="post" id="dropbox-cancel-form">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}">
 </form>
+{{/blog.client}}
