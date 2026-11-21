@@ -13,13 +13,18 @@ const SERVING_CPU_SHARES = 2048;
 // being replaced, so each is sized for everything the app does, not half of it:
 // Sized from production peaks (#2795, 19 Nov 2026, about 11 hours including
 // deploys; unit-mem-summary.sh on the host and the [STATS] process lines):
-//   node-a   heapUsed peaked at 1072 MiB (mean ~600): 1536 leaves ~40% for GC
+//   node-a   heapUsed peaked at 1072 MiB (mean ~600). 1024 since 21 Nov: an
+//            overnight run (7.6 h) peaked at ~780 MiB, ~745 just after a
+//            major GC. The maintainer accepts an occasional V8 heap OOM
+//            here: each one is a request (or a cache) to fix, and the
+//            report it leaves (--report-on-fatalerror) says which
 //   node-b   heapUsed peaked at 199 MiB: 512 leaves room for a heavy build
 //   memory   the container's unreclaimable memory (anon + shmem: both Node
 //            processes, OpenResty, the broker, git and scripts) peaked at
-//            1966 MiB; 2560m leaves ~30%. Both heaps at their ceilings would
-//            not fit, which is deliberate: under pressure the kernel kills
-//            node-b (oom_score_adj 900) before node-a, and scripts first.
+//            1966 MiB; 2560m leaves ~30%. The two heaps' ceilings (1536 MiB)
+//            leave ~1 GiB for the rest, which git and scripts at their worst
+//            would still overrun: under pressure the kernel kills node-b
+//            (oom_score_adj 900) before node-a, and scripts first.
 //            Page cache counts against this too, but it is reclaimed.
 // The host's budget is the sum of enforced limits: two units at this memory,
 // plus each unit's sandbox cgroups (config/host/host/setup.sh, outside this
@@ -38,7 +43,7 @@ const UNIT = {
   cpus: 4,
   memory: "2560m",
   cpuShares: SERVING_CPU_SHARES,
-  nodeAMaxOldSpaceSize: 1536,
+  nodeAMaxOldSpaceSize: 1024,
   nodeBMaxOldSpaceSize: 512,
   scriptMaxOldSpaceSize: 256,
   stopTimeout: 40, // above OpenResty drain (10s) plus the app drain (25s): drained in turn
