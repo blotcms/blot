@@ -67,6 +67,9 @@ const OPTIONS = {
     help: "replay: the container's upstream (default the old yellow port, for logs from before the units)",
   },
   timeout: { value: "S", help: "per-request timeout (default 120)" },
+  "snapshot-at-end": {
+    help: "write end.heapsnapshot once the requests finish, caches still full (as large as the heap)",
+  },
   verbose: { help: "print each request's render steps" },
   out: { value: "DIR" },
 };
@@ -891,6 +894,14 @@ async function main() {
   });
 
   out.writeJSON("summary.json", summary);
+  // What the caches hold after a replay, object by object: the render caches'
+  // own byte counts undercount node-a's heap (#2795).
+  if (args["snapshot-at-end"]) {
+    const file = require("v8").writeHeapSnapshot(
+      require("path").join(out.dir, "end.heapsnapshot")
+    );
+    console.log(`probe: wrote ${file}`);
+  }
   console.log(
     `probe: done in ${(totals.elapsedMs / 1000).toFixed(1)}s, peak heap ${totals.peaks.heapUsedMB}MB,` +
       ` max loop delay ${totals.peaks.eventLoopDelayMaxMs}ms,` +
