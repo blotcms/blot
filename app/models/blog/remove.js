@@ -142,13 +142,28 @@ async function deleteKeys(blog) {
 async function disconnectClient(blog) {
   var clients = require("clients");
 
-  if (!blog.client || !clients[blog.client]) return;
+  if (blog.client && clients[blog.client]) {
+    try {
+      await clients[blog.client].disconnect(blog.id);
+    } catch (err) {
+      // we still want to continue even if there is an error
+      console.error("Error disconnecting client:", err);
+    }
+  }
 
-  try {
-    await clients[blog.client].disconnect(blog.id);
-  } catch (err) {
-    // we still want to continue even if there is an error
-    console.error("Error disconnecting client:", err);
+  // Then every client's own records of the blog, whatever its client is
+  // now: a record can outlive its connection (a disconnect that failed part
+  // way, a blog that moved to another client), and a deleted blog must leave
+  // nothing behind. forget() only deletes what Blot keeps; it never reaches
+  // the service.
+  for (var name in clients) {
+    if (typeof clients[name].forget !== "function") continue;
+
+    try {
+      await clients[name].forget(blog.id);
+    } catch (err) {
+      console.error("Error forgetting blog for client " + name + ":", err);
+    }
   }
 }
 

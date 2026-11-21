@@ -20,6 +20,33 @@ describe("Blog.remove", function () {
     expect(results).toEqual([]);
   });
 
+  it("has every client forget the blog, whatever its client is", async function () {
+    var clients = require("clients");
+    var forgotten = [];
+    var failing = [];
+    clients["spec-forget"] = {
+      forget: async (blogID) => forgotten.push(blogID),
+    };
+    // One that fails doesn't stop the others or the removal
+    clients["spec-forget-failing"] = {
+      forget: async (blogID) => {
+        failing.push(blogID);
+        throw new Error("Spec failure");
+      },
+    };
+
+    try {
+      await remove(this.blog.id);
+    } finally {
+      delete clients["spec-forget"];
+      delete clients["spec-forget-failing"];
+    }
+
+    expect(forgotten).toEqual([this.blog.id]);
+    expect(failing).toEqual([this.blog.id]);
+    expect(await getAllIDs()).not.toContain(this.blog.id);
+  });
+
   it("removes the blog's folder and nothing beside it", async function () {
     var folder = require("storage/folder");
     var otherID = this.blog.id + "0";
