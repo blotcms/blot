@@ -1,6 +1,7 @@
 const clfdate = require("helper/clfdate");
 const database = require("../database");
 const disconnect = require("../disconnect");
+const { forgetFolder } = require("../forget");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const requestServiceAccount = require("clients/google-drive/serviceAccount/request");
 const parseBody = require("helper/bodyParser").urlencoded({ extended: false });
@@ -171,6 +172,9 @@ dashboard
       const serviceAccountId = await requestServiceAccount();
       const blog = req.blog;
       const email = req.body.email;
+
+      // A new setup replaces the folder: the old one's records go with it
+      await forgetFolder(req.blog.id, existingAccount?.folderId);
 
       await database.blog.store(req.blog.id, {
         email,

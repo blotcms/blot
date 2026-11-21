@@ -45,7 +45,7 @@ function harness(options) {
         get: async function () {
           return account;
         },
-        store: async function (blogID, data) {
+        update: async function (blogID, data) {
           stored.push({ blogID: blogID, data: data });
         },
       },

@@ -17,11 +17,18 @@ function load(file, stubs) {
 // database stubbed with the accounts given ({ blogID: account }), recording
 // what is deleted and reset
 function fakeDatabase(accounts) {
-  const calls = { deleted: [], dirtyForgotten: [], reset: [] };
+  const calls = {
+    deleted: [],
+    dirtyForgotten: [],
+    reset: [],
+    forgotOwn: [],
+    order: [],
+  };
   const database = {
     blog: {
       get: async (blogID) => accounts[blogID] || null,
       delete: async (blogID) => {
+        calls.order.push("delete");
         calls.deleted.push(blogID);
         delete accounts[blogID];
       },
@@ -31,10 +38,17 @@ function fakeDatabase(accounts) {
       },
     },
     dirty: {
-      forget: async (blogID) => calls.dirtyForgotten.push(blogID),
+      forget: async (blogID) => {
+        calls.order.push("dirty");
+        calls.dirtyForgotten.push(blogID);
+      },
     },
     folder: (folderId, blogID) => ({
-      reset: async (options) => calls.reset.push({ folderId, blogID, options }),
+      reset: async (options) => {
+        calls.order.push("reset");
+        calls.reset.push({ folderId, blogID, options });
+      },
+      forgetOwn: async () => calls.forgotOwn.push({ folderId, blogID }),
     }),
   };
   return { database, calls };
@@ -81,6 +95,8 @@ describe("Drive forget", function () {
     expect(calls.reset).toEqual([
       { folderId: "folder-1", blogID: "blog-1", options: undefined },
     ]);
+    // The account names the folder, so it goes last
+    expect(calls.order).toEqual(["reset", "dirty", "delete"]);
   });
 
   it("keeps a folder's mapping another blog's account still names", async function () {
@@ -93,6 +109,9 @@ describe("Drive forget", function () {
 
     expect(calls.deleted).toEqual(["blog-1"]);
     expect(calls.reset).toEqual([]);
+    expect(calls.forgotOwn).toEqual([
+      { folderId: "folder-1", blogID: "blog-1" },
+    ]);
   });
 
   it("does nothing more for a blog with no Drive account", async function () {

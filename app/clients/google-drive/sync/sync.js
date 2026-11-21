@@ -220,7 +220,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
   const markSourceMissing = async (message) => {
     publish("Error syncing with Google Drive");
-    await database.blog.store(blogID, sourceMissingFields(account, message));
+    await database.blog.update(blogID, sourceMissingFields(account, message));
     return false;
   };
 
@@ -234,7 +234,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     });
 
     if (folder.data.name !== folderName) {
-      await database.blog.store(blogID, { folderName: folder.data.name });
+      await database.blog.update(blogID, { folderName: folder.data.name });
     }
 
     if (folder.data.trashed) return markSourceMissing(MESSAGES.TRASHED);

@@ -203,13 +203,20 @@ async function main() {
       continue;
     }
 
-    if (!apply) continue;
+    if (!apply) {
+      purged += 1;
+      continue;
+    }
 
     // Again, just before deleting: the blog may have connected to Drive
     // since the scan
     const now = await stateOf(blogID);
-    if (!isDangling(now.state) || settingUp(await database.blog.get(blogID))) {
+    if (!isDangling(now.state)) {
       console.log(`  left alone: now ${now.state}`);
+      continue;
+    }
+    if (settingUp(await database.blog.get(blogID))) {
+      console.log("  left alone: a setup has started since the scan");
       continue;
     }
 
@@ -230,7 +237,7 @@ async function main() {
   console.log(
     apply
       ? `Deleted the Google Drive records of ${purged} of ${dangling.length} blogs`
-      : `Dry run: would delete the Google Drive records of ${dangling.length} blogs`
+      : `Dry run: would delete the Google Drive records of ${purged} of ${dangling.length} blogs`
   );
 }
 
