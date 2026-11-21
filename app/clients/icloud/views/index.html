@@ -353,24 +353,29 @@
 /* Each step has a ring rather than a number, joined to the next by a dotted
    line. A running step spins an arc around its ring; a finished one fills
    with a check and its text comes up to full strength */
+.icloud-steps > ol {
+  padding-left: 26px;
+}
+
 .icloud-steps > ol > li::before {
   content: "";
+  left: -26px;
   box-sizing: border-box;
   top: 1px;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   border: 1.5px solid var(--border-color);
-  background: var(--background-color) center / 12px no-repeat;
+  background: var(--background-color) center / 10px no-repeat;
 }
 
 .icloud-steps > ol > li {
-  margin-bottom: 1.5em;
+  margin-bottom: 1.2em;
 }
 
 .icloud-steps > ol > li::after {
-  left: calc(9px - 32px);
-  top: 26px;
-  bottom: calc(-1.5em + 5px);
+  left: calc(7px - 26px);
+  top: 21px;
+  bottom: calc(-1.2em + 4px);
   width: 0;
   background: none;
   border-left: 2px dotted
@@ -383,16 +388,11 @@
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-4.9' fill='none' stroke='white' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
-/* Keeps the connector between finished steps from shrinking to a stub */
-.icloud-steps ol li.done {
-  min-height: 1.6em;
-}
-
 /* Hierarchy by size and colour rather than weight: the address is the only
    bold text in the steps */
 .icloud-steps .step-title {
   display: block;
-  font-size: 17px;
+  font-size: 14px;
   line-height: 1.25;
   color: var(--text-color);
 }
@@ -401,7 +401,7 @@
 .icloud-steps .step-problem {
   display: block;
   margin-top: 4px;
-  font-size: 14px;
+  font-size: 13px;
   color: var(--medium-text-color);
   max-width: 520px;
 }
@@ -431,13 +431,13 @@
 .icloud-steps .step-icon {
   position: absolute;
   top: 1px;
-  left: -32px;
-  width: 20px;
-  height: 20px;
+  left: -26px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 14px;
 }
 
 .icloud-steps .step-icon.problem {
@@ -842,8 +842,8 @@
 /* In a step, the spinner is an arc running round the step's ring */
 .icloud-steps .step-icon .icloud-spinner {
   box-sizing: border-box;
-  width: 20px;
-  height: 20px;
+  width: 16px;
+  height: 16px;
   border: 1.5px solid transparent;
   border-top-color: var(--accent-color);
   border-right-color: var(--accent-color);
