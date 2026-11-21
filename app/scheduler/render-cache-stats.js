@@ -1,5 +1,6 @@
 const clfdate = require("helper/clfdate");
 const heapStats = require("helper/heapStats");
+const heapEstimate = require("models/cache/heapEstimate");
 
 // Counts garbage collections from boot, since setup requires this module then
 heapStats.start();
@@ -36,6 +37,12 @@ function uncachedBy(reasons) {
 }
 
 module.exports = function () {
+  // Measures more cached values for the next line, off the request path
+  heapEstimate
+    .measureSome()
+    .catch((err) =>
+      console.error(clfdate(), "[STATS] heap estimate failed", err)
+    );
   try {
     const mem = process.memoryUsage();
     const all = caches.map((stats) => stats());
@@ -69,6 +76,8 @@ module.exports = function () {
         "render_cache_maxSize=" + cache.maxSize,
         "render_cache_heapBytes=" + (cache.heapBytes || 0),
         "render_cache_twoByteBytes=" + (cache.twoByteBytes || 0),
+        "render_cache_wideObjects=" + (cache.wideObjects || 0),
+        "render_cache_heapMeasured=" + (cache.heapMeasured ?? 1).toFixed(2),
         ...(c
           ? [
               "render_cache_hits=" + c.hit,

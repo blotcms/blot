@@ -35,40 +35,6 @@ describe("cache value preparation", function () {
     expect(many.size - once.size).toBeLessThan(200);
   });
 
-  it("estimates V8's heap beside the size the caps use", function () {
-    const ascii = prepareCacheValue({ body: "x".repeat(1000) });
-    const twoByte = prepareCacheValue({ body: "x".repeat(999) + "\u201c" });
-
-    // One character above U+00FF makes V8 store the whole string as UTF-16
-    expect(twoByte.heapBytes - ascii.heapBytes).toBeGreaterThan(900);
-    expect(twoByte.twoByteBytes).toBeGreaterThanOrEqual(2000);
-    expect(ascii.twoByteBytes).toBe(0);
-    // size, which the caps use, is unchanged by this
-    expect(twoByte.size - ascii.size).toBeLessThan(10);
-  });
-
-  it("counts an object with many keys at V8's dictionary-mode cost", function () {
-    const keys = (n) =>
-      Object.fromEntries(Array.from({ length: n }, (_, i) => ["k" + i, true]));
-    const fast = prepareCacheValue(keys(10));
-    const slow = prepareCacheValue(keys(30));
-
-    expect(fast.heapBytes).toBeLessThan(300);
-    expect(slow.heapBytes).toBeGreaterThan(1500);
-  });
-
-  it("counts a shared object's heap once", function () {
-    const shared = { body: "x".repeat(1000) };
-    const once = prepareCacheValue([{ link: shared }]);
-    const many = prepareCacheValue([
-      { link: shared },
-      { link: shared },
-      { link: shared },
-    ]);
-
-    expect(many.heapBytes - once.heapBytes).toBeLessThan(300);
-  });
-
   it("uses the envelope estimate to reject a value over the byte cap", function () {
     const cache = new LRUCache({
       maxSize: 64,
