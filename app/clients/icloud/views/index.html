@@ -156,7 +156,6 @@
           {{#setup.slow}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.slow}}
           <span class="step-title">Joining your folder</span>
           {{^setup.slow}}
-          <span class="step-text icloud-progress icloud-join-progress">{{> sync-status}}</span>
           <span class="step-text icloud-quiet-hint">Still working. This can take up to a minute.</span>
           {{/setup.slow}}
           {{#setup.slow}}
@@ -189,6 +188,18 @@
 
 {{/setup.joined}}
 
+{{! While Blot's Mac joins the folder, the status line where it will be once
+  setup is done }}
+{{#setup.joining}}{{^setup.slow}}
+<a class="line sync-status-line icloud-join-status" href="{{{dashboardBase}}}/client/activity">
+  <span class="label">Status</span>
+  <span class="center sync-status-center icloud-progress">
+    {{> sync-status}}
+    <span class="icloud-join-waiting"><span class="loading"></span>Starting…</span>
+  </span>
+</a>
+{{/setup.slow}}{{/setup.joining}}
+
 {{! Cancel setup goes where Disconnect will be once setup is done }}
 {{#setup.linked}}
 <form action="{{{base}}}/disconnect" method="post" id="icloud-cancel-form">
@@ -212,13 +223,13 @@
     var lastText = null;
     var lastChange = Date.now();
     setInterval(function () {
-      var text = document.querySelector(".icloud-join-progress .sync-status-text");
+      var text = document.querySelector(".icloud-join-status .sync-status-text");
       var current = text ? text.textContent : null;
       if (current !== lastText) {
         lastText = current;
         lastChange = Date.now();
       }
-      var step = text && text.closest("li");
+      var step = text && document.querySelector('.icloud-steps li[data-step="join"]');
       if (step) step.classList.toggle("icloud-quiet", Date.now() - lastChange > 12000);
     }, 1000);
     setInterval(function () {
@@ -973,10 +984,32 @@
 }
 
 /* While joining, show the status line only for progress: an idle "Synced"
-   from before would read as done. The copy's status line keeps the "Synced"
-   it ends with, until the page switches to the finished settings */
-.icloud-join-progress .sync-status.synced {
+   from before would read as done, so it says Starting until the first
+   message. The copy's status line keeps the "Synced" it ends with, until the
+   page switches to the finished settings */
+.icloud-join-status .sync-status.synced {
   display: none;
+}
+
+.icloud-join-waiting {
+  display: none;
+  color: var(--text-color);
+}
+
+.icloud-join-waiting .loading {
+  width: 0.5em;
+  height: 0.5em;
+  display: inline-block;
+  border-radius: 50%;
+  position: relative;
+  top: -1px;
+  margin-right: 9px;
+  background: var(--medium-text-color);
+  animation: l1 1s infinite ease-in-out;
+}
+
+.icloud-join-status:has(.sync-status.synced) .icloud-join-waiting {
+  display: inline;
 }
 
 /* A failed copy, laid out like the status line's health issues */
