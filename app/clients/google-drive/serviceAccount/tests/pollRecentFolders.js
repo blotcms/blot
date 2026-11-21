@@ -10,6 +10,7 @@ describe("google drive pollRecentFolders", function () {
       "helper/clfdate": () => "[date]",
       "../database": { recent: { list } },
       "../sync/util/driveReaddir": null,
+      "../util/prefetch": { start() {} },
     };
     const module = { exports: {} };
     vm.runInNewContext(
@@ -226,5 +227,53 @@ describe("google drive pollRecentFolders", function () {
 
     expect(signals.length).toBe(1);
     expect(signals[0].aborted).toBe(true);
+  });
+
+  it("starts downloading the files whose bytes changed", async function () {
+    const controller = new AbortController();
+    let round = 0;
+    const started = [];
+    const poll = load(async () => {
+      if (++round > 2) {
+        controller.abort();
+        return [];
+      }
+      return [{ blogID: "blog_a", dirId: "posts" }];
+    });
+    const a = {
+      id: "a",
+      name: "a.md",
+      mimeType: "text/plain",
+      md5Checksum: "1",
+      size: "3",
+    };
+    const b = {
+      id: "b",
+      name: "b.md",
+      mimeType: "text/plain",
+      md5Checksum: "2",
+      size: "4",
+    };
+    const doc = {
+      id: "d",
+      name: "d.gdoc",
+      mimeType: "application/vnd.google-apps.document",
+    };
+    const drive = {};
+
+    await poll("sa", drive, controller.signal, {
+      everyMs: 1,
+      // Second round: a renamed, b edited, a Doc added
+      readdir: async () =>
+        round === 1
+          ? [a, b]
+          : [{ ...a, name: "A.md" }, { ...b, md5Checksum: "5" }, doc],
+      onChanged: async () => {},
+      prefetch: { start: (client, file) => started.push([client, file]) },
+    });
+
+    expect(started).toEqual([
+      [drive, { id: "b", md5Checksum: "5", size: "4" }],
+    ]);
   });
 });
