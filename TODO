@@ -112,7 +112,6 @@ Noticed during the async/await migration (#2559), 6 Nov 2026
 - GitHub reports 20 open Dependabot alerts on master, 2 critical. Nothing in CI checks npm advisories (see the stale dependencies note further down).
 
 Follow-ups from the ESLint and Prettier setup (#2508)
-- `app/clients/icloud/macserver/httpClient/resync.js`: the `return` inside `finally` (when the debounce entry is gone) swallows a failed resync, so the caller sees success. Move the cleanup into an `if (entry)` and let the error through; needs a macserver deploy.
 - `scripts/tests/util/site.js` builds a `new Promise(async ...)`: an exception thrown outside its own try/catch is lost and the promise never settles. Rewrite it as a plain async function (part of the callbacks to async/await migration).
 - `app/dashboard/site/import/helper/replace_embeds.js` threw a ReferenceError (no `cheerio` or `parse` in scope) on every call until #2508, so nothing can have been using it successfully: check whether the importer calls it at all, and delete it if not.
 - `app/documentation/tools/finder/index.js` threw on a `code.file` element without a type class (missing `determine_icon` require). Now fixed, so the docs may render icons that were never exercised; check the documentation pages once.
@@ -382,7 +381,6 @@ Clarify on cancel / delete / overdue pages for accounts with grandfathered subsc
 
 Sync sweep digest (app/clients/util/syncReport.js) follow-ups
 - Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
-- iCloud: stop watching blogs that are disabled or gone (the macserver keeps uploading, gets 500 `Cannot sync blog` from sync/index.js and requests resyncs); have /upload answer 4xx so the macserver drops them
 - iCloud initial transfer: the verify pass now reruns twice with a pause, but still gives up with TRANSFER_INCOMPLETE if every attempt fails; make initialTransfer resumable (a stalled `ls` during the upload burst caused TRANSFER_INCOMPLETE). Check the macserver's new `ls took`/`Diagnostic snapshot`/`still running after kill` log lines for the root cause of the stalls
 - Once-per-occurrence suppression treats "not seen this run" as cleared, including blogs that just weren't eligible that hour, so an ongoing error can be re-emailed after a quiet hour - remember issues until a successful walk/Fix actually clears them
 
