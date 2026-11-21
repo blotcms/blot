@@ -63,8 +63,16 @@
   border-top: 1px solid var(--border-color);
 }
 
+/* The dashboard form is sized for a page of its own: keep it in the step */
 .drive-account-form {
+  width: auto;
+  max-width: 420px;
   margin-top: 8px;
   font-size: 14px;
+}
+
+.drive-account-form input[type="text"] {
+  width: 100%;
+  box-sizing: border-box;
 }
 </style>
