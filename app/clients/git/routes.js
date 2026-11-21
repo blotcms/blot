@@ -26,27 +26,32 @@ var followUps = followUpSync("git", async function (blogID) {
   await sync(blogID, blog.handle);
 });
 
-// Whether the blog has a repository in the store, or one is being set up for
-// it: the blog's own mark, set by create.js, which expires by itself, so a
-// setup cut off by a crash or a deploy doesn't leave the blog, or the owner's
-// other blogs, stuck "in progress"
-async function hasRepository(blog) {
-  if (await repo.exists(blog.id)) return true;
+// "ready" if the blog has a repository in the store, "creating" if one is
+// being set up for it (the blog's own mark, set by create.js, which expires by
+// itself, so a setup cut off by a crash or a deploy doesn't leave the blog, or
+// the owner's other blogs, stuck "in progress"), or null
+async function repositoryState(blog) {
+  if (await repo.exists(blog.id)) return "ready";
 
-  return await database.isCreating(blog.id);
+  return (await database.isCreating(blog.id)) ? "creating" : null;
+}
+
+async function hasRepository(blog) {
+  return (await repositoryState(blog)) !== null;
 }
 
 dashboard.get("/", async function (req, res, next) {
-  var exists;
+  var state;
 
   try {
-    exists = await hasRepository(req.blog);
+    state = await repositoryState(req.blog);
   } catch (err) {
     return next(err);
   }
 
-  if (exists) {
+  if (state) {
     res.locals.repo = true;
+    res.locals.createInProgress = state === "creating";
     return next();
   }
 
@@ -55,13 +60,7 @@ dashboard.get("/", async function (req, res, next) {
 
 dashboard.get("/", async function (req, res, next) {
   // A failed lookup renders the page without it, as before
-  var status, token;
-
-  try {
-    status = await database.getStatus(req.blog.owner);
-  } catch (err) {
-    status = undefined;
-  }
+  var token;
 
   try {
     token = await database.getToken(req.blog.owner);
@@ -73,8 +72,6 @@ dashboard.get("/", async function (req, res, next) {
     res.render(__dirname + "/views/index.html", {
       title: "Git",
       token: token,
-      createFailed: status === "createFailed",
-      createInProgress: status === "createInProgress",
       host,
     });
   } catch (err) {
