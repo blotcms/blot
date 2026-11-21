@@ -17,7 +17,6 @@ Sync latency follow-ups from #2814 (20 Nov 2026):
 - Retry builds that fail for temporary reasons (a sandbox job killed or timed out, a fetch that failed) once or twice where they happen, and keep a per-blog set of paths whose build still failed, rebuilt by the next sync or Fix() and shown on the dashboard. Today such an entry stays built without the failed part (no thumbnail, an unoptimised image) until something rebuilds it.
 - Git: one push of 144 files spent 13.8s in "Applied from the store" (writing the files into the folder) before any build started (a Git blog, 20 Nov 03:14 UTC). Profile `materialize` for large pushes; set aside on 20 Nov.
 - Sandbox `fetch` jobs are almost all (~96%) the featured-sites check: `app/setup.js:277` runs `documentation/featured/check` on every process start (about 70 fetches, one at a time, ~30s), and `lock.cron("check-featured-sites")` runs it daily at 08:00. None run in sync. Skip the startup check when `featured.json` is less than a day old, so deploys don't fill the sandbox's fetch queue. Separately, `app/build/plugins/videoEmbeds/bandcamp.js:43` fetches each Bandcamp link on every build with no cache (unused in the last day): cache by URL with a TTL.
-- Google Drive walks the whole folder of every blog on a service account for each `changes.watch` webhook. Over 11 hours on 19 Nov, about 4% of Drive syncs found a change. Use `changes.list` with the page token watchChanges.js already gets, and sync only the blogs and files that changed. Trial on drivetest, 20 Nov: every edit showed in `changes.list` within about 2s of its change time (in place, atomic save, same-size, rename, delete as `trashed: true`), and rapid edits collapse to the latest state. Drive for desktop records two changes per edit, about 6s apart (the upload, then the local mtime put back). A webhook can arrive just before the change is listed, so check again once, a few seconds later, when a listing finds nothing. Being worked on in its own session ("Google Drive", 20 Nov).
 - Nothing warms the cache after a change goes live, so the first reader (usually the author) gets a cold render. Covered by the pre-building work in #2476; don't build a separate warmer.
 
 Deploy: on 20 Nov 2026 00:17 UTC (run https://github.com/blotcms/blot/actions/runs/44643019427, 2e49c7493) replacing blot-green failed the custom-domain certificate sweep (`cert_sweep` in proxy/deploy/common.sh): 69 domains in a row, all starting with "n", came back with no certificate, so a stretch of the 16-way `openssl s_client` handshakes timed out together for ~20 s. Blue had passed the same sweep on the same image two minutes before, there was no memory pressure, and a re-run passed. Find what stalls the handshakes (a new unit's auto-ssl lookups while its cache warms? Redis?), or retry a domain that times out once before counting it as changed.
@@ -111,12 +110,11 @@ Noticed during the async/await migration (#2559), 6 Nov 2026
 - `Entry.get`, `Entries.getRange`/`getRecent`/`getAll` call back with no error argument (`callback(entries)`), so errors are silently dropped and every caller needs a hand-written adapter (`blog/lib/models.js`, `entry/search.js`, ...). The migration gives them promise APIs (#2559); until then, treat an empty result there as "maybe an error".
 - The PR benchmark's render peak RSS is bimodal (about 470 MB or about 530 MB on the same code), so it flags "regressed" at random. Pin the runner, raise the iteration count, or compare against the same runner's previous run.
 - `POST /sites/<handle>/template/new` (`app/dashboard/site/template/index.js`) calls `Template.create(blogID, name, callback)` without the metadata argument, so it has always failed `create`'s argument check (a 500). The "new template" page only posts to `/new/upload`, so the route looks dead: delete it, or pass `{}` if something still uses it.
-- The Google Drive client retries a sync every few seconds for a blog that can't sync ("Sync init failed ... Cannot sync blog", 7 times in 30 s from both units for one blog on 6 Nov). Back off, or stop, when the blog is disabled or gone.
 - GitHub reports 20 open Dependabot alerts on master, 2 critical. Nothing in CI checks npm advisories (see the stale dependencies note further down).
 
 Follow-ups from the ESLint and Prettier setup (#2508)
 - `app/clients/icloud/macserver/httpClient/resync.js`: the `return` inside `finally` (when the debounce entry is gone) swallows a failed resync, so the caller sees success. Move the cleanup into an `if (entry)` and let the error through; needs a macserver deploy.
-- `app/clients/google-drive/util/download.js` and `scripts/tests/util/site.js` build a `new Promise(async ...)`: an exception thrown outside their own try/catch is lost and the promise never settles. Rewrite both as plain async functions (part of the callbacks to async/await migration).
+- `scripts/tests/util/site.js` builds a `new Promise(async ...)`: an exception thrown outside its own try/catch is lost and the promise never settles. Rewrite it as a plain async function (part of the callbacks to async/await migration).
 - `app/dashboard/site/import/helper/replace_embeds.js` threw a ReferenceError (no `cheerio` or `parse` in scope) on every call until #2508, so nothing can have been using it successfully: check whether the importer calls it at all, and delete it if not.
 - `app/documentation/tools/finder/index.js` threw on a `code.file` element without a type class (missing `determine_icon` require). Now fixed, so the docs may render icons that were never exercised; check the documentation pages once.
 
@@ -432,7 +430,6 @@ Fix benchmark build-corpus action issue
 Improve Google Drive sync
 - Fix Google Drive sync outage caused by Google account suspesion
   - Future fix to Google Drive client needs to never use the service account to create files (ask the user to handle the initial transfer)
-  - Revert 1958
   - Create simple config option to disable a given client when something like the Google Drive issue happens. Make it clear on the dashboard and docs that it's not working.
   - Add google drive kill switch (when platform goes down, etc.)
 - Fix bug with Google Drive client and [Stephen's large blog](https://mail.google.com/mail/u/0/#inbox/QgrcJHsBsbkNkMkkkMmLWBxRfnGnWPVwLHl)
@@ -440,8 +437,7 @@ Improve Google Drive sync
 - When you re-connect to Google Drive, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 - Fix bug with shared drive folders for [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBkLKSVzvjZLRSCpRJwcKBPlf)
 - Fix bug with Google Docs when disconnecting a site from Google Drive on Blot then reconnecting the site to Google Drive. We need to work out how to handle this (Google Docs are not real files)
-- Improve sync efficieny with option to target a specific folder or file first (Track ids in database) and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBspgLdtHcrTZqRcPTJFNzBbd) maybe use touch metadata method to force syncs periodically for hot files?
-  - Make it possible to short-circuit the full folder traversal and immediately begin at a specific file/subfolder
+- Tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBspgLdtHcrTZqRcPTJFNzBbd) Google Drive now syncs only the folders that changed, usually within a few seconds (#2847)
 - Improve html output for google docs and tell [Chuck](https://mail.google.com/mail/u/0/#inbox/FMfcgzQfBQFmTvLKzPkJrgsBTWZmQJWS)
   Issue: <p><img><br><img></p> should be <p><img></p><p><img></p>
 - Fix possible bug where it seems like sometimes the first sentence of Google Docs become titles unexpectedly – possibly a mis-identified title tag?
@@ -450,11 +446,6 @@ Improve Google Drive sync
 - Add a way for sync/build to accept a ctime as an option. We can't set this at the operating system level but google drive's API does return a createdTime value and we could use this as the true file's created date, rather than the date the file is made on the server
 - Google Drive `write` should use the best method for large file uploading
 - Add proper testing for this
-- Make Google Drive incremental sync efficient
-  - Store hash of their api responses
-  - Don’t touch disk
-  - Support huge folders with huge directories
-  - Start with recently changed files and dirs first
 
 Improve Dropbox sync
 - Batch dependent-entry rebuilds across a sync: a large asset delta batch rebuilt the same referring entry after each image (~13s per update), holding the folder lock for over three hours (2026-11-04). The stuck-lock alert should distinguish ongoing progress from a hung sync.
