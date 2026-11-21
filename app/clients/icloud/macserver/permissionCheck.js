@@ -16,6 +16,12 @@ const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
 
 const reported = new Map(); // blogID -> permission last told to Blot
 
+// A blog Blot doesn't sync (disabled, deleted, on another client) answers
+// 410 or 400. Ask again a day later, without logging: a blog enabled again
+// then gets its permission reported, View only included.
+const NOT_SYNCING_RETRY_MS = 24 * 60 * 60 * 1000;
+const notSyncingUntil = new Map(); // blogID -> when to ask again
+
 export const checkPermissions = async () => {
   let readOnly = 0;
   let changed = 0;
@@ -33,16 +39,15 @@ export const checkPermissions = async () => {
     if (!permission) continue;
     if (permission === "readOnly") readOnly++;
     if (reported.get(blogID) === permission) continue;
+    if (notSyncingUntil.get(blogID) > Date.now()) continue;
 
     try {
       await status(blogID, { permission });
       reported.set(blogID, permission);
       changed++;
     } catch (error) {
-      // A blog Blot doesn't sync (disabled, deleted, on another client):
-      // nothing to show, so don't ask again until the permission changes
       if (isNotSyncing(error)) {
-        reported.set(blogID, permission);
+        notSyncingUntil.set(blogID, Date.now() + NOT_SYNCING_RETRY_MS);
         continue;
       }
       console.error(
