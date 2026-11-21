@@ -1,6 +1,7 @@
 import { blogIDs, rootOf } from "./blogFolder.js";
 import sharePermission from "./util/sharePermission.js";
 import status from "./httpClient/status.js";
+import { isNotSyncing } from "./httpClient/notSyncing.js";
 import clfdate from "./util/clfdate.js";
 
 // An owner can switch a folder's sharing to "View only" after setup (which
@@ -38,6 +39,12 @@ export const checkPermissions = async () => {
       reported.set(blogID, permission);
       changed++;
     } catch (error) {
+      // A blog Blot doesn't sync (disabled, deleted, on another client):
+      // nothing to show, so don't ask again until the permission changes
+      if (isNotSyncing(error)) {
+        reported.set(blogID, permission);
+        continue;
+      }
       console.error(
         clfdate(),
         `Could not report the share permission of ${blogID}:`,
