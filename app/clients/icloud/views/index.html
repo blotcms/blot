@@ -364,8 +364,10 @@
 /* Each step has a ring rather than a number, joined to the next by a dotted
    line. A running step spins an arc around its ring; a finished one fills
    with a check and its text comes up to full strength */
+/* The first step's title sits on the same baseline as the line's label */
 .icloud-steps > ol {
   padding-left: 26px;
+  margin-top: 3px;
 }
 
 .icloud-steps > ol > li::before {
