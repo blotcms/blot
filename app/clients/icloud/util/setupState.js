@@ -112,6 +112,9 @@ module.exports = function setupState(account, options = {}) {
     // checklist, and adds the rest when the copy finishes
     joined:
       stage === "copying" || stage === "transferFailed" || stage === "complete",
+    // The site had no files to copy when the link was sent (routes/
+    // dashboard.js), so the checklist has no copying step
+    nothingToCopy: !!account && account.nothingToCopy === true,
     sharingLink:
       options.sharingLink !== undefined
         ? options.sharingLink

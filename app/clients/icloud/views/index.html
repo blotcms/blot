@@ -141,11 +141,13 @@
         </li>
         {{/setup.joined}}
 
+        {{^setup.nothingToCopy}}
         <li data-step="copy" class="{{#setup.joining}}todo{{/setup.joining}}{{#setup.copying}}active{{/setup.copying}}{{#setup.transferFailed}}problem{{/setup.transferFailed}}">
           {{#setup.copying}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.copying}}
           {{#setup.transferFailed}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.transferFailed}}
           <span class="step-title">Copying your site’s files</span>
         </li>
+        {{/setup.nothingToCopy}}
 
       </ol>
       {{#setup.slow}}
