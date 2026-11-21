@@ -261,6 +261,9 @@ async function runProbe({
     "docker create",
     `--name ${name}`,
     "--restart no",
+    // The image's health check asks OpenResty, which a probe doesn't run, so
+    // the host's check_docker_health.sh would restart it every few minutes
+    "--no-healthcheck",
     `--env-file ${ENV_FILE_ON_SERVER}`,
     ...Object.entries(environment).map(
       ([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`
