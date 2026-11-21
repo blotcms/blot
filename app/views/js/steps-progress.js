@@ -34,41 +34,50 @@ var known = {};
 
 function update() {
   var lists = document.querySelectorAll(".steps-progress");
+  // Lists that share a key (several on one page path) are remembered
+  // together: each one's steps read and write the same record
+  var before = {};
+  var next = {};
 
   for (var l = 0; l < lists.length; l++) {
     var key = keyFor(lists[l]);
-    var before = key in known ? known[key] : read(key);
+    if (!(key in before)) {
+      before[key] = key in known ? known[key] : read(key);
+      next[key] = {};
+    }
+
     var steps = lists[l].querySelectorAll(":scope > ol > li[data-step]");
-    var next = {};
     var delay = 0;
 
     for (var i = 0; i < steps.length; i++) {
       var step = steps[i];
       var name = step.getAttribute("data-step");
       var done = step.classList.contains("done");
-      next[name] = done;
+      var was = before[key];
+      next[key][name] = done;
 
-      if (done && before && before[name] === false) {
+      if (done && was && was[name] === false) {
         step.style.setProperty("--step-delay", delay + "s");
         step.classList.add("became-done");
         delay += STAGGER;
       }
     }
+  }
 
-    known[key] = next;
-    write(key, next);
+  for (var k in next) {
+    known[k] = next[k];
+    write(k, next[k]);
   }
 }
 
 function start() {
-  if (!document.querySelector(".steps-progress")) return;
-
   update();
 
+  // sync_status.js swaps the children of .live-updates on each re-render,
+  // which can bring a checklist in that the page didn't load with
   var live = document.querySelector(".live-updates");
   if (!live || !window.MutationObserver) return;
 
-  // sync_status.js swaps the children of .live-updates on each re-render
   new MutationObserver(function (records) {
     for (var i = 0; i < records.length; i++)
       if (records[i].type === "childList" && records[i].target === live)
