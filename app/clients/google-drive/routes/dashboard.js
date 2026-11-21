@@ -4,7 +4,7 @@ const disconnect = require("../disconnect");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const requestServiceAccount = require("clients/google-drive/serviceAccount/request");
 const parseBody = require("helper/bodyParser").urlencoded({ extended: false });
-const Blog = require("models/blog");
+const setClient = require("clients/util/setClient");
 
 const express = require("express");
 const dashboard = new express.Router();
@@ -165,7 +165,7 @@ dashboard
         return res.message(req.baseUrl, "Please enter a valid email address");
       }
 
-      await Blog.set(req.blog.id, { client: "google-drive" });
+      await setClient(req.blog, "google-drive");
 
       // Determine the service account ID we'll use to sync this blog.
       const serviceAccountId = await requestServiceAccount();

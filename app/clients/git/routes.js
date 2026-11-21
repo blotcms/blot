@@ -5,6 +5,7 @@ var disconnect = require("./disconnect");
 var repo = require("./repo");
 var sync = require("./sync");
 var Blog = require("models/blog");
+var setClient = require("clients/util/setClient");
 var debug = require("debug")("blot:clients:git:routes");
 var Express = require("express");
 var dashboard = Express.Router();
@@ -117,7 +118,7 @@ dashboard.post("/create", async function (req, res, next) {
       );
     }
 
-    await Blog.set(req.blog.id, { client: "git" });
+    await setClient(req.blog, "git");
 
     // Marked before the redirect, so the page it lands on shows the setup
     // (create.js marks it too, and clears it when the setup ends). A failure

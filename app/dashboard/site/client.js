@@ -5,6 +5,7 @@ const express = require("express");
 const client_routes = express.Router();
 const Path = require("path");
 const Blog = require("models/blog");
+const setClient = require("clients/util/setClient");
 const load = require("./load");
 const Sync = require("sync");
 const Fix = require("sync/fix");
@@ -61,8 +62,7 @@ client_routes
     if (req.body.client === req.blog.client) return res.redirect(redirect);
 
     try {
-      await clients[req.blog.client].disconnect(req.blog.id);
-      await Blog.set(req.blog.id, { client: req.body.client });
+      await setClient(req.blog, req.body.client);
 
       res.redirect(redirect);
     } catch (err) {

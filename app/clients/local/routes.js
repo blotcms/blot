@@ -1,7 +1,7 @@
 var Express = require("express");
 var setup = require("./setup");
 var disconnect = require("./disconnect");
-var Blog = require("models/blog");
+var setClient = require("clients/util/setClient");
 
 // It's important this is an Express router
 // and not an Express app for reasons unknown
@@ -12,7 +12,7 @@ var Dashboard = Express.Router();
 Dashboard.get("/", async function (req, res, next) {
   try {
     if (req.blog.client !== "local") {
-      await Blog.set(req.blog.id, { client: "local" });
+      await setClient(req.blog, "local");
       req.blog.client = "local";
     }
 

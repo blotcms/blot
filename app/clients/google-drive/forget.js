@@ -16,17 +16,19 @@ const database = require("./database");
 async function forget(blogID) {
   const account = await database.blog.get(blogID);
 
-  await database.blog.delete(blogID);
+  // The folder first: the account record is what names it, so a forget that
+  // stops between the two can be run again and still finds the folder
+  if (account?.folderId) {
+    let shared = false;
+    await database.blog.iterate(async (otherID, other) => {
+      if (otherID !== blogID && other.folderId === account.folderId)
+        shared = true;
+    });
+    if (!shared) await database.folder(account.folderId, blogID).reset();
+  }
+
   await database.dirty.forget(blogID);
-
-  if (!account?.folderId) return;
-
-  let shared = false;
-  await database.blog.iterate(async (otherID, other) => {
-    if (otherID !== blogID && other.folderId === account.folderId)
-      shared = true;
-  });
-  if (!shared) await database.folder(account.folderId, blogID).reset();
+  await database.blog.delete(blogID);
 }
 
 module.exports = forget;
