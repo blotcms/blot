@@ -2,7 +2,7 @@
 
 <div class="live-updates" data-throttle="300">
 
-{{#account}}{{> status-line}}{{/account}}
+{{> status-line}}
 
 {{! Once Blot's Mac has the folder, the page builds up to how it looks when
   setup is done: the folder, then the status, then the rest at the end }}
@@ -68,7 +68,7 @@
 {{/setup.otherProblem}}
 
 <div class="line icloud-setup-line">
-  <span class="label">Set up folder</span>
+  <span class="label">Folder on iCloud</span>
   <div class="center">
     <div class="steps icloud-steps">
       {{^setup.linked}}
