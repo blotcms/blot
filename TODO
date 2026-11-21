@@ -54,7 +54,6 @@ Security notes from the CodeQL triage, 15 Nov 2026 (#2707). None was flagged by 
 - `/questions/ask` (`app/documentation/questions/index.js`) emails the maintainer on each post, with only the proxy's per-IP limit in front of it. Add a per-address or per-IP throttle like the newsletter's (`app/documentation/news.js`).
 - Dashboard forms redirect to `req.body.redirect` unchecked (`app/dashboard/util/message.js` and the template save routes). CSRF protection keeps another site from posting it, but run it through `app/dashboard/log-in/safeThen.js` so it can only be a same-site path.
 - The scheduled entries list renders `{{{path}}}` unescaped (`app/views/dashboard/site/index.html`). Only the blog owner sees it, so it is self-XSS; switch to `{{path}}` unless the markup is needed.
-- The macserver routes take `blogID` from the request without checking its format. They sit behind the shared Authorization secret; validate it anyway.
 
 Readable place names for photos: turn a photo's GPS position into a place such as "Zion National Park", "near Springdale, Utah" or "Utah, United States", at build time and offline. Nearest town from GeoNames (towns of 1,000+ people, about 25MB), region and country from Natural Earth or GeoNames boundaries, and parks and nature reserves extracted once from OpenStreetMap with osmium into a spatial index. Show the park if the photo is inside one, else the nearest town within a few km, else the region, then the country. Store it on the entry (e.g. `exif.place = { name, locality, region, country }`) for templates like Keynote's camera card. Only when the blog's EXIF setting includes the position. Existing posts need a resumable backfill. Static location maps (Protomaps PMTiles in the bucket, rendered at build time in the sandbox's Chromium) could follow.
 
@@ -66,7 +65,6 @@ Noticed while flagging the existing placeholders, 12 Nov 2026 (#2675). The resyn
 - Two Dropbox blogs answer 401: their access was revoked, but they still count as connected. Find out whether the hourly validation and the dashboard tell the owner, and if not, mark the blog as needing to reconnect.
 - Three Dropbox blogs fail the whole resync on a 409 for one path (one was a `.url` file). See the Dropbox 409 entry below. A refused file should not stop the rest of a reset.
 - One Dropbox blog never finished its initial transfer, so its reset refuses to run. Find out how long it has been stuck and whether the owner was told.
-- One iCloud blog: the macserver's `/download` answers 500 for three files, every time. Check the macserver logs for why.
 
 Lift the file name length limit rather than trim names. The check behind it, `exceedsFilesystemPathLimits` in `app/clients/dropbox/util/constants.js`, dates from when blog folders lived on ext4: 255 bytes per name, 4096 per path. Folders are in S3 now:
 - Directory names and full paths no longer touch a local filesystem. S3's own limit is 1024 bytes for a key.
@@ -209,7 +207,6 @@ Git sync (#2259 PR 4): a sync interrupted part way leaves already-applied paths 
 
 Speed up ci / simplify proxy and e2e testing slightly
 
-Deploy macserver
 
 ---
 
@@ -390,7 +387,6 @@ Sync sweep digest (app/clients/util/syncReport.js) follow-ups
 - Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
 - iCloud: stop watching blogs that are disabled or gone (the macserver keeps uploading, gets 500 `Cannot sync blog` from sync/index.js and requests resyncs); have /upload answer 4xx so the macserver drops them
 - iCloud initial transfer: the verify pass now reruns twice with a pause, but still gives up with TRANSFER_INCOMPLETE if every attempt fails; make initialTransfer resumable (a stalled `ls` during the upload burst caused TRANSFER_INCOMPLETE). Check the macserver's new `ls took`/`Diagnostic snapshot`/`still running after kill` log lines for the root cause of the stalls
-- Don't report a stuck lock for a blog still in its initial setup/transfer (Dropbox transfer_pending, Drive preparing, iCloud transferringToiCloud) - a big first transfer can legitimately hold the lock >1h
 - Once-per-occurrence suppression treats "not seen this run" as cleared, including blogs that just weren't eligible that hour, so an ongoing error can be re-emailed after a quiet hour - remember issues until a successful walk/Fix actually clears them
 
 Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
@@ -513,38 +509,13 @@ Improve git sync
 - Rate limit authentication route?
 
 Improve iCloud sync
-- The dashboard needs more feedback as the macserver goes through iCloud setup: it would be useful to echo that the invite link is valid, we're waiting for the new folder, then that step can wait up to a minute while so the user understands what's happening?  the google drive client has a step based system
 - We need a plan for the suspension of the iCloud user as well... is the code resilient to data loss in this scenario?
   - Add icloud kill switch (when platform goes down, etc.)
-- iCloud server should periodically:
-  - quit safari (some error flow during auth sometimes opens it)
-  - close all system UI prompts (sometimes we get error for maybe accessing a revoked folder?)
 - Sync no-progress watchdog: app/sync/lock.js renews a folder lock for as long as the process lives, so any hung sync holds a blog's lock until a container restart (7h+ on 16 Oct, #2147). Track the sync's last progress (file processed / status update) and, after N minutes with none, stop renewing and fail the sync so the lock expires and the next resync or hourly check can run
-- iCloud macserver should periodically validate the local blog folders to ensure the client is still connected on blot and clean up any failed initial transfers (i.e. non blog_... folders)
-- If we need to resolve further bugs with sync drift:
-  - Implement additional parsing of modified paths from monitorer.js (brctl monitor -i) and reconcile these in addition to the fswatch module with the chokidar events for additional redundancy
-- Think about adding a more efficient endpoint to sync folder state. 
-  - use wisdom from rsync?
-  - the call to recursive list can take a way long time for large blogs (blog_3ec96xxx) so we need to increase timeout from 10 seconds to maybe multiple minutes...
-    - can we get rid of recursive list entirely if we simply call brctl download on the paths flagged by brctl monitor?
-  - don't hold sync lock the whole time? 
-  - fetch file list, compute changes, then lock, then apply?
-    - we'll need to update the call sites since the lock will be handled within
-- Daily icloud resync should also log how long the longest folder took to resync.
+- A resync holds the blog's lock for its whole walk. List the folder and work out the changes first, then take the lock only to apply them (the callers take the lock today).
 - Add stats on response time to iCloud server health check logging
   - maybe monitor response time average and email notify when it increases dramatically?
-- Smooth over setup process, add guidance for 'mode' of share panel (e.g. copy vs. collaborate) and maybe a screenshot
-- Add a progress bar to the dashboard during initial client setup. Use the Google Drive and Git client progress bar implementations as reference.
-- Make iCloud sync issue emails more useful with a script to compile the logs for a single site (including macserver)
-  - Add logging instrumentation of modified file paths to sync verification to aid in analysis of sync drift
-- Enforce a configurable timeout and cancellation for build jobs triggered by iCloud sync events to avoid the concurrent sync bug referenced in `sync/set.js`.
-- Start writing tests for icloud client
-- Start writing tests for macserver
 - Instead of our bespoke header modifiedTime we should use 'Last-Modified' and note we don't need to set this for route using res.download – res.download does this automatically
-- Rename /watch route to setup-complete
-- Remove recursiveReaddirRoute
-  - instead, to sync folder tree, whenever readddir is called, it should maintain an internal map of the last time a blog's subfolder tree was recursively checked, and call it? or maybe just call ls and brctl download on the specific folder? or is this too slow?
-- Investigate the EHOSTUNREACH erors on the main server when attempting to communicate with the mac server – some firewall issue with mac hosting provider?
 - Investigate: can we modify app/clients/icloud/routes/site/upload.js and app/clients/icloud/macserver/httpClient/upload.js to exchange a content hash? to prevent needless re-upload?
 - Investigate setting up paralell server with 'Advanced Data Protection' enabled so users with this setting can sync to Blot as well
 
@@ -756,7 +727,6 @@ Create a new template local '{{{system-css}}}' which merges `{{{appCSS}}}, {{{fo
 
 Secure deploy ssh on GitHub
 
-Add GitHub deploy button for macserver
 
 Add GitHub deploy button for openresty 
 
