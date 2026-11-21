@@ -4,9 +4,8 @@
 
 {{> status-line}}
 
-{{! Once Blot's Mac has the folder, the page builds up to how it looks when
-  setup is done: the folder, then the status, then the rest at the end }}
-{{#setup.joined}}
+{{! Once setup is done, the folder in place of the steps }}
+{{#setup.complete}}
 <div class="line icloud-folder-line">
   <span class="label">Folder on iCloud</span>
   <span class="center">
@@ -14,47 +13,14 @@
     {{#setup.folderLink}}
     <a class="icloud-open" href="{{setup.folderLink}}" target="_blank" rel="noopener">Open in iCloud <span class="icon-small-chevron-right"></span></a>
     {{/setup.folderLink}}
-    <span class="icloud-note">{{#setup.copying}}Files appear here as Blot copies them. This can take a few minutes, and you can leave this page.{{/setup.copying}}{{^setup.copying}}You can rename or move the folder.{{/setup.copying}}</span>
+    <span class="icloud-note">You can rename or move the folder.</span>
   </span>
 </div>
-{{/setup.joined}}
 
-{{#setup.complete}}
 {{> disconnect-line}}
 {{/setup.complete}}
 
-{{! The status line as the end shows it, with a bar while files are copied }}
-{{#setup.copying}}
-<a class="line sync-status-line" href="{{{dashboardBase}}}/client/activity">
-  <span class="label">Status</span>
-  <span class="center sync-status-center icloud-progress">
-    {{> sync-status}}
-  </span>
-</a>
-
-{{/setup.copying}}
-
-{{#setup.transferFailed}}
-<div class="line sync-status-line icloud-transfer-failed">
-  <span class="label">Status</span>
-  <span class="center">
-    <span class="icloud-problem"><span class="icon-small-alert"></span> Copying didn’t finish</span>
-    <span class="icloud-problem-detail">Nothing was removed from your folder or your site.</span>
-    <form action="{{{base}}}/retry-transfer" method="post" class="icloud-retry">
-      <input type="hidden" name="_csrf" value="{{csrftoken}}">
-      <div class="buttons">
-        <button type="submit">Try again</button>
-        <a href="{{{dashboardBase}}}/client/activity">View activity</a>
-      </div>
-    </form>
-    <!-- Keeps the page listening for status messages, so it follows a retry -->
-    <span class="icloud-listen" hidden>{{> sync-status}}</span>
-  </span>
-</div>
-
-{{/setup.transferFailed}}
-
-{{^setup.joined}}
+{{^setup.complete}}
 
 {{#setup.share}}
 {{#blog.healthIssue}}
@@ -151,6 +117,10 @@
         <li class="done" data-step="share"><span class="step-title">Share the folder</span></li>
         <li class="done" data-step="link"><span class="step-title">Paste the link</span></li>
 
+        {{#setup.joined}}
+        <li class="done" data-step="join"><span class="step-title">Joining your folder</span></li>
+        {{/setup.joined}}
+        {{^setup.joined}}
         <li data-step="join" class="{{^setup.slow}}active{{/setup.slow}}{{#setup.slow}}problem{{/setup.slow}}"{{^setup.slow}} data-slow-in="{{setup.slowInMs}}"{{/setup.slow}}>
           {{^setup.slow}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.slow}}
           {{#setup.slow}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.slow}}
@@ -169,16 +139,20 @@
           </form>
           {{/setup.slow}}
         </li>
+        {{/setup.joined}}
 
-        <li class="todo" data-step="copy">
+        <li data-step="copy" class="{{#setup.joining}}todo{{/setup.joining}}{{#setup.copying}}active{{/setup.copying}}{{#setup.transferFailed}}problem{{/setup.transferFailed}}">
+          {{#setup.copying}}<span class="step-icon"><span class="icloud-spinner" aria-hidden="true"></span></span>{{/setup.copying}}
+          {{#setup.transferFailed}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.transferFailed}}
           <span class="step-title">Copying your site’s files</span>
         </li>
 
       </ol>
-      {{#setup.stuck}}
-      <!-- Keeps the page listening for status messages, so it follows a retry -->
+      {{#setup.slow}}
+      <!-- Keeps the page listening for status messages, so it follows a retry
+        (a failed copy's status line below has its own) -->
       <span class="icloud-listen" hidden>{{> sync-status}}</span>
-      {{/setup.stuck}}
+      {{/setup.slow}}
       {{/setup.linked}}
     </div>
 
@@ -186,19 +160,40 @@
 </div>
 
 
-{{/setup.joined}}
+{{/setup.complete}}
 
-{{! While Blot's Mac joins the folder, the status line where it will be once
-  setup is done }}
-{{#setup.joining}}{{^setup.slow}}
-<a class="line sync-status-line icloud-join-status" href="{{{dashboardBase}}}/client/activity">
+{{! While Blot's Mac joins the folder and the files are copied, the status
+  line where it will be once setup is done, with a bar while files are
+  copied }}
+{{#setup.working}}
+<a class="line sync-status-line{{#setup.joining}} icloud-join-status{{/setup.joining}}" href="{{{dashboardBase}}}/client/activity">
   <span class="label">Status</span>
   <span class="center sync-status-center icloud-progress">
     {{> sync-status}}
-    <span class="icloud-join-waiting"><span class="loading"></span>Starting…</span>
+    {{#setup.joining}}<span class="icloud-join-waiting"><span class="loading"></span>Starting…</span>{{/setup.joining}}
   </span>
 </a>
-{{/setup.slow}}{{/setup.joining}}
+{{/setup.working}}
+
+{{#setup.transferFailed}}
+<div class="line sync-status-line icloud-transfer-failed">
+  <span class="label">Status</span>
+  <span class="center">
+    <span class="icloud-problem"><span class="icon-small-alert"></span> Copying didn’t finish</span>
+    <span class="icloud-problem-detail">Nothing was removed from your folder or your site.</span>
+    <form action="{{{base}}}/retry-transfer" method="post" class="icloud-retry">
+      <input type="hidden" name="_csrf" value="{{csrftoken}}">
+      <div class="buttons">
+        <button type="submit">Try again</button>
+        <a href="{{{dashboardBase}}}/client/activity">View activity</a>
+      </div>
+    </form>
+    <!-- Keeps the page listening for status messages, so it follows a retry -->
+    <span class="icloud-listen" hidden>{{> sync-status}}</span>
+  </span>
+</div>
+
+{{/setup.transferFailed}}
 
 {{! Cancel setup goes where Disconnect will be once setup is done }}
 {{#setup.linked}}
