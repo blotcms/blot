@@ -10,7 +10,8 @@
    - problem: <span class="step-icon problem"><span
      class="icon-small-alert"></span></span> in place of its ring
    Inside a step: .step-title, then .step-text or .step-problem. An
-   instruction's .step-text is full strength; a status step's is quieter.
+   instruction's .step-text, or a problem step's, is full strength; a status
+   step's is quieter.
 
    Give each <li> a data-step name and js/steps-progress.js animates a step
    that has finished since the page last showed it (the check fades in, the
@@ -80,11 +81,9 @@
   text-wrap: pretty;
 }
 
-/* An instruction step (no state class): its detail is read and followed */
-.steps-progress
-  > ol
-  > li:not(.todo):not(.active):not(.done):not(.problem)
-  .step-text {
+/* An instruction step (no state class), or one with a problem to fix: its
+   detail is read and followed */
+.steps-progress > ol > li:not(.todo):not(.active):not(.done) .step-text {
   color: var(--text-color);
 }
 
