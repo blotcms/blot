@@ -90,7 +90,7 @@
           <ol class="icloud-howto">
             <li>Right-click the folder in Finder and choose <span class="ui-label ui-menu">Share…</span></li>
             <li>Choose <span class="ui-label ui-select">Collaborate</span>, then <span class="ui-label ui-menu"><span class="mac-app mac-app-link"></span>Invite with Link</span>.</li>
-            <li>Add the address in <span class="ui-label">To</span>, then click <span class="ui-label">Copy Link</span>.</li>
+            <li>Add the address in <span class="ui-label">To</span>, then click <span class="ui-label ui-button">Copy Link</span>.</li>
           </ol>
 
           <details class="icloud-show-me">
@@ -550,6 +550,19 @@
   padding-right: 4px;
   border: 1px solid var(--border-color);
   background: var(--background-color);
+}
+
+/* A push button, as in a macOS sheet */
+.icloud-steps .ui-button {
+  display: inline-block;
+  padding: 0 8px;
+  border-radius: 5px;
+  line-height: 1.5;
+  white-space: nowrap;
+  background: linear-gradient(#fff, #f7f7f7);
+  box-shadow:
+    0 0 0 0.5px rgba(0, 0, 0, 0.18),
+    0 1px 1.5px rgba(0, 0, 0, 0.12);
 }
 
 /* Up and down chevrons, as on a pop-up menu */
