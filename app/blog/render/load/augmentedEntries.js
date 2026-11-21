@@ -21,6 +21,7 @@
 // Everything augment() derives from the request must be in the cache key
 // (augmentContext) or recomputed per request in shareEntries (absoluteURL).
 const EntryInstance = require("models/entry/instance");
+const { emptyCopy } = require("models/cache/clone");
 const { LRUCache } = require("lru-cache");
 const augment = require("./augment");
 const backlinksFor = require("./backlinks");
@@ -137,7 +138,9 @@ function copyForHost(value, blogURL) {
   }
 
   if (value instanceof EntryInstance) {
-    const entry = Object.assign(new EntryInstance(), value);
+    // Not Object.assign(new EntryInstance(), value): built that way an entry
+    // ends in V8's dictionary mode, ~5x the memory (see emptyCopy)
+    const entry = emptyCopy(value, true);
 
     if (entry.__augmented && typeof entry.url === "string") {
       entry.absoluteURL = augment.absoluteURL(blogURL, entry.url);
@@ -147,7 +150,7 @@ function copyForHost(value, blogURL) {
   }
 
   if (value && typeof value === "object") {
-    const copy = {};
+    const copy = emptyCopy(value, false);
     for (const key of Object.keys(value)) {
       copy[key] = copyForHost(value[key], blogURL);
     }
