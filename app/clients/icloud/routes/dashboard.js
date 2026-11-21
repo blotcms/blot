@@ -10,11 +10,20 @@ const parseBody = require("helper/bodyParser").urlencoded({ extended: false });
 const config = require("config"); // For accessing configuration values
 const establishSyncLock = require("sync/establishSyncLock");
 const { handleSyncLockError } = require("./lock");
-const Blog = require("models/blog");
+const setClient = require("clients/util/setClient");
 const health = require("clients/health");
 const { SETUP_FAILED, isSetupInProgress } = require("../error");
+const storageFolder = require("storage/folder");
 
 const VIEWS = require("path").resolve(__dirname + "/../views") + "/";
+
+// Whether the site has a file for setup to copy to iCloud: stops at the
+// first one, so it's quick however big the folder is. Asked when the link
+// is sent, since the setup later brings the iCloud folder's own files in
+const hasFilesToCopy = async (blogID) => {
+  for await (const _ of storageFolder.walk(blogID, "/")) return true;
+  return false;
+};
 
 const MACSERVER_URL = config.icloud.server_address; // The Macserver base URL from config
 const MACSERVER_AUTH = config.icloud.secret; // The Macserver Authorization secret from config
@@ -134,7 +143,7 @@ dashboard
       }
 
       try {
-        await Blog.set(req.blog.id, { client: "icloud" });
+        await setClient(req.blog, "icloud");
       } catch (setClientError) {
         return next(setClientError);
       }
@@ -157,9 +166,14 @@ dashboard
         return res.redirect(req.baseUrl);
       }
 
+      // The checklist leaves out "Copying your site's files" with nothing to
+      // copy. If the check fails, the step shows as before
+      const nothingToCopy = !(await hasFilesToCopy(blogID).catch(() => true));
+
       await database.store(blogID, {
         sharingLink,
         blotiCloudAccount,
+        nothingToCopy,
         error: null,
         setupErrorReason: null,
         acceptedSharingLink: false,

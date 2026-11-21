@@ -3,6 +3,7 @@ describe("icloud sweepOrphans", function () {
 
   // blogs: id -> blog (absent = deleted); accounts: ids with an account record
   function setup({ folders, blogs = {}, accounts = [] }) {
+    accounts = [...accounts];
     const removed = [];
     const deletedAccounts = [];
     const deps = {
@@ -11,6 +12,7 @@ describe("icloud sweepOrphans", function () {
       getBlog: async (id) => blogs[id],
       getAccount: async (id) => (accounts.includes(id) ? { id } : null),
       deleteAccount: async (id) => deletedAccounts.push(id),
+      listAccounts: async () => accounts,
       log: () => {},
     };
     return { deps, removed, deletedAccounts };
@@ -135,5 +137,50 @@ describe("icloud sweepOrphans", function () {
 
     expect(result.failed).toEqual(["blog_x"]);
     expect(result.removed).toEqual(["blog_y"]);
+  });
+
+  it("deletes account records with no folder whose blog is deleted or on another client", async function () {
+    const live = connected(20);
+    const { deps, removed, deletedAccounts } = setup({
+      folders: live,
+      blogs: {
+        ...icloudBlogs(live),
+        blog_dropbox: { client: "dropbox" },
+        blog_none: { client: "" },
+        blog_settingup: { client: "icloud" },
+      },
+      accounts: [
+        ...live,
+        "blog_deleted",
+        "blog_dropbox",
+        "blog_none",
+        "blog_settingup",
+      ],
+    });
+
+    const dry = await sweepOrphans({ deps });
+    expect(dry.staleAccounts).toEqual([
+      { blogID: "blog_deleted", reason: "blog deleted" },
+      { blogID: "blog_dropbox", reason: "client is dropbox" },
+    ]);
+    expect(deletedAccounts).toEqual([]);
+
+    const result = await sweepOrphans({ apply: true, deps });
+    expect(deletedAccounts).toEqual(["blog_deleted", "blog_dropbox"]);
+    expect(result.deletedAccounts).toEqual(["blog_deleted", "blog_dropbox"]);
+    expect(removed).toEqual([]);
+  });
+
+  it("deletes no account records when too many look stale", async function () {
+    const live = connected(20);
+    const gone = Array.from({ length: 11 }, (_, i) => "blog_gone" + i);
+    const { deps, deletedAccounts } = setup({
+      folders: live,
+      blogs: icloudBlogs(live),
+      accounts: [...live, ...gone],
+    });
+
+    await sweepOrphans({ apply: true, deps });
+    expect(deletedAccounts).toEqual([]);
   });
 });

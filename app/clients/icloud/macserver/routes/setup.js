@@ -27,7 +27,7 @@ const SETUP_ERRORS = {
   NO_ACCESS: "This folder isn’t shared yet. Share it, then try again.",
   PRIVATE: "This folder isn’t shared yet. Share it, then try again.",
   INVALID_LINK:
-    "This link doesn’t open an iCloud Drive folder. Copy it again from Finder, then try again.",
+    "This link doesn’t open an iCloud folder. Copy it again from Finder, then try again.",
   TIMEOUT:
     "iCloud took too long to share the folder. Check the link, then try again.",
   READ_ONLY:

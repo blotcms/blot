@@ -64,7 +64,7 @@ module.exports = async function (
     // lock's own "Synced" statuses can't be used for this: the validation
     // takes the lock too.
     await database.blog
-      .store(blogID, { lastSync: Date.now() })
+      .update(blogID, { lastSync: Date.now() })
       .catch((err) => log("Error stamping lastSync", err));
 
     let walkLock;

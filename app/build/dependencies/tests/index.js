@@ -652,6 +652,30 @@ describe("dependencies", function () {
     },
   });
 
+  // An empty src on the first element must not fail the build
+  should_get_dependencies({
+    html: '<img src=""><img src="photo.jpg">',
+    path: "/foo/post.txt",
+    metadata: {},
+    result: {
+      html: '<img src=""><img src="/foo/photo.jpg">',
+      metadata: {},
+      dependencies: ["/foo/photo.jpg"],
+    },
+  });
+
+  // An empty href after a normal src must not reuse the src attribute
+  should_get_dependencies({
+    html: '<img src="photo.jpg"><a href="">x</a>',
+    path: "/foo/post.txt",
+    metadata: {},
+    result: {
+      html: '<img src="/foo/photo.jpg"><a href="">x</a>',
+      metadata: {},
+      dependencies: ["/foo/photo.jpg"],
+    },
+  });
+
   // Should ignore metadata without paths
   should_get_dependencies({
     html: "Hello",

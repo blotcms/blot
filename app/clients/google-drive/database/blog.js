@@ -57,6 +57,25 @@ const blog = {
     }
   },
 
+  // Like store, for a blog that still has an account only. A background
+  // write (a sync's lastSync, the Activity poller's timestamp) can finish
+  // after the blog is disconnected, and must not bring its record back.
+  // Resolves to whether it wrote.
+  async update(blogID, data) {
+    const key = this._key(blogID);
+
+    if (typeof data !== "object" || data === null) {
+      throw new Error("Data must be a non-null object");
+    }
+
+    if (!(await client.exists(key))) return false;
+
+    for (const [field, value] of Object.entries(data)) {
+      await client.hSet(key, field, JSON.stringify(value));
+    }
+    return true;
+  },
+
   async get(blogID) {
     const key = this._key(blogID);
     const result = await client.hGetAll(key);

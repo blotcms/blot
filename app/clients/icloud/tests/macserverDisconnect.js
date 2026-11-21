@@ -361,20 +361,27 @@ describe("icloud macserver disconnect handling", function () {
   });
 
   describe("resync", function () {
-    it("gives up after one attempt when Blot answers 400", async function () {
-      respond = () => 400;
+    // 400: no iCloud account; 410: blog deleted, disabled or on another
+    // client (httpClient/notSyncing.js). Neither is asked twice: not by the
+    // fetch wrapper, nor by the resync's own retries
+    [400, 410].forEach(function (status) {
+      it(`gives up after one request when Blot answers ${status}`, async function () {
+        respond = () => status;
 
-      await resync(newBlogID(), "remove failed");
+        await resync(newBlogID(), "remove failed");
 
-      // one attempt is the fetch wrapper's own three tries; a second attempt
-      // (after the 1s backoff) would make six
-      expect(requests).toBe(3);
-      const logged = console.log.calls.allArgs().map((args) => args.join(" "));
-      expect(
-        logged.some((line) =>
-          /Resync not needed: blog .* is no longer connected/.test(line)
-        )
-      ).toBe(true);
+        expect(requests).toBe(1);
+        const logged = console.log.calls
+          .allArgs()
+          .map((args) => args.join(" "));
+        expect(
+          logged.some((line) =>
+            new RegExp(
+              `Resync not needed: Blot isn't syncing blog .* \\(${status}\\)`
+            ).test(line)
+          )
+        ).toBe(true);
+      });
     });
 
     [409, 423, 500].forEach(function (status) {

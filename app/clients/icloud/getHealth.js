@@ -14,5 +14,14 @@ module.exports = async function getHealth(blogID) {
 
   if (isSetupInProgress(account)) return health.syncing();
 
+  // Reported by the macserver's share permission check
+  if (account.permission === "readOnly")
+    return health.error([
+      {
+        code: health.CODES.VIEW_ONLY,
+        since: account.permissionSince || undefined,
+      },
+    ]);
+
   return health.ok();
 };

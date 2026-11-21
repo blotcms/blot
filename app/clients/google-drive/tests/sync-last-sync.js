@@ -51,7 +51,7 @@ function load({
     "../database": {
       blog: {
         get: async () => account,
-        store: async (blogID, data) => {
+        update: async (blogID, data) => {
           events.push("store");
           if (storeError) throw storeError;
           stored.push({ blogID, data });

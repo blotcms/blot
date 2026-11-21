@@ -1,15 +1,30 @@
 const EntryInstance = require("models/entry/instance");
 
+// A shallow copy for the walks below to fill in, made so V8 keeps it in
+// fast mode (#2795). Built a key at a time, an object past ~16 keys ends in
+// dictionary mode: a 30-field entry then costs ~1,700 bytes instead of ~300,
+// and the copies here are what the render caches hold and every hit makes.
+// Spreading the source copies its shape in one go, and with __proto__ in the
+// same literal an EntryInstance stays one (instanceof Entry still holds).
+// Values are replaced after, in place, which adds no keys. An object with
+// symbol keys, which spread would copy and Object.keys skips, is copied the
+// old way so the result has exactly the same keys as before.
+function emptyCopy(value, preserveEntryInstances) {
+  const asEntry = preserveEntryInstances && value instanceof EntryInstance;
+  if (Object.getOwnPropertySymbols(value).length)
+    return asEntry ? new EntryInstance() : {};
+  return asEntry
+    ? { __proto__: EntryInstance.prototype, ...value }
+    : { ...value };
+}
+
 function cloneDeep(value, { preserveEntryInstances = false } = {}) {
   if (Array.isArray(value)) {
     return value.map((item) => cloneDeep(item, { preserveEntryInstances }));
   }
 
   if (value && typeof value === "object") {
-    const clone =
-      preserveEntryInstances && value instanceof EntryInstance
-        ? new EntryInstance()
-        : {};
+    const clone = emptyCopy(value, preserveEntryInstances);
 
     Object.keys(value).forEach((key) => {
       clone[key] = cloneDeep(value[key], { preserveEntryInstances });
@@ -68,9 +83,7 @@ function prepareCacheValue(value, { preserveEntryInstances = false } = {}) {
     seen.add(input);
     const payload = Array.isArray(input)
       ? []
-      : preserveEntryInstances && input instanceof EntryInstance
-        ? new EntryInstance()
-        : {};
+      : emptyCopy(input, preserveEntryInstances);
     let size = Array.isArray(input) ? 16 : 24;
 
     for (const key of Object.keys(input)) {
@@ -87,4 +100,4 @@ function prepareCacheValue(value, { preserveEntryInstances = false } = {}) {
   return Object.freeze(visit(value));
 }
 
-module.exports = { cloneDeep, deepFreeze, prepareCacheValue };
+module.exports = { cloneDeep, deepFreeze, prepareCacheValue, emptyCopy };

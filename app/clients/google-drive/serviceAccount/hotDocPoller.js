@@ -735,7 +735,7 @@ class HotDocPoller {
     try {
       // For the hourly validation (see ../validate.js), as sync/index.js does
       await database.blog
-        .store(item.blogID, { lastSync: Date.now() })
+        .update(item.blogID, { lastSync: Date.now() })
         .catch((err) => this.log("last-sync-failed", { message: err.message }));
 
       const plan = await this.planSingleDoc(item);

@@ -261,6 +261,9 @@ async function runProbe({
     "docker create",
     `--name ${name}`,
     "--restart no",
+    // The image's health check asks OpenResty, which a probe doesn't run, so
+    // the host's check_docker_health.sh would restart it every few minutes
+    "--no-healthcheck",
     `--env-file ${ENV_FILE_ON_SERVER}`,
     ...Object.entries(environment).map(
       ([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`
@@ -364,7 +367,15 @@ async function runProbe({
         `Starting ${name}; the app takes a minute or so to load before the probe prints anything...`
       );
       await new Promise((resolve) => {
-        const child = spawn("ssh", ["blot", remoteCommand], {
+        // Keepalives, so a connection that stalls rather than drops still
+        // ends here within a minute and the probe is checked on below
+        const keepalive = [
+          "-o",
+          "ServerAliveInterval=15",
+          "-o",
+          "ServerAliveCountMax=4",
+        ];
+        const child = spawn("ssh", [...keepalive, "blot", remoteCommand], {
           stdio: ["ignore", "inherit", "inherit"],
         });
         child.on("exit", resolve);
@@ -375,9 +386,26 @@ async function runProbe({
       const running = await sshCommand(
         `docker inspect ${name} --format '{{.State.Running}}' 2>/dev/null || true`
       );
+      // Long-lived ssh sessions from some environments are cut after a few
+      // minutes, while short commands still work: so rather than stop the
+      // probe, check on it with short commands until it finishes by itself
+      // (it has its own memory limit and ends when its requests do). Ctrl-C
+      // still stops it.
       if (running === "true" && !stopping) {
-        console.log(`\nLost the connection to ${name} while it was running.`);
-        stop();
+        console.log(
+          `\nLost the connection to ${name} while it was running; checking on it every 15s until it exits (Ctrl-C stops it).`
+        );
+        while (!stopping) {
+          await new Promise((resolve) => setTimeout(resolve, 15000));
+          const still = await sshCommand(
+            `docker inspect ${name} --format '{{.State.Running}}' 2>/dev/null || true`
+          ).catch(() => "true");
+          if (still !== "true") break;
+          const last = await sshCommand(
+            `docker logs --tail 200 ${name} 2>&1 | grep 'inflight=' | tail -1 || true`
+          ).catch(() => "");
+          if (last) console.log(last);
+        }
       }
       await stopping;
       await sshCommand(`docker wait ${name} > /dev/null 2>&1 || true`);

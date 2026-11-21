@@ -1,62 +1,138 @@
 {{> status-line}}
 
-<style type="text/css">
-  span.link[onclick] {
-    cursor: pointer;
-    margin-left: 1rem
-  }
-  span.link[onclick]:hover {
-    text-decoration: underline;
-  }
-  span.link[onclick]:active {
-    opacity: 0.8
-  }
-
-
-  .copier {margin-top: 4px;}
-  
-</style>
 <div class="live-updates">
   {{#repo}}
-  {{#createInProgress}}
-     <div class="line" >
-  <span class="label">Repository URL</span>
-  <span class="center">Setting up repository...</span>
+  <div class="line git-setup-line">
+    <span class="label">Repository</span>
+    <div class="center">
+      <div class="steps steps-progress git-steps" data-steps-key="git-steps:{{{base}}}">
+        <ol>
+
+          {{#createInProgress}}
+          <li data-step="create" class="active">
+            <span class="step-icon"><span class="steps-spinner" aria-hidden="true"></span></span>
+            <span class="step-title">Creating your repository</span>
+            <span class="step-text">This page updates when it’s ready.</span>
+          </li>
+          <li data-step="clone" class="todo"><span class="step-title">Clone it to your computer</span></li>
+          <li data-step="add" class="todo"><span class="step-title">Add your files</span></li>
+          <li data-step="push" class="todo"><span class="step-title">Push to publish</span></li>
+          {{/createInProgress}}
+
+          {{^createInProgress}}
+          {{! Blot knows the repository exists. It doesn't record a push, so the
+            steps after are instructions, not progress }}
+          <li data-step="create" class="done">
+            <span class="step-title">Create a repository on Blot</span>
+          </li>
+
+          <li data-step="clone">
+            <span class="step-title">Clone it to your computer</span>
+            <span class="copy-box">
+              <span class="copy-box-value code" id="repo_url">git clone https://{{host}}/clients/git/end/{{blog.handle}}.git</span>
+              <button class="copy" data-copy="git clone https://{{host}}/clients/git/end/{{blog.handle}}.git"><span class="icon-copy"></span> Copy</button>
+            </span>
+            <span class="step-text">Git asks for a username and password the first time:</span>
+            <dl class="git-credentials">
+              <div class="git-credential">
+                <dt>Username</dt>
+                <dd class="copy-box">
+                  <span class="copy-box-value code" id="repo_username">{{user.email}}</span>
+                  <button class="copy" data-copy="{{user.email}}"><span class="icon-copy"></span> Copy</button>
+                </dd>
+              </div>
+              <div class="git-credential">
+                <dt>Password</dt>
+                <dd class="copy-box">
+                  <span class="copy-box-value code" id="repo_password">{{token}}</span>
+                  <button class="copy" data-copy="{{token}}"><span class="icon-copy"></span> Copy</button>
+                  <a class="git-reset" href="{{{base}}}/reset-password">Reset</a>
+                </dd>
+              </div>
+            </dl>
+          </li>
+
+          <li data-step="add">
+            <span class="step-title">Add your files</span>
+            <span class="step-text">Put your posts, pages and images in the folder Git made, then commit them:</span>
+            <span class="copy-box">
+              <span class="copy-box-value code">git add -A &amp;&amp; git commit -m "First post"</span>
+              <button class="copy" data-copy='git add -A &amp;&amp; git commit -m "First post"'><span class="icon-copy"></span> Copy</button>
+            </span>
+          </li>
+
+          <li data-step="push">
+            <span class="step-title">Push to publish</span>
+            <span class="copy-box">
+              <span class="copy-box-value code">git push origin master</span>
+              <button class="copy" data-copy="git push origin master"><span class="icon-copy"></span> Copy</button>
+            </span>
+            <span class="step-text">Blot publishes your changes each time you push to the <code>master</code> branch.</span>
+          </li>
+          {{/createInProgress}}
+
+        </ol>
       </div>
-  {{/createInProgress}}
-  {{^createInProgress}}
-
-    <div class="line" >
-  <span class="label">Repository URL</span>
-  <span class="center">
-    <span id="repo_url">https://{{host}}/clients/git/end/{{blog.handle}}.git</span>
-    <button class="copy" data-copy="https://{{host}}/clients/git/end/{{blog.handle}}.git"><span class="icon-copy"></span> Copy</button>
-  </span>
-</div>  
-
-<div class="line" >
-  <span class="label">Username</span>
-  <span class="center">
-    <span id="repo_username">{{user.email}}</span>
-    <button class="copy" data-copy="{{user.email}}"><span class="icon-copy"></span> Copy</button>
-  </span>
-</div>  
-
-<div class="line" >
-  <span class="label">Password</span>
-  <span class="center">
-    <span id="repo_password">{{token}}</span>
-    <button class="copy" data-copy="{{token}}"><span class="icon-copy"></span> Copy</button>
-    <a style="margin-left: 12px;font-size: 14px;" class="link" href="{{{base}}}/reset-password">Reset</a>
-  </span>
-</div>  
-
-<div class="line">
-  <span class="label">Branch</span>
-  <span class="center">master</span>
-</div>  
-  {{/createInProgress}}
+    </div>
+  </div>
   {{/repo}}
 
   {{> disconnect-line}}
 </div>
+
+<style>
+/* Beside its label like every other line, and above it on a phone */
+.git-setup-line .label {
+  flex-basis: 30%;
+}
+
+.git-setup-line .center {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .git-setup-line .label,
+  .git-setup-line .center {
+    flex-basis: 100%;
+  }
+}
+
+.git-credentials {
+  margin: 6px 0 2px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 6px 12px;
+  align-items: center;
+}
+
+.git-credential {
+  display: contents;
+}
+
+.git-credential dt {
+  font-size: 13px;
+  color: var(--medium-text-color);
+}
+
+.git-credential dd.copy-box {
+  margin: 0;
+  justify-self: start;
+}
+
+.git-reset {
+  font-size: 13px;
+  margin-right: 6px;
+}
+
+@media (max-width: 600px) {
+  .git-credentials {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .git-credential dt {
+    margin-top: 4px;
+  }
+}
+</style>

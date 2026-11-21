@@ -4,6 +4,7 @@ const {
   SETUP_ERROR,
   clearAllErrorFields,
   clearHealthErrorFields,
+  isSetupError,
 } = require("../database/error");
 const clfdate = require("helper/clfdate");
 const config = require("config");
@@ -11,6 +12,16 @@ const config = require("config");
 // Maximum time to wait for the user to complete the setup
 // before aborting and requiring them to start again
 const SETUP_TIMEOUT = 1000 * 60 * 60 * 2; // 2 hours
+
+// Whether a setup has run for longer than SETUP_TIMEOUT. A setup that timed
+// out keeps preparing: true beside its stored error (the dashboard shows the
+// failure from that pair), so restartSetupProcesses skips it: restarted, it
+// would only time out again, on every start of every process. One that ran
+// out of time with no error stored (its process died mid-setup) is restarted
+// once, so it fails and the dashboard says so.
+const timedOut = (account, now = Date.now()) =>
+  Boolean(account?.startedSetup) &&
+  now - Number(account.startedSetup) > SETUP_TIMEOUT;
 
 // Cancelling setup (disconnect) deletes the account hash outright. The
 // background polling loop below writes status fields (nonEmptyFolderShared,
@@ -20,7 +31,7 @@ const SETUP_TIMEOUT = 1000 * 60 * 60 * 2; // 2 hours
 async function storeIfAccountExists(blogID, data) {
   const account = await database.blog.get(blogID);
   if (!account) return null;
-  await database.blog.store(blogID, data);
+  if (!(await database.blog.update(blogID, data))) return null;
   return account;
 }
 
@@ -47,7 +58,7 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
     if (!preparing) throw new Error("Permission to set up revoked");
 
     // if the setup process has been running for too long then abort
-    if (startedSetup && Date.now() - startedSetup > SETUP_TIMEOUT) {
+    if (timedOut({ startedSetup })) {
       throw new Error("Setup timed out");
     }
 
@@ -137,17 +148,13 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
       error = null;
     }
 
-    // check that the blog still exists in the database
-    const existingBlog = await database.blog.get(blog.id);
-
-    if (existingBlog) {
-      await database.blog.store(blog.id, {
-        error,
-        folderId: null,
-        folderName: null,
-        ...clearHealthErrorFields(),
-      });
-    }
+    // Only if the account still exists: a disconnect meanwhile deleted it
+    await database.blog.update(blog.id, {
+      error,
+      folderId: null,
+      folderName: null,
+      ...clearHealthErrorFields(),
+    });
   } finally {
     if (sync && typeof sync.done === "function") {
       await sync.done(null);
@@ -392,7 +399,9 @@ async function restartSetupProcesses() {
         // And it has a service account ID
         account?.serviceAccountId &&
         // And it doesn't have a folder ID yet
-        !account?.folderId
+        !account?.folderId &&
+        // And it hasn't already run out of time and failed
+        !(timedOut(account) && isSetupError(account.error))
       ) {
         blogsToRestart.push({ blogID, account });
       }
@@ -485,3 +494,4 @@ async function restartSetupProcesses() {
 
 module.exports = finishSetup;
 module.exports.restartSetupProcesses = restartSetupProcesses;
+module.exports.timedOut = timedOut;

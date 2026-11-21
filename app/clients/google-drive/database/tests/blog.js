@@ -21,6 +21,22 @@ describe("google drive database.blog", function () {
     expect(updatedAccount).toEqual({ foo: "bar", baz: null, bat: 123 });
   });
 
+  it("updates an account that exists, and never brings back a deleted one", async function () {
+    const blogID = "blog_" + Date.now().toString();
+    await database.blog.store(blogID, { foo: "bar" });
+
+    expect(await database.blog.update(blogID, { lastSync: 1 })).toBe(true);
+    expect(await database.blog.get(blogID)).toEqual({
+      foo: "bar",
+      lastSync: 1,
+    });
+
+    await database.blog.delete(blogID);
+    expect(await database.blog.update(blogID, { lastSync: 2 })).toBe(false);
+    expect(await database.blog.get(blogID)).toBe(null);
+    expect(await database.blog.list()).not.toContain(blogID);
+  });
+
   it("can list all blog IDs", async function () {
     const blogID1 = "blog_" + Date.now().toString();
     const blogID2 = "blog_" + (Date.now() + 1).toString();
