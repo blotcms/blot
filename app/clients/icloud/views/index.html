@@ -8,11 +8,11 @@
   setup is done: the folder, then the status, then the rest at the end }}
 {{#setup.joined}}
 <div class="line icloud-folder-line">
-  <span class="label">Folder on iCloud Drive</span>
+  <span class="label">Folder on iCloud</span>
   <span class="center">
     <span class="icloud-folder-name"><span class="icon-folder"></span> {{#setup.folderName}}{{setup.folderName}}{{/setup.folderName}}{{^setup.folderName}}Your shared folder{{/setup.folderName}}</span>
     {{#setup.folderLink}}
-    <a class="icloud-open" href="{{setup.folderLink}}" target="_blank" rel="noopener">Open in iCloud Drive <span class="icon-small-chevron-right"></span></a>
+    <a class="icloud-open" href="{{setup.folderLink}}" target="_blank" rel="noopener">Open in iCloud <span class="icon-small-chevron-right"></span></a>
     {{/setup.folderLink}}
     <span class="icloud-note">{{#setup.copying}}Files appear here as Blot copies them. This can take a few minutes, and you can leave this page.{{/setup.copying}}{{^setup.copying}}You can rename or move the folder.{{/setup.copying}}</span>
   </span>
@@ -75,7 +75,7 @@
       <ol>
 
         <li>
-          <span class="step-title">Create a folder in iCloud Drive</span>
+          <span class="step-title">Create a folder in iCloud</span>
         </li>
 
         <li class="{{#setup.shareProblem}}problem{{/setup.shareProblem}}">

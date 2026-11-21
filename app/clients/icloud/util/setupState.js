@@ -26,7 +26,7 @@ const LINK_PROBLEMS = {
 };
 
 const FORMAT_PROBLEM =
-  "That isn’t an iCloud Drive folder link. Use Copy Link in Finder.";
+  "That isn’t an iCloud folder link. Use Copy Link in Finder.";
 
 const SLOW_JOIN_MS = 2 * 60 * 1000;
 
