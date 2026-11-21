@@ -14,6 +14,8 @@ describe("git client dashboard: a setup in progress", function () {
 
   beforeEach(async function () {
     var blog = this.blog;
+    var ctx = this;
+    ctx.rendered = null;
 
     this.app = Express()
       .use(function (req, res, next) {
@@ -23,8 +25,10 @@ describe("git client dashboard: a setup in progress", function () {
         res.message = function () {
           res.sendStatus(200);
         };
-        // The page itself: its rendering is not what is checked here
-        res.render = function () {
+        // The page itself: its rendering is not what is checked here, only
+        // whether it shows the setup as still running
+        res.render = function (view, locals) {
+          ctx.rendered = Object.assign({}, res.locals, locals);
           res.sendStatus(200);
         };
         next();
@@ -90,6 +94,21 @@ describe("git client dashboard: a setup in progress", function () {
 
     expect(await isCreating(this.blog.id)).toBe(false);
     expect(await landing(this)).toBe("page");
+  });
+
+  it("shows the repository as being created only until it exists, whatever the owner's status says", async function () {
+    await setCreating(this.blog.id);
+    await setStatus(this.blog.owner, "createComplete");
+
+    expect(await landing(this)).toBe("page");
+    expect(this.rendered.createInProgress).toBe(true);
+
+    await require("clients/git/create")(this.blog);
+    // A setup for another of the owner's blogs
+    await setStatus(this.blog.owner, "createInProgress");
+
+    expect(await landing(this)).toBe("page");
+    expect(this.rendered.createInProgress).toBe(false);
   });
 
   it("is cleared by a disconnect, with the owner's status", async function () {
