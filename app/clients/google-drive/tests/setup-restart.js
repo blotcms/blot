@@ -132,10 +132,10 @@ describe("google drive setup across a restart", function () {
     expect(accounts.blog_a.folderId).toBe("f1");
   });
 
-  it("keeps the folder of a setup that timed out after storing it", async function () {
-    // A blog left preparing by an old setup, which synced with its folder
-    // for days because syncs used to ignore preparing
-    const account = { ...copying(), startedSetup: Date.now() - 25 * 3600e3 };
+  it("marks connected a blog an old setup left preparing, which has synced since", async function () {
+    // Before #2922 syncs ignored preparing, so this blog synced for days
+    const startedSetup = Date.now() - 5 * 24 * 3600e3;
+    const account = { ...copying(), startedSetup, lastSync: Date.now() };
     const { setup, accounts, events } = load({ account });
 
     await setup.restartSetupProcesses();
@@ -146,6 +146,24 @@ describe("google drive setup across a restart", function () {
     expect(accounts.blog_a.preparing).toBe(false);
     expect(accounts.blog_a.folderId).toBe("f1");
     expect(accounts.blog_a.folderName).toBe("Blog");
+    expect(accounts.blog_a.error).toBeUndefined();
+  });
+
+  it("keeps resuming a copy that has never synced, however old", async function () {
+    // A lastSync from before this setup started is the old folder's
+    const startedSetup = Date.now() - 5 * 24 * 3600e3;
+    const account = {
+      ...copying(),
+      startedSetup,
+      lastSync: startedSetup - 1000,
+    };
+    const { setup, accounts, events } = load({ account });
+
+    await setup.restartSetupProcesses();
+
+    expect(events).toEqual(["lock", "copy", "store preparing", "release"]);
+    expect(accounts.blog_a.preparing).toBe(false);
+    expect(accounts.blog_a.folderId).toBe("f1");
     expect(accounts.blog_a.error).toBeUndefined();
   });
 
@@ -164,13 +182,11 @@ describe("google drive setup across a restart", function () {
     expect(accounts.blog_a.folderId).toBe(null);
   });
 
-  it("gives the copy longer than the wait for a folder", function () {
+  it("times out the wait for a folder, never the copy", function () {
     const { timedOut } = load({ account: copying() }).setup;
-    const threeHoursAgo = Date.now() - 3 * 3600e3;
-    expect(timedOut({ startedSetup: threeHoursAgo })).toBe(true);
-    expect(timedOut({ startedSetup: threeHoursAgo, folderId: "f1" })).toBe(
-      false
-    );
+    const longAgo = Date.now() - 30 * 24 * 3600e3;
+    expect(timedOut({ startedSetup: longAgo })).toBe(true);
+    expect(timedOut({ startedSetup: longAgo, folderId: "f1" })).toBe(false);
   });
 });
 

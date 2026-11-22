@@ -14,25 +14,32 @@ const config = require("config");
 // before aborting and requiring them to start again
 const SETUP_TIMEOUT = 1000 * 60 * 60 * 2; // 2 hours
 
-// Once Blot has the folder, the copy of the site's files into it may take
-// longer than that on a large site, and a deploy part way through starts it
-// again (restartSetupProcesses). This bounds the restarts.
-const COPY_TIMEOUT = 1000 * 60 * 60 * 24; // 24 hours
-
 // How long a setup waits before trying the folder lock again
 const LOCK_RETRY_MS = 5000;
 
-// Whether a setup has run for longer than its timeout: SETUP_TIMEOUT until it
-// has a folder, COPY_TIMEOUT while it copies the site's files. A setup that
-// timed out keeps preparing: true beside its stored error (the dashboard
-// shows the failure from that pair), so restartSetupProcesses skips it:
-// restarted, it would only time out again, on every start of every process.
-// One that ran out of time with no error stored (its process died
+// Whether a setup has waited longer than SETUP_TIMEOUT for a folder. Once it
+// has one, the copy of the site's files never times out: a deploy part way
+// through starts it again (restartSetupProcesses), and a copy run again only
+// uploads what is missing. Failing it instead would leave the site's files
+// half copied, and connecting it would let a sync remove the rest.
+// A setup that timed out keeps preparing: true beside its stored error (the
+// dashboard shows the failure from that pair), so restartSetupProcesses skips
+// it: restarted, it would only time out again, on every start of every
+// process. One that ran out of time with no error stored (its process died
 // mid-setup) is restarted once, so it fails and the dashboard says so.
 const timedOut = (account, now = Date.now()) =>
+  !account?.folderId &&
   Boolean(account?.startedSetup) &&
-  now - Number(account.startedSetup) >
-    (account.folderId ? COPY_TIMEOUT : SETUP_TIMEOUT);
+  now - Number(account.startedSetup) > SETUP_TIMEOUT;
+
+// Before #2922 syncs ignored preparing, so a setup that never cleared it left
+// a blog that synced with its folder all the same. Only a sync stamps
+// lastSync, and none runs while preparing now (sync/index.js and the hot doc
+// poller check it first), so a lastSync after the setup started means the
+// blog was already syncing: Drive has its files, and it is connected.
+const syncedSinceSetup = (account) =>
+  Boolean(account?.folderId) &&
+  Number(account.lastSync) > Number(account.startedSetup || 0);
 
 // Errors which mean this setup should stop and leave the account as it is:
 // someone changed the email or service account and a new setup has started,
@@ -100,9 +107,26 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
   };
 
   try {
+    const initial = await checkWeCanContinue();
+
+    if (syncedSinceSetup(initial)) {
+      console.log(
+        clfdate(),
+        "Google Drive Client",
+        "Setup left preparing on a blog that syncs, marking it connected",
+        blog.id
+      );
+      await storeIfAccountExists(blog.id, {
+        preparing: false,
+        nonEmptyFolderShared: false,
+        nonEditorPermissions: false,
+      });
+      return;
+    }
+
     // A setup whose copy was interrupted (a deploy, say) already has its
     // folder: it only needs the copy run again
-    const resuming = Boolean((await checkWeCanContinue()).folderId);
+    const resuming = Boolean(initial.folderId);
 
     // Phase A: wait for an eligible shared folder without the sync lock
     while (!resuming && !folderId) {
@@ -185,29 +209,6 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
     // account for the other setup, or for the next process to resume
     // (restartSetupProcesses)
     if (STOPPED.has(e.message) || isLockError(e)) return;
-
-    // A setup that had its folder for longer than COPY_TIMEOUT is a blog
-    // that has been syncing with that folder. Before #2922 syncs ignored
-    // preparing, so a setup that never cleared it still synced, and Drive
-    // already has its files. Clear preparing and keep the folder: nulling
-    // folderId would turn its sync off.
-    if (e.message === "Setup timed out") {
-      const account = await database.blog.get(blog.id);
-      if (account?.folderId) {
-        console.log(
-          clfdate(),
-          "Google Drive Client",
-          "Setup timed out after storing its folder, keeping the folder",
-          blog.id
-        );
-        await database.blog.update(blog.id, {
-          preparing: false,
-          nonEmptyFolderShared: false,
-          nonEditorPermissions: false,
-        });
-        return;
-      }
-    }
 
     // Only if the account still exists: a disconnect meanwhile deleted it
     await database.blog.update(blog.id, {
