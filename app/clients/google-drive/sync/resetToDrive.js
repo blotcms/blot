@@ -191,7 +191,15 @@ module.exports = async (blogID, publish, options = {}) => {
               body: folder.createReadStream(blogID, path),
             },
           });
-        } else if (!existsOnRemote) {
+        } else if (existsOnRemote) {
+          // Already on Drive: a setup that was interrupted part way and run
+          // again (routes/setup.js) finds the files it copied the first time.
+          // reset() above dropped their mapping, so record it again.
+          await set(existsOnRemote.id, path, {
+            modifiedTime,
+            isDirectory: false,
+          });
+        } else {
           await checkWeCanContinue();
           publishTransferStatus(progress, publish, "Transferring", path);
           const { data } = await drive.files.create({

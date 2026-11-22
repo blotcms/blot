@@ -101,7 +101,8 @@ module.exports = async () => {
     .then((first) => first && refresh())
     .catch((err) => console.error(prefix(), "Startup refresh failed", err));
 
-  // Re-watch for new folders for sites in the middle of the setup process.
+  // Re-watch for new folders for sites in the middle of the setup process,
+  // and resume copies of site files that a restart interrupted.
   // Once per deploy across all processes.
   onceAtStartup("google-drive-restart-setup", () =>
     restartSetupProcesses()
