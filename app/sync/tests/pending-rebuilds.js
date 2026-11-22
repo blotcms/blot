@@ -44,9 +44,13 @@ describe("pending rebuilds", function () {
   });
 
   it("rejects a flag it doesn't know", async function () {
-    await expectAsync(
-      pendingRebuilds.queue(this.blog.id, ["rebuild", "everything"])
-    ).toBeRejectedWithError(TypeError);
+    let error;
+    try {
+      await pendingRebuilds.queue(this.blog.id, ["rebuild", "everything"]);
+    } catch (err) {
+      error = err;
+    }
+    expect(error instanceof TypeError).toBe(true);
     expect(await pendingRebuilds.pending(this.blog.id)).toEqual([]);
   });
 
