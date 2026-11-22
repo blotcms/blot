@@ -16,10 +16,12 @@ describe("dropbox resetFromBlot", function () {
   const originals = {};
   let saved;
   let uploadCalls;
+  let deleteCalls;
 
   beforeEach(async function () {
     saved = [];
     uploadCalls = [];
+    deleteCalls = [];
     [
       resetPath,
       createClientPath,
@@ -60,6 +62,10 @@ describe("dropbox resetFromBlot", function () {
           error: null,
           client: {
             filesCreateFolder: async () => ({ result: {} }),
+            filesDelete: async ({ path }) => {
+              deleteCalls.push(path);
+              return { result: {} };
+            },
             usersGetSpaceUsage: async () => ({ result: spaceUsage }),
             filesListFolderGetLatestCursor: async () => ({
               result: { cursor: "new-cursor" },
@@ -307,6 +313,68 @@ describe("dropbox resetFromBlot", function () {
       );
     }
     expect(contents.sort()).toEqual(["one", "two"]);
+  });
+
+  // A resume runs unattended, after the person may have written on Dropbox
+  it("with keepDropbox, only uploads what Dropbox lacks", async function () {
+    await storage.write(blogID, "/edited.txt", Buffer.from("Blot's copy"));
+    await storage.write(blogID, "/new.txt", Buffer.from("not on Dropbox"));
+
+    const file = (name) => ({
+      ".tag": "file",
+      name,
+      path_display: "/" + name,
+      content_hash: "dropbox-hash-" + name,
+      size: 10,
+      server_modified: "2026-01-01T00:00:00Z",
+    });
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: { "/": [file("edited.txt"), file("added-on-dropbox.txt")] },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(blogID, () => {}, { aborted: false }, undefined, {
+      keepDropbox: true,
+    });
+
+    expect(uploadCalls).toEqual(["/new.txt"]);
+    expect(deleteCalls).toEqual([]);
+    expect(saved.some((values) => values.transfer_pending === false)).toBe(
+      true
+    );
+  });
+
+  it("without keepDropbox, makes Dropbox match Blot", async function () {
+    await storage.write(blogID, "/a.txt", Buffer.from("hello"));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {
+        "/": [
+          {
+            ".tag": "file",
+            name: "extra.txt",
+            path_display: "/extra.txt",
+            content_hash: "x",
+            size: 1,
+            server_modified: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(blogID, () => {}, { aborted: false });
+
+    expect(deleteCalls).toEqual(["/extra.txt"]);
   });
 
   it("skips placeholders, uploads empty files, and never overwrites a remote file with one", async function () {

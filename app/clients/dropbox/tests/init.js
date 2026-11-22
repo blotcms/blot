@@ -67,10 +67,11 @@ describe("dropbox init", function () {
 
     const blogID = "blog_incompletetransfertest" + Date.now();
     const originals = {};
-    let resumed;
+    let resumed, walked;
 
     beforeEach(function () {
       resumed = [];
+      walked = [];
       paths.forEach((path) => (originals[path] = require.cache[path]));
     });
 
@@ -84,7 +85,8 @@ describe("dropbox init", function () {
     function load(account) {
       // A transfer that can be resumed is, through these stubs
       require.cache[resetFromBlotPath] = {
-        exports: async function (id) {
+        exports: async function (id, publish, signal, update, options) {
+          expect(options).toEqual({ keepDropbox: true });
           resumed.push(id);
         },
       };
@@ -132,7 +134,10 @@ describe("dropbox init", function () {
         },
       };
       require.cache[resetToBlotPath] = {
-        exports: function () {
+        exports: async function (id) {
+          // Once a resume has finished the transfer, Dropbox's side is walked
+          // into Blot
+          if (resumed.includes(id)) return walked.push(id);
           throw new Error(
             "resetToBlot should never be called for a blog with an incomplete transfer"
           );
@@ -205,6 +210,7 @@ describe("dropbox init", function () {
       });
       await init.resyncRecentSyncsOnStartup();
       expect(resumed).toEqual([blogID]);
+      expect(walked).toEqual([blogID]);
     });
   });
 

@@ -364,13 +364,16 @@ after acquiring its own lock and before constructing `Delta`/`Apply`, leaving
 
 A transfer that nothing is running any more (a deploy or crash killed the
 setup) is resumed, not just skipped: `init.js`'s `resumeTransfers()` re-runs
-`resetFromBlot()` under the folder lock, which only uploads, deletes nothing on
-Blot and runs its own quota check. The startup job resumes every such blog,
+`resetFromBlot()` under the folder lock with `keepDropbox`, which only uploads
+what Dropbox lacks. It deletes nothing on Dropbox and leaves a file there that
+differs from Blot's alone, since the person may have added or edited it while
+the transfer was paused. It runs its own quota check. The startup job resumes every such blog,
 however long ago its transfer started, and the hourly validation queues them
 once its sweep is done, without waiting for them. A blog whose lock is held
 (setup still running), or whose account has a durable error such as a full
 Dropbox (`issueFromAccount()`), is left alone. After a resume finishes, a
-catch-up sync picks up what changed on Dropbox meanwhile.
+walk of Dropbox into Blot (`resetToBlot()`) brings in what the person
+added or edited there, then a catch-up sync runs.
 
 The startup job runs once per unit per deploy (`onceAtStartup`, named with
 `config.unit`), since blue and green stop and start minutes apart and each

@@ -68,10 +68,12 @@ const resetToBlotWithLock = async (blogID, publish) => {
 
 // A deploy or crash that stops an initial transfer part way leaves
 // transfer_pending set, and every automatic sync skips the blog until a
-// transfer finishes. Resuming is safe: resetFromBlot only uploads to Dropbox,
-// deletes nothing on Blot, and runs its own quota check first. Not while the
-// account has a durable error (revoked access, a missing folder, a full
-// Dropbox), which needs the person to act first.
+// transfer finishes. Resuming runs resetFromBlot with keepDropbox, which only
+// uploads what Dropbox lacks: anything the person added or edited on Dropbox
+// meanwhile is kept, and resumeTransfers then walks Dropbox into Blot. It
+// runs its own quota check first. Not while the account has a durable error
+// (revoked access, a missing folder, a full Dropbox), which needs the person
+// to act first.
 const canResumeTransfer = (account) =>
   !!account && account.transfer_pending === true && !issueFromAccount(account);
 
@@ -113,7 +115,9 @@ const resumeTransfer = async (blogID) => {
 
     console.log(clfdate(), "Dropbox: Resuming initial transfer", blogID);
     folder.status("Syncing your folder to Dropbox");
-    await resetFromBlot(blogID, folder.status, signal, folder.update);
+    await resetFromBlot(blogID, folder.status, signal, folder.update, {
+      keepDropbox: true,
+    });
     return true;
   } catch (err) {
     if (err && err.name === "AbortError") return false;
@@ -136,9 +140,11 @@ const resumeTransfer = async (blogID) => {
 // blog again while an earlier sweep's resume of it is still running
 const resuming = new Set();
 
-// Resumes each blog's transfer in turn, then syncs it to pick up what changed
-// on Dropbox meanwhile (webhook syncs skip a blog while its transfer is
-// pending). Never rejects.
+// Resumes each blog's transfer in turn. Then walks Dropbox into Blot, which
+// brings in what the person added or edited on Dropbox while the transfer was
+// paused (webhook syncs skip a blog while its transfer is pending, and the
+// resume left those files alone), and syncs from the cursor. Nothing on Blot
+// is lost: every Blot file is now on Dropbox. Never rejects.
 const resumeTransfers = async (blogIDs) => {
   for (const blogID of blogIDs) {
     if (resuming.has(blogID)) continue;
@@ -147,6 +153,10 @@ const resumeTransfers = async (blogIDs) => {
     try {
       if (!(await resumeTransfer(blogID))) continue;
       console.log(clfdate(), "Dropbox: Resumed initial transfer", blogID);
+
+      const publish = (...args) =>
+        console.log(clfdate(), "Dropbox:", blogID, ...args);
+      await resetToBlotWithLock(blogID, publish);
 
       const blog = await getBlog({ id: blogID });
       if (blog) await catchUpSync(blog);

@@ -208,7 +208,12 @@ function publishTransferStatus(progress, publish, path) {
   );
 }
 
-async function resetFromBlot(blogID, publish, signal, update) {
+// options.keepDropbox resumes a transfer a deploy or crash cut short, with no
+// one watching: what is on Dropbox may be the person's own writing, added or
+// edited while the transfer was paused. It only uploads what Dropbox lacks:
+// nothing on Dropbox is deleted, and a file there that differs from Blot's
+// is left as it is (init.js then brings Dropbox's side into Blot).
+async function resetFromBlot(blogID, publish, signal, update, options = {}) {
   if (!publish)
     publish = function () {
       log.apply(null, arguments);
@@ -239,7 +244,8 @@ async function resetFromBlot(blogID, publish, signal, update) {
       signal,
       client,
       account,
-      update
+      update,
+      options
     );
   } catch (err) {
     if (!err || err.name !== "AbortError") {
@@ -278,7 +284,8 @@ async function resetFromBlotWithClient(
   signal,
   client,
   account,
-  update
+  update,
+  { keepDropbox = false } = {}
 ) {
   abortIfRequested(signal);
 
@@ -434,6 +441,7 @@ async function resetFromBlotWithClient(
       abortIfRequested(signal);
 
       const path = join(dir, name);
+      if (keepDropbox) continue;
       if (!localContents.find((localItem) => localItem.name === name)) {
         log("Removing", path);
         try {
@@ -463,7 +471,17 @@ async function resetFromBlotWithClient(
         // Counted in the pre-walk — bump even if the folder already exists.
         publishTransferStatus(progress, publish, path);
 
-        if (remoteCounterpart && !remoteCounterpart.is_directory) {
+        if (
+          keepDropbox &&
+          remoteCounterpart &&
+          !remoteCounterpart.is_directory
+        ) {
+          // Not replaced unattended. The transfer stays incomplete, and
+          // Retry transfer runs the setup's full reset.
+          log("Not replacing a file on Dropbox with a folder", path);
+          failures.push(path);
+          continue;
+        } else if (remoteCounterpart && !remoteCounterpart.is_directory) {
           log("Removing", path);
           abortIfRequested(signal);
           await client.filesDelete({ path: join(dropboxRoot, path) });
@@ -518,7 +536,9 @@ async function resetFromBlotWithClient(
           }
         }
 
-        if (remoteCounterpart && !identicalOnRemote) {
+        if (keepDropbox && remoteCounterpart && !identicalOnRemote) {
+          log("Keeping the file on Dropbox, which differs from Blot's", path);
+        } else if (remoteCounterpart && !identicalOnRemote) {
           try {
             abortIfRequested(signal);
             await storage.withLocal(blogID, localItem.path_display, (local) =>
