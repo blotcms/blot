@@ -375,6 +375,15 @@ Dropbox (`issueFromAccount()`), is left alone. After a resume finishes, a
 walk of Dropbox into Blot (`resetToBlot()`) brings in what the person
 added or edited there, then a catch-up sync runs.
 
+When a second blog connects to an account whose app folder root is already
+another blog's folder, setup moves that blog's files into a subfolder
+(`routes/setup/createFolder.js`'s `moveExistingFiles()`). It records the
+subfolder on that blog's account first (`move_folder`/`move_folder_id`), which
+pauses the blog's syncs (`transferIncomplete()`) until the move is done. A
+move a deploy or crash cuts short is finished into the same subfolder: by a
+retried setup, or by `init.js`'s `finishMoves()` in the startup job and after
+the hourly sweep, which then syncs the blog from its new folder.
+
 The startup job runs once per unit per deploy (`onceAtStartup`, named with
 `config.unit`), since blue and green stop and start minutes apart and each
 must resync the syncs its own stop killed.

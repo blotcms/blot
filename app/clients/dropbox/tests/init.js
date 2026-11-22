@@ -855,4 +855,95 @@ describe("dropbox init", function () {
       expect(init.startupJobName()).toEqual("dropbox-resync-recent");
     });
   });
+
+  // A second blog's setup moving this blog's files into a subfolder, cut
+  // short by a deploy, is finished by the startup and hourly jobs
+  describe("finishes a move cut short", function () {
+    const blogPath = require.resolve("models/blog");
+    const databasePath = require.resolve("../database");
+    const createFolderPath = require.resolve("../routes/setup/createFolder");
+    const loadClientPath = require.resolve("../util/loadClient");
+    const resetToBlotPath = require.resolve("../sync/reset-to-blot");
+    const syncPath = require.resolve("../sync");
+    const initPath = require.resolve("../init");
+    const paths = [
+      blogPath,
+      databasePath,
+      createFolderPath,
+      loadClientPath,
+      resetToBlotPath,
+      syncPath,
+      initPath,
+    ];
+    const blogID = "blog_finishmove" + Date.now();
+    const originals = {};
+    let account, moves, synced;
+
+    beforeEach(function () {
+      paths.forEach((path) => (originals[path] = require.cache[path]));
+      moves = [];
+      synced = [];
+      account = {
+        error_code: 0,
+        transfer_pending: false,
+        folder: "",
+        move_folder: "/Blog",
+        move_folder_id: "id:recorded",
+        last_sync: Date.now(),
+      };
+      require.cache[blogPath] = {
+        exports: {
+          getAllIDs: async () => [blogID],
+          get: async () => ({ id: blogID, client: "dropbox" }),
+        },
+      };
+      require.cache[databasePath] = {
+        exports: { get: async () => account, set: async () => {} },
+      };
+      require.cache[loadClientPath] = {
+        exports: async () => ({ client: {}, account }),
+      };
+      require.cache[createFolderPath] = {
+        exports: {
+          moveExistingFiles: async (client, blog, options) => {
+            moves.push([blog.id, options]);
+            account = Object.assign({}, account, {
+              folder: "/Blog",
+              move_folder: "",
+              move_folder_id: "",
+            });
+          },
+        },
+      };
+      require.cache[resetToBlotPath] = {
+        exports: async () => {
+          throw new Error("never walked while a move is pending");
+        },
+      };
+      require.cache[syncPath] = {
+        exports: async (blog) => synced.push(blog.id),
+      };
+      delete require.cache[initPath];
+    });
+
+    afterEach(function () {
+      paths.forEach((path) => {
+        if (originals[path]) require.cache[path] = originals[path];
+        else delete require.cache[path];
+      });
+    });
+
+    it("at startup, then syncs the blog from its new folder", async function () {
+      await require("../init").resyncRecentSyncsOnStartup();
+      expect(moves).toEqual([[blogID, { resume: true }]]);
+      expect(synced).toEqual([blogID]);
+    });
+
+    it("after the hourly sweep", async function () {
+      const { finishing } = await require("../init").validateAllBlogs();
+      await finishing;
+      expect(moves).toEqual([[blogID, { resume: true }]]);
+      expect(synced).toEqual([blogID]);
+    });
+  });
 });

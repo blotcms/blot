@@ -17,6 +17,8 @@ const folderLock = require("sync/lock");
 const redisSubscriber = require("helper/redisSubscriber");
 const config = require("config");
 const sync = require("./sync");
+const loadClient = require("./util/loadClient");
+const { moveExistingFiles } = require("./routes/setup/createFolder");
 const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
 const getAllIDs = () => Blog.getAllIDs();
@@ -174,6 +176,32 @@ const resumeTransfers = async (blogIDs) => {
   }
 };
 
+// Finishes moving each blog's files into the subfolder another blog's setup
+// recorded for them (routes/setup/createFolder.js), when a deploy or crash
+// cut the move short and no retried setup has finished it. The blog's syncs
+// are paused until then (transferIncomplete). Then syncs it from the new
+// folder. Never rejects.
+const finishMoves = async (blogIDs) => {
+  for (const blogID of blogIDs) {
+    try {
+      const blog = await getBlog({ id: blogID });
+      if (!blog || blog.client !== "dropbox") continue;
+
+      const { error, client } = await loadClient(blogID);
+      if (error) throw error;
+
+      console.log(clfdate(), "Dropbox: Finishing move into subfolder", blogID);
+      await moveExistingFiles(client, blog, { resume: true });
+
+      const account = await getDropboxAccount(blogID);
+      if (account && !account.move_folder_id) await catchUpSync(blog);
+    } catch (err) {
+      if (err && err.message === "Failed to acquire folder lock") continue;
+      console.error(clfdate(), "Dropbox: Error finishing move", blogID, err);
+    }
+  }
+};
+
 // Event loop delay while one blog was validated, to find which blog and which
 // phase blocks the loop (a stall longer than the folder lock TTL crashes the
 // process). Every blog is logged so quiet blogs are a baseline. entryCount is
@@ -235,6 +263,7 @@ const validateAllBlogs = async () => {
 
   const report = syncReport.create();
   const transfersToResume = [];
+  const movesToFinish = [];
   let checkedBlogs = 0;
 
   for (const blogID of blogIDs) {
@@ -259,6 +288,12 @@ const validateAllBlogs = async () => {
       // resumed once the sweep is done.
       if (account && account.transfer_pending === true) {
         if (canResumeTransfer(account)) transfersToResume.push(blogID);
+        continue;
+      }
+
+      // A move into a subfolder cut short, finished once the sweep is done
+      if (account && account.move_folder_id) {
+        movesToFinish.push(blogID);
         continue;
       }
 
@@ -378,7 +413,10 @@ const validateAllBlogs = async () => {
   // Not awaited: a big transfer can take longer than the hour, and the next
   // sweep waits for this one to finish. Returned in an object, which the
   // scheduler doesn't wait for, so specs can.
-  return { resuming: resumeTransfers(transfersToResume) };
+  return {
+    resuming: resumeTransfers(transfersToResume),
+    finishing: finishMoves(movesToFinish),
+  };
 };
 
 const resyncRecentSyncsOnStartup = async () => {
@@ -395,6 +433,7 @@ const resyncRecentSyncsOnStartup = async () => {
 
   const blogsToResync = [];
   const transfersToResume = [];
+  const movesToFinish = [];
 
   for (const blogID of blogIDs) {
     try {
@@ -402,6 +441,11 @@ const resyncRecentSyncsOnStartup = async () => {
       if (!blog || blog.client !== "dropbox") continue;
 
       const account = await getDropboxAccount(blogID);
+
+      if (!blog.isDisabled && account && account.move_folder_id) {
+        movesToFinish.push(blogID);
+        continue;
+      }
 
       // However long ago it started: a transfer can run for hours
       if (!blog.isDisabled && canResumeTransfer(account)) {
@@ -466,6 +510,7 @@ const resyncRecentSyncsOnStartup = async () => {
     }
   }
 
+  await finishMoves(movesToFinish);
   await resumeTransfers(transfersToResume);
 };
 
@@ -498,5 +543,6 @@ module.exports.validateAllBlogs = validateAllBlogs;
 module.exports.resetToBlotWithLock = resetToBlotWithLock;
 module.exports.resumeTransfer = resumeTransfer;
 module.exports.resumeTransfers = resumeTransfers;
+module.exports.finishMoves = finishMoves;
 module.exports.startupJobName = startupJobName;
 module.exports.TRANSFER_INCOMPLETE = TRANSFER_INCOMPLETE;

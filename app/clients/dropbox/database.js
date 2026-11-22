@@ -111,11 +111,13 @@ async function setAccount(blogID, changes) {
 
   // Rows written before these fields existed, or a first save from
   // setup, do not carry them. Every other field stays required.
-  ["error_source", "error_since"].forEach(function (field) {
-    if (account[field] === undefined || account[field] === null) {
-      account[field] = defaultFor(Model[field]);
+  ["error_source", "error_since", "move_folder", "move_folder_id"].forEach(
+    function (field) {
+      if (account[field] === undefined || account[field] === null) {
+        account[field] = defaultFor(Model[field]);
+      }
     }
-  });
+  );
 
   // Verify that the type of new account state
   // matches the expected types declared in Model below.
@@ -257,6 +259,17 @@ Model = {
   // field; getAccount() below defaults a missing boolean field to false, so
   // old accounts are unaffected.
   transfer_pending: "boolean",
+
+  // Set while another blog's setup moves this blog's files from the root of
+  // the app folder into a subfolder of their own (routes/setup/createFolder.js
+  // moveExistingFiles): the subfolder they are going to, by path and by ID.
+  // Written before the move starts and cleared in the write that points
+  // folder/folder_id at the subfolder, so a move a deploy or crash cuts short
+  // is finished into the same subfolder, not a new one. While set, Dropbox
+  // can't be trusted as the blog's source of truth (transferIncomplete()).
+  // Empty strings otherwise.
+  move_folder: "string",
+  move_folder_id: "string",
 };
 
 module.exports = {

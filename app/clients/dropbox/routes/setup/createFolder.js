@@ -137,11 +137,25 @@ async function checkAppFolder(account) {
   return { blogToMove, blogsInAppFolder };
 }
 
-async function moveExistingFiles(client, otherBlog) {
+// Moves the other blog's files from the root of the app folder into a
+// subfolder of their own, under that blog's folder lock. The subfolder is
+// recorded on its account first (move_folder/move_folder_id), which pauses
+// its syncs (transferIncomplete) until the move is done. A move a deploy or
+// crash cut short is finished into the same subfolder by whatever runs this
+// next: a retried setup, or the startup and hourly jobs (init.js).
+//
+// options.resume is for the startup and hourly jobs: they only finish a move
+// that is still recorded, and leave the blog alone otherwise.
+async function moveExistingFiles(client, otherBlog, options = {}) {
   // Get a lock on the blog
   // we should add a way to retry this sync attempt
   await sync(otherBlog.id, async function () {
-    const { folder, folder_id } = await mkdir(client, otherBlog.title);
+    const account = await database.get(otherBlog.id);
+    if (!account) return;
+    // Finished since the caller looked, by whatever held the lock
+    if (!account.move_folder_id && (options.resume || account.folder)) return;
+
+    const { folder, folder_id } = await moveTarget(client, otherBlog, account);
 
     let {
       result: { entries },
@@ -152,7 +166,7 @@ async function moveExistingFiles(client, otherBlog) {
     });
 
     entries = entries
-      .filter((entry) => entry.path_display !== folder)
+      .filter((entry) => entry.id !== folder_id)
       .map(function (entry) {
         return {
           from_path: entry.path_display,
@@ -160,42 +174,69 @@ async function moveExistingFiles(client, otherBlog) {
         };
       });
 
-    if (entries.length === 0) {
-      await database.set(otherBlog.id, {
-        folder,
-        folder_id,
-        cursor: "",
-      });
-      return;
-    }
-
-    const {
-      result: { async_job_id },
-    } = await client.filesMoveBatch({
-      entries,
-      autorename: false,
-    });
-
-    let tag;
-
-    do {
-      const { result } = await client.filesMoveBatchCheck({ async_job_id });
-
-      tag = result[".tag"];
-
-      if (tag === "failed")
-        throw new Error("Failed to move files, please try again.");
-
-      if (tag !== "complete" && tag !== "in_progress")
-        throw new Error("Unknown response " + JSON.stringify(result));
-    } while (tag === "in_progress");
+    if (entries.length) await moveBatch(client, entries);
 
     await database.set(otherBlog.id, {
       folder,
       folder_id,
       cursor: "",
+      move_folder: "",
+      move_folder_id: "",
     });
   });
+}
+
+// The subfolder the other blog's files go to: the one a move cut short
+// recorded, if it is still there, or a new one, recorded before anything
+// moves
+async function moveTarget(client, otherBlog, account) {
+  if (account.move_folder_id) {
+    try {
+      const { result } = await client.filesGetMetadata({
+        path: account.move_folder_id,
+      });
+      if (result[".tag"] === "folder")
+        return {
+          folder: result.path_display,
+          folder_id: account.move_folder_id,
+        };
+    } catch (e) {
+      // Gone, so start again with a new one. Anything else fails the move.
+      if (!isNotFoundError(e)) throw e;
+    }
+  }
+
+  const { folder, folder_id } = await mkdir(client, otherBlog.title);
+
+  await database.set(otherBlog.id, {
+    move_folder: folder,
+    move_folder_id: folder_id,
+  });
+
+  return { folder, folder_id };
+}
+
+async function moveBatch(client, entries) {
+  const {
+    result: { async_job_id },
+  } = await client.filesMoveBatch({
+    entries,
+    autorename: false,
+  });
+
+  let tag;
+
+  do {
+    const { result } = await client.filesMoveBatchCheck({ async_job_id });
+
+    tag = result[".tag"];
+
+    if (tag === "failed")
+      throw new Error("Failed to move files, please try again.");
+
+    if (tag !== "complete" && tag !== "in_progress")
+      throw new Error("Unknown response " + JSON.stringify(result));
+  } while (tag === "in_progress");
 }
 
 async function mkdir(client, title) {
