@@ -42,6 +42,13 @@ describe("dropbox database", function () {
         folder_id: "id:folder",
       });
 
+      // Expires after a week, so a long-dormant folder isn't reused
+      const ttl = await require("models/client").ttl(
+        "blog:" + blogID + ":dropbox:previous"
+      );
+      expect(ttl).toBeGreaterThan(7 * 24 * 60 * 60 - 60);
+      expect(ttl).toBeLessThanOrEqual(7 * 24 * 60 * 60);
+
       // A later account at the root of the app folder leaves nothing to reuse
       await database.set(blogID, fakeAccount());
       await database.drop(blogID);

@@ -154,13 +154,18 @@ async function dropAccount(blogID) {
   multi.del(require("./util/accessTokenCache").key(blogID));
 
   // Remember which folder this blog used, and on which Dropbox account, so
-  // reconnecting the same account can pick it up again (getPrevious)
+  // reconnecting the same account can pick it up again (getPrevious). It
+  // expires after a week: reconnects that fix auth or switch permission mode
+  // come within days, while a folder left for months may hold old copies
+  // that the reconnect's resetToBlot would write over newer files in Blot,
+  // and bring back files since deleted there.
   multi.del(previousKey(blogID));
   if (account && account.account_id && account.folder_id) {
     multi.hSet(previousKey(blogID), {
       account_id: account.account_id,
       folder_id: account.folder_id,
     });
+    multi.expire(previousKey(blogID), PREVIOUS_TTL_SECONDS);
   }
 
   return multi.exec();
@@ -200,6 +205,8 @@ function accountKey(blogID) {
 }
 
 // Redis Hash left behind when the account is dropped (see getPrevious)
+const PREVIOUS_TTL_SECONDS = 7 * 24 * 60 * 60;
+
 function previousKey(blogID) {
   return "blog:" + blogID + ":dropbox:previous";
 }
