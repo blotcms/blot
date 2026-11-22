@@ -72,6 +72,8 @@ Show file flags on the dashboard: the errors and warnings Blot now stores per fi
 
 Flag folder posts' sources: `app/sync/update/set.js` sets no build, assets or references flags for a `+` folder post, since the build has no one file to put them on. `app/build/multiple.js` now sets `err.sourcePath` on a failed source (#2677). Do the same for the flags each source's build reports, and set them on that source.
 
+- Check (from 23 Nov 2026): the hourly Dropbox sweep no longer reports the three blogs whose resync failed on a 409 (#2936 carries on past a refused subfolder listing). If they still fail, find the 409's tag in their logs (#2933).
+
 Noticed while flagging the existing placeholders, 12 Nov 2026 (#2675). The resync failed for a few blogs, every time:
 - Two Dropbox blogs answer 401: their access was revoked, but they still count as connected. Find out whether the hourly validation and the dashboard tell the owner, and if not, mark the blog as needing to reconnect.
 - One Dropbox blog never finished its initial transfer, so its reset refuses to run. The startup job now resumes every pending transfer (#2923): check after the next deploy that it finished, and if not, why.
