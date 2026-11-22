@@ -98,7 +98,9 @@ describe("scheduler resume-blog-removal", function () {
 
     beforeEach(async function () {
       // The owner has one site left and pays for two
-      await Blog.create(this.user.uid, { handle: "resumeblogtwo" });
+      this.second = await Blog.create(this.user.uid, {
+        handle: "resumeblogtwo",
+      });
       await User.set(this.user.uid, { subscription: subscription() });
       await removalBilling.record(this.blog.id, this.user.uid);
 
@@ -117,6 +119,8 @@ describe("scheduler resume-blog-removal", function () {
     });
 
     afterEach(async function () {
+      // Frees its handle for the next spec
+      if (this.second) await Blog.remove(this.second.id).catch(() => {});
       stripe.customers.updateSubscription = this.original;
       await removalBilling.clear(this.blog.id);
       await client.del("notify:blog-removal:billing:" + this.blog.id);
