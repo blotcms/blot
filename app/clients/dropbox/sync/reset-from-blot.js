@@ -462,8 +462,13 @@ async function resetFromBlotWithClient(
       abortIfRequested(signal);
 
       const path = join(dir, localItem.name);
-      const remoteCounterpart = remoteContents.find(
-        (remoteItem) => remoteItem.name === localItem.name
+      // Dropbox paths are case-insensitive, so with keepDropbox a file the
+      // person renamed only in case (post.txt to Post.txt) is the same file,
+      // and uploading Blot's copy would overwrite theirs
+      const remoteCounterpart = remoteContents.find((remoteItem) =>
+        keepDropbox
+          ? remoteItem.name.toLowerCase() === localItem.name.toLowerCase()
+          : remoteItem.name === localItem.name
       );
 
       if (isDotfileOrDotfolder(path)) continue;
