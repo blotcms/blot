@@ -7,21 +7,51 @@ const {
   isSetupError,
 } = require("../database/error");
 const clfdate = require("helper/clfdate");
+const drain = require("helper/drain");
 const config = require("config");
 
 // Maximum time to wait for the user to complete the setup
 // before aborting and requiring them to start again
 const SETUP_TIMEOUT = 1000 * 60 * 60 * 2; // 2 hours
 
-// Whether a setup has run for longer than SETUP_TIMEOUT. A setup that timed
-// out keeps preparing: true beside its stored error (the dashboard shows the
-// failure from that pair), so restartSetupProcesses skips it: restarted, it
-// would only time out again, on every start of every process. One that ran
-// out of time with no error stored (its process died mid-setup) is restarted
-// once, so it fails and the dashboard says so.
+// Once Blot has the folder, the copy of the site's files into it may take
+// longer than that on a large site, and a deploy part way through starts it
+// again (restartSetupProcesses). This bounds the restarts.
+const COPY_TIMEOUT = 1000 * 60 * 60 * 24; // 24 hours
+
+// How long a setup waits before trying the folder lock again
+const LOCK_RETRY_MS = 5000;
+
+// Whether a setup has run for longer than its timeout: SETUP_TIMEOUT until it
+// has a folder, COPY_TIMEOUT while it copies the site's files. A setup that
+// timed out keeps preparing: true beside its stored error (the dashboard
+// shows the failure from that pair), so restartSetupProcesses skips it:
+// restarted, it would only time out again, on every start of every process.
+// One that ran out of time with no error stored (its process died
+// mid-setup) is restarted once, so it fails and the dashboard says so.
 const timedOut = (account, now = Date.now()) =>
   Boolean(account?.startedSetup) &&
-  now - Number(account.startedSetup) > SETUP_TIMEOUT;
+  now - Number(account.startedSetup) >
+    (account.folderId ? COPY_TIMEOUT : SETUP_TIMEOUT);
+
+// Errors which mean this setup should stop and leave the account as it is:
+// someone changed the email or service account and a new setup has started,
+// they cancelled, or another process finished the setup. Writing anything
+// then (folderId: null, say) would undo what the other setup stored.
+const STOPPED = new Set([
+  "Email changed",
+  "Permission to set up revoked",
+  "Service account changed",
+  // From util/checkWeCanContinue.js, inside the copy
+  "Folder ID changed",
+  "Preparing has changed",
+]);
+
+// Raised by sync/index.js when the folder lock is held, or when this process
+// has begun draining for a deploy and takes no more locks (sync/lock.js)
+const isLockError = (err) =>
+  err?.message === "Failed to acquire folder lock" ||
+  err?.cause?.code === "ELOCKED";
 
 // Cancelling setup (disconnect) deletes the account hash outright. The
 // background polling loop below writes status fields (nonEmptyFolderShared,
@@ -58,7 +88,7 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
     if (!preparing) throw new Error("Permission to set up revoked");
 
     // if the setup process has been running for too long then abort
-    if (timedOut({ startedSetup })) {
+    if (timedOut({ startedSetup, folderId: account.folderId })) {
       throw new Error("Setup timed out");
     }
 
@@ -70,8 +100,12 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
   };
 
   try {
+    // A setup whose copy was interrupted (a deploy, say) already has its
+    // folder: it only needs the copy run again
+    const resuming = Boolean((await checkWeCanContinue()).folderId);
+
     // Phase A: wait for an eligible shared folder without the sync lock
-    do {
+    while (!resuming && !folderId) {
       await checkWeCanContinue();
       console.log(
         clfdate(),
@@ -95,36 +129,47 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
 
       folderId = res.folderId;
       folderName = res.folderName;
-    } while (!folderId);
-
-    // Phase B: only lock right before mutating sync-critical state
-    sync = await establishSyncLock(blog.id);
-
-    const status = sync.folder.status;
-    status("Waiting for invite to Google Drive folder");
-
-    await checkWeCanContinue();
-
-    const refreshedFolder = await processFolder(
-      { id: folderId, name: folderName },
-      drive,
-      blog.id,
-      status,
-      true,
-      serviceAccountId
-    );
-
-    if (!refreshedFolder) {
-      throw new Error("Folder no longer eligible");
     }
 
-    await storeIfAccountExists(blog.id, {
-      folderId,
-      folderName,
-      nonEmptyFolderShared: false,
-      nonEditorPermissions: false,
-      ...clearAllErrorFields(),
-    });
+    // Phase B: only lock right before mutating sync-critical state
+    sync = await lockForSetup(blog.id, checkWeCanContinue);
+
+    const status = sync.folder.status;
+    const account = await checkWeCanContinue();
+
+    if (account.folderId) {
+      // Resuming, or another process stored the folder while this one
+      // waited for the lock and then stopped before the copy was done
+      console.log(
+        clfdate(),
+        "Google Drive Client",
+        "Resuming the copy into the folder for blog",
+        blog.id
+      );
+    } else {
+      status("Waiting for invite to Google Drive folder");
+
+      const refreshedFolder = await processFolder(
+        { id: folderId, name: folderName },
+        drive,
+        blog.id,
+        status,
+        true,
+        serviceAccountId
+      );
+
+      if (!refreshedFolder) {
+        throw new Error("Folder no longer eligible");
+      }
+
+      await storeIfAccountExists(blog.id, {
+        folderId,
+        folderName,
+        nonEmptyFolderShared: false,
+        nonEditorPermissions: false,
+        ...clearAllErrorFields(),
+      });
+    }
 
     await checkWeCanContinue();
     status("Ensuring new folder is in sync");
@@ -136,21 +181,14 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
   } catch (e) {
     console.log(clfdate(), "Google Drive Client", e);
 
-    let error = SETUP_ERROR;
-
-    if (e.message === "Email changed") {
-      // don't store this error, the user is changing their email
-      // we just want to stop the current setup process
-      error = null;
-    }
-
-    if (e.message === "Permission to set up revoked") {
-      error = null;
-    }
+    // Stopped for another setup, or interrupted by a deploy: leave the
+    // account for the other setup, or for the next process to resume
+    // (restartSetupProcesses)
+    if (STOPPED.has(e.message) || isLockError(e)) return;
 
     // Only if the account still exists: a disconnect meanwhile deleted it
     await database.blog.update(blog.id, {
-      error,
+      error: SETUP_ERROR,
       folderId: null,
       folderName: null,
       ...clearHealthErrorFields(),
@@ -159,6 +197,23 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
     if (sync && typeof sync.done === "function") {
       await sync.done(null);
     }
+  }
+}
+
+// Takes the blog's folder lock for the setup. While another process holds it
+// (on a deploy, the old container may still be copying this blog's files),
+// waits and tries again, until the setup can't continue (it timed out, or the
+// other process finished it). Rejects with the lock error if this process is
+// draining, so the setup is left for the next process.
+async function lockForSetup(blogID, checkWeCanContinue) {
+  for (;;) {
+    try {
+      return await establishSyncLock(blogID);
+    } catch (err) {
+      if (!isLockError(err) || drain.isDraining()) throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_MS));
+    await checkWeCanContinue();
   }
 }
 
@@ -398,8 +453,6 @@ async function restartSetupProcesses() {
         account?.preparing &&
         // And it has a service account ID
         account?.serviceAccountId &&
-        // And it doesn't have a folder ID yet
-        !account?.folderId &&
         // And it hasn't already run out of time and failed
         !(timedOut(account) && isSetupError(account.error))
       ) {
@@ -495,3 +548,4 @@ async function restartSetupProcesses() {
 module.exports = finishSetup;
 module.exports.restartSetupProcesses = restartSetupProcesses;
 module.exports.timedOut = timedOut;
+module.exports.isLockError = isLockError;

@@ -23,13 +23,15 @@ function appliedKey(blogID) {
 
 // Set while a repository is being set up for the blog (create.js), so the
 // dashboard shows the setup's progress rather than the create page before the
-// store has the repository. It expires by itself, so a setup cut off by a
-// crash or a deploy never leaves the blog stuck "in progress".
+// store has the repository. It expires soon by itself, and the running setup
+// renews it (refreshCreating) every CREATING_REFRESH_MS, so a setup cut off by
+// a crash or a deploy leaves the blog "in progress" for at most the TTL.
 function creatingKey(blogID) {
   return "blog:" + blogID + ":git:creating";
 }
 
-var CREATING_TTL_SECONDS = 60 * 60;
+var CREATING_TTL_SECONDS = 2 * 60;
+var CREATING_REFRESH_MS = 30 * 1000;
 
 function generateToken() {
   return uuid().replace(/-/g, "");
@@ -100,6 +102,15 @@ async function setCreating(blogID) {
   });
 }
 
+// Renews the mark only while it is there (XX): a renewal that lands after the
+// setup cleared it does not bring it back
+async function refreshCreating(blogID) {
+  await client.set(creatingKey(blogID), String(Date.now()), {
+    EX: CREATING_TTL_SECONDS,
+    XX: true,
+  });
+}
+
 async function isCreating(blogID) {
   return !!(await client.get(creatingKey(blogID)));
 }
@@ -150,10 +161,12 @@ database.setStatus = setStatus;
 database.getStatus = getStatus;
 database.removeStatus = removeStatus;
 database.setCreating = setCreating;
+database.refreshCreating = refreshCreating;
 database.isCreating = isCreating;
 database.clearCreating = clearCreating;
 database.creatingKey = creatingKey;
 database.CREATING_TTL_SECONDS = CREATING_TTL_SECONDS;
+database.CREATING_REFRESH_MS = CREATING_REFRESH_MS;
 
 database.getApplied = getApplied;
 database.setApplied = setApplied;

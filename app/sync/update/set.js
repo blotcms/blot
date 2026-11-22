@@ -1,5 +1,6 @@
 var rebuildDependents = require("./rebuildDependents");
 var Entry = require("models/entry");
+var client = require("models/client");
 var Preview = require("./preview");
 var isPreview = require("./drafts").isPreview;
 var isDraft = require("./drafts").isDraft;
@@ -21,6 +22,16 @@ var isRedisUnavailableError =
 var basename = (path.posix || path).basename;
 
 var noop = () => {};
+
+// Paths whose entry has been saved and whose dependents may not have been
+// rebuilt yet. A path is added before Entry.set and removed once set() has
+// rebuilt what depends on it, so a sync killed in between (a deploy) leaves
+// it here. When the file is synced again it builds the same entry, which
+// would otherwise skip the dependents as unchanged: a path still here has
+// them rebuilt anyway.
+function dependentsPendingKey(blogID) {
+  return "blog:" + blogID + ":sync:dependents_pending";
+}
 
 function isPublic(path) {
   const normalizedPath = pathNormalizer(path).toLowerCase();
@@ -230,6 +241,12 @@ async function buildAndSet(blog, path, multiInfo, state) {
   if (entry.metadata && entry.metadata._sourcePaths)
     delete entry.metadata._sourcePaths;
 
+  // SADD answers 0 when the path was already pending: an earlier sync saved
+  // its entry and was killed before rebuilding its dependents
+  state.pending = true;
+  state.wasPending =
+    Number(await client.sAdd(dependentsPendingKey(blog.id), path)) === 0;
+
   var result = await Entry.set(blog.id, entry.path, entry);
 
   // Only a plain published entry: dropping other sources changed
@@ -266,11 +283,24 @@ async function buildAndSet(blog, path, multiInfo, state) {
 
   // An unchanged entry has the same slug and file name, and
   // the same contentHash, so the same source bytes: what
-  // depends on it would build the same
-  if (!state.unchanged)
-    syntheticKeys.forEach((syntheticKey) =>
-      rebuildDependents(blog.id, syntheticKey).catch(noop)
-    );
+  // depends on it would build the same, unless an earlier sync
+  // was killed before rebuilding it. Waited for, so the path
+  // stays pending until they are done; a failure is logged and
+  // doesn't fail the file's own sync.
+  if (!state.unchanged || state.wasPending) {
+    for (const syntheticKey of syntheticKeys) {
+      try {
+        await rebuildDependents(blog.id, syntheticKey);
+      } catch (err) {
+        console.error(
+          "sync.set: rebuilding wikilink dependents of",
+          path,
+          syntheticKey,
+          err
+        );
+      }
+    }
+  }
 
   // A draft folder post outside /drafts/ would write "/album.html"
   // and could clobber a real sibling source file, so skip the
@@ -298,7 +328,11 @@ module.exports = async function set(blog, path) {
   path = pathNormalizer(path);
 
   var multiInfo = build.findMultiFolder(path);
-  var state = { unchanged: false };
+  // unchanged: the build stored exactly the entry already there
+  // pending: path was added to the dependents-pending set, to remove once
+  //          its dependents are rebuilt
+  // wasPending: it was already there, left by a sync that was killed
+  var state = { unchanged: false, pending: false, wasPending: false };
   var ignoring = false;
 
   var is_preview = await isPreview(blog.id, path);
@@ -317,7 +351,10 @@ module.exports = async function set(blog, path) {
 
   // Resolves to { changed: false } when the file built exactly the
   // entry already stored, so the caller need not purge the blog's pages
-  if (state.unchanged && !ignoring) return { changed: false };
+  if (state.unchanged && !state.wasPending && !ignoring) {
+    await client.sRem(dependentsPendingKey(blog.id), path);
+    return { changed: false };
+  }
 
   var targets = [path];
 
@@ -331,6 +368,9 @@ module.exports = async function set(blog, path) {
   for (const target of targets) {
     await rebuildDependents(blog.id, target);
   }
+
+  if (state.pending) await client.sRem(dependentsPendingKey(blog.id), path);
 };
 
 module.exports.isTemplatePath = isTemplatePath;
+module.exports.dependentsPendingKey = dependentsPendingKey;

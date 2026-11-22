@@ -103,7 +103,9 @@ unit-mem-summary.sh [logfile]
 (per container: max and p99 anon+shmem, max node_max, max oom_kill, max and p99
 of the broker, the retired proxy jail and OpenResty, top 5 child processes; host:
 lowest mem_available.) With no argument it reads the live log and the daily
-copies in `/var/lib/blot-unit-mem`. `config/host/tests/unit-mem.sh` tests both
+copies in `/var/lib/blot-unit-mem`. From a checkout, `scripts/prod/read.sh unit-mem
+[--since 12h]` runs it over `ssh blot` (read-only, so it needs no approval), and
+`--tail <n>` prints the raw lines. `config/host/tests/unit-mem.sh` tests both
 scripts against a fake `/proc` and cgroup tree.
 
 ## Permanent bans

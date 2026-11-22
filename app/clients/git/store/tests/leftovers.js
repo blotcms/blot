@@ -3,7 +3,7 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { sweepScratch } = require("../leftovers");
+const { sweepScratch, SETUP_MIN_AGE_MS } = require("../leftovers");
 
 const HOUR = 60 * 60 * 1000;
 
@@ -41,6 +41,24 @@ describe("git store leftovers", function () {
 
     expect(result).toEqual({ removed: 3, spared: 0, bytes: 600, errors: 0 });
     dirs.forEach((dir) => expect(fs.existsSync(dir)).toBe(false));
+  });
+
+  it("clears only setup directories untouched for an hour at startup, as init.js asks", async function () {
+    const killed = make("setup-a1B2c3", 2 * HOUR);
+    const running = make("setup-d4E5f6", 10 * 60 * 1000);
+    const importing = make("import-a1B2c3", 2 * HOUR);
+
+    const result = await sweepScratch({
+      dir: root,
+      now: NOW,
+      minAge: SETUP_MIN_AGE_MS,
+      prefixes: ["setup-"],
+    });
+
+    expect(result.removed).toBe(1);
+    expect(fs.existsSync(killed)).toBe(false);
+    expect(fs.existsSync(running)).toBe(true);
+    expect(fs.existsSync(importing)).toBe(true);
   });
 
   it("keeps a recent directory, and one whose contents are recent", async function () {
