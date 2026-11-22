@@ -143,7 +143,38 @@ async function acquire(blogID) {
   // path could have changed every template (the folder itself, or the root)
   let templatesTouched = false;
   let touchedTemplates = new Set();
+  // Resolves, once the first templates path has marked the templates as
+  // needing a build, to { existed, marked }: whether the key was already set
+  // before this sync, and whether setting it worked (see beforeRelease)
+  let needsBuildMarked = null;
   const originalUpdate = new Update(blog, log, status);
+  // The key is set before the first templates path is updated, not when the
+  // sync ends: a deploy can kill the sync in between, after the client has
+  // saved its cursor, and the next sync must still build the templates. Never
+  // rejects: a failure is handled in beforeRelease.
+  function markTemplatesNeedBuild() {
+    if (needsBuildMarked) return needsBuildMarked;
+
+    needsBuildMarked = (async function () {
+      try {
+        const [existed] = await client
+          .multi()
+          .exists(templateKey.needsBuild(blogID))
+          .set(templateKey.needsBuild(blogID), "1", {
+            EX: NEEDS_BUILD_TTL_SECONDS,
+          })
+          .exec();
+
+        return { existed: Number(existed) > 0, marked: true };
+      } catch (err) {
+        log("Could not mark templates as needing a build", err.message);
+        return { existed: true, marked: false };
+      }
+    })();
+
+    return needsBuildMarked;
+  }
+
   // How long after the change in the source a file went live: the update
   // bumps the blog's cacheID once it has saved a changed file (see
   // update/index.js), so the change is live when update resolves. options:
@@ -207,6 +238,7 @@ async function acquire(blogID) {
         const name = templateDirName(path);
         if (name === null) touchedTemplates = ALL_TEMPLATES;
         else if (touchedTemplates !== ALL_TEMPLATES) touchedTemplates.add(name);
+        await markTemplatesNeedBuild();
       }
 
       const updateStartedAt = Date.now();
@@ -249,37 +281,41 @@ async function acquire(blogID) {
     try {
       await beforeRelease();
     } finally {
-      // We could do these next two things in parallel
-      // but it's a little bit of refactoring...
+      // Before the release: a deploy's drain (helper/drain) lets the process
+      // exit once it holds no folder locks, so a bump after the release could
+      // be lost, leaving the site serving pages cached under the old cacheID.
+      // The bump never throws, so the lock is still released.
+      if (changes) await bumpCacheID();
+
       log("Releasing lock");
       try {
         await release();
         log("Finished sync");
       } catch (err) {
         // Redis unreachable or the lock was already lost. Never leave the
-        // caller waiting; surface the failure instead. The folder still
-        // changed, so the cacheID must still be bumped.
+        // caller waiting; surface the failure instead.
         log("Failed to release lock", err.message);
         releaseError = err;
       }
     }
 
-    if (changes) {
-      // If Redis is unavailable the bump is retried in the background,
-      // and the preview reloaded again once it lands
-      log("Updating cacheID of blog");
-      try {
-        await Blog.bumpCacheID(blogID, function () {
-          previewReload.publish(blogID);
-        });
-      } catch (err) {
-        log("Error updating cacheID of blog");
-      }
+    if (syncError || releaseError) throw syncError || releaseError;
+  }
 
-      previewReload.publish(blogID);
+  async function bumpCacheID() {
+    // If Redis is unavailable the bump is retried in the background,
+    // and the preview reloaded again once it lands
+    log("Updating cacheID of blog");
+    try {
+      await Blog.bumpCacheID(blogID, function () {
+        previewReload.publish(blogID);
+      });
+    } catch (err) {
+      log("Error updating cacheID of blog");
     }
 
-    if (syncError || releaseError) throw syncError || releaseError;
+    // Never rejects; not waited for, as before
+    previewReload.publish(blogID);
   }
 
   async function beforeRelease() {
@@ -305,7 +341,9 @@ async function acquire(blogID) {
     // A build which fails to read a template (Redis trouble, say) would not
     // be retried by the next sync, as the client has already saved its cursor,
     // so a path in the templates folder also leaves a key behind, which is
-    // cleared only by a build which read every template it was asked to.
+    // cleared only by a build which read every template it was asked to. The
+    // key is set as the sync first updates such a path, so a sync killed
+    // before it gets here (a deploy) leaves it too.
     //
     // A build reads only the templates whose directories this sync updated:
     // the others are as the last build left them. Every template is read
@@ -316,19 +354,21 @@ async function acquire(blogID) {
     let readAll = touchedTemplates === ALL_TEMPLATES;
 
     if (templatesTouched) {
-      try {
-        if (!readAll)
-          readAll = (await client.exists(templateKey.needsBuild(blogID))) > 0;
-      } catch (err) {
-        readAll = true;
-      }
+      // The key was set by the first templates path this sync updated (see
+      // markTemplatesNeedBuild), so whether it was already set comes from
+      // there. If setting it failed then, try again now.
+      const { existed, marked } = await markTemplatesNeedBuild();
 
-      try {
-        await client.set(templateKey.needsBuild(blogID), "1", {
-          EX: NEEDS_BUILD_TTL_SECONDS,
-        });
-      } catch (err) {
-        log("Could not mark templates as needing a build", err.message);
+      if (!readAll) readAll = existed;
+
+      if (!marked) {
+        try {
+          await client.set(templateKey.needsBuild(blogID), "1", {
+            EX: NEEDS_BUILD_TTL_SECONDS,
+          });
+        } catch (err) {
+          log("Could not mark templates as needing a build", err.message);
+        }
       }
     } else {
       try {

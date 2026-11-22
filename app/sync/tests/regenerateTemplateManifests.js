@@ -56,9 +56,37 @@ describe("regenerateTemplateManifests", function () {
   it("does not loop forever on a template that keeps failing", async function () {
     await client.sAdd(this.pendingKey, [this.missingID]);
 
-    // the failed ID is only re-added after the drain finishes, so one run
-    // handles it exactly once
+    // the pending set is read once, so one run handles it exactly once
     expect(await run(this.blog.id, function () {})).toBe(0);
     expect(await client.sMembers(this.pendingKey)).toEqual([this.missingID]);
+  });
+
+  it("keeps a template pending until its manifest is regenerated", async function () {
+    var pendingKey = this.pendingKey;
+    var templateID = this.templateID;
+
+    await client.sAdd(pendingKey, [templateID]);
+
+    // Popping it first would lose it to a process killed mid-regeneration
+    spyOn(client, "sPop").and.callThrough();
+    spyOn(client, "sRem").and.callThrough();
+
+    expect(await run(this.blog.id, function () {})).toBe(1);
+    expect(client.sPop).not.toHaveBeenCalled();
+    expect(client.sRem).toHaveBeenCalledWith(pendingKey, templateID);
+    expect(await client.sMembers(pendingKey)).toEqual([]);
+  });
+
+  it("leaves a template pending if clearing it fails", async function () {
+    await client.sAdd(this.pendingKey, [this.templateID]);
+
+    spyOn(client, "sRem").and.rejectWith(new Error("killed"));
+
+    var log = jasmine.createSpy("log");
+
+    expect(await run(this.blog.id, log)).toBe(1);
+    expect(log).toHaveBeenCalled();
+    client.sRem.and.callThrough();
+    expect(await client.sMembers(this.pendingKey)).toEqual([this.templateID]);
   });
 });

@@ -364,6 +364,26 @@ describe("sync cacheID", function () {
     expect(after.cacheID).toBeGreaterThan(before.cacheID);
   });
 
+  // A deploy's drain lets the process exit once it holds no folder locks, so
+  // a bump after the release could be lost
+  it("bumps the cacheID before releasing the lock", async function () {
+    const blogID = this.blog.id;
+    const bumpCacheID = Blog.bumpCacheID;
+    const held = [];
+
+    // The update bumps it too, as it saves the file; the last bump is done's
+    spyOn(Blog, "bumpCacheID").and.callFake(async function () {
+      held.push((await folderLock.inspect(blogID)).held);
+      return bumpCacheID.apply(Blog, arguments);
+    });
+
+    await syncChange(blogID);
+
+    expect(Blog.bumpCacheID).toHaveBeenCalled();
+    expect(held[held.length - 1]).toBe(true);
+    expect((await folderLock.inspect(blogID)).held).toBe(false);
+  });
+
   // Syncs a.txt with these contents, resolving the update's result
   function syncContents(blogID, contents) {
     return sync(blogID, async function (folder) {

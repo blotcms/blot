@@ -86,6 +86,26 @@ describe("sync end-of-sync work", function () {
     });
   });
 
+  // A deploy can kill the sync after the client saved its cursor and before
+  // the build: the key left behind makes the next sync build every template
+  it("marks templates as needing a build as soon as a templates path is updated", async function () {
+    const blogID = this.blog.id;
+    const key = templateKey.needsBuild(blogID);
+    let during;
+
+    await sync(blogID, async function (folder) {
+      await folder.update("/Templates/mine/package.json");
+      during = await client.exists(key);
+    });
+
+    expect(during).toBe(1);
+    // Set by this sync, so the build still reads only what it updated
+    expect(template.buildFromFolder).toHaveBeenCalledWith(blogID, {
+      only: new Set(["mine"]),
+    });
+    expect(await client.exists(key)).toBe(0);
+  });
+
   it("builds templates when the templates folder itself was updated", async function () {
     const blogID = this.blog.id;
 
