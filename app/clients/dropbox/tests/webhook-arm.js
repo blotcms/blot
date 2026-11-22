@@ -22,12 +22,11 @@ describe("dropbox webhook follow-ups", function () {
     });
 
     const { synced } = await site.handleWebhook(["dbid:a", "dbid:b"]);
-    expect(events.slice().sort()).toEqual([
-      ["arm", "blog_a1"],
-      ["arm", "blog_a2"],
-    ]);
-
     await synced;
+
+    // The syncs may start as soon as arming is done, so compare the order
+    const kinds = events.map((e) => e[0]);
+    expect(kinds).toEqual(["arm", "arm", "run", "run"]);
     expect(events.filter((e) => e[0] === "run").sort()).toEqual([
       ["run", "blog_a1", "token-blog_a1"],
       ["run", "blog_a2", "token-blog_a2"],
