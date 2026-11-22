@@ -14,10 +14,15 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
   // the timeout and retries cover reading the body: the timer restarts on
   // each chunk, so a stalled body aborts the attempt (rather than hanging the
   // caller after the headers arrived) while a slow but active one completes.
+  // retryDelay waits that many milliseconds before the second attempt,
+  // doubling before each one after, so a macserver restart (a few seconds)
+  // doesn't use up every attempt at once. 0, the default, retries straight
+  // away.
   const {
     timeout = 10000,
     retries = 3,
     readBody = false,
+    retryDelay = 0,
     ...fetchOptions
   } = options;
 
@@ -91,6 +96,12 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
         throw new Error(
           `Request failed after ${retries} retries: ${error.message} ${url}`,
           { cause: error }
+        );
+      }
+
+      if (retryDelay > 0) {
+        await new Promise((resolve) =>
+          setTimeout(resolve, retryDelay * 2 ** (attempt - 1))
         );
       }
     }
