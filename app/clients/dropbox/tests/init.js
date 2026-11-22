@@ -47,25 +47,68 @@ describe("dropbox init", function () {
     const blogPath = require.resolve("models/blog");
     const databasePath = require.resolve("../database");
     const resetToBlotPath = require.resolve("../sync/reset-to-blot");
+    const resetFromBlotPath = require.resolve("../sync/reset-from-blot");
+    const lockPath = require.resolve("sync/establishSyncLock");
+    const folderLockPath = require.resolve("sync/lock");
+    const subscriberPath = require.resolve("helper/redisSubscriber");
+    const syncPath = require.resolve("../sync");
     const initPath = require.resolve("../init");
+    const paths = [
+      blogPath,
+      databasePath,
+      resetToBlotPath,
+      resetFromBlotPath,
+      lockPath,
+      folderLockPath,
+      subscriberPath,
+      syncPath,
+      initPath,
+    ];
 
     const blogID = "blog_incompletetransfertest" + Date.now();
     const originals = {};
+    let resumed;
 
     beforeEach(function () {
-      [blogPath, databasePath, resetToBlotPath, initPath].forEach(
-        (path) => (originals[path] = require.cache[path])
-      );
+      resumed = [];
+      paths.forEach((path) => (originals[path] = require.cache[path]));
     });
 
     afterEach(function () {
-      [blogPath, databasePath, resetToBlotPath, initPath].forEach((path) => {
+      paths.forEach((path) => {
         if (originals[path]) require.cache[path] = originals[path];
         else delete require.cache[path];
       });
     });
 
     function load(account) {
+      // A transfer that can be resumed is, through these stubs
+      require.cache[resetFromBlotPath] = {
+        exports: async function (id) {
+          resumed.push(id);
+        },
+      };
+      require.cache[lockPath] = {
+        exports: async function () {
+          return {
+            folder: { update: async function () {}, status: function () {} },
+            done: async function () {},
+          };
+        },
+      };
+      require.cache[folderLockPath] = {
+        exports: { inspect: async () => ({ held: false }) },
+      };
+      require.cache[subscriberPath] = {
+        exports: function () {
+          return {
+            setupPromise: Promise.resolve(),
+            cleanup: async function () {},
+          };
+        },
+      };
+      require.cache[syncPath] = { exports: async function () {} };
+
       require.cache[blogPath] = {
         exports: {
           getAllIDs: async function () {
@@ -111,6 +154,13 @@ describe("dropbox init", function () {
       },
     };
 
+    // A full Dropbox needs the person to free space first. An interrupted
+    // transfer is resumed, uploading what Dropbox lacks.
+    const resumes = {
+      "the legacy out-of-space error code": 0,
+      "transfer_pending, with no error code": 1,
+    };
+
     Object.keys(scenarios).forEach((description) => {
       const account = scenarios[description];
 
@@ -120,13 +170,41 @@ describe("dropbox init", function () {
           const init = load(account);
           // Throws (failing the test) if resetToBlot ever gets invoked.
           await init.resyncRecentSyncsOnStartup();
+          expect(resumed.length).toBe(resumes[description]);
         }
       );
 
       it("validateAllBlogs skips it (" + description + ")", async function () {
         const init = load(account);
-        await init.validateAllBlogs();
+        const { resuming } = await init.validateAllBlogs();
+        await resuming;
+        expect(resumed.length).toBe(resumes[description]);
       });
+    });
+
+    it("leaves a transfer alone while something holds the lock", async function () {
+      const init = load(scenarios["transfer_pending, with no error code"]);
+      require.cache[folderLockPath].exports.inspect = async () => ({
+        held: true,
+      });
+      expect(await init.resumeTransfer(blogID)).toBe(false);
+      expect(resumed).toEqual([]);
+    });
+
+    it("leaves a transfer that finished while it waited for the lock", async function () {
+      const init = load({ error_code: 0, transfer_pending: false });
+      expect(await init.resumeTransfer(blogID)).toBe(false);
+      expect(resumed).toEqual([]);
+    });
+
+    it("resumes a transfer, however long ago it started", async function () {
+      const init = load({
+        error_code: 0,
+        transfer_pending: true,
+        last_sync: Date.now() - 24 * 60 * 60 * 1000,
+      });
+      await init.resyncRecentSyncsOnStartup();
+      expect(resumed).toEqual([blogID]);
     });
   });
 
@@ -749,6 +827,26 @@ describe("dropbox init", function () {
       expect(sentEmails[2].blogs.map((blog) => blog.id).sort()).toEqual(
         [ids.walkError, ids.stuck].sort()
       );
+    });
+  });
+
+  describe("startupJobName", function () {
+    const config = require("config");
+    const original = config.unit;
+
+    afterEach(function () {
+      config.unit = original;
+    });
+
+    it("is one per unit, so each unit resyncs what its own stop killed", function () {
+      const init = require("../init");
+      config.unit = "blue";
+      const blue = init.startupJobName();
+      config.unit = "green";
+      const green = init.startupJobName();
+      expect(blue).not.toEqual(green);
+      config.unit = "";
+      expect(init.startupJobName()).toEqual("dropbox-resync-recent");
     });
   });
 });

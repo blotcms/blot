@@ -71,3 +71,20 @@ module.exports = function setupState(pending, options = {}) {
     },
   };
 };
+
+// How long after /authenticate starts a setup it may still be waiting to take
+// the folder lock
+const START_GRACE_MS = 60 * 1000;
+
+// Whether the setup in this session has stopped without clearing it: a deploy
+// or crash killed the process running it, so routes/setup/index.js never
+// removed it. A running setup holds the blog's folder lock throughout (setup
+// runs inside sync()). held is whether that lock is held now. started is when
+// /authenticate began the setup; sessions from before it was stored have none.
+module.exports.stopped = function stopped(pending, held, now = Date.now()) {
+  if (!pending || held) return false;
+  if (typeof pending.started !== "number") return true;
+  return now - pending.started > START_GRACE_MS;
+};
+
+module.exports.START_GRACE_MS = START_GRACE_MS;
