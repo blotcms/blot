@@ -23,6 +23,7 @@ describe("scheduler", function () {
     "subscription-emails",
     "welcome-email-reconcile",
     "scheduled-entries-reconcile",
+    "resume-blog-removal",
   ];
 
   describe("registering jobs", function () {

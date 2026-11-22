@@ -26,6 +26,7 @@ const sweep = require("storage/sweep");
 const purgeQueue = require("cdn/purgeQueue");
 const pruneTmp = require("./prune-tmp");
 const gitStoreMaintenance = require("./git-store-maintenance");
+const resumeBlogRemoval = require("./resume-blog-removal");
 const sweepICloudOrphans = require("clients/icloud/sweepOrphans");
 
 // If a disk has less than 2GB of space, we should notify the admin.
@@ -560,6 +561,16 @@ module.exports = function () {
     },
     { rerunIfKilled: false }
   );
+
+  // Finish blog removals a deploy interrupted
+  console.log(clfdate(), "Scheduled resuming of interrupted blog removals");
+  lock.cron("resume-blog-removal", "*/15 * * * *", async function () {
+    try {
+      await resumeBlogRemoval();
+    } catch (err) {
+      console.log(clfdate(), "Error: Resuming blog removals", err);
+    }
+  });
 
   console.log(clfdate(), "Scheduled daily check of featured sites");
   lock.cron("check-featured-sites", { hour: 8, minute: 0 }, async function () {
