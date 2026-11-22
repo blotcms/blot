@@ -132,8 +132,30 @@ describe("google drive setup across a restart", function () {
     expect(accounts.blog_a.folderId).toBe("f1");
   });
 
-  it("fails a copy that has been restarted for longer than a day", async function () {
+  it("keeps the folder of a setup that timed out after storing it", async function () {
+    // A blog left preparing by an old setup, which synced with its folder
+    // for days because syncs used to ignore preparing
     const account = { ...copying(), startedSetup: Date.now() - 25 * 3600e3 };
+    const { setup, accounts, events } = load({ account });
+
+    await setup.restartSetupProcesses();
+
+    expect(events).toEqual([
+      "store preparing,nonEmptyFolderShared,nonEditorPermissions",
+    ]);
+    expect(accounts.blog_a.preparing).toBe(false);
+    expect(accounts.blog_a.folderId).toBe("f1");
+    expect(accounts.blog_a.folderName).toBe("Blog");
+    expect(accounts.blog_a.error).toBeUndefined();
+  });
+
+  it("still fails a setup that timed out waiting for a folder", async function () {
+    const account = {
+      ...copying(),
+      folderId: null,
+      folderName: null,
+      startedSetup: Date.now() - 3 * 3600e3,
+    };
     const { setup, accounts } = load({ account });
 
     await setup({ id: "blog_a" }, await stubDrive(), "a@example.com", "sa");

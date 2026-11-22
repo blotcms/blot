@@ -186,6 +186,29 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
     // (restartSetupProcesses)
     if (STOPPED.has(e.message) || isLockError(e)) return;
 
+    // A setup that had its folder for longer than COPY_TIMEOUT is a blog
+    // that has been syncing with that folder. Before #2922 syncs ignored
+    // preparing, so a setup that never cleared it still synced, and Drive
+    // already has its files. Clear preparing and keep the folder: nulling
+    // folderId would turn its sync off.
+    if (e.message === "Setup timed out") {
+      const account = await database.blog.get(blog.id);
+      if (account?.folderId) {
+        console.log(
+          clfdate(),
+          "Google Drive Client",
+          "Setup timed out after storing its folder, keeping the folder",
+          blog.id
+        );
+        await database.blog.update(blog.id, {
+          preparing: false,
+          nonEmptyFolderShared: false,
+          nonEditorPermissions: false,
+        });
+        return;
+      }
+    }
+
     // Only if the account still exists: a disconnect meanwhile deleted it
     await database.blog.update(blog.id, {
       error: SETUP_ERROR,
