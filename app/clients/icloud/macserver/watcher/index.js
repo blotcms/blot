@@ -20,7 +20,7 @@ import { iCloudDriveDirectory } from "../config.js";
 import { join } from "path";
 import * as brctl from "../brctl/index.js";
 import { itemAt } from "../birdState.js";
-import { openJournal, startJournal } from "../journal.js";
+import { openJournal, startJournal, trackReplay } from "../journal.js";
 import status from "../httpClient/status.js";
 import { performAction } from "./actions.js";
 import {
@@ -373,8 +373,10 @@ const reconcileBlogFolderEvent = async (blogID) => {
 
 // One reconcile per path at a time: FSEvents often reports one change several
 // times. A report that arrives while the path is being handled runs it once
-// more afterwards, so a change in between is not missed.
-const reconciling = new Map(); // `${blogID}:${path}` -> { again }
+// more afterwards, so a change in between is not missed, and is given the
+// running reconcile's promise, which settles after that rerun (the journal
+// waits on it before it saves its position).
+const reconciling = new Map(); // `${blogID}:${path}` -> { again, promise }
 
 const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
   if (!pathInBlogDirectory) return reconcileBlogFolderEvent(blogID);
@@ -401,21 +403,25 @@ const reconcileFsWatchEvent = async (blogID, pathInBlogDirectory) => {
   const running = reconciling.get(key);
   if (running) {
     running.again = true;
-    return;
+    return running.promise;
   }
 
-  const state = { again: false };
+  const state = { again: false, promise: null };
   reconciling.set(key, state);
 
-  try {
-    do {
-      state.again = false;
-      await delay(FS_WATCH_SETTLE_DELAY_MS);
-      await reconcilePath(blogID, pathInBlogDirectory);
-    } while (state.again && isActive(blogID));
-  } finally {
-    reconciling.delete(key);
-  }
+  state.promise = (async () => {
+    try {
+      do {
+        state.again = false;
+        await delay(FS_WATCH_SETTLE_DELAY_MS);
+        await reconcilePath(blogID, pathInBlogDirectory);
+      } while (state.again && isActive(blogID));
+    } finally {
+      reconciling.delete(key);
+    }
+  })();
+
+  return state.promise;
 };
 
 // Lists the folder above a path bird has but the disk doesn't, which asks
@@ -763,22 +769,24 @@ const initialize = async () => {
       clfdate(),
       `journal: pushing ${replay.length} path(s) changed while stopped`
     );
-    for (const { blogID, path: p } of replay) {
-      reconcileFsWatchEvent(blogID, p).catch((error) =>
-        console.error(clfdate(), `Replay failed (${blogID}, ${p}):`, error)
-      );
-    }
+    trackReplay(
+      replay.map(({ blogID, path: p }) =>
+        reconcileFsWatchEvent(blogID, p).catch((error) =>
+          console.error(clfdate(), `Replay failed (${blogID}, ${p}):`, error)
+        )
+      )
+    );
   }
 
-  startJournal((blogID, p) => {
+  startJournal((blogID, p) =>
     reconcileFsWatchEvent(blogID, p).catch((error) =>
       console.error(
         clfdate(),
         `Journal reconcile failed (${blogID}, ${p}):`,
         error
       )
-    );
-  });
+    )
+  );
 
   startSweepLoop();
 };

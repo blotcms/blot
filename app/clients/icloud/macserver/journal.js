@@ -7,7 +7,11 @@
 //
 // The macserver uses it as a second source of events next to FSEvents, and
 // to pick up where it left off after a restart: the last rank is saved, and
-// the paths that changed while it was down are pushed on startup.
+// the paths that changed while it was down are pushed on startup. The rank
+// saved is only ever one whose pushes have all finished: the pushes are
+// queued in memory, so saving a rank as soon as it was read lost every push
+// still queued when the macserver stopped, until Blot's hourly validation
+// (for a quiet blog, up to a day).
 //
 // Like birdState.js this is best effort and read-only: without the database
 // nothing here runs and the watcher works from FSEvents and its sweep alone.
@@ -21,6 +25,10 @@ import { database } from "./birdState.js";
 const POLL_MS = 2_000;
 const SAVE_EVERY_MS = 10_000;
 const MAX_REPLAY = 5_000;
+// A batch of pushes still running after this long no longer holds the saved
+// position back: a push that never settles would otherwise stop it moving
+// for good, and every restart would replay everything since
+const STUCK_BATCH_MS = 30 * 60 * 1000;
 // where the last rank seen is kept; JOURNAL_STATE_FILE moves it, for a
 // second copy of the macserver run beside the real one
 const STATE_FILE =
@@ -36,8 +44,14 @@ const roots = new Map(); // "z:id" -> blogID
 const key = (z, id) => `${z}:${id}`;
 
 let statements = null;
+let replayBatch = null;
 let lastRank = 0;
 let savedRank = 0;
+// The rank up to which every push has finished, and the batches of pushes
+// still running, oldest first: { upTo, done, since }. With none running, every rank
+// read so far (lastRank) is settled.
+let settledRank = 0;
+const outstanding = [];
 let lastSave = 0;
 let timer = null;
 let polling = false;
@@ -102,13 +116,44 @@ const readState = async () => {
   }
 };
 
+const settled = (now = Date.now()) => {
+  while (outstanding.length) {
+    const batch = outstanding[0];
+    if (!batch.done && now - batch.since < STUCK_BATCH_MS) break;
+    if (!batch.done) {
+      console.warn(
+        clfdate(),
+        `journal: pushes up to rank ${batch.upTo} still running after ${STUCK_BATCH_MS / 60000} minutes, saving past them`
+      );
+    }
+    settledRank = outstanding.shift().upTo;
+  }
+  return outstanding.length ? settledRank : lastRank;
+};
+
+// Counts the rows up to rank upTo as handled once every push they started
+// has finished, failed ones included (a failure is not a restart losing it)
+const track = (
+  upTo,
+  pushes,
+  batch = { upTo, done: false, since: Date.now() }
+) => {
+  if (!outstanding.includes(batch)) outstanding.push(batch);
+  Promise.allSettled(pushes).then(() => {
+    batch.done = true;
+    return saveState();
+  });
+  return batch;
+};
+
 const saveState = async (force = false) => {
-  if (lastRank === savedRank) return;
+  const rank = settled();
+  if (rank === savedRank) return;
   if (!force && Date.now() - lastSave < SAVE_EVERY_MS) return;
   lastSave = Date.now();
   try {
-    await fs.outputJson(STATE_FILE, { rank: lastRank, at: new Date() });
-    savedRank = lastRank;
+    await fs.outputJson(STATE_FILE, { rank, at: new Date() });
+    savedRank = rank;
   } catch (error) {
     console.warn(clfdate(), "journal: could not save its position:", error);
   }
@@ -204,7 +249,11 @@ const poll = async () => {
       apply(rows, (blogID, path) =>
         touched.set(`${blogID}/${path}`, { blogID, path })
       );
-      for (const { blogID, path } of touched.values()) onChange(blogID, path);
+      const pushes = [];
+      for (const { blogID, path } of touched.values()) {
+        pushes.push(Promise.resolve().then(() => onChange(blogID, path)));
+      }
+      track(lastRank, pushes);
     } while (pollAgain);
     lastPollAt = Date.now();
     await saveState();
@@ -221,7 +270,8 @@ const poll = async () => {
 // Resolves to the { blogID, path, isFile } entries to push after the blogs
 // are watched
 // (empty the first time, when there is no saved position), or null when the
-// database can't be read.
+// database can't be read. The position stays where it was until the pushes
+// are passed to trackReplay and have all finished.
 const openJournal = async () => {
   const db = await database();
   if (!db) return null;
@@ -233,6 +283,7 @@ const openJournal = async () => {
     for (const row of statements.all.all()) index(row);
     const max = statements.max.get().m || 0;
     const saved = await readState();
+    savedRank = saved;
 
     const replay = [];
     if (saved && saved < max) {
@@ -244,6 +295,11 @@ const openJournal = async () => {
     }
 
     lastRank = max;
+    settledRank = saved || max;
+    if (replay.length)
+      outstanding.push(
+        (replayBatch = { upTo: max, done: false, since: Date.now() })
+      );
     console.log(
       clfdate(),
       `journal: ${items.size} items in ${roots.size} blog folders loaded in ${Date.now() - started}ms; ${replay.length} changed since the last run${saved ? "" : " (first run)"}`
@@ -266,7 +322,15 @@ const openJournal = async () => {
   }
 };
 
-// Starts polling; handler(blogID, path) is called for each changed path
+// Takes the promises of the pushes openJournal's replay started
+const trackReplay = (pushes) => {
+  if (!replayBatch) return;
+  track(replayBatch.upTo, pushes, replayBatch);
+  replayBatch = null;
+};
+
+// Starts polling; handler(blogID, path) is called for each changed path, and
+// returns a promise that settles once the path has been pushed
 const startJournal = (handler) => {
   if (!statements || timer) return;
   onChange = handler;
@@ -298,4 +362,10 @@ const journalStatus = (now = Date.now()) => {
   return status;
 };
 
-export { openJournal, startJournal, journalRunning, journalStatus };
+export {
+  openJournal,
+  trackReplay,
+  startJournal,
+  journalRunning,
+  journalStatus,
+};
