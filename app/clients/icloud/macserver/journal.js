@@ -152,7 +152,12 @@ const saveState = async (force = false) => {
   if (!force && Date.now() - lastSave < SAVE_EVERY_MS) return;
   lastSave = Date.now();
   try {
-    await fs.outputJson(STATE_FILE, { rank, at: new Date() });
+    // Written beside it and renamed over it, so a stop mid-write never
+    // leaves a truncated file, which readState would take as no position
+    // at all (a first run, replaying nothing)
+    const temporary = `${STATE_FILE}.${process.pid}.tmp`;
+    await fs.outputJson(temporary, { rank, at: new Date() });
+    await fs.rename(temporary, STATE_FILE);
     savedRank = rank;
   } catch (error) {
     console.warn(clfdate(), "journal: could not save its position:", error);
