@@ -111,13 +111,17 @@ async function setAccount(blogID, changes) {
 
   // Rows written before these fields existed, or a first save from
   // setup, do not carry them. Every other field stays required.
-  ["error_source", "error_since", "move_folder", "move_folder_id"].forEach(
-    function (field) {
-      if (account[field] === undefined || account[field] === null) {
-        account[field] = defaultFor(Model[field]);
-      }
+  [
+    "error_source",
+    "error_since",
+    "move_folder",
+    "move_folder_id",
+    "reused_folder",
+  ].forEach(function (field) {
+    if (account[field] === undefined || account[field] === null) {
+      account[field] = defaultFor(Model[field]);
     }
-  );
+  });
 
   // Verify that the type of new account state
   // matches the expected types declared in Model below.
@@ -153,7 +157,30 @@ async function dropAccount(blogID) {
   multi.del(accountKey(blogID));
   multi.del(require("./util/accessTokenCache").key(blogID));
 
+  // Remember which folder this blog used, and on which Dropbox account, so
+  // reconnecting the same account can pick it up again (getPrevious). It
+  // expires after a week: reconnects that fix auth or switch permission mode
+  // come within days, while a folder left for months may hold old copies
+  // that the reconnect's resetToBlot would write over newer files in Blot,
+  // and bring back files since deleted there.
+  multi.del(previousKey(blogID));
+  if (account && account.account_id && account.folder_id) {
+    multi.hSet(previousKey(blogID), {
+      account_id: account.account_id,
+      folder_id: account.folder_id,
+    });
+    multi.expire(previousKey(blogID), PREVIOUS_TTL_SECONDS);
+  }
+
   return multi.exec();
+}
+
+// The folder this blog used before it last disconnected: { account_id,
+// folder_id }, or null
+async function getPrevious(blogID) {
+  const previous = await redis.hGetAll(previousKey(blogID));
+  if (!previous || !previous.account_id || !previous.folder_id) return null;
+  return previous;
 }
 
 // Persist a classified Dropbox error. Repeating the same status+source
@@ -179,6 +206,13 @@ async function setError(blogID, classification) {
 // Redis Hash which stores the Dropbox account info
 function accountKey(blogID) {
   return "blog:" + blogID + ":dropbox:account";
+}
+
+// Redis Hash left behind when the account is dropped (see getPrevious)
+const PREVIOUS_TTL_SECONDS = 7 * 24 * 60 * 60;
+
+function previousKey(blogID) {
+  return "blog:" + blogID + ":dropbox:previous";
 }
 
 // Redis set whoses members are the blog IDs
@@ -270,6 +304,12 @@ Model = {
   // Empty strings otherwise.
   move_folder: "string",
   move_folder_id: "string",
+
+  // True when setup reconnected the blog to the folder it used before it
+  // disconnected (routes/setup/createFolder.js). That folder may hold the
+  // person's own writing, so a retry of its transfer stays non-destructive
+  // (resetFromBlot's keepDropbox) like the first attempt.
+  reused_folder: "boolean",
 };
 
 module.exports = {
@@ -277,5 +317,6 @@ module.exports = {
   setError: setError,
   drop: dropAccount,
   get: getAccount,
+  getPrevious: getPrevious,
   listBlogs: listAccountBlogs,
 };

@@ -163,4 +163,80 @@ describe("dropbox setup abort subscriber", function () {
       releaseAccount();
     });
   });
+
+  it("keeps the lock until the reused folder's walk has stopped", async function () {
+    const resetToBlotPath =
+      require.resolve("clients/dropbox/sync/reset-to-blot");
+    const original = require.cache[resetToBlotPath];
+    const events = [];
+    const captured = {};
+    let walkStarted, stopWalk;
+    const started = new Promise((resolve) => (walkStarted = resolve));
+
+    // Installs the other stubs; the ones below replace sync and createFolder
+    loadSetup({ onMessage: captured, cleanup: async () => {} });
+    require.cache[syncPath] = {
+      exports: async function (_blogID, fn) {
+        try {
+          return await fn({ status: () => {}, update: async () => {} });
+        } finally {
+          events.push("released");
+        }
+      },
+    };
+    require.cache[createFolderPath] = {
+      exports: async (account) =>
+        Object.assign(account, { folder_id: "id:old", reused_folder: true }),
+    };
+    const saved = [];
+    require.cache[databasePath] = {
+      exports: {
+        get: async () => null,
+        listBlogs: async () => [],
+        set: async (blogID, changes) => saved.push(changes),
+      },
+    };
+    require.cache[resetToBlotPath] = {
+      exports: (blogID, publish, update, signal) =>
+        new Promise(function (resolve, reject) {
+          walkStarted();
+          stopWalk = function () {
+            events.push("walk stopped");
+            const error = new Error("aborted");
+            error.name = "AbortError";
+            if (signal.aborted) reject(error);
+            else resolve();
+          };
+        }),
+    };
+    delete require.cache[setupPath];
+    const setup = require("clients/dropbox/routes/setup");
+
+    try {
+      let settled = false;
+      const session = { dropbox: {}, save: () => {} };
+      const result = setup({ blog: { id: "blog_1" } }, session).then(
+        () => (settled = "resolved"),
+        (err) => (settled = err.message)
+      );
+
+      await started;
+      captured.captured.onMessage("Attempting to disconnect from Dropbox");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(settled).toBe(false);
+      expect(events).toEqual([]);
+
+      stopWalk();
+      await result;
+
+      expect(settled).toBe("Dropbox setup aborted");
+      expect(events).toEqual(["walk stopped", "released"]);
+      // So a retry of this transfer stays keepDropbox (createFolder.js)
+      expect(saved[0].reused_folder).toBe(true);
+    } finally {
+      if (original) require.cache[resetToBlotPath] = original;
+      else delete require.cache[resetToBlotPath];
+    }
+  });
 });

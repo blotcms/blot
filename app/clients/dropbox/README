@@ -114,7 +114,7 @@ HTML templates rendered by dashboard routes:
 - **`tests/webhook-arm.js`**: Tests that the webhook leaves a follow-up for each blog before it answers Dropbox, and still syncs a blog it couldn't arm.
 - **`tests/write-order.js`**: Tests that `write()` uploads to Dropbox before writing to Blot's folder.
 - **`tests/sync-transfer-incomplete.js`**: Tests that the webhook-driven sync in `sync/index.js` skips a blog with an incomplete transfer before running delta/apply, without touching `error_code`/`cursor`.
-- **`tests/setup/createFolder-reuse.js`**: Tests the retry-reuses-the-partial-folder behavior in `routes/setup/createFolder.js` (reuse, not_found-falls-through vs. transient-error-propagates, account_id/full_access mismatch, already-completed).
+- **`tests/setup/createFolder-reuse.js`**: Tests the retry-reuses-the-partial-folder behavior in `routes/setup/createFolder.js` (reuse, not_found-falls-through vs. transient-error-propagates, account_id/full_access mismatch, already-completed) and the reconnect reuse of the previous folder (different account, folder used by another blog).
 - **`tests/classifyError.js`**: Tests for health classification of Dropbox errors and stored rows.
 - **`tests/getHealth.js`**: Tests for the client's `getHealth` method.
 - **`tests/waitForErrorTimeout.js`**: Tests for rate limit handling.
@@ -195,7 +195,7 @@ Disconnects a blog from Dropbox, inside the blog's sync lock.
 - **Returns**: A promise, which resolves once the lock is released and rejects as `sync()` does if the lock is held.
 - **Behavior**:
   - Clears the blog's client type.
-  - Removes Dropbox account credentials from the database.
+  - Removes Dropbox account credentials from the database, keeping only the blog's `folder_id` and `account_id` (`database.getPrevious`) so reconnecting can reuse the folder.
   - Revokes the OAuth token if no other blogs use the same account.
 
 ### `resync(blogID, publish, update)`
@@ -271,10 +271,21 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
 5. Setup function (in `routes/setup/index.js`) is called asynchronously:
    - `getAccount()`: Exchanges code for access/refresh tokens and retrieves account info.
    - `createFolder()`: Creates or designates the blog folder in Dropbox (handles migration for multiple blogs).
+     On a reconnect it reuses the folder the blog used before it disconnected,
+     wherever it is now, if it is the same Dropbox account, the folder still
+     exists, the new permission mode can reach it, and it neither is, holds
+     nor sits inside another blog's folder on the account. It never reuses a
+     folder just because of its name. The account records the reuse
+     (`reused_folder`), so a retry of a failed reconnect transfer stays
+     non-destructive.
    - Saves account info to Redis database.
    - `resetFromBlot()`: Uploads all local blog files to Dropbox. Stops the whole
      transfer if Dropbox runs out of space (see "Handling insufficient Dropbox
-     space" below) or if any file fails to upload.
+     space" below) or if any file fails to upload. On a reconnect into the
+     blog's previous folder it uploads only what the folder lacks
+     (`keepDropbox`), then `resetToBlot()` brings the folder's own changes
+     into Blot. A disconnect stops either walk, and setup keeps the folder
+     lock until it has stopped.
 
 ### Ongoing Sync (Webhook-Triggered)
 
