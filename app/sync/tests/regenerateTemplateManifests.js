@@ -80,7 +80,9 @@ describe("regenerateTemplateManifests", function () {
   it("leaves a template pending if clearing it fails", async function () {
     await client.sAdd(this.pendingKey, [this.templateID]);
 
-    spyOn(client, "sRem").and.rejectWith(new Error("killed"));
+    spyOn(client, "sRem").and.callFake(() =>
+      Promise.reject(new Error("killed"))
+    );
 
     var log = jasmine.createSpy("log");
 
