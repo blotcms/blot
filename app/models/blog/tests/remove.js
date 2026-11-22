@@ -153,7 +153,14 @@ describe("Blog.remove", function () {
       );
     }
 
+    // An interrupted removal keeps the handle claimed, so finish it or the
+    // next spec can't create its blog
     afterEach(async function () {
+      var purgeQueue = require("cdn/purgeQueue");
+      [discover.removeBlog, purgeQueue.blog].forEach(function (fn) {
+        if (jasmine.isSpy(fn)) fn.and.callThrough();
+      });
+      await remove(this.blog.id).catch(function () {});
       await client.zRem(key.removing, this.blog.id);
       await client.hDel(key.removalAttempts, this.blog.id);
     });

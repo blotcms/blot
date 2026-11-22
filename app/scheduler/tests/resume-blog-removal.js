@@ -22,7 +22,11 @@ describe("scheduler resume-blog-removal", function () {
     this.kill.and.callThrough();
   });
 
+  // An interrupted removal keeps the handle claimed, so finish it or the
+  // next spec can't create its blog
   afterEach(async function () {
+    this.kill.and.callThrough();
+    await Blog.remove(this.blog.id).catch(() => {});
     await client.zRem(Blog.key.removing, this.blog.id);
     await client.hDel(Blog.key.removalAttempts, this.blog.id);
   });
