@@ -37,4 +37,8 @@ module.exports = {
 
   // Hash of how many times the scheduler has resumed each blog in removing
   removalAttempts: "blogs:removing:attempts",
+
+  // Hash of blog ID to JSON { uid, at } for a blog its owner deleted from the
+  // dashboard, whose subscription is reduced once it is gone
+  removalBilling: "blogs:removing:billing",
 };

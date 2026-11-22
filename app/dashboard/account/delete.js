@@ -34,6 +34,7 @@ Delete.route("/")
 
   .post(
     checkPassword,
+    clearRemovalBilling,
     issueDeletionRefund,
     deleteSubscription,
     deleteBlogs,
@@ -44,6 +45,18 @@ Delete.route("/")
       res.redirect("/sites/deleted");
     }
   );
+
+// The whole subscription is cancelled below, so a reduction a site deletion
+// left to the scheduler must not be tried on it
+async function clearRemovalBilling(req, res, next) {
+  try {
+    await require("models/blog/removalBilling").clearForUser(req.user.uid);
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
+}
 
 async function emailUser(req, res, next) {
   try {

@@ -22,13 +22,6 @@ Sync: {{sync_summary}}
 
 Newsletter: {{newsletter_subscribers}} subscribers
 
-{{#billing_mismatches.length}}
-Paying for more sites than they have:
-{{#billing_mismatches}}
-- [{{email}}](https://www.google.com/search?udm=14&q={{email}}) pays for {{quantity}}, has {{blogs}}
-{{/billing_mismatches}}
-
-{{/billing_mismatches.length}}
 {{#new_customers.length}}
 New customers:
 {{#new_customers}}
