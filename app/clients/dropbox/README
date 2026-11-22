@@ -377,7 +377,8 @@ added or edited there, then a catch-up sync runs.
 
 When a second blog connects to an account whose app folder root is already
 another blog's folder, setup moves that blog's files into a subfolder
-(`routes/setup/createFolder.js`'s `moveExistingFiles()`). It records the
+(`routes/setup/createFolder.js`'s `moveExistingFiles()`), retrying for about
+two minutes if webhooks keep that blog's folder lock busy. It records the
 subfolder on that blog's account first (`move_folder`/`move_folder_id`), which
 pauses the blog's syncs (`transferIncomplete()`) until the move is done. A
 move a deploy or crash cuts short is finished into the same subfolder: by a

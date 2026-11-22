@@ -1,6 +1,7 @@
 const titleToFolder = require("clients/dropbox/util/titleToFolder");
 
 const sync = require("sync");
+const drain = require("helper/drain");
 const database = require("clients/dropbox/database");
 const { transferIncomplete } = require("clients/dropbox/util/constants");
 
@@ -147,8 +148,22 @@ async function checkAppFolder(account) {
 // options.resume is for the startup and hourly jobs: they only finish a move
 // that is still recorded, and leave the blog alone otherwise.
 async function moveExistingFiles(client, otherBlog, options = {}) {
-  // Get a lock on the blog
-  // we should add a way to retry this sync attempt
+  // Webhooks can keep the blog's lock busy for longer than sync() waits for
+  // it, so try again for about two minutes. Only a busy lock is retried, and
+  // not while draining: the startup and hourly jobs finish a recorded move.
+  const { retryMs = 5000, tries = 24 } = options;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await moveUnderLock(client, otherBlog, options);
+    } catch (err) {
+      const busy = err?.message === "Failed to acquire folder lock";
+      if (!busy || attempt >= tries || drain.isDraining()) throw err;
+    }
+    await new Promise((resolve) => setTimeout(resolve, retryMs));
+  }
+}
+
+async function moveUnderLock(client, otherBlog, options) {
   await sync(otherBlog.id, async function () {
     const account = await database.get(otherBlog.id);
     if (!account) return;

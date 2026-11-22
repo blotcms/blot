@@ -141,6 +141,50 @@ describe("dropbox createFolder moveExistingFiles resumes", function () {
     expect(account.folder_id).toBe("id:new");
   });
 
+  it("waits for the other blog's lock instead of failing", async function () {
+    account = {
+      folder: "",
+      folder_id: "",
+      move_folder: "",
+      move_folder_id: "",
+    };
+    const moveExistingFiles = load();
+    let busy = 2;
+    require.cache[syncPath].exports = async (blogID, fn) => {
+      if (busy-- > 0) {
+        throw new Error("Failed to acquire folder lock", {
+          cause: Object.assign(new Error("held"), { code: "ELOCKED" }),
+        });
+      }
+      return fn({});
+    };
+
+    await moveExistingFiles(client([]), otherBlog, { retryMs: 1 });
+
+    expect(busy).toBe(-1);
+    expect(account.folder).toBe("/Other blog");
+  });
+
+  it("does not retry other errors", async function () {
+    account = {
+      folder: "",
+      folder_id: "",
+      move_folder: "",
+      move_folder_id: "",
+    };
+    const moveExistingFiles = load();
+    let runs = 0;
+    require.cache[syncPath].exports = async () => {
+      runs++;
+      throw new Error("Cannot sync blog");
+    };
+
+    await expectAsync(
+      moveExistingFiles(client([]), otherBlog, { retryMs: 1 })
+    ).toBeRejectedWithError("Cannot sync blog");
+    expect(runs).toBe(1);
+  });
+
   it("pauses the blog's syncs while a move is recorded", function () {
     const { transferIncomplete } = require("clients/dropbox/util/constants");
     expect(transferIncomplete({ move_folder_id: "id:recorded" })).toBe(true);

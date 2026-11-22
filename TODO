@@ -460,7 +460,6 @@ Improve Dropbox sync
 - Batch dependent-entry rebuilds across a sync: a large asset delta batch rebuilt the same referring entry after each image (~13s per update), holding the folder lock for over three hours (2026-11-04). The stuck-lock alert should distinguish ongoing progress from a hung sync.
 - Review public asset rate limits and nginx-429 bans: loading an image-heavy page triggered repeated 429s and temporary visitor bans (2026-11-03/04); avoid banning normal page loads while retaining abuse protection.
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
-- Adding an additional blog to an existing app folder under constant webhooks fails: moveExistingFiles (routes/setup/createFolder.js) gives up on the root blog's lock after ~5s and setup fails loudly. Retry or wait longer for the other blog's lock (or take all account-linked blogs' locks in a fixed order)
 - Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
 - A restart mid-transfer now resumes it (#2923), but a file over 140 MB restarts its upload session from zero. Persist the session id and offset if that turns out to matter.
 - Bug: run reset-to-blot when sync fails / errors
