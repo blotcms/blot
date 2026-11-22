@@ -110,7 +110,9 @@ HTML templates rendered by dashboard routes:
 - **`tests/database.js`**: Tests for database operations.
 - **`tests/reset-to-blot.js`**: Tests for the download/apply walk, including that it refuses outright (before touching anything) for a blog with an incomplete transfer.
 - **`tests/reset-from-blot.js`**: Tests for the initial transfer's quota pre-flight check (including that it nets out bytes already on Dropbox and doesn't get blocked by a negative free-space figure on a zero-growth retry), its mid-transfer/end-of-transfer handling of failed uploads, and that a full success clears `transfer_pending`.
-- **`tests/init.js`**: Tests `transferIncomplete()` and that the hourly validation and startup resync skip a blog with an incomplete transfer (both the `transfer_pending` and legacy `error_code: 507` cases).
+- **`tests/init.js`**: Tests `transferIncomplete()`, that the hourly validation and startup resync never walk a blog with an incomplete transfer (both the `transfer_pending` and legacy `error_code: 507` cases), that they resume an interrupted transfer but not one stopped by a full Dropbox or still running, and that the startup job is named per unit.
+- **`tests/webhook-arm.js`**: Tests that the webhook leaves a follow-up for each blog before it answers Dropbox, and still syncs a blog it couldn't arm.
+- **`tests/write-order.js`**: Tests that `write()` uploads to Dropbox before writing to Blot's folder.
 - **`tests/sync-transfer-incomplete.js`**: Tests that the webhook-driven sync in `sync/index.js` skips a blog with an incomplete transfer before running delta/apply, without touching `error_code`/`cursor`.
 - **`tests/setup/createFolder-reuse.js`**: Tests the retry-reuses-the-partial-folder behavior in `routes/setup/createFolder.js` (reuse, not_found-falls-through vs. transient-error-propagates, account_id/full_access mismatch, already-completed).
 - **`tests/classifyError.js`**: Tests for health classification of Dropbox errors and stored rows.
@@ -359,6 +361,23 @@ load that happens once the lock is held) still catches it.
 `sync/index.js`'s webhook-driven sync has the same kind of cheap pre-check,
 after acquiring its own lock and before constructing `Delta`/`Apply`, leaving
 `error_code`/`cursor` untouched when it skips.
+
+A transfer that nothing is running any more (a deploy or crash killed the
+setup) is resumed, not just skipped: `init.js`'s `resumeTransfers()` re-runs
+`resetFromBlot()` under the folder lock with `keepDropbox`, which only uploads
+what Dropbox lacks. It deletes nothing on Dropbox and leaves a file there that
+differs from Blot's alone, since the person may have added or edited it while
+the transfer was paused. It runs its own quota check. The startup job resumes every such blog,
+however long ago its transfer started, and the hourly validation queues them
+once its sweep is done, without waiting for them. A blog whose lock is held
+(setup still running), or whose account has a durable error such as a full
+Dropbox (`issueFromAccount()`), is left alone. After a resume finishes, a
+walk of Dropbox into Blot (`resetToBlot()`) brings in what the person
+added or edited there, then a catch-up sync runs.
+
+The startup job runs once per unit per deploy (`onceAtStartup`, named with
+`config.unit`), since blue and green stop and start minutes apart and each
+must resync the syncs its own stop killed.
 
 Specifically for running out of space, `resetFromBlot()` also:
 

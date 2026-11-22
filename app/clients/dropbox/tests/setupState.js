@@ -62,4 +62,31 @@ describe("dropbox setupState", function () {
       });
     }
   });
+
+  describe("stopped", function () {
+    const { stopped, START_GRACE_MS } = setupState;
+    const now = 1000000;
+
+    it("is a running setup while the folder lock is held", function () {
+      expect(stopped({ started: 0 }, true, now)).toBe(false);
+    });
+
+    it("gives a setup that has just started time to take the lock", function () {
+      expect(stopped({ started: now - 1000 }, false, now)).toBe(false);
+    });
+
+    it("has stopped once nothing holds the lock after that", function () {
+      expect(stopped({ started: now - START_GRACE_MS - 1 }, false, now)).toBe(
+        true
+      );
+    });
+
+    it("has stopped for a setup from before started was stored", function () {
+      expect(stopped({ preparing: true }, false, now)).toBe(true);
+    });
+
+    it("has nothing to stop without a setup", function () {
+      expect(stopped(undefined, false, now)).toBe(false);
+    });
+  });
 });

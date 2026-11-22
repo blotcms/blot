@@ -6,11 +6,16 @@ const onceAtStartup = require("clients/util/onceAtStartup");
 const email = require("helper/email");
 const syncReport = require("clients/util/syncReport");
 const resetToBlot = require("./sync/reset-to-blot");
+const resetFromBlot = require("./sync/reset-from-blot");
 const { transferIncomplete } = require("./util/constants");
+const { issueFromAccount } = require("./util/classifyError");
 const { get: getDropboxAccount } = require("./database");
 const getHealth = require("./getHealth");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
+const folderLock = require("sync/lock");
+const redisSubscriber = require("helper/redisSubscriber");
+const config = require("config");
 const sync = require("./sync");
 const { measure: measureEventLoop } = require("helper/eventLoopMonitor");
 
@@ -58,6 +63,114 @@ const resetToBlotWithLock = async (blogID, publish) => {
       if (err !== error)
         console.error(clfdate(), "Dropbox: Error releasing lock", blogID, err);
     });
+  }
+};
+
+// A deploy or crash that stops an initial transfer part way leaves
+// transfer_pending set, and every automatic sync skips the blog until a
+// transfer finishes. Resuming runs resetFromBlot with keepDropbox, which only
+// uploads what Dropbox lacks: anything the person added or edited on Dropbox
+// meanwhile is kept, and resumeTransfers then walks Dropbox into Blot. It
+// runs its own quota check first. Not while the account has a durable error
+// (revoked access, a missing folder, a full Dropbox), which needs the person
+// to act first.
+const canResumeTransfer = (account) =>
+  !!account && account.transfer_pending === true && !issueFromAccount(account);
+
+// Resumes one blog's initial transfer under its folder lock. Resolves true if
+// the transfer finished, false if it was left alone: something holds the lock
+// (a setup is running it), the transfer is no longer pending, or a disconnect
+// aborted it. Rejects if the transfer fails, which leaves transfer_pending set.
+const resumeTransfer = async (blogID) => {
+  if ((await folderLock.inspect(blogID)).held) return false;
+
+  let lock;
+  try {
+    lock = await establishSyncLock(blogID);
+  } catch (err) {
+    if (err.message === "Failed to acquire folder lock") return false;
+    throw err;
+  }
+
+  const { folder, done } = lock;
+  const signal = { aborted: false };
+  // A disconnect waits for the folder lock, so stop for it as setup does
+  const subscription = redisSubscriber({
+    channel: "sync:status:" + blogID,
+    onMessage: function (message) {
+      if (message === "Attempting to disconnect from Dropbox")
+        signal.aborted = true;
+    },
+    onError: function (err) {
+      console.error(clfdate(), "Dropbox: Resume subscriber", blogID, err);
+    },
+  });
+
+  let error = null;
+  try {
+    await subscription.setupPromise;
+
+    // The setup this replaces may have finished just before we took the lock
+    if (!canResumeTransfer(await getDropboxAccount(blogID))) return false;
+
+    console.log(clfdate(), "Dropbox: Resuming initial transfer", blogID);
+    folder.status("Syncing your folder to Dropbox");
+    await resetFromBlot(blogID, folder.status, signal, folder.update, {
+      keepDropbox: true,
+    });
+    return true;
+  } catch (err) {
+    if (err && err.name === "AbortError") return false;
+    error = err;
+    throw err;
+  } finally {
+    await subscription
+      .cleanup()
+      .catch((err) =>
+        console.error(clfdate(), "Dropbox: Resume cleanup", blogID, err)
+      );
+    await done(error).catch((err) => {
+      if (err !== error)
+        console.error(clfdate(), "Dropbox: Error releasing lock", blogID, err);
+    });
+  }
+};
+
+// Blogs whose transfer this process is resuming, so a sweep doesn't queue a
+// blog again while an earlier sweep's resume of it is still running
+const resuming = new Set();
+
+// Resumes each blog's transfer in turn. Then walks Dropbox into Blot, which
+// brings in what the person added or edited on Dropbox while the transfer was
+// paused (webhook syncs skip a blog while its transfer is pending, and the
+// resume left those files alone), and syncs from the cursor. Nothing on Blot
+// is lost: every Blot file is now on Dropbox. Never rejects.
+const resumeTransfers = async (blogIDs) => {
+  for (const blogID of blogIDs) {
+    if (resuming.has(blogID)) continue;
+    resuming.add(blogID);
+
+    try {
+      if (!(await resumeTransfer(blogID))) continue;
+      console.log(clfdate(), "Dropbox: Resumed initial transfer", blogID);
+
+      const publish = (...args) =>
+        console.log(clfdate(), "Dropbox:", blogID, ...args);
+      await resetToBlotWithLock(blogID, publish);
+
+      const blog = await getBlog({ id: blogID });
+      if (blog) await catchUpSync(blog);
+    } catch (err) {
+      if (err && err.message === "Failed to acquire folder lock") continue;
+      console.error(
+        clfdate(),
+        "Dropbox: Error resuming initial transfer",
+        blogID,
+        err
+      );
+    } finally {
+      resuming.delete(blogID);
+    }
   }
 };
 
@@ -121,6 +234,7 @@ const validateAllBlogs = async () => {
   }
 
   const report = syncReport.create();
+  const transfersToResume = [];
   let checkedBlogs = 0;
 
   for (const blogID of blogIDs) {
@@ -141,8 +255,12 @@ const validateAllBlogs = async () => {
       const account = await getDropboxAccount(blogID);
 
       // A big first transfer can legitimately hold the lock for over an
-      // hour, so it isn't a stuck lock (and it is skipped below anyway).
-      if (account && account.transfer_pending === true) continue;
+      // hour, so it isn't a stuck lock. One nothing is running any more is
+      // resumed once the sweep is done.
+      if (account && account.transfer_pending === true) {
+        if (canResumeTransfer(account)) transfersToResume.push(blogID);
+        continue;
+      }
 
       if (await syncReport.recordStuckLock(report, blog)) continue;
 
@@ -253,8 +371,14 @@ const validateAllBlogs = async () => {
     clfdate(),
     "Dropbox: Sync validation complete",
     `checked=${checkedBlogs}`,
-    `issues=${reported}`
+    `issues=${reported}`,
+    `transfersToResume=${transfersToResume.length}`
   );
+
+  // Not awaited: a big transfer can take longer than the hour, and the next
+  // sweep waits for this one to finish. Returned in an object, which the
+  // scheduler doesn't wait for, so specs can.
+  return { resuming: resumeTransfers(transfersToResume) };
 };
 
 const resyncRecentSyncsOnStartup = async () => {
@@ -270,6 +394,7 @@ const resyncRecentSyncsOnStartup = async () => {
   }
 
   const blogsToResync = [];
+  const transfersToResume = [];
 
   for (const blogID of blogIDs) {
     try {
@@ -277,6 +402,13 @@ const resyncRecentSyncsOnStartup = async () => {
       if (!blog || blog.client !== "dropbox") continue;
 
       const account = await getDropboxAccount(blogID);
+
+      // However long ago it started: a transfer can run for hours
+      if (!blog.isDisabled && canResumeTransfer(account)) {
+        transfersToResume.push(blogID);
+        continue;
+      }
+
       if (!account || typeof account.last_sync !== "number") continue;
 
       if (Date.now() - account.last_sync >= FIFTEEN_MINUTES_IN_MS) continue;
@@ -299,8 +431,6 @@ const resyncRecentSyncsOnStartup = async () => {
       );
     }
   }
-
-  if (!blogsToResync.length) return;
 
   for (const { blog, blogID } of blogsToResync) {
     const publish = (...args) => {
@@ -335,7 +465,13 @@ const resyncRecentSyncsOnStartup = async () => {
       console.error(clfdate(), "Dropbox: Resync error for blog", blogID, err);
     }
   }
+
+  await resumeTransfers(transfersToResume);
 };
+
+// Outside a unit (development, tests) there is one name for every process
+const startupJobName = () =>
+  "dropbox-resync-recent" + (config.unit ? ":" + config.unit : "");
 
 module.exports = async function init() {
   console.log(clfdate(), "Dropbox: Scheduling hourly sync validation");
@@ -343,8 +479,10 @@ module.exports = async function init() {
   // is not overlapped by the next one (the "running" lock is cross-process).
   scheduleExclusive("dropbox-validation", "0 * * * *", validateAllBlogs);
 
-  // Once per deploy across all processes, not once per process.
-  onceAtStartup("dropbox-resync-recent", resyncRecentSyncsOnStartup).catch(
+  // Once per unit per deploy: a unit's two processes share it, but the
+  // units stop and start minutes apart, and each must resync the syncs its
+  // own stop killed.
+  onceAtStartup(startupJobName(), resyncRecentSyncsOnStartup).catch(
     function (err) {
       console.error(clfdate(), "Dropbox: Startup resync failed", err);
     }
@@ -358,4 +496,7 @@ module.exports = async function init() {
 module.exports.resyncRecentSyncsOnStartup = resyncRecentSyncsOnStartup;
 module.exports.validateAllBlogs = validateAllBlogs;
 module.exports.resetToBlotWithLock = resetToBlotWithLock;
+module.exports.resumeTransfer = resumeTransfer;
+module.exports.resumeTransfers = resumeTransfers;
+module.exports.startupJobName = startupJobName;
 module.exports.TRANSFER_INCOMPLETE = TRANSFER_INCOMPLETE;

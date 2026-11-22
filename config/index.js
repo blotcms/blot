@@ -72,6 +72,8 @@ module.exports = {
   // the worker child it forks. Otherwise map 'blot-container-<container-name>'
   // to 'container-name'; a forked worker child shares its parent's
   // CONTAINER_NAME, so gets a suffix.
+  // Which unit (blue or green) this process runs in, empty outside a unit
+  unit: BLOT_UNIT,
   container: BLOT_UNIT
     ? BLOT_UNIT + (BLOT_WORKER_CHILD ? "/node-b" : "/node-a")
     : (process.env.CONTAINER_NAME || "").split("-").slice(2).join("-") +
