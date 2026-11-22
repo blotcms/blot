@@ -12,6 +12,9 @@ sync/
                             folder interface while it is held, then finishes the sync.
   rebuild.js                Full-folder rebuild: walks every file in the blog directory
                             and calls update on each path in series.
+  pendingRebuilds.js        Whole-blog rebuilds and resaves queued in Redis before they
+                            start, run under the folder lock, and run again by any
+                            process if the one running them is killed.
   renames.js                Post-sync rename detection. Correlates recently created and
                             deleted entries by file size and title to infer moves.
   messenger.js              Factory for the log/status/syncID triple attached to every
@@ -128,6 +131,19 @@ Walks every file in the blog's folder (one `storage/folder` `listNames` per dire
 
 - `options.thumbnails` — boolean. Flushes the thumbnail Transformer store and empties the `_thumbnails` static directory before rebuilding.
 - `options.imageCache` — boolean. Flushes the image-cache Transformer store and empties the `_image_cache` static directory before rebuilding.
+
+### `pendingRebuilds`
+
+**File:** `pendingRebuilds.js`
+
+Whole-blog work that a settings change or the dashboard asks for, which must finish even if a deploy kills the process running it. The work is a set of flags: `resave` (save every entry again, for a link format change), `rebuild` (build every file again, for plugins, image metadata or converters), `thumbnails` and `imageCache` (wipe those first), `fix` (run `Fix()` after the rebuild, for the dashboard's Rebuild button).
+
+- `await queue(blogID, flags)` adds the flags to `blog:<id>:rebuild:pending` and sets the blog's alarm in `alarm:due:pending-rebuilds` (`helper/alarm`) due now, in one MULTI.
+- `await request(blogID, flags)` queues them and starts `run` in this process without waiting; it never rejects. The settings pages use it.
+- `await run(blogID)` takes the blog's folder lock through `sync()` and calls `runLocked`. If the lock is held it sets the alarm 15 seconds later instead. A blog that is gone or disabled has its record dropped.
+- `await runLocked(blogID, folder)` is for a caller already holding the lock (the dashboard's Rebuild, through `establishSyncLock`). In one MULTI it merges the pending flags into `blog:<id>:rebuild:running`, clears the pending set and increments `blog:<id>:rebuild:attempts`, then does the work and deletes both keys. A run that is killed leaves `running` behind for the next one, which starts again from scratch. After three attempts it gives up. A failure other than Redis being unavailable is logged and the record cleared, since it would fail the same way again.
+
+Every process polls the alarm (`setup.js`, skipped in previews), so a rebuild left by a dead process is run by whichever process next claims it once the dead one's folder lock has expired. The folder lock is what keeps two runs apart, and drain waits for it like any sync.
 
 ### `await establishSyncLock(blogID)`
 
@@ -301,7 +317,7 @@ await sync(blogID, fn)
 - The lock lives in Redis (`blog:<id>:folder-lock`, 10s TTL, 3s heartbeat), so it coordinates across processes and hosts. A process that dies while holding it leaves the key until the TTL expires. If the heartbeat finds the lock lost, `[LOCK COMPROMISED]` is logged with diagnostics and the process crashes, so a sync never keeps writing without the lock. Git write/remove and template `writeToFolder`/`removeFromFolder` do not take this lock yet.
 - `renames.js` relies on a 30-second window and a heuristic match by file size or title. Renames involving empty files are skipped (zero `size` is excluded). Ambiguous renames — where multiple deleted entries have the same size or title — are not resolved.
 - `rebuildDependents` suppresses build errors for individual dependents and continues, so a broken dependent entry does not block other rebuilds.
-- `rebuild.js` does not acquire the sync lock itself; callers are responsible for ensuring no concurrent sync is in progress.
+- `rebuild.js` does not acquire the sync lock itself; callers are responsible for ensuring no concurrent sync is in progress. `pendingRebuilds.js` runs it under the lock.
 - The `maybeEnableInjectTitle` side effect in `update/index.js` mutates `blog.plugins` in-place on the in-memory blog object, so subsequent updates within the same sync session see the updated plugin state.
 
 ## Tests
