@@ -29,8 +29,13 @@ async function createFolder(account) {
   if (reused) {
     account.folder = reused.folder;
     account.folder_id = reused.folder_id;
-    // Setup then uploads only what the folder lacks (see setup/index.js)
-    account.reused_folder = true;
+    // On a reconnect, setup uploads only what the folder lacks, since it
+    // may hold the person's own changes (see setup/index.js). A retried
+    // transfer runs the normal reset: that folder only ever held Blot's own
+    // partial upload, and the normal reset resolves type conflicts. So if
+    // a reconnect's transfer fails on one, the next Retry finds the account
+    // row and takes the normal path, and can finish.
+    if (reused.previous) account.reused_folder = true;
     return account;
   }
 
@@ -76,9 +81,11 @@ async function tryReuseFolder(account) {
   const existing = await database.get(blog.id);
 
   let candidate = null;
+  let previous = false;
 
   if (!existing) {
     candidate = await database.getPrevious(blog.id);
+    previous = true;
   } else if (
     transferIncomplete(existing) &&
     existing.full_access === full_access
@@ -97,7 +104,11 @@ async function tryReuseFolder(account) {
 
     if (result[".tag"] !== "folder") return null;
 
-    return { folder: result.path_display, folder_id: candidate.folder_id };
+    return {
+      folder: result.path_display,
+      folder_id: candidate.folder_id,
+      previous,
+    };
   } catch (e) {
     // Only a confirmed "the folder is gone" (Dropbox's 409 path/not_found,
     // which is also what an app-folder token gets for a folder outside the

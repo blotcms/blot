@@ -86,6 +86,8 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
     expect(filesCreateFolderCalled).toEqual(false);
     expect(result.folder).toEqual("/My Blog");
     expect(result.folder_id).toEqual("id:existingfolder");
+    // A retried transfer runs the normal reset, not the keepDropbox one
+    expect(result.reused_folder).toBeUndefined();
   });
 
   // Mirrors the shape of an error the Dropbox SDK throws for a

@@ -12,23 +12,25 @@ const resetToBlot = require("../../sync/reset-to-blot");
 // Resolves once the setup is finished and the sync has released the folder
 // lock, or rejects with why it failed. A disconnect aborts the setup: the
 // sync finishes straight away, with "Dropbox setup aborted", even while a
-// step is still running.
+// step is still running - except the transfer itself, which writes to the
+// folder, so setup waits for it to stop at its next check of the signal
+// before releasing the lock.
 function setup(account, session) {
   return sync(account.blog.id, function (folder) {
     return new Promise(function (resolve, reject) {
       const signal = { aborted: false };
       const abortChannel = "sync:status:" + account.blog.id;
-      let abortHandled = false;
       let cleaned = false;
       let finished = false;
+      let transferring = false;
 
       const subscription = redisSubscriber({
         channel: abortChannel,
         onMessage: function (message) {
           if (message !== "Attempting to disconnect from Dropbox") return;
           signal.aborted = true;
-          abortHandled = true;
-          handleAbort();
+          // run() finishes once the transfer has stopped
+          if (!transferring) handleAbort();
         },
         onError: function (err) {
           console.log("Error:", err);
@@ -114,9 +116,12 @@ function setup(account, session) {
           folder.status("Syncing your folder to Dropbox");
           if (handleAbort()) return;
 
-          // upload folder contents to dropbox. A folder this blog used
-          // before (createFolder.js) may hold the person's own changes, so
-          // only upload what it lacks, then bring its changes into Blot.
+          transferring = true;
+
+          // upload folder contents to dropbox. The folder this blog used
+          // before it disconnected (createFolder.js) may hold the person's
+          // own changes, so only upload what it lacks, then bring its
+          // changes into Blot.
           await resetFromBlot(
             account.blog.id,
             folder.status,
@@ -131,8 +136,14 @@ function setup(account, session) {
             // The transfer is done, so a failure here doesn't fail setup:
             // the hourly validation runs the same walk again
             try {
-              await resetToBlot(account.blog.id, folder.status, folder.update);
+              await resetToBlot(
+                account.blog.id,
+                folder.status,
+                folder.update,
+                signal
+              );
             } catch (err) {
+              if (err && err.name === "AbortError") throw err;
               console.log("Error syncing reused Dropbox folder:", err);
             }
             if (handleAbort()) return;
@@ -140,7 +151,6 @@ function setup(account, session) {
         } catch (err) {
           if (err && err.name === "AbortError") {
             folder.status("Dropbox setup aborted");
-            if (abortHandled) return;
             signal.aborted = true;
             return handleAbort();
           }
