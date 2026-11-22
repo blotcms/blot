@@ -20,6 +20,12 @@ describe("icloud routes stamp lastSync", function () {
   routeNames.forEach((name) => (paths[name] = require.resolve("../" + name)));
 
   const originals = {};
+  // The upload route marks each upload until it is built
+  const uploadMarks = {
+    markUploadPending: async () => {},
+    clearUploadPending: async () => {},
+    isUploadPending: async () => false,
+  };
   let blogID;
   let stamped;
   let walked;
@@ -80,6 +86,7 @@ describe("icloud routes stamp lastSync", function () {
       done: async () => {},
     }));
     stub("database", {
+      ...uploadMarks,
       store: async () => {},
       get: async () => ({
         sharingLink: "https://www.icloud.com/iclouddrive/x",
@@ -166,6 +173,7 @@ describe("icloud routes stamp lastSync", function () {
   it("a failing stamp doesn't fail the route", async function () {
     delete require.cache[paths.stamp];
     stub("database", {
+      ...uploadMarks,
       stampLastSync: async () => {
         throw new Error("redis down");
       },
