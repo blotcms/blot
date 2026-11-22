@@ -394,7 +394,7 @@ Clarify on cancel / delete / overdue pages for accounts with grandfathered subsc
 
 Sync sweep digest (app/clients/util/syncReport.js) follow-ups
 - Hourly Fix() (Dropbox, iCloud, Google Drive) runs outside the folder lock, so menu-ghosts' whole-array menu write can clobber a concurrent sync's menu change - fix in app/sync/fix/menu-ghosts for all clients (raised on PR #2001)
-- iCloud initial transfer: the verify pass now reruns twice with a pause, but still gives up with TRANSFER_INCOMPLETE if every attempt fails; make initialTransfer resumable (a stalled `ls` during the upload burst caused TRANSFER_INCOMPLETE). Check the macserver's new `ls took`/`Diagnostic snapshot`/`still running after kill` log lines for the root cause of the stalls
+- iCloud initial transfer: a transfer a deploy killed is now resumed at startup and hourly (#2926), but one whose verify pass fails all three attempts still stores TRANSFER_INCOMPLETE and nothing retries it (a stalled `ls` during the upload burst caused it). Retry it from the hourly resumer, and check the macserver's `ls took`/`Diagnostic snapshot`/`still running after kill` log lines for the root cause of the stalls
 - Once-per-occurrence suppression treats "not seen this run" as cleared, including blogs that just weren't eligible that hour, so an ongoing error can be re-emailed after a quiet hour - remember issues until a successful walk/Fix actually clears them
 
 Surface template choices on the templates subpages: switch from png to iframe after hovering a selection
@@ -513,8 +513,6 @@ Improve iCloud sync
 - Investigate setting up paralell server with 'Advanced Data Protection' enabled so users with this setting can sync to Blot as well
 
 ---
-
-Fix bug with placeholder files when switching clients which will lead to data loss because Blot will not transfer the contents of placeholder files across
 
 Fix bug with the paypal next bill dates are not syncing correctly for some users (e.g.slopserve)
 
