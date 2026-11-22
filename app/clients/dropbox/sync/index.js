@@ -11,6 +11,7 @@ var persistError = require("../util/persistError");
 var {
   SOURCES,
   classify,
+  dropboxTag,
   keepsErrorAfterDownload,
 } = require("../util/classifyError");
 var Path = require("path");
@@ -522,11 +523,22 @@ function Apply(client, blogID, log, status, publish) {
         return;
       }
 
-      // Swallow the error that occur when the user has forbidden content
-      // in their folder. We should surface this eventually. You can test
-      // this error using the file in tests/files/will_flag_restricted_content.png
-      // Warning: this looks like a more generic error!
-      if (err && err.statusCode === 409 && err.statusMessage === "Conflict") {
+      // Dropbox refuses a file it has flagged as restricted content (test
+      // with tests/files/will_flag_restricted_content.png) or no longer has.
+      // Skip it, and say so: it never reaches the blog.
+      if (
+        err &&
+        /^path\/(restricted_content|not_found)\b/.test(dropboxTag(err))
+      ) {
+        log(
+          item.resolved_relative_path,
+          "Dropbox refused to download this file for blog",
+          blogID + ":",
+          dropboxTag(err)
+        );
+        status(
+          "Skipping " + item.resolved_relative_path + " (refused by Dropbox)"
+        );
         return;
       }
 

@@ -217,6 +217,7 @@ validation and recovery):
   - `blogID`: String identifier for the blog.
   - `publish(args...)`: Callback to report progress (typically logs to console or updates UI).
   - `update(path)` (returns a promise): Notifies Blot's Entry model about each changed path.
+  - `signal` (optional, `{ aborted }`): checked between files and folders. When it turns true the walk rejects with an `AbortError` and leaves the cursor and error state alone. `init.js` passes one that a disconnect sets when it resumes a transfer.
 - **Returns**: Promise resolving to a summary object with `{ downloaded, removed, createdDirs, skipped }`.
 - **Behavior**:
   - Walks the entire Dropbox folder recursively.
@@ -498,7 +499,7 @@ Sync records only failures the customer must act on, tagged with `error_source` 
 - **HTTP 507** (quota exceeded): Persisted as `QUOTA_EXCEEDED`; not retried.
 - **HTTP 400 `invalid_grant` / HTTP 401**: Persisted as `REAUTH_REQUIRED` from any step; not retried. Other 400s are treated as transient. Resyncs (reset to/from Blot) persist errors the same way: only the folder lookup counts as the delta step, so a per-file 409 during a resync is not reported as a missing folder.
 - **HTTP 409 from delta** (`filesListFolder` / `filesGetMetadata` on the blog folder): Persisted as `SOURCE_MISSING`. A `reset` tag is recovered by clearing the cursor and listing from scratch — that is a rename/move, not a missing folder, and does not set `error_code`.
-- **HTTP 409 from apply / write / remove**: Per-file conflict or restricted content. Not persisted, not retried, not reported as a missing folder.
+- **HTTP 409 from apply / write / remove**: Per-file conflict or restricted content. Not persisted, not retried, not reported as a missing folder. A resync records the path in `summary.failed` and carries on; the same goes for any other 409 listing a subfolder. A webhook sync skips a file refused with `path/restricted_content` or `path/not_found` and logs it with the blog and path (no placeholder is written).
 - **HTTP 409 `path/not_found` / `path/not_folder` listing a subfolder during a resync**: The folder was deleted, moved or replaced by a file in Dropbox after its parent was listed. If Dropbox lists the folder as changed since the pre-walk cursor, the walk skips it (`summary.skipped`) and carries on, leaving the catch-up sync to apply the change. Otherwise the 409 is unexplained: it's counted as a failed path (`summary.failed`, so the hourly validation reports a walk error), and nothing is removed. Neither case retries.
 - **Unsupported files** (`.paper`): a placeholder flagged `SYNC_UNSUPPORTED` is written (see `app/models/file/README`, Flags); download skipped.
 - **Oversized files** (>100 MB): a placeholder flagged `SYNC_TOO_LARGE` is written; download skipped. Placeholders are never uploaded back to Dropbox, but files which really are empty are.
