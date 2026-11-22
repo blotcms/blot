@@ -188,6 +188,14 @@ describe("dropbox setup abort subscriber", function () {
       exports: async (account) =>
         Object.assign(account, { folder_id: "id:old", reused_folder: true }),
     };
+    const saved = [];
+    require.cache[databasePath] = {
+      exports: {
+        get: async () => null,
+        listBlogs: async () => [],
+        set: async (blogID, changes) => saved.push(changes),
+      },
+    };
     require.cache[resetToBlotPath] = {
       exports: (blogID, publish, update, signal) =>
         new Promise(function (resolve, reject) {
@@ -224,6 +232,8 @@ describe("dropbox setup abort subscriber", function () {
 
       expect(settled).toBe("Dropbox setup aborted");
       expect(events).toEqual(["walk stopped", "released"]);
+      // So a retry of this transfer stays keepDropbox (createFolder.js)
+      expect(saved[0].reused_folder).toBe(true);
     } finally {
       if (original) require.cache[resetToBlotPath] = original;
       else delete require.cache[resetToBlotPath];

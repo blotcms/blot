@@ -291,9 +291,15 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
   describe("on reconnect", function () {
     const previous = { account_id: "abc123", folder_id: "id:oldfolder" };
 
-    function reconnect(options, account_id = "abc123") {
+    // paths maps folder ids to their current path_display. The old folder
+    // was renamed while the blog was disconnected.
+    function reconnect(
+      options,
+      { account_id = "abc123", existing = null, paths = {} } = {}
+    ) {
+      paths = Object.assign({ "id:oldfolder": "/Renamed" }, paths);
       const calls = { metadata: [], create: [] };
-      const createFolder = load(null, options);
+      const createFolder = load(existing, options);
       const account = {
         blog: { id: blogID, title: "My Blog" },
         account_id,
@@ -301,8 +307,8 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
         client: {
           filesGetMetadata: async ({ path }) => {
             calls.metadata.push(path);
-            // Renamed while the blog was disconnected
-            return { result: { ".tag": "folder", path_display: "/Renamed" } };
+            if (!paths[path]) throw notFoundSdkError();
+            return { result: { ".tag": "folder", path_display: paths[path] } };
           },
           filesCreateFolder: async ({ path }) => {
             calls.create.push(path);
@@ -323,8 +329,28 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
       expect(result.reused_folder).toBe(true);
     });
 
+    it("keeps the reconnect's keepDropbox mode when retrying its failed transfer", async function () {
+      // The account row setup saved before the reconnect's transfer failed
+      const existing = {
+        account_id: "abc123",
+        full_access: true,
+        folder_id: "id:oldfolder",
+        transfer_pending: true,
+        reused_folder: true,
+        error_code: 0,
+      };
+      const { result, calls } = await reconnect({}, { existing });
+
+      expect(calls.create).toEqual([]);
+      expect(result.folder_id).toEqual("id:oldfolder");
+      expect(result.reused_folder).toBe(true);
+    });
+
     it("creates a new folder on a different Dropbox account", async function () {
-      const { result, calls } = await reconnect({ previous }, "other-account");
+      const { result, calls } = await reconnect(
+        { previous },
+        { account_id: "other-account" }
+      );
 
       expect(calls.metadata).toEqual([]);
       expect(result.folder_id).toEqual("id:newfolder");
@@ -339,10 +365,37 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
           folder_id: "id:oldfolder",
         },
       };
-      const { result, calls } = await reconnect({ previous, others });
+      const { result } = await reconnect({ previous, others });
 
-      expect(calls.metadata).toEqual([]);
       expect(result.folder_id).toEqual("id:newfolder");
+      expect(result.reused_folder).toBeUndefined();
+    });
+
+    it("creates a new folder when the old one is inside another blog's folder", async function () {
+      const others = {
+        blog_other: {
+          full_access: true,
+          folder: "/Other",
+          folder_id: "id:other",
+        },
+      };
+      const { result } = await reconnect(
+        { previous, others },
+        { paths: { "id:oldfolder": "/Other/Renamed", "id:other": "/Other" } }
+      );
+
+      expect(result.folder_id).toEqual("id:newfolder");
+      expect(result.reused_folder).toBeUndefined();
+    });
+
+    it("creates a new folder when another blog syncs the root of the app folder", async function () {
+      const others = {
+        blog_other: { full_access: false, folder: "", folder_id: "" },
+      };
+      const { result } = await reconnect({ previous, others });
+
+      expect(result.folder_id).toEqual("id:newfolder");
+      expect(result.reused_folder).toBeUndefined();
     });
 
     it("creates a new folder when there is no previous folder", async function () {

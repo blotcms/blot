@@ -29,13 +29,14 @@ async function createFolder(account) {
   if (reused) {
     account.folder = reused.folder;
     account.folder_id = reused.folder_id;
-    // On a reconnect, setup uploads only what the folder lacks, since it
-    // may hold the person's own changes (see setup/index.js). A retried
-    // transfer runs the normal reset: that folder only ever held Blot's own
-    // partial upload, and the normal reset resolves type conflicts. So if
-    // a reconnect's transfer fails on one, the next Retry finds the account
-    // row and takes the normal path, and can finish.
-    if (reused.previous) account.reused_folder = true;
+    // On a reconnect, and on a retry of a reconnect's transfer, setup
+    // uploads only what the folder lacks, since it may hold the person's
+    // own writing (see setup/index.js). A file on one side where the other
+    // has a folder then fails the transfer with its path, and the person
+    // resolves it by renaming in Dropbox: which copy to drop isn't ours to
+    // pick silently. A retry of a plain first transfer runs the normal
+    // reset, since that folder only ever held Blot's own partial upload.
+    if (reused.reconnect) account.reused_folder = true;
     return account;
   }
 
@@ -64,8 +65,9 @@ async function createFolder(account) {
 //   (database.getPrevious), wherever it is now, if the new permission mode
 //   can reach it: app-folder ids only resolve inside the app folder.
 // Only a folder recorded against this blog is reused, never one that merely
-// has the right name, and never one another blog on the account now uses:
-// either would publish someone else's files on this blog.
+// has the right name, and never one that is, holds or sits inside another
+// blog's folder on the account: either would publish someone else's files
+// on this blog.
 //
 // Returns null (falling through to the normal folder-creation logic)
 // otherwise, including the app-folder-root case (folder_id === ""), which
@@ -81,57 +83,75 @@ async function tryReuseFolder(account) {
   const existing = await database.get(blog.id);
 
   let candidate = null;
-  let previous = false;
+  let reconnect = false;
 
   if (!existing) {
     candidate = await database.getPrevious(blog.id);
-    previous = true;
+    reconnect = true;
   } else if (
     transferIncomplete(existing) &&
     existing.full_access === full_access
   ) {
     candidate = existing;
+    // A retry of a reconnect's transfer that failed
+    reconnect = existing.reused_folder === true;
   }
 
   if (!candidate || !candidate.folder_id) return null;
   if (candidate.account_id !== account_id) return null;
-  if (await usedByAnotherBlog(account, candidate.folder_id)) return null;
 
+  const path = await folderPath(client, candidate.folder_id);
+  if (!path) return null;
+  if (await overlapsAnotherBlog(account, candidate.folder_id, path.lower))
+    return null;
+
+  return {
+    folder: path.display,
+    folder_id: candidate.folder_id,
+    reconnect,
+  };
+}
+
+// The folder's current path as this client sees it, or null if it's gone.
+// Only a confirmed "the folder is gone" (Dropbox's 409 path/not_found, which
+// is also what an app-folder token gets for a folder outside the app folder)
+// returns null. Anything else (a timeout, a rate limit, an outage) is
+// transient: rethrowing fails this setup attempt instead of quietly
+// abandoning a folder that's still there.
+async function folderPath(client, folder_id) {
   try {
-    const { result } = await client.filesGetMetadata({
-      path: candidate.folder_id,
-    });
-
+    const { result } = await client.filesGetMetadata({ path: folder_id });
     if (result[".tag"] !== "folder") return null;
-
     return {
-      folder: result.path_display,
-      folder_id: candidate.folder_id,
-      previous,
+      display: result.path_display,
+      lower: result.path_lower || result.path_display.toLowerCase(),
     };
   } catch (e) {
-    // Only a confirmed "the folder is gone" (Dropbox's 409 path/not_found,
-    // which is also what an app-folder token gets for a folder outside the
-    // app folder) falls through to creating a new folder. Anything else (a
-    // timeout, a rate limit, an outage) is transient: rethrowing fails this
-    // setup attempt instead of quietly abandoning a folder that's still
-    // there.
     if (isNotFoundError(e)) return null;
     throw e;
   }
 }
 
-// True if another blog connected to this Dropbox account uses the folder,
-// or is having its files moved into it
-async function usedByAnotherBlog(account, folder_id) {
+// True if another blog connected to this Dropbox account uses the folder, is
+// having its files moved into it, or syncs a folder inside it or around it.
+// An empty folder_id is the root of the app folder or of Dropbox, which
+// holds everything.
+async function overlapsAnotherBlog(account, folder_id, pathLower) {
   const blogs = await database.listBlogs(account.account_id);
+  const overlaps = (a, b) => a === b || a.startsWith(b + "/");
 
   for (const other of blogs) {
     if (other.id === account.blog.id) continue;
     const otherAccount = await database.get(other.id);
     if (!otherAccount) continue;
+    if (!otherAccount.folder_id) return true;
     if (otherAccount.folder_id === folder_id) return true;
     if (otherAccount.move_folder_id === folder_id) return true;
+
+    const otherPath = await folderPath(account.client, otherAccount.folder_id);
+    if (!otherPath) continue;
+    if (overlaps(pathLower, otherPath.lower)) return true;
+    if (overlaps(otherPath.lower, pathLower)) return true;
   }
 
   return false;

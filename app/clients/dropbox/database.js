@@ -111,13 +111,17 @@ async function setAccount(blogID, changes) {
 
   // Rows written before these fields existed, or a first save from
   // setup, do not carry them. Every other field stays required.
-  ["error_source", "error_since", "move_folder", "move_folder_id"].forEach(
-    function (field) {
-      if (account[field] === undefined || account[field] === null) {
-        account[field] = defaultFor(Model[field]);
-      }
+  [
+    "error_source",
+    "error_since",
+    "move_folder",
+    "move_folder_id",
+    "reused_folder",
+  ].forEach(function (field) {
+    if (account[field] === undefined || account[field] === null) {
+      account[field] = defaultFor(Model[field]);
     }
-  );
+  });
 
   // Verify that the type of new account state
   // matches the expected types declared in Model below.
@@ -300,6 +304,12 @@ Model = {
   // Empty strings otherwise.
   move_folder: "string",
   move_folder_id: "string",
+
+  // True when setup reconnected the blog to the folder it used before it
+  // disconnected (routes/setup/createFolder.js). That folder may hold the
+  // person's own writing, so a retry of its transfer stays non-destructive
+  // (resetFromBlot's keepDropbox) like the first attempt.
+  reused_folder: "boolean",
 };
 
 module.exports = {

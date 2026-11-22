@@ -273,8 +273,11 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
    - `createFolder()`: Creates or designates the blog folder in Dropbox (handles migration for multiple blogs).
      On a reconnect it reuses the folder the blog used before it disconnected,
      wherever it is now, if it is the same Dropbox account, the folder still
-     exists, the new permission mode can reach it, and no other blog on the
-     account uses it. It never reuses a folder just because of its name.
+     exists, the new permission mode can reach it, and it neither is, holds
+     nor sits inside another blog's folder on the account. It never reuses a
+     folder just because of its name. The account records the reuse
+     (`reused_folder`), so a retry of a failed reconnect transfer stays
+     non-destructive.
    - Saves account info to Redis database.
    - `resetFromBlot()`: Uploads all local blog files to Dropbox. Stops the whole
      transfer if Dropbox runs out of space (see "Handling insufficient Dropbox

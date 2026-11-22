@@ -94,6 +94,7 @@ function setup(account, session) {
             full_access: account.full_access,
             folder: account.folder,
             folder_id: account.folder_id,
+            reused_folder: !!account.reused_folder,
             error_code: 0,
             last_sync: Date.now(),
             cursor: "",
