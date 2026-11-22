@@ -23,6 +23,7 @@ describe("dropbox sync/index with a file over the download size limit", function
   const originals = {};
   let maxFileSize;
   let logs;
+  let saved;
 
   // A limit below the fixtures' sizes, so a matching local copy can have the
   // same size as the Dropbox file. sync/index reads it when it loads.
@@ -45,6 +46,7 @@ describe("dropbox sync/index with a file over the download size limit", function
   // download runs
   function run(content_hash, size, downloadError) {
     logs = [];
+    saved = [];
     if (downloadError)
       require.cache[downloadPath] = {
         exports: async function () {
@@ -69,7 +71,7 @@ describe("dropbox sync/index with a file over the download size limit", function
       }),
     };
     require.cache[databasePath] = {
-      exports: { set: async () => {} },
+      exports: { set: async (_id, values) => saved.push(values) },
     };
     let calls = 0;
     require.cache[deltaPath] = {
@@ -145,14 +147,16 @@ describe("dropbox sync/index with a file over the download size limit", function
       expect(line).toContain("path/restricted_content");
     });
 
-    it("still fails the sync for revoked access", async function () {
-      let error;
-      try {
-        await run("hash", 3, refused("invalid_access_token/..", 401));
-      } catch (err) {
-        error = err;
-      }
-      expect(error && error.status).toEqual(401);
+    it("still stops the sync for revoked access, without moving the cursor", async function () {
+      await run("hash", 3, refused("invalid_access_token/..", 401));
+
+      expect(saved.some((values) => values.cursor === "new")).toEqual(false);
+    });
+
+    it("moves the cursor past a refused file", async function () {
+      await run("hash", 3, refused("path/restricted_content/.."));
+
+      expect(saved.some((values) => values.cursor === "new")).toEqual(true);
     });
   });
 });
