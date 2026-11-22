@@ -1,5 +1,5 @@
 const linkFormat = require("express").Router();
-const { resave: resaveEntries } = require("models/entries");
+const pendingRebuilds = require("sync/pendingRebuilds");
 const updateBlog = require("dashboard/util/update-blog");
 
 var permalink = require("build/prepare/permalink");
@@ -90,8 +90,9 @@ linkFormat.post("/", async (req, res) => {
     });
 
     if (changes && changes.includes("permalink")) {
-      // Not awaited: the page does not wait on the resave, and its errors are ignored
-      resaveEntries(req.blog.id).catch(() => {});
+      // Queued in Redis, so it finishes even if a deploy kills the process
+      // running it; the page doesn't wait for it (sync/pendingRebuilds)
+      await pendingRebuilds.request(req.blog.id, ["resave"]);
     }
 
     res.message(req.baseUrl, "Saved changes to link format");

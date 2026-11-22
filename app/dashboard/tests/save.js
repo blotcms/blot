@@ -35,6 +35,23 @@ describe("dashboard site settings save", function () {
     }, 30000);
   });
 
+  // The resave is queued in Redis (sync/pendingRebuilds), so a deploy which
+  // kills the process running it doesn't leave the blog half saved
+  it("queues a resave of every entry when the link format changes", async function () {
+    const pendingRebuilds = require("sync/pendingRebuilds");
+
+    spyOn(pendingRebuilds, "request").and.returnValue(Promise.resolve());
+
+    await this.submit(`/sites/${this.blog.handle}/settings/links`, {
+      format: "",
+      custom: "/archive/{{slug}}",
+    });
+
+    expect(pendingRebuilds.request).toHaveBeenCalledWith(this.blog.id, [
+      "resave",
+    ]);
+  }, 30000);
+
   it("does not redirect to the homepage when the form omits a redirect field", async function () {
     const res = await this.submit(`/sites/${this.blog.handle}/settings`, {
       "plugins.typeset.options.punctuation": "on",
