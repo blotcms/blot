@@ -146,4 +146,19 @@ describe("dropbox createFolder moveExistingFiles resumes", function () {
     expect(transferIncomplete({ move_folder_id: "id:recorded" })).toBe(true);
     expect(transferIncomplete({ move_folder_id: "" })).toBe(false);
   });
+
+  it("leaves a blog alone once its move is done", async function () {
+    account = {
+      folder: "/Other blog",
+      folder_id: "id:done",
+      move_folder_id: "",
+    };
+    const moveExistingFiles = load();
+
+    await moveExistingFiles(client([]), otherBlog, { resume: true });
+    await moveExistingFiles(client([]), otherBlog);
+
+    expect(calls).toEqual([]);
+    expect(writes).toEqual([]);
+  });
 });

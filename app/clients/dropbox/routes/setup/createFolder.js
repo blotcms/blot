@@ -143,11 +143,19 @@ async function checkAppFolder(account) {
 // its syncs (transferIncomplete) until the move is done. A move a deploy or
 // crash cut short is finished into the same subfolder by whatever runs this
 // next: a retried setup, or the startup and hourly jobs (init.js).
-async function moveExistingFiles(client, otherBlog) {
+//
+// options.resume is for the startup and hourly jobs: they only finish a move
+// that is still recorded, and leave the blog alone otherwise.
+async function moveExistingFiles(client, otherBlog, options = {}) {
   // Get a lock on the blog
   // we should add a way to retry this sync attempt
   await sync(otherBlog.id, async function () {
-    const { folder, folder_id } = await moveTarget(client, otherBlog);
+    const account = await database.get(otherBlog.id);
+    if (!account) return;
+    // Finished since the caller looked, by whatever held the lock
+    if (!account.move_folder_id && (options.resume || account.folder)) return;
+
+    const { folder, folder_id } = await moveTarget(client, otherBlog, account);
 
     let {
       result: { entries },
@@ -181,10 +189,8 @@ async function moveExistingFiles(client, otherBlog) {
 // The subfolder the other blog's files go to: the one a move cut short
 // recorded, if it is still there, or a new one, recorded before anything
 // moves
-async function moveTarget(client, otherBlog) {
-  const account = await database.get(otherBlog.id);
-
-  if (account && account.move_folder_id) {
+async function moveTarget(client, otherBlog, account) {
+  if (account.move_folder_id) {
     try {
       const { result } = await client.filesGetMetadata({
         path: account.move_folder_id,
