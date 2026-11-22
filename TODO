@@ -76,7 +76,7 @@ Flag folder posts' sources: `app/sync/update/set.js` sets no build, assets or re
 Noticed while flagging the existing placeholders, 12 Nov 2026 (#2675). The resync failed for a few blogs, every time:
 - Two Dropbox blogs answer 401: their access was revoked, but they still count as connected. Find out whether the hourly validation and the dashboard tell the owner, and if not, mark the blog as needing to reconnect.
 - Three Dropbox blogs fail the whole resync on a 409 for one path (one was a `.url` file). See the Dropbox 409 entry below. A refused file should not stop the rest of a reset.
-- One Dropbox blog never finished its initial transfer, so its reset refuses to run. Find out how long it has been stuck and whether the owner was told.
+- One Dropbox blog never finished its initial transfer, so its reset refuses to run. The startup job now resumes every pending transfer (#2923): check after the next deploy that it finished, and if not, why.
 
 Lift the file name length limit rather than trim names. The check behind it, `exceedsFilesystemPathLimits` in `app/clients/dropbox/util/constants.js`, dates from when blog folders lived on ext4: 255 bytes per name, 4096 per path. Folders are in S3 now:
 - Directory names and full paths no longer touch a local filesystem. S3's own limit is 1024 bytes for a key.
@@ -459,30 +459,23 @@ Improve Google Drive sync
 Improve Dropbox sync
 - Batch dependent-entry rebuilds across a sync: a large asset delta batch rebuilt the same referring entry after each image (~13s per update), holding the folder lock for over three hours (2026-11-04). The stuck-lock alert should distinguish ongoing progress from a hung sync.
 - Review public asset rate limits and nginx-429 bans: loading an image-heavy page triggered repeated 429s and temporary visitor bans (2026-11-03/04); avoid banning normal page loads while retaining abuse protection.
-- When you re-connect to Dropbox, you have to re-create a folder and perform a full transfer. It would be great if we could re-use the existing folder... Maybe an option during the connect flow? Would be nice to avoid requiring a full transfer
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
-- Bug: ensure that when a process dies, any blogs setting up dropbox client will be re-attempted. A startup resume was tried in #2515 and pulled: resetFromBlot deletes Dropbox files Blot lacks, so resuming a transfer stuck days ago would delete what the user added in Dropbox since (webhooks skip transfer_pending blogs); and onceAtStartup marks the run done on blot-blue while green's setup still holds the lock, so a setup killed by the deploy waits for the next one. Resume only recent transfers (record when they started), from the hourly validation rather than startup
 - Adding an additional blog to an existing app folder under constant webhooks fails: moveExistingFiles (routes/setup/createFolder.js) gives up on the root blog's lock after ~5s and setup fails loudly. Retry or wait longer for the other blog's lock (or take all account-linked blogs' locks in a fixed order)
 - Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
-- Bug: make large Dropbox upload sessions (>140 MB) resumable across process restarts by persisting the session id and offset
+- A restart mid-transfer now resumes it (#2923), but a file over 140 MB restarts its upload session from zero. Persist the session id and offset if that turns out to matter.
 - Bug: run reset-to-blot when sync fails / errors
 - Bug: ensure you can move the folder in full-folder permission mode
-- Bug: reconnecting with the same account and same permissions should not create a new folder for `full_access=true`
-- Bug: add a check for folder storage before doing mass upload
-- Bug: handle folder full error appropriately
+- Reconnecting creates a new folder and a full transfer, so people collect 'Title (1)' folders. Offer the existing folder of that name during the connect flow (same account and permissions, `full_access=true` included) and upload only what it lacks (`resetFromBlot`'s `keepDropbox` mode, #2923).
 - Add testing for dropbox:
 - Modify setup flow:
   - Phase 1: RESET FROM BLOT (NON DESTRUCTIVE, deduplicate on conflict)
   - Phase 2: RESET TO BLOT (TWICE?) then sync/FIX then begin ordinary syncing
-  - Add a progress bar to the dashboard during initial client setup. Use the Google Drive and Git client progress bar implementations as reference.
 - Make Dropbox sync issue emails more useful with a script to compile the logs for a single site (including macserver)
   - Adjust full_folder to add a big warning to prevent confusion about where the new folder is when transitioning permissions
-  - Add a step to authentication flow which says: 'there is already a folder called 'Your blog title' in your Dropbox, would you like to use that?' then overwrite the files inside. This prevents the proliferation of confusing 'Your blog title (1)' when you re-authenticate.
 - When you switch from app folder to full folder, there should be a notification indicating that your folder location has changed
 - Check content hash for upload possible
-- Make dropbox reset FROM abortable
 - Make dropbox reset TO abortable
-- Surface errors during setup on dashboard
+- Surface errors during setup on dashboard: a first connect that fails after sign-in loses its error (the setup record is dropped, so the sign-in step shows no problem), and a stalled copy shows only in the Status line, not on the copy step (#2914).
 - Surface sync issues with Dropbox client on the homepage of dashboard
 - How do we make errors sticky? To make sure users click through to clients page to re-connect to Dropbox, etc...
 
