@@ -1,6 +1,7 @@
 const crypto = require("crypto");
 const Blog = require("models/blog");
 const clfdate = require("helper/clfdate");
+const drain = require("helper/drain");
 const email = require("helper/email");
 const monitorMacServerStats = require("./util/monitorMacServerStats");
 const resumeTransfers = require("./sync/resumeTransfers");
@@ -47,9 +48,22 @@ const validateAllBlogs = async ({ idleSlice } = {}) => {
 
   const report = syncReport.create();
   let checkedBlogs = 0;
+  let stopped = false;
 
   try {
     await database.iterate(async (blogID, account) => {
+      // Every lock is refused while draining; the next hour's run covers the rest
+      if (stopped || drain.isDraining()) {
+        if (!stopped) {
+          console.log(
+            clfdate(),
+            "iCloud: Stopped sync validation for the drain"
+          );
+        }
+        stopped = true;
+        return;
+      }
+
       let blog;
       let phase = "validation";
 

@@ -586,6 +586,17 @@ describe("dropbox init", function () {
       expect(synced).toEqual([ids.clean]);
     });
 
+    it("stops at the next blog once the process is draining", async function () {
+      const init = load({ [ids.changes]: {}, [ids.clean]: {} }, []);
+
+      spyOn(require("helper/drain"), "isDraining").and.callFake(
+        () => walked.length > 0
+      );
+      await init.validateAllBlogs();
+
+      expect(walked).toEqual([ids.changes]);
+    });
+
     it("skips Fix and the catch-up sync without reporting when the blog was deleted during the walk", async function () {
       const sentEmails = [];
       const init = load(
