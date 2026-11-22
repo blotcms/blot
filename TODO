@@ -232,7 +232,7 @@ Analyze the new log line paramater for accept encoding to determine if we should
 
 Redis host follow-ups (from #2041, new host since 8 Oct):
 - Lock heartbeat: no overlapping EXTENDs
-- Remaining dropped write errors: await set() in resetToDrive; Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
+- Remaining dropped write errors: Dropbox disconnect.js and _assign.js dropFromMenu check the wrong error; write order in Blog.create; the list-ghosts restore path; error paths for background resave and rebuild; a callback for the messenger's setStatus; make Entry.set atomic
 - TLS handshakes were about a quarter of billed egress on 21 Oct (#2107): ECDSA certificates shrink each by about a third, and few TLS connections resume today, so look at session reuse and keep-alive (about 1.7 requests per connection). No `ssl_session_tickets` without a shared key (#2271)
 - restore.sh --offsite: have the host download from B2 with a short-lived presigned URL (aws s3 presign on the maintainer's machine, passed over stdin), so a restore doesn't depend on the maintainer's upload speed and the read key still stays off servers. Not tested yet
 - cycle.sh --drill hosts have no AWS credentials (no instance profile), so restoring an S3 backup onto one means copying keys onto it or using --offsite, which streams the dump through the maintainer's machine: on 3 Nov a 2 GB dump took about 30 minutes at 1.2 MB/s. Give drill hosts a read-only instance profile scoped to s3://blot-redis-backups (or reuse the presigned-URL idea above for S3 too), so the host fetches it directly in about a minute
@@ -455,7 +455,6 @@ Improve Google Drive sync
 - Retry 429s on Google Drive writes (files.create/update): reads already retry with backoff (serviceAccount/retryConfig.js), but write bodies are streams gaxios can't replay
 - Add a way for sync/build to accept a ctime as an option. We can't set this at the operating system level but google drive's API does return a createdTime value and we could use this as the true file's created date, rather than the date the file is made on the server
 - Google Drive `write` should use the best method for large file uploading
-- Add proper testing for this
 
 Improve Dropbox sync
 - Batch dependent-entry rebuilds across a sync: a large asset delta batch rebuilt the same referring entry after each image (~13s per update), holding the folder lock for over three hours (2026-11-04). The stuck-lock alert should distinguish ongoing progress from a hung sync.
