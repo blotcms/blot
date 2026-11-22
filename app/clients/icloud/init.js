@@ -3,7 +3,7 @@ const Blog = require("models/blog");
 const clfdate = require("helper/clfdate");
 const email = require("helper/email");
 const monitorMacServerStats = require("./util/monitorMacServerStats");
-const initialTransfer = require("./sync/initialTransfer");
+const resumeTransfers = require("./sync/resumeTransfers");
 const database = require("./database");
 const getHealth = require("./getHealth");
 const { shouldSkipBackgroundSync } = require("./error");
@@ -124,25 +124,30 @@ const runValidation = exclusive("icloud-validation", () =>
   validateAllBlogs({ idleSlice: new Date().getUTCHours() % IDLE_SLICES })
 );
 
-const resumeInitialTransfers = () =>
-  database.iterate(async (blogID, account) => {
-    if (!account.transferringToiCloud) {
-      return;
-    }
-
-    try {
-      console.log("Resuming initial transfer for", blogID);
-      await initialTransfer(blogID);
-    } catch (error) {
-      console.error("Error resuming initial transfer for", blogID, error);
-    }
-  });
+// Startup's resume does not count as done while a transfer it skipped was
+// locked: that transfer may be running in a process the deploy is about to
+// stop, and the next process to start in this release should try it again.
+const resumeInitialTransfers = async () => {
+  const busy = await resumeTransfers();
+  if (busy > 0) {
+    throw new Error(`${busy} initial transfer(s) locked, not marking done`);
+  }
+};
 
 const init = async () => {
   // At :45 because the Dropbox sweep runs at :00 and Google Drive's at :30,
   // and all three share the Redis connection. One process runs each sweep.
   console.log(clfdate(), "iCloud: Scheduling hourly sync validation");
   schedule("icloud-validation", "45 * * * *", runValidation);
+
+  // Startup's resume runs once per release, so a transfer killed after it
+  // (the second unit of a deploy, or a crash) is picked up here instead. A
+  // resume can take hours, so runs never overlap.
+  schedule(
+    "icloud-resume-transfers-hourly",
+    "15 * * * *",
+    exclusive("icloud-resume-transfers-hourly", resumeTransfers)
+  );
 
   // Resuming can take a long time, so the sweep is scheduled first. Once per
   // deploy across all processes, not once per process.
@@ -163,5 +168,6 @@ const init = async () => {
 init.validateAllBlogs = validateAllBlogs;
 init.idleSliceOf = idleSliceOf;
 init.runValidation = runValidation;
+init.resumeInitialTransfers = resumeInitialTransfers;
 
 module.exports = init;

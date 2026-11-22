@@ -24,16 +24,20 @@ describe("icloud initialTransfer", function () {
     };
   }
 
-  function load({ syncToiCloud }) {
+  function load({ syncToiCloud, lock, fetch }) {
     mockModule(databasePath, { store });
     mockModule(toiCloudPath, syncToiCloud);
     mockModule(fromiCloudPath, async () => {});
     mockModule(resolveCaseConflictsPath, async () => {});
-    mockModule(fetchPath, async () => {});
-    mockModule(establishSyncLockPath, async () => ({
-      folder: { status: () => {}, update: () => {} },
-      done,
-    }));
+    mockModule(fetchPath, fetch || (async () => {}));
+    mockModule(
+      establishSyncLockPath,
+      lock ||
+        (async () => ({
+          folder: { status: () => {}, update: () => {} },
+          done,
+        }))
+    );
     delete require.cache[initialTransferPath];
     return require(initialTransferPath);
   }
@@ -66,6 +70,46 @@ describe("icloud initialTransfer", function () {
       transferringToiCloud: false,
       error: null,
     });
+  });
+
+  it("marks the transfer as due before taking the lock, and leaves it due when the lock is busy", async function () {
+    const order = [];
+    store.and.callFake(async (blogID, data) => {
+      order.push(["store", data]);
+    });
+    const initialTransfer = load({
+      syncToiCloud: async () => {},
+      lock: async () => {
+        order.push(["lock"]);
+        throw new Error("Failed to acquire folder lock");
+      },
+    });
+
+    let thrown;
+    try {
+      await initialTransfer("blog");
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown && thrown.message).toBe("Failed to acquire folder lock");
+    // Only the mark: nothing clears it, so resumeTransfers finds the blog
+    expect(order).toEqual([
+      ["store", { transferringToiCloud: true, error: null }],
+      ["lock"],
+    ]);
+  });
+
+  it("asks the macserver to watch the folder with retries spaced out", async function () {
+    const fetch = jasmine.createSpy("fetch").and.returnValue(Promise.resolve());
+    const initialTransfer = load({ syncToiCloud: async () => {}, fetch });
+
+    await initialTransfer("blog", { watchRetryDelayMs: 5 });
+
+    expect(fetch).toHaveBeenCalledWith(
+      jasmine.stringMatching(/\/watch$/),
+      jasmine.objectContaining({ retries: 5, retryDelay: 5 })
+    );
   });
 
   it("reruns the verify pass after a failed listing", async function () {

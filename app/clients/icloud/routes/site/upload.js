@@ -7,6 +7,7 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const stampLastSync = require("./stampLastSync");
 const liveLag = require("../../util/liveLag");
+const database = require("../../database");
 
 // If Redis cannot take the update, take the file we just wrote back off the
 // disk. The macserver will push it again, and the upload route would
@@ -61,6 +62,10 @@ module.exports = async function (req, res) {
         return false;
       }
 
+      // An earlier upload of this file wrote it but never built it (the
+      // process died in between), so the same bytes still need building
+      if (await database.isUploadPending(blogID, filePath)) return false;
+
       // An empty file is only a current placeholder if it is flagged as one,
       // and a placeholder is never current for a file's real bytes, even
       // when the file is now really empty
@@ -93,6 +98,8 @@ module.exports = async function (req, res) {
           .send(`File already up to date for blogID: ${blogID}`);
       }
 
+      await database.markUploadPending(blogID, filePath);
+
       if (isPlaceholderUpload) {
         folder.status("Saving placeholder " + filePath);
 
@@ -103,6 +110,7 @@ module.exports = async function (req, res) {
         });
 
         await updateOrRollBack(blogID, folder, filePath, modifiedTime);
+        await database.clearUploadPending(blogID, filePath);
         folder.status("Updated placeholder " + filePath);
 
         console.warn(
@@ -128,6 +136,7 @@ module.exports = async function (req, res) {
 
       // Call the folder's update method to register the file change
       await updateOrRollBack(blogID, folder, filePath, modifiedTime);
+      await database.clearUploadPending(blogID, filePath);
 
       // Set the folder status to reflect the upload action
       folder.status("Updated " + filePath);
