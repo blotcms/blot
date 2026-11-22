@@ -75,7 +75,7 @@ describe("git client dashboard: a setup in progress", function () {
     await setCreating(this.blog.id);
     expect(await landing(this)).toBe("page");
 
-    // A mark with only a moment left, as one left by a setup cut off an hour ago
+    // A mark with only a moment left, as one left by a setup cut off minutes ago
     await client.set(database.creatingKey(this.blog.id), "1", { PX: 50 });
     await new Promise((resolve) => setTimeout(resolve, 150));
 
@@ -94,6 +94,33 @@ describe("git client dashboard: a setup in progress", function () {
 
     expect(await isCreating(this.blog.id)).toBe(false);
     expect(await landing(this)).toBe("page");
+  });
+
+  it("renews the mark while the setup runs, so it can expire soon after one is cut off", async function () {
+    var every = database.CREATING_REFRESH_MS;
+    database.CREATING_REFRESH_MS = 50;
+    spyOn(database, "refreshCreating").and.callThrough();
+
+    try {
+      // The setup waits a second at the end, so it renews the mark meanwhile
+      await require("clients/git/create")(this.blog);
+    } finally {
+      database.CREATING_REFRESH_MS = every;
+    }
+
+    expect(database.refreshCreating).toHaveBeenCalledWith(this.blog.id);
+    expect(database.CREATING_TTL_SECONDS).toBeLessThanOrEqual(5 * 60);
+    expect(await isCreating(this.blog.id)).toBe(false);
+  });
+
+  it("does not bring back a mark the setup has cleared", async function () {
+    await database.refreshCreating(this.blog.id);
+    expect(await isCreating(this.blog.id)).toBe(false);
+
+    await setCreating(this.blog.id);
+    await database.refreshCreating(this.blog.id);
+    var ttl = await client.ttl(database.creatingKey(this.blog.id));
+    expect(ttl).toBeGreaterThan(database.CREATING_TTL_SECONDS - 5);
   });
 
   it("shows the repository as being created only until it exists, whatever the owner's status says", async function () {

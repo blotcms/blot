@@ -28,6 +28,14 @@ const PREFIXES = ["import-", "verify-", "rewrite-", "setup-"];
 // leftover waits at most this long (and a day for the next run) before it goes.
 const MIN_AGE_MS = 12 * 60 * 60 * 1000;
 
+// A setup (setup-) runs inside the blog's folder lock and touches its own
+// directory every SETUP_TOUCH_MS while it runs (served/create.js), however
+// deep the files it is writing, so one untouched for an hour is a leftover:
+// the Git client clears these at startup (init.js), straight after the deploy
+// or crash which most often leaves them.
+const SETUP_TOUCH_MS = 5 * 60 * 1000;
+const SETUP_MIN_AGE_MS = 60 * 60 * 1000;
+
 const NAME = new RegExp(
   "^(" +
     PREFIXES.map((p) => p.replace("-", "\\-")).join("|") +
@@ -118,4 +126,10 @@ async function sweepScratch({
   return result;
 }
 
-module.exports = { sweepScratch, PREFIXES, MIN_AGE_MS };
+module.exports = {
+  sweepScratch,
+  PREFIXES,
+  MIN_AGE_MS,
+  SETUP_TOUCH_MS,
+  SETUP_MIN_AGE_MS,
+};
