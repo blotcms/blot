@@ -71,7 +71,10 @@ describe("dropbox sync/index with a file over the download size limit", function
       }),
     };
     require.cache[databasePath] = {
-      exports: { set: async (_id, values) => saved.push(values) },
+      exports: {
+        set: async (_id, values) => saved.push(values),
+        setError: async () => {},
+      },
     };
     let calls = 0;
     require.cache[deltaPath] = {
