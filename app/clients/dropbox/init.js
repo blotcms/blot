@@ -1,6 +1,7 @@
 const Blog = require("models/blog");
 const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
+const drain = require("helper/drain");
 const scheduleExclusive = require("clients/util/scheduleExclusive");
 const onceAtStartup = require("clients/util/onceAtStartup");
 const email = require("helper/email");
@@ -267,6 +268,12 @@ const validateAllBlogs = async () => {
   let checkedBlogs = 0;
 
   for (const blogID of blogIDs) {
+    // Every lock is refused while draining; the next hour's run covers the rest
+    if (drain.isDraining()) {
+      console.log(clfdate(), "Dropbox: Stopped sync validation for the drain");
+      break;
+    }
+
     let blog;
     let phase = "validation";
 
