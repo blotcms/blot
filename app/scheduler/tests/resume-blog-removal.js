@@ -15,8 +15,8 @@ describe("scheduler resume-blog-removal", function () {
     spyOn(console, "error");
 
     // The kill: removal stops after the owner's list is updated
-    this.kill = spyOn(discover, "removeBlog").and.rejectWith(
-      new Error("killed")
+    this.kill = spyOn(discover, "removeBlog").and.callFake(() =>
+      Promise.reject(new Error("killed"))
     );
     await expectAsync(Blog.remove(this.blog.id)).toBeRejected();
     this.kill.and.callThrough();
@@ -39,12 +39,12 @@ describe("scheduler resume-blog-removal", function () {
   it("leaves a removal alone while it may still be running", async function () {
     const result = await resume({ now: Date.now() + MINUTE });
 
-    expect(result).toEqual({ resumed: [], failed: [], gaveUp: [] });
+    expect(result).toEqual({ resumed: [], failed: [], gaveUp: [], billed: [] });
     expect(await Blog.get({ id: this.blog.id })).toBeDefined();
   });
 
   it("waits longer after each failed attempt and gives up after too many", async function () {
-    this.kill.and.rejectWith(new Error("still failing"));
+    this.kill.and.callFake(() => Promise.reject(new Error("still failing")));
 
     let now = Date.now() + 11 * MINUTE;
     let result = await resume({ now });
@@ -56,6 +56,7 @@ describe("scheduler resume-blog-removal", function () {
       resumed: [],
       failed: [],
       gaveUp: [],
+      billed: [],
     });
 
     await client.hSet(
@@ -121,7 +122,8 @@ describe("scheduler resume-blog-removal", function () {
       const result = await resume(this.later);
 
       expect(result.billed).toEqual([this.blog.id]);
-      expect(this.update).toHaveBeenCalledOnceWith("cus_test", "sub_test", {
+      expect(this.update).toHaveBeenCalledTimes(1);
+      expect(this.update).toHaveBeenCalledWith("cus_test", "sub_test", {
         quantity: 1,
         prorate: false,
       });
@@ -169,7 +171,9 @@ describe("scheduler resume-blog-removal", function () {
     });
 
     it("emails the maintainer, once, when the reduction fails, and tries again", async function () {
-      this.update.and.rejectWith(new Error("Stripe is down"));
+      this.update.and.callFake(() =>
+        Promise.reject(new Error("Stripe is down"))
+      );
 
       const first = await resume(this.later);
       await resume({ now: this.later.now + 20 * MINUTE });

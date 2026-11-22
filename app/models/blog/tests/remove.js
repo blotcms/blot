@@ -148,7 +148,9 @@ describe("Blog.remove", function () {
 
     // Fails the step after the user is updated, as a kill there would
     function interrupt() {
-      return spyOn(discover, "removeBlog").and.rejectWith(new Error("killed"));
+      return spyOn(discover, "removeBlog").and.callFake(() =>
+        Promise.reject(new Error("killed"))
+      );
     }
 
     afterEach(async function () {
@@ -206,7 +208,9 @@ describe("Blog.remove", function () {
 
     it("finishes a removal whose blog record is already deleted", async function () {
       var purgeQueue = require("cdn/purgeQueue");
-      var purge = spyOn(purgeQueue, "blog").and.rejectWith(new Error("killed"));
+      var purge = spyOn(purgeQueue, "blog").and.callFake(() =>
+        Promise.reject(new Error("killed"))
+      );
 
       await expectAsync(remove(this.blog.id)).toBeRejected();
 
