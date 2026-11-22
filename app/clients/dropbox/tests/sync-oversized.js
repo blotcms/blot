@@ -8,7 +8,9 @@ describe("dropbox sync/index with a file over the download size limit", function
   const databasePath = require.resolve("../database");
   const deltaPath = require.resolve("../delta");
   const persistErrorPath = require.resolve("../util/persistError");
+  const downloadPath = require.resolve("../util/download");
   const paths = [
+    downloadPath,
     syncPath,
     lockPath,
     createClientPath,
@@ -20,6 +22,7 @@ describe("dropbox sync/index with a file over the download size limit", function
   const blogID = "blog_syncoversized" + Date.now();
   const originals = {};
   let maxFileSize;
+  let logs;
 
   // A limit below the fixtures' sizes, so a matching local copy can have the
   // same size as the Dropbox file. sync/index reads it when it loads.
@@ -38,11 +41,21 @@ describe("dropbox sync/index with a file over the download size limit", function
     await storage.removeAll(blogID);
   });
 
-  function run(content_hash, size) {
+  // downloadError: what a (stubbed) download throws; without it the real
+  // download runs
+  function run(content_hash, size, downloadError) {
+    logs = [];
+    if (downloadError)
+      require.cache[downloadPath] = {
+        exports: async function () {
+          throw downloadError;
+        },
+      };
+    else delete require.cache[downloadPath];
     require.cache[lockPath] = {
       exports: async function (_blogID, fn) {
         return fn({
-          log: function () {},
+          log: (...args) => logs.push(args.join(" ")),
           status: function () {},
           update: async () => {},
         });
@@ -114,5 +127,32 @@ describe("dropbox sync/index with a file over the download size limit", function
     expect((await storage.stat(blogID, "/big.txt")).flags).toEqual([
       { code: "SYNC_TOO_LARGE", size: 14, limit: 4 },
     ]);
+  });
+
+  describe("a file Dropbox refuses to download", function () {
+    const refused = (summary, status = 409) =>
+      Object.assign(new Error("Response failed with a 409 code"), {
+        status,
+        error: { error_summary: summary },
+      });
+
+    it("logs the blog and the path, and carries on", async function () {
+      await run("hash", 3, refused("path/restricted_content/.."));
+
+      const line = logs.find((entry) => /refused to download/.test(entry));
+      expect(line).toContain("big.txt");
+      expect(line).toContain(blogID);
+      expect(line).toContain("path/restricted_content");
+    });
+
+    it("still fails the sync for revoked access", async function () {
+      let error;
+      try {
+        await run("hash", 3, refused("invalid_access_token/..", 401));
+      } catch (err) {
+        error = err;
+      }
+      expect(error && error.status).toEqual(401);
+    });
   });
 });

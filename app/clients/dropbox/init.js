@@ -40,12 +40,13 @@ const TRANSFER_INCOMPLETE = Symbol("dropbox-transfer-incomplete");
 // Runs resetToBlot while holding the blog's folder lock, so it can't race a
 // webhook sync. resetToBlot updates the database as it changes files, since it
 // advances the Dropbox cursor and later syncs would never revisit them.
-const resetToBlotWithLock = async (blogID, publish) => {
+// signal ({ aborted }) stops the walk part way, as for resetToBlot.
+const resetToBlotWithLock = async (blogID, publish, signal) => {
   const { folder, done } = await establishSyncLock(blogID);
   let error = null;
 
   try {
-    return await resetToBlot(blogID, publish, folder.update);
+    return await resetToBlot(blogID, publish, folder.update, signal);
   } catch (err) {
     // resetToBlot itself refuses (see sync/reset-to-blot.js) if the account's
     // initial transfer to Dropbox hasn't finished - that guard runs right
@@ -79,6 +80,24 @@ const resetToBlotWithLock = async (blogID, publish) => {
 const canResumeTransfer = (account) =>
   !!account && account.transfer_pending === true && !issueFromAccount(account);
 
+// A disconnect waits for the folder lock, so whatever holds the lock stops for
+// it: signal.aborted turns true when one is requested. Call
+// subscription.cleanup() when done.
+const watchForDisconnect = (blogID) => {
+  const signal = { aborted: false };
+  const subscription = redisSubscriber({
+    channel: "sync:status:" + blogID,
+    onMessage: function (message) {
+      if (message === "Attempting to disconnect from Dropbox")
+        signal.aborted = true;
+    },
+    onError: function (err) {
+      console.error(clfdate(), "Dropbox: Resume subscriber", blogID, err);
+    },
+  });
+  return { signal, subscription };
+};
+
 // Resumes one blog's initial transfer under its folder lock. Resolves true if
 // the transfer finished, false if it was left alone: something holds the lock
 // (a setup is running it), the transfer is no longer pending, or a disconnect
@@ -95,18 +114,7 @@ const resumeTransfer = async (blogID) => {
   }
 
   const { folder, done } = lock;
-  const signal = { aborted: false };
-  // A disconnect waits for the folder lock, so stop for it as setup does
-  const subscription = redisSubscriber({
-    channel: "sync:status:" + blogID,
-    onMessage: function (message) {
-      if (message === "Attempting to disconnect from Dropbox")
-        signal.aborted = true;
-    },
-    onError: function (err) {
-      console.error(clfdate(), "Dropbox: Resume subscriber", blogID, err);
-    },
-  });
+  const { signal, subscription } = watchForDisconnect(blogID);
 
   let error = null;
   try {
@@ -158,12 +166,23 @@ const resumeTransfers = async (blogIDs) => {
 
       const publish = (...args) =>
         console.log(clfdate(), "Dropbox:", blogID, ...args);
-      await resetToBlotWithLock(blogID, publish);
+      const { signal, subscription } = watchForDisconnect(blogID);
+      try {
+        await subscription.setupPromise;
+        await resetToBlotWithLock(blogID, publish, signal);
+      } finally {
+        await subscription
+          .cleanup()
+          .catch((err) =>
+            console.error(clfdate(), "Dropbox: Resume cleanup", blogID, err)
+          );
+      }
 
       const blog = await getBlog({ id: blogID });
       if (blog) await catchUpSync(blog);
     } catch (err) {
       if (err && err.message === "Failed to acquire folder lock") continue;
+      if (err && err.name === "AbortError") continue;
       console.error(
         clfdate(),
         "Dropbox: Error resuming initial transfer",
