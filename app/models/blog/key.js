@@ -29,4 +29,12 @@ module.exports = {
 
   // Set which stores all the IDs of extant blogs
   ids: "blogs",
+
+  // Sorted set of the IDs of blogs whose removal has begun and not finished,
+  // scored by the time (ms) the scheduler may next resume it. Remove adds a
+  // blog before its first step and drops it after the last.
+  removing: "blogs:removing",
+
+  // Hash of how many times the scheduler has resumed each blog in removing
+  removalAttempts: "blogs:removing:attempts",
 };

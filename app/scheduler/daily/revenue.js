@@ -2,6 +2,7 @@ const User = require("models/user");
 const extend = require("models/user/extend");
 const prettyPrice = require("helper/prettyPrice");
 const prettyNumber = require("helper/prettyNumber");
+const billingMismatch = require("./billing-mismatch");
 
 async function main() {
   var annual_recurring_revenue = 0;
@@ -15,8 +16,14 @@ async function main() {
   const uids = await User.getAllIds();
   const users = await Promise.all(uids.map((uid) => User.getById(uid)));
 
+  const billing_mismatches = [];
+
   users.forEach(function (user) {
     if (!user) return;
+
+    const mismatch = billingMismatch(user);
+    if (mismatch) billing_mismatches.push(mismatch);
+
     user = extend(user);
 
     if (user.isDisabled) return;
@@ -43,6 +50,7 @@ async function main() {
   });
 
   return {
+    billing_mismatches,
     total_customers_paypal,
     total_active_blogs_paypal,
     paypal_percentage:
