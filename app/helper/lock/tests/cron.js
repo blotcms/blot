@@ -89,7 +89,8 @@ describe("helper/lock cron", function () {
   it("swallows Redis errors", async function () {
     const name = newName();
     spyOn(console, "error");
-    spyOn(client, "set").and.returnValue(
+    // The first Redis call a fire makes is the check for its done marker
+    spyOn(client, "exists").and.callFake(() =>
       Promise.reject(new Error("redis down"))
     );
     let called = false;
@@ -147,4 +148,125 @@ describe("helper/lock cron", function () {
     b.cancel();
     expect(count).toEqual(1);
   }, 10000);
+
+  describe("when a process is killed mid-run", function () {
+    const doneKey = (name, date) => "cron:" + name + ":" + date.toISOString();
+    const drain = require("helper/drain");
+
+    afterEach(async function () {
+      await client.del("cron:in-progress");
+    });
+
+    it("sets the done marker only after fn resolves", async function () {
+      const name = newName();
+      const fireDate = new Date();
+      let duringRun;
+      await lock.cron._fire(name, fireDate, async () => {
+        duringRun = await client.exists(doneKey(name, fireDate));
+      });
+      expect(duringRun).toEqual(0);
+      expect(await client.exists(doneKey(name, fireDate))).toEqual(1);
+    });
+
+    it("re-runs a fire whose claim died without a done marker", async function () {
+      const name = newName();
+      const fireDate = new Date();
+      let count = 0;
+      lock.cron(name, "0 0 1 1 *", () => count++).cancel();
+      // What a killed winner leaves: the fire is listed, there is no claim
+      // (expired) and no done marker.
+      await client.zAdd("cron:in-progress", {
+        score: fireDate.getTime(),
+        value: JSON.stringify({
+          name,
+          fireDate: fireDate.toISOString(),
+          scope: "cluster",
+        }),
+      });
+      await lock.cron._recover();
+      expect(count).toEqual(1);
+      expect(await client.exists(doneKey(name, fireDate))).toEqual(1);
+      await lock.cron._recover();
+      expect(count).toEqual(1);
+    });
+
+    it("does not re-run a fire whose claim is still held", async function () {
+      const name = newName();
+      const fireDate = new Date();
+      let count = 0;
+      lock.cron(name, "0 0 1 1 *", () => count++).cancel();
+      await client.zAdd("cron:in-progress", {
+        score: fireDate.getTime(),
+        value: JSON.stringify({
+          name,
+          fireDate: fireDate.toISOString(),
+          scope: "cluster",
+        }),
+      });
+      await client.set(doneKey(name, fireDate) + ":claim", "x", { PX: 30000 });
+      await lock.cron._recover();
+      expect(count).toEqual(0);
+      await client.del(doneKey(name, fireDate) + ":claim");
+      await lock.cron._recover();
+      expect(count).toEqual(1);
+    });
+
+    it("skips fires older than six hours", async function () {
+      const name = newName();
+      const fireDate = new Date(Date.now() - 7 * 60 * 60 * 1000);
+      let count = 0;
+      lock.cron(name, "0 0 1 1 *", () => count++).cancel();
+      await client.zAdd("cron:in-progress", {
+        score: fireDate.getTime(),
+        value: JSON.stringify({
+          name,
+          fireDate: fireDate.toISOString(),
+          scope: "cluster",
+        }),
+      });
+      await lock.cron._recover();
+      expect(count).toEqual(0);
+    });
+
+    it("does not re-run a fn that threw", async function () {
+      const name = newName();
+      const fireDate = new Date();
+      let count = 0;
+      spyOn(console, "error");
+      await lock.cron._fire(name, fireDate, () => {
+        count++;
+        throw new Error("boom");
+      });
+      await lock.cron._recover();
+      expect(count).toEqual(1);
+      expect(await client.exists(doneKey(name, fireDate))).toEqual(1);
+      expect(await client.zCard("cron:in-progress")).toEqual(0);
+    });
+
+    it("does not start a fire while draining", async function () {
+      const name = newName();
+      spyOn(drain, "isDraining").and.returnValue(true);
+      let count = 0;
+      const ran = await lock.cron._fire(name, new Date(), () => count++);
+      expect(ran).toEqual(false);
+      expect(count).toEqual(0);
+      expect(await client.keys("cron:" + name + ":*")).toEqual([]);
+    });
+
+    it("with rerunIfKilled false, marks the fire before running", async function () {
+      const name = newName();
+      const fireDate = new Date();
+      let duringRun;
+      await lock.cron._fire(
+        name,
+        fireDate,
+        async () => {
+          duringRun = await client.exists(doneKey(name, fireDate));
+        },
+        { rerunIfKilled: false }
+      );
+      expect(duringRun).toEqual(1);
+      expect(await client.zCard("cron:in-progress")).toEqual(0);
+    });
+  });
 });
