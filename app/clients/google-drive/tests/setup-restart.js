@@ -134,7 +134,7 @@ describe("google drive setup across a restart", function () {
 
   it("marks connected a blog an old setup left preparing, which has synced since", async function () {
     // Before #2922 syncs ignored preparing, so this blog synced for days
-    const startedSetup = Date.now() - 5 * 24 * 3600e3;
+    const startedSetup = Date.UTC(2026, 10, 17);
     const account = { ...copying(), startedSetup, lastSync: Date.now() };
     const { setup, accounts, events } = load({ account });
 
@@ -147,6 +147,18 @@ describe("google drive setup across a restart", function () {
     expect(accounts.blog_a.folderId).toBe("f1");
     expect(accounts.blog_a.folderName).toBe("Blog");
     expect(accounts.blog_a.error).toBeUndefined();
+  });
+
+  it("resumes the copy of a setup started since #2922, whatever its lastSync", async function () {
+    // The hot doc poller could stamp lastSync during setup until #2930
+    const startedSetup = Date.UTC(2026, 10, 22, 11);
+    const account = { ...copying(), startedSetup, lastSync: startedSetup + 1 };
+    const { setup, accounts, events } = load({ account });
+
+    await setup.restartSetupProcesses();
+
+    expect(events).toEqual(["lock", "copy", "store preparing", "release"]);
+    expect(accounts.blog_a.folderId).toBe("f1");
   });
 
   it("keeps resuming a copy that has never synced, however old", async function () {

@@ -33,13 +33,19 @@ const timedOut = (account, now = Date.now()) =>
   now - Number(account.startedSetup) > SETUP_TIMEOUT;
 
 // Before #2922 syncs ignored preparing, so a setup that never cleared it left
-// a blog that synced with its folder all the same. Only a sync stamps
-// lastSync, and none runs while preparing now (sync/index.js and the hot doc
-// poller check it first), so a lastSync after the setup started means the
-// blog was already syncing: Drive has its files, and it is connected.
+// a blog that synced with its folder all the same. A lastSync after the setup
+// started shows that, but only for setups started before #2922 was deployed:
+// since then no sync runs while preparing. The hot doc poller stamped lastSync
+// before checking preparing until #2930, though, so a later setup's lastSync
+// isn't evidence its copy finished, and it always resumes the copy instead.
+// The deploy of #2922 restarted every setup with a folder, and only one blog
+// was in this state.
+const LEGACY_SETUP_BEFORE = Date.UTC(2026, 10, 22, 10, 19);
+
 const syncedSinceSetup = (account) =>
   Boolean(account?.folderId) &&
-  Number(account.lastSync) > Number(account.startedSetup || 0);
+  Number(account.startedSetup) < LEGACY_SETUP_BEFORE &&
+  Number(account.lastSync) > Number(account.startedSetup);
 
 // Errors which mean this setup should stop and leave the account as it is:
 // someone changed the email or service account and a new setup has started,
