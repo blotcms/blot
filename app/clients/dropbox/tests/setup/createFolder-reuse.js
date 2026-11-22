@@ -25,16 +25,22 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
       require.cache[createFolderPath] = originals[createFolderPath];
   });
 
-  function load(existingAccount) {
+  // others maps the IDs of other blogs on the Dropbox account to their
+  // accounts; previous is what the blog's last disconnect left behind
+  function load(existingAccount, { previous = null, others = {} } = {}) {
     require.cache[databasePath] = {
       exports: {
-        get: async function () {
-          return existingAccount;
+        get: async function (id) {
+          return id === blogID ? existingAccount : others[id];
+        },
+        getPrevious: async function () {
+          return previous;
         },
         listBlogs: async function () {
-          // No other blogs on this Dropbox account - keeps checkAppFolder's
-          // fall-through path (used when reuse doesn't apply) simple.
-          return [];
+          // No other blogs on this Dropbox account by default - keeps
+          // checkAppFolder's fall-through path (used when reuse doesn't
+          // apply) simple.
+          return Object.keys(others).map((id) => ({ id }));
         },
         set: async function () {},
       },
@@ -278,5 +284,69 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
     expect(error).toBeDefined();
     expect(error.message).toEqual("redis blip");
     expect(filesCreateFolderCalled).toEqual(false);
+  });
+
+  describe("on reconnect", function () {
+    const previous = { account_id: "abc123", folder_id: "id:oldfolder" };
+
+    function reconnect(options, account_id = "abc123") {
+      const calls = { metadata: [], create: [] };
+      const createFolder = load(null, options);
+      const account = {
+        blog: { id: blogID, title: "My Blog" },
+        account_id,
+        full_access: true,
+        client: {
+          filesGetMetadata: async ({ path }) => {
+            calls.metadata.push(path);
+            // Renamed while the blog was disconnected
+            return { result: { ".tag": "folder", path_display: "/Renamed" } };
+          },
+          filesCreateFolder: async ({ path }) => {
+            calls.create.push(path);
+            return { result: { id: "id:newfolder", path_display: path } };
+          },
+        },
+      };
+      return createFolder(account).then((result) => ({ result, calls }));
+    }
+
+    it("reuses the folder the blog used before it disconnected, at its current path", async function () {
+      const { result, calls } = await reconnect({ previous });
+
+      expect(calls.metadata).toEqual(["id:oldfolder"]);
+      expect(calls.create).toEqual([]);
+      expect(result.folder).toEqual("/Renamed");
+      expect(result.folder_id).toEqual("id:oldfolder");
+      expect(result.reused_folder).toBe(true);
+    });
+
+    it("creates a new folder on a different Dropbox account", async function () {
+      const { result, calls } = await reconnect({ previous }, "other-account");
+
+      expect(calls.metadata).toEqual([]);
+      expect(result.folder_id).toEqual("id:newfolder");
+      expect(result.reused_folder).toBeUndefined();
+    });
+
+    it("creates a new folder when another blog on the account uses the old one", async function () {
+      const others = {
+        blog_other: {
+          full_access: true,
+          folder: "/x",
+          folder_id: "id:oldfolder",
+        },
+      };
+      const { result, calls } = await reconnect({ previous, others });
+
+      expect(calls.metadata).toEqual([]);
+      expect(result.folder_id).toEqual("id:newfolder");
+    });
+
+    it("creates a new folder when there is no previous folder", async function () {
+      const { result } = await reconnect({});
+
+      expect(result.folder_id).toEqual("id:newfolder");
+    });
   });
 });

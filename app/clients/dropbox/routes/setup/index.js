@@ -7,6 +7,7 @@ const getAccount = require("./getAccount");
 const createFolder = require("./createFolder");
 const revokePreviousToken = require("./revokePreviousToken");
 const resetFromBlot = require("../../sync/reset-from-blot");
+const resetToBlot = require("../../sync/reset-to-blot");
 
 // Resolves once the setup is finished and the sync has released the folder
 // lock, or rejects with why it failed. A disconnect aborts the setup: the
@@ -113,16 +114,29 @@ function setup(account, session) {
           folder.status("Syncing your folder to Dropbox");
           if (handleAbort()) return;
 
-          // upload folder contents to dropbox
-          // todo: pass in signal
+          // upload folder contents to dropbox. A folder this blog used
+          // before (createFolder.js) may hold the person's own changes, so
+          // only upload what it lacks, then bring its changes into Blot.
           await resetFromBlot(
             account.blog.id,
             folder.status,
             signal,
-            folder.update
+            folder.update,
+            { keepDropbox: !!account.reused_folder }
           );
 
           if (handleAbort()) return;
+
+          if (account.reused_folder) {
+            // The transfer is done, so a failure here doesn't fail setup:
+            // the hourly validation runs the same walk again
+            try {
+              await resetToBlot(account.blog.id, folder.status, folder.update);
+            } catch (err) {
+              console.log("Error syncing reused Dropbox folder:", err);
+            }
+            if (handleAbort()) return;
+          }
         } catch (err) {
           if (err && err.name === "AbortError") {
             folder.status("Dropbox setup aborted");

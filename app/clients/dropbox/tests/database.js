@@ -30,6 +30,25 @@ describe("dropbox database", function () {
     });
   });
 
+  describe("previous folder", function () {
+    it("remembers the folder and account a dropped account used", async function () {
+      const blogID = this.blog.id;
+      expect(await database.getPrevious(blogID)).toBeNull();
+
+      await database.set(blogID, fakeAccount({ folder_id: "id:folder" }));
+      await database.drop(blogID);
+      expect(await database.getPrevious(blogID)).toEqual({
+        account_id: "XXXXX",
+        folder_id: "id:folder",
+      });
+
+      // A later account at the root of the app folder leaves nothing to reuse
+      await database.set(blogID, fakeAccount());
+      await database.drop(blogID);
+      expect(await database.getPrevious(blogID)).toBeNull();
+    });
+  });
+
   describe("promise form", function () {
     it("sets, gets and drops an account without a callback", async function () {
       const blogID = this.blog.id;

@@ -459,7 +459,6 @@ Improve Dropbox sync
 - A restart mid-transfer now resumes it (#2923), but a file over 140 MB restarts its upload session from zero. Persist the session id and offset if that turns out to matter.
 - Bug: run reset-to-blot when sync fails / errors
 - Bug: ensure you can move the folder in full-folder permission mode
-- Reconnecting creates a new folder and a full transfer, so people collect 'Title (1)' folders. Offer the existing folder of that name during the connect flow (same account and permissions, `full_access=true` included) and upload only what it lacks (`resetFromBlot`'s `keepDropbox` mode, #2923).
 - Add testing for dropbox:
 - Modify setup flow:
   - Phase 1: RESET FROM BLOT (NON DESTRUCTIVE, deduplicate on conflict)

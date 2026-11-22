@@ -153,7 +153,25 @@ async function dropAccount(blogID) {
   multi.del(accountKey(blogID));
   multi.del(require("./util/accessTokenCache").key(blogID));
 
+  // Remember which folder this blog used, and on which Dropbox account, so
+  // reconnecting the same account can pick it up again (getPrevious)
+  multi.del(previousKey(blogID));
+  if (account && account.account_id && account.folder_id) {
+    multi.hSet(previousKey(blogID), {
+      account_id: account.account_id,
+      folder_id: account.folder_id,
+    });
+  }
+
   return multi.exec();
+}
+
+// The folder this blog used before it last disconnected: { account_id,
+// folder_id }, or null
+async function getPrevious(blogID) {
+  const previous = await redis.hGetAll(previousKey(blogID));
+  if (!previous || !previous.account_id || !previous.folder_id) return null;
+  return previous;
 }
 
 // Persist a classified Dropbox error. Repeating the same status+source
@@ -179,6 +197,11 @@ async function setError(blogID, classification) {
 // Redis Hash which stores the Dropbox account info
 function accountKey(blogID) {
   return "blog:" + blogID + ":dropbox:account";
+}
+
+// Redis Hash left behind when the account is dropped (see getPrevious)
+function previousKey(blogID) {
+  return "blog:" + blogID + ":dropbox:previous";
 }
 
 // Redis set whoses members are the blog IDs
@@ -277,5 +300,6 @@ module.exports = {
   setError: setError,
   drop: dropAccount,
   get: getAccount,
+  getPrevious: getPrevious,
   listBlogs: listAccountBlogs,
 };

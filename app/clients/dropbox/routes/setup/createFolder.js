@@ -24,11 +24,13 @@ const { transferIncomplete } = require("clients/dropbox/util/constants");
 async function createFolder(account) {
   const { client, full_access } = account;
 
-  const reused = await tryReuseIncompleteTransferFolder(account);
+  const reused = await tryReuseFolder(account);
 
   if (reused) {
     account.folder = reused.folder;
     account.folder_id = reused.folder_id;
+    // Setup then uploads only what the folder lacks (see setup/index.js)
+    account.reused_folder = true;
     return account;
   }
 
@@ -47,58 +49,81 @@ async function createFolder(account) {
   return account;
 }
 
-// If this blog is retrying a previously-interrupted initial transfer (see
-// transferIncomplete() in util/constants.js) to the same Dropbox account
-// under the same permission mode, reuse the folder that transfer was already
-// using instead of creating a new one. Without this, every "Retry transfer"
-// click would call mkdir(..., autorename: true) below, which Dropbox
-// auto-renames to something like "My Blog (1)" since the original folder
-// still exists (with whatever files did make it across) - abandoning that
-// partial upload and doubling the pre-flight quota check's space
-// requirement, since it would then need room for a second, near-complete
-// copy of the folder on top of the first.
+// Reuses a folder this blog already had on the same Dropbox account, instead
+// of calling mkdir(..., autorename: true) below, which Dropbox auto-renames
+// to something like "My Blog (1)" because the old folder still exists:
+// - a retry of an initial transfer that was cut short (transferIncomplete()
+//   in util/constants.js), under the same permission mode, keeps the folder
+//   that transfer was using, with the files that made it across;
+// - a reconnect after a disconnect keeps the folder the blog used before
+//   (database.getPrevious), wherever it is now, if the new permission mode
+//   can reach it: app-folder ids only resolve inside the app folder.
+// Only a folder recorded against this blog is reused, never one that merely
+// has the right name, and never one another blog on the account now uses:
+// either would publish someone else's files on this blog.
 //
-// Returns null (falling through to the normal folder-creation logic) for the
-// app-folder-root case (folder_id === "" and not full_access): createFolder
-// already leaves folder/folder_id as "" without ever calling mkdir when
-// shouldCreateFolder is false, so there's nothing to recreate or abandon
-// there, and no reuse logic is needed.
-async function tryReuseIncompleteTransferFolder(account) {
+// Returns null (falling through to the normal folder-creation logic)
+// otherwise, including the app-folder-root case (folder_id === ""), which
+// createFolder already reuses without calling mkdir.
+async function tryReuseFolder(account) {
   const { client, full_access, account_id, blog } = account;
 
   // Not wrapped in try/catch: a failure to read our own database here is a
   // transient infrastructure problem (e.g. Redis blip), not a confirmed "no
   // existing account" - swallowing it and falling through to mkdir would
-  // risk the same abandoned-partial-folder problem this function exists to
-  // prevent. Let it propagate and fail this setup attempt instead.
+  // abandon the folder this function exists to keep. Let it propagate and
+  // fail this setup attempt instead.
   const existing = await database.get(blog.id);
 
-  if (!existing) return null;
-  if (!transferIncomplete(existing)) return null;
-  if (existing.account_id !== account_id) return null;
-  if (existing.full_access !== full_access) return null;
-  if (!existing.folder_id) return null;
+  let candidate = null;
+
+  if (!existing) {
+    candidate = await database.getPrevious(blog.id);
+  } else if (
+    transferIncomplete(existing) &&
+    existing.full_access === full_access
+  ) {
+    candidate = existing;
+  }
+
+  if (!candidate || !candidate.folder_id) return null;
+  if (candidate.account_id !== account_id) return null;
+  if (await usedByAnotherBlog(account, candidate.folder_id)) return null;
 
   try {
     const { result } = await client.filesGetMetadata({
-      path: existing.folder_id,
+      path: candidate.folder_id,
     });
 
     if (result[".tag"] !== "folder") return null;
 
-    return { folder: result.path_display, folder_id: existing.folder_id };
+    return { folder: result.path_display, folder_id: candidate.folder_id };
   } catch (e) {
-    // Only a confirmed "the folder is gone" (Dropbox's 409
-    // path/not_found) should fall through to creating a brand new folder
-    // and abandoning the partial transfer - that's a real, permanent state
-    // change we need to react to. Anything else (a timeout, a rate limit, an
-    // outage) is transient: rethrowing makes this setup attempt fail
-    // (surfaced to the user as an error, same as any other setup failure)
-    // instead of quietly abandoning a folder that's actually still there and
-    // still has the partially-transferred files in it.
+    // Only a confirmed "the folder is gone" (Dropbox's 409 path/not_found,
+    // which is also what an app-folder token gets for a folder outside the
+    // app folder) falls through to creating a new folder. Anything else (a
+    // timeout, a rate limit, an outage) is transient: rethrowing fails this
+    // setup attempt instead of quietly abandoning a folder that's still
+    // there.
     if (isNotFoundError(e)) return null;
     throw e;
   }
+}
+
+// True if another blog connected to this Dropbox account uses the folder,
+// or is having its files moved into it
+async function usedByAnotherBlog(account, folder_id) {
+  const blogs = await database.listBlogs(account.account_id);
+
+  for (const other of blogs) {
+    if (other.id === account.blog.id) continue;
+    const otherAccount = await database.get(other.id);
+    if (!otherAccount) continue;
+    if (otherAccount.folder_id === folder_id) return true;
+    if (otherAccount.move_folder_id === folder_id) return true;
+  }
+
+  return false;
 }
 
 function isNotFoundError(err) {
