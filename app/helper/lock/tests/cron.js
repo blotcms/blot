@@ -89,7 +89,8 @@ describe("helper/lock cron", function () {
   it("swallows Redis errors", async function () {
     const name = newName();
     spyOn(console, "error");
-    spyOn(client, "set").and.returnValue(
+    // The first Redis call a fire makes is the check for its done marker
+    spyOn(client, "exists").and.callFake(() =>
       Promise.reject(new Error("redis down"))
     );
     let called = false;
