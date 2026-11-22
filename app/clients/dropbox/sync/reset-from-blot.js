@@ -371,8 +371,11 @@ async function resetFromBlotWithClient(
 
   // Bytes this transfer adds to Dropbox: each local file's size minus
   // whatever already sits at the same path (see listRemoteSizes).
+  // keepDropbox leaves any file already on Dropbox as it is, so only the
+  // files Dropbox lacks add anything.
   let netBytesToUpload = 0;
   for (const [path, size] of localSizes) {
+    if (keepDropbox && remoteSizes.has(path)) continue;
     netBytesToUpload += Math.max(0, size - (remoteSizes.get(path) || 0));
   }
 
@@ -536,7 +539,17 @@ async function resetFromBlotWithClient(
           }
         }
 
-        if (keepDropbox && remoteCounterpart && !identicalOnRemote) {
+        if (
+          keepDropbox &&
+          remoteCounterpart &&
+          remoteCounterpart.is_directory
+        ) {
+          // Not replaced unattended, as for the opposite case above. Left
+          // as it is, the walk into Blot afterwards would delete this file
+          // to make way for the folder.
+          log("Not replacing a folder on Dropbox with a file", path);
+          failures.push(path);
+        } else if (keepDropbox && remoteCounterpart && !identicalOnRemote) {
           log("Keeping the file on Dropbox, which differs from Blot's", path);
         } else if (remoteCounterpart && !identicalOnRemote) {
           try {

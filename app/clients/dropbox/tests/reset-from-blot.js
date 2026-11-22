@@ -349,6 +349,71 @@ describe("dropbox resetFromBlot", function () {
     );
   });
 
+  it("with keepDropbox, stays incomplete when Dropbox has a folder where Blot has a file", async function () {
+    await storage.write(blogID, "/post.txt", Buffer.from("never uploaded"));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {
+        "/": [
+          { ".tag": "folder", name: "post.txt", path_display: "/post.txt" },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await expectAsync(
+      resetFromBlot(blogID, () => {}, { aborted: false }, undefined, {
+        keepDropbox: true,
+      })
+    ).toBeRejectedWith(
+      jasmine.objectContaining({ code: "DROPBOX_TRANSFER_INCOMPLETE" })
+    );
+    expect(uploadCalls).toEqual([]);
+    expect(deleteCalls).toEqual([]);
+    expect(saved.some((values) => values.transfer_pending === false)).toBe(
+      false
+    );
+  });
+
+  it("with keepDropbox, doesn't count a file Dropbox keeps against the quota", async function () {
+    await storage.write(blogID, "/big.txt", Buffer.alloc(5000, "a"));
+
+    const resetFromBlot = load({
+      // Room for nothing more
+      spaceUsage: {
+        used: 1000000,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {
+        "/": [
+          {
+            ".tag": "file",
+            name: "big.txt",
+            path_display: "/big.txt",
+            path_lower: "/big.txt",
+            content_hash: "shorter",
+            size: 10,
+            server_modified: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(blogID, () => {}, { aborted: false }, undefined, {
+      keepDropbox: true,
+    });
+
+    expect(uploadCalls).toEqual([]);
+    expect(saved.some((values) => values.transfer_pending === false)).toBe(
+      true
+    );
+  });
+
   it("without keepDropbox, makes Dropbox match Blot", async function () {
     await storage.write(blogID, "/a.txt", Buffer.from("hello"));
 
