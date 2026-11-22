@@ -38,7 +38,9 @@ describe("icloud resumeTransfers", function () {
   beforeEach(function () {
     spyOn(console, "log");
     spyOn(console, "error");
-    transfer = jasmine.createSpy("initialTransfer").and.resolveTo();
+    transfer = jasmine
+      .createSpy("initialTransfer")
+      .and.callFake(async () => {});
   });
 
   afterEach(function () {
@@ -87,7 +89,9 @@ describe("icloud resumeTransfers", function () {
   describe("at startup", function () {
     it("doesn't count as done while a transfer was locked", async function () {
       accounts = { locked: { transferringToiCloud: true } };
-      transfer.and.rejectWith(new Error("Failed to acquire folder lock"));
+      transfer.and.callFake(async () => {
+        throw new Error("Failed to acquire folder lock");
+      });
       load();
       const init = require(initPath);
 
