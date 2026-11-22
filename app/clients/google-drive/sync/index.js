@@ -54,7 +54,9 @@ module.exports = async function (
 
   try {
     const account = await database.blog.get(blogID);
-    if (!account?.folderId) {
+    // While setup copies the site's files into the folder (routes/setup.js),
+    // a walk would find most of them missing from Drive and remove them
+    if (!account?.folderId || account.preparing) {
       return;
     }
 

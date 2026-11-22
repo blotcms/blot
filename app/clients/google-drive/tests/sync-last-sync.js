@@ -108,6 +108,16 @@ function load({
 const folder = { folderId: "folder" };
 
 describe("google drive sync entry point", function () {
+  it("leaves the folder alone while setup copies the site's files into it", async function () {
+    const { sync, events } = load({
+      account: { folderId: "folder", preparing: true },
+    });
+
+    expect(await sync("blog_a")).toBeUndefined();
+
+    expect(events).toEqual([]);
+  });
+
   it("stamps lastSync, then walks without the folder lock when nothing changed", async function () {
     const before = Date.now();
     const { sync, events, stored } = load({ account: folder });
