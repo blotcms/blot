@@ -7,30 +7,32 @@ var updateCdnManifest = require("models/template/util/updateCdnManifest");
 // Resolves to the number of templates updated. log is passed in an options
 // object. Errors for a template are logged and the rest carry on.
 //
-// Templates are popped one at a time, so a crash mid-way leaves the rest
-// pending for the next sync (and loses at most the one in flight). A
-// template whose regeneration fails is put back once the rest are done, so
-// the next sync retries it rather than leaving its manifest stale.
+// A template leaves the pending set only once its manifest has been
+// regenerated, so a process killed mid-way (a deploy) leaves it, and the
+// rest, for the next sync. One whose regeneration fails stays pending too, so
+// the next sync retries it rather than leaving its manifest stale. The set is
+// read once, so a template that keeps failing is tried once per call.
 module.exports = async function regenerateTemplateManifests(blogID, { log }) {
+  var pendingKey = key.templateManifestsPending(blogID);
+  var templateIDs = await client.sMembers(pendingKey);
   var count = 0;
-  var failed = [];
-  var templateID;
 
-  while (
-    (templateID = await client.sPop(key.templateManifestsPending(blogID)))
-  ) {
+  for (var templateID of templateIDs) {
     try {
       await updateCdnManifest(templateID);
-
-      count++;
     } catch (err) {
       log("Error updating CDN manifest for template", templateID, err.message);
-      failed.push(templateID);
+      continue;
     }
-  }
 
-  if (failed.length) {
-    await client.sAdd(key.templateManifestsPending(blogID), failed);
+    count++;
+
+    try {
+      await client.sRem(pendingKey, templateID);
+    } catch (err) {
+      // Regenerated again by the next sync, which is harmless
+      log("Error clearing pending CDN manifest", templateID, err.message);
+    }
   }
 
   return count;
