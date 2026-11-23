@@ -23,6 +23,10 @@ directory under the app's tmp directory, `{tmp}/storage-assets-staging/
 {blogID}/...`; `assets.commit()` uploads it and deletes what it uploaded. The
 daily tmp prune removes staged files a week after they were last written.
 
+## Demo folder ZIPs: `folders/`
+
+The download ZIPs of the demo folders (#2940) are kept at `folders/<name>-<hash>.zip`, outside `blog_*`, so they aren't public in the bucket. `app/cdn` serves them at `cdn.blot.im/folders/<name>-<hash>.zip`, and Bunny pulls them from the origin like the documentation. The deploy uploads them (`scripts/deploy/demo-folders.js`, `app/templates/folders/publishZip.js`). It keeps each folder's previous ZIP for a rollback and deletes any older ones. The weekly Perma-Cache sweep deletes the CDN's copies of ZIPs that the image no longer links.
+
 ## Git repositories: `{blogID}/git/`, and what is not public under `blog_*`
 
 The git client's store (`app/clients/git/store`, [#2259](https://github.com/blotcms/blot/issues/2259))
