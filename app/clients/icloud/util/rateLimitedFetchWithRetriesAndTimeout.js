@@ -1,5 +1,6 @@
 const Bottleneck = require("bottleneck");
 const fetch = require("node-fetch");
+const { setTimeout: wait } = require("timers/promises");
 
 // Global rate limiter configuration
 const limiter = new Bottleneck({
@@ -111,10 +112,11 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
         );
       }
 
+      // The next attempt throws the caller's reason if it aborts meanwhile
       if (retryDelay > 0) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, retryDelay * 2 ** (attempt - 1))
-        );
+        await wait(retryDelay * 2 ** (attempt - 1), undefined, {
+          signal: callerSignal,
+        }).catch(() => {});
       }
     } finally {
       if (callerSignal)

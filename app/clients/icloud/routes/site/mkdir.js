@@ -1,6 +1,7 @@
 const establishSyncLock = require("sync/establishSyncLock");
 const storage = require("storage/folder");
 const { handleSyncLockError } = require("../lock");
+const stillConnected = require("./stillConnected");
 const { handleRedisUnavailable } = require("../unavailable");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -43,6 +44,13 @@ module.exports = async function (req, res) {
       // Inside run, a write to the folder throws once a disconnect has
       // stopped this request (sync/seize.js)
       return await folder.run(async () => {
+        if (!(await stillConnected(blogID))) {
+          console.log(`Not syncing ${blogID}: disconnected while waiting`);
+          return res
+            .status(410)
+            .send("Blog is deleted, disabled or not on iCloud");
+        }
+
         const directoryExistsInLock = await storage.exists(blogID, dirPath);
 
         console.log(`Creating directory at: ${dirPath}`);

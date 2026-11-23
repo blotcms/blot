@@ -4,6 +4,7 @@ const database = require("../../../database");
 
 const uploadPath = require.resolve("../upload");
 const establishSyncLockPath = require.resolve("sync/establishSyncLock");
+const stillConnectedPath = require.resolve("../stillConnected");
 
 describe("icloud upload route", function () {
   const originals = new Map();
@@ -44,6 +45,8 @@ describe("icloud upload route", function () {
 
   let blogID;
   let updateCalls;
+  // What the route finds once it holds the lock
+  let connected;
 
   const fakeReq = ({ blogID, filePath, body, modifiedTime }) => ({
     header(name) {
@@ -88,6 +91,8 @@ describe("icloud upload route", function () {
     )}`;
 
     updateCalls = [];
+    connected = true;
+    mockModule(stillConnectedPath, async () => connected);
     mockModule(establishSyncLockPath, async () => ({
       folder: {
         status: () => {},
@@ -177,6 +182,21 @@ describe("icloud upload route", function () {
 
     expect(res.statusCode).toBe(500);
     expect(await database.isUploadPending(blogID, filePath)).toBe(true);
+  });
+
+  it("writes nothing for a blog disconnected while it waited for the lock", async function () {
+    const filePath = "/late.txt";
+    connected = false;
+
+    const res = fakeRes();
+    await require(uploadPath)(
+      fakeReq({ blogID, filePath, body: Buffer.from("late") }),
+      res
+    );
+
+    expect(res.statusCode).toBe(410);
+    expect(updateCalls).toEqual([]);
+    expect(await folder.exists(blogID, filePath)).toBe(false);
   });
 
   it("treats identical contents as already current regardless of mtime, without setting mtime", async () => {

@@ -23,7 +23,13 @@ const isPermanent = (error) => {
   return status >= 400 && status < 500 && status !== 408 && status !== 429;
 };
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const { setTimeout: wait } = require("timers/promises");
+
+// Waits ms, or less if signal aborts first, then throws its reason
+const sleep = async (ms, signal) => {
+  await wait(ms, undefined, { signal }).catch(() => {});
+  if (signal) signal.throwIfAborted();
+};
 
 const remoteReaddir = async (blogID, path, { signal } = {}) => {
   const BACKOFF = remoteReaddir.backoff;
@@ -59,7 +65,7 @@ const remoteReaddir = async (blogID, path, { signal } = {}) => {
         isPermanent(error)
       )
         throw error;
-      await sleep(BACKOFF[attempt]);
+      await sleep(BACKOFF[attempt], signal);
     }
   }
 };
