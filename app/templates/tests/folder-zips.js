@@ -57,15 +57,15 @@ describe("demo folder ZIPs", function () {
 
     beforeEach(function () {
       listed = [];
-      spyOn(s3, "uploadFile").and.resolveTo({});
-      spyOn(s3, "deleteKeys").and.resolveTo();
+      spyOn(s3, "uploadFile").and.returnValue(Promise.resolve({}));
+      spyOn(s3, "deleteKeys").and.returnValue(Promise.resolve());
       spyOn(s3, "listEntries").and.callFake(async function* () {
         for (const entry of listed) yield entry;
       });
     });
 
     it("uploads a ZIP the bucket doesn't have, under the folder's hash", async function () {
-      spyOn(s3, "head").and.resolveTo(null);
+      spyOn(s3, "head").and.returnValue(Promise.resolve(null));
 
       const result = await publishZip("bees", directory);
       const key = publishZip.keyFor("bees", await hashFolder(directory));
@@ -81,7 +81,7 @@ describe("demo folder ZIPs", function () {
     });
 
     it("doesn't upload a ZIP the bucket has", async function () {
-      spyOn(s3, "head").and.resolveTo({ size: 1 });
+      spyOn(s3, "head").and.returnValue(Promise.resolve({ size: 1 }));
 
       const result = await publishZip("bees", directory);
 
@@ -90,7 +90,7 @@ describe("demo folder ZIPs", function () {
     });
 
     it("keeps the newest previous ZIP and deletes older ones, of this folder only", async function () {
-      spyOn(s3, "head").and.resolveTo({ size: 1 });
+      spyOn(s3, "head").and.returnValue(Promise.resolve({ size: 1 }));
       const key = publishZip.keyFor("bees", await hashFolder(directory));
 
       listed = [
