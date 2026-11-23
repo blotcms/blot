@@ -5,6 +5,13 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && cd ../../ && pwd)"
 FOLDERS_DIR="$DIR/app/templates/folders"
 
+# The demo folders are a submodule (blotcms/demo-folders, #2940): check it
+# out the first time it's needed
+if [ -z "$(ls -A "$FOLDERS_DIR" 2>/dev/null)" ]; then
+  echo "Checking out the demo folders (app/templates/folders)"
+  git -C "$DIR" submodule update --init --depth 1 app/templates/folders
+fi
+
 # Get list of available folders (directories that don't start with . or -)
 get_available_folders() {
   find "$FOLDERS_DIR" -maxdepth 1 -type d -not -path "$FOLDERS_DIR" | while read -r folder; do
@@ -75,5 +82,5 @@ if [ ! -d "$FOLDERS_DIR/$FOLDER_NAME" ]; then
 fi
 
 # Run nodemon with the folder name as argument
-docker exec blot-node-app-1 npx nodemon app/templates/folders --ext '*' --watch "/usr/src/app/app/templates/folders/$FOLDER_NAME" "$FOLDER_NAME"
+docker exec blot-node-app-1 npx nodemon app/templates/demo --ext '*' --watch "/usr/src/app/app/templates/folders/$FOLDER_NAME" "$FOLDER_NAME"
 

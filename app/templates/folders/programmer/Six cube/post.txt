@@ -1,7 +1,0 @@
-# Six cube perspective projection
-
-{>} ![6 cube](_pic.png)
-
-A render of a 6-cube.
-
-Source: [Wikipedia](https://en.wikipedia.org/cube)

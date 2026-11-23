@@ -1,7 +1,0 @@
-# Heesch's polygon
-
-{>} ![Heesch polygon](_pic.png)
-
-A polygon discovered by [Robert Amman](https://en.wikipedia.org/wiki/Robert_Amman), formed from a regular hexagon by adding projections on two of its sides and matching indentations on three sides. It may be surrounded by four layers of congruent copies of itself, but not five. See [Heesch's problem](https://en.wikipedia.org/wiki/Heesch%27s_problem).
-
-Source: [Wikipedia](http://wikipedia.org)

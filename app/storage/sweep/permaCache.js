@@ -256,7 +256,7 @@ async function* staleDocumentation(base) {
   }
 }
 
-// Demo folder ZIPs (/folders/<name>-<hash>.zip, templates/folders/publishZip)
+// Demo folder ZIPs (/folders/<name>-<hash>.zip, templates/demo/publishZip)
 // that the image's template pages no longer link: its manifest lists the
 // current one for each folder. The deploy keeps the previous ZIP in the
 // bucket for a rollback, so a request for it still gets the right answer

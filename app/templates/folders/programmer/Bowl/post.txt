@@ -1,7 +1,0 @@
-# Bowl function
-
-{>} ![Bowl function](_photo.png)
-
-A plot of the bowl function $$f(x) = x^2 + y^2$$
-
-Source: [Wikipedia](http://wikipedia.org)

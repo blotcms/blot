@@ -9,7 +9,7 @@ const key = require("models/template/key");
 const assets = require("storage/assets");
 const folder = require("storage/folder");
 const sendObject = require("storage/sendObject");
-const publishZip = require("templates/folders/publishZip");
+const publishZip = require("templates/demo/publishZip");
 const {
   getStat,
   PENDING_VERSION,
@@ -51,7 +51,7 @@ cdn.use("/plugins", static(GLOBAL_STATIC_FILES + "/plugins"));
 cdn.use("/documentation/v-:version", static(config.views_directory));
 
 // The download ZIPs of the demo folders, e.g. /folders/bees-0123456789abcdef.zip,
-// from the storage bucket's private folders/ prefix (templates/folders/
+// from the storage bucket's private folders/ prefix (templates/demo/
 // publishZip). The hash is of the ZIP's files, so a URL never changes bytes.
 // A missing ZIP isn't cached: a deploy may upload it a moment after the page
 // that links it goes live.

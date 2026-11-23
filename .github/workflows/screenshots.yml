@@ -26,7 +26,10 @@ on:
   pull_request:
     paths:
       - "app/templates/source/**"
-      - "app/templates/folders/**"
+      # The demo folders are a submodule (blotcms/demo-folders): a new pin
+      # changes this path. Their builder and settings are app/templates/demo.
+      - "app/templates/folders"
+      - "app/templates/demo/**"
 
 # Superseded PR pushes are cancelled; dispatched runs each get their own group.
 concurrency:
@@ -80,7 +83,26 @@ jobs:
           git diff --no-renames --name-only \
             "${{ github.event.pull_request.base.sha }}" \
             "${{ github.event.pull_request.head.sha }}" \
-            -- app/templates/source app/templates/folders > "$changed_files"
+            -- app/templates/source app/templates/demo > "$changed_files"
+
+          # The folders are a submodule: list the files that changed between
+          # its old and new pins, as paths under app/templates/folders. A pin
+          # that can't be compared (the move into the submodule, a missing
+          # commit) refreshes every preview.
+          base_pin=$(git ls-tree "${{ github.event.pull_request.base.sha }}" app/templates/folders | awk '$2 == "commit" {print $3}')
+          head_pin=$(git ls-tree "${{ github.event.pull_request.head.sha }}" app/templates/folders | awk '$2 == "commit" {print $3}')
+          if [ "$base_pin" != "$head_pin" ]; then
+            demo="$RUNNER_TEMP/demo-folders"
+            git clone -q --filter=blob:none --no-checkout https://github.com/blotcms/demo-folders.git "$demo"
+            if [ -n "$base_pin" ] && [ -n "$head_pin" ] && \
+              git -C "$demo" cat-file -e "$base_pin^{commit}" 2>/dev/null && \
+              git -C "$demo" cat-file -e "$head_pin^{commit}" 2>/dev/null; then
+              git -C "$demo" diff --no-renames --name-only "$base_pin" "$head_pin" \
+                | sed 's#^#app/templates/folders/#' >> "$changed_files"
+            else
+              echo "app/templates/folders (pin changed)" >> "$changed_files"
+            fi
+          fi
 
           templates=$(node - "$changed_files" <<'NODE'
           const fs = require("fs");
@@ -172,6 +194,9 @@ jobs:
           # to github.ref as before.
           ref: ${{ github.head_ref || github.ref }}
           token: ${{ secrets.SCREENSHOTS_PUSH_TOKEN || secrets.GITHUB_TOKEN }}
+          # The demo folders (blotcms/demo-folders), which the demo blogs
+          # are built from
+          submodules: true
 
       # The Node and Pandoc versions are those of the Dockerfile. The macOS
       # Pandoc build must be arm64: the runners are Apple silicon and an x86_64
@@ -351,7 +376,7 @@ jobs:
           node app/index.js &
 
           echo "Building demo folders"
-          node app/templates/folders/index.js --for-templates="$TEMPLATES"
+          node app/templates/demo/index.js --for-templates="$TEMPLATES"
 
           # Flush Redis to disk here rather than at the end of the job: this is
           # the state worth caching, and it is worth caching even if a
