@@ -28,6 +28,7 @@ On a new host run `deploy.sh` directly (see [Moving to a new host](#moving-to-a-
 | `scripts/unit-mem-log.sh`, `scripts/unit-mem-summary.sh` | `/usr/local/bin/` |
 | (written by `deploy.sh`) | `/etc/cron.d/blot-unit-mem` (runs `unit-mem-log.sh` every minute as root) |
 | `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` (enabled; started only if `/var/instance-ssd` is not mounted yet) |
+| `scripts/unit-cgroups/*.slice`, `scripts/unit-cgroups/blot-unit-cgroups.service`, `scripts/unit-cgroups/blot-unit-cgroups.sh` | `/etc/systemd/system/`, the script in `/usr/local/sbin/` (enabled and restarted each run). Each unit's slice, `system-blot-<unit>.slice` in `system.slice`, holds its container and its two sandbox jails (`sandbox/`, `browser/`, which the script makes) under one `MemoryMax`, the unit's memory (#2795). Its value must equal `UNIT.memory` in `scripts/deploy/constants.js`: the unit deploy checks |
 | `scripts/docker.service.d/*.conf` | `/etc/systemd/system/docker.service.d/` (`10-instance-store.conf`, and `20-rsyslog.conf`: docker starts after rsyslog, whose socket the units log to) |
 | `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then creates any `logpath` in `jail.local` that is missing and restarts fail2ban) |
 | `scripts/fail2ban.service.d/10-instance-store.conf` | `/etc/systemd/system/fail2ban.service.d/10-instance-store.conf` |
@@ -199,7 +200,8 @@ upgrades a package. It:
 - enables docker without starting it, checks cgroup v2, and adds a drop-in that
   orders docker after `redis6.service`; `ec2-user` joins the `docker` group;
 - installs `blot-sandbox-cgroup.service`, ordered before docker, which makes
-  `/sys/fs/cgroup/blot-sandbox/{blue,green}` for the units' nsjail sandbox
+  `/sys/fs/cgroup/blot-sandbox/{blue,green}` (the layout before #2795, kept
+  for a unit not yet redeployed into its slice: see `scripts/unit-cgroups`) for the units' nsjail sandbox
   (`app/sandbox`). Each is capped at 512M of memory (no swap), 256 pids and a
   `cpu.weight` of 25. Nothing uses them until `BLOT_SANDBOX=1` is set in the
   proxy env file (`proxy/deploy/proxy.env.example`). It also makes

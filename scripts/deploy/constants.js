@@ -10,33 +10,49 @@ const SERVING_CPU_SHARES = 2048;
 // (via ./units.sh). It gets these through ./unit-settings.js.
 //
 // One unit must be able to carry all the traffic on its own while the other is
-// being replaced, so each is sized for everything the app does, not half of it:
-// Sized from production peaks (#2795, 19 Nov 2026, about 11 hours including
-// deploys; unit-mem-summary.sh on the host and the [STATS] process lines):
-//   node-a   heapUsed peaked at 1072 MiB (mean ~600): 1536 leaves ~40% for GC
+// being replaced, so each is sized for everything the app does, not half of it.
+//
+// memory is the whole unit's memory (#2795, 23 Nov 2026): the host runs each
+// unit in a slice of its own (config/host/scripts/unit-cgroups) whose
+// MemoryMax is this same number, and the slice holds the container and its two
+// sandbox jails. The container's own limit is this too, so either can use what
+// the other leaves. Page cache counts against it, but it is reclaimed. The deploy
+// refuses to start a unit whose slice has a different limit
+// (proxy/deploy/common.sh, require_unit_slice).
+//
+// It is not the sum of every process's limit. That sum is larger, and only has
+// to fit if everything peaks at once. Instead the kernel kills in a set order
+// when the unit is full ("Kill order" in proxy/unit/supervisor.sh): sandbox
+// jobs and docker exec scripts first, then node-b, then the broker, then node-a,
+// and OpenResty last. Losing a job, a script or node-b is accepted; losing
+// node-a or OpenResty is not. So the rule is: what must not be killed, at its
+// own limits, fits in memory with room to spare. In MiB:
+//   OpenResty (master, workers, shared dicts)   ~400
+//   node-a heap (nodeAMaxOldSpaceSize)          1536
+//   node-a outside the heap                     ~450
+//   ----------------------------------------- -----
+//   must not be killed                         ~2390 of 3584
+// That leaves ~1200 for node-b (typically ~450), the broker (~80), git, the
+// jails (512 and 1024 at most, ~50 typically) and page cache. A peak of all of
+// those at once can kill a job or node-b, which is accepted.
+//   node-a   heapUsed peaked at 1072 MiB (mean ~600, 19 Nov); its heap after
+//            GC levels off at ~700-740 once the render caches are full
 //   node-b   heapUsed peaked at 199 MiB: 512 leaves room for a heavy build
-//   memory   the container's unreclaimable memory (anon + shmem: both Node
-//            processes, OpenResty, the broker, git and scripts) peaked at
-//            1966 MiB; 2560m leaves ~30%. Both heaps at their ceilings would
-//            not fit, which is deliberate: under pressure the kernel kills
-//            node-b (oom_score_adj 900) before node-a, and scripts first.
-//            Page cache counts against this too, but it is reclaimed.
-// The host's budget is the sum of enforced limits: two units at this memory,
-// plus each unit's sandbox cgroups (config/host/host/setup.sh, outside this
-// limit), plus Redis's maxmemory and overhead, the host itself, offsite-sync
-// and a 1 GiB margin, within the host's RAM (config/redis/README.md).
+// The host's budget is the sum of the two units' memory, Redis's maxmemory and
+// overhead, the host itself, offsite-sync, the script runner and a 1 GiB
+// margin, within the host's RAM (config/redis/README.md).
 // cpus overcommits slightly.
 //
-// Scripts run with `docker exec` in a unit are not part of that budget, so
-// they get a small heap of their own (scriptMaxOldSpaceSize: the container's
-// NODE_OPTIONS, which only they inherit, node-a's own options travel as
-// BLOT_NODE_A_OPTIONS) and start at oom_score_adj 1000, so under memory pressure
-// they are killed before node-b (900) or node-a (0). Nothing a script needs
-// beyond 256 MB belongs in a unit: it goes through scripts/prod/run-script.js
-// (SCRIPT_RUNNER), a container of its own outside the units' limits.
+// Scripts run with `docker exec` in a unit get a small heap of their own
+// (scriptMaxOldSpaceSize: the container's NODE_OPTIONS, which only they
+// inherit, node-a's own options travel as BLOT_NODE_A_OPTIONS) and start at
+// oom_score_adj 1000, so under memory pressure they are killed first. Nothing a
+// script needs beyond 256 MB belongs in a unit: it goes through
+// scripts/prod/run-script.js (SCRIPT_RUNNER), a container of its own outside
+// the units' limits.
 const UNIT = {
   cpus: 4,
-  memory: "2560m",
+  memory: "3584m",
   cpuShares: SERVING_CPU_SHARES,
   nodeAMaxOldSpaceSize: 1536,
   nodeBMaxOldSpaceSize: 512,

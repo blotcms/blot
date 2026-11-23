@@ -579,7 +579,7 @@ check "blue is replaced, checked and verified, all before green is touched, and 
 check "both units run on the new image, blue was verified once, and the old airlocks are gone" \
   'running_now blot-blue && running_now blot-green && ! running_now blot-blue-airlock && ! running_now blot-green-airlock && before "docker stop --time 40 blot-green" "docker rm -f blot-blue-airlock" && [ "$(cat "$FAKE/image/blot-blue")" = "$UNIT_IMG" ] && [ "$(cat "$FAKE/image/blot-green")" = "$UNIT_IMG" ] && [ "$(grep -c verify-container "$FAKE/calls")" = 1 ] && called "exec --user 1000:1000 -e HOME=/home/node blot-blue node /usr/src/app/scripts/deploy/verify-container/index.js $SHA_NEW"'
 check "a unit gets both env files (secrets.env first), its name, sockets, memory, heaps, release and mounts" \
-  'called "create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536 --stop-timeout 40" && called "create .*--env-file $T/secrets.env --env-file $T/proxy.env -e BLOT_UNIT=blue -e PROXY_UNIT=blue -e PROXY_UPSTREAM_MODE=unit" && called "create .*-e BLOT_SOCKET=$T/run-blot/blue-a.sock -e BLOT_WORKER_SOCKET=$T/run-blot/blue-b.sock" && called "create .*--memory 2560m --cpus 4 --cpu-shares 2048" && called "create .*-e BLOT_RELEASE_ID=$SHA_NEW" && called "create .*--oom-score-adj 1000 --cap-add SYS_RESOURCE" && called "create .*-e BLOT_NODE_A_OPTIONS=--max-old-space-size=1536 --report-on-fatalerror --report-directory=/usr/src/app/data/node-reports/blot-blue" && called "create .*-e NODE_OPTIONS=--max-old-space-size=256" && called "create .*-e BLOT_WORKER_MAX_OLD_SPACE_SIZE=512" && called "create .*bind-propagation=rslave" && called "create .*source=$T/tmp,target=$T/tmp" && called "create .*-e BLOT_TMP_DIRECTORY=$T/tmp"'
+  'called "create --restart no --name blot-blue --network host --cap-add SYS_NICE --ulimit nofile=65536:65536 --stop-timeout 40" && called "create .*--env-file $T/secrets.env --env-file $T/proxy.env -e BLOT_UNIT=blue -e PROXY_UNIT=blue -e PROXY_UPSTREAM_MODE=unit" && called "create .*-e BLOT_SOCKET=$T/run-blot/blue-a.sock -e BLOT_WORKER_SOCKET=$T/run-blot/blue-b.sock" && called "create .*--memory 3584m --cpus 4 --cpu-shares 2048" && called "create .*-e BLOT_RELEASE_ID=$SHA_NEW" && called "create .*--oom-score-adj 1000 --cap-add SYS_RESOURCE" && called "create .*-e BLOT_NODE_A_OPTIONS=--max-old-space-size=1536 --report-on-fatalerror --report-directory=/usr/src/app/data/node-reports/blot-blue" && called "create .*-e NODE_OPTIONS=--max-old-space-size=256" && called "create .*-e BLOT_WORKER_MAX_OLD_SPACE_SIZE=512" && called "create .*bind-propagation=rslave" && called "create .*source=$T/tmp,target=$T/tmp" && called "create .*-e BLOT_TMP_DIRECTORY=$T/tmp"'
 check "without rsyslog's socket a unit logs to json-file, and says so" \
   'called "create .*--name blot-blue .*--log-driver json-file --log-opt max-size=512m --log-opt max-file=4 --log-opt compress=true" && ! called "syslog" && mentions "logs to json-file only"'
 python3 -c 'import socket, sys; socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM).bind(sys.argv[1])' "$PROXY_APP_LOG_SOCKET"
@@ -597,13 +597,16 @@ check "without BLOT_SANDBOX a unit gets none of the sandbox flags" \
   '[ $RC = 0 ] && called "create .*--name blot-blue" && ! called "cgroupns" && ! called "seccomp" && ! called "sandbox-cgroup" && ! called "BLOT_SANDBOX_SOCKET"'
 
 printf 'BLOT_SANDBOX=1\n' >> "$T/proxy.env"
-export PROXY_SANDBOX_CGROUP_DIR="$T/sandbox-cgroup"
-reset units; mkdir -p "$T/sandbox-cgroup/blue" "$T/sandbox-cgroup/green" "$T/sandbox-cgroup/blue-browser" "$T/sandbox-cgroup/green-browser"; bluegreen
+export PROXY_UNIT_CGROUP_DIR="$T/units"
+B="$T/units/system-blot-blue.slice" G="$T/units/system-blot-green.slice"
+mkdir -p "$B/sandbox" "$B/browser" "$G/sandbox" "$G/browser"
+echo $((3584 * 1024 * 1024)) > "$B/memory.max"; echo $((3584 * 1024 * 1024)) > "$G/memory.max"
+reset units; bluegreen
 SECCOMP="$(cd "$DEPLOY" && pwd)/sandbox-seccomp.json"
-check "BLOT_SANDBOX=1: each unit gets the host cgroup namespace, the seccomp profile, its own cgroup subtree and the broker's socket" \
-  '[ $RC = 0 ] && called "create .*--name blot-blue .*--cgroupns=host --security-opt seccomp=$SECCOMP --mount type=bind,source=$T/sandbox-cgroup/blue,target=/sandbox-cgroup -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock" && called "create .*--name blot-green .*source=$T/sandbox-cgroup/green,target=/sandbox-cgroup"'
+check "BLOT_SANDBOX=1: each unit runs in its own slice, with the host cgroup namespace, the seccomp profile, its jails' cgroup and the broker's socket" \
+  '[ $RC = 0 ] && called "create .*--name blot-blue .*--cgroup-parent system-blot-blue.slice --cgroupns=host --security-opt seccomp=$SECCOMP --mount type=bind,source=$B/sandbox,target=/sandbox-cgroup -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock" && called "create .*--name blot-green .*--cgroup-parent system-blot-green.slice .*source=$G/sandbox,target=/sandbox-cgroup"'
 check "and the device and browser cgroup the jails need, and no proxy URL" \
-  'called "create .*--name blot-blue .*--device /dev/net/tun --mount type=bind,source=$T/sandbox-cgroup/blue-browser,target=/sandbox-browser-cgroup" && ! called "BLOT_EGRESS_PROXY_URL" && ! called "BLOT_AIRLOCK_PROXY_URL" && ! called "BLOT_AIRLOCK_BROWSER_URL"'
+  'called "create .*--name blot-blue .*--device /dev/net/tun --mount type=bind,source=$B/browser,target=/sandbox-browser-cgroup" && ! called "BLOT_EGRESS_PROXY_URL" && ! called "BLOT_AIRLOCK_PROXY_URL" && ! called "BLOT_AIRLOCK_BROWSER_URL"'
 check "and none of the flags the sandbox must not need" \
   '! called "--privileged" && ! called "unconfined" && ! called "--cap-add SYS_ADMIN" && ! called "systempaths"'
 check "the profile is Docker's default plus exactly clone, mount, umount2, pivot_root and sethostname" \
@@ -615,16 +618,20 @@ check "the profile is Docker's default plus exactly clone, mount, umount2, pivot
     if (names !== \"clone,mount,pivot_root,sethostname,setns,umount2,unshare\") process.exit(1);
   " "$SECCOMP"'
 
-reset units; rmdir "$T/sandbox-cgroup/green"; bluegreen
-check "BLOT_SANDBOX=1 without a unit's cgroup subtree: refused before anything is touched" \
-  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "green does not exist"'
+reset units; rmdir "$G/sandbox"; bluegreen; mkdir -p "$G/sandbox"
+check "BLOT_SANDBOX=1 without a unit's sandbox cgroup: refused before anything is touched" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "system-blot-green.slice/sandbox does not exist"'
 
-mkdir -p "$T/sandbox-cgroup/green"
-reset units; rmdir "$T/sandbox-cgroup/blue-browser"; bluegreen; mkdir -p "$T/sandbox-cgroup/blue-browser"
+reset units; rmdir "$B/browser"; bluegreen; mkdir -p "$B/browser"
 check "BLOT_SANDBOX=1 without a unit's browser cgroup: refused before anything is touched" \
-  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "blue-browser does not exist"'
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "system-blot-blue.slice/browser does not exist"'
+
+echo $((2560 * 1024 * 1024)) > "$G/memory.max"; reset units; bluegreen
+echo $((3584 * 1024 * 1024)) > "$G/memory.max"
+check "BLOT_SANDBOX=1 with a slice whose limit is not UNIT_MEMORY: refused before anything is touched" \
+  '[ $RC != 0 ] && ! called "docker stop" && ! called "docker create" && mentions "system-blot-green.slice/memory.max is 2684354560, but UNIT_MEMORY is 3584m"'
 sed -i.bak -e '/^BLOT_SANDBOX=1$/d' "$T/proxy.env"; rm -f "$T/proxy.env.bak"
-unset PROXY_SANDBOX_CGROUP_DIR
+unset PROXY_UNIT_CGROUP_DIR B G
 
 reset units; FAKE_NODE_B_UNHEALTHY=blot-blue bluegreen
 check "node-b never healthy in the new blue: rolled back, green untouched" \

@@ -1,0 +1,18 @@
+# Installed by config/host/deploy.sh. Unit blot-green (blotcms/blot#2795): its
+# container (docker run --cgroup-parent, proxy/deploy/common.sh) and its two
+# sandbox jails, sandbox/ and browser/, which blot-unit-cgroups.sh makes in it.
+# MemoryMax is the whole unit's memory: everything it runs shares it, and under
+# pressure the kernel kills in the order proxy/unit/supervisor.sh sets ("Kill
+# order"), jobs and scripts first, OpenResty last. It must equal UNIT.memory in
+# scripts/deploy/constants.js: the unit deploy refuses to start a unit when
+# they differ.
+[Unit]
+Description=Blot unit blot-green: its container and sandbox jails
+
+[Slice]
+MemoryMax=3584M
+MemorySwapMax=0
+# Keeps the controllers the jails' limits need enabled before the container
+# starts in the slice (memory comes with MemoryMax)
+TasksAccounting=yes
+CPUWeight=100
