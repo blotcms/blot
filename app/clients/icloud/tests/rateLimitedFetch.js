@@ -9,6 +9,8 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
   let trickle;
   let failFirst;
   let requestTimes;
+  // Called once the server has a request
+  let onRequest;
 
   beforeEach(async function () {
     requests = 0;
@@ -16,9 +18,11 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
     trickle = false;
     failFirst = 0;
     requestTimes = [];
+    onRequest = () => {};
     server = http.createServer((req, res) => {
       requests++;
       requestTimes.push(Date.now());
+      onRequest();
       if (requests <= failFirst) {
         res.writeHead(503);
         res.end();
@@ -110,7 +114,9 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
     const cancelled = Object.assign(new Error("Sync cancelled"), {
       code: "ECANCELED",
     });
-    setTimeout(() => controller.abort(cancelled), 100);
+    // Once the request reaches the server: the rate limiter can hold it
+    // longer than a fixed delay
+    onRequest = () => setTimeout(() => controller.abort(cancelled), 50);
 
     let thrown;
     try {
