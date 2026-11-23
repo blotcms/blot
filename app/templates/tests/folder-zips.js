@@ -59,9 +59,11 @@ describe("demo folder ZIPs", function () {
       listed = [];
       spyOn(s3, "uploadFile").and.returnValue(Promise.resolve({}));
       spyOn(s3, "deleteKeys").and.returnValue(Promise.resolve());
-      spyOn(s3, "listEntries").and.callFake(async function* () {
+      // Jasmine 3.3's callFake takes only a plain function
+      async function* entries() {
         for (const entry of listed) yield entry;
-      });
+      }
+      spyOn(s3, "listEntries").and.callFake(() => entries());
     });
 
     it("uploads a ZIP the bucket doesn't have, under the folder's hash", async function () {
