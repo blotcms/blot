@@ -1,4 +1,5 @@
 var { NotFoundError } = require("./errors");
+var { check } = require("./guard");
 
 // Every read and write of a blog's folder (the files its owner syncs) goes
 // through this module, the way generated assets go through storage/assets.
@@ -22,6 +23,14 @@ function backend() {
 
 function delegate(name) {
   return function () {
+    return backend()[name].apply(null, arguments);
+  };
+}
+
+// A write from a sync whose lock was seized throws instead (./guard.js)
+function write(name) {
+  return async function (blogID) {
+    check(blogID);
     return backend()[name].apply(null, arguments);
   };
 }
@@ -52,13 +61,13 @@ module.exports = {
   // replaced.
   // { flags } gives the new file flags (models/file/flags.js); otherwise it
   // has none, since a write replaces whatever described the old bytes.
-  write: delegate("write"),
+  write: write("write"),
 
   // Writes an empty placeholder for a file which could not be fetched, with
   // the flag saying why: { code, ...detail }, a code marked placeholder in
   // models/file/flags.js. stat then reports placeholder: true, so resets and
   // builds can tell it from a file which really is empty.
-  writePlaceholder: delegate("writePlaceholder"),
+  writePlaceholder: write("writePlaceholder"),
 
   // Resolves to whether the file at path is a placeholder. A missing path is
   // not one.
@@ -67,7 +76,7 @@ module.exports = {
   // (blogID, path, source, flags, { sha1 }): replaces one source's flags on
   // a file without touching its bytes. With sha1, only while the file still
   // has those bytes. Resolves to false if there was no such file to flag.
-  setFlags: delegate("setFlags"),
+  setFlags: write("setFlags"),
 
   // An async iterator of { path, size, modified, flags, placeholder } for
   // every flagged file in the folder. It reads the whole index, so it is for
@@ -77,14 +86,14 @@ module.exports = {
   // Copies (or, with { move: true }, moves) a local file in, replacing any
   // file already at path. The source is the caller's own, never a blog path.
   // { modified } (ms) gives the file that modified time.
-  writeFrom: delegate("writeFrom"),
+  writeFrom: write("writeFrom"),
 
   // For tools which insist on writing to a path themselves (pandoc, sharp's
   // toFile): create the parent directory of await path(blogID, p), write to it,
   // then call commit(blogID, p) once the file is complete. commit is where the
   // file is uploaded, so a tool must not touch the path afterwards.
   path: delegate("path"),
-  commit: delegate("commit"),
+  commit: write("commit"),
 
   // Resolves to a real local path holding the file, for tools which read from
   // a path (hashing, sharp, pandoc). Read-only by contract: the caller must
@@ -100,17 +109,17 @@ module.exports = {
   // after fn is done.
   withLocal: delegate("withLocal"),
 
-  mkdir: delegate("mkdir"),
+  mkdir: write("mkdir"),
 
   // Removes a directory and everything in it (a prefix delete)
-  rmdir: delegate("rmdir"),
+  rmdir: write("rmdir"),
 
   // Removes a file or a directory. A missing path is not an error.
-  remove: delegate("remove"),
+  remove: write("remove"),
 
   // Moves a file or a directory, replacing a file or directory of the same
   // kind at the destination and creating its parents
-  move: delegate("move"),
+  move: write("move"),
 
   // { isDirectory, size, modified }, with modified in milliseconds since the
   // epoch and size 0 for a directory. A file also gets hash when called with

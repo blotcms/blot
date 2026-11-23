@@ -182,10 +182,16 @@ async function deleteKeys(blog) {
   // A sync (or a script under sync/hold) may still hold the folder
   // lock. Deleting it under them makes their release find it gone, and
   // a holder whose lock is lost crashes the process. The holder
-  // releases it, or it expires on its own within the lock's TTL.
-  var folderLockKey = folderLock.key(blog.id);
+  // releases it, or it expires on its own within the lock's TTL. So do
+  // the keys a disconnect's seize (sync/seize.js) leaves: without them, a
+  // holder it took the lock from would crash instead of stopping.
+  var lockKeys = [
+    folderLock.key(blog.id),
+    folderLock.cancelKey(blog.id),
+    folderLock.seizedKey(blog.id),
+  ];
   remove = remove.filter(function (name) {
-    return name !== folderLockKey;
+    return lockKeys.indexOf(name) === -1;
   });
 
   if (remove.length > 0) multi.del(remove);

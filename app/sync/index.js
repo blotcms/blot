@@ -13,6 +13,7 @@ const previewReload = require("helper/publishPreviewReload");
 const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
 const readOnly = require("helper/readOnly");
 const logContext = require("helper/logContext");
+const guard = require("storage/folder/guard");
 const {
   addPendingSync,
   removePendingSync,
@@ -58,7 +59,7 @@ function sync(blogID, fn) {
     let result;
 
     try {
-      result = await fn(folder);
+      result = await folder.run(() => fn(folder));
     } catch (err) {
       await done(err);
       throw err;
@@ -109,6 +110,7 @@ async function acquire(blogID) {
   log("Starting sync");
 
   let release;
+  let signal;
   let lockAcquiredAt;
 
   try {
@@ -128,6 +130,7 @@ async function acquire(blogID) {
     }
 
     release = lock.release;
+    signal = lock.signal;
     lockAcquiredAt = Date.now();
     addPendingSync(blogID, syncID);
     log("Successfully acquired lock on folder");
@@ -228,9 +231,22 @@ async function acquire(blogID) {
   // other outcome counts as a change. Each update is listed as pending for
   // lock-diagnostics until it settles. A client may pass the source's time
   // for the change as options.modified (see logLag).
+  //
+  // folder.signal aborts when seize() (./seize.js) wants the lock, e.g. for
+  // a disconnect: the client should stop at its next check
+  // (signal.throwIfAborted()), and pass the signal into its requests. From
+  // then on update() throws the signal's reason, status() does nothing, and
+  // so do writes to the folder from inside sync()'s fn or folder.run()
+  // (storage/folder/guard.js).
   const folder = {
+    signal,
+    // Runs async fn() so that its writes to the folder throw once the signal
+    // has aborted, as sync()'s fn does. For callers of establishSyncLock.
+    run: (fn) => guard.run(blogID, signal, fn),
     update: async function update(path, options) {
       let result;
+
+      signal.throwIfAborted();
 
       addPendingUpdate(blogID, syncID, path);
       if (isTemplatePath(path)) {
@@ -257,7 +273,9 @@ async function acquire(blogID) {
       }
       return result;
     },
-    status,
+    status(...args) {
+      if (!signal.aborted) status(...args);
+    },
     log,
   };
 
@@ -279,7 +297,12 @@ async function acquire(blogID) {
     // The steps before the release log their own failures, so the lock is
     // released even if something unexpected throws
     try {
-      await beforeRelease();
+      // A cancelled sync gives the lock up straight away. The templates key
+      // is set already (markTemplatesNeedBuild), so the next sync builds
+      // them. A file it moved isn't paired up as a rename, so its entry
+      // counts as new: only for a move in the seconds before a disconnect.
+      if (!signal.aborted) await beforeRelease();
+      else log("Cancelled, skipping renames, templates and CDN manifests");
     } finally {
       // Before the release: a deploy's drain (helper/drain) lets the process
       // exit once it holds no folder locks, so a bump after the release could
@@ -423,3 +446,4 @@ async function acquire(blogID) {
 
 module.exports = sync;
 module.exports.establishSyncLock = establishSyncLock;
+module.exports.seize = require("./seize");
