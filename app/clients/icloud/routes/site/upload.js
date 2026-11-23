@@ -125,7 +125,8 @@ module.exports = async function (req, res) {
           folder.status("Updated placeholder " + filePath);
 
           console.warn(
-            `Placeholder created for oversized source file at: ${filePath}`,
+            "Placeholder created for oversized source file at:",
+            filePath,
             {
               blogID,
               filePath,
