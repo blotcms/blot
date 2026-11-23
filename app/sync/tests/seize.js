@@ -251,6 +251,29 @@ describe("sync/seize", function () {
     expect(await storage.exists(blogID, "/queued.txt")).toBe(true);
   });
 
+  it("lets a client refuse its own records' writes after an abort", async function () {
+    const blogID = this.blog.id;
+    const guard = require("storage/folder/guard");
+    let refused;
+
+    await settle(
+      sync(blogID, async function (folder) {
+        guard.throwIfAborted();
+        await client.set(lock.cancelKey(blogID), "disconnect", { PX: 30000 });
+        await aborted(folder.signal);
+        try {
+          guard.throwIfAborted();
+        } catch (e) {
+          refused = e;
+        }
+      })
+    );
+
+    expect(refused && refused.code).toEqual("ECANCELED");
+    // Outside any sync there is nothing to refuse
+    expect(() => guard.throwIfAborted()).not.toThrow();
+  });
+
   it("only counts a lost lock as seized while a marker is set", async function () {
     const blogID = this.blog.id;
 

@@ -9,7 +9,7 @@ const { AsyncLocalStorage } = require("async_hooks");
 //
 // Only code started inside the function sees the signal. A caller of
 // establishSyncLock, which carries on outside the function that took the
-// lock, has to check folder.signal itself.
+// lock, wraps its code in folder.run() or checks folder.signal itself.
 
 const storage = new AsyncLocalStorage();
 
@@ -38,4 +38,12 @@ function check(blogID) {
   }
 }
 
-module.exports = { run, check };
+// The same for a client's own records of a blog (its account, its mapping of
+// the folder), which aren't always keyed by blogID: throws if this code runs
+// for a sync whose lock was seized, whichever blog it is
+function throwIfAborted() {
+  const store = storage.getStore();
+  if (store && store.active && store.signal.aborted) throw store.signal.reason;
+}
+
+module.exports = { run, check, throwIfAborted };
