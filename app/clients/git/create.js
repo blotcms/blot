@@ -83,8 +83,10 @@ async function createRepository(blog, folder) {
   });
 
   // Until the status is recorded the store's copy is still the setup's to
-  // take back, so a failure here leaves the store empty for a retry
+  // take back, so a failure here leaves the store empty for a retry. So does
+  // a disconnect that seized the lock meanwhile.
   try {
+    if (folder.signal) folder.signal.throwIfAborted();
     await database.setStatus(blog.owner, "createComplete");
   } catch (err) {
     await made.rollback();

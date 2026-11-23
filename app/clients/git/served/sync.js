@@ -54,7 +54,14 @@ async function hasCommit(reader, oid) {
   }
 }
 
-// folder is what the sync lock gives: { log, update(path) }
+// Stops a sync a disconnect has seized the lock from (sync.seize) before it
+// writes anything more: the disconnect removes the applied commit, and one
+// recorded after it would be where a later connection starts
+function stopIfCancelled(folder) {
+  if (folder.signal) folder.signal.throwIfAborted();
+}
+
+// folder is what the sync lock gives: { log, update(path), signal }
 async function sync(blogID, folder) {
   const store = context.storeFor(blogID);
   const cache = context.cache();
@@ -87,6 +94,7 @@ async function sync(blogID, folder) {
 
   if (!base) {
     base = EMPTY_TREE;
+    stopIfCancelled(folder);
     await setApplied(blogID, base);
   }
 
@@ -115,6 +123,8 @@ async function sync(blogID, folder) {
   for (const path of paths) {
     let err = null;
 
+    stopIfCancelled(folder);
+
     try {
       await folder.update(path, { modified: committed, since: "git-commit" });
     } catch (e) {
@@ -136,6 +146,7 @@ async function sync(blogID, folder) {
   }
 
   folder.log(`Processed ${paths.length} changes`);
+  stopIfCancelled(folder);
   await setApplied(blogID, commit);
 }
 
