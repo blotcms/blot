@@ -5,6 +5,7 @@ const database = require("../../../database");
 const uploadPath = require.resolve("../upload");
 const establishSyncLockPath = require.resolve("sync/establishSyncLock");
 const stillConnectedPath = require.resolve("../stillConnected");
+const liveLagPath = require.resolve("../../../util/liveLag");
 
 describe("icloud upload route", function () {
   const originals = new Map();
@@ -48,8 +49,15 @@ describe("icloud upload route", function () {
   // What the route finds once it holds the lock
   let connected;
 
-  const fakeReq = ({ blogID, filePath, body, modifiedTime }) => ({
+  const fakeReq = ({
+    blogID,
+    filePath,
+    body,
+    modifiedTime,
+    fromDirectoryWalk,
+  }) => ({
     header(name) {
+      if (name === "fromDirectoryWalk") return fromDirectoryWalk;
       if (name === "blogID") return blogID;
       if (name === "pathBase64")
         return Buffer.from(filePath).toString("base64");
@@ -251,5 +259,44 @@ describe("icloud upload route", function () {
     // The file was written just now; it must not have been backdated to
     // the modifiedTime header.
     expect(stat.modified).toBeGreaterThanOrEqual(beforeUpload - 1000);
+  });
+
+  describe("live lag", function () {
+    let recorded;
+
+    beforeEach(function () {
+      recorded = [];
+      mockModule(liveLagPath, {
+        record: async (modifiedTime) => recorded.push(modifiedTime),
+      });
+    });
+
+    const push = async (fromDirectoryWalk) => {
+      const res = fakeRes();
+      await require(uploadPath)(
+        fakeReq({
+          blogID,
+          filePath: "/post.txt",
+          body: Buffer.from("hello"),
+          modifiedTime: "2026-11-23T14:00:00.000Z",
+          fromDirectoryWalk,
+        }),
+        res
+      );
+      expect(res.statusCode).toBe(200);
+    };
+
+    it("records the delay of a file the watcher saw change", async function () {
+      await push(undefined);
+
+      expect(recorded).toEqual(["2026-11-23T14:00:00.000Z"]);
+    });
+
+    // A folder moved or copied in: its files keep the mtimes they had
+    it("leaves out a file pushed by the walk of a directory that appeared", async function () {
+      await push("true");
+
+      expect(recorded).toEqual([]);
+    });
   });
 });

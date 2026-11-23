@@ -154,7 +154,10 @@ module.exports = async function (req, res) {
 
         // Set the folder status to reflect the upload action
         folder.status("Updated " + filePath);
-        await liveLag.record(modifiedTime);
+        // A moved or copied-in folder's files keep their old mtimes, so
+        // mtime-to-now isn't how late they are
+        if (req.header("fromDirectoryWalk") !== "true")
+          await liveLag.record(modifiedTime);
 
         console.log(`File successfully written to: ${filePath}`);
         res

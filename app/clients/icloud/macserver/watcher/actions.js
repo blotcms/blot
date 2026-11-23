@@ -67,7 +67,14 @@ const withRetries = async (label, operation, options = {}) => {
   throw lastError;
 };
 
-const performAction = async (blogID, pathInBlogDirectory, action) => {
+// options.fromWalk: an upload from the walk of a directory the watcher saw
+// appear (watcher/index.js), so Blot leaves it out of its live lag
+const performAction = async (
+  blogID,
+  pathInBlogDirectory,
+  action,
+  { fromWalk = false } = {}
+) => {
   const validActions = ["upload", "remove", "mkdir"];
 
   if (!validActions.includes(action)) {
@@ -101,20 +108,22 @@ const performAction = async (blogID, pathInBlogDirectory, action) => {
 
   try {
     await turn.ready;
-    return await runAction(limiter, blogID, pathInBlogDirectory, action);
+    return await runAction(limiter, blogID, pathInBlogDirectory, action, {
+      fromWalk,
+    });
   } finally {
     turn.done();
   }
 };
 
 // resolves to the result of the action; mkdir reports whether Blot created the directory
-const runAction = (limiter, blogID, pathInBlogDirectory, action) =>
+const runAction = (limiter, blogID, pathInBlogDirectory, action, options) =>
   limiter
     .schedule(async () => {
       try {
         if (action === "upload") {
           await withRetries(`upload ${blogID}/${pathInBlogDirectory}`, () =>
-            upload(blogID, pathInBlogDirectory)
+            upload(blogID, pathInBlogDirectory, options)
           );
         } else if (action === "remove") {
           // forgotten even if the remove fails, so the file is pushed again
