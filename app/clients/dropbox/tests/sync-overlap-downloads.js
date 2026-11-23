@@ -55,6 +55,7 @@ describe("dropbox sync/index overlapping downloads", function () {
     require.cache[lockPath] = {
       exports: async function (_blogID, fn) {
         return fn({
+          signal: new AbortController().signal,
           log: function () {},
           status: function () {},
           update: async (path) => {

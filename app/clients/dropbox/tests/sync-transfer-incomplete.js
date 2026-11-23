@@ -45,6 +45,7 @@ describe("dropbox sync/index skips a blog with an incomplete transfer", function
     require.cache[lockPath] = {
       exports: async function (_blogID, fn) {
         return fn({
+          signal: new AbortController().signal,
           log: function () {},
           status: function () {},
           path: "/tmp/" + blogID,
