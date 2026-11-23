@@ -44,10 +44,10 @@ async function notifyMacserver(blogID) {
 // Resolves to the warning when the Mac server could not be told, else null.
 //
 // The Mac server is told first, so it stops sending changes while the lock
-// is taken. The local part runs under the blog's folder lock, taken from any
-// sync still running (sync/seize.js): that sync is stopped, and writes
+// is taken. The account is deleted under the blog's folder lock, taken from
+// any sync still running (sync/seize.js): that sync is stopped, and writes
 // nothing after the account is deleted, which would otherwise bring back a
-// record of the account or leave placeholders behind.
+// record of the account or a placeholder after they are removed.
 module.exports = async function disconnect(blogID) {
   // Phase A (best effort): notify the Mac server to disconnect.
   const remoteWarning = await notifyMacserver(blogID);
@@ -57,14 +57,16 @@ module.exports = async function disconnect(blogID) {
     blogID,
     async () => {
       await database.delete(blogID);
-
-      // Their bytes are only in iCloud, which Blot can no longer reach
-      await placeholders.removeAtDisconnect(blogID);
-
       await Blog.set(blogID, { client: "" });
     },
     { reason: "disconnect" }
   );
+
+  // Their bytes are only in iCloud, which Blot can no longer reach. Once
+  // seize has released the lock: removeAtDisconnect syncs each removal, so
+  // it takes the lock itself. The account is gone by now, so nothing iCloud
+  // sends can bring a placeholder back meanwhile.
+  await placeholders.removeAtDisconnect(blogID);
 
   return remoteWarning;
 };
