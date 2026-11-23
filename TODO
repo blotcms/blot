@@ -1,3 +1,7 @@
+Demo folders, left over from #2940 (23 Nov 2026):
+- stampclub and toni wait in demo-folders commit c7117f9 (not pushed yet). Bump the `app/templates/folders` pin to it in the same deploy as, or after, the templates they're previewed on: `SITE:organization` (#2872) and the Gallery rework (#2932). A deploy creates and syncs every folder in the pin, so pinning first would put stampclub.blot.im on a template that doesn't exist yet.
+- The image build still checks out the submodule (`unit-image.yml`) for the docs build's folder trees and ZIP hashes. Having demo-folders' own CI build `manifest.json` would take the folders out of the image build entirely.
+
 Git setup: a failed repository setup is never shown. create.js records `createFailed` under the owner (`user:<id>:git:status`), not the blog, and nothing reads it, so the person lands back on the create page with no explanation. Record the failure per blog with a short expiry and show the create step as a problem with the reason. (23 Nov 2026)
 
 Restart resilience, left over from #2918 (22 Nov 2026). A deploy gives each process 25s to drain, then kills it; these still lose or stall work when that lands mid-task:

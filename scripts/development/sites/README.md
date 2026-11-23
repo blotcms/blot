@@ -1,6 +1,6 @@
 # Test sites
 
-Local development sites for working on templates, beside the demo folder sites in `app/templates/folders`. Unlike those, they never reach production.
+Local development sites for working on templates, beside the demo folder sites in `app/templates/folders` (a submodule, blotcms/demo-folders: see `app/templates/demo/README.md`). Unlike those, they never reach production.
 
 | Site | What it's for |
 | --- | --- |
