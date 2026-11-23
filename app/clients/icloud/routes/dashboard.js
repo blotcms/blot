@@ -283,8 +283,10 @@ dashboard.post("/retry-transfer", async function (req, res) {
 
 dashboard.post("/cancel", async function (req, res, next) {
   try {
-    // Under the folder lock, taken from a transfer still running, which is
+    // The Mac server stops setting up or watching the folder first. Then,
+    // under the folder lock, taken from a transfer still running, which is
     // stopped and so can't write the account back (sync/seize.js)
+    await disconnect.notifyMacserver(req.blog.id);
     await seize(req.blog.id, () => database.delete(req.blog.id), {
       reason: "disconnect",
     });

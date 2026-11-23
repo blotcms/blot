@@ -8,7 +8,7 @@ const resolveCaseConflicts = require("../../util/resolveCaseConflicts");
 const establishSyncLock = require("sync/establishSyncLock");
 const fetch = require("../util/rateLimitedFetchWithRetriesAndTimeout");
 const health = require("clients/health");
-const { setTimeout } = require("timers/promises");
+const { setTimeout: wait } = require("timers/promises");
 
 // The verify pass aborts on the first listing that fails (after
 // remoteReaddir's own retries), so rerun it a couple of times with a
@@ -27,7 +27,7 @@ const WATCH_RETRY_DELAY_MS = 2000;
 
 // Waits ms, or less if signal aborts first, then throws its reason
 const sleep = async (ms, signal) => {
-  await setTimeout(ms, undefined, { signal }).catch(() => {});
+  await wait(ms, undefined, { signal }).catch(() => {});
   signal.throwIfAborted();
 };
 
@@ -53,6 +53,23 @@ module.exports = async function initialTransfer(blogID, options = {}) {
 
   const { folder, done } = await establishSyncLock(blogID);
   const { signal } = folder;
+
+  // A disconnect may have finished between the check above and the lock,
+  // so the mark just stored may be all there is of the account. Stop
+  // without copying anything. The mark is left: deleting it here could race
+  // a new setup's first write, and resumeTransfers skips an account without
+  // a sharing link.
+  let connected;
+  try {
+    connected = isConnected(await database.get(blogID));
+  } catch (error) {
+    await done();
+    throw error;
+  }
+  if (!connected) {
+    await done();
+    throw new Error("Blog is not connected to iCloud: " + blogID);
+  }
 
   try {
     // Inside run, a write to the folder throws once a disconnect has

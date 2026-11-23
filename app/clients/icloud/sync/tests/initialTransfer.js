@@ -240,4 +240,32 @@ describe("icloud initialTransfer", function () {
     expect(store).not.toHaveBeenCalled();
     expect(syncToiCloud).not.toHaveBeenCalled();
   });
+
+  it("stops without copying when a disconnect finished before it took the lock", async function () {
+    const syncToiCloud = jasmine.createSpy("syncToiCloud");
+    const initialTransfer = load({
+      syncToiCloud,
+      lock: async () => {
+        // The disconnect deleted the account while this waited for the lock
+        connected = false;
+        return {
+          folder: {
+            status: () => {},
+            update: () => {},
+            signal: controller.signal,
+            run: (fn) => fn(),
+          },
+          done,
+        };
+      },
+    });
+
+    await expectAsync(initialTransfer("blog")).toBeRejected();
+
+    expect(syncToiCloud).not.toHaveBeenCalled();
+    expect(store.calls.allArgs()).toEqual([
+      ["blog", { transferringToiCloud: true, error: null }],
+    ]);
+    expect(done).toHaveBeenCalled();
+  });
 });
