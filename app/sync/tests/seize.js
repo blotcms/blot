@@ -210,6 +210,47 @@ describe("sync/seize", function () {
     expect(logged("[LOCK] forced seize")).toBe(false);
   });
 
+  it("guards an establishSyncLock caller's writes through folder.run", async function () {
+    const blogID = this.blog.id;
+    const { folder, done } = await sync.establishSyncLock(blogID);
+    let writeError;
+
+    await client.set(lock.cancelKey(blogID), "disconnect", { PX: 30000 });
+    await aborted(folder.signal);
+
+    try {
+      await folder.run(() => storage.write(blogID, "/late.txt", "late"));
+    } catch (e) {
+      writeError = e;
+    }
+
+    await settle(done(null));
+
+    expect(writeError && writeError.code).toEqual("ECANCELED");
+    expect(await storage.exists(blogID, "/late.txt")).toBe(false);
+  });
+
+  it("stops guarding once the sync's fn has settled", async function () {
+    const blogID = this.blog.id;
+    let later;
+
+    await settle(
+      sync(blogID, async function (folder) {
+        await client.set(lock.cancelKey(blogID), "disconnect", { PX: 30000 });
+        await aborted(folder.signal);
+        // Runs after fn has thrown, in fn's context with its aborted
+        // signal, as a job on a shared queue would
+        later = sleep(200).then(() =>
+          storage.write(blogID, "/queued.txt", "ok")
+        );
+        folder.signal.throwIfAborted();
+      })
+    );
+
+    await later;
+    expect(await storage.exists(blogID, "/queued.txt")).toBe(true);
+  });
+
   it("only counts a lost lock as seized while a marker is set", async function () {
     const blogID = this.blog.id;
 

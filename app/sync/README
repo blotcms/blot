@@ -116,7 +116,8 @@ const result = await sync(blogID, async function (folder) {
   - `folder.update(path)` — processes a single path and returns a promise. It resolves `{ error, changed }` (a per-file error is logged and returned as `error`) and rejects when Redis is unavailable or the path cannot be read (a symlink in its way, say). See `update/index.js`.
   - `folder.status(message)` — broadcasts a status message via Redis pub/sub.
   - `folder.log(...args)` — writes a prefixed log line to stdout.
-  - `folder.signal` — an `AbortSignal` that aborts when `seize` wants the lock (below). Check it with `signal.throwIfAborted()` before each slow step and pass it into requests. Once it has aborted, `folder.update` throws its reason (code `ECANCELED`), `folder.status` does nothing, and so do writes to the folder through `storage/folder` from code `fn` started (`storage/folder/guard.js`).
+  - `folder.signal` — an `AbortSignal` that aborts when `seize` wants the lock (below). Check it with `signal.throwIfAborted()` before each slow step and pass it into requests. Once it has aborted, `folder.update` throws its reason (code `ECANCELED`), `folder.status` does nothing, and so do writes to the folder through `storage/folder` from code `fn` started while `fn` runs (`storage/folder/guard.js`). A cancelled sync skips renames, templates and CDN manifests when it finishes, keeping only the `cacheID` bump, so it gives the lock up straight away.
+  - `folder.run(fn)` — runs `await fn()` with that same guard, for callers of `establishSyncLock`, whose code runs outside it otherwise.
 - Once `fn` settles, the sync is finished: status "Synced", `renames`, `buildFromFolder` (templates), CDN manifests, `blog.cacheID` bumped when a `folder.update` changed something, then the lock released (also if one of those steps throws). The bump comes before the release because a deploy's drain (`helper/drain`) lets the process exit as soon as it holds no folder locks. Then `sync` rejects with what `fn` threw, or else with the error releasing the lock, or resolves to `fn`'s result.
 - The templates-need-building key (`Template.key.needsBuild`) is set as soon as `folder.update` is first called for a path in the templates folder, not at the end, so a sync killed before it builds the templates leaves the key for the next sync, which then reads every template. Whether the key was already set before this sync is captured at that point and decides, as before, whether the build reads every template or only the ones this sync updated.
 - `fn` and the finishing steps run in the sync's `helper/logContext`, so their log lines carry the blog and sync ID.
@@ -135,8 +136,9 @@ Runs `await fn({ signal })` holding the blog's folder lock, taken from whatever 
 
 - It sets `blog:<id>:folder-lock:cancel` to `reason`. The holder's heartbeat reads it within 3 seconds and aborts the holder's `folder.signal` (or `hold`'s `signal`) with an error whose `code` is `ECANCELED` and whose `reason` is `reason`. While the key is set, nothing but `seize` can take the lock.
 - If the lock is still held after `wait`, it logs `[LOCK] forced seize`, sets `blog:<id>:folder-lock:seized` for 10 minutes and deletes the lock. The holder later finds its lock gone and, seeing the marker or the cancel key, aborts its signal instead of crashing its process. A lock lost with neither key set is still a compromise and crashes the process (`hold.js`).
-- A second `seize` of the same blog waits for the first to finish rather than forcing it, and rejects with code `ELOCKED` after 5 minutes.
-- Code after `await establishSyncLock(blogID)` runs outside the guard's context, so a caller of it must check `folder.signal` before its own writes.
+- While the cancel key is set, a sync that tries to start rejects with `Failed to acquire folder lock`, as when the lock is held, with `err.cause.code` `ELOCKED` and `err.cause.reason` the seize's `reason`.
+- Only the seize that set the cancel key takes the lock, and it refreshes the key until it is done. A second `seize` of the same blog waits for the first to finish rather than forcing it, and rejects with code `ELOCKED` after 5 minutes.
+- Code after `await establishSyncLock(blogID)` runs outside the guard's context: wrap it in `folder.run(fn)`, or check `folder.signal` before its own writes.
 
 ### `rebuild(blogID, [options], callback)`
 

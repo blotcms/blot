@@ -26,6 +26,7 @@ const { take } = require("./hold");
 
 const POLL_MS = 500;
 const MAX_WAIT_MS = 5 * 60 * 1000;
+const REFRESH_MS = 30 * 1000;
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -37,23 +38,46 @@ async function seize(blogID, fn, options = {}) {
   const { reason = "disconnect", wait = 20 * 1000 } = options;
   const cancelKey = folderLock.cancelKey(blogID);
 
-  // Whether this seize set the cancel key, and so may force the lock
+  // Lives past the wait, and is refreshed for as long as this seize runs, so
+  // a second seize can't claim it and force the lock in the middle of fn
+  const cancelTTL = wait + 2 * 60 * 1000;
+  let owner = false;
+  let refresh = null;
+
+  // Whether this seize now owns the cancel key, and so may take the lock
   async function claim() {
     const set = await client.set(cancelKey, reason, {
       NX: true,
-      PX: wait + 2 * 60 * 1000,
+      PX: cancelTTL,
     });
-    return set === "OK";
+    if (set !== "OK") return false;
+    owner = true;
+    refresh = setInterval(() => {
+      client.pExpire(cancelKey, cancelTTL).catch(() => {});
+    }, REFRESH_MS);
+    refresh.unref();
+    return true;
   }
 
   const startedAt = Date.now();
-  let owner = await claim();
-  let deadline = Date.now() + wait;
+  let deadline = null;
   let forcedAt = null;
   let lock = null;
 
   try {
     while (!lock) {
+      // Only the owner takes the lock: another seize waits for it to finish.
+      // Nothing else can take the lock while the key is set anyway.
+      if (!owner) {
+        if (await claim()) {
+          deadline = Date.now() + wait;
+        } else {
+          if (Date.now() - startedAt > MAX_WAIT_MS) throw notSeized(blogID);
+          await sleep(POLL_MS);
+          continue;
+        }
+      }
+
       await readOnly.whenWritable("seize " + blogID);
 
       try {
@@ -68,11 +92,9 @@ async function seize(blogID, fn, options = {}) {
         if (err.code !== "ELOCKED") throw err;
       }
 
-      if (!owner && (owner = await claim())) deadline = Date.now() + wait;
-
       const now = Date.now();
 
-      if (owner && now >= deadline && forcedAt === null) {
+      if (now >= deadline && forcedAt === null) {
         const [holder, since] = await Promise.all([
           folderLock.inspect(blogID).catch(() => ({})),
           folderLock.heldSince(blogID).catch(() => null),
@@ -97,9 +119,7 @@ async function seize(blogID, fn, options = {}) {
         (forcedAt !== null && now - forcedAt > wait) ||
         now - startedAt > MAX_WAIT_MS
       ) {
-        const err = new Error("Could not seize folder lock for " + blogID);
-        err.code = "ELOCKED";
-        throw err;
+        throw notSeized(blogID);
       }
 
       await sleep(POLL_MS);
@@ -113,8 +133,15 @@ async function seize(blogID, fn, options = {}) {
       await lock.release();
     }
   } finally {
+    clearInterval(refresh);
     if (owner) await client.del(cancelKey).catch(() => {});
   }
+}
+
+function notSeized(blogID) {
+  const err = new Error("Could not seize folder lock for " + blogID);
+  err.code = "ELOCKED";
+  return err;
 }
 
 module.exports = seize;

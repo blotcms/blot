@@ -59,7 +59,7 @@ function sync(blogID, fn) {
     let result;
 
     try {
-      result = await guard.run(blogID, folder.signal, () => fn(folder));
+      result = await folder.run(() => fn(folder));
     } catch (err) {
       await done(err);
       throw err;
@@ -236,10 +236,13 @@ async function acquire(blogID) {
   // a disconnect: the client should stop at its next check
   // (signal.throwIfAborted()), and pass the signal into its requests. From
   // then on update() throws the signal's reason, status() does nothing, and
-  // so do writes to the folder from inside sync()'s fn
+  // so do writes to the folder from inside sync()'s fn or folder.run()
   // (storage/folder/guard.js).
   const folder = {
     signal,
+    // Runs async fn() so that its writes to the folder throw once the signal
+    // has aborted, as sync()'s fn does. For callers of establishSyncLock.
+    run: (fn) => guard.run(blogID, signal, fn),
     update: async function update(path, options) {
       let result;
 
@@ -294,7 +297,12 @@ async function acquire(blogID) {
     // The steps before the release log their own failures, so the lock is
     // released even if something unexpected throws
     try {
-      await beforeRelease();
+      // A cancelled sync gives the lock up straight away. The templates key
+      // is set already (markTemplatesNeedBuild), so the next sync builds
+      // them. A file it moved isn't paired up as a rename, so its entry
+      // counts as new: only for a move in the seconds before a disconnect.
+      if (!signal.aborted) await beforeRelease();
+      else log("Cancelled, skipping renames, templates and CDN manifests");
     } finally {
       // Before the release: a deploy's drain (helper/drain) lets the process
       // exit once it holds no folder locks, so a bump after the release could

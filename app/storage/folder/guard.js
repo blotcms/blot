@@ -13,13 +13,27 @@ const { AsyncLocalStorage } = require("async_hooks");
 
 const storage = new AsyncLocalStorage();
 
-function run(blogID, signal, fn) {
-  return storage.run({ blogID, signal }, fn);
+// A context can outlive its fn: a module-level queue runs each job in the
+// context of whatever settled before it, which may be an earlier sync's. So
+// a context stops counting once fn has settled, and work fn started without
+// waiting for it loses the guard.
+async function run(blogID, signal, fn) {
+  const store = { blogID, signal, active: true };
+  try {
+    return await storage.run(store, fn);
+  } finally {
+    store.active = false;
+  }
 }
 
 function check(blogID) {
   const store = storage.getStore();
-  if (store && store.blogID === blogID && store.signal.aborted) {
+  if (
+    store &&
+    store.active &&
+    store.blogID === blogID &&
+    store.signal.aborted
+  ) {
     throw store.signal.reason;
   }
 }
