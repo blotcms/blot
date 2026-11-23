@@ -11,6 +11,8 @@ const fetchPath =
 describe("icloud initialTransfer", function () {
   const originals = new Map();
   let store;
+  let connected;
+  let controller;
   let done;
 
   function mockModule(modulePath, exportsValue) {
@@ -25,7 +27,10 @@ describe("icloud initialTransfer", function () {
   }
 
   function load({ syncToiCloud, lock, fetch }) {
-    mockModule(databasePath, { store });
+    mockModule(databasePath, {
+      store,
+      get: async () => (connected ? { sharingLink: "link" } : null),
+    });
     mockModule(toiCloudPath, syncToiCloud);
     mockModule(fromiCloudPath, async () => {});
     mockModule(resolveCaseConflictsPath, async () => {});
@@ -34,7 +39,12 @@ describe("icloud initialTransfer", function () {
       establishSyncLockPath,
       lock ||
         (async () => ({
-          folder: { status: () => {}, update: () => {} },
+          folder: {
+            status: () => {},
+            update: () => {},
+            signal: controller.signal,
+            run: (fn) => fn(),
+          },
           done,
         }))
     );
@@ -44,6 +54,8 @@ describe("icloud initialTransfer", function () {
 
   beforeEach(function () {
     store = jasmine.createSpy("store").and.returnValue(Promise.resolve());
+    connected = true;
+    controller = new AbortController();
     done = jasmine.createSpy("done").and.returnValue(Promise.resolve());
   });
 
@@ -182,5 +194,50 @@ describe("icloud initialTransfer", function () {
       jasmine.objectContaining({ setupComplete: true })
     );
     expect(done).toHaveBeenCalled();
+  });
+
+  it("stops for a disconnect without writing the account or watching the folder", async function () {
+    const fetch = jasmine.createSpy("fetch").and.returnValue(Promise.resolve());
+    const cancelled = Object.assign(new Error("Sync cancelled"), {
+      code: "ECANCELED",
+      reason: "disconnect",
+    });
+    let walkSignal;
+    const initialTransfer = load({
+      fetch,
+      syncToiCloud: async (blogID, status, update, options) => {
+        walkSignal = options.signal;
+        // seize() stops the transfer part way through the copy
+        controller.abort(cancelled);
+        throw cancelled;
+      },
+    });
+
+    let thrown;
+    try {
+      await initialTransfer("blog");
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBe(cancelled);
+    expect(walkSignal).toBe(controller.signal);
+    // Only the mark made before the lock: nothing after the abort
+    expect(store.calls.allArgs()).toEqual([
+      ["blog", { transferringToiCloud: true, error: null }],
+    ]);
+    expect(fetch).not.toHaveBeenCalled();
+    expect(done).toHaveBeenCalled();
+  });
+
+  it("doesn't start for a blog no longer connected", async function () {
+    connected = false;
+    const syncToiCloud = jasmine.createSpy("syncToiCloud");
+    const initialTransfer = load({ syncToiCloud });
+
+    await expectAsync(initialTransfer("blog")).toBeRejected();
+
+    expect(store).not.toHaveBeenCalled();
+    expect(syncToiCloud).not.toHaveBeenCalled();
   });
 });

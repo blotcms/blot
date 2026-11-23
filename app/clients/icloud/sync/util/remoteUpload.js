@@ -8,7 +8,7 @@ const fetch = require("../../util/rateLimitedFetchWithRetriesAndTimeout");
 // dashboard edit, which would then be undone by the next walk
 const RETRY_DELAY_MS = 1000;
 
-module.exports = async (blogID, path) => {
+module.exports = async (blogID, path, { signal } = {}) => {
   const stat = await folder.stat(blogID, path);
   // Milliseconds, with the fraction fs.stat gives: the same value as before
   const modifiedTime = stat.modified;
@@ -28,5 +28,6 @@ module.exports = async (blogID, path) => {
     },
     body,
     retryDelay: RETRY_DELAY_MS,
+    signal,
   });
 };

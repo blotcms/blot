@@ -40,34 +40,38 @@ module.exports = async function (req, res) {
     const { done, folder } = await establishSyncLock(blogID);
 
     try {
-      const directoryExistsInLock = await storage.exists(blogID, dirPath);
+      // Inside run, a write to the folder throws once a disconnect has
+      // stopped this request (sync/seize.js)
+      return await folder.run(async () => {
+        const directoryExistsInLock = await storage.exists(blogID, dirPath);
 
-      console.log(`Creating directory at: ${dirPath}`);
+        console.log(`Creating directory at: ${dirPath}`);
 
-      if (!directoryExistsInLock) {
-        // Ensure the directory exists
-        await storage.mkdir(blogID, dirPath); // Creates the directory if it does not exist
+        if (!directoryExistsInLock) {
+          // Ensure the directory exists
+          await storage.mkdir(blogID, dirPath); // Creates the directory if it does not exist
 
-        // Call the folder's update method to register the directory creation.
-        // If Redis cannot take it, remove the directory again: the macserver
-        // will ask again, and would be told it already exists.
-        try {
-          await folder.update(dirPath);
-        } catch (err) {
-          if (isRedisUnavailableError(err))
-            await storage.rmdir(blogID, dirPath).catch(() => {});
-          throw err;
+          // Call the folder's update method to register the directory creation.
+          // If Redis cannot take it, remove the directory again: the macserver
+          // will ask again, and would be told it already exists.
+          try {
+            await folder.update(dirPath);
+          } catch (err) {
+            if (isRedisUnavailableError(err))
+              await storage.rmdir(blogID, dirPath).catch(() => {});
+            throw err;
+          }
+
+          // Set the folder status to reflect the mkdir action
+          folder.status("Created " + dirPath);
         }
 
-        // Set the folder status to reflect the mkdir action
-        folder.status("Created " + dirPath);
-      }
-
-      console.log(`Directory successfully created: ${dirPath}`);
-      res
-        .status(200)
-        .set("directory-created", String(!directoryExistsInLock))
-        .send(`Directory successfully created for blogID: ${blogID}`);
+        console.log(`Directory successfully created: ${dirPath}`);
+        res
+          .status(200)
+          .set("directory-created", String(!directoryExistsInLock))
+          .send(`Directory successfully created for blogID: ${blogID}`);
+      });
     } finally {
       // Release the sync lock
       await done().catch((err) => console.error("Error releasing lock:", err));

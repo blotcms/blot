@@ -91,6 +91,8 @@ describe("icloud upload route", function () {
     mockModule(establishSyncLockPath, async () => ({
       folder: {
         status: () => {},
+        signal: new AbortController().signal,
+        run: (fn) => fn(),
         update: async (path) => {
           updateCalls.push(path);
         },
@@ -131,6 +133,8 @@ describe("icloud upload route", function () {
     mockModule(establishSyncLockPath, async () => ({
       folder: {
         status: () => {},
+        signal: new AbortController().signal,
+        run: (fn) => fn(),
         update: async (path) => {
           pendingDuringUpdate = await database.isUploadPending(blogID, path);
           updateCalls.push(path);
@@ -156,6 +160,8 @@ describe("icloud upload route", function () {
     mockModule(establishSyncLockPath, async () => ({
       folder: {
         status: () => {},
+        signal: new AbortController().signal,
+        run: (fn) => fn(),
         update: async () => {
           throw new Error("process died");
         },

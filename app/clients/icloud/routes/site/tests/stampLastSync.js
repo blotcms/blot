@@ -82,7 +82,12 @@ describe("icloud routes stamp lastSync", function () {
 
     stub("stamp", async (id) => stamped.push(id));
     stub("lock", async () => ({
-      folder: { status: () => {}, update: async () => {} },
+      folder: {
+        status: () => {},
+        update: async () => {},
+        signal: new AbortController().signal,
+        run: (fn) => fn(),
+      },
       done: async () => {},
     }));
     stub("database", {

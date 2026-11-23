@@ -92,58 +92,66 @@ module.exports = async function (req, res) {
     const { done, folder } = await establishSyncLock(blogID);
 
     try {
-      if (await isFileAlreadyCurrent()) {
-        return res
-          .status(200)
-          .send(`File already up to date for blogID: ${blogID}`);
-      }
+      // Inside run, a write to the folder throws once a disconnect has
+      // stopped this request (sync/seize.js)
+      return await folder.run(async () => {
+        if (await isFileAlreadyCurrent()) {
+          return res
+            .status(200)
+            .send(`File already up to date for blogID: ${blogID}`);
+        }
 
-      await database.markUploadPending(blogID, filePath);
+        await database.markUploadPending(blogID, filePath);
 
-      if (isPlaceholderUpload) {
-        folder.status("Saving placeholder " + filePath);
+        if (isPlaceholderUpload) {
+          folder.status("Saving placeholder " + filePath);
 
-        await storage.writePlaceholder(blogID, filePath, {
-          code: "SYNC_TOO_LARGE",
-          size: Number.isFinite(originalSize) ? originalSize : undefined,
-          limit: config.icloud.maxFileSize,
-        });
+          await storage.writePlaceholder(blogID, filePath, {
+            code: "SYNC_TOO_LARGE",
+            size: Number.isFinite(originalSize) ? originalSize : undefined,
+            limit: config.icloud.maxFileSize,
+          });
 
+          await updateOrRollBack(blogID, folder, filePath, modifiedTime);
+          await database.clearUploadPending(blogID, filePath);
+          folder.status("Updated placeholder " + filePath);
+
+          console.warn(
+            `Placeholder created for oversized source file at: ${filePath}`,
+            {
+              blogID,
+              filePath,
+              originalSize,
+              modifiedTime,
+            }
+          );
+
+          return res
+            .status(200)
+            .send(
+              `Placeholder created for oversized file for blogID: ${blogID}`
+            );
+        }
+
+        folder.status("Saving " + filePath);
+
+        // Ensure the directory exists and write the binary data to the file
+        // Write the binary data (req.body is raw binary)
+        await storage.write(blogID, filePath, incomingContents);
+
+        // Call the folder's update method to register the file change
         await updateOrRollBack(blogID, folder, filePath, modifiedTime);
         await database.clearUploadPending(blogID, filePath);
-        folder.status("Updated placeholder " + filePath);
 
-        console.warn(
-          `Placeholder created for oversized source file at: ${filePath}`,
-          {
-            blogID,
-            filePath,
-            originalSize,
-            modifiedTime,
-          }
-        );
+        // Set the folder status to reflect the upload action
+        folder.status("Updated " + filePath);
+        await liveLag.record(modifiedTime);
 
-        return res
+        console.log(`File successfully written to: ${filePath}`);
+        res
           .status(200)
-          .send(`Placeholder created for oversized file for blogID: ${blogID}`);
-      }
-
-      folder.status("Saving " + filePath);
-
-      // Ensure the directory exists and write the binary data to the file
-      // Write the binary data (req.body is raw binary)
-      await storage.write(blogID, filePath, incomingContents);
-
-      // Call the folder's update method to register the file change
-      await updateOrRollBack(blogID, folder, filePath, modifiedTime);
-      await database.clearUploadPending(blogID, filePath);
-
-      // Set the folder status to reflect the upload action
-      folder.status("Updated " + filePath);
-      await liveLag.record(modifiedTime);
-
-      console.log(`File successfully written to: ${filePath}`);
-      res.status(200).send(`File successfully uploaded for blogID: ${blogID}`);
+          .send(`File successfully uploaded for blogID: ${blogID}`);
+      });
     } finally {
       // Release the sync lock
       await done().catch((err) => console.error("Error releasing lock:", err));

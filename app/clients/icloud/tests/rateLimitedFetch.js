@@ -103,4 +103,39 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
     expect(error).toBeDefined();
     expect(requests).toBe(2);
   });
+
+  it("cuts off a request when the caller's signal aborts, without retrying", async function () {
+    stallFirst = 5;
+    const controller = new AbortController();
+    const cancelled = Object.assign(new Error("Sync cancelled"), {
+      code: "ECANCELED",
+    });
+    setTimeout(() => controller.abort(cancelled), 100);
+
+    let thrown;
+    try {
+      await fetch(url, {
+        readBody: true,
+        timeout: 5000,
+        retryDelay: 100,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBe(cancelled);
+    expect(requests).toBe(1);
+  });
+
+  it("doesn't send a request once the caller's signal has aborted", async function () {
+    const controller = new AbortController();
+    const cancelled = new Error("Sync cancelled");
+    controller.abort(cancelled);
+
+    await expectAsync(
+      fetch(url, { signal: controller.signal })
+    ).toBeRejectedWith(cancelled);
+    expect(requests).toBe(0);
+  });
 });

@@ -37,7 +37,7 @@ The architecture separates concerns:
 
 - `init.js` - Initialization and background job orchestration. Resumes interrupted initial transfers (`sync/resumeTransfers.js`) on startup and hourly at `:15`, so a transfer a deploy or crash killed after startup's run is still finished. Schedules the hourly validation sweep (`:45`; Dropbox runs at `:00`, Google Drive at `:30`): for each blog whose `lastSync` is within the last hour, and for a twenty-fourth of the other blogs (chosen by a hash of the blog ID, so every blog is walked once a day), it walks the folder under the sync lock and runs Fix() if the walk succeeded (both in `sync/validateBlog.js`), and emails one `ICLOUD_SYNC_ISSUE` digest (`clients/util/syncReport.js`) listing changes it had to pull, Fix() repairs, errors (including walks that swallowed failures) and stuck locks. Blogs with a user-side issue (folder deleted, storage full) are skipped silently, and an ongoing error or stuck lock is emailed once per occurrence. Monitors macro server health.
 
-- `disconnect.js` - Handles client disconnection. Notifies the remote macserver to disconnect (best-effort), then locally removes the blog's database entry and clears the blog's client assignment.
+- `disconnect.js` - Handles client disconnection. Notifies the remote macserver to disconnect (best-effort), then, under the folder lock taken from any sync still running (`sync/seize.js`, reason `disconnect`), removes the blog's database entry and placeholders and clears the blog's client assignment. The running sync is stopped through its lock's `folder.signal`, which every macserver request is given, and writes nothing to the account or the folder afterwards.
 
 - `remove.js` - File removal handler. Deletes a file from both the local Blot storage and the remote iCloud folder.
 
@@ -107,7 +107,7 @@ Web UI endpoints for dashboard and folder setup:
 
 #### `/routes/lock.js` - Sync Lock Utilities
 
-- `handleSyncLockError()` - Detects and handles sync lock acquisition failures, returning HTTP 423 with Retry-After header.
+- `handleSyncLockError()` - Detects and handles sync lock acquisition failures, returning HTTP 423 with Retry-After header. A request refused or stopped because the blog is being disconnected (`seize`'s reason `disconnect`) gets a 410 instead, so the macserver drops the change.
 
 ### `/util`
 
