@@ -28,8 +28,9 @@ const {
 const tagSource = require("../util/tagSource");
 const retryRequest = require("../util/retryRequest");
 const loadClient = require("../util/loadClient");
-const createClient = async (blogID) => {
-  const { error, client, account } = await loadClient(blogID);
+const cancelled = require("../util/cancelled");
+const createClient = async (blogID, signal) => {
+  const { error, client, account } = await loadClient(blogID, { signal });
   if (error) throw error;
   return [client, account];
 };
@@ -64,8 +65,9 @@ async function mapLimit(items, limit, iterator) {
 // database follows the folder even if the walk fails part way through. It is
 // the same (blogID, publish, update) contract the iCloud and Drive clients
 // use, and callers should hold the folder lock while it runs. An optional
-// signal ({ aborted }) stops the walk between files and folders, rejecting
-// with an AbortError (as reset-from-blot.js does).
+// signal (an AbortSignal, the sync's folder.signal) stops the walk between
+// files and folders, rejecting with an AbortError (as reset-from-blot.js
+// does), and cuts off its requests and downloads in flight.
 async function resetToBlot(blogID, publish, update, signal) {
   if (!publish)
     publish = (...args) => {
@@ -89,9 +91,9 @@ async function resetToBlot(blogID, publish, update, signal) {
 
   let client, account;
   try {
-    [client, account] = await createClient(blogID);
+    [client, account] = await createClient(blogID, signal);
   } catch (err) {
-    await persistError(blogID, err, SOURCES.AUTH);
+    if (!cancelled(err, signal)) await persistError(blogID, err, SOURCES.AUTH);
     throw err;
   }
 
@@ -106,7 +108,7 @@ async function resetToBlot(blogID, publish, update, signal) {
       signal
     );
   } catch (err) {
-    if (err && err.name === "AbortError") throw err;
+    if (cancelled(err, signal)) throw err;
     await persistError(blogID, err, SOURCES.APPLY);
     throw err;
   }
@@ -272,7 +274,9 @@ async function resetToBlotWithClient(
 
   // This means that future syncs will be fast
   // A download-only pass can't show that Dropbox has room for uploads,
-  // so it leaves a quota error in place.
+  // so it leaves a quota error in place. Not once a disconnect has dropped
+  // the account, which this would bring back.
+  abortIfRequested(signal);
   await set(
     blogID,
     keepsErrorAfterDownload(account) ? { cursor } : { cursor, error_code: 0 }
@@ -521,7 +525,9 @@ const walk = async (
           localCounterpart.is_directory
         );
         try {
-          await download(client, pathOnDropbox, blogID, pathOnBlot);
+          await download(client, pathOnDropbox, blogID, pathOnBlot, {
+            signal,
+          });
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -529,6 +535,7 @@ const walk = async (
             summary.modifiedPaths.push(pathOnBlot);
           } else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
+          if (cancelled(e, signal)) throw e;
           // A file can end up with a destination path longer than the
           // filesystem allows – seen in production when a Dropbox account
           // got stuck wrapping the same file in nested "(Conflict met
@@ -547,7 +554,9 @@ const walk = async (
         // Already added to total by the discover() pass above.
         progress.publish("Downloading", pathOnBlot, false);
         try {
-          await download(client, pathOnDropbox, blogID, pathOnBlot);
+          await download(client, pathOnDropbox, blogID, pathOnBlot, {
+            signal,
+          });
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -555,6 +564,7 @@ const walk = async (
             summary.modifiedPaths.push(pathOnBlot);
           } else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
+          if (cancelled(e, signal)) throw e;
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
           else recordFailure(summary, pathOnBlot, e);
           // Revoked access fails every remaining file: fail the resync.

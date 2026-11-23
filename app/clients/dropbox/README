@@ -74,7 +74,7 @@ The Dropbox client operates using a webhook-based event notification system comb
   - `isDotfileOrDotfolder`: Alias for `shouldIgnoreFile()`, filters out dotfiles and dotfolders.
   - `INSUFFICIENT_SPACE_ERROR_CODE` / `isInsufficientSpaceError()`: The `507` account `error_code` sentinel for "ran out of Dropbox space", and a check for that error shape from the Dropbox SDK.
   - `transferIncomplete(account)`: True while the initial transfer to Dropbox hasn't finished - see "Handling an incomplete initial transfer" below.
-- **`util/createClient.js`**: `await createClient(blogID)` retrieves the Dropbox account from the database and instantiates a Dropbox SDK client. Handles token refresh if a refresh token is present. Resolves to `{ error, client, account }` and never rejects: the account comes with an error when the token could not be refreshed, which disconnecting needs. `util/loadClient.js` is the same, looked up when called.
+- **`util/createClient.js`**: `await createClient(blogID, { signal })` retrieves the Dropbox account from the database and instantiates a Dropbox SDK client. Handles token refresh if a refresh token is present. Resolves to `{ error, client, account }` and never rejects: the account comes with an error when the token could not be refreshed, which disconnecting needs. With `signal` (the sync's `folder.signal`), every request the client makes is cut off once it aborts. `util/loadClient.js` is the same, looked up when called. `util/cancelled.js` tells an error that ends a cancelled sync, which is never retried or persisted.
 - **`util/download.js`**: Downloads a file from Dropbox and writes it into the blog folder with `storage/folder` (`download(client, source, blogID, path, callback)`). Does not set the local file's mtime; change detection elsewhere in the client relies on Dropbox's `content_hash`/size, not local mtimes.
 - **`util/upload.js`**: Uploads a file from disk to Dropbox. Omits `client_modified` so Dropbox stamps the file with its own server time, since Blot no longer keeps a settable local mtime to send.
 - **`util/retry.js`**: Wraps a function to retry on transient errors.
@@ -188,11 +188,11 @@ Returns a Promise of the client's current health for the dashboard (`{state, iss
 
 ### `await disconnect(blogID)`
 
-Disconnects a blog from Dropbox, inside the blog's sync lock.
+Disconnects a blog from Dropbox, under the blog's sync lock, which it takes from any sync or setup still running (`sync/seize.js`, reason `disconnect`). That sync's `folder.signal` aborts: its requests to Dropbox are cut off, and it writes nothing to the account or the folder afterwards. Then it removes the blog's placeholders in a sync of their own.
 
 - **Parameters**:
   - `blogID`: String identifier for the blog.
-- **Returns**: A promise, which resolves once the lock is released and rejects as `sync()` does if the lock is held.
+- **Returns**: A promise, which resolves once the account is dropped and rejects with code `ELOCKED` if the lock couldn't be taken.
 - **Behavior**:
   - Clears the blog's client type.
   - Removes Dropbox account credentials from the database, keeping only the blog's `folder_id` and `account_id` (`database.getPrevious`) so reconnecting can reuse the folder.
@@ -217,7 +217,7 @@ validation and recovery):
   - `blogID`: String identifier for the blog.
   - `publish(args...)`: Callback to report progress (typically logs to console or updates UI).
   - `update(path)` (returns a promise): Notifies Blot's Entry model about each changed path.
-  - `signal` (optional, `{ aborted }`): checked between files and folders. When it turns true the walk rejects with an `AbortError` and leaves the cursor and error state alone. `init.js` passes one that a disconnect sets when it resumes a transfer.
+  - `signal` (optional, an `AbortSignal`): checked between files and folders, and passed into every request and download. When it aborts the walk rejects with an `AbortError` (or the signal's reason) and leaves the cursor and error state alone. Callers pass the sync's `folder.signal`, which a disconnect aborts.
 - **Returns**: Promise resolving to a summary object with `{ downloaded, removed, createdDirs, skipped }`.
 - **Behavior**:
   - Walks the entire Dropbox folder recursively.

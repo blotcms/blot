@@ -50,7 +50,6 @@ describe("dropbox init", function () {
     const resetFromBlotPath = require.resolve("../sync/reset-from-blot");
     const lockPath = require.resolve("sync/establishSyncLock");
     const folderLockPath = require.resolve("sync/lock");
-    const subscriberPath = require.resolve("helper/redisSubscriber");
     const syncPath = require.resolve("../sync");
     const initPath = require.resolve("../init");
     const paths = [
@@ -60,7 +59,6 @@ describe("dropbox init", function () {
       resetFromBlotPath,
       lockPath,
       folderLockPath,
-      subscriberPath,
       syncPath,
       initPath,
     ];
@@ -93,21 +91,18 @@ describe("dropbox init", function () {
       require.cache[lockPath] = {
         exports: async function () {
           return {
-            folder: { update: async function () {}, status: function () {} },
+            folder: {
+              update: async function () {},
+              status: function () {},
+              signal: new AbortController().signal,
+              run: (fn) => fn(),
+            },
             done: async function () {},
           };
         },
       };
       require.cache[folderLockPath] = {
         exports: { inspect: async () => ({ held: false }) },
-      };
-      require.cache[subscriberPath] = {
-        exports: function () {
-          return {
-            setupPromise: Promise.resolve(),
-            cleanup: async function () {},
-          };
-        },
       };
       require.cache[syncPath] = { exports: async function () {} };
 
@@ -254,6 +249,8 @@ describe("dropbox init", function () {
           return Promise.resolve({
             folder: {
               update: async function () {},
+              signal: new AbortController().signal,
+              run: (fn) => fn(),
             },
             done: async function () {},
           });
@@ -377,6 +374,8 @@ describe("dropbox init", function () {
           return Promise.resolve({
             folder: {
               update: async function () {},
+              signal: new AbortController().signal,
+              run: (fn) => fn(),
             },
             done: async function () {},
           });
@@ -503,7 +502,11 @@ describe("dropbox init", function () {
           return Promise.reject(new Error("Failed to acquire folder lock"));
         }
         return Promise.resolve({
-          folder: { update: async () => {} },
+          folder: {
+            update: async () => {},
+            signal: new AbortController().signal,
+            run: (fn) => fn(),
+          },
           done: async function () {},
         });
       });

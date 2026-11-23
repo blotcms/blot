@@ -12,9 +12,10 @@ const { SOURCES, classify } = require("../util/classifyError");
 const tagSource = require("../util/tagSource");
 const resolveCaseConflicts = require("../../util/resolveCaseConflicts");
 const loadClient = require("../util/loadClient");
+const cancelled = require("../util/cancelled");
 
-const createClient = async (blogID) => {
-  const { error, client, account } = await loadClient(blogID);
+const createClient = async (blogID, signal) => {
+  const { error, client, account } = await loadClient(blogID, { signal });
   if (error) throw error;
   return [client, account];
 };
@@ -231,9 +232,9 @@ async function resetFromBlot(blogID, publish, signal, update, options = {}) {
 
   let client, account;
   try {
-    [client, account] = await createClient(blogID);
+    [client, account] = await createClient(blogID, signal);
   } catch (err) {
-    await persistError(blogID, err, SOURCES.AUTH);
+    if (!cancelled(err, signal)) await persistError(blogID, err, SOURCES.AUTH);
     throw err;
   }
 
@@ -248,7 +249,7 @@ async function resetFromBlot(blogID, publish, signal, update, options = {}) {
       options
     );
   } catch (err) {
-    if (!err || err.name !== "AbortError") {
+    if (!cancelled(err, signal)) {
       await persistError(blogID, err, SOURCES.APPLY);
     }
     throw err;
@@ -258,7 +259,7 @@ async function resetFromBlot(blogID, publish, signal, update, options = {}) {
 // A failed upload is logged and skipped, unless retrying can never
 // help (revoked access, full storage): that must fail the resync.
 function rethrowIfDurable(err) {
-  if (err && err.name === "AbortError") throw err;
+  if (cancelled(err)) throw err;
 
   const classified = classify(err, SOURCES.APPLY);
   if (!classified.persist) return;

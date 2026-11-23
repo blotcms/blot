@@ -11,7 +11,13 @@ const fetch = require("./fetch");
 // Resolves to { error, client, account } and never rejects, since the caller
 // sometimes needs the account even when there is an error with the client
 // (during disconnection, say). client is null whenever there is an error.
-module.exports = async function createClient(blogID) {
+// options.signal (an AbortSignal, the sync's folder.signal) goes into every
+// request the client makes, the token refresh included, so a disconnect cuts
+// off a transfer in flight. Once it has aborted, the refreshed token isn't
+// saved: the account may have been dropped meanwhile.
+module.exports = async function createClient(blogID, options = {}) {
+  const { signal } = options;
+
   let account;
 
   try {
@@ -28,7 +34,9 @@ module.exports = async function createClient(blogID) {
     };
   }
 
-  const client = new Dropbox({ fetch });
+  const client = new Dropbox({
+    fetch: signal ? (url, init) => fetch(url, { ...init, signal }) : fetch,
+  });
 
   client.auth.setAccessToken(account.access_token);
 
@@ -83,6 +91,10 @@ module.exports = async function createClient(blogID) {
   }
 
   account.access_token = latestToken;
+
+  if (signal && signal.aborted) {
+    return { error: signal.reason, client: null, account };
+  }
 
   try {
     await database.set(blogID, account);

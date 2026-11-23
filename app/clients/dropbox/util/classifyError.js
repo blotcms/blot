@@ -118,6 +118,8 @@ function classify(err, source) {
 function isRetryable(err) {
   if (!err) return true;
   if (err.code === "ENAMETOOLONG") return false;
+  // Stopped by a disconnect (util/cancelled.js)
+  if (err.code === "ECANCELED" || err.name === "AbortError") return false;
   const classified = classify(err);
   if (classified.healthCode) return false;
   if (classified.status === 409) return false;
