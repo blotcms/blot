@@ -103,7 +103,10 @@ function writeMarker(marker) {
 // doesn't check out, so add the folders to it first: a checkout fetches
 // their blobs in one batch, where git archive would fetch them one by one.
 async function send(commit, names, dir) {
-  if (git("config", "--bool", "core.sparseCheckout") === "true") {
+  if (
+    git("config", "--bool", "--default", "false", "core.sparseCheckout") ===
+    "true"
+  ) {
     git("sparse-checkout", "add", ...names.map((name) => FOLDERS + "/" + name));
   }
 

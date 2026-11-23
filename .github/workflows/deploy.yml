@@ -268,7 +268,14 @@ jobs:
       - name: Sync the demo folders
         env:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
-        run: node scripts/deploy/demo-folders.js "$TARGET_SHA"
+        run: |
+          # A commit from before #2940 has no such script, and syncs the
+          # demo blogs on boot instead
+          if [ ! -f scripts/deploy/demo-folders.js ]; then
+            echo "No scripts/deploy/demo-folders.js at $TARGET_SHA: skipping"
+            exit 0
+          fi
+          node scripts/deploy/demo-folders.js "$TARGET_SHA"
 
       # A failed swap whose old container would not come back keeps the new
       # one running and says so; make that visible on the run page.
