@@ -217,8 +217,8 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
           `Directory contents: upload, blogID: ${blogID}, path: ${childPath}`
         );
         uploads.push(
-          performAction(blogID, childPath, "upload").catch((error) =>
-            logWalkError(blogID, childPath, error)
+          performAction(blogID, childPath, "upload", { fromWalk: true }).catch(
+            (error) => logWalkError(blogID, childPath, error)
           )
         );
       }
