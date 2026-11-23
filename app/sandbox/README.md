@@ -327,7 +327,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   nsjail. So nsjail can't make cgroups: the broker's shell joins the job to a
   free one of the job's `cgroups` first, whose limits are the job's, and the
   broker kills what is left in it afterwards. So each holds one jail at a time.
-  The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
+  The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/system.slice/system-blot.slice/system-blot-<unit>.slice/browser`
   on the host), so one screenshot runs at a time per unit. `fetch-image`'s is
   `/sandbox-cgroup/fetch-image`, 256 MiB and 64 pids, and `fetch`'s is
   `/sandbox-cgroup/fetch`, 256 MiB and 64 pids; the broker makes both when it
@@ -344,7 +344,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   job's queue is its own (`fetch` 16, `fetch-image` 8). A domain check can still
   wait for an import batch that is running (the verification's 5s covers the
   request, not the wait).
-- **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
+- **The fetch shares the unit's sandbox subtree** (`system-blot-<unit>.slice/sandbox`,
   512 MiB) with the image jobs (each up to 512 MiB, but two at once for the three sharp jobs that decode a whole image). The fetch
   jobs' cgroups are in it, so their 256 + 256 MiB are limited by its 512 MiB, not added to it: the image jobs
   have whatever the fetch jobs aren't using. (The retired proxy jail's

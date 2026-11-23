@@ -129,4 +129,30 @@ echo "2026-10-01T00:00:00Z name=blot-blue anon=1 file=1 shmem=0 limit=0 oom_kill
 UNIT_MEM_LOG=$LOG UNIT_MEM_OLD=$OLD "$SCRIPTS/unit-mem-summary.sh" > "$OUT"
 check "the daily copies are read too" grep -q '^blot-blue: 4 samples, 2026-10-01T00:00:00Z' "$OUT"
 
+# A unit in its own slice (#2795): the container's scope and both jails are in
+# it, and the slice gets a line of its own, in the log but not in Redis.
+CG2=$TMP/cgroup2 LOG2=$TMP/unit-mem2.log
+SLICE=$CG2/system.slice/system-blot.slice/system-blot-blue.slice
+mkdir -p "$SLICE/docker-$ID.scope" "$SLICE/sandbox" "$SLICE/browser"
+touch "$CG2/cgroup.controllers"
+for d in "$SLICE" "$SLICE/docker-$ID.scope" "$SLICE/sandbox" "$SLICE/browser"; do
+  cp "$DIR/memory.stat" "$DIR/memory.pressure" "$DIR/memory.events" "$d/"
+  : > "$d/cgroup.procs"
+done
+echo 3758096384 > "$SLICE/memory.max"
+cp "$DIR/memory.max" "$SLICE/docker-$ID.scope/memory.max"
+echo 536870912 > "$SLICE/sandbox/memory.max"
+echo 1073741824 > "$SLICE/browser/memory.max"
+cp "$DIR/cgroup.procs" "$SLICE/docker-$ID.scope/cgroup.procs"
+rm -f "$TMP/redis-args"
+check "the sampler exits cleanly with the unit in a slice" \
+  env UNIT_MEM_LOG=$LOG2 PROC=$PROC CGROUP_ROOT=$CG2 DOCKER=$TMP/docker REDIS_CLI=$TMP/redis-cli \
+    SAMPLES=1 INTERVAL=0 CONTAINERS=blot-blue "$SCRIPTS/unit-mem-log.sh"
+check "the container is found in its slice" grep -q " name=blot-blue .*node_a=$(bytes 1000) " "$LOG2"
+check "the jails are read in the slice" \
+  grep -q ' name=blot-sandbox-blue anon=.* limit=536870912 ' "$LOG2"
+check "and the browser jail" grep -q ' name=blot-sandbox-blue-browser anon=.* limit=1073741824 ' "$LOG2"
+check "the slice gets a line with the unit's limit" grep -q ' name=blot-unit-blue anon=.* limit=3758096384 ' "$LOG2"
+check "the slice is not stored in Redis" bash -c "! grep -q blot-unit '$TMP/redis-args'"
+
 exit "$FAILED"

@@ -34,8 +34,9 @@
 #                                               (see run_args()); each deploy
 #                                               copies the image's over it
 #                                               (see sync_static)
-#   PROXY_SANDBOX_CGROUP_DIR /sys/fs/cgroup/blot-sandbox  where the host made
-#                                               each unit's cgroup subtree (only
+#   PROXY_UNIT_CGROUP_DIR  /sys/fs/cgroup/system.slice/system-blot.slice  where
+#                                               the host made each unit's slice
+#                                               and its jails' cgroups (only
 #                                               read with BLOT_SANDBOX=1)
 #   PROXY_AUTOSSL_VOLUME   blot-proxy-auto-ssl  dehydrated account state
 #   PROXY_PURGE_URLS       (read from the unit's environment)  comma separated
@@ -72,7 +73,7 @@ LOG_DIR="${PROXY_LOG_DIR:-/var/instance-ssd/logs}"
 APP_LOG_SOCKET="${PROXY_APP_LOG_SOCKET:-/run/blot-log/app.sock}"
 CERT_DIR="${PROXY_CERT_DIR:-/etc/ssl/private}"
 GLOBAL_STATIC_DIR="${PROXY_GLOBAL_STATIC_DIR:-/var/www/blot/app/blog/static}"
-SANDBOX_CGROUP_DIR="${PROXY_SANDBOX_CGROUP_DIR:-/sys/fs/cgroup/blot-sandbox}"
+UNIT_CGROUP_DIR="${PROXY_UNIT_CGROUP_DIR:-/sys/fs/cgroup/system.slice/system-blot.slice}"
 AUTOSSL_VOLUME="${PROXY_AUTOSSL_VOLUME:-blot-proxy-auto-ssl}"
 HEALTH_TIMEOUT="${PROXY_HEALTH_TIMEOUT:-60}"
 DRAIN_TIMEOUT="${PROXY_DRAIN_TIMEOUT:-30}"
@@ -198,9 +199,33 @@ env_conflicts() { # env_conflicts <first file> <second file>
   ' "$1" "$2" | sort -u
 }
 
-require_sandbox_cgroup() { # require_sandbox_cgroup <unit>
-  [ -d "$SANDBOX_CGROUP_DIR/$1" ] \
-    || die "BLOT_SANDBOX=1 is set in $ENV_FILE but $SANDBOX_CGROUP_DIR/$1 does not exist: run config/host/host/setup.sh on this host (Amazon Linux 2023, cgroup v2), which installs blot-sandbox-cgroup.service"
+# A unit's slice (config/host/scripts/unit-cgroups): its container runs in it
+# beside its two sandbox jails, and its MemoryMax is the whole unit's memory
+# (#2795). The host makes it, so a slice whose limit differs from UNIT_MEMORY
+# means the host and scripts/deploy/constants.js disagree.
+unit_slice() { echo "$UNIT_CGROUP_DIR/system-blot-$1.slice"; }
+require_unit_slice() { # require_unit_slice <unit>
+  local slice want have d
+  slice="$(unit_slice "$1")"
+  for d in "$slice" "$slice/sandbox" "$slice/browser"; do
+    [ -d "$d" ] \
+      || die "BLOT_SANDBOX=1 is set in $ENV_FILE but $d does not exist: run npm run deploy-host (config/host/deploy.sh), which installs the units' slices and blot-unit-cgroups.service (Amazon Linux 2023, cgroup v2)"
+  done
+  want="$(memory_bytes "$UNIT_MEMORY")"
+  have="$(cat "$slice/memory.max" 2>/dev/null || true)"
+  [ "$have" = "$want" ] \
+    || die "$slice/memory.max is ${have:-unreadable}, but UNIT_MEMORY is $UNIT_MEMORY ($want bytes): make MemoryMax in config/host/scripts/unit-cgroups/system-blot-$1.slice and UNIT.memory in scripts/deploy/constants.js agree, then run npm run deploy-host"
+}
+
+# docker's size (512m, 3584m, 2g) in bytes
+memory_bytes() { # memory_bytes <size>
+  local n="${1%[kKmMgG]}"
+  case "$1" in
+    *[kK]) echo $((n * 1024)) ;;
+    *[mM]) echo $((n * 1024 * 1024)) ;;
+    *[gG]) echo $((n * 1024 * 1024 * 1024)) ;;
+    *) echo "$1" ;;
+  esac
 }
 
 # The settings file (the numbers in scripts/deploy/constants.js), the two env
@@ -222,8 +247,7 @@ load_unit_settings() {
   done
   if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ]; then
     for d in $UNITS; do
-      require_sandbox_cgroup "$d"
-      require_sandbox_cgroup "$d-browser"
+      require_unit_slice "$d"
     done
   fi
   # the longer of the two defaults: Node has to start as well
@@ -324,8 +348,9 @@ sync_static() { # sync_static <image>
 #     ports above
 #   - with BLOT_SANDBOX=1 in proxy.env, the flags the nsjail sandbox needs
 #     (app/sandbox): the host's cgroup namespace, a seccomp profile that is
-#     Docker's default plus a few syscalls, the cgroup subtrees the host made
-#     for this unit (config/host/host/setup.sh), and /dev/net/tun for pasta.
+#     Docker's default plus a few syscalls, the unit's slice (--cgroup-parent)
+#     and its jails' cgroups in it, which the host made
+#     (config/host/scripts/unit-cgroups), and /dev/net/tun for pasta.
 #     Screenshots run in its browser jail, and the app's fetches of untrusted
 #     URLs run as sandbox jobs (fetch, fetch-image) with their own network jail.
 #     Without it there is neither, and production refuses those features
@@ -388,16 +413,21 @@ run_args() { # run_args <name>
     -v "$GLOBAL_STATIC_DIR":/var/www/blot/app/blog/static:ro
   )
   if [ "$(env_value "$ENV_FILE" BLOT_SANDBOX)" = 1 ]; then
-    require_sandbox_cgroup "$unit"
+    require_unit_slice "$unit"
+    local slice
+    slice="$(unit_slice "$unit")"
     RUN_ARGS+=(
+      # The unit's slice holds this container and its jails under one memory
+      # limit (#2795): see require_unit_slice
+      --cgroup-parent "system-blot-$unit.slice"
       # nsjail puts each job in a cgroup of its own, which --cgroupns=private
       # can't reach; the bind below is the host-made subtree for this unit
       --cgroupns=host
       --security-opt "seccomp=$COMMON_DIR/sandbox-seccomp.json"
-      --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit,target=/sandbox-cgroup"
+      --mount "type=bind,source=$slice/sandbox,target=/sandbox-cgroup"
       -e BLOT_SANDBOX_SOCKET=/run/blot-sandbox/broker.sock
       --device /dev/net/tun
-      --mount "type=bind,source=$SANDBOX_CGROUP_DIR/$unit-browser,target=/sandbox-browser-cgroup"
+      --mount "type=bind,source=$slice/browser,target=/sandbox-browser-cgroup"
     )
   fi
 }

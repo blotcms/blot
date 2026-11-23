@@ -89,6 +89,17 @@ ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "if [ -e /etc/systemd/system/
 echo "Installing the fstrim.service.d drop-in on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo mkdir -p /etc/systemd/system/fstrim.service.d && sudo cp /home/ec2-user/scripts/fstrim.service.d/10-instance-store.conf /etc/systemd/system/fstrim.service.d/10-instance-store.conf && sudo systemctl daemon-reload"
 
+# The units' slices and their sandbox jails' cgroups (#2795, see
+# scripts/unit-cgroups). Each unit's memory limit is its slice's MemoryMax,
+# shared by its container and its jails. Safe on a running host: daemon-reload
+# applies a changed MemoryMax to a running slice, and the script only makes
+# directories and writes limits. A unit moves into its slice when it is next
+# deployed (proxy/deploy/common.sh), which refuses while these are missing, so
+# this runs before the unit deploy that first uses them.
+echo "Installing the units' slices and blot-unit-cgroups.service on $PUBLIC_IP"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo install -m 644 /home/ec2-user/scripts/unit-cgroups/*.slice /home/ec2-user/scripts/unit-cgroups/blot-unit-cgroups.service /etc/systemd/system/ && sudo install -m 755 /home/ec2-user/scripts/unit-cgroups/blot-unit-cgroups.sh /usr/local/sbin/blot-unit-cgroups.sh"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl daemon-reload && sudo systemctl enable blot-unit-cgroups.service && sudo systemctl restart blot-unit-cgroups.service"
+
 # Remove the legacy mount-data-disk unit: its script was never part of this
 # directory and no longer exists on the host, so the unit only fails at boot.
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "if [ -f /etc/systemd/system/mount-data-disk.service ]; then sudo systemctl disable mount-data-disk.service || true; sudo rm -f /etc/systemd/system/mount-data-disk.service; fi"

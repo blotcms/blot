@@ -27,13 +27,18 @@
 # Kill order under memory pressure (the container is started with
 # --oom-score-adj 1000 and --cap-add SYS_RESOURCE, proxy/deploy/common.sh).
 # The kernel kills the process with the highest badness, roughly
-# rss + oom_score_adj x limit / 1000, where limit is the container's memory
-# limit. Every process a `docker exec` starts inherits the container's 1000, so
-# a script is the first victim. At startup, while this shell (root) still holds
+# rss + oom_score_adj x limit / 1000, where limit is that of the cgroup that ran
+# out: the container's, or on the production host the unit's slice, which holds
+# the container and its sandbox jails under the same limit (#2795,
+# config/host/scripts/unit-cgroups). Every process a `docker exec` starts
+# inherits the container's 1000, so a script is the first victim. At startup, while this shell (root) still holds
 # CAP_SYS_RESOURCE, it sets:
 #
-#   tini (pid 1), this supervisor, node-a, the broker:  0
+#   tini (pid 1), this supervisor, node-a:                  0
 #       tini must not stay at 1000: killing pid 1 takes the whole container
+#   the broker                                                           500
+#       above node-a, which is far larger: at 0 the broker would outlive it.
+#       While it is down sandbox jobs fail closed, and it is started again
 #   OpenResty                                                           -900
 #       the unit dies with it, and the other one takes over
 #   node-b                                                               900
@@ -43,7 +48,10 @@
 #
 # With node-b at 900, a script at 1000 is killed before it whenever its resident
 # memory is larger than node-b's minus a tenth of the limit (node-b scores
-# R + 0.9 x limit, a script of S scores S + limit), and anything at 0 goes last.
+# R + 0.9 x limit, a script of S scores S + limit). node-a goes only once
+# everything above it is gone, and OpenResty last. That order is what lets a
+# unit's limit be less than the sum of its processes' limits
+# (scripts/deploy/constants.js): only node-a and OpenResty must fit.
 # Raising a score needs no privilege, so the app can do it; lowering one below
 # what the container started with needs CAP_SYS_RESOURCE, so everything this
 # supervisor starts loses that capability (setpriv, the bounding and
@@ -158,6 +166,9 @@ run_sandbox() { # run_sandbox <file> <description>
   child=
   stopping=
   trap 'stopping=1; [ -n "$child" ] && kill -TERM "$child" 2>/dev/null' TERM
+
+  # above node-a (see "Kill order"); raising a score needs no capability
+  set_oom self 500
 
   while [ -z "$stopping" ]; do
     env -i PATH=/usr/local/bin:/usr/bin:/bin BLOT_UNIT="$BLOT_UNIT" \
