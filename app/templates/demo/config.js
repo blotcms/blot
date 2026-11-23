@@ -25,7 +25,7 @@ module.exports = {
     title: "Documentation",
     template: "SITE:documentation",
   },
-  stampclub: {
+  stamps: {
     title: "New York Stamp Club",
     template: "SITE:organization",
     menu: [

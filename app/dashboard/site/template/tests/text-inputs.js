@@ -11,7 +11,7 @@ describe("template text inputs", function () {
     const result = run({
       tagline: "Since 1951",
       address: "",
-      demo_folder: "stampclub",
+      demo_folder: "stamps",
       text_inputs: ["address", "tagline"],
       text_input_labels: { tagline: "Strapline" },
     });
