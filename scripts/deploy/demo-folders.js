@@ -34,7 +34,12 @@ const { TMP_DIRECTORY } = require("./constants");
 
 const ROOT = join(__dirname, "../..");
 const FOLDERS = "app/templates/folders";
-const UNIT = process.env.BLOT_DEMO_FOLDERS_UNIT || "blot-blue";
+// The unit the sync runs in: BLOT_DEMO_FOLDERS_UNIT, or whichever of the two
+// is running, blue first (pickUnit)
+const UNITS = process.env.BLOT_DEMO_FOLDERS_UNIT
+  ? [process.env.BLOT_DEMO_FOLDERS_UNIT]
+  : ["blot-blue", "blot-green"];
+let UNIT;
 const MARKER = "$HOME/demo-folders.json";
 
 const TARGET = process.env.BLOT_DEPLOY_TARGET || "blot";
@@ -178,7 +183,20 @@ async function main() {
     return;
   }
 
-  console.log("Demo folders to sync:", changed.join(", "));
+  // A unit may be down: the deploy that follows this step is what brings it
+  // back, so don't stand in its way. The marker is untouched, so the next
+  // deploy syncs these folders.
+  const running = (await ssh(`docker ps --format '{{.Names}}'`)).split("\n");
+  UNIT = UNITS.find((name) => running.includes(name));
+  if (!UNIT) {
+    console.log(
+      `Demo folders: no running unit (${UNITS.join(", ")}), skipping:`,
+      changed.join(", ")
+    );
+    return;
+  }
+
+  console.log("Demo folders to sync in " + UNIT + ":", changed.join(", "));
 
   const dir = `${TMP_DIRECTORY}/demo-folders/${commit}`;
   const failed = [];

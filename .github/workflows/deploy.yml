@@ -254,6 +254,10 @@ jobs:
       # template pages link ZIPs that are already in the bucket. The running
       # image's app/templates/folders/index.js does the sync. Safe to re-run.
       - name: Sync the demo folders
+        # A failure here mustn't stop the deploy, which may be the fix for it.
+        # The marker isn't updated for a failed folder, so the next deploy
+        # retries it.
+        continue-on-error: true
         env:
           TARGET_SHA: ${{ steps.resolve.outputs.sha }}
         run: |
