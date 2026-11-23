@@ -1,7 +1,0 @@
-# Cayley Torus
-
-{>} ![Cayley Torus](_pic.png)
-
-Un des 9 groupes non-abéliens d'ordre 16 est le produit semi-direct de C_2^2 par C_4. On peut dessiner le graphe de Cayley de cette présentation sur une surface de genre 1, qui sera divisée en 8 régions, et coloriée avec 4 couleurs.
-
-Source: [Wikipedia](https://commons.wikimedia.org/wiki/File:GrapheCayley-C2xC2semiC4-Tore.svg)

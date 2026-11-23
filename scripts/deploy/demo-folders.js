@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Syncs the demo folders (app/templates/folders) into the production demo
-// blogs and uploads their download ZIPs, sending only the folders that
-// changed (#2940). The unit image doesn't carry them.
+// Syncs the demo folders into the production demo blogs and uploads their
+// download ZIPs, sending only the folders that changed (#2940). The folders
+// are the blotcms/demo-folders repository, a submodule at
+// app/templates/folders; their settings are app/templates/demo/config.js.
+// The unit image carries neither the folders nor their ZIPs.
 //
 //   node scripts/deploy/demo-folders.js [<commit>]
 //
@@ -9,17 +11,21 @@
 // same ssh target as units.sh (BLOT_DEPLOY_TARGET, default blot). <commit>
 // defaults to HEAD. Safe to re-run.
 //
-// 1. Each folder's git tree hash and config.js settings at <commit> are
-//    compared with the marker,
+// 1. The demo-folders commit that <commit> pins is fetched, without blobs,
+//    into a partial clone in the OS tmp directory. Each folder's git tree
+//    hash there and its config.js settings at <commit> are compared with the
+//    marker,
 //    ~/demo-folders.json on the host (in the deploy user's home on the root
 //    volume: the app's tmp directory is on the instance store, which a
 //    stop/start wipes, and prune-tmp empties it daily). A lost marker only
 //    means every folder is synced once, which writes nothing that matches.
-// 2. The changed folders and config.js go over ssh, as a tar from git
-//    archive, into
+// 2. The changed folders (checked out in the clone, which fetches their
+//    blobs) go over ssh as a tar from git archive, and config.js after them,
+//    into
 //    <tmp>/demo-folders/<commit>/ inside the unit: the app's tmp directory
 //    is bind-mounted into every unit at the same path.
-// 3. For each, one at a time, the unit runs app/templates/folders/index.js
+// 3. For each, one at a time, the unit runs app/templates/demo/index.js
+//    (app/templates/folders/index.js in an image from before the move)
 //    --from <dir> --only <name> --zip, which writes the changed files, runs
 //    sync and Fix, and uploads the ZIP. The marker is updated after each
 //    folder that succeeds, so a re-run after a failure redoes only the rest.
@@ -29,11 +35,22 @@
 const { spawn, execFileSync } = require("child_process");
 const { join } = require("path");
 const crypto = require("crypto");
+const os = require("os");
+const fs = require("fs");
 const vm = require("vm");
 const { TMP_DIRECTORY } = require("./constants");
 
 const ROOT = join(__dirname, "../..");
+// The folders are a submodule (blotcms/demo-folders); this repository pins
+// its commit at FOLDERS and keeps their settings in CONFIG
 const FOLDERS = "app/templates/folders";
+const CONFIG = "app/templates/demo/config.js";
+const DEMO_REPO =
+  process.env.BLOT_DEMO_FOLDERS_REPO ||
+  "https://github.com/blotcms/demo-folders.git";
+// A partial clone of it, reused between runs: trees only, plus the blobs of
+// folders that were sent
+const DEMO_CLONE = join(os.tmpdir(), "blot-demo-folders");
 // The unit the sync runs in: BLOT_DEMO_FOLDERS_UNIT, or whichever of the two
 // is running, blue first (pickUnit)
 const UNITS = process.env.BLOT_DEMO_FOLDERS_UNIT
@@ -85,11 +102,11 @@ function ssh(command, { input, inherit } = {}) {
 // hash of its settings in config.js (title, template, menu, plugins), so a
 // change to either syncs the folder again, and a change to one blog's
 // settings syncs only that blog.
-function folderHashes(commit) {
+function folderHashes(commit, pin) {
   const settings = loadConfig(commit);
   const hashes = {};
-  for (const line of git("ls-tree", commit, FOLDERS + "/").split("\n")) {
-    const match = /^\d+ tree ([0-9a-f]+)\t.+\/([^/]+)$/.exec(line);
+  for (const line of demo("ls-tree", pin).split("\n")) {
+    const match = /^\d+ tree ([0-9a-f]+)\t([^/]+)$/.exec(line);
     if (!match || /^[-.]/.test(match[2])) continue;
     const settingsHash = crypto
       .createHash("sha1")
@@ -100,10 +117,38 @@ function folderHashes(commit) {
   return hashes;
 }
 
+// The demo-folders commit this repository pins at commit
+function pinnedCommit(commit) {
+  const match = /^160000 commit ([0-9a-f]+)\t/.exec(
+    git("ls-tree", commit, FOLDERS)
+  );
+  if (!match) throw new Error(`${FOLDERS} isn't a submodule at ${commit}`);
+  return match[1];
+}
+
+function demo(...args) {
+  return execFileSync("git", ["-C", DEMO_CLONE, ...args], {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+  }).trim();
+}
+
+// Fetches pin into the partial clone, without blobs
+function fetchPin(pin) {
+  if (!fs.existsSync(join(DEMO_CLONE, ".git"))) {
+    fs.mkdirSync(DEMO_CLONE, { recursive: true });
+    demo("init", "-q");
+    demo("remote", "add", "origin", DEMO_REPO);
+    demo("config", "remote.origin.promisor", "true");
+    demo("config", "remote.origin.partialclonefilter", "blob:none");
+  }
+  demo("fetch", "-q", "--filter=blob:none", "origin", pin);
+}
+
 // config.js at commit, evaluated like the module it is (it only assigns
 // module.exports)
 function loadConfig(commit) {
-  const source = git("show", commit + ":" + FOLDERS + "/config.js");
+  const source = git("show", commit + ":" + CONFIG);
   const module = { exports: {} };
   vm.runInNewContext(source, { module, exports: module.exports });
   return module.exports;
@@ -125,29 +170,16 @@ function writeMarker(marker) {
   });
 }
 
-// Sends the folders at commit to dir in the unit, as git archive's tar of
-// them. The deploy workflow's checkout is sparse and fetches no blobs it
-// doesn't check out, so add the folders to it first: a checkout fetches
-// their blobs in one batch, where git archive would fetch them one by one.
-async function send(commit, names, dir) {
-  if (
-    git("config", "--bool", "--default", "false", "core.sparseCheckout") ===
-    "true"
-  ) {
-    git("sparse-checkout", "add", ...names.map((name) => FOLDERS + "/" + name));
-  }
+// Sends the folders at pin to dir in the unit, as git archive's tar of them,
+// and config.js at commit next to them. Checking the folders out first
+// fetches their blobs in one batch, where git archive would fetch them one
+// by one.
+async function send(commit, pin, names, dir) {
+  demo("checkout", "-q", "--force", pin, "--", ...names);
 
   const archive = spawn(
     "git",
-    [
-      "-C",
-      ROOT,
-      "archive",
-      "--format=tar",
-      commit + ":" + FOLDERS,
-      "config.js",
-      ...names,
-    ],
+    ["-C", DEMO_CLONE, "archive", "--format=tar", pin, ...names],
     { stdio: ["ignore", "pipe", "inherit"] }
   );
   const archived = new Promise((resolve, reject) => {
@@ -164,6 +196,10 @@ async function send(commit, names, dir) {
     ),
     archived,
   ]);
+
+  await ssh(`docker exec -i -u 1000 ${UNIT} sh -c 'cat > ${dir}/config.js'`, {
+    input: git("show", commit + ":" + CONFIG) + "\n",
+  });
 }
 
 async function main() {
@@ -172,7 +208,9 @@ async function main() {
     "--verify",
     (process.argv[2] || "HEAD") + "^{commit}"
   );
-  const hashes = folderHashes(commit);
+  const pin = pinnedCommit(commit);
+  fetchPin(pin);
+  const hashes = folderHashes(commit, pin);
   const marker = await readMarker();
   const changed = Object.keys(hashes).filter(
     (name) => marker[name] !== hashes[name]
@@ -202,12 +240,12 @@ async function main() {
   const failed = [];
 
   try {
-    await send(commit, changed, dir);
+    await send(commit, pin, changed, dir);
 
     for (const name of changed) {
       try {
         await ssh(
-          `docker exec -u 1000 ${UNIT} timeout 1800 node app/templates/folders/index.js --from ${dir} --only ${name} --zip`,
+          `docker exec -u 1000 ${UNIT} sh -c 'script=app/templates/demo/index.js; [ -f $script ] || script=app/templates/folders/index.js; exec timeout 1800 node $script --from ${dir} --only ${name} --zip'`,
           { inherit: true }
         );
         marker[name] = hashes[name];

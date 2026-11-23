@@ -3,8 +3,8 @@ describe("demo folder ZIPs", function () {
   const { join } = require("path");
   const s3 = require("storage/s3");
   const tempDir = require("helper/tempDir");
-  const { hashFolder, listFiles } = require("templates/folders/contents");
-  const publishZip = require("templates/folders/publishZip");
+  const { hashFolder, listFiles } = require("templates/demo/contents");
+  const publishZip = require("templates/demo/publishZip");
 
   let directory;
 

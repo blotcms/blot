@@ -1,7 +1,0 @@
-# Plane partition
-
-{>} ![](_pic.png)
-
-In mathematics and especially in combinatorics, a plane partition is a two-dimensional array of nonnegative integers $$ n_{i,j}} n_{{i,j}} $$ (with positive integer indices i and j) that is nonincreasing in both indices, that is, that satisfies for all i and j, and for which only finitely many of the ni,j are nonzero. A plane partitions may be represented visually by the placement of a stack of unit cubes above each other giving a three-dimensional solid like the one shown at right.
-
-Source: [Wikipedia](https://en.wikipedia.org/wiki/Plane_partition)

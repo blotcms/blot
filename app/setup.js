@@ -163,7 +163,7 @@ async function runPostListenTasks() {
   // files through the Local client. Before the clients start, so they're on it.
   try {
     if (!config.preview && config.environment === "development") {
-      await require("./templates/folders/local").start();
+      await require("./templates/demo/local").start();
     }
   } catch (err) {
     logError("Failed to sync demo folder blogs", err);

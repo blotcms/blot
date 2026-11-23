@@ -322,7 +322,7 @@ const loadTemplates = async () => {
       folder_preview: folderPreviewForTemplate(template, manifest),
       folder_html: folderHTMLForTemplate(template, manifest),
       // The ZIP's path on the CDN, /folders/<name>-<hash>.zip, from the
-      // manifest (templates/folders/zip). None if the build skipped it.
+      // manifest (templates/demo/zip). None if the build skipped it.
       zip_path: (manifest[template.demo_folder] || {}).zip,
     }));
 };

@@ -229,7 +229,7 @@ RUN apk add --no-cache openresty sudo procps \
 # this stage starts from `base` and skips the dev-only stages
 FROM base AS app-source
 COPY ./app /src/app
-RUN find /src/app/templates/folders -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+RUN rm -rf /src/app/templates/folders && mkdir /src/app/templates/folders
 
 FROM base AS source
 
@@ -244,12 +244,13 @@ COPY --from=deps /usr/src/app/node_modules ./node_modules
 # `app` tree into an extra layer that every deploy then has to pull. config,
 # scripts and node_modules stay root-owned (the app only reads them).
 #
-# The demo folders' directories (app/templates/folders/*/) stay out of the
-# image (#2940): the deploy syncs them into the demo blogs and uploads their
-# ZIPs (scripts/deploy/demo-folders.js). They are removed in the throwaway
-# app-source stage, so no layer of this image ever holds them; the docs build
-# below reads them from the build context with a bind mount. The .js files
-# next to them stay: the deploy's sync runs app/templates/folders/index.js.
+# The demo folders (app/templates/folders, the blotcms/demo-folders
+# submodule) stay out of the image (#2940): the deploy syncs them into the
+# demo blogs and uploads their ZIPs (scripts/deploy/demo-folders.js). They are
+# removed in the throwaway app-source stage, so no layer of this image ever
+# holds them; the docs build below reads them from the build context with a
+# bind mount. A build without the submodule checked out still works, with no
+# folder previews or ZIP links on the template pages.
 COPY ./config ./config
 COPY ./scripts ./scripts
 COPY --from=app-source --chown=1000:1000 /src/app ./app
