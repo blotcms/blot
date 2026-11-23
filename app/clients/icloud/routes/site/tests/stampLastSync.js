@@ -16,6 +16,7 @@ describe("icloud routes stamp lastSync", function () {
     fix: require.resolve("sync/fix"),
     getHealth: require.resolve("../../../getHealth"),
     validateBlog: require.resolve("../../../sync/validateBlog"),
+    stillConnected: require.resolve("../stillConnected"),
   };
   routeNames.forEach((name) => (paths[name] = require.resolve("../" + name)));
 
@@ -82,7 +83,12 @@ describe("icloud routes stamp lastSync", function () {
 
     stub("stamp", async (id) => stamped.push(id));
     stub("lock", async () => ({
-      folder: { status: () => {}, update: async () => {} },
+      folder: {
+        status: () => {},
+        update: async () => {},
+        signal: new AbortController().signal,
+        run: (fn) => fn(),
+      },
       done: async () => {},
     }));
     stub("database", {
@@ -103,6 +109,7 @@ describe("icloud routes stamp lastSync", function () {
       get: async ({ id }) => ({ id, client: "icloud" }),
     });
     stub("entries", { getAllTotal: async () => 0 });
+    stub("stillConnected", async () => true);
     stub("fix", async () => ({}));
     stub("getHealth", async () => ({ issues: [] }));
     // Reload each route, and the walk and Fix() it runs, bound to the stubs

@@ -23,9 +23,15 @@ const isPermanent = (error) => {
   return status >= 400 && status < 500 && status !== 408 && status !== 429;
 };
 
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const { setTimeout: wait } = require("timers/promises");
 
-const remoteReaddir = async (blogID, path) => {
+// Waits ms, or less if signal aborts first, then throws its reason
+const sleep = async (ms, signal) => {
+  await wait(ms, undefined, { signal }).catch(() => {});
+  if (signal) signal.throwIfAborted();
+};
+
+const remoteReaddir = async (blogID, path, { signal } = {}) => {
   const BACKOFF = remoteReaddir.backoff;
   const pathBase64 = Buffer.from(path).toString("base64");
 
@@ -39,6 +45,7 @@ const remoteReaddir = async (blogID, path) => {
         readBody: true,
         timeout: ATTEMPT_TIMEOUT,
         retries: 1,
+        signal,
         headers: { Authorization: MACSERVER_AUTH, blogID, pathBase64 },
       });
       const elapsed = Date.now() - startedAt;
@@ -52,8 +59,13 @@ const remoteReaddir = async (blogID, path) => {
       console.log(
         `iCloud remoteReaddir: ${blogID} ${path} failed after ${Date.now() - startedAt}ms (attempt ${attempt + 1}/${BACKOFF.length + 1}): ${error.message}`
       );
-      if (attempt >= BACKOFF.length || isPermanent(error)) throw error;
-      await sleep(BACKOFF[attempt]);
+      if (
+        (signal && signal.aborted) ||
+        attempt >= BACKOFF.length ||
+        isPermanent(error)
+      )
+        throw error;
+      await sleep(BACKOFF[attempt], signal);
     }
   }
 };

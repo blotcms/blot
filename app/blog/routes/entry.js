@@ -1,6 +1,6 @@
 const normalize = require("helper/urlNormalizer");
 const metadataCaseInsensitive = require("helper/metadataCaseInsensitive");
-const { getEntryByUrl } = require("../lib/models");
+const { getEntryByUrl, getViewByURL } = require("../lib/models");
 const attachAdjacent = require("../lib/attachAdjacent");
 const loadPlugin = require("../lib/loadPlugin");
 
@@ -28,6 +28,12 @@ const entryJSON = (entry) => ({
       }
     : null,
 });
+
+// Whether the template has a view at exactly this URL, with no parameters
+const isExactView = async (templateID, url) => {
+  const { viewName, params } = await getViewByURL(templateID, url);
+  return !!viewName && (!params || Object.keys(params).length === 0);
+};
 
 const normalizeMetadataToggle = function (value) {
   if (typeof value === "undefined" || value === null) return "";
@@ -109,6 +115,21 @@ module.exports = async function entry(req, res, next) {
     )
       return next();
 
+    const isOldUrl =
+      entry.url && normalize(entry.url) !== normalize(comparableUrl);
+
+    // An entry's old URL keeps redirecting to its new one, but not when the
+    // template has a page at that exact URL: an imported post that once took
+    // /archives and then moved would otherwise hide the archives page for
+    // ever. Patterns with parameters (e.g. /:slug) don't count, or they would
+    // swallow every old URL.
+    if (
+      isOldUrl &&
+      blog.template &&
+      (await isExactView(blog.template, comparableUrl))
+    )
+      return next();
+
     const asJSON = req.query && req.query.format === "json";
 
     if (!asJSON) await attachAdjacent(blog.id, entry);
@@ -116,7 +137,7 @@ module.exports = async function entry(req, res, next) {
     // Ensure the user is always viewing
     // the entry at its latest and greatest URL
     // 301 passes link juice for SEO?
-    if (entry.url && normalize(entry.url) !== normalize(comparableUrl)) {
+    if (isOldUrl) {
       // Res.direct expects a URL, we shouldnt need
       // to do this now but OK. I feel like we're decoding
       // then recoding then decoding. I should just store

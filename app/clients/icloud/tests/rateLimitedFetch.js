@@ -9,6 +9,8 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
   let trickle;
   let failFirst;
   let requestTimes;
+  // Called once the server has a request
+  let onRequest;
 
   beforeEach(async function () {
     requests = 0;
@@ -16,9 +18,11 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
     trickle = false;
     failFirst = 0;
     requestTimes = [];
+    onRequest = () => {};
     server = http.createServer((req, res) => {
       requests++;
       requestTimes.push(Date.now());
+      onRequest();
       if (requests <= failFirst) {
         res.writeHead(503);
         res.end();
@@ -102,5 +106,42 @@ describe("icloud rateLimitedFetchWithRetriesAndTimeout", function () {
     }
     expect(error).toBeDefined();
     expect(requests).toBe(2);
+  });
+
+  it("cuts off a request when the caller's signal aborts, without retrying", async function () {
+    stallFirst = 5;
+    const controller = new AbortController();
+    const cancelled = Object.assign(new Error("Sync cancelled"), {
+      code: "ECANCELED",
+    });
+    // Once the request reaches the server: the rate limiter can hold it
+    // longer than a fixed delay
+    onRequest = () => setTimeout(() => controller.abort(cancelled), 50);
+
+    let thrown;
+    try {
+      await fetch(url, {
+        readBody: true,
+        timeout: 5000,
+        retryDelay: 100,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBe(cancelled);
+    expect(requests).toBe(1);
+  });
+
+  it("doesn't send a request once the caller's signal has aborted", async function () {
+    const controller = new AbortController();
+    const cancelled = new Error("Sync cancelled");
+    controller.abort(cancelled);
+
+    await expectAsync(
+      fetch(url, { signal: controller.signal })
+    ).toBeRejectedWith(cancelled);
+    expect(requests).toBe(0);
   });
 });

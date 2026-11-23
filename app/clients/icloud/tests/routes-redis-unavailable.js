@@ -7,6 +7,8 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
   const folder = require("storage/folder");
   const Entry = require("models/entry");
   const redis = require("models/client");
+  const Blog = require("models/blog");
+  const database = require("../database");
   const { SimpleError } = require("redis");
   const upload = require("../routes/site/upload");
   const remove = require("../routes/site/delete");
@@ -61,6 +63,19 @@ describe("iCloud macserver routes when Redis is unavailable", function () {
   }
 
   const getEntry = (blogID, path) => Entry.get(blogID, path);
+
+  // The routes check, under the folder lock, that the blog is still on
+  // iCloud (routes/site/stillConnected.js)
+  beforeEach(async function () {
+    await Blog.set(this.blog.id, { client: "icloud" });
+    await database.store(this.blog.id, {
+      sharingLink: "https://www.icloud.com/iclouddrive/test#Blog",
+    });
+  });
+
+  afterEach(async function () {
+    await database.delete(this.blog.id);
+  });
 
   beforeEach(function () {
     spyOn(console, "warn");

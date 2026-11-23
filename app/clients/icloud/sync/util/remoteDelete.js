@@ -7,7 +7,7 @@ const fetch = require("../../util/rateLimitedFetchWithRetriesAndTimeout");
 // dashboard edit, which would then be undone by the next walk
 const RETRY_DELAY_MS = 1000;
 
-module.exports = async (blogID, path) => {
+module.exports = async (blogID, path, { signal } = {}) => {
   const pathBase64 = Buffer.from(path).toString("base64");
 
   // rateLimitedFetchWithRetriesAndTimeout throws on non-OK responses
@@ -15,5 +15,6 @@ module.exports = async (blogID, path) => {
     method: "POST",
     headers: { Authorization: MACSERVER_AUTH, blogID, pathBase64 },
     retryDelay: RETRY_DELAY_MS,
+    signal,
   });
 };

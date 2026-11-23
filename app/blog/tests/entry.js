@@ -33,6 +33,42 @@ describe("entry", function () {
     expect(res3.status).not.toEqual(302);
   });
 
+  it("serves a template view at an entry's old URL instead of redirecting", async function () {
+    await this.template(
+      {
+        "archives.html": "The archives page",
+        "entry.html": "{{{entry.html}}}",
+      },
+      {
+        views: {
+          "archives.html": { name: "archives.html", url: ["/archives"] },
+          "entry.html": { name: "entry.html", url: ["/:slug"] },
+        },
+      }
+    );
+
+    await this.write({ path: "/a.txt", content: "Link: archives\nOld!" });
+
+    // The entry has the URL, so it wins over the view
+    expect(await this.text("/archives", { redirect: "manual" })).toContain(
+      "Old!"
+    );
+
+    await this.write({ path: "/a.txt", content: "Link: old-archives\nOld!" });
+
+    const res = await this.get("/archives", { redirect: "manual" });
+    expect(res.status).toEqual(200);
+    expect(await res.text()).toContain("The archives page");
+
+    // An old URL that only a parameter pattern matches still redirects
+    await this.write({ path: "/b.txt", content: "Link: b\nB!" });
+    await this.write({ path: "/b.txt", content: "Link: c\nB!" });
+
+    const res2 = await this.get("/b", { redirect: "manual" });
+    expect(res2.status).toEqual(302);
+    expect(await res2.text()).toContain("Redirecting to /c");
+  });
+
   it("will not render a scheduled entry unless the query string scheduled is set to true", async function () {
     // 1 year from now
     const date = new Date();

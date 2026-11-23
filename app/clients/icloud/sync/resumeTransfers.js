@@ -1,4 +1,5 @@
 const clfdate = require("helper/clfdate");
+const Blog = require("models/blog");
 const database = require("../database");
 const initialTransfer = require("./initialTransfer");
 const { isSyncLockError } = require("../routes/lock");
@@ -8,6 +9,11 @@ const { isSyncLockError } = require("../routes/lock");
 // transferringToiCloud stays true), and while that flag is set the hourly
 // validation and every background sync leave the blog alone, so nothing
 // else would ever finish it.
+//
+// A record with no sharing link, or for a blog that is gone or no longer on
+// iCloud, is left alone: a disconnect deleted the account and something
+// wrote part of it back, and resuming would copy files into a folder Blot
+// has left.
 //
 // A folder lock that is held usually means the transfer is still running in
 // another process, so the blog is left for the next run. Resolves to how many
@@ -19,6 +25,18 @@ module.exports = async function resumeTransfers() {
     if (!account || account.transferringToiCloud !== true) return;
 
     try {
+      const blog = await Blog.get({ id: blogID });
+
+      if (!account.sharingLink || !blog || blog.client !== "icloud") {
+        console.log(
+          clfdate(),
+          "iCloud: Not resuming the transfer for",
+          blogID,
+          "which is no longer connected"
+        );
+        return;
+      }
+
       console.log(clfdate(), "iCloud: Resuming initial transfer for", blogID);
       await initialTransfer(blogID);
     } catch (error) {
