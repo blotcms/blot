@@ -84,7 +84,7 @@ const MUTATION_ALLOWED_PREFIXES = [
   "app/clients/util/placeholders.js",
   "app/clients/folder.js", // the router
   // Syncs Blot's own demo blogs, which have no client.
-  "app/templates/folders/",
+  "app/templates/demo/",
   // Deletes a whole blog folder along with the blog.
   "app/models/blog/remove.js",
   // Creates the empty folder of a brand new blog, which has no client yet.

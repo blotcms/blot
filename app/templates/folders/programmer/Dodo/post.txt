@@ -1,7 +1,0 @@
-# Truncated dodecahedron
-
-{>} ![Dodecahedron](_pic.png)
-
-A monochrome render of a Truncated dodecahedron by Olfa Wektoryzacja, 2007.
-
-Source: [Wikipedia](http://wikipedia.org)

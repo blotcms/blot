@@ -7,6 +7,14 @@
 - When the maintainer asks to “clear the folder,” remove everything inside the validated source directory `data/local-sources/<handle>/`, including hidden files and nested directories, but leave the source folder itself in place. Use `local` unless another blog handle is specified, then wait for the watcher/rebuild to finish and verify that the live site and Archives reflect the empty source.
 - Treat the replacement as exact: include all source-folder contents, including hidden files, and clear only the validated destination folder. Confirm the source and destination paths before removing existing destination contents.
 
+## Demo folders
+
+- **Where they are:** the demo folders in `app/templates/folders/<name>` are a git submodule, [blotcms/demo-folders](https://github.com/blotcms/demo-folders) (#2940). In a fresh worktree that directory is empty: run `git submodule update --init --depth 1 app/templates/folders`, or let `npm run folder` do it.
+- **Settings and code:** their settings (`config.js`) and the code that builds them live in `app/templates/demo/`. See its README.
+- **Committing a folder change:** run `npm run demo-folders:commit -- "<message>"`. It commits and pushes inside the submodule, then commits the new pointer here.
+- **Never edit the folders through this repository's index:** `git add app/templates/folders/<file>` doesn't work in a submodule.
+- **Publishing:** the deploy syncs changed folders into the production demo blogs and uploads their download ZIPs. Nothing at boot reads the folders, and the image doesn't carry them.
+
 ## Sites for checking templates
 
 `npm run folder` builds every site there is for checking a template: one per demo folder in `app/templates/folders` (bees, sergey, david and the rest, each on the template that previews it) and the test sites in `scripts/development/sites`, each meant to break templates in one way:

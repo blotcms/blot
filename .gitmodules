@@ -1,0 +1,3 @@
+[submodule "app/templates/folders"]
+	path = app/templates/folders
+	url = https://github.com/blotcms/demo-folders.git

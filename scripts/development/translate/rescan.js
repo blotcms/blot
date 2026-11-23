@@ -9,7 +9,7 @@
 // removes ghosts of files that have gone, it does not discover new ones.
 //
 // So rather than waiting and hoping, walk the folder and update every path
-// explicitly. This is the same mechanism app/templates/folders/index.js uses to
+// explicitly. This is the same mechanism app/templates/demo/index.js uses to
 // load the demo folders.
 
 const { posix } = require("path");
