@@ -66,6 +66,13 @@ const isLockError = (err) =>
   err?.message === "Failed to acquire folder lock" ||
   err?.cause?.code === "ELOCKED";
 
+// A disconnect seized the folder lock from the copy (sync/seize.js), or
+// refused it while it waited for it
+const isCancelled = (err, sync) =>
+  Boolean(sync?.folder?.signal?.aborted) ||
+  err?.code === "ECANCELED" ||
+  Boolean(err?.cause?.reason);
+
 // Cancelling setup (disconnect) deletes the account hash outright. The
 // background polling loop below writes status fields (nonEmptyFolderShared,
 // folderId, etc.) after awaiting slow Drive API calls, so without this guard
@@ -204,17 +211,28 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
     await checkWeCanContinue();
     status("Ensuring new folder is in sync");
 
-    await resetFromBlot(blog.id, status, { publishSyncProgress: true });
+    // Cancelling setup seizes the lock (disconnect.js, sync/seize.js): the
+    // copy stops mid-upload, and inside run its writes to the folder and to
+    // Drive's records throw
+    const { signal } = sync.folder;
+    await sync.folder.run(async () => {
+      await resetFromBlot(blog.id, status, {
+        publishSyncProgress: true,
+        signal,
+      });
 
-    await storeIfAccountExists(blog.id, { preparing: false });
+      signal.throwIfAborted();
+      await storeIfAccountExists(blog.id, { preparing: false });
+    });
     status("All files transferred");
   } catch (e) {
     console.log(clfdate(), "Google Drive Client", e);
 
-    // Stopped for another setup, or interrupted by a deploy: leave the
-    // account for the other setup, or for the next process to resume
-    // (restartSetupProcesses)
-    if (STOPPED.has(e.message) || isLockError(e)) return;
+    // Stopped for another setup, interrupted by a deploy, or cancelled: leave
+    // the account for the other setup, for the next process to resume
+    // (restartSetupProcesses), or to the disconnect deleting it
+    if (STOPPED.has(e.message) || isLockError(e) || isCancelled(e, sync))
+      return;
 
     // Only if the account still exists: a disconnect meanwhile deleted it
     await database.blog.update(blog.id, {

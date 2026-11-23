@@ -1,6 +1,7 @@
 const client = require("models/client");
 
 const PREFIX = require("./prefix");
+const refuseAfterAbort = require("./refuseAfterAbort");
 
 // The Drive directories of a blog which have changed since its last sync, as
 // a set of directory ids (#2847). syncChanges adds them, from changes.list
@@ -100,3 +101,12 @@ module.exports = {
   seenKey,
   movesKey,
 };
+
+// A sync a disconnect cancelled can't write these back (sync/seize.js)
+refuseAfterAbort(module.exports, [
+  "forget",
+  "add",
+  "seen",
+  "take",
+  "hintMoves",
+]);

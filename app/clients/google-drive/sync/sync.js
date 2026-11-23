@@ -203,7 +203,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     throw new Error("Google Drive setup is still copying this site's files");
   }
 
-  const drive = await createDriveClient(serviceAccountId);
+  // options.signal is the folder lock's (sync/index.js): once a disconnect
+  // aborts it (sync/seize.js), requests in flight are cut off, the walk
+  // stops at its next step, and the folder and the mapping refuse writes
+  const { signal } = options;
+  const drive = await createDriveClient(serviceAccountId, { signal });
   const {
     get: getPath,
     getPaths,
@@ -217,7 +221,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     getVerifiedContents,
     setVerifiedContent,
   } = database.folder(folderId, blogID);
-  const checkWeCanContinue = CheckWeCanContinue(blogID, account);
+  const checkWeCanContinue = CheckWeCanContinue(blogID, account, signal);
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
 
   // Downloads run side by side, but each one writes into the blog folder only

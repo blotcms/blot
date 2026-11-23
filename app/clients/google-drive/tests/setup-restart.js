@@ -23,7 +23,11 @@ function load({ account, lockErrors = [], draining = false }) {
       }
       events.push("lock");
       return {
-        folder: { status() {} },
+        folder: {
+          status() {},
+          signal: new AbortController().signal,
+          run: (fn) => fn(),
+        },
         done: async () => events.push("release"),
       };
     },

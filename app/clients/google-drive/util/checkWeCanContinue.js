@@ -1,7 +1,10 @@
 const database = require("clients/google-drive/database");
 
-module.exports = (blogID, initialAccount) => {
+// signal: the sync lock's folder.signal. Once a disconnect has aborted it
+// (sync/seize.js), the walk stops at its next step.
+module.exports = (blogID, initialAccount, signal) => {
   return async () => {
+    if (signal) signal.throwIfAborted();
     const account = await database.blog.get(blogID);
     if (!account) throw new Error("Blog not found");
     if (account.folderId !== initialAccount.folderId)
