@@ -2,20 +2,31 @@
 <html>
   {{> head}}
   <body>
-    <div class="container">
     {{> header}}
-    <h1>{{tag}}</h1>
 
-    <ul class="catalog" data-grid data-page="{{entries.pagination.current}}" data-page-size="{{entries.pagination.page_size}}" data-entries="{{entries.pagination.total_entries}}">
+    <h1 class="tag-title">{{tag}}</h1>
+
+    {{! The tag's posts in four columns like books on a shelf: uncropped pictures standing on a shared line, each with its title under it in grey. A picture opens the viewer. }}
+    <ul class="shelf" data-grid data-page="{{entries.pagination.current}}" data-page-size="{{entries.pagination.page_size}}" data-entries="{{entries.pagination.total_entries}}">
       {{#entries}}
-        {{> card}}
+      <li data-entry>
+        <figure class="shelf__item">
+          <a href="{{{url}}}"{{#thumbnail.large.url}} data-title="{{title}}" data-preview="{{{thumbnail.large.url}}}" data-width="{{thumbnail.large.width}}" data-height="{{thumbnail.large.height}}"{{/thumbnail.large.url}}>
+            {{#thumbnail.medium}}<img src="{{{url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w, {{{thumbnail.large.url}}} {{thumbnail.large.width}}w" sizes="(min-width: 761px) calc((100vw - 300px) / 4), (min-width: 521px) 45vw, 90vw" width="{{width}}" height="{{height}}" alt="" loading="lazy" decoding="async">{{/thumbnail.medium}}
+            {{#thumbnail.large.url}}<template class="entry-details">{{> details}}</template>{{/thumbnail.large.url}}
+          </a>
+          <figcaption><a href="{{{url}}}">{{title}}</a></figcaption>
+        </figure>
+      </li>
       {{/entries}}
     </ul>
 
     {{> pagination}}
 
+    <h2 class="tag-index__heading">↓ Every tag</h2>
+    {{> tag-rows}}
+
     {{> lightbox}}
     {{> footer}}
-    </div>
   </body>
 </html>

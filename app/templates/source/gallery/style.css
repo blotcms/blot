@@ -76,8 +76,7 @@ h2 { font-size: calc({{font.font_size}}px * 1.66); }
 h3 { font-size: calc({{font.font_size}}px * 1.34); }
 
 /* ---- Page layout and primary navigation ----
-   A centred header: the profile photo, the site's title, then the menu in a row
-   that wraps. The grid's own rule sits under it. */
+   One line across the top: the title, underlined, then the menu, wrapping on a phone. */
 
 html {
   --page-pad: 16px;
@@ -90,38 +89,34 @@ html {
   }
 }
 
-@media (min-width: 1024px) {
-  html {
-    --page-pad: 36px;
-  }
-}
-
 @media (min-width: 1440px) {
   html {
-    --page-pad: 60px;
+    --page-pad: 32px;
   }
 }
 
 .site-header {
-  padding: 24px var(--page-pad) 0;
-  text-align: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 1rem;
+  padding: 18px var(--page-pad) 0;
 }
 
 .avatar-link {
   display: block;
-  width: fit-content;
-  margin: 0 auto 0.75rem;
+  flex: none;
 }
 
 /* The photo's saved shape is baked into it, so only a plain photo is rounded here. */
 .avatar {
   display: block;
   width: auto;
-  height: 6rem;
+  height: 1.75rem;
 }
 
 .avatar--round {
-  width: 6rem;
+  width: 1.75rem;
   aspect-ratio: 1;
   border-radius: 50%;
   object-fit: cover;
@@ -129,41 +124,41 @@ html {
 
 .site-title {
   margin: 0;
-  font-size: 1.5rem;
-  font-weight: 700;
-  line-height: 1.2;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
 }
 
 .site-title a {
   color: inherit;
-  text-decoration: none;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 .primary-navigation {
   display: flex;
   flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem 1.5rem;
-  margin: 1rem 0 0;
+  gap: 0.4rem 1rem;
+  margin: 0;
   padding: 0;
   list-style: none;
 }
 
+.primary-navigation a {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.64);
+  text-decoration: none;
+}
+
+.primary-navigation a:hover,
 .primary-navigation a.active,
 .primary-navigation a[aria-current="page"] {
-  font-weight: 700;
+  color: inherit;
 }
 
 .primary-navigation a:focus-visible,
 .site-title a:focus-visible {
   outline: 2px solid currentColor;
   outline-offset: 3px;
-}
-
-@media (max-width: 32rem) {
-  .primary-navigation {
-    gap: 0.5rem 1rem;
-  }
 }
 
 .site-main {
@@ -202,440 +197,266 @@ pre, code {
   margin: 0 auto;
 }
 
-/* Ruled catalog grid on the index page: two, three or six columns of
-   uncropped images separated by hairline rules. Each row is sized by its
-   tallest image and caption, so images share a bottom edge and titles a
-   top edge. */
-.catalog {
-  --columns: 2;
-  --rule: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
-  --heading: 13px;
-  --text: 13px;
-  --detail: 11px;
-  --detail-line: 1.2;
-  --spacing: -0.005em;
+/* Tag pages: four columns like books on a shelf, uncropped pictures standing on a
+   shared line with their titles under them in grey; two on a tablet, one on a phone. */
+.tag-title {
+  margin: 0;
+  padding: 1.5rem 0 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
 
-  position: relative;
-  box-sizing: border-box;
+.shelf {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  column-gap: clamp(24px, 3.3vw, 47px);
+  row-gap: 3.5rem;
+  margin: 0;
+  padding: 2.5rem 0 1rem;
+  list-style: none;
+}
+
+.shelf > li,
+.shelf__item {
+  min-width: 0;
+  margin: 0;
+}
+
+.shelf__item a,
+.shelf__item img {
+  display: block;
+}
+
+.shelf__item img {
+  width: 100%;
+  height: auto;
+}
+
+.shelf__item a:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: 3px;
+}
+
+.shelf__item figcaption {
+  margin-top: 0.65rem;
+  font-size: 0.75rem;
+  line-height: 1.25;
+}
+
+.shelf__item figcaption a {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.55);
+  text-decoration: none;
+}
+
+.shelf__item figcaption a:hover {
+  color: inherit;
+}
+
+@media (max-width: 760px) {
+  .shelf {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+    row-gap: 2.5rem;
+    padding-top: 1.5rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .shelf {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* Page links, for readers without script: with it they're hidden and later pages load
+   as the list scrolls. */
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1rem 0 0;
+}
+
+.pagination[hidden] {
+  display: none;
+}
+
+.pagination a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.pagination a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.pagination a[rel="next"] {
+  margin-left: auto;
+}
+
+/* Archives: every post as a tiny uncropped picture, ten to a row on a wide screen and
+   three on a narrow phone, its title showing beneath on hover or focus. Captions in
+   the left half of a row hang from their picture's left edge, the rest from its
+   right, so none runs off the page. */
+.tiny-grid {
+  --columns: 10;
+
   display: grid;
   grid-template-columns: repeat(var(--columns), minmax(0, 1fr));
-  column-gap: var(--gap);
-  width: 100%;
-  margin: 16px 0 0;
-  padding: 12px 0 0;
+  align-items: center;
+  column-gap: 3vw;
+  row-gap: 4.5vw;
+  margin: 0;
+  padding: clamp(3rem, 10vh, 5rem) 0 4rem;
   list-style: none;
 }
 
-/* Rule above the first row. */
-.catalog::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: var(--rule);
+.tiny-grid__item {
+  min-width: 0;
 }
 
-/* Each card spans an image row and a caption row shared with its neighbours,
-   so images share a bottom edge and captions share a height. */
-.catalog > li {
+.tiny-grid__figure {
   position: relative;
   display: grid;
-  grid-row: span 2;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: subgrid;
-  margin: 0;
-}
-
-/* Vertical rule between columns, in the middle of the gap. */
-.catalog > li::before {
-  content: "";
-  position: absolute;
-  inset: 0 -12px 0 auto;
-  border-right: 1px solid var(--rule);
-  pointer-events: none;
-}
-
-/* The wrapper and link add no boxes, so the image and caption are the
-   card's two rows and share track sizes with the rest of the row. */
-.item,
-.item a {
-  display: contents;
-  color: inherit;
-  text-decoration: none;
-}
-
-/* Rule above each row of cards. */
-.catalog > li::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: var(--rule);
-}
-
-.item img {
-  display: block;
-  grid-row: 1;
-  align-self: end;
-  width: 100%;
-  height: auto;
-  margin: 12px 0 0;
-  outline: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
-  outline-offset: -1px;
-}
-
-.caption {
-  box-sizing: border-box;
-  grid-row: 2;
-  margin: 0 0 18px;
-  min-height: 2.4em;
-  padding-top: 8px;
-  font-size: 16px;
-}
-
-.caption h2,
-.caption p {
-  margin: 0;
-}
-
-.caption h2 {
-  font-size: var(--heading);
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: var(--spacing);
-}
-
-.caption h2 span {
-  display: -webkit-box;
-  overflow: hidden;
-  border-bottom: 1px solid transparent;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  text-decoration: underline transparent;
-  transition: text-decoration-color 195ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.caption p {
-  margin-top: 4px;
-  font-size: var(--text);
-  line-height: 1.35;
-  letter-spacing: -0.01em;
-}
-
-/* The post's tags, in italics and separated by commas. The card is one link,
-   so they are plain text here; the tag pages are in the archives and the viewer. */
-.caption .tags {
-  font-style: italic;
-}
-
-.caption .tags span + span::before {
-  content: ", ";
-}
-
-.caption .detail {
-  display: -webkit-box;
-  overflow: hidden;
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.64);
-  font-size: var(--detail);
-  line-height: var(--detail-line);
-  letter-spacing: normal;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-}
-
-.item a:hover h2 span,
-.item a:focus-visible h2 span {
-  text-decoration-color: currentcolor;
-}
-
-.item a:focus-visible {
-  outline: none;
-}
-
-.item a:focus-visible img {
-  outline: 4px solid {{link_color}};
-  outline-offset: 8px;
-}
-
-/* Two columns, then three, then six. */
-@media (max-width: 767px) {
-  .catalog > li:nth-child(-n + 2)::after,
-  .catalog > li:nth-child(2n)::before {
-    display: none;
-  }
-}
-
-@media (min-width: 768px) {
-  .catalog {
-    --columns: 3;
-    --heading: 14px;
-    --text: 14px;
-    --detail: 12px;
-    --spacing: -0.01em;
-  }
-}
-
-@media (min-width: 768px) and (max-width: 1023px) {
-  .catalog > li:nth-child(-n + 3)::after,
-  .catalog > li:nth-child(3n)::before {
-    display: none;
-  }
-}
-
-@media (min-width: 1024px) {
-  .catalog {
-    --columns: 6;
-    --heading: 15px;
-    --text: 15px;
-    --detail: 13px;
-    --detail-line: 1.35;
-  }
-
-  .catalog > li:nth-child(-n + 6)::after,
-  .catalog > li:nth-child(6n)::before {
-    display: none;
-  }
-
-  .item a:focus-visible img {
-    outline-offset: 12px;
-  }
-}
-
-@media (min-width: 1920px) {
-  .catalog {
-    --heading: 16px;
-    --text: 16px;
-    --detail: 14px;
-  }
-
-  .caption h2 {
-    letter-spacing: -0.015em;
-  }
-
-  .caption p:not(.detail) {
-    letter-spacing: 0.01em;
-  }
-}
-
-/* Circle pagination. The page shows previous, current and next without
-   JavaScript; script.js fills in the numbered pages around the current one. */
-.pagination {
-  box-sizing: border-box;
-  display: flex;
-  width: min(100%, 476px);
-  min-height: 84px;
-  margin: {{spacing}}em auto;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
-}
-
-.pagination__list {
-  display: flex;
-  max-width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1;
-  font-variant-numeric: tabular-nums;
-}
-
-.pagination__list li {
-  flex: 0 0 auto;
-}
-
-.pagination__page,
-.pagination__control {
-  box-sizing: border-box;
-  display: inline-flex;
-  width: 40px;
-  height: 40px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border-radius: 50%;
-  color: inherit;
-  text-decoration: none;
-}
-
-.pagination__page[aria-current="page"] {
-  background: {{link_color}};
-  color: {{background_color}};
-}
-
-.pagination__control svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  stroke-width: 1.75;
-}
-
-.pagination__control[aria-disabled="true"] {
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.25);
-}
-
-.pagination__ellipsis {
-  width: 24px;
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.64);
-  text-align: center;
-}
-
-.pagination__page:focus-visible,
-.pagination__control:focus-visible {
-  outline: 2px solid {{link_color}};
-  outline-offset: 2px;
-}
-
-@media (hover: hover) {
-  .pagination__page:not([aria-current="page"]):hover,
-  a.pagination__control:hover {
-    background: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.06);
-  }
-}
-
-@media (max-width: 360px) {
-  .pagination__list {
-    gap: 0;
-  }
-
-  .pagination__page,
-  .pagination__control {
-    width: 36px;
-    height: 36px;
-  }
-}
-
-/* Archives: a table the width of the page, ruled like the grid,
-   with a tiny uncropped thumbnail in the first cell. */
-.archive {
-  --rule: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.1);
-
-  width: 100%;
-  margin-top: 16px;
-  border-collapse: collapse;
-  font-size: 13px;
-  line-height: 1.35;
-  font-variant-numeric: tabular-nums;
-}
-
-.archive caption {
-  margin-bottom: 1em;
-  font-size: 15px;
-  font-weight: 600;
-  text-align: left;
-}
-
-.archive th,
-.archive td {
-  padding: 8px 16px 8px 0;
-  border-top: 1px solid var(--rule);
-  text-align: left;
-  vertical-align: middle;
-}
-
-.archive th:last-child,
-.archive td:last-child {
-  padding-right: 0;
-}
-
-.archive tbody tr:last-child > * {
-  border-bottom: 1px solid var(--rule);
-}
-
-.archive tbody th {
-  font-weight: 600;
-}
-
-.archive tbody th a {
-  color: inherit;
-  text-decoration: underline transparent;
-  transition: text-decoration-color 195ms cubic-bezier(0.25, 0.1, 0.25, 1);
-}
-
-.archive tbody tr:hover th a,
-.archive tbody th a:focus-visible {
-  text-decoration-color: currentcolor;
-}
-
-/* The thumbnail fits a small square cell without cropping. */
-.archive__thumb {
-  width: 40px;
-}
-
-.archive__thumb a {
-  display: grid;
-  width: 40px;
-  height: 40px;
+  height: clamp(2.5rem, 4.25vw, 3.5rem);
   place-items: center;
+  margin: 0;
 }
 
-.archive__thumb img {
+.tiny-grid__link {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  text-decoration: none;
+}
+
+.tiny-grid__link img {
   display: block;
   width: auto;
-  max-width: 40px;
   height: auto;
-  max-height: 40px;
-  outline: 1px solid var(--rule);
-  outline-offset: -1px;
+  max-width: min(5rem, 100%);
+  max-height: clamp(2.5rem, 4.25vw, 3.5rem);
+  object-fit: contain;
 }
 
-/* The post's tags, in italics and separated by commas, as in the grid. */
-.archive__tags {
-  font-style: italic;
+.tiny-grid__text {
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.2;
+  text-align: center;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
-.archive__tags a {
-  color: inherit;
-  text-decoration: none;
+.tiny-grid__caption {
+  position: absolute;
+  z-index: 1;
+  top: calc(100% + 0.45rem);
+  left: 0;
+  width: max-content;
+  max-width: min(17rem, calc(100vw - 2rem));
+  padding: 0.12rem 0.25rem;
+  background: {{background_color}};
+  color: {{text_color}};
+  font-size: 0.75rem;
+  line-height: 1.3;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease;
 }
 
-/* Inline-block keeps the hover underline off the comma. */
-.archive__tags a + a::before {
-  display: inline-block;
-  content: ", ";
-  white-space: pre;
+.tiny-grid__item:nth-child(10n + 6) .tiny-grid__caption,
+.tiny-grid__item:nth-child(10n + 7) .tiny-grid__caption,
+.tiny-grid__item:nth-child(10n + 8) .tiny-grid__caption,
+.tiny-grid__item:nth-child(10n + 9) .tiny-grid__caption,
+.tiny-grid__item:nth-child(10n + 10) .tiny-grid__caption {
+  right: 0;
+  left: auto;
+  text-align: right;
+}
+
+.tiny-grid__link:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: 4px;
+}
+
+.tiny-grid__link:focus-visible + .tiny-grid__caption {
+  opacity: 1;
 }
 
 @media (hover: hover) {
-  .archive__tags a:hover {
-    text-decoration: underline;
+  .tiny-grid__link:hover + .tiny-grid__caption {
+    opacity: 1;
   }
 }
 
-.archive__tags a:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-}
+@media (max-width: 72rem) {
+  .tiny-grid {
+    --columns: 8;
+  }
 
-.archive__date {
-  width: 1%;
-  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.64);
-  white-space: nowrap;
-}
+  .tiny-grid__item:nth-child(n) .tiny-grid__caption {
+    right: auto;
+    left: 0;
+    text-align: left;
+  }
 
-@media (max-width: 767px) {
-  .archive__tags {
-    display: none;
+  .tiny-grid__item:nth-child(8n + 5) .tiny-grid__caption,
+  .tiny-grid__item:nth-child(8n + 6) .tiny-grid__caption,
+  .tiny-grid__item:nth-child(8n + 7) .tiny-grid__caption,
+  .tiny-grid__item:nth-child(8n + 8) .tiny-grid__caption {
+    right: 0;
+    left: auto;
+    text-align: right;
   }
 }
 
-@media (min-width: 768px) {
-  .archive {
-    font-size: 14px;
+@media (max-width: 56rem) {
+  .tiny-grid {
+    --columns: 6;
+  }
+
+  .tiny-grid__item:nth-child(n) .tiny-grid__caption {
+    right: auto;
+    left: 0;
+    text-align: left;
+  }
+
+  .tiny-grid__item:nth-child(6n + 4) .tiny-grid__caption,
+  .tiny-grid__item:nth-child(6n + 5) .tiny-grid__caption,
+  .tiny-grid__item:nth-child(6n + 6) .tiny-grid__caption {
+    right: 0;
+    left: auto;
+    text-align: right;
   }
 }
 
-@media (min-width: 1024px) {
-  .archive {
-    font-size: 15px;
+@media (max-width: 36rem) {
+  .tiny-grid {
+    --columns: 4;
+    column-gap: 4vw;
+    row-gap: clamp(2.75rem, 12vw, 3.5rem);
+    padding-top: 1.5rem;
+  }
+
+  .tiny-grid__item:nth-child(n) .tiny-grid__caption {
+    right: auto;
+    left: 0;
+    text-align: left;
+  }
+
+  .tiny-grid__item:nth-child(4n + 3) .tiny-grid__caption,
+  .tiny-grid__item:nth-child(4n + 4) .tiny-grid__caption {
+    right: 0;
+    left: auto;
+    text-align: right;
   }
 }
 
@@ -1577,4 +1398,156 @@ html {
 .lightbox *::after {
   transition: none !important;
   animation: none !important;
+}
+
+/* ---- Index: every tag as a picture ----
+   Four columns of uncropped pictures standing on a shared line, the tag with the newest
+   post first, each with the tag's name and that post's title in italics under it. */
+
+.tag-index {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  align-items: end;
+  column-gap: clamp(24px, 4vw, 64px);
+  row-gap: 3.5rem;
+  margin: 0;
+  padding: 2.5rem 0 3rem;
+  list-style: none;
+}
+
+.tag-index > li {
+  min-width: 0;
+}
+
+.tag-index__item {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+
+.tag-index__item img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.tag-index__caption {
+  display: block;
+  margin-top: 0.65rem;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+
+.tag-index__caption i {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.64);
+}
+
+.tag-index__item:hover .tag-index__caption {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.tag-index__item:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: 4px;
+}
+
+.tag-index__heading {
+  margin: 4rem 0 0;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+}
+
+@media (max-width: 760px) {
+  .tag-index {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    column-gap: 1.5rem;
+    row-gap: 2.5rem;
+    padding-top: 1.5rem;
+  }
+}
+
+@media (max-width: 520px) {
+  .tag-index {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/* ---- Below a tag's page: every other tag as a row ----
+   Ruled rows: the tag's name over the newest post's title and year, an arrow to the
+   tag's page, then a strip of its newest pictures, each cropped to the same upright
+   frame, running off the right edge and scrolling sideways. */
+
+.tag-rows {
+  margin: 1rem 0 3rem;
+  padding: 0;
+  list-style: none;
+}
+
+.tag-row {
+  padding: 1.75rem 0 2.25rem;
+  border-top: 1px solid rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.15);
+}
+
+.tag-row__heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  color: inherit;
+  text-decoration: none;
+  line-height: 1.35;
+}
+
+.tag-row__heading i {
+  color: rgba({{#rgb}}{{text_color}}{{/rgb}}, 0.64);
+}
+
+.tag-row__heading svg {
+  flex: none;
+  margin-right: 0.25rem;
+}
+
+.tag-row__heading:hover span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.tag-row__heading:focus-visible,
+.tag-row__strip a:focus-visible {
+  outline: 2px solid {{text_color}};
+  outline-offset: 3px;
+}
+
+.tag-row__strip {
+  display: flex;
+  gap: 11px;
+  margin: 1.25rem calc(-1 * var(--page-pad)) 0 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+  overscroll-behavior-x: contain;
+}
+
+.tag-row__strip::-webkit-scrollbar {
+  display: none;
+}
+
+.tag-row__strip a {
+  flex: none;
+  display: block;
+}
+
+.tag-row__strip img {
+  display: block;
+  width: 160px;
+  height: 200px;
+  object-fit: cover;
+}
+
+@media (max-width: 520px) {
+  .tag-row__strip img {
+    width: 112px;
+    height: 140px;
+  }
 }

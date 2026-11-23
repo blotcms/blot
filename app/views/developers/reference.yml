@@ -485,6 +485,30 @@
           type: number
           description: The number of entries with this tag.
 
+    - name: recent_tags
+      type: array
+      description: A list of all the tags used on your site, the tag with the most recent entry first, each with that entry.
+      example: |
+        {{#recent_tags}}
+        <a href="/tagged/{{slug}}">{{tag}}</a> {{entry.title}}<br>
+        {{/recent_tags}}
+      properties:
+        - name: tag
+          type: string
+          description: The tag text
+        - name: slug
+          type: string
+          description: The tag text, in a URL-friendly form
+        - name: entry
+          type: object
+          description: The most recent [entry](#entry) with this tag, without its HTML.
+        - name: entries
+          type: array
+          description: The 12 most recent [entries](#entry) with this tag, newest first, without their HTML. Read only when a view uses them.
+        - name: total
+          type: number
+          description: The number of entries with this tag.
+
     - name: popular_tags
       type: array
       description: A list of all the tags used on your site, sorted by the number of entries with each tag.

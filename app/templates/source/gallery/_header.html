@@ -1,3 +1,4 @@
+{{! One line across the top: the title, then the menu. }}
 <header class="site-header" data-scheme="{{#light_or_dark}}{{background_color}}{{/light_or_dark}}">
   {{#profile_image.thumbnails.small}}<a href="/" class="avatar-link" tabindex="-1" aria-hidden="true"><img class="avatar{{^profile_image.mask}} avatar--round{{/profile_image.mask}}" src="{{{url}}}" srcset="{{{url}}} {{width}}w{{#profile_image.thumbnails.medium}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.medium}}{{#profile_image.thumbnails.large}}, {{{url}}} {{width}}w{{/profile_image.thumbnails.large}}" sizes="96px" width="{{width}}" height="{{height}}" alt=""></a>{{/profile_image.thumbnails.small}}
   <p class="site-title"><a href="/">{{title}}</a></p>

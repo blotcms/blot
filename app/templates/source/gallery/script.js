@@ -1,78 +1,83 @@
 {{{app_js}}}
-// Circle pagination: fill in the numbered pages around the current one,
-// with the first and last page always shown and gaps marked by an ellipsis.
+// Infinite scroll on tag pages: as the end of the list comes near, the next page is
+// fetched and its pictures added to the list, and the page links (there for readers
+// without script) are hidden. The viewer is told about each picture added.
 (function () {
   var navigation = document.querySelector("[data-pagination]");
-  if (!navigation) return;
+  var list = document.querySelector("[data-grid]");
+  if (!navigation || !list || !("IntersectionObserver" in window)) return;
 
-  var list = navigation.querySelector(".pagination__list");
-  var currentItem = list.querySelector('[aria-current="page"]').parentNode;
-  var current = parseInt(navigation.getAttribute("data-current"), 10);
-  var total = parseInt(navigation.getAttribute("data-total"), 10);
   var base = navigation.getAttribute("data-base") || "";
-  if (!current || !total) return;
+  var next = parseInt(navigation.getAttribute("data-current"), 10) + 1;
+  var total = parseInt(navigation.getAttribute("data-total"), 10);
+  navigation.hidden = true;
+  if (!(next <= total)) return;
 
-  function visiblePages() {
-    var siblings = 1;
-    var boundary = 1;
-    var pages = [];
-    var value;
+  var sentinel = document.createElement("div");
+  sentinel.setAttribute("aria-hidden", "true");
+  list.after(sentinel);
 
-    // Few enough pages to show them all without an ellipsis.
-    if (total <= boundary * 2 + siblings * 2 + 3) {
-      for (value = 1; value <= total; value++) pages.push(value);
-      return pages;
-    }
+  var loading = false;
+  // Load when the end of the list is near, or already scrolled past (a jump to the
+  // foot of the page, past every tag below the list).
+  var observer = new IntersectionObserver(
+    function (records) {
+      var due = records.some(function (record) {
+        return record.isIntersecting || record.boundingClientRect.top < 0;
+      });
+      if (due) load();
+    },
+    { rootMargin: "0px 0px 1500px 0px" }
+  );
+  observer.observe(sentinel);
 
-    var start = Math.max(
-      Math.min(current - siblings, total - boundary - siblings * 2 - 1),
-      boundary + 2
-    );
-    var end = Math.min(
-      Math.max(current + siblings, boundary + siblings * 2 + 2),
-      total - boundary - 1
-    );
-    pages.push(1);
-
-    if (start > boundary + 2) pages.push("ellipsis");
-    else for (value = boundary + 1; value < start; value++) pages.push(value);
-
-    for (value = start; value <= end; value++) pages.push(value);
-
-    if (end < total - boundary - 1) pages.push("ellipsis");
-    else
-      for (value = end + 1; value <= total - boundary; value++)
-        pages.push(value);
-
-    pages.push(total);
-    return pages;
+  function finish() {
+    observer.disconnect();
+    sentinel.remove();
   }
 
-  function pageItem(page) {
-    var item = document.createElement("li");
+  function load() {
+    if (loading) return;
+    if (next > total) return finish();
+    loading = true;
 
-    if (page === "ellipsis") {
-      item.className = "pagination__ellipsis";
-      item.setAttribute("aria-hidden", "true");
-      item.textContent = "…";
-      return item;
-    }
-
-    var link = document.createElement("a");
-    link.className = "pagination__page";
-    link.href = base + "/page/" + page;
-    link.setAttribute("aria-label", "Page " + page);
-    link.textContent = String(page);
-    if (page === current) link.setAttribute("aria-current", "page");
-    item.appendChild(link);
-    return item;
+    fetch(base + "/page/" + next)
+      .then(function (response) {
+        if (!response.ok) throw new Error("Page " + next + " answered " + response.status);
+        return response.text();
+      })
+      .then(function (html) {
+        var page = new DOMParser().parseFromString(html, "text/html");
+        var items = page.querySelectorAll("[data-grid] > [data-entry]");
+        var links = [];
+        Array.prototype.forEach.call(items, function (item) {
+          var adopted = document.adoptNode(item);
+          list.appendChild(adopted);
+          var link = adopted.querySelector("a[data-preview]");
+          if (link) links.push(link);
+        });
+        list.dispatchEvent(new CustomEvent("entries-added", { detail: links }));
+        next += 1;
+        loading = false;
+        if (!items.length || next > total) return finish();
+        // Still in view (a short page, a tall window): keep going.
+        var rect = sentinel.getBoundingClientRect();
+        if (rect.top < innerHeight + 1500) load();
+      })
+      .catch(function () {
+        // Show the page links again, so the rest can still be reached.
+        finish();
+        navigation.hidden = false;
+      });
   }
+})();
 
-  var items = document.createDocumentFragment();
-  visiblePages().forEach(function (page) {
-    items.appendChild(pageItem(page));
+// Below a tag's page every tag has a row; leave out the one for this page.
+(function () {
+  var path = location.pathname.replace(/\/page\/\d+\/?$/, "").replace(/\/$/, "");
+  Array.prototype.forEach.call(document.querySelectorAll("[data-tag-row]"), function (row) {
+    if (decodeURI(row.getAttribute("data-tag-row")) === decodeURI(path)) row.remove();
   });
-  list.replaceChild(items, currentItem);
 })();
 
 // Mark the current page's link in the navigation for screen readers.
@@ -1072,16 +1077,19 @@
     const list = document.querySelector("[data-grid]");
     if (!list) return null;
 
-    // Each post is a card in the grid or a row in the archives, marked data-entry. Posts
+    // Each post is a card in the grid or a picture in the archives, marked data-entry. Posts
     // without an image link to their page; only images open the viewer.
     const cache = [...list.querySelectorAll("[data-entry] a[data-preview]")].map(readEntry);
+    // Pictures added by infinite scroll join the end of the viewer's list.
+    list.addEventListener("entries-added", (event) => {
+      for (const link of event.detail) cache.push(readEntry(link));
+    });
     const entryOf = (link) => link?.closest("[data-entry]");
 
     list.addEventListener("click", (event) => {
-      // In the archives the thumbnail and the title both open the post's image.
       const clicked = event.target.closest("a[href]");
       const row = entryOf(clicked);
-      if (!row || clicked.closest(".archive__tags")) return;
+      if (!row) return;
       const link = row.querySelector("a[data-preview]");
       if (!link || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
       const index = cache.findIndex((entry) => entry.link === link);

@@ -1,0 +1,11 @@
+{{! Every tag as a picture, the tag with the newest post first, shown by that post's picture, with the tag's name and that post's title. A tag opens its page. }}
+<ul class="tag-index">
+  {{#recent_tags}}
+  <li>
+    <a class="tag-index__item" href="/tagged/{{slug}}">
+      {{#entry.thumbnail.medium}}<img src="{{{url}}}" srcset="{{{entry.thumbnail.small.url}}} {{entry.thumbnail.small.width}}w, {{{entry.thumbnail.medium.url}}} {{entry.thumbnail.medium.width}}w, {{{entry.thumbnail.large.url}}} {{entry.thumbnail.large.width}}w" sizes="(min-width: 761px) 21vw, (min-width: 521px) 44vw, 90vw" width="{{width}}" height="{{height}}" alt="" loading="lazy" decoding="async">{{/entry.thumbnail.medium}}
+      <span class="tag-index__caption">{{tag}},<br><i>{{entry.title}}</i></span>
+    </a>
+  </li>
+  {{/recent_tags}}
+</ul>

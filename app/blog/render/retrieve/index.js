@@ -43,6 +43,7 @@ const dictionary = {
   popular_tags: require("./popular_tags"),
   posts: require("./posts"),
   recent_entries: recent_entries,
+  recent_tags: require("./recent_tags"),
   rgb: require("./rgb"),
   search_query: require("./search_query"),
   search_results: require("./search_results"),

@@ -1,0 +1,16 @@
+{{! Every tag as a row, the tag with the newest post first: its name, the newest post's title and year, an arrow to the tag's page, then a strip of its newest pictures that runs off the right edge and scrolls sideways. script.js drops the row for the tag whose page this is. }}
+<ul class="tag-rows">
+  {{#recent_tags}}
+  <li class="tag-row" data-tag-row="/tagged/{{slug}}">
+    <a class="tag-row__heading" href="/tagged/{{slug}}">
+      <span>{{tag}},<br><i>{{entry.title}}</i>{{#entry}}, {{#formatDate}}YYYY{{/formatDate}}{{/entry}}</span>
+      <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><path d="m6 3.5 4.5 4.5L6 12.5" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
+    </a>
+    <div class="tag-row__strip">
+      {{#entries}}
+      {{#thumbnail.small.url}}<a href="{{{url}}}" aria-label="{{title}}"><img src="{{{thumbnail.small.url}}}" srcset="{{{thumbnail.small.url}}} {{thumbnail.small.width}}w, {{{thumbnail.medium.url}}} {{thumbnail.medium.width}}w" sizes="160px" width="{{thumbnail.small.width}}" height="{{thumbnail.small.height}}" alt="" loading="lazy" decoding="async"></a>{{/thumbnail.small.url}}
+      {{/entries}}
+    </div>
+  </li>
+  {{/recent_tags}}
+</ul>

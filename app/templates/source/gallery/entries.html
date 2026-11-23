@@ -5,15 +5,9 @@
 
     {{> header}}
 
-    <ul class="catalog" data-grid data-page="{{posts.pagination.current}}" data-page-size="{{posts.pagination.page_size}}" data-entries="{{posts.pagination.total_entries}}">
-      {{#posts}}
-        {{> card}}
-      {{/posts}}
-    </ul>
+    <h1 class="visually-hidden">{{title}}</h1>
+    {{> tags}}
 
-    {{> pagination}}
-
-    {{> lightbox}}
     {{> footer}}
   </body>
 </html>

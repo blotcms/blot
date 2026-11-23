@@ -4,19 +4,22 @@
   <body>
     {{> header}}
 
-    <table class="archive" data-grid>
-      <caption>Archives</caption>
-      <tbody>
-        {{#all_entries}}
-        <tr data-entry>
-          <td class="archive__thumb">{{#thumbnail.small.url}}<a href="{{{url}}}" tabindex="-1" aria-hidden="true"><img src="{{{thumbnail.small.url}}}" width="{{thumbnail.small.width}}" height="{{thumbnail.small.height}}" alt="" loading="lazy" decoding="async"></a>{{/thumbnail.small.url}}</td>
-          <th scope="row"><a href="{{{url}}}"{{#thumbnail.large.url}} data-title="{{title}}" data-preview="{{{thumbnail.large.url}}}" data-width="{{thumbnail.large.width}}" data-height="{{thumbnail.large.height}}"{{/thumbnail.large.url}}>{{title}}{{#thumbnail.large.url}}<template class="entry-details">{{> details}}</template>{{/thumbnail.large.url}}</a></th>
-          <td class="archive__tags">{{#tags}}<a href="/tagged/{{slug}}">{{name}}</a>{{/tags}}</td>
-          {{^hide_dates}}<td class="archive__date">{{#formatDate}}{{date_display}}{{/formatDate}}</td>{{/hide_dates}}
-        </tr>
-        {{/all_entries}}
-      </tbody>
-    </table>
+    {{! Every post as a tiny uncropped picture in a grid of up to ten columns, its title showing on hover or focus. A picture opens the viewer; a post without one is listed by its title. }}
+    <h1 class="visually-hidden">Archives</h1>
+    <ul class="tiny-grid" data-grid>
+      {{#all_entries}}
+      <li class="tiny-grid__item" data-entry>
+        <figure class="tiny-grid__figure">
+          <a class="tiny-grid__link" href="{{{url}}}"{{#thumbnail.large.url}} data-title="{{title}}" data-preview="{{{thumbnail.large.url}}}" data-width="{{thumbnail.large.width}}" data-height="{{thumbnail.large.height}}"{{/thumbnail.large.url}} aria-label="{{title}}">
+            {{#thumbnail.small.url}}<img src="{{{thumbnail.small.url}}}" width="{{thumbnail.small.width}}" height="{{thumbnail.small.height}}" alt="" loading="lazy" decoding="async">{{/thumbnail.small.url}}
+            {{^thumbnail.small.url}}<span class="tiny-grid__text">{{title}}</span>{{/thumbnail.small.url}}
+            {{#thumbnail.large.url}}<template class="entry-details">{{> details}}</template>{{/thumbnail.large.url}}
+          </a>
+          <figcaption class="tiny-grid__caption">{{title}}</figcaption>
+        </figure>
+      </li>
+      {{/all_entries}}
+    </ul>
 
     {{> lightbox}}
     {{> footer}}
