@@ -1,3 +1,5 @@
+Slug from a numeric title: a front-matter title that YAML reads as a number (a Git blog's /Posts/2004-4-15-537.md, 23 Nov 15:20 and 15:35 UTC) fails the build with `TypeError: Param "537" must be a string` from makeSlug in app/build/prepare/index.js:178, so the file never saves. Coerce metadataValue("title") to a string there, or make metadata values strings where they are parsed. (23 Nov 2026)
+
 Unit slices, left over from #2795 (23 Nov 2026): once both units run in their slices (`system-blot-<unit>.slice`), remove the old sandbox tree: `blot-sandbox-cgroup.service` and `/sys/fs/cgroup/blot-sandbox` in `config/host/host/setup.sh` (and its checks in `config/host/tests/setup.sh`), the fallback to it in `config/host/scripts/unit-mem-log.sh`, and the mention in `config/host/README.md`. Keep it until then: a rolled-back unit restarts with the old binds.
 
 Demo folders, left over from #2940 (23 Nov 2026):
