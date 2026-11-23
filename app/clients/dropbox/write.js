@@ -2,6 +2,7 @@ var join = require("path").join;
 var debug = require("debug")("blot:clients:dropbox:write");
 var loadClient = require("./util/loadClient");
 var folder = require("storage/folder");
+var guard = require("storage/folder/guard");
 var retry = require("./util/retry");
 var persistError = require("./util/persistError");
 var database = require("./database");
@@ -44,6 +45,9 @@ async function write(blogID, path, contents) {
 
   try {
     await fs.outputFile(staged, contents);
+    // A disconnect has stopped the sync this runs in (sync/seize.js): its
+    // write to Blot's folder below would be refused, so don't upload either
+    guard.check(blogID);
     await upload(client, staged, pathInDropbox);
     await folder.write(blogID, path, contents);
   } catch (e) {

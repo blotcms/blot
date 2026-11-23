@@ -221,10 +221,13 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
     let summary;
 
     try {
+      // A disconnect stops the resync through the lock's signal
+      // (sync/seize.js): a client's resync takes it after update
       summary = await res.locals.client.resync(
         req.blog.id,
         folder.status,
-        folder.update
+        folder.update,
+        folder.signal
       );
     } catch (err) {
       console.log("ERROR:", err);

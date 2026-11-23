@@ -1,11 +1,13 @@
 const { classify } = require("./classifyError");
+const cancelled = require("./cancelled");
 
 // Persist a Dropbox error onto the blog's account row when it is
 // user-actionable. Transient failures are ignored so a previous durable
 // error (e.g. 401) is not overwritten by a later 500, and a healthy
 // account is not marked broken by a blip.
 async function persistError(blogID, err, source) {
-  if (err && err.name === "AbortError") return;
+  // A sync a disconnect stopped: the account is about to go
+  if (cancelled(err)) return;
 
   const classified = classify(err, (err && err.dropboxSource) || source);
   // A token the cache holds may be the one Dropbox rejected

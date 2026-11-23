@@ -398,7 +398,7 @@ describe("dropbox resetToBlot", function () {
 
   it("stops part way when the signal aborts, and leaves the cursor alone", async function () {
     const resetToBlot = load({ "/": [file("a.txt"), file("b.txt")] });
-    const signal = { aborted: false };
+    const controller = new AbortController();
     const updated = [];
 
     let error;
@@ -408,9 +408,9 @@ describe("dropbox resetToBlot", function () {
         () => {},
         async (path) => {
           updated.push(path);
-          signal.aborted = true;
+          controller.abort();
         },
-        signal
+        controller.signal
       );
     } catch (err) {
       error = err;
