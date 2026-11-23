@@ -25,7 +25,15 @@ describe("icloud setupState", function () {
     ).toBe("complete");
   });
 
-  it("shows the final page's lines once Blot's Mac has joined the folder", function () {
+  it("leaves out the copying step only for a site that had nothing to copy", function () {
+    const nothing = (account) => setupState(account, { email }).nothingToCopy;
+    expect(nothing(null)).toBe(false);
+    expect(nothing({ sharingLink: link })).toBe(false);
+    expect(nothing({ sharingLink: link, nothingToCopy: false })).toBe(false);
+    expect(nothing({ sharingLink: link, nothingToCopy: true })).toBe(true);
+  });
+
+  it("marks the join done once Blot's Mac has joined the folder", function () {
     const joined = (account) => setupState(account, { email }).joined;
     expect(joined(null)).toBe(false);
     expect(joined({ sharingLink: link })).toBe(false);

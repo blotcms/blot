@@ -23,6 +23,7 @@ describe("dropbox sync/index delta calls", function () {
     require.cache[lockPath] = {
       exports: async function (_blogID, fn) {
         return fn({
+          signal: new AbortController().signal,
           log: function () {},
           status: function () {},
           update: async () => {},

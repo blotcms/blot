@@ -10,8 +10,12 @@ const join = require("path").join;
 const moment = require("moment");
 const { Dropbox } = require("dropbox");
 const views = __dirname + "/../views/";
+// The setup checklist, on the setup page and the settings page while it runs
+const partials = { "dropbox-steps": views + "steps.html" };
 const client = require("models/client");
-const Blog = require("models/blog");
+const setClient = require("clients/util/setClient");
+const setupState = require("clients/dropbox/util/setupState");
+const folderLock = require("sync/lock");
 
 dashboard.use(async function loadDropboxAccount(req, res, next) {
   try {
@@ -33,8 +37,34 @@ dashboard.use(async function loadDropboxAccount(req, res, next) {
   next();
 });
 
+// A deploy or crash that kills a setup leaves it in the session, which would
+// show the checklist's spinners for good and hide the health issue's action
+// (such as Retry transfer). Drops it once nothing runs it. If the lock can't
+// be read, the setup is left as it is.
+async function dropStoppedSetup(req) {
+  if (!req.session.dropbox) return;
+
+  let held;
+  try {
+    held = (await folderLock.inspect(req.blog.id)).held;
+  } catch (err) {
+    return;
+  }
+
+  if (!setupState.stopped(req.session.dropbox, held)) return;
+
+  delete req.session.dropbox;
+  await new Promise((resolve) => req.session.save(() => resolve()));
+}
+
 // The settings page for a Dropbox account
-dashboard.get("/", function (req, res) {
+dashboard.get("/", async function (req, res, next) {
+  try {
+    await dropStoppedSetup(req);
+  } catch (err) {
+    return next(err);
+  }
+
   // Ask to user to authenticate with Dropbox if they have not yet
   if (!req.account && !req.session.dropbox) {
     var query = "";
@@ -42,9 +72,10 @@ dashboard.get("/", function (req, res) {
     return res.redirect(req.baseUrl + "/setup" + query);
   }
 
+  res.locals.setup = setupState(req.session.dropbox);
+
   if (req.session.dropbox) {
     res.locals.account = req.session.dropbox;
-    res.locals.preparing = true;
     // Just in case we haven't acquired the sync lock
     // the first time this page is loaded, we set the
     // state of the blog to syncing...
@@ -133,14 +164,24 @@ dashboard.get("/", function (req, res) {
     }
   }
 
-  res.render(views + "index");
+  res.render(views + "index", { partials });
 });
 
 // Explains to the user what will happen when they authenticate
 // then provides them with a link to the dropbox redirect
 dashboard.get("/setup", function (req, res) {
-  res.render(views + "authenticate");
+  renderSetup(req, res);
 });
+
+// The setup page's checklist: the person signs in, with Blot's
+// steps waiting. error is why the last sign-in didn't work
+function renderSetup(req, res, error) {
+  res.locals.setup = setupState(null, {
+    fullAccess: !!(req.account && req.account.full_access),
+    error,
+  });
+  res.render(views + "authenticate", { partials });
+}
 
 // Allows the user to choose a new Dropbox account to connect
 // then provides them with a link to the dropbox redirect
@@ -325,12 +366,13 @@ async function authenticate(req, res, next) {
     return req.session.save(function () {
       restorePriorError()
         .then(function () {
-          res.locals.error =
+          renderSetup(
+            req,
+            res,
             error === "access_denied"
-              ? "You cancelled Dropbox authorization, so Blot can't access your folder. Try again to connect."
-              : "Something went wrong connecting to Dropbox. Try again to connect.";
-
-          res.render(views + "authenticate");
+              ? "You cancelled signing in, so Blot can’t open your folder. Sign in again to connect."
+              : "Something went wrong signing in to Dropbox. Sign in again to connect."
+          );
         })
         .catch(next);
     });
@@ -353,13 +395,16 @@ async function authenticate(req, res, next) {
     redirectUri,
     full_access: full_access === "true",
     preparing: true,
+    // So the settings page can tell a setup still starting from one a deploy
+    // killed (util/setupState.js's stopped)
+    started: Date.now(),
     blog: req.blog,
   };
 
   // this the first time the user has visited this page
   req.session.dropbox = account;
 
-  await Blog.set(req.blog.id, { client: "dropbox" });
+  await setClient(req.blog, "dropbox");
 
   setup(account, req.session).catch(function (err) {
     console.log("err setting up", err);

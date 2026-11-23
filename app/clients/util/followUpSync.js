@@ -20,6 +20,14 @@ const DIRTY_TTL_SECONDS = 5 * 60;
 // arrived during the sync, before leaving the rest to the follow-up alarm
 const MAX_REPEATS = 5;
 
+// A follow-up whose sync fails for another reason than the lock (Redis or the
+// store unreachable while a deploy restarts things) is tried again after each
+// of these waits in turn, then dropped until the next change. The count of
+// failures in a row expires by itself, so an old one never shortens the
+// retries of a later failure.
+const FAILURE_RETRY_MS = [30 * 1000, 60 * 1000, 2 * 60 * 1000, 4 * 60 * 1000];
+const FAILURES_TTL_SECONDS = 60 * 60;
+
 const instances = [];
 
 function isLocked(err) {
@@ -51,10 +59,41 @@ function followUpSync(name, syncBlog) {
     name + "-follow-up-sync",
     async function (blogID) {
       log("Running follow-up sync", blogID);
-      await attempt(blogID);
+      if ((await attempt(blogID)) === "failed") await retry(blogID);
     },
     { pollMs: 2000 }
   );
+
+  // sync:follow-up:failures:<name>:<blogID> counts the follow-ups in a row
+  // whose sync failed
+  function failuresKey(blogID) {
+    return "sync:follow-up:failures:" + name + ":" + blogID;
+  }
+
+  // Sets the follow-up again for after the next wait, or drops it once the
+  // waits are used up. Setting it while it is being handled keeps the new
+  // time (helper/alarm). If Redis can't take it this rejects, and the alarm,
+  // still in place, is retried once its lease runs out.
+  async function retry(blogID) {
+    const [failures] = await client
+      .multi()
+      .incr(failuresKey(blogID))
+      .expire(failuresKey(blogID), FAILURES_TTL_SECONDS)
+      .exec();
+    const wait = FAILURE_RETRY_MS[Number(failures) - 1];
+
+    if (wait === undefined) {
+      log(
+        "Follow-up sync keeps failing, leaving it to the next change",
+        blogID
+      );
+      await client.del(failuresKey(blogID));
+      return;
+    }
+
+    log("Retrying follow-up sync in " + wait / 1000 + "s", blogID);
+    await alarms.set(blogID, Date.now() + wait);
+  }
 
   async function later(blogID) {
     // Setting the alarm again while it is being handled keeps the new time,
@@ -91,10 +130,15 @@ function followUpSync(name, syncBlog) {
   }
 
   // Resolves "synced" if the sync ran, "locked" if it found the lock taken
-  // (a follow-up is queued) and "failed" if it threw anything else
+  // (a follow-up is queued) and "failed" if it threw anything else. The
+  // follow-up alarm retries a failed sync (retry); a sync that runs clears
+  // the count of failures.
   async function attempt(blogID) {
     try {
       await syncBlog(blogID);
+      await client
+        .del(failuresKey(blogID))
+        .catch((err) => log("Could not clear failures", blogID, err));
       return "synced";
     } catch (err) {
       if (isLocked(err)) {
@@ -206,5 +250,7 @@ followUpSync.startAll = function () {
 followUpSync.stopAll = function () {
   return Promise.all(instances.map(({ alarm }) => alarm.stop()));
 };
+
+followUpSync.FAILURE_RETRY_MS = FAILURE_RETRY_MS;
 
 module.exports = followUpSync;

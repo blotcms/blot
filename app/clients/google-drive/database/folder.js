@@ -1,6 +1,7 @@
 const client = require("models/client");
 
 const PREFIX = require("./prefix");
+const refuseAfterAbort = require("./refuseAfterAbort");
 
 function folder(folderId, blogID) {
   if (!(this instanceof folder)) {
@@ -309,6 +310,12 @@ function folder(folderId, blogID) {
     await multi.exec();
   };
 
+  // Deletes only this blog's checksums of the folder's files, leaving the
+  // mapping, which another blog on the same folder still uses
+  this.forgetOwn = async () => {
+    await client.del([this.contentKey, this.appliedKey]);
+  };
+
   this.readdir = async (dir) => {
     if (!dir || typeof dir !== "string") {
       throw new Error("Directory path must be a non-empty string");
@@ -372,6 +379,17 @@ function folder(folderId, blogID) {
 
     return results;
   };
+
+  refuseAfterAbort(this, [
+    "setVerifiedContent",
+    "setApplied",
+    "pruneVerifiedContents",
+    "set",
+    "move",
+    "remove",
+    "reset",
+    "forgetOwn",
+  ]);
 
   return this;
 }

@@ -2,6 +2,7 @@ var debug = require("debug")("blot:clients:dropbox:remove");
 var loadClient = require("./util/loadClient");
 var join = require("path").join;
 var folder = require("storage/folder");
+var guard = require("storage/folder/guard");
 var retry = require("./util/retry");
 var persistError = require("./util/persistError");
 var { SOURCES } = require("./util/classifyError");
@@ -27,6 +28,10 @@ async function remove(blogID, path) {
   pathOnDropbox = join(account.folder || "/", path);
 
   try {
+    // A disconnect has stopped the sync this runs in (sync/seize.js): its
+    // removal from Blot's folder below would be refused, so leave Dropbox
+    guard.check(blogID);
+
     try {
       await client.filesDelete({
         path: pathOnDropbox,

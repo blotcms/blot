@@ -29,7 +29,6 @@ function retry(fn, options) {
   options.errorFilter =
     options.errorFilter ||
     function (err) {
-      console.log("dropbox:retry invoked with err", err);
       return isRetryable(err);
     };
 
@@ -41,7 +40,14 @@ function retry(fn, options) {
         return await fn.apply(null, args);
       } catch (err) {
         // The filter is only consulted when another attempt is left
-        if (attempt++ < options.times && options.errorFilter(err)) {
+        if (attempt < options.times && options.errorFilter(err)) {
+          console.log(
+            "dropbox:retry attempt",
+            attempt,
+            "failed:",
+            err.status || err.code || err.message
+          );
+          attempt++;
           await new Promise((resolve) =>
             setTimeout(resolve, options.interval(attempt))
           );

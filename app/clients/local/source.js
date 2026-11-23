@@ -22,8 +22,8 @@ async function directory(blogID) {
   if (!blog) throw new Error("No blog with ID " + blogID);
 
   // A blog named like a demo folder is synced from that folder in the
-  // checkout, so edits there reach it (see templates/folders/local.js)
-  const demo = require("templates/folders/local").sourceFor(blog.handle);
+  // checkout, so edits there reach it (see templates/demo/local.js)
+  const demo = require("templates/demo/local").sourceFor(blog.handle);
   if (demo) return demo;
 
   const name = String(blog.handle || blog.id);

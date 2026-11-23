@@ -1,0 +1,14 @@
+# Installed by config/host/deploy.sh. The parent of the two units' slices
+# (blotcms/blot#2795), inside system.slice: the app firewall
+# (config/host/host/setup.sh, blot-app.nft) matches the units' sockets by
+# "socket cgroupv2 level 1 system.slice", so a unit must stay under it.
+#
+# CPUWeight: the units used to be two docker scopes directly in system.slice at
+# --cpu-shares 2048 (cgroup v2 weight 79 each, 158 together) beside Redis and
+# the other services at systemd's default of 100. 160 keeps them about where
+# they were. Between the two units the weight is even.
+[Unit]
+Description=Blot's units (blot-blue, blot-green)
+
+[Slice]
+CPUWeight=160

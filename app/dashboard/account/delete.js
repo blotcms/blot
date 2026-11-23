@@ -36,6 +36,7 @@ Delete.route("/")
     checkPassword,
     issueDeletionRefund,
     deleteSubscription,
+    clearRemovalBilling,
     deleteBlogs,
     deleteUser,
     emailUser,
@@ -44,6 +45,20 @@ Delete.route("/")
       res.redirect("/sites/deleted");
     }
   );
+
+// The whole subscription is cancelled now, so a reduction a site deletion left
+// to the scheduler must not be tried on it. Only after the cancellation: if it
+// fails or a deploy cuts the request short, the reduction is still owed. Until
+// this runs the scheduler skips the cancelled subscription anyway.
+async function clearRemovalBilling(req, res, next) {
+  try {
+    await require("models/blog/removalBilling").clearForUser(req.user.uid);
+  } catch (err) {
+    return next(err);
+  }
+
+  next();
+}
 
 async function emailUser(req, res, next) {
   try {

@@ -1,0 +1,64 @@
+<div class="steps steps-progress dropbox-steps" data-steps-key="dropbox-setup:{{blog.handle}}">
+  <ol>
+
+    {{#setup.steps.signIn}}
+    <li data-step="sign-in" class="{{className}}">
+      {{#active}}<span class="step-icon"><span class="steps-spinner" aria-hidden="true"></span></span>{{/active}}
+      {{#problem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/problem}}
+      <span class="step-title">Sign in to Dropbox</span>
+      {{#problem}}<span class="step-problem">{{problem}}</span>{{/problem}}
+      {{#done}}<span class="step-text">{{setup.email}}</span>{{/done}}
+      {{^setup.running}}
+      {{^problem}}{{^setup.fullAccess}}<span class="step-text">Blot gets a folder of its own in Apps › Blot, and can’t open anything else in your Dropbox.</span>{{/setup.fullAccess}}{{/problem}}
+      <div class="buttons">
+        <a href="{{{base}}}/redirect{{#setup.fullAccess}}?full_access=true{{/setup.fullAccess}}">Sign in</a>
+        {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
+        {{#blog.client}}<button type="submit" form="dropbox-cancel-form">Cancel</button>{{/blog.client}}
+      </div>
+      {{/setup.running}}
+    </li>
+    {{/setup.steps.signIn}}
+
+    {{#setup.steps.folder}}
+    <li data-step="folder" class="{{className}}">
+      {{#active}}<span class="step-icon"><span class="steps-spinner" aria-hidden="true"></span></span>{{/active}}
+      <span class="step-title">{{#done}}Your site’s folder{{/done}}{{^done}}Creating your site’s folder{{/done}}</span>
+      {{#done}}<span class="step-text">{{#dropboxBreadcrumbs}}{{name}}{{^last}} › {{/last}}{{/dropboxBreadcrumbs}}</span>{{/done}}
+    </li>
+    {{/setup.steps.folder}}
+
+    {{#setup.steps.copy}}
+    <li data-step="copy" class="{{className}}">
+      {{#active}}<span class="step-icon"><span class="steps-spinner" aria-hidden="true"></span></span>{{/active}}
+      <span class="step-title">Copying your site’s files</span>
+    </li>
+    {{/setup.steps.copy}}
+
+  </ol>
+</div>
+
+<style>
+/* Beside its label like every other line, and above it on a phone */
+.dropbox-setup-line .center {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .dropbox-setup-line .center {
+    flex-basis: 100%;
+  }
+}
+
+.dropbox-steps .buttons {
+  margin: 12px 0 0;
+  max-width: 520px;
+}
+
+/* Sign in at its natural width, with Cancel beside it */
+.dropbox-steps .buttons > * {
+  flex-grow: 0;
+  white-space: nowrap;
+}
+</style>

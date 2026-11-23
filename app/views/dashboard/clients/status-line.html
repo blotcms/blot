@@ -10,10 +10,10 @@
 </style>
 
 
-<a class="line" style="border-top:1px solid var(--border-color)" href="{{{dashboardBase}}}/client/switch">
+<a class="line" style="border-top:1px solid var(--border-color)" href="{{{dashboardBase}}}/client{{#blog.client}}/switch{{/blog.client}}">
   <span class="label">Syncs with</span>
   <span class="center">
-    <span><img width="16" height="16" src="{{#cdn}}/images/sync/{{blog.client}}.svg{{/cdn}}" style="flex-shrink:0;margin-right:2px" />
+    <span><img width="16" height="16" src="{{#cdn}}/images/sync/{{effectiveClient}}.svg{{/cdn}}" style="flex-shrink:0;margin-right:2px" />
     {{client.display_name}}
     </span>
       <span class="link">Edit</span>

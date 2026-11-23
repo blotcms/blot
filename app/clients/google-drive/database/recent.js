@@ -1,6 +1,7 @@
 const client = require("models/client");
 
 const PREFIX = require("./prefix");
+const refuseAfterAbort = require("./refuseAfterAbort");
 
 // The Drive directories of each service account's blogs that changed in the
 // last few minutes, for serviceAccount/pollRecentFolders.js to list again and
@@ -48,3 +49,6 @@ module.exports = {
 
   key,
 };
+
+// A sync a disconnect cancelled can't write these back (sync/seize.js)
+refuseAfterAbort(module.exports, ["touch"]);

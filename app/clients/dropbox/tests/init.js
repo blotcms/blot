@@ -47,25 +47,65 @@ describe("dropbox init", function () {
     const blogPath = require.resolve("models/blog");
     const databasePath = require.resolve("../database");
     const resetToBlotPath = require.resolve("../sync/reset-to-blot");
+    const resetFromBlotPath = require.resolve("../sync/reset-from-blot");
+    const lockPath = require.resolve("sync/establishSyncLock");
+    const folderLockPath = require.resolve("sync/lock");
+    const syncPath = require.resolve("../sync");
     const initPath = require.resolve("../init");
+    const paths = [
+      blogPath,
+      databasePath,
+      resetToBlotPath,
+      resetFromBlotPath,
+      lockPath,
+      folderLockPath,
+      syncPath,
+      initPath,
+    ];
 
     const blogID = "blog_incompletetransfertest" + Date.now();
     const originals = {};
+    let resumed, walked;
 
     beforeEach(function () {
-      [blogPath, databasePath, resetToBlotPath, initPath].forEach(
-        (path) => (originals[path] = require.cache[path])
-      );
+      resumed = [];
+      walked = [];
+      paths.forEach((path) => (originals[path] = require.cache[path]));
     });
 
     afterEach(function () {
-      [blogPath, databasePath, resetToBlotPath, initPath].forEach((path) => {
+      paths.forEach((path) => {
         if (originals[path]) require.cache[path] = originals[path];
         else delete require.cache[path];
       });
     });
 
     function load(account) {
+      // A transfer that can be resumed is, through these stubs
+      require.cache[resetFromBlotPath] = {
+        exports: async function (id, publish, signal, update, options) {
+          expect(options).toEqual({ keepDropbox: true });
+          resumed.push(id);
+        },
+      };
+      require.cache[lockPath] = {
+        exports: async function () {
+          return {
+            folder: {
+              update: async function () {},
+              status: function () {},
+              signal: new AbortController().signal,
+              run: (fn) => fn(),
+            },
+            done: async function () {},
+          };
+        },
+      };
+      require.cache[folderLockPath] = {
+        exports: { inspect: async () => ({ held: false }) },
+      };
+      require.cache[syncPath] = { exports: async function () {} };
+
       require.cache[blogPath] = {
         exports: {
           getAllIDs: async function () {
@@ -89,7 +129,10 @@ describe("dropbox init", function () {
         },
       };
       require.cache[resetToBlotPath] = {
-        exports: function () {
+        exports: async function (id) {
+          // Once a resume has finished the transfer, Dropbox's side is walked
+          // into Blot
+          if (resumed.includes(id)) return walked.push(id);
           throw new Error(
             "resetToBlot should never be called for a blog with an incomplete transfer"
           );
@@ -111,6 +154,13 @@ describe("dropbox init", function () {
       },
     };
 
+    // A full Dropbox needs the person to free space first. An interrupted
+    // transfer is resumed, uploading what Dropbox lacks.
+    const resumes = {
+      "the legacy out-of-space error code": 0,
+      "transfer_pending, with no error code": 1,
+    };
+
     Object.keys(scenarios).forEach((description) => {
       const account = scenarios[description];
 
@@ -120,13 +170,42 @@ describe("dropbox init", function () {
           const init = load(account);
           // Throws (failing the test) if resetToBlot ever gets invoked.
           await init.resyncRecentSyncsOnStartup();
+          expect(resumed.length).toBe(resumes[description]);
         }
       );
 
       it("validateAllBlogs skips it (" + description + ")", async function () {
         const init = load(account);
-        await init.validateAllBlogs();
+        const { resuming } = await init.validateAllBlogs();
+        await resuming;
+        expect(resumed.length).toBe(resumes[description]);
       });
+    });
+
+    it("leaves a transfer alone while something holds the lock", async function () {
+      const init = load(scenarios["transfer_pending, with no error code"]);
+      require.cache[folderLockPath].exports.inspect = async () => ({
+        held: true,
+      });
+      expect(await init.resumeTransfer(blogID)).toBe(false);
+      expect(resumed).toEqual([]);
+    });
+
+    it("leaves a transfer that finished while it waited for the lock", async function () {
+      const init = load({ error_code: 0, transfer_pending: false });
+      expect(await init.resumeTransfer(blogID)).toBe(false);
+      expect(resumed).toEqual([]);
+    });
+
+    it("resumes a transfer, however long ago it started", async function () {
+      const init = load({
+        error_code: 0,
+        transfer_pending: true,
+        last_sync: Date.now() - 24 * 60 * 60 * 1000,
+      });
+      await init.resyncRecentSyncsOnStartup();
+      expect(resumed).toEqual([blogID]);
+      expect(walked).toEqual([blogID]);
     });
   });
 
@@ -170,6 +249,8 @@ describe("dropbox init", function () {
           return Promise.resolve({
             folder: {
               update: async function () {},
+              signal: new AbortController().signal,
+              run: (fn) => fn(),
             },
             done: async function () {},
           });
@@ -293,6 +374,8 @@ describe("dropbox init", function () {
           return Promise.resolve({
             folder: {
               update: async function () {},
+              signal: new AbortController().signal,
+              run: (fn) => fn(),
             },
             done: async function () {},
           });
@@ -419,7 +502,11 @@ describe("dropbox init", function () {
           return Promise.reject(new Error("Failed to acquire folder lock"));
         }
         return Promise.resolve({
-          folder: { update: async () => {} },
+          folder: {
+            update: async () => {},
+            signal: new AbortController().signal,
+            run: (fn) => fn(),
+          },
           done: async function () {},
         });
       });
@@ -500,6 +587,17 @@ describe("dropbox init", function () {
       // The walk may have added a menu page that a stale blog.menu would drop
       expect(fixedLoads[ids.clean]).toBeGreaterThan(1);
       expect(synced).toEqual([ids.clean]);
+    });
+
+    it("stops at the next blog once the process is draining", async function () {
+      const init = load({ [ids.changes]: {}, [ids.clean]: {} }, []);
+
+      spyOn(require("helper/drain"), "isDraining").and.callFake(
+        () => walked.length > 0
+      );
+      await init.validateAllBlogs();
+
+      expect(walked).toEqual([ids.changes]);
     });
 
     it("skips Fix and the catch-up sync without reporting when the blog was deleted during the walk", async function () {
@@ -749,6 +847,117 @@ describe("dropbox init", function () {
       expect(sentEmails[2].blogs.map((blog) => blog.id).sort()).toEqual(
         [ids.walkError, ids.stuck].sort()
       );
+    });
+  });
+
+  describe("startupJobName", function () {
+    const config = require("config");
+    const original = config.unit;
+
+    afterEach(function () {
+      config.unit = original;
+    });
+
+    it("is one per unit, so each unit resyncs what its own stop killed", function () {
+      const init = require("../init");
+      config.unit = "blue";
+      const blue = init.startupJobName();
+      config.unit = "green";
+      const green = init.startupJobName();
+      expect(blue).not.toEqual(green);
+      config.unit = "";
+      expect(init.startupJobName()).toEqual("dropbox-resync-recent");
+    });
+  });
+
+  // A second blog's setup moving this blog's files into a subfolder, cut
+  // short by a deploy, is finished by the startup and hourly jobs
+  describe("finishes a move cut short", function () {
+    const blogPath = require.resolve("models/blog");
+    const databasePath = require.resolve("../database");
+    const createFolderPath = require.resolve("../routes/setup/createFolder");
+    const loadClientPath = require.resolve("../util/loadClient");
+    const resetToBlotPath = require.resolve("../sync/reset-to-blot");
+    const syncPath = require.resolve("../sync");
+    const initPath = require.resolve("../init");
+    const paths = [
+      blogPath,
+      databasePath,
+      createFolderPath,
+      loadClientPath,
+      resetToBlotPath,
+      syncPath,
+      initPath,
+    ];
+    const blogID = "blog_finishmove" + Date.now();
+    const originals = {};
+    let account, moves, synced;
+
+    beforeEach(function () {
+      paths.forEach((path) => (originals[path] = require.cache[path]));
+      moves = [];
+      synced = [];
+      account = {
+        error_code: 0,
+        transfer_pending: false,
+        folder: "",
+        move_folder: "/Blog",
+        move_folder_id: "id:recorded",
+        last_sync: Date.now(),
+      };
+      require.cache[blogPath] = {
+        exports: {
+          getAllIDs: async () => [blogID],
+          get: async () => ({ id: blogID, client: "dropbox" }),
+        },
+      };
+      require.cache[databasePath] = {
+        exports: { get: async () => account, set: async () => {} },
+      };
+      require.cache[loadClientPath] = {
+        exports: async () => ({ client: {}, account }),
+      };
+      require.cache[createFolderPath] = {
+        exports: {
+          moveExistingFiles: async (client, blog, options) => {
+            moves.push([blog.id, options]);
+            account = Object.assign({}, account, {
+              folder: "/Blog",
+              move_folder: "",
+              move_folder_id: "",
+            });
+          },
+        },
+      };
+      require.cache[resetToBlotPath] = {
+        exports: async () => {
+          throw new Error("never walked while a move is pending");
+        },
+      };
+      require.cache[syncPath] = {
+        exports: async (blog) => synced.push(blog.id),
+      };
+      delete require.cache[initPath];
+    });
+
+    afterEach(function () {
+      paths.forEach((path) => {
+        if (originals[path]) require.cache[path] = originals[path];
+        else delete require.cache[path];
+      });
+    });
+
+    it("at startup, then syncs the blog from its new folder", async function () {
+      await require("../init").resyncRecentSyncsOnStartup();
+      expect(moves).toEqual([[blogID, { resume: true }]]);
+      expect(synced).toEqual([blogID]);
+    });
+
+    it("after the hourly sweep", async function () {
+      const { finishing } = await require("../init").validateAllBlogs();
+      await finishing;
+      expect(moves).toEqual([[blogID, { resume: true }]]);
+      expect(synced).toEqual([blogID]);
     });
   });
 });

@@ -8,9 +8,11 @@ var isDotfileOrDotfolder = _require.isDotfileOrDotfolder;
 var transferIncomplete = _require.transferIncomplete;
 var Database = require("../database");
 var persistError = require("../util/persistError");
+var cancelled = require("../util/cancelled");
 var {
   SOURCES,
   classify,
+  dropboxTag,
   keepsErrorAfterDownload,
 } = require("../util/classifyError");
 var Path = require("path");
@@ -84,7 +86,14 @@ module.exports = async function main(blog, options) {
 
 // Resolves when the folder is in sync (or the sync was given up on with the
 // error persisted), and rejects with the error the sync fails with.
+//
+// A disconnect stops it through folder.signal (sync/seize.js): its requests
+// are cut off, and it checks the signal before each page of changes, each
+// download and the cursor save, so it rejects with the signal's reason and
+// writes nothing to the account afterwards.
 async function sync(blog, folder, stampLastSync) {
+  const { signal } = folder;
+
   if (stampLastSync) {
     Database.set(blog.id, { last_sync: Date.now() }).catch(
       function (lastSyncErr) {
@@ -97,9 +106,10 @@ async function sync(blog, folder, stampLastSync) {
   // We need to look up the Dropbox account for this blog
   // to retrieve the access token used to create a new Dropbox
   // client to retrieve changes made to the user's Dropbox.
-  const { error, client, account } = await loadClient(blog.id);
+  const { error, client, account } = await loadClient(blog.id, { signal });
 
   if (error) {
+    if (cancelled(error, signal)) throw error;
     folder.log("Error creating client", error);
     return persistError(blog.id, error, SOURCES.AUTH);
   }
@@ -123,7 +133,14 @@ async function sync(blog, folder, stampLastSync) {
   var delta = new Delta(client, account.folder_id, blog.id);
   // Files download concurrently but are written into the folder one at a
   // time (see util/download)
-  var apply = Apply(client, blog.id, folder.log, folder.status, Serial());
+  var apply = Apply(
+    client,
+    blog.id,
+    folder.log,
+    folder.status,
+    Serial(),
+    signal
+  );
 
   var cursor = account.cursor;
 
@@ -137,9 +154,12 @@ async function sync(blog, folder, stampLastSync) {
   for (;;) {
     let result;
 
+    signal.throwIfAborted();
+
     try {
       result = await delta(cursor);
     } catch (err) {
+      if (cancelled(err, signal)) throw err;
       folder.log("Error fetching changes from Dropbox", err);
       return persistError(blog.id, err, SOURCES.DELTA);
     }
@@ -157,6 +177,7 @@ async function sync(blog, folder, stampLastSync) {
     try {
       batch = await apply(result.entries);
     } catch (err) {
+      if (cancelled(err, signal)) throw err;
       console.log("Blog", blog.id, "Dropbox Error:", err);
       return persistError(blog.id, err, SOURCES.APPLY);
     }
@@ -189,6 +210,7 @@ async function sync(blog, folder, stampLastSync) {
           try {
             await download;
           } catch (err) {
+            if (cancelled(err, signal)) throw err;
             // Revoked access fails every remaining file and must not advance
             // the cursor past changes we never downloaded.
             console.log("Blog", blog.id, "Dropbox Error:", err);
@@ -208,6 +230,9 @@ async function sync(blog, folder, stampLastSync) {
             since: "dropbox-server-modified",
           });
         } catch (err) {
+          // A disconnect: update refuses every path from now on
+          if (cancelled(err, signal)) throw err;
+
           // Redis cannot take writes (a host cutover, an outage), so
           // this change and those after it are not in the database.
           // Stop here. The cursor below is not saved, so the next
@@ -248,6 +273,10 @@ async function sync(blog, folder, stampLastSync) {
     // we store account folder for use on the dashboard
     if (result.path_display) account.folder = result.path_display;
 
+    // Not once a disconnect has dropped the account, which this would bring
+    // back
+    signal.throwIfAborted();
+
     debug("Storing latest cursor and folder information...", account);
 
     await Database.set(blog.id, account);
@@ -285,7 +314,9 @@ async function sync(blog, folder, stampLastSync) {
 // promise for its download, which rejects only with an error that must stop
 // the sync; abort stops downloads which have not started; settled() resolves
 // once every download has finished.
-function Apply(client, blogID, log, status, publish) {
+// signal (the sync's folder.signal) stops each download that hasn't started,
+// and gives up those in flight (util/download.js).
+function Apply(client, blogID, log, status, publish, signal) {
   return async function apply(changes) {
     debug("Retrieved changes", changes);
 
@@ -375,6 +406,8 @@ function Apply(client, blogID, log, status, publish) {
     // relative path to an item, since the root of the
     // Dropbox folder might not be the root of the blog.
     async function download(item) {
+      if (signal) signal.throwIfAborted();
+
       await determinePathOnDisk(blogID, item);
 
       var pathForUnsupportedCheck =
@@ -487,11 +520,14 @@ function Apply(client, blogID, log, status, publish) {
           {
             metadata: { path_display: item.path_display, size: item.size },
             publish,
+            signal,
           }
         );
       } catch (downloadError) {
         err = downloadError;
       }
+
+      if (err && cancelled(err, signal)) throw err;
 
       if (err) {
         log(item.resolved_relative_path, "Error downloading from dropbox", err);
@@ -522,11 +558,22 @@ function Apply(client, blogID, log, status, publish) {
         return;
       }
 
-      // Swallow the error that occur when the user has forbidden content
-      // in their folder. We should surface this eventually. You can test
-      // this error using the file in tests/files/will_flag_restricted_content.png
-      // Warning: this looks like a more generic error!
-      if (err && err.statusCode === 409 && err.statusMessage === "Conflict") {
+      // Dropbox refuses a file it has flagged as restricted content (test
+      // with tests/files/will_flag_restricted_content.png) or no longer has.
+      // Skip it, and say so: it never reaches the blog.
+      if (
+        err &&
+        /^path\/(restricted_content|not_found)\b/.test(dropboxTag(err))
+      ) {
+        log(
+          item.resolved_relative_path,
+          "Dropbox refused to download this file for blog",
+          blogID + ":",
+          dropboxTag(err)
+        );
+        status(
+          "Skipping " + item.resolved_relative_path + " (refused by Dropbox)"
+        );
         return;
       }
 

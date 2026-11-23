@@ -1,5 +1,6 @@
 const Bottleneck = require("bottleneck");
 const fetch = require("node-fetch");
+const { setTimeout: wait } = require("timers/promises");
 
 // Global rate limiter configuration
 const limiter = new Bottleneck({
@@ -14,18 +15,33 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
   // the timeout and retries cover reading the body: the timer restarts on
   // each chunk, so a stalled body aborts the attempt (rather than hanging the
   // caller after the headers arrived) while a slow but active one completes.
+  // retryDelay waits that many milliseconds before the second attempt,
+  // doubling before each one after, so a macserver restart (a few seconds)
+  // doesn't use up every attempt at once. 0, the default, retries straight
+  // away.
+  // signal is the caller's (a sync lock's folder.signal, sync/seize.js): once
+  // it aborts, the request in flight is cut off and the promise rejects with
+  // its reason, with no retry, as it does if it aborted before the request
+  // left the rate limiter's queue.
   const {
     timeout = 10000,
     retries = 3,
     readBody = false,
+    retryDelay = 0,
+    signal: callerSignal,
     ...fetchOptions
   } = options;
 
   for (let attempt = 1; attempt <= retries; attempt++) {
+    if (callerSignal) callerSignal.throwIfAborted();
+
     // Timeout logic
     const controller = new AbortController();
     const signal = controller.signal;
     let timer = setTimeout(() => controller.abort(), timeout);
+    const onCallerAbort = () => controller.abort();
+    if (callerSignal)
+      callerSignal.addEventListener("abort", onCallerAbort, { once: true });
 
     try {
       const response = await fetch(url, { ...fetchOptions, signal });
@@ -53,6 +69,8 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
       return response; // Return the successful response
     } catch (error) {
       clearTimeout(timer); // Clear the timeout in case of error
+
+      if (callerSignal && callerSignal.aborted) throw callerSignal.reason;
 
       // Handle timeout or other fetch errors
       if (error.name === "AbortError") {
@@ -93,6 +111,16 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
           { cause: error }
         );
       }
+
+      // The next attempt throws the caller's reason if it aborts meanwhile
+      if (retryDelay > 0) {
+        await wait(retryDelay * 2 ** (attempt - 1), undefined, {
+          signal: callerSignal,
+        }).catch(() => {});
+      }
+    } finally {
+      if (callerSignal)
+        callerSignal.removeEventListener("abort", onCallerAbort);
     }
   }
 };

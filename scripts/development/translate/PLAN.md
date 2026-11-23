@@ -88,7 +88,7 @@ locally-edited template installed.*
 - Get-or-create user `example@example.com` (hardcoded in
   `app/configure-local-blogs.js:6`, not configurable — §2.1). Mirror its
   create logic so a fresh Redis works.
-- Get-or-create blog by handle — `app/templates/folders/setupBlogs.js` is the
+- Get-or-create blog by handle — `app/templates/demo/setupBlogs.js` is the
   precedent, including "throw if owned by another user".
 - `Blog.set(blogID, { client: "local", forceSSL: false })`.
 - Start the watcher in the **master** process by publishing to Redis:
@@ -157,7 +157,7 @@ starts is invisible to it, permanently. `sync/fix` does not rescue this: it only
 removes ghosts of files that have gone, it never discovers new ones.
 
 `rescan.js` walks the folder and calls `folder.update()` per path, the same
-mechanism `app/templates/folders/index.js` uses to load the demo folders. Two
+mechanism `app/templates/demo/index.js` uses to load the demo folders. Two
 details it needs:
 
 - **Retry on lock contention.** The watcher takes the same folder lock for every

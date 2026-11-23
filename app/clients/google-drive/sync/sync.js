@@ -196,7 +196,18 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     throw new Error("Missing required folderId for sync");
   }
 
-  const drive = await createDriveClient(serviceAccountId);
+  // Setup owns the folder until it has copied the site's files into it and
+  // cleared preparing (routes/setup.js). A walk before then would remove
+  // every file not copied yet, since Drive doesn't have it.
+  if (account.preparing) {
+    throw new Error("Google Drive setup is still copying this site's files");
+  }
+
+  // options.signal is the folder lock's (sync/index.js): once a disconnect
+  // aborts it (sync/seize.js), requests in flight are cut off, the walk
+  // stops at its next step, and the folder and the mapping refuse writes
+  const { signal } = options;
+  const drive = await createDriveClient(serviceAccountId, { signal });
   const {
     get: getPath,
     getPaths,
@@ -210,7 +221,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     getVerifiedContents,
     setVerifiedContent,
   } = database.folder(folderId, blogID);
-  const checkWeCanContinue = CheckWeCanContinue(blogID, account);
+  const checkWeCanContinue = CheckWeCanContinue(blogID, account, signal);
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
 
   // Downloads run side by side, but each one writes into the blog folder only
@@ -220,7 +231,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
   const markSourceMissing = async (message) => {
     publish("Error syncing with Google Drive");
-    await database.blog.store(blogID, sourceMissingFields(account, message));
+    await database.blog.update(blogID, sourceMissingFields(account, message));
     return false;
   };
 
@@ -234,7 +245,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     });
 
     if (folder.data.name !== folderName) {
-      await database.blog.store(blogID, { folderName: folder.data.name });
+      await database.blog.update(blogID, { folderName: folder.data.name });
     }
 
     if (folder.data.trashed) return markSourceMissing(MESSAGES.TRASHED);

@@ -48,6 +48,14 @@ const ISSUES = {
       "Blot couldn't finish transferring this site's folder. No files were removed.",
     action: "Retry transfer",
   },
+  // The folder still syncs into Blot, but nothing Blot writes there (files
+  // copied in, dashboard uploads) reaches the owner's iCloud. Fixed in the
+  // owner's sharing settings, not on Blot's setup page, so no action link.
+  VIEW_ONLY: {
+    label: "View only",
+    message:
+      "Your folder is shared with Blot as View only, so files Blot adds to it don't reach iCloud. In Finder, open the folder's sharing options and let Blot make changes.",
+  },
   SYNC_ERROR: {
     label: "Sync problem",
     message: "Something went wrong while syncing this site.",

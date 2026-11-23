@@ -3,9 +3,20 @@
 ## Default site and folder-operation shorthand
 
 - Unless the maintainer indicates another site, the default blog to edit is the dashboard site with handle `local`.
-- When the maintainer asks to “load in the `david` folder,” this means the complete folder-replacement task: resolve the `local` blog ID, copy the contents of `app/templates/folders/david/` into that blog’s source directory, `data/local-sources/<handle>/` (the Local client copies it into the blog's folder in the bucket), replacing the existing contents, then wait for the watcher/rebuild to finish and verify the rendered site. If another blog handle is specified, use that handle instead of `local`.
+- When the maintainer asks to “load in the `david` folder” (check the submodule is checked out first; see Demo folders below), this means the complete folder-replacement task: resolve the `local` blog ID, copy the contents of `app/templates/folders/david/` into that blog’s source directory, `data/local-sources/<handle>/` (the Local client copies it into the blog's folder in the bucket), replacing the existing contents, then wait for the watcher/rebuild to finish and verify the rendered site. If another blog handle is specified, use that handle instead of `local`.
 - When the maintainer asks to “clear the folder,” remove everything inside the validated source directory `data/local-sources/<handle>/`, including hidden files and nested directories, but leave the source folder itself in place. Use `local` unless another blog handle is specified, then wait for the watcher/rebuild to finish and verify that the live site and Archives reflect the empty source.
 - Treat the replacement as exact: include all source-folder contents, including hidden files, and clear only the validated destination folder. Confirm the source and destination paths before removing existing destination contents.
+
+## Demo folders
+
+- **Where they are:** the demo folders in `app/templates/folders/<name>` are a git submodule, [blotcms/demo-folders](https://github.com/blotcms/demo-folders) (#2940). In a fresh worktree that directory is empty: run `git submodule update --init --depth 1 app/templates/folders`, or let `npm run folder` do it.
+- **After a pull:** a pull that moves the pin doesn't update the folders. Run `git submodule update app/templates/folders` (`git status` shows `app/templates/folders` as modified until you do).
+- **A checkout from before #2950:** the pull removes the old tracked files but leaves ignored ones, such as `.DS_Store`, and the submodule only checks out into an empty directory. Check with `git status --short --ignored app/templates/folders`, delete what's left if it is only `.DS_Store` files (ask the maintainer about anything else), then run the `--init` command above.
+- **A branch from before #2950 that edits folder files:** it conflicts with the move. Make those edits in the submodule instead, with `npm run demo-folders:commit`, and drop them from the branch.
+- **Settings and code:** their settings (`config.js`) and the code that builds them live in `app/templates/demo/`. See its README.
+- **Committing a folder change:** run `npm run demo-folders:commit -- "<message>"`. It commits and pushes inside the submodule, then commits the new pointer here.
+- **Never edit the folders through this repository's index:** `git add app/templates/folders/<file>` doesn't work in a submodule.
+- **Publishing:** the deploy syncs changed folders into the production demo blogs and uploads their download ZIPs. Nothing at boot reads the folders, and the image doesn't carry them.
 
 ## Sites for checking templates
 

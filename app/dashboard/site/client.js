@@ -5,14 +5,15 @@ const express = require("express");
 const client_routes = express.Router();
 const Path = require("path");
 const Blog = require("models/blog");
+const setClient = require("clients/util/setClient");
 const load = require("./load");
 const Sync = require("sync");
 const Fix = require("sync/fix");
-const Rebuild = require("sync/rebuild");
+const pendingRebuilds = require("sync/pendingRebuilds");
+const establishSyncLock = require("sync/establishSyncLock");
 const config = require("config");
 const fetch = require("node-fetch");
 const notifyAdminIfResyncFoundChanges = require("./notifyResyncFoundChanges");
-const syncReport = require("clients/util/syncReport");
 
 const RESYNC_REFUSALS = [
   "DROPBOX_TRANSFER_INCOMPLETE",
@@ -61,8 +62,7 @@ client_routes
     if (req.body.client === req.blog.client) return res.redirect(redirect);
 
     try {
-      await clients[req.blog.client].disconnect(req.blog.id);
-      await Blog.set(req.blog.id, { client: req.body.client });
+      await setClient(req.blog, req.body.client);
 
       res.redirect(redirect);
     } catch (err) {
@@ -149,59 +149,60 @@ client_routes
 
 // N.B. these reset POSTs run on green, the redirect target renders on blue;
 // see dashboard/site/index.js.
-client_routes.post("/reset/rebuild", function (req, res) {
-  // Set once the sync has the lock, to tell its failure apart from a later one
-  let folder = null;
+// The rebuild, and the Fix() after it, are queued in Redis before they start
+// and run under the folder lock, so a deploy that kills the process part way
+// leaves them to be run again (sync/pendingRebuilds).
+client_routes.post("/reset/rebuild", async function (req, res) {
+  const blogID = req.blog.id;
+  const flags = [
+    "rebuild",
+    "fix",
+    req.query.thumbnails && "thumbnails",
+    req.query.imageCache && "imageCache",
+  ];
 
-  Sync(req.blog.id, async function (syncFolder) {
-    folder = syncFolder;
+  let folder;
+  let done;
 
-    res.message(
+  try {
+    await pendingRebuilds.queue(blogID, flags);
+  } catch (err) {
+    console.log(err);
+    return res.message(
       res.locals.base + "/client/reset",
-      "Begin rebuild of your site"
+      new Error("Failed to rebuild folder")
     );
+  }
 
-    folder.status("Rebuilding your site");
+  try {
+    ({ folder, done } = await establishSyncLock(blogID));
+  } catch (err) {
+    // Queued: whichever process next finds the folder free runs it
+    return res.message(
+      res.locals.base + "/client/reset",
+      new Error(
+        "Your folder is syncing. Your site will be rebuilt once it finishes"
+      )
+    );
+  }
 
-    const thumbnails = !!req.query.thumbnails;
-    const imageCache = !!req.query.imageCache;
+  res.message(res.locals.base + "/client/reset", "Begin rebuild of your site");
 
-    try {
-      await Rebuild(req.blog.id, {
-        thumbnails,
-        imageCache,
-        status: folder.status,
-        log: folder.log,
-      });
-    } catch (err) {
-      console.log(err);
-    }
+  let runError = null;
 
-    folder.status("Checking your site for issues");
+  try {
+    await pendingRebuilds.runLocked(blogID, folder);
+  } catch (err) {
+    // Redis is unavailable: the queued rebuild is retried later
+    console.log(err);
+    runError = err;
+  }
 
-    let report;
-
-    try {
-      report = await Fix(req.blog, { status: folder.status, log: folder.log });
-    } catch (err) {
-      console.log(err);
-      report = err.report;
-    }
-
-    // Fix() doesn't email; a rebuild only logs what it repaired.
-    const repaired = syncReport.summarize(report);
-    if (repaired) console.log("Fix repaired", req.blog.id, repaired);
-    folder.status("Finished site rebuild");
-  }).catch(function (err) {
-    if (!folder) {
-      return res.message(
-        res.locals.base + "/client/reset",
-        new Error("Failed to rebuild folder since it is syncing")
-      );
-    }
-
+  try {
+    await done(runError);
+  } catch (err) {
     console.log("Error releasing sync: ", err);
-  });
+  }
 });
 
 client_routes.post("/reset/resync", load.client, function (req, res, next) {
@@ -220,10 +221,13 @@ client_routes.post("/reset/resync", load.client, function (req, res, next) {
     let summary;
 
     try {
+      // A disconnect stops the resync through the lock's signal
+      // (sync/seize.js): a client's resync takes it after update
       summary = await res.locals.client.resync(
         req.blog.id,
         folder.status,
-        folder.update
+        folder.update,
+        folder.signal
       );
     } catch (err) {
       console.log("ERROR:", err);

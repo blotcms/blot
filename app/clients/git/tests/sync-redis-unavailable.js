@@ -119,6 +119,8 @@ describe("Git sync when Redis is unavailable", function () {
           }
         },
         "./served/sync": served,
+        // The blog is on git, so the sync goes ahead
+        "models/blog": { get: async () => ({ id: "test", client: "git" }) },
       });
 
       sync("test", "test").then(() => resolve(null), resolve);

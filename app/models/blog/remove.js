@@ -20,34 +20,88 @@ function isValidBlogID(blogID) {
   return typeof blogID === "string" && BLOG_ID_REGEX.test(blogID);
 }
 
+// How long a removal has to finish before the scheduler resumes it
+var RESUME_AFTER_MS = 10 * 60 * 1000;
+
 // Resolves to the removed blog. Rejects with the error that stopped the
 // removal: an invalid id, no such blog, or a failed step.
+//
+// A removal is a series of steps, and the process can be killed between any
+// two (a deploy). The blog is recorded in key.removing before the first step
+// and dropped after the last, and every step can be run again on a half
+// removed blog, so scheduler/resume-blog-removal can finish what was
+// interrupted by calling remove again.
 var remove = async function remove(blogID) {
   if (!isValidBlogID(blogID)) throw new Error("Invalid blog id");
 
   var blog = await get({ id: blogID });
-  if (!blog || !blog.id) throw new Error("No blog");
 
-  // We need to enable the blog to disconnect the client
-  // since we need to acquire a sync lock...
-  await set(blogID, { isDisabled: false });
+  if (!blog || !blog.id) {
+    // The hash is deleted with the last step but one, so a blog that is
+    // recorded as being removed and has no hash only needs its leftovers
+    // cleaned up. Anything else was never a blog.
+    if ((await client.zScore(key.removing, blogID)) === null)
+      throw new Error("No blog");
 
-  await flushCache(blogID);
+    await finishWithoutRecord(blogID);
+    await markRemoved(blogID);
+    return { id: blogID };
+  }
+
+  // NX: a resumed removal keeps the time the scheduler set for it
+  await client.zAdd(
+    key.removing,
+    { score: Date.now() + RESUME_AFTER_MS, value: blogID },
+    { NX: true }
+  );
+
+  // Syncing needs the blog enabled, and so does disconnecting the client
+  // (it takes the sync lock). A disabled blog is only enabled for that.
+  if (blog.client && blog.isDisabled) {
+    await set(blogID, { isDisabled: false });
+    await flushCache(blogID);
+  }
 
   // The order of these tasks is important right now.
   // For example, if you wipe the blog's folder before disconnecting
   // the client, you might run into an error. It would be nice to
   // be able to run them in parallel though
   await disconnectClient(blog);
+
+  // The site stops serving from here, rather than being enabled until the
+  // last step: a removal that is interrupted doesn't leave it public
+  if (!blog.isDisabled || blog.client) {
+    await set(blogID, { isDisabled: true });
+    await flushCache(blogID);
+  }
+
   await updateUser(blog);
   await dropFromDiscover(blog);
   await wipeFolders(blog);
   await dropTemplates(blog);
   await deleteKeys(blog);
   await purgeQueue.blog(blog.id);
+  await markRemoved(blogID);
 
   return blog;
 };
+
+async function markRemoved(blogID) {
+  var multi = client.multi();
+
+  multi.zRem(key.removing, blogID);
+  multi.hDel(key.removalAttempts, blogID);
+  await multi.exec();
+}
+
+// What is left once the blog's hash is gone: its keys went with it (deleteKeys
+// is one transaction), so it is the Discover posts, folder and generated
+// files, and the CDN purge.
+async function finishWithoutRecord(blogID) {
+  await dropFromDiscover({ id: blogID });
+  await wipeFolders({ id: blogID });
+  await purgeQueue.blog(blogID);
+}
 
 // Required here, not at the top: models/discover requires models/blog
 async function dropFromDiscover(blog) {
@@ -128,10 +182,16 @@ async function deleteKeys(blog) {
   // A sync (or a script under sync/hold) may still hold the folder
   // lock. Deleting it under them makes their release find it gone, and
   // a holder whose lock is lost crashes the process. The holder
-  // releases it, or it expires on its own within the lock's TTL.
-  var folderLockKey = folderLock.key(blog.id);
+  // releases it, or it expires on its own within the lock's TTL. So do
+  // the keys a disconnect's seize (sync/seize.js) leaves: without them, a
+  // holder it took the lock from would crash instead of stopping.
+  var lockKeys = [
+    folderLock.key(blog.id),
+    folderLock.cancelKey(blog.id),
+    folderLock.seizedKey(blog.id),
+  ];
   remove = remove.filter(function (name) {
-    return name !== folderLockKey;
+    return lockKeys.indexOf(name) === -1;
   });
 
   if (remove.length > 0) multi.del(remove);
@@ -162,17 +222,19 @@ async function updateUser(blog) {
 
   var changes = {};
 
-  var blogs = user.blogs.slice();
-
-  blogs = blogs.filter(function (otherBlogID) {
+  var blogs = user.blogs.filter(function (otherBlogID) {
     return otherBlogID !== blog.id;
   });
 
-  changes.blogs = blogs;
+  if (blogs.length !== user.blogs.length) changes.blogs = blogs;
 
   if (user.lastSession === blog.id) changes.lastSession = "";
+
+  // A resumed removal finds the user already updated
+  if (!Object.keys(changes).length) return;
 
   await User.set(blog.owner, changes);
 }
 
 module.exports = remove;
+module.exports.RESUME_AFTER_MS = RESUME_AFTER_MS;

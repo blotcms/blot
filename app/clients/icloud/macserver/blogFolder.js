@@ -46,6 +46,9 @@ export const rootOf = (blogID) => {
   return root;
 };
 
+// The blogs whose shared folder is known
+export const blogIDs = () => [...roots.keys()];
+
 // The owner's name for a blog's folder, or null
 export const folderNameOf = (blogID) => {
   const root = roots.get(blogID);

@@ -365,6 +365,63 @@ describe("dropbox resetToBlot", function () {
     expect(summary.firstError).toEqual("/a.txt: download exploded");
   });
 
+  it("records a file Dropbox refuses with a 409 and carries on with the rest", async function () {
+    load({ "/": [file("a.txt"), file("b.txt")] });
+    require.cache[downloadPath].exports = async function (
+      _client,
+      source,
+      id,
+      destination
+    ) {
+      if (source === "/a.txt")
+        throw Object.assign(new Error("Response failed with a 409 code"), {
+          status: 409,
+          error: { error_summary: "path/restricted_content/.." },
+        });
+      await storage.write(id, destination, "hello");
+    };
+    delete require.cache[resetPath];
+    const resetToBlot = require("../sync/reset-to-blot");
+
+    const summary = await resetToBlot(
+      blogID,
+      () => {},
+      async () => {}
+    );
+
+    expect(summary.downloaded).toEqual(1);
+    expect(summary.failed).toEqual(1);
+    expect(summary.firstError).toEqual(
+      "/a.txt: Response failed with a 409 code"
+    );
+  });
+
+  it("stops part way when the signal aborts, and leaves the cursor alone", async function () {
+    const resetToBlot = load({ "/": [file("a.txt"), file("b.txt")] });
+    const controller = new AbortController();
+    const updated = [];
+
+    let error;
+    try {
+      await resetToBlot(
+        blogID,
+        () => {},
+        async (path) => {
+          updated.push(path);
+          controller.abort();
+        },
+        controller.signal
+      );
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error && error.name).toEqual("AbortError");
+    expect(updated).toEqual(["/a.txt"]);
+    expect(saved.some((values) => "cursor" in values)).toEqual(false);
+    expect(saved.some((values) => "error_code" in values)).toEqual(false);
+  });
+
   describe("a file over the download size limit", function () {
     const constants = require("../util/constants");
     let maxFileSize;
@@ -618,22 +675,21 @@ describe("dropbox resetToBlot", function () {
       expect(saved.some((values) => "cursor" in values)).toEqual(false);
     });
 
-    it("still throws on any other 409", async function () {
-      load({ "/": [folder("sub")] });
+    it("records any other 409 for a subfolder as a failed path and carries on", async function () {
+      await storage.write(blogID, "/sub/old.txt", "x");
+      load({ "/": [folder("sub"), file("a.txt")] });
       const resetToBlot = vanish("/sub", "path/restricted_content/..");
 
-      let error;
-      try {
-        await resetToBlot(
-          blogID,
-          () => {},
-          async () => {}
-        );
-      } catch (err) {
-        error = err;
-      }
+      const summary = await resetToBlot(
+        blogID,
+        () => {},
+        async () => {}
+      );
 
-      expect(error && error.status).toEqual(409);
+      expect(summary.downloaded).toEqual(1);
+      expect(summary.removed).toEqual(0);
+      expect(summary.failed).toEqual(1);
+      expect(summary.firstError).toContain("/sub");
     });
   });
 

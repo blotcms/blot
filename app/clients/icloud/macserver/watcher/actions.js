@@ -4,6 +4,7 @@ import { takeTurn } from "../pathOrder.js";
 import mkdir from "../httpClient/mkdir.js";
 import remove from "../httpClient/remove.js";
 import resync from "../httpClient/resync.js";
+import { isNotSyncing } from "../httpClient/notSyncing.js";
 import upload from "../httpClient/upload.js";
 import { forgetPath, recordDirectory } from "../pushedFiles.js";
 import { forgetBlotChange, isBlotEcho } from "../blotWrites.js";
@@ -26,8 +27,8 @@ const withRetries = async (label, operation, options = {}) => {
     } catch (error) {
       lastError = error;
 
-      // the file is gone, retrying cannot help
-      if (isFileMissingError(error)) {
+      // the file is gone, or Blot won't sync the blog: retrying cannot help
+      if (isFileMissingError(error) || isNotSyncing(error)) {
         throw error;
       }
 
@@ -136,6 +137,15 @@ const runAction = (limiter, blogID, pathInBlogDirectory, action) =>
             blogID,
             pathInBlogDirectory,
           });
+          return;
+        }
+
+        if (isNotSyncing(error)) {
+          console.log(
+            clfdate(),
+            `Dropped ${action} for ${blogID}: Blot isn't syncing this blog (${error.status})`,
+            pathInBlogDirectory
+          );
           return;
         }
 

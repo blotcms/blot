@@ -24,7 +24,18 @@ async function flushTokenIfUnused(blog) {
 // Called when the user disconnects the client, and when the blog is deleted.
 // It needs nothing from the blog folder, so a blog whose folder is already
 // gone is disconnected, and its repository removed, all the same.
+//
+// It holds the blog's folder lock, seized from whatever holds it (sync.seize):
+// a push's sync or a setup still running is told to stop and gives the lock
+// up, so it can't record its commit as applied, or put a repository in the
+// store, after this has removed them.
 async function disconnect(blogID) {
+  await require("sync").seize(blogID, () => disconnectLocked(blogID), {
+    reason: "disconnect",
+  });
+}
+
+async function disconnectLocked(blogID) {
   // TODO, this shit should be handled at the next layer up
   // we shouldn't worry about setting blog.client to ""
   var blog = await Blog.get({ id: blogID });

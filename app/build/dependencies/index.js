@@ -91,7 +91,7 @@ function dependencies(path, html, metadata) {
   // Multiple times. The plugins features also do this.
   var $ = cheerio.load(html, { decodeEntities: false }, false);
   var dependencies = [];
-  var attribute, value, resolved_value;
+  var value, resolved_value;
   var metadataByLowercaseKey = metadataCaseInsensitive(metadata);
 
   // We have to be slightly stricter for
@@ -147,7 +147,9 @@ function dependencies(path, html, metadata) {
     var isWikilink = $el.attr("title") === "wikilink";
     var suffix;
 
-    if ($el.attr("href")) attribute = "href";
+    // Decide the attribute for this element alone: src wins over href,
+    // and an element with neither set must not reuse the previous one's.
+    var attribute = "href";
     if ($el.attr("src")) attribute = "src";
 
     // Browsers strip all ASCII tab/newline characters (wherever

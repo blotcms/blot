@@ -81,6 +81,8 @@ describe("icloud status route", function () {
         bind: () => (line) => events.push("status: " + line),
       }),
       update() {},
+      signal: new AbortController().signal,
+      run: (fn) => fn(),
     },
     done: async () => {
       releases.count += 1;
@@ -565,5 +567,38 @@ describe("icloud status route", function () {
     expect(lockAttempts).toBe(2);
     expect(retry.statusCode).toBeUndefined();
     expect(syncs).toEqual(["blog_a"]);
+  });
+
+  it("stores a View only share's permission once, and clears it when it can make changes", async function () {
+    const status = require(statusPath);
+    const post = (body) => status({ header: () => "blog_a", body }, fakeRes());
+
+    await post({ permission: "readOnly" });
+    expect(stored.length).toBe(1);
+    expect(stored[0].permission).toBe("readOnly");
+    expect(typeof stored[0].permissionSince).toBe("number");
+    expect(syncs).toEqual([]);
+
+    mockModule(databasePath, {
+      store: async (blogID, value) => stored.push(value),
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        setupComplete: true,
+        permission: "readOnly",
+      }),
+    });
+    delete require.cache[statusPath];
+    delete require.cache[validateBlogPath];
+    delete require.cache[stampLastSyncPath];
+    const reloaded = require(statusPath);
+    const postAgain = (body) =>
+      reloaded({ header: () => "blog_a", body }, fakeRes());
+
+    // Already known: nothing new to store
+    await postAgain({ permission: "readOnly" });
+    expect(stored.length).toBe(1);
+
+    await postAgain({ permission: "readWrite" });
+    expect(stored[1]).toEqual({ permission: null, permissionSince: null });
   });
 });

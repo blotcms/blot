@@ -76,7 +76,7 @@ remember.
 | Phase | What happens | Reuse | New work |
 |---|---|---|---|
 | A. Preflight | Confirm the dev server is up at `config.host`; abort with instructions if not | `/health` endpoints (§1.5) | reachability check |
-| B. Provision | Create or reuse the blog on the local dev account, set `client: "local"`, `forceSSL: false`, `git init` | `app/templates/folders/setupUser.js`, `setupBlogs.js`, `app/configure-local-blogs.js` | thin wrapper |
+| B. Provision | Create or reuse the blog on the local dev account, set `client: "local"`, `forceSSL: false`, `git init` | `app/templates/demo/setupUser.js`, `setupBlogs.js`, `app/configure-local-blogs.js` | thin wrapper |
 | C. Template scaffold | `Template.create` → `setMetadata({localEditing:true})` → `writeToFolder` → ensure `"enabled": true` | `scripts/test/setup-restore-git-test.js` is a working example | the `enabled` injection (§5.1) |
 | D. Content handoff | Prompt the maintainer to move content in; **verify entries actually built** before continuing | — | the wait-and-verify gate (§3) |
 | E. Template authoring | Claude Code writes Mustache views + `package.json` + CSS into `Templates/<slug>/` | — | prompt design |
@@ -146,7 +146,7 @@ creates and deletes. **No `--rebuild` fallback is required for correctness.**
   permanently, not just late. `sync/fix` does not compensate: it removes ghosts
   of deleted files, it never discovers new ones. Anything that puts content into
   a folder out-of-band must therefore walk it and call `folder.update()` per path
-  (as `app/templates/folders/index.js` does) rather than waiting for a sync that
+  (as `app/templates/demo/index.js` does) rather than waiting for a sync that
   will never come. Note also that the watcher holds the folder lock for each
   event it processes, so an explicit rescan has to retry: `sync` itself gives up
   after roughly eleven seconds.
@@ -175,7 +175,7 @@ creates and deletes. **No `--rebuild` fallback is required for correctness.**
 
 `scripts/development/folder.sh` is the closest structural precedent for the new
 script: validate an argument, print usage when absent, then
-`docker exec blot-node-app-1 npx nodemon app/templates/folders ... "$FOLDER_NAME"`.
+`docker exec blot-node-app-1 npx nodemon app/templates/demo ... "$FOLDER_NAME"`.
 
 Module resolution inside the container relies on `ENV NODE_PATH=/usr/src/app/app`
 (Dockerfile), which is why app code does `require("models/blog")`,
@@ -295,7 +295,7 @@ otherwise. It:
 - Prints the capability banner (`Local server capabilities: …`) plus a magic-link
   dashboard URL from `User.generateAccessToken`, the blog URL, and the folder path.
 
-**The second account, for contrast.** `app/templates/folders/setupUser.js` uses:
+**The second account, for contrast.** `app/templates/demo/setupUser.js` uses:
 
 ```js
 const FOLDER_ACCOUNT_EMAIL = config.admin.email || "folders@example.com";
@@ -313,7 +313,7 @@ Tumblr variables. So in practice that account is literally
 account `npm start` logs the developer into, it is the one whose blogs get
 `client: "local"` and `forceSSL: false` applied automatically on every boot, and
 keeping translated sites off `folders@example.com` avoids polluting the demo-folder
-account that `app/templates/folders/index.js` manages and prints URLs for.
+account that `app/templates/demo/index.js` manages and prints URLs for.
 
 The script should still **look the user up rather than assume it exists**
 (`User.getByEmail`, create if absent, mirroring `configure-local-blogs.js`) so it
@@ -412,11 +412,11 @@ same code path.
 
 ### 2.5 Reference implementations to copy
 
-- `app/templates/folders/index.js` + `setupBlogs.js` + `setupUser.js` — the full
+- `app/templates/demo/index.js` + `setupBlogs.js` + `setupUser.js` — the full
   "create user → create blogs → copy a source folder in → sync changed paths →
   print URLs" flow, promisified. `applyChanges()` shows how to call `sync()` and
   `folder.update()` directly rather than relying on the watcher.
-- `app/templates/folders/config.js` — per-handle overrides (`title`, `template`,
+- `app/templates/demo/config.js` — per-handle overrides (`title`, `template`,
   `menu`, `plugins`). Same shape the translate script will want.
 - `scripts/blog/create.js` — CLI-shaped blog creation with confirmation prompt.
 - `scripts/test/setup-restore-git-test.js` — creates a blog template, enables
@@ -904,7 +904,7 @@ though the script is not doing the zipping.
 The strongest check, if it is ever wanted: **provision a second, empty blog, copy
 the folder into it, let it sync, and screenshot it.** If `enabled: true` is doing
 its job the second site renders identically to the first with zero configuration.
-`app/templates/folders/index.js` already demonstrates every piece — create blog,
+`app/templates/demo/index.js` already demonstrates every piece — create blog,
 copy a source tree into `localPath(blogID, "/")`, `sync()` + `folder.update()` per
 changed path, `fix()`. Not required for a first version; the maintainer eyeballing
 the comparison UI covers the common case.
@@ -1400,7 +1400,7 @@ for guidance up front.**
    count and timestamps. **Decided: `data/tmp/translate/<handle>.json`** via
    `helper/tempDir()` — where the importers already stage working state, and
    safely outside the blog folder, so it can never end up in the maintainer's zip.
-2. **Handle lookup.** `Blog.get({ handle })` — `app/templates/folders/setupBlogs.js`
+2. **Handle lookup.** `Blog.get({ handle })` — `app/templates/demo/setupBlogs.js`
    is the precedent: reuse the blog if it exists, throw if it is owned by another
    user, otherwise create. That alone makes provisioning idempotent even with no
    state file.
@@ -1491,7 +1491,7 @@ await sync(blogID, async (folder) => {
 });
 ```
 
-`app/templates/folders/index.js#applyChanges` is a working version
+`app/templates/demo/index.js#applyChanges` is a working version
 that also calls `sync/fix`. Templates specifically can be rebuilt with
 `Template.buildFromFolder(blogID, cb)` — and `sync()` already calls it on lock
 release.
@@ -1660,7 +1660,7 @@ app/configure-local-blogs.js              dev user/blog bootstrap
 app/models/blog/create.js  defaults.js    Blog.create + defaults
 app/models/blog/validate/handle.js        handle rules + banned.txt
 app/clients/local/{README,setup.js,init.js,write.js}
-app/templates/folders/{index.js,setupUser.js,setupBlogs.js,config.js}
+app/templates/demo/{index.js,setupUser.js,setupBlogs.js,config.js}
 scripts/blog/create.js                    CLI blog creation
 scripts/test/setup-restore-git-test.js    create template + enable local editing
 ```
@@ -1697,7 +1697,7 @@ app/models/template/removeEnabledFromAllTemplates.js
 app/dashboard/site/template/index.js
   /:templateSlug/download-zip                same omission, confirms §5.1
 clients/util/shouldIgnoreFile.js             exclusion list for manual cleanup
-app/templates/folders/index.js               round-trip validation pattern (§5.3)
+app/templates/demo/index.js               round-trip validation pattern (§5.3)
 ```
 
 **Preflight / environment health**
@@ -1728,8 +1728,8 @@ app/blog/vhosts.js:100-101                   preview subdomains strip both heade
 app/blog/draft.js:86-87                      /_draft/* strips both headers
 app/views/dashboard/template/js/
   template-editor-preview-iframe.js          working preview-iframe UI to copy
-app/templates/folders/index.js               hashFile diff → {added,modified,removed}
-app/templates/folders/setupBlogs.js          reuse-blog-by-handle idempotency
+app/templates/demo/index.js               hashFile diff → {added,modified,removed}
+app/templates/demo/setupBlogs.js          reuse-blog-by-handle idempotency
 app/dashboard/site/import/helper/process.js  preserve_output_directory flag
 scripts/development/dynamic-importer/RESEARCH.md   the content-acquisition companion
 ```

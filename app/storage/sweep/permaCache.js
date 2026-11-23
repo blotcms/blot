@@ -256,6 +256,31 @@ async function* staleDocumentation(base) {
   }
 }
 
+// Demo folder ZIPs (/folders/<name>-<hash>.zip, templates/demo/publishZip)
+// that the image's template pages no longer link: its manifest lists the
+// current one for each folder. The deploy keeps the previous ZIP in the
+// bucket for a rollback, so a request for it still gets the right answer
+// from the origin: only the storage copy is deleted.
+async function* staleFolderZips(base) {
+  const manifest = await fs
+    .readJson(config.views_directory + "/folders/manifest.json")
+    .catch(() => null);
+
+  // Without a manifest, nothing tells the current ZIPs from old ones
+  if (!manifest) return;
+
+  const current = new Set(
+    Object.values(manifest)
+      .map((entry) => entry && entry.zip)
+      .filter(Boolean)
+  );
+
+  for await (const item of cachedBelow(base, "folders/")) {
+    if (!current.has(item.path))
+      yield { ...item, reason: "old demo folder zip", remove: true };
+  }
+}
+
 // Template outputs whose hash is gone from Redis: /template/<d1>/<d2>/<rest>/<name>.
 // The origin 404s them, and a template's save or drop purges its old URLs as
 // it goes, so whatever is left only takes space: the storage copy is deleted.
@@ -400,6 +425,9 @@ async function sweepEntry(base, entry, { apply, log, totals, deleted, files }) {
 
   if (name === "documentation" && entry.isDirectory)
     return applyStale(staleDocumentation(base), name, { apply, log, totals });
+
+  if (name === "folders" && entry.isDirectory)
+    return applyStale(staleFolderZips(base), name, { apply, log, totals });
 
   if (name === "template" && entry.isDirectory)
     return applyStale(staleTemplateOutputs(base), name, { apply, log, totals });

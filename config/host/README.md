@@ -28,6 +28,7 @@ On a new host run `deploy.sh` directly (see [Moving to a new host](#moving-to-a-
 | `scripts/unit-mem-log.sh`, `scripts/unit-mem-summary.sh` | `/usr/local/bin/` |
 | (written by `deploy.sh`) | `/etc/cron.d/blot-unit-mem` (runs `unit-mem-log.sh` every minute as root) |
 | `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` (enabled; started only if `/var/instance-ssd` is not mounted yet) |
+| `scripts/unit-cgroups/*.slice`, `scripts/unit-cgroups/blot-unit-cgroups.service`, `scripts/unit-cgroups/blot-unit-cgroups.sh` | `/etc/systemd/system/`, the script in `/usr/local/sbin/` (enabled and restarted each run). Each unit's slice, `system-blot-<unit>.slice` in `system.slice`, holds its container and its two sandbox jails (`sandbox/`, `browser/`, which the script makes) under one `MemoryMax`, the unit's memory (#2795). Its value must equal `UNIT.memory` in `scripts/deploy/constants.js`: the unit deploy checks |
 | `scripts/docker.service.d/*.conf` | `/etc/systemd/system/docker.service.d/` (`10-instance-store.conf`, and `20-rsyslog.conf`: docker starts after rsyslog, whose socket the units log to) |
 | `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then creates any `logpath` in `jail.local` that is missing and restarts fail2ban) |
 | `scripts/fail2ban.service.d/10-instance-store.conf` | `/etc/systemd/system/fail2ban.service.d/10-instance-store.conf` |
@@ -103,7 +104,9 @@ unit-mem-summary.sh [logfile]
 (per container: max and p99 anon+shmem, max node_max, max oom_kill, max and p99
 of the broker, the retired proxy jail and OpenResty, top 5 child processes; host:
 lowest mem_available.) With no argument it reads the live log and the daily
-copies in `/var/lib/blot-unit-mem`. `config/host/tests/unit-mem.sh` tests both
+copies in `/var/lib/blot-unit-mem`. From a checkout, `scripts/prod/read.sh unit-mem
+[--since 12h]` runs it over `ssh blot` (read-only, so it needs no approval), and
+`--tail <n>` prints the raw lines. `config/host/tests/unit-mem.sh` tests both
 scripts against a fake `/proc` and cgroup tree.
 
 ## Permanent bans
@@ -197,7 +200,8 @@ upgrades a package. It:
 - enables docker without starting it, checks cgroup v2, and adds a drop-in that
   orders docker after `redis6.service`; `ec2-user` joins the `docker` group;
 - installs `blot-sandbox-cgroup.service`, ordered before docker, which makes
-  `/sys/fs/cgroup/blot-sandbox/{blue,green}` for the units' nsjail sandbox
+  `/sys/fs/cgroup/blot-sandbox/{blue,green}` (the layout before #2795, kept
+  for a unit not yet redeployed into its slice: see `scripts/unit-cgroups`) for the units' nsjail sandbox
   (`app/sandbox`). Each is capped at 512M of memory (no swap), 256 pids and a
   `cpu.weight` of 25. Nothing uses them until `BLOT_SANDBOX=1` is set in the
   proxy env file (`proxy/deploy/proxy.env.example`). It also makes

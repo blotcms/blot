@@ -28,8 +28,9 @@ const {
 const tagSource = require("../util/tagSource");
 const retryRequest = require("../util/retryRequest");
 const loadClient = require("../util/loadClient");
-const createClient = async (blogID) => {
-  const { error, client, account } = await loadClient(blogID);
+const cancelled = require("../util/cancelled");
+const createClient = async (blogID, signal) => {
+  const { error, client, account } = await loadClient(blogID, { signal });
   if (error) throw error;
   return [client, account];
 };
@@ -63,8 +64,11 @@ async function mapLimit(items, limit, iterator) {
 // update(path) is called as each file or directory changes on disk, so the
 // database follows the folder even if the walk fails part way through. It is
 // the same (blogID, publish, update) contract the iCloud and Drive clients
-// use, and callers should hold the folder lock while it runs.
-async function resetToBlot(blogID, publish, update) {
+// use, and callers should hold the folder lock while it runs. An optional
+// signal (an AbortSignal, the sync's folder.signal) stops the walk between
+// files and folders, rejecting with an AbortError (as reset-from-blot.js
+// does), and cuts off its requests and downloads in flight.
+async function resetToBlot(blogID, publish, update, signal) {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " Dropbox:", args.join(" "));
@@ -87,9 +91,9 @@ async function resetToBlot(blogID, publish, update) {
 
   let client, account;
   try {
-    [client, account] = await createClient(blogID);
+    [client, account] = await createClient(blogID, signal);
   } catch (err) {
-    await persistError(blogID, err, SOURCES.AUTH);
+    if (!cancelled(err, signal)) await persistError(blogID, err, SOURCES.AUTH);
     throw err;
   }
 
@@ -100,9 +104,11 @@ async function resetToBlot(blogID, publish, update) {
       client,
       account,
       updatePath,
-      startedAt
+      startedAt,
+      signal
     );
   } catch (err) {
+    if (cancelled(err, signal)) throw err;
     await persistError(blogID, err, SOURCES.APPLY);
     throw err;
   }
@@ -114,7 +120,8 @@ async function resetToBlotWithClient(
   client,
   account,
   updatePath,
-  startedAt
+  startedAt,
+  signal
 ) {
   // Guard this at the source rather than only in each caller: resetToBlot
   // treats Dropbox as the source of truth and deletes any local file with no
@@ -232,7 +239,8 @@ async function resetToBlotWithClient(
     summary,
     progress,
     readdir,
-    "/"
+    "/",
+    signal
   );
 
   const changed =
@@ -266,7 +274,9 @@ async function resetToBlotWithClient(
 
   // This means that future syncs will be fast
   // A download-only pass can't show that Dropbox has room for uploads,
-  // so it leaves a quota error in place.
+  // so it leaves a quota error in place. Not once a disconnect has dropped
+  // the account, which this would bring back.
+  abortIfRequested(signal);
   await set(
     blogID,
     keepsErrorAfterDownload(account) ? { cursor } : { cursor, error_code: 0 }
@@ -275,6 +285,14 @@ async function resetToBlotWithClient(
   progress.finish("Finished processing folder");
 
   return summary;
+}
+
+function abortIfRequested(signal) {
+  if (signal && signal.aborted) {
+    const error = new Error("Dropbox reset aborted");
+    error.name = "AbortError";
+    throw error;
+  }
 }
 
 function recordFailure(summary, path, err) {
@@ -292,12 +310,21 @@ const walk = async (
   summary,
   progress,
   readdir,
-  key
+  key,
+  signal
 ) => {
+  abortIfRequested(signal);
   publish("Checking", dir);
   const remoteReading = readdir(dir, key).catch((err) => {
-    if (dir === "/" || !vanishedFolder(err)) throw err;
-    summary.vanished.push({ dir, tag: dropboxTag(err) });
+    if (dir === "/" || !(err && err.status === 409)) throw err;
+    if (vanishedFolder(err)) {
+      summary.vanished.push({ dir, tag: dropboxTag(err) });
+    } else {
+      // Dropbox refuses this one folder (restricted content, say): note it
+      // and leave Blot's copy of it alone, rather than stop the whole walk
+      publish("Failed to list", dir, dropboxTag(err));
+      recordFailure(summary, dir, new Error("409 " + dropboxTag(err)));
+    }
     return null;
   });
   const [remoteContents, localContents] = await Promise.all([
@@ -310,6 +337,7 @@ const walk = async (
   if (!remoteContents) return;
 
   for (const { name, path_display, is_directory } of localContents) {
+    abortIfRequested(signal);
     const pathOnBlot = join(dir, name);
     // A directory removed in one fs.remove call still accounts for every
     // file total counted inside it, so current must advance by that many.
@@ -370,6 +398,7 @@ const walk = async (
   progress.discover(newFileCount);
 
   for (const remoteItem of remoteContents) {
+    abortIfRequested(signal);
     const localCounterpart = localContents.find(
       (localItem) => localItem.name === remoteItem.name
     );
@@ -426,7 +455,8 @@ const walk = async (
         summary,
         progress,
         readdir,
-        remoteItem.path_lower
+        remoteItem.path_lower,
+        signal
       );
     } else {
       if (hasUnsupportedExtension(pathOnDropbox)) {
@@ -495,7 +525,9 @@ const walk = async (
           localCounterpart.is_directory
         );
         try {
-          await download(client, pathOnDropbox, blogID, pathOnBlot);
+          await download(client, pathOnDropbox, blogID, pathOnBlot, {
+            signal,
+          });
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -503,6 +535,7 @@ const walk = async (
             summary.modifiedPaths.push(pathOnBlot);
           } else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
+          if (cancelled(e, signal)) throw e;
           // A file can end up with a destination path longer than the
           // filesystem allows – seen in production when a Dropbox account
           // got stuck wrapping the same file in nested "(Conflict met
@@ -521,7 +554,9 @@ const walk = async (
         // Already added to total by the discover() pass above.
         progress.publish("Downloading", pathOnBlot, false);
         try {
-          await download(client, pathOnDropbox, blogID, pathOnBlot);
+          await download(client, pathOnDropbox, blogID, pathOnBlot, {
+            signal,
+          });
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -529,6 +564,7 @@ const walk = async (
             summary.modifiedPaths.push(pathOnBlot);
           } else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
+          if (cancelled(e, signal)) throw e;
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
           else recordFailure(summary, pathOnBlot, e);
           // Revoked access fails every remaining file: fail the resync.

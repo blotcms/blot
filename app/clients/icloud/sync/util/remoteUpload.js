@@ -4,7 +4,11 @@ const Authorization = config.icloud.secret; // The Macserver Authorization secre
 const folder = require("storage/folder");
 const fetch = require("../../util/rateLimitedFetchWithRetriesAndTimeout");
 
-module.exports = async (blogID, path) => {
+// Waits 1s then 2s between attempts, so a macserver restart doesn't fail a
+// dashboard edit, which would then be undone by the next walk
+const RETRY_DELAY_MS = 1000;
+
+module.exports = async (blogID, path, { signal } = {}) => {
   const stat = await folder.stat(blogID, path);
   // Milliseconds, with the fraction fs.stat gives: the same value as before
   const modifiedTime = stat.modified;
@@ -23,5 +27,7 @@ module.exports = async (blogID, path) => {
       modifiedTime,
     },
     body,
+    retryDelay: RETRY_DELAY_MS,
+    signal,
   });
 };

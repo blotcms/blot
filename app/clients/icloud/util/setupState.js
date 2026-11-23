@@ -26,7 +26,7 @@ const LINK_PROBLEMS = {
 };
 
 const FORMAT_PROBLEM =
-  "That isn’t an iCloud Drive folder link. Use Copy Link in Finder.";
+  "That isn’t an iCloud folder link. Use Copy Link in Finder.";
 
 const SLOW_JOIN_MS = 2 * 60 * 1000;
 
@@ -112,6 +112,9 @@ module.exports = function setupState(account, options = {}) {
     // checklist, and adds the rest when the copy finishes
     joined:
       stage === "copying" || stage === "transferFailed" || stage === "complete",
+    // The site had no files to copy when the link was sent (routes/
+    // dashboard.js), so the checklist has no copying step
+    nothingToCopy: !!account && account.nothingToCopy === true,
     sharingLink:
       options.sharingLink !== undefined
         ? options.sharingLink

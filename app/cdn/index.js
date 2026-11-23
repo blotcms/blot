@@ -8,6 +8,8 @@ const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const key = require("models/template/key");
 const assets = require("storage/assets");
 const folder = require("storage/folder");
+const sendObject = require("storage/sendObject");
+const publishZip = require("templates/demo/publishZip");
 const {
   getStat,
   PENDING_VERSION,
@@ -47,6 +49,38 @@ cdn.use("/plugins", static(GLOBAL_STATIC_FILES + "/plugins"));
 // /documentation/v-8d7d9d72/favicon-180x180.png
 // /documentation/v-76e1992c/documentation.min.css
 cdn.use("/documentation/v-:version", static(config.views_directory));
+
+// The download ZIPs of the demo folders, e.g. /folders/bees-0123456789abcdef.zip,
+// from the storage bucket's private folders/ prefix (templates/demo/
+// publishZip). The hash is of the ZIP's files, so a URL never changes bytes.
+// A missing ZIP isn't cached: a deploy may upload it a moment after the page
+// that links it goes live.
+cdn.get("/folders/:file", async (req, res, next) => {
+  const file = req.params.file;
+  const notFound = () => res.set("Cache-Control", "no-store").sendStatus(404);
+
+  if (!publishZip.KEY.test(file)) return notFound();
+
+  try {
+    await sendObject(
+      req,
+      res,
+      publishZip.PREFIX + file,
+      {
+        maxAge: "1y",
+        immutable: true,
+        headers: { "Content-Type": "application/zip" },
+      },
+      {
+        notFound: () => Object.assign(new Error("Not found"), { status: 404 }),
+        label: "[cdn] folder zip stream failed " + file,
+      }
+    );
+  } catch (err) {
+    if (err.status === 404) return notFound();
+    next(err);
+  }
+});
 
 // Serves files directly from a blog's folder e.g.
 // /blog_1234/folder/v-1a2b3c4d/favicon.ico

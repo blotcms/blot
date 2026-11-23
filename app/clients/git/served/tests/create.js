@@ -84,7 +84,7 @@ describe("git store: new-folder setup", function () {
     await local.expectSynced();
   });
 
-  it("takes back the store's copy when recording the setup fails, so a retry works", async function () {
+  it("leaves the store empty when recording the setup fails, so a retry works", async function () {
     await folder.write(this.blog.id, "/first.txt", "Hello");
 
     var setApplied = database.setApplied;
@@ -114,6 +114,53 @@ describe("git store: new-folder setup", function () {
     expect(
       (await manifest.read(this.stores[this.blog.id])).refs["refs/heads/master"]
     ).toBe(await local.remoteHead());
+  });
+
+  it("records the first commit as applied before the store has it, so a setup killed after the swap leaves the first sync its base", async function () {
+    await folder.write(this.blog.id, "/first.txt", "Hello");
+
+    var ctx = this;
+    var setApplied = database.setApplied;
+    var emptyWhenRecorded = null;
+
+    spyOn(database, "setApplied").and.callFake(async function () {
+      if (emptyWhenRecorded === null) emptyWhenRecorded = await isEmpty(ctx);
+      return setApplied.apply(database, arguments);
+    });
+
+    var local = await connect(this);
+
+    expect(emptyWhenRecorded).toBe(true);
+    expect(await database.getApplied(this.blog.id)).toBe(
+      await local.remoteHead()
+    );
+  });
+
+  it("stops a setup whose lock a disconnect seized, leaving the store empty", async function () {
+    await folder.write(this.blog.id, "/first.txt", "Hello");
+
+    var controller = new AbortController();
+    var stub = {
+      signal: controller.signal,
+      status: function () {},
+      log: function () {},
+    };
+
+    var err = await require("clients/git/served/create")(this.blog, stub, {
+      beforeSave: async function () {
+        controller.abort(
+          Object.assign(new Error("Sync cancelled: disconnect"), {
+            code: "ECANCELED",
+          })
+        );
+      },
+    }).then(
+      () => null,
+      (e) => e
+    );
+
+    expect(err && err.code).toBe("ECANCELED");
+    expect(await isEmpty(this)).toBe(true);
   });
 
   it("refuses to set up over a store copy the blog already has, and leaves it alone", async function () {

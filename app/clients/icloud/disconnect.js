@@ -3,16 +3,15 @@ const database = require("./database");
 const placeholders = require("clients/util/placeholders");
 const fetch = require("./util/rateLimitedFetchWithRetriesAndTimeout");
 const config = require("config");
+const seize = require("sync/seize");
 
 const MACSERVER_URL = config.icloud.server_address; // The Macserver base URL from config
 const MACSERVER_AUTH = config.icloud.secret; // The Macserver Authorization secret from config
 
-// Resolves to the warning when the Mac server could not be told, else null.
-module.exports = async function disconnect(blogID) {
-  let remoteWarning = null;
-
+// Tells the Mac server to stop syncing the blog's folder, best effort:
+// resolves to a warning when it could not be told, else null.
+async function notifyMacserver(blogID) {
   try {
-    // Phase A (best effort): notify the Mac server to disconnect.
     await fetch(`${MACSERVER_URL}/disconnect`, {
       method: "POST",
       headers: {
@@ -21,8 +20,9 @@ module.exports = async function disconnect(blogID) {
         blogID: blogID,
       },
     });
+    return null;
   } catch (error) {
-    remoteWarning = {
+    const remoteWarning = {
       event: "icloud-disconnect-remote-failed",
       blogID,
       error: {
@@ -36,15 +36,39 @@ module.exports = async function disconnect(blogID) {
       "icloud-disconnect-remote-failed",
       JSON.stringify(remoteWarning)
     );
+
+    return remoteWarning;
   }
+}
+
+// Resolves to the warning when the Mac server could not be told, else null.
+//
+// The Mac server is told first, so it stops sending changes while the lock
+// is taken. The account is deleted under the blog's folder lock, taken from
+// any sync still running (sync/seize.js): that sync is stopped, and writes
+// nothing after the account is deleted, which would otherwise bring back a
+// record of the account or a placeholder after they are removed.
+module.exports = async function disconnect(blogID) {
+  // Phase A (best effort): notify the Mac server to disconnect.
+  const remoteWarning = await notifyMacserver(blogID);
 
   // Phase B (authoritative local): always disconnect locally.
-  await database.delete(blogID);
+  await seize(
+    blogID,
+    async () => {
+      await database.delete(blogID);
+      await Blog.set(blogID, { client: "" });
+    },
+    { reason: "disconnect" }
+  );
 
-  // Their bytes are only in iCloud, which Blot can no longer reach
+  // Their bytes are only in iCloud, which Blot can no longer reach. Once
+  // seize has released the lock: removeAtDisconnect syncs each removal, so
+  // it takes the lock itself. The account is gone by now, so nothing iCloud
+  // sends can bring a placeholder back meanwhile.
   await placeholders.removeAtDisconnect(blogID);
-
-  await Blog.set(blogID, { client: "" });
 
   return remoteWarning;
 };
+
+module.exports.notifyMacserver = notifyMacserver;

@@ -1,7 +1,0 @@
-# Contours
-
-{>} ![Contours](_pic.png)
-
-Contours around a saddle point. Selfmade with Mathematica and Inkscape.
-
-Source: [Wikipedia](https://commons.wikimedia.org/wiki/File:Saddle_contours.svg)

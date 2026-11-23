@@ -5,7 +5,6 @@ const path = require("path");
 const client = require("models/client");
 const documentation = require("./documentation/build");
 const templates = require("./templates");
-const folders = require("./templates/folders");
 const clfdate = require("helper/clfdate");
 const scheduler = require("./scheduler");
 const logRedisCacheStats = require("./scheduler/redis-cache-stats");
@@ -131,6 +130,24 @@ async function runPostListenTasks() {
     logError("Failed to start follow-up syncs", err);
   }
 
+  try {
+    // Whole-blog rebuilds a settings change or the dashboard queued, and any
+    // a killed process left part done. Any container may run them. Previews
+    // share the dev Redis and skip them.
+    if (!config.preview) {
+      log("Starting pending rebuilds");
+      const pendingRebuilds = require("sync/pendingRebuilds");
+      pendingRebuilds.start();
+      require("helper/drain").onStart(() => {
+        pendingRebuilds
+          .stop()
+          .catch((err) => logError("Failed to stop pending rebuilds", err));
+      });
+    }
+  } catch (err) {
+    logError("Failed to start pending rebuilds", err);
+  }
+
   // Cron jobs and client jobs take Redis locks, so every container runs them.
   // Worktree previews share the dev Redis and skip them.
   try {
@@ -146,7 +163,7 @@ async function runPostListenTasks() {
   // files through the Local client. Before the clients start, so they're on it.
   try {
     if (!config.preview && config.environment === "development") {
-      await require("./templates/folders/local").start();
+      await require("./templates/demo/local").start();
     }
   } catch (err) {
     logError("Failed to sync demo folder blogs", err);
@@ -199,18 +216,8 @@ async function runPostListenTasks() {
     logError("Failed to configure local blogs", err);
   }
 
-  if (config.environment === "production") {
-    log("Building folders asynchronously");
-
-    setImmediate(async () => {
-      try {
-        await folders();
-        log("Built folders asynchronously");
-      } catch (err) {
-        logError("Error building folders", err);
-      }
-    });
-  }
+  // The production demo blogs are synced by the deploy, not here: the image
+  // doesn't carry their folders (scripts/deploy/demo-folders.js, #2940).
 
   try {
     const cdnURL = require("documentation/tools/cdn-url-helper")({

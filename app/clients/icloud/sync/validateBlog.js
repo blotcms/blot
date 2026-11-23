@@ -48,7 +48,15 @@ const walk = async (blogID, publish, heldLock) => {
       }
     }
 
-    return await syncFromiCloud(blogID, publish, folder.update);
+    // A disconnect stops the walk through the lock's signal (sync/seize.js),
+    // and inside run its writes to the folder throw. The blog is going, so
+    // there is nothing to report or repair.
+    const summary = await folder.run(() =>
+      syncFromiCloud(blogID, publish, folder.update, {
+        signal: folder.signal,
+      })
+    );
+    return folder.signal.aborted ? REFUSED : summary;
   } catch (err) {
     error = err;
     throw err;

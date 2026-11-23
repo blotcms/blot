@@ -1,4 +1,5 @@
 var Sync = require("sync");
+var Blog = require("models/blog");
 
 // Brings the blog folder to master in the git store (served/sync.js), inside
 // the sync's folder lock, and passes the changed paths to Blot. The commit
@@ -20,6 +21,14 @@ async function sync(blogID, gitHandle) {
   // acquire the lock, perhaps another process is syncing it. Settles once
   // the sync has released the lock.
   await Sync(blogID, async function (folder) {
+    // A push's sync that waited for a disconnect to finish (a follow-up)
+    // finds the blog off git: its repository is gone, and nothing is applied
+    const blog = await Blog.get({ id: blogID });
+    if (!blog || blog.client !== "git") {
+      folder.log("The blog is no longer on git, nothing to apply");
+      return;
+    }
+
     try {
       await require("./served/sync")(blogID, folder);
     } catch (err) {

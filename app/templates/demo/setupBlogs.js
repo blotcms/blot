@@ -1,0 +1,84 @@
+const Blog = require("models/blog");
+const setBlog = (...args) => Blog.set(...args);
+const getBlog = (by) => Blog.get(by);
+const createBlog = (...args) => Blog.create(...args);
+
+const config = require("./config");
+const CONFIG_PATH = require.resolve("./config");
+const basename = require("path").basename;
+
+// The settings config.js gives a blog: title, template, menu, plugins. Read
+// fresh each time when asked to, so a development server can pick up an edit.
+// settings replaces config.js: the deploy sends the commit's own copy along
+// with the folders (scripts/deploy/demo-folders.js).
+function settingsFor(blog, { reload, settings: given } = {}) {
+  let settings = given || config;
+
+  if (reload) {
+    delete require.cache[CONFIG_PATH];
+    settings = require("./config");
+  }
+
+  const update = { ...(settings[blog.handle] || {}) };
+
+  if (update.plugins) {
+    update.plugins = { ...blog.plugins, ...update.plugins };
+  }
+
+  if (update.menu) {
+    update.menu = mergeMenu(update.menu, blog.menu);
+  }
+
+  return update;
+}
+
+async function setupBlogs(user, folders, { settings } = {}) {
+  const blogs = {};
+
+  // Create/get blogs
+  for (const path of folders) {
+    const handle = basename(path);
+
+    console.log("Setting up", handle);
+
+    let blog = await getBlog({ handle });
+
+    if (blog && blog.owner !== user.uid) {
+      throw new Error(`${blog.handle} owned by another user`);
+    }
+
+    if (!blog) {
+      console.log("Creating blog", handle);
+      blog = await createBlog(user.uid, { handle });
+    }
+
+    const update = settingsFor(blog, { settings });
+
+    await setBlog(blog.id, { ...update, client: "" });
+
+    blogs[blog.id] = { path, blog };
+  }
+
+  return blogs;
+}
+
+module.exports = setupBlogs;
+module.exports.settingsFor = settingsFor;
+
+// The config decides which pages are in the menu and in what order, but each
+// item's label, url and metadata are copied from its page entry by sync/fix.
+// Keep those from the existing menu so rebuilding on every boot doesn't reset
+// them and make Fix() report (and email about) the same repair each deploy.
+// Only copy fields the existing item actually has: an item written straight
+// from the config has no metadata, and an undefined key fails validation.
+function mergeMenu(configMenu, existingMenu = []) {
+  return configMenu.map((item) => {
+    const existing = existingMenu.find((other) => other.id === item.id);
+    if (!existing) return item;
+    const merged = { ...item };
+    for (const key of ["label", "url", "metadata"]) {
+      if (existing[key] !== undefined) merged[key] = existing[key];
+    }
+    return merged;
+  });
+}

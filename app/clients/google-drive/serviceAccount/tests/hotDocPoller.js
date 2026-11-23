@@ -327,7 +327,7 @@ describe("google drive hotDocPoller", function () {
       spyOn(database.blog, "get").and.returnValue(
         Promise.resolve({ folderId, serviceAccountId })
       );
-      spyOn(database.blog, "store").and.returnValue(Promise.resolve());
+      spyOn(database.blog, "update").and.returnValue(Promise.resolve(true));
 
       lock = {
         folder: {
@@ -335,6 +335,8 @@ describe("google drive hotDocPoller", function () {
             .createSpy("update")
             .and.returnValue(Promise.resolve()),
           status: jasmine.createSpy("status"),
+          signal: new AbortController().signal,
+          run: (fn) => fn(),
         },
         done: jasmine.createSpy("done").and.returnValue(Promise.resolve()),
       };
@@ -398,7 +400,7 @@ describe("google drive hotDocPoller", function () {
       expect(applied.modifiedTime).toEqual(modifiedTime);
       expect(lock.done).toHaveBeenCalledTimes(1);
       expect(poller.fullSync).not.toHaveBeenCalled();
-      expect(database.blog.store).toHaveBeenCalledWith(blogID, {
+      expect(database.blog.update).toHaveBeenCalledWith(blogID, {
         lastSync: jasmine.any(Number),
       });
     });
@@ -505,6 +507,16 @@ describe("google drive hotDocPoller", function () {
         Promise.resolve({ folderId: "elsewhere", serviceAccountId })
       );
       await expectFullSync("account-changed");
+    });
+
+    it("doesn't stamp lastSync while setup copies the site's files", async function () {
+      database.blog.get.and.returnValue(
+        Promise.resolve({ folderId, serviceAccountId, preparing: true })
+      );
+      await expectFullSync("account-changed");
+      expect(database.blog.update).not.toHaveBeenCalledWith(blogID, {
+        lastSync: jasmine.any(Number),
+      });
     });
   });
 

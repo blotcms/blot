@@ -11,8 +11,10 @@ function delay(ms) {
 
 // Sets up a blog's repository from its folder, in the git store
 // (served/create.js), inside the sync's folder lock. While it runs the blog
-// is marked as being set up (database.setCreating, which expires by itself),
-// for the dashboard; the mark goes when the setup ends, however it ends.
+// is marked as being set up (database.setCreating, which expires soon by
+// itself), for the dashboard. The setup renews the mark while it runs, and
+// clears it when it ends, however it ends: a setup killed by a deploy stops
+// renewing it, so the blog is not left "in progress" for long.
 async function create(blog) {
   try {
     await database.setCreating(blog.id);
@@ -24,6 +26,9 @@ async function create(blog) {
         err.message
     );
   }
+
+  const renewal = setInterval(renewMark, database.CREATING_REFRESH_MS, blog.id);
+  renewal.unref();
 
   // The mark is cleared once the sync has released the folder lock. A setup
   // that cannot run (the folder is locked) leaves no mark behind either.
@@ -43,26 +48,45 @@ async function create(blog) {
       }
     });
   } finally {
+    clearInterval(renewal);
     await database.clearCreating(blog.id).catch(function () {});
   }
 }
 
 module.exports = create;
 
+async function renewMark(blogID) {
+  try {
+    await database.refreshCreating(blogID);
+  } catch (e) {
+    console.log(
+      clfdate() + " Git: create: could not renew the setup mark: " + e.message
+    );
+  }
+}
+
 async function createRepository(blog, folder) {
   report(folder, "Creating token");
   await prepareMetadata(blog);
 
-  const made = await require("./served/create")(blog, folder);
-
   // Everything in the folder is already in the repository, and Blot already
   // has the folder's entries, so the first sync starts from this commit. An
-  // old value would be from an earlier connection: this replaces it. Until
-  // both are recorded the store's copy is still the setup's to take back, so
-  // a failure here leaves the store empty for a retry.
-  try {
+  // old value would be from an earlier connection: this replaces it. It is
+  // recorded before the commit goes into the store: a setup killed between
+  // the two (a deploy) would otherwise leave a repository with no applied
+  // commit, and its first sync would compare from nothing, so files deleted
+  // before that push would stay on the blog. One killed before the store has
+  // the commit leaves the create page, and the next setup replaces the value.
+  const made = await require("./served/create")(blog, folder, {
     // Looked up on the module each time, so a spec can make it fail
-    await database.setApplied(blog.id, made.commit);
+    beforeSave: (commit) => database.setApplied(blog.id, commit),
+  });
+
+  // Until the status is recorded the store's copy is still the setup's to
+  // take back, so a failure here leaves the store empty for a retry. So does
+  // a disconnect that seized the lock meanwhile.
+  try {
+    if (folder.signal) folder.signal.throwIfAborted();
     await database.setStatus(blog.owner, "createComplete");
   } catch (err) {
     await made.rollback();

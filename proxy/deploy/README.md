@@ -215,12 +215,16 @@ mounts at `/var/cache/openresty`. It must exist and belong to uid 1000
 Required in production: without `BLOT_SANDBOX=1` in the proxy env file a unit
 has no browser and no way to fetch a user-supplied URL, so screenshots, remote images and domain
 checks fail closed, and verify-container refuses the deploy. With it a unit
-gets `--cgroupns=host`, `--security-opt seccomp=sandbox-seccomp.json`, binds of
-`/sys/fs/cgroup/blot-sandbox/<unit>` at `/sandbox-cgroup` and
-`/sys/fs/cgroup/blot-sandbox/<unit>-browser` at `/sandbox-browser-cgroup`,
-`--device /dev/net/tun` for pasta, and `BLOT_SANDBOX_SOCKET`. The
-deploy refuses, before touching anything, if the host has not made those
-directories (`config/host/host/setup.sh`, Amazon Linux 2023). See
+gets `--cgroup-parent system-blot-<unit>.slice`, `--cgroupns=host`,
+`--security-opt seccomp=sandbox-seccomp.json`, binds of
+`/sys/fs/cgroup/system.slice/system-blot.slice/system-blot-<unit>.slice/sandbox` at `/sandbox-cgroup` and
+`/sys/fs/cgroup/system.slice/system-blot.slice/system-blot-<unit>.slice/browser` at `/sandbox-browser-cgroup`,
+`--device /dev/net/tun` for pasta, and `BLOT_SANDBOX_SOCKET`. The slice holds
+the container and both jails under one memory limit, the unit's (#2795,
+`UNIT.memory` in `scripts/deploy/constants.js`). The deploy refuses, before
+touching anything, if the host has not made the slice and the two directories
+or the slice's limit is not `UNIT.memory` (`npm run deploy-host`,
+`config/host/scripts/unit-cgroups`, Amazon Linux 2023). See
 `app/sandbox/README.md`.
 
 `sandbox-seccomp.json` is moby's `profiles/seccomp/default.json` at v25.0.14

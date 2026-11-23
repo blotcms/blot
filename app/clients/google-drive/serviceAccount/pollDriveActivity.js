@@ -83,7 +83,7 @@ module.exports = async (
           if (!succeeded) return;
         }
         console.log(prefix(), "storing timestamp", timestamp);
-        await database.blog.store(blogID, {
+        await database.blog.update(blogID, {
           latestDriveActivityTimestamp: timestamp,
         });
       } else {

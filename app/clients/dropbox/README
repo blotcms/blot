@@ -74,7 +74,7 @@ The Dropbox client operates using a webhook-based event notification system comb
   - `isDotfileOrDotfolder`: Alias for `shouldIgnoreFile()`, filters out dotfiles and dotfolders.
   - `INSUFFICIENT_SPACE_ERROR_CODE` / `isInsufficientSpaceError()`: The `507` account `error_code` sentinel for "ran out of Dropbox space", and a check for that error shape from the Dropbox SDK.
   - `transferIncomplete(account)`: True while the initial transfer to Dropbox hasn't finished - see "Handling an incomplete initial transfer" below.
-- **`util/createClient.js`**: `await createClient(blogID)` retrieves the Dropbox account from the database and instantiates a Dropbox SDK client. Handles token refresh if a refresh token is present. Resolves to `{ error, client, account }` and never rejects: the account comes with an error when the token could not be refreshed, which disconnecting needs. `util/loadClient.js` is the same, looked up when called.
+- **`util/createClient.js`**: `await createClient(blogID, { signal })` retrieves the Dropbox account from the database and instantiates a Dropbox SDK client. Handles token refresh if a refresh token is present. Resolves to `{ error, client, account }` and never rejects: the account comes with an error when the token could not be refreshed, which disconnecting needs. With `signal` (the sync's `folder.signal`), every request the client makes is cut off once it aborts. `util/loadClient.js` is the same, looked up when called. `util/cancelled.js` tells an error that ends a cancelled sync, which is never retried or persisted.
 - **`util/download.js`**: Downloads a file from Dropbox and writes it into the blog folder with `storage/folder` (`download(client, source, blogID, path, callback)`). Does not set the local file's mtime; change detection elsewhere in the client relies on Dropbox's `content_hash`/size, not local mtimes.
 - **`util/upload.js`**: Uploads a file from disk to Dropbox. Omits `client_modified` so Dropbox stamps the file with its own server time, since Blot no longer keeps a settable local mtime to send.
 - **`util/retry.js`**: Wraps a function to retry on transient errors.
@@ -110,9 +110,11 @@ HTML templates rendered by dashboard routes:
 - **`tests/database.js`**: Tests for database operations.
 - **`tests/reset-to-blot.js`**: Tests for the download/apply walk, including that it refuses outright (before touching anything) for a blog with an incomplete transfer.
 - **`tests/reset-from-blot.js`**: Tests for the initial transfer's quota pre-flight check (including that it nets out bytes already on Dropbox and doesn't get blocked by a negative free-space figure on a zero-growth retry), its mid-transfer/end-of-transfer handling of failed uploads, and that a full success clears `transfer_pending`.
-- **`tests/init.js`**: Tests `transferIncomplete()` and that the hourly validation and startup resync skip a blog with an incomplete transfer (both the `transfer_pending` and legacy `error_code: 507` cases).
+- **`tests/init.js`**: Tests `transferIncomplete()`, that the hourly validation and startup resync never walk a blog with an incomplete transfer (both the `transfer_pending` and legacy `error_code: 507` cases), that they resume an interrupted transfer but not one stopped by a full Dropbox or still running, and that the startup job is named per unit.
+- **`tests/webhook-arm.js`**: Tests that the webhook leaves a follow-up for each blog before it answers Dropbox, and still syncs a blog it couldn't arm.
+- **`tests/write-order.js`**: Tests that `write()` uploads to Dropbox before writing to Blot's folder.
 - **`tests/sync-transfer-incomplete.js`**: Tests that the webhook-driven sync in `sync/index.js` skips a blog with an incomplete transfer before running delta/apply, without touching `error_code`/`cursor`.
-- **`tests/setup/createFolder-reuse.js`**: Tests the retry-reuses-the-partial-folder behavior in `routes/setup/createFolder.js` (reuse, not_found-falls-through vs. transient-error-propagates, account_id/full_access mismatch, already-completed).
+- **`tests/setup/createFolder-reuse.js`**: Tests the retry-reuses-the-partial-folder behavior in `routes/setup/createFolder.js` (reuse, not_found-falls-through vs. transient-error-propagates, account_id/full_access mismatch, already-completed) and the reconnect reuse of the previous folder (different account, folder used by another blog).
 - **`tests/classifyError.js`**: Tests for health classification of Dropbox errors and stored rows.
 - **`tests/getHealth.js`**: Tests for the client's `getHealth` method.
 - **`tests/waitForErrorTimeout.js`**: Tests for rate limit handling.
@@ -186,14 +188,14 @@ Returns a Promise of the client's current health for the dashboard (`{state, iss
 
 ### `await disconnect(blogID)`
 
-Disconnects a blog from Dropbox, inside the blog's sync lock.
+Disconnects a blog from Dropbox, under the blog's sync lock, which it takes from any sync or setup still running (`sync/seize.js`, reason `disconnect`). That sync's `folder.signal` aborts: its requests to Dropbox are cut off, and it writes nothing to the account or the folder afterwards. Then it removes the blog's placeholders in a sync of their own.
 
 - **Parameters**:
   - `blogID`: String identifier for the blog.
-- **Returns**: A promise, which resolves once the lock is released and rejects as `sync()` does if the lock is held.
+- **Returns**: A promise, which resolves once the account is dropped and rejects with code `ELOCKED` if the lock couldn't be taken.
 - **Behavior**:
   - Clears the blog's client type.
-  - Removes Dropbox account credentials from the database.
+  - Removes Dropbox account credentials from the database, keeping only the blog's `folder_id` and `account_id` (`database.getPrevious`) so reconnecting can reuse the folder.
   - Revokes the OAuth token if no other blogs use the same account.
 
 ### `resync(blogID, publish, update)`
@@ -215,6 +217,7 @@ validation and recovery):
   - `blogID`: String identifier for the blog.
   - `publish(args...)`: Callback to report progress (typically logs to console or updates UI).
   - `update(path)` (returns a promise): Notifies Blot's Entry model about each changed path.
+  - `signal` (optional, an `AbortSignal`): checked between files and folders, and passed into every request and download. When it aborts the walk rejects with an `AbortError` (or the signal's reason) and leaves the cursor and error state alone. Callers pass the sync's `folder.signal`, which a disconnect aborts.
 - **Returns**: Promise resolving to a summary object with `{ downloaded, removed, createdDirs, skipped }`.
 - **Behavior**:
   - Walks the entire Dropbox folder recursively.
@@ -268,10 +271,21 @@ The client uses the official Dropbox JavaScript SDK (`dropbox` npm package) to i
 5. Setup function (in `routes/setup/index.js`) is called asynchronously:
    - `getAccount()`: Exchanges code for access/refresh tokens and retrieves account info.
    - `createFolder()`: Creates or designates the blog folder in Dropbox (handles migration for multiple blogs).
+     On a reconnect it reuses the folder the blog used before it disconnected,
+     wherever it is now, if it is the same Dropbox account, the folder still
+     exists, the new permission mode can reach it, and it neither is, holds
+     nor sits inside another blog's folder on the account. It never reuses a
+     folder just because of its name. The account records the reuse
+     (`reused_folder`), so a retry of a failed reconnect transfer stays
+     non-destructive.
    - Saves account info to Redis database.
    - `resetFromBlot()`: Uploads all local blog files to Dropbox. Stops the whole
      transfer if Dropbox runs out of space (see "Handling insufficient Dropbox
-     space" below) or if any file fails to upload.
+     space" below) or if any file fails to upload. On a reconnect into the
+     blog's previous folder it uploads only what the folder lacks
+     (`keepDropbox`), then `resetToBlot()` brings the folder's own changes
+     into Blot. A disconnect stops either walk, and setup keeps the folder
+     lock until it has stopped.
 
 ### Ongoing Sync (Webhook-Triggered)
 
@@ -359,6 +373,33 @@ load that happens once the lock is held) still catches it.
 `sync/index.js`'s webhook-driven sync has the same kind of cheap pre-check,
 after acquiring its own lock and before constructing `Delta`/`Apply`, leaving
 `error_code`/`cursor` untouched when it skips.
+
+A transfer that nothing is running any more (a deploy or crash killed the
+setup) is resumed, not just skipped: `init.js`'s `resumeTransfers()` re-runs
+`resetFromBlot()` under the folder lock with `keepDropbox`, which only uploads
+what Dropbox lacks. It deletes nothing on Dropbox and leaves a file there that
+differs from Blot's alone, since the person may have added or edited it while
+the transfer was paused. It runs its own quota check. The startup job resumes every such blog,
+however long ago its transfer started, and the hourly validation queues them
+once its sweep is done, without waiting for them. A blog whose lock is held
+(setup still running), or whose account has a durable error such as a full
+Dropbox (`issueFromAccount()`), is left alone. After a resume finishes, a
+walk of Dropbox into Blot (`resetToBlot()`) brings in what the person
+added or edited there, then a catch-up sync runs.
+
+When a second blog connects to an account whose app folder root is already
+another blog's folder, setup moves that blog's files into a subfolder
+(`routes/setup/createFolder.js`'s `moveExistingFiles()`), retrying for about
+two minutes if webhooks keep that blog's folder lock busy. It records the
+subfolder on that blog's account first (`move_folder`/`move_folder_id`), which
+pauses the blog's syncs (`transferIncomplete()`) until the move is done. A
+move a deploy or crash cuts short is finished into the same subfolder: by a
+retried setup, or by `init.js`'s `finishMoves()` in the startup job and after
+the hourly sweep, which then syncs the blog from its new folder.
+
+The startup job runs once per unit per deploy (`onceAtStartup`, named with
+`config.unit`), since blue and green stop and start minutes apart and each
+must resync the syncs its own stop killed.
 
 Specifically for running out of space, `resetFromBlot()` also:
 
@@ -469,7 +510,7 @@ Sync records only failures the customer must act on, tagged with `error_source` 
 - **HTTP 507** (quota exceeded): Persisted as `QUOTA_EXCEEDED`; not retried.
 - **HTTP 400 `invalid_grant` / HTTP 401**: Persisted as `REAUTH_REQUIRED` from any step; not retried. Other 400s are treated as transient. Resyncs (reset to/from Blot) persist errors the same way: only the folder lookup counts as the delta step, so a per-file 409 during a resync is not reported as a missing folder.
 - **HTTP 409 from delta** (`filesListFolder` / `filesGetMetadata` on the blog folder): Persisted as `SOURCE_MISSING`. A `reset` tag is recovered by clearing the cursor and listing from scratch — that is a rename/move, not a missing folder, and does not set `error_code`.
-- **HTTP 409 from apply / write / remove**: Per-file conflict or restricted content. Not persisted, not retried, not reported as a missing folder.
+- **HTTP 409 from apply / write / remove**: Per-file conflict or restricted content. Not persisted, not retried, not reported as a missing folder. A resync records the path in `summary.failed` and carries on; the same goes for any other 409 listing a subfolder. A webhook sync skips a file refused with `path/restricted_content` or `path/not_found` and logs it with the blog and path (no placeholder is written).
 - **HTTP 409 `path/not_found` / `path/not_folder` listing a subfolder during a resync**: The folder was deleted, moved or replaced by a file in Dropbox after its parent was listed. If Dropbox lists the folder as changed since the pre-walk cursor, the walk skips it (`summary.skipped`) and carries on, leaving the catch-up sync to apply the change. Otherwise the 409 is unexplained: it's counted as a failed path (`summary.failed`, so the hourly validation reports a walk error), and nothing is removed. Neither case retries.
 - **Unsupported files** (`.paper`): a placeholder flagged `SYNC_UNSUPPORTED` is written (see `app/models/file/README`, Flags); download skipped.
 - **Oversized files** (>100 MB): a placeholder flagged `SYNC_TOO_LARGE` is written; download skipped. Placeholders are never uploaded back to Dropbox, but files which really are empty are.

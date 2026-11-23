@@ -3,6 +3,7 @@ import fetch from "node-fetch";
 import http from "http";
 import https from "https";
 import clfdate from "../util/clfdate.js";
+import { isNotSyncing } from "./notSyncing.js";
 
 // At most five requests to Blot at once. There is no minimum gap between
 // them: Blot takes each blog's sync lock and builds the entry in well under
@@ -81,10 +82,11 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
         }
       }
 
-      // If all retries fail, throw the error
-      if (attempt === retries) {
+      // If all retries fail, throw the error. Blot won't sync the blog at
+      // all (notSyncing.js): asking again can't change that
+      if (attempt === retries || isNotSyncing(error)) {
         const finalError = new Error(
-          `Request failed after ${retries} retries: ${error.message} ${url}`
+          `Request failed after ${attempt} attempt(s): ${error.message} ${url}`
         );
         // lets callers tell an HTTP rejection (e.g. 400) from a network failure
         finalError.status = error.status;

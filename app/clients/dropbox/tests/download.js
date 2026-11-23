@@ -38,4 +38,36 @@ describe("dropbox download", function () {
     const stat = await folder.stat(blogID, destination);
     expect(stat.modified).toBeGreaterThanOrEqual(beforeDownload - 1000);
   });
+
+  it("gives up once the signal aborts, and writes nothing", async function () {
+    const controller = new AbortController();
+    let finish;
+
+    const fakeClient = {
+      filesDownload: () =>
+        new Promise((resolve) => {
+          finish = () =>
+            resolve({ result: { fileBinary: Buffer.from("late") } });
+          controller.abort(
+            Object.assign(new Error("cancelled"), { code: "ECANCELED" })
+          );
+        }),
+    };
+
+    let error;
+    try {
+      await download(fakeClient, "/post.txt", blogID, destination, {
+        metadata: { path_display: "/post.txt", size: 4 },
+        signal: controller.signal,
+      });
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error && error.code).toBe("ECANCELED");
+
+    finish();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(await folder.exists(blogID, destination)).toBe(false);
+  });
 });

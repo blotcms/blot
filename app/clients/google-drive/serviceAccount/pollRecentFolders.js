@@ -25,6 +25,7 @@
 const clfdate = require("helper/clfdate");
 const database = require("../database");
 const driveReaddir = require("../sync/util/driveReaddir");
+const filePrefetch = require("../util/prefetch");
 
 const EVERY_MS = 500;
 const LISTINGS_PER_SECOND = 16;
@@ -118,6 +119,29 @@ const fingerprint = (items) =>
     .sort()
     .join("\n");
 
+// Starts downloading each file whose bytes changed since the last listing
+// (util/prefetch.js), as changes.list and the search do: when this poller
+// sees a change first, the sync it starts would otherwise download the file
+// only once it had the folder lock and had listed the directory again. Only
+// files with an md5Checksum, so never a Doc or a folder.
+const prefetchChanged = (prefetch, drive, before, items) => {
+  const md5Before = new Map();
+  for (const line of before.split("\n")) {
+    const fields = line.split("|");
+    md5Before.set(fields[0], fields[4]);
+  }
+  for (const item of items) {
+    if (!item.md5Checksum || item.md5Checksum === md5Before.get(item.id))
+      continue;
+    if (item.mimeType?.startsWith("application/vnd.google-apps.")) continue;
+    prefetch.start(drive, {
+      id: item.id,
+      md5Checksum: item.md5Checksum,
+      size: item.size,
+    });
+  }
+};
+
 // Lists the recent directories until the signal aborts. onChanged(
 // serviceAccountId, [{ blogID, dirId, folders }]) is called with each round's
 // changed directories, folders being the ids of the folders now in each.
@@ -132,6 +156,7 @@ module.exports = async function pollRecentFolders(
     now = () => Date.now(),
     listingTimeoutMs = LISTING_TIMEOUT_MS,
     statsEveryMs = STATS_EVERY_MS,
+    prefetch = filePrefetch,
   } = {}
 ) {
   if (!serviceAccountId || !drive || !onChanged) {
@@ -233,6 +258,7 @@ module.exports = async function pollRecentFolders(
         const before = last.get(member);
         last.set(member, print);
         if (before === undefined || before === print) continue;
+        prefetchChanged(prefetch, drive, before, items);
         changed.push({
           blogID,
           dirId,
