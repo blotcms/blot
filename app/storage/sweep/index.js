@@ -20,8 +20,8 @@ const bucket = require("./s3");
 //   Bunny in the same pass. The order is Redis, S3, Bunny.
 // - a blog in Perma-Cache with no blog in Redis: removed, with the guard
 //   against more than 50 at once (./permaCache);
-// - the shared directories (documentation, template outputs, static files,
-//   anything else): ./permaCache.
+// - the shared directories (documentation, template outputs, demo folder
+//   ZIPs, static files, anything else): ./permaCache.
 //
 // A run has a second pass, SECOND_PASS_DELAY after the main pass ends (the
 // state's mainDoneAt), for the blogs the main pass left candidates for:

@@ -116,19 +116,17 @@ jobs:
         run: docker compose -f "$E2E_COMPOSE_FILE" up -d --wait --wait-timeout 420
 
       # /health answers before the app has finished starting up: it is still
-      # building the global templates and the folder templates, which would race
-      # the seed scripts below (both build templates). The production app logs
-      # one of these lines when the folder build is done. That takes about 100
-      # seconds from the stack being healthy on a PR run (the production app
-      # image) and about 130 on a master push (the unit image: OpenResty and
-      # two node processes on one runner), so allow five minutes and print how
+      # building the global templates, which would race the seed scripts
+      # below (both build templates). The app logs one of these lines when
+      # the build is done. (The demo folders used to be built on boot too;
+      # the deploy syncs them now, #2940.) Allow five minutes and print how
       # long it took.
       - name: Wait for the app to finish starting
         run: |
           SECONDS=0
           while [ "$SECONDS" -lt 300 ]; do
             if docker compose -f "$E2E_COMPOSE_FILE" logs --no-color app \
-              | grep -qE "Built folders asynchronously|Error building folders"; then
+              | grep -qE "Built templates after listen|Failed to build templates after listen"; then
               echo "the app finished starting after ${SECONDS}s"
               exit 0
             fi

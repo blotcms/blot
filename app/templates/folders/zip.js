@@ -1,13 +1,10 @@
 const fs = require("fs-extra");
-const archiver = require("archiver");
 const config = require("config");
-const clfdate = require("helper/clfdate");
+const { hashFolder } = require("./contents");
+const { keyFor } = require("./publishZip");
 const VIEW_DIRECTORY = config.views_directory + "/folders";
 const FOLDER_DIRECTORY = __dirname;
 const MANIFEST_PATH = VIEW_DIRECTORY + "/manifest.json";
-
-const tmp = require("helper/tempDir")();
-const cache = {};
 
 const buildFolderTree = (directoryPath, depth = 0, relativePath = "") => {
   return fs.readdirSync(directoryPath).map((name) => {
@@ -60,51 +57,12 @@ const buildDisplayTree = (nodes) => {
   });
 };
 
-// Resolves once the ZIP of one folder is written to tmpPath and copied to
-// outputPath, or rejects on an archive error
-const archiveFolder = (folder, tmpPath, outputPath) => {
-  return new Promise((resolve, reject) => {
-    fs.removeSync(tmpPath);
-
-    fs.ensureDirSync(tmp + "folder-zips");
-
-    const output = fs.createWriteStream(tmpPath);
-
-    const archive = archiver("zip", {
-      zlib: { level: 9 }, // Sets the compression level.
-    });
-
-    output.on("close", function () {
-      console.log(archive.pointer() + " total bytes for", folder);
-      cache[folder] = tmpPath;
-      fs.removeSync(outputPath);
-      fs.copy(tmpPath, outputPath).then(resolve, reject);
-    });
-
-    // good practice to catch warnings (ie stat failures and other non-blocking errors)
-    archive.on("warning", function (err) {
-      console.log(err);
-
-      if (err.code === "ENOENT") {
-        // log warning
-      } else {
-        // throw error
-        reject(err);
-      }
-    });
-
-    // good practice to catch this error explicitly
-    archive.on("error", function (err) {
-      console.log(err);
-      reject(err);
-    });
-
-    archive.pipe(output);
-    archive.directory(FOLDER_DIRECTORY + "/" + folder + "/", false);
-    archive.finalize();
-  });
-};
-
+// Writes manifest.json: for each demo folder, its tree (the folder preview on
+// its template pages) and the path of its download ZIP on the CDN,
+// /folders/<name>-<hash>.zip. The ZIPs themselves aren't built here: the
+// deploy uploads them to the storage bucket under the same hash
+// (./publishZip, scripts/deploy/demo-folders.js), so the image carries
+// neither the folders nor their ZIPs (#2940).
 const main = async () => {
   const folders = fs
     .readdirSync(FOLDER_DIRECTORY)
@@ -115,35 +73,12 @@ const main = async () => {
 
   for (const folder of folders) {
     const fullTree = buildFolderTree(FOLDER_DIRECTORY + "/" + folder);
+    const hash = await hashFolder(FOLDER_DIRECTORY + "/" + folder);
     manifest[folder] = {
       fullTree,
       displayTree: buildDisplayTree(fullTree),
+      zip: "/" + keyFor(folder, hash),
     };
-
-    if (cache[folder]) {
-      await fs.copy(cache[folder], VIEW_DIRECTORY + "/" + folder + ".zip");
-      continue;
-    }
-
-    const tmpPath = tmp + "folder-zips/" + folder + ".zip";
-
-    if (config.environment === "development") {
-      if (fs.existsSync(tmpPath)) {
-        console.log(
-          clfdate(),
-          folder,
-          "Copying cached ZIP since we are in development environment"
-        );
-        await fs.copy(tmpPath, VIEW_DIRECTORY + "/" + folder + ".zip");
-        continue;
-      }
-    }
-
-    await archiveFolder(
-      folder,
-      tmpPath,
-      VIEW_DIRECTORY + "/" + folder + ".zip"
-    );
   }
 
   fs.ensureDirSync(VIEW_DIRECTORY);

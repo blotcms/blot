@@ -227,6 +227,10 @@ RUN apk add --no-cache openresty sudo procps \
 # This gets our source code into builder for use in next two stages
 # It gets its own stage so we don't have to copy twice
 # this stage starts from `base` and skips the dev-only stages
+FROM base AS app-source
+COPY ./app /src/app
+RUN find /src/app/templates/folders -mindepth 1 -maxdepth 1 -type d -exec rm -rf {} +
+
 FROM base AS source
 
 WORKDIR /usr/src/app
@@ -239,9 +243,16 @@ COPY --from=deps /usr/src/app/node_modules ./node_modules
 # recursive chown rewrites every inode, so it would duplicate the whole ~380MB
 # `app` tree into an extra layer that every deploy then has to pull. config,
 # scripts and node_modules stay root-owned (the app only reads them).
+#
+# The demo folders' directories (app/templates/folders/*/) stay out of the
+# image (#2940): the deploy syncs them into the demo blogs and uploads their
+# ZIPs (scripts/deploy/demo-folders.js). They are removed in the throwaway
+# app-source stage, so no layer of this image ever holds them; the docs build
+# below reads them from the build context with a bind mount. The .js files
+# next to them stay: the deploy's sync runs app/templates/folders/index.js.
 COPY ./config ./config
 COPY ./scripts ./scripts
-COPY --chown=1000:1000 ./app ./app
+COPY --from=app-source --chown=1000:1000 /src/app ./app
 COPY ./TODO ./TODO
 
 ## Stage 6 (production)
@@ -262,8 +273,10 @@ USER 1000
 # Re-configuring git for the non-root user
 RUN git config --global user.email "you@example.com" && git config --global user.name "Your Name"
 
-# Build the documentation
-RUN node app/documentation/build
+# Build the documentation. It reads the demo folders (their trees, and the
+# hash in each ZIP's URL) from the build context: they aren't in the image.
+RUN --mount=type=bind,source=app/templates/folders,target=/usr/src/app/app/templates/folders \
+  node app/documentation/build
 
 CMD ["node", "/usr/src/app/app/index.js"]
 

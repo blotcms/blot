@@ -5,7 +5,6 @@ const path = require("path");
 const client = require("models/client");
 const documentation = require("./documentation/build");
 const templates = require("./templates");
-const folders = require("./templates/folders");
 const clfdate = require("helper/clfdate");
 const scheduler = require("./scheduler");
 const logRedisCacheStats = require("./scheduler/redis-cache-stats");
@@ -217,18 +216,8 @@ async function runPostListenTasks() {
     logError("Failed to configure local blogs", err);
   }
 
-  if (config.environment === "production") {
-    log("Building folders asynchronously");
-
-    setImmediate(async () => {
-      try {
-        await folders();
-        log("Built folders asynchronously");
-      } catch (err) {
-        logError("Error building folders", err);
-      }
-    });
-  }
+  // The production demo blogs are synced by the deploy, not here: the image
+  // doesn't carry their folders (scripts/deploy/demo-folders.js, #2940).
 
   try {
     const cdnURL = require("documentation/tools/cdn-url-helper")({

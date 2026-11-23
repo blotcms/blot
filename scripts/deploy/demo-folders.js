@@ -9,12 +9,14 @@
 // same ssh target as units.sh (BLOT_DEPLOY_TARGET, default blot). <commit>
 // defaults to HEAD. Safe to re-run.
 //
-// 1. Each folder's git tree hash at <commit> is compared with the marker,
+// 1. Each folder's git tree hash and config.js settings at <commit> are
+//    compared with the marker,
 //    ~/demo-folders.json on the host (in the deploy user's home on the root
 //    volume: the app's tmp directory is on the instance store, which a
 //    stop/start wipes, and prune-tmp empties it daily). A lost marker only
 //    means every folder is synced once, which writes nothing that matches.
-// 2. The changed folders go over ssh, as a tar from git archive, into
+// 2. The changed folders and config.js go over ssh, as a tar from git
+//    archive, into
 //    <tmp>/demo-folders/<commit>/ inside the unit: the app's tmp directory
 //    is bind-mounted into every unit at the same path.
 // 3. For each, one at a time, the unit runs app/templates/folders/index.js
@@ -26,6 +28,8 @@
 // Node built-ins only: the deploy workflow runs no npm install.
 const { spawn, execFileSync } = require("child_process");
 const { join } = require("path");
+const crypto = require("crypto");
+const vm = require("vm");
 const { TMP_DIRECTORY } = require("./constants");
 
 const ROOT = join(__dirname, "../..");
@@ -71,15 +75,33 @@ function ssh(command, { input, inherit } = {}) {
   });
 }
 
-// { name: tree hash } for the demo folders at commit, skipping names that
-// start with - or . as the build does
-function treeHashes(commit) {
+// { name: hash } for the demo folders at commit, skipping names that start
+// with - or . as the build does. The hash is the folder's git tree hash and a
+// hash of its settings in config.js (title, template, menu, plugins), so a
+// change to either syncs the folder again, and a change to one blog's
+// settings syncs only that blog.
+function folderHashes(commit) {
+  const settings = loadConfig(commit);
   const hashes = {};
   for (const line of git("ls-tree", commit, FOLDERS + "/").split("\n")) {
     const match = /^\d+ tree ([0-9a-f]+)\t.+\/([^/]+)$/.exec(line);
-    if (match && !/^[-.]/.test(match[2])) hashes[match[2]] = match[1];
+    if (!match || /^[-.]/.test(match[2])) continue;
+    const settingsHash = crypto
+      .createHash("sha1")
+      .update(JSON.stringify(settings[match[2]] || null))
+      .digest("hex");
+    hashes[match[2]] = match[1] + ":" + settingsHash;
   }
   return hashes;
+}
+
+// config.js at commit, evaluated like the module it is (it only assigns
+// module.exports)
+function loadConfig(commit) {
+  const source = git("show", commit + ":" + FOLDERS + "/config.js");
+  const module = { exports: {} };
+  vm.runInNewContext(source, { module, exports: module.exports });
+  return module.exports;
 }
 
 async function readMarker() {
@@ -112,7 +134,15 @@ async function send(commit, names, dir) {
 
   const archive = spawn(
     "git",
-    ["-C", ROOT, "archive", "--format=tar", commit + ":" + FOLDERS, ...names],
+    [
+      "-C",
+      ROOT,
+      "archive",
+      "--format=tar",
+      commit + ":" + FOLDERS,
+      "config.js",
+      ...names,
+    ],
     { stdio: ["ignore", "pipe", "inherit"] }
   );
   const archived = new Promise((resolve, reject) => {
@@ -137,7 +167,7 @@ async function main() {
     "--verify",
     (process.argv[2] || "HEAD") + "^{commit}"
   );
-  const hashes = treeHashes(commit);
+  const hashes = folderHashes(commit);
   const marker = await readMarker();
   const changed = Object.keys(hashes).filter(
     (name) => marker[name] !== hashes[name]
