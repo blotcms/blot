@@ -1,4 +1,6 @@
 const folder = require("storage/folder");
+const client = require("models/client");
+const database = require("../../../database");
 
 const uploadPath = require.resolve("../upload");
 const establishSyncLockPath = require.resolve("sync/establishSyncLock");
@@ -41,6 +43,7 @@ describe("icloud upload route", function () {
   };
 
   let blogID;
+  let updateCalls;
 
   const fakeReq = ({ blogID, filePath, body, modifiedTime }) => ({
     header(name) {
@@ -84,7 +87,7 @@ describe("icloud upload route", function () {
       Math.random() * 10000
     )}`;
 
-    let updateCalls = [];
+    updateCalls = [];
     mockModule(establishSyncLockPath, async () => ({
       folder: {
         status: () => {},
@@ -100,6 +103,74 @@ describe("icloud upload route", function () {
   afterEach(async () => {
     restoreModules();
     await folder.removeAll(blogID);
+    await client.del(database._pendingUploadsKey(blogID));
+  });
+
+  it("builds a file already on disk whose earlier upload never built it", async () => {
+    const filePath = "/post.txt";
+    const contents = "hello world";
+    // The process died after writing the file and before building it
+    await database.markUploadPending(blogID, filePath);
+    await folder.write(blogID, filePath, contents);
+
+    const res = fakeRes();
+    await require(uploadPath)(
+      fakeReq({ blogID, filePath, body: Buffer.from(contents) }),
+      res
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("successfully uploaded");
+    expect(updateCalls).toEqual([filePath]);
+    expect(await database.isUploadPending(blogID, filePath)).toBe(false);
+  });
+
+  it("marks an upload only until it is built", async () => {
+    const filePath = "/new.txt";
+    let pendingDuringUpdate = null;
+    mockModule(establishSyncLockPath, async () => ({
+      folder: {
+        status: () => {},
+        update: async (path) => {
+          pendingDuringUpdate = await database.isUploadPending(blogID, path);
+          updateCalls.push(path);
+        },
+      },
+      done: async () => {},
+    }));
+
+    const res = fakeRes();
+    await require(uploadPath)(
+      fakeReq({ blogID, filePath, body: Buffer.from("new") }),
+      res
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(pendingDuringUpdate).toBe(true);
+    expect(updateCalls).toEqual([filePath]);
+    expect(await database.isUploadPending(blogID, filePath)).toBe(false);
+  });
+
+  it("leaves the mark when the build fails, so a retry builds the file", async () => {
+    const filePath = "/fails.txt";
+    mockModule(establishSyncLockPath, async () => ({
+      folder: {
+        status: () => {},
+        update: async () => {
+          throw new Error("process died");
+        },
+      },
+      done: async () => {},
+    }));
+
+    const res = fakeRes();
+    await require(uploadPath)(
+      fakeReq({ blogID, filePath, body: Buffer.from("x") }),
+      res
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(await database.isUploadPending(blogID, filePath)).toBe(true);
   });
 
   it("treats identical contents as already current regardless of mtime, without setting mtime", async () => {
@@ -124,6 +195,7 @@ describe("icloud upload route", function () {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("already up to date");
+    expect(updateCalls).toEqual([]);
 
     const after = await folder.stat(blogID, filePath);
     expect(after.modified).toBe(before.modified);

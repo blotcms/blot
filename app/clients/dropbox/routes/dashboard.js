@@ -15,6 +15,7 @@ const partials = { "dropbox-steps": views + "steps.html" };
 const client = require("models/client");
 const setClient = require("clients/util/setClient");
 const setupState = require("clients/dropbox/util/setupState");
+const folderLock = require("sync/lock");
 
 dashboard.use(async function loadDropboxAccount(req, res, next) {
   try {
@@ -36,8 +37,34 @@ dashboard.use(async function loadDropboxAccount(req, res, next) {
   next();
 });
 
+// A deploy or crash that kills a setup leaves it in the session, which would
+// show the checklist's spinners for good and hide the health issue's action
+// (such as Retry transfer). Drops it once nothing runs it. If the lock can't
+// be read, the setup is left as it is.
+async function dropStoppedSetup(req) {
+  if (!req.session.dropbox) return;
+
+  let held;
+  try {
+    held = (await folderLock.inspect(req.blog.id)).held;
+  } catch (err) {
+    return;
+  }
+
+  if (!setupState.stopped(req.session.dropbox, held)) return;
+
+  delete req.session.dropbox;
+  await new Promise((resolve) => req.session.save(() => resolve()));
+}
+
 // The settings page for a Dropbox account
-dashboard.get("/", function (req, res) {
+dashboard.get("/", async function (req, res, next) {
+  try {
+    await dropStoppedSetup(req);
+  } catch (err) {
+    return next(err);
+  }
+
   // Ask to user to authenticate with Dropbox if they have not yet
   if (!req.account && !req.session.dropbox) {
     var query = "";
@@ -368,6 +395,9 @@ async function authenticate(req, res, next) {
     redirectUri,
     full_access: full_access === "true",
     preparing: true,
+    // So the settings page can tell a setup still starting from one a deploy
+    // killed (util/setupState.js's stopped)
+    started: Date.now(),
     blog: req.blog,
   };
 

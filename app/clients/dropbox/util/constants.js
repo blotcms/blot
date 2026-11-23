@@ -54,10 +54,15 @@ const isInsufficientSpaceError = (err) => {
 // transfer_pending existed). Every automatic path that could otherwise run
 // resetToBlot's delete-local-files-with-no-Dropbox-counterpart logic, or the
 // webhook-driven sync in sync/index.js, must check this first.
+//
+// A move of the blog's files into a subfolder of the app folder that hasn't
+// finished (move_folder_id, see database.js) counts too: until it does, the
+// blog's folder on Dropbox is half at the root and half in the subfolder.
 const transferIncomplete = (account) =>
   !!account &&
   (account.transfer_pending === true ||
-    account.error_code === INSUFFICIENT_SPACE_ERROR_CODE);
+    account.error_code === INSUFFICIENT_SPACE_ERROR_CODE ||
+    !!account.move_folder_id);
 
 module.exports = {
   MAX_FILE_SIZE: 100 * 1024 * 1024, // 100 MB

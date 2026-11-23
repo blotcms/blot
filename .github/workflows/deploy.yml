@@ -261,6 +261,22 @@ jobs:
           scripts/deploy/units.sh "$TARGET_SHA" 2>&1 | tee deploy.log
           echo "### Deployed \`${TARGET_SHA}\`" >> "$GITHUB_STEP_SUMMARY"
 
+      # The demo blogs' folders aren't in the image (#2940): send the ones
+      # that changed since the last sync to the host and sync them in a unit.
+      # Needs the new image's app/templates/folders/index.js --from, so it
+      # runs once the units are deployed. Safe to re-run.
+      - name: Sync the demo folders
+        env:
+          TARGET_SHA: ${{ steps.resolve.outputs.sha }}
+        run: |
+          # A commit from before #2940 has no such script, and syncs the
+          # demo blogs on boot instead
+          if [ ! -f scripts/deploy/demo-folders.js ]; then
+            echo "No scripts/deploy/demo-folders.js at $TARGET_SHA: skipping"
+            exit 0
+          fi
+          node scripts/deploy/demo-folders.js "$TARGET_SHA"
+
       # A failed swap whose old container would not come back keeps the new
       # one running and says so; make that visible on the run page.
       - name: Surface a rollback warning

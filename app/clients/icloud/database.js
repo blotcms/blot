@@ -3,6 +3,11 @@ const { normalizeErrorFields } = require("./error");
 
 const PREFIX = "blot:clients:icloud-drive:";
 
+// How long a path stays marked as uploading. An upload is marked only while
+// it runs (seconds), so this only bounds a mark left by a crash, which the
+// macserver's retry clears long before.
+const PENDING_UPLOAD_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 module.exports = {
   _key(blogID) {
     return `${PREFIX}blogs:${blogID}`;
@@ -10,6 +15,34 @@ module.exports = {
 
   _globalSetKey() {
     return `${PREFIX}blogs`;
+  },
+
+  _pendingUploadsKey(blogID) {
+    return `${PREFIX}pending-uploads:${blogID}`;
+  },
+
+  // The upload route writes a file and then builds it. A crash between the
+  // two leaves the file current on disk with nothing built, and the
+  // macserver's retry would find it up to date and stop. The path is marked
+  // before the write and cleared once the build is done, so the retry knows
+  // to build it.
+  async markUploadPending(blogID, path) {
+    const key = this._pendingUploadsKey(blogID);
+    await client
+      .multi()
+      .sAdd(key, path)
+      .pExpire(key, PENDING_UPLOAD_TTL_MS)
+      .exec();
+  },
+
+  async clearUploadPending(blogID, path) {
+    await client.sRem(this._pendingUploadsKey(blogID), path);
+  },
+
+  async isUploadPending(blogID, path) {
+    return Boolean(
+      await client.sIsMember(this._pendingUploadsKey(blogID), path)
+    );
   },
 
   async store(blogID, data) {
@@ -80,6 +113,7 @@ module.exports = {
 
     // Remove the Redis hash
     await client.del(key);
+    await client.del(this._pendingUploadsKey(blogID));
 
     // Remove blog ID from the global set
     await client.sRem(this._globalSetKey(), blogID);

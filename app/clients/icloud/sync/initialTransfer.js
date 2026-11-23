@@ -16,6 +16,14 @@ const health = require("clients/health");
 const VERIFY_EXTRA_ATTEMPTS = 2;
 const VERIFY_RETRY_DELAY_MS = 45 * 1000;
 
+// /watch is the last step of a transfer that has already copied every file,
+// so it waits out a macserver restart (2s, 4s, 8s, 16s between attempts)
+// rather than failing the whole transfer on a blip. It stays fatal: it also
+// lets the macserver act again for a blog disconnected earlier
+// (reviveLimiterForBlogID in macserver/routes/watch.js).
+const WATCH_RETRIES = 5;
+const WATCH_RETRY_DELAY_MS = 2000;
+
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 module.exports = async function initialTransfer(blogID, options = {}) {
@@ -24,12 +32,16 @@ module.exports = async function initialTransfer(blogID, options = {}) {
       ? options.verifyRetryDelayMs
       : VERIFY_RETRY_DELAY_MS;
 
-  // establish sync lock
+  // Marked before the lock is taken: if taking it fails (another sync holds
+  // it, or this process is draining for a deploy), the account still says a
+  // transfer is due and resumeTransfers picks it up within the hour. The
+  // macserver was already told "ok" and won't ask again.
+  await database.store(blogID, { transferringToiCloud: true, error: null });
+
   const { folder, done } = await establishSyncLock(blogID);
 
   try {
     folder.status("Getting ready");
-    await database.store(blogID, { transferringToiCloud: true, error: null });
     await resolveCaseConflicts(blogID, folder.status, folder.update);
 
     // 'skipDeletions' sync does not remove
@@ -74,6 +86,11 @@ module.exports = async function initialTransfer(blogID, options = {}) {
         Authorization: MACSERVER_AUTH,
         blogID: blogID,
       },
+      retries: WATCH_RETRIES,
+      retryDelay:
+        options.watchRetryDelayMs !== undefined
+          ? options.watchRetryDelayMs
+          : WATCH_RETRY_DELAY_MS,
     });
     folder.status("Setup complete");
     await database.store(blogID, {

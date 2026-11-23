@@ -24,13 +24,14 @@
 // Scratch is a directory of its own (setup-XXXXXX) in the store's scratch
 // directory, on the instance store in production, outside the cache's
 // budget: a folder can be larger than the cache.
-// store/leftovers.js clears what a killed setup leaves.
+// store/leftovers.js clears what a killed setup leaves: the setup touches its
+// directory while it runs, so one left untouched is told from one in use.
 //
 // Resolves with { commit, rollback }. An import whose outcome is unknown goes
 // on only if a read finds the commit on master. On failure the store's copy
 // is removed if this setup may have made it (not one that was already there,
 // which importRepo refuses); create.js calls rollback() if it then fails to
-// record the setup.
+// record the setup's status.
 const fs = require("fs-extra");
 const path = require("path");
 // Called through the module, so a spec can make one command fail
@@ -41,6 +42,7 @@ const storage = require("storage/folder");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const limiter = require("../limiter");
 const importRepo = require("../store/import");
+const { SETUP_TOUCH_MS } = require("../store/leftovers");
 const removeRepo = require("../store/remove");
 const manifest = require("../store/manifest");
 const context = require("./context");
@@ -313,8 +315,12 @@ async function assertEmpty(blogID) {
   }
 }
 
-// folder is the sync lock's ({ status, log })
-async function create(blog, folder) {
+// folder is the sync lock's ({ status, log }). beforeSave(commit), if given,
+// is awaited once the commit is made and before it goes into the store, so
+// that what has to know the commit (create.js records it as applied) knows it
+// before the store has it: a process killed after the swap leaves nothing to
+// catch up on. A failure there stops the setup with the store untouched.
+async function create(blog, folder, { beforeSave } = {}) {
   const started = Date.now();
   const blogID = blog.id;
   const store = context.storeFor(blogID);
@@ -329,6 +335,14 @@ async function create(blog, folder) {
   const gitDir = path.join(dir, "repo.git");
   let imported = false;
 
+  // The files go deep inside the directory, where its own time does not
+  // move: this keeps it from looking like a leftover (store/leftovers.js)
+  const touch = setInterval(() => {
+    const now = new Date();
+    fs.utimes(dir, now, now).catch(() => {});
+  }, SETUP_TOUCH_MS);
+  touch.unref();
+
   try {
     await git(["init", "-q", "--bare", "--initial-branch=master", gitDir]);
 
@@ -339,6 +353,8 @@ async function create(blog, folder) {
 
     folder.status("Adding " + files.length + " files");
     const commit = await fastImport(blogID, files, gitDir, folder);
+
+    if (beforeSave) await beforeSave(commit);
 
     folder.status("Saving your repository");
 
@@ -400,6 +416,7 @@ async function create(blog, folder) {
     if (imported) await removeCopy(blogID);
     throw err;
   } finally {
+    clearInterval(touch);
     await fs.remove(dir).catch(() => {});
   }
 }

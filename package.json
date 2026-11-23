@@ -17,6 +17,7 @@
     "deploy-macserver": "./scripts/macserver/deploy.sh",
     "deploy-localmacserver": "./scripts/macserver/local-deploy.sh",
     "deploy-units": "./scripts/deploy/units.sh",
+    "deploy-demo-folders": "node scripts/deploy/demo-folders.js",
     "deploy-host": ". /etc/blot/openresty-deploy-environment.sh && ./config/host/deploy.sh",
     "client": "docker exec -it blot-redis-1 redis-cli",
     "login": "docker exec -it blot-node-app-1 /bin/sh",

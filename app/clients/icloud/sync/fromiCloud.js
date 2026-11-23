@@ -39,6 +39,19 @@ const MAX_DOWNLOAD_BYTES_IN_FLIGHT = 32 * 1000 * 1000;
 // whole folder (about 22s for a few hundred files), so say it's still going.
 const LISTING_HEARTBEAT_SECONDS = 5;
 
+// Maps each item's NFC name to the item, keeping the first of any that share
+// one, as find() did. Matching a listing against the other with find() was
+// quadratic: a folder of 3,076 files blocked the event loop for about 10s,
+// long enough to lose the folder lock and end the process.
+const byNFCName = (items) => {
+  const map = new Map();
+  for (const item of items) {
+    const name = item.name.normalize("NFC");
+    if (!map.has(name)) map.set(name, item);
+  }
+  return map;
+};
+
 module.exports = async (blogID, publish, update) => {
   if (!publish)
     publish = (...args) => {
@@ -128,6 +141,8 @@ module.exports = async (blogID, publish, update) => {
       remoteReaddir(blogID, dir),
       localReaddir(blogID, dir),
     ]);
+    const remoteByName = byNFCName(remoteContents);
+    const localByName = byNFCName(localContents);
 
     for (const { name, isDirectory: isLocalDirectory } of localContents) {
       const path = join(dir, name);
@@ -153,11 +168,7 @@ module.exports = async (blogID, publish, update) => {
         continue;
       }
 
-      if (
-        !remoteContents.find(
-          (item) => item.name.normalize("NFC") === name.normalize("NFC")
-        )
-      ) {
+      if (!remoteByName.has(name.normalize("NFC"))) {
         await checkWeCanContinue();
         progress.publish("Removing local item", path, false, removedCount);
         const descendants = isLocalDirectory
@@ -176,11 +187,7 @@ module.exports = async (blogID, publish, update) => {
     // discovered instead of total growing in lockstep with current.
     const newFileCount = remoteContents.filter(
       (item) =>
-        !item.isDirectory &&
-        !localContents.find(
-          (localItem) =>
-            localItem.name.normalize("NFC") === item.name.normalize("NFC")
-        )
+        !item.isDirectory && !localByName.has(item.name.normalize("NFC"))
     ).length;
     progress.discover(newFileCount);
 
@@ -198,9 +205,7 @@ module.exports = async (blogID, publish, update) => {
     for (const { name, size, isDirectory } of remoteContents) {
       if (isDirectory || size > maxFileSize) continue;
       const path = join(dir, name);
-      const existsLocally = localContents.find(
-        (item) => item.name.normalize("NFC") === name.normalize("NFC")
-      );
+      const existsLocally = localByName.get(name.normalize("NFC"));
       if (existsLocally && existsLocally.isDirectory) continue;
 
       // We could compare modified time but this seems to bug out on some sites
@@ -232,7 +237,7 @@ module.exports = async (blogID, publish, update) => {
       await applyRemoteContents(
         dir,
         remoteContents,
-        localContents,
+        localByName,
         dirChangedDuringWalk,
         createdLive,
         started
@@ -249,16 +254,14 @@ module.exports = async (blogID, publish, update) => {
   const applyRemoteContents = async (
     dir,
     remoteContents,
-    localContents,
+    localByName,
     dirChangedDuringWalk,
     createdLive,
     started
   ) => {
     for (const { name, size, isDirectory, modifiedTime } of remoteContents) {
       const path = join(dir, name);
-      const existsLocally = localContents.find(
-        (item) => item.name.normalize("NFC") === name.normalize("NFC")
-      );
+      const existsLocally = localByName.get(name.normalize("NFC"));
 
       if (isDirectory) {
         let walkedDirCreatedLive = false;

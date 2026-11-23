@@ -94,10 +94,18 @@ const followUps = followUpSync("dropbox", async function (blogID) {
   await sync(blog);
 });
 
-// Syncs the blogs connected to each of the accounts. The accounts, and the
-// blogs of each account, are synced in parallel.
-async function syncAccounts(accounts) {
-  await Promise.all(
+// How long the webhook waits to leave follow-ups before it answers anyway:
+// Dropbox wants a reply within ten seconds
+const ARM_TIMEOUT_MS = 3000;
+
+// Lists the blogs connected to each of the accounts, and leaves a follow-up
+// in Redis for each one (followUps.arm) before the webhook is answered, so a
+// process that dies before it has synced them doesn't lose the change.
+// Resolves to { blogID, armed } for each blog, armed being the token for
+// followUps.run. Never rejects: a blog it couldn't arm is still synced, just
+// without the follow-up behind it.
+async function armAccounts(accounts) {
+  const lists = await Promise.all(
     accounts.map(async function (account_id) {
       debug("Checking blogs for Dropbox account", account_id);
 
@@ -112,33 +120,70 @@ async function syncAccounts(accounts) {
           account_id,
           err
         );
-        return;
+        return [];
       }
 
-      debug("Syncing", blogs.length, "blogs");
-
-      await Promise.all(
+      return Promise.all(
         blogs.map(async function (blog) {
-          // Used for testing purposes only
-          started(blog.id);
-
+          let armed;
           try {
-            await followUps.run(blog.id);
+            armed = await followUps.arm(blog.id);
           } catch (err) {
             console.error(
               clfdate(),
-              "Dropbox: Webhook sync error",
+              "Dropbox: Webhook failed to arm follow-up",
               blog.id,
               err
             );
           }
-
-          debug("Finish sync for", blog.id);
-          finished(blog.id);
+          return { blogID: blog.id, armed };
         })
       );
     })
   );
+
+  return lists.flat();
+}
+
+// Syncs each blog, in parallel
+async function syncBlogs(blogs) {
+  debug("Syncing", blogs.length, "blogs");
+
+  await Promise.all(
+    blogs.map(async function ({ blogID, armed }) {
+      // Used for testing purposes only
+      started(blogID);
+
+      try {
+        await followUps.run(blogID, armed);
+      } catch (err) {
+        console.error(clfdate(), "Dropbox: Webhook sync error", blogID, err);
+      }
+
+      debug("Finish sync for", blogID);
+      finished(blogID);
+    })
+  );
+}
+
+// Arms each blog's follow-up, waiting at most ARM_TIMEOUT_MS before it
+// resolves so the webhook can answer, then syncs the blogs once they are all
+// armed. Resolves the sync's promise, which never rejects.
+async function handleWebhook(accounts) {
+  const arming = armAccounts(accounts);
+  let timer;
+  const timeout = new Promise(function (resolve) {
+    timer = setTimeout(resolve, ARM_TIMEOUT_MS);
+  });
+
+  await Promise.race([arming, timeout]);
+  clearTimeout(timer);
+
+  return {
+    synced: arming.then(syncBlogs).catch(function (err) {
+      console.error(clfdate(), "Dropbox: Webhook error", err);
+    }),
+  };
 }
 
 site.post("/webhook", function (req, res) {
@@ -174,15 +219,16 @@ site.post("/webhook", function (req, res) {
       return res.sendStatus(504);
     }
 
-    // Tell Dropbox we retrieved the list of accounts
-    res.sendStatus(200);
-
-    // Sync each of the accounts! Nothing waits for the syncs to finish,
-    // Dropbox has been answered already.
-    syncAccounts(accounts).catch(function (err) {
-      console.error(clfdate(), "Dropbox: Webhook error", err);
+    // Follow-ups first, then tell Dropbox we retrieved the list of
+    // accounts. Nothing waits for the syncs to finish.
+    handleWebhook(accounts).then(function () {
+      res.sendStatus(200);
     });
   });
 });
 
 module.exports = site;
+// Exposed for tests
+module.exports.armAccounts = armAccounts;
+module.exports.handleWebhook = handleWebhook;
+module.exports.followUps = followUps;

@@ -733,12 +733,19 @@ class HotDocPoller {
 
     let fallback;
     try {
-      // For the hourly validation (see ../validate.js), as sync/index.js does
-      await database.blog
-        .update(item.blogID, { lastSync: Date.now() })
-        .catch((err) => this.log("last-sync-failed", { message: err.message }));
-
       const plan = await this.planSingleDoc(item);
+
+      // For the hourly validation (see ../validate.js), as sync/index.js
+      // does. Not while setup copies the site's files ("account-changed"
+      // covers preparing): routes/setup.js reads a lastSync after the
+      // setup started as a sign the blog was syncing.
+      if (plan.fallback !== "account-changed") {
+        await database.blog
+          .update(item.blogID, { lastSync: Date.now() })
+          .catch((err) =>
+            this.log("last-sync-failed", { message: err.message })
+          );
+      }
       if (plan.fallback) {
         fallback = plan.fallback;
       } else {

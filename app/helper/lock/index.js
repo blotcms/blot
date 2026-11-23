@@ -11,7 +11,8 @@ const clfdate = require("helper/clfdate");
 //           whose key expired can never release or extend someone else's lock.
 //   once    at most once: the first caller within the TTL wins, nobody else.
 //   cron    at most once per scheduled run: every process registers the same
-//           job and one of them wins the run.
+//           job and one of them wins the run. A run killed mid-way (a deploy)
+//           is re-run by another process, see fire().
 //   lease   one holder at a time of a continuous loop, with takeover by
 //           another process between one and two ttls after the holder dies.
 //
@@ -314,27 +315,80 @@ function checkScope(scope) {
 
 // What runs when a cron job fires. Every process derives the same key from
 // the fire date node-schedule passes in (not Date.now(), so a process that
-// fires late still agrees), and only the winner runs fn. Never throws: errors
+// fires late still agrees), and only one of them runs fn. Never throws: errors
 // from Redis or fn are logged. Resolves true if fn ran to completion here.
 //
-// Two things callers must keep in mind. Every process has to run in the same
+// Two keys per fire. The done marker (cronKey, 24 hours by default) says the
+// fire is finished and is only set once fn has returned or thrown. While fn
+// runs, the winner holds a short claim lock (cronKey + ":claim") with a
+// heartbeat, so if the process is killed mid-run (a deploy) the claim expires
+// within its ttl and the fire has no done marker. node-schedule never fires
+// the same date twice in a process, so a survivor would not notice by itself:
+// every claim is therefore also listed in the IN_PROGRESS sorted set before it
+// is taken, and recover() (run every minute by every process) re-runs any
+// listed fire whose claim is gone and whose done marker is unset, for up to
+// MAX_RERUN_AGE_MS after the fire date. A fn that throws counts as done (it is
+// logged, not retried), so a failing job never loops; only a kill re-runs.
+// Jobs that are not safe to run twice, or that are pointless late (every few
+// minutes), pass { rerunIfKilled: false }: they use a plain once() marker set
+// before fn runs, so a kill skips that fire.
+//
+// A draining process (SIGTERM received, see helper/drain) never starts a
+// fire: the deploy would kill it mid-run and another process is up.
+//
+// Callers must keep in mind that every process has to run in the same
 // timezone, because node-schedule reads cron strings and object rules in
 // local time unless a `tz` is given, and processes in different zones would
 // compute different fire dates, so different keys, and both would run. And
 // consecutive runs are not mutually exclusive: a run still going when the
 // next fire date arrives can overlap with it on another process, so wrap fn
 // in lock() if a job must not overlap itself.
+const IN_PROGRESS = "cron:in-progress";
+const MAX_RERUN_AGE_MS = 6 * 60 * 60 * 1000;
+const CLAIM_TTL_MS = 30 * 1000;
+const CLAIM_HEARTBEAT_MS = 10 * 1000;
+const RECOVER_RULE = "* * * * *";
+
+// Jobs registered in this process, so recover() can find fn for a fire
+// another process started and died in.
+const registry = new Map();
+
+function isDraining() {
+  // Lazy: helper/drain requires sync/lock, which must not load with this file
+  return require("helper/drain").isDraining();
+}
+
+function inProgressMember(name, fireDate, scope) {
+  return JSON.stringify({
+    name,
+    fireDate: fireDate.toISOString(),
+    scope,
+    host: scope === "host" ? process.env.BLOT_HOST_ID : undefined,
+  });
+}
+
 async function fire(name, fireDate, fn, options = {}) {
   // The marker must outlive any late firing: a process whose event loop or
   // container was suspended still gets the original fireDate from
   // node-schedule when it wakes, and must find the marker. The keys are tiny.
-  const { scope = "cluster", ttl = 24 * 60 * 60 * 1000 } = options;
+  const {
+    scope = "cluster",
+    ttl = 24 * 60 * 60 * 1000,
+    rerunIfKilled = true,
+  } = options;
   try {
     checkScope(scope);
-    const won = await once(cronKey(name, fireDate, scope), ttl);
-    if (!won) return false;
-    await fn(fireDate);
-    return true;
+    if (isDraining()) return false;
+    registry.set(name, { fn, options });
+    const doneKey = cronKey(name, fireDate, scope);
+
+    if (!rerunIfKilled) {
+      if (!(await once(doneKey, ttl))) return false;
+      await runJob(name, fireDate, fn);
+      return true;
+    }
+
+    return await claimAndRun(name, fireDate, fn, scope, ttl);
   } catch (e) {
     console.error(
       clfdate(),
@@ -347,16 +401,116 @@ async function fire(name, fireDate, fn, options = {}) {
   }
 }
 
+// Runs fn, logging a throw. Resolves normally either way.
+async function runJob(name, fireDate, fn) {
+  try {
+    await fn(fireDate);
+  } catch (e) {
+    console.error(
+      clfdate(),
+      "[CRON]",
+      name,
+      "failed:",
+      e && e.stack ? e.stack : e
+    );
+  }
+}
+
+async function claimAndRun(name, fireDate, fn, scope, ttl) {
+  const doneKey = cronKey(name, fireDate, scope);
+  const member = inProgressMember(name, fireDate, scope);
+  if (await client.exists(doneKey)) return false;
+
+  // Listed before the claim, so a kill between the two still leaves a record
+  await client.zAdd(IN_PROGRESS, { score: fireDate.getTime(), value: member });
+
+  let claim;
+  try {
+    claim = await lock(doneKey + ":claim", {
+      ttl: CLAIM_TTL_MS,
+      heartbeat: CLAIM_HEARTBEAT_MS,
+      onCompromised: (err) =>
+        console.error(clfdate(), "[CRON]", name, "claim lost:", err.message),
+    });
+  } catch (e) {
+    if (e.code === "ELOCKED" || e.code === "ESLOW") return false;
+    throw e;
+  }
+
+  try {
+    // The previous holder may have finished between our check and our claim
+    if (await client.exists(doneKey)) {
+      await client.zRem(IN_PROGRESS, member);
+      return false;
+    }
+    await runJob(name, fireDate, fn);
+    // Done, whether fn returned or threw
+    await client.set(doneKey, "1", { PX: ttl });
+    await client.zRem(IN_PROGRESS, member);
+    return true;
+  } finally {
+    await claim.release().catch((e) => {
+      if (e.code !== "ECOMPROMISED")
+        console.error(clfdate(), "[CRON]", name, "claim release failed", e);
+    });
+  }
+}
+
+// Re-runs fires whose winner died: listed in IN_PROGRESS, no done marker, no
+// live claim, newer than MAX_RERUN_AGE_MS. Skips jobs this process did not
+// register and, for scope "host", fires of another host. Never throws.
+async function recover() {
+  try {
+    if (isDraining()) return;
+    const cutoff = Date.now() - MAX_RERUN_AGE_MS;
+    await client.zRemRangeByScore(IN_PROGRESS, "-inf", cutoff);
+    const members = await client.zRange(IN_PROGRESS, 0, -1);
+    for (const member of members) {
+      if (isDraining()) return;
+      let entry;
+      try {
+        entry = JSON.parse(member);
+      } catch (e) {
+        await client.zRem(IN_PROGRESS, member);
+        continue;
+      }
+      const job = registry.get(entry.name);
+      if (!job) continue;
+      const scope = entry.scope || "cluster";
+      if (scope === "host" && entry.host !== process.env.BLOT_HOST_ID) continue;
+      const fireDate = new Date(entry.fireDate);
+      const { ttl = 24 * 60 * 60 * 1000 } = job.options;
+      if (await client.exists(cronKey(entry.name, fireDate, scope))) {
+        await client.zRem(IN_PROGRESS, member);
+        continue;
+      }
+      if (await claimAndRun(entry.name, fireDate, job.fn, scope, ttl))
+        console.log(clfdate(), "[CRON]", entry.name, "re-ran a killed fire");
+    }
+  } catch (e) {
+    console.error(
+      clfdate(),
+      "[CRON] recover failed:",
+      e && e.stack ? e.stack : e
+    );
+  }
+}
+
+let recoverJob = null;
+
 // Returns the node-schedule Job so callers can cancel it. Throws at
 // registration time for a bad scope or a missing BLOT_HOST_ID.
 function cron(name, rule, fn, options = {}) {
   checkScope(options.scope || "cluster");
+  registry.set(name, { fn, options });
+  if (!recoverJob) recoverJob = scheduler.scheduleJob(RECOVER_RULE, recover);
   return scheduler.scheduleJob(rule, (fireDate) =>
     fire(name, fireDate, fn, options)
   );
 }
 
 cron._fire = fire;
+cron._recover = recover;
 
 // Keeps trying to be the single holder of a continuous loop. fn(signal) runs
 // while we hold the lock; signal aborts if the lock is compromised or stop()

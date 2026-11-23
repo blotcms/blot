@@ -1,6 +1,7 @@
 const Blog = require("models/blog");
 const Entries = require("models/entries");
 const clfdate = require("helper/clfdate");
+const drain = require("helper/drain");
 const email = require("helper/email");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
@@ -151,8 +152,21 @@ const validateAllBlogs = async () => {
 
   const report = syncReport.create();
   let checkedBlogs = 0;
+  let stopped = false;
 
   await database.blog.iterate(async (blogID, account) => {
+    // Every lock is refused while draining; the next hour's run covers the rest
+    if (stopped || drain.isDraining()) {
+      if (!stopped) {
+        console.log(
+          clfdate(),
+          "Google Drive: Stopped sync validation for the drain"
+        );
+      }
+      stopped = true;
+      return;
+    }
+
     let blog;
     let phase = "validation";
 

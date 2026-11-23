@@ -146,6 +146,24 @@ async function runPostListenTasks() {
     logError("Failed to start follow-up syncs", err);
   }
 
+  try {
+    // Whole-blog rebuilds a settings change or the dashboard queued, and any
+    // a killed process left part done. Any container may run them. Previews
+    // share the dev Redis and skip them.
+    if (!config.preview) {
+      log("Starting pending rebuilds");
+      const pendingRebuilds = require("sync/pendingRebuilds");
+      pendingRebuilds.start();
+      require("helper/drain").onStart(() => {
+        pendingRebuilds
+          .stop()
+          .catch((err) => logError("Failed to stop pending rebuilds", err));
+      });
+    }
+  } catch (err) {
+    logError("Failed to start pending rebuilds", err);
+  }
+
   // Cron jobs and client jobs take Redis locks, so every container runs them.
   // Worktree previews share the dev Redis and skip them.
   try {

@@ -35,6 +35,39 @@ describe("dashboard site settings save", function () {
     }, 30000);
   });
 
+  // The resave is queued in Redis (sync/pendingRebuilds), so a deploy which
+  // kills the process running it doesn't leave the blog half saved
+  it("queues a resave of every entry when the link format changes", async function () {
+    const pendingRebuilds = require("sync/pendingRebuilds");
+    const linkFormat = require("dashboard/site/link-format");
+
+    spyOn(pendingRebuilds, "request").and.returnValue(Promise.resolve());
+
+    // The links page has the shared settings form first, which this.submit
+    // would post to instead, so the route's handler is called directly
+    const handler = linkFormat.stack.find(
+      (layer) => layer.route && layer.route.methods.post
+    ).route.stack[0].handle;
+    const res = { message: jasmine.createSpy("message") };
+
+    await handler(
+      {
+        body: { format: "", custom: "/archive/{{slug}}" },
+        blog: this.blog,
+        baseUrl: "/settings/links",
+      },
+      res
+    );
+
+    expect(res.message).toHaveBeenCalledWith(
+      "/settings/links",
+      "Saved changes to link format"
+    );
+    expect(pendingRebuilds.request).toHaveBeenCalledWith(this.blog.id, [
+      "resave",
+    ]);
+  }, 30000);
+
   it("does not redirect to the homepage when the form omits a redirect field", async function () {
     const res = await this.submit(`/sites/${this.blog.handle}/settings`, {
       "plugins.typeset.options.punctuation": "on",

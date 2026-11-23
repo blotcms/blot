@@ -13,6 +13,7 @@ const syncReport = require("clients/util/syncReport");
 const setupUser = require("./setupUser");
 const setupBlogs = require("./setupBlogs");
 const demoFolders = require("../demoFolders");
+const publishZip = require("./publishZip");
 
 // Compares the directory sourcePath with the folder of the blog blogID
 async function getChangedFiles(sourcePath, blogID) {
@@ -132,8 +133,28 @@ async function applyChanges(blog, changes) {
   });
 }
 
+// options:
+//   from       the directory holding the folders (default: the ones in this
+//              checkout). The deploy step sends the folders to the host and
+//              passes their directory (scripts/deploy/demo-folders.js).
+//   only       folder names to build, all others are skipped
+//   zip        also upload each folder's download ZIP (./publishZip)
+//   templates  template names: build the folders they're previewed on
+//   filter     a function of the folder's path
+// Resolves once every folder is built. A folder that fails is logged and the
+// rest are still built; with from set, build then rejects, so the deploy
+// step fails and doesn't record the folder as done.
 async function build(options = {}) {
-  let folders = await loadFoldersToBuild(DIR);
+  let folders = await loadFoldersToBuild(options.from || DIR);
+
+  if (options.only !== undefined) {
+    const missing = options.only.filter(
+      (name) => !folders.some((path) => basename(path) === name)
+    );
+    if (missing.length)
+      throw new Error("No such demo folders: " + missing.join(", "));
+    folders = folders.filter((path) => options.only.includes(basename(path)));
+  }
 
   if (options.templates !== undefined) {
     // Screenshotting a template only needs the one folder it is previewed on,
@@ -156,6 +177,8 @@ async function build(options = {}) {
 
   const blogs = await setupBlogs(user, folders);
 
+  const failed = [];
+
   // Update and sync blogs
   for (const [blogID, { path, blog }] of Object.entries(blogs)) {
     try {
@@ -166,8 +189,17 @@ async function build(options = {}) {
 
       // Only update changed files
       await applyChanges(blog, changes);
+
+      if (options.zip) {
+        const zip = await publishZip(basename(path), path);
+        console.log(
+          (zip.uploaded ? "Uploaded " : "Already uploaded ") + zip.key,
+          zip.removed.length ? "and removed " + zip.removed.join(", ") : ""
+        );
+      }
     } catch (e) {
       console.error("Error syncing folder", path, "for blog", blog.handle, e);
+      failed.push(basename(path));
     }
   }
 
@@ -178,6 +210,9 @@ async function build(options = {}) {
   });
 
   if (url) console.log("Dashboard:\n" + url);
+
+  if (failed.length && options.from)
+    throw new Error("Failed to build demo folders: " + failed.join(", "));
 }
 
 // Like templates(), wait for the lock (retries with backoff, about 95s in
@@ -222,7 +257,20 @@ if (require.main === module) {
   const forTemplates = args
     .find((arg) => arg.startsWith("--for-templates="))
     ?.slice("--for-templates=".length);
-  const positional = args.find((arg) => !arg.startsWith("--"));
+  const valueOf = (name) => {
+    const index = args.indexOf(name);
+    return index === -1 ? undefined : args[index + 1];
+  };
+  const from = valueOf("--from");
+  const only = valueOf("--only");
+  const positional = args.find(
+    (arg, i) =>
+      !arg.startsWith("--") && !["--from", "--only"].includes(args[i - 1])
+  );
+
+  if (from) options.from = require("path").resolve(from);
+  if (only) options.only = only.split(",").filter(Boolean);
+  if (args.includes("--zip")) options.zip = true;
 
   if (forTemplates) {
     options.templates = forTemplates;

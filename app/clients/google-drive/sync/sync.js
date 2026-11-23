@@ -196,6 +196,13 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     throw new Error("Missing required folderId for sync");
   }
 
+  // Setup owns the folder until it has copied the site's files into it and
+  // cleared preparing (routes/setup.js). A walk before then would remove
+  // every file not copied yet, since Drive doesn't have it.
+  if (account.preparing) {
+    throw new Error("Google Drive setup is still copying this site's files");
+  }
+
   const drive = await createDriveClient(serviceAccountId);
   const {
     get: getPath,

@@ -506,6 +506,16 @@ describe("google drive hotDocPoller", function () {
       );
       await expectFullSync("account-changed");
     });
+
+    it("doesn't stamp lastSync while setup copies the site's files", async function () {
+      database.blog.get.and.returnValue(
+        Promise.resolve({ folderId, serviceAccountId, preparing: true })
+      );
+      await expectFullSync("account-changed");
+      expect(database.blog.update).not.toHaveBeenCalledWith(blogID, {
+        lastSync: jasmine.any(Number),
+      });
+    });
   });
 
   it("spaces docs.get slots 250ms apart for a service account", async function () {

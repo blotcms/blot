@@ -4,6 +4,7 @@ const folder = require("storage/folder");
 const fromiCloudPath = require.resolve("../fromiCloud");
 const remoteRecursiveListPath = require.resolve("../util/remoteRecursiveList");
 const remoteReaddirPath = require.resolve("../util/remoteReaddir");
+const localReaddirPath = require.resolve("../util/localReaddir");
 const downloadPath = require.resolve("../util/download");
 const checkWeCanContinuePath = require.resolve("../util/checkWeCanContinue");
 const databasePath = require.resolve("../../database");
@@ -901,6 +902,55 @@ describe("icloud fromiCloud sync", function () {
       expect(runningWithBig).toEqual([0]);
       expect(summary.downloaded).toBe(3);
     });
+  });
+
+  it("matches a directory of thousands of files without comparing every pair", async () => {
+    const count = 5000;
+    const names = Array.from({ length: count }, (_, i) => `post-${i}.md`);
+    // The same name in NFD in iCloud and NFC locally is the same file
+    names.push("cafe\u0301.md");
+    const remote = names.map((name) => ({ name, size: 1, isDirectory: false }));
+    const local = names.map((name) => ({
+      name: name.normalize("NFC"),
+      size: 1,
+      isDirectory: false,
+    }));
+
+    mockModule(remoteRecursiveListPath, async () => {});
+    mockModule(remoteReaddirPath, async () => remote);
+    mockModule(localReaddirPath, async () => local);
+    mockModule(downloadPath, async () => {
+      throw new Error("no file should be downloaded");
+    });
+    mockModule(checkWeCanContinuePath, () => async () => {});
+    mockModule(databasePath, {
+      store: async () => {},
+      get: async () => ({}),
+    });
+
+    // Matching each name against the whole other listing normalized names
+    // tens of millions of times here and blocked the event loop for seconds
+    const { normalize } = String.prototype;
+    let normalizations = 0;
+    String.prototype.normalize = function (...args) {
+      normalizations += 1;
+      return normalize.apply(this, args);
+    };
+    let summary;
+    try {
+      summary = await require(fromiCloudPath)(
+        blogID,
+        () => {},
+        async () => {}
+      );
+    } finally {
+      String.prototype.normalize = normalize;
+    }
+
+    expect(normalizations).toBeLessThan(10 * names.length);
+    expect(summary.downloaded).toBe(0);
+    expect(summary.removed).toBe(0);
+    expect(summary.failed).toBe(0);
   });
 
   describe("folder tree listing", () => {
