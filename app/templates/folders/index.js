@@ -136,7 +136,8 @@ async function applyChanges(blog, changes) {
 // options:
 //   from       the directory holding the folders (default: the ones in this
 //              checkout). The deploy step sends the folders to the host and
-//              passes their directory (scripts/deploy/demo-folders.js).
+//              passes their directory (scripts/deploy/demo-folders.js). A
+//              config.js there replaces this directory's.
 //   only       folder names to build, all others are skipped
 //   zip        also upload each folder's download ZIP (./publishZip)
 //   templates  template names: build the folders they're previewed on
@@ -175,7 +176,15 @@ async function build(options = {}) {
     "Established user " + user.email + " to manage demonstration blogs"
   );
 
-  const blogs = await setupBlogs(user, folders);
+  // The deploy sends the commit's config.js with its folders: the running
+  // image's copy may be older (scripts/deploy/demo-folders.js)
+  const sentConfig = options.from && join(options.from, "config.js");
+  const settings =
+    sentConfig && (await fs.pathExists(sentConfig))
+      ? require(sentConfig)
+      : undefined;
+
+  const blogs = await setupBlogs(user, folders, { settings });
 
   const failed = [];
 

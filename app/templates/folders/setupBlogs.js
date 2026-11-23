@@ -9,8 +9,10 @@ const basename = require("path").basename;
 
 // The settings config.js gives a blog: title, template, menu, plugins. Read
 // fresh each time when asked to, so a development server can pick up an edit.
-function settingsFor(blog, { reload } = {}) {
-  let settings = config;
+// settings replaces config.js: the deploy sends the commit's own copy along
+// with the folders (scripts/deploy/demo-folders.js).
+function settingsFor(blog, { reload, settings: given } = {}) {
+  let settings = given || config;
 
   if (reload) {
     delete require.cache[CONFIG_PATH];
@@ -30,7 +32,7 @@ function settingsFor(blog, { reload } = {}) {
   return update;
 }
 
-async function setupBlogs(user, folders) {
+async function setupBlogs(user, folders, { settings } = {}) {
   const blogs = {};
 
   // Create/get blogs
@@ -50,7 +52,7 @@ async function setupBlogs(user, folders) {
       blog = await createBlog(user.uid, { handle });
     }
 
-    const update = settingsFor(blog);
+    const update = settingsFor(blog, { settings });
 
     await setBlog(blog.id, { ...update, client: "" });
 
