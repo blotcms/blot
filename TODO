@@ -1,3 +1,5 @@
+Git setup: a failed repository setup is never shown. create.js records `createFailed` under the owner (`user:<id>:git:status`), not the blog, and nothing reads it, so the person lands back on the create page with no explanation. Record the failure per blog with a short expiry and show the create step as a problem with the reason. (23 Nov 2026)
+
 Restart resilience, left over from #2918 (22 Nov 2026). A deploy gives each process 25s to drain, then kills it; these still lose or stall work when that lands mid-task:
 - Google Drive setup: a copy-stage failure other than a timeout (a Drive API error mid-copy) still stores SETUP_ERROR and nulls folderId, so Retry makes a new folder rather than resuming into the one already half copied. Keeping it needs changes to `/set-up-folder` (#2930 left it out).
 - Blogs half removed before #2921 shipped (hash still there, the owner no longer listing them) aren't in `blogs:removing`, so the resumer never finds them. A one-off read-only scan for blog hashes whose owner doesn't list them would show whether there are any.
@@ -475,24 +477,15 @@ Improve Dropbox sync
 
 Improve git sync
 - Create tests for large Git repo initialization
-- Make git client setup resumable / handle server restart
-- Fix bug with git client which let large pushes overwhelm the main server, leading to downtime
 - Handle error out of space on blot server during git client setup
 - Add sync check
 - Add support for LFS and tell [Jamie](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVMcpnxGHqnxJHNdbMBSrglzg)
 - Backdate existing commits (perhaps set file ctime using info from git log?) This would sidestep the frustration experienced by [Gavin](https://mail.google.com/mail/u/0/#inbox/1669a8e621f9ef37) when he imported an existing repository.
-- Extend sync lock during long syncs
-- Write test to simulate process dying and restarting mid-pull. Does the client recover? What happens if a pull fails midway? Does git recover?
 - Write tests for a series of random client operations (pull, add, push, move, reset, delete) that can be seeded and reliably re-run in the case of failure.
-- Move to neat promise chain api when 2.0 comes out
 - Test that client must keep sending new entries and deleted entries when it recieved an error from entry.build otherwise you get ghost posts...
-- send nice error message with instructions for 413 request too large: "git reset HEAD^" etc...
 - Thoroughly document:
 - Explain that the git client uses the master branch and repos from github will use main in the docs and on the dashboard then tell [N](https://mail.google.com/mail/u/0/#inbox/FMfcgzGqPzKcnQKsQQNkzcRpvCWpWKTr)
 - Tidy up tests and reduce size and runtime
-- This client should acquire a lock on the blog's folder before doing stuff to it more generally, especially during initialization etc...
-- what happens if customer changes their handle? will pushing break?
-  - I want them to be able to keep using their old one *until* someone else claims it, then I want 401 unauthorized, please reauthenticate with new username... but the remote path will be wrong?
 - Rate limit authentication route?
 
 Improve iCloud sync
