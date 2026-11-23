@@ -22,4 +22,4 @@ Create `app/templates/folders/marmalade`, add its settings to `config.js`, then 
 
 ## Publish new folders
 
-Merge to master and deploy: production rebuilds the folder blogs and their ZIPs on start.
+Merge to master and deploy. The deploy's last step, `scripts/deploy/demo-folders.js` (#2940), sends each folder that changed since the last deploy to the host and syncs it into its demo blog from inside a unit (`index.js --from <dir> --only <name> --zip`). It also uploads the folder's ZIP to the storage bucket as `folders/<name>-<hash>.zip`, where `<hash>` is `contents.js`'s hash of the folder's files. `app/cdn` serves it at `/folders/<name>-<hash>.zip`. Each folder's ZIP from before the change is kept, and older ones are deleted. The host keeps a marker, `~/demo-folders.json`, holding each folder's git tree hash from its last sync. To sync again by hand, run `npm run deploy-demo-folders` from master.
