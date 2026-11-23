@@ -551,9 +551,9 @@ Blot no longer owns the domain.
     allowlist mirrors `app/cdn/index.js` plus the top level of
     `app/blog/static`: `/`, `/health`, `/favicon.ico`, `/robots.txt`,
     `/fonts/`, `/icons/`, `/katex/`, `/plugins/`, `/syntax-highlighter/`,
-    `/html2canvas.min.js` (stale: #2661 removed it; drop it next time the rule is
-    edited), `/layout.css`, `/documentation/v-`, `/folder/v-`,
-    `/template/`, `/blog_`. **A new top-level path on the CDN must be added
+    `/folders/` (the demo folder ZIPs, #2940: it took the slot of the stale
+    `/html2canvas.min.js` on 23 Nov 2026), `/layout.css`, `/documentation/v-`,
+    `/folder/v-`, `/template/`, `/blog_`. **A new top-level path on the CDN must be added
     to this rule or Bunny will 403 it.** Bunny allows 5 patterns per
     condition, so the allowlist is split over several "match none"
     conditions; `*` matches across `/`, so every pattern names the host (a
