@@ -1,6 +1,7 @@
 const establishSyncLock = require("sync/establishSyncLock");
 const storage = require("storage/folder");
 const { handleSyncLockError } = require("../lock");
+const stillConnected = require("./stillConnected");
 const { handleRedisUnavailable } = require("../unavailable");
 const stampLastSync = require("./stampLastSync");
 
@@ -29,45 +30,58 @@ module.exports = async function (req, res) {
     const { done, folder } = await establishSyncLock(blogID);
 
     try {
-      if (!(await storage.exists(blogID, filePath))) {
-        console.warn(`File not found (locked): ${filePath}`);
-        return res.sendStatus(204);
-      }
-
-      console.log(`Deleting file at: ${filePath}`);
-
-      const pathsToUpdate = [filePath];
-      const stat = await storage.stat(blogID, filePath);
-
-      if (stat.isDirectory) {
-        // Directories before what is inside them
-        for await (const childPath of storage.walk(blogID, filePath, {
-          directories: true,
-        })) {
-          pathsToUpdate.push(childPath);
+      // Inside run, a write to the folder throws once a disconnect has
+      // stopped this request (sync/seize.js)
+      return await folder.run(async () => {
+        if (!(await stillConnected(blogID))) {
+          console.log(`Not syncing ${blogID}: disconnected while waiting`);
+          return res
+            .status(410)
+            .send("Blog is deleted, disabled or not on iCloud");
         }
 
-        console.log(
-          `Folder delete will update ${pathsToUpdate.length} paths for ${filePath}`
-        );
-      }
+        if (!(await storage.exists(blogID, filePath))) {
+          console.warn(`File not found (locked): ${filePath}`);
+          return res.sendStatus(204);
+        }
 
-      // The file is removed before Blot's entries are updated. If Redis
-      // refuses the update the route answers 503, but the file is already
-      // gone, so the macserver's retry is told there is nothing to delete and
-      // the entries (for a folder, those of the files inside it) stay until a
-      // resync or Fix(). Accepted: it needs Redis to fail in the middle of a delete.
-      await storage.remove(blogID, filePath); // Removes the file or directory
+        console.log(`Deleting file at: ${filePath}`);
 
-      // Call the folder's update method to register the file deletion
-      for (const pathToUpdate of pathsToUpdate) {
-        await folder.update(pathToUpdate);
-        // Set the folder status to reflect the delete action
-        folder.status("Removed " + pathToUpdate);
-      }
+        const pathsToUpdate = [filePath];
+        const stat = await storage.stat(blogID, filePath);
 
-      console.log(`Successfully deleted: ${filePath}`);
-      return res.status(200).send(`Successfully deleted for blogID: ${blogID}`);
+        if (stat.isDirectory) {
+          // Directories before what is inside them
+          for await (const childPath of storage.walk(blogID, filePath, {
+            directories: true,
+          })) {
+            pathsToUpdate.push(childPath);
+          }
+
+          console.log(
+            `Folder delete will update ${pathsToUpdate.length} paths for ${filePath}`
+          );
+        }
+
+        // The file is removed before Blot's entries are updated. If Redis
+        // refuses the update the route answers 503, but the file is already
+        // gone, so the macserver's retry is told there is nothing to delete and
+        // the entries (for a folder, those of the files inside it) stay until a
+        // resync or Fix(). Accepted: it needs Redis to fail in the middle of a delete.
+        await storage.remove(blogID, filePath); // Removes the file or directory
+
+        // Call the folder's update method to register the file deletion
+        for (const pathToUpdate of pathsToUpdate) {
+          await folder.update(pathToUpdate);
+          // Set the folder status to reflect the delete action
+          folder.status("Removed " + pathToUpdate);
+        }
+
+        console.log(`Successfully deleted: ${filePath}`);
+        return res
+          .status(200)
+          .send(`Successfully deleted for blogID: ${blogID}`);
+      });
     } finally {
       // Release the sync lock
       await done().catch((err) => console.error("Error releasing lock:", err));

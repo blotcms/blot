@@ -107,7 +107,11 @@ describe("icloud init validateAllBlogs", function () {
         return Promise.reject(new Error("Cannot sync blog " + blogID));
       }
       return Promise.resolve({
-        folder: { update: async () => {} },
+        folder: {
+          update: async () => {},
+          signal: new AbortController().signal,
+          run: (fn) => fn(),
+        },
         done: async function () {},
       });
     });

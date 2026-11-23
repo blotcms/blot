@@ -81,6 +81,8 @@ describe("icloud status route", function () {
         bind: () => (line) => events.push("status: " + line),
       }),
       update() {},
+      signal: new AbortController().signal,
+      run: (fn) => fn(),
     },
     done: async () => {
       releases.count += 1;
