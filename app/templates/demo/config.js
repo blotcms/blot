@@ -54,6 +54,10 @@ module.exports = {
     title: "Sergey Prokudin-Gorsky",
     template: "SITE:album",
   },
+  toni: {
+    title: "Toni Frissell",
+    template: "SITE:gallery",
+  },
   sky: {
     title: "Skies",
     template: "SITE:gallery",
