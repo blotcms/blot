@@ -13,6 +13,7 @@ const previewReload = require("helper/publishPreviewReload");
 const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
 const readOnly = require("helper/readOnly");
 const logContext = require("helper/logContext");
+const guard = require("storage/folder/guard");
 const {
   addPendingSync,
   removePendingSync,
@@ -58,7 +59,7 @@ function sync(blogID, fn) {
     let result;
 
     try {
-      result = await fn(folder);
+      result = await guard.run(blogID, folder.signal, () => fn(folder));
     } catch (err) {
       await done(err);
       throw err;
@@ -109,6 +110,7 @@ async function acquire(blogID) {
   log("Starting sync");
 
   let release;
+  let signal;
   let lockAcquiredAt;
 
   try {
@@ -128,6 +130,7 @@ async function acquire(blogID) {
     }
 
     release = lock.release;
+    signal = lock.signal;
     lockAcquiredAt = Date.now();
     addPendingSync(blogID, syncID);
     log("Successfully acquired lock on folder");
@@ -228,9 +231,19 @@ async function acquire(blogID) {
   // other outcome counts as a change. Each update is listed as pending for
   // lock-diagnostics until it settles. A client may pass the source's time
   // for the change as options.modified (see logLag).
+  //
+  // folder.signal aborts when seize() (./seize.js) wants the lock, e.g. for
+  // a disconnect: the client should stop at its next check
+  // (signal.throwIfAborted()), and pass the signal into its requests. From
+  // then on update() throws the signal's reason, status() does nothing, and
+  // so do writes to the folder from inside sync()'s fn
+  // (storage/folder/guard.js).
   const folder = {
+    signal,
     update: async function update(path, options) {
       let result;
+
+      signal.throwIfAborted();
 
       addPendingUpdate(blogID, syncID, path);
       if (isTemplatePath(path)) {
@@ -257,7 +270,9 @@ async function acquire(blogID) {
       }
       return result;
     },
-    status,
+    status(...args) {
+      if (!signal.aborted) status(...args);
+    },
     log,
   };
 
@@ -423,3 +438,4 @@ async function acquire(blogID) {
 
 module.exports = sync;
 module.exports.establishSyncLock = establishSyncLock;
+module.exports.seize = require("./seize");
