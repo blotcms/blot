@@ -57,6 +57,7 @@ describe("dropbox sync/index with a file over the download size limit", function
     require.cache[lockPath] = {
       exports: async function (_blogID, fn) {
         return fn({
+          signal: new AbortController().signal,
           log: (...args) => logs.push(args.join(" ")),
           status: function () {},
           update: async () => {},

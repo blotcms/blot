@@ -249,22 +249,29 @@ async function markDirty(blogID, { changed, full }, source, account) {
 
 // Under the folder lock, applies the directories in the dirty set, and walks
 // everything when asked to (full) or when the set asks for it
+//
+// A disconnect seizes the lock (sync/seize.js): the walk then stops, and
+// inside folder.run its writes to the folder and to Drive's records throw, so
+// it can't bring back what the disconnect deletes
 async function applyLocked(blogID, sync, { full = false } = {}) {
   const { done, folder } = await establishSyncLock(blogID);
   try {
     // Resolves to sync's summary, or false if the walk failed
-    return await sync(blogID, folder.status, folder.update, {
-      fullWalk: full ? "always" : "if-asked",
-      dirty: {
-        FULL: database.dirty.FULL,
-        take: () => database.dirty.take(blogID),
-        count: () => database.dirty.count(blogID),
-        members: () => database.dirty.members(blogID),
-        moveHint: (id) => database.dirty.moveHint(blogID, id),
-        seen: (ids) => database.dirty.seen(blogID, ids),
-        putBack: (ids) => database.dirty.add(blogID, ids),
-      },
-    });
+    return await folder.run(() =>
+      sync(blogID, folder.status, folder.update, {
+        signal: folder.signal,
+        fullWalk: full ? "always" : "if-asked",
+        dirty: {
+          FULL: database.dirty.FULL,
+          take: () => database.dirty.take(blogID),
+          count: () => database.dirty.count(blogID),
+          members: () => database.dirty.members(blogID),
+          moveHint: (id) => database.dirty.moveHint(blogID, id),
+          seen: (ids) => database.dirty.seen(blogID, ids),
+          putBack: (ids) => database.dirty.add(blogID, ids),
+        },
+      })
+    );
   } catch (err) {
     log("Sync failed", err);
     return false;

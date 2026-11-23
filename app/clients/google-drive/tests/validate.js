@@ -90,7 +90,12 @@ function load({
       if (locks[blogID]) throw locks[blogID];
       if (onLock[blogID]) onLock[blogID]();
       return {
-        folder: { status() {}, update: async () => {} },
+        folder: {
+          status() {},
+          update: async () => {},
+          signal: new AbortController().signal,
+          run: (fn) => fn(),
+        },
         done: async () => calls.released.push(blogID),
       };
     },

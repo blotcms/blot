@@ -10,12 +10,12 @@ const resetToBlot = require("./sync/reset-to-blot");
 const resetFromBlot = require("./sync/reset-from-blot");
 const { transferIncomplete } = require("./util/constants");
 const { issueFromAccount } = require("./util/classifyError");
+const cancelled = require("./util/cancelled");
 const { get: getDropboxAccount } = require("./database");
 const getHealth = require("./getHealth");
 const Fix = require("sync/fix");
 const establishSyncLock = require("sync/establishSyncLock");
 const folderLock = require("sync/lock");
-const redisSubscriber = require("helper/redisSubscriber");
 const config = require("config");
 const sync = require("./sync");
 const loadClient = require("./util/loadClient");
@@ -40,14 +40,18 @@ const TRANSFER_INCOMPLETE = Symbol("dropbox-transfer-incomplete");
 
 // Runs resetToBlot while holding the blog's folder lock, so it can't race a
 // webhook sync. resetToBlot updates the database as it changes files, since it
-// advances the Dropbox cursor and later syncs would never revisit them.
-// signal ({ aborted }) stops the walk part way, as for resetToBlot.
-const resetToBlotWithLock = async (blogID, publish, signal) => {
+// advances the Dropbox cursor and later syncs would never revisit them. A
+// disconnect stops the walk part way (folder.signal, sync/seize.js): it
+// rejects with an error util/cancelled.js recognises, and its writes to the
+// folder are refused from then on (folder.run).
+const resetToBlotWithLock = async (blogID, publish) => {
   const { folder, done } = await establishSyncLock(blogID);
   let error = null;
 
   try {
-    return await resetToBlot(blogID, publish, folder.update, signal);
+    return await folder.run(() =>
+      resetToBlot(blogID, publish, folder.update, folder.signal)
+    );
   } catch (err) {
     // resetToBlot itself refuses (see sync/reset-to-blot.js) if the account's
     // initial transfer to Dropbox hasn't finished - that guard runs right
@@ -81,24 +85,6 @@ const resetToBlotWithLock = async (blogID, publish, signal) => {
 const canResumeTransfer = (account) =>
   !!account && account.transfer_pending === true && !issueFromAccount(account);
 
-// A disconnect waits for the folder lock, so whatever holds the lock stops for
-// it: signal.aborted turns true when one is requested. Call
-// subscription.cleanup() when done.
-const watchForDisconnect = (blogID) => {
-  const signal = { aborted: false };
-  const subscription = redisSubscriber({
-    channel: "sync:status:" + blogID,
-    onMessage: function (message) {
-      if (message === "Attempting to disconnect from Dropbox")
-        signal.aborted = true;
-    },
-    onError: function (err) {
-      console.error(clfdate(), "Dropbox: Resume subscriber", blogID, err);
-    },
-  });
-  return { signal, subscription };
-};
-
 // Resumes one blog's initial transfer under its folder lock. Resolves true if
 // the transfer finished, false if it was left alone: something holds the lock
 // (a setup is running it), the transfer is no longer pending, or a disconnect
@@ -115,31 +101,25 @@ const resumeTransfer = async (blogID) => {
   }
 
   const { folder, done } = lock;
-  const { signal, subscription } = watchForDisconnect(blogID);
 
   let error = null;
   try {
-    await subscription.setupPromise;
-
     // The setup this replaces may have finished just before we took the lock
     if (!canResumeTransfer(await getDropboxAccount(blogID))) return false;
 
     console.log(clfdate(), "Dropbox: Resuming initial transfer", blogID);
     folder.status("Syncing your folder to Dropbox");
-    await resetFromBlot(blogID, folder.status, signal, folder.update, {
-      keepDropbox: true,
-    });
+    await folder.run(() =>
+      resetFromBlot(blogID, folder.status, folder.signal, folder.update, {
+        keepDropbox: true,
+      })
+    );
     return true;
   } catch (err) {
-    if (err && err.name === "AbortError") return false;
+    if (cancelled(err, folder.signal)) return false;
     error = err;
     throw err;
   } finally {
-    await subscription
-      .cleanup()
-      .catch((err) =>
-        console.error(clfdate(), "Dropbox: Resume cleanup", blogID, err)
-      );
     await done(error).catch((err) => {
       if (err !== error)
         console.error(clfdate(), "Dropbox: Error releasing lock", blogID, err);
@@ -167,23 +147,13 @@ const resumeTransfers = async (blogIDs) => {
 
       const publish = (...args) =>
         console.log(clfdate(), "Dropbox:", blogID, ...args);
-      const { signal, subscription } = watchForDisconnect(blogID);
-      try {
-        await subscription.setupPromise;
-        await resetToBlotWithLock(blogID, publish, signal);
-      } finally {
-        await subscription
-          .cleanup()
-          .catch((err) =>
-            console.error(clfdate(), "Dropbox: Resume cleanup", blogID, err)
-          );
-      }
+      await resetToBlotWithLock(blogID, publish);
 
       const blog = await getBlog({ id: blogID });
       if (blog) await catchUpSync(blog);
     } catch (err) {
       if (err && err.message === "Failed to acquire folder lock") continue;
-      if (err && err.name === "AbortError") continue;
+      if (cancelled(err)) continue;
       console.error(
         clfdate(),
         "Dropbox: Error resuming initial transfer",
@@ -355,7 +325,8 @@ const validateAllBlogs = async () => {
         // A sync is already running for this blog, and that sync will pick
         // up whatever changed. Check it again next hour (a lock that stays
         // held is caught by the stuck-lock check above).
-        if (err.message === "Failed to acquire folder lock") {
+        // Or a disconnect stopped the walk: the blog is no longer on Dropbox
+        if (err.message === "Failed to acquire folder lock" || cancelled(err)) {
           console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
           checkedBlogs -= 1;
           continue;
@@ -528,7 +499,7 @@ const resyncRecentSyncsOnStartup = async () => {
       await catchUpSync(blog);
       console.log(clfdate(), "Dropbox: Resync complete for blog", blogID);
     } catch (err) {
-      if (err.message === "Failed to acquire folder lock") {
+      if (err.message === "Failed to acquire folder lock" || cancelled(err)) {
         console.log(clfdate(), "Dropbox: Skipping busy blog", blogID);
         continue;
       }

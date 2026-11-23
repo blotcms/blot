@@ -73,6 +73,20 @@ describe("Blog.remove", function () {
     expect((await folderLock.inspect(blogID)).held).toBe(false);
   });
 
+  it("leaves the keys a disconnect's seize left behind", async function () {
+    var folderLock = require("sync/lock");
+    var client = require("models/client");
+    var blogID = this.blog.id;
+
+    await client.set(folderLock.seizedKey(blogID), "1", { PX: 30000 });
+
+    await remove(blogID);
+
+    // A holder the seize took the lock from still finds it seized
+    expect(await folderLock.wasSeized(blogID)).toBe(true);
+    await client.del(folderLock.seizedKey(blogID));
+  });
+
   describe("templates", function () {
     var client = require("models/client");
     var Template = require("models/template");

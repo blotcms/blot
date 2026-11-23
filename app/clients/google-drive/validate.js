@@ -120,8 +120,18 @@ const walkWithLock = async (blogID, publish, options) => {
     // may have waited for it: setup or a stored error can have started since.
     if (!isEligible(await database.blog.get(blogID))) return NOT_ELIGIBLE;
 
-    return await sync(blogID, publish, folder.update, options);
+    // A disconnect seizes the lock (sync/seize.js): the walk stops, and
+    // inside run its writes throw. The blog is going, so there is nothing
+    // to report.
+    const summary = await folder.run(() =>
+      sync(blogID, publish, folder.update, {
+        ...options,
+        signal: folder.signal,
+      })
+    );
+    return folder.signal.aborted ? NOT_ELIGIBLE : summary;
   } catch (err) {
+    if (folder.signal.aborted) return NOT_ELIGIBLE;
     error = err;
     throw err;
   } finally {

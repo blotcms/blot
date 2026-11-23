@@ -20,12 +20,20 @@ const {
 // File.setMany (two siblings differing only in case lose a spelling from the
 // lowercased-name index), so a caller downloading several files at once passes
 // a publish which runs them one at a time. It defaults to calling fn.
+//
+// options.signal (the sync's folder.signal) gives the download up as the
+// timeout does once it aborts, rejecting with its reason, and nothing is
+// written after that. The client's own requests are cut off too when it was
+// loaded with the signal (util/loadClient.js).
 async function download(client, source, blogID, destination, options) {
   const id = uuid();
   const prefix = () =>
     clfdate() + " clients:dropbox:download:" + id.slice(0, 6);
   let timedOut = false;
   const publish = (options && options.publish) || ((fn) => fn());
+  const signal = options && options.signal;
+
+  if (signal) signal.throwIfAborted();
 
   console.log(prefix(), source, "->", destination);
 
@@ -44,12 +52,21 @@ async function download(client, source, blogID, destination, options) {
   }
 
   let timeout;
+  let onAbort;
   const timeoutReached = new Promise(function (resolve, reject) {
     timeout = setTimeout(function () {
       timedOut = true;
       console.log(prefix(), "reached timeout for download");
       reject(new Error("Timeout reached for download"));
     }, TIMEOUT);
+
+    if (!signal) return;
+    onAbort = function () {
+      timedOut = true;
+      console.log(prefix(), "cancelled download");
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 
   const transfer = (async function () {
@@ -119,6 +136,7 @@ async function download(client, source, blogID, destination, options) {
     throw err;
   } finally {
     clearTimeout(timeout);
+    if (onAbort) signal.removeEventListener("abort", onAbort);
     console.log(prefix(), "calling back with err = ", failure);
   }
 }

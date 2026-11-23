@@ -44,7 +44,12 @@ function load({
     "sync/establishSyncLock": async () => {
       events.push("lock");
       return {
-        folder: { status() {}, update() {} },
+        folder: {
+          status() {},
+          update() {},
+          signal: new AbortController().signal,
+          run: (fn) => fn(),
+        },
         done: async () => events.push("release"),
       };
     },

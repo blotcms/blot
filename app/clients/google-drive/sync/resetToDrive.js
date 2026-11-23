@@ -41,8 +41,12 @@ module.exports = async (blogID, publish, options = {}) => {
 
   const account = await database.blog.get(blogID);
   const { folderId, serviceAccountId } = account;
-  const drive = await createDriveClient(serviceAccountId);
-  const checkWeCanContinue = CheckWeCanContinue(blogID, account);
+  // options.signal is the folder lock's (routes/setup.js): once a disconnect
+  // aborts it (sync/seize.js), uploads in flight are cut off and the copy
+  // stops at its next step
+  const { signal } = options;
+  const drive = await createDriveClient(serviceAccountId, { signal });
+  const checkWeCanContinue = CheckWeCanContinue(blogID, account, signal);
   const { reset, set, getAllApplied } = database.folder(folderId, blogID);
 
   // .gdoc files have no md5Checksum, so we fall back to comparing

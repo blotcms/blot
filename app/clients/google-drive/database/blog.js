@@ -1,6 +1,7 @@
 const client = require("models/client");
 
 const PREFIX = require("./prefix");
+const refuseAfterAbort = require("./refuseAfterAbort");
 
 const blog = {
   _key(blogID) {
@@ -146,4 +147,4 @@ const blog = {
   },
 };
 
-module.exports = blog;
+module.exports = refuseAfterAbort(blog, ["store", "update", "delete"]);

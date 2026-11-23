@@ -321,6 +321,9 @@ const loadTemplates = async () => {
       ...template,
       folder_preview: folderPreviewForTemplate(template, manifest),
       folder_html: folderHTMLForTemplate(template, manifest),
+      // The ZIP's path on the CDN, /folders/<name>-<hash>.zip, from the
+      // manifest (templates/folders/zip). None if the build skipped it.
+      zip_path: (manifest[template.demo_folder] || {}).zip,
     }));
 };
 
@@ -431,8 +434,11 @@ module.exports = async () => {
   }
 
   for (const template of templates) {
-    const zip_name = `${template.demo_folder}.zip`;
-    const zip = `/folders/${zip_name}`;
+    // The CDN is cdn.<host> (config.cdn.origin), and like preview_host the
+    // host is filled in when the page is served.
+    const zip = template.zip_path
+      ? `${config.protocol}cdn.{{host}}${template.zip_path}`
+      : undefined;
     const readmePath = path.join(
       templatesSourceDirectory,
       template.slug,

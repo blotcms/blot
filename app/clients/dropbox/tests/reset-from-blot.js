@@ -129,7 +129,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -157,7 +157,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -184,7 +184,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -206,7 +206,7 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false });
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
 
     expect(uploadCalls.length).toEqual(1);
     expect(
@@ -242,7 +242,7 @@ describe("dropbox resetFromBlot", function () {
     await resetFromBlot(
       blogID,
       () => {},
-      { aborted: false },
+      new AbortController().signal,
       require("util").promisify(folderUpdate)
     );
 
@@ -271,7 +271,7 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false });
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
 
     expect(
       (await storage.listNames(blogID, "/.git/refs/heads"))
@@ -294,7 +294,7 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false });
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
 
     const top = (await storage.listNames(blogID, "/"))
       .map((e) => e.name)
@@ -338,9 +338,15 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false }, undefined, {
-      keepDropbox: true,
-    });
+    await resetFromBlot(
+      blogID,
+      () => {},
+      new AbortController().signal,
+      undefined,
+      {
+        keepDropbox: true,
+      }
+    );
 
     expect(uploadCalls).toEqual(["/new.txt"]);
     expect(deleteCalls).toEqual([]);
@@ -366,7 +372,7 @@ describe("dropbox resetFromBlot", function () {
     });
 
     await expectAsync(
-      resetFromBlot(blogID, () => {}, { aborted: false }, undefined, {
+      resetFromBlot(blogID, () => {}, new AbortController().signal, undefined, {
         keepDropbox: true,
       })
     ).toBeRejectedWith(
@@ -403,9 +409,15 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false }, undefined, {
-      keepDropbox: true,
-    });
+    await resetFromBlot(
+      blogID,
+      () => {},
+      new AbortController().signal,
+      undefined,
+      {
+        keepDropbox: true,
+      }
+    );
 
     expect(uploadCalls).toEqual([]);
     expect(deleteCalls).toEqual([]);
@@ -436,9 +448,15 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false }, undefined, {
-      keepDropbox: true,
-    });
+    await resetFromBlot(
+      blogID,
+      () => {},
+      new AbortController().signal,
+      undefined,
+      {
+        keepDropbox: true,
+      }
+    );
 
     expect(uploadCalls).toEqual([]);
     expect(saved.some((values) => values.transfer_pending === false)).toBe(
@@ -469,7 +487,7 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false });
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
 
     expect(deleteCalls).toEqual(["/extra.txt"]);
   });
@@ -505,9 +523,11 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, (...args) => messages.push(args.join(" ")), {
-      aborted: false,
-    });
+    await resetFromBlot(
+      blogID,
+      (...args) => messages.push(args.join(" ")),
+      new AbortController().signal
+    );
 
     expect(uploadCalls.sort()).toEqual(["/a.txt", "/new-empty.txt"]);
     expect(messages.some((m) => /Skipped 1 placeholder /.test(m))).toEqual(
@@ -547,7 +567,7 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false });
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
 
     expect(uploadCalls.length).toEqual(1);
     expect(saved.some((values) => values.error_code === 507)).toEqual(false);
@@ -580,7 +600,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -609,7 +629,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -648,7 +668,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -684,7 +704,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -713,7 +733,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }

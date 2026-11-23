@@ -18,7 +18,10 @@ function folderMissingError(account) {
   return error;
 }
 
-module.exports = async (blogID, publish, update) => {
+// signal, the dashboard's sync lock's (app/dashboard/site/client.js): a
+// disconnect aborts it (sync/seize.js), and the walk stops and its requests
+// are cut off, as for any other sync
+module.exports = async (blogID, publish, update, signal) => {
   publish = publish || function () {};
   update = update || function () {};
 
@@ -32,7 +35,8 @@ module.exports = async (blogID, publish, update) => {
 
   // sync resets the database state of the folder once it has confirmed
   // the folder is still reachable
-  const summary = await sync(blogID, publish, update, { reset: true });
+  const summary = await sync(blogID, publish, update, { reset: true, signal });
+  if (signal) signal.throwIfAborted();
 
   if (summary) {
     await pruneVerifiedContents();
