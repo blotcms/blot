@@ -7,6 +7,7 @@ const database = require("../database");
 const config = require("config");
 const accessTokenCache = require("./accessTokenCache");
 const fetch = require("./fetch");
+const guard = require("storage/folder/guard");
 
 // Resolves to { error, client, account } and never rejects, since the caller
 // sometimes needs the account even when there is an error with the client
@@ -14,7 +15,9 @@ const fetch = require("./fetch");
 // options.signal (an AbortSignal, the sync's folder.signal) goes into every
 // request the client makes, the token refresh included, so a disconnect cuts
 // off a transfer in flight. Once it has aborted, the refreshed token isn't
-// saved: the account may have been dropped meanwhile.
+// saved: the account may have been dropped meanwhile. The same goes for a
+// caller without the signal that runs inside a sync a disconnect has
+// stopped, such as a dashboard write (storage/folder/guard.js).
 module.exports = async function createClient(blogID, options = {}) {
   const { signal } = options;
 
@@ -94,6 +97,12 @@ module.exports = async function createClient(blogID, options = {}) {
 
   if (signal && signal.aborted) {
     return { error: signal.reason, client: null, account };
+  }
+
+  try {
+    guard.check(blogID);
+  } catch (error) {
+    return { error, client: null, account };
   }
 
   try {
