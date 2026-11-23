@@ -1,0 +1,15 @@
+# Installed by config/host/deploy.sh. Starts the units' slices and makes their
+# sandbox jails' cgroups in them, before docker starts the units at boot.
+[Unit]
+Description=Blot units' slices and sandbox cgroups
+Wants=system-blot-blue.slice system-blot-green.slice
+After=system-blot-blue.slice system-blot-green.slice
+Before=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/blot-unit-cgroups.sh
+
+[Install]
+WantedBy=multi-user.target
