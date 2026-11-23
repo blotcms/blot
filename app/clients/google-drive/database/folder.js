@@ -1,6 +1,7 @@
 const client = require("models/client");
 
 const PREFIX = require("./prefix");
+const refuseAfterAbort = require("./refuseAfterAbort");
 
 function folder(folderId, blogID) {
   if (!(this instanceof folder)) {
@@ -378,6 +379,17 @@ function folder(folderId, blogID) {
 
     return results;
   };
+
+  refuseAfterAbort(this, [
+    "setVerifiedContent",
+    "setApplied",
+    "pruneVerifiedContents",
+    "set",
+    "move",
+    "remove",
+    "reset",
+    "forgetOwn",
+  ]);
 
   return this;
 }

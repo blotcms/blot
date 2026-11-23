@@ -335,6 +335,8 @@ describe("google drive hotDocPoller", function () {
             .createSpy("update")
             .and.returnValue(Promise.resolve()),
           status: jasmine.createSpy("status"),
+          signal: new AbortController().signal,
+          run: (fn) => fn(),
         },
         done: jasmine.createSpy("done").and.returnValue(Promise.resolve()),
       };
