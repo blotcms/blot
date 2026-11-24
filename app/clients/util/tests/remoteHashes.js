@@ -1,7 +1,7 @@
-describe("dropbox content hashes", function () {
-  const hashes = require("../util/hashes");
+describe("remote hashes", function () {
+  const hashes = require("../remoteHashes")("spec");
   const crypto = require("crypto");
-  const blogID = "blog_dropboxhashestest" + Date.now();
+  const blogID = "blog_remotehashestest" + Date.now();
 
   const sha1 = (text) => crypto.createHash("sha1").update(text).digest("hex");
   const sha256 = (text) =>
@@ -52,6 +52,16 @@ describe("dropbox content hashes", function () {
     const known = await hashes.load(blogID);
     expect(known.get(sha1("a"))).toEqual(sha256("a").slice(0, 24));
     expect(known.get(sha1("b"))).toEqual(sha256("b").slice(0, 24));
+  });
+
+  it("takes a shorter remote hash, as hex or bytes", async function () {
+    const md5 = (text) => crypto.createHash("md5").update(text).digest();
+    await hashes.add(blogID, sha1("a"), md5("a"));
+    const walk = await hashes.load(blogID);
+    walk.set(sha1("b"), md5("b").toString("hex"));
+
+    expect(walk.get(sha1("a"))).toEqual(md5("a").toString("hex").slice(0, 24));
+    expect(walk.get(sha1("b"))).toEqual(md5("b").toString("hex").slice(0, 24));
   });
 
   it("stores 24 bytes a file", async function () {
