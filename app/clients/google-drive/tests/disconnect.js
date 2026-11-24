@@ -22,6 +22,7 @@ function fakeDatabase(accounts) {
     dirtyForgotten: [],
     reset: [],
     forgotOwn: [],
+    hashesDropped: [],
     order: [],
   };
   const database = {
@@ -50,11 +51,21 @@ function fakeDatabase(accounts) {
       },
       forgetOwn: async () => calls.forgotOwn.push({ folderId, blogID }),
     }),
+    calls,
   };
   return { database, calls };
 }
 
-const loadForget = (database) => load("../forget", { "./database": database });
+const loadForget = (database) =>
+  load("../forget", {
+    "./database": database,
+    "./util/hashes": {
+      drop: async (blogID) => {
+        database.calls.hashesDropped.push(blogID);
+        database.calls.order.push("hashes");
+      },
+    },
+  });
 
 describe("Drive disconnect", function () {
   it("forgets the blog's records, removes its placeholders and clears its client", async function () {
@@ -92,11 +103,12 @@ describe("Drive forget", function () {
 
     expect(calls.deleted).toEqual(["blog-1"]);
     expect(calls.dirtyForgotten).toEqual(["blog-1"]);
+    expect(calls.hashesDropped).toEqual(["blog-1"]);
     expect(calls.reset).toEqual([
       { folderId: "folder-1", blogID: "blog-1", options: undefined },
     ]);
     // The account names the folder, so it goes last
-    expect(calls.order).toEqual(["reset", "dirty", "delete"]);
+    expect(calls.order).toEqual(["reset", "dirty", "hashes", "delete"]);
   });
 
   it("keeps a folder's mapping another blog's account still names", async function () {

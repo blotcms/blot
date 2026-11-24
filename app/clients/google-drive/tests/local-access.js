@@ -1,6 +1,5 @@
 const fs = require("fs-extra");
 const folder = require("storage/folder");
-const localFingerprint = require("../util/localFingerprint");
 const localFile = require("../util/localFile");
 const localReaddir = require("../sync/util/localReaddir");
 
@@ -9,18 +8,8 @@ const localReaddir = require("../sync/util/localReaddir");
 describe("Drive client access to the blog folder", function () {
   global.test.blog();
 
-  // A fingerprint is of the content cache's copy, whose mtime the cache moves
-  // to keep it recent, so an old disk fingerprint never matches (see
-  // README, "Content hash"). Only its absence is specified.
-  it("has no fingerprint for a missing file or a directory", async function () {
-    await folder.mkdir(this.blog.id, "/dir");
-
-    expect(await localFingerprint(this.blog.id, "/missing.txt")).toBeNull();
-    expect(await localFingerprint(this.blog.id, "/dir")).toBeNull();
-  });
-
   describe("localReaddir", function () {
-    it("lists names, sizes and times from storage/folder, as the disk has them", async function () {
+    it("lists names, sizes, times and SHA-1s from storage/folder", async function () {
       await folder.write(this.blog.id, "/b.txt", "bb");
       await folder.write(this.blog.id, "/a/inner.txt", "i");
 
@@ -38,6 +27,8 @@ describe("Drive client access to the blog folder", function () {
         size: 2,
         modified: real.modified,
         modifiedTime: new Date(Math.round(real.modified)).toISOString(),
+        // From the index, so a walk can match the file without reading it
+        sha1: require("crypto").createHash("sha1").update("bb").digest("hex"),
       });
       expect(byName.a.isDirectory).toBe(true);
       expect(byName.a.modifiedTime).toBeUndefined();

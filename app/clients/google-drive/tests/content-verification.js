@@ -48,18 +48,6 @@ describe("Drive verified content on disk", function () {
     expect(fingerprint(stat)).toBe(stat.size + ":" + stat.mtimeNs);
   });
 
-  it("accepts stored five-field fingerprints only while size and mtime match", function () {
-    const same = fingerprint.sameFingerprint;
-    expect(same("1:2:4:1000:3000", "4:1000")).toBe(true);
-    expect(same("1:2:4:1000:3000", "4:1001")).toBe(false);
-    expect(same("1:2:4:1000:3000", "5:1000")).toBe(false);
-    expect(same("4:1000", "4:1000")).toBe(true);
-    expect(same("4:1000", "4:1001")).toBe(false);
-    expect(same(null, "4:1000")).toBe(false);
-    expect(same("4:1000", null)).toBe(false);
-    expect(same("", "")).toBe(false);
-  });
-
   it("declines verification if the file changes while its checksum is being established", async function () {
     const module = { exports: {} };
     const racingChecksum = {

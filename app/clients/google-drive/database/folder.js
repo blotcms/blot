@@ -26,36 +26,26 @@ function folder(folderId, blogID) {
   // verified content, so change detection never depends on the file's mtime.
   this.appliedKey = `${PREFIX}${folderId}:applied-modified-time${blogID ? ":" + blogID : ""}`;
 
-  // Content verification is independent of mutable metadata written by set().
-  // A verified record pairs Drive's md5Checksum with the state of the file
-  // Blot holds: { path, checksum, size, modified, sha1 } (util/localState.js;
-  // sha1 may be null), or { path, checksum, fingerprint } from before.
-  // Fetch a directory in one Redis request, rather than one request per file.
+  // Records from before util/hashes.js: per file ID, Drive's md5Checksum and
+  // the SHA-1 of the file Blot verified against it, { path, checksum, sha1,
+  // ... }. Only read now, so a walk can take them over (sync/sync.js); drop
+  // this and the verified-content keys once every Drive blog has been walked
+  // since. One Redis request per directory.
   this.getVerifiedContents = async (ids) => {
     if (!ids.length) return [];
     return (await client.hmGet(this.contentKey, ids)).map((value) => {
       try {
         const record = value && JSON.parse(value);
-        if (
-          !record ||
-          ![record.path, record.checksum].every(
-            (field) => typeof field === "string" && field.length
-          )
-        )
-          return null;
-        const described =
-          Number.isFinite(record.size) && Number.isFinite(record.modified);
-        const legacy =
-          typeof record.fingerprint === "string" && record.fingerprint.length;
-        return described || legacy ? record : null;
+        return record &&
+          typeof record.checksum === "string" &&
+          typeof record.sha1 === "string" &&
+          record.sha1.length
+          ? record
+          : null;
       } catch (_) {
         return null;
       }
     });
-  };
-
-  this.setVerifiedContent = async (id, value) => {
-    await client.hSet(this.contentKey, id, JSON.stringify(value));
   };
 
   const parseApplied = (value) => {
@@ -75,16 +65,15 @@ function folder(folderId, blogID) {
       Object.entries(all).map(([id, value]) => [id, parseApplied(value)])
     );
   };
-  // { modifiedTime, size, modified, sha1 }: the state is that of the file
-  // Blot wrote (util/localState.js), and may be missing if it couldn't be
-  // read, in which case the record is never trusted. Records from before
-  // have { modifiedTime, fingerprint } instead.
-  this.setApplied = async (id, { modifiedTime, size, modified, sha1 }) => {
+  // { modifiedTime, sha1 }: Drive's modifiedTime of the version Blot wrote,
+  // and the SHA-1 of the file it wrote (util/localState.js). The SHA-1 may be
+  // missing if the file couldn't be read, in which case the record is never
+  // trusted. Records from before hold size and modified time too, which
+  // nothing reads now, or { modifiedTime, fingerprint }, which never matches.
+  this.setApplied = async (id, { modifiedTime, sha1 }) => {
     if (!modifiedTime) return;
     const record = { modifiedTime };
-    if (Number.isFinite(size) && Number.isFinite(modified)) {
-      Object.assign(record, { size, modified, sha1: sha1 || null });
-    }
+    if (sha1) record.sha1 = sha1;
     await client.hSet(this.appliedKey, id, JSON.stringify(record));
   };
 
@@ -384,7 +373,6 @@ function folder(folderId, blogID) {
   };
 
   refuseAfterAbort(this, [
-    "setVerifiedContent",
     "setApplied",
     "pruneVerifiedContents",
     "set",

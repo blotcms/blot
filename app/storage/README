@@ -256,13 +256,10 @@ with `Last-Modified`.
   still changes whenever the file is rewritten.
 - Google Drive compares Drive's `modifiedTime` with an "applied" record in
   its client DB. iCloud and Dropbox compare content or provider hashes.
-- Google Drive's records of the file Blot holds (`util/localState.js`) are
-  storage/folder's `size` and `modified` (rounded to the millisecond, as
-  `models/file` keeps it),
-  plus the SHA-1 when it's known, checked only when those two moved. The
-  older fingerprint (`util/contentFingerprint.js`, `localFingerprint.js`:
-  size and nanosecond mtime on disk) is still honoured in records written
-  before, and replaced the first time it matches.
+- Google Drive's records of the file Blot holds are its SHA-1 from the
+  folder's index (`util/localState.js`): files with an md5Checksum are paired
+  SHA-1 to md5Checksum (`clients/util/remoteHashes.js`), and Google Docs keep
+  `{ modifiedTime, sha1 }` per file ID. Neither looks at size or mtime.
 - The other mtime reads are display (`retrieve/folder.js`,
   `dashboard/site/folder/stat.js`, `build/multiple.js`) and iCloud
   forwarding the time to the macserver.

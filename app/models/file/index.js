@@ -639,6 +639,33 @@ async function setFlags(blogID, path, source, list, options) {
   return true;
 }
 
+// Stores a SHA-1 a reader computed for a file whose record has none (an
+// index rebuilt without hashing), so the next listing has it for free. Only
+// while the record still describes the bytes that were read: the same size
+// and modified time, and still no SHA-1. Resolves to whether it stored it.
+async function fillSha1(blogID, path, read, sha1) {
+  check(blogID);
+  path = normalize(path);
+
+  if (path === "/" || !/^[0-9a-f]{40}$/.test(sha1 || "")) return false;
+
+  var dirKey = key.dir(blogID, parentOf(path));
+  var found = parse(await client.hGet(dirKey, nameOf(path)));
+
+  if (
+    !found ||
+    found.type !== "file" ||
+    found.sha1 ||
+    found.size !== read.size ||
+    found.modified !== read.modified
+  )
+    return false;
+
+  found.sha1 = sha1;
+  await client.hSet(dirKey, nameOf(path), pack(found));
+  return true;
+}
+
 // An async iterator of { path, ...record } for every file below dir which
 // has flags. Reads each directory's hash once, so it costs a pass over the
 // whole subtree: for rebuilds and scripts, not for requests.
@@ -1048,6 +1075,7 @@ module.exports = {
   set,
   setMany,
   setFlags,
+  fillSha1,
   flagged,
   remove,
   removeAll,
