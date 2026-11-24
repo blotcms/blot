@@ -26,7 +26,6 @@ const PREFIX = require("../database/prefix");
 const POLL_EVERY_MS = 1000;
 // How long the list of a service account's blogs is reused
 const BLOGS_TTL_MS = 30 * 1000;
-// Pause after Drive rate-limits us, before the next read
 
 const FIELDS =
   "nextPageToken,newStartPageToken,changes(fileId,removed,time,file(name,mimeType,parents,trashed,md5Checksum,size))";
