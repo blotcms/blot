@@ -505,10 +505,13 @@ time: the file's build flag tells them.
   directly; `#!/usr/bin/env` scripts won't start. pandoc is a static binary,
   bound on its own: never `/usr/local/bin`.
 - **The environment is empty** except `NODE_PATH`, so `require("sharp")` resolves.
-- **Job cgroups are outside the unit's.** The host makes
-  `/sys/fs/cgroup/blot-sandbox/<unit>` (`config/host/host/setup.sh`) and the
-  deploy binds it at `/sandbox-cgroup` with `--cgroupns=host`; `--cgroupns=private`
-  can't move a job into it. So their limits add to the units' on the host.
+- **Job cgroups are inside the unit's slice.** The host makes
+  `sandbox/` and `browser/` in `system-blot-<unit>.slice`
+  (`config/host/scripts/unit-cgroups`), beside the unit's container, and the
+  deploy binds them at `/sandbox-cgroup` and `/sandbox-browser-cgroup` with
+  `--cgroupns=host`; `--cgroupns=private` can't move a job into them. Their own
+  limits stop one job, and the slice's limit bounds the unit and its jobs
+  together (#2795).
 - **Jobs go first when the host runs out of memory.** The broker's shell sets
   `oom_score_adj` to 1000 before it execs nsjail, so a job is killed before the
   units' Node: `node-b` sets itself to 900 (`app/index.js`) and `node-a` stays

@@ -46,12 +46,12 @@
 # from disk and waits on it, which slows renders; these show that before
 # render times do (#2795). Older lines lack them, and cgroup v1 logs 0.
 #
-# The units' sandbox jobs (#2257) run in cgroups outside the unit's, so each
-# unit's subtree, where the host has made one, gets a line of its own as
-# name=blot-sandbox-<unit>. Jobs last under a second, so read peak and oom_kill
-# there, not anon. Where the unit runs in a slice of its own (#2795), the slice
-# gets a line too, name=blot-unit-<unit>: the container and both jails under
-# the one limit that bounds the whole unit.
+# The units' sandbox jobs (#2257) run in two jails beside the container in the
+# unit's slice (#2795), and each jail gets a line of its own, as
+# name=blot-sandbox-<unit> and name=blot-sandbox-<unit>-browser. Jobs last
+# under a second, so read peak and oom_kill there, not anon. The slice gets a
+# line too, name=blot-unit-<unit>: the container and both jails under the one
+# limit that bounds the whole unit.
 # Works on cgroup v1 (Amazon Linux 2) and v2 (Amazon Linux 2023).
 # Read it with unit-mem-summary.sh.
 #
@@ -104,19 +104,17 @@ for name in $CONTAINERS; do
     if [ -r "$dir/memory.stat" ]; then targets="$targets $name=$dir"; break; fi
   done
 done
-# A unit deployed since #2795 runs in a slice of its own, with its jails
-# beside its container in it; one deployed before, in the older blot-sandbox
-# tree. The slice is the whole unit and gets a line of its own,
+# A unit runs in a slice of its own (#2795), with its jails beside its
+# container in it. The slice is the whole unit and gets a line of its own,
 # name=blot-unit-<unit>, in the log only: its oom_kill counts the same kills as
 # the container's and the jails', which the app already alerts on.
 slices=""
 for unit in blue green; do
   slice="$CGROUP_ROOT/system.slice/system-blot.slice/system-blot-$unit.slice"
   case "$targets " in
-    *"=$slice/"*) dir=$slice/sandbox browser=$slice/browser
-                  slices="$slices blot-unit-$unit=$slice" ;;
-    *) dir=$CGROUP_ROOT/blot-sandbox/$unit browser=$CGROUP_ROOT/blot-sandbox/$unit-browser ;;
+    *"=$slice/"*) slices="$slices blot-unit-$unit=$slice" ;;
   esac
+  dir=$slice/sandbox browser=$slice/browser
   [ -r "$dir/memory.stat" ] && targets="$targets blot-sandbox-$unit=$dir"
   [ -r "$browser/memory.stat" ] && targets="$targets blot-sandbox-$unit-browser=$browser"
 done
