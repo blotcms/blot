@@ -4,6 +4,7 @@ var Blog = require("models/blog");
 var debug = require("debug")("blot:clients:dropbox");
 var seize = require("sync/seize");
 var placeholders = require("clients/util/placeholders");
+var hashes = require("./util/hashes");
 
 // Dont write tests for this or you'll need to regenerate
 // an access token for Travis and it'll be annoying. Just
@@ -38,6 +39,7 @@ async function remove(blogID, signal) {
 
   debug("dropping blog from database");
   await database.drop(blogID);
+  await hashes.drop(blogID);
 
   if (!account) {
     debug("the user chose Dropbox but did not connect their account");

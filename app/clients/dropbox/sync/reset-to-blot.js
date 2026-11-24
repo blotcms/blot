@@ -29,6 +29,7 @@ const tagSource = require("../util/tagSource");
 const retryRequest = require("../util/retryRequest");
 const loadClient = require("../util/loadClient");
 const cancelled = require("../util/cancelled");
+const hashes = require("../util/hashes");
 const createClient = async (blogID, signal) => {
   const { error, client, account } = await loadClient(blogID, { signal });
   if (error) throw error;
@@ -229,19 +230,30 @@ async function resetToBlotWithClient(
 
   const readdir = await createReaddir(client, dropboxRoot, rootLower, publish);
 
-  await walk(
-    blogID,
-    client,
-    publish,
-    updatePath,
-    dropboxRoot,
-    "/",
-    summary,
-    progress,
-    readdir,
-    "/",
-    signal
-  );
+  // Files whose content_hash is known from their SHA-1 aren't read to hash
+  // them (util/hashes.js). A walk that saw every file keeps only what it used.
+  const known = await hashes.load(blogID);
+  let walked = false;
+
+  try {
+    await walk(
+      blogID,
+      client,
+      publish,
+      updatePath,
+      dropboxRoot,
+      "/",
+      summary,
+      progress,
+      readdir,
+      "/",
+      signal,
+      known
+    );
+    walked = true;
+  } finally {
+    await known.save({ complete: walked && !summary.failed });
+  }
 
   const changed =
     summary.changedPaths.length || summary.vanished.length
@@ -311,7 +323,8 @@ const walk = async (
   progress,
   readdir,
   key,
-  signal
+  signal,
+  known
 ) => {
   abortIfRequested(signal);
   publish("Checking", dir);
@@ -329,7 +342,7 @@ const walk = async (
   });
   const [remoteContents, localContents] = await Promise.all([
     remoteReading,
-    localReaddir(blogID, dir, remoteReading),
+    localReaddir(blogID, dir, remoteReading, known),
   ]);
 
   // Dropbox no longer has this folder: remove nothing, and check once the
@@ -456,7 +469,8 @@ const walk = async (
         progress,
         readdir,
         remoteItem.path_lower,
-        signal
+        signal,
+        known
       );
     } else {
       if (hasUnsupportedExtension(pathOnDropbox)) {
@@ -525,9 +539,14 @@ const walk = async (
           localCounterpart.is_directory
         );
         try {
-          await download(client, pathOnDropbox, blogID, pathOnBlot, {
-            signal,
-          });
+          const pair = await download(
+            client,
+            pathOnDropbox,
+            blogID,
+            pathOnBlot,
+            { signal }
+          );
+          if (pair) known.set(pair.sha1, pair.content_hash);
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -554,9 +573,14 @@ const walk = async (
         // Already added to total by the discover() pass above.
         progress.publish("Downloading", pathOnBlot, false);
         try {
-          await download(client, pathOnDropbox, blogID, pathOnBlot, {
-            signal,
-          });
+          const pair = await download(
+            client,
+            pathOnDropbox,
+            blogID,
+            pathOnBlot,
+            { signal }
+          );
+          if (pair) known.set(pair.sha1, pair.content_hash);
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -699,24 +723,35 @@ const excuseRecentChanges = async (client, changed, dropboxRoot, summary) => {
 // A file's hash is undefined if it can't be read, which never matches Dropbox's.
 // Hashing can mean reading the whole file, so when Dropbox's size for the file
 // is known it is compared first, from the index: files of different sizes
-// can't have the same bytes.
-const contentHash = async (blogID, path, size) => {
+// can't have the same bytes. Then the content_hash stored for the file's
+// SHA-1 (util/hashes.js) answers without reading it: Dropbox's own hash when
+// they agree, so the caller's comparison matches, and the stored prefix when
+// they don't, so it doesn't. Only a file with no stored hash is read.
+const contentHash = async (blogID, path, size, remoteHash, known) => {
   try {
-    const stat = await storage.stat(blogID, path);
+    const stat = await storage.stat(blogID, path, { sha1: true });
     if (stat.isDirectory) return undefined;
     // A placeholder's bytes aren't the file's, so they never match Dropbox's,
     // even when the file there is now really empty too
     if (stat.placeholder) return undefined;
     if (typeof size === "number" && stat.size !== size) return undefined;
-    return (await storage.stat(blogID, path, { hash: true })).hash;
+
+    const prefix = known && known.get(stat.sha1);
+    if (prefix !== undefined) {
+      return remoteHash && remoteHash.startsWith(prefix) ? remoteHash : prefix;
+    }
+
+    const { hash } = await storage.stat(blogID, path, { hash: true });
+    if (known) known.set(stat.sha1, hash);
+    return hash;
   } catch (e) {
     return undefined;
   }
 };
 
 // remoteContentsPromise is the same folder's listing in Dropbox (null if it
-// is gone), for the sizes
-const localReaddir = async (blogID, dir, remoteContentsPromise) => {
+// is gone), for the sizes and hashes. known is the walk's util/hashes.js.
+const localReaddir = async (blogID, dir, remoteContentsPromise, known) => {
   const [contents, remoteContents] = await Promise.all([
     storage.listNames(blogID, dir),
     remoteContentsPromise,
@@ -737,7 +772,13 @@ const localReaddir = async (blogID, dir, remoteContentsPromise) => {
         : await contentHash(
             blogID,
             path_display,
-            remoteItem && !remoteItem.is_directory ? remoteItem.size : undefined
+            remoteItem && !remoteItem.is_directory
+              ? remoteItem.size
+              : undefined,
+            remoteItem && !remoteItem.is_directory
+              ? remoteItem.content_hash
+              : undefined,
+            known
           ),
     };
   });
