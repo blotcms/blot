@@ -14,7 +14,7 @@ const manifest = require("../manifest");
 const compact = require("../compact");
 const commit = require("../commit");
 const sweep = require("../sweep");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const {
@@ -738,6 +738,7 @@ describe("git store sweep", function () {
 describe("git store sweep, after compacting a real repository", function () {
   timeout(180 * 1000);
 
+  const ws = workspace.each();
   let clock;
   let dir;
   let work;
@@ -786,12 +787,12 @@ describe("git store sweep, after compacting a real repository", function () {
   beforeEach(async function () {
     clock = T0;
     counter = 0;
-    dir = fx.tempDir();
+    dir = ws.dir();
     work = path.join(dir, "work");
     fx.buildFixture(work, { commits: 5, large: false });
     inner = createMemoryStore({ now: () => clock });
     store = faults(inner);
-    cache = createCache({
+    cache = ws.cache({
       dir: path.join(dir, "cache"),
       maxBytes: 64 * 1024 * 1024,
     });
@@ -822,8 +823,6 @@ describe("git store sweep, after compacting a real repository", function () {
     if (server) await server.close();
     if (received) await received.close();
     server = received = null;
-    await createCache.closeAll();
-    fx.remove(dir);
   });
 
   it("deletes the merged-away packs and pieces, and the repository still clones, fscks and reads back", async function () {

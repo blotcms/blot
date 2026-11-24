@@ -8,7 +8,7 @@ const timeout = require("./helpers/timeout");
 const manifest = require("../manifest");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const {
   CorruptError,
   StaleManifestError,
@@ -380,13 +380,14 @@ describe("git store against a misbehaving object store", function () {
   });
 
   describe("reading a repository", function () {
+    const ws = workspace.all();
     let workDir;
     let fixture;
     let oracle;
     let pack;
 
     beforeAll(function () {
-      workDir = fx.tempDir();
+      workDir = ws.dir();
       fixture = fx.buildFixture(workDir + "/repo", {
         commits: 6,
         large: false,
@@ -396,11 +397,6 @@ describe("git store against a misbehaving object store", function () {
       [pack] = fx.readPacks(fixture.dir);
     });
 
-    afterAll(async function () {
-      await createCache.closeAll();
-      fx.remove(workDir);
-    });
-
     // `byRange` gives the reader a cache too small for it to read the index
     // whole (idx.js), so it reads it by range as a big index is
     let caches = 0;
@@ -408,7 +404,7 @@ describe("git store against a misbehaving object store", function () {
       const store = faults(createMemoryStore());
       const entry = await fx.upload(store, pack, oracle.size);
       if (byRange)
-        cache = createCache({
+        cache = ws.cache({
           dir: workDir + "/range-cache-" + ++caches,
           maxBytes: 8 * pack.idx.length,
         });
@@ -485,7 +481,7 @@ describe("git store against a misbehaving object store", function () {
     });
 
     it("does not keep a cut-short or damaged whole index in the cache, nor in memory", async function () {
-      const cache = createCache({
+      const cache = ws.cache({
         dir: workDir + "/cache",
         maxBytes: 50 * 1024 * 1024,
       });

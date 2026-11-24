@@ -6,6 +6,7 @@ const fs = require("fs");
 const { PassThrough, Writable } = require("stream");
 const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
+const workspace = require("./helpers/workspace");
 const faults = require("./helpers/faults");
 const {
   startServer,
@@ -35,19 +36,16 @@ function objectIds(dir) {
 describe("git store clone", function () {
   timeout(120 * 1000);
 
+  const ws = workspace.all();
   let workDir;
   let fixture;
   let origin; // every object ID in the origin, sorted
   let counter = 0;
 
   beforeAll(function () {
-    workDir = fx.tempDir();
+    workDir = ws.dir();
     fixture = fx.buildFixture(workDir + "/repo");
     origin = objectIds(fixture.dir);
-  });
-
-  afterAll(function () {
-    fx.remove(workDir);
   });
 
   const tags = () => ({ v1: fixture.tag });

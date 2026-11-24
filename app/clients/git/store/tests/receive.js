@@ -12,7 +12,7 @@ const { createReceiveServer, push } = require("./helpers/receiveServer");
 const manifest = require("../manifest");
 const receive = require("../receive");
 const blotWrite = require("../commit");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const {
@@ -45,6 +45,7 @@ const bodyOf = (buffer) => Readable.from([buffer]);
 describe("git store receive", function () {
   timeout(60 * 1000);
 
+  const ws = workspace.each();
   let dir;
   let src;
   let fixture;
@@ -79,7 +80,7 @@ describe("git store receive", function () {
     limit,
     prepare,
   } = {}) {
-    dir = fx.tempDir();
+    dir = ws.dir();
     src = path.join(dir, "src");
     fixture = fx.buildFixture(src, { commits: 4, large: false });
     if (prepare) {
@@ -87,7 +88,7 @@ describe("git store receive", function () {
       fixture.head = fx.text(src, ["rev-parse", "HEAD"]);
     }
     store = wrap(createMemoryStore());
-    cache = createCache({ dir: path.join(dir, "cache"), maxBytes });
+    cache = ws.cache({ dir: path.join(dir, "cache"), maxBytes });
     lock = createLock();
     await seed(store);
     server = await createReceiveServer({ store, cache, lock, limit });
@@ -96,8 +97,6 @@ describe("git store receive", function () {
   async function teardown() {
     if (server) await server.close();
     server = null;
-    await createCache.closeAll();
-    fx.remove(dir);
   }
 
   // The scratch space a push used is gone, and the budget it held is back
@@ -557,7 +556,7 @@ describe("git store receive", function () {
         "x".repeat(65 * MiB) + "\n"
       );
       const roomy = {
-        cache: createCache({
+        cache: ws.cache({
           dir: path.join(dir, "roomy"),
           maxBytes: 1024 * MiB,
         }),
@@ -1173,7 +1172,7 @@ describe("git store receive", function () {
     });
 
     it("fails clearly when the cache has no room, and gives the budget back", async function () {
-      const small = createCache({
+      const small = ws.cache({
         dir: path.join(dir, "small"),
         maxBytes: 256 * 1024,
       });

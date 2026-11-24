@@ -1,13 +1,14 @@
 // Clearing scratch directories a killed process left behind: only old ones,
 // only by name, and never an error for one that is already gone.
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { sweepScratch, SETUP_MIN_AGE_MS } = require("../leftovers");
+const workspace = require("./helpers/workspace");
 
 const HOUR = 60 * 60 * 1000;
 
 describe("git store leftovers", function () {
+  const ws = workspace.each();
   let root;
   const NOW = Date.now();
 
@@ -23,11 +24,7 @@ describe("git store leftovers", function () {
   }
 
   beforeEach(function () {
-    root = fs.mkdtempSync(path.join(os.tmpdir(), "leftovers-spec-"));
-  });
-
-  afterEach(function () {
-    fs.rmSync(root, { recursive: true, force: true });
+    root = ws.dir("leftovers-spec-");
   });
 
   it("removes old import, verify and rewrite directories and counts the bytes", async function () {

@@ -11,7 +11,7 @@ const timeout = require("./helpers/timeout");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const manifest = require("../manifest");
 const compact = require("../compact");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const { createSemaphore, createChildren } = require("../limit");
 
@@ -39,12 +39,13 @@ function createLock() {
 describe("git store gate", function () {
   timeout(120 * 1000);
 
+  const ws = workspace.each();
   let dir;
   let log;
   let saved;
 
   beforeEach(function () {
-    dir = fx.tempDir();
+    dir = ws.dir();
     log = path.join(dir, "log");
     fs.writeFileSync(log, "");
 
@@ -60,12 +61,10 @@ describe("git store gate", function () {
     process.env.PATH = bin + path.delimiter + process.env.PATH;
   });
 
-  afterEach(async function () {
+  afterEach(function () {
     process.env.PATH = saved.PATH;
     delete process.env.STORE_SPY_LOG;
     delete process.env.STORE_SPY_REAL;
-    await createCache.closeAll();
-    fx.remove(dir);
   });
 
   // A gate which lets one git run at a time, and logs when it lets one start
@@ -127,7 +126,7 @@ describe("git store gate", function () {
     fx.buildFixture(work, { commits: 3, large: false });
 
     const store = createMemoryStore();
-    const cache = createCache({
+    const cache = ws.cache({
       dir: path.join(dir, "cache"),
       maxBytes: 64 * MiB,
     });

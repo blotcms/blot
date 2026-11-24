@@ -10,7 +10,7 @@ const timeout = require("./helpers/timeout");
 const manifest = require("../manifest");
 const importRepo = require("../import");
 const removeRepo = require("../remove");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createFsStore = require("../objectStore/fs");
 const { packKey, idxKey, manifestKey } = require("../layout");
 
@@ -64,13 +64,14 @@ function listing(dir) {
 describe("checking a store repository at an explicit target", function () {
   timeout(60 * 1000);
 
+  const ws = workspace.all();
   let root;
   let counter = 0;
   let imported;
   const unique = (name) => path.join(root, name + "-" + ++counter);
 
   beforeAll(async function () {
-    root = fx.tempDir();
+    root = ws.dir();
 
     const source = unique("source");
     fs.mkdirSync(source);
@@ -87,7 +88,7 @@ describe("checking a store repository at an explicit target", function () {
     fx.git(source, ["branch", "dev"]);
 
     imported = unique("imported");
-    const cache = createCache({ dir: unique("cache"), maxBytes: 64 * MiB });
+    const cache = ws.cache({ dir: unique("cache"), maxBytes: 64 * MiB });
     const result = await importRepo({
       store: createFsStore({ root: imported }),
       cache,
@@ -95,11 +96,6 @@ describe("checking a store repository at an explicit target", function () {
       gitDir: path.join(source, ".git"),
     });
     expect(result.outcome).toBe("imported");
-  });
-
-  afterAll(async function () {
-    await createCache.closeAll();
-    fx.remove(root);
   });
 
   // A copy of the imported repository, as <blogID>/git/ under `under`
