@@ -930,8 +930,8 @@ async function stat(blogID, relPath, options) {
   }
 
   // Dropbox's content_hash is not in the index (its SHA-1 is), so this costs
-  // a download until the Dropbox client keeps its own { sha1, content_hash }
-  // pairs (#2258, "Content hash")
+  // a read of the file. The Dropbox walk asks only for a file whose SHA-1 it
+  // has no stored content_hash for (clients/util/remoteHashes.js)
   if (options && options.hash && !isDirectory) {
     result.hash = await hashFile(await ensureLocal(blogID, path));
   }

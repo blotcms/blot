@@ -29,6 +29,7 @@ describe("dropbox resetToBlot", function () {
     });
     if (originals[resetPath]) require.cache[resetPath] = originals[resetPath];
     await storage.removeAll(blogID);
+    await require("../util/hashes").drop(blogID);
   });
 
   // delta: entries Dropbox reports since the pre-walk cursor, i.e. edits
@@ -321,6 +322,78 @@ describe("dropbox resetToBlot", function () {
 
       expect(summary.downloaded).toEqual(1);
       expect(hashedStats().length).toEqual(1);
+    });
+
+    it("hashes a file once, then answers from the stored hash", async function () {
+      await storage.write(blogID, "/a.txt", "hello");
+      const remote = {
+        "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
+      };
+
+      await load(remote)(
+        blogID,
+        () => {},
+        async () => {}
+      );
+      expect(hashedStats().length).toEqual(1);
+
+      storage.stat.calls.reset();
+      const summary = await load(remote)(
+        blogID,
+        () => {},
+        async () => {}
+      );
+
+      expect(summary.downloaded).toEqual(0);
+      expect(hashedStats()).toEqual([]);
+    });
+
+    it("hashes again, and downloads, a file edited since its hash was stored", async function () {
+      await storage.write(blogID, "/a.txt", "hello");
+      const remote = {
+        "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
+      };
+      await load(remote)(
+        blogID,
+        () => {},
+        async () => {}
+      );
+
+      // Edited in Blot to other bytes of the same size; Dropbox still has hello
+      await storage.write(blogID, "/a.txt", "world");
+      storage.stat.calls.reset();
+      const summary = await load(remote)(
+        blogID,
+        () => {},
+        async () => {}
+      );
+
+      expect(hashedStats().length).toEqual(1);
+      expect(summary.downloaded).toEqual(1);
+    });
+
+    it("downloads without hashing when the stored hash disagrees with Dropbox's", async function () {
+      await storage.write(blogID, "/a.txt", "hello");
+      await load({
+        "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
+      })(
+        blogID,
+        () => {},
+        async () => {}
+      );
+
+      storage.stat.calls.reset();
+      const worldHash = sha256(sha256("world")).toString("hex");
+      const summary = await load({
+        "/": [{ ...file("a.txt"), content_hash: worldHash, size: 5 }],
+      })(
+        blogID,
+        () => {},
+        async () => {}
+      );
+
+      expect(summary.downloaded).toEqual(1);
+      expect(hashedStats()).toEqual([]);
     });
 
     it("downloads a file that is not in the folder", async function () {
