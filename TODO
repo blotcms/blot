@@ -48,7 +48,6 @@ Noticed while fixing the flaky specs, 19 Nov 2026
 - `app/models/file` says its writes are safe only under the sync lock, and #2743 found writers that don't hold it. List the folder writers that run without the lock: the index's read-then-exec writes aren't safe for concurrent writers.
 - app-e2e on master pushes takes about 130 s to start (the unit image builds every test folder, with two node processes on one runner) against about 100 s on PRs; #2782 allows five minutes. A readiness signal that doesn't wait for the sky blog's images would cut the wait, if the seed scripts only need the templates.
 - `scripts/tests/index.js` runs the bucket setup in an un-awaited async function, so a failure there prints a bare SDK stack with no hint it was the setup. `scripts/tests/ci/run-lanes.sh` could also wait for MinIO's `/minio/health/live` the way it waits for Redis.
-- `app/clients/git/store/cache.js` declines every put silently on Node below 22.2, which lacks `zlib.crc32` (it bit a local spec run). Fail at startup instead.
 - `scripts/tests/util/checkBrokenLinks.js` never reads or cancels the body of a non-HTML response, which leaves its connection open until garbage collection.
 - The git store specs now share `app/clients/git/store/tests/helpers/caches.js` to close their caches (#2780), but each still hand-rolls the rest of its teardown; a shared fixture would stop the next spec forgetting `closeAll()`.
 
@@ -84,10 +83,6 @@ Image jobs run about 3.5x slower in production than on a recent Mac (12 Nov 2026
 - About 2.3x is the CPU (Graviton2, Neoverse-N1) and about 1.5x Alpine's libvips build, resizing above all. The allocator (mimalloc, jemalloc) is under 10%. A newer instance type would speed up every image job.
 
 Build add font ui
-
-Could we possibly consolidate storage assets and git s3?
-- Any opportunities for shared primitives?
-- These were written in parallel so there may be overlap
 
 Can we build templates in s3 with their own git repos? Forks as patches? Update application possible?
 
@@ -460,13 +455,6 @@ Improve Dropbox sync
 - Surface errors during setup on dashboard: a first connect that fails after sign-in loses its error (the setup record is dropped, so the sign-in step shows no problem), and a stalled copy shows only in the Status line, not on the copy step (#2914).
 
 Improve git sync
-- Create tests for large Git repo initialization
-- Handle error out of space on blot server during git client setup
-- Add sync check
-- Add support for LFS and tell [Jamie](https://mail.google.com/mail/u/0/#inbox/FMfcgxwBVMcpnxGHqnxJHNdbMBSrglzg)
-- Backdate existing commits (perhaps set file ctime using info from git log?) This would sidestep the frustration experienced by [Gavin](https://mail.google.com/mail/u/0/#inbox/1669a8e621f9ef37) when he imported an existing repository.
-- Write tests for a series of random client operations (pull, add, push, move, reset, delete) that can be seeded and reliably re-run in the case of failure.
-- Test that client must keep sending new entries and deleted entries when it recieved an error from entry.build otherwise you get ghost posts...
 - Thoroughly document:
 - Explain that the git client uses the master branch and repos from github will use main in the docs and on the dashboard then tell [N](https://mail.google.com/mail/u/0/#inbox/FMfcgzGqPzKcnQKsQQNkzcRpvCWpWKTr)
 - Tidy up tests and reduce size and runtime
