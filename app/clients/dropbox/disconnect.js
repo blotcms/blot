@@ -39,7 +39,8 @@ async function remove(blogID, signal) {
 
   debug("dropping blog from database");
   await database.drop(blogID);
-  await hashes.drop(blogID);
+  // Only a cache: a failure must not stop the disconnect
+  await hashes.drop(blogID).catch((err) => debug("dropping hashes", err));
 
   if (!account) {
     debug("the user chose Dropbox but did not connect their account");

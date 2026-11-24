@@ -348,6 +348,30 @@ describe("dropbox resetToBlot", function () {
       expect(hashedStats()).toEqual([]);
     });
 
+    it("hashes again, and downloads, a file edited since its hash was stored", async function () {
+      await storage.write(blogID, "/a.txt", "hello");
+      const remote = {
+        "/": [{ ...file("a.txt"), content_hash: helloHash, size: 5 }],
+      };
+      await load(remote)(
+        blogID,
+        () => {},
+        async () => {}
+      );
+
+      // Edited in Blot to other bytes of the same size; Dropbox still has hello
+      await storage.write(blogID, "/a.txt", "world");
+      storage.stat.calls.reset();
+      const summary = await load(remote)(
+        blogID,
+        () => {},
+        async () => {}
+      );
+
+      expect(hashedStats().length).toEqual(1);
+      expect(summary.downloaded).toEqual(1);
+    });
+
     it("downloads without hashing when the stored hash disagrees with Dropbox's", async function () {
       await storage.write(blogID, "/a.txt", "hello");
       await load({
