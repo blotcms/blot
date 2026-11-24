@@ -6,10 +6,16 @@ const fetch = require("../../util/rateLimitedFetchWithRetriesAndTimeout");
 // The macserver can take a long time to list a directory iCloud is still
 // materialising: its ls() gives up on a plain `ls` at 30s, then may spend up
 // to 30s in `brctl download` and up to another ~35s polling, so ~95s worst
-// case, after which it replies. Each attempt waits longer than that, so we never
-// abandon a request the macserver is still working on, and never stack a
-// second ls on the same directory. Backing off between attempts gives iCloud
-// time to catch up.
+// case, after which it replies. Later attempts wait longer than that, so we
+// never give up on a request the macserver is still working on. Backing off
+// between attempts gives iCloud time to catch up.
+//
+// The first attempt waits less: almost every listing takes milliseconds, and
+// about once a day a reply the macserver sent at once never arrives, which
+// held the walk (and the folder lock) for the full two minutes. A retry while
+// the macserver is still listing joins that listing (brctl/ls.js) rather than
+// starting a second ls.
+const FIRST_ATTEMPT_TIMEOUT = 30 * 1000;
 const ATTEMPT_TIMEOUT = 120 * 1000;
 const DEFAULT_BACKOFF = [5 * 1000, 15 * 1000, 30 * 1000];
 
@@ -43,7 +49,7 @@ const remoteReaddir = async (blogID, path, { signal } = {}) => {
       // we retry here, with a pause.
       const body = await fetch(MAC_SERVER_ADDRESS + "/readdir", {
         readBody: true,
-        timeout: ATTEMPT_TIMEOUT,
+        timeout: attempt === 0 ? FIRST_ATTEMPT_TIMEOUT : ATTEMPT_TIMEOUT,
         retries: 1,
         signal,
         headers: { Authorization: MACSERVER_AUTH, blogID, pathBase64 },

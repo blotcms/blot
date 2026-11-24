@@ -936,10 +936,20 @@ async function stat(blogID, relPath, options) {
     result.hash = await hashFile(await ensureLocal(blogID, path));
   }
 
-  // Free from the index, unless a rebuild without hashing left it out
+  // Free from the index, unless a rebuild without hashing left it out. Then
+  // the file is read once to hash it, and the SHA-1 kept in the index, so a
+  // client comparing hashes (clients/util/remoteHashes.js) doesn't read it on
+  // every walk
   if (options && options.sha1 && !isDirectory) {
-    result.sha1 =
-      found.sha1 || (await sha1File(await ensureLocal(blogID, path)));
+    result.sha1 = found.sha1;
+    if (!result.sha1) {
+      result.sha1 = await sha1File(await ensureLocal(blogID, path));
+      try {
+        await File.fillSha1(blogID, path, found, result.sha1);
+      } catch (err) {
+        console.error("storage: could not keep the SHA-1 of", relPath, err);
+      }
+    }
   }
 
   return result;
@@ -1015,6 +1025,10 @@ function toEntry(entry) {
     size: isDirectory ? 0 : entry.size,
     modified: entry.modified,
   };
+
+  // The SHA-1 the index holds, free: a client comparing the folder with its
+  // remote (clients/util/remoteHashes.js) needs it for every file it lists
+  if (!isDirectory && entry.sha1) result.sha1 = entry.sha1;
 
   // As stat: only a flagged file has these keys
   if (entry.flags) {
