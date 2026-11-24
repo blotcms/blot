@@ -14,7 +14,14 @@ function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
   // (util/hashes.js)
   const sha1s = new Map();
   const pairs = new Map();
-  const state = { downloads: [], updates: [], moves: [], removes: [], files };
+  const state = {
+    downloads: [],
+    updates: [],
+    moves: [],
+    removes: [],
+    files,
+    failUpdate,
+  };
 
   const isDir = (path) => files.has(path + "/");
   const exists = (path) => path === "/" || files.has(path) || isDir(path);
@@ -64,6 +71,10 @@ function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
         }
       },
       isPlaceholder: async () => false,
+      stat: async (blogID, path) => ({
+        isDirectory: isDir(path),
+        sha1: sha1s.get(path),
+      }),
     },
     "../database": {
       blog: {
@@ -171,7 +182,7 @@ function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
   };
 
   const update = async (path) => {
-    if (path === failUpdate) throw new Error("Redis went away");
+    if (path === state.failUpdate) throw new Error("Redis went away");
     state.updates.push(path);
   };
   // A targeted pass of the given directories, as sync/index.js runs one
@@ -288,7 +299,7 @@ describe("google-drive sync() folder renames and moves", function () {
     expect(h.downloads).toEqual(["/z/y.md"]);
   });
 
-  it("keeps the moved files' pairs when an update fails, so a retry matches them without downloading", async function () {
+  it("rebuilds the moved files on the next walk when an update fails", async function () {
     const h = harness({
       remote: {
         root: [folderItem("F", "new")],
@@ -302,8 +313,13 @@ describe("google-drive sync() folder renames and moves", function () {
     expect(await h.apply(["root"])).toBe(false);
 
     expect(h.files.has("/new/a.md")).toBe(true);
-    // Keyed by the file's bytes, not its path: nothing to rewrite
-    expect(h.pairs.get("sha1-a")).toBe("md5-a");
+
+    // The pair alone would say the file is unchanged, so it was unpaired:
+    // the retry checks it through download(), which rebuilds it
+    h.failUpdate = null;
+    h.updates.length = 0;
+    expect(await h.walk()).toBeTruthy();
+    expect(h.updates).toContain("/new/a.md");
   });
 
   it("still removes a folder that is gone from Drive", async function () {

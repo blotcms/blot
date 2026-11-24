@@ -61,6 +61,9 @@ const YIELD_CHECK_MS = 250;
 // Thrown to stop a full walk that should make way
 const YIELD = new Error("Making way for changed directories");
 
+// A hash no Drive md5Checksum has, to unpair a file whose rebuild failed
+const UNPAIRED = "0".repeat(32);
+
 // Lists directories ahead of the walk. take(dirId) gives a directory's
 // listing (fetched already, in flight, or fetched now), and queues its
 // subdirectories at the front, since the depth-first walk needs them next.
@@ -343,10 +346,24 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     forgetLocal(from);
 
     const movedPaths = descendants.map((path) => to + path.slice(from.length));
-    await update(from);
-    for (const path of descendants) await update(path);
-    await update(to);
-    for (const path of movedPaths) await update(path);
+    try {
+      await update(from);
+      for (const path of descendants) await update(path);
+      await update(to);
+      for (const path of movedPaths) await update(path);
+    } catch (err) {
+      // Paired by their bytes, the moved files would match on the next walk
+      // and never be rebuilt at their new paths. Pairing their SHA-1s with a
+      // hash no md5Checksum has sends them through download() instead, which
+      // finds them unchanged, rebuilds them and pairs them again.
+      for (const path of movedPaths) {
+        try {
+          const { sha1 } = await folder.stat(blogID, path, { sha1: true });
+          if (sha1) known.set(sha1, UNPAIRED);
+        } catch (e) {}
+      }
+      throw err;
+    }
 
     summary.moved = (summary.moved || 0) + 1;
     return true;
