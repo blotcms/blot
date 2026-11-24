@@ -128,7 +128,8 @@ Google Drive API client management and monitoring:
 - `createDocsClient.js` — Initializes a Google Docs API client for metadata operations.
 - `fetchStorageInfo.js` — Queries and stores current storage quota usage; selects the service account with least load for new blogs.
 - `watchChanges.js` — Sets up a `changes.watch` webhook channel on the Drive API; replaces expired channels.
-- `pollDriveActivity.js` — Polls the DriveActivity API for changes as a fallback to webhooks; respects rate limits via Bottleneck.
+- `pollDriveActivity.js` — Polls the DriveActivity API for changes as a fallback to webhooks; respects rate limits via Bottleneck. Syncs through the shared follow-up queue (`sync/followUps.js`), like `syncChanges.js`, so a blog already syncing gets a follow-up rather than a lock error.
+- `rateLimit.js` — What `readChanges.js`, `searchEdits.js` and `pollRecentFolders.js` do when Drive refuses a call as rate limited (429, or 403 `userRateLimitExceeded`/`rateLimitExceeded`): wait 10s, doubling with each refusal in a row up to 2 minutes, with jitter, and log the reason.
 - `cachedAuth.js` — One GoogleAuth per service account and scopes for the life of the process, its token refreshed in the background every 5 minutes (google-auth-library refreshes within 15 minutes of expiry). Before, every sync made a new Drive client, so its first request waited for a new access token (#2847).
 - `pollRecentFolders.js` — Lists the directories any source saw change in the last five minutes (`database/recent.js`, newest 16, at most 16 listings a second per service account) every 500ms, and syncs a blog as soon as one of them lists differently, recording it with `source=recent` (`Google Drive recent: ...`). A directory's own listing showed changes 1-2s before `changes.list` in trials, and changes cluster in folders being written to. New folders that appear in a recent directory become recent too (#2847).
 - `readChanges.js` — Reads the service account's `changes.list` every second from a page token kept in Redis (one process per account, under a lease, from `init.js`), works out which blogs each change belongs to through their folder mappings, logs each change with its lag from Google's change time (`Google Drive changes: ... lag_ms=`) and syncs those blogs (`syncChanges.js`). The `changes.watch` webhook was 4-13s late often enough in trials to need this beside it (#2847).
@@ -186,7 +187,7 @@ HTML templates for user-facing pages:
 **Fallback (Polling)**:
 - `pollDriveActivity()` runs continuously in the background.
 - It iterates over all blogs, querying their latest activity timestamp.
-- If a new activity is detected, it triggers `sync(blogID)`.
+- If a new activity is detected, it arms a follow-up, stores the timestamp, then syncs the blog through `sync/followUps.js`.
 - Rate limiting via Bottleneck respects the Drive API quota (up to 48 calls per minute per service account).
 
 **Walking outside the folder lock** (`sync/index.js`, #2847): a sync first walks the whole folder without the blog's folder lock, changing nothing (`sync.js` with `detectOnly`), to find the directories that differ. One process walks a blog at a time, under its own Redis lock; a request that arrives meanwhile asks for one more walk and gets a follow-up. Only if something differs does it take the folder lock, to apply just those directories, and then it walks again outside the lock to check nothing is left (`still differs after apply` in the log would show a gap). So other change sources that need the folder lock (the hot doc poller, dashboard writes) aren't held up by walks. If a detecting walk fails, it walks under the folder lock as before.
