@@ -79,11 +79,26 @@ dashboard.get("/", async function (req, res, next) {
   }
 });
 
-dashboard.get("/create", function (req, res) {
-  res.locals.breadcrumbs.add("Git", "git");
-  res.render(__dirname + "/views/create.html", {
-    title: "Git",
-  });
+dashboard.get("/create", async function (req, res, next) {
+  // Why the last setup failed, if it did. A failed lookup shows the page
+  // without it.
+  var failed;
+
+  try {
+    failed = await database.getFailed(req.blog.id);
+  } catch (err) {
+    failed = null;
+  }
+
+  try {
+    res.locals.breadcrumbs.add("Git", "git");
+    res.render(__dirname + "/views/create.html", {
+      title: "Git",
+      failed: failed,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 dashboard.post("/create", async function (req, res, next) {

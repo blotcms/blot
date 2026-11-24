@@ -1,12 +1,8 @@
 Google Drive verified-content takeover, left over from #2965 (24 Nov 2026): once every Drive blog has had a full walk since #2965 deployed (the hourly validation only walks blogs that synced recently, so check the oldest `lastSync`), remove the takeover of old records in sync/sync.js and `getVerifiedContents` in database/folder.js, and delete the `blot:google-drive:*:verified-content*` keys with a dry-run-first script. Applied records' leftover `size` and `modified` fields can go in the same pass.
 
-Slug from a numeric title: a front-matter title that YAML reads as a number (a Git blog's /Posts/2004-4-15-537.md, 23 Nov 15:20 and 15:35 UTC) fails the build with `TypeError: Param "537" must be a string` from makeSlug in app/build/prepare/index.js:178, so the file never saves. Coerce metadataValue("title") to a string there, or make metadata values strings where they are parsed. (23 Nov 2026)
-
 Demo folders, left over from #2940 (23 Nov 2026):
 - stamps and toni are on demo-folders master (3f00196), not yet pinned. #2872 should bump the `app/templates/folders` pin to it and add toni's `config.js` entry next to stamps', so both folders go live with `SITE:organization`. A deploy creates and syncs every folder in the pin, so bumping the pin before then would publish stamps.blot.im with no settings.
 - The image build still checks out the submodule (`unit-image.yml`) for the docs build's folder trees and ZIP hashes. Having demo-folders' own CI build `manifest.json` would take the folders out of the image build entirely.
-
-Git setup: a failed repository setup is never shown. create.js records `createFailed` under the owner (`user:<id>:git:status`), not the blog, and nothing reads it, so the person lands back on the create page with no explanation. Record the failure per blog with a short expiry and show the create step as a problem with the reason. (23 Nov 2026)
 
 Restart resilience, left over from #2918 (22 Nov 2026). A deploy gives each process 25s to drain, then kills it; these still lose or stall work when that lands mid-task:
 - Google Drive setup: a copy-stage failure other than a timeout (a Drive API error mid-copy) still stores SETUP_ERROR and nulls folderId, so Retry makes a new folder rather than resuming into the one already half copied. Keeping it needs changes to `/set-up-folder` (#2930 left it out).
@@ -14,7 +10,6 @@ Restart resilience, left over from #2918 (22 Nov 2026). A deploy gives each proc
 - Emails sent after a state change aren't retried if the process dies between the two: subscription-lifecycle's OVERDUE_CLOSURE after `User.disable`, the Stripe webhook's CLOSED/OVERDUE/RECOVERED (sent before the save, so a Stripe retry can also send twice), PayPal's cancellation email after its claim. Send after the write, and record an owed email the way the welcome email does.
 - A handle or domain change runs `rebuildEntriesOnNewHosts` and `updateCdnManifest` from a bare `setImmediate` (models/blog/set.js), with no record, so a kill leaves entries linking to the old host's origin URLs until each is rebuilt. Route it through `sync/pendingRebuilds` (#2929).
 - Docx/odt/rtf media is written under `_assets/<hash(path)>/`, overwritten in place file by file, so a reconversion killed mid-commit mixes old and new images under URLs the CDN caches. Hash the content into the directory name.
-- Git: a disconnect killed between deleting the store's packs and writing the tombstone leaves a repository that makes `/create` answer "already exists"; the second removal pass is an in-memory 5-minute timer. Have create remove a store copy left by a blog that isn't on Git.
 - Dropbox: a kill between `mkdir` and recording `move_folder` in a second blog's setup leaves an empty subfolder, which a retry moves into the new one (#2931). Harmless, but visible in the person's Dropbox.
 - Rename detection (sync/renames.js) runs only at the end of a sync, so a sync killed before it gives a renamed post a new URL and its old link breaks. Low priority: renames are best effort.
 
