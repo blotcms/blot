@@ -128,10 +128,14 @@ describe("scripts/storage/redis-vestiges", function () {
     expect(await client.exists("blog:" + this.blog.id + ":info")).toBe(1);
   });
 
-  it("dropbox-members removes the blogs which are gone from a set", async function () {
+  it("dropbox-members removes the blogs no webhook would sync from a set", async function () {
+    var Blog = require("models/blog");
     var set = remember("clients:dropbox:vestiges-test");
+    var account = remember("blog:" + this.blog.id + ":dropbox:account");
     var gone = "blog_" + "e5f6a7b8".repeat(4);
 
+    await Blog.set(this.blog.id, { client: "dropbox" });
+    await client.hSet(account, { account_id: "vestiges-test" });
     await client.sAdd(set, [this.blog.id, gone]);
 
     expect(
@@ -142,6 +146,66 @@ describe("scripts/storage/redis-vestiges", function () {
     await vestiges.dropboxMembers({ only: "vestiges-test", apply: true });
 
     expect(await client.sMembers(set)).toEqual([this.blog.id]);
+
+    // On another client now, so its membership goes too
+    await Blog.set(this.blog.id, { client: "" });
+    await vestiges.dropboxMembers({ only: "vestiges-test", apply: true });
+    expect(await client.exists(set)).toBe(0);
+  });
+
+  it("dropbox-members empties a set whose account matches no blog's", async function () {
+    var Blog = require("models/blog");
+    var set = remember("clients:dropbox:vestiges-undefined");
+
+    await Blog.set(this.blog.id, { client: "dropbox" });
+    await client.sAdd(set, this.blog.id);
+
+    await vestiges.dropboxMembers({ only: "vestiges-undefined", apply: true });
+
+    expect(await client.exists(set)).toBe(0);
+    await Blog.set(this.blog.id, { client: "" });
+  });
+
+  it("dropbox-accounts deletes the account of a blog on another client", async function () {
+    var Blog = require("models/blog");
+    var blogID = this.blog.id;
+    var account = remember("blog:" + blogID + ":dropbox:account");
+    var token = remember("blog:" + blogID + ":dropbox:access-token");
+    var set = remember("clients:dropbox:vestiges-left");
+
+    await client.hSet(account, { account_id: "vestiges-left" });
+    await client.set(token, "{}");
+    await client.sAdd(set, blogID);
+
+    await Blog.set(blogID, { client: "dropbox" });
+    expect(
+      (await vestiges.dropboxAccounts({ only: blogID, apply: true })).deleted
+    ).toBe(0);
+    expect(await client.exists(account)).toBe(1);
+
+    await Blog.set(blogID, { client: "icloud" });
+    expect((await vestiges.dropboxAccounts({ only: blogID })).left).toBe(1);
+    expect(await client.exists(account)).toBe(1);
+
+    await vestiges.dropboxAccounts({ only: blogID, apply: true, recheckMs: 0 });
+
+    expect(await client.exists(account)).toBe(0);
+    expect(await client.exists(token)).toBe(0);
+    expect(await client.exists(set)).toBe(0);
+    await Blog.set(blogID, { client: "" });
+  });
+
+  it("dropbox-legacy deletes the old client's dropbox:<user id> sets only", async function () {
+    var legacy = remember("dropbox:990011");
+    var other = remember("dropbox:990011x");
+
+    await client.sAdd(legacy, "blog_x");
+    await client.sAdd(other, "blog_x");
+
+    await vestiges.dropboxLegacy({ only: "990011*", apply: true });
+
+    expect(await client.exists(legacy)).toBe(0);
+    expect(await client.exists(other)).toBe(1);
   });
 
   it("template-shares deletes a share whose template is gone, not one whose template exists", async function () {
