@@ -2,6 +2,7 @@ const comparePaths = require("./util/comparePaths");
 const folder = require("storage/folder");
 const { join, dirname, basename } = require("path");
 const database = require("../database");
+const { forgetFolder } = require("../forget");
 const {
   MESSAGES,
   isLostFolderError,
@@ -229,9 +230,13 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   // so two writes at once could lose an entry.
   const publishToFolder = createLimiter(1);
 
+  // The account stops naming the folder (sourceMissingFields nulls
+  // folderId), so its mapping goes too: nothing would read it again or
+  // delete it, and a folder that comes back is set up again from scratch
   const markSourceMissing = async (message) => {
     publish("Error syncing with Google Drive");
     await database.blog.update(blogID, sourceMissingFields(account, message));
+    await forgetFolder(blogID, folderId);
     return false;
   };
 

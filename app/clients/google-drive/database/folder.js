@@ -8,7 +8,10 @@ function folder(folderId, blogID) {
     return new folder(folderId, blogID);
   }
 
-  if (!folderId) {
+  // "undefined" and "null" too: a folder ID that reached here as that text
+  // once left blot:google-drive:undefined:* and null:* mappings, which no
+  // account reads
+  if (!folderId || folderId === "undefined" || folderId === "null") {
     throw new Error("Folder ID is required");
   }
 

@@ -4,7 +4,7 @@ const vm = require("vm");
 // Loads routes/setup.js with its dependencies stubbed, around one stored
 // account. lockErrors are what each attempt to take the folder lock throws,
 // in turn, before one succeeds.
-function load({ account, lockErrors = [], draining = false }) {
+function load({ account, lockErrors = [], draining = false, copyError }) {
   const module = { exports: {} };
   const accounts = { blog_a: account };
   const events = [];
@@ -15,6 +15,12 @@ function load({ account, lockErrors = [], draining = false }) {
     config: { google_drive: { service_accounts: [] } },
     "../sync/resetToDrive": async () => {
       events.push("copy");
+      if (copyError) throw copyError;
+    },
+    "../forget": {
+      forgetFolder: async (blogID, folderId) => {
+        if (folderId) events.push("forget " + folderId);
+      },
     },
     "sync/establishSyncLock": async () => {
       if (lockErrors.length) {
@@ -203,6 +209,19 @@ describe("google drive setup across a restart", function () {
     const longAgo = Date.now() - 30 * 24 * 3600e3;
     expect(timedOut({ startedSetup: longAgo })).toBe(true);
     expect(timedOut({ startedSetup: longAgo, folderId: "f1" })).toBe(false);
+  });
+
+  it("forgets the folder's mapping when the copy fails, as the account stops naming it", async function () {
+    const { setup, accounts, events } = load({
+      account: copying(),
+      copyError: new Error("Drive said no"),
+    });
+
+    await setup.restartSetupProcesses();
+
+    expect(accounts.blog_a.error).toBeTruthy();
+    expect(accounts.blog_a.folderId).toBe(null);
+    expect(events).toContain("forget f1");
   });
 });
 

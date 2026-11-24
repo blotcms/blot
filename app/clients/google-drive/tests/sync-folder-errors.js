@@ -20,11 +20,17 @@ function harness(options) {
   const downloaded = [];
   const updated = [];
   const removedIds = [];
+  const forgotten = [];
   // path -> names of the files and directories ("name/") inside it
   const localTree = options.localTree || {};
   const mappings = options.mappings || {};
 
   const stubs = {
+    "../forget": {
+      forgetFolder: async function (blogID, folderId) {
+        forgotten.push([blogID, folderId]);
+      },
+    },
     "storage/folder": {
       remove: async function (blogID, path) {
         removed.push(path);
@@ -159,6 +165,7 @@ function harness(options) {
     downloaded: downloaded,
     updated: updated,
     removedIds: removedIds,
+    forgotten: forgotten,
     run: async function (syncOptions) {
       return module.exports(
         "blog",
@@ -190,6 +197,8 @@ describe("google drive sync folder health", function () {
     expect(h.stored[0].data.errorCode).toBe(health.CODES.SOURCE_MISSING);
     expect(h.stored[0].data.folderId).toBeNull();
     expect(typeof h.stored[0].data.errorSince).toBe("number");
+    // The account no longer names the folder, so its mapping goes too
+    expect(h.forgotten).toEqual([["blog", "folder"]]);
   });
 
   it("stores SOURCE_MISSING and stops when the folder is deleted", async function () {
@@ -221,6 +230,7 @@ describe("google drive sync folder health", function () {
     expect(await h.run()).toBe(false);
     expect(h.didWalk()).toBe(false);
     expect(h.stored).toEqual([]);
+    expect(h.forgotten).toEqual([]);
     expect(h.published[0][0]).toBe("Sync failed");
   });
 
