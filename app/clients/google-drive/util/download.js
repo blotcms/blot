@@ -8,7 +8,6 @@ const debug = require("debug")("blot:clients:google-drive:download");
 const tempDir = require("helper/tempDir")();
 const guid = require("helper/guid");
 const verifyContent = require("./verifyContent");
-const localState = require("./localState");
 const assets = require("storage/assets");
 const hash = require("helper/hash");
 const cheerio = require("cheerio");
@@ -77,36 +76,27 @@ const statOnBlot = async (blogID, path, options) => {
   }
 };
 
-// The record of a verified file: Drive's md5Checksum paired with the state
-// of the file Blot holds (util/localState.js), { checksum, sha1, size,
-// modified }, or null if the file at path in the blog's folder doesn't have
-// that md5. Reads the file (on S3, into the content cache); its state before
-// and after must agree, so a file changed while it was read is not vouched
-// for.
+// { checksum, sha1 } of the file at path in the blog's folder, if it has
+// Drive's md5Checksum, or null. Reads the file (on S3, into the content
+// cache) to hash it, and vouches for it only while the folder's index holds
+// the same SHA-1, so a file changed while it was read is not vouched for.
+// The pair is what the walk remembers (clients/util/remoteHashes.js).
 const verifyOnBlot = async (blogID, path, md5Checksum) => {
   if (!md5Checksum) return null;
-  const before = localState.stamp(await statOnBlot(blogID, path));
-  if (!before) return null;
+  const stat = await statOnBlot(blogID, path, { sha1: true });
+  if (!stat) return null;
   const file = await localFile(blogID, path);
   const hashes = file ? await verifyContent(file, md5Checksum) : null;
-  if (!hashes) return null;
-  const after = localState.stamp(await statOnBlot(blogID, path));
-  return after &&
-    after.size === before.size &&
-    after.modified === before.modified
-    ? { ...hashes, ...after }
-    : null;
+  return hashes && stat.sha1 === hashes.sha1 ? hashes : null;
 };
 
 // After download() has published a file it verified in its tmp file: the
-// record of the file now in the blog's folder, if it holds those bytes. The
-// SHA-1 is free from the index on S3; on disk this reads the file, as the
-// MD5 check it replaces did.
+// pair, if the file now in the blog's folder holds those bytes. The SHA-1 is
+// free from the index.
 const verifyPublished = async (blogID, path, hashes) => {
   if (!hashes) return null;
   const stat = await statOnBlot(blogID, path, { sha1: true });
-  const after = localState.stamp(stat);
-  return after && stat.sha1 === hashes.sha1 ? { ...hashes, ...after } : null;
+  return stat && stat.sha1 === hashes.sha1 ? hashes : null;
 };
 
 const streamToFile = (readStream, filePath) =>

@@ -1016,6 +1016,10 @@ function toEntry(entry) {
     modified: entry.modified,
   };
 
+  // The SHA-1 the index holds, free: a client comparing the folder with its
+  // remote (clients/util/remoteHashes.js) needs it for every file it lists
+  if (!isDirectory && entry.sha1) result.sha1 = entry.sha1;
+
   // As stat: only a flagged file has these keys
   if (entry.flags) {
     result.flags = entry.flags;

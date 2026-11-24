@@ -9,7 +9,11 @@ const FOLDER = "application/vnd.google-apps.folder";
 function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
   const files = new Set(local);
   const paths = new Map(Object.entries(mapping));
-  const verified = new Map();
+  // The SHA-1 of the bytes at each path in the blog folder, which a move
+  // carries along, and Drive's md5Checksum paired with each SHA-1
+  // (util/hashes.js)
+  const sha1s = new Map();
+  const pairs = new Map();
   const state = { downloads: [], updates: [], moves: [], removes: [], files };
 
   const isDir = (path) => files.has(path + "/");
@@ -28,15 +32,12 @@ function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
       .filter((path) => path.startsWith(dir + "/"));
   const idOf = (path) => [...paths].find(([, p]) => p === path)?.[0] || null;
 
-  // Every file starts verified at its path, so nothing needs downloading
+  // Every file starts verified, so nothing needs downloading
   for (const [id, path] of paths) {
-    if (files.has(path))
-      verified.set(id, {
-        path,
-        checksum: "md5-" + id,
-        size: 1,
-        modified: 1,
-      });
+    if (files.has(path)) {
+      sha1s.set(path, "sha1-" + id);
+      pairs.set("sha1-" + id, "md5-" + id);
+    }
   }
 
   const stubs = {
@@ -55,7 +56,11 @@ function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
         for (const each of [from, ...below(from)]) {
           const moved = to + each.slice(from.length);
           if (files.delete(each + "/")) files.add(moved + "/");
-          if (files.delete(each)) files.add(moved);
+          if (files.delete(each)) {
+            files.add(moved);
+            sha1s.set(moved, sha1s.get(each));
+            sha1s.delete(each);
+          }
         }
       },
       isPlaceholder: async () => false,
@@ -86,25 +91,26 @@ function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
             if (path === from || path.startsWith(from + "/"))
               paths.set(each, to + path.slice(from.length));
         },
-        getVerifiedContents: async (ids) =>
-          ids.map((id) => verified.get(id) || undefined),
-        setVerifiedContent: async (id, record) => verified.set(id, record),
+        getVerifiedContents: async (ids) => ids.map(() => undefined),
         getApplied: async () => ({ modifiedTime: "2026-01-01T00:00:00Z" }),
         setApplied: async () => {},
       }),
     },
+    "../util/hashes": {
+      load: async () => ({
+        get: (sha1) => pairs.get(sha1),
+        set: (sha1, md5) => pairs.set(sha1, md5),
+        async save() {},
+      }),
+    },
     "../util/localState": {
-      stamp: require("../util/localState").stamp,
-      // Unchanged where the verified record says it is
-      unchanged: async (blogID, path, record) =>
-        record && record.path === path && files.has(path)
-          ? { size: 1, modified: 1, sha1: "s" }
-          : null,
-      stateOf: async () => ({ size: 1, modified: 1, sha1: "s" }),
+      unchanged: async () => true,
+      stateOf: async () => ({ sha1: "s" }),
     },
     "../util/download": async (blogID, drive, path) => {
       state.downloads.push(path);
       files.add(path);
+      sha1s.set(path, "downloaded");
       return { updated: true };
     },
     "../serviceAccount/createDriveClient": async () => ({
@@ -136,6 +142,7 @@ function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
         name: path.split("/").pop(),
         isDirectory: isDir(path),
         size: 1,
+        sha1: isDir(path) ? undefined : sha1s.get(path),
       })),
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
@@ -176,7 +183,7 @@ function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
   // The full walk under the lock, as the hourly check runs it
   state.walk = () => module.exports("blog", () => {}, update);
   state.paths = paths;
-  state.verified = verified;
+  state.pairs = pairs;
   return state;
 }
 
@@ -201,7 +208,6 @@ describe("google-drive sync() folder renames and moves", function () {
     expect(h.downloads).toEqual([]);
     expect([...h.files].sort()).toEqual(["/new/", "/new/a.md", "/new/b.md"]);
     expect(h.paths.get("a")).toBe("/new/a.md");
-    expect(h.verified.get("a").path).toBe("/new/a.md");
     // Old and new paths are updated, so the posts move
     for (const path of ["/old", "/old/a.md", "/new", "/new/a.md", "/new/b.md"])
       expect(h.updates).toContain(path);
@@ -282,7 +288,7 @@ describe("google-drive sync() folder renames and moves", function () {
     expect(h.downloads).toEqual(["/z/y.md"]);
   });
 
-  it("leaves the verified records at the old paths when an update fails, so a retry rebuilds the moved files", async function () {
+  it("keeps the moved files' pairs when an update fails, so a retry matches them without downloading", async function () {
     const h = harness({
       remote: {
         root: [folderItem("F", "new")],
@@ -296,7 +302,8 @@ describe("google-drive sync() folder renames and moves", function () {
     expect(await h.apply(["root"])).toBe(false);
 
     expect(h.files.has("/new/a.md")).toBe(true);
-    expect(h.verified.get("a").path).toBe("/old/a.md");
+    // Keyed by the file's bytes, not its path: nothing to rewrite
+    expect(h.pairs.get("sha1-a")).toBe("md5-a");
   });
 
   it("still removes a folder that is gone from Drive", async function () {

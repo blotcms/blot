@@ -12,6 +12,7 @@ const {
 const download = require("../util/download");
 const prefetch = require("../util/prefetch");
 const localState = require("../util/localState");
+const hashes = require("../util/hashes");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -144,9 +145,6 @@ function prefetchListings(list, { ahead = true } = {}) {
   return { take, stop };
 }
 
-// The fields of a record which describe the file Blot holds
-const stateFields = ({ size, modified, sha1 }) => ({ size, modified, sha1 });
-
 // Resolves to a summary of what changed (truthy) when the walk finishes, or
 // false when it fails part way through or the folder lookup fails. In that
 // case options.onError, if given, receives the error that caused it.
@@ -213,15 +211,21 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     get: getPath,
     getPaths,
     getByPath,
-    getIds,
     move: moveMapping,
     getApplied,
     setApplied,
     set,
     remove,
     getVerifiedContents,
-    setVerifiedContent,
   } = database.folder(folderId, blogID);
+
+  // Drive's md5Checksum of the files in the blog's folder, by SHA-1
+  // (util/hashes.js): a file whose SHA-1 is paired with the md5Checksum
+  // Drive lists for it is unchanged, without reading it, at whatever path.
+  // Saved when the sync finishes (not while detecting, which writes nothing),
+  // keeping only what a whole walk used.
+  const known = await hashes.load(blogID);
+  let walkedWhole = false;
   const checkWeCanContinue = CheckWeCanContinue(blogID, account, signal);
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
 
@@ -343,22 +347,6 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     for (const path of descendants) await update(path);
     await update(to);
     for (const path of movedPaths) await update(path);
-
-    // Verified records name the path they were verified at. Rewritten only
-    // once every path above is updated: if an update fails, the records still
-    // name the old paths, so a retry checks the files at the new ones (their
-    // md5 matches, so nothing is downloaded) and rebuilds them.
-    const ids = (await getIds(movedPaths)).filter(Boolean);
-    const records = await getVerifiedContents(ids);
-    for (let i = 0; i < ids.length; i++) {
-      const record = records[i];
-      if (record && record.path.startsWith(from + "/")) {
-        await setVerifiedContent(ids[i], {
-          ...record,
-          path: to + record.path.slice(from.length),
-        });
-      }
-    }
 
     summary.moved = (summary.moved || 0) + 1;
     return true;
@@ -552,25 +540,18 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         "application/vnd.google-apps."
       );
 
-      // The file's state as its applied or verified record describes it,
-      // brought up to date, or null when the file may have changed since
-      // that record was written
-      let appliedState = null;
-      let verifiedState = null;
+      // The SHA-1 of the file Blot holds here, from the folder's index
+      const localSha1 =
+        existsLocally && !existsLocally.isDirectory
+          ? existsLocally.sha1 || null
+          : null;
       let identical;
 
       if (isGoogleAppFile || !md5Checksum) {
         const isModifiedTimeCurrent = applied
           ? truncateToSecond(applied.modifiedTime) ===
               truncateToSecond(modifiedTime) &&
-            Boolean(
-              (appliedState = await localState.unchanged(
-                blogID,
-                path,
-                applied,
-                existsLocally
-              ))
-            )
+            (await localState.unchanged(blogID, path, applied, existsLocally))
           : truncateToSecond(existsLocally?.modifiedTime) ===
             truncateToSecond(modifiedTime);
 
@@ -593,16 +574,28 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           identical = false;
         }
       } else {
-        // Drive's md5Checksum is the one Blot verified the file at this
-        // path against, and the file is unchanged since: no download and
-        // no read. Anything else falls back to download(), which compares
-        // the file's md5 with Drive's before it downloads anything.
-        const cached = verifiedById.get(id);
-        verifiedState =
-          cached && cached.path === path && cached.checksum === md5Checksum
-            ? await localState.unchanged(blogID, path, cached, existsLocally)
-            : null;
-        identical = Boolean(verifiedState);
+        // The file Blot holds has bytes Blot once verified against this
+        // md5Checksum, wherever it was then: no download and no read.
+        // Anything else falls back to download(), which compares the file's
+        // md5 with Drive's before it downloads anything.
+        identical = Boolean(
+          localSha1 &&
+          known.get(localSha1) === md5Checksum.slice(0, 24).toLowerCase()
+        );
+
+        // Records from before util/hashes.js, kept per file ID with the
+        // path and SHA-1 they were verified at: taken over the first time
+        // they match. Drop this, getVerifiedContents and the verified-content
+        // keys once every Drive blog has been walked since.
+        const cached = !identical && localSha1 ? verifiedById.get(id) : null;
+        if (
+          cached &&
+          cached.checksum === md5Checksum &&
+          cached.sha1 === localSha1
+        ) {
+          identical = true;
+          known.set(localSha1, md5Checksum);
+        }
       }
 
       let started = null;
@@ -667,12 +660,13 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       }
 
       return {
-        applied,
-        appliedState,
-        verifiedState,
+        localSha1,
         isGoogleAppFile,
         started,
         needsUpdate,
+        // The applied record is missing, or is from before records held a
+        // SHA-1: an unchanged file still gets its record written
+        converge: !applied || (!applied.sha1 && Boolean(localSha1)),
       };
     };
 
@@ -692,7 +686,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     try {
       for (const entry of remoteContents) {
         await maybeYield();
-        const { id, name, isDirectory, modifiedTime, md5Checksum } = entry;
+        const { id, name, isDirectory, modifiedTime } = entry;
         const path = join(dir, name);
         const existsLocally = localContents.find((item) => item.name === name);
 
@@ -708,12 +702,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             const planned = plans.has(id)
               ? await plans.get(id)
               : await plan(entry);
-            if (
-              planned.needsUpdate ||
-              !planned.applied ||
-              planned.verifiedState?.stale ||
-              planned.appliedState?.stale
-            )
+            if (planned.needsUpdate || planned.converge)
               changed.set(dirId, dir);
           } else if (!existsLocally || !existsLocally.isDirectory) {
             changed.set(dirId, dir);
@@ -739,13 +728,11 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
             if (staleId && staleId !== id) await remove(staleId);
           }
 
-          const {
-            applied,
-            appliedState,
-            verifiedState,
-            isGoogleAppFile,
-            started,
-          } = plans.has(id) ? await plans.get(id) : await plan(entry);
+          const { localSha1, isGoogleAppFile, started, converge } = plans.has(
+            id
+          )
+            ? await plans.get(id)
+            : await plan(entry);
 
           if (started) {
             // The download may be done already or still running; either way
@@ -791,23 +778,18 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                   downloadedAt: result?.downloadedAt || outcome.downloadedAt,
                 });
               }
-              if (!isGoogleAppFile && result?.verifiedContent) {
-                await setVerifiedContent(id, {
-                  path,
-                  ...result.verifiedContent,
-                });
-              }
+              const verified = !isGoogleAppFile && result?.verifiedContent;
+              if (verified) known.set(verified.sha1, verified.checksum);
 
               // Only trust the remote modifiedTime once download() has
               // returned without throwing: the blog folder now reflects that remote
               // state. A failed download must not be treated as up to date, so
               // this must not run in the catch below. A verified download
-              // already knows the file's state; anything else is described
-              // afresh.
+              // already knows the file's SHA-1; anything else is read afresh.
               await setApplied(id, {
                 modifiedTime,
-                ...(!isGoogleAppFile && result?.verifiedContent
-                  ? stateFields(result.verifiedContent)
+                ...(verified
+                  ? { sha1: verified.sha1 }
                   : await localState.stateOf(blogID, path)),
               });
             } catch (err) {
@@ -820,35 +802,18 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           } else {
             progress.publishThrottled("Checking", path);
 
-            // Unchanged, but the record was in the older form, or the file's
-            // modified time moved while its SHA-1 didn't (the same bytes
-            // written again): bring the record up to date, so the next sync
-            // matches on size and modified time alone
-            if (verifiedState && verifiedState.stale) {
-              await setVerifiedContent(id, {
-                path,
-                checksum: md5Checksum,
-                ...stateFields(verifiedState),
-              });
-            }
-
-            if (appliedState && appliedState.stale) {
-              await setApplied(id, {
-                modifiedTime: applied.modifiedTime,
-                ...stateFields(appliedState),
-              });
-            }
-
             // Converge: the local file already matches remotely, even though
             // we only know that via the local-mtime fallback (or, for a file
-            // with an md5Checksum, its verified record). Store the remote
-            // modifiedTime now so future syncs no longer need it.
-            if (!applied) {
+            // with an md5Checksum, its SHA-1 pair). Store the remote
+            // modifiedTime now so future syncs no longer need it. An applied
+            // record with no SHA-1 (written before records held one) is
+            // replaced the same way. Without a SHA-1 from the index the
+            // record has none either: reading the file to hash it isn't
+            // worth it for a file Blot already holds.
+            if (converge) {
               await setApplied(id, {
                 modifiedTime,
-                ...(verifiedState
-                  ? stateFields(verifiedState)
-                  : localState.stamp(existsLocally)),
+                ...(localSha1 ? { sha1: localSha1 } : {}),
               });
             }
           }
@@ -1061,6 +1026,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       canYield = Boolean(options.dirty) && yields < MAX_YIELDS;
       try {
         await pass(() => walk("/", folderId));
+        walkedWhole = true;
       } catch (err) {
         if (err !== YIELD) throw err;
         yields += 1;
@@ -1088,8 +1054,13 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
       break;
     }
     progress.finish("Finished processing folder");
+    // A whole walk that downloaded everything saw every file, so the pairs
+    // it didn't use (files gone, or edited since) are dropped
+    await known.save({ complete: walkedWhole && summary.failed === 0 });
     return summary;
   } catch (err) {
+    // What the walk verified before it stopped still holds
+    await known.save({ complete: false });
     if (options.dirty && taken.length) {
       await options.dirty
         .putBack(taken)
