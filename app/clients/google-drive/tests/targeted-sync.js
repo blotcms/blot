@@ -76,27 +76,30 @@ function harness({
         getByPath: async () => null,
         set: write("set"),
         remove: write("remove"),
-        getVerifiedContents: async (ids) =>
-          ids.map((id) =>
-            fresh.has(itemPath(id))
-              ? {
-                  path: itemPath(id),
-                  checksum: "md5-" + id,
-                  sha1: "s",
-                }
-              : undefined
-          ),
-        setVerifiedContent: write("setVerifiedContent"),
         getApplied: async (id) =>
           fresh.has(itemPath(id))
-            ? { modifiedTime: "2026-01-01T00:00:00Z", sha1: "s" }
+            ? {
+                modifiedTime: "2026-01-01T00:00:00Z",
+                sha1: "sha1:" + itemPath(id),
+              }
             : null,
         setApplied: write("setApplied"),
       }),
     },
-    // Nothing paired yet: up-to-date files match on their verified records
+    // An up-to-date file's SHA-1 ("sha1:" + its path) is paired with the
+    // md5Checksum Drive lists for it ("md5-" + its id)
     "../util/hashes": {
-      load: async () => ({ get() {}, set() {}, async save() {} }),
+      load: async () => ({
+        get: (sha1) => {
+          const path = sha1.slice("sha1:".length);
+          const file = path.match(/^\/d0(\d)\/(\w)\.txt$/);
+          return fresh.has(path) && file
+            ? "md5-dir-" + file[1] + "-" + file[2]
+            : undefined;
+        },
+        set() {},
+        async save() {},
+      }),
     },
     "../util/localState": {
       stamp: require("../util/localState").stamp,
@@ -152,7 +155,7 @@ function harness({
               name: path.split("/").pop(),
               isDirectory: false,
               size: 1,
-              sha1: "s",
+              sha1: "sha1:" + path,
             }))
         ),
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),

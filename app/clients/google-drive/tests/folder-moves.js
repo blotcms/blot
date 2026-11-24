@@ -102,7 +102,6 @@ function harness({ remote, local, mapping, hints = {}, failUpdate = null }) {
             if (path === from || path.startsWith(from + "/"))
               paths.set(each, to + path.slice(from.length));
         },
-        getVerifiedContents: async (ids) => ids.map(() => undefined),
         getApplied: async () => ({ modifiedTime: "2026-01-01T00:00:00Z" }),
         setApplied: async () => {},
       }),

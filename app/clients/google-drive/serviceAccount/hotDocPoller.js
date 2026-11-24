@@ -896,7 +896,7 @@ class HotDocPoller {
     const folderDb = database.folder(item.folderId, item.blogID);
     const { id, mimeType, modifiedTime } = file;
 
-    await folderDb.set(id, path, { isDirectory: false, modifiedTime });
+    await folderDb.set(id, path);
 
     const result = await this.download(
       item.blogID,
