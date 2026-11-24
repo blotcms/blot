@@ -30,7 +30,7 @@ iCloud setup, from the setup review (20 Nov 2026):
 - Setup's verify pass re-reads the macserver's own copy, so it can't tell when iCloud refuses an upload for any other reason. Have it wait until bird reports at least one written file uploaded (`birdState.syncedUp`).
 
 Sync latency follow-ups from #2814 (20 Nov 2026):
-- Check after 20 Nov's deploys (#2838-#2846): the hourly Dropbox walk now lists each folder once, recursively (#2844). In the `Dropbox: validation lag ... walk` lines, the largest blog's walk was 94-210s; expect seconds. Dropbox download times (`Downloading` to `Downloaded to folder successfully`) were p50 0.86s before keep-alive; compare after a day. The one blog whose orphaned templates were rebuilt and deleted on every sync (#2838) should log "removing template" for them once, at its next template build, and never again.
+- Check after 20 Nov's deploys (#2838-#2846): Dropbox download times (`Downloading` to `Downloaded to folder successfully`) were p50 0.86s before keep-alive; compare after a day. The one blog whose orphaned templates were rebuilt and deleted on every sync (#2838) should log "removing template" for them once, at its next template build, and never again. (The walk-time part is confirmed: walks take seconds since #2844 and #2960.)
 - Retry builds that fail for temporary reasons (a sandbox job killed or timed out, a fetch that failed) once or twice where they happen, and keep a per-blog set of paths whose build still failed, rebuilt by the next sync or Fix() and shown on the dashboard. Today such an entry stays built without the failed part (no thumbnail, an unoptimised image) until something rebuilds it.
 - Git: one push of 144 files spent 13.8s in "Applied from the store" (writing the files into the folder) before any build started (a Git blog, 20 Nov 03:14 UTC). Profile `materialize` for large pushes; set aside on 20 Nov.
 - Sandbox `fetch` jobs are almost all (~96%) the featured-sites check: `app/setup.js:277` runs `documentation/featured/check` on every process start (about 70 fetches, one at a time, ~30s), and `lock.cron("check-featured-sites")` runs it daily at 08:00. None run in sync. Skip the startup check when `featured.json` is less than a day old, so deploys don't fill the sandbox's fetch queue. Separately, `app/build/plugins/videoEmbeds/bandcamp.js:43` fetches each Bandcamp link on every build with no cache (unused in the last day): cache by URL with a TTL.
@@ -76,7 +76,6 @@ Show file flags on the dashboard: the errors and warnings Blot now stores per fi
 Flag folder posts' sources: `app/sync/update/set.js` sets no build, assets or references flags for a `+` folder post, since the build has no one file to put them on. `app/build/multiple.js` now sets `err.sourcePath` on a failed source (#2677). Do the same for the flags each source's build reports, and set them on that source.
 
 Noticed while flagging the existing placeholders, 12 Nov 2026 (#2675). The resync failed for a few blogs, every time:
-- Two Dropbox blogs answer 401: their access was revoked, but they still count as connected. Find out whether the hourly validation and the dashboard tell the owner, and if not, mark the blog as needing to reconnect.
 - One Dropbox blog never finished its initial transfer, so its reset refuses to run. The startup job now resumes every pending transfer (#2923): check after the next deploy that it finished, and if not, why.
 
 Unescaped tag in tag-page titles: when `/tagged/<tag>` matches no entries, `app/blog/render/listingViews.js` sets `res.locals.tag` to the raw `req.params.tag`, and 18 of the 21 templates put it into the title and description partials with `{{{tag}}}` (in `package.json`), which their heads render inside `<title>` and `content="..."` attributes. So a crafted link to any blog runs a stranger's script on that blog's domain. Not urgent: blog pages set no cookies and the dashboard session cookie is host-only on blot.im, so it reaches no account; it amounts to phishing or defacement on someone else's domain. Fix: escape the tag (or don't fall back to the raw param) in `listingViews.js`, switch the partials to `{{tag}}`, and add a spec for a tag URL containing markup.
@@ -458,17 +457,7 @@ Improve Dropbox sync
 - A restart mid-transfer now resumes it (#2923), but a file over 140 MB restarts its upload session from zero. Persist the session id and offset if that turns out to matter.
 - Bug: run reset-to-blot when sync fails / errors
 - Bug: ensure you can move the folder in full-folder permission mode
-- Add testing for dropbox:
-- Modify setup flow:
-  - Phase 1: RESET FROM BLOT (NON DESTRUCTIVE, deduplicate on conflict)
-  - Phase 2: RESET TO BLOT (TWICE?) then sync/FIX then begin ordinary syncing
-- Make Dropbox sync issue emails more useful with a script to compile the logs for a single site (including macserver)
-  - Adjust full_folder to add a big warning to prevent confusion about where the new folder is when transitioning permissions
-- When you switch from app folder to full folder, there should be a notification indicating that your folder location has changed
-- Check content hash for upload possible
 - Surface errors during setup on dashboard: a first connect that fails after sign-in loses its error (the setup record is dropped, so the sign-in step shows no problem), and a stalled copy shows only in the Status line, not on the copy step (#2914).
-- Surface sync issues with Dropbox client on the homepage of dashboard
-- How do we make errors sticky? To make sure users click through to clients page to re-connect to Dropbox, etc...
 
 Improve git sync
 - Create tests for large Git repo initialization
@@ -959,8 +948,6 @@ Can we support white-label cdn subdomain so there are no Blot CDN links?
 Write tests for animated gif thumbnail
 
 Surface Blot client sync errors on dashboard
-- add email notifications for major sync errors (i.e. dropbox token revoked)
-- surface dropbox out of space error
 - Expose markdown build errors on the dashboard to prevent weird non-update situations where it looks like the sync is stuck
 
 ---
