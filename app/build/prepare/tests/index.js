@@ -40,6 +40,19 @@ describe("prepare", function () {
     expect(entry.slug).toEqual("537");
   });
 
+  it("takes other numbers in front matter as text, whatever the key's case", function () {
+    var entry = this.entry;
+
+    entry.html = "<p>Hey there.</p>";
+    entry.metadata = { Title: 12, slug: 537, summary: 42 };
+
+    prepare(entry);
+
+    expect(entry.title).toEqual("12");
+    expect(entry.slug).toEqual("537");
+    expect(entry.summary).toEqual("42");
+  });
+
   it("makes the slug from the document when the title is not text", function () {
     var entry = this.entry;
 
