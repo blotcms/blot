@@ -22,6 +22,7 @@ import * as brctl from "../brctl/index.js";
 import { itemAt } from "../birdState.js";
 import { openJournal, startJournal, trackReplay } from "../journal.js";
 import status from "../httpClient/status.js";
+import { isNotSyncing } from "../httpClient/notSyncing.js";
 import { performAction } from "./actions.js";
 import {
   startFsWatch as startFsWatchInternal,
@@ -367,13 +368,15 @@ const blogFolderPresent = async (blogID) => {
       clfdate(),
       `Folder for ${blogID} renamed from "${layout.renamedFrom}" to "${layout.name}"`
     );
-    status(blogID, { folderName: layout.name }).catch((error) =>
+    status(blogID, { folderName: layout.name }).catch((error) => {
+      // a blog Blot doesn't sync has no folder name to keep
+      if (isNotSyncing(error)) return;
       console.error(
         clfdate(),
         `Failed to report the folder's new name for ${blogID}:`,
         error.message
-      )
-    );
+      );
+    });
   }
   return Boolean(layout.root) && fs.pathExists(layout.root);
 };
@@ -741,13 +744,15 @@ const initialize = async () => {
   // to Blot, which keeps the one it last heard: a rename made while the
   // macserver was stopped is reported here
   for (const { blogID, name } of await refreshAllBlogFolders()) {
-    status(blogID, { folderName: name }).catch((error) =>
+    status(blogID, { folderName: name }).catch((error) => {
+      // a blog Blot doesn't sync has no folder name to keep
+      if (isNotSyncing(error)) return;
       console.error(
         clfdate(),
         `Failed to report the folder's name for ${blogID}:`,
         error.message
-      )
-    );
+      );
+    });
   }
 
   // bird's journal, loaded before the blogs are scanned: it knows which

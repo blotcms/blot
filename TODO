@@ -1,8 +1,5 @@
 Google Drive verified-content takeover, left over from #2965 (24 Nov 2026): once every Drive blog has had a full walk since #2965 deployed (the hourly validation only walks blogs that synced recently, so check the oldest `lastSync`), remove the takeover of old records in sync/sync.js and `getVerifiedContents` in database/folder.js, and delete the `blot:google-drive:*:verified-content*` keys with a dry-run-first script. Applied records' leftover `size` and `modified` fields can go in the same pass.
 
-iCloud, from the 24 Nov health check:
-- Six blogs still have folders the macserver watches but Blot answers 410 (deleted, disabled or not on iCloud) for their status pushes, at every macserver start. The orphan sweep keeps them because they still have an account or `client: "icloud"` (a disabled blog, probably). Either unwatch on a 410 or have the sweep treat a disabled blog's folder as an orphan.
-
 Slug from a numeric title: a front-matter title that YAML reads as a number (a Git blog's /Posts/2004-4-15-537.md, 23 Nov 15:20 and 15:35 UTC) fails the build with `TypeError: Param "537" must be a string` from makeSlug in app/build/prepare/index.js:178, so the file never saves. Coerce metadataValue("title") to a string there, or make metadata values strings where they are parsed. (23 Nov 2026)
 
 Demo folders, left over from #2940 (23 Nov 2026):
