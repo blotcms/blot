@@ -2,19 +2,24 @@
 
 {{> status-line}}
 
+{{! Inside .live-updates, so a page that showed the setup running and
+  reloads when it fails swaps this in }}
+<div class="live-updates">
 <div class="line git-setup-line">
   <span class="label">Repository</span>
   <div class="center">
     <div class="steps steps-progress git-steps" data-steps-key="git-steps:{{{base}}}">
       <ol>
 
-        <li data-step="create">
+        <li data-step="create" class="{{#failed}}problem{{/failed}}">
+          {{#failed}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/failed}}
           <span class="step-title">Create a repository on Blot</span>
+          {{#failed}}<span class="step-problem">{{failed}}</span>{{/failed}}
           <span class="step-text">Blot makes a Git repository from your site’s folder, with a username and password to clone it.</span>
-          <form method="post" class="dashboard-form git-create-form">
+          <form method="post" action="{{{base}}}/create" class="dashboard-form git-create-form">
             <input type="hidden" name="_csrf" value="{{csrftoken}}">
             <div class="buttons">
-              <button type="submit">Create repository</button>
+              <button type="submit">{{#failed}}Try again{{/failed}}{{^failed}}Create repository{{/failed}}</button>
               {{^blog.client}}<a href="{{{dashboardBase}}}/client">Cancel</a>{{/blog.client}}
               {{#blog.client}}<button type="submit" name="cancel" value="cancel">Cancel</button>{{/blog.client}}
             </div>
@@ -37,6 +42,7 @@
     </div>
     <p class="git-note">You can switch from Git to another way of syncing at any time.</p>
   </div>
+</div>
 </div>
 
 <style>

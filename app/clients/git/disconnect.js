@@ -57,6 +57,7 @@ async function removeRepository(blog) {
   // and the mark of a setup in progress the blog's
   await database.removeStatus(blog.owner);
   await database.clearCreating(blog.id);
+  await database.clearFailed(blog.id);
 
   await removeLiveClone(blog);
 }
