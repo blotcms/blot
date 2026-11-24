@@ -5,12 +5,16 @@
 // For every Drive account:
 //   - each verified record (<folderId>:verified-content:<blogID>, by file ID:
 //     { path, checksum, sha1, ... }) whose SHA-1 is still the one the folder's
-//     index has at its path becomes a pair. One that doesn't match is
-//     dropped: the next walk checks that file through download(), as it
-//     would any file without a pair.
+//     index has at its path becomes a pair. A record written before Blot knew
+//     the file's SHA-1 ({ ..., size, modified, sha1: null }) becomes one when
+//     the index still has the same size and modified time at its path, which
+//     is what the sync trusted until #2965, paired with the SHA-1 the index
+//     has now. Anything else is dropped: the next walk checks that file
+//     through download(), as it would any file without a pair.
 //   - each applied record (<folderId>:applied-modified-time:<blogID>) still
 //     holding size, modified or fingerprint is rewritten as
-//     { modifiedTime, sha1 }.
+//     { modifiedTime, sha1 }. One without a SHA-1 gets the index's, by the
+//     same size and modified time check, so a Google Doc isn't exported again.
 // Then, across Drive's whole prefix, every verified-content key and every
 // <folderId>:metadata hash (written by the mapping, never read) is deleted
 // with UNLINK, including those of folders no account names.
@@ -80,28 +84,54 @@ async function backfillBlog(blogID, folderId, totals) {
     if (
       !record ||
       typeof record.checksum !== "string" ||
-      typeof record.sha1 !== "string" ||
       typeof record.path !== "string"
     ) {
       dropped += 1;
       continue;
     }
     const found = await File.get(blogID, record.path);
-    if (!found || found.type !== "file" || found.sha1 !== record.sha1) {
+    if (!found || found.type !== "file" || !found.sha1) {
       dropped += 1;
       continue;
     }
-    known.set(record.sha1, record.checksum);
+    const unchanged = record.sha1
+      ? found.sha1 === record.sha1
+      : Number.isFinite(record.size) &&
+        Number.isFinite(record.modified) &&
+        found.size === record.size &&
+        Math.round(found.modified) === record.modified;
+    if (!unchanged) {
+      dropped += 1;
+      continue;
+    }
+    known.set(found.sha1, record.checksum);
     paired += 1;
   }
 
   const applied = await readHash(appliedKey);
+  const paths = (await client.hGetAll(`${PREFIX}${folderId}:folder`)) || {};
   const rewrites = [];
   for (const [id, record] of Object.entries(applied || {})) {
     if (!record || typeof record.modifiedTime !== "string") continue;
     if (!LEFTOVER_FIELDS.some((field) => field in record)) continue;
     const slim = { modifiedTime: record.modifiedTime };
-    if (typeof record.sha1 === "string" && record.sha1) slim.sha1 = record.sha1;
+    if (typeof record.sha1 === "string" && record.sha1) {
+      slim.sha1 = record.sha1;
+    } else if (
+      paths[id] &&
+      Number.isFinite(record.size) &&
+      Number.isFinite(record.modified)
+    ) {
+      const found = await File.get(blogID, paths[id]);
+      if (
+        found &&
+        found.type === "file" &&
+        found.sha1 &&
+        found.size === record.size &&
+        Math.round(found.modified) === record.modified
+      )
+        slim.sha1 = found.sha1;
+    }
     rewrites.push([id, JSON.stringify(slim)]);
   }
 
