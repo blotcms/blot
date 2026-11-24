@@ -15,7 +15,7 @@ const timeout = require("./helpers/timeout");
 const manifest = require("../manifest");
 const commit = require("../commit");
 const receive = require("../receive");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const { manifestKey, packKey, idxKey, revKey } = require("../layout");
@@ -138,6 +138,7 @@ function plumbing(bare, file, contents, ms) {
 describe("git store commit", function () {
   timeout(60 * 1000);
 
+  const ws = workspace.each();
   const warm = !!zlib.crc32;
 
   let dir;
@@ -179,10 +180,10 @@ describe("git store commit", function () {
   }
 
   async function setup({ seeded = true, maxBytes = 64 * MiB } = {}) {
-    dir = fx.tempDir();
+    dir = ws.dir();
     inner = createMemoryStore();
     store = faults(inner);
-    cache = createCache({ dir: path.join(dir, "cache"), maxBytes });
+    cache = ws.cache({ dir: path.join(dir, "cache"), maxBytes });
     lock = createLock();
     head = null;
     if (seeded) {
@@ -190,12 +191,6 @@ describe("git store commit", function () {
       await seed(store, head);
     }
   }
-
-  // The caches write in the background: close them before their directory goes
-  const teardown = async () => {
-    await createCache.closeAll();
-    fx.remove(dir);
-  };
 
   // The repository as the store holds it, as a bare repository on disk
   async function exportRepo(name = "check.git") {
@@ -245,7 +240,6 @@ describe("git store commit", function () {
 
   describe("on a repository git made", function () {
     beforeEach(() => setup());
-    afterEach(teardown);
 
     it("makes the commits plumbing.js makes: the same trees, messages, identity and modes", async function () {
       const oracle = path.join(dir, "oracle.git");
@@ -658,7 +652,6 @@ describe("git store commit", function () {
 
   describe("on an empty repository", function () {
     beforeEach(() => setup({ seeded: false }));
-    afterEach(teardown);
 
     it("makes a root commit that plumbing.js would make", async function () {
       const oracle = path.join(dir, "oracle.git");
@@ -716,7 +709,6 @@ describe("git store commit", function () {
 
   describe("against pushes and other commits", function () {
     beforeEach(() => setup());
-    afterEach(teardown);
 
     // A push of one more commit from the client, through receive()
     async function pushFromClient(file, text) {
@@ -870,7 +862,6 @@ describe("git store commit", function () {
 
   describe("when the store fails", function () {
     beforeEach(() => setup());
-    afterEach(teardown);
 
     it("leaves the manifest as it was when an upload fails, and a later commit works", async function () {
       const before = await manifest.read(store);
@@ -967,7 +958,6 @@ describe("git store commit", function () {
     }
 
     beforeEach(() => setup());
-    afterEach(teardown);
 
     it("is hashed and packed from a stream of known size, through scratch which is then released", async function () {
       const file = chunked(5, 3 * MiB);
@@ -1064,7 +1054,7 @@ describe("git store commit", function () {
 
     it("reserves room for the raw copy of a stream and its deflated copy together", async function () {
       // 1.5 MiB of random bytes does not deflate, so scratch holds about 3 MiB
-      const tight = createCache({
+      const tight = ws.cache({
         dir: path.join(dir, "tight"),
         maxBytes: 2560 * 1024,
       });
@@ -1082,7 +1072,7 @@ describe("git store commit", function () {
       expect(tight.stats().reservedBytes).toBe(0);
       expect((await manifest.read(store)).seq).toBe(1);
 
-      const roomy = createCache({
+      const roomy = ws.cache({
         dir: path.join(dir, "roomy"),
         maxBytes: 4 * MiB,
       });
@@ -1151,7 +1141,7 @@ describe("git store commit", function () {
       );
       expect(error).toEqual(jasmine.any(TooLargeError));
 
-      const small = createCache({
+      const small = ws.cache({
         dir: path.join(dir, "small"),
         maxBytes: 256 * 1024,
       });
@@ -1177,7 +1167,6 @@ describe("git store commit", function () {
 
   describe("requests", function () {
     beforeEach(() => setup());
-    afterEach(teardown);
 
     // The store as a fresh process sees it: nothing remembered about manifests
     const fresh = () => (store = faults(inner));
@@ -1280,7 +1269,7 @@ describe("git store commit", function () {
 
     it("reads the commit and the trees by range when nothing is cached, and then caches them", async function () {
       fresh();
-      const emptyCache = createCache({
+      const emptyCache = ws.cache({
         dir: path.join(dir, "cold-cache"),
         maxBytes: 64 * MiB,
       });

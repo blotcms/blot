@@ -1,10 +1,10 @@
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { fork } = require("child_process");
 const { Readable } = require("stream");
 const createCache = require("../cache");
 const timeout = require("./helpers/timeout");
+const workspace = require("./helpers/workspace");
 const { NoRoomError } = require("../errors");
 
 // Bytes in the cache's entries
@@ -52,30 +52,22 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 describe("git store cache", function () {
   timeout(60 * 1000);
 
+  const ws = workspace.each();
   let dir;
-  let caches;
 
   // Fine-grained recency and no rate limits, so specs can see the order
   const open = (options) => {
-    const cache = createCache({
+    return ws.cache({
       dir,
       bucketMs: 1,
       touchEveryMs: 0,
       walkGapMs: 0,
       ...options,
     });
-    caches.push(cache);
-    return cache;
   };
 
   beforeEach(function () {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), "git-store-cache-"));
-    caches = [];
-  });
-
-  afterEach(async function () {
-    await Promise.all(caches.map((cache) => cache.close()));
-    fs.rmSync(dir, { recursive: true, force: true });
+    dir = ws.dir("git-store-cache-");
   });
 
   const data = (length, fill = "x") => Buffer.alloc(length, fill);
@@ -347,11 +339,10 @@ describe("git store cache", function () {
 
     it("is merely empty when its directory can't be used", async function () {
       fs.writeFileSync(path.join(dir, "file"), "x");
-      const cache = createCache({
+      const cache = ws.cache({
         dir: path.join(dir, "file", "cache"),
         maxBytes: 1000,
       });
-      caches.push(cache);
       expect(await cache.get("a")).toBeNull();
       expect(await cache.put("a", data(1))).toBe(false);
       let error;
@@ -529,15 +520,13 @@ describe("git store cache", function () {
       for (let round = 0; round < 5; round++) {
         const sub = path.join(dir, "round-" + round);
         const instances = [0, 1, 2].map(() => {
-          const cache = createCache({
+          return ws.cache({
             dir: sub,
             maxBytes: 1000,
             bucketMs: 1,
             touchEveryMs: 0,
             walkGapMs: 1e9,
           });
-          caches.push(cache);
-          return cache;
         });
         await Promise.all(instances.map((cache) => cache.settle()));
 

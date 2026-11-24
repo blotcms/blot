@@ -19,7 +19,7 @@ const importRepo = require("../import");
 const compact = require("../compact");
 const sweep = require("../sweep");
 const blotWrite = require("../commit");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const createFsStore = require("../objectStore/fs");
 const createReader = require("../reader");
@@ -51,18 +51,17 @@ function createLock() {
 describe("git store rewrite", function () {
   timeout(180 * 1000);
 
+  const ws = workspace.all();
   let root;
   let counter = 0;
   const open = [];
 
   beforeAll(function () {
-    root = fx.tempDir();
+    root = ws.dir();
   });
 
   afterAll(async function () {
     for (const server of open) await server.close();
-    await createCache.closeAll();
-    fx.remove(root);
   });
 
   const unique = (name) => path.join(root, name + "-" + ++counter);
@@ -89,7 +88,7 @@ describe("git store rewrite", function () {
     const env = { now: START, lock: createLock() };
     env.inner = createMemoryStore({ now: () => env.now });
     env.cacheDir = unique("cache");
-    env.cache = createCache({ dir: env.cacheDir, maxBytes: 64 * MiB });
+    env.cache = ws.cache({ dir: env.cacheDir, maxBytes: 64 * MiB });
     env.receiver = await createReceiveServer({
       store: env.inner,
       cache: env.cache,
@@ -485,7 +484,7 @@ describe("git store rewrite", function () {
       // Host B: its own view of the store (the same keys and id) and its own
       // cache instance over the same directory, so it finds what A wrote there
       const elsewhere = { ...env.inner };
-      const theirs = createCache({ dir: env.cacheDir, maxBytes: 64 * MiB });
+      const theirs = ws.cache({ dir: env.cacheDir, maxBytes: 64 * MiB });
       const current = await manifest.read(elsewhere);
       expect(current.epoch).toBe(result.epoch);
       const reader = createReader({
@@ -1096,7 +1095,7 @@ describe("git store rewrite", function () {
       const used = [];
       for (const rewriteIt of [false, true]) {
         const store = createMemoryStore();
-        const cache = createCache({ dir: unique("cache"), maxBytes: 64 * MiB });
+        const cache = ws.cache({ dir: unique("cache"), maxBytes: 64 * MiB });
         const lock = createLock();
         await importRepo({
           store,
@@ -1120,7 +1119,7 @@ describe("git store rewrite", function () {
         commitFile(client, "docs/b.md", "# Two, edited\n", "Edit");
 
         // A fresh cache and server, so neither starts warm
-        const fresh = createCache({ dir: unique("cache"), maxBytes: 64 * MiB });
+        const fresh = ws.cache({ dir: unique("cache"), maxBytes: 64 * MiB });
         const server = await createReceiveServer({ store, cache: fresh, lock });
         open.push(server);
         const start = { ...store.stats };
@@ -1183,7 +1182,7 @@ describe("git store rewrite", function () {
       fx.git(source, ["init", "-q", "-b", "master"]);
       const first = commitFile(source, "a.md", "# One\n", "First");
       commitFile(source, "secret.txt", SECRET + "\n", "Secret");
-      const cache = createCache({ dir: unique("cache"), maxBytes: 64 * MiB });
+      const cache = ws.cache({ dir: unique("cache"), maxBytes: 64 * MiB });
       await importRepo({
         store,
         cache,

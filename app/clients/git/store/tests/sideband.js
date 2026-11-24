@@ -9,7 +9,7 @@ const timeout = require("./helpers/timeout");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const manifest = require("../manifest");
 const createResponse = require("../sideband");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 
 const MASTER = "refs/heads/master";
@@ -152,6 +152,7 @@ describe("git store progress", function () {
   });
 
   describe("a real git push", function () {
+    const ws = workspace.each();
     let dir;
     let src;
     let fixture;
@@ -160,7 +161,7 @@ describe("git store progress", function () {
     let server;
 
     beforeEach(async function () {
-      dir = fx.tempDir();
+      dir = ws.dir();
       src = path.join(dir, "src");
       fixture = fx.buildFixture(src, { commits: 3, large: false });
       fx.repackAll(src);
@@ -180,7 +181,7 @@ describe("git store progress", function () {
         }),
       });
 
-      const cache = createCache({
+      const cache = ws.cache({
         dir: path.join(dir, "cache"),
         maxBytes: 64 * 1024 * 1024,
       });
@@ -203,8 +204,6 @@ describe("git store progress", function () {
 
     afterEach(async function () {
       await server.close();
-      await createCache.closeAll();
-      fx.remove(dir);
     });
 
     it("shows each stage as a remote line while the push is still working", async function () {

@@ -19,7 +19,7 @@ const manifest = require("../manifest");
 const importRepo = require("../import");
 const { verifyImport } = importRepo;
 const compact = require("../compact");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const createFolderSink = require("../folderSink");
@@ -168,20 +168,16 @@ const refsOf = (dir) =>
 describe("git store import", function () {
   timeout(180 * 1000);
 
+  const ws = workspace.all();
   let root;
   let rich; // the working tree of the rich repository
   let counter = 0;
 
   beforeAll(function () {
-    root = fx.tempDir();
+    root = ws.dir();
     rich = path.join(root, "rich");
     buildRich(rich);
     addLeftovers(rich);
-  });
-
-  afterAll(async function () {
-    await createCache.closeAll();
-    fx.remove(root);
   });
 
   // A memory store, a cache, and the pieces importRepo wants
@@ -191,7 +187,7 @@ describe("git store import", function () {
     return {
       inner,
       store: wrap(inner),
-      cache: createCache({ dir, maxBytes }),
+      cache: ws.cache({ dir, maxBytes }),
       cacheDir: dir,
     };
   }
@@ -617,7 +613,7 @@ describe("git store import", function () {
       const env = {
         store,
         inner,
-        cache: createCache({
+        cache: ws.cache({
           dir: path.join(root, "cache-" + ++counter),
           maxBytes: 64 * MiB,
         }),

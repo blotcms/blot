@@ -14,7 +14,7 @@ const faults = require("./helpers/faults");
 const fx = require("./helpers/fixture");
 const { makeRepo, listFiles } = require("./helpers/repo");
 const createMemoryStore = require("../objectStore/memory");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createReader = require("../reader");
 const materialize = require("../materialize");
 const createFolderSink = require("../folderSink");
@@ -28,6 +28,7 @@ const {
 describe("git store materialize", function () {
   timeout(120 * 1000);
 
+  const ws = workspace.each();
   let repo;
   let tmp;
   let folder;
@@ -36,7 +37,7 @@ describe("git store materialize", function () {
 
   beforeEach(function () {
     repo = makeRepo();
-    tmp = fx.tempDir();
+    tmp = ws.dir();
     folder = path.join(tmp, "folder");
     outside = path.join(tmp, "outside");
     logs = [];
@@ -44,10 +45,8 @@ describe("git store materialize", function () {
     fs.mkdirSync(outside);
   });
 
-  afterEach(async function () {
-    await createCache.closeAll();
+  afterEach(function () {
     repo.remove();
-    fx.remove(tmp);
   });
 
   // The bytes of a UTF-8 name, as the latin1 text commitExactly takes
@@ -817,7 +816,7 @@ describe("git store materialize", function () {
       const first = repo.commit({ "huge.txt": huge(0), "small.txt": "small" });
       const second = repo.commit({ "huge.txt": huge(1) });
 
-      const cache = createCache({
+      const cache = ws.cache({
         dir: path.join(tmp, "cache"),
         maxBytes: 64 * 1024 * 1024,
       });
@@ -864,7 +863,7 @@ describe("git store materialize", function () {
       for (let n = 0; n < 4; n++) edited["huge" + n + ".txt"] = huge(n + 1);
       repo.commit(edited);
 
-      const cache = createCache({
+      const cache = ws.cache({
         dir: path.join(tmp, "cache"),
         maxBytes: 64 * 1024 * 1024,
       });
@@ -906,7 +905,7 @@ describe("git store materialize", function () {
 
       it("fails with a NoRoomError when the room is taken just now, and works once it is free", async function () {
         const first = build();
-        const cache = createCache({
+        const cache = ws.cache({
           dir: path.join(tmp, "cache"),
           maxBytes: 16 * 1024 * 1024,
         });
@@ -930,7 +929,7 @@ describe("git store materialize", function () {
 
       it("fails with a TooLargeError naming the path when the budget could never hold it", async function () {
         const first = build();
-        const cache = createCache({
+        const cache = ws.cache({
           dir: path.join(tmp, "cache"),
           maxBytes: 4 * 1024 * 1024,
         });
@@ -1216,7 +1215,7 @@ describe("git store materialize", function () {
       const everything = requests(all.store);
 
       // Cold: nothing in the cache
-      const cache = createCache({
+      const cache = ws.cache({
         dir: path.join(tmp, "cache"),
         maxBytes: 64 * 1024 * 1024,
       });
