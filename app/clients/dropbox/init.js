@@ -453,6 +453,11 @@ const resyncRecentSyncsOnStartup = async () => {
       if (!account || typeof account.last_sync !== "number") continue;
 
       if (Date.now() - account.last_sync >= FIFTEEN_MINUTES_IN_MS) continue;
+
+      // A deleted folder or revoked access fails the walk every time, as
+      // in the hourly validation
+      if (await syncReport.hasUserSideIssue(blogID, getHealth)) continue;
+
       if (transferIncomplete(account)) {
         console.log(
           clfdate(),
