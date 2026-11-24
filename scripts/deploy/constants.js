@@ -28,15 +28,19 @@ const SERVING_CPU_SHARES = 2048;
 // node-a or OpenResty is not. So the rule is: what must not be killed, at its
 // own limits, fits in memory with room to spare. In MiB:
 //   OpenResty (master, workers, shared dicts)   ~400
-//   node-a heap (nodeAMaxOldSpaceSize)          1536
+//   node-a heap (nodeAMaxOldSpaceSize)          1024
 //   node-a outside the heap                     ~450
 //   ----------------------------------------- -----
-//   must not be killed                         ~2390 of 3584
-// That leaves ~1200 for node-b (typically ~450), the broker (~80), git, the
+//   must not be killed                         ~1880 of 3584
+// That leaves ~1700 for node-b (typically ~450), the broker (~80), git, the
 // jails (512 and 1024 at most, ~50 typically) and page cache. A peak of all of
 // those at once can kill a job or node-b, which is accepted.
-//   node-a   heapUsed peaked at 1072 MiB (mean ~600, 19 Nov); its heap after
-//            GC levels off at ~700-740 once the render caches are full
+//   node-a   heapUsed peaked at 1072 MiB (mean ~600, 19 Nov). 1024 since 21 Nov: an
+//            overnight run (7.6 h) peaked at ~780 MiB, ~745 just after a
+//            major GC, and its heap after GC levels off once the render caches
+//            are full. The maintainer accepts an occasional V8 heap OOM here:
+//            each one is a request (or a cache) to fix, and the report it
+//            leaves (--report-on-fatalerror) says which
 //   node-b   heapUsed peaked at 199 MiB: 512 leaves room for a heavy build
 // The host's budget is the sum of the two units' memory, Redis's maxmemory and
 // overhead, the host itself, offsite-sync, the script runner and a 1 GiB
@@ -54,7 +58,7 @@ const UNIT = {
   cpus: 4,
   memory: "3584m",
   cpuShares: SERVING_CPU_SHARES,
-  nodeAMaxOldSpaceSize: 1536,
+  nodeAMaxOldSpaceSize: 1024,
   nodeBMaxOldSpaceSize: 512,
   scriptMaxOldSpaceSize: 256,
   stopTimeout: 40, // above OpenResty drain (10s) plus the app drain (25s): drained in turn
