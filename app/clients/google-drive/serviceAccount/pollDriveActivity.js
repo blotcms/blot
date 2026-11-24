@@ -27,7 +27,7 @@ const sleep = (ms, signal) =>
 // rejecting if it fails: the follow-up it was armed with retries it
 async function runSync(blogID, armed, prefix) {
   try {
-    await followUps.run(blogID, armed);
+    await followUps.run(blogID, armed, { trigger: "activity" });
   } catch (err) {
     console.error(prefix(), "sync failed", err.message);
   }

@@ -69,8 +69,8 @@ describe("google drive pollDriveActivity", function () {
         order.push(["armed", blogID]);
         return 123;
       });
-      spyOn(followUps, "run").and.callFake(async (blogID, armed) => {
-        order.push(["ran", blogID, armed]);
+      spyOn(followUps, "run").and.callFake(async (blogID, armed, context) => {
+        order.push(["ran", blogID, armed, context]);
       });
       const driveactivity = {
         activity: {
@@ -89,7 +89,7 @@ describe("google drive pollDriveActivity", function () {
       expect(await round("t1", "t2")).toEqual([
         ["armed", "blog_a"],
         ["stored", "t2"],
-        ["ran", "blog_a", 123],
+        ["ran", "blog_a", 123, { trigger: "activity" }],
       ]);
     });
 
