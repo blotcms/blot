@@ -62,7 +62,11 @@ const processBlog = async (blog) => {
     try {
       folder.status("Dropbox resyncing");
 
-      await resetToBlot(blog.id, publish, folder.update);
+      // A disconnect seizes the lock (sync/seize.js): the signal stops the
+      // walk, and run() refuses any write to the folder after that
+      await folder.run(() =>
+        resetToBlot(blog.id, publish, folder.update, folder.signal)
+      );
       try {
         await require("sync/fix")(blog);
       } catch (err) {

@@ -1,4 +1,5 @@
 var resetToBlot = require("clients/dropbox/sync/reset-to-blot");
+var sync = require("sync");
 var eachBlogOrOneBlog = require("../each/eachBlogOrOneBlog");
 console.warn("Warning: this uses an internal method of the Dropbox client.");
 console.log('Consider debugging with "export DEBUG=clients:dropbox*"');
@@ -13,7 +14,11 @@ async function runFullSync(blog) {
     );
   };
 
-  await resetToBlot(blog.id, publish);
+  // Under the folder lock, like any sync: a disconnect seizes it and the
+  // signal stops the walk (sync/seize.js)
+  await sync(blog.id, (folder) =>
+    resetToBlot(blog.id, publish, folder.update, folder.signal)
+  );
 }
 
 let processedCount = 0;
