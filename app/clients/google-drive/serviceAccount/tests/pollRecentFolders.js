@@ -8,6 +8,7 @@ describe("google drive pollRecentFolders", function () {
   function load(list) {
     const stubs = {
       "helper/clfdate": () => "[date]",
+      "./rateLimit": require("../rateLimit"),
       "../database": { recent: { list } },
       "../sync/util/driveReaddir": null,
       "../util/prefetch": { start() {} },
@@ -93,7 +94,7 @@ describe("google drive pollRecentFolders", function () {
     controller.abort();
     await running;
 
-    // One round, then the ten second pause
+    // One round, then the backoff's pause (at least five seconds)
     expect(lists).toBe(1);
   });
 
