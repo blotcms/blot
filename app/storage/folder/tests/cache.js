@@ -123,6 +123,15 @@ describe("storage/folder cache", function () {
     ).toMatch(/\/cat\.JPG$/);
   });
 
+  it("shortens a name the disk would refuse, keeping its extension", async function () {
+    var cache = open();
+    var name = "é".repeat(200) + ".md";
+    var local = await cache.get(spec("/posts/" + name, "post"), source("post"));
+
+    expect(local).toMatch(/\/file\.md$/);
+    expect(await fs.readFile(local, "utf8")).toBe("post");
+  });
+
   it("uses a new key when the file's SHA-1 changes", async function () {
     var cache = open();
     var one = source("one");

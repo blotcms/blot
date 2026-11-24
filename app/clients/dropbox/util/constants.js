@@ -1,5 +1,4 @@
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
-const path = require("path");
 
 const UNSUPPORTED_FILE_EXTENSIONS = [".paper"];
 
@@ -10,20 +9,18 @@ const hasUnsupportedExtension = (filePath = "") => {
   );
 };
 
-// ext4 (and most Linux filesystems) reject any path component over 255
-// bytes and any full path over 4096 bytes with ENAMETOOLONG. Checking this
-// locally lets us skip a destination we already know is unwriteable instead
-// of downloading the file from Dropbox first and failing on the write.
-const NAME_MAX_BYTES = 255;
-const PATH_MAX_BYTES = 4096;
+// A blog's folder lives in the storage bucket (storage/folder/s3.js), where a
+// file is the object {blogID}/folder/{path} and S3 refuses a key over 1024
+// bytes. Names have no limit of their own: the content cache shortens a long
+// one on local disk (storage/folder/cache.js). Checking the length here lets
+// us skip a destination we already know is unwriteable instead of downloading
+// the file from Dropbox first and failing on the write. The margin covers the
+// prefix and a directory marker's trailing slash.
+const MAX_KEY_BYTES = 1024;
+const KEY_PREFIX_BYTES = 64;
 
-const exceedsFilesystemPathLimits = (destination = "") => {
-  if (Buffer.byteLength(destination, "utf8") > PATH_MAX_BYTES) return true;
-
-  return destination
-    .split(path.sep)
-    .some((component) => Buffer.byteLength(component, "utf8") > NAME_MAX_BYTES);
-};
+const exceedsStorageLimits = (destination = "") =>
+  Buffer.byteLength(destination, "utf8") > MAX_KEY_BYTES - KEY_PREFIX_BYTES;
 
 // Dropbox never returns HTTP 507 itself - a WriteError with reason
 // "insufficient_space" comes back as a 409 with a nested error tag (see
@@ -69,7 +66,7 @@ module.exports = {
   UNSUPPORTED_FILE_EXTENSIONS,
   hasUnsupportedExtension,
   isDotfileOrDotfolder: shouldIgnoreFile,
-  exceedsFilesystemPathLimits,
+  exceedsStorageLimits,
   INSUFFICIENT_SPACE_ERROR_CODE,
   isInsufficientSpaceError,
   transferIncomplete,
