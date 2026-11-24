@@ -100,6 +100,19 @@ echo "Installing the units' slices and blot-unit-cgroups.service on $PUBLIC_IP"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo install -m 644 /home/ec2-user/scripts/unit-cgroups/*.slice /home/ec2-user/scripts/unit-cgroups/blot-unit-cgroups.service /etc/systemd/system/ && sudo install -m 755 /home/ec2-user/scripts/unit-cgroups/blot-unit-cgroups.sh /usr/local/sbin/blot-unit-cgroups.sh"
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "sudo systemctl daemon-reload && sudo systemctl enable blot-unit-cgroups.service && sudo systemctl restart blot-unit-cgroups.service"
 
+# The jails' cgroups before #2795: one tree outside the units, made by
+# blot-sandbox-cgroup.service from an older setup.sh. Nothing uses it once both
+# units run in their slices, so it goes, along with the service. A unit image
+# from before #2951 binds it and would refuse to deploy without it. rmdir only
+# removes empty cgroups, so a directory something is still in stays, with a
+# warning. Safe to run again: it does nothing once they are gone.
+echo "Removing the old blot-sandbox cgroup tree on $PUBLIC_IP, if it is there"
+ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP 'if [ -e /etc/systemd/system/blot-sandbox-cgroup.service ]; then sudo systemctl disable --now blot-sandbox-cgroup.service; sudo rm -f /etc/systemd/system/blot-sandbox-cgroup.service /usr/local/sbin/blot-sandbox-cgroup.sh; sudo systemctl daemon-reload; fi
+t=/sys/fs/cgroup/blot-sandbox
+for d in $t/blue $t/green $t/blue-browser $t/green-browser $t; do
+  [ ! -d $d ] || sudo rmdir $d || echo "WARNING: $d is still in use and was left in place"
+done'
+
 # Remove the legacy mount-data-disk unit: its script was never part of this
 # directory and no longer exists on the host, so the unit only fails at boot.
 ssh -p "$SSH_PORT" -i $SSH_KEY ec2-user@$PUBLIC_IP "if [ -f /etc/systemd/system/mount-data-disk.service ]; then sudo systemctl disable mount-data-disk.service || true; sudo rm -f /etc/systemd/system/mount-data-disk.service; fi"
