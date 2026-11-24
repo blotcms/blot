@@ -1,6 +1,7 @@
 import { remoteServer, Authorization } from "../config.js";
 import fetch from "./rateLimitedFetchWithRetriesAndTimeout.js";
 import clfdate from "../util/clfdate.js";
+import { isNotSyncing } from "./notSyncing.js";
 
 export default async (...args) => {
   const [blogID, status] = args;
@@ -48,6 +49,8 @@ export default async (...args) => {
       body: JSON.stringify(status),
     });
   } catch (error) {
+    // logged once by the fetch wrapper; the caller decides what it means
+    if (isNotSyncing(error)) throw error;
     console.error(clfdate(), `Failed to send status for blogID ${blogID}`, {
       status,
       error,
