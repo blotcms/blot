@@ -29,12 +29,20 @@ describe("icloud remoteReaddir", function () {
     delete require.cache[remoteReaddirPath];
   });
 
-  it("waits longer than the macserver's whole listing flow, in one request per attempt", async function () {
-    const remoteReaddir = load(async () => Buffer.from("[]"));
+  it("gives up on a first reply sooner, then waits longer than the macserver's whole listing flow", async function () {
+    const remoteReaddir = load(async (n) => {
+      if (n < 3) throw new Error("The user aborted a request.");
+      return Buffer.from("[]");
+    });
     await remoteReaddir("blog_x", "/");
-    expect(calls.length).toEqual(1);
-    expect(calls[0].timeout).toBeGreaterThan(95 * 1000);
-    expect(calls[0].retries).toEqual(1);
+    expect(calls.length).toEqual(3);
+    // A reply lost on the way back costs half a minute, not two
+    expect(calls[0].timeout).toEqual(30 * 1000);
+    // A retry joins a listing still running on the macserver, so it waits
+    // as long as that can take
+    expect(calls[1].timeout).toBeGreaterThan(95 * 1000);
+    expect(calls[2].timeout).toBeGreaterThan(95 * 1000);
+    calls.forEach((options) => expect(options.retries).toEqual(1));
   });
 
   it("retries a failed listing after a pause and returns the result", async function () {
