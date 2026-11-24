@@ -311,27 +311,37 @@ describe("dropbox init", function () {
     const databasePath = require.resolve("../database");
     const resetToBlotPath = require.resolve("../sync/reset-to-blot");
     const lockPath = require.resolve("sync/establishSyncLock");
+    const healthPath = require.resolve("../getHealth");
     const initPath = require.resolve("../init");
 
     const blogID = "blog_refusedmidrun" + Date.now();
     const originals = {};
 
     beforeEach(function () {
-      [blogPath, databasePath, resetToBlotPath, lockPath, initPath].forEach(
-        (path) => (originals[path] = require.cache[path])
-      );
+      [
+        blogPath,
+        databasePath,
+        resetToBlotPath,
+        lockPath,
+        healthPath,
+        initPath,
+      ].forEach((path) => (originals[path] = require.cache[path]));
     });
 
     afterEach(function () {
-      [blogPath, databasePath, resetToBlotPath, lockPath].forEach((path) => {
-        if (originals[path]) require.cache[path] = originals[path];
-        else delete require.cache[path];
-      });
+      [blogPath, databasePath, resetToBlotPath, lockPath, healthPath].forEach(
+        (path) => {
+          if (originals[path]) require.cache[path] = originals[path];
+          else delete require.cache[path];
+        }
+      );
       delete require.cache[initPath];
       if (originals[initPath]) require.cache[initPath] = originals[initPath];
     });
 
-    function load(onResetToBlotCalled) {
+    // health is what getHealth answers, healthy by default
+    function load(onResetToBlotCalled, health = { issues: [] }) {
+      require.cache[healthPath] = { exports: async () => health };
       require.cache[blogPath] = {
         exports: {
           getAllIDs: async function () {
@@ -405,6 +415,17 @@ describe("dropbox init", function () {
       await init.resyncRecentSyncsOnStartup();
       await new Promise((resolve) => setImmediate(resolve));
       expect(wasCalled).toBe(true);
+    });
+
+    it("resyncRecentSyncsOnStartup skips a blog whose folder is gone", async function () {
+      let walked = false;
+      const init = load(() => (walked = true), {
+        issues: [{ code: "SOURCE_MISSING" }],
+      });
+
+      await init.resyncRecentSyncsOnStartup();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(walked).toBe(false);
     });
   });
 
