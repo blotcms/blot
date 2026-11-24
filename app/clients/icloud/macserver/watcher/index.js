@@ -604,15 +604,16 @@ const sweepBlog = async (blogID) => {
   let pushes = 0;
 
   const unlisted = await walkTree(blogID, "", {
+    // in NFC, as recordedPaths() gives them
     onDirectory: async (dir) => {
-      seen.add(dir);
+      seen.add(dir.normalize("NFC"));
       if (!isKnownDirectory(blogID, dir)) {
         pushes++;
         await performAction(blogID, dir, "mkdir");
       }
     },
     onFile: async (file, stat) => {
-      seen.add(file);
+      seen.add(file.normalize("NFC"));
       if (!isUnchanged(blogID, file, stat)) {
         pushes++;
         console.log(
@@ -626,8 +627,9 @@ const sweepBlog = async (blogID) => {
 
   if (unlisted.includes("")) return; // the blog folder itself is gone
 
+  const unlistedNFC = unlisted.map((dir) => dir.normalize("NFC"));
   const insideUnlisted = (p) =>
-    unlisted.some((dir) => p === dir || p.startsWith(dir + "/"));
+    unlistedNFC.some((dir) => p === dir || p.startsWith(dir + "/"));
 
   const missing = recorded
     .filter(([p]) => !seen.has(p) && !shouldIgnore(p) && !insideUnlisted(p))
