@@ -1,5 +1,6 @@
 const resetFromBlot = require("../sync/resetToDrive");
 const database = require("../database");
+const { forgetFolder } = require("../forget");
 const {
   SETUP_ERROR,
   clearAllErrorFields,
@@ -235,12 +236,20 @@ async function finishSetup(blog, drive, email, serviceAccountId) {
       return;
 
     // Only if the account still exists: a disconnect meanwhile deleted it
+    const failed = await database.blog.get(blog.id);
     await database.blog.update(blog.id, {
       error: SETUP_ERROR,
       folderId: null,
       folderName: null,
       ...clearHealthErrorFields(),
     });
+    // The account no longer names the folder, so whatever the copy wrote of
+    // its mapping goes too, as a disconnect's would (forget.js)
+    try {
+      await forgetFolder(blog.id, failed?.folderId);
+    } catch (err) {
+      console.log(clfdate(), "Google Drive Client", "forget failed", err);
+    }
   } finally {
     if (sync && typeof sync.done === "function") {
       await sync.done(null);

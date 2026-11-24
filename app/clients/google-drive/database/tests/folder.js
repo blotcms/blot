@@ -90,6 +90,13 @@ describe("folder module", function () {
     expect(updatedFilePath2).toBe(`${newFolderPath}/file2.txt`);
   });
 
+  it("refuses a missing folder ID, or one that reads undefined or null", function () {
+    for (const folderId of [undefined, null, "", "undefined", "null"])
+      expect(() => folderModule(folderId, "blog_a")).toThrowError(
+        "Folder ID is required"
+      );
+  });
+
   it("throws an error when moving to or from root", async function () {
     const id = "file_1";
     const path = "/file1.txt";
