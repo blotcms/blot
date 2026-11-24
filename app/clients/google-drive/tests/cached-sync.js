@@ -20,8 +20,6 @@ function load(file, stubs) {
 }
 
 function harness(count = 1) {
-  // Records from before util/hashes.js, by file ID (getVerifiedContents)
-  const records = new Map();
   const metadata = new Map();
   // Drive's md5Checksum by SHA-1, as util/hashes.js has saved them
   const pairs = new Map();
@@ -52,12 +50,10 @@ function harness(count = 1) {
   const state = {
     files,
     local,
-    records,
     metadata,
     pairs,
     saves: [],
     downloads: [],
-    batches: [],
     updates: [],
     hashed: [],
     failDownload: false,
@@ -100,10 +96,6 @@ function harness(count = 1) {
         },
         set: async () => {},
         remove: async () => {},
-        getVerifiedContents: async (ids) => {
-          state.batches.push(ids);
-          return ids.map((id) => records.get(id));
-        },
       }),
     },
     // An in-memory util/hashes.js: a sync's pairs reach the store when it
@@ -182,21 +174,10 @@ function harness(count = 1) {
   // Every file paired with its md5Checksum, as when Blot last verified it
   state.warm = () =>
     files.forEach((file) => pairs.set("sha1-" + file.id, file.md5Checksum));
-  // The same, as verified records written before util/hashes.js
-  state.warmRecords = () =>
-    files.forEach((file) =>
-      records.set(file.id, {
-        path: "/" + file.name,
-        checksum: file.md5Checksum,
-        sha1: "sha1-" + file.id,
-        size: 4,
-        modified: 1000,
-      })
-    );
   return state;
 }
 describe("Drive verified content cache", function () {
-  it("skips 1000 unchanged files without content reads and batches the directory lookup", async function () {
+  it("skips 1000 unchanged files without content reads", async function () {
     const h = harness(1000);
     h.warm();
     expect(await h.run()).toBeTruthy();
@@ -204,9 +185,6 @@ describe("Drive verified content cache", function () {
     expect(h.updates).toEqual([]);
     expect(h.hashed).toEqual([]);
     expect(h.finished).toBe("Finished processing folder");
-    // The records from before util/hashes.js, in one request
-    expect(h.batches.length).toBe(1);
-    expect(h.batches[0].length).toBe(1000);
   });
   it("verifies same-size remote edits and local replacements", async function () {
     const h = harness(3);
@@ -252,26 +230,6 @@ describe("Drive verified content cache", function () {
     expect(await h.run()).toBeTruthy();
     expect(h.downloads).toEqual(["0"]);
     expect(h.hashed).toEqual([]);
-  });
-  it("takes over a verified record from before util/hashes.js", async function () {
-    const h = harness(2);
-    h.warmRecords();
-    expect(await h.run()).toBeTruthy();
-    expect(h.downloads).toEqual([]);
-    expect(h.pairs.get("sha1-0")).toBe("md5");
-    expect(h.pairs.get("sha1-1")).toBe("md5");
-    // The pairs are enough from then on
-    h.records.clear();
-    expect(await h.run()).toBeTruthy();
-    expect(h.downloads).toEqual([]);
-  });
-  it("doesn't take over an old record for other bytes or another md5Checksum", async function () {
-    const h = harness(2);
-    h.warmRecords();
-    h.local[0].sha1 = "edited";
-    h.files[1].md5Checksum = "new";
-    expect(await h.run()).toBeTruthy();
-    expect(h.downloads).toEqual(["0", "1"]);
   });
   it("saves a whole walk as complete, dropping pairs it didn't use", async function () {
     const h = harness(1);

@@ -219,7 +219,6 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     setApplied,
     set,
     remove,
-    getVerifiedContents,
   } = database.folder(folderId, blogID);
 
   // Drive's md5Checksum of the files in the blog's folder, by SHA-1
@@ -279,9 +278,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
   // folder lookup has succeeded, so a failed lookup does not leave them
   // empty (which would make later writes duplicate remote files).
   if (options.reset) {
-    await database
-      .folder(folderId, blogID)
-      .reset({ preserveVerifiedContent: true });
+    await database.folder(folderId, blogID).reset({ keepApplied: true });
   }
 
   // Directory listings for the pass under way; each pass makes its own
@@ -393,7 +390,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     // Ensure the dir is stored against the dirId. Detecting, a directory
     // mapped to another path means the mapping has drifted: only a full walk
     // under the lock can be trusted to put it right.
-    if (!detecting) await set(dirId, dir, { isDirectory: true });
+    if (!detecting) await set(dirId, dir);
     else if ((await getPath(dirId)) !== dir) needsFull = true;
 
     const [driveItems, localContents] = await Promise.all([
@@ -409,18 +406,6 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     const remoteContents = transformDriveItems(
       driveItems.filter((item) => item.mimeType !== SHORTCUT)
     ).sort((a, b) => comparePaths(a.name, b.name));
-    const regularFiles = remoteContents.filter(
-      (item) =>
-        !item.isDirectory &&
-        !item.mimeType.startsWith("application/vnd.google-apps.") &&
-        item.md5Checksum
-    );
-    const verifiedRecords = await getVerifiedContents(
-      regularFiles.map((item) => item.id)
-    );
-    const verifiedById = new Map(
-      regularFiles.map((item, i) => [item.id, verifiedRecords[i]])
-    );
 
     // Detecting: where the mapping has each item now, in one request
     const mappedPaths = new Map();
@@ -548,7 +533,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
 
       // Ensure the file is stored in the database (id <-> path mapping);
       // any folders will be stored as they are walked.
-      if (!detecting) await set(id, path, { isDirectory, modifiedTime });
+      if (!detecting) await set(id, path);
       else if (mappedPaths.get(id) !== path) changed.set(dirId, dir);
 
       // These do not have a md5Checksum so we fall
@@ -599,20 +584,6 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
           localSha1 &&
           known.get(localSha1) === md5Checksum.slice(0, 24).toLowerCase()
         );
-
-        // Records from before util/hashes.js, kept per file ID with the
-        // path and SHA-1 they were verified at: taken over the first time
-        // they match. Drop this, getVerifiedContents and the verified-content
-        // keys once every Drive blog has been walked since.
-        const cached = !identical && localSha1 ? verifiedById.get(id) : null;
-        if (
-          cached &&
-          cached.checksum === md5Checksum &&
-          cached.sha1 === localSha1
-        ) {
-          identical = true;
-          known.set(localSha1, md5Checksum);
-        }
       }
 
       let started = null;

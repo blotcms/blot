@@ -31,7 +31,7 @@ module.exports = async (blogID, publish, update, signal) => {
   // unshared, so there is nothing to walk until the user sets up again.
   if (!account || !account.folderId) throw folderMissingError(account);
 
-  const { pruneVerifiedContents } = database.folder(account.folderId, blogID);
+  const { pruneApplied } = database.folder(account.folderId, blogID);
 
   // sync resets the database state of the folder once it has confirmed
   // the folder is still reachable
@@ -39,7 +39,7 @@ module.exports = async (blogID, publish, update, signal) => {
   if (signal) signal.throwIfAborted();
 
   if (summary) {
-    await pruneVerifiedContents();
+    await pruneApplied();
     return summary;
   }
 

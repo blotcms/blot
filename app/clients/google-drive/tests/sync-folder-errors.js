@@ -70,10 +70,6 @@ function harness(options) {
           reset: async function () {
             resets += 1;
           },
-          getVerifiedContents: async function () {
-            return [];
-          },
-          setVerifiedContent: async function () {},
           getApplied: async function () {
             return null;
           },

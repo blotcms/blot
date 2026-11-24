@@ -33,8 +33,6 @@ function harness(files) {
         getByPath: async () => null,
         set: async () => {},
         remove: async () => {},
-        getVerifiedContents: async (ids) => ids.map(() => undefined),
-        setVerifiedContent: async () => {},
         getApplied: async () => null,
         setApplied: async () => {},
       }),

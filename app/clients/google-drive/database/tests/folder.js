@@ -36,16 +36,6 @@ describe("folder module", function () {
     expect(retrievedId).toBe(id);
   });
 
-  it("can set and get metadata for a file", async function () {
-    const id = "file_1";
-    const path = "/folder/file1.txt";
-    const metadata = { size: 1024, lastModified: "2025-02-21" };
-
-    await folder.set(id, path, metadata);
-    const retrievedMetadata = await folder.getMetadata(id);
-    expect(retrievedMetadata).toEqual(metadata);
-  });
-
   it("can move a file to a new path", async function () {
     const id = "file_1";
     const oldPath = "/folder/old/file1.txt";
@@ -134,9 +124,14 @@ describe("folder module", function () {
 
     const retrievedId = await folder.getByPath(path);
     expect(retrievedId).toBeNull();
+  });
 
-    const contents = await folder.readdir("/folder");
-    expect(contents).toEqual([]);
+  it("can reset all mappings", async function () {
+    await folder.set("file_1", "/folder/file1.txt");
+    await folder.reset();
+
+    expect(await folder.get("file_1")).toBeNull();
+    expect(await folder.getByPath("/folder/file1.txt")).toBeNull();
   });
 
   it("can remove a folder and all its children", async function () {
@@ -164,42 +159,6 @@ describe("folder module", function () {
     expect(retrievedFolderPath).toBeNull();
     expect(retrievedFilePath1).toBeNull();
     expect(retrievedFilePath2).toBeNull();
-  });
-
-  it("can reset all mappings and metadata", async function () {
-    const id = "file_1";
-    const path = "/folder/file1.txt";
-    const metadata = { size: 1024, lastModified: "2025-02-21" };
-
-    await folder.set(id, path, metadata);
-    await folder.reset();
-
-    const retrievedPath = await folder.get(id);
-    const retrievedMetadata = await folder.getMetadata(id);
-
-    expect(retrievedPath).toBeNull();
-    expect(retrievedMetadata).toBeNull();
-  });
-
-  it("can list all files and folders with metadata", async function () {
-    const id1 = "file_1";
-    const id2 = "file_2";
-    const path1 = "/folder/file1.txt";
-    const path2 = "/folder/file2.txt";
-    const metadata1 = { size: 1024, lastModified: "2025-02-21" };
-    const metadata2 = { size: 2048, lastModified: "2025-02-22" };
-
-    await folder.set(id1, path1, metadata1);
-    await folder.set(id2, path2, metadata2);
-
-    const results = await folder.listAll();
-
-    expect(results).toEqual(
-      jasmine.arrayWithExactContents([
-        { id: id1, path: path1, metadata: metadata1 },
-        { id: id2, path: path2, metadata: metadata2 },
-      ])
-    );
   });
 
   it("move won't clobber a similar file", async function () {
@@ -294,24 +253,6 @@ describe("folder module", function () {
     expect(await folder.getByPath("/bar")).toBeNull(); // Nonexistent path
   });
 
-  it("can reset all mappings and metadata", async function () {
-    const id = "file_1";
-    const path = "/folder/file1.txt";
-    const metadata = { size: 1024, lastModified: "2025-02-21" };
-
-    await folder.set(id, path, metadata);
-    await folder.reset();
-
-    // Ensure all mappings, metadata, and keys are removed
-    const retrievedPath = await folder.get(id);
-    const retrievedMetadata = await folder.getMetadata(id);
-    const allFiles = await folder.listAll();
-
-    expect(retrievedPath).toBeNull();
-    expect(retrievedMetadata).toBeNull();
-    expect(allFiles).toEqual([]);
-  });
-
   it("move handles folder children, including nested folders", async function () {
     const folderId = "folder_1";
     const nestedFolderId = "nested_folder";
@@ -329,24 +270,22 @@ describe("folder module", function () {
   });
 
   it("throws an error when trying to set a mapping with an empty ID or path", async function (done) {
-    const metadata = { size: 1024, lastModified: "2025-02-21" };
-
     try {
-      await folder.set("", "/file1.txt", metadata);
+      await folder.set("", "/file1.txt");
       done.fail("Expected an error for empty ID");
     } catch (err) {
       expect(err.message).toBe("ID and path must be non-empty strings");
     }
 
     try {
-      await folder.set("file_1", "", metadata);
+      await folder.set("file_1", "");
       done.fail("Expected an error for empty path");
     } catch (err) {
       expect(err.message).toBe("ID and path must be non-empty strings");
     }
 
     try {
-      await folder.set(null, null, metadata);
+      await folder.set(null, null);
       done.fail("Expected an error for null ID and path");
     } catch (err) {
       expect(err.message).toBe("ID and path must be non-empty strings");
@@ -376,45 +315,6 @@ describe("folder module", function () {
 
     const removedPaths = await folder.remove(nonExistentId);
     expect(removedPaths).toEqual([]); // Should simply return an empty array
-
-    done();
-  });
-
-  it("throws an error when metadata is not a valid object", async function (done) {
-    const id = "file_1";
-    const path = "/folder/file1.txt";
-
-    try {
-      await folder.set(id, path, "invalid_metadata");
-      done.fail("Expected an error for invalid metadata");
-    } catch (err) {
-      expect(err.message).toBe("Metadata must be a valid object");
-    }
-
-    try {
-      await folder.set(id, path, null); // Null metadata should still succeed
-      done();
-    } catch (err) {
-      done.fail("Did not expect an error for null metadata");
-    }
-  });
-
-  it("handles errors when metadata is corrupted or invalid", async function (done) {
-    const id = "file_1";
-
-    // Corrupt metadata in Redis
-    await client.hSet(
-      `${prefix}test_folder:metadata`,
-      id,
-      "corrupted_metadata_string"
-    );
-
-    try {
-      await folder.getMetadata(id);
-      done.fail("Expected a SyntaxError for corrupted metadata");
-    } catch (err) {
-      expect(err instanceof SyntaxError).toBe(true);
-    }
 
     done();
   });
@@ -466,22 +366,6 @@ describe("folder module", function () {
     // Ensure old ID-to-path mapping is removed
     const oldPath = await folder.get(id1);
     expect(oldPath).toBeNull();
-  });
-
-  it("can update metadata without changing the path", async function () {
-    const id = "file_1";
-    const path = "/folder/file1.txt";
-    const oldMetadata = { size: 1024, lastModified: "2025-02-21" };
-    const newMetadata = { size: 2048, lastModified: "2025-02-22" };
-
-    await folder.set(id, path, oldMetadata);
-    await folder.set(id, path, newMetadata);
-
-    const retrievedMetadata = await folder.getMetadata(id);
-    expect(retrievedMetadata).toEqual(newMetadata);
-
-    const retrievedPath = await folder.get(id);
-    expect(retrievedPath).toBe(path); // Path should remain unchanged
   });
 
   it("throws an error when trying to move to an existing path", async function (done) {
@@ -548,15 +432,10 @@ describe("folder module", function () {
 
     await folder.reset();
 
-    const allFiles = await folder.listAll();
-    expect(allFiles).toEqual([]); // Everything should be removed
-  });
-
-  it("returns null when requesting metadata for a nonexistent ID", async function () {
-    const nonexistentId = "nonexistent_file";
-
-    const metadata = await folder.getMetadata(nonexistentId);
-    expect(metadata).toBeNull();
+    // Everything should be removed
+    expect(await folder.get(id1)).toBeNull();
+    expect(await folder.get(id2)).toBeNull();
+    expect(await folder.getByPath(path2)).toBeNull();
   });
 
   it("throws an error when trying to move a folder to a subfolder of itself", async function (done) {
@@ -574,183 +453,6 @@ describe("folder module", function () {
     }
 
     done();
-  });
-
-  it("returns entries sorted alphabetically by path", async function () {
-    const fileId1 = "file_1";
-    const fileId2 = "file_2";
-    const subfolderId = "subfolder_1";
-    const basePath = "/folder";
-    const filePath1 = `${basePath}/fileB.txt`;
-    const filePath2 = `${basePath}/fileA.txt`;
-    const subfolderPath = `${basePath}/subfolder`;
-
-    await folder.set(fileId1, filePath1);
-    await folder.set(fileId2, filePath2);
-    await folder.set(subfolderId, subfolderPath);
-
-    const entries = await folder.readdir(basePath);
-
-    expect(entries).toEqual([
-      { id: fileId2, path: filePath2, metadata: null }, // fileA.txt
-      { id: fileId1, path: filePath1, metadata: null }, // fileB.txt
-      { id: subfolderId, path: subfolderPath, metadata: null }, // subfolder
-    ]);
-  });
-
-  it("can list files and folders in a directory", async function () {
-    const folderId = "folder_1";
-    const fileId1 = "file_1";
-    const fileId2 = "file_2";
-    const subfolderId = "subfolder_1";
-    const basePath = "/folder";
-    const filePath1 = `${basePath}/file1.txt`;
-    const filePath2 = `${basePath}/file2.txt`;
-    const subfolderPath = `${basePath}/subfolder`;
-
-    await folder.set(folderId, basePath);
-    await folder.set(fileId1, filePath1);
-    await folder.set(fileId2, filePath2);
-    await folder.set(subfolderId, subfolderPath);
-
-    const entries = await folder.readdir(basePath);
-
-    expect(entries).toEqual(
-      jasmine.arrayWithExactContents([
-        { id: fileId1, path: filePath1, metadata: null },
-        { id: fileId2, path: filePath2, metadata: null },
-        { id: subfolderId, path: subfolderPath, metadata: null },
-      ])
-    );
-  });
-
-  it("returns an empty list for an empty directory", async function () {
-    const folderId = "empty_folder";
-    const basePath = "/empty";
-
-    await folder.set(folderId, basePath);
-
-    const entries = await folder.readdir(basePath);
-
-    expect(entries).toEqual([]);
-  });
-
-  it("excludes nested directories and files", async function () {
-    const folderId = "folder_1";
-    const fileId1 = "file_1";
-    const fileId2 = "file_2";
-    const nestedFileId = "nested_file";
-    const basePath = "/folder";
-    const filePath1 = `${basePath}/file1.txt`;
-    const filePath2 = `${basePath}/file2.txt`;
-    const nestedFilePath = `${basePath}/subfolder/nested.txt`;
-
-    await folder.set(folderId, basePath);
-    await folder.set(fileId1, filePath1);
-    await folder.set(fileId2, filePath2);
-    await folder.set(nestedFileId, nestedFilePath);
-
-    const entries = await folder.readdir(basePath);
-
-    expect(entries).toEqual(
-      jasmine.arrayWithExactContents([
-        { id: fileId1, path: filePath1, metadata: null },
-        { id: fileId2, path: filePath2, metadata: null },
-      ])
-    );
-  });
-
-  it("returns metadata for files and folders", async function () {
-    const folderId = "folder_1";
-    const fileId1 = "file_1";
-    const fileId2 = "file_2";
-    const basePath = "/folder";
-    const filePath1 = `${basePath}/file1.txt`;
-    const filePath2 = `${basePath}/file2.txt`;
-    const metadata1 = { size: 1024, lastModified: "2025-02-21" };
-    const metadata2 = { size: 2048, lastModified: "2025-02-22" };
-
-    await folder.set(folderId, basePath);
-    await folder.set(fileId1, filePath1, metadata1);
-    await folder.set(fileId2, filePath2, metadata2);
-
-    const entries = await folder.readdir(basePath);
-
-    expect(entries).toEqual(
-      jasmine.arrayWithExactContents([
-        { id: fileId1, path: filePath1, metadata: metadata1 },
-        { id: fileId2, path: filePath2, metadata: metadata2 },
-      ])
-    );
-  });
-
-  it("throws an error for invalid directory paths", async function (done) {
-    try {
-      await folder.readdir("");
-      done.fail("Expected an error for an empty directory path");
-    } catch (err) {
-      expect(err.message).toBe("Directory path must be a non-empty string");
-    }
-
-    try {
-      await folder.readdir(null);
-      done.fail("Expected an error for a null directory path");
-    } catch (err) {
-      expect(err.message).toBe("Directory path must be a non-empty string");
-    }
-
-    done();
-  });
-
-  it("does not include entries outside the given directory", async function () {
-    const folderId = "folder_1";
-    const fileId1 = "file_1";
-    const fileId2 = "file_2";
-    const unrelatedFileId = "file_3";
-    const basePath = "/folder";
-    const unrelatedPath = "/other";
-    const filePath1 = `${basePath}/file1.txt`;
-    const filePath2 = `${basePath}/file2.txt`;
-    const unrelatedFilePath = `${unrelatedPath}/file3.txt`;
-
-    await folder.set(folderId, basePath);
-    await folder.set(fileId1, filePath1);
-    await folder.set(fileId2, filePath2);
-    await folder.set(unrelatedFileId, unrelatedFilePath);
-
-    const entries = await folder.readdir(basePath);
-
-    expect(entries).toEqual(
-      jasmine.arrayWithExactContents([
-        { id: fileId1, path: filePath1, metadata: null },
-        { id: fileId2, path: filePath2, metadata: null },
-      ])
-    );
-  });
-
-  it("handles case-sensitive paths correctly", async function () {
-    const folderId = "folder_1";
-    const fileId1 = "file_1";
-    const fileId2 = "file_2";
-    const basePath = "/Folder";
-    const filePath1 = `${basePath}/file1.txt`;
-    const filePath2 = `${basePath}/file2.txt`;
-
-    await folder.set(folderId, basePath);
-    await folder.set(fileId1, filePath1);
-    await folder.set(fileId2, filePath2);
-
-    const entries = await folder.readdir(basePath);
-
-    expect(entries).toEqual(
-      jasmine.arrayWithExactContents([
-        { id: fileId1, path: filePath1, metadata: null },
-        { id: fileId2, path: filePath2, metadata: null },
-      ])
-    );
-
-    const entriesLowerCase = await folder.readdir(basePath.toLowerCase());
-    expect(entriesLowerCase).toEqual([]); // Should not match a case-sensitive path
   });
 
   it("propagates client promise failures", async function () {

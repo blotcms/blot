@@ -23,7 +23,7 @@ function load(accounts, syncResult) {
             },
             folder: function () {
               return {
-                pruneVerifiedContents: async function () {
+                pruneApplied: async function () {
                   calls.prune++;
                 },
               };

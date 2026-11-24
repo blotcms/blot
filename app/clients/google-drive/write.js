@@ -91,7 +91,7 @@ async function write(blogID, path, input) {
       // Record the new file straight away, so a save retried before the
       // next sync updates it rather than creating a second file of the
       // same name
-      await set(data.id, path, { isDirectory: false });
+      await set(data.id, path);
     }
   }
 

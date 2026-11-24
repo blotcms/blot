@@ -6,9 +6,8 @@ const { Readable } = require("stream");
 
 // The real sync, download and client database, against a blog folder in S3,
 // with Drive played by a fake client. What must hold: an unchanged file is
-// neither downloaded nor read, a file changed outside the client is noticed,
-// and verified records from before util/hashes.js are taken over
-// (#2258, "Content hash").
+// neither downloaded nor read, and a file changed outside the client is
+// noticed (#2258, "Content hash").
 describe("Google Drive sync against storage/folder", function () {
   const folder = require("storage/folder");
   const database = require("clients/google-drive/database");
@@ -183,54 +182,6 @@ describe("Google Drive sync against storage/folder", function () {
       expect(await folder.exists(this.blog.id, "/b.txt")).toBe(false);
       expect(await folder.exists(this.blog.id, "/a.txt")).toBe(true);
       expect(updates).toContain("/b.txt");
-    });
-
-    it("takes over a verified record from before util/hashes.js, without reading the file", async function () {
-      drive.files["a.txt"] = "alpha";
-      await folder.write(this.blog.id, "/a.txt", "alpha");
-      const contentKey = database.folder(folderId, this.blog.id).contentKey;
-      await client.hSet(
-        contentKey,
-        "id-a.txt",
-        JSON.stringify({
-          path: "/a.txt",
-          checksum: md5("alpha"),
-          sha1: sha1("alpha"),
-          size: 5,
-          modified: 1000,
-        })
-      );
-      spyOn(folder, "ensureLocal").and.callThrough();
-
-      expect(await run()).toBeTruthy();
-      expect(drive.downloads).toEqual([]);
-      expect(folder.ensureLocal).not.toHaveBeenCalled();
-      expect(await paired(this.blog.id, "alpha")).toBe(
-        md5("alpha").slice(0, 24)
-      );
-    });
-
-    it("pairs a file whose old record can't be taken over by checking it, not downloading it", async function () {
-      drive.files["a.txt"] = "alpha";
-      await folder.write(this.blog.id, "/a.txt", "alpha");
-      // The record as it was before this client kept each file's state: the
-      // file's fingerprint on disk, which S3 has no way to match
-      const contentKey = database.folder(folderId, this.blog.id).contentKey;
-      await client.hSet(
-        contentKey,
-        "id-a.txt",
-        JSON.stringify({
-          path: "/a.txt",
-          checksum: md5("alpha"),
-          fingerprint: "5:1000000000",
-        })
-      );
-
-      expect(await run()).toBeTruthy();
-      expect(drive.downloads).toEqual([]);
-      expect(await paired(this.blog.id, "alpha")).toBe(
-        md5("alpha").slice(0, 24)
-      );
     });
   }
 
