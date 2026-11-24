@@ -82,18 +82,21 @@ function harness({
               ? {
                   path: itemPath(id),
                   checksum: "md5-" + id,
-                  size: 1,
-                  modified: 1,
+                  sha1: "s",
                 }
               : undefined
           ),
         setVerifiedContent: write("setVerifiedContent"),
         getApplied: async (id) =>
           fresh.has(itemPath(id))
-            ? { modifiedTime: "2026-01-01T00:00:00Z" }
+            ? { modifiedTime: "2026-01-01T00:00:00Z", sha1: "s" }
             : null,
         setApplied: write("setApplied"),
       }),
+    },
+    // Nothing paired yet: up-to-date files match on their verified records
+    "../util/hashes": {
+      load: async () => ({ get() {}, set() {}, async save() {} }),
     },
     "../util/localState": {
       stamp: require("../util/localState").stamp,
@@ -149,6 +152,7 @@ function harness({
               name: path.split("/").pop(),
               isDirectory: false,
               size: 1,
+              sha1: "s",
             }))
         ),
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),

@@ -71,7 +71,6 @@ describe("Drive download completion", function () {
         },
       },
       "./localFile": async () => "/test-blog/file.txt",
-      "./localState": require("../util/localState"),
       "colors/safe": {
         green: (x) => x,
       },
@@ -136,8 +135,6 @@ describe("Drive download completion", function () {
       verifiedContent: {
         checksum: "new",
         sha1: "sha",
-        size: 12,
-        modified: 1000,
       },
     });
     expect(moved).toBe(true);
@@ -202,7 +199,6 @@ describe("Drive download checksum optimization", function () {
         stat: async () => stats.shift(),
       },
       "./localFile": async () => "/test-blog/file.txt",
-      "./localState": require("../util/localState"),
       "colors/safe": {
         green: (x) => x,
       },
@@ -243,25 +239,17 @@ describe("Drive download checksum optimization", function () {
   }
 
   it("does not request content when the local checksum matches", async function () {
-    const stat = { isDirectory: false, size: 4, modified: 1000.4 };
-    stats = [stat, stat];
+    stats = [{ isDirectory: false, size: 4, modified: 1000.4, sha1: "sha" }];
     expect(await start()).toEqual({
       updated: false,
-      verifiedContent: {
-        checksum: "same",
-        sha1: "sha",
-        size: 4,
-        modified: 1000,
-      },
+      verifiedContent: { checksum: "same", sha1: "sha" },
     });
     expect(requested).toBe(false);
   });
 
-  it("does not vouch for a file which changed while it was hashed", async function () {
-    stats = [
-      { isDirectory: false, size: 4, modified: 1000 },
-      { isDirectory: false, size: 4, modified: 2000 },
-    ];
+  it("does not vouch for a file whose bytes aren't the ones the index has", async function () {
+    // Changed while it was hashed, say: the index has the new SHA-1
+    stats = [{ isDirectory: false, size: 4, modified: 1000, sha1: "other" }];
     let error;
     try {
       await start();
@@ -303,7 +291,6 @@ describe("Drive download of a prefetched file", function () {
             : null,
       },
       "./localFile": async () => null,
-      "./localState": require("../util/localState"),
       "colors/safe": { green: (x) => x },
       debug: () => () => {},
       "helper/tempDir": () => "/test-temp",
@@ -339,8 +326,6 @@ describe("Drive download of a prefetched file", function () {
       verifiedContent: {
         checksum: "new",
         sha1: "sha",
-        size: 12,
-        modified: 1000,
       },
     });
   });
