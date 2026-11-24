@@ -535,7 +535,7 @@ Sync records only failures the customer must act on, tagged with `error_source` 
 - **Large folder migrations**: When a customer connects a second blog to an app folder, all existing files must be moved into a subfolder. This requires customer input to specify folder names.
 - **Folder moves**: If a customer moves a blog folder within Dropbox after setup, the `folder_id` (which is immutable) is used to track the new location. However, if the folder is deleted and recreated, setup must occur again.
 - **Missing parent directories**: If a file's parent directory does not exist on disk, the client attempts to resolve the case-sensitive path. If this fails, the file is still downloaded using the relative path from Dropbox.
-- **Long file names**: File names exceeding the OS's maximum path length are skipped (error code `ENAMETOOLONG`).
+- **Long paths**: a path too long for a storage bucket key (S3 allows 1024 bytes) is skipped (error code `ENAMETOOLONG`). Long names alone are fine: the content cache shortens them on local disk.
 
 ## Testing
 

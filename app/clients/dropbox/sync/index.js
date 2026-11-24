@@ -552,7 +552,7 @@ function Apply(client, blogID, log, status, publish, signal) {
       if (err && err.code === "ENAMETOOLONG") {
         log(
           item.resolved_relative_path,
-          "Skipping download because destination path exceeds filesystem name limit"
+          "Skipping download because destination path exceeds the storage path limit"
         );
         status("Skipping " + item.resolved_relative_path + " (name too long)");
         return;

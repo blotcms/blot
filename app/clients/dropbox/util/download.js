@@ -8,7 +8,7 @@ const TIMEOUT = 30 * 1000; // 30 seconds
 const {
   MAX_FILE_SIZE,
   hasUnsupportedExtension,
-  exceedsFilesystemPathLimits,
+  exceedsStorageLimits,
 } = require("./constants");
 
 // options.metadata is the file's { path_display, size } when the caller has
@@ -40,13 +40,13 @@ async function download(client, source, blogID, destination, options) {
   // The destination path can never become writeable between attempts, so
   // check it locally before fetching anything from Dropbox. Without this,
   // we'd download the full file every time only to fail on the write.
-  if (exceedsFilesystemPathLimits(destination)) {
+  if (exceedsStorageLimits(destination)) {
     console.log(
       prefix(),
-      "destination exceeds filesystem name/path limit, skipping download",
+      "destination exceeds the storage path limit, skipping download",
       destination
     );
-    const err = new Error("Destination path exceeds filesystem limit");
+    const err = new Error("Destination path exceeds the storage limit");
     err.code = "ENAMETOOLONG";
     throw err;
   }
