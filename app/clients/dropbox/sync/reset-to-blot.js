@@ -729,20 +729,22 @@ const excuseRecentChanges = async (client, changed, dropboxRoot, summary) => {
 // they don't, so it doesn't. Only a file with no stored hash is read.
 const contentHash = async (blogID, path, size, remoteHash, known) => {
   try {
-    const stat = await storage.stat(blogID, path, { sha1: true });
+    const stat = await storage.stat(blogID, path);
     if (stat.isDirectory) return undefined;
     // A placeholder's bytes aren't the file's, so they never match Dropbox's,
     // even when the file there is now really empty too
     if (stat.placeholder) return undefined;
     if (typeof size === "number" && stat.size !== size) return undefined;
 
-    const prefix = known && known.get(stat.sha1);
+    // From the index, unless it has no SHA-1 for the file
+    const { sha1 } = await storage.stat(blogID, path, { sha1: true });
+    const prefix = known && known.get(sha1);
     if (prefix !== undefined) {
       return remoteHash && remoteHash.startsWith(prefix) ? remoteHash : prefix;
     }
 
     const { hash } = await storage.stat(blogID, path, { hash: true });
-    if (known) known.set(stat.sha1, hash);
+    if (known) known.set(sha1, hash);
     return hash;
   } catch (e) {
     return undefined;
