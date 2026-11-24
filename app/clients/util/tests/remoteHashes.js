@@ -42,6 +42,19 @@ describe("remote hashes", function () {
     expect(known.get(sha1("c"))).toEqual(sha256("c").slice(0, 24));
   });
 
+  it("removes duplicate records when a complete walk used them all", async function () {
+    await hashes.add(blogID, sha1("a"), sha256("a"));
+    await hashes.add(blogID, sha1("a"), sha256("a"));
+
+    const walk = await hashes.load(blogID);
+    walk.get(sha1("a"));
+    await walk.save({ complete: true });
+
+    expect(await require("models/client").strLen(hashes.key(blogID))).toEqual(
+      24
+    );
+  });
+
   it("adds to what was there after a walk that stopped part way", async function () {
     await hashes.add(blogID, sha1("a"), sha256("a"));
 

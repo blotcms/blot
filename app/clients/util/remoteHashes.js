@@ -76,6 +76,9 @@ module.exports = function remoteHashes(name) {
       );
     }
 
+    // Records in the string, duplicates included: appends of files with the
+    // same bytes repeat one, which only a rewrite removes
+    const storedRecords = stored ? Math.floor(stored.length / RECORD) : 0;
     const used = new Map();
     let added = false;
 
@@ -104,7 +107,12 @@ module.exports = function remoteHashes(name) {
       async save({ complete }) {
         try {
           if (complete) {
-            if (!added && used.size === known.size) return;
+            if (
+              !added &&
+              used.size === known.size &&
+              known.size === storedRecords
+            )
+              return;
             const pairs = [...used];
             if (!pairs.length) await client.del(key(blogID));
             else await client.set(key(blogID), encode(pairs));
