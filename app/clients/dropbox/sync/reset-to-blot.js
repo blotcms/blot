@@ -30,6 +30,7 @@ const retryRequest = require("../util/retryRequest");
 const loadClient = require("../util/loadClient");
 const cancelled = require("../util/cancelled");
 const hashes = require("../util/hashes");
+const localContentHash = require("../util/localContentHash");
 const createClient = async (blogID, signal) => {
   const { error, client, account } = await loadClient(blogID, { signal });
   if (error) throw error;
@@ -720,36 +721,10 @@ const excuseRecentChanges = async (client, changed, dropboxRoot, summary) => {
   }
 };
 
-// A file's hash is undefined if it can't be read, which never matches Dropbox's.
-// Hashing can mean reading the whole file, so when Dropbox's size for the file
-// is known it is compared first, from the index: files of different sizes
-// can't have the same bytes. Then the content_hash stored for the file's
-// SHA-1 (util/hashes.js) answers without reading it: Dropbox's own hash when
-// they agree, so the caller's comparison matches, and the stored prefix when
-// they don't, so it doesn't. Only a file with no stored hash is read.
-const contentHash = async (blogID, path, size, remoteHash, known) => {
-  try {
-    const stat = await storage.stat(blogID, path);
-    if (stat.isDirectory) return undefined;
-    // A placeholder's bytes aren't the file's, so they never match Dropbox's,
-    // even when the file there is now really empty too
-    if (stat.placeholder) return undefined;
-    if (typeof size === "number" && stat.size !== size) return undefined;
-
-    // From the index, unless it has no SHA-1 for the file
-    const { sha1 } = await storage.stat(blogID, path, { sha1: true });
-    const prefix = known && known.get(sha1);
-    if (prefix !== undefined) {
-      return remoteHash && remoteHash.startsWith(prefix) ? remoteHash : prefix;
-    }
-
-    const { hash } = await storage.stat(blogID, path, { hash: true });
-    if (known) known.set(sha1, hash);
-    return hash;
-  } catch (e) {
-    return undefined;
-  }
-};
+// Dropbox's content_hash of a local file, looked up by its SHA-1 in the
+// walk's stored hashes where it can be (util/localContentHash.js)
+const contentHash = (blogID, path, size, remoteHash, known) =>
+  localContentHash(blogID, path, { size, remoteHash, known });
 
 // remoteContentsPromise is the same folder's listing in Dropbox (null if it
 // is gone), for the sizes and hashes. known is the walk's util/hashes.js.
