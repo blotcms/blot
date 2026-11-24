@@ -67,12 +67,12 @@ const clfdate = require("helper/clfdate");
 const folderLock = require("sync/lock");
 const establishSyncLock = require("sync/establishSyncLock");
 const followUpSync = require("clients/util/followUpSync");
+const syncOrThrow = require("../sync/syncOrThrow");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 const createDriveClient = require("./createDriveClient");
 const createDocsClient = require("./createDocsClient");
 const database = require("../database");
 const localState = require("../util/localState");
-const sync = require("../sync");
 
 const prefix = () => `${clfdate()} Google Drive hotDocPoller:`;
 
@@ -205,7 +205,7 @@ class HotDocPoller {
     // follow-up queue (not the webhook's), so it runs once a sync already
     // running has finished, in any process.
     this.followUps = followUpSync("google-drive-hot-docs", (blogID) =>
-      sync(blogID, { rethrowLocked: true, trigger: "hotdoc" })
+      syncOrThrow(blogID, { trigger: "hotdoc" })
     );
 
     // Caps this process's concurrent docs.get calls; the per service account

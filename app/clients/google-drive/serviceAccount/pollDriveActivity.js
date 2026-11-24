@@ -1,7 +1,7 @@
 const Bottleneck = require("bottleneck");
 const database = require("clients/google-drive/database");
 const clfdate = require("helper/clfdate");
-const sync = require("clients/google-drive/sync");
+const followUps = require("clients/google-drive/sync/followUps");
 
 const prefix = () => `${clfdate()} Google Drive:`;
 
@@ -22,6 +22,16 @@ const sleep = (ms, signal) =>
 
     signal.addEventListener("abort", done, { once: true });
   });
+
+// Runs a blog's sync through the follow-up queue, logging rather than
+// rejecting if it fails: the follow-up it was armed with retries it
+async function runSync(blogID, armed, prefix) {
+  try {
+    await followUps.run(blogID, armed);
+  } catch (err) {
+    console.error(prefix(), "sync failed", err.message);
+  }
+}
 
 // Polls every blog on the service account for Drive activity until the signal
 // aborts (see init.js, which runs this under a lease so only one process polls
@@ -71,21 +81,25 @@ module.exports = async (
       }
 
       if (timestamp !== latestDriveActivityTimestamp) {
+        // The shared follow-up queue starts the sync, as it does for the
+        // change feed and the search (syncChanges.js): a blog already
+        // syncing gets one more sync once that one has finished, rather than
+        // a "Failed to acquire folder lock" here. The follow-up is armed in
+        // Redis before the timestamp is stored, so the activity can't be
+        // lost if this process dies first, and a sync that fails is retried
+        // by the follow-up, not by noticing the same activity again.
+        let armed;
         if (latestDriveActivityTimestamp) {
+          armed = await followUps.arm(blogID);
           console.log(prefix(), "starting sync");
-          let succeeded = false;
-          try {
-            succeeded = (await sync(blogID, { trigger: "activity" })) !== false;
-          } catch (e) {
-            console.error(prefix(), "sync failed", e.message);
-          }
-          // Leave the stored timestamp alone so the next poll retries.
-          if (!succeeded) return;
         }
         console.log(prefix(), "storing timestamp", timestamp);
         await database.blog.update(blogID, {
           latestDriveActivityTimestamp: timestamp,
         });
+        // Not awaited: a long sync of one blog mustn't hold up polling the
+        // others on the service account
+        if (latestDriveActivityTimestamp) runSync(blogID, armed, prefix);
       } else {
         // console.log(prefix(), "no new activity");
       }

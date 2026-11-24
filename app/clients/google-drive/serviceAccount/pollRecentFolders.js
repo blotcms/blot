@@ -26,11 +26,11 @@ const clfdate = require("helper/clfdate");
 const database = require("../database");
 const driveReaddir = require("../sync/util/driveReaddir");
 const filePrefetch = require("../util/prefetch");
+const rateLimit = require("./rateLimit");
 
 const EVERY_MS = 500;
 const LISTINGS_PER_SECOND = 16;
 const MAX_DIRS = 16;
-const RATE_LIMIT_BACKOFF_MS = 10 * 1000;
 // A listing that takes longer is cancelled and given up on for this round,
 // so one slow or hung request can't stall the poller:
 // googleapis sets no timeout, and single listings of a 100-item directory
@@ -54,9 +54,6 @@ const sleep = (ms, signal) =>
     }
     signal.addEventListener("abort", done, { once: true });
   });
-
-const statusOf = (err) =>
-  Number(err?.code || err?.status || err?.response?.status) || null;
 
 // Lists a directory through its own object in place of the client, counting
 // each files.list call (every page included, for the rate) and cancelling the
@@ -157,6 +154,7 @@ module.exports = async function pollRecentFolders(
     listingTimeoutMs = LISTING_TIMEOUT_MS,
     statsEveryMs = STATS_EVERY_MS,
     prefetch = filePrefetch,
+    backoff = rateLimit.backoff(),
   } = {}
 ) {
   if (!serviceAccountId || !drive || !onChanged) {
@@ -199,7 +197,8 @@ module.exports = async function pollRecentFolders(
     const startedAt = now();
     stats.rounds += 1;
     let dirs = [];
-    let rateLimited = false;
+    // The refusal, if a listing this round was refused as rate limited
+    let rateLimited = null;
     calls = 0;
     try {
       dirs = await database.recent.list(serviceAccountId, MAX_DIRS, now());
@@ -230,7 +229,7 @@ module.exports = async function pollRecentFolders(
             );
             return { blogID, dirId, items };
           } catch (err) {
-            if ([403, 429].includes(statusOf(err))) rateLimited = true;
+            if (rateLimit.isRateLimited(err)) rateLimited = err;
             if (err.timedOut) stats.timeouts += 1;
             else {
               // A folder gone from Drive is the other sources' to apply
@@ -281,10 +280,18 @@ module.exports = async function pollRecentFolders(
     if (now() - statsAt >= statsEveryMs) logStats();
 
     if (rateLimited) {
-      console.error(prefix(), `client_id=${serviceAccountId} rate limited`);
-      await sleep(RATE_LIMIT_BACKOFF_MS, signal);
+      const wait = backoff.next();
+      console.error(
+        prefix(),
+        `client_id=${serviceAccountId} rate limited`,
+        `reason=${rateLimit.reasonOf(rateLimited)}`,
+        `refusals=${backoff.refusals}`,
+        `waiting=${wait}ms`
+      );
+      await sleep(wait, signal);
       continue;
     }
+    backoff.reset();
 
     const round = Math.max(
       everyMs,
