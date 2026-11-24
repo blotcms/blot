@@ -14,6 +14,12 @@ saving existing entries, since images don't need
 to be reuploaded each time!
 
 
+A file in the blog's folder is looked up by the SHA-1 its folder index
+record holds, the same hash the store is keyed by, so a cached result costs
+no read of the file. Only a miss reads it, and stores the result under the
+hash of the bytes it read.
+
+
 API
 ---
 
@@ -40,7 +46,7 @@ transform again.
 It is NOT a guarantee about lookups that are in flight at the same moment.
 Note this does not happen within a single entry render: the image plugin
 looks each distinct <img> src up once (a repeated src is not looked up again)
-and at most two at a time (see build/plugins/image/index.js), so the same
+and a few at a time (see build/plugins/image/index.js), so the same
 image referenced twice in one post is never looked up concurrently. Two
 different srcs with identical bytes in one post can be, which at worst leaves
 one extra copy under _image_cache/. The race is between *independent* callers of

@@ -297,9 +297,25 @@ function Transformer(blogID, name) {
   }
 
   // A file in the blog's folder, at exactly this path
-  function fromFolder(path, transform) {
-    // The transform (sharp, ffmpeg, exiftool) may run for longer than the
-    // cache keeps a path, so the file is held until it is done
+  async function fromFolder(path, transform) {
+    // A result is stored by the SHA-1 of the file's bytes, which the folder's
+    // index already holds (the same hash ./hash.js computes), so a cached
+    // result is found without reading or downloading the file. Rejects as
+    // withLocal does for a path with no file, so the next way of finding it
+    // is tried. A directory has no SHA-1 and goes on to withLocal, which
+    // refuses it.
+    var stat = await folder.stat(blogID, path, { sha1: true });
+
+    if (!stat.isDirectory && stat.sha1) {
+      var existing = await get(stat.sha1);
+      if (existing && (await stillValid(transform, existing)))
+        return { result: existing, hash: stat.sha1 };
+    }
+
+    // A miss: the result is stored by the hash of the bytes the transform
+    // read, in case the file changed since the stat. The transform (sharp,
+    // ffmpeg, exiftool) may run for longer than the cache keeps a path, so
+    // the file is held until it is done.
     return folder.withLocal(blogID, path, function (fullLocalPath) {
       return fromPath(fullLocalPath, transform);
     });
