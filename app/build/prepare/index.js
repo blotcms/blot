@@ -48,13 +48,24 @@ var modelKeyByLower = Object.keys(Model).reduce((acc, modelKey) => {
 
 // Maps each front matter key which overwrites an entry field to that
 // field's name: { Teaser: "teaser" }. Keys are case-insensitive.
+// Front matter reads "title: 537" as the number 537, though the author meant
+// the text. Numbers stand for their text wherever a field takes a string.
+function asText(value) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? String(value)
+    : value;
+}
+
 function overrides(metadata) {
   var result = {};
 
   for (var key in metadata) {
     var canonical = modelKeyByLower[key.toLowerCase()];
 
-    if (canOverwrite(canonical) && type(metadata[key], Model[canonical]))
+    if (
+      canOverwrite(canonical) &&
+      type(asText(metadata[key]), Model[canonical])
+    )
       result[key] = canonical;
   }
 
@@ -146,7 +157,7 @@ function Prepare(entry, options = {}) {
   // We pass in the metadata title in case it exists to prevent
   // a bug which surfaces when the file contains title metadata
   var title = entry.title;
-  const metadataTitle = metadataValue("title");
+  const metadataTitle = asText(metadataValue("title"));
   if (type(metadataTitle, Model.title)) title = metadataTitle;
   // The summary is plain text, so strip the teaser marker from the parsed
   // HTML first, while we still know which text is inside code blocks.
@@ -176,7 +187,8 @@ function Prepare(entry, options = {}) {
 
   debug(entry.path, "Generating makeSlug");
   entry.slug = makeSlug(
-    metadataValue("title") || escapeAmpersands(entry.title)
+    (typeof metadataTitle === "string" && metadataTitle) ||
+      escapeAmpersands(entry.title)
   );
   debug(entry.path, "Generated  makeSlug");
 
@@ -262,7 +274,8 @@ function Prepare(entry, options = {}) {
 
   const overridden = overrides(entry.metadata);
 
-  for (var key in overridden) entry[overridden[key]] = entry.metadata[key];
+  for (var key in overridden)
+    entry[overridden[key]] = asText(entry.metadata[key]);
 
   debug(entry.path, "Generated  meta-overwrite");
 

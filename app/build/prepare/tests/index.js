@@ -27,6 +27,31 @@ describe("prepare", function () {
     expect(slugOf("<h1>Salt&Pepper</h1>")).toEqual("saltandpepper");
   });
 
+  // Front matter reads "title: 537" as a number
+  it("takes a title that is a number as its text, for the slug too", function () {
+    var entry = this.entry;
+
+    entry.html = "<p>Hey there.</p>";
+    entry.metadata = { title: 537 };
+
+    prepare(entry);
+
+    expect(entry.title).toEqual("537");
+    expect(entry.slug).toEqual("537");
+  });
+
+  it("makes the slug from the document when the title is not text", function () {
+    var entry = this.entry;
+
+    entry.html = "<h1>Hello world</h1><p>Hey there.</p>";
+    entry.metadata = { title: true };
+
+    prepare(entry);
+
+    expect(entry.title).toEqual("Hello world");
+    expect(entry.slug).toEqual("hello-world");
+  });
+
   // This was the result of a rather niche bug, caused by files like this:
   // Title:
   // Hello world!
