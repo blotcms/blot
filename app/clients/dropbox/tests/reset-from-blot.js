@@ -43,6 +43,29 @@ describe("dropbox resetFromBlot", function () {
     }
     if (originals[resetPath]) require.cache[resetPath] = originals[resetPath];
     await storage.removeAll(blogID);
+    await require("../util/hashes").drop(blogID);
+  });
+
+  it("stores Dropbox's content_hash of each file it uploads, by its SHA-1", async function () {
+    const crypto = require("crypto");
+    const contentHash = crypto.createHash("sha256").update("x").digest("hex");
+    await storage.write(blogID, "/a.txt", "hello");
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null, contentHash),
+    });
+
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
+
+    const sha1 = crypto.createHash("sha1").update("hello").digest("hex");
+    const known = await require("../util/hashes").load(blogID);
+    expect(uploadCalls.length).toEqual(1);
+    expect(known.get(sha1)).toEqual(contentHash.slice(0, 24));
   });
 
   // Mirrors the shape of an error the Dropbox SDK throws for a filesUpload
@@ -102,7 +125,9 @@ describe("dropbox resetFromBlot", function () {
       exports: function (client, source, destination) {
         uploadCalls.push(destination);
         return new Promise((resolve, reject) =>
-          uploadBehavior((err) => (err ? reject(err) : resolve()))
+          uploadBehavior((err, contentHash) =>
+            err ? reject(err) : resolve(contentHash)
+          )
         );
       },
     };

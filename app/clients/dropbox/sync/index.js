@@ -9,6 +9,8 @@ var transferIncomplete = _require.transferIncomplete;
 var Database = require("../database");
 var persistError = require("../util/persistError");
 var cancelled = require("../util/cancelled");
+var hashes = require("../util/hashes");
+var localContentHash = require("../util/localContentHash");
 var {
   SOURCES,
   classify,
@@ -317,6 +319,11 @@ async function sync(blog, folder, stampLastSync) {
 // signal (the sync's folder.signal) stops each download that hasn't started,
 // and gives up those in flight (util/download.js).
 function Apply(client, blogID, log, status, publish, signal) {
+  // The blog's stored content hashes, read once a change needs them: most
+  // changes have another size than Blot's copy, which rules them out first
+  let loading;
+  const known = () => loading || (loading = hashes.load(blogID));
+
   return async function apply(changes) {
     debug("Retrieved changes", changes);
 
@@ -453,7 +460,9 @@ function Apply(client, blogID, log, status, publish, signal) {
         var localHash = await contentHash(
           blogID,
           item.resolved_relative_path,
-          item.size
+          item.size,
+          item.content_hash,
+          known
         );
 
         if (item.content_hash && localHash && localHash === item.content_hash) {
@@ -491,7 +500,9 @@ function Apply(client, blogID, log, status, publish, signal) {
       var content_hash = await contentHash(
         blogID,
         item.resolved_relative_path,
-        item.size
+        item.size,
+        item.content_hash,
+        known
       );
 
       if (
@@ -619,22 +630,16 @@ function Apply(client, blogID, log, status, publish, signal) {
 }
 
 // The hash of the file in the folder, in the form of Dropbox's content_hash,
-// or undefined if it can't be read (it isn't there, or is a folder): either
-// way the file is downloaded. Hashing can mean reading the whole file, so when
-// Dropbox's size for the file is known it is compared first, from the index:
-// files of different sizes can't have the same bytes.
-async function contentHash(blogID, path, size) {
-  try {
-    const stat = await storage.stat(blogID, path);
-    if (stat.isDirectory) return undefined;
-    // A placeholder's bytes aren't the file's, so they never match Dropbox's,
-    // even when the file there is now really empty too
-    if (stat.placeholder) return undefined;
-    if (typeof size === "number" && stat.size !== size) return undefined;
-    return (await storage.stat(blogID, path, { hash: true })).hash;
-  } catch (err) {
-    return undefined;
-  }
+// or undefined if it can't be read: either way the file is downloaded. See
+// util/localContentHash.js. known loads the blog's stored hashes, once a
+// sync needs them; a hash worked out here is appended to them.
+function contentHash(blogID, path, size, remoteHash, known) {
+  return localContentHash(blogID, path, {
+    size,
+    remoteHash,
+    known,
+    append: true,
+  });
 }
 
 // Sets item.resolved_relative_path to the item's path in the blog's folder,
