@@ -68,7 +68,9 @@ describe("git client: a failed setup", function () {
   }
 
   it("shows why it failed on the create page, once the setup has ended", async function () {
-    spyOn(database, "createToken").and.rejectWith(new Error("Redis went away"));
+    spyOn(database, "createToken").and.callFake(async function () {
+      throw new Error("Redis went away");
+    });
 
     expect(await setupError(this.blog)).toEqual(jasmine.any(Error));
 
@@ -83,7 +85,9 @@ describe("git client: a failed setup", function () {
   });
 
   it("sends a status, so a page showing the setup reloads", async function () {
-    spyOn(database, "createToken").and.rejectWith(new Error("Redis went away"));
+    spyOn(database, "createToken").and.callFake(async function () {
+      throw new Error("Redis went away");
+    });
 
     await setupError(this.blog);
 
@@ -140,9 +144,9 @@ describe("git client: a failed setup", function () {
   });
 
   it("records nothing for a setup a disconnect stopped", async function () {
-    spyOn(database, "createToken").and.rejectWith(
-      Object.assign(new Error("Cancelled"), { code: "ECANCELED" })
-    );
+    spyOn(database, "createToken").and.callFake(async function () {
+      throw Object.assign(new Error("Cancelled"), { code: "ECANCELED" });
+    });
 
     expect(await setupError(this.blog)).toEqual(jasmine.any(Error));
 
