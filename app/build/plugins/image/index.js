@@ -7,9 +7,30 @@ var { report } = require("build/flags");
 var assets = require("storage/assets");
 var config = require("config");
 
-// Images looked up at once for one entry. Each lookup is a sandbox job (a
-// fresh jail, ~70ms before any work), so two at a time overlap their start-up.
-var CONCURRENCY = 2;
+// Images looked up at once for one entry. A lookup whose result is cached
+// costs a few Redis reads, so several overlap. One that isn't runs a sandbox
+// job (a fresh jail, ~70ms before any work) through the broker, which runs
+// two image decodes a unit at once and refuses jobs once its queue is full,
+// so an entry still transforms only TRANSFORMS at a time.
+var CONCURRENCY = 8;
+var TRANSFORMS = 2;
+
+// Runs fn with at most `limit` calls of one limiter in flight
+function limiter(limit) {
+  var running = 0;
+  var waiting = [];
+
+  return async function (fn) {
+    if (running >= limit) await new Promise((resolve) => waiting.push(resolve));
+    running++;
+    try {
+      return await fn();
+    } finally {
+      running--;
+      if (waiting.length) waiting.shift()();
+    }
+  };
+}
 
 // What went wrong fetching a remote image. The downloader's error for an
 // HTTP failure is just the status, e.g. "404".
@@ -67,7 +88,7 @@ async function render($, { blogID, seedThumbnail }) {
 
     if (!relativePath) return true;
 
-    return assets.exists(blogID, relativePath);
+    return assets.existsRecently(blogID, relativePath);
   }
 
   // First collect each <img> with a cacheable src. The same src is looked up
@@ -111,6 +132,7 @@ async function render($, { blogID, seedThumbnail }) {
 
   // Keyed by src, which is any string, so no inherited keys (e.g. "constructor")
   var infos = Object.create(null);
+  var transforming = limiter(TRANSFORMS);
 
   // Looks up one src. A failed lookup is logged and the image left alone.
   async function lookupSrc(src) {
@@ -125,7 +147,7 @@ async function render($, { blogID, seedThumbnail }) {
         src,
         async function () {
           try {
-            return await transform.apply(this, arguments);
+            return await transforming(() => transform.apply(this, arguments));
           } catch (err) {
             if (err && typeof err === "object") err.fromTransform = true;
             throw err;

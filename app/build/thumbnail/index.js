@@ -43,7 +43,7 @@ async function thumbnail(blog, path, metadata, html) {
 
     if (!first || !result[first] || !result[first].path) return true;
 
-    return assets.exists(blog.id, result[first].path);
+    return assets.existsRecently(blog.id, result[first].path);
   }
 
   // The first candidate which produces thumbnails wins
