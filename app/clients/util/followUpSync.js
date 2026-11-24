@@ -46,8 +46,11 @@ function isLocked(err) {
 //   const followUps = followUpSync("dropbox", (blogID) => syncBlog(blogID));
 //   await followUps.run(blogID);
 //
-// syncBlog(blogID) must return a promise which rejects with sync's "Failed
-// to acquire folder lock" error when the blog's folder is locked. Every
+// syncBlog(blogID, context) must return a promise which rejects with sync's
+// "Failed to acquire folder lock" error when the blog's folder is locked.
+// context is what the caller passed run() (what started the sync, say, for
+// the client's log), for the sync run() starts straight away; a follow-up
+// run later has none. Every
 // instance polls once startAll() is called, which setup does in every
 // process.
 function followUpSync(name, syncBlog) {
@@ -133,9 +136,11 @@ function followUpSync(name, syncBlog) {
   // (a follow-up is queued) and "failed" if it threw anything else. The
   // follow-up alarm retries a failed sync (retry); a sync that runs clears
   // the count of failures.
-  async function attempt(blogID) {
+  async function attempt(blogID, context) {
     try {
-      await syncBlog(blogID);
+      // Called as before when there's no context
+      if (context === undefined) await syncBlog(blogID);
+      else await syncBlog(blogID, context);
       await client
         .del(failuresKey(blogID))
         .catch((err) => log("Could not clear failures", blogID, err));
@@ -176,7 +181,8 @@ function followUpSync(name, syncBlog) {
   //
   // If the change was armed, its token is passed too, and once the sync has
   // run the follow-up is taken back, unless another has been written since.
-  async function run(blogID, armed, repeats = 0) {
+  // context goes to syncBlog for this sync only.
+  async function run(blogID, armed, context, repeats = 0) {
     const { held } = await folderLock.inspect(blogID);
 
     if (held) {
@@ -184,7 +190,7 @@ function followUpSync(name, syncBlog) {
       return queue(blogID);
     }
 
-    const result = await attempt(blogID);
+    const result = await attempt(blogID, context);
 
     if (result !== "synced") return;
 
@@ -226,7 +232,7 @@ function followUpSync(name, syncBlog) {
     }
 
     log("Changes arrived during the sync, syncing again", blogID);
-    return run(blogID, due, repeats + 1);
+    return run(blogID, due, undefined, repeats + 1);
   }
 
   // For the clients' test-only syncs-finished routes: whether a follow-up is
