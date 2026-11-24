@@ -46,8 +46,6 @@ var modelKeyByLower = Object.keys(Model).reduce((acc, modelKey) => {
   return acc;
 }, {});
 
-// Maps each front matter key which overwrites an entry field to that
-// field's name: { Teaser: "teaser" }. Keys are case-insensitive.
 // Front matter reads "title: 537" as the number 537, though the author meant
 // the text. Numbers stand for their text wherever a field takes a string.
 function asText(value) {
@@ -56,6 +54,8 @@ function asText(value) {
     : value;
 }
 
+// Maps each front matter key which overwrites an entry field to that
+// field's name: { Teaser: "teaser" }. Keys are case-insensitive.
 function overrides(metadata) {
   var result = {};
 
