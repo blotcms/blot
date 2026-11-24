@@ -70,9 +70,15 @@ const FS_WATCH_SETTLE_DELAY_MS = 300;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Whether the path names the file with the case it has on disk: a case-only
+// rename is a removal of the old name. Both sides are compared in NFC, as
+// APFS treats "å" precomposed and decomposed as one name: Blot writes NFC
+// (a draft's preview), an owner's device may write NFD, and iCloud can swap
+// one for the other, so a byte comparison took a file that was still there
+// for a rename and sent Blot a delete.
 async function exactCaseViaRealpath(p) {
   const resolved = await realpath(p);
-  return resolved === path.resolve(p);
+  return resolved.normalize("NFC") === path.resolve(p).normalize("NFC");
 }
 
 // Walks a blog folder (or one directory in it) depth first with readdir and
