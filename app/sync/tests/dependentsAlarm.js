@@ -81,6 +81,19 @@ describe("sync dependents alarm", function () {
     expect(await client.zScore(DUE, this.blog.id)).toBe(null);
   });
 
+  it("stays set while a sync holds the lock, even with nothing pending yet", async function () {
+    const { done } = await sync.establishSyncLock(this.blog.id);
+
+    try {
+      await dependentsAlarm.run(this.blog.id);
+      expect(await client.zScore(DUE, this.blog.id)).toBeGreaterThan(
+        Date.now()
+      );
+    } finally {
+      await done();
+    }
+  });
+
   it("looks again later while the folder is locked", async function () {
     await client.sAdd(dependents.pendingKey(this.blog.id), imagePath);
     const { done } = await sync.establishSyncLock(this.blog.id);

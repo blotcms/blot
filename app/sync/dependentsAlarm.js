@@ -44,23 +44,32 @@ async function arm(blogID, delay = DELAY_MS) {
   }
 }
 
+// For run(): sets the alarm being handled again. Rejects if Redis can't take
+// it, so the alarm keeps its claim and comes due again once the lease runs
+// out, rather than being completed with the work still pending.
+async function later(blogID, delay = RETRY_MS) {
+  await alarms.set(blogID, Date.now() + delay);
+}
+
 // Rebuilds what is pending for the blog under its folder lock. Resolves
 // either way; rejects only if Redis is unavailable, so the alarm retries.
 async function run(blogID) {
   // Required when used: sync/index requires the update chain
   const sync = require("./index");
 
-  if (!(await client.sCard(dependents.pendingKey(blogID)))) return;
+  // Checked first: the sync which holds the lock may record more work after
+  // this, and it sets the alarm only once, so keep it set while that sync
+  // runs. The sync rebuilds them when it ends; look again after.
+  if ((await folderLock.inspect(blogID)).held) return later(blogID);
 
-  // The sync which holds it rebuilds them when it ends; look again after
-  if ((await folderLock.inspect(blogID)).held) return arm(blogID, RETRY_MS);
+  if (!(await client.sCard(dependents.pendingKey(blogID)))) return;
 
   try {
     // The sync's end does the rebuild (sync/index.js done)
     await sync(blogID, async () => {});
   } catch (err) {
     if (err && err.message === "Failed to acquire folder lock")
-      return arm(blogID, RETRY_MS);
+      return later(blogID);
 
     // Also what a failed read of the blog gives, so look again unless the
     // blog really is deleted or disabled: then its keys go with it, or stay
@@ -71,7 +80,7 @@ async function run(blogID) {
 
       if (blog && blog.id && !blog.isDisabled) {
         log(blogID, "could not start, will retry", err.message);
-        return arm(blogID, RETRY_MS);
+        return later(blogID);
       }
 
       log(blogID, "not rebuilding, the blog cannot be synced");
@@ -81,14 +90,14 @@ async function run(blogID) {
     if (isRedisUnavailableError(err)) throw err;
 
     log(blogID, "failed, will look again", err.message);
-    return arm(blogID, RETRY_MS);
+    return later(blogID);
   }
 
   // The drain never rejects: one cut short (a Redis error, a disconnect's
   // seize) leaves paths pending, so come back for them
   if (await client.sCard(dependents.pendingKey(blogID))) {
     log(blogID, "work left after the rebuild, will look again");
-    return arm(blogID);
+    return later(blogID, DELAY_MS);
   }
 }
 
