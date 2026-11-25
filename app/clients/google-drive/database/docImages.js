@@ -32,19 +32,19 @@ async function set(blogID, fileId, record) {
 
 // After the post for { revision, path } was built
 async function setBuilt(blogID, fileId, built) {
-  if (!built || !built.revision || !built.path) return;
+  if (!built || !built.revision || !built.path || !built.sha1) return;
   const record = await get(blogID, fileId);
   await set(blogID, fileId, { ...record, built });
 }
 
-// The revision built at this path, if any
-async function builtRevision(blogID, fileId, path) {
+// What was built at this path ({ revision, path, sha1 }), if anything
+async function getBuilt(blogID, fileId, path) {
   const { built } = await get(blogID, fileId);
-  return built && built.path === path ? built.revision : null;
+  return built && built.path === path ? built : null;
 }
 
 async function drop(blogID) {
   await client.del(key(blogID));
 }
 
-module.exports = { get, set, setBuilt, builtRevision, drop, key };
+module.exports = { get, set, setBuilt, getBuilt, drop, key };

@@ -38,12 +38,17 @@ describe("google drive fetchDoc", function () {
       "../database/docImages": {
         get: async (blogID, id) => state.records.get(id) || {},
         set: async (blogID, id, record) => state.records.set(id, record),
-        builtRevision: async (blogID, id, path) => {
+        getBuilt: async (blogID, id, path) => {
           const { built } = state.records.get(id) || {};
-          return built && built.path === path ? built.revision : null;
+          return built && built.path === path ? built : null;
         },
       },
       "../serviceAccount/createDocsClient": async () => ({}),
+      // The file's "SHA-1" is its text, so a changed file never matches
+      "./localState": {
+        stateOf: async (blogID, path) =>
+          state.files.has(path) ? { sha1: String(state.files.get(path)) } : {},
+      },
     };
     const module = { exports: {} };
     vm.runInNewContext(fs.readFileSync(file, "utf8"), {
@@ -195,13 +200,25 @@ describe("google drive fetchDoc", function () {
     expect(h.folderWrites).toBe(2);
 
     // Built (what the poller and the walk record afterwards): skipped
-    h.records.set("doc", {
-      ...h.records.get("doc"),
-      built: { revision: "r1", path: "/post.gdoc" },
-    });
+    const built = () =>
+      h.records.set("doc", {
+        ...h.records.get("doc"),
+        built: {
+          revision: "r1",
+          path: "/post.gdoc",
+          sha1: String(h.files.get("/post.gdoc")),
+        },
+      });
+    built();
     expect(await h.fetch()).toEqual({ updated: false });
     expect(h.folderWrites).toBe(2);
     expect(h.fetched.length).toBe(1);
+
+    // The file Blot holds was replaced since (an upload): written again
+    h.files.set("/post.gdoc", "something else");
+    expect((await h.fetch()).updated).toBe(true);
+    expect(h.folderWrites).toBe(3);
+    built();
 
     // At another path, or another revision: written
     expect((await h.fetch("/renamed.gdoc")).updated).toBe(true);

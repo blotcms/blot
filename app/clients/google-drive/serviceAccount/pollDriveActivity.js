@@ -20,6 +20,10 @@ const editedDocs = (activity) =>
 const prefix = () => `${clfdate()} Google Drive:`;
 
 const POLL_EVERY_MS = 5000;
+// Activities read per poll of a blog: more than a blog sees in 5s. Beyond
+// that the full sync started on any new activity still catches the rest,
+// once Drive's modifiedTime moves.
+const ACTIVITY_PAGE = 50;
 
 // Resolves after ms, or as soon as the signal aborts
 const sleep = (ms, signal) =>
@@ -78,10 +82,16 @@ module.exports = async (
 
       // console.log(prefix(), "fetching");
 
+      // Every activity since the one stored (newest first), so two Docs
+      // edited between polls are both watched; the first time, just the
+      // latest, to store its timestamp
       const res = await driveactivity.activity.query({
         requestBody: {
-          pageSize: 1,
+          pageSize: latestDriveActivityTimestamp ? ACTIVITY_PAGE : 1,
           ancestorName: `items/${folderId}`,
+          ...(latestDriveActivityTimestamp && {
+            filter: `time > "${latestDriveActivityTimestamp}"`,
+          }),
         },
       });
 
@@ -117,8 +127,9 @@ module.exports = async (
 
         // An edited Doc is polled from now, and its first poll publishes the
         // edit: the sync above can't, until Drive's modifiedTime moves
+        const edited = new Set(activities.flatMap(editedDocs));
         if (latestDriveActivityTimestamp)
-          for (const fileId of editedDocs(activity))
+          for (const fileId of edited)
             await hotDocPoller
               .enqueue({
                 blogID,

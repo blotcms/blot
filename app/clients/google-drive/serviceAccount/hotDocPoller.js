@@ -80,7 +80,7 @@ const createDriveClient = require("./createDriveClient");
 const createDocsClient = require("./createDocsClient");
 const database = require("../database");
 const localState = require("../util/localState");
-const docImages = require("../database/docImages");
+const { isBuilt, markBuilt } = require("../util/fetchDoc");
 
 const prefix = () => `${clfdate()} Google Drive hotDocPoller:`;
 
@@ -766,8 +766,7 @@ class HotDocPoller {
     // first, or an unseen enqueue's first poll found nothing new. Recorded
     // only for the Docs API's JSON and only after the build, so a zip export
     // or a write whose build never finished always goes on.
-    if (item.revision && (await this.storedRevision(item)) === item.revision)
-      return "unchanged";
+    if (item.revision && (await this.isBuilt(item))) return "unchanged";
 
     // Skip establishSyncLock's own retries (over 5s) when the lock is
     // visibly held: the next poll, 500ms on, is sooner
@@ -826,13 +825,13 @@ class HotDocPoller {
     return "full-sync";
   }
 
-  async storedRevision(item) {
+  async isBuilt(item) {
     const path = await database
       .folder(item.folderId, item.blogID)
       .get(item.fileId);
-    return path
-      ? docImages.builtRevision(item.blogID, item.fileId, path)
-      : null;
+    return Boolean(
+      path && (await isBuilt(item.blogID, item.fileId, path, item.revision))
+    );
   }
 
   // Whether another sync holds the blog's folder lock
@@ -992,18 +991,16 @@ class HotDocPoller {
 
     const downloadedAt = Date.now();
     if (result?.updated) {
-      await folder.update(path, {
+      const built = await folder.update(path, {
         modified: modifiedTime,
         since: "drive-modified",
         seenAt: item.detectedAt,
         seenBy: "hotdoc",
         downloadedAt,
       });
-      // Built: a fetch of this revision can now skip the write
-      await docImages.setBuilt(item.blogID, id, {
-        revision: result.revision,
-        path,
-      });
+      // Built without an error: a fetch of this revision can skip the write
+      if (!built?.error)
+        await markBuilt(item.blogID, id, path, result.revision);
     }
 
     await folderDb.setApplied(id, {

@@ -427,7 +427,7 @@ describe("google drive hotDocPoller", function () {
     };
 
     it("does nothing at all when Blot already holds this revision", async function () {
-      spyOn(poller, "storedRevision").and.returnValue(Promise.resolve("rev-9"));
+      spyOn(poller, "isBuilt").and.returnValue(Promise.resolve(true));
 
       expect(await poller.applyChange({ ...item, revision: "rev-9" })).toEqual(
         "unchanged"

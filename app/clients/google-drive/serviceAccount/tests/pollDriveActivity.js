@@ -123,6 +123,63 @@ describe("google drive pollDriveActivity", function () {
       expect(await round("t1", "t1")).toEqual([]);
     });
 
+    it("watches every Doc edited since the stored activity, not just the latest", async function () {
+      const hotDocPoller = require("../hotDocPoller");
+      spyOn(hotDocPoller, "enqueue").and.returnValue(Promise.resolve());
+      const edit = (id, timestamp) => ({
+        timestamp,
+        primaryActionDetail: { edit: {} },
+        targets: [
+          {
+            driveItem: {
+              name: "items/" + id,
+              mimeType: "application/vnd.google-apps.document",
+            },
+          },
+        ],
+      });
+      let requestBody;
+      order = [];
+      const controller = new AbortController();
+      database.blog.iterateByServiceAccountId.and.callFake(
+        async (sa, callback) => {
+          await callback("blog_a", {
+            folderId: "folder",
+            latestDriveActivityTimestamp: "t1",
+          });
+          controller.abort();
+        }
+      );
+      spyOn(database.blog, "update").and.returnValue(Promise.resolve());
+      spyOn(followUps, "arm").and.returnValue(Promise.resolve(1));
+      spyOn(followUps, "run").and.returnValue(Promise.resolve());
+
+      await pollDriveActivity(
+        "test-sa",
+        {
+          activity: {
+            query: async (args) => {
+              requestBody = args.requestBody;
+              return {
+                data: {
+                  activities: [edit("doc-2", "t3"), edit("doc-1", "t2")],
+                },
+              };
+            },
+          },
+        },
+        controller.signal
+      );
+
+      expect(requestBody.filter).toEqual('time > "t1"');
+      expect(
+        hotDocPoller.enqueue.calls.allArgs().map(([each]) => each.fileId)
+      ).toEqual(["doc-2", "doc-1"]);
+      expect(database.blog.update).toHaveBeenCalledWith("blog_a", {
+        latestDriveActivityTimestamp: "t3",
+      });
+    });
+
     it("watches a Google Doc the activity edited, as a change not yet seen", async function () {
       const hotDocPoller = require("../hotDocPoller");
       spyOn(hotDocPoller, "enqueue").and.returnValue(Promise.resolve());
