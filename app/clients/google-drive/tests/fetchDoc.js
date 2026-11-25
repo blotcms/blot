@@ -38,6 +38,10 @@ describe("google drive fetchDoc", function () {
       "../database/docImages": {
         get: async (blogID, id) => state.records.get(id) || {},
         set: async (blogID, id, record) => state.records.set(id, record),
+        builtRevision: async (blogID, id, path) => {
+          const { built } = state.records.get(id) || {};
+          return built && built.path === path ? built.revision : null;
+        },
       },
       "../serviceAccount/createDocsClient": async () => ({}),
     };
@@ -124,7 +128,7 @@ describe("google drive fetchDoc", function () {
     const h = harness();
     h.doc = doc("Hello");
 
-    expect(await h.fetch()).toEqual({ updated: true });
+    expect((await h.fetch()).updated).toBe(true);
 
     const stored = JSON.parse(h.files.get("/post.gdoc"));
     const image =
@@ -180,19 +184,29 @@ describe("google drive fetchDoc", function () {
     expect(h.fetched.length).toBe(2);
   });
 
-  it("writes nothing when Blot already holds this revision", async function () {
+  it("writes nothing when the post is already built at this revision", async function () {
     const h = harness();
     h.doc = { ...doc("Hello"), revisionId: "r1" };
     await h.fetch();
     expect(h.folderWrites).toBe(1);
 
+    // Written but never built (a deploy between the two): written again
+    expect(await h.fetch()).toEqual({ updated: true, revision: "r1" });
+    expect(h.folderWrites).toBe(2);
+
+    // Built (what the poller and the walk record afterwards): skipped
+    h.records.set("doc", {
+      ...h.records.get("doc"),
+      built: { revision: "r1", path: "/post.gdoc" },
+    });
     expect(await h.fetch()).toEqual({ updated: false });
-    expect(h.folderWrites).toBe(1);
+    expect(h.folderWrites).toBe(2);
     expect(h.fetched.length).toBe(1);
 
+    // At another path, or another revision: written
+    expect((await h.fetch("/renamed.gdoc")).updated).toBe(true);
     h.doc = { ...doc("Hello again"), revisionId: "r2" };
-    expect(await h.fetch()).toEqual({ updated: true });
-    expect(h.folderWrites).toBe(2);
+    expect((await h.fetch()).updated).toBe(true);
   });
 
   it("leaves a Doc with a drawing to the zip export", async function () {

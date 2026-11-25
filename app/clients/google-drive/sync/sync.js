@@ -12,6 +12,7 @@ const {
 const download = require("../util/download");
 const prefetch = require("../util/prefetch");
 const localState = require("../util/localState");
+const docImages = require("../database/docImages");
 const hashes = require("../util/hashes");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
@@ -765,6 +766,12 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                   seenBy: sighting?.source,
                   downloadedAt: result?.downloadedAt || outcome.downloadedAt,
                 });
+                // The post is built at this Doc revision (Docs API only)
+                if (result?.revision)
+                  await docImages.setBuilt(blogID, id, {
+                    revision: result.revision,
+                    path,
+                  });
               }
               const verified = !isGoogleAppFile && result?.verifiedContent;
               if (verified) known.set(verified.sha1, verified.checksum);

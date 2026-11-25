@@ -37,9 +37,9 @@
  * stretched by the same factor (intervalFor), so they share the budget in
  * proportion to their tier rather than piling up on the slot.
  *
- * On a change: nothing is done if Blot already holds that revision (the
- * Docs API's JSON records it, util/fetchDoc.js), which a sync may have
- * written first. Otherwise the Doc alone is exported and published under the blog's
+ * On a change: nothing is done if the post is already built at that
+ * revision (database/docImages.js, recorded after the build; Docs API only),
+ * which a sync may have done first. Otherwise the Doc alone is exported and published under the blog's
  * folder lock (applyChange), which takes about as long as the export, rather
  * than walking the whole folder (about 10.5s on a 3,000-file blog). That is
  * only done when the Doc is certainly at the path a walk of the folder would
@@ -80,7 +80,7 @@ const createDriveClient = require("./createDriveClient");
 const createDocsClient = require("./createDocsClient");
 const database = require("../database");
 const localState = require("../util/localState");
-const { storedRevision } = require("../util/fetchDoc");
+const docImages = require("../database/docImages");
 
 const prefix = () => `${clfdate()} Google Drive hotDocPoller:`;
 
@@ -762,9 +762,10 @@ class HotDocPoller {
   //   "unchanged"  Blot already holds this revision
   // A failed export or Drive call rejects, and the poll retries it.
   async applyChange(item) {
-    // Blot already holds this revision: a sync published it first, or an
-    // unseen enqueue's first poll found nothing new. Only the Docs API's JSON
-    // records its revision; a zip export always goes on.
+    // The post is already built at this revision: a sync published it
+    // first, or an unseen enqueue's first poll found nothing new. Recorded
+    // only for the Docs API's JSON and only after the build, so a zip export
+    // or a write whose build never finished always goes on.
     if (item.revision && (await this.storedRevision(item)) === item.revision)
       return "unchanged";
 
@@ -829,7 +830,9 @@ class HotDocPoller {
     const path = await database
       .folder(item.folderId, item.blogID)
       .get(item.fileId);
-    return path ? storedRevision(item.blogID, path) : null;
+    return path
+      ? docImages.builtRevision(item.blogID, item.fileId, path)
+      : null;
   }
 
   // Whether another sync holds the blog's folder lock
@@ -995,6 +998,11 @@ class HotDocPoller {
         seenAt: item.detectedAt,
         seenBy: "hotdoc",
         downloadedAt,
+      });
+      // Built: a fetch of this revision can now skip the write
+      await docImages.setBuilt(item.blogID, id, {
+        revision: result.revision,
+        path,
       });
     }
 

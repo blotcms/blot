@@ -348,6 +348,8 @@ describe("google drive hotDocPoller", function () {
 
     beforeEach(async function () {
       poller.applyChange.and.callThrough();
+      // planSingleDoc's checks are reused for 30s, across specs too
+      poller.plans.clear();
 
       const folderDb = database.folder(folderId, blogID);
       await folderDb.set(folderId, "/", { isDirectory: true });

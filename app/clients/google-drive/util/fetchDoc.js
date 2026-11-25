@@ -12,7 +12,8 @@
 // bytes and written to the Doc's _assets directory, several at a time. Images
 // the Doc no longer uses are deleted.
 //
-// Resolves to { updated: true }, or to null when the Doc holds something the
+// Resolves to { updated: true, revision }, { updated: false } when the post
+// is already built at this revision, or to null when the Doc holds something the
 // Docs API can't give (a drawing, a positioned image, an equation), for the
 // caller to use the zip export instead.
 const crypto = require("crypto");
@@ -171,25 +172,24 @@ module.exports = async function fetchDoc(
 
   const assetDir = "_assets/" + hash(path);
 
-  // Already published at this revision (the hot doc poller got here first,
-  // and the walk runs once Drive's modifiedTime catches up): nothing to
-  // write, so nothing to rebuild
+  // Already built into the post at this revision (the hot doc poller got
+  // here first, or this is the walk that runs once Drive's modifiedTime
+  // catches up): nothing to write, so nothing to rebuild
   if (
     data.revisionId &&
-    (await storedRevision(blogID, path)) === data.revisionId
+    (await docImages.builtRevision(blogID, id, path)) === data.revisionId &&
+    (await folder.exists(blogID, path))
   ) {
-    const record = await docImages.get(blogID, id);
-    if (record.dir === assetDir || !Object.keys(record.images || {}).length) {
-      console.log(
-        clfdate(),
-        "Google Drive: Doc unchanged",
-        blogID,
-        path,
-        `fetch_ms=${fetched - started}`
-      );
-      return { updated: false };
-    }
+    console.log(
+      clfdate(),
+      "Google Drive: Doc unchanged",
+      blogID,
+      path,
+      `fetch_ms=${fetched - started}`
+    );
+    return { updated: false };
   }
+
   // Trusted only for the same directory, and while the Doc's file is still
   // in the folder: a rename moves the Doc to another directory, and a Doc
   // removed (and its images with it, sync/update/removeConvertedAssets) then
@@ -283,21 +283,10 @@ module.exports = async function fetchDoc(
     `bytes=${stored.length}`
   );
 
-  return { updated: true };
+  // The caller records it with docImages.setBuilt once the post is built
+  return { updated: true, revision: data.revisionId || null };
 };
 
-// The revisionId in the Doc's JSON as Blot holds it, if it holds JSON
-async function storedRevision(blogID, path) {
-  try {
-    const text = (await folder.read(blogID, path)).toString("utf8");
-    if (!text.startsWith("{")) return null;
-    return JSON.parse(text).revisionId || null;
-  } catch (err) {
-    return null;
-  }
-}
-
-module.exports.storedRevision = storedRevision;
 module.exports.unsupported = unsupported;
 module.exports.objectKey = objectKey;
 module.exports.trim = trim;
