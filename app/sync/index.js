@@ -294,6 +294,8 @@ async function acquire(blogID) {
   // Writes like any of the sync's, so they are refused once the signal has
   // aborted, and it stops between entries then. Never rejects.
   async function drainDependents() {
+    const drainStartedAt = Date.now();
+
     try {
       const rebuilt = await guard.run(blogID, signal, () =>
         dependents.drain(blogID, {
@@ -306,7 +308,12 @@ async function acquire(blogID) {
 
       if (rebuilt) {
         changes = true;
-        log("Rebuilt " + rebuilt + " dependent entries");
+        log(
+          "Rebuilt " +
+            rebuilt +
+            " dependent entries ms=" +
+            (Date.now() - drainStartedAt)
+        );
       }
     } catch (err) {
       log("Error rebuilding dependent entries", err.message);
