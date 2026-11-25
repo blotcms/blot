@@ -142,7 +142,8 @@ function readMetadata(content) {
     const named =
       (content[j].paragraph.paragraphStyle || {}).namedStyleType ||
       "NORMAL_TEXT";
-    if (named === "NORMAL_TEXT") paragraphs.push(j);
+    if (named === "NORMAL_TEXT" && !content[j].paragraph.bullet)
+      paragraphs.push(j);
   }
 
   let fenced = false;
@@ -213,41 +214,108 @@ function renderContent(content, tab, context) {
     list = null;
   };
 
-  for (const el of content) {
-    if (el.blotMetadata) continue;
+  const flushMono = () => {
+    if (mono)
+      html += `<pre><code>${escape(mono.join("\n").split(LINE_BREAK).join("\n"))}</code></pre>\n`;
+    mono = null;
+  };
+  const codeHtml = (lines) =>
+    `<pre><code>${escape(lines.join("\n").split(LINE_BREAK).join("\n"))}</code></pre>\n`;
+
+  // Code blocks: the paragraphs from one carrying the mark to the next. A
+  // mark with no partner (a line copied out of a block) is just dropped.
+  const marks = content
+    .map((el, i) =>
+      el.paragraph && paragraphText(el.paragraph).includes(CODE_BLOCK_MARK)
+        ? i
+        : -1
+    )
+    .filter((i) => i !== -1);
+  const opens = new Set();
+  const closes = new Set();
+  const single = new Set();
+  for (let k = 0; k < marks.length; k++) {
+    const text = paragraphText(content[marks[k]].paragraph);
+    if (text.split(CODE_BLOCK_MARK).length > 2) single.add(marks[k]);
+    else if (k + 1 < marks.length && !single.has(marks[k + 1])) {
+      const next = paragraphText(content[marks[k + 1]].paragraph);
+      if (next.split(CODE_BLOCK_MARK).length > 2) continue;
+      opens.add(marks[k]);
+      closes.add(marks[k + 1]);
+      k++;
+    }
+  }
+  const stripMark = (text) => text.split(CODE_BLOCK_MARK).join("");
+
+  // A tab written wholly in a typewriter font is writing, not code
+  const paragraphs = content.filter(
+    (el) => el.paragraph && !el.blotMetadata && !isEmptyParagraph(el.paragraph)
+  );
+  const allMono =
+    paragraphs.length > 1 &&
+    paragraphs.every((el) => isMonospace(el.paragraph));
+
+  content.forEach((el, index) => {
+    if (el.blotMetadata) return;
 
     const p = el.paragraph;
+    const style = (p && p.paragraphStyle) || {};
+    const named = style.namedStyleType || "NORMAL_TEXT";
+    const heading =
+      named === "TITLE"
+        ? 1
+        : named === "SUBTITLE"
+          ? 2
+          : (named.match(/^HEADING_(\d)$/) || [])[1];
 
-    // Code blocks: from a line starting with the mark to the next one
-    if (p && paragraphText(p).includes(CODE_BLOCK_MARK)) {
-      const text = paragraphText(p).replace(
-        new RegExp(CODE_BLOCK_MARK, "g"),
-        ""
-      );
-      if (!code) {
-        flushLines();
-        flushList();
-        code = [];
-        if (text) code.push(text);
-      } else {
-        if (text) code.push(text);
-        html += `<pre><code>${escape(code.join("\n").split(LINE_BREAK).join("\n"))}</code></pre>\n`;
-        code = null;
-      }
+    const monoLine =
+      !allMono &&
+      !code &&
+      p &&
+      !p.bullet &&
+      !heading &&
+      !opens.has(index) &&
+      !single.has(index) &&
+      isMonospace(p);
+    if (!monoLine) flushMono();
+
+    if (single.has(index)) {
+      flushLines();
+      flushList();
+      html += codeHtml([stripMark(paragraphText(p))]);
       previous = null;
-      continue;
+      return;
+    }
+    if (opens.has(index)) {
+      flushLines();
+      flushList();
+      const text = stripMark(paragraphText(p));
+      code = text ? [text] : [];
+      previous = null;
+      return;
+    }
+    if (closes.has(index)) {
+      const text = stripMark(paragraphText(p));
+      if (text) code.push(text);
+      html += codeHtml(code);
+      code = null;
+      previous = null;
+      return;
     }
     if (code) {
-      if (p) code.push(paragraphText(p));
-      continue;
+      if (p) code.push(stripMark(paragraphText(p)));
+      return;
     }
+    renderElement(el, p, style, heading, monoLine);
+  });
 
+  function renderElement(el, p, style, heading, monoLine) {
     if (el.table) {
       flushLines();
       flushList();
       html += renderTable(el.table, tab, context);
       previous = null;
-      continue;
+      return;
     }
 
     if (el.tableOfContents) {
@@ -255,13 +323,10 @@ function renderContent(content, tab, context) {
       flushList();
       html += renderContent(el.tableOfContents.content || [], tab, context);
       previous = null;
-      continue;
+      return;
     }
 
-    if (!p) continue;
-
-    const style = p.paragraphStyle || {};
-    const named = style.namedStyleType || "NORMAL_TEXT";
+    if (!p) return;
 
     // Consecutive list items make one tree, even across list ids: Docs
     // imported from Word give each nesting level its own list
@@ -276,16 +341,10 @@ function renderContent(content, tab, context) {
       if (top && !list.rootId) list.rootId = p.bullet.listId;
       list.items.push(p);
       previous = null;
-      continue;
+      return;
     }
     flushList();
 
-    const heading =
-      named === "TITLE"
-        ? 1
-        : named === "SUBTITLE"
-          ? 2
-          : (named.match(/^HEADING_(\d)$/) || [])[1];
     if (heading) {
       flushLines();
       const inner = renderInline(p, tab, context);
@@ -294,33 +353,23 @@ function renderContent(content, tab, context) {
         html += `<h${heading}${slug ? ` id="${slug}"` : ""}>${inner}</h${heading}>\n`;
       }
       previous = null;
-      continue;
+      return;
     }
 
     // A paragraph wholly in a monospace font is a line of code, and
-    // consecutive ones a code block
-    if (isMonospace(p)) {
+    // consecutive ones a code block (flushed by the next other element)
+    if (monoLine) {
       flushLines();
       mono = mono || [];
       mono.push(paragraphText(p));
-      const next = content[content.indexOf(el) + 1];
-      if (
-        !next ||
-        !next.paragraph ||
-        !isMonospace(next.paragraph) ||
-        next.paragraph.bullet
-      ) {
-        html += `<pre><code>${escape(mono.join("\n").split(LINE_BREAK).join("\n"))}</code></pre>\n`;
-        mono = null;
-      }
       previous = null;
-      continue;
+      return;
     }
 
     if (isEmptyParagraph(p)) {
       flushLines();
       previous = null;
-      continue;
+      return;
     }
 
     // Alone on its line: a rule, not text
@@ -333,7 +382,7 @@ function renderContent(content, tab, context) {
       flushLines();
       html += "<hr>\n";
       previous = null;
-      continue;
+      return;
     }
 
     const gap =
@@ -344,7 +393,7 @@ function renderContent(content, tab, context) {
     previous = p;
   }
 
-  if (code) html += `<pre><code>${escape(code.join("\n"))}</code></pre>\n`;
+  flushMono();
   flushLines();
   flushList();
   return html;
@@ -392,6 +441,9 @@ function renderList({ items }, tab, context) {
     if (kind.checklist) attrs += ' class="checklist"';
     const lis = children
       .map(({ p, children: sub }) => {
+        // Docs numbers a sub-list from 1 again under each item
+        for (const k of [...context.counters.keys()])
+          if (Number(k.split(":").pop()) > level) context.counters.delete(k);
         let inner = renderInline(p, tab, context, {
           checklist: kind.checklist,
         });
@@ -459,10 +511,20 @@ function renderTable(table, tab, context) {
 
   let head = "";
   let body = "";
-  rows.forEach((row) => {
+  // Google keeps a cell for every column, those a merge covers included
+  // (with nothing in them): skip those, by position
+  const covered = new Set();
+  rows.forEach((row, r) => {
     const header = row.tableRowStyle && row.tableRowStyle.tableHeader;
+    const positional = row.tableCells.length === table.columns;
     const cells = row.tableCells
-      .map((cell) => {
+      .map((cell, c) => {
+        if (positional && covered.has(`${r}:${c}`)) return "";
+        const { columnSpan = 1, rowSpan = 1 } = cell.tableCellStyle || {};
+        if (positional)
+          for (let i = 0; i < rowSpan; i++)
+            for (let j = 0; j < columnSpan; j++)
+              if (i || j) covered.add(`${r + i}:${c + j}`);
         const tag = header ? "th" : "td";
         const style = cell.tableCellStyle || {};
         let attrs = "";
@@ -480,9 +542,10 @@ function renderTable(table, tab, context) {
         if (single && !single[1].includes("<p>")) inner = single[1];
         return `<${tag}${attrs}>${inner}</${tag}>`;
       })
-      .join("");
-    if (header) head += `<tr>${cells}</tr>\n`;
-    else body += `<tr>${cells}</tr>\n`;
+      .filter(Boolean)
+      .join("\n");
+    if (header) head += `<tr>\n${cells}\n</tr>\n`;
+    else body += `<tr>\n${cells}\n</tr>\n`;
   });
 
   return `<table>\n${head ? `<thead>\n${head}</thead>\n` : ""}<tbody>\n${body}</tbody>\n</table>\n`;
@@ -558,10 +621,14 @@ function renderInline(p, tab, context, options = {}) {
 function linkOf(style, context) {
   const link = style.link;
   if (!link) return null;
-  if (link.url) return link.url;
-  if (link.headingId && context.headings.has(link.headingId))
-    return "#" + context.headings.get(link.headingId);
-  if (link.bookmarkId) return "#" + link.bookmarkId;
+  if (link.url)
+    return /^\s*(javascript|data|vbscript):/i.test(link.url) ? null : link.url;
+  // With includeTabsContent Google gives link.heading { id, tabId }; the
+  // older headingId is kept for Docs fetched without it
+  const headingId = (link.heading && link.heading.id) || link.headingId;
+  if (headingId && context.headings.has(headingId))
+    return "#" + context.headings.get(headingId);
+  // Bookmarks have no position in the JSON, so nothing to link to
   return null;
 }
 
@@ -603,8 +670,9 @@ function renderImage(id, tab) {
 }
 
 function renderFootnoteRef(ref, tab, context) {
-  const number = ref.footnoteNumber;
+  // Numbered here, not by Google, which numbers each tab from 1
   if (!context.footnoteNumbers.has(ref.footnoteId)) {
+    const number = context.footnotes.length + 1;
     context.footnoteNumbers.set(ref.footnoteId, number);
     const footnote = (tab.footnotes || {})[ref.footnoteId];
     const text = footnote
@@ -615,6 +683,7 @@ function renderFootnoteRef(ref, tab, context) {
       : "";
     context.footnotes.push({ number, html: text });
   }
+  const number = context.footnoteNumbers.get(ref.footnoteId);
   return `<a href="#footnote-${number}" id="ref-${number}" role="doc-noteref" class="footnote-ref"><sup>${number}</sup></a>`;
 }
 
@@ -624,7 +693,9 @@ module.exports.isDocJSON = (text) => {
   if (!start.startsWith("{")) return false;
   try {
     const doc = JSON.parse(start);
-    return Boolean(doc && (doc.tabs || doc.body) && doc.documentId);
+    return Boolean(
+      doc && (doc.tabs || doc.body) && (doc.blotDoc || doc.documentId)
+    );
   } catch (err) {
     return false;
   }

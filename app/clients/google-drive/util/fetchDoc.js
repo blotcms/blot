@@ -51,6 +51,13 @@ const DROP = new Set([
   "suggestedInsertionIds",
   "suggestedDeletionIds",
   "documentStyle",
+  // The .gdoc file is served from the folder as it is: nothing that leads
+  // back to the Doc (its id, an image's source link) or that the post
+  // doesn't show (headers, footers)
+  "documentId",
+  "sourceUri",
+  "headers",
+  "footers",
 ]);
 
 function trim(value) {
@@ -186,17 +193,30 @@ module.exports = async function fetchDoc(
     }
   }
 
-  await eachLimit(toFetch, IMAGE_CONCURRENCY, async ({ keyed, embedded }) => {
-    const { buffer, ext } = await fetchImage(
-      embedded.imageProperties.contentUri
-    );
-    const file =
-      crypto.createHash("sha1").update(buffer).digest("hex").slice(0, 16) +
-      "." +
-      ext;
-    await assets.write(blogID, assetDir + "/" + file, buffer);
-    now[keyed] = file;
-  });
+  // Every write goes through publish, so none lands once a disconnect has
+  // taken the folder
+  const written = [];
+  try {
+    await eachLimit(toFetch, IMAGE_CONCURRENCY, async ({ keyed, embedded }) => {
+      const { buffer, ext } = await fetchImage(
+        embedded.imageProperties.contentUri
+      );
+      const file =
+        crypto.createHash("sha1").update(buffer).digest("hex").slice(0, 16) +
+        "." +
+        ext;
+      await publish(() => assets.write(blogID, assetDir + "/" + file, buffer));
+      written.push(file);
+      now[keyed] = file;
+    });
+  } catch (err) {
+    // The caller falls back to the zip export: remove what this fetch wrote
+    const kept = new Set(Object.values(held));
+    for (const file of written)
+      if (!kept.has(file))
+        await assets.remove(blogID, assetDir + "/" + file).catch(() => {});
+    throw err;
+  }
   const imagesDone = Date.now();
 
   for (const tab of tabsOf(data)) {
@@ -213,9 +233,12 @@ module.exports = async function fetchDoc(
     }
   }
 
-  const stored = JSON.stringify(trim(data));
+  // Marked as Blot's, for the converter, now the Doc's id is dropped
+  const stored = JSON.stringify({ blotDoc: 1, ...trim(data) });
   await publish(() => folder.write(blogID, path, stored));
-  await docImages.set(blogID, id, { dir: assetDir, images: now });
+  await publish(() =>
+    docImages.set(blogID, id, { dir: assetDir, images: now })
+  );
 
   // Images this Doc no longer uses. Only when its images changed, so a text
   // edit lists nothing.
@@ -223,7 +246,9 @@ module.exports = async function fetchDoc(
     (file) => !Object.values(now).includes(file)
   );
   for (const file of new Set(gone))
-    await assets.remove(blogID, assetDir + "/" + file).catch(() => {});
+    await publish(() =>
+      assets.remove(blogID, assetDir + "/" + file).catch(() => {})
+    );
 
   console.log(
     clfdate(),

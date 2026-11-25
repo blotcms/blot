@@ -126,6 +126,9 @@ describe("google drive fetchDoc", function () {
     expect(image.contentUri).toBeUndefined();
     expect(image.blotSrc).toMatch(/^\/_assets\/[a-f0-9]+\/[a-f0-9]{16}\.png$/);
     expect(h.written.length).toBe(1);
+    // Nothing in the served file leads back to the Doc
+    expect(stored.documentId).toBeUndefined();
+    expect(stored.blotDoc).toBe(1);
   });
 
   it("makes no image request at all when only the text changed", async function () {
