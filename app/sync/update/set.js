@@ -378,7 +378,8 @@ module.exports = async function set(blog, path, track) {
     blog.id,
     path,
     targets.concat(state.syntheticKeys || []),
-    track
+    track,
+    { started: state.pending }
   );
 };
 

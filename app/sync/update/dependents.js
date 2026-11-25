@@ -91,6 +91,7 @@ async function addTargets(blogID, path, targets) {
 // the sets, unless this sync already recorded it as needing its dependents
 // rebuilt
 async function clearPending(blogID, path, targets, track) {
+  if (track) track.startedAt.delete(path);
   if (track && track.needed.has(path)) return;
 
   await client
@@ -103,7 +104,9 @@ async function clearPending(blogID, path, targets, track) {
 // Records that the dependents of targets need rebuilding because path
 // changed, and marks the templates which link to them for a CDN manifest
 // update (cheap, and already done once per sync). Rebuilt by drain().
-async function record(blogID, path, targets, track) {
+// options.started: set() marked the path pending as its change started, so
+// the number taken then is the change's; otherwise (a drop) it takes one now.
+async function record(blogID, path, targets, track, options = {}) {
   await client
     .multi()
     .sAdd(pendingKey(blogID), path)
@@ -114,7 +117,9 @@ async function record(blogID, path, targets, track) {
     track.needed.add(path);
     track.recordedAt.set(
       path,
-      track.startedAt.has(path) ? track.startedAt.get(path) : track.next()
+      options.started && track.startedAt.has(path)
+        ? track.startedAt.get(path)
+        : track.next()
     );
     track.startedAt.delete(path);
   }
