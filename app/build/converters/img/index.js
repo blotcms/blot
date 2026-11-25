@@ -101,7 +101,7 @@ async function read(blog, path) {
         const conversionRelativePath =
           conversion?.relativePath || convertedRelativePath;
 
-        if (!(await assets.exists(blog.id, conversionRelativePath))) {
+        if (!(await assets.existsRecently(blog.id, conversionRelativePath))) {
           await writeConversion(localPath, conversionRelativePath);
         }
 

@@ -23,7 +23,7 @@ function screenshotPathFor(href) {
 // at worst it replaces the file with a newer screenshot of the same page.
 async function taken(blogID, screenshotPath) {
   try {
-    return await assets.exists(blogID, screenshotPath);
+    return await assets.existsRecently(blogID, screenshotPath);
   } catch (err) {
     console.log(
       clfdate(),

@@ -41,8 +41,9 @@ const bucket = require("./s3");
 // build that has just found one can link it in the seconds before the
 // second pass deletes it. It must have been unreferenced for six hours
 // first, and the next
-// rebuild finds no file and takes it again. There is no cache entry or lock
-// for it.
+// rebuild finds no file and takes it again, or, in a process whose build
+// asked about it in the last hour (assets.existsRecently), the one after
+// that hour. There is no cache entry or lock for it.
 //
 // Modes (see ./index): "report" reads everything and fills the totals as if
 // applying, but writes nothing (no candidate set, no cache deletes, no S3
