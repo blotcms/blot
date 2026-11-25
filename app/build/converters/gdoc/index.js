@@ -14,6 +14,7 @@ const linebreaks = require("./linebreaks");
 const restoreDisplayMath = require("./restore-display-math");
 const processImages = require("./images");
 const cleanupSpans = require("./cleanup-spans");
+const removeComments = require("./comments");
 const {
   normalizeLiteralDollarMath,
 } = require("build/math/normalizeLiteralDollars");
@@ -71,21 +72,6 @@ function convertCodeTables($) {
   });
 }
 
-function removeComments($) {
-  $('a[id^="cmnt_ref"]').each(function () {
-    const marker = $(this).parent("sup");
-    (marker.length ? marker : $(this)).remove();
-  });
-
-  $('a[id^="cmnt"]').each(function () {
-    const comment = $(this).closest("div");
-    // The comment's own box: it holds no marker of the Doc's text
-    if (comment.length && !comment.find('a[id^="cmnt_ref"]').length)
-      comment.remove();
-    else $(this).closest("p").remove();
-  });
-}
-
 function is(path) {
   return [".gdoc"].indexOf(extname(path).toLowerCase()) > -1;
 }
@@ -105,10 +91,7 @@ async function read(blog, path) {
 
   const $ = cheerio.load(contents, { decodeEntities: false });
 
-  // Comments are private to the Doc's editors. The export marks each
-  // commented passage with a numbered link, <sup><a id="cmnt_ref1">[a]</a>,
-  // and puts each comment's text in its own <div> at the end, starting with
-  // <a id="cmnt1">[a]</a>. Remove both, so no comment is published.
+  // Comments are never published (./comments.js)
   removeComments($);
 
   // replaces google docs 'titles' with true h1 tags

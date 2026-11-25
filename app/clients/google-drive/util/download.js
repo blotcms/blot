@@ -12,6 +12,7 @@ const verifyContent = require("./verifyContent");
 const assets = require("storage/assets");
 const hash = require("helper/hash");
 const cheerio = require("cheerio");
+const removeComments = require("build/converters/gdoc/comments");
 const sandbox = require("sandbox");
 const hotDocPoller = require("../serviceAccount/hotDocPoller");
 const database = require("../database");
@@ -238,6 +239,9 @@ const downloadGoogleDocAsZip = async ({
 
     const html = await fs.readFile(htmlPath, "utf-8");
     const $ = cheerio.load(html, { decodeEntities: false });
+    // The folder's copy is served as is, so the Doc's comments, private to
+    // its editors, come out before it is written
+    removeComments($);
     $("img").each(function () {
       const src = $(this).attr("src");
       if (!src) return;
