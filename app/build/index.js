@@ -93,15 +93,18 @@ function stripTrailingPlus(segment) {
   return segment.replace(/\+$/, "");
 }
 
-// The SHA-1 of a file's bytes, streamed, so no local copy of it is needed
+// The SHA-1 of a file's bytes, from the folder's index, which holds it for
+// every file: no read of the file (storage/folder's stat reads it only to fill
+// in a SHA-1 an index rebuilt without hashing left out). A directory has none,
+// and is refused as reading it would be.
 async function hashSource(blogID, sourcePath) {
-  var hash = crypto.createHash("sha1");
+  var stat = await folder.stat(blogID, sourcePath, { sha1: true });
 
-  for await (var chunk of folder.createReadStream(blogID, sourcePath)) {
-    hash.update(chunk);
+  if (stat.isDirectory || !stat.sha1) {
+    throw new Error("No SHA-1 for " + sourcePath);
   }
 
-  return hash.digest("hex");
+  return stat.sha1;
 }
 
 // Hashes an entry's source bytes so we can tell whether its content has
