@@ -34,6 +34,32 @@ describe("replaceFolderLinks folderFile", function () {
     expect(File.get).toHaveBeenCalledTimes(1);
   });
 
+  it("does not read a file over the size cap whose index record has no SHA-1", async function () {
+    const File = require("models/file");
+
+    await folder.write(this.blog.id, "/images/big.mp4", "x");
+    await File.set(this.blog.id, "/images/big.mp4", {
+      type: "file",
+      size: 6 * 1024 * 1024,
+      modified: 1700000000000,
+      sha1: "",
+    });
+
+    spyOn(folder, "ensureLocal").and.callThrough();
+    spyOn(folder, "read").and.callThrough();
+
+    const found = await hashFolderFile(this.blog.id, "/images/big.mp4");
+
+    expect(found.version).toEqual(
+      contentVersion.fromFolderRecord({
+        size: 6 * 1024 * 1024,
+        modified: 1700000000000,
+      })
+    );
+    expect(folder.ensureLocal).not.toHaveBeenCalled();
+    expect(folder.read).not.toHaveBeenCalled();
+  });
+
   it("finds a file in another case, and answers null for none", async function () {
     await folder.write(this.blog.id, "/images/B.jpg", "bee");
 

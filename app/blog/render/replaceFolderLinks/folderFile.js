@@ -1,4 +1,5 @@
 const folder = require("storage/folder");
+const File = require("models/file");
 const contentVersion = require("helper/contentVersion");
 const BLOT_CDN_TOKEN = require("./cdnToken");
 const { folderCdnPath } = require("./shared");
@@ -16,27 +17,30 @@ const { folderCdnPath } = require("./shared");
 // without one (an index rebuilt without hashing) has the file read and
 // hashed, as contentVersion.fromFolder does.
 async function hashFolderFile(blogID, path) {
-  let stat, resolvedPath;
+  let record, resolvedPath;
 
-  // One read of the index gives the size, modified time and SHA-1 (storage/
-  // folder's stat only reads the file to fill in a SHA-1 an index rebuilt
-  // without hashing left out). Another case is looked for only when the exact
-  // path isn't there.
+  // One read of the index gives the size, modified time and SHA-1, and never
+  // reads the file (folder.stat with { sha1: true } would, to fill in a SHA-1
+  // an index rebuilt without hashing left out, even for a file over the cap
+  // where the token needs none). Another case is looked for only when the
+  // exact path has no record.
   try {
-    try {
-      stat = await folder.stat(blogID, path, { sha1: true });
-      resolvedPath = path;
-    } catch (err) {
+    record = await File.get(blogID, path);
+    resolvedPath = path;
+
+    if (!record) {
       resolvedPath = await folder.resolveCaseInsensitive(blogID, path);
-      stat = await folder.stat(blogID, resolvedPath, { sha1: true });
+      record = await File.get(blogID, resolvedPath);
     }
   } catch (err) {
     return null;
   }
 
+  if (!record) return null;
+
   const version =
-    contentVersion.fromFolderRecord(stat) ||
-    (await contentVersion.fromFolder(blogID, resolvedPath, stat));
+    contentVersion.fromFolderRecord(record) ||
+    (await contentVersion.fromFolder(blogID, resolvedPath, record));
 
   return { path: resolvedPath, version };
 }
