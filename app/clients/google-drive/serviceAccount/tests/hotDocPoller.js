@@ -356,9 +356,11 @@ describe("google drive hotDocPoller", function () {
       );
       spyOn(poller, "isBuilt").and.returnValue(Promise.resolve(false));
       spyOn(poller, "isFolderLocked").and.returnValue(Promise.resolve(false));
-      spyOn(poller, "applyRecorded").and.returnValue(
-        Promise.resolve({ downloaded: 1 })
-      );
+      // As the sync does with a forced Doc it downloaded
+      spyOn(poller, "applyRecorded").and.callFake(async () => {
+        await database.dirty.unforce(blogID, fileId);
+        return { downloaded: 1, failed: 0 };
+      });
       spyOn(poller, "fullSync").and.returnValue(Promise.resolve());
 
       item = {
@@ -377,10 +379,20 @@ describe("google drive hotDocPoller", function () {
     });
 
     it("records the Doc and its directory, then has the sync apply them", async function () {
+      let recorded;
+      poller.applyRecorded.and.callFake(async () => {
+        recorded = {
+          forced: await database.dirty.forced(blogID),
+          dirs: await database.dirty.members(blogID),
+        };
+        await database.dirty.unforce(blogID, fileId);
+        return { downloaded: 1, failed: 0 };
+      });
+
       expect(await poller.applyChange(item)).toEqual("applied");
 
-      expect(await database.dirty.forced(blogID)).toEqual([fileId]);
-      expect(await database.dirty.members(blogID)).toEqual([folderId]);
+      expect(recorded.forced).toEqual([fileId]);
+      expect(recorded.dirs).toEqual([folderId]);
       expect(poller.applyRecorded).toHaveBeenCalledWith(blogID);
       expect(poller.fullSync).not.toHaveBeenCalled();
     });
@@ -389,8 +401,13 @@ describe("google drive hotDocPoller", function () {
       const folderDb = database.folder(folderId, blogID);
       await folderDb.set("dir-1", "/Notes", { isDirectory: true });
       await folderDb.set(fileId, "/Notes/Post.gdoc", {});
+      poller.applyRecorded.and.returnValue(Promise.resolve(false));
 
-      expect(await poller.applyChange(item)).toEqual("applied");
+      try {
+        await poller.applyChange(item);
+      } catch (err) {
+        // Only what it recorded matters here
+      }
       expect(await database.dirty.members(blogID)).toEqual(["dir-1"]);
     });
 
@@ -416,6 +433,30 @@ describe("google drive hotDocPoller", function () {
       });
 
       expect(await poller.applyChange(item)).toEqual("locked");
+    });
+
+    it("rejects when the sync couldn't export the Doc, so the poll retries it", async function () {
+      poller.applyRecorded.and.returnValue(
+        Promise.resolve({ downloaded: 0, failed: 1 })
+      );
+
+      let error;
+      try {
+        await poller.applyChange(item);
+      } catch (err) {
+        error = err;
+      }
+      expect(error).toBeDefined();
+      expect(await database.dirty.forced(blogID)).toEqual([fileId]);
+    });
+
+    it("starts a full sync when the Doc wasn't in the directory the sync listed", async function () {
+      poller.applyRecorded.and.returnValue(
+        Promise.resolve({ downloaded: 0, failed: 0 })
+      );
+
+      expect(await poller.applyChange(item)).toEqual("full-sync");
+      expect(poller.fullSync).toHaveBeenCalledWith(blogID);
     });
 
     it("rejects when the apply fails, so the poll retries it", async function () {

@@ -797,6 +797,23 @@ class HotDocPoller {
     }
     if (summary === false) throw new Error("Applying the Doc's change failed");
 
+    // The sync clears the mark once the Doc's download succeeds. Still
+    // marked: its download failed (counted, not thrown, by the sync), so the
+    // poll retries; or the Doc wasn't in the directory listed (moved or
+    // renamed meanwhile), which the full sync finds
+    if ((await database.dirty.forced(item.blogID)).includes(item.fileId)) {
+      if (summary?.failed) throw new Error("Exporting the Doc failed");
+      this.metrics.fullSyncCount += 1;
+      this.log("full-sync", {
+        reason: "not-listed",
+        blogID: item.blogID,
+        serviceAccountId: item.serviceAccountId,
+        fileId: item.fileId,
+      });
+      await this.fullSync(item.blogID);
+      return "full-sync";
+    }
+
     this.metrics.appliedCount += 1;
     return "applied";
   }
