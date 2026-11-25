@@ -191,17 +191,21 @@ Classifies the path and routes it:
 - **Public file** (path starts with `/public/`, contains `/_`, `/.`, or `.textbundle/assets/`): drops any entry for the path. The dashboard works out from the path that it is not a post.
 - **Template file** (path starts with `/templates/`): no entry action taken.
 - **Preview file** (identified by `drafts.isPreview`): no entry action taken.
-- **Post/page**: calls `build(blog, path, ...)` then `Entry.set`. After setting, waits for `rebuildDependents` for the wikilink slug and filename synthetic keys (a failure there is logged). If the entry is a visible draft, writes a preview file.
-- Then calls `rebuildDependents(blogID, path, ...)` for the raw path, unless the entry came out exactly as stored (`{ changed: false }`).
-- Before `Entry.set` the path is added to `blog:<id>:sync:dependents_pending`, and removed once its dependents are rebuilt. A sync killed in between leaves it there. When the file is synced again its entry comes out unchanged, but `SADD` answering 0 says it was still pending, so its dependents are rebuilt anyway and the update does not report `{ changed: false }`.
+- **Post/page**: calls `build(blog, path, ...)` then `Entry.set`. If the entry is a visible draft, writes a preview file.
+- Then records, unless the entry came out exactly as stored (`{ changed: false }`), that the dependents of the path need rebuilding: those of the raw path, a folder post's entry path and the entry's wikilink slug and filename keys. They are rebuilt once, when the sync ends (`update/dependents.js`), not once per file, so a batch of images used by one post rebuilds it once. The templates linking to those paths are marked for a CDN manifest update straight away.
+- Before `Entry.set` the path is added to `blog:<id>:sync:dependents_pending`, and the paths to look up its dependents by to `blog:<id>:sync:dependents_targets`; both are removed once its dependents are rebuilt. A sync killed before its end leaves them, and the next sync of the blog rebuilds them at its end. When the file is synced again its entry comes out unchanged, but its being pending from an earlier sync means its dependents are rebuilt anyway and the update does not report `{ changed: false }`. The sync remembers which paths it added itself, so a file synced twice in one sync is not taken for one a killed sync left.
 
 ### `update/drop.js`
 
-Runs in series: `Ignored.drop` → `Entry.drop` → `rebuildDependents`. If the path is currently a draft, also calls `Preview.remove`.
+Runs in series: `Ignored.drop` → `Entry.drop` → records the path's dependents for the rebuild at the end of the sync, as `set.js` does. If the path is currently a draft, also calls `Preview.remove`.
+
+### `update/dependents.js`
+
+The rebuild at the end of the sync (`drain`), run by `done()` after renames and templates and before CDN manifests, and by `folder.drainDependents()` for a caller which answers a request before `done()` (the iCloud upload, delete and mkdir routes). It reads the pending paths, collects the unique entries which depend on them (`Entry.key.dependents` of each target), and rebuilds each once with `rebuildDependent`. An entry saved in this sync after every change it depends on was recorded already read the new files and is skipped, so a first transfer doesn't build each post twice. A pending path is removed once all its dependents are rebuilt, so a deploy which kills the drain leaves only what is left. It stops between entries once the sync's signal aborts, and its writes go through the folder guard like the sync's. The rebuild is not transitive: a rebuilt entry's own dependents are not rebuilt.
 
 ### `update/rebuildDependents.js`
 
-Reads the Redis set at `Entry.key.dependents(blogID, path)`. For each dependent path, retrieves the entry, calls `build`, and calls `Entry.set(..., false)` (the `false` suppresses scheduled-post side effects).
+`rebuildDependent(blog, path)` retrieves the dependent entry, calls `build`, and calls `Entry.set(..., false)` (the `false` suppresses scheduled-post side effects), dropping it if its own source is gone. `rebuildDependents(blogID, path)` does that for each path in the Redis set at `Entry.key.dependents(blogID, path)`.
 
 It then reads the set at `Template.key.templateDependents(blogID, path)` (the path is lowercased): the blog's templates whose CDN manifest resolves that file. They are only added to the blog's pending set (`Template.key.templateManifestsPending`); regenerating a manifest re-hashes every folder file it uses, so `sync/index.js` drains the set once, after `buildFromFolder` and before the lock is released, via `update/regenerateTemplateManifests` (one `updateCdnManifest` per template, errors logged). A template is removed from the set only after its manifest has been regenerated, so one that failed, or was cut off by a deploy, stays for the next sync. The blog's `cacheID` is bumped by the sync's usual end-of-sync bump. The set lives in Redis so a sync that dies part way leaves its templates for the next one.
 
@@ -298,15 +302,16 @@ await sync(blogID, fn)
                       ├─ build(blog, path)
                       ├─ SADD dependents_pending
                       ├─ Entry.set
-                      ├─ rebuildDependents (wikilink keys)
                       ├─ Preview.write (if visible draft)
-                      ├─ rebuildDependents (path), unless unchanged and not pending
-                      └─ SREM dependents_pending
+                      └─ SADD dependents_targets (path, wikilink keys) and mark
+                         templates, unless unchanged and not pending
             └─ fs.stat fingerprint (after) → retry if changed
             └─ flushCache
   └─ done(fn's error or null)       Finish the sync, however fn settled
        └─ renames(blogID)            Detect file moves by size/title correlation
        └─ buildFromFolder(blogID)    Rebuild templates from Templates/ folder
+       └─ dependents.drain           Rebuild each dependent of the pending paths once,
+                                     then SREM them
        └─ regenerateTemplateManifests CDN manifests of templates whose files changed
        └─ Blog.bumpCacheID           Only if an update changed something, also if a step above throws
        └─ lock.release               Also if a step above throws

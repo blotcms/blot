@@ -11,6 +11,7 @@ const { take } = require("./hold");
 const messenger = require("./messenger");
 const previewReload = require("helper/publishPreviewReload");
 const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
+const dependents = require("./update/dependents");
 const readOnly = require("helper/readOnly");
 const logContext = require("helper/logContext");
 const guard = require("storage/folder/guard");
@@ -277,17 +278,46 @@ async function acquire(blogID) {
       if (!signal.aborted) status(...args);
     },
     log,
+    // Rebuilds now what depends on the files this sync changed, as done()
+    // does before it releases the lock: for a caller which answers a request
+    // before calling done(), so the answer comes once the rebuild is over,
+    // as it did when dependents were rebuilt with each file. Call it inside
+    // folder.run. Never rejects.
+    drainDependents,
   };
 
   // We acquired a lock on the resource!
   folder.status("Syncing");
+
+  // Rebuilds, once each, what depends on the files changed in this sync or
+  // left pending by one killed before its end (update/dependents.js).
+  // Writes like any of the sync's, so they are refused once the signal has
+  // aborted, and it stops between entries then. Never rejects.
+  async function drainDependents() {
+    try {
+      const rebuilt = await guard.run(blogID, signal, () =>
+        dependents.drain(blogID, {
+          track: originalUpdate.track,
+          signal,
+          status: folder.status,
+          log,
+        })
+      );
+
+      if (rebuilt) {
+        changes = true;
+        log("Rebuilt " + rebuilt + " dependent entries");
+      }
+    } catch (err) {
+      log("Error rebuilding dependent entries", err.message);
+    }
+  }
 
   // Called once the caller is finished with the lock on the user's folder.
   // Rejects with syncError, or else with the error releasing the lock.
   async function done(syncError) {
     log("Sync callback invoked");
     removePendingSync(blogID, syncID);
-    folder.status("Synced");
 
     if (typeof syncError === "function")
       throw new Error("Pass an error or null as first argument to done");
@@ -302,7 +332,11 @@ async function acquire(blogID) {
       // them. A file it moved isn't paired up as a rename, so its entry
       // counts as new: only for a move in the seconds before a disconnect.
       if (!signal.aborted) await beforeRelease();
-      else log("Cancelled, skipping renames, templates and CDN manifests");
+      else
+        log(
+          "Cancelled, skipping renames, templates, dependents and CDN manifests"
+        );
+      folder.status("Synced");
     } finally {
       // Before the release: a deploy's drain (helper/drain) lets the process
       // exit once it holds no folder locks, so a bump after the release could
@@ -424,6 +458,11 @@ async function acquire(blogID) {
         console.log(buildError);
       }
     }
+
+    // After renames, which only pair up deletions from the last few seconds,
+    // and the templates, before their CDN manifests
+    log("Rebuilding dependent entries");
+    await drainDependents();
 
     // Templates which link to files that changed in this sync have
     // their CDN manifest regenerated once, now, rather than once per
