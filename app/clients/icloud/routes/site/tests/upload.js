@@ -106,6 +106,7 @@ describe("icloud upload route", function () {
         status: () => {},
         signal: new AbortController().signal,
         run: (fn) => fn(),
+        drainDependents: async () => {},
         update: async (path) => {
           updateCalls.push(path);
         },
@@ -148,6 +149,7 @@ describe("icloud upload route", function () {
         status: () => {},
         signal: new AbortController().signal,
         run: (fn) => fn(),
+        drainDependents: async () => {},
         update: async (path) => {
           pendingDuringUpdate = await database.isUploadPending(blogID, path);
           updateCalls.push(path);
@@ -175,6 +177,7 @@ describe("icloud upload route", function () {
         status: () => {},
         signal: new AbortController().signal,
         run: (fn) => fn(),
+        drainDependents: async () => {},
         update: async () => {
           throw new Error("process died");
         },

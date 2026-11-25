@@ -77,6 +77,10 @@ module.exports = async function (req, res) {
           folder.status("Removed " + pathToUpdate);
         }
 
+        // What depended on it is rebuilt before the answer, as when that
+        // was part of the update: the macserver's next request waits on it
+        await folder.drainDependents();
+
         console.log(`Successfully deleted: ${filePath}`);
         return res
           .status(200)

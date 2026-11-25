@@ -1,10 +1,11 @@
 var Entry = require("models/entry");
 var Preview = require("./preview");
 var isDraft = require("./drafts").isDraft;
-var rebuildDependents = require("./rebuildDependents");
+var dependents = require("./dependents");
 var removeConvertedAssets = require("./removeConvertedAssets");
 
-module.exports = async function drop(blogID, path) {
+// track is the sync's dependents tracker (./dependents.js)
+module.exports = async function drop(blogID, path, track) {
   // We don't know if this file used to be a draft based
   // on its metadata. We should probably look this up?
   // An error is ignored: the file is then treated as not a draft.
@@ -20,7 +21,8 @@ module.exports = async function drop(blogID, path) {
   // ORDER IS IMPORTANT
   // Rebuild must happen after we remove the file from disk
   await Entry.drop(blogID, path);
-  await rebuildDependents(blogID, path);
+  // What linked to the file is rebuilt once, when the sync ends
+  await dependents.record(blogID, path, [path], track);
 
   // Best effort: never fails the drop
   await removeConvertedAssets(blogID, path);
