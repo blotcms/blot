@@ -158,6 +158,51 @@ describe("gdoc json renderer", function () {
     expect(out).toBe("<pre><code>a\nb</code></pre>");
   });
 
+  it("starts a numbered list at its configured number", function () {
+    const lists = {
+      l: {
+        listProperties: {
+          nestingLevels: [{ glyphType: "DECIMAL", startNumber: 5 }],
+        },
+      },
+    };
+    const item = (text) => para(text, { bullet: { listId: "l" } });
+    expect(html([item("a"), item("b")], { lists })).toContain('<ol start="5">');
+  });
+
+  it("keeps blank lines past the first as line breaks", function () {
+    expect(html([para("a"), para(""), para(""), para(""), para("b")])).toBe(
+      "<p>a</p>\n<br>\n<br>\n<p>b</p>"
+    );
+  });
+
+  it("never gives two headings the same id", function () {
+    const h = (text, id) =>
+      para(text, {
+        paragraphStyle: { namedStyleType: "HEADING_2", headingId: id },
+      });
+    const out = html([
+      h("Intro", "h.1"),
+      h("Intro", "h.2"),
+      h("Intro 1", "h.3"),
+    ]);
+    expect(out.match(/id="[^"]+"/g)).toEqual([
+      'id="intro"',
+      'id="intro-1"',
+      'id="intro-1-1"',
+    ]);
+  });
+
+  it("keeps a display equation on paragraphs of its own together", function () {
+    const spaced = { paragraphStyle: { spaceBelow: { magnitude: 8 } } };
+    const out = html([
+      para("$$", spaced),
+      para("x = y", spaced),
+      para("$$", spaced),
+    ]);
+    expect(out).toBe("<p>$$<br>\nx = y<br>\n$$</p>");
+  });
+
   it("never takes a list item as metadata", function () {
     const result = render(
       doc([para("Note: bring snacks", { bullet: { listId: "l" } })])

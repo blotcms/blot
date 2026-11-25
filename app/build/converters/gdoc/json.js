@@ -35,7 +35,7 @@ const pt = (dimension) => (dimension && dimension.magnitude) || 0;
 
 // A heading's id, as a slug of its text, unique within the post
 function slugger() {
-  const used = new Map();
+  const used = new Set();
   return (text) => {
     const base =
       String(text)
@@ -46,9 +46,12 @@ function slugger() {
         .trim()
         .replace(/\s+/g, "-")
         .replace(/-+/g, "-") || "section";
-    const n = used.get(base) || 0;
-    used.set(base, n + 1);
-    return n ? `${base}-${n}` : base;
+    // Every id handed out is reserved, so "Intro", "Intro", "Intro 1"
+    // can't give "intro-1" twice
+    let id = base;
+    for (let n = 1; used.has(id); n++) id = `${base}-${n}`;
+    used.add(id);
+    return id;
   };
 }
 
@@ -215,9 +218,19 @@ function renderContent(content, tab, context) {
   let list = null;
   let code = null;
 
+  // Empty paragraphs since the last element: past the first, each is a
+  // <br>, as the HTML converter keeps them (linebreaks.js)
+  let empty = 0;
+  // A display equation typed as "$$", the TeX, "$$" on paragraphs of their
+  // own: kept as one paragraph of lines for restore-display-math.js
+  let math = null;
+
   const flushLines = () => {
     if (lines.length) html += `<p>${lines.join("<br>\n")}</p>\n`;
     lines = [];
+    // Never closed: just paragraphs
+    if (math) html += math.map((line) => `<p>${line}</p>\n`).join("");
+    math = null;
   };
   const flushList = () => {
     if (list) html += renderList(list, tab, context);
@@ -291,6 +304,8 @@ function renderContent(content, tab, context) {
   });
 
   function renderElement(el, p, style, heading) {
+    // Blank lines count only between paragraphs
+    if (!p || p.bullet || heading) empty = 0;
     if (el.table) {
       flushLines();
       flushList();
@@ -338,7 +353,26 @@ function renderContent(content, tab, context) {
     }
 
     if (isEmptyParagraph(p)) {
+      if (math) return;
       flushLines();
+      empty += 1;
+      previous = null;
+      return;
+    }
+    const blank = empty;
+    empty = 0;
+
+    const text = paragraphText(p).trim();
+    if (text === "$$" || math) {
+      if (!math) {
+        flushLines();
+        math = [];
+      }
+      math.push(escape(paragraphText(p)));
+      if (text === "$$" && math.length > 1) {
+        html += `<p>${math.join("<br>\n")}</p>\n`;
+        math = null;
+      }
       previous = null;
       return;
     }
@@ -360,6 +394,8 @@ function renderContent(content, tab, context) {
       previous &&
       (spacing(previous, tab).below > 0 || spacing(p, tab).above > 0);
     if (gap) flushLines();
+    if (!lines.length && blank > 1 && html && !html.endsWith("<hr>\n"))
+      html += "<br>\n".repeat(blank - 1);
     lines.push(renderInline(p, tab, context));
     previous = p;
   }
@@ -383,7 +419,11 @@ function listKind(tab, listId, level) {
     {};
   if (nesting.glyphSymbol) return { tag: "ul" };
   if (ORDERED.test(nesting.glyphType || ""))
-    return { tag: "ol", type: OL_TYPES[nesting.glyphType] };
+    return {
+      tag: "ol",
+      type: OL_TYPES[nesting.glyphType],
+      startNumber: nesting.startNumber,
+    };
   // Docs' checklists have no glyph but do have a format. A list with
   // neither (seen in Docs imported from elsewhere) is a plain list.
   if (
@@ -414,7 +454,9 @@ function renderList({ items }, tab, context) {
     const listId = children[0].p.bullet.listId;
     const kind = listKind(tab, listId, level);
     const key = `${listId}:${level}`;
-    const start = (context.counters.get(key) || 0) + 1;
+    const start = context.counters.has(key)
+      ? context.counters.get(key) + 1
+      : kind.startNumber || 1;
     context.counters.set(key, start - 1 + children.length);
     let attrs = "";
     if (kind.tag === "ol" && start > 1) attrs += ` start="${start}"`;
