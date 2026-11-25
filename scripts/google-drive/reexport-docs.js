@@ -2,7 +2,9 @@
 // each under its blog's folder lock, as the hot doc poller does for an edit
 // (serviceAccount/hotDocPoller.js applyChange). A Doc that can't be published
 // alone (renamed, moved, a sibling with its name) falls back to the blog's
-// full sync, as an edit would.
+// full sync, as an edit would. Its applied record is made stale first, so
+// that sync sees a change and exports it too, instead of finding the copy
+// it holds current.
 //
 // --comments: only Docs whose copy in the blog folder still holds comments,
 // written before the export removed them (#2975). That copy is served as is,
@@ -73,6 +75,12 @@ async function main() {
         console.log("Would re-export", blogID, path);
         continue;
       }
+
+      // A record with no SHA-1 is never trusted (database/folder.js); an
+      // applied single-Doc export writes a fresh one
+      await mapping.setApplied(fileId, {
+        modifiedTime: new Date(0).toISOString(),
+      });
 
       const result = await hotDocPoller.applyChange({
         blogID,
