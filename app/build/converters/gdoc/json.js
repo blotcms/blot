@@ -487,6 +487,8 @@ function renderTable(table, tab, context) {
     (cell.content || [])
       .filter((c) => c.paragraph)
       .map((c) => paragraphText(c.paragraph))
+      .join("\n")
+      .split(LINE_BREAK)
       .join("\n");
 
   // Code tables, as Blot has always read them: a 1x1 table is a code block,
@@ -544,6 +546,17 @@ function renderTable(table, tab, context) {
 // styles merged so tags aren't repeated at every run boundary
 function renderInline(p, tab, context, options = {}) {
   const parts = [];
+  // Bold and italic set on the paragraph's style (a Heading 1 styled
+  // italic, say) apply to every run that doesn't say otherwise, as the HTML
+  // export gave them. Not underline: on a heading it reads as a link.
+  const named = ((tab.namedStyles || {}).styles || []).find(
+    (s) =>
+      s.namedStyleType ===
+      ((p.paragraphStyle || {}).namedStyleType || "NORMAL_TEXT")
+  );
+  const base = {};
+  for (const key of ["bold", "italic"])
+    if (named && named.textStyle && named.textStyle[key]) base[key] = true;
   // A paragraph wholly in a typewriter font is writing in that font, as
   // often as it is code, so only monospace words among others become code.
   // Code blocks come from Google's own code blocks and 1x1 tables.
@@ -555,7 +568,7 @@ function renderInline(p, tab, context, options = {}) {
       if (!text) continue;
       text = text.replace(/\n$/, "");
       if (!text) continue;
-      parts.push({ style: e.textRun.textStyle || {}, text });
+      parts.push({ style: { ...base, ...(e.textRun.textStyle || {}) }, text });
     } else if (e.inlineObjectElement) {
       parts.push({
         raw: renderImage(e.inlineObjectElement.inlineObjectId, tab),

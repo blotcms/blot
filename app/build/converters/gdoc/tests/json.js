@@ -129,6 +129,35 @@ describe("gdoc json renderer", function () {
     expect(out).toBe("<ul>\n<li><h2>CWS on Fargate</h2></li>\n</ul>");
   });
 
+  it("applies a heading style's italic, but not its underline", function () {
+    const namedStyles = {
+      styles: [
+        {
+          namedStyleType: "HEADING_1",
+          textStyle: { italic: true, underline: true },
+        },
+      ],
+    };
+    const out = html(
+      [para("Prologue", { paragraphStyle: { namedStyleType: "HEADING_1" } })],
+      { namedStyles }
+    );
+    expect(out).toBe("<h1><em>Prologue</em></h1>");
+  });
+
+  it("turns Shift+Enter into a new line in a 1x1 code table", function () {
+    const LINE = String.fromCharCode(11);
+    const out = html([
+      {
+        table: {
+          columns: 1,
+          tableRows: [{ tableCells: [{ content: [para("a" + LINE + "b")] }] }],
+        },
+      },
+    ]);
+    expect(out).toBe("<pre><code>a\nb</code></pre>");
+  });
+
   it("never takes a list item as metadata", function () {
     const result = render(
       doc([para("Note: bring snacks", { bullet: { listId: "l" } })])
