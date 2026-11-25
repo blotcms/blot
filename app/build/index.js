@@ -93,15 +93,18 @@ function stripTrailingPlus(segment) {
   return segment.replace(/\+$/, "");
 }
 
-// The SHA-1 of a file's bytes, streamed, so no local copy of it is needed
+// The SHA-1 of a file's bytes, from the folder's index, which holds it for
+// every file: no read of the file (storage/folder's stat reads it only to fill
+// in a SHA-1 an index rebuilt without hashing left out). A directory has none,
+// and is refused as reading it would be.
 async function hashSource(blogID, sourcePath) {
-  var hash = crypto.createHash("sha1");
+  var stat = await folder.stat(blogID, sourcePath, { sha1: true });
 
-  for await (var chunk of folder.createReadStream(blogID, sourcePath)) {
-    hash.update(chunk);
+  if (stat.isDirectory || !stat.sha1) {
+    throw new Error("No SHA-1 for " + sourcePath);
   }
 
-  return hash.digest("hex");
+  return stat.sha1;
 }
 
 // Hashes an entry's source bytes so we can tell whether its content has
@@ -109,9 +112,8 @@ async function hashSource(blogID, sourcePath) {
 // on every reconnect/resync/upload). `sourcePaths` is one path for a plain
 // entry, or the sorted list of files that make up a multi-file/folder post
 // (see multiple.js, which stores this on metadata._sourcePaths). Resolves to
-// the hash (or calls back with (null, hash)) on success. If any source can't
-// be hashed (deleted mid-build, EMFILE, a provider swapping the file out
-// underneath us, ...) it rejects (calls back with (err)) - the caller must not
+// the hash on success. If any source can't be hashed (deleted mid-build, a
+// directory, ...) it rejects - the caller must not
 // derive a contentHash from a partial result, since a consistent failure would
 // otherwise produce the same placeholder digest on every build and
 // permanently mask real changes.
