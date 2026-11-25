@@ -119,6 +119,16 @@ describe("gdoc json renderer", function () {
     expect(out).toBe("<ul>\n<li>item</li>\n</ul>");
   });
 
+  it("keeps a heading with a bullet as a heading in its item", function () {
+    const out = html([
+      para("CWS on Fargate", {
+        bullet: { listId: "l" },
+        paragraphStyle: { namedStyleType: "HEADING_2" },
+      }),
+    ]);
+    expect(out).toBe("<ul>\n<li><h2>CWS on Fargate</h2></li>\n</ul>");
+  });
+
   it("never takes a list item as metadata", function () {
     const result = render(
       doc([para("Note: bring snacks", { bullet: { listId: "l" } })])

@@ -258,12 +258,7 @@ function renderContent(content, tab, context) {
     const p = el.paragraph;
     const style = (p && p.paragraphStyle) || {};
     const named = style.namedStyleType || "NORMAL_TEXT";
-    const heading =
-      named === "TITLE"
-        ? 1
-        : named === "SUBTITLE"
-          ? 2
-          : (named.match(/^HEADING_(\d)$/) || [])[1];
+    const heading = headingLevel(named);
 
     if (single.has(index)) {
       flushLines();
@@ -374,6 +369,13 @@ function renderContent(content, tab, context) {
   return html;
 }
 
+// TITLE -> 1, SUBTITLE -> 2, HEADING_n -> n, anything else -> undefined
+function headingLevel(named = "NORMAL_TEXT") {
+  if (named === "TITLE") return 1;
+  if (named === "SUBTITLE") return 2;
+  return (named.match(/^HEADING_(\d)$/) || [])[1];
+}
+
 function listKind(tab, listId, level) {
   const lists = tab.lists || {};
   const nesting =
@@ -429,6 +431,14 @@ function renderList({ items }, tab, context) {
         if (kind.checklist) {
           const checked = isStruckThrough(p);
           inner = `<input type="checkbox" disabled${checked ? " checked" : ""}> ${checked ? renderInline(p, tab, context, { noStrike: true }) : inner}`;
+        }
+        // A numbered heading: the heading inside its item, as the HTML
+        // export gave it
+        const style = p.paragraphStyle || {};
+        const h = headingLevel(style.namedStyleType);
+        if (h) {
+          const slug = style.headingId && context.headings.get(style.headingId);
+          inner = `<h${h}${slug ? ` id="${slug}"` : ""}>${inner}</h${h}>`;
         }
         // A deeper level after an item nests inside it
         return `<li>${inner}${sub.length ? "\n" + renderLevel(sub, sub[0].p.bullet.nestingLevel || 0) : ""}</li>\n`;
