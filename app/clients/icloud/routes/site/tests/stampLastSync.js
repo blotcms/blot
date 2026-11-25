@@ -88,6 +88,7 @@ describe("icloud routes stamp lastSync", function () {
         update: async () => {},
         signal: new AbortController().signal,
         run: (fn) => fn(),
+        drainDependents: async () => {},
       },
       done: async () => {},
     }));

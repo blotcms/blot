@@ -27,16 +27,7 @@ var NO_LONGER_VALID_ERRORS = [
 // links to it for a CDN manifest update at the end of the sync.
 
 module.exports = async function rebuildDependents(blogID, path) {
-  const log = function () {
-    console.log.apply(null, [
-      clfdate(),
-      blogID.slice(0, 12),
-      "rebuildDependents:",
-      path,
-      ...arguments,
-    ]);
-  };
-
+  const log = logFor(blogID, path);
   const blog = await Blog.get({ id: blogID });
 
   if (!blog) throw new Error("No blog");
@@ -47,42 +38,61 @@ module.exports = async function rebuildDependents(blogID, path) {
   const dependent_paths = await client.sMembers(dependentsKey(blogID, path));
 
   for (const dependent_path of dependent_paths) {
-    // A failed read is the same as no entry
-    const entry = await Entry.get(blogID, dependent_path).catch(
-      () => undefined
-    );
-
-    if (!entry) {
-      log("No entry for dependent_path:", dependent_path);
-      continue;
-    }
-
-    // Folder posts are rebuilt through their source folder, see
-    // rebuildEntry.
-    try {
-      await rebuildEntry(blog, entry);
-    } catch (err) {
-      // The dependent's own source file is gone, usually deleted
-      // in the same batch as this file. Dropping it below is the
-      // whole fix, so don't report it as an error.
-      if (isMissingFile(err)) {
-        log("Dependent no longer exists:", dependent_path);
-      } else {
-        log("Error rebuilding dependent_path:", dependent_path, err);
-      }
-
-      if (shouldDropDependent(err)) {
-        try {
-          await dropDependent(blogID, dependent_path);
-        } catch (dropErr) {
-          log("Error dropping invalid dependent:", dependent_path, dropErr);
-        }
-      }
-    }
+    await rebuildDependent(blog, dependent_path, log);
   }
 
   await markTemplateDependents(blog.id, path, log);
 };
+
+function logFor(blogID, path) {
+  return function () {
+    console.log.apply(null, [
+      clfdate(),
+      blogID.slice(0, 12),
+      "rebuildDependents:",
+      path,
+      ...arguments,
+    ]);
+  };
+}
+
+// Rebuilds one entry which depends on a changed file, dropping it if its own
+// source is gone. Never rejects for the entry's own build failing: that is
+// logged. log is a function taking what to log.
+async function rebuildDependent(blog, dependent_path, log) {
+  log = log || logFor(blog.id, dependent_path);
+
+  // A failed read is the same as no entry
+  const entry = await Entry.get(blog.id, dependent_path).catch(() => undefined);
+
+  if (!entry) {
+    log("No entry for dependent_path:", dependent_path);
+    return;
+  }
+
+  // Folder posts are rebuilt through their source folder, see
+  // rebuildEntry.
+  try {
+    await rebuildEntry(blog, entry);
+  } catch (err) {
+    // The dependent's own source file is gone, usually deleted
+    // in the same batch as this file. Dropping it below is the
+    // whole fix, so don't report it as an error.
+    if (isMissingFile(err)) {
+      log("Dependent no longer exists:", dependent_path);
+    } else {
+      log("Error rebuilding dependent_path:", dependent_path, err);
+    }
+
+    if (shouldDropDependent(err)) {
+      try {
+        await dropDependent(blog.id, dependent_path);
+      } catch (dropErr) {
+        log("Error dropping invalid dependent:", dependent_path, dropErr);
+      }
+    }
+  }
+}
 
 // Templates link to files in the blog's folder with {{#cdn}}. Their CDN
 // manifest holds each file's versioned URL, so when the file changes, appears
@@ -93,6 +103,7 @@ module.exports = async function rebuildDependents(blogID, path) {
 // regenerateTemplateManifests), where the blog's cacheID is also bumped.
 // Errors are logged and never fail the sync of the file itself.
 async function markTemplateDependents(blogID, path, log) {
+  log = log || logFor(blogID, path);
   try {
     const templateIDs = await client.sMembers(
       templateDependentsKey(blogID, path)
@@ -142,3 +153,6 @@ async function dropDependent(blogID, path) {
     await Preview.remove(blogID, path);
   }
 }
+
+module.exports.rebuildDependent = rebuildDependent;
+module.exports.markTemplateDependents = markTemplateDependents;

@@ -74,6 +74,10 @@ module.exports = async function (req, res) {
           folder.status("Created " + dirPath);
         }
 
+        // What depends on it is rebuilt before the answer, as when that
+        // was part of the update: the macserver's next request waits on it
+        await folder.drainDependents();
+
         console.log(`Directory successfully created: ${dirPath}`);
         res
           .status(200)

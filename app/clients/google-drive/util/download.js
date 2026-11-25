@@ -5,12 +5,19 @@ const localFile = require("./localFile");
 const colors = require("colors/safe");
 const { join, dirname, sep } = require("path");
 const debug = require("debug")("blot:clients:google-drive:download");
+const clfdate = require("helper/clfdate");
 const tempDir = require("helper/tempDir")();
 const guid = require("helper/guid");
 const verifyContent = require("./verifyContent");
 const assets = require("storage/assets");
 const hash = require("helper/hash");
 const cheerio = require("cheerio");
+const removeComments = require("build/converters/gdoc/comments");
+const fetchDoc = require("./fetchDoc");
+
+// Blogs whose Docs are fetched through the Docs API (#2975), while it rolls
+// out: drivetest first
+const DOCS_API_BLOGS = new Set(["blog_7ee4700bf9fc44f99d9c6a858ac4b135"]);
 const sandbox = require("sandbox");
 const hotDocPoller = require("../serviceAccount/hotDocPoller");
 const database = require("../database");
@@ -40,6 +47,13 @@ const isExportSizeLimitError = (err) => {
 // downloads at once passes its own publish(fn), which runs fn when the folder
 // is free to take another write; by default fn runs straight away.
 const run = (fn) => fn();
+
+// Whether Drive's modifiedTime is within the last half hour, or unknown
+const HOT_WINDOW_MS = 30 * 60 * 1000;
+const editedRecently = (modifiedTime) => {
+  const at = Date.parse(modifiedTime);
+  return !Number.isFinite(at) || Date.now() - at < HOT_WINDOW_MS;
+};
 
 const ensurePlaceholder = async (blogID, path, flag) => {
   // The caller (sync.js) records the remote modifiedTime in the client's
@@ -182,6 +196,14 @@ const downloadGoogleDocAsZip = async ({
 }) => {
   const zipPath = join(tempDir, guid());
   const extractDir = join(tempDir, guid());
+  // Each stage's time, logged once the Doc is published (#2975)
+  const timings = {};
+  let stageStart = Date.now();
+  const stage = (name) => {
+    timings[name] = Date.now() - stageStart;
+    stageStart = Date.now();
+  };
+  let imageCount = 0;
 
   try {
     const stream =
@@ -198,7 +220,9 @@ const downloadGoogleDocAsZip = async ({
       ).data;
 
     await streamToFile(stream, zipPath);
+    stage("export_ms");
     await extractZip(zipPath, extractDir);
+    stage("unzip_ms");
     const { htmlPath, imagesDir } = await resolveHtmlAndImagesDir(extractDir);
     const docHash = hash(path);
     const assetDir = "_assets/" + docHash;
@@ -209,15 +233,20 @@ const downloadGoogleDocAsZip = async ({
         const srcPath = join(imagesDir, name);
         const st = await fs.stat(srcPath);
         if (st.isFile()) {
+          imageCount += 1;
           await publish(() =>
             assets.writeFrom(blogID, assetDir + "/" + name, srcPath)
           );
         }
       }
     }
+    stage("images_ms");
 
     const html = await fs.readFile(htmlPath, "utf-8");
     const $ = cheerio.load(html, { decodeEntities: false });
+    // The folder's copy is served as is, so the Doc's comments, private to
+    // its editors, come out before it is written
+    removeComments($);
     $("img").each(function () {
       const src = $(this).attr("src");
       if (!src) return;
@@ -229,6 +258,15 @@ const downloadGoogleDocAsZip = async ({
     });
 
     await publish(() => folder.write(blogID, path, $.html().trim()));
+    stage("write_ms");
+    console.log(
+      clfdate(),
+      "Google Drive: exported Doc",
+      blogID,
+      path,
+      `images=${imageCount}`,
+      ...Object.entries(timings).map(([name, ms]) => `${name}=${ms}`)
+    );
   } finally {
     await fs.remove(zipPath).catch(() => {});
     await fs.remove(extractDir).catch(() => {});
@@ -239,7 +277,7 @@ module.exports = async (
   blogID,
   drive,
   path,
-  { id, md5Checksum, mimeType },
+  { id, md5Checksum, mimeType, modifiedTime },
   { serviceAccountId, folderId, skipHotEnqueue, publish = run } = {}
 ) => {
   const tempPath = join(tempDir, guid());
@@ -306,10 +344,17 @@ module.exports = async (
     return "placeholder";
   };
   try {
+    // Only a Doc edited recently is watched for more edits. A walk exports
+    // every Doc it finds changed in its records, which after a deploy or a
+    // backfill can be hundreds untouched for days; watching them all
+    // squeezed the poll rate of a Doc being typed in from 500ms to ~37s
+    // (24 Nov 2026). An edit to an older Doc reaches the poller through
+    // changes.list, the search or the recent-folders poller instead.
     if (
       !skipHotEnqueue &&
       id &&
-      mimeType === "application/vnd.google-apps.document"
+      mimeType === "application/vnd.google-apps.document" &&
+      editedRecently(modifiedTime)
     ) {
       let accountServiceAccountId = serviceAccountId;
       let accountFolderId = folderId;
@@ -376,6 +421,36 @@ module.exports = async (
 
     debug("DOWNLOAD file");
     debug("   to:", colors.green(path));
+
+    // Through the Docs API where it's switched on (#2975): its JSON, and
+    // only the images that changed. The zip export below stays for a Doc
+    // the API can't give whole, and if the API fails.
+    if (
+      mimeType === "application/vnd.google-apps.document" &&
+      DOCS_API_BLOGS.has(blogID)
+    ) {
+      try {
+        const fetched = await fetchDoc(
+          blogID,
+          path,
+          { id },
+          {
+            serviceAccountId,
+            acquireSlot: (account) => hotDocPoller.acquireDocsSlot(account),
+            publish,
+          }
+        );
+        if (fetched) return fetched;
+      } catch (err) {
+        console.error(
+          clfdate(),
+          "Google Drive: Docs API fetch failed, using the zip export",
+          blogID,
+          path,
+          err.message
+        );
+      }
+    }
 
     if (mimeType === "application/vnd.google-apps.document") {
       try {

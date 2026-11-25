@@ -354,6 +354,8 @@ describe("update", function () {
         )
       );
       await update(syncFolder, "/missing.png");
+      // The post that links to it is rebuilt when the sync ends, or now
+      await syncFolder.drainDependents();
 
       expect(await references()).toEqual([
         "BROKEN_FILE_LINK /files/missing.pdf",

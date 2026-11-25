@@ -2,6 +2,7 @@ Google Drive orphaned folder records, from #2961 (24 Nov 2026): on or after 1 De
 
 Demo folders, left over from #2940 (23 Nov 2026):
 - Sync: rebuild each dependent entry once per sync, not once per changed file, and tell a busy sync from a hung one in the stuck-lock alert. Plan: #2978.
+- Check after #2982/#2983: the `Rebuilt N dependent entries ms=` lines in the app log, especially on iCloud blogs, where each upload is its own sync. If a large entry's rebuild is slow enough that a burst of uploads rebuilds it many times over, add the debounced alarm #2978 dropped (short syncs leave their rebuild to it).
 - stamps and toni are on demo-folders master (3f00196), not yet pinned. #2872 should bump the `app/templates/folders` pin to it and add toni's `config.js` entry next to stamps', so both folders go live with `SITE:organization`. A deploy creates and syncs every folder in the pin, so bumping the pin before then would publish stamps.blot.im with no settings.
 - The image build still checks out the submodule (`unit-image.yml`) for the docs build's folder trees and ZIP hashes. Having demo-folders' own CI build `manifest.json` would take the folders out of the image build entirely.
 

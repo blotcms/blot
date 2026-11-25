@@ -122,6 +122,7 @@ module.exports = async function (req, res) {
 
           await updateOrRollBack(blogID, folder, filePath, modifiedTime);
           await database.clearUploadPending(blogID, filePath);
+          await folder.drainDependents();
           folder.status("Updated placeholder " + filePath);
 
           console.warn(
@@ -151,6 +152,10 @@ module.exports = async function (req, res) {
         // Call the folder's update method to register the file change
         await updateOrRollBack(blogID, folder, filePath, modifiedTime);
         await database.clearUploadPending(blogID, filePath);
+
+        // What depends on it is rebuilt before the answer, as when that
+        // was part of the update: the macserver's next request waits on it
+        await folder.drainDependents();
 
         // Set the folder status to reflect the upload action
         folder.status("Updated " + filePath);

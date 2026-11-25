@@ -148,6 +148,24 @@ async function runPostListenTasks() {
     logError("Failed to start pending rebuilds", err);
   }
 
+  try {
+    // Rebuilds of dependent entries a killed sync left pending, for blogs
+    // which don't sync again (sync/dependentsAlarm). Any container may run
+    // them; previews share the dev Redis and skip them.
+    if (!config.preview) {
+      log("Starting the dependents alarm");
+      const dependentsAlarm = require("sync/dependentsAlarm");
+      dependentsAlarm.start();
+      require("helper/drain").onStart(() => {
+        dependentsAlarm
+          .stop()
+          .catch((err) => logError("Failed to stop the dependents alarm", err));
+      });
+    }
+  } catch (err) {
+    logError("Failed to start the dependents alarm", err);
+  }
+
   // Cron jobs and client jobs take Redis locks, so every container runs them.
   // Worktree previews share the dev Redis and skip them.
   try {
