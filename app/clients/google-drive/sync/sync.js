@@ -282,6 +282,12 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
     await database.folder(folderId, blogID).reset({ keepApplied: true });
   }
 
+  // Google Docs the hot doc poller saw change: downloaded whatever their
+  // modifiedTime says, which lags an open Doc's edits (database/dirty.js)
+  const forced = new Set(
+    options.dirty?.forced ? await options.dirty.forced() : []
+  );
+
   // Directory listings for the pass under way; each pass makes its own
   let listings = null;
 
@@ -587,6 +593,8 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
         );
       }
 
+      if (forced.has(id)) identical = false;
+
       let started = null;
       const needsUpdate = !existsLocally || !identical;
 
@@ -785,6 +793,7 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                   ? { sha1: verified.sha1 }
                   : await localState.stateOf(blogID, path)),
               });
+              if (forced.has(id)) await options.dirty.unforce(id);
             } catch (err) {
               publish("Download failed", path);
               console.error("Download failed for", path, err);
