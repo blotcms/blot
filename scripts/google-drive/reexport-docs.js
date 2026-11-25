@@ -33,6 +33,8 @@ const HAS_COMMENT = /id="cmnt_ref\d+"/;
 async function main() {
   if (!commentsOnly && !onlyBlog)
     throw new Error("Pass --comments, or --blog <id> to re-export one blog");
+  if (args.includes("--blog") && !/^blog_/.test(onlyBlog || ""))
+    throw new Error("--blog needs a blog id, e.g. --blog blog_abc");
 
   const accounts = [];
   await database.blog.iterate(async (blogID, account) => {
@@ -41,7 +43,10 @@ async function main() {
       accounts.push({ blogID, account });
   });
 
-  const counts = { docs: 0, applied: 0, other: {} };
+  const counts = { docs: 0, applied: 0, failed: 0, other: {} };
+  // Blogs whose Doc fell back to a full sync, which runs in this process
+  // without being awaited: wait for each before exiting
+  const syncing = new Set();
 
   for (const { blogID, account } of accounts) {
     const paths = [];
@@ -82,23 +87,50 @@ async function main() {
         modifiedTime: new Date(0).toISOString(),
       });
 
-      const result = await hotDocPoller.applyChange({
-        blogID,
-        serviceAccountId: account.serviceAccountId,
-        fileId,
-        folderId: account.folderId,
-      });
+      let result;
+      try {
+        result = await hotDocPoller.applyChange({
+          blogID,
+          serviceAccountId: account.serviceAccountId,
+          fileId,
+          folderId: account.folderId,
+        });
+      } catch (err) {
+        // Its applied record is stale, so the blog's next sync exports it
+        console.log("Failed", blogID, path, err.message);
+        counts.failed += 1;
+        continue;
+      }
       console.log("Re-exported", blogID, path, result);
+      if (result === "full-sync") syncing.add(blogID);
       if (result === "applied") counts.applied += 1;
       else counts.other[result] = (counts.other[result] || 0) + 1;
     }
   }
 
+  for (const blogID of syncing) {
+    console.log("Waiting for the full sync of", blogID);
+    await waitForSync(blogID);
+  }
+
   console.log(
     apply
-      ? `Re-exported ${counts.applied} of ${counts.docs} Docs; others: ${JSON.stringify(counts.other)}`
+      ? `Re-exported ${counts.applied} of ${counts.docs} Docs, ${counts.failed} failed; others: ${JSON.stringify(counts.other)}`
       : `Dry run: would re-export ${counts.docs} Docs. Run again with --apply.`
   );
+}
+
+// Until the blog's folder lock is free for a few checks in a row: the full
+// sync starts a moment after applyChange returns, and may run twice (a
+// follow-up). Gives up after 15 minutes; the follow-up armed in Redis then
+// runs in the app.
+async function waitForSync(blogID) {
+  const deadline = Date.now() + 15 * 60 * 1000;
+  let free = 0;
+  while (free < 3 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    free = (await hotDocPoller.isFolderLocked(blogID)) ? 0 : free + 1;
+  }
 }
 
 main()
