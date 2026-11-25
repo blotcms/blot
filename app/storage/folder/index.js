@@ -101,12 +101,17 @@ module.exports = {
   // evicted once it is no longer recent, so use the path straight away.
   ensureLocal: delegate("ensureLocal"),
 
+  // ensureLocal, resolving to { localPath, size, modified }, the size and
+  // modified time as stat gives them, from the same read of the index
+  ensureLocalWithStat: delegate("ensureLocalWithStat"),
+
   // Calls fn(localPath) with the same kind of path as ensureLocal, and
   // resolves to what fn resolves to. For tools which may run for a long time
   // (pandoc, sharp, a big upload): the cache entry is pinned, in every process
   // sharing the cache, until the promise fn returns has settled, so it cannot
   // be evicted under the tool. The path is read-only and must not be used
-  // after fn is done.
+  // after fn is done. fn is also given { size, modified }, as stat gives
+  // them, from the same read of the index.
   withLocal: delegate("withLocal"),
 
   mkdir: write("mkdir"),

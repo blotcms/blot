@@ -4,6 +4,7 @@ const folder = require("storage/folder");
 const path = require("path");
 const hash = require("helper/hash");
 const assets = require("storage/assets");
+const s3 = require("storage/s3");
 
 describe("img converter", function () {
   global.test.blog();
@@ -38,6 +39,24 @@ describe("img converter", function () {
       if (err) throw err;
       expect(result).toEqual(expected);
     });
+  });
+
+  it("asks the bucket about a converted image once, not on every build", async function () {
+    const test = this;
+    const path = "/laptop.tiff";
+
+    await folder.writeFrom(test.blog.id, path, __dirname + path);
+    await img.read(test.blog, path);
+
+    const key = test.blog.id + "/_assets/" + hash(path) + "/";
+    spyOn(s3, "head").and.callThrough();
+
+    await img.read(test.blog, path);
+
+    const asked = s3.head.calls
+      .allArgs()
+      .filter(([k]) => typeof k === "string" && k.startsWith(key));
+    expect(asked).toEqual([]);
   });
 
   it("extracts EXIF data by default", async function () {
