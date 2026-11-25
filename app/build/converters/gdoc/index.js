@@ -14,6 +14,7 @@ const linebreaks = require("./linebreaks");
 const restoreDisplayMath = require("./restore-display-math");
 const processImages = require("./images");
 const cleanupSpans = require("./cleanup-spans");
+const removeComments = require("./comments");
 const {
   normalizeLiteralDollarMath,
 } = require("build/math/normalizeLiteralDollars");
@@ -89,6 +90,9 @@ async function read(blog, path) {
   const contents = (await folder.read(blog.id, path)).toString("utf-8");
 
   const $ = cheerio.load(contents, { decodeEntities: false });
+
+  // Comments are never published (./comments.js)
+  removeComments($);
 
   // replaces google docs 'titles' with true h1 tags
   $("p.title").each(function (i, elem) {

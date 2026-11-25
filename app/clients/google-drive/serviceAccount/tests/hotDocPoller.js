@@ -77,6 +77,36 @@ describe("google drive hotDocPoller", function () {
     return due === null ? null : due - Date.now();
   };
 
+  it("asks docs.get for the revision only", async function () {
+    const get = jasmine
+      .createSpy("get")
+      .and.returnValue(Promise.resolve({ data: { revisionId: "r" } }));
+
+    const state = await poller.fetchLatestRevisionState(
+      { documents: { get } },
+      fileId
+    );
+
+    expect(get).toHaveBeenCalledWith({
+      documentId: fileId,
+      fields: "revisionId",
+    });
+    expect(state).toEqual({ lastKnownRevision: "r" });
+  });
+
+  it("logs a summary of what it did, then starts counting again", function () {
+    poller.metrics.pollAttempts = 3;
+    poller.logSummary();
+    const line = console.log.calls.mostRecent().args.join(" ");
+    expect(line).toContain('"event":"summary"');
+    expect(line).toContain('"pollAttempts":3');
+    expect(poller.metrics.pollAttempts).toBe(0);
+
+    console.log.calls.reset();
+    poller.logSummary();
+    expect(console.log).not.toHaveBeenCalled();
+  });
+
   describe("schedule", function () {
     it("arms an alarm at the 500ms tier when a Doc is enqueued", async function () {
       const before = Date.now();

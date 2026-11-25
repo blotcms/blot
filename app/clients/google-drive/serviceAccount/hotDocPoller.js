@@ -83,6 +83,8 @@ const SHORTCUT = "application/vnd.google-apps.shortcut";
 // call per 250ms slot (a per-second counter would allow 8 calls across a
 // second boundary).
 const DOCS_GET_SLOT_MS = 250;
+// How often each process logs what its poller did
+const SUMMARY_EVERY_MS = 60 * 1000;
 const DOCS_GET_PER_SECOND = 1000 / DOCS_GET_SLOT_MS;
 // Slots tried before giving up on a rate-limit slot (about 10s)
 const DOCS_GET_MAX_SLOT_ATTEMPTS = 40;
@@ -236,6 +238,16 @@ class HotDocPoller {
     this.started = true;
     this.alarms.start();
     this.stopOnDrain = drain.onStart(() => this.stop());
+    // What this process's poller did, once a minute when it did anything
+    this.summaryTimer = setInterval(() => this.logSummary(), SUMMARY_EVERY_MS);
+    this.summaryTimer.unref?.();
+  }
+
+  logSummary() {
+    const counts = { ...this.metrics };
+    if (!Object.values(counts).some((n) => n > 0)) return;
+    this.log("summary", counts);
+    for (const name of Object.keys(this.metrics)) this.metrics[name] = 0;
   }
 
   // Waits for the Doc being polled, claims no more
@@ -244,6 +256,8 @@ class HotDocPoller {
     this.started = false;
     if (this.stopOnDrain) this.stopOnDrain();
     this.stopOnDrain = null;
+    clearInterval(this.summaryTimer);
+    this.logSummary();
     await this.alarms.stop();
   }
 
@@ -382,7 +396,13 @@ class HotDocPoller {
   async fetchLatestRevisionState(docs, fileId) {
     if (!docs) return { lastKnownRevision: null };
 
-    const doc = await docs.documents.get({ documentId: fileId });
+    // Only the revision: without a fields mask every poll downloads the
+    // whole Doc (15-77 KB for small Docs, far more for long ones) to read
+    // one field. The mask returns about 128 bytes (24 Nov 2026).
+    const doc = await docs.documents.get({
+      documentId: fileId,
+      fields: "revisionId",
+    });
     return { lastKnownRevision: doc?.data?.revisionId ?? null };
   }
 
