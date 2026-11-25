@@ -1,0 +1,634 @@
+// Renders a Google Doc from the Docs API's JSON (docs.documents.get with
+// includeTabsContent) to HTML (#2975). The client stores that JSON as the
+// .gdoc file, with each image's contentUri swapped for the path Blot keeps
+// it at (imageProperties.blotSrc), see clients/google-drive/util/fetchDoc.js.
+//
+// The JSON says exactly what the writer did, so nothing is guessed from CSS
+// as the HTML export needs: list nesting, checklists, code blocks, combined
+// styles, header rows, tabs. Comments aren't in it at all.
+//
+// render(doc) resolves to { html, metadata }: metadata from the leading
+// paragraphs, read with build/metadata as for every other format.
+const Metadata = require("build/metadata");
+
+const MONOSPACE =
+  /^(courier|courier new|consolas|roboto mono|source code pro|inconsolata|menlo|monaco|fira code|fira mono|jetbrains mono|ibm plex mono|ubuntu mono|space mono|pt mono|andale mono|lucida console|monospace)$/i;
+
+// Google marks the first and last line of a code block (Insert, Building
+// blocks, Code block) with this private-use character
+const CODE_BLOCK_MARK = String.fromCharCode(0xe907);
+
+// A line break inside a paragraph (Shift+Enter) is a vertical tab
+const LINE_BREAK = String.fromCharCode(11);
+
+const ORDERED = /^(DECIMAL|ZERO_DECIMAL|UPPER_ALPHA|ALPHA|UPPER_ROMAN|ROMAN)$/;
+const OL_TYPES = { UPPER_ALPHA: "A", ALPHA: "a", UPPER_ROMAN: "I", ROMAN: "i" };
+
+const escape = (text) =>
+  String(text)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const pt = (dimension) => (dimension && dimension.magnitude) || 0;
+
+// A heading's id, as a slug of its text, unique within the post
+function slugger() {
+  const used = new Map();
+  return (text) => {
+    const base =
+      String(text)
+        .toLowerCase()
+        .normalize("NFKD")
+        .replace(/[̀-ͯ]/g, "")
+        .replace(/[^a-z0-9\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-") || "section";
+    const n = used.get(base) || 0;
+    used.set(base, n + 1);
+    return n ? `${base}-${n}` : base;
+  };
+}
+
+const paragraphText = (paragraph) =>
+  (paragraph.elements || [])
+    .map((e) => (e.textRun ? e.textRun.content : ""))
+    .join("")
+    .replace(/\n$/, "");
+
+const isEmptyParagraph = (paragraph) =>
+  !(paragraph.elements || []).some(
+    (e) =>
+      (e.textRun && e.textRun.content.replace(/[\n\s]/g, "") !== "") ||
+      e.inlineObjectElement ||
+      e.horizontalRule ||
+      e.footnoteReference ||
+      e.person ||
+      e.richLink ||
+      e.dateElement
+  );
+
+function render(doc) {
+  const tabs = doc.tabs || [{ documentTab: doc }];
+  const context = {
+    slug: slugger(),
+    // headingId (Google's, for internal links) -> the slug it was given
+    headings: new Map(),
+    footnotes: [],
+    footnoteNumbers: new Map(),
+  };
+
+  // Headings first, so a link to a heading later in the Doc resolves
+  const collect = (tab) => {
+    for (const el of tab.documentTab.body.content || []) {
+      const p = el.paragraph;
+      if (p && p.paragraphStyle && p.paragraphStyle.headingId)
+        context.headings.set(
+          p.paragraphStyle.headingId,
+          context.slug(paragraphText(p))
+        );
+    }
+    (tab.childTabs || []).forEach(collect);
+  };
+  tabs.forEach(collect);
+
+  // Metadata from the first tab's leading paragraphs, before rendering
+  const first = tabs[0].documentTab.body.content || [];
+  const metadata = readMetadata(first);
+
+  const wrap = tabs.length > 1 || tabs.some((t) => (t.childTabs || []).length);
+  const renderTab = (tab) => {
+    const inner = renderContent(
+      tab.documentTab.body.content || [],
+      tab.documentTab,
+      context
+    );
+    const children = (tab.childTabs || []).map(renderTab).join("");
+    if (!wrap) return inner + children;
+    const title = (tab.tabProperties && tab.tabProperties.title) || "";
+    return `<section class="tab" data-title="${escape(title)}" id="${escape(context.slug(title || "tab"))}">\n${inner}${children}</section>\n`;
+  };
+
+  let html = tabs.map(renderTab).join("");
+
+  if (context.footnotes.length) {
+    html +=
+      '<section id="footnotes" class="footnotes footnotes-end-of-document" role="doc-endnotes"><hr>\n<ol>' +
+      context.footnotes
+        .map(
+          ({ number, html: text }) =>
+            `<li id="footnote-${number}"><p>${text}<a href="#ref-${number}" role="doc-backlink" class="footnote-back">↩︎</a></p>\n</li>\n`
+        )
+        .join("") +
+      "</ol>\n</section>\n";
+  }
+
+  return { html: html.trim(), metadata };
+}
+
+// Leading paragraphs that are metadata lines ("Key: value", or YAML between
+// --- lines) are taken out of the body, as for Markdown and the HTML export
+function readMetadata(content) {
+  const metadata = {};
+  let i = 0;
+  while (i < content.length && !content[i].paragraph) i++;
+
+  // As the HTML converter did: headings (Title, Heading 1...) are never
+  // metadata and don't end it, so "Title" then "Tags: a, b" still works
+  const paragraphs = [];
+  for (let j = i; j < content.length && content[j].paragraph; j++) {
+    const named =
+      (content[j].paragraph.paragraphStyle || {}).namedStyleType ||
+      "NORMAL_TEXT";
+    if (named === "NORMAL_TEXT") paragraphs.push(j);
+  }
+
+  let fenced = false;
+  let taken = 0;
+  for (const j of paragraphs) {
+    const text = paragraphText(content[j].paragraph).trim();
+    if (!taken && (text === "---" || text === "—")) {
+      fenced = true;
+      taken += 1;
+      continue;
+    }
+    if (
+      fenced &&
+      (text === "---" || text === "—") &&
+      Object.keys(metadata).length
+    ) {
+      taken += 1;
+      break;
+    }
+    if (!text) {
+      if (!Object.keys(metadata).length) break;
+      taken += 1;
+      break;
+    }
+    const colon = text.indexOf(":");
+    if (colon === -1 || /\s/.test(text.slice(0, colon).trim())) break;
+    const parsed = Metadata(text);
+    if (parsed.html === text) break;
+    Object.assign(metadata, parsed.metadata);
+    taken += 1;
+  }
+
+  if (!Object.keys(metadata).length) return {};
+  // Mark the paragraphs taken, so renderContent skips them
+  for (let k = 0; k < taken; k++) content[paragraphs[k]].blotMetadata = true;
+  return metadata;
+}
+
+// The effective space below and above a paragraph, falling back to its
+// named style's
+function spacing(paragraph, tab) {
+  const style = paragraph.paragraphStyle || {};
+  const named = ((tab.namedStyles || {}).styles || []).find(
+    (s) => s.namedStyleType === (style.namedStyleType || "NORMAL_TEXT")
+  );
+  const base = (named && named.paragraphStyle) || {};
+  return {
+    above: style.spaceAbove ? pt(style.spaceAbove) : pt(base.spaceAbove),
+    below: style.spaceBelow ? pt(style.spaceBelow) : pt(base.spaceBelow),
+  };
+}
+
+function renderContent(content, tab, context) {
+  let html = "";
+  // Normal paragraphs with no space between them, joined with <br> as one
+  let lines = [];
+  let previous = null;
+  let list = null;
+  let code = null;
+  let mono = null;
+
+  const flushLines = () => {
+    if (lines.length) html += `<p>${lines.join("<br>\n")}</p>\n`;
+    lines = [];
+  };
+  const flushList = () => {
+    if (list) html += renderList(list, tab, context);
+    list = null;
+  };
+
+  for (const el of content) {
+    if (el.blotMetadata) continue;
+
+    const p = el.paragraph;
+
+    // Code blocks: from a line starting with the mark to the next one
+    if (p && paragraphText(p).includes(CODE_BLOCK_MARK)) {
+      const text = paragraphText(p).replace(
+        new RegExp(CODE_BLOCK_MARK, "g"),
+        ""
+      );
+      if (!code) {
+        flushLines();
+        flushList();
+        code = [];
+        if (text) code.push(text);
+      } else {
+        if (text) code.push(text);
+        html += `<pre><code>${escape(code.join("\n").split(LINE_BREAK).join("\n"))}</code></pre>\n`;
+        code = null;
+      }
+      previous = null;
+      continue;
+    }
+    if (code) {
+      if (p) code.push(paragraphText(p));
+      continue;
+    }
+
+    if (el.table) {
+      flushLines();
+      flushList();
+      html += renderTable(el.table, tab, context);
+      previous = null;
+      continue;
+    }
+
+    if (el.tableOfContents) {
+      flushLines();
+      flushList();
+      html += renderContent(el.tableOfContents.content || [], tab, context);
+      previous = null;
+      continue;
+    }
+
+    if (!p) continue;
+
+    const style = p.paragraphStyle || {};
+    const named = style.namedStyleType || "NORMAL_TEXT";
+
+    // Consecutive list items make one tree, even across list ids: Docs
+    // imported from Word give each nesting level its own list
+    if (p.bullet) {
+      flushLines();
+      // ...but a top-level item of another list starts a new one (a
+      // numbered list straight after a bulleted one)
+      const top = !p.bullet.nestingLevel;
+      if (list && top && list.rootId && list.rootId !== p.bullet.listId)
+        flushList();
+      if (!list) list = { items: [], rootId: null };
+      if (top && !list.rootId) list.rootId = p.bullet.listId;
+      list.items.push(p);
+      previous = null;
+      continue;
+    }
+    flushList();
+
+    const heading =
+      named === "TITLE"
+        ? 1
+        : named === "SUBTITLE"
+          ? 2
+          : (named.match(/^HEADING_(\d)$/) || [])[1];
+    if (heading) {
+      flushLines();
+      const inner = renderInline(p, tab, context);
+      if (inner.trim()) {
+        const slug = style.headingId && context.headings.get(style.headingId);
+        html += `<h${heading}${slug ? ` id="${slug}"` : ""}>${inner}</h${heading}>\n`;
+      }
+      previous = null;
+      continue;
+    }
+
+    // A paragraph wholly in a monospace font is a line of code, and
+    // consecutive ones a code block
+    if (isMonospace(p)) {
+      flushLines();
+      mono = mono || [];
+      mono.push(paragraphText(p));
+      const next = content[content.indexOf(el) + 1];
+      if (
+        !next ||
+        !next.paragraph ||
+        !isMonospace(next.paragraph) ||
+        next.paragraph.bullet
+      ) {
+        html += `<pre><code>${escape(mono.join("\n").split(LINE_BREAK).join("\n"))}</code></pre>\n`;
+        mono = null;
+      }
+      previous = null;
+      continue;
+    }
+
+    if (isEmptyParagraph(p)) {
+      flushLines();
+      previous = null;
+      continue;
+    }
+
+    // Alone on its line: a rule, not text
+    if (
+      p.elements.length &&
+      p.elements.every(
+        (e) => e.horizontalRule || (e.textRun && !e.textRun.content.trim())
+      )
+    ) {
+      flushLines();
+      html += "<hr>\n";
+      previous = null;
+      continue;
+    }
+
+    const gap =
+      previous &&
+      (spacing(previous, tab).below > 0 || spacing(p, tab).above > 0);
+    if (gap) flushLines();
+    lines.push(renderInline(p, tab, context));
+    previous = p;
+  }
+
+  if (code) html += `<pre><code>${escape(code.join("\n"))}</code></pre>\n`;
+  flushLines();
+  flushList();
+  return html;
+}
+
+function listKind(tab, listId, level) {
+  const lists = tab.lists || {};
+  const nesting =
+    (((lists[listId] || {}).listProperties || {}).nestingLevels || [])[level] ||
+    {};
+  if (nesting.glyphSymbol) return { tag: "ul" };
+  if (ORDERED.test(nesting.glyphType || ""))
+    return { tag: "ol", type: OL_TYPES[nesting.glyphType] };
+  // Docs' checklists have no glyph at all
+  if (!nesting.glyphType || nesting.glyphType === "GLYPH_TYPE_UNSPECIFIED")
+    return { tag: "ul", checklist: true };
+  return { tag: "ul" };
+}
+
+function renderList({ items }, tab, context) {
+  // Build the tree from each item's nesting level
+  const root = { children: [] };
+  const stack = [{ level: -1, node: root }];
+  for (const p of items) {
+    const level = p.bullet.nestingLevel || 0;
+    while (stack.length > 1 && stack[stack.length - 1].level >= level)
+      stack.pop();
+    const node = { p, children: [] };
+    stack[stack.length - 1].node.children.push(node);
+    stack.push({ level, node });
+  }
+
+  // Docs numbers a list on across anything in between, by list and level
+  context.counters = context.counters || new Map();
+
+  const renderLevel = (children, level) => {
+    const listId = children[0].p.bullet.listId;
+    const kind = listKind(tab, listId, level);
+    const key = `${listId}:${level}`;
+    const start = (context.counters.get(key) || 0) + 1;
+    context.counters.set(key, start - 1 + children.length);
+    let attrs = "";
+    if (kind.tag === "ol" && start > 1) attrs += ` start="${start}"`;
+    if (kind.type) attrs += ` type="${kind.type}"`;
+    if (kind.checklist) attrs += ' class="checklist"';
+    const lis = children
+      .map(({ p, children: sub }) => {
+        let inner = renderInline(p, tab, context, {
+          checklist: kind.checklist,
+        });
+        if (kind.checklist) {
+          const checked = isStruckThrough(p);
+          inner = `<input type="checkbox" disabled${checked ? " checked" : ""}> ${checked ? renderInline(p, tab, context, { noStrike: true }) : inner}`;
+        }
+        // A deeper level after an item nests inside it
+        return `<li>${inner}${sub.length ? "\n" + renderLevel(sub, sub[0].p.bullet.nestingLevel || 0) : ""}</li>\n`;
+      })
+      .join("");
+    return `<${kind.tag}${attrs}>\n${lis}</${kind.tag}>\n`;
+  };
+
+  // Items deeper than the first item's level with no parent still render
+  return renderLevel(
+    root.children,
+    root.children.length ? root.children[0].p.bullet.nestingLevel || 0 : 0
+  );
+}
+
+const isMonospace = (p) => {
+  // Line breaks and spaces often keep the body font: only text counts
+  const runs = (p.elements || []).filter(
+    (e) => e.textRun && e.textRun.content.trim()
+  );
+  return (
+    runs.length > 0 &&
+    !(p.elements || []).some((e) => !e.textRun) &&
+    runs.every((e) =>
+      MONOSPACE.test(
+        ((e.textRun.textStyle || {}).weightedFontFamily || {}).fontFamily || ""
+      )
+    )
+  );
+};
+
+const isStruckThrough = (p) => {
+  const runs = (p.elements || []).filter(
+    (e) => e.textRun && e.textRun.content.trim()
+  );
+  return (
+    runs.length > 0 &&
+    runs.every((e) => (e.textRun.textStyle || {}).strikethrough)
+  );
+};
+
+function renderTable(table, tab, context) {
+  const rows = table.tableRows || [];
+
+  const cellText = (cell) =>
+    (cell.content || [])
+      .filter((c) => c.paragraph)
+      .map((c) => paragraphText(c.paragraph))
+      .join("\n");
+
+  // Code tables, as Blot has always read them: a 1x1 table is a code block,
+  // and a 2x1 one is a language and a code block
+  if (rows.length === 1 && rows[0].tableCells.length === 1)
+    return `<pre><code>${escape(cellText(rows[0].tableCells[0]))}</code></pre>\n`;
+  if (rows.length === 2 && rows.every((r) => r.tableCells.length === 1)) {
+    const language = cellText(rows[0].tableCells[0]).trim();
+    return `<pre${language ? ` class="${escape(language)}"` : ""}><code>${escape(cellText(rows[1].tableCells[0]))}</code></pre>\n`;
+  }
+
+  let head = "";
+  let body = "";
+  rows.forEach((row) => {
+    const header = row.tableRowStyle && row.tableRowStyle.tableHeader;
+    const cells = row.tableCells
+      .map((cell) => {
+        const tag = header ? "th" : "td";
+        const style = cell.tableCellStyle || {};
+        let attrs = "";
+        if (style.columnSpan > 1) attrs += ` colspan="${style.columnSpan}"`;
+        if (style.rowSpan > 1) attrs += ` rowspan="${style.rowSpan}"`;
+        const firstParagraph = (cell.content || []).find((c) => c.paragraph);
+        const alignment =
+          firstParagraph &&
+          (firstParagraph.paragraph.paragraphStyle || {}).alignment;
+        if (alignment === "CENTER") attrs += ' style="text-align:center"';
+        if (alignment === "END") attrs += ' style="text-align:right"';
+        let inner = renderContent(cell.content || [], tab, context).trim();
+        // A cell of one paragraph needs no <p>
+        const single = inner.match(/^<p>([\s\S]*)<\/p>$/);
+        if (single && !single[1].includes("<p>")) inner = single[1];
+        return `<${tag}${attrs}>${inner}</${tag}>`;
+      })
+      .join("");
+    if (header) head += `<tr>${cells}</tr>\n`;
+    else body += `<tr>${cells}</tr>\n`;
+  });
+
+  return `<table>\n${head ? `<thead>\n${head}</thead>\n` : ""}<tbody>\n${body}</tbody>\n</table>\n`;
+}
+
+// The paragraph's elements as inline HTML, consecutive runs with the same
+// styles merged so tags aren't repeated at every run boundary
+function renderInline(p, tab, context, options = {}) {
+  const parts = [];
+
+  for (const e of p.elements || []) {
+    if (e.textRun) {
+      let text = e.textRun.content;
+      if (!text) continue;
+      text = text.replace(/\n$/, "");
+      if (!text) continue;
+      parts.push({ style: e.textRun.textStyle || {}, text });
+    } else if (e.inlineObjectElement) {
+      parts.push({
+        raw: renderImage(e.inlineObjectElement.inlineObjectId, tab),
+      });
+    } else if (e.footnoteReference) {
+      parts.push({ raw: renderFootnoteRef(e.footnoteReference, tab, context) });
+    } else if (e.horizontalRule) {
+      parts.push({ raw: "<hr>" });
+    } else if (e.person) {
+      const props = e.person.personProperties || {};
+      const name = escape(props.name || props.email || "");
+      parts.push({
+        raw: props.email
+          ? `<a href="mailto:${escape(props.email)}">${name}</a>`
+          : name,
+      });
+    } else if (e.richLink) {
+      const props = e.richLink.richLinkProperties || {};
+      parts.push({
+        raw: `<a href="${escape(props.uri || "")}">${escape(props.title || props.uri || "")}</a>`,
+      });
+    } else if (e.dateElement) {
+      const props = e.dateElement.dateElementProperties || {};
+      parts.push({ raw: escape(props.displayText || props.timestamp || "") });
+    }
+  }
+
+  // Group runs by link first, then by style
+  let html = "";
+  let i = 0;
+  while (i < parts.length) {
+    const part = parts[i];
+    if (part.raw !== undefined) {
+      html += part.raw;
+      i++;
+      continue;
+    }
+    const href = linkOf(part.style, context);
+    let j = i;
+    let inner = "";
+    while (
+      j < parts.length &&
+      parts[j].raw === undefined &&
+      linkOf(parts[j].style, context) === href
+    ) {
+      inner += styled(parts[j], options, Boolean(href));
+      j++;
+    }
+    html += href ? `<a href="${escape(href)}">${inner}</a>` : inner;
+    i = j;
+  }
+
+  return mergeAdjacent(html);
+}
+
+function linkOf(style, context) {
+  const link = style.link;
+  if (!link) return null;
+  if (link.url) return link.url;
+  if (link.headingId && context.headings.has(link.headingId))
+    return "#" + context.headings.get(link.headingId);
+  if (link.bookmarkId) return "#" + link.bookmarkId;
+  return null;
+}
+
+function styled({ style, text }, options, inLink) {
+  let html = escape(text).split(LINE_BREAK).join("<br>\n");
+  const font = (style.weightedFontFamily || {}).fontFamily || "";
+  if (MONOSPACE.test(font)) html = `<code>${html}</code>`;
+  if (style.baselineOffset === "SUPERSCRIPT") html = `<sup>${html}</sup>`;
+  if (style.baselineOffset === "SUBSCRIPT") html = `<sub>${html}</sub>`;
+  if (style.strikethrough && !options.noStrike) html = `<s>${html}</s>`;
+  // Docs underlines links itself
+  if (style.underline && !inLink) html = `<u>${html}</u>`;
+  if (style.italic) html = `<em>${html}</em>`;
+  if (style.bold) html = `<strong>${html}</strong>`;
+  return html;
+}
+
+// <strong>a</strong><strong>b</strong> -> <strong>ab</strong>
+function mergeAdjacent(html) {
+  let previous;
+  do {
+    previous = html;
+    html = html.replace(/<\/(strong|em|u|s|sup|sub|code)><\1>/g, "");
+  } while (html !== previous);
+  return html;
+}
+
+function renderImage(id, tab) {
+  const object = ((tab.inlineObjects || {})[id] || {}).inlineObjectProperties;
+  const embedded = object && object.embeddedObject;
+  if (!embedded) return "";
+  const src = embedded.imageProperties && embedded.imageProperties.blotSrc;
+  if (!src) return "";
+  const width = Math.round((pt(embedded.size && embedded.size.width) * 4) / 3);
+  const height = Math.round(
+    (pt(embedded.size && embedded.size.height) * 4) / 3
+  );
+  let attrs = `src="${escape(src)}" alt="${escape(embedded.description || "")}"`;
+  if (embedded.title) attrs += ` title="${escape(embedded.title)}"`;
+  if (width && height) attrs += ` width="${width}" height="${height}"`;
+  return `<img ${attrs}>`;
+}
+
+function renderFootnoteRef(ref, tab, context) {
+  const number = ref.footnoteNumber;
+  if (!context.footnoteNumbers.has(ref.footnoteId)) {
+    context.footnoteNumbers.set(ref.footnoteId, number);
+    const footnote = (tab.footnotes || {})[ref.footnoteId];
+    const text = footnote
+      ? (footnote.content || [])
+          .filter((c) => c.paragraph)
+          .map((c) => renderInline(c.paragraph, tab, context).trim())
+          .join("<br>\n")
+      : "";
+    context.footnotes.push({ number, html: text });
+  }
+  return `<a href="#footnote-${number}" id="ref-${number}" role="doc-noteref" class="footnote-ref"><sup>${number}</sup></a>`;
+}
+
+module.exports = render;
+module.exports.isDocJSON = (text) => {
+  const start = text.trimStart();
+  if (!start.startsWith("{")) return false;
+  try {
+    const doc = JSON.parse(start);
+    return Boolean(doc && (doc.tabs || doc.body) && doc.documentId);
+  } catch (err) {
+    return false;
+  }
+};

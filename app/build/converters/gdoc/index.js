@@ -15,6 +15,7 @@ const restoreDisplayMath = require("./restore-display-math");
 const processImages = require("./images");
 const cleanupSpans = require("./cleanup-spans");
 const removeComments = require("./comments");
+const renderJSON = require("./json");
 const {
   normalizeLiteralDollarMath,
 } = require("build/math/normalizeLiteralDollars");
@@ -72,6 +73,24 @@ function convertCodeTables($) {
   });
 }
 
+// The steps the HTML export also goes through that still apply: quotes
+// marked with >, display math and literal dollars, and the metadata as
+// front matter. Images were stored when the Doc was fetched, and the
+// renderer already handles line breaks, footnotes and code tables.
+async function fromJSON(contents) {
+  const { html: rendered, metadata } = renderJSON(JSON.parse(contents));
+  const $ = cheerio.load(rendered, { decodeEntities: false }, false);
+
+  blockquotes($);
+  restoreDisplayMath($);
+  normalizeLiteralDollarMath($);
+
+  let html = $.html();
+  if (Object.keys(metadata).length)
+    html = "---\n" + yaml.stringify(metadata) + "---\n" + html;
+  return html.trim();
+}
+
 function is(path) {
   return [".gdoc"].indexOf(extname(path).toLowerCase()) > -1;
 }
@@ -88,6 +107,9 @@ async function read(blog, path) {
     throw postSourceSize.tooLargeError(postSourceSize.GDOC);
 
   const contents = (await folder.read(blog.id, path)).toString("utf-8");
+
+  // A Doc fetched through the Docs API: its JSON (./json.js)
+  if (renderJSON.isDocJSON(contents)) return [await fromJSON(contents), stat];
 
   const $ = cheerio.load(contents, { decodeEntities: false });
 

@@ -13,6 +13,11 @@ const assets = require("storage/assets");
 const hash = require("helper/hash");
 const cheerio = require("cheerio");
 const removeComments = require("build/converters/gdoc/comments");
+const fetchDoc = require("./fetchDoc");
+
+// Blogs whose Docs are fetched through the Docs API (#2975), while it rolls
+// out: drivetest first
+const DOCS_API_BLOGS = new Set(["blog_7ee4700bf9fc44f99d9c6a858ac4b135"]);
 const sandbox = require("sandbox");
 const hotDocPoller = require("../serviceAccount/hotDocPoller");
 const database = require("../database");
@@ -416,6 +421,36 @@ module.exports = async (
 
     debug("DOWNLOAD file");
     debug("   to:", colors.green(path));
+
+    // Through the Docs API where it's switched on (#2975): its JSON, and
+    // only the images that changed. The zip export below stays for a Doc
+    // the API can't give whole, and if the API fails.
+    if (
+      mimeType === "application/vnd.google-apps.document" &&
+      DOCS_API_BLOGS.has(blogID)
+    ) {
+      try {
+        const fetched = await fetchDoc(
+          blogID,
+          path,
+          { id },
+          {
+            serviceAccountId,
+            acquireSlot: (account) => hotDocPoller.acquireDocsSlot(account),
+            publish,
+          }
+        );
+        if (fetched) return fetched;
+      } catch (err) {
+        console.error(
+          clfdate(),
+          "Google Drive: Docs API fetch failed, using the zip export",
+          blogID,
+          path,
+          err.message
+        );
+      }
+    }
 
     if (mimeType === "application/vnd.google-apps.document") {
       try {

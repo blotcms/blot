@@ -59,6 +59,7 @@ function fakeDatabase(accounts) {
 const loadForget = (database) =>
   load("../forget", {
     "./database": database,
+    "./database/docImages": { drop: async () => {} },
     "./util/hashes": {
       drop: async (blogID) => {
         database.calls.hashesDropped.push(blogID);
