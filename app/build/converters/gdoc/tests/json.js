@@ -16,24 +16,20 @@ describe("gdoc json renderer", function () {
   });
   const html = (content, more) => render(doc(content, more)).html;
 
-  it("keeps a monospace line followed by a monospace heading", function () {
-    const out = html([
-      para("intro"),
-      para("x = 1", {}, mono),
-      para(
-        "Heading",
-        { paragraphStyle: { namedStyleType: "HEADING_1" } },
-        mono
-      ),
-    ]);
-    expect(out).toContain("<pre><code>x = 1</code></pre>");
-    expect(out.indexOf("x = 1")).toBeLessThan(out.indexOf("<h1>"));
+  it("leaves a paragraph wholly in a typewriter font as a paragraph", function () {
+    const out = html([para("intro"), para("Le texte", {}, mono)]);
+    expect(out).toBe("<p>intro<br>\nLe texte</p>");
   });
 
-  it("leaves a Doc written wholly in a typewriter font as paragraphs", function () {
-    const out = html([para("one", {}, mono), para(""), para("two", {}, mono)]);
-    expect(out).not.toContain("<pre>");
-    expect(out).toContain("<p><code>one</code></p>");
+  it("marks monospace words among others as code", function () {
+    const out = html([
+      {
+        paragraph: {
+          elements: [run("run "), run("npm test", mono), run("\n")],
+        },
+      },
+    ]);
+    expect(out).toBe("<p>run <code>npm test</code></p>");
   });
 
   it("drops a code block mark with no partner", function () {
@@ -111,12 +107,62 @@ describe("gdoc json renderer", function () {
     expect(out).toContain('id="ref-2"');
   });
 
+  it("reads a list with no glyph and no format as a plain list", function () {
+    const lists = {
+      l: {
+        listProperties: {
+          nestingLevels: [{ glyphType: "GLYPH_TYPE_UNSPECIFIED" }],
+        },
+      },
+    };
+    const out = html([para("item", { bullet: { listId: "l" } })], { lists });
+    expect(out).toBe("<ul>\n<li>item</li>\n</ul>");
+  });
+
   it("never takes a list item as metadata", function () {
     const result = render(
       doc([para("Note: bring snacks", { bullet: { listId: "l" } })])
     );
     expect(result.metadata).toEqual({});
     expect(result.html).toContain("bring snacks");
+  });
+
+  it("reads metadata lines joined with Shift+Enter", function () {
+    const LINE = String.fromCharCode(11);
+    const result = render(
+      doc([para("Date: 1 Oct" + LINE + "Tags: a, b"), para(""), para("Body")])
+    );
+    expect(result.metadata).toEqual({ Date: "1 Oct", Tags: "a, b" });
+    expect(result.html).toBe("<p>Body</p>");
+  });
+
+  it("keeps an image straight after the metadata lines", function () {
+    const result = render(
+      doc(
+        [
+          para("Menu: no"),
+          {
+            paragraph: {
+              elements: [
+                { inlineObjectElement: { inlineObjectId: "i" } },
+                run("\n"),
+              ],
+            },
+          },
+        ],
+        {
+          inlineObjects: {
+            i: {
+              inlineObjectProperties: {
+                embeddedObject: { imageProperties: { blotSrc: "/a.png" } },
+              },
+            },
+          },
+        }
+      )
+    );
+    expect(result.metadata).toEqual({ Menu: "no" });
+    expect(result.html).toContain('<img src="/a.png"');
   });
 
   it("links to a heading in the tabs form of a link", function () {

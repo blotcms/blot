@@ -164,15 +164,26 @@ function readMetadata(content) {
       break;
     }
     if (!text) {
+      // An image (or a rule, a chip) has no text but isn't a blank line
+      if (!isEmptyParagraph(content[j].paragraph)) break;
       if (!Object.keys(metadata).length) break;
       taken += 1;
       break;
     }
-    const colon = text.indexOf(":");
-    if (colon === -1 || /\s/.test(text.slice(0, colon).trim())) break;
-    const parsed = Metadata(text);
-    if (parsed.html === text) break;
-    Object.assign(metadata, parsed.metadata);
+    // Lines joined with Shift+Enter are each a metadata line, and all of
+    // them have to be for the paragraph to be taken
+    const found = {};
+    const lines = text.split(LINE_BREAK).map((line) => line.trim());
+    const isMetadata = lines.every((line) => {
+      const colon = line.indexOf(":");
+      if (colon === -1 || /\s/.test(line.slice(0, colon).trim())) return false;
+      const parsed = Metadata(line);
+      if (parsed.html === line) return false;
+      Object.assign(found, parsed.metadata);
+      return true;
+    });
+    if (!isMetadata) break;
+    Object.assign(metadata, found);
     taken += 1;
   }
 
@@ -203,7 +214,6 @@ function renderContent(content, tab, context) {
   let previous = null;
   let list = null;
   let code = null;
-  let mono = null;
 
   const flushLines = () => {
     if (lines.length) html += `<p>${lines.join("<br>\n")}</p>\n`;
@@ -214,11 +224,6 @@ function renderContent(content, tab, context) {
     list = null;
   };
 
-  const flushMono = () => {
-    if (mono)
-      html += `<pre><code>${escape(mono.join("\n").split(LINE_BREAK).join("\n"))}</code></pre>\n`;
-    mono = null;
-  };
   const codeHtml = (lines) =>
     `<pre><code>${escape(lines.join("\n").split(LINE_BREAK).join("\n"))}</code></pre>\n`;
 
@@ -247,14 +252,6 @@ function renderContent(content, tab, context) {
   }
   const stripMark = (text) => text.split(CODE_BLOCK_MARK).join("");
 
-  // A tab written wholly in a typewriter font is writing, not code
-  const paragraphs = content.filter(
-    (el) => el.paragraph && !el.blotMetadata && !isEmptyParagraph(el.paragraph)
-  );
-  const allMono =
-    paragraphs.length > 1 &&
-    paragraphs.every((el) => isMonospace(el.paragraph));
-
   content.forEach((el, index) => {
     if (el.blotMetadata) return;
 
@@ -267,17 +264,6 @@ function renderContent(content, tab, context) {
         : named === "SUBTITLE"
           ? 2
           : (named.match(/^HEADING_(\d)$/) || [])[1];
-
-    const monoLine =
-      !allMono &&
-      !code &&
-      p &&
-      !p.bullet &&
-      !heading &&
-      !opens.has(index) &&
-      !single.has(index) &&
-      isMonospace(p);
-    if (!monoLine) flushMono();
 
     if (single.has(index)) {
       flushLines();
@@ -306,10 +292,10 @@ function renderContent(content, tab, context) {
       if (p) code.push(stripMark(paragraphText(p)));
       return;
     }
-    renderElement(el, p, style, heading, monoLine);
+    renderElement(el, p, style, heading);
   });
 
-  function renderElement(el, p, style, heading, monoLine) {
+  function renderElement(el, p, style, heading) {
     if (el.table) {
       flushLines();
       flushList();
@@ -356,16 +342,6 @@ function renderContent(content, tab, context) {
       return;
     }
 
-    // A paragraph wholly in a monospace font is a line of code, and
-    // consecutive ones a code block (flushed by the next other element)
-    if (monoLine) {
-      flushLines();
-      mono = mono || [];
-      mono.push(paragraphText(p));
-      previous = null;
-      return;
-    }
-
     if (isEmptyParagraph(p)) {
       flushLines();
       previous = null;
@@ -393,7 +369,6 @@ function renderContent(content, tab, context) {
     previous = p;
   }
 
-  flushMono();
   flushLines();
   flushList();
   return html;
@@ -407,8 +382,12 @@ function listKind(tab, listId, level) {
   if (nesting.glyphSymbol) return { tag: "ul" };
   if (ORDERED.test(nesting.glyphType || ""))
     return { tag: "ol", type: OL_TYPES[nesting.glyphType] };
-  // Docs' checklists have no glyph at all
-  if (!nesting.glyphType || nesting.glyphType === "GLYPH_TYPE_UNSPECIFIED")
+  // Docs' checklists have no glyph but do have a format. A list with
+  // neither (seen in Docs imported from elsewhere) is a plain list.
+  if (
+    nesting.glyphType === "GLYPH_TYPE_UNSPECIFIED" &&
+    nesting.glyphFormat !== undefined
+  )
     return { tag: "ul", checklist: true };
   return { tag: "ul" };
 }
@@ -555,6 +534,10 @@ function renderTable(table, tab, context) {
 // styles merged so tags aren't repeated at every run boundary
 function renderInline(p, tab, context, options = {}) {
   const parts = [];
+  // A paragraph wholly in a typewriter font is writing in that font, as
+  // often as it is code, so only monospace words among others become code.
+  // Code blocks come from Google's own code blocks and 1x1 tables.
+  options = { ...options, plainFont: isMonospace(p) };
 
   for (const e of p.elements || []) {
     if (e.textRun) {
@@ -635,7 +618,7 @@ function linkOf(style, context) {
 function styled({ style, text }, options, inLink) {
   let html = escape(text).split(LINE_BREAK).join("<br>\n");
   const font = (style.weightedFontFamily || {}).fontFamily || "";
-  if (MONOSPACE.test(font)) html = `<code>${html}</code>`;
+  if (MONOSPACE.test(font) && !options.plainFont) html = `<code>${html}</code>`;
   if (style.baselineOffset === "SUPERSCRIPT") html = `<sup>${html}</sup>`;
   if (style.baselineOffset === "SUBSCRIPT") html = `<sub>${html}</sub>`;
   if (style.strikethrough && !options.noStrike) html = `<s>${html}</s>`;

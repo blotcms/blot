@@ -88,7 +88,9 @@ async function fromJSON(contents) {
   let html = $.html();
   if (Object.keys(metadata).length)
     html = "---\n" + yaml.stringify(metadata) + "---\n" + html;
-  return html.trim();
+  return tidy(
+    html.replace(/(<\/(?:h[1-6]|p|blockquote|ul|ol|li)>|<(?:hr|br)>)\n/g, "$1")
+  );
 }
 
 function is(path) {
@@ -261,14 +263,16 @@ async function read(blog, path) {
     html = "---\n" + yaml.stringify(metadata) + "---\n" + html;
   }
 
-  // make output more readable by inserting new lines after block elements
-  // handle hr and br separately as it is self-closing
-  html = html
+  return [tidy(html), stat];
+}
+
+// make output more readable by inserting new lines after block elements
+// handle hr and br separately as it is self-closing
+function tidy(html) {
+  return html
     .replace(/<\/(h1|h2|h3|h4|h5|h6|p|blockquote|ul|ol|li)>/g, "</$1>\n")
     .replace(/<(hr|br)[^>]*>/g, "<$1>\n")
     .trim();
-
-  return [html, stat];
 }
 
 // Called back with (err, html, stat); without a callback it resolves to
