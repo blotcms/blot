@@ -16,7 +16,12 @@
  *
  * Which Docs: any code that sees a Doc change calls enqueue(), which starts
  * watching it or, for a Doc already watched, moves it back to the fastest
- * poll. util/download.js does so after each export of a Doc. A Doc is polled
+ * poll. util/download.js does so after each export of a Doc edited in the
+ * last half hour, and pollDriveActivity.js as soon as Drive Activity names a
+ * Doc that was edited, as "unseen", so the first poll publishes that edit
+ * rather than taking it as the baseline: a Doc nobody had touched for a
+ * while is then live within seconds of its first edit, not once Drive's
+ * modifiedTime moves. A Doc is polled
  * on a schedule that follows its last activity, the later of its last
  * enqueue and the last change this poller detected (SCHEDULE_TIERS): every
  * 500ms for 2 minutes, every 2s up to 10 minutes, every 5s up to 30 minutes,
@@ -32,7 +37,9 @@
  * stretched by the same factor (intervalFor), so they share the budget in
  * proportion to their tier rather than piling up on the slot.
  *
- * On a change: the Doc alone is exported and published under the blog's
+ * On a change: nothing is done if the post is already built at that
+ * revision (database/docImages.js, recorded after the build; Docs API only),
+ * which a sync may have done first. Otherwise the Doc alone is exported and published under the blog's
  * folder lock (applyChange), which takes about as long as the export, rather
  * than walking the whole folder (about 10.5s on a 3,000-file blog). That is
  * only done when the Doc is certainly at the path a walk of the folder would
@@ -73,6 +80,7 @@ const createDriveClient = require("./createDriveClient");
 const createDocsClient = require("./createDocsClient");
 const database = require("../database");
 const localState = require("../util/localState");
+const { isBuilt, markBuilt } = require("../util/fetchDoc");
 
 const prefix = () => `${clfdate()} Google Drive hotDocPoller:`;
 
@@ -111,6 +119,8 @@ const EVICT_AFTER_SECONDS =
 // The last poll evicts a Doc nobody enqueued again at EVICT_AFTER_SECONDS;
 // the hash only outlives that if the process died before cleaning up.
 const ITEM_TTL_SECONDS = EVICT_AFTER_SECONDS + 120;
+// How long planSingleDoc's Drive checks are reused for a Doc
+const PLAN_REUSE_MS = 30 * 1000;
 // Alarms handled per poll of the queue
 const ALARM_BATCH = 20;
 
@@ -231,6 +241,8 @@ class HotDocPoller {
     // API clients are cached per process
     this.driveByServiceAccount = new Map();
     this.docsByServiceAccount = new Map();
+    // item id -> planSingleDoc's last Drive checks (PLAN_REUSE_MS)
+    this.plans = new Map();
   }
 
   start() {
@@ -497,7 +509,11 @@ class HotDocPoller {
   // Starts watching a Doc, or moves a Doc already watched back to the fastest
   // poll. For any code that sees a Doc change (util/download.js after an
   // export, a Drive change listing). Resolves once the Doc is scheduled.
-  async enqueue({ blogID, serviceAccountId, fileId, folderId }) {
+  //
+  // unseen: the caller saw the Doc change but Blot hasn't exported that
+  // change (Drive Activity, pollDriveActivity.js). The first poll then takes
+  // whatever revision the Doc has as a change, rather than as its baseline.
+  async enqueue({ blogID, serviceAccountId, fileId, folderId, unseen }) {
     if (!blogID || !serviceAccountId || !fileId || !folderId) return;
 
     this.start();
@@ -531,6 +547,12 @@ class HotDocPoller {
     await this.touch(id, serviceAccountId, now);
     this.metrics.enqueueCount += 1;
     this.log("enqueued", { blogID, serviceAccountId, fileId, folderId });
+
+    if (unseen) {
+      await this.alarms.set(id, now);
+      await this.enforceCaps(serviceAccountId);
+      return;
+    }
 
     // The first poll waits for the revision the Doc has now, so the poll
     // doesn't mistake it for a change.
@@ -713,6 +735,7 @@ class HotDocPoller {
     // For the live line: an open Doc's modifiedTime lags its edits, so for
     // a Doc the gaps between seen_ms, download_ms and lag_ms are what matter
     item.detectedAt = detectedAt;
+    item.revision = revision;
     const outcome = await this.applyChange(item);
 
     this.log("change-handled", {
@@ -736,8 +759,15 @@ class HotDocPoller {
   //   "full-sync"  it couldn't be, so a full sync was started instead
   //   "locked"     another sync holds the blog's folder lock; try again
   //   "unavailable" the blog can't sync (removed or disabled)
+  //   "unchanged"  Blot already holds this revision
   // A failed export or Drive call rejects, and the poll retries it.
   async applyChange(item) {
+    // The post is already built at this revision: a sync published it
+    // first, or an unseen enqueue's first poll found nothing new. Recorded
+    // only for the Docs API's JSON and only after the build, so a zip export
+    // or a write whose build never finished always goes on.
+    if (item.revision && (await this.isBuilt(item))) return "unchanged";
+
     // Skip establishSyncLock's own retries (over 5s) when the lock is
     // visibly held: the next poll, 500ms on, is sooner
     if ((await this.isFolderLocked(item.blogID)) === true) return "locked";
@@ -793,6 +823,15 @@ class HotDocPoller {
     });
     await this.fullSync(item.blogID);
     return "full-sync";
+  }
+
+  async isBuilt(item) {
+    const path = await database
+      .folder(item.folderId, item.blogID)
+      .get(item.fileId);
+    return Boolean(
+      path && (await isBuilt(item.blogID, item.fileId, path, item.revision))
+    );
   }
 
   // Whether another sync holds the blog's folder lock
@@ -857,6 +896,18 @@ class HotDocPoller {
 
     const drive = await this.getDrive(item.serviceAccountId);
 
+    // A Doc being typed in changes every second or so, and its name and
+    // folder almost never do: the Drive checks below are reused for a short
+    // while, so typing costs one docs.get a change rather than three calls.
+    // A rename in that window is caught by the next walk.
+    const cached = this.plans.get(item.id);
+    if (
+      cached &&
+      cached.path === path &&
+      Date.now() - cached.at < PLAN_REUSE_MS
+    )
+      return { path, file: cached.file, drive };
+
     let file, siblings;
     try {
       [file, siblings] = await Promise.all([
@@ -904,6 +955,10 @@ class HotDocPoller {
     if (sharingName.length !== 1 || sharingName[0].id !== item.fileId)
       return { fallback: "duplicate-name" };
 
+    this.plans.set(item.id, { path, file: data, at: Date.now() });
+    // Old entries go as new ones arrive; the map stays small
+    for (const [id, plan] of this.plans)
+      if (Date.now() - plan.at >= PLAN_REUSE_MS) this.plans.delete(id);
     return { path, file: data, drive };
   }
 
@@ -936,13 +991,16 @@ class HotDocPoller {
 
     const downloadedAt = Date.now();
     if (result?.updated) {
-      await folder.update(path, {
+      const built = await folder.update(path, {
         modified: modifiedTime,
         since: "drive-modified",
         seenAt: item.detectedAt,
         seenBy: "hotdoc",
         downloadedAt,
       });
+      // Built without an error: a fetch of this revision can skip the write
+      if (!built?.error)
+        await markBuilt(item.blogID, id, path, result.revision);
     }
 
     await folderDb.setApplied(id, {

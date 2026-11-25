@@ -17,8 +17,15 @@ describe("google drive fetchDoc", function () {
     const file = require.resolve("../util/fetchDoc");
     const stubs = {
       "storage/folder": {
-        write: async (blogID, path, data) => state.files.set(path, data),
+        write: async (blogID, path, data) => {
+          state.folderWrites = (state.folderWrites || 0) + 1;
+          state.files.set(path, data);
+        },
         exists: async (blogID, path) => state.files.has(path),
+        read: async (blogID, path) => {
+          if (!state.files.has(path)) throw new Error("ENOENT");
+          return Buffer.from(state.files.get(path));
+        },
       },
       "storage/assets": {
         write: async (blogID, path) => state.written.push(path),
@@ -31,8 +38,17 @@ describe("google drive fetchDoc", function () {
       "../database/docImages": {
         get: async (blogID, id) => state.records.get(id) || {},
         set: async (blogID, id, record) => state.records.set(id, record),
+        getBuilt: async (blogID, id, path) => {
+          const { built } = state.records.get(id) || {};
+          return built && built.path === path ? built : null;
+        },
       },
       "../serviceAccount/createDocsClient": async () => ({}),
+      // The file's "SHA-1" is its text, so a changed file never matches
+      "./localState": {
+        stateOf: async (blogID, path) =>
+          state.files.has(path) ? { sha1: String(state.files.get(path)) } : {},
+      },
     };
     const module = { exports: {} };
     vm.runInNewContext(fs.readFileSync(file, "utf8"), {
@@ -117,7 +133,7 @@ describe("google drive fetchDoc", function () {
     const h = harness();
     h.doc = doc("Hello");
 
-    expect(await h.fetch()).toEqual({ updated: true });
+    expect((await h.fetch()).updated).toBe(true);
 
     const stored = JSON.parse(h.files.get("/post.gdoc"));
     const image =
@@ -171,6 +187,43 @@ describe("google drive fetchDoc", function () {
     await h.fetch("/renamed.gdoc");
 
     expect(h.fetched.length).toBe(2);
+  });
+
+  it("writes nothing when the post is already built at this revision", async function () {
+    const h = harness();
+    h.doc = { ...doc("Hello"), revisionId: "r1" };
+    await h.fetch();
+    expect(h.folderWrites).toBe(1);
+
+    // Written but never built (a deploy between the two): written again
+    expect(await h.fetch()).toEqual({ updated: true, revision: "r1" });
+    expect(h.folderWrites).toBe(2);
+
+    // Built (what the poller and the walk record afterwards): skipped
+    const built = () =>
+      h.records.set("doc", {
+        ...h.records.get("doc"),
+        built: {
+          revision: "r1",
+          path: "/post.gdoc",
+          sha1: String(h.files.get("/post.gdoc")),
+        },
+      });
+    built();
+    expect(await h.fetch()).toEqual({ updated: false });
+    expect(h.folderWrites).toBe(2);
+    expect(h.fetched.length).toBe(1);
+
+    // The file Blot holds was replaced since (an upload): written again
+    h.files.set("/post.gdoc", "something else");
+    expect((await h.fetch()).updated).toBe(true);
+    expect(h.folderWrites).toBe(3);
+    built();
+
+    // At another path, or another revision: written
+    expect((await h.fetch("/renamed.gdoc")).updated).toBe(true);
+    h.doc = { ...doc("Hello again"), revisionId: "r2" };
+    expect((await h.fetch()).updated).toBe(true);
   });
 
   it("leaves a Doc with a drawing to the zip export", async function () {

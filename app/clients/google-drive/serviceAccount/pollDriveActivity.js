@@ -2,10 +2,28 @@ const Bottleneck = require("bottleneck");
 const database = require("clients/google-drive/database");
 const clfdate = require("helper/clfdate");
 const followUps = require("clients/google-drive/sync/followUps");
+const hotDocPoller = require("./hotDocPoller");
+
+const GOOGLE_DOC = "application/vnd.google-apps.document";
+
+// The Google Docs an activity edited: Drive Activity names them within
+// seconds of an edit, while the Doc's modifiedTime (all a sync walk sees)
+// lags by about 2 minutes
+const editedDocs = (activity) =>
+  activity.primaryActionDetail?.edit
+    ? (activity.targets || [])
+        .map((target) => target.driveItem)
+        .filter((item) => item?.mimeType === GOOGLE_DOC && item.name)
+        .map((item) => item.name.replace(/^items\//, ""))
+    : [];
 
 const prefix = () => `${clfdate()} Google Drive:`;
 
 const POLL_EVERY_MS = 5000;
+// Activities read per poll of a blog: more than a blog sees in 5s. Beyond
+// that the full sync started on any new activity still catches the rest,
+// once Drive's modifiedTime moves.
+const ACTIVITY_PAGE = 50;
 
 // Resolves after ms, or as soon as the signal aborts
 const sleep = (ms, signal) =>
@@ -64,10 +82,16 @@ module.exports = async (
 
       // console.log(prefix(), "fetching");
 
+      // Every activity since the one stored (newest first), so two Docs
+      // edited between polls are both watched; the first time, just the
+      // latest, to store its timestamp
       const res = await driveactivity.activity.query({
         requestBody: {
-          pageSize: 1,
+          pageSize: latestDriveActivityTimestamp ? ACTIVITY_PAGE : 1,
           ancestorName: `items/${folderId}`,
+          ...(latestDriveActivityTimestamp && {
+            filter: `time > "${latestDriveActivityTimestamp}"`,
+          }),
         },
       });
 
@@ -100,6 +124,23 @@ module.exports = async (
         // Not awaited: a long sync of one blog mustn't hold up polling the
         // others on the service account
         if (latestDriveActivityTimestamp) runSync(blogID, armed, prefix);
+
+        // An edited Doc is polled from now, and its first poll publishes the
+        // edit: the sync above can't, until Drive's modifiedTime moves
+        const edited = new Set(activities.flatMap(editedDocs));
+        if (latestDriveActivityTimestamp)
+          for (const fileId of edited)
+            await hotDocPoller
+              .enqueue({
+                blogID,
+                serviceAccountId,
+                fileId,
+                folderId,
+                unseen: true,
+              })
+              .catch((err) =>
+                console.error(prefix(), "hot doc enqueue failed", err.message)
+              );
       } else {
         // console.log(prefix(), "no new activity");
       }
@@ -133,3 +174,5 @@ module.exports = async (
     await sleep(POLL_EVERY_MS, signal);
   }
 };
+
+module.exports.editedDocs = editedDocs;

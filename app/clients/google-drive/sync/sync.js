@@ -12,6 +12,7 @@ const {
 const download = require("../util/download");
 const prefetch = require("../util/prefetch");
 const localState = require("../util/localState");
+const { markBuilt } = require("../util/fetchDoc");
 const hashes = require("../util/hashes");
 const createDriveClient = require("../serviceAccount/createDriveClient");
 const CheckWeCanContinue = require("../util/checkWeCanContinue");
@@ -758,13 +759,17 @@ module.exports = async function sync(blogID, publish, update, options = {}) {
                 // change took to go live, and when it was first seen and
                 // downloaded, so the log shows where that time went
                 const sighting = seenDirs.get(dirId);
-                await update(path, {
+                const built = await update(path, {
                   modified: modifiedTime,
                   since: "drive-modified",
                   seenAt: sighting?.at,
                   seenBy: sighting?.source,
                   downloadedAt: result?.downloadedAt || outcome.downloadedAt,
                 });
+                // Built without an error at this Doc revision (Docs API
+                // only): a fetch of it can skip the write
+                if (result?.revision && !built?.error)
+                  await markBuilt(blogID, id, path, result.revision);
               }
               const verified = !isGoogleAppFile && result?.verifiedContent;
               if (verified) known.set(verified.sha1, verified.checksum);

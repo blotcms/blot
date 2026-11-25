@@ -12,7 +12,8 @@
 // bytes and written to the Doc's _assets directory, several at a time. Images
 // the Doc no longer uses are deleted.
 //
-// Resolves to { updated: true }, or to null when the Doc holds something the
+// Resolves to { updated: true, revision }, { updated: false } when the post
+// is already built at this revision, or to null when the Doc holds something the
 // Docs API can't give (a drawing, a positioned image, an equation), for the
 // caller to use the zip export instead.
 const crypto = require("crypto");
@@ -23,6 +24,7 @@ const hash = require("helper/hash");
 const clfdate = require("helper/clfdate");
 const database = require("../database");
 const docImages = require("../database/docImages");
+const localState = require("./localState");
 const createDocsClient = require("../serviceAccount/createDocsClient");
 
 const IMAGE_CONCURRENCY = 4;
@@ -170,6 +172,21 @@ module.exports = async function fetchDoc(
   }
 
   const assetDir = "_assets/" + hash(path);
+
+  // Already built into the post at this revision (the hot doc poller got
+  // here first, or this is the walk that runs once Drive's modifiedTime
+  // catches up): nothing to write, so nothing to rebuild
+  if (data.revisionId && (await isBuilt(blogID, id, path, data.revisionId))) {
+    console.log(
+      clfdate(),
+      "Google Drive: Doc unchanged",
+      blogID,
+      path,
+      `fetch_ms=${fetched - started}`
+    );
+    return { updated: false };
+  }
+
   // Trusted only for the same directory, and while the Doc's file is still
   // in the folder: a rename moves the Doc to another directory, and a Doc
   // removed (and its images with it, sync/update/removeConvertedAssets) then
@@ -263,9 +280,30 @@ module.exports = async function fetchDoc(
     `bytes=${stored.length}`
   );
 
-  return { updated: true };
+  // The caller records it with markBuilt once the post is built
+  return { updated: true, revision: data.revisionId || null };
 };
 
+// Whether the post at path is built from this revision of the Doc, with the
+// file Blot holds still the one it was built from (an upload from the
+// dashboard can replace it)
+async function isBuilt(blogID, fileId, path, revision) {
+  const built = await docImages.getBuilt(blogID, fileId, path);
+  if (!built || built.revision !== revision) return false;
+  const { sha1 } = await localState.stateOf(blogID, path);
+  return Boolean(sha1) && sha1 === built.sha1;
+}
+
+// For the caller once the post for a fetch's { revision } is built without
+// an error: the next fetch of that revision can skip the write
+async function markBuilt(blogID, fileId, path, revision) {
+  if (!revision) return;
+  const { sha1 } = await localState.stateOf(blogID, path);
+  await docImages.setBuilt(blogID, fileId, { revision, path, sha1 });
+}
+
+module.exports.isBuilt = isBuilt;
+module.exports.markBuilt = markBuilt;
 module.exports.unsupported = unsupported;
 module.exports.objectKey = objectKey;
 module.exports.trim = trim;
