@@ -1,14 +1,21 @@
 // Exports Google Docs again from Drive and republishes them, one at a time,
-// each under its blog's folder lock, as the hot doc poller does for an edit
-// (serviceAccount/hotDocPoller.js applyChange). A Doc that can't be published
-// alone (renamed, moved, a sibling with its name) falls back to the blog's
-// full sync, as an edit would. Its applied record is made stale first, so
-// that sync sees a change and exports it too, instead of finding the copy
-// it holds current.
+// as the hot doc poller does for an edit (serviceAccount/hotDocPoller.js
+// applyChange): the sync applies the Doc's directory under the blog's folder
+// lock and exports the Doc whatever its modifiedTime says. A Doc the
+// directory's listing doesn't find falls back to the blog's full sync, as an
+// edit would. Its applied record is made stale first, so that sync sees a
+// change and exports it too. A blog whose folder is busy is tried again for
+// up to a minute.
 //
 // --comments: only Docs whose copy in the blog folder still holds comments,
 // written before the export removed them (#2975). That copy is served as is,
 // so their comments were readable by anyone with its URL.
+//
+// --zip: every Doc still held as a zip export (HTML), on every Drive blog,
+// so it is fetched through the Docs API and rendered from its JSON (#2975).
+// A Doc the API can't give whole (a positioned image, a drawing) stays a zip
+// export and is listed again on the next run; so is an HTML file someone
+// named .gdoc, which is downloaded again unchanged.
 //
 // Writes only what a sync writes. Safe to run again: a re-export of an
 // unchanged Doc gives the same file.
@@ -17,9 +24,11 @@
 //   node scripts/google-drive/reexport-docs.js --comments            # dry run
 //   node scripts/google-drive/reexport-docs.js --comments --apply
 //   node scripts/google-drive/reexport-docs.js --blog blog_x --apply  # every Doc on one blog
+//   node scripts/google-drive/reexport-docs.js --zip --apply          # every zip export
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const commentsOnly = args.includes("--comments");
+const zipOnly = args.includes("--zip");
 const onlyBlog = args.includes("--blog")
   ? args[args.indexOf("--blog") + 1]
   : null;
@@ -31,8 +40,10 @@ const hotDocPoller = require("clients/google-drive/serviceAccount/hotDocPoller")
 const HAS_COMMENT = /id="cmnt_ref\d+"/;
 
 async function main() {
-  if (!commentsOnly && !onlyBlog)
-    throw new Error("Pass --comments, or --blog <id> to re-export one blog");
+  if (!commentsOnly && !zipOnly && !onlyBlog)
+    throw new Error(
+      "Pass --comments, --zip, or --blog <id> to re-export one blog"
+    );
   if (args.includes("--blog") && !/^blog_/.test(onlyBlog || ""))
     throw new Error("--blog needs a blog id, e.g. --blog blog_abc");
 
@@ -61,12 +72,15 @@ async function main() {
     const mapping = database.folder(account.folderId, blogID);
 
     for (const path of paths) {
-      if (commentsOnly) {
+      if (commentsOnly || zipOnly) {
         let html = "";
         try {
           html = (await folder.read(blogID, path)).toString("utf8");
         } catch (err) {}
-        if (!HAS_COMMENT.test(html)) continue;
+        if (commentsOnly && !HAS_COMMENT.test(html)) continue;
+        // JSON from the Docs API starts with "{"; an empty placeholder has
+        // nothing to fetch through it
+        if (zipOnly && !html.trimStart().startsWith("<")) continue;
       }
 
       const fileId = await mapping.getByPath(path);
@@ -89,12 +103,16 @@ async function main() {
 
       let result;
       try {
-        result = await hotDocPoller.applyChange({
-          blogID,
-          serviceAccountId: account.serviceAccountId,
-          fileId,
-          folderId: account.folderId,
-        });
+        for (let tries = 0; tries < 30; tries++) {
+          result = await hotDocPoller.applyChange({
+            blogID,
+            serviceAccountId: account.serviceAccountId,
+            fileId,
+            folderId: account.folderId,
+          });
+          if (result !== "locked") break;
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
       } catch (err) {
         // Its applied record is stale, so the blog's next sync exports it
         console.log("Failed", blogID, path, err.message);

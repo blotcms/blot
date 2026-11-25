@@ -2,7 +2,7 @@
 
 <p class="supported-extensions">File extensions: <span>.gdoc</span></p>
 
-<p>Blot will automatically publish Google Docs inside your folder when you sync your folder with <a href="/how/sync/google-drive">Google Drive</a>.</p>
+<p>Blot will automatically publish Google Docs inside your folder when you sync your folder with <a href="/how/sync/google-drive">Google Drive</a>. Changes you make to a Google Doc appear on your site within a few seconds, even while you are still typing.</p>
 
 <h2>Metadata</h2>
 
@@ -16,15 +16,15 @@ The rest of your post goes here.
 
 <h2>Images</h2>
 
-<p>Insert photos directly in Google Docs using the menu <span class="ui-action">Insert</span> then <span class="ui-action">Image</span>, or by dragging and dropping an image file into the document. If you define Alt and title text in Google Docs, Blot will use them for the image's alt text and caption.</p>
+<p>Insert photos directly in Google Docs using the menu <span class="ui-action">Insert</span> then <span class="ui-action">Image</span>, or by dragging and dropping an image file into the document. If you define Alt and title text in Google Docs, Blot will use them for the image's alt text and caption. Blot uses the largest version of each image Google keeps, and only fetches an image again when you change it.</p>
 
 <h2>Headings</h2>
 
-<p>Apply the text style <span class="ui-action">Title</span>, <span class="ui-action">Heading 1</span>, <span class="ui-action">Heading 2</span>, etc. in Google Docs to create headings.</p>
+<p>Apply the text style <span class="ui-action">Title</span>, <span class="ui-action">Heading 1</span>, <span class="ui-action">Heading 2</span>, etc. in Google Docs to create headings. Links to headings inside your document, including a table of contents, keep working in the published post.</p>
 
 <h2>Text formatting</h2>
 
-<p>Blot preserves most text formatting in Google Docs. Single line breaks are preserved by default so poetry or addresses appear as expected.</p>
+<p>Blot preserves most text formatting in Google Docs, including combinations such as bold italic.</p>
 
 <table class="feature-table">
   <tbody>
@@ -62,7 +62,7 @@ The rest of your post goes here.
       <td><span style="color:red;font-size: 12px;margin-right: 4px;position: relative;top:-2px" class="icon-small-no-entry"></span></td>
     </tr>
     <tr>
-        <td>Spacing</td>
+        <td>Spacing (see <a href="#line-breaks">line breaks</a>)</td>
         <td><span style="color:red;font-size: 12px;margin-right: 4px;position: relative;top:-2px" class="icon-small-no-entry"></span></td>
     </tr>
   </tbody>
@@ -75,7 +75,7 @@ The rest of your post goes here.
 
 <h2>Lists</h2>
 
-<p>Use the <span class="ui-action">Bulleted list</span>, <span class="ui-action">Numbered list</span>, or <span class="ui-action">Checklist</span> buttons in Google Docs to create lists. </p>
+<p>Use the <span class="ui-action">Bulleted list</span>, <span class="ui-action">Numbered list</span>, or <span class="ui-action">Checklist</span> buttons in Google Docs to create lists. Nested lists stay nested, numbered lists keep their numbering, and checklist items appear as checkboxes, ticked when you have checked them.</p>
 
 <h2>Tables</h2>
 
@@ -83,7 +83,9 @@ The rest of your post goes here.
 
 <h2>Code</h2>
 
-<p>Use a single-celled tables to mark up code blocks in your document. For example:</p>
+<p>Use Google Docs' own code blocks: <span class="ui-action">Insert</span> then <span class="ui-action">Building blocks</span> then <span class="ui-action">Code block</span>. Words in a monospace font, such as Courier New or Roboto Mono, inside a paragraph of other text become inline code.</p>
+
+<p>You can also use a single-celled table to mark up a code block. For example:</p>
 <p><span class="ui-action">Insert</span> then <span class="ui-action">Table</span> then <span class="ui-action">1 x 1</span></p>
 
 <p>If you create a double celled table, with two rows, you can specify the language of the code in the first cell to enable syntax highlighting:</p>
@@ -104,9 +106,13 @@ The rest of your post goes here.
 
 <p>Footnotes in your Google Doc are preserved in the published post.</p>
 
-<h2>Line breaks</h2>
+<h2 id="line-breaks">Line breaks</h2>
 
-<p>Single line breaks are preserved by default so poetry or addresses appear as expected.</p>
+<p>Line breaks are preserved so poetry and addresses appear as expected. Paragraphs with no space between them (<span class="ui-action">Format</span> then <span class="ui-action">Line &amp; paragraph spacing</span>) are joined with line breaks; paragraphs with space between them, as in most documents, stay separate paragraphs.</p>
+
+<h2>Tabs</h2>
+
+<p>A document with several tabs is published with each tab in its own section, in order.</p>
 
 <h2>Math</h2>
 

@@ -262,6 +262,13 @@ module.exports = async function fetchDoc(
   const gone = Object.values(held).filter(
     (file) => !Object.values(now).includes(file)
   );
+  // The first fetch through the Docs API, after zip exports (no record of
+  // images or of a build): anything else in the directory is the zip
+  // export's image1.png and so on. The directory is this Doc's alone (a hash
+  // of its path), so the rest goes. One listing, only then.
+  if (!record.dir && !record.built)
+    for (const name of await assets.list(blogID, assetDir).catch(() => []))
+      if (!Object.values(now).includes(name)) gone.push(name);
   for (const file of new Set(gone))
     await publish(() =>
       assets.remove(blogID, assetDir + "/" + file).catch(() => {})

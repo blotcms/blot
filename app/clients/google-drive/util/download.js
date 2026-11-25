@@ -15,9 +15,6 @@ const cheerio = require("cheerio");
 const removeComments = require("build/converters/gdoc/comments");
 const fetchDoc = require("./fetchDoc");
 
-// Blogs whose Docs are fetched through the Docs API (#2975), while it rolls
-// out: drivetest first
-const DOCS_API_BLOGS = new Set(["blog_7ee4700bf9fc44f99d9c6a858ac4b135"]);
 const sandbox = require("sandbox");
 const hotDocPoller = require("../serviceAccount/hotDocPoller");
 const database = require("../database");
@@ -425,10 +422,7 @@ module.exports = async (
     // Through the Docs API where it's switched on (#2975): its JSON, and
     // only the images that changed. The zip export below stays for a Doc
     // the API can't give whole, and if the API fails.
-    if (
-      mimeType === "application/vnd.google-apps.document" &&
-      DOCS_API_BLOGS.has(blogID)
-    ) {
+    if (mimeType === "application/vnd.google-apps.document") {
       try {
         const fetched = await fetchDoc(
           blogID,

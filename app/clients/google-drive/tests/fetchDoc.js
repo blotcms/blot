@@ -30,6 +30,7 @@ describe("google drive fetchDoc", function () {
       "storage/assets": {
         write: async (blogID, path) => state.written.push(path),
         remove: async (blogID, path) => state.removed.push(path),
+        list: async () => state.listing || [],
       },
       "helper/clfdate": () => "",
       "../database": {
@@ -224,6 +225,25 @@ describe("google drive fetchDoc", function () {
     expect((await h.fetch("/renamed.gdoc")).updated).toBe(true);
     h.doc = { ...doc("Hello again"), revisionId: "r2" };
     expect((await h.fetch()).updated).toBe(true);
+  });
+
+  it("removes the zip export's images on the first fetch through the API", async function () {
+    const h = harness();
+    h.doc = doc("Hello");
+    h.listing = ["image1.png", "image2.jpg"];
+
+    await h.fetch();
+
+    expect(h.removed.map((path) => path.split("/").pop())).toEqual([
+      "image1.png",
+      "image2.jpg",
+    ]);
+
+    // Not again on a later fetch
+    h.removed = [];
+    h.doc = doc("Hello, edited");
+    await h.fetch();
+    expect(h.removed).toEqual([]);
   });
 
   it("leaves a Doc with a drawing to the zip export", async function () {
