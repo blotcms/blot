@@ -17,18 +17,30 @@ const { folderCdnPath } = require("./shared");
 // without one (an index rebuilt without hashing) has the file read and
 // hashed, as contentVersion.fromFolder does.
 async function hashFolderFile(blogID, path) {
-  let stat, resolvedPath;
+  let record, resolvedPath;
 
+  // One read of the index gives the size, modified time and SHA-1, and never
+  // reads the file (folder.stat with { sha1: true } would, to fill in a SHA-1
+  // an index rebuilt without hashing left out, even for a file over the cap
+  // where the token needs none). Another case is looked for only when the
+  // exact path has no record.
   try {
-    ({ stat, path: resolvedPath } = await getStat(blogID, path));
+    record = await File.get(blogID, path);
+    resolvedPath = path;
+
+    if (!record) {
+      resolvedPath = await folder.resolveCaseInsensitive(blogID, path);
+      record = await File.get(blogID, resolvedPath);
+    }
   } catch (err) {
     return null;
   }
 
-  const record = await File.get(blogID, resolvedPath).catch(() => null);
+  if (!record) return null;
+
   const version =
     contentVersion.fromFolderRecord(record) ||
-    (await contentVersion.fromFolder(blogID, resolvedPath, stat));
+    (await contentVersion.fromFolder(blogID, resolvedPath, record));
 
   return { path: resolvedPath, version };
 }
