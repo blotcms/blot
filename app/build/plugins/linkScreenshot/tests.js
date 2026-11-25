@@ -176,6 +176,9 @@ describe("linkScreenshot plugin, on rebuilds", function () {
   });
 
   it("asks the bucket about an existing screenshot once, not on every build", async function () {
+    // The first build finds none and takes one; the second finds it, and
+    // that yes is remembered
+    await build(this.blog.id, "https://example.com/");
     await build(this.blog.id, "https://example.com/");
 
     spyOn(s3, "head").and.callThrough();
