@@ -269,6 +269,8 @@ async function applyLocked(blogID, sync, { full = false } = {}) {
           moveHint: (id) => database.dirty.moveHint(blogID, id),
           seen: (ids) => database.dirty.seen(blogID, ids),
           putBack: (ids) => database.dirty.add(blogID, ids),
+          forced: () => database.dirty.forced(blogID),
+          unforce: (id) => database.dirty.unforce(blogID, id),
         },
       })
     );
@@ -280,3 +282,18 @@ async function applyLocked(blogID, sync, { full = false } = {}) {
     await done();
   }
 }
+
+// Applies, under the folder lock, just the directories recorded as changed
+// and the files forced (database/dirty.js), with no walk: what the hot doc
+// poller runs when a Doc's revision moves, so the Doc is exported, written
+// and built by the same code as any other change. Rejects with "Failed to
+// acquire folder lock" when another sync holds it, leaving what is recorded
+// for that sync or the poller's next try. Resolves to sync's summary, or
+// false if the apply failed.
+module.exports.applyRecorded = async (blogID) => {
+  // As above: for the hourly validation, on the attempt
+  await database.blog
+    .update(blogID, { lastSync: Date.now() })
+    .catch((err) => log("Error stamping lastSync", err));
+  return applyLocked(blogID, require("./sync.js"));
+};

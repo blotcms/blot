@@ -11,7 +11,6 @@ describe("google drive hotDocPoller", function () {
   const poller = require("../hotDocPoller");
 
   const ITEM_PREFIX = "blot:google-drive:hotdocs:item:";
-  const GOOGLE_DOC = "application/vnd.google-apps.document";
   const MINUTE = 60 * 1000;
 
   let serviceAccountId, blogID, fileId, folderId, id, revision;
@@ -343,59 +342,22 @@ describe("google drive hotDocPoller", function () {
   });
 
   describe("applyChange", function () {
-    const modifiedTime = "2026-11-20T10:00:00.000Z";
-    let item, driveFile, siblings, lock, drive;
+    let item;
 
     beforeEach(async function () {
       poller.applyChange.and.callThrough();
-      // planSingleDoc's checks are reused for 30s, across specs too
-      poller.plans.clear();
 
       const folderDb = database.folder(folderId, blogID);
       await folderDb.set(folderId, "/", { isDirectory: true });
       await folderDb.set(fileId, "/Post.gdoc", {});
 
-      driveFile = {
-        id: fileId,
-        name: "Post",
-        parents: [folderId],
-        trashed: false,
-        mimeType: GOOGLE_DOC,
-        modifiedTime,
-      };
-      siblings = [{ id: fileId, name: "Post", mimeType: GOOGLE_DOC }];
-      drive = {
-        files: {
-          get: jasmine
-            .createSpy("files.get")
-            .and.callFake(async () => ({ data: driveFile })),
-          list: jasmine
-            .createSpy("files.list")
-            .and.callFake(async () => ({ data: { files: siblings } })),
-        },
-      };
-      spyOn(poller, "getDrive").and.returnValue(Promise.resolve(drive));
-
       spyOn(database.blog, "get").and.returnValue(
         Promise.resolve({ folderId, serviceAccountId })
       );
-      spyOn(database.blog, "update").and.returnValue(Promise.resolve(true));
-
-      lock = {
-        folder: {
-          update: jasmine
-            .createSpy("update")
-            .and.returnValue(Promise.resolve()),
-          status: jasmine.createSpy("status"),
-          signal: new AbortController().signal,
-          run: (fn) => fn(),
-        },
-        done: jasmine.createSpy("done").and.returnValue(Promise.resolve()),
-      };
+      spyOn(poller, "isBuilt").and.returnValue(Promise.resolve(false));
       spyOn(poller, "isFolderLocked").and.returnValue(Promise.resolve(false));
-      spyOn(poller, "lockFolder").and.returnValue(Promise.resolve(lock));
-      spyOn(poller, "download").and.returnValue(
-        Promise.resolve({ updated: true })
+      spyOn(poller, "applyRecorded").and.returnValue(
+        Promise.resolve({ downloaded: 1 })
       );
       spyOn(poller, "fullSync").and.returnValue(Promise.resolve());
 
@@ -405,188 +367,93 @@ describe("google drive hotDocPoller", function () {
         serviceAccountId,
         fileId,
         folderId,
+        revision: "rev-2",
       };
     });
 
     afterEach(async function () {
       await database.folder(folderId, blogID).reset();
+      await database.dirty.forget(blogID);
     });
 
-    const expectFullSync = async (reason) => {
-      expect(await poller.applyChange(item)).toEqual("full-sync");
-      expect(poller.download).not.toHaveBeenCalled();
-      expect(lock.done).toHaveBeenCalledTimes(1);
-      expect(poller.fullSync).toHaveBeenCalledWith(blogID);
-      const logged = console.log.calls
-        .allArgs()
-        .map((args) => args[1])
-        .filter((line) => typeof line === "string" && line.startsWith("{"))
-        .map((line) => JSON.parse(line))
-        .find((line) => line.event === "full-sync");
-      expect(logged.reason).toEqual(reason);
-    };
-
-    it("does nothing at all when Blot already holds this revision", async function () {
-      spyOn(poller, "isBuilt").and.returnValue(Promise.resolve(true));
-
-      expect(await poller.applyChange({ ...item, revision: "rev-9" })).toEqual(
-        "unchanged"
-      );
-      expect(poller.lockFolder).not.toHaveBeenCalled();
-    });
-
-    it("reuses its Drive checks for the next change while the Doc is typed in", async function () {
-      expect(await poller.applyChange(item)).toEqual("applied");
+    it("records the Doc and its directory, then has the sync apply them", async function () {
       expect(await poller.applyChange(item)).toEqual("applied");
 
-      expect(drive.files.get).toHaveBeenCalledTimes(1);
-      expect(drive.files.list).toHaveBeenCalledTimes(1);
-      expect(poller.download).toHaveBeenCalledTimes(2);
-    });
-
-    it("exports and publishes just that Doc under the folder lock", async function () {
-      expect(await poller.applyChange(item)).toEqual("applied");
-
-      expect(poller.lockFolder).toHaveBeenCalledWith(blogID);
-      expect(poller.download).toHaveBeenCalledTimes(1);
-      const [downloadBlogID, , path, file, options] =
-        poller.download.calls.argsFor(0);
-      expect(downloadBlogID).toEqual(blogID);
-      expect(path).toEqual("/Post.gdoc");
-      expect(file).toEqual({ id: fileId, mimeType: GOOGLE_DOC, modifiedTime });
-      expect(options.skipHotEnqueue).toBe(true);
-
-      expect(lock.folder.update).toHaveBeenCalledWith(
-        "/Post.gdoc",
-        jasmine.objectContaining({
-          modified: modifiedTime,
-          since: "drive-modified",
-          seenBy: "hotdoc",
-        })
-      );
-      const applied = await database
-        .folder(folderId, blogID)
-        .getApplied(fileId);
-      expect(applied.modifiedTime).toEqual(modifiedTime);
-      expect(lock.done).toHaveBeenCalledTimes(1);
-      expect(poller.fullSync).not.toHaveBeenCalled();
-      expect(database.blog.update).toHaveBeenCalledWith(blogID, {
-        lastSync: jasmine.any(Number),
-      });
-    });
-
-    it("exports the Doc even though Drive's modifiedTime hasn't moved", async function () {
-      await database
-        .folder(folderId, blogID)
-        .setApplied(fileId, { modifiedTime });
-
-      expect(await poller.applyChange(item)).toEqual("applied");
-      expect(poller.download).toHaveBeenCalledTimes(1);
-    });
-
-    it("does not rebuild when the export changed nothing", async function () {
-      poller.download.and.returnValue(Promise.resolve({ updated: false }));
-
-      expect(await poller.applyChange(item)).toEqual("applied");
-      expect(lock.folder.update).not.toHaveBeenCalled();
-    });
-
-    it("releases the lock and rejects when the export fails", async function () {
-      poller.download.and.callFake(async () => {
-        throw new Error("boom");
-      });
-
-      await expectAsync(poller.applyChange(item)).toBeRejected();
-      expect(lock.done).toHaveBeenCalledTimes(1);
+      expect(await database.dirty.forced(blogID)).toEqual([fileId]);
+      expect(await database.dirty.members(blogID)).toEqual([folderId]);
+      expect(poller.applyRecorded).toHaveBeenCalledWith(blogID);
       expect(poller.fullSync).not.toHaveBeenCalled();
     });
 
-    it("waits for the next poll while the folder lock is held", async function () {
+    it("records the directory a Doc below the top is in", async function () {
+      const folderDb = database.folder(folderId, blogID);
+      await folderDb.set("dir-1", "/Notes", { isDirectory: true });
+      await folderDb.set(fileId, "/Notes/Post.gdoc", {});
+
+      expect(await poller.applyChange(item)).toEqual("applied");
+      expect(await database.dirty.members(blogID)).toEqual(["dir-1"]);
+    });
+
+    it("does nothing when the post is already built at this revision", async function () {
+      poller.isBuilt.and.returnValue(Promise.resolve(true));
+
+      expect(await poller.applyChange(item)).toEqual("unchanged");
+      expect(await database.dirty.count(blogID)).toEqual(0);
+      expect(poller.applyRecorded).not.toHaveBeenCalled();
+    });
+
+    it("leaves what it recorded and waits for the next poll while the folder lock is held", async function () {
       poller.isFolderLocked.and.returnValue(Promise.resolve(true));
 
       expect(await poller.applyChange(item)).toEqual("locked");
-      expect(poller.lockFolder).not.toHaveBeenCalled();
-      expect(poller.fullSync).not.toHaveBeenCalled();
+      expect(await database.dirty.forced(blogID)).toEqual([fileId]);
+      expect(poller.applyRecorded).not.toHaveBeenCalled();
     });
 
     it("waits for the next poll when another sync takes the lock first", async function () {
-      poller.lockFolder.and.callFake(async () => {
+      poller.applyRecorded.and.callFake(async () => {
         throw new Error("Failed to acquire folder lock");
       });
 
       expect(await poller.applyChange(item)).toEqual("locked");
-      expect(poller.fullSync).not.toHaveBeenCalled();
     });
 
-    it("falls back to a full sync for a Doc that isn't mapped yet", async function () {
+    it("rejects when the apply fails, so the poll retries it", async function () {
+      poller.applyRecorded.and.returnValue(Promise.resolve(false));
+
+      let error;
+      try {
+        await poller.applyChange(item);
+      } catch (err) {
+        error = err;
+      }
+      expect(error).toBeDefined();
+    });
+
+    it("starts a full sync for a Doc that isn't mapped yet", async function () {
       await database.folder(folderId, blogID).remove(fileId);
-      await expectFullSync("unmapped");
+
+      expect(await poller.applyChange(item)).toEqual("full-sync");
+      expect(poller.fullSync).toHaveBeenCalledWith(blogID);
+      expect(poller.applyRecorded).not.toHaveBeenCalled();
     });
 
-    it("falls back to a full sync for a trashed Doc", async function () {
-      driveFile.trashed = true;
-      await expectFullSync("trashed");
-    });
-
-    it("falls back to a full sync for a renamed Doc", async function () {
-      driveFile.name = "New title";
-      await expectFullSync("renamed");
-    });
-
-    it("falls back to a full sync for a Doc moved to another folder", async function () {
-      driveFile.parents = ["another-folder"];
-      await expectFullSync("moved");
-    });
-
-    it("falls back to a full sync when a sibling would share the Doc's name", async function () {
-      siblings.push({ id: "other", name: "Post.gdoc", mimeType: "text/html" });
-      await expectFullSync("duplicate-name");
-    });
-
-    it("ignores siblings whose names don't clash", async function () {
-      // A file called Post (no .gdoc), a Doc called Post.gdoc (which becomes
-      // Post.gdoc.gdoc) and a shortcut
-      siblings.push(
-        { id: "a", name: "Post", mimeType: "text/plain" },
-        { id: "b", name: "Post.gdoc", mimeType: GOOGLE_DOC },
-        {
-          id: "c",
-          name: "Post",
-          mimeType: "application/vnd.google-apps.shortcut",
-        }
-      );
-
-      expect(await poller.applyChange(item)).toEqual("applied");
-    });
-
-    it("falls back to a full sync for a path the walk may have suffixed", async function () {
-      await database.folder(folderId, blogID).set(fileId, "/Post (1).gdoc", {});
-      driveFile.name = "Post (1)";
-      await expectFullSync("suffixed-name");
-    });
-
-    it("falls back to a full sync when Drive no longer has the Doc", async function () {
-      drive.files.get.and.callFake(async () => {
-        throw Object.assign(new Error("Not found"), { code: 404 });
-      });
-      await expectFullSync("not-found");
-    });
-
-    it("falls back to a full sync when the blog moved to another folder", async function () {
+    it("starts a full sync when the blog moved to another folder", async function () {
       database.blog.get.and.returnValue(
         Promise.resolve({ folderId: "elsewhere", serviceAccountId })
       );
-      await expectFullSync("account-changed");
+
+      expect(await poller.applyChange(item)).toEqual("full-sync");
+      expect(await database.dirty.count(blogID)).toEqual(0);
     });
 
-    it("doesn't stamp lastSync while setup copies the site's files", async function () {
+    it("leaves a blog whose setup is copying the site's files to the full sync", async function () {
       database.blog.get.and.returnValue(
         Promise.resolve({ folderId, serviceAccountId, preparing: true })
       );
-      await expectFullSync("account-changed");
-      expect(database.blog.update).not.toHaveBeenCalledWith(blogID, {
-        lastSync: jasmine.any(Number),
-      });
+
+      expect(await poller.applyChange(item)).toEqual("full-sync");
+      expect(poller.applyRecorded).not.toHaveBeenCalled();
     });
   });
 

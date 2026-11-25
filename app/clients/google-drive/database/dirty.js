@@ -22,13 +22,19 @@ const TAKE = 1000;
 const key = (blogID) => `${PREFIX}dirty-dirs:${blogID}`;
 const seenKey = (blogID) => `${PREFIX}dirty-seen:${blogID}`;
 const movesKey = (blogID) => `${PREFIX}moved-folders:${blogID}`;
+const forcedKey = (blogID) => `${PREFIX}forced-files:${blogID}`;
 
 module.exports = {
   FULL,
 
   // Deletes the blog's dirty directories, first sightings and move hints
   async forget(blogID) {
-    await client.del([key(blogID), seenKey(blogID), movesKey(blogID)]);
+    await client.del([
+      key(blogID),
+      seenKey(blogID),
+      movesKey(blogID),
+      forcedKey(blogID),
+    ]);
   },
 
   // source names what saw the directories change (changes, search,
@@ -97,9 +103,30 @@ module.exports = {
     return await client.hGet(movesKey(blogID), id);
   },
 
+  // Google Docs the hot doc poller saw change (serviceAccount/hotDocPoller.js),
+  // which the next apply downloads whatever their modifiedTime says: an open
+  // Doc's modifiedTime lags its edits by about 2 minutes. A file stays
+  // forced until a download of it succeeds (unforce).
+  async force(blogID, fileId) {
+    await client
+      .multi()
+      .sAdd(forcedKey(blogID), fileId)
+      .expire(forcedKey(blogID), TTL_SECONDS)
+      .exec();
+  },
+
+  async forced(blogID) {
+    return await client.sMembers(forcedKey(blogID));
+  },
+
+  async unforce(blogID, fileId) {
+    await client.sRem(forcedKey(blogID), fileId);
+  },
+
   key,
   seenKey,
   movesKey,
+  forcedKey,
 };
 
 // A sync a disconnect cancelled can't write these back (sync/seize.js)
@@ -109,4 +136,6 @@ refuseAfterAbort(module.exports, [
   "seen",
   "take",
   "hintMoves",
+  "force",
+  "unforce",
 ]);
