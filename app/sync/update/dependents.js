@@ -45,6 +45,8 @@ function tracker() {
   let counter = 0;
 
   return {
+    // Whether this sync has set the dependents alarm (../dependentsAlarm.js)
+    alarmSet: false,
     // Paths this sync recorded as needing their dependents rebuilt
     needed: new Set(),
     // The number of each path's latest change, taken when set() marks it
@@ -60,6 +62,21 @@ function tracker() {
   };
 }
 
+// Adds setting the dependents alarm to multi, once per sync: the first write
+// of work for the rebuild at the sync's end also makes sure it happens if
+// the sync is killed first and the blog never syncs again. Required when
+// used: the alarm requires this module.
+function armOnce(multi, blogID, track) {
+  if (track && track.alarmSet) return multi;
+  if (track) track.alarmSet = true;
+  const dependentsAlarm = require("../dependentsAlarm");
+  return dependentsAlarm.alarm.queueSet(
+    multi,
+    blogID,
+    Date.now() + dependentsAlarm.DELAY_MS
+  );
+}
+
 function pairs(path, targets) {
   return targets.map((target) => path + SEPARATOR + target);
 }
@@ -69,11 +86,12 @@ function pairs(path, targets) {
 // them rebuilt. Resolves to whether an earlier sync, or an earlier set() of
 // this sync that failed before record(), left the path pending.
 async function markPending(blogID, path, targets, track) {
-  const [added] = await client
+  const multi = client
     .multi()
     .sAdd(pendingKey(blogID), path)
-    .sAdd(targetsKey(blogID), pairs(path, targets))
-    .exec();
+    .sAdd(targetsKey(blogID), pairs(path, targets));
+  armOnce(multi, blogID, track);
+  const [added] = await multi.exec();
 
   if (track) track.startedAt.set(path, track.next());
 
@@ -107,11 +125,12 @@ async function clearPending(blogID, path, targets, track) {
 // options.started: set() marked the path pending as its change started, so
 // the number taken then is the change's; otherwise (a drop) it takes one now.
 async function record(blogID, path, targets, track, options = {}) {
-  await client
+  const multi = client
     .multi()
     .sAdd(pendingKey(blogID), path)
-    .sAdd(targetsKey(blogID), pairs(path, targets))
-    .exec();
+    .sAdd(targetsKey(blogID), pairs(path, targets));
+  armOnce(multi, blogID, track);
+  await multi.exec();
 
   if (track) {
     track.needed.add(path);

@@ -12,7 +12,6 @@ const messenger = require("./messenger");
 const previewReload = require("helper/publishPreviewReload");
 const regenerateTemplateManifests = require("./update/regenerateTemplateManifests");
 const dependents = require("./update/dependents");
-const dependentsAlarm = require("./dependentsAlarm");
 const readOnly = require("helper/readOnly");
 const logContext = require("helper/logContext");
 const guard = require("storage/folder/guard");
@@ -273,7 +272,6 @@ async function acquire(blogID) {
         changes = true;
         if (!result || !result.error) logLag(path, options, updateStartedAt);
       }
-      await armDependentsAlarm();
       return result;
     },
     status(...args) {
@@ -290,21 +288,6 @@ async function acquire(blogID) {
 
   // We acquired a lock on the resource!
   folder.status("Syncing");
-
-  // Once this sync has recorded work for the rebuild at its end, an alarm
-  // makes sure it happens even if the sync is killed first and the blog
-  // never syncs again (./dependentsAlarm.js). Set once a sync.
-  let dependentsAlarmSet = false;
-
-  async function armDependentsAlarm() {
-    const track = originalUpdate.track;
-
-    if (dependentsAlarmSet || !track) return;
-    if (!track.needed.size && !track.startedAt.size) return;
-
-    dependentsAlarmSet = true;
-    await dependentsAlarm.arm(blogID);
-  }
 
   // Rebuilds, once each, what depends on the files changed in this sync or
   // left pending by one killed before its end (update/dependents.js).

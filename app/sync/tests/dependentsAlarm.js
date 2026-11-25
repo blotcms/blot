@@ -24,7 +24,7 @@ describe("sync dependents alarm", function () {
     await this.blog.write({ path: postPath, content: `![Alt](${imagePath})` });
     await this.blog.rebuild();
     await this.blog.check({ path: postPath });
-    await client.zRem(DUE, this.blog.id);
+    await dependentsAlarm.alarm.cancel(this.blog.id);
 
     this.postBuilds = () =>
       Entry.set.calls.allArgs().filter((args) => args[1] === postPath).length;
@@ -35,7 +35,7 @@ describe("sync dependents alarm", function () {
       dependents.pendingKey(this.blog.id),
       dependents.targetsKey(this.blog.id),
     ]);
-    await client.zRem(DUE, this.blog.id);
+    await dependentsAlarm.alarm.cancel(this.blog.id);
   });
 
   it("is set by a sync which records rebuilds", async function () {
@@ -48,10 +48,14 @@ describe("sync dependents alarm", function () {
     expect(due).toBeGreaterThanOrEqual(before + dependentsAlarm.DELAY_MS);
   });
 
-  it("isn't set by a sync whose files came out unchanged", async function () {
+  it("finds nothing to do after a sync which finished its rebuilds", async function () {
+    await this.blog.write({ path: imagePath, content: await png("#00f") });
     await sync(this.blog.id, (folder) => folder.update(imagePath));
+    spyOn(Entry, "set").and.callThrough();
 
-    expect(await client.zScore(DUE, this.blog.id)).toBe(null);
+    await dependentsAlarm.run(this.blog.id);
+
+    expect(this.postBuilds()).toBe(0);
   });
 
   it("rebuilds what a killed sync left pending", async function () {

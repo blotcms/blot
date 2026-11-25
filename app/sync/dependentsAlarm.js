@@ -2,6 +2,7 @@ const alarm = require("helper/alarm");
 const clfdate = require("helper/clfdate");
 const client = require("models/client");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
+const Blog = require("models/blog");
 const folderLock = require("./lock");
 const dependents = require("./update/dependents");
 
@@ -61,9 +62,18 @@ async function run(blogID) {
     if (err && err.message === "Failed to acquire folder lock")
       return arm(blogID, RETRY_MS);
 
-    // A deleted or disabled blog: its keys go with it, or stay for its next
-    // sync once it is enabled again
+    // Also what a failed read of the blog gives, so look again unless the
+    // blog really is deleted or disabled: then its keys go with it, or stay
+    // for its next sync once it is enabled again. Blog.get rejects if Redis
+    // is unavailable, so the alarm retries then.
     if (err && /^Cannot sync blog /.test(err.message)) {
+      const blog = await Blog.get({ id: blogID });
+
+      if (blog && blog.id && !blog.isDisabled) {
+        log(blogID, "could not start, will retry", err.message);
+        return arm(blogID, RETRY_MS);
+      }
+
       log(blogID, "not rebuilding, the blog cannot be synced");
       return;
     }
@@ -72,6 +82,13 @@ async function run(blogID) {
 
     log(blogID, "failed, will look again", err.message);
     return arm(blogID, RETRY_MS);
+  }
+
+  // The drain never rejects: one cut short (a Redis error, a disconnect's
+  // seize) leaves paths pending, so come back for them
+  if (await client.sCard(dependents.pendingKey(blogID))) {
+    log(blogID, "work left after the rebuild, will look again");
+    return arm(blogID);
   }
 }
 
