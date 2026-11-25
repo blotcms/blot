@@ -1,0 +1,85 @@
+const alarm = require("helper/alarm");
+const clfdate = require("helper/clfdate");
+const client = require("models/client");
+const { isRedisUnavailableError } = require("helper/redisUnavailable");
+const folderLock = require("./lock");
+const dependents = require("./update/dependents");
+
+// What depends on a sync's files is rebuilt when the sync ends (see
+// update/dependents.js). A sync killed before then (a deploy) leaves the work
+// in dependents_pending, and the blog's next sync does it at its end. A blog
+// which doesn't sync again would keep it for good, so each sync which records
+// work also sets this alarm, and when the alarm comes due, whichever process
+// claims it rebuilds what is still pending, under the folder lock. By then the
+// sync has usually done the work itself, and the alarm finds nothing.
+//
+// One alarm per blog, alarm:due:dependents (helper/alarm). Setting it again
+// replaces it, so a run of syncs keeps pushing it back.
+
+// Long enough for the sync which set it to have finished, in most cases
+const DELAY_MS = 2 * 60 * 1000;
+
+// How long to wait before looking again while the folder is locked
+const RETRY_MS = 30 * 1000;
+
+const alarms = alarm(
+  "dependents",
+  async function (blogID) {
+    await run(blogID);
+  },
+  { pollMs: 5000 }
+);
+
+function log(...args) {
+  console.log(clfdate(), "Dependents alarm:", ...args);
+}
+
+// Never rejects: a failure only leaves the work for the blog's next sync
+async function arm(blogID, delay = DELAY_MS) {
+  try {
+    await alarms.set(blogID, Date.now() + delay);
+  } catch (err) {
+    log(blogID, "could not set the alarm", err.message);
+  }
+}
+
+// Rebuilds what is pending for the blog under its folder lock. Resolves
+// either way; rejects only if Redis is unavailable, so the alarm retries.
+async function run(blogID) {
+  // Required when used: sync/index requires the update chain
+  const sync = require("./index");
+
+  if (!(await client.sCard(dependents.pendingKey(blogID)))) return;
+
+  // The sync which holds it rebuilds them when it ends; look again after
+  if ((await folderLock.inspect(blogID)).held) return arm(blogID, RETRY_MS);
+
+  try {
+    // The sync's end does the rebuild (sync/index.js done)
+    await sync(blogID, async () => {});
+  } catch (err) {
+    if (err && err.message === "Failed to acquire folder lock")
+      return arm(blogID, RETRY_MS);
+
+    // A deleted or disabled blog: its keys go with it, or stay for its next
+    // sync once it is enabled again
+    if (err && /^Cannot sync blog /.test(err.message)) {
+      log(blogID, "not rebuilding, the blog cannot be synced");
+      return;
+    }
+
+    if (isRedisUnavailableError(err)) throw err;
+
+    log(blogID, "failed, will look again", err.message);
+    return arm(blogID, RETRY_MS);
+  }
+}
+
+module.exports = {
+  arm,
+  run,
+  alarm: alarms,
+  start: () => alarms.start(),
+  stop: () => alarms.stop(),
+  DELAY_MS,
+};
