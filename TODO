@@ -1,6 +1,7 @@
 Google Drive orphaned folder records, from #2961 (24 Nov 2026): on or after 1 Dec, run `scripts/google-drive/purge-orphan-folders.js` in a unit without `--apply`. It should list close to nothing; anything it does list is a leak #2961 missed, so find which path cleared a folderId without forgetting the folder.
 
 Demo folders, left over from #2940 (23 Nov 2026):
+- Sync: rebuild each dependent entry once per sync, not once per changed file, and tell a busy sync from a hung one in the stuck-lock alert. Plan: #2978.
 - Build: link screenshots (`app/build/plugins/linkScreenshot/index.js`) and image conversion (`app/build/converters/img/index.js`, the `assets.exists` check after the lookup) ask the bucket whether a file exists on every build. Use `assets.existsRecently` (#2973), which remembers a yes for an hour: one bucket request saved per image per build.
 - Build (trivial): `withLocal` and `withLocalHeld` in `app/build/converters/folderStat.js` read the file's index record twice (`ensureLocal`/`withLocal`, then `folder.stat`). Take the size and modified time from one read.
 - stamps and toni are on demo-folders master (3f00196), not yet pinned. #2872 should bump the `app/templates/folders` pin to it and add toni's `config.js` entry next to stamps', so both folders go live with `SITE:organization`. A deploy creates and syncs every folder in the pin, so bumping the pin before then would publish stamps.blot.im with no settings.
@@ -446,7 +447,6 @@ Improve Google Drive sync
 - Google Drive `write` should use the best method for large file uploading
 
 Improve Dropbox sync
-- Batch dependent-entry rebuilds across a sync: a large asset delta batch rebuilt the same referring entry after each image (~13s per update), holding the folder lock for over three hours (2026-11-04). The stuck-lock alert should distinguish ongoing progress from a hung sync.
 - Review public asset rate limits and nginx-429 bans: loading an image-heavy page triggered repeated 429s and temporary visitor bans (2026-11-03/04); avoid banning normal page loads while retaining abuse protection.
 - Sync verification should instrument the sync/fix function to also report errors where the folder doesn't match the database.
 - Fix bug with Client.write which does not propogate sync errors... to demonstrate this, revoke dropbox token then try to enable local editing.
