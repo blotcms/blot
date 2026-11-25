@@ -23,6 +23,17 @@ describe("replaceFolderLinks folderFile", function () {
     expect(folder.ensureLocal).not.toHaveBeenCalled();
   });
 
+  it("reads the index once for a file at the exact path", async function () {
+    const File = require("models/file");
+
+    await folder.write(this.blog.id, "/images/c.jpg", "see");
+    spyOn(File, "get").and.callThrough();
+
+    await hashFolderFile(this.blog.id, "/images/c.jpg");
+
+    expect(File.get).toHaveBeenCalledTimes(1);
+  });
+
   it("finds a file in another case, and answers null for none", async function () {
     await folder.write(this.blog.id, "/images/B.jpg", "bee");
 
