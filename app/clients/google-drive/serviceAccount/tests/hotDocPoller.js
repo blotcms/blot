@@ -322,6 +322,26 @@ describe("google drive hotDocPoller", function () {
     });
   });
 
+  describe("a Doc enqueued as unseen", function () {
+    it("is polled straight away and its first poll is a change", async function () {
+      await enqueue({ unseen: true });
+
+      expect(await field("lastKnownRevision")).toBeNull();
+      await poller.alarms.poll();
+
+      expect(poller.applyChange).toHaveBeenCalledTimes(1);
+      expect(await field("lastKnownRevision")).toEqual("rev-1");
+    });
+
+    it("records the revision when Blot already held it", async function () {
+      poller.applyChange.and.returnValue(Promise.resolve("unchanged"));
+      await enqueue({ unseen: true });
+      await poller.alarms.poll();
+
+      expect(await field("lastKnownRevision")).toEqual("rev-1");
+    });
+  });
+
   describe("applyChange", function () {
     const modifiedTime = "2026-11-20T10:00:00.000Z";
     let item, driveFile, siblings, lock, drive;
@@ -403,6 +423,24 @@ describe("google drive hotDocPoller", function () {
         .find((line) => line.event === "full-sync");
       expect(logged.reason).toEqual(reason);
     };
+
+    it("does nothing at all when Blot already holds this revision", async function () {
+      spyOn(poller, "storedRevision").and.returnValue(Promise.resolve("rev-9"));
+
+      expect(await poller.applyChange({ ...item, revision: "rev-9" })).toEqual(
+        "unchanged"
+      );
+      expect(poller.lockFolder).not.toHaveBeenCalled();
+    });
+
+    it("reuses its Drive checks for the next change while the Doc is typed in", async function () {
+      expect(await poller.applyChange(item)).toEqual("applied");
+      expect(await poller.applyChange(item)).toEqual("applied");
+
+      expect(drive.files.get).toHaveBeenCalledTimes(1);
+      expect(drive.files.list).toHaveBeenCalledTimes(1);
+      expect(poller.download).toHaveBeenCalledTimes(2);
+    });
 
     it("exports and publishes just that Doc under the folder lock", async function () {
       expect(await poller.applyChange(item)).toEqual("applied");

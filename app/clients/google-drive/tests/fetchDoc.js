@@ -17,8 +17,15 @@ describe("google drive fetchDoc", function () {
     const file = require.resolve("../util/fetchDoc");
     const stubs = {
       "storage/folder": {
-        write: async (blogID, path, data) => state.files.set(path, data),
+        write: async (blogID, path, data) => {
+          state.folderWrites = (state.folderWrites || 0) + 1;
+          state.files.set(path, data);
+        },
         exists: async (blogID, path) => state.files.has(path),
+        read: async (blogID, path) => {
+          if (!state.files.has(path)) throw new Error("ENOENT");
+          return Buffer.from(state.files.get(path));
+        },
       },
       "storage/assets": {
         write: async (blogID, path) => state.written.push(path),
@@ -171,6 +178,21 @@ describe("google drive fetchDoc", function () {
     await h.fetch("/renamed.gdoc");
 
     expect(h.fetched.length).toBe(2);
+  });
+
+  it("writes nothing when Blot already holds this revision", async function () {
+    const h = harness();
+    h.doc = { ...doc("Hello"), revisionId: "r1" };
+    await h.fetch();
+    expect(h.folderWrites).toBe(1);
+
+    expect(await h.fetch()).toEqual({ updated: false });
+    expect(h.folderWrites).toBe(1);
+    expect(h.fetched.length).toBe(1);
+
+    h.doc = { ...doc("Hello again"), revisionId: "r2" };
+    expect(await h.fetch()).toEqual({ updated: true });
+    expect(h.folderWrites).toBe(2);
   });
 
   it("leaves a Doc with a drawing to the zip export", async function () {

@@ -170,6 +170,26 @@ module.exports = async function fetchDoc(
   }
 
   const assetDir = "_assets/" + hash(path);
+
+  // Already published at this revision (the hot doc poller got here first,
+  // and the walk runs once Drive's modifiedTime catches up): nothing to
+  // write, so nothing to rebuild
+  if (
+    data.revisionId &&
+    (await storedRevision(blogID, path)) === data.revisionId
+  ) {
+    const record = await docImages.get(blogID, id);
+    if (record.dir === assetDir || !Object.keys(record.images || {}).length) {
+      console.log(
+        clfdate(),
+        "Google Drive: Doc unchanged",
+        blogID,
+        path,
+        `fetch_ms=${fetched - started}`
+      );
+      return { updated: false };
+    }
+  }
   // Trusted only for the same directory, and while the Doc's file is still
   // in the folder: a rename moves the Doc to another directory, and a Doc
   // removed (and its images with it, sync/update/removeConvertedAssets) then
@@ -266,6 +286,18 @@ module.exports = async function fetchDoc(
   return { updated: true };
 };
 
+// The revisionId in the Doc's JSON as Blot holds it, if it holds JSON
+async function storedRevision(blogID, path) {
+  try {
+    const text = (await folder.read(blogID, path)).toString("utf8");
+    if (!text.startsWith("{")) return null;
+    return JSON.parse(text).revisionId || null;
+  } catch (err) {
+    return null;
+  }
+}
+
+module.exports.storedRevision = storedRevision;
 module.exports.unsupported = unsupported;
 module.exports.objectKey = objectKey;
 module.exports.trim = trim;

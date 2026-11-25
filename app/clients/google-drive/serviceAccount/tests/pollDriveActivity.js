@@ -44,13 +44,35 @@ describe("google drive pollDriveActivity", function () {
     expect(iterations).toEqual(0);
   });
 
+  describe("editedDocs", function () {
+    const { editedDocs } = require("../pollDriveActivity");
+    const doc = (id) => ({
+      driveItem: {
+        name: "items/" + id,
+        mimeType: "application/vnd.google-apps.document",
+      },
+    });
+
+    it("lists the Google Docs an edit touched", function () {
+      expect(
+        editedDocs({ primaryActionDetail: { edit: {} }, targets: [doc("a")] })
+      ).toEqual(["a"]);
+    });
+
+    it("lists nothing for another kind of activity", function () {
+      expect(
+        editedDocs({ primaryActionDetail: { rename: {} }, targets: [doc("a")] })
+      ).toEqual([]);
+    });
+  });
+
   describe("on new activity", function () {
     const followUps = require("clients/google-drive/sync/followUps");
     let order;
 
     // One round over one blog whose last stored activity is `stored`, with
     // Drive reporting activity at `latest`
-    async function round(stored, latest) {
+    async function round(stored, latest, extra = {}) {
       order = [];
       const controller = new AbortController();
       database.blog.iterateByServiceAccountId.and.callFake(
@@ -75,7 +97,7 @@ describe("google drive pollDriveActivity", function () {
       const driveactivity = {
         activity: {
           query: async () => ({
-            data: { activities: [{ timestamp: latest }] },
+            data: { activities: [{ timestamp: latest, ...extra }] },
           }),
         },
       };
@@ -99,6 +121,36 @@ describe("google drive pollDriveActivity", function () {
 
     it("does nothing when the activity is the one it stored", async function () {
       expect(await round("t1", "t1")).toEqual([]);
+    });
+
+    it("watches a Google Doc the activity edited, as a change not yet seen", async function () {
+      const hotDocPoller = require("../hotDocPoller");
+      spyOn(hotDocPoller, "enqueue").and.returnValue(Promise.resolve());
+
+      await round("t1", "t2", {
+        primaryActionDetail: { edit: {} },
+        targets: [
+          {
+            driveItem: {
+              name: "items/doc-1",
+              mimeType: "application/vnd.google-apps.document",
+            },
+          },
+          { driveItem: { name: "items/file-2", mimeType: "text/plain" } },
+        ],
+      });
+
+      expect(hotDocPoller.enqueue.calls.allArgs()).toEqual([
+        [
+          {
+            blogID: "blog_a",
+            serviceAccountId: "test-sa",
+            fileId: "doc-1",
+            folderId: "folder",
+            unseen: true,
+          },
+        ],
+      ]);
     });
   });
 });
