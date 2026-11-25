@@ -332,8 +332,11 @@ async function exists(blogID, relPath) {
 // checks that a cached result's files are still stored, which ask about the
 // same files on every rebuild of an entry. Safe because every routine
 // removal of generated assets (the sweep, a cache wipe) deletes the cache
-// entry naming them first, so nothing asks about them afterwards. A no is
-// never remembered.
+// entry naming them first, so nothing asks about them afterwards. The one
+// exception is a bookmark screenshot, which has no cache entry: the sweep
+// deletes it once nothing has referenced it for hours, so a remembered yes
+// can only outlive that by the accepted gap in storage/sweep/generated.js.
+// A no is never remembered.
 const EXISTS_TTL_MS = 60 * 60 * 1000;
 const EXISTS_MAX = 20000;
 const existing = new Map();
