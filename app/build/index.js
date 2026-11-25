@@ -112,9 +112,8 @@ async function hashSource(blogID, sourcePath) {
 // on every reconnect/resync/upload). `sourcePaths` is one path for a plain
 // entry, or the sorted list of files that make up a multi-file/folder post
 // (see multiple.js, which stores this on metadata._sourcePaths). Resolves to
-// the hash (or calls back with (null, hash)) on success. If any source can't
-// be hashed (deleted mid-build, EMFILE, a provider swapping the file out
-// underneath us, ...) it rejects (calls back with (err)) - the caller must not
+// the hash on success. If any source can't be hashed (deleted mid-build, a
+// directory, ...) it rejects - the caller must not
 // derive a contentHash from a partial result, since a consistent failure would
 // otherwise produce the same placeholder digest on every build and
 // permanently mask real changes.
