@@ -19,6 +19,7 @@
 const crypto = require("crypto");
 const mime = require("mime-types");
 const folder = require("storage/folder");
+const { throwIfAborted } = require("storage/folder/guard");
 const assets = require("storage/assets");
 const hash = require("helper/hash");
 const clfdate = require("helper/clfdate");
@@ -210,11 +211,13 @@ module.exports = async function fetchDoc(
     }
   }
 
-  // Every write goes through publish, so none lands once a disconnect has
-  // taken the folder
+  // A disconnect seizes the folder lock (sync/seize.js): folder writes and
+  // docImages then refuse, and nothing is fetched or written to the bucket
+  // after that either. A fetch already in flight finishes, then stops here.
   const written = [];
   try {
     await eachLimit(toFetch, IMAGE_CONCURRENCY, async ({ keyed, embedded }) => {
+      throwIfAborted();
       const { buffer, ext } = await fetchImage(
         embedded.imageProperties.contentUri
       );
@@ -222,6 +225,7 @@ module.exports = async function fetchDoc(
         crypto.createHash("sha1").update(buffer).digest("hex").slice(0, 16) +
         "." +
         ext;
+      throwIfAborted();
       await publish(() => assets.write(blogID, assetDir + "/" + file, buffer));
       written.push(file);
       now[keyed] = file;
@@ -262,6 +266,7 @@ module.exports = async function fetchDoc(
   const gone = Object.values(held).filter(
     (file) => !Object.values(now).includes(file)
   );
+  throwIfAborted();
   for (const file of new Set(gone))
     await publish(() =>
       assets.remove(blogID, assetDir + "/" + file).catch(() => {})

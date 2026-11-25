@@ -11,6 +11,7 @@
 // One hash per blog, field = the Doc's Drive file id, so deleting the blog
 // (its blog:<id>:* keys) or disconnecting Drive (../forget.js) removes it.
 const client = require("models/client");
+const refuseAfterAbort = require("./refuseAfterAbort");
 
 const key = (blogID) => `blog:${blogID}:google-drive:doc-images`;
 
@@ -48,3 +49,7 @@ async function drop(blogID) {
 }
 
 module.exports = { get, set, setBuilt, getBuilt, drop, key };
+
+// A fetch a disconnect cancelled can't bring back the record it just
+// dropped (sync/seize.js)
+refuseAfterAbort(module.exports, ["set", "setBuilt"]);

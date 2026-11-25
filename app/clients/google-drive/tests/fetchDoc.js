@@ -226,6 +226,26 @@ describe("google drive fetchDoc", function () {
     expect((await h.fetch()).updated).toBe(true);
   });
 
+  it("fetches and writes nothing for a sync whose lock a disconnect seized", async function () {
+    const guard = require("storage/folder/guard");
+    const h = harness();
+    h.doc = doc("Hello");
+    const controller = new AbortController();
+    controller.abort(new Error("seized"));
+
+    let error;
+    try {
+      await guard.run("blog_a", controller.signal, () => h.fetch());
+    } catch (err) {
+      error = err;
+    }
+    expect(error && error.message).toBe("seized");
+
+    expect(h.fetched).toEqual([]);
+    expect(h.written).toEqual([]);
+    expect(h.files.size).toBe(0);
+  });
+
   it("leaves a Doc with a drawing to the zip export", async function () {
     const h = harness();
     h.doc = doc("Hello");
