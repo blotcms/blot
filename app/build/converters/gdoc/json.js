@@ -595,13 +595,10 @@ function renderImage(id, tab) {
   if (!embedded) return "";
   const src = embedded.imageProperties && embedded.imageProperties.blotSrc;
   if (!src) return "";
-  const width = Math.round((pt(embedded.size && embedded.size.width) * 4) / 3);
-  const height = Math.round(
-    (pt(embedded.size && embedded.size.height) * 4) / 3
-  );
+  // No width or height: the HTML export never gave them, and a template
+  // with max-width:100% but no height:auto would squash the image
   let attrs = `src="${escape(src)}" alt="${escape(embedded.description || "")}"`;
   if (embedded.title) attrs += ` title="${escape(embedded.title)}"`;
-  if (width && height) attrs += ` width="${width}" height="${height}"`;
   return `<img ${attrs}>`;
 }
 
