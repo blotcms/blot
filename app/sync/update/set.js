@@ -28,6 +28,19 @@ var noop = () => {};
 // though the entry comes out unchanged.
 var dependentsPendingKey = dependents.pendingKey;
 
+// Where to look for the entries which depend on path: the path itself and,
+// for a file in a "+" folder, the folder post's entry path
+function targetsOf(path, multiInfo) {
+  var targets = [path];
+
+  if (multiInfo && multiInfo.entryPath)
+    targets.push(pathNormalizer(multiInfo.entryPath));
+
+  return targets.map(pathNormalizer).filter(function (value, index, array) {
+    return array.indexOf(value) === index;
+  });
+}
+
 function isPublic(path) {
   const normalizedPath = pathNormalizer(path).toLowerCase();
   return (
@@ -236,10 +249,15 @@ async function buildAndSet(blog, path, multiInfo, state, track) {
   if (entry.metadata && entry.metadata._sourcePaths)
     delete entry.metadata._sourcePaths;
 
-  // Already pending, and not by this sync: an earlier sync saved its entry
-  // and was killed before rebuilding its dependents
+  // Already pending, and not recorded by this sync: an earlier sync saved
+  // its entry and was killed (or failed) before rebuilding its dependents
   state.pending = true;
-  state.wasPending = await dependents.markPending(blog.id, path, track);
+  state.wasPending = await dependents.markPending(
+    blog.id,
+    path,
+    targetsOf(path, multiInfo),
+    track
+  );
 
   var result = await Entry.set(blog.id, entry.path, entry);
   dependents.saved(track, entry.path);
@@ -279,8 +297,10 @@ async function buildAndSet(blog, path, multiInfo, state, track) {
   // An unchanged entry has the same slug and file name, and the same
   // contentHash, so the same source bytes: what depends on it would build
   // the same, unless an earlier sync was killed before rebuilding it
+  // Stored now, before the steps below which may throw
   if (!state.unchanged || state.wasPending) {
     state.syntheticKeys = Array.from(syntheticKeys);
+    await dependents.addTargets(blog.id, path, state.syntheticKeys);
   }
 
   // A draft folder post outside /drafts/ would write "/album.html"
@@ -342,18 +362,16 @@ module.exports = async function set(blog, path, track) {
   // Resolves to { changed: false } when the file built exactly the
   // entry already stored, so the caller need not purge the blog's pages
   if (state.unchanged && !state.wasPending && !ignoring) {
-    await dependents.clearPending(blog.id, path, track);
+    await dependents.clearPending(
+      blog.id,
+      path,
+      targetsOf(path, multiInfo),
+      track
+    );
     return { changed: false };
   }
 
-  var targets = [path];
-
-  if (multiInfo && multiInfo.entryPath)
-    targets.push(pathNormalizer(multiInfo.entryPath));
-
-  targets = targets.map(pathNormalizer).filter(function (value, index, array) {
-    return array.indexOf(value) === index;
-  });
+  var targets = targetsOf(path, multiInfo);
 
   // Rebuilt once, when the sync ends (./dependents.js drain)
   await dependents.record(

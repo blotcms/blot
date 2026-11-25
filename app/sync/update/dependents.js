@@ -38,64 +38,85 @@ function targetsKey(blogID) {
 }
 
 // A sync's memory of what it did, for the rebuild at its end. Each event (a
-// path recorded, an entry saved) takes the next number, so the rebuild can
-// tell an entry saved after every change it depends on, which read the new
-// files already and needs no rebuild.
+// path's change starting, an entry saved) takes the next number, so the
+// rebuild can tell an entry saved after every change it depends on, which
+// read the new files already and needs no rebuild.
 function tracker() {
   let counter = 0;
 
   return {
-    // Paths this sync added to dependents_pending, so a second set() of one
-    // in the same sync doesn't take it for one a killed sync left
-    added: new Set(),
     // Paths this sync recorded as needing their dependents rebuilt
     needed: new Set(),
-    // The number of each path's latest recording, and of each entry's latest
-    // save (by the entry's own path, as dependents sets list it)
+    // The number of each path's latest change, taken when set() marks it
+    // pending, before its own entry is saved: an entry of the path's (a
+    // folder post's aggregate, for one of its files) saved after that read
+    // it. A path record() sees unmarked (a public file, a drop) takes one then
+    startedAt: new Map(),
     recordedAt: new Map(),
+    // The number of each entry's latest save, by the entry's own path, as
+    // dependents sets list it
     savedAt: new Map(),
     next: () => ++counter,
   };
 }
 
-// Adds path to dependents_pending. Resolves to whether an earlier sync left
-// it there (it was already a member, and this sync didn't add it).
-async function markPending(blogID, path, track) {
-  const added = Number(await client.sAdd(pendingKey(blogID), path)) === 1;
-
-  if (added) {
-    if (track) track.added.add(path);
-    return false;
-  }
-
-  return !(track && track.added.has(path));
+function pairs(path, targets) {
+  return targets.map((target) => path + SEPARATOR + target);
 }
 
-// For a path whose entry came out unchanged: removes it from
-// dependents_pending, unless this sync already recorded it as needing its
-// dependents rebuilt
-async function clearPending(blogID, path, track) {
+// Adds path to dependents_pending and targets to dependents_targets, before
+// the entry is saved, so a sync killed or failing after the save still has
+// them rebuilt. Resolves to whether an earlier sync, or an earlier set() of
+// this sync that failed before record(), left the path pending.
+async function markPending(blogID, path, targets, track) {
+  const [added] = await client
+    .multi()
+    .sAdd(pendingKey(blogID), path)
+    .sAdd(targetsKey(blogID), pairs(path, targets))
+    .exec();
+
+  if (track) track.startedAt.set(path, track.next());
+
+  if (Number(added) === 1) return false;
+  return !(track && track.needed.has(path));
+}
+
+// Adds more targets for a pending path (the wikilink keys of its new entry)
+async function addTargets(blogID, path, targets) {
+  if (targets.length)
+    await client.sAdd(targetsKey(blogID), pairs(path, targets));
+}
+
+// For a path whose entry came out unchanged: removes it and its targets from
+// the sets, unless this sync already recorded it as needing its dependents
+// rebuilt
+async function clearPending(blogID, path, targets, track) {
   if (track && track.needed.has(path)) return;
-  await client.sRem(pendingKey(blogID), path);
-  if (track) track.added.delete(path);
+
+  await client
+    .multi()
+    .sRem(pendingKey(blogID), path)
+    .sRem(targetsKey(blogID), pairs(path, targets))
+    .exec();
 }
 
 // Records that the dependents of targets need rebuilding because path
 // changed, and marks the templates which link to them for a CDN manifest
 // update (cheap, and already done once per sync). Rebuilt by drain().
 async function record(blogID, path, targets, track) {
-  const multi = client.multi();
-  multi.sAdd(pendingKey(blogID), path);
-  multi.sAdd(
-    targetsKey(blogID),
-    targets.map((target) => path + SEPARATOR + target)
-  );
-  await multi.exec();
+  await client
+    .multi()
+    .sAdd(pendingKey(blogID), path)
+    .sAdd(targetsKey(blogID), pairs(path, targets))
+    .exec();
 
   if (track) {
-    track.added.add(path);
     track.needed.add(path);
-    track.recordedAt.set(path, track.next());
+    track.recordedAt.set(
+      path,
+      track.startedAt.has(path) ? track.startedAt.get(path) : track.next()
+    );
+    track.startedAt.delete(path);
   }
 
   for (const target of targets) {
@@ -219,6 +240,7 @@ module.exports = {
   targetsKey,
   tracker,
   markPending,
+  addTargets,
   clearPending,
   record,
   saved,

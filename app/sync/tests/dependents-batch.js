@@ -26,6 +26,11 @@ describe("sync dependents batch", function () {
     await this.blog.rebuild();
     await this.blog.check({ path: postPath });
 
+    // The rebuild drains what it recorded: start each spec from nothing
+    expect(await client.sMembers(dependents.pendingKey(this.blog.id))).toEqual(
+      []
+    );
+
     this.recolour = async (colour) => {
       for (const path of images)
         await this.blog.write({ path, content: await png(colour) });

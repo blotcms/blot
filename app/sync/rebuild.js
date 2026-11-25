@@ -1,5 +1,6 @@
 const ensure = require("helper/ensure");
 const Update = require("./update");
+const dependents = require("./update/dependents");
 const storage = require("storage/folder");
 const messenger = require("./messenger");
 const assets = require("storage/assets");
@@ -153,6 +154,22 @@ module.exports = async function main(blogID, options = {}) {
       failed++;
       if (!firstError) firstError = fileError;
     }
+  }
+
+  // What depends on the rebuilt files, once each (update/dependents.js), as
+  // a sync does when it ends: a rebuild may run without the folder lock, and
+  // then no sync's end comes after it. An entry this rebuild saved after the
+  // files it depends on is skipped, so most are not built twice.
+  try {
+    const rebuilt = await dependents.drain(blogID, {
+      track: update.track,
+      status,
+      log,
+    });
+    if (rebuilt) log("Rebuilt " + rebuilt + " dependent entries");
+  } catch (err) {
+    if (isRedisUnavailableError(err)) throw err;
+    log("Error rebuilding dependent entries", err.message);
   }
 
   if (failed) {
