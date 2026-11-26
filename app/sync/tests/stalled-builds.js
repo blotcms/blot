@@ -14,7 +14,7 @@ describe("sync/update/stalledBuilds", function () {
 
   beforeEach(function () {
     stallMs = stalledBuilds.options.stallMs;
-    stalledBuilds.options.stallMs = 100;
+    stalledBuilds.options.stallMs = 500;
     spyOn(email, "BUILD_STALLED").and.returnValue(Promise.resolve());
   });
 
@@ -24,8 +24,8 @@ describe("sync/update/stalledBuilds", function () {
   });
 
   // Blocks the event loop for ms, as a quadratic converter does. The stall
-  // is measured by a timer firing every second, so a block of 1.2s is at
-  // least 0.2s late, over the 0.1s the specs count as a stall.
+  // is measured by a timer firing every second, so a block of 1.7s is at
+  // least 0.7s late, over the 0.5s the specs count as a stall.
   function block(ms) {
     var until = Date.now() + ms;
     while (Date.now() < until);
@@ -74,7 +74,7 @@ describe("sync/update/stalledBuilds", function () {
     var builds = 0;
     var slow = async () => {
       builds += 1;
-      block(1200);
+      block(1700);
     };
     await folder.write(blog.id, "/a.txt", "a");
 
@@ -115,7 +115,7 @@ describe("sync/update/stalledBuilds", function () {
 
     // The next build starts straight after the stall, before the timer has
     // fired to see it
-    block(1200);
+    block(1700);
     await stalledBuilds(blog, "/a.txt", async () => "built");
 
     expect(await attempts(blog.id, "/a.txt")).toBe(null);
@@ -123,7 +123,7 @@ describe("sync/update/stalledBuilds", function () {
 
   it("builds the file again once it changes", async function () {
     var blog = this.blog;
-    var slow = async () => block(1200);
+    var slow = async () => block(1700);
     await folder.write(blog.id, "/a.txt", "a");
     await stalledBuilds(blog, "/a.txt", slow);
     await stalledBuilds(blog, "/a.txt", slow);

@@ -23,19 +23,21 @@ var hold = require("sync/hold");
 // out), so a write then would be lost.
 //
 // The key holds the file's SHA-1 (or its size and modified time), so an
-// edit gets a fresh count. It expires an hour after the last attempt, so the file is tried
-// again then.
+// edit gets a fresh count; a folder post's folder has neither, so its edits
+// share one. It expires an hour after the last attempt, so the next sync or
+// rebuild after that tries the file again.
 
 var MAX_ATTEMPTS = 2;
 var ATTEMPT_TTL_SECONDS = 60 * 60;
 var ALERT_TTL_SECONDS = 60 * 60;
 
-// A stall this long risks the lock: its lease is renewed every heartbeat
-// and lasts LEASE_MS, so the lease can run out after LEASE_MS - HEARTBEAT_MS
-// (specs lower it)
-var options = { stallMs: hold.LEASE_MS - hold.HEARTBEAT_MS };
-
 var TICK_MS = 1000;
+
+// A stall this long risks the lock: its lease is renewed every heartbeat
+// and lasts LEASE_MS, so the lease can run out after LEASE_MS - HEARTBEAT_MS.
+// A stall is measured as late as the timer is, up to TICK_MS less than it
+// lasted, so less that too (specs lower it).
+var options = { stallMs: hold.LEASE_MS - hold.HEARTBEAT_MS - TICK_MS };
 
 // Event loop stalls, measured by a timer which should fire every TICK_MS.
 // A stall is recorded by the first tick after it, numbered.
