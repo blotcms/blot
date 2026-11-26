@@ -86,7 +86,10 @@ async function read(blog, path) {
   // this is possibly? span id="h.ulrsxjddh07w" class="anchor">
   // Whether the document has an h1 yet: counted once and kept up to date
   // here, not queried for every paragraph, which was quadratic and blocked
-  // the event loop for over 15s on a long directory page (26 Nov 2026)
+  // the event loop for over 15s on a long directory page (26 Nov 2026).
+  // Pandoc's output is loaded as a fragment, with no <body>, so the query
+  // always found none and every bold title stays an <h1>: kept as it was.
+  var hasBody = $("body").length > 0;
   var hasH1 = $("body h1").length > 0;
   $("p").each(function () {
     var children = $(this).children();
@@ -103,7 +106,7 @@ async function read(blog, path) {
       var title = $("<h1>");
 
       if (hasH1) title = $("<h2>");
-      hasH1 = true;
+      if (hasBody) hasH1 = true;
 
       title.html(strong.html());
 
