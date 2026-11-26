@@ -4,7 +4,7 @@ const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
 const createReader = require("../reader");
 const { chooseWhole } = require("../idx");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const { CorruptError, TooLargeError } = require("../errors");
 
@@ -17,19 +17,15 @@ async function collect(iterable) {
 describe("git store reader", function () {
   timeout(60 * 1000);
 
+  const ws = workspace.all();
   let workDir;
   let fixture;
   let oracle; // Map(oid -> { type, data }) from git itself
 
   beforeAll(function () {
-    workDir = fx.tempDir();
+    workDir = ws.dir();
     fixture = fx.buildFixture(workDir + "/repo");
     oracle = fx.catAll(fixture.dir);
-  });
-
-  afterAll(async function () {
-    await createCache.closeAll();
-    fx.remove(workDir);
   });
 
   // Puts packs in a store, and returns a reader over them (oldest first)
@@ -89,7 +85,7 @@ describe("git store reader", function () {
     });
 
     it("reads every object with a cache, cold then warm", async function () {
-      const cache = createCache({
+      const cache = ws.cache({
         dir: workDir + "/cache-a",
         maxBytes: 50 * 1024 * 1024,
       });
@@ -100,7 +96,7 @@ describe("git store reader", function () {
     });
 
     it("reads every object with a cache far too small for the index", async function () {
-      const cache = createCache({ dir: workDir + "/cache-b", maxBytes: 100 });
+      const cache = ws.cache({ dir: workDir + "/cache-b", maxBytes: 100 });
       const { reader } = await readerFor(packs, { cache });
       await expectAllObjects(reader);
       expect(cache.stats().entryBytes).toBeLessThanOrEqual(100);
@@ -115,7 +111,7 @@ describe("git store reader", function () {
     });
 
     it("reads an object in few round trips, and the next near it in fewer", async function () {
-      const cache = createCache({
+      const cache = ws.cache({
         dir: workDir + "/cache-c",
         maxBytes: 50 * 1024 * 1024,
       });
@@ -393,7 +389,7 @@ describe("git store reader", function () {
       const fs = require("fs");
       const path = require("path");
       const dir = workDir + "/cache-d";
-      const cache = createCache({ dir, maxBytes: 10 * 1024 * 1024 });
+      const cache = ws.cache({ dir, maxBytes: 10 * 1024 * 1024 });
       const { reader } = await readerFor(packs, { cache });
       await expectAllObjects(reader);
 
@@ -440,7 +436,7 @@ describe("git store reader", function () {
       fx.repackAll(fixture.dir);
       const packs = fx.readPacks(fixture.dir);
       // A sixteenth of this cache is smaller than the index
-      const cache = createCache({
+      const cache = ws.cache({
         dir: workDir + "/cache-range",
         maxBytes: 8 * packs[0].idx.length,
       });

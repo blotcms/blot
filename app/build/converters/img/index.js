@@ -57,7 +57,10 @@ async function read(blog, path) {
       if (EXTENSIONS_TO_CONVERT.includes(extname(path).toLowerCase())) {
         const transformer = new Transformer(blog.id, "img-converter");
         const hashPath = hash(path);
-        const convertedFilename = `${name}.png`;
+        // Written to local disk first (assets.path), which refuses a name
+        // over 255 bytes; the directory is already unique to the path
+        const convertedFilename =
+          Buffer.byteLength(name + ".png") > 255 ? "image.png" : `${name}.png`;
         const convertedRelativePath = `/_assets/${hashPath}/${convertedFilename}`;
 
         const writeConversion = async (sourcePath, relativePath) => {
@@ -98,7 +101,7 @@ async function read(blog, path) {
         const conversionRelativePath =
           conversion?.relativePath || convertedRelativePath;
 
-        if (!(await assets.exists(blog.id, conversionRelativePath))) {
+        if (!(await assets.existsRecently(blog.id, conversionRelativePath))) {
           await writeConversion(localPath, conversionRelativePath);
         }
 

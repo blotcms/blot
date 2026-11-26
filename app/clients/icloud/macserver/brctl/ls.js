@@ -66,7 +66,7 @@ const listDirectory = async (dirPath) => {
   }
 };
 
-export default async (dirPath) => {
+const lsOnce = async (dirPath) => {
   try {
     return await listDirectory(dirPath);
   } catch (error) {
@@ -109,4 +109,20 @@ export default async (dirPath) => {
     console.error(clfdate(), `Timeout listing directory ${dirPath}`);
     return null;
   }
+};
+
+// A listing already running for a directory is shared, not started again:
+// Blot gives up on a /readdir that takes too long and asks again (a reply can
+// be lost on the way back), and a second ls stacked on a directory iCloud is
+// still materialising only slows both down.
+const running = new Map();
+
+export default (dirPath) => {
+  if (!running.has(dirPath)) {
+    running.set(
+      dirPath,
+      lsOnce(dirPath).finally(() => running.delete(dirPath))
+    );
+  }
+  return running.get(dirPath);
 };

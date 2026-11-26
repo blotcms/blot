@@ -18,13 +18,14 @@ const maxFileSize = config.icloud.maxFileSize; // Maximum file size for iCloud u
 
 const prefix = () => `${clfdate()} iCloud Sync to iCloud:`;
 
-// Retry failed operations with exponential backoff
-async function retry(fn, ...args) {
+// Retry failed operations with exponential backoff, but not once signal has
+// aborted (a disconnect stopped the sync, sync/seize.js)
+async function retry(signal, fn, ...args) {
   for (let i = 0; i < 3; i++) {
     try {
       return await fn(...args);
     } catch (e) {
-      if (i === 2) throw e;
+      if (i === 2 || (signal && signal.aborted)) throw e;
       const delay = Math.min(1000 * Math.pow(2, i), 10000);
       console.log("Attempt", i, "failed, retrying in", delay, "ms", e);
       await new Promise((r) => setTimeout(r, delay));
@@ -36,11 +37,20 @@ module.exports = async (
   blogID,
   publish,
   update,
-  { skipDeletions = false, abortOnError = false, check = false } = {}
+  {
+    skipDeletions = false,
+    abortOnError = false,
+    check = false,
+    // The sync lock's folder.signal: once it aborts, the walk stops at its
+    // next step and the request in flight is cut off
+    signal,
+  } = {}
 ) => {
   publish = publish || function () {};
 
-  const checkWeCanContinue = CheckWeCanContinue(blogID);
+  const checkWeCanContinue = CheckWeCanContinue(blogID, signal);
+  // An aborted walk stops, whether or not it stops on other errors
+  const stops = () => abortOnError || Boolean(signal && signal.aborted);
 
   let skippedPlaceholders = 0;
 
@@ -65,7 +75,7 @@ module.exports = async (
 
   const walk = async (dir) => {
     const [remoteContents, localContents] = await Promise.all([
-      remoteReaddir(blogID, dir),
+      remoteReaddir(blogID, dir, { signal }),
       localReaddir(blogID, dir),
     ]);
 
@@ -79,11 +89,11 @@ module.exports = async (
         await checkWeCanContinue();
         progress.note("Removing from iCloud", path);
         try {
-          await retry(remoteDelete, blogID, path);
+          await retry(signal, remoteDelete, blogID, path, { signal });
         } catch (e) {
           progress.note("Failed to remove", path);
           console.log(prefix(), "Failed to remove", path, e);
-          if (abortOnError) throw e;
+          if (stops()) throw e;
         }
       }
     }
@@ -99,11 +109,11 @@ module.exports = async (
           await checkWeCanContinue();
           progress.note("Creating directory in iCloud", path);
           try {
-            await retry(remoteMkdir, blogID, path);
+            await retry(signal, remoteMkdir, blogID, path, { signal });
           } catch (e) {
             progress.note("Failed to create directory", path);
             console.log(prefix(), "Failed to create directory", path, e);
-            if (abortOnError) throw e;
+            if (stops()) throw e;
             continue;
           }
         }
@@ -150,11 +160,11 @@ module.exports = async (
           }
           progress.publish("Transferring to iCloud", path);
           try {
-            await retry(remoteUpload, blogID, path);
+            await retry(signal, remoteUpload, blogID, path, { signal });
           } catch (e) {
             progress.note("Failed to upload", path, e);
             console.log(prefix(), "Failed to upload", path, e);
-            if (abortOnError) throw e;
+            if (stops()) throw e;
           }
         } else {
           progress.publishThrottled("Checking", path);
@@ -178,6 +188,6 @@ module.exports = async (
   } catch (e) {
     publish("Sync failed");
     console.log(prefix(), "Sync failed", e);
-    if (abortOnError) throw e;
+    if (stops()) throw e;
   }
 };

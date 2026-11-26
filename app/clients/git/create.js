@@ -2,6 +2,16 @@ const database = require("./database");
 const storage = require("storage/folder");
 const clfdate = require("helper/clfdate");
 const sync = require("sync");
+const messenger = require("sync/messenger");
+
+// What the create page says about a setup that failed (database.setFailed)
+const REASONS = {
+  LOCKED: "Your folder was busy syncing. Try again in a minute.",
+  LIVE_CLONE:
+    "Your site’s folder has a .git folder in it. Remove it, then try again.",
+  OTHER:
+    "Blot couldn’t finish setting up the repository. Try again, and contact us if it happens again.",
+};
 
 function delay(ms) {
   return new Promise(function (resolve) {
@@ -16,6 +26,13 @@ function delay(ms) {
 // clears it when it ends, however it ends: a setup killed by a deploy stops
 // renewing it, so the blog is not left "in progress" for long.
 async function create(blog) {
+  // A reason left by an earlier setup is this one's to replace
+  try {
+    await database.clearFailed(blog.id);
+  } catch (err) {
+    // The page may show the old reason until this setup ends
+  }
+
   try {
     await database.setCreating(blog.id);
   } catch (err) {
@@ -29,6 +46,7 @@ async function create(blog) {
 
   const renewal = setInterval(renewMark, database.CREATING_REFRESH_MS, blog.id);
   renewal.unref();
+  let failed = false;
 
   // The mark is cleared once the sync has released the folder lock. A setup
   // that cannot run (the folder is locked) leaves no mark behind either.
@@ -41,15 +59,50 @@ async function create(blog) {
       try {
         await createRepository(blog, folder);
       } catch (err) {
-        await database
-          .setStatus(blog.owner, "createFailed")
-          .catch(function () {});
+        // Recorded while the lock is held, so a disconnect, which seizes
+        // it, clears the reason after this. A setup the disconnect stopped
+        // records none.
+        const cancelled =
+          err.code === "ECANCELED" || (folder.signal && folder.signal.aborted);
+        if (!cancelled) failed = await recordFailure(blog.id, err);
         throw err;
       }
     });
+  } catch (err) {
+    // Thrown before the setup could start
+    if (isLocked(err)) failed = await recordFailure(blog.id, err);
+    throw err;
   } finally {
     clearInterval(renewal);
     await database.clearCreating(blog.id).catch(function () {});
+
+    // A page showing the setup reloads on a status, and now finds the
+    // create page with the reason
+    if (failed) messenger(blog).status("Repository setup failed");
+  }
+}
+
+function isLocked(err) {
+  return !!err && err.message === "Failed to acquire folder lock";
+}
+
+function reasonFor(err) {
+  if (isLocked(err)) return REASONS.LOCKED;
+  if (err && err.code === "LIVE_CLONE") return REASONS.LIVE_CLONE;
+  return REASONS.OTHER;
+}
+
+// Resolves to whether the reason was recorded. Never throws over the setup's
+// own error.
+async function recordFailure(blogID, err) {
+  try {
+    await database.setFailed(blogID, reasonFor(err));
+    return true;
+  } catch (e) {
+    console.log(
+      clfdate() + " Git: create: could not record the failure: " + e.message
+    );
+    return false;
   }
 }
 
@@ -83,8 +136,10 @@ async function createRepository(blog, folder) {
   });
 
   // Until the status is recorded the store's copy is still the setup's to
-  // take back, so a failure here leaves the store empty for a retry
+  // take back, so a failure here leaves the store empty for a retry. So does
+  // a disconnect that seized the lock meanwhile.
   try {
+    if (folder.signal) folder.signal.throwIfAborted();
     await database.setStatus(blog.owner, "createComplete");
   } catch (err) {
     await made.rollback();
@@ -114,7 +169,10 @@ async function prepareMetadata(blog) {
 // has one, rather than leave it to be taken for one.
 async function assertNoLiveClone(blogID) {
   if (await storage.exists(blogID, "/.git")) {
-    throw new Error("The blog folder already has a .git directory");
+    throw Object.assign(
+      new Error("The blog folder already has a .git directory"),
+      { code: "LIVE_CLONE" }
+    );
   }
 }
 

@@ -77,6 +77,8 @@ EOF'
 echo "# A new host: no instance store mounted"
 # Skip mode writes no units; the real one exists on a host set up with systemd.
 in_ct 'touch /etc/systemd/system/blot-instance-store.service'
+# A host set up before #2795 has the old sandbox cgroup service.
+in_ct 'touch /etc/systemd/system/blot-sandbox-cgroup.service /usr/local/sbin/blot-sandbox-cgroup.sh'
 check "deploy.sh runs to the end" deploy "$TMP/run1"
 check "deploy.sh says so" grep -q '^Host setup complete' "$TMP/run1"
 check "the instance store unit is enabled" in_ct 'grep -qx "enable mount-instance-store.service" /tmp/systemctl.log'
@@ -105,6 +107,28 @@ check "ec2-user, whom read.sh connects as, can read app.log" in_ct '
   [ "$(stat -c %U /var/instance-ssd/logs/app.log)" = ec2-user ] && runuser -u ec2-user -- head -c 1 /var/instance-ssd/logs/app.log > /dev/null'
 check "fstrim's weekly run also trims the instance store, when mounted" in_ct 'grep -qF "if mountpoint -q /var/instance-ssd; then exec /usr/sbin/fstrim --verbose /var/instance-ssd; fi" /etc/systemd/system/fstrim.service.d/10-instance-store.conf'
 check "fstrim is never run by deploy.sh" in_ct '! grep -q fstrim /tmp/systemctl.log'
+check "the units' slices and their cgroup service are installed, enabled and started" in_ct '
+  for f in system-blot.slice system-blot-blue.slice system-blot-green.slice blot-unit-cgroups.service; do
+    [ "$(stat -c "%a %U" /etc/systemd/system/$f)" = "644 root" ] || exit 1
+  done
+  [ -x /usr/local/sbin/blot-unit-cgroups.sh ] &&
+  grep -qx "MemoryMax=3584M" /etc/systemd/system/system-blot-blue.slice &&
+  grep -qx "MemoryMax=3584M" /etc/systemd/system/system-blot-green.slice &&
+  grep -qx "enable blot-unit-cgroups.service" /tmp/systemctl.log && grep -qx "restart blot-unit-cgroups.service" /tmp/systemctl.log'
+check "the cgroup script makes each unit's jails in its slice, with their limits" in_ct '
+  r=/tmp/cg/system.slice/system-blot.slice
+  mkdir -p $r/system-blot-blue.slice $r/system-blot-green.slice
+  CGROUP_ROOT=/tmp/cg /usr/local/sbin/blot-unit-cgroups.sh &&
+  [ "$(cat $r/system-blot-blue.slice/sandbox/memory.max)" = 512M ] &&
+  [ "$(cat $r/system-blot-green.slice/browser/memory.max)" = 1G ] &&
+  [ "$(cat $r/system-blot-green.slice/browser/memory.oom.group)" = 1 ] &&
+  [ "$(cat $r/system-blot-blue.slice/cgroup.subtree_control)" = "+memory +pids +cpu" ]'
+check "the cgroup script fails while a unit's slice is missing" in_ct '
+  rm -rf /tmp/cg; mkdir -p /tmp/cg/system.slice/system-blot.slice/system-blot-blue.slice
+  ! CGROUP_ROOT=/tmp/cg /usr/local/sbin/blot-unit-cgroups.sh 2> /dev/null'
+check "the old sandbox cgroup service is disabled and removed" in_ct '
+  grep -qx "disable --now blot-sandbox-cgroup.service" /tmp/systemctl.log &&
+  [ ! -e /etc/systemd/system/blot-sandbox-cgroup.service ] && [ ! -e /usr/local/sbin/blot-sandbox-cgroup.sh ]'
 check "docker starts after rsyslog at boot" in_ct 'grep -qx "After=rsyslog.service" /etc/systemd/system/docker.service.d/20-rsyslog.conf'
 check "app.log is rotated" in_ct 'logrotate --debug /etc/logrotate.d/app-log 2>&1 | grep -q "/var/instance-ssd/logs/app.log"'
 check "the unit memory log is rotated into the root disk" in_ct 'logrotate --debug /etc/logrotate.d/unit-mem 2>&1 | grep -q "/var/lib/blot-unit-mem"'

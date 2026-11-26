@@ -279,6 +279,38 @@ describe("clients/util syncReport", function () {
       expect(record.lockHeldFor).toEqual("2h 15m");
     });
 
+    it("stays silent for a long-held lock whose sync set the status recently", async function () {
+      const report = syncReport.create();
+      const client = require("models/client");
+      const infoKey = require("models/blog/key").info(blog.id);
+      stubHeldSince(Date.now() - 135 * MINUTE);
+
+      await client.hSet(
+        infoKey,
+        "status",
+        JSON.stringify({
+          message: "Rebuilding entries 10/40",
+          datestamp: Date.now() - 2 * MINUTE,
+        })
+      );
+
+      try {
+        expect(await syncReport.recordStuckLock(report, blog)).toEqual(false);
+
+        await client.hSet(
+          infoKey,
+          "status",
+          JSON.stringify({
+            message: "Syncing",
+            datestamp: Date.now() - 30 * MINUTE,
+          })
+        );
+        expect(await syncReport.recordStuckLock(report, blog)).toEqual(true);
+      } finally {
+        await client.hDel(infoKey, "status");
+      }
+    });
+
     it("stays silent for a recently taken lock", async function () {
       const report = syncReport.create();
       stubHeldSince(

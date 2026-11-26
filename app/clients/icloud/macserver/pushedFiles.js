@@ -12,13 +12,18 @@
 
 const MAX_ENTRIES_PER_BLOG = 100000;
 
+// Paths are kept in NFC: APFS takes "å" precomposed and decomposed as one
+// name, events can carry either, and Blot stores NFC. Keyed byte for byte, a
+// file seen both ways was recorded twice and the sweep counted one as missing.
+const nfc = (path) => path.normalize("NFC");
+
 // blogID -> Map(path -> fingerprint)
 const blogs = new Map();
 
 const fingerprint = (stat) => `${stat.size}:${stat.mtimeMs}`;
 
 const isUnchanged = (blogID, path, stat) =>
-  blogs.get(blogID)?.get(path) === fingerprint(stat);
+  blogs.get(blogID)?.get(nfc(path)) === fingerprint(stat);
 
 // Directories Blot already has are recorded too, so a walk of an existing
 // folder doesn't ask Blot to create every subfolder again. No file's
@@ -26,9 +31,10 @@ const isUnchanged = (blogID, path, stat) =>
 const DIRECTORY = "directory";
 
 const isKnownDirectory = (blogID, path) =>
-  blogs.get(blogID)?.get(path) === DIRECTORY;
+  blogs.get(blogID)?.get(nfc(path)) === DIRECTORY;
 
-const record = (blogID, path, value) => {
+const record = (blogID, rawPath, value) => {
+  const path = nfc(rawPath);
   if (!blogs.has(blogID)) blogs.set(blogID, new Map());
   const pushed = blogs.get(blogID);
 
@@ -48,7 +54,8 @@ const recordDirectory = (blogID, path) => record(blogID, path, DIRECTORY);
 
 // Forgets the path and, if it was a directory, everything under it: a folder
 // moved out of the blog and back keeps its files' mtimes, and must be pushed.
-const forgetPath = (blogID, path) => {
+const forgetPath = (blogID, rawPath) => {
+  const path = nfc(rawPath);
   const pushed = blogs.get(blogID);
   if (!pushed) return;
 
@@ -60,8 +67,8 @@ const forgetPath = (blogID, path) => {
   }
 };
 
-// Every path recorded for a blog, as [path, isDirectory] pairs: what the
-// periodic sweep expects to find on disk
+// Every path recorded for a blog, in NFC, as [path, isDirectory] pairs: what
+// the periodic sweep expects to find on disk
 const recordedPaths = (blogID) =>
   Array.from(blogs.get(blogID) || [], ([path, value]) => [
     path,

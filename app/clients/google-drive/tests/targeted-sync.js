@@ -43,6 +43,10 @@ function harness({
   drift = {},
   // Directory id -> { at, source }, as the dirty set's sightings
   seen = null,
+  // File id -> its applied record, beside the up-to-date files'
+  applied = {},
+  // File ids the hot doc poller forced
+  forced = [],
 } = {}) {
   const state = {
     listed: [],
@@ -53,6 +57,7 @@ function harness({
     putBack: [],
     writes: [],
     downloads: [],
+    unforced: [],
   };
   const fresh = new Set(upToDate);
   const write = (name) => async (id) => state.writes.push(name + " " + id);
@@ -76,23 +81,30 @@ function harness({
         getByPath: async () => null,
         set: write("set"),
         remove: write("remove"),
-        getVerifiedContents: async (ids) =>
-          ids.map((id) =>
-            fresh.has(itemPath(id))
-              ? {
-                  path: itemPath(id),
-                  checksum: "md5-" + id,
-                  size: 1,
-                  modified: 1,
-                }
-              : undefined
-          ),
-        setVerifiedContent: write("setVerifiedContent"),
         getApplied: async (id) =>
-          fresh.has(itemPath(id))
-            ? { modifiedTime: "2026-01-01T00:00:00Z" }
-            : null,
+          applied[id] ||
+          (fresh.has(itemPath(id))
+            ? {
+                modifiedTime: "2026-01-01T00:00:00Z",
+                sha1: "sha1:" + itemPath(id),
+              }
+            : null),
         setApplied: write("setApplied"),
+      }),
+    },
+    // An up-to-date file's SHA-1 ("sha1:" + its path) is paired with the
+    // md5Checksum Drive lists for it ("md5-" + its id)
+    "../util/hashes": {
+      load: async () => ({
+        get: (sha1) => {
+          const path = sha1.slice("sha1:".length);
+          const file = path.match(/^\/d0(\d)\/(\w)\.txt$/);
+          return fresh.has(path) && file
+            ? "md5-dir-" + file[1] + "-" + file[2]
+            : undefined;
+        },
+        set() {},
+        async save() {},
       }),
     },
     "../util/localState": {
@@ -101,6 +113,7 @@ function harness({
         fresh.has(path) ? { size: 1, modified: 1, sha1: "s" } : null,
       stateOf: async () => ({ size: 1, modified: 1000, sha1: "sha1" }),
     },
+    "../util/fetchDoc": { markBuilt: async () => {} },
     "../util/download": async (blogID, drive, path) => {
       state.downloads.push(path);
       return { updated: true };
@@ -149,6 +162,7 @@ function harness({
               name: path.split("/").pop(),
               isDirectory: false,
               size: 1,
+              sha1: "sha1:" + path,
             }))
         ),
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
@@ -215,6 +229,8 @@ function harness({
           members:
             members || (async () => ((await count()) > 0 ? ["recorded"] : [])),
           putBack: async (ids) => state.putBack.push(...ids),
+          forced: async () => forced,
+          unforce: async (id) => state.unforced.push(id),
           ...(seen
             ? {
                 seen: async (ids) =>
@@ -464,6 +480,32 @@ describe("google-drive sync() detecting what changed", function () {
     expect(options.seenAt).toBe(1234);
     expect(options.seenBy).toBe("changes");
     expect(options.downloadedAt).not.toBeLessThan(before);
+  });
+
+  it("downloads a Doc the hot doc poller forced, though its modifiedTime is current", async function () {
+    const DOC = "application/vnd.google-apps.document";
+    const dirs = tree();
+    dirs["dir-2"].push({ id: "doc-1", name: "Doc", mimeType: DOC });
+    const options = {
+      dirs,
+      local: allDirs,
+      upToDate: ["/d02/a.txt", "/d02/b.txt", "/d02/Doc.gdoc"],
+      applied: {
+        "doc-1": { modifiedTime: "2026-01-01T00:00:00Z", sha1: "sha1" },
+      },
+      dirty: ["dir-2"],
+    };
+
+    const quiet = harness(options);
+    quiet.queue.push(["dir-2"]);
+    await quiet.apply();
+    expect(quiet.downloads).toEqual([]);
+
+    const forced = harness({ ...options, forced: ["doc-1"] });
+    forced.queue.push(["dir-2"]);
+    await forced.apply();
+    expect(forced.downloads).toEqual(["/d02/Doc.gdoc"]);
+    expect(forced.unforced).toEqual(["doc-1"]);
   });
 
   it("checks just the given directories, not below them, with only", async function () {

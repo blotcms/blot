@@ -1,5 +1,5 @@
-// A file's entry is saved before what depends on it is rebuilt, so a deploy
-// can kill the sync in between. The path is recorded as pending first, and a
+// A file's entry is saved before what depends on it is rebuilt (at the end of
+// the sync, update/dependents.js), so a deploy can kill the sync in between. The path is recorded as pending first, and a
 // later sync of the same file rebuilds its dependents even though its own
 // entry comes out unchanged.
 describe("sync dependents pending", function () {
@@ -36,7 +36,10 @@ describe("sync dependents pending", function () {
   });
 
   afterEach(async function () {
-    await client.del(this.pendingKey);
+    await client.del([
+      this.pendingKey,
+      require("../update/dependents").targetsKey(this.blog.id),
+    ]);
   });
 
   const rebuiltPost = () =>

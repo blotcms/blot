@@ -20,13 +20,12 @@
 const client = require("models/client");
 const clfdate = require("helper/clfdate");
 const database = require("clients/google-drive/database");
+const rateLimit = require("./rateLimit");
 const PREFIX = require("../database/prefix");
 
 const POLL_EVERY_MS = 1000;
 // How long the list of a service account's blogs is reused
 const BLOGS_TTL_MS = 30 * 1000;
-// Pause after Drive rate-limits us, before the next read
-const RATE_LIMIT_BACKOFF_MS = 10 * 1000;
 
 const FIELDS =
   "nextPageToken,newStartPageToken,changes(fileId,removed,time,file(name,mimeType,parents,trashed,md5Checksum,size))";
@@ -56,8 +55,6 @@ const statusOf = (err) =>
 const isInvalidToken = (err) =>
   [404, 410].includes(statusOf(err)) ||
   /page ?token/i.test(String(err?.message));
-
-const isRateLimited = (err) => [403, 429].includes(statusOf(err));
 
 // The blogs on a service account which have a folder: [{ blogID, folderId }]
 async function blogsOf(serviceAccountId) {
@@ -167,7 +164,11 @@ module.exports = async function readChanges(
   serviceAccountId,
   drive,
   signal = new AbortController().signal,
-  { pollMs = POLL_EVERY_MS, onChanges = logChanges } = {}
+  {
+    pollMs = POLL_EVERY_MS,
+    onChanges = logChanges,
+    backoff = rateLimit.backoff(),
+  } = {}
 ) {
   if (!serviceAccountId || !drive) {
     throw new Error("Missing required arguments for readChanges");
@@ -212,6 +213,7 @@ module.exports = async function readChanges(
       if (newStartPageToken && newStartPageToken !== token) {
         await client.set(tokenKey(serviceAccountId), newStartPageToken);
       }
+      backoff.reset();
     } catch (err) {
       if (isInvalidToken(err)) {
         // Start again from now. Changes in between are left to the webhook,
@@ -222,13 +224,22 @@ module.exports = async function readChanges(
           err.message
         );
         await client.del(tokenKey(serviceAccountId)).catch(() => {});
+      } else if (rateLimit.isRateLimited(err)) {
+        const wait = backoff.next();
+        console.error(
+          prefix(),
+          `client_id=${serviceAccountId} rate limited`,
+          `reason=${rateLimit.reasonOf(err)}`,
+          `refusals=${backoff.refusals}`,
+          `waiting=${wait}ms`
+        );
+        await sleep(wait, signal);
       } else {
         console.error(
           prefix(),
           `client_id=${serviceAccountId} read failed:`,
           err.message
         );
-        if (isRateLimited(err)) await sleep(RATE_LIMIT_BACKOFF_MS, signal);
       }
     }
 

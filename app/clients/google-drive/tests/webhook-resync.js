@@ -42,6 +42,25 @@ function load({ blogIDs, sync = jasmine.createSpy("sync"), run, lookupError }) {
               exports: followUps.exports,
               require: function (name) {
                 if (name === "clients/google-drive/sync") return sync;
+                // The real syncOrThrow, over the stubbed sync
+                if (name === "./syncOrThrow") {
+                  const syncOrThrow = { exports: {} };
+                  vm.runInNewContext(
+                    fs.readFileSync(
+                      require.resolve("../sync/syncOrThrow"),
+                      "utf8"
+                    ),
+                    {
+                      module: syncOrThrow,
+                      exports: syncOrThrow.exports,
+                      require: (name) =>
+                        name === "clients/google-drive/sync"
+                          ? sync
+                          : require(name),
+                    }
+                  );
+                  return syncOrThrow.exports;
+                }
                 if (name === "clients/util/followUpSync")
                   return function (followUpName, fn) {
                     syncBlog = fn;
@@ -124,5 +143,21 @@ describe("google drive changes.watch webhook", function () {
     await deliver.syncBlog("blog_a");
 
     expect(sync).toHaveBeenCalledWith("blog_a", { rethrowLocked: true });
+  });
+
+  it("rejects when the sync resolves false, so the follow-up retries it", async function () {
+    const sync = jasmine
+      .createSpy("sync")
+      .and.returnValue(Promise.resolve(false));
+    const deliver = load({ blogIDs: [], sync, run: jasmine.createSpy("run") });
+
+    let error;
+    try {
+      await deliver.syncBlog("blog_a");
+    } catch (err) {
+      error = err;
+    }
+
+    expect(error && error.message).toBe("Google Drive sync did not complete");
   });
 });

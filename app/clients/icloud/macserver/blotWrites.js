@@ -16,7 +16,8 @@ const TTL_MS = 60_000;
 // `${blogID}:${path}` -> { action, at }
 const expected = new Map();
 
-const key = (blogID, path) => `${blogID}:${path}`;
+// NFC, as pushedFiles.js: an event can spell Blot's own write the other way
+const key = (blogID, path) => `${blogID}:${path.normalize("NFC")}`;
 
 const prune = (now) => {
   for (const [k, entry] of expected) {

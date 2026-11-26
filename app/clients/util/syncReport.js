@@ -249,7 +249,30 @@ function recordError(report, blog, phase, err) {
 // look "recently synced". Resolves to true if the blog was recorded, so the
 // sweep should skip it. The lookup is best effort - if it fails the blog is
 // treated as not stuck.
+//
+// A long sync which is still working isn't stuck: one which set the blog's
+// status (models/blog/setStatus) in the last STATUS_FRESH_MS is left alone.
+// A sync sets it for each file it updates, and the rebuild of dependents at
+// its end every few entries (sync/update/dependents.js).
 const STUCK_LOCK_THRESHOLD_MS = 60 * 60 * 1000;
+const STATUS_FRESH_MS = 10 * 60 * 1000;
+
+// When the blog's status was last set, or null if it can't be read
+async function statusSetAt(blogID) {
+  try {
+    const status = JSON.parse(
+      await require("models/client").hGet(
+        require("models/blog/key").info(blogID),
+        "status"
+      )
+    );
+    return status && Number.isFinite(status.datestamp)
+      ? status.datestamp
+      : null;
+  } catch (err) {
+    return null;
+  }
+}
 
 function formatDuration(ms) {
   const minutes = Math.floor(ms / 60000);
@@ -267,6 +290,11 @@ async function recordStuckLock(report, blog) {
   }
 
   if (since === null || Date.now() - since < STUCK_LOCK_THRESHOLD_MS) {
+    return false;
+  }
+
+  const statusAt = await statusSetAt(blog.id);
+  if (statusAt !== null && Date.now() - statusAt < STATUS_FRESH_MS) {
     return false;
   }
 

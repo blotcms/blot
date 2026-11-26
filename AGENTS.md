@@ -106,6 +106,7 @@ Any session or subagent working on that goal reads the Grant first and acts only
 
 # Working in this repo
 
+- `app/templates/folders` is a git submodule, the blotcms/demo-folders repository, and a new worktree has it empty. Check it out with `git submodule update --init --depth 1 app/templates/folders` only when a task needs the demo folders. See `app/templates/AGENTS.md`.
 - Check changes on GitHub CI: push, open a draft PR and watch its checks. Don't run the local Docker test suite (`npm test`) unless the maintainer asks.
 - After a merge, resolve every file `git diff --name-only --diff-filter=U` lists, and check `git grep -nE '^(<<<<<<<|>>>>>>>) '` prints nothing before committing.
 - Don't write to another session's or subagent's worktree, even through a shell. Message its owner, or check its branch out in your own worktree.

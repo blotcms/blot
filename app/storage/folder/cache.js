@@ -4,7 +4,7 @@ var fs = require("fs-extra");
 var fsPromises = require("fs").promises;
 var crypto = require("crypto");
 var { pipeline } = require("stream/promises");
-var { join, dirname, basename } = require("path");
+var { join, dirname, basename, extname } = require("path");
 
 // The content cache of the S3 backend (./s3.js): the bytes of blog files it
 // has read, on the host's instance store, so a second read of the same file
@@ -22,6 +22,8 @@ var { join, dirname, basename } = require("path");
 //   blogs/{blogID}/{id}/{name}  an entry: id is the SHA-1 of the path and
 //                               version, name is the file's own name, kept so
 //                               tools which look at the extension still work
+//                               (shortened to "file" and its extension when
+//                               it is longer than the disk allows, localName)
 //   tmp/{random}                a download in progress
 //
 // A download is written to tmp, checked against the size and SHA-1 the index
@@ -89,6 +91,18 @@ function changed(message) {
   var err = new Error(message);
   err.code = "ECHANGED";
   return err;
+}
+
+// The disk refuses a name over 255 bytes, which a file in the bucket can have
+var NAME_MAX_BYTES = 255;
+var EXTENSION_MAX_BYTES = 32;
+
+function localName(path) {
+  var name = basename(path);
+  if (Buffer.byteLength(name) <= NAME_MAX_BYTES) return name;
+  var extension = extname(name);
+  if (Buffer.byteLength(extension) > EXTENSION_MAX_BYTES) extension = "";
+  return "file" + extension;
 }
 
 function idOf(path, version) {
@@ -162,7 +176,7 @@ function createCache(options) {
 
     return {
       name: spec.blogID + "/" + id,
-      file: join(blogsDir, spec.blogID, id, basename(spec.path)),
+      file: join(blogsDir, spec.blogID, id, localName(spec.path)),
     };
   }
 

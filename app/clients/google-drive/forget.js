@@ -1,4 +1,6 @@
 const database = require("./database");
+const hashes = require("./util/hashes");
+const docImages = require("./database/docImages");
 
 // Deletes everything Blot keeps in Redis for a blog's Google Drive
 // connection: the account record and its place in the account sets, the
@@ -34,6 +36,8 @@ async function forget(blogID) {
   // stops between the two can be run again and still finds the folder
   await forgetFolder(blogID, account?.folderId);
   await database.dirty.forget(blogID);
+  await hashes.drop(blogID);
+  await docImages.drop(blogID);
   await database.blog.delete(blogID);
 }
 

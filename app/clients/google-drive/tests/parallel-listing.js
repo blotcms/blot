@@ -57,8 +57,6 @@ function harness(dirs, { listDelay = 5, failOn = null } = {}) {
         getByPath: async () => null,
         set: async () => {},
         remove: async () => {},
-        getVerifiedContents: async (ids) => ids.map(() => undefined),
-        setVerifiedContent: async () => {},
         getApplied: async () => null,
         setApplied: async () => {},
       }),

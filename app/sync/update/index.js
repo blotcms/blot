@@ -2,6 +2,7 @@ var storage = require("storage/folder");
 var clfdate = require("helper/clfdate");
 var drop = require("./drop");
 var set = require("./set");
+var dependents = require("./dependents");
 var pathNormalizer = require("helper/pathNormalizer");
 var Blog = require("models/blog");
 var build = require("build");
@@ -36,6 +37,10 @@ function fingerprint(stat) {
 }
 
 module.exports = function (blog, log, status) {
+  // What this sync changed, for rebuilding what depends on it once the sync
+  // ends (./dependents.js)
+  var track = dependents.tracker();
+
   // Puts a changed file live as soon as it is saved, rather than when the
   // whole sync ends. The entry lists that render pages read are cached per
   // cacheID (models/entries/catalog, cachedRecent, cachedPage), so a purge
@@ -147,7 +152,7 @@ module.exports = function (blog, log, status) {
         log(target, "Dropping from database");
 
         try {
-          await drop(blog.id, target);
+          await drop(blog.id, target, track);
           log(target, "Dropping from database succeeded");
         } catch (err) {
           log(target, "Error dropping from database", err);
@@ -198,7 +203,7 @@ module.exports = function (blog, log, status) {
       log(rebuildTarget, "Rebuilding multi-folder in database");
 
       try {
-        await set(blog, rebuildTarget);
+        await set(blog, rebuildTarget, track);
         log(rebuildTarget, "Rebuilding multi-folder in database succeeded");
       } catch (err) {
         log(rebuildTarget, "Error rebuilding multi-folder in database", err);
@@ -221,7 +226,7 @@ module.exports = function (blog, log, status) {
       log(path, "Saving multi-folder in database");
 
       try {
-        await set(blog, targetPath);
+        await set(blog, targetPath, track);
         log(targetPath, "Saving multi-folder in database succeeded");
       } catch (err) {
         log(targetPath, "Error saving multi-folder in database", err);
@@ -237,7 +242,7 @@ module.exports = function (blog, log, status) {
     var setError;
 
     try {
-      setResult = await set(blog, path);
+      setResult = await set(blog, path, track);
       log(path, "Saving file in database succeeded");
     } catch (err) {
       setError = err;
@@ -247,6 +252,7 @@ module.exports = function (blog, log, status) {
     return done(setError, setResult);
   }
 
+  update.track = track;
   return update;
 };
 

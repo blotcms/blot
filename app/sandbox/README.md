@@ -327,7 +327,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   nsjail. So nsjail can't make cgroups: the broker's shell joins the job to a
   free one of the job's `cgroups` first, whose limits are the job's, and the
   broker kills what is left in it afterwards. So each holds one jail at a time.
-  The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
+  The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/system.slice/system-blot.slice/system-blot-<unit>.slice/browser`
   on the host), so one screenshot runs at a time per unit. `fetch-image`'s is
   `/sandbox-cgroup/fetch-image`, 256 MiB and 64 pids, and `fetch`'s is
   `/sandbox-cgroup/fetch`, 256 MiB and 64 pids; the broker makes both when it
@@ -344,7 +344,7 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   job's queue is its own (`fetch` 16, `fetch-image` 8). A domain check can still
   wait for an import batch that is running (the verification's 5s covers the
   request, not the wait).
-- **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
+- **The fetch shares the unit's sandbox subtree** (`system-blot-<unit>.slice/sandbox`,
   512 MiB) with the image jobs (each up to 512 MiB, but two at once for the three sharp jobs that decode a whole image). The fetch
   jobs' cgroups are in it, so their 256 + 256 MiB are limited by its 512 MiB, not added to it: the image jobs
   have whatever the fetch jobs aren't using. (The retired proxy jail's
@@ -505,10 +505,13 @@ time: the file's build flag tells them.
   directly; `#!/usr/bin/env` scripts won't start. pandoc is a static binary,
   bound on its own: never `/usr/local/bin`.
 - **The environment is empty** except `NODE_PATH`, so `require("sharp")` resolves.
-- **Job cgroups are outside the unit's.** The host makes
-  `/sys/fs/cgroup/blot-sandbox/<unit>` (`config/host/host/setup.sh`) and the
-  deploy binds it at `/sandbox-cgroup` with `--cgroupns=host`; `--cgroupns=private`
-  can't move a job into it. So their limits add to the units' on the host.
+- **Job cgroups are inside the unit's slice.** The host makes
+  `sandbox/` and `browser/` in `system-blot-<unit>.slice`
+  (`config/host/scripts/unit-cgroups`), beside the unit's container, and the
+  deploy binds them at `/sandbox-cgroup` and `/sandbox-browser-cgroup` with
+  `--cgroupns=host`; `--cgroupns=private` can't move a job into them. Their own
+  limits stop one job, and the slice's limit bounds the unit and its jobs
+  together (#2795).
 - **Jobs go first when the host runs out of memory.** The broker's shell sets
   `oom_score_adj` to 1000 before it execs nsjail, so a job is killed before the
   units' Node: `node-b` sets itself to 900 (`app/index.js`) and `node-a` stays

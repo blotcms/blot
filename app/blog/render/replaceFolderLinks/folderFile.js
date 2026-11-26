@@ -1,4 +1,5 @@
 const folder = require("storage/folder");
+const File = require("models/file");
 const contentVersion = require("helper/contentVersion");
 const BLOT_CDN_TOKEN = require("./cdnToken");
 const { folderCdnPath } = require("./shared");
@@ -11,24 +12,37 @@ const { folderCdnPath } = require("./shared");
 // doesn't exist. path is the case-corrected path.
 //
 // The version token is a hash of the file's content (helper/contentVersion),
-// not its mtime/ctime: blog folders are moving from local disk to S3, which
-// can't set a file's Last-Modified and has no ctime, but does hand back a
-// content-derived ETag for free on every PUT. Until storage reads switch
-// over, local disk pays the cost of hashing on each build (contentVersion
-// falls back to a size+mtime token above its size cap instead).
+// not its mtime/ctime. It comes from the folder index's record of the file,
+// whose SHA-1 is the content hash, so the file isn't read; only a record
+// without one (an index rebuilt without hashing) has the file read and
+// hashed, as contentVersion.fromFolder does.
 async function hashFolderFile(blogID, path) {
-  let stat, resolvedPath;
+  let record, resolvedPath;
 
+  // One read of the index gives the size, modified time and SHA-1, and never
+  // reads the file (folder.stat with { sha1: true } would, to fill in a SHA-1
+  // an index rebuilt without hashing left out, even for a file over the cap
+  // where the token needs none). Another case is looked for only when the
+  // exact path has no record.
   try {
-    ({ stat, path: resolvedPath } = await getStat(blogID, path));
+    record = await File.get(blogID, path);
+    resolvedPath = path;
+
+    if (!record) {
+      resolvedPath = await folder.resolveCaseInsensitive(blogID, path);
+      record = await File.get(blogID, resolvedPath);
+    }
   } catch (err) {
     return null;
   }
 
-  return {
-    path: resolvedPath,
-    version: await contentVersion.fromFolder(blogID, resolvedPath, stat),
-  };
+  if (!record) return null;
+
+  const version =
+    contentVersion.fromFolderRecord(record) ||
+    (await contentVersion.fromFolder(blogID, resolvedPath, record));
+
+  return { path: resolvedPath, version };
 }
 
 async function getStat(blogID, path) {

@@ -22,6 +22,7 @@ import * as brctl from "../brctl/index.js";
 import { itemAt } from "../birdState.js";
 import { openJournal, startJournal, trackReplay } from "../journal.js";
 import status from "../httpClient/status.js";
+import { isNotSyncing } from "../httpClient/notSyncing.js";
 import { performAction } from "./actions.js";
 import {
   startFsWatch as startFsWatchInternal,
@@ -69,9 +70,15 @@ const FS_WATCH_SETTLE_DELAY_MS = 300;
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Whether the path names the file with the case it has on disk: a case-only
+// rename is a removal of the old name. Both sides are compared in NFC, as
+// APFS treats "å" precomposed and decomposed as one name: Blot writes NFC
+// (a draft's preview), an owner's device may write NFD, and iCloud can swap
+// one for the other, so a byte comparison took a file that was still there
+// for a rename and sent Blot a delete.
 async function exactCaseViaRealpath(p) {
   const resolved = await realpath(p);
-  return resolved === path.resolve(p);
+  return resolved.normalize("NFC") === path.resolve(p).normalize("NFC");
 }
 
 // Walks a blog folder (or one directory in it) depth first with readdir and
@@ -127,7 +134,11 @@ const walkTree = async (blogID, top, { onDirectory, onFile }) => {
 // walks the directory again from the top, up to MAX_WALK_RESTARTS times.
 const MAX_WALK_RESTARTS = 3;
 
-const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
+// appeared: the directory was new to the macserver (moved or copied in), so
+// the files the walk pushes keep mtimes from before it arrived and Blot leaves
+// them out of its live lag (fromWalk). A directory it already had is walked
+// because a child changed, and that child's delay is real.
+const syncDirectoryContents = async (blogID, pathInBlogDirectory, appeared) => {
   // subfolders this walk went into, walked again on a restart even though
   // they are known by then
   const entered = new Set();
@@ -136,7 +147,8 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
     const interrupted = await walkDirectoryContents(
       blogID,
       pathInBlogDirectory,
-      entered
+      entered,
+      appeared
     );
 
     if (!interrupted) return;
@@ -158,7 +170,12 @@ const syncDirectoryContents = async (blogID, pathInBlogDirectory) => {
 };
 
 // Returns true if any entry was skipped because of eviction suppression.
-const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
+const walkDirectoryContents = async (
+  blogID,
+  pathInBlogDirectory,
+  entered,
+  appeared
+) => {
   let entries;
   let interrupted = false;
   // a folder's files are pushed side by side (see limiters.js), its
@@ -203,7 +220,9 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
       if (isDirectory) {
         await performAction(blogID, childPath, "mkdir");
         entered.add(childPath);
-        if (await walkDirectoryContents(blogID, childPath, entered))
+        // a subfolder walked from here is new to the macserver (or was on
+        // an earlier attempt of this walk), so it appeared with its files
+        if (await walkDirectoryContents(blogID, childPath, entered, true))
           interrupted = true;
       } else {
         // Files unchanged since their last push are skipped here, without
@@ -217,9 +236,9 @@ const walkDirectoryContents = async (blogID, pathInBlogDirectory, entered) => {
           `Directory contents: upload, blogID: ${blogID}, path: ${childPath}`
         );
         uploads.push(
-          performAction(blogID, childPath, "upload").catch((error) =>
-            logWalkError(blogID, childPath, error)
-          )
+          performAction(blogID, childPath, "upload", {
+            fromWalk: appeared,
+          }).catch((error) => logWalkError(blogID, childPath, error))
         );
       }
     } catch (error) {
@@ -250,14 +269,21 @@ const logWalkError = (blogID, childPath, error) =>
 const DIRECTORY_WALK_MIN_INTERVAL_MS = 60_000;
 const directoryWalks = new Map(); // key -> { lastStart, running, timer }
 
-const requestDirectoryWalk = async (blogID, pathInBlogDirectory) => {
+const requestDirectoryWalk = async (
+  blogID,
+  pathInBlogDirectory,
+  { appeared = false } = {}
+) => {
   const key = `${blogID}:${pathInBlogDirectory}`;
   const state = directoryWalks.get(key) || {
     lastStart: 0,
     running: false,
     timer: null,
+    appeared: false,
   };
   directoryWalks.set(key, state);
+  // held until a walk starts, so a trailing walk still knows
+  if (appeared) state.appeared = true;
 
   if (state.timer) return; // a trailing walk is already scheduled
 
@@ -283,9 +309,11 @@ const requestDirectoryWalk = async (blogID, pathInBlogDirectory) => {
 
   state.running = true;
   state.lastStart = Date.now();
+  const walkAppeared = state.appeared;
+  state.appeared = false;
 
   try {
-    await syncDirectoryContents(blogID, pathInBlogDirectory);
+    await syncDirectoryContents(blogID, pathInBlogDirectory, walkAppeared);
   } finally {
     state.running = false;
     // forget idle directories once their window has passed
@@ -305,10 +333,11 @@ const requestDirectoryWalk = async (blogID, pathInBlogDirectory) => {
 // A directory Blot already has isn't sent again, but is still walked: its
 // contents may have been moved in with it
 const mkdirAndSyncContents = async (blogID, pathInBlogDirectory) => {
-  if (!isKnownDirectory(blogID, pathInBlogDirectory)) {
+  const appeared = !isKnownDirectory(blogID, pathInBlogDirectory);
+  if (appeared) {
     await performAction(blogID, pathInBlogDirectory, "mkdir");
   }
-  await requestDirectoryWalk(blogID, pathInBlogDirectory);
+  await requestDirectoryWalk(blogID, pathInBlogDirectory, { appeared });
 };
 
 // The blog's own folder was deleted or unshared on iCloud
@@ -345,13 +374,15 @@ const blogFolderPresent = async (blogID) => {
       clfdate(),
       `Folder for ${blogID} renamed from "${layout.renamedFrom}" to "${layout.name}"`
     );
-    status(blogID, { folderName: layout.name }).catch((error) =>
+    status(blogID, { folderName: layout.name }).catch((error) => {
+      // a blog Blot doesn't sync has no folder name to keep
+      if (isNotSyncing(error)) return;
       console.error(
         clfdate(),
         `Failed to report the folder's new name for ${blogID}:`,
         error.message
-      )
-    );
+      );
+    });
   }
   return Boolean(layout.root) && fs.pathExists(layout.root);
 };
@@ -573,15 +604,16 @@ const sweepBlog = async (blogID) => {
   let pushes = 0;
 
   const unlisted = await walkTree(blogID, "", {
+    // in NFC, as recordedPaths() gives them
     onDirectory: async (dir) => {
-      seen.add(dir);
+      seen.add(dir.normalize("NFC"));
       if (!isKnownDirectory(blogID, dir)) {
         pushes++;
         await performAction(blogID, dir, "mkdir");
       }
     },
     onFile: async (file, stat) => {
-      seen.add(file);
+      seen.add(file.normalize("NFC"));
       if (!isUnchanged(blogID, file, stat)) {
         pushes++;
         console.log(
@@ -595,8 +627,9 @@ const sweepBlog = async (blogID) => {
 
   if (unlisted.includes("")) return; // the blog folder itself is gone
 
+  const unlistedNFC = unlisted.map((dir) => dir.normalize("NFC"));
   const insideUnlisted = (p) =>
-    unlisted.some((dir) => p === dir || p.startsWith(dir + "/"));
+    unlistedNFC.some((dir) => p === dir || p.startsWith(dir + "/"));
 
   const missing = recorded
     .filter(([p]) => !seen.has(p) && !shouldIgnore(p) && !insideUnlisted(p))
@@ -719,13 +752,15 @@ const initialize = async () => {
   // to Blot, which keeps the one it last heard: a rename made while the
   // macserver was stopped is reported here
   for (const { blogID, name } of await refreshAllBlogFolders()) {
-    status(blogID, { folderName: name }).catch((error) =>
+    status(blogID, { folderName: name }).catch((error) => {
+      // a blog Blot doesn't sync has no folder name to keep
+      if (isNotSyncing(error)) return;
       console.error(
         clfdate(),
         `Failed to report the folder's name for ${blogID}:`,
         error.message
-      )
-    );
+      );
+    });
   }
 
   // bird's journal, loaded before the blogs are scanned: it knows which

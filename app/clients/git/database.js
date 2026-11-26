@@ -30,7 +30,14 @@ function creatingKey(blogID) {
   return "blog:" + blogID + ":git:creating";
 }
 
+// Why the blog's last setup failed, for the create page to show. It expires
+// by itself, and the next setup or a disconnect clears it.
+function failedKey(blogID) {
+  return "blog:" + blogID + ":git:failed";
+}
+
 var CREATING_TTL_SECONDS = 2 * 60;
+var FAILED_TTL_SECONDS = 60 * 60;
 var CREATING_REFRESH_MS = 30 * 1000;
 
 function generateToken() {
@@ -119,6 +126,18 @@ async function clearCreating(blogID) {
   await client.del(creatingKey(blogID));
 }
 
+async function setFailed(blogID, reason) {
+  await client.set(failedKey(blogID), reason, { EX: FAILED_TTL_SECONDS });
+}
+
+async function getFailed(blogID) {
+  return (await client.get(failedKey(blogID))) || null;
+}
+
+async function clearFailed(blogID) {
+  await client.del(failedKey(blogID));
+}
+
 async function getApplied(blogID) {
   return (await client.get(appliedKey(blogID))) || null;
 }
@@ -167,6 +186,11 @@ database.clearCreating = clearCreating;
 database.creatingKey = creatingKey;
 database.CREATING_TTL_SECONDS = CREATING_TTL_SECONDS;
 database.CREATING_REFRESH_MS = CREATING_REFRESH_MS;
+database.setFailed = setFailed;
+database.getFailed = getFailed;
+database.clearFailed = clearFailed;
+database.failedKey = failedKey;
+database.FAILED_TTL_SECONDS = FAILED_TTL_SECONDS;
 
 database.getApplied = getApplied;
 database.setApplied = setApplied;

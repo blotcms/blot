@@ -16,7 +16,12 @@
  *
  * Which Docs: any code that sees a Doc change calls enqueue(), which starts
  * watching it or, for a Doc already watched, moves it back to the fastest
- * poll. util/download.js does so after each export of a Doc. A Doc is polled
+ * poll. util/download.js does so after each export of a Doc edited in the
+ * last half hour, and pollDriveActivity.js as soon as Drive Activity names a
+ * Doc that was edited, as "unseen", so the first poll publishes that edit
+ * rather than taking it as the baseline: a Doc nobody had touched for a
+ * while is then live within seconds of its first edit, not once Drive's
+ * modifiedTime moves. A Doc is polled
  * on a schedule that follows its last activity, the later of its last
  * enqueue and the last change this poller detected (SCHEDULE_TIERS): every
  * 500ms for 2 minutes, every 2s up to 10 minutes, every 5s up to 30 minutes,
@@ -32,16 +37,20 @@
  * stretched by the same factor (intervalFor), so they share the budget in
  * proportion to their tier rather than piling up on the slot.
  *
- * On a change: the Doc alone is exported and published under the blog's
- * folder lock (applyChange), which takes about as long as the export, rather
- * than walking the whole folder (about 10.5s on a 3,000-file blog). That is
- * only done when the Doc is certainly at the path a walk of the folder would
- * give it (planSingleDoc): mapped, not trashed, not renamed or moved, no
- * sibling sharing its local name. Otherwise the full sync runs, through a
- * follow-up (clients/util/followUpSync) so a sync already running doesn't
- * drop it. If the folder lock is held the change is retried at the next poll,
- * at most 500ms after the lock is free: the full sync can't stand in for it,
- * since the walk decides from modifiedTime, which hasn't moved yet.
+ * On a change: nothing is done if the post is already built at that
+ * revision (database/docImages.js, recorded after the build; Docs API only),
+ * which a sync may have done first. Otherwise the change goes through the
+ * sync like any other (applyChange): the Doc is recorded as forced and its
+ * directory as changed (database/dirty.js), and the sync applies just what is
+ * recorded under the folder lock, listing that one directory rather than
+ * walking the whole folder (about 10.5s on a 3,000-file blog), and
+ * downloading the Doc whatever its modifiedTime says. So the export, the
+ * write, the build and Drive's records are the sync's, and a rename, a move
+ * or a name clash is handled as the sync handles it. A Doc not mapped yet
+ * starts a full sync through a follow-up (clients/util/followUpSync). If the
+ * folder lock is held, the sync holding it applies what was recorded if it
+ * hasn't finished its directories, and the poll retries at most 500ms after
+ * the lock is free.
  *
  * State lives in Redis so any number of processes can enqueue and poll:
  *   - each watched Doc is a hash (item:<id>) holding what a poll needs (blog,
@@ -59,30 +68,26 @@
  * The id of a Doc is <serviceAccountId>:<blogID>:<fileId>.
  */
 const Bottleneck = require("bottleneck");
-const { basename, dirname } = require("path");
+const { dirname } = require("path");
 const client = require("models/client");
 const alarm = require("helper/alarm");
 const drain = require("helper/drain");
 const clfdate = require("helper/clfdate");
 const folderLock = require("sync/lock");
-const establishSyncLock = require("sync/establishSyncLock");
 const followUpSync = require("clients/util/followUpSync");
-const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
-const createDriveClient = require("./createDriveClient");
+const syncOrThrow = require("../sync/syncOrThrow");
 const createDocsClient = require("./createDocsClient");
 const database = require("../database");
-const localState = require("../util/localState");
-const sync = require("../sync");
+const { isBuilt } = require("../util/fetchDoc");
 
 const prefix = () => `${clfdate()} Google Drive hotDocPoller:`;
-
-const GOOGLE_DOC = "application/vnd.google-apps.document";
-const SHORTCUT = "application/vnd.google-apps.shortcut";
 
 // docs.get() quota: 5/sec per service account; we use 4/sec for buffer, as one
 // call per 250ms slot (a per-second counter would allow 8 calls across a
 // second boundary).
 const DOCS_GET_SLOT_MS = 250;
+// How often each process logs what its poller did
+const SUMMARY_EVERY_MS = 60 * 1000;
 const DOCS_GET_PER_SECOND = 1000 / DOCS_GET_SLOT_MS;
 // Slots tried before giving up on a rate-limit slot (about 10s)
 const DOCS_GET_MAX_SLOT_ATTEMPTS = 40;
@@ -153,8 +158,6 @@ const fairIntervalMs = (tierMs, countsByTier) => {
 };
 
 // A string for a Drive query, quoted
-const quote = (value) =>
-  "'" + value.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
 
 const isRateLimitError = (err) => {
   const code = err?.code || err?.status || err?.response?.status;
@@ -205,7 +208,7 @@ class HotDocPoller {
     // follow-up queue (not the webhook's), so it runs once a sync already
     // running has finished, in any process.
     this.followUps = followUpSync("google-drive-hot-docs", (blogID) =>
-      sync(blogID, { rethrowLocked: true, trigger: "hotdoc" })
+      syncOrThrow(blogID, { trigger: "hotdoc" })
     );
 
     // Caps this process's concurrent docs.get calls; the per service account
@@ -227,7 +230,6 @@ class HotDocPoller {
     };
 
     // API clients are cached per process
-    this.driveByServiceAccount = new Map();
     this.docsByServiceAccount = new Map();
   }
 
@@ -236,6 +238,16 @@ class HotDocPoller {
     this.started = true;
     this.alarms.start();
     this.stopOnDrain = drain.onStart(() => this.stop());
+    // What this process's poller did, once a minute when it did anything
+    this.summaryTimer = setInterval(() => this.logSummary(), SUMMARY_EVERY_MS);
+    this.summaryTimer.unref?.();
+  }
+
+  logSummary() {
+    const counts = { ...this.metrics };
+    if (!Object.values(counts).some((n) => n > 0)) return;
+    this.log("summary", counts);
+    for (const name of Object.keys(this.metrics)) this.metrics[name] = 0;
   }
 
   // Waits for the Doc being polled, claims no more
@@ -244,6 +256,8 @@ class HotDocPoller {
     this.started = false;
     if (this.stopOnDrain) this.stopOnDrain();
     this.stopOnDrain = null;
+    clearInterval(this.summaryTimer);
+    this.logSummary();
     await this.alarms.stop();
   }
 
@@ -287,16 +301,6 @@ class HotDocPoller {
     }
 
     console.log(prefix(), payload);
-  }
-
-  async getDrive(serviceAccountId) {
-    if (this.driveByServiceAccount.has(serviceAccountId)) {
-      return this.driveByServiceAccount.get(serviceAccountId);
-    }
-
-    const drive = await createDriveClient(serviceAccountId);
-    this.driveByServiceAccount.set(serviceAccountId, drive);
-    return drive;
   }
 
   async getDocs(serviceAccountId) {
@@ -382,7 +386,13 @@ class HotDocPoller {
   async fetchLatestRevisionState(docs, fileId) {
     if (!docs) return { lastKnownRevision: null };
 
-    const doc = await docs.documents.get({ documentId: fileId });
+    // Only the revision: without a fields mask every poll downloads the
+    // whole Doc (15-77 KB for small Docs, far more for long ones) to read
+    // one field. The mask returns about 128 bytes (24 Nov 2026).
+    const doc = await docs.documents.get({
+      documentId: fileId,
+      fields: "revisionId",
+    });
     return { lastKnownRevision: doc?.data?.revisionId ?? null };
   }
 
@@ -477,7 +487,11 @@ class HotDocPoller {
   // Starts watching a Doc, or moves a Doc already watched back to the fastest
   // poll. For any code that sees a Doc change (util/download.js after an
   // export, a Drive change listing). Resolves once the Doc is scheduled.
-  async enqueue({ blogID, serviceAccountId, fileId, folderId }) {
+  //
+  // unseen: the caller saw the Doc change but Blot hasn't exported that
+  // change (Drive Activity, pollDriveActivity.js). The first poll then takes
+  // whatever revision the Doc has as a change, rather than as its baseline.
+  async enqueue({ blogID, serviceAccountId, fileId, folderId, unseen }) {
     if (!blogID || !serviceAccountId || !fileId || !folderId) return;
 
     this.start();
@@ -511,6 +525,12 @@ class HotDocPoller {
     await this.touch(id, serviceAccountId, now);
     this.metrics.enqueueCount += 1;
     this.log("enqueued", { blogID, serviceAccountId, fileId, folderId });
+
+    if (unseen) {
+      await this.alarms.set(id, now);
+      await this.enforceCaps(serviceAccountId);
+      return;
+    }
 
     // The first poll waits for the revision the Doc has now, so the poll
     // doesn't mistake it for a change.
@@ -693,6 +713,7 @@ class HotDocPoller {
     // For the live line: an open Doc's modifiedTime lags its edits, so for
     // a Doc the gaps between seen_ms, download_ms and lag_ms are what matter
     item.detectedAt = detectedAt;
+    item.revision = revision;
     const outcome = await this.applyChange(item);
 
     this.log("change-handled", {
@@ -711,68 +732,99 @@ class HotDocPoller {
     if (outcome !== "locked") await this.saveRevision(item, revision);
   }
 
-  // Applies a detected change to the blog. Resolves to:
-  //   "applied"    the Doc was exported and published on its own
-  //   "full-sync"  it couldn't be, so a full sync was started instead
-  //   "locked"     another sync holds the blog's folder lock; try again
+  // Applies a detected change to the blog, through the sync like any other
+  // change: the Doc is recorded as forced (downloaded whatever its lagging
+  // modifiedTime says) and its directory as changed (database/dirty.js),
+  // then the sync applies just what is recorded, under the folder lock, with
+  // no walk (sync/index.js applyRecorded). So the export, the write, the
+  // build and the records Drive keeps are the sync's own, and a rename, a
+  // move or a name clash is handled as the sync handles it. Resolves to:
+  //   "applied"     the sync applied it
+  //   "full-sync"   the Doc isn't mapped yet, so a full sync was started
+  //   "locked"      another sync holds the folder lock: it takes what is
+  //                 recorded, and the next poll tries again if it didn't
   //   "unavailable" the blog can't sync (removed or disabled)
-  // A failed export or Drive call rejects, and the poll retries it.
+  //   "unchanged"   the post is already built at this revision
+  // An apply that fails rejects, and the poll retries it.
   async applyChange(item) {
-    // Skip establishSyncLock's own retries (over 5s) when the lock is
-    // visibly held: the next poll, 500ms on, is sooner
+    // The post is already built at this revision: a sync published it
+    // first, or an unseen enqueue's first poll found nothing new. Recorded
+    // only for the Docs API's JSON and only after the build, so a zip export
+    // or a write whose build never finished always goes on.
+    if (item.revision && (await this.isBuilt(item))) return "unchanged";
+
+    // The blog moved to another folder or service account, or its setup is
+    // copying the site's files (which a sync must leave alone): the full
+    // sync sorts it out, or waits
+    const account = await database.blog.get(item.blogID);
+    const folderDb = database.folder(item.folderId, item.blogID);
+    const current =
+      account?.folderId === item.folderId &&
+      account?.serviceAccountId === item.serviceAccountId &&
+      !account?.preparing;
+    const path = current ? await folderDb.get(item.fileId) : null;
+    const dirId = path
+      ? dirname(path) === "/"
+        ? item.folderId
+        : await folderDb.getByPath(dirname(path))
+      : null;
+    if (!dirId) {
+      this.metrics.fullSyncCount += 1;
+      this.log("full-sync", {
+        reason: current ? "unmapped" : "account-changed",
+        blogID: item.blogID,
+        serviceAccountId: item.serviceAccountId,
+        fileId: item.fileId,
+      });
+      await this.fullSync(item.blogID);
+      return "full-sync";
+    }
+
+    await database.dirty.force(item.blogID, item.fileId);
+    await database.dirty.add(item.blogID, [dirId], "hotdoc");
+
+    // establishSyncLock's own retries take over 5s when the lock is visibly
+    // held: the next poll, 500ms on, is sooner
     if ((await this.isFolderLocked(item.blogID)) === true) return "locked";
 
-    let lock;
+    let summary;
     try {
-      lock = await this.lockFolder(item.blogID);
+      summary = await this.applyRecorded(item.blogID);
     } catch (err) {
       if (err?.message === "Failed to acquire folder lock") return "locked";
       if (err?.message?.startsWith("Cannot sync blog")) return "unavailable";
       throw err;
     }
+    if (summary === false) throw new Error("Applying the Doc's change failed");
 
-    let fallback;
-    try {
-      // A disconnect seizes the lock (sync/seize.js): inside run, writes to
-      // the folder and to Drive's records throw from then on
-      await lock.folder.run(async () => {
-        const plan = await this.planSingleDoc(item);
-
-        // For the hourly validation (see ../validate.js), as sync/index.js
-        // does. Not while setup copies the site's files ("account-changed"
-        // covers preparing): routes/setup.js reads a lastSync after the
-        // setup started as a sign the blog was syncing.
-        if (plan.fallback !== "account-changed") {
-          await database.blog
-            .update(item.blogID, { lastSync: Date.now() })
-            .catch((err) =>
-              this.log("last-sync-failed", { message: err.message })
-            );
-        }
-        if (plan.fallback) {
-          fallback = plan.fallback;
-        } else {
-          await this.applySingleDoc(item, plan, lock.folder);
-        }
+    // The sync clears the mark once the Doc's download succeeds. Still
+    // marked: its download failed (counted, not thrown, by the sync), so the
+    // poll retries; or the Doc wasn't in the directory listed (moved or
+    // renamed meanwhile), which the full sync finds
+    if ((await database.dirty.forced(item.blogID)).includes(item.fileId)) {
+      if (summary?.failed) throw new Error("Exporting the Doc failed");
+      this.metrics.fullSyncCount += 1;
+      this.log("full-sync", {
+        reason: "not-listed",
+        blogID: item.blogID,
+        serviceAccountId: item.serviceAccountId,
+        fileId: item.fileId,
       });
-    } finally {
-      await lock.done();
+      await this.fullSync(item.blogID);
+      return "full-sync";
     }
 
-    if (!fallback) {
-      this.metrics.appliedCount += 1;
-      return "applied";
-    }
+    this.metrics.appliedCount += 1;
+    return "applied";
+  }
 
-    this.metrics.fullSyncCount += 1;
-    this.log("full-sync", {
-      reason: fallback,
-      blogID: item.blogID,
-      serviceAccountId: item.serviceAccountId,
-      fileId: item.fileId,
-    });
-    await this.fullSync(item.blogID);
-    return "full-sync";
+  async isBuilt(item) {
+    const path = await database
+      .folder(item.folderId, item.blogID)
+      .get(item.fileId);
+    return Boolean(
+      path && (await isBuilt(item.blogID, item.fileId, path, item.revision))
+    );
   }
 
   // Whether another sync holds the blog's folder lock
@@ -780,8 +832,10 @@ class HotDocPoller {
     return (await folderLock.inspect(blogID)).held;
   }
 
-  lockFolder(blogID) {
-    return establishSyncLock(blogID);
+  // sync/index.js requires this module (through util/download.js), so it is
+  // loaded when first used
+  applyRecorded(blogID) {
+    return require("../sync").applyRecorded(blogID);
   }
 
   // Starts the blog's full sync without waiting for it: arm() leaves the
@@ -800,148 +854,6 @@ class HotDocPoller {
     } catch (err) {
       this.log("full-sync-failed", { blogID, message: err?.message }, "warn");
     }
-  }
-
-  // Under the folder lock: where the Doc goes in the blog folder, or why that
-  // isn't certain. A walk of the folder (sync/sync.js) names a Doc after its
-  // Drive name through util/localName.js, adds ".gdoc"
-  // (sync/util/transformDriveItems.js) and suffixes " (1)" and so on to
-  // siblings that end up with the same name. So the path the last walk
-  // mapped the Doc to is only used when the Doc still has that name and
-  // parent, isn't trashed, and has no sibling that would take its name.
-  // Resolves { path, file, drive } or { fallback: reason }.
-  async planSingleDoc(item) {
-    const account = await database.blog.get(item.blogID);
-    if (
-      !account ||
-      account.folderId !== item.folderId ||
-      account.serviceAccountId !== item.serviceAccountId ||
-      account.preparing
-    )
-      return { fallback: "account-changed" };
-
-    const folderDb = database.folder(item.folderId, item.blogID);
-    const path = await folderDb.get(item.fileId);
-    if (!path) return { fallback: "unmapped" };
-    if (shouldIgnoreFile(path)) return { fallback: "ignored" };
-
-    const name = basename(path);
-    if (!name.endsWith(".gdoc")) return { fallback: "not-gdoc" };
-    const title = name.slice(0, -".gdoc".length);
-    // Could be a suffix the walk added, which would mean it depends on
-    // siblings with another name
-    if (/ \(\d+\)$/.test(title)) return { fallback: "suffixed-name" };
-
-    const parentId = await folderDb.getByPath(dirname(path));
-    if (!parentId) return { fallback: "parent-unmapped" };
-
-    const drive = await this.getDrive(item.serviceAccountId);
-
-    let file, siblings;
-    try {
-      [file, siblings] = await Promise.all([
-        drive.files.get({
-          fileId: item.fileId,
-          fields: "id,name,parents,trashed,mimeType,modifiedTime",
-          supportsAllDrives: true,
-        }),
-        // The siblings that could share the Doc's local name: Docs with its
-        // title and anything named title.gdoc. Siblings whose Drive name only
-        // matches once normalised (util/localName.js) aren't found; that is
-        // rare, and the next walk fixes it.
-        drive.files.list({
-          q: `${quote(parentId)} in parents and trashed = false and (name = ${quote(title)} or name = ${quote(name)})`,
-          fields: "files(id,name,mimeType)",
-          pageSize: 100,
-          supportsAllDrives: true,
-          includeItemsFromAllDrives: true,
-        }),
-      ]);
-    } catch (err) {
-      const reason = getTerminalErrorReason(err);
-      if (reason) return { fallback: reason };
-      throw err;
-    }
-
-    const data = file.data;
-    if (data.trashed) return { fallback: "trashed" };
-    if (data.mimeType !== GOOGLE_DOC) return { fallback: "not-a-doc" };
-    // Exactly the Drive name, so localName() leaves it as it is
-    if (data.name !== title) return { fallback: "renamed" };
-    if (
-      !data.parents ||
-      data.parents.length !== 1 ||
-      data.parents[0] !== parentId
-    )
-      return { fallback: "moved" };
-
-    const sharingName = (siblings.data.files || []).filter(
-      (each) =>
-        each.mimeType !== SHORTCUT &&
-        (each.mimeType === GOOGLE_DOC ? each.name + ".gdoc" : each.name) ===
-          name
-    );
-    if (sharingName.length !== 1 || sharingName[0].id !== item.fileId)
-      return { fallback: "duplicate-name" };
-
-    return { path, file: data, drive };
-  }
-
-  // What sync/sync.js does for a Google Doc it found out of date: map it,
-  // export it (util/download.js), publish it, then record the Drive
-  // modifiedTime it was applied at. That modifiedTime may be from before
-  // this edit (Drive's metadata lags by about 2 minutes), so the walk after
-  // Drive catches up exports the Doc once more, to the same result.
-  async applySingleDoc(item, { path, file, drive }, folder) {
-    const folderDb = database.folder(item.folderId, item.blogID);
-    const { id, mimeType, modifiedTime } = file;
-
-    await folderDb.set(id, path, { isDirectory: false, modifiedTime });
-
-    const result = await this.download(
-      item.blogID,
-      drive,
-      path,
-      { id, mimeType, modifiedTime },
-      {
-        serviceAccountId: item.serviceAccountId,
-        folderId: item.folderId,
-        skipHotEnqueue: true,
-      }
-    );
-
-    if (result?.skippedReason === "exportSizeLimitExceeded") {
-      folder.status("Skipped oversized Google Doc", path);
-    }
-
-    const downloadedAt = Date.now();
-    if (result?.updated) {
-      await folder.update(path, {
-        modified: modifiedTime,
-        since: "drive-modified",
-        seenAt: item.detectedAt,
-        seenBy: "hotdoc",
-        downloadedAt,
-      });
-    }
-
-    await folderDb.setApplied(id, {
-      modifiedTime,
-      ...(await localState.stateOf(item.blogID, path)),
-    });
-
-    this.log("applied", {
-      blogID: item.blogID,
-      serviceAccountId: item.serviceAccountId,
-      fileId: item.fileId,
-      path,
-      updated: Boolean(result?.updated),
-    });
-  }
-
-  // util/download.js requires this module, so it is loaded when first used
-  download(...args) {
-    return require("../util/download")(...args);
   }
 }
 

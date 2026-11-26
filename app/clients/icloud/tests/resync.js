@@ -55,7 +55,9 @@ describe("icloud resync", function () {
     const update = () => {};
 
     expect(await resync("blog", publish, update)).toEqual({ downloaded: 1 });
-    expect(syncFromiCloud).toHaveBeenCalledWith("blog", publish, update);
+    expect(syncFromiCloud).toHaveBeenCalledWith("blog", publish, update, {
+      signal: undefined,
+    });
   });
 
   it("refuses without syncing when the folder is missing", async function () {

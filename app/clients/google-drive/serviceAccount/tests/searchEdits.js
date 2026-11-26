@@ -7,6 +7,7 @@ describe("google drive searchEdits", function () {
   function load() {
     const stubs = {
       "helper/clfdate": () => "[date]",
+      "./rateLimit": require("../rateLimit"),
       "./readChanges": {
         blogsOf: async () => [{ blogID: "blog_a", folderId: "f" }],
         placeChanges: async (blogs, changes) =>
@@ -124,5 +125,72 @@ describe("google drive searchEdits", function () {
 
     expect(queries[0].orderBy).toBe("modifiedTime desc");
     expect(Math.abs(Date.now() - since - 5 * 60 * 1000)).toBeLessThan(2000);
+  });
+
+  it("waits longer after each rate-limit refusal in a row, and starts over once a search goes through", async function () {
+    const searchEdits = load();
+    const refused = Object.assign(new Error("User rate limit exceeded."), {
+      code: 403,
+      errors: [{ reason: "userRateLimitExceeded" }],
+    });
+    const replies = [refused, refused, null, refused];
+    const events = [];
+    let calls = 0;
+    const controller = new AbortController();
+    const drive = {
+      files: {
+        list: async () => {
+          const reply = replies[calls++];
+          if (calls >= replies.length) controller.abort();
+          if (reply) throw reply;
+          return { data: { files: [] } };
+        },
+      },
+    };
+    const backoff = {
+      refusals: 0,
+      next() {
+        this.refusals += 1;
+        events.push("wait " + this.refusals);
+        return 1;
+      },
+      reset() {
+        this.refusals = 0;
+        events.push("reset");
+      },
+    };
+
+    await searchEdits("sa", drive, controller.signal, {
+      pollMs: 1,
+      onChanges: async () => {},
+      backoff,
+    });
+
+    expect(events).toEqual(["wait 1", "wait 2", "reset", "wait 1"]);
+  });
+
+  it("doesn't wait after a refusal that isn't a rate limit", async function () {
+    const searchEdits = load();
+    const controller = new AbortController();
+    const waits = [];
+    const drive = {
+      files: {
+        list: async () => {
+          controller.abort();
+          throw Object.assign(new Error("Forbidden"), {
+            code: 403,
+            errors: [{ reason: "insufficientPermissions" }],
+          });
+        },
+      },
+    };
+
+    await searchEdits("sa", drive, controller.signal, {
+      pollMs: 1,
+      onChanges: async () => {},
+      backoff: { next: () => waits.push(1), reset() {} },
+    });
+
+    expect(waits).toEqual([]);
   });
 });

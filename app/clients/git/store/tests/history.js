@@ -4,7 +4,7 @@ const zlib = require("zlib");
 const path = require("path");
 const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const { readHistory } = require("../history");
 const { CorruptError } = require("../errors");
@@ -21,6 +21,7 @@ const message = (i) =>
 describe("git store history", function () {
   timeout(60 * 1000);
 
+  const ws = workspace.all();
   let dir;
   let repo;
   let commits; // oldest first
@@ -45,7 +46,7 @@ describe("git store history", function () {
   }
 
   beforeAll(function () {
-    dir = fx.tempDir();
+    dir = ws.dir();
     repo = path.join(dir, "repo");
     fx.buildFixture(repo, { commits: 1, large: false });
     for (let i = 0; i < 20; i++)
@@ -53,10 +54,6 @@ describe("git store history", function () {
     commits = fx.text(repo, ["rev-list", "--reverse", "HEAD"]).split("\n");
   });
 
-  afterAll(async () => {
-    await createCache.closeAll();
-    fx.remove(dir);
-  });
   beforeEach(() => (store = createMemoryStore()));
 
   const manifestOf = (history, pieces) => ({ history, historyPieces: pieces });
@@ -114,7 +111,7 @@ describe("git store history", function () {
   });
 
   it("reads each pack once, and from the cache after that", async function () {
-    const cache = createCache({
+    const cache = ws.cache({
       dir: path.join(dir, "cache"),
       maxBytes: 8 * 1024 * 1024,
     });

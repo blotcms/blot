@@ -671,6 +671,14 @@ async function fileAt(blogID, path, relPath) {
 // straight away: open it, or hand it to a tool, rather than keeping the path.
 // For a tool which runs for longer, see withLocal.
 async function ensureLocal(blogID, relPath) {
+  return (await ensureLocalWithStat(blogID, relPath)).localPath;
+}
+
+// ensureLocal, resolving to { localPath, size, modified }: the size and
+// modified time (as stat gives them) come from the index record the copy was
+// fetched for, so a caller which wants both reads the index once, and they
+// describe the bytes at localPath even if a write lands in between.
+async function ensureLocalWithStat(blogID, relPath) {
   var path = locate(blogID, relPath);
 
   // A second try picks up the index catching up with a write in progress
@@ -678,10 +686,12 @@ async function ensureLocal(blogID, relPath) {
     var found = await fileAt(blogID, path, relPath);
 
     try {
-      return await contentCache().get(
+      var localPath = await contentCache().get(
         cached(blogID, path, found),
         opener(blogID, path)
       );
+
+      return { localPath, size: found.size, modified: found.modified };
     } catch (err) {
       if (err.code !== "ECHANGED" || attempt) throw err;
     }
@@ -692,7 +702,8 @@ async function ensureLocal(blogID, relPath) {
 // resolves to what fn resolves to. The copy is pinned until fn has settled,
 // in this process and in every other one sharing the cache directory (see
 // ./cache.js), so a tool may take as long as it needs. The path is read-only
-// and is not valid after fn returns.
+// and is not valid after fn returns. fn is also given { size, modified } from
+// the index record the copy was fetched for, as stat gives them.
 async function withLocal(blogID, relPath, fn) {
   var path = locate(blogID, relPath);
 
@@ -706,7 +717,10 @@ async function withLocal(blogID, relPath, fn) {
         opener(blogID, path),
         async function (local) {
           try {
-            return await fn(local);
+            return await fn(local, {
+              size: found.size,
+              modified: found.modified,
+            });
           } catch (err) {
             failedInside = true;
             throw err;
@@ -930,16 +944,26 @@ async function stat(blogID, relPath, options) {
   }
 
   // Dropbox's content_hash is not in the index (its SHA-1 is), so this costs
-  // a download until the Dropbox client keeps its own { sha1, content_hash }
-  // pairs (#2258, "Content hash")
+  // a read of the file. The Dropbox walk asks only for a file whose SHA-1 it
+  // has no stored content_hash for (clients/util/remoteHashes.js)
   if (options && options.hash && !isDirectory) {
     result.hash = await hashFile(await ensureLocal(blogID, path));
   }
 
-  // Free from the index, unless a rebuild without hashing left it out
+  // Free from the index, unless a rebuild without hashing left it out. Then
+  // the file is read once to hash it, and the SHA-1 kept in the index, so a
+  // client comparing hashes (clients/util/remoteHashes.js) doesn't read it on
+  // every walk
   if (options && options.sha1 && !isDirectory) {
-    result.sha1 =
-      found.sha1 || (await sha1File(await ensureLocal(blogID, path)));
+    result.sha1 = found.sha1;
+    if (!result.sha1) {
+      result.sha1 = await sha1File(await ensureLocal(blogID, path));
+      try {
+        await File.fillSha1(blogID, path, found, result.sha1);
+      } catch (err) {
+        console.error("storage: could not keep the SHA-1 of", relPath, err);
+      }
+    }
   }
 
   return result;
@@ -1015,6 +1039,10 @@ function toEntry(entry) {
     size: isDirectory ? 0 : entry.size,
     modified: entry.modified,
   };
+
+  // The SHA-1 the index holds, free: a client comparing the folder with its
+  // remote (clients/util/remoteHashes.js) needs it for every file it lists
+  if (!isDirectory && entry.sha1) result.sha1 = entry.sha1;
 
   // As stat: only a flagged file has these keys
   if (entry.flags) {
@@ -1200,6 +1228,7 @@ module.exports = {
   path,
   commit,
   ensureLocal,
+  ensureLocalWithStat,
   withLocal,
   mkdir,
   rmdir,

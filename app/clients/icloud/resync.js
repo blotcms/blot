@@ -16,7 +16,9 @@ function refusal(code, message) {
   return error;
 }
 
-module.exports = async (blogID, publish, update) => {
+// signal is the sync's folder.signal (sync/seize.js), so a disconnect stops
+// the walk and the request in flight
+module.exports = async (blogID, publish, update, signal) => {
   const account = await database.get(blogID);
 
   // The watcher saw the shared folder deleted. Walking it would only fail
@@ -38,7 +40,7 @@ module.exports = async (blogID, publish, update) => {
     );
   }
 
-  return syncFromiCloud(blogID, publish, update);
+  return syncFromiCloud(blogID, publish, update, { signal });
 };
 
 module.exports.FOLDER_MISSING = FOLDER_MISSING;

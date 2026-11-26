@@ -12,13 +12,13 @@
 // The first search only notes what is there; later ones pass on what's new.
 const clfdate = require("helper/clfdate");
 const { placeChanges, blogsOf } = require("./readChanges");
+const rateLimit = require("./rateLimit");
 
 const POLL_EVERY_MS = 1000;
 // How far back each search looks. Longer than Drive for desktop takes to
 // upload an edit (6-8s), since modifiedTime is the local file's.
 const WINDOW_MS = 5 * 60 * 1000;
 const BLOGS_TTL_MS = 30 * 1000;
-const RATE_LIMIT_BACKOFF_MS = 10 * 1000;
 
 const FIELDS =
   "files(id,name,mimeType,parents,trashed,modifiedTime,md5Checksum,size)";
@@ -37,9 +37,6 @@ const sleep = (ms, signal) =>
     signal.addEventListener("abort", done, { once: true });
   });
 
-const statusOf = (err) =>
-  Number(err?.code || err?.status || err?.response?.status) || null;
-
 // What a file looks like, to tell a new edit from one already passed on
 const stateOf = (file) =>
   [file.modifiedTime, file.md5Checksum || "", file.name, file.trashed].join(
@@ -50,7 +47,12 @@ module.exports = async function searchEdits(
   serviceAccountId,
   drive,
   signal = new AbortController().signal,
-  { pollMs = POLL_EVERY_MS, onChanges, now = () => Date.now() } = {}
+  {
+    pollMs = POLL_EVERY_MS,
+    onChanges,
+    now = () => Date.now(),
+    backoff = rateLimit.backoff(),
+  } = {}
 ) {
   if (!serviceAccountId || !drive || !onChanges) {
     throw new Error("Missing required arguments for searchEdits");
@@ -105,14 +107,25 @@ module.exports = async function searchEdits(
         if (placed.length) await onChanges(serviceAccountId, placed, "search");
       }
       primed = true;
+      backoff.reset();
     } catch (err) {
-      console.error(
-        prefix(),
-        `client_id=${serviceAccountId} search failed:`,
-        err.message
-      );
-      if ([403, 429].includes(statusOf(err)))
-        await sleep(RATE_LIMIT_BACKOFF_MS, signal);
+      if (rateLimit.isRateLimited(err)) {
+        const wait = backoff.next();
+        console.error(
+          prefix(),
+          `client_id=${serviceAccountId} rate limited`,
+          `reason=${rateLimit.reasonOf(err)}`,
+          `refusals=${backoff.refusals}`,
+          `waiting=${wait}ms`
+        );
+        await sleep(wait, signal);
+      } else {
+        console.error(
+          prefix(),
+          `client_id=${serviceAccountId} search failed:`,
+          err.message
+        );
+      }
     }
 
     await sleep(pollMs, signal);

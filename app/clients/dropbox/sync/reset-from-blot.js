@@ -1,4 +1,6 @@
 const storage = require("storage/folder");
+const hashes = require("../util/hashes");
+const localContentHash = require("../util/localContentHash");
 const join = require("path").join;
 const clfdate = require("helper/clfdate");
 const upload = require("../util/upload");
@@ -428,6 +430,15 @@ async function resetFromBlotWithClient(
 
   let skippedPlaceholders = 0;
 
+  // Uploads a file and stores Dropbox's content_hash of it by the SHA-1 of
+  // the bytes sent, so the walk which follows doesn't hash it again
+  const uploadAndRecord = (localPath, path) =>
+    storage.withLocal(blogID, localPath, async (local) => {
+      const { sha1 } = await storage.stat(blogID, localPath, { sha1: true });
+      const contentHash = await upload(client, local, join(dropboxRoot, path));
+      if (known) known.set(sha1, contentHash);
+    });
+
   const walk = async (dir) => {
     abortIfRequested(signal);
 
@@ -436,7 +447,7 @@ async function resetFromBlotWithClient(
     const remoteReading = remoteReaddir(client, join(dropboxRoot, dir), signal);
     const [remoteContents, localContents] = await Promise.all([
       remoteReading,
-      localReaddir(blogID, dir, signal, remoteReading),
+      localReaddir(blogID, dir, signal, remoteReading, known),
     ]);
 
     abortIfRequested(signal);
@@ -560,9 +571,7 @@ async function resetFromBlotWithClient(
         } else if (remoteCounterpart && !identicalOnRemote) {
           try {
             abortIfRequested(signal);
-            await storage.withLocal(blogID, localItem.path_display, (local) =>
-              upload(client, local, join(dropboxRoot, path))
-            );
+            await uploadAndRecord(localItem.path_display, path);
             abortIfRequested(signal);
           } catch (e) {
             await handleUploadFailure(e, path);
@@ -570,9 +579,7 @@ async function resetFromBlotWithClient(
         } else if (!remoteCounterpart) {
           try {
             abortIfRequested(signal);
-            await storage.withLocal(blogID, localItem.path_display, (local) =>
-              upload(client, local, join(dropboxRoot, path))
-            );
+            await uploadAndRecord(localItem.path_display, path);
             abortIfRequested(signal);
           } catch (e) {
             await handleUploadFailure(e, path);
@@ -582,7 +589,14 @@ async function resetFromBlotWithClient(
     }
   };
 
-  await walk("/");
+  // Only adds to what was stored: a transfer which keeps Dropbox's copies
+  // (keepDropbox) doesn't see every file in the end state
+  const known = await hashes.load(blogID);
+  try {
+    await walk("/");
+  } finally {
+    await known.save({ complete: false });
+  }
 
   abortIfRequested(signal);
 
@@ -671,24 +685,16 @@ async function resetFromBlotWithClient(
 //   }
 // }
 
-// A file's hash is undefined if it can't be read, which never matches Dropbox's.
-// Hashing can mean reading the whole file, so when Dropbox's size for the file
-// is known it is compared first, from the index: files of different sizes
-// can't have the same bytes.
-const contentHash = async (blogID, path, size) => {
-  try {
-    if (typeof size === "number") {
-      const stat = await storage.stat(blogID, path);
-      if (stat.isDirectory || stat.size !== size) return undefined;
-    }
-    return (await storage.stat(blogID, path, { hash: true })).hash;
-  } catch (e) {
-    return undefined;
-  }
-};
-
 // remoteContentsPromise is the same folder's listing in Dropbox, for the sizes
-const localReaddir = async (blogID, dir, signal, remoteContentsPromise) => {
+// and hashes. known is the transfer's util/hashes.js load(), which
+// localContentHash looks each file up in and records new hashes on.
+const localReaddir = async (
+  blogID,
+  dir,
+  signal,
+  remoteContentsPromise,
+  known
+) => {
   abortIfRequested(signal);
 
   const [contents, remoteContents] = await Promise.all([
@@ -704,13 +710,15 @@ const localReaddir = async (blogID, dir, signal, remoteContentsPromise) => {
 
       const path_display = join(dir, name);
       const remoteItem = remoteContents.find((item) => item.name === name);
+      const remoteFile =
+        remoteItem && !remoteItem.is_directory ? remoteItem : null;
       const content_hash = isDirectory
         ? undefined
-        : await contentHash(
-            blogID,
-            path_display,
-            remoteItem && !remoteItem.is_directory ? remoteItem.size : undefined
-          );
+        : await localContentHash(blogID, path_display, {
+            size: remoteFile ? remoteFile.size : undefined,
+            remoteHash: remoteFile ? remoteFile.content_hash : undefined,
+            known,
+          });
 
       abortIfRequested(signal);
 

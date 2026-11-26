@@ -1,6 +1,7 @@
 const establishSyncLock = require("sync/establishSyncLock");
 const storage = require("storage/folder");
 const { handleSyncLockError } = require("../lock");
+const stillConnected = require("./stillConnected");
 const { handleRedisUnavailable } = require("../unavailable");
 const { isRedisUnavailableError } = require("helper/redisUnavailable");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
@@ -40,34 +41,49 @@ module.exports = async function (req, res) {
     const { done, folder } = await establishSyncLock(blogID);
 
     try {
-      const directoryExistsInLock = await storage.exists(blogID, dirPath);
-
-      console.log(`Creating directory at: ${dirPath}`);
-
-      if (!directoryExistsInLock) {
-        // Ensure the directory exists
-        await storage.mkdir(blogID, dirPath); // Creates the directory if it does not exist
-
-        // Call the folder's update method to register the directory creation.
-        // If Redis cannot take it, remove the directory again: the macserver
-        // will ask again, and would be told it already exists.
-        try {
-          await folder.update(dirPath);
-        } catch (err) {
-          if (isRedisUnavailableError(err))
-            await storage.rmdir(blogID, dirPath).catch(() => {});
-          throw err;
+      // Inside run, a write to the folder throws once a disconnect has
+      // stopped this request (sync/seize.js)
+      return await folder.run(async () => {
+        if (!(await stillConnected(blogID))) {
+          console.log(`Not syncing ${blogID}: disconnected while waiting`);
+          return res
+            .status(410)
+            .send("Blog is deleted, disabled or not on iCloud");
         }
 
-        // Set the folder status to reflect the mkdir action
-        folder.status("Created " + dirPath);
-      }
+        const directoryExistsInLock = await storage.exists(blogID, dirPath);
 
-      console.log(`Directory successfully created: ${dirPath}`);
-      res
-        .status(200)
-        .set("directory-created", String(!directoryExistsInLock))
-        .send(`Directory successfully created for blogID: ${blogID}`);
+        console.log(`Creating directory at: ${dirPath}`);
+
+        if (!directoryExistsInLock) {
+          // Ensure the directory exists
+          await storage.mkdir(blogID, dirPath); // Creates the directory if it does not exist
+
+          // Call the folder's update method to register the directory creation.
+          // If Redis cannot take it, remove the directory again: the macserver
+          // will ask again, and would be told it already exists.
+          try {
+            await folder.update(dirPath);
+          } catch (err) {
+            if (isRedisUnavailableError(err))
+              await storage.rmdir(blogID, dirPath).catch(() => {});
+            throw err;
+          }
+
+          // Set the folder status to reflect the mkdir action
+          folder.status("Created " + dirPath);
+        }
+
+        // What depends on it is rebuilt before the answer, as when that
+        // was part of the update: the macserver's next request waits on it
+        await folder.drainDependents();
+
+        console.log(`Directory successfully created: ${dirPath}`);
+        res
+          .status(200)
+          .set("directory-created", String(!directoryExistsInLock))
+          .send(`Directory successfully created for blogID: ${blogID}`);
+      });
     } finally {
       // Release the sync lock
       await done().catch((err) => console.error("Error releasing lock:", err));

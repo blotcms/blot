@@ -1,6 +1,7 @@
 // The upload-pack ref advertisement, built from a manifest, and whether git
 // accepts it.
 const fx = require("./helpers/fixture");
+const workspace = require("./helpers/workspace");
 const timeout = require("./helpers/timeout");
 const { startServer, runGit, manifestOf } = require("./helpers/upload-server");
 const createMemoryStore = require("../objectStore/memory");
@@ -25,6 +26,8 @@ function lines(body) {
 }
 
 describe("git store ref advertisement", function () {
+  const ws = workspace.each();
+
   timeout(30 * 1000);
 
   it("starts with the service line and a flush, and ends with a flush", function () {
@@ -117,29 +120,25 @@ describe("git store ref advertisement", function () {
   });
 
   it("is read by git, which lists the refs", async function () {
-    const dir = fx.tempDir();
+    const dir = ws.dir();
+    const fixture = fx.buildFixture(dir + "/repo", {
+      commits: 3,
+      large: false,
+    });
+    const server = await startServer({
+      store: createMemoryStore(),
+      manifest: () => manifestOf([], fixture.head, { v1: fixture.tag }),
+    });
     try {
-      const fixture = fx.buildFixture(dir + "/repo", {
-        commits: 3,
-        large: false,
-      });
-      const server = await startServer({
-        store: createMemoryStore(),
-        manifest: () => manifestOf([], fixture.head, { v1: fixture.tag }),
-      });
-      try {
-        const listed = await runGit(["ls-remote", server.url]);
-        expect(listed.code).toBe(0);
-        expect(listed.stdout.trim().split("\n")).toEqual([
-          fixture.head + "\tHEAD",
-          fixture.head + "\trefs/heads/master",
-          fixture.tag + "\trefs/tags/v1",
-        ]);
-      } finally {
-        await server.close();
-      }
+      const listed = await runGit(["ls-remote", server.url]);
+      expect(listed.code).toBe(0);
+      expect(listed.stdout.trim().split("\n")).toEqual([
+        fixture.head + "\tHEAD",
+        fixture.head + "\trefs/heads/master",
+        fixture.tag + "\trefs/tags/v1",
+      ]);
     } finally {
-      fx.remove(dir);
+      await server.close();
     }
   });
 });

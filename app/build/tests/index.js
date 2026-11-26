@@ -552,7 +552,7 @@ describe("build", function () {
       );
     });
 
-    it("hashes the SHA-1 of the source's bytes, reading it once", async function () {
+    it("hashes the SHA-1 of the source's bytes, from the index without reading the file", async function () {
       var crypto = require("crypto");
       var path = "/hash-once.txt";
       var contents = "Hash me";
@@ -574,7 +574,17 @@ describe("build", function () {
         read.calls
           .allArgs()
           .filter((args) => args[0] === blogID && args[1] === path).length
-      ).toEqual(1);
+      ).toEqual(0);
+    });
+
+    it("fails to hash a source which is a directory", async function () {
+      var blog = this.blog;
+
+      await folder.mkdir(blog.id, "/a-directory");
+
+      await expectAsync(
+        build.hashEntrySource(blog, ["/a-directory"])
+      ).toBeRejected();
     });
 
     it("keeps 'updated' unchanged when only the file's mtime changes", async function () {

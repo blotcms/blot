@@ -339,6 +339,18 @@ function listen({ host }) {
         options.body = Buffer.from(metadata.body, "base64");
       }
 
+      // To the worker child's socket when there is one, since it, not this
+      // process, syncs (helper/servesOnly, #2990)
+      if (config.worker_socket) {
+        console.log(
+          clfdate(),
+          "Webhooks forwarding to",
+          config.worker_socket + path
+        );
+        await requestSocket(config.worker_socket, path, options);
+        return;
+      }
+
       const localURL = "http://" + config.host + ":" + config.port + path;
 
       console.log(clfdate(), "Webhooks forwarding to", localURL);
@@ -348,6 +360,23 @@ function listen({ host }) {
       console.log(clfdate(), "Webhooks error forwarding request", e);
     }
   }
+}
+
+// Sends a request to the HTTP server on a Unix socket, and resolves once its
+// response has been read
+function requestSocket(socketPath, path, { method, headers, body }) {
+  return new Promise((resolve, reject) => {
+    const req = require("http").request(
+      { socketPath, path, method, headers },
+      (res) => {
+        res.resume();
+        res.on("end", resolve);
+        res.on("error", reject);
+      }
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
 }
 
 // node-a only: node-b would forward every notification a second time

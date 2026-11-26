@@ -8,52 +8,22 @@ function folder(folderId, blogID) {
     return new folder(folderId, blogID);
   }
 
-  if (!folderId) {
+  // "undefined" and "null" too: a folder ID that reached here as that text
+  // once left blot:google-drive:undefined:* and null:* mappings, which no
+  // account reads
+  if (!folderId || folderId === "undefined" || folderId === "null") {
     throw new Error("Folder ID is required");
   }
 
   // Redis keys
   this.key = `${PREFIX}${folderId}:folder`; // ID ↔ Path mapping
   this.reverseKey = `${PREFIX}${folderId}:path`; // Path ↔ ID mapping
-  this.contentKey = `${PREFIX}${folderId}:verified-content${blogID ? ":" + blogID : ""}`;
-  this.metadataKey = `${PREFIX}${folderId}:metadata`; // File metadata
   // Per file ID, the Drive modifiedTime of the version last written to the
-  // blog folder plus that file's state right after the write. Only written
-  // after a successful download, and kept across mapping resets like
-  // verified content, so change detection never depends on the file's mtime.
+  // blog folder plus the SHA-1 of what was written. Only written after a
+  // successful download, and kept across mapping resets, so change detection
+  // never depends on the file's mtime. Files with an md5Checksum are matched
+  // by content instead (util/hashes.js).
   this.appliedKey = `${PREFIX}${folderId}:applied-modified-time${blogID ? ":" + blogID : ""}`;
-
-  // Content verification is independent of mutable metadata written by set().
-  // A verified record pairs Drive's md5Checksum with the state of the file
-  // Blot holds: { path, checksum, size, modified, sha1 } (util/localState.js;
-  // sha1 may be null), or { path, checksum, fingerprint } from before.
-  // Fetch a directory in one Redis request, rather than one request per file.
-  this.getVerifiedContents = async (ids) => {
-    if (!ids.length) return [];
-    return (await client.hmGet(this.contentKey, ids)).map((value) => {
-      try {
-        const record = value && JSON.parse(value);
-        if (
-          !record ||
-          ![record.path, record.checksum].every(
-            (field) => typeof field === "string" && field.length
-          )
-        )
-          return null;
-        const described =
-          Number.isFinite(record.size) && Number.isFinite(record.modified);
-        const legacy =
-          typeof record.fingerprint === "string" && record.fingerprint.length;
-        return described || legacy ? record : null;
-      } catch (_) {
-        return null;
-      }
-    });
-  };
-
-  this.setVerifiedContent = async (id, value) => {
-    await client.hSet(this.contentKey, id, JSON.stringify(value));
-  };
 
   const parseApplied = (value) => {
     try {
@@ -72,44 +42,36 @@ function folder(folderId, blogID) {
       Object.entries(all).map(([id, value]) => [id, parseApplied(value)])
     );
   };
-  // { modifiedTime, size, modified, sha1 }: the state is that of the file
-  // Blot wrote (util/localState.js), and may be missing if it couldn't be
-  // read, in which case the record is never trusted. Records from before
-  // have { modifiedTime, fingerprint } instead.
-  this.setApplied = async (id, { modifiedTime, size, modified, sha1 }) => {
+  // { modifiedTime, sha1 }: Drive's modifiedTime of the version Blot wrote,
+  // and the SHA-1 of the file it wrote (util/localState.js). The SHA-1 may be
+  // missing if the file couldn't be read, in which case the record is never
+  // trusted.
+  this.setApplied = async (id, { modifiedTime, sha1 }) => {
     if (!modifiedTime) return;
     const record = { modifiedTime };
-    if (Number.isFinite(size) && Number.isFinite(modified)) {
-      Object.assign(record, { size, modified, sha1: sha1 || null });
-    }
+    if (sha1) record.sha1 = sha1;
     await client.hSet(this.appliedKey, id, JSON.stringify(record));
   };
 
-  // Only manual mapping resets need this cleanup. Scan in batches so old
-  // verified IDs removed while mappings were absent do not accumulate forever.
-  this.pruneVerifiedContents = async () => {
-    for (const key of [this.contentKey, this.appliedKey]) {
-      let cursor = "0";
-      do {
-        const page = await client.hScan(key, cursor, { COUNT: 256 });
-        cursor = page.cursor;
-        const ids = page.entries.map((entry) => entry.field);
-        if (!ids.length) continue;
-        const paths = await client.hmGet(this.key, ids);
-        const removed = ids.filter((id, i) => !paths[i]);
-        if (removed.length) await client.hDel(key, removed);
-      } while (cursor !== "0");
-    }
+  // Only manual mapping resets need this cleanup. Scan in batches so applied
+  // records of IDs removed while mappings were absent do not accumulate.
+  this.pruneApplied = async () => {
+    let cursor = "0";
+    do {
+      const page = await client.hScan(this.appliedKey, cursor, { COUNT: 256 });
+      cursor = page.cursor;
+      const ids = page.entries.map((entry) => entry.field);
+      if (!ids.length) continue;
+      const paths = await client.hmGet(this.key, ids);
+      const removed = ids.filter((id, i) => !paths[i]);
+      if (removed.length) await client.hDel(this.appliedKey, removed);
+    } while (cursor !== "0");
   };
 
-  // Set a mapping (ID → Path) and store metadata
-  this.set = async (id, path, metadata = {}) => {
+  // Set a mapping (ID → Path)
+  this.set = async (id, path) => {
     if (!id || !path || typeof id !== "string" || typeof path !== "string") {
       throw new Error("ID and path must be non-empty strings");
-    }
-
-    if (metadata && typeof metadata !== "object") {
-      throw new Error("Metadata must be a valid object");
     }
 
     const multi = client.multi(); // Start a Redis transaction
@@ -124,18 +86,12 @@ function folder(folderId, blogID) {
     if (previousId && previousId !== id) {
       // Remove the old mapping for the previous ID
       multi.hDel(this.key, previousId);
-      multi.hDel(this.contentKey, previousId);
       multi.hDel(this.appliedKey, previousId);
     }
 
     // Add the new ID ↔ Path mapping
     multi.hSet(this.key, id, path);
     multi.hSet(this.reverseKey, path, id);
-
-    // Update metadata if provided
-    if (metadata && Object.keys(metadata).length > 0) {
-      multi.hSet(this.metadataKey, id, JSON.stringify(metadata));
-    }
 
     // Execute the transaction
     await multi.exec();
@@ -165,12 +121,6 @@ function folder(folderId, blogID) {
     return await client.hGet(this.reverseKey, path);
   };
 
-  // Get metadata for a given ID
-  this.getMetadata = async (id) => {
-    const metadata = await client.hGet(this.metadataKey, id);
-    return metadata ? JSON.parse(metadata) : null;
-  };
-
   this.move = async (id, to) => {
     if (id === "/" || to === "/") {
       throw new Error("Cannot move to or from root");
@@ -195,13 +145,10 @@ function folder(folderId, blogID) {
 
     // If `from` is the exact path of the file, treat it as a file move
     if (from === to || !from.startsWith("/")) {
-      const metadata = (await this.getMetadata(id)) || {}; // Default to empty metadata
-
       // Remove old reverse mapping and add new mappings in transaction
       multi.hDel(this.reverseKey, from);
       multi.hSet(this.reverseKey, to, id);
       multi.hSet(this.key, id, to);
-      multi.hSet(this.metadataKey, id, JSON.stringify(metadata));
 
       movedPaths.push({ from, to });
 
@@ -228,13 +175,11 @@ function folder(folderId, blogID) {
         // Check if the current path is affected by the move
         if (currentPath === from || currentPath.startsWith(`${from}/`)) {
           const newPath = to + currentPath.slice(from.length);
-          const metadata = (await this.getMetadata(currentId)) || {}; // Default to empty metadata
 
           // Queue all changes in the transaction
           multi.hDel(this.reverseKey, currentPath); // Remove old reverse mapping
           multi.hSet(this.reverseKey, newPath, currentId); // Add new reverse mapping
           multi.hSet(this.key, currentId, newPath); // Update the path mapping
-          multi.hSet(this.metadataKey, currentId, JSON.stringify(metadata)); // Update metadata
 
           movedPaths.push({ from: currentPath, to: newPath });
         }
@@ -283,9 +228,7 @@ function folder(folderId, blogID) {
         ) {
           multi.hDel(this.key, currentId); // Delete ID ↔ Path mapping
           multi.hDel(this.reverseKey, currentPath); // Delete Path ↔ ID mapping
-          multi.hDel(this.contentKey, currentId);
           multi.hDel(this.appliedKey, currentId);
-          multi.hDel(this.metadataKey, currentId); // Delete metadata
           removedPaths.push(currentPath);
         }
       }
@@ -297,93 +240,25 @@ function folder(folderId, blogID) {
     return removedPaths;
   };
 
-  // Reset all mappings and metadata
-  this.reset = async ({ preserveVerifiedContent = false } = {}) => {
+  // Reset the mapping, and the applied records unless keepApplied (a resync
+  // rebuilding the mapping keeps them, then prunes: pruneApplied)
+  this.reset = async ({ keepApplied = false } = {}) => {
     const multi = client.multi();
     multi.del(this.key);
     multi.del(this.reverseKey);
-    multi.del(this.metadataKey);
-    if (!preserveVerifiedContent) {
-      multi.del(this.contentKey);
-      multi.del(this.appliedKey);
-    }
+    if (!keepApplied) multi.del(this.appliedKey);
     await multi.exec();
   };
 
-  // Deletes only this blog's checksums of the folder's files, leaving the
+  // Deletes only this blog's records of the folder's files, leaving the
   // mapping, which another blog on the same folder still uses
   this.forgetOwn = async () => {
-    await client.del([this.contentKey, this.appliedKey]);
-  };
-
-  this.readdir = async (dir) => {
-    if (!dir || typeof dir !== "string") {
-      throw new Error("Directory path must be a non-empty string");
-    }
-
-    // Normalize the directory path to ensure it ends with a "/"
-    const basePath = dir.endsWith("/") ? dir : dir + "/";
-
-    const START_CURSOR = "0";
-    let cursor = START_CURSOR;
-    let entries = [];
-
-    do {
-      // Scan the folder key
-      const { cursor: nextCursor, entries: scannedEntries } =
-        await client.hScan(this.key, cursor);
-      cursor = nextCursor;
-
-      for (const entry of scannedEntries) {
-        const id = entry.field;
-        const path = entry.value;
-
-        // Check if the path is an immediate child of the given directory
-        if (
-          path.startsWith(basePath) &&
-          path !== basePath && // Exclude the directory itself
-          !path.slice(basePath.length).includes("/") // Exclude paths inside subdirectories of the directory
-        ) {
-          const metadata = await this.getMetadata(id);
-          entries.push({ id, path, metadata });
-        }
-      }
-    } while (cursor !== START_CURSOR);
-
-    // Sort entries alphabetically by path
-    entries.sort((a, b) => a.path.localeCompare(b.path));
-
-    return entries;
-  };
-
-  // List all files and folders with metadata
-  this.listAll = async () => {
-    const START_CURSOR = "0";
-    let cursor = START_CURSOR;
-    let results = [];
-
-    do {
-      const { cursor: nextCursor, entries } = await client.hScan(
-        this.key,
-        cursor
-      );
-      cursor = nextCursor;
-
-      for (const entry of entries) {
-        const id = entry.field;
-        const path = entry.value;
-        const metadata = await this.getMetadata(id);
-        results.push({ id, path, metadata });
-      }
-    } while (cursor !== START_CURSOR);
-
-    return results;
+    await client.del(this.appliedKey);
   };
 
   refuseAfterAbort(this, [
-    "setVerifiedContent",
     "setApplied",
-    "pruneVerifiedContents",
+    "pruneApplied",
     "set",
     "move",
     "remove",

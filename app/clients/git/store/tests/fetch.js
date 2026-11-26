@@ -11,7 +11,7 @@ const timeout = require("./helpers/timeout");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const { startServer, runGit, collect } = require("./helpers/upload-server");
 const manifest = require("../manifest");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const { cacheKeyOf } = require("../packcache");
 const createMemoryStore = require("../objectStore/memory");
 const { serve } = require("../clone");
@@ -74,6 +74,7 @@ function answerOf(bytes) {
 describe("git store fetch", function () {
   timeout(180 * 1000);
 
+  const each = workspace.each();
   let dir;
   let work; // the pusher's repository
   let store;
@@ -89,17 +90,18 @@ describe("git store fetch", function () {
     commits = 5,
     cacheDir = "cache",
     shared = false,
+    ws = each,
     ...options
   } = {}) {
-    dir = fx.tempDir();
+    dir = ws.dir();
     work = path.join(dir, "work");
     counter = 0;
     fx.buildFixture(work, { commits, large: false });
 
     store = createMemoryStore();
-    cache = createCache({ dir: path.join(dir, cacheDir), maxBytes: 64 * MiB });
+    cache = ws.cache({ dir: path.join(dir, cacheDir), maxBytes: 64 * MiB });
     const serving = shared
-      ? createCache({ dir: path.join(dir, cacheDir), maxBytes: 64 * MiB })
+      ? ws.cache({ dir: path.join(dir, cacheDir), maxBytes: 64 * MiB })
       : cache;
     received = await createReceiveServer({ store, cache, lock: createLock() });
     server = await startServer({
@@ -114,8 +116,6 @@ describe("git store fetch", function () {
     if (server) await server.close();
     if (received) await received.close();
     server = received = null;
-    await createCache.closeAll();
-    fx.remove(dir);
   }
 
   const refresh = async () => (latest = await manifest.read(store));
@@ -822,11 +822,12 @@ describe("git store fetch", function () {
   });
 
   describe("the negotiation", function () {
+    const all = workspace.all();
     let commits;
 
     // Three pushes after the first, so there are four snapshots
     beforeAll(async function () {
-      await setup();
+      await setup({ ws: all });
       await pushWork("master", "refs/tags/v1");
       commits = [fx.text(work, ["rev-parse", "HEAD"])];
       for (let i = 0; i < 3; i++) {

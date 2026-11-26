@@ -3,6 +3,7 @@
 const fs = require("fs");
 const path = require("path");
 const fx = require("./helpers/fixture");
+const workspace = require("./helpers/workspace");
 const objects = require("../objects");
 const { buildRev } = require("../rev");
 const { scanPack } = require("../packscan");
@@ -18,18 +19,18 @@ function fails(fn) {
 }
 
 describe("git store objects", function () {
+  const all = workspace.all();
+  const each = workspace.each();
   let dir;
   let fixture;
 
   beforeAll(function () {
-    dir = fx.tempDir();
+    dir = all.dir();
     fixture = fx.buildFixture(path.join(dir, "src"), {
       commits: 4,
       large: false,
     });
   });
-
-  afterAll(() => fx.remove(dir));
 
   const src = () => path.join(dir, "src");
 
@@ -140,21 +141,17 @@ describe("git store objects", function () {
           fx.repackAll(src(), { refDeltas });
           const [pack] = fx.readPacks(src());
 
-          const work = fx.tempDir();
-          try {
-            fs.writeFileSync(path.join(work, "in.pack"), pack.pack);
-            fx.git(work, ["index-pack", "--rev-index", "in.pack"]);
-            expect(
-              buildRev(fs.readFileSync(path.join(work, "in.idx"))).equals(
-                fs.readFileSync(path.join(work, "in.rev"))
-              )
-            ).toBe(true);
-            expect(buildRev(pack.idx).length).toBe(
-              12 + 4 * fx.listEntries(pack).length + 40
-            );
-          } finally {
-            fx.remove(work);
-          }
+          const work = each.dir();
+          fs.writeFileSync(path.join(work, "in.pack"), pack.pack);
+          fx.git(work, ["index-pack", "--rev-index", "in.pack"]);
+          expect(
+            buildRev(fs.readFileSync(path.join(work, "in.idx"))).equals(
+              fs.readFileSync(path.join(work, "in.rev"))
+            )
+          ).toBe(true);
+          expect(buildRev(pack.idx).length).toBe(
+            12 + 4 * fx.listEntries(pack).length + 40
+          );
         }
       );
     }
@@ -172,8 +169,7 @@ describe("git store objects", function () {
   describe("scanning a pack", function () {
     let file;
 
-    beforeEach(() => (file = path.join(fx.tempDir(), "in.pack")));
-    afterEach(() => fx.remove(path.dirname(file)));
+    beforeEach(() => (file = path.join(each.dir(), "in.pack")));
 
     it("finds the bases a thin pack needs and does not contain", async function () {
       fs.writeFileSync(

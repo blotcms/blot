@@ -119,7 +119,7 @@ async function uploadInChunks(
     contents = await read(offset, size - offset);
     const cursor = { session_id, offset };
     check();
-    await retryRequest(
+    const finished = await retryRequest(
       () => (
         check(),
         client.filesUploadSessionFinish({
@@ -134,11 +134,20 @@ async function uploadInChunks(
       ),
       "uploadSessionFinish"
     );
+    return contentHashOf(finished);
   } finally {
     await fs.close(handle);
   }
 }
 
+// The content_hash in a response with the file's metadata, if there is one
+function contentHashOf(response) {
+  return (
+    (response && response.result && response.result.content_hash) || undefined
+  );
+}
+
+// Resolves to Dropbox's content_hash of the file it now holds, if it said
 async function upload(client, source, destination) {
   const id = uuid();
   const prefix = () => clfdate() + " clients:dropbox:upload:" + id.slice(0, 6);
@@ -183,12 +192,13 @@ async function upload(client, source, destination) {
     // client_modified is intentionally omitted: Blot doesn't keep a
     // provider-independent modified time for local files, so Dropbox
     // stamps the upload with its own server time instead.
-    await client.filesUpload({
+    const uploaded = await client.filesUpload({
       path: destination,
       mode: { ".tag": "overwrite" },
       autorename: false,
       contents,
     });
+    return contentHashOf(uploaded);
   })();
 
   // After a timeout the transfer is abandoned, and whatever it ends with
@@ -198,7 +208,7 @@ async function upload(client, source, destination) {
   let failure;
 
   try {
-    await Promise.race([transfer, timedOut]);
+    return await Promise.race([transfer, timedOut]);
   } catch (err) {
     failure = err;
     throw err;

@@ -52,7 +52,10 @@ const byNFCName = (items) => {
   return map;
 };
 
-module.exports = async (blogID, publish, update) => {
+// signal is the sync lock's folder.signal: once it aborts (a disconnect,
+// sync/seize.js), the walk stops at its next step, the request in flight is
+// cut off, and the account is left alone.
+module.exports = async (blogID, publish, update, { signal } = {}) => {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " iCloud:", args.join(" "));
@@ -65,7 +68,7 @@ module.exports = async (blogID, publish, update) => {
   // lock, so this is (just after) when it was acquired.
   const startedAt = Date.now();
 
-  const checkWeCanContinue = CheckWeCanContinue(blogID);
+  const checkWeCanContinue = CheckWeCanContinue(blogID, signal);
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
   const summary = {
     downloaded: 0,
@@ -110,7 +113,7 @@ module.exports = async (blogID, publish, update) => {
 
   try {
     publish("Syncing folder tree");
-    await remoteRecursiveList(blogID, "/");
+    await remoteRecursiveList(blogID, "/", { signal });
     publish("Synced folder tree");
   } catch (error) {
     console.error("Failed to sync folder tree", {
@@ -138,7 +141,7 @@ module.exports = async (blogID, publish, update) => {
     console.log(clfdate(), `Syncing folder: ${dir}`);
     const dirChangedDuringWalk = modifiedSince(dirModifiedTime, startedAt);
     const [remoteContents, localContents] = await Promise.all([
-      remoteReaddir(blogID, dir),
+      remoteReaddir(blogID, dir, { signal }),
       localReaddir(blogID, dir),
     ]);
     const remoteByName = byNFCName(remoteContents);
@@ -223,7 +226,7 @@ module.exports = async (blogID, publish, update) => {
         try {
           await checkWeCanContinue();
           progress.publish("Downloading", path, false);
-          await download(blogID, path);
+          await download(blogID, path, { signal });
           return {};
         } catch (error) {
           return { error };
@@ -394,7 +397,7 @@ module.exports = async (blogID, publish, update) => {
               Boolean(existsLocally && existsLocally.isDirectory)
             );
 
-            await download(blogID, path);
+            await download(blogID, path, { signal });
             summary.downloaded += 1;
             if (modifiedSince(modifiedTime, startedAt)) {
               summary.modifiedDuringWalk += 1;
@@ -423,6 +426,7 @@ module.exports = async (blogID, publish, update) => {
     // watcher stops watching a deleted folder, so only setup recovers it.
     const account = await database.get(blogID);
     if (
+      !(signal && signal.aborted) &&
       account &&
       account.setupComplete &&
       account.error &&

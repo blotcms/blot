@@ -131,7 +131,7 @@ creates and deletes. **No `--rebuild` fallback is required for correctness.**
 
 `scripts/development/folder.sh` is the closest structural precedent for the new
 script: validate an argument, print usage when absent, then
-`docker exec blot-node-app-1 npx nodemon app/templates/folders ... "$FOLDER_NAME"`.
+`docker exec blot-node-app-1 npx nodemon app/templates/demo ... "$FOLDER_NAME"`.
 
 Module resolution inside the container relies on `ENV NODE_PATH=/usr/src/app/app`
 (Dockerfile), which is why app code does `require("models/blog")`,
@@ -251,7 +251,7 @@ otherwise. It:
 - Prints the capability banner (`Local server capabilities: …`) plus a magic-link
   dashboard URL from `User.generateAccessToken`, the blog URL, and the folder path.
 
-**The second account, for contrast.** `app/templates/folders/setupUser.js` uses:
+**The second account, for contrast.** `app/templates/demo/setupUser.js` uses:
 
 ```js
 const FOLDER_ACCOUNT_EMAIL = config.admin.email || "folders@example.com";
@@ -269,7 +269,7 @@ Tumblr variables. So in practice that account is literally
 account `npm start` logs the developer into, it is the one whose blogs get
 `client: "local"` and `forceSSL: false` applied automatically on every boot, and
 keeping translated sites off `folders@example.com` avoids polluting the demo-folder
-account that `app/templates/folders/index.js` manages and prints URLs for.
+account that `app/templates/demo/index.js` manages and prints URLs for.
 
 The script should still **look the user up rather than assume it exists**
 (`User.getByEmail`, create if absent, mirroring `configure-local-blogs.js`) so it
@@ -368,11 +368,11 @@ same code path.
 
 ### 2.5 Reference implementations to copy
 
-- `app/templates/folders/index.js` + `setupBlogs.js` + `setupUser.js` — the full
+- `app/templates/demo/index.js` + `setupBlogs.js` + `setupUser.js` — the full
   "create user → create blogs → copy a source folder in → sync changed paths →
   print URLs" flow, promisified. `applyChanges()` shows how to call `sync()` and
   `folder.update()` directly rather than relying on the watcher.
-- `app/templates/folders/config.js` — per-handle overrides (`title`, `template`,
+- `app/templates/demo/config.js` — per-handle overrides (`title`, `template`,
   `menu`, `plugins`). Same shape the translate script will want.
 - `scripts/blog/create.js` — CLI-shaped blog creation with confirmation prompt.
 - `scripts/test/setup-restore-git-test.js` — creates a blog template, enables
@@ -842,7 +842,7 @@ Re-running against the same URL should continue, not start over.
   `--session-id`, run count and timestamps. Outside the blog folder so it never
   travels with the content.
 - **Provisioning is naturally idempotent** if you reuse the blog by handle —
-  `app/templates/folders/setupBlogs.js` is the precedent (reuse if it exists, throw
+  `app/templates/demo/setupBlogs.js` is the precedent (reuse if it exists, throw
   if owned by another user, otherwise create).
 - **Scoped re-crawl.** `--recrawl [path]` re-fetches everything or only URLs under
   a path prefix. The mechanical trap: `helper/process.js` calls
@@ -884,7 +884,7 @@ await sync(blogID, async (folder) => {
 });
 ```
 
-`app/templates/folders/index.js#applyChanges` is a working version that
+`app/templates/demo/index.js#applyChanges` is a working version that
 also calls `sync/fix`.
 
 ---
@@ -962,7 +962,7 @@ app/models/blog/create.js  defaults.js    Blog.create + defaults
 app/models/blog/validate/handle.js        handle rules + banned.txt
 app/clients/local/{README,setup.js,init.js}
 app/clients/local/init.js:46              channel payload must be JSON
-app/templates/folders/{index.js,setupUser.js,setupBlogs.js}
+app/templates/demo/{index.js,setupUser.js,setupBlogs.js}
 scripts/blog/create.js                    CLI blog creation
 ```
 

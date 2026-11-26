@@ -50,6 +50,26 @@ describe("followUpSync", function () {
     expect(await followUps.alarm.when(blogID)).toBe(null);
   });
 
+  it("passes the caller's context to the sync it starts, not to a follow-up", async function () {
+    const syncBlog = jasmine
+      .createSpy("syncBlog")
+      .and.returnValue(Promise.resolve());
+    const followUps = followUpSync(name, syncBlog);
+
+    await followUps.run(blogID, undefined, { trigger: "activity" });
+    expect(syncBlog.calls.allArgs()).toEqual([
+      [blogID, { trigger: "activity" }],
+    ]);
+
+    syncBlog.calls.reset();
+    await holdLock();
+    await followUps.run(blogID, undefined, { trigger: "activity" });
+    await releaseLock();
+    await makeDue(followUps);
+    await followUps.alarm.poll();
+    expect(syncBlog.calls.allArgs()).toEqual([[blogID]]);
+  });
+
   it("collapses requests during a running sync into one follow-up, run once the lock is free", async function () {
     const syncBlog = jasmine
       .createSpy("syncBlog")

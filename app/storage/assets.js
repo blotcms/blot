@@ -328,6 +328,38 @@ async function exists(blogID, relPath) {
   return !!(await s3.head(keyFor(blogID, relPath)));
 }
 
+// exists(), remembering a yes in this process for an hour: for the build's
+// checks that a cached result's files are still stored, which ask about the
+// same files on every rebuild of an entry. Safe because every routine
+// removal of generated assets (the sweep, a cache wipe) deletes the cache
+// entry naming them first, so nothing asks about them afterwards. The one
+// exception is a bookmark screenshot, which has no cache entry: the sweep
+// deletes it once nothing has referenced it for hours, so a remembered yes
+// can only outlive that by the accepted gap in storage/sweep/generated.js.
+// A no is never remembered.
+const EXISTS_TTL_MS = 60 * 60 * 1000;
+const EXISTS_MAX = 20000;
+const existing = new Map();
+
+async function existsRecently(blogID, relPath) {
+  const key = blogID + "\0" + relPath;
+  const at = existing.get(key);
+
+  if (at !== undefined && Date.now() - at < EXISTS_TTL_MS) return true;
+  existing.delete(key);
+
+  const found = await exists(blogID, relPath);
+
+  if (found) {
+    existing.set(key, Date.now());
+    // Map keeps insertion order: drop the oldest
+    if (existing.size > EXISTS_MAX)
+      existing.delete(existing.keys().next().value);
+  }
+
+  return found;
+}
+
 // Names of the immediate children of a directory, or [] if it doesn't exist.
 // An empty relDir is the blog's root, where only the names which start with
 // "_" (the assets scope) are listed.
@@ -604,6 +636,7 @@ module.exports = {
   writeFrom,
   read,
   exists,
+  existsRecently,
   list,
   walk,
   walkEntries,

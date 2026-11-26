@@ -9,6 +9,7 @@ const dashboard = new express.Router();
 const parseBody = require("helper/bodyParser").urlencoded({ extended: false });
 const config = require("config"); // For accessing configuration values
 const establishSyncLock = require("sync/establishSyncLock");
+const seize = require("sync/seize");
 const { handleSyncLockError } = require("./lock");
 const setClient = require("clients/util/setClient");
 const health = require("clients/health");
@@ -282,7 +283,13 @@ dashboard.post("/retry-transfer", async function (req, res) {
 
 dashboard.post("/cancel", async function (req, res, next) {
   try {
-    await database.delete(req.blog.id);
+    // The Mac server stops setting up or watching the folder first. Then,
+    // under the folder lock, taken from a transfer still running, which is
+    // stopped and so can't write the account back (sync/seize.js)
+    await disconnect.notifyMacserver(req.blog.id);
+    await seize(req.blog.id, () => database.delete(req.blog.id), {
+      reason: "disconnect",
+    });
 
     res.message(req.baseUrl, "Cancelled the creation of your new folder");
   } catch (error) {

@@ -1,6 +1,5 @@
-var rebuildDependents = require("./rebuildDependents");
+var dependents = require("./dependents");
 var Entry = require("models/entry");
-var client = require("models/client");
 var Preview = require("./preview");
 var isPreview = require("./drafts").isPreview;
 var isDraft = require("./drafts").isDraft;
@@ -13,6 +12,7 @@ var path = require("path");
 var folder = require("storage/folder");
 var postSourceSize = require("build/converters/post-source-size");
 var buildFlags = require("build/flags");
+var stalledBuilds = require("./stalledBuilds");
 var storeBuildFlags = require("./storeBuildFlags");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
@@ -23,14 +23,23 @@ var basename = (path.posix || path).basename;
 
 var noop = () => {};
 
-// Paths whose entry has been saved and whose dependents may not have been
-// rebuilt yet. A path is added before Entry.set and removed once set() has
-// rebuilt what depends on it, so a sync killed in between (a deploy) leaves
-// it here. When the file is synced again it builds the same entry, which
-// would otherwise skip the dependents as unchanged: a path still here has
-// them rebuilt anyway.
-function dependentsPendingKey(blogID) {
-  return "blog:" + blogID + ":sync:dependents_pending";
+// The set of paths whose dependents still need a rebuild (./dependents.js).
+// A path is added before Entry.set, so a sync killed after saving its entry
+// (a deploy) leaves it there, and a later sync rebuilds its dependents even
+// though the entry comes out unchanged.
+var dependentsPendingKey = dependents.pendingKey;
+
+// Where to look for the entries which depend on path: the path itself and,
+// for a file in a "+" folder, the folder post's entry path
+function targetsOf(path, multiInfo) {
+  var targets = [path];
+
+  if (multiInfo && multiInfo.entryPath)
+    targets.push(pathNormalizer(multiInfo.entryPath));
+
+  return targets.map(pathNormalizer).filter(function (value, index, array) {
+    return array.indexOf(value) === index;
+  });
 }
 
 function isPublic(path) {
@@ -151,7 +160,7 @@ async function dropStaleAggregate(blog, multiInfo, finalErr) {
 
 // state.unchanged is set when the build stored exactly the entry that was
 // already there (see Entry.set's changed), so nothing derived from it differs
-async function buildAndSet(blog, path, multiInfo, state) {
+async function buildAndSet(blog, path, multiInfo, state, track) {
   var entry;
 
   // A placeholder's bytes aren't the file's (Blot couldn't fetch it), so it
@@ -164,7 +173,11 @@ async function buildAndSet(blog, path, multiInfo, state) {
 
   try {
     ({ result: entry, flags: found } = await buildFlags.collect(() =>
-      build(blog, path)
+      // A file in a "+" folder builds the whole folder post, so its attempts
+      // are counted against the folder, whichever file changed
+      stalledBuilds(blog, multiInfo ? multiInfo.folderPath : path, () =>
+        build(blog, path)
+      )
     ));
   } catch (err) {
     if (err && err.code === "WRONGTYPE") {
@@ -241,13 +254,18 @@ async function buildAndSet(blog, path, multiInfo, state) {
   if (entry.metadata && entry.metadata._sourcePaths)
     delete entry.metadata._sourcePaths;
 
-  // SADD answers 0 when the path was already pending: an earlier sync saved
-  // its entry and was killed before rebuilding its dependents
+  // Already pending, and not recorded by this sync: an earlier sync saved
+  // its entry and was killed (or failed) before rebuilding its dependents
   state.pending = true;
-  state.wasPending =
-    Number(await client.sAdd(dependentsPendingKey(blog.id), path)) === 0;
+  state.wasPending = await dependents.markPending(
+    blog.id,
+    path,
+    targetsOf(path, multiInfo),
+    track
+  );
 
   var result = await Entry.set(blog.id, entry.path, entry);
+  dependents.saved(track, entry.path);
 
   // Only a plain published entry: dropping other sources changed
   // something, and a draft rewrites its preview file
@@ -281,25 +299,13 @@ async function buildAndSet(blog, path, multiInfo, state) {
     syntheticKeys.add(`/__wikilink_filename__/${filenameToken}`);
   }
 
-  // An unchanged entry has the same slug and file name, and
-  // the same contentHash, so the same source bytes: what
-  // depends on it would build the same, unless an earlier sync
-  // was killed before rebuilding it. Waited for, so the path
-  // stays pending until they are done; a failure is logged and
-  // doesn't fail the file's own sync.
+  // An unchanged entry has the same slug and file name, and the same
+  // contentHash, so the same source bytes: what depends on it would build
+  // the same, unless an earlier sync was killed before rebuilding it
+  // Stored now, before the steps below which may throw
   if (!state.unchanged || state.wasPending) {
-    for (const syntheticKey of syntheticKeys) {
-      try {
-        await rebuildDependents(blog.id, syntheticKey);
-      } catch (err) {
-        console.error(
-          "sync.set: rebuilding wikilink dependents of",
-          path,
-          syntheticKey,
-          err
-        );
-      }
-    }
+    state.syntheticKeys = Array.from(syntheticKeys);
+    await dependents.addTargets(blog.id, path, state.syntheticKeys);
   }
 
   // A draft folder post outside /drafts/ would write "/album.html"
@@ -314,7 +320,9 @@ async function buildAndSet(blog, path, multiInfo, state) {
   }
 }
 
-module.exports = async function set(blog, path) {
+// track is the sync's dependents tracker (./dependents.js), which the rebuild
+// at the end of the sync reads
+module.exports = async function set(blog, path, track) {
   // if typeof blog is not object, return error
   if (typeof blog !== "object") {
     throw new Error("sync.set: blog must be an object");
@@ -332,7 +340,14 @@ module.exports = async function set(blog, path) {
   // pending: path was added to the dependents-pending set, to remove once
   //          its dependents are rebuilt
   // wasPending: it was already there, left by a sync that was killed
-  var state = { unchanged: false, pending: false, wasPending: false };
+  // syntheticKeys: the entry's wikilink keys, whose dependents are rebuilt
+  //          too
+  var state = {
+    unchanged: false,
+    pending: false,
+    wasPending: false,
+    syntheticKeys: null,
+  };
   var ignoring = false;
 
   var is_preview = await isPreview(blog.id, path);
@@ -346,30 +361,31 @@ module.exports = async function set(blog, path) {
     await Entry.drop(blog.id, path);
   } else if (!isTemplate(path) && !is_preview) {
     // This file should become a blog post or page!
-    await buildAndSet(blog, path, multiInfo, state);
+    await buildAndSet(blog, path, multiInfo, state, track);
   }
 
   // Resolves to { changed: false } when the file built exactly the
   // entry already stored, so the caller need not purge the blog's pages
   if (state.unchanged && !state.wasPending && !ignoring) {
-    await client.sRem(dependentsPendingKey(blog.id), path);
+    await dependents.clearPending(
+      blog.id,
+      path,
+      targetsOf(path, multiInfo),
+      track
+    );
     return { changed: false };
   }
 
-  var targets = [path];
+  var targets = targetsOf(path, multiInfo);
 
-  if (multiInfo && multiInfo.entryPath)
-    targets.push(pathNormalizer(multiInfo.entryPath));
-
-  targets = targets.map(pathNormalizer).filter(function (value, index, array) {
-    return array.indexOf(value) === index;
-  });
-
-  for (const target of targets) {
-    await rebuildDependents(blog.id, target);
-  }
-
-  if (state.pending) await client.sRem(dependentsPendingKey(blog.id), path);
+  // Rebuilt once, when the sync ends (./dependents.js drain)
+  await dependents.record(
+    blog.id,
+    path,
+    targets.concat(state.syntheticKeys || []),
+    track,
+    { started: state.pending }
+  );
 };
 
 module.exports.isTemplatePath = isTemplatePath;

@@ -155,20 +155,27 @@ host's 15,608 (no swap):
 
 | | MiB |
 | --- | --- |
-| two units, each: container 2560 (`scripts/deploy/constants.js`), sandbox 512 and browser 1,024 (`config/host/host/setup.sh`) | 8,192 |
+| two units, each 3,584: its slice's `MemoryMax`, shared by its container and its sandbox and browser jails (`UNIT.memory` in `scripts/deploy/constants.js`, `config/host/scripts/unit-cgroups`) | 7,168 |
 | the host itself (sshd, docker, journald, rsyslog, fail2ban, cron) | 768 |
 | offsite-sync (`MemoryMax` in `config/host/host/setup.sh`) | 512 |
+| the script runner, one at a time (`SCRIPT_RUNNER` in `scripts/deploy/constants.js`) | 512 |
 | Redis above its `maxmemory` (allocator overhead, client buffers) | 512 |
 | Redis `maxmemory` | 5,120 |
-| margin | 504 |
+| margin | 1,016 |
+
+A unit's 3,584 is not the sum of its processes' limits: the kernel kills in
+an order inside it (jobs, scripts and node-b first, OpenResty last; "Kill
+order" in `proxy/unit/supervisor.sh`), so only what must not be killed has to
+fit (`scripts/deploy/constants.js`). The host's sum is what can't be
+overcommitted.
 
 A BGSAVE child's copy-on-write pages are not in this sum: the child runs at
 `oom_score_adj` 1000 (`oom-score-adj-values` in `redis.conf`, relative to the
 service's -900), the highest on the host, so under pressure a save fails, not
 the host or a unit. Raise `maxmemory` only after lowering a limit above
 has been deployed (units) or applied (`bootstrap.sh`), never before. The
-target margin is 1,024 MiB; #2795 has the options for the rest (the browser
-jail is the largest: heavy pages use over 512 MiB of it, so it stays at 1G).
+target margin is 1,024 MiB; #2795 has the options for lowering the units'
+memory, which is what gives Redis more.
 
 To change a setting: edit `redis.conf`, run `bootstrap.sh`, restart Redis if
 it says so. `maxmemory` is about 70% of RAM, computed at bootstrap

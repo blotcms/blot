@@ -53,6 +53,13 @@ const fetchWithRetriesAndTimeout = async (url, options = {}) => {
           clfdate(),
           `Request timed out (attempt ${attempt} of ${retries}): ${url}`
         );
+      } else if (isNotSyncing(error)) {
+        // Blot won't sync this blog (deleted, disabled, or on another
+        // client): an answer, not a failure, so one line rather than an error
+        console.log(
+          clfdate(),
+          `Not syncing ${options?.headers?.blogID}: Blot answered ${error.status} for ${url}`
+        );
       } else {
         console.error(
           clfdate(),

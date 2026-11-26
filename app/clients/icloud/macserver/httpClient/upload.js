@@ -46,7 +46,10 @@ const evictAfterPush = (filePath) => {
   });
 };
 
-export default async (blogID, path) => {
+// fromWalk: pushed by the walk of a directory that appeared (a folder moved
+// or copied in), whose files keep their old mtimes, so Blot doesn't count
+// mtime-to-now as sync delay (app/clients/icloud/util/liveLag.js)
+export default async (blogID, path, { fromWalk = false } = {}) => {
   // Input validation
   if (!blogID || typeof blogID !== "string") {
     console.error(clfdate(), "Invalid blogID for upload client request", {
@@ -243,6 +246,7 @@ export default async (blogID, path) => {
           blogID,
           pathBase64,
           modifiedTime,
+          ...(fromWalk && { fromDirectoryWalk: "true" }),
         },
         body: fileBuffer,
       });

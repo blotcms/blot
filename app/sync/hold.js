@@ -175,3 +175,5 @@ async function hold(blogID, fn, options = {}) {
 module.exports = hold;
 module.exports.take = take;
 module.exports.cancelError = cancelError;
+module.exports.LEASE_MS = LOCK_STALE_TIMEOUT_MS;
+module.exports.HEARTBEAT_MS = LOCK_UPDATE_INTERVAL_MS;

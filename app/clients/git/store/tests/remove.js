@@ -13,7 +13,7 @@ const removeRepo = require("../remove");
 const sweep = require("../sweep");
 const importRepo = require("../import");
 const { verifyImport } = importRepo;
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const {
   LATEST_KEY,
@@ -527,15 +527,11 @@ describe("git store removal", function () {
   });
 
   describe("with a real import", function () {
+    const ws = workspace.each();
     let root;
 
     beforeEach(function () {
-      root = fx.tempDir();
-    });
-
-    afterEach(async function () {
-      await createCache.closeAll();
-      fx.remove(root);
+      root = ws.dir();
     });
 
     function makeRepo() {
@@ -563,7 +559,7 @@ describe("git store removal", function () {
       const error = await fails(
         importRepo({
           store: processOf(),
-          cache: createCache({
+          cache: ws.cache({
             dir: path.join(root, "cache"),
             maxBytes: 64 * 1024 * 1024,
           }),
@@ -594,7 +590,7 @@ describe("git store removal", function () {
       }
       const gitDir = path.join(work, ".git");
       const cache = () =>
-        createCache({
+        ws.cache({
           dir: path.join(root, "cache-" + ++made),
           maxBytes: 64 * 1024 * 1024,
         });
