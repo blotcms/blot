@@ -4,8 +4,6 @@ var optimize = require("./optimize");
 var url = require("url");
 var isURL = require("helper/transformer/isURL");
 var { report } = require("build/flags");
-var assets = require("storage/assets");
-var config = require("config");
 
 // Images looked up at once for one entry. A lookup whose result is cached
 // costs a few Redis reads, so several overlap. One that isn't runs a sandbox
@@ -67,29 +65,10 @@ function firstCandidateSrc($) {
 async function render($, { blogID, seedThumbnail }) {
   var cache = new Transformer(blogID, "image-cache");
 
-  // A cached result is found by the image's bytes, so it may be one built long
-  // ago, whose file has since gone from storage (removed, or never uploaded).
-  // If so, the image is made again rather than linked. The result holds the
-  // file's CDN URL, not its path, so the path is taken back out of it. A
-  // result which isn't one of ours counts as valid.
-  var urlPrefix = config.cdn.origin + "/" + blogID + "/";
-
-  async function isValid(result) {
-    if (!result || typeof result.src !== "string") return true;
-    if (result.src.indexOf(urlPrefix) !== 0) return true;
-
-    var relativePath;
-
-    try {
-      relativePath = decodeURIComponent(result.src.slice(urlPrefix.length));
-    } catch (e) {
-      return true;
-    }
-
-    if (!relativePath) return true;
-
-    return assets.existsRecently(blogID, relativePath);
-  }
+  // A cached result is linked without asking the bucket whether its file is
+  // still there: every routine removal deletes the cache entry first, and
+  // the weekly sweep deletes any left pointing at a missing file and
+  // rebuilds the entries that link it (storage/sweep/generated.js)
 
   // First collect each <img> with a cacheable src. The same src is looked up
   // once however often it appears in the entry, and distinct srcs run
@@ -143,18 +122,14 @@ async function render($, { blogID, seedThumbnail }) {
     });
 
     try {
-      infos[src] = await cache.lookup(
-        src,
-        async function () {
-          try {
-            return await transforming(() => transform.apply(this, arguments));
-          } catch (err) {
-            if (err && typeof err === "object") err.fromTransform = true;
-            throw err;
-          }
-        },
-        { isValid }
-      );
+      infos[src] = await cache.lookup(src, async function () {
+        try {
+          return await transforming(() => transform.apply(this, arguments));
+        } catch (err) {
+          if (err && typeof err === "object") err.fromTransform = true;
+          throw err;
+        }
+      });
     } catch (err) {
       debug(src, "Optimize failed with Error:", err);
 

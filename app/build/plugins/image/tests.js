@@ -109,7 +109,7 @@ describe("image", function () {
     this.result = secondResult;
   });
 
-  it("makes an image again when its cached file has gone from storage", async function () {
+  it("links a cached image without asking the bucket whether it is there", async function () {
     var path = "/tests-image.png";
     var html = '<img src="' + path + '">';
     var blog = this.blog;
@@ -117,20 +117,13 @@ describe("image", function () {
     await folder.writeFrom(blog.id, path, __dirname + path);
 
     var firstResult = await render(blog, html);
-    var firstPath = extractCachedImagePaths(blog, firstResult)[0];
 
-    expect(await assets.exists(blog.id, firstPath)).toEqual(true);
-
-    await assets.remove(blog.id, firstPath);
-
-    expect(await assets.exists(blog.id, firstPath)).toEqual(false);
+    spyOn(assets, "exists").and.callThrough();
 
     var secondResult = await render(blog, html);
-    var secondPath = extractCachedImagePaths(blog, secondResult)[0];
 
-    expect(secondPath).toContain("_image_cache/");
-    expect(secondPath).not.toEqual(firstPath);
-    expect(await assets.exists(blog.id, secondPath)).toEqual(true);
+    expect(secondResult).toEqual(firstResult);
+    expect(assets.exists).not.toHaveBeenCalled();
 
     this.result = secondResult;
   });

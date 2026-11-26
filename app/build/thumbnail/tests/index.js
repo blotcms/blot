@@ -11,7 +11,7 @@ describe("thumbnail", function () {
   var sharp = require("sharp");
   var assets = require("storage/assets");
 
-  it("makes a cached result's thumbnails again once their files are gone", async function () {
+  it("links cached thumbnails without asking the bucket whether they are there", async function () {
     var thumbnail = require("../index");
     var imagePath = "/portrait.jpg";
     var html = '<img src="' + imagePath + '">';
@@ -24,15 +24,12 @@ describe("thumbnail", function () {
 
     var first = await thumbnail(this.blog, "/post.txt", {}, html);
 
-    for (var size of Object.keys(first))
-      await assets.remove(this.blog.id, first[size].path);
+    spyOn(assets, "exists").and.callThrough();
 
     var second = await thumbnail(this.blog, "/post.txt", {}, html);
 
-    // The same image's directory, made again
-    expect(second.small.path).toBe(first.small.path);
-    for (var name of Object.keys(second))
-      expect(await assets.exists(this.blog.id, second[name].path)).toBe(true);
+    expect(second).toEqual(first);
+    expect(assets.exists).not.toHaveBeenCalled();
   });
 
   it("creates thumbnails", async function () {

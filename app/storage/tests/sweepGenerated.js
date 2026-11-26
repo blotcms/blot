@@ -12,6 +12,7 @@ describe("storage/sweep generated files", function () {
   const generated = require("storage/sweep/generated");
   const cache = require("storage/sweep/cache");
   const sweep = require("storage/sweep");
+  const pendingRebuilds = require("sync/pendingRebuilds");
 
   const DAY = 24 * 60 * 60 * 1000;
   const NOW = Date.now();
@@ -27,6 +28,8 @@ describe("storage/sweep generated files", function () {
     used = new Set();
 
     spyOn(references, "inUse").and.callFake(async () => used);
+    spyOn(references, "entriesMentioning").and.callFake(async () => []);
+    spyOn(pendingRebuilds, "queuePaths").and.callFake(async () => {});
     spyOn(assets, "walkEntries").and.callFake(() =>
       (async function* () {
         for (const [key, object] of Array.from(store)) {
@@ -101,6 +104,8 @@ describe("storage/sweep generated files", function () {
       deletedBytes: 0,
       cacheKeysDeleted: 0,
       legacyCacheKeys: 0,
+      missingDirs: 0,
+      rebuildsQueued: 0,
     };
   }
 
@@ -137,6 +142,8 @@ describe("storage/sweep generated files", function () {
       deletedBytes: 0,
       cacheKeysDeleted: 3,
       legacyCacheKeys: 0,
+      missingDirs: 0,
+      rebuildsQueued: 0,
     });
     expect(await client.exists(generated.candidatesKey(id))).toBe(0);
     expect(await exists(keys)).toBe(true);
@@ -325,6 +332,51 @@ describe("storage/sweep generated files", function () {
     );
     expect(await client.sCard(everything)).toBe(3);
     expect(deleted).toEqual([]);
+  });
+
+  it("queues the entries linking a missing directory to rebuild, once its cache entries are gone", async function () {
+    const id = this.blog.id;
+    const gone = await entry(id, "thumbnails", "_thumbnails/gone", "u1");
+    let left;
+
+    used.add("_thumbnails/gone");
+    references.entriesMentioning.and.callFake(async (blogID, names) => {
+      expect(names).toEqual(["_thumbnails/gone"]);
+      return ["/post.txt"];
+    });
+    pendingRebuilds.queuePaths.and.callFake(async () => {
+      left = await client.exists(gone);
+    });
+
+    const { totals } = await run(id, "apply");
+
+    expect(pendingRebuilds.queuePaths).toHaveBeenCalledWith(id, ["/post.txt"]);
+    expect(left).toBe(0);
+    expect(totals.missingDirs).toBe(1);
+    expect(totals.rebuildsQueued).toBe(1);
+  });
+
+  it("queues nothing in report mode, or when no missing directory is cached", async function () {
+    const id = this.blog.id;
+
+    await entry(id, "thumbnails", "_thumbnails/gone", "u1");
+    references.entriesMentioning.and.callFake(async () => ["/post.txt"]);
+
+    const report = await run(id, "report");
+
+    expect(report.totals.rebuildsQueued).toBe(1);
+    expect(pendingRebuilds.queuePaths).not.toHaveBeenCalled();
+
+    await run(id, "apply");
+    pendingRebuilds.queuePaths.calls.reset();
+    references.entriesMentioning.calls.reset();
+
+    // The cache entry went with the first apply: nothing points there now
+    const again = await run(id, "apply");
+
+    expect(again.totals.missingDirs).toBe(0);
+    expect(references.entriesMentioning).not.toHaveBeenCalled();
+    expect(pendingRebuilds.queuePaths).toHaveBeenCalledWith(id, []);
   });
 
   it("leaves the other transformer names alone", async function () {

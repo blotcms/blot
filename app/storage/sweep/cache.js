@@ -63,8 +63,8 @@ async function read(blogID) {
         // at the old CDN (blotcdn.com, which answers 403 now). Nothing can
         // use them: the image plugin reads `src`, which they lack, so a post
         // that hits one never gets its _image_cache copy, and thumbnails
-        // reject them by isValid and make them again. Deleting them lets the
-        // next build make the files properly.
+        // would link them. Deleting them lets the next build make the files
+        // properly.
         if (!dirs.size && LEGACY.test(String(value))) {
           legacy.add(key);
           stale.push({ name, key, legacy: true });

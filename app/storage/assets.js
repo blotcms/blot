@@ -330,7 +330,9 @@ async function exists(blogID, relPath) {
 
 // exists(), remembering a yes in this process for an hour: for the build's
 // checks that a cached result's files are still stored, which ask about the
-// same files on every rebuild of an entry. Safe because every routine
+// same files on every rebuild of an entry (the image converter's _assets and
+// bookmark screenshots; the image cache and thumbnails don't ask, and leave
+// a lost file to the sweep: storage/sweep/generated.js). Safe because every routine
 // removal of generated assets (the sweep, a cache wipe) deletes the cache
 // entry naming them first, so nothing asks about them afterwards. The one
 // exception is a bookmark screenshot, which has no cache entry: the sweep

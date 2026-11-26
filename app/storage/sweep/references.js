@@ -102,4 +102,36 @@ async function inUse(blogID, pattern) {
 
   return used;
 }
-module.exports = { inUse, referencesIn, SCOPES, ASSET_REFERENCE };
+// The paths of the saved entries (not deleted) that mention any of names
+// ("<scope>/<id>"), for the sweep to build again when those directories have
+// gone from the bucket (./generated)
+async function entriesMentioning(blogID, names) {
+  const wanted = new Set(names);
+  const paths = [];
+  const ids = wanted.size ? await Entries.getAllIDs(blogID) : [];
+
+  for (let i = 0; i < ids.length; i += ENTRY_BATCH) {
+    for (const entry of await Entry.get(
+      blogID,
+      ids.slice(i, i + ENTRY_BATCH)
+    )) {
+      if (!entry || entry.deleted || !entry.path) continue;
+
+      for (const name of referencesIn(entry, new Set()))
+        if (wanted.has(name)) {
+          paths.push(entry.path);
+          break;
+        }
+    }
+  }
+
+  return paths;
+}
+
+module.exports = {
+  inUse,
+  referencesIn,
+  entriesMentioning,
+  SCOPES,
+  ASSET_REFERENCE,
+};
