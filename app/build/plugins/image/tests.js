@@ -126,8 +126,6 @@ describe("image", function () {
 
     expect(secondResult).toEqual(firstResult);
     expect(await assets.exists(blog.id, firstPath)).toBe(false);
-
-    this.result = secondResult;
   });
 
   it("reuses a cached image whose file still exists, without making it again", async function () {
