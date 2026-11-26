@@ -6,9 +6,9 @@ const clfdate = require("helper/clfdate");
 // The child runs the same app (script) and serves HTTP on its own Unix socket
 // only, for the reverse proxy to send it the requests that sync or build
 // (webhooks, /clients, dashboard writes), so they never block the parent's
-// event loop while it serves blogs and dashboard pages. Both run the same
-// background jobs, which Redis locks and leases share out between every
-// process, so either may pick up a given one.
+// event loop while it serves blogs and dashboard pages. The child also runs
+// the background jobs, which the parent doesn't start (helper/servesOnly,
+// #2990); Redis locks and leases share them out between the units' children.
 //
 // A child that exits is forked again after a delay that doubles from
 // minBackoffMs to maxBackoffMs, and starts again from minBackoffMs once a
