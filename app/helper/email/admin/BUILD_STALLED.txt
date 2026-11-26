@@ -1,0 +1,9 @@
+Build skipped on {{{handle}}}: {{{path}}}
+
+The last {{attempts}} builds of `{{{path}}}` on {{{handle}}} ({{blogID}}) crashed the process or blocked its event loop for long enough to lose the folder lock, so Blot has stopped building it. Its existing post stays as it was, and the file is flagged "took too long to build" (a folder post is not flagged). The next sync or rebuild an hour after its last attempt tries it again, as does any change to the file.
+
+This email is sent at most once an hour for each blog. Find the builds in the logs:
+
+$ docker logs --since 2h blot-blue 2>&1 | grep -F -e "[BUILD]" -e "LOCK COMPROMISED" | grep {{blogID}}
+
+A build which blocks the event loop is usually a converter doing quadratic work on a large file (the .docx title check fixed in #2988 was one).
