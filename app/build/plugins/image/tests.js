@@ -117,13 +117,15 @@ describe("image", function () {
     await folder.writeFrom(blog.id, path, __dirname + path);
 
     var firstResult = await render(blog, html);
+    var firstPath = extractCachedImagePaths(blog, firstResult)[0];
 
-    spyOn(assets, "exists").and.callThrough();
+    // Gone some way other than a routine removal: the sweep's to repair
+    await assets.remove(blog.id, firstPath);
 
     var secondResult = await render(blog, html);
 
     expect(secondResult).toEqual(firstResult);
-    expect(assets.exists).not.toHaveBeenCalled();
+    expect(await assets.exists(blog.id, firstPath)).toBe(false);
 
     this.result = secondResult;
   });

@@ -24,12 +24,14 @@ describe("thumbnail", function () {
 
     var first = await thumbnail(this.blog, "/post.txt", {}, html);
 
-    spyOn(assets, "exists").and.callThrough();
+    // Gone some way other than a routine removal: the sweep's to repair
+    for (var size of Object.keys(first))
+      await assets.remove(this.blog.id, first[size].path);
 
     var second = await thumbnail(this.blog, "/post.txt", {}, html);
 
     expect(second).toEqual(first);
-    expect(assets.exists).not.toHaveBeenCalled();
+    expect(await assets.exists(this.blog.id, first.small.path)).toBe(false);
   });
 
   it("creates thumbnails", async function () {
