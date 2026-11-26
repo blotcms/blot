@@ -22,7 +22,7 @@ const Blog = require("models/blog");
 const Entry = require("models/entry");
 const client = require("models/client");
 const folder = require("storage/folder");
-const hold = require("sync/hold");
+const clientFolder = require("clients/folder");
 
 const run = promisify(execFile);
 const args = process.argv.slice(2);
@@ -51,7 +51,7 @@ async function writeDocx(blogID, marker) {
   await fs.writeFile(path.join(dir, "in.md"), lines.join("\n"));
   await run("pandoc", ["in.md", "-o", "out.docx"], { cwd: dir });
   const buffer = await fs.readFile(path.join(dir, "out.docx"));
-  await hold(blogID, () => folder.write(blogID, PATH, buffer));
+  await clientFolder.write(blogID, PATH, buffer);
   await fs.remove(dir);
 }
 

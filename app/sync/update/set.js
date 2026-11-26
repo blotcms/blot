@@ -173,7 +173,11 @@ async function buildAndSet(blog, path, multiInfo, state, track) {
 
   try {
     ({ result: entry, flags: found } = await buildFlags.collect(() =>
-      stalledBuilds(blog, path, () => build(blog, path))
+      // A file in a "+" folder builds the whole folder post, so its attempts
+      // are counted against the folder, whichever file changed
+      stalledBuilds(blog, multiInfo ? multiInfo.folderPath : path, () =>
+        build(blog, path)
+      )
     ));
   } catch (err) {
     if (err && err.code === "WRONGTYPE") {
