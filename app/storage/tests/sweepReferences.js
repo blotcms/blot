@@ -51,6 +51,12 @@ describe("storage/sweep/references and s3", function () {
         thumbnail: { small: { path: "/_thumbnails/lost-too/small.jpg" } },
       },
       { path: "/d.txt", deleted: true, html: `/_image_cache/lost/a.jpg` },
+      {
+        path: "/album",
+        html:
+          '<section class="multi-file-post" data-folder="/album+">' +
+          '<img src="/_image_cache/lost/b.jpg"></section>',
+      },
     ]);
 
     const paths = await references.entriesMentioning(this.blog.id, [
@@ -58,7 +64,7 @@ describe("storage/sweep/references and s3", function () {
       "_thumbnails/lost-too",
     ]);
 
-    expect(paths).toEqual(["/a.txt", "/c.txt"]);
+    expect(paths).toEqual(["/a.txt", "/c.txt", "/album+"]);
   });
 
   it("reads no entries when no directory is asked about", async function () {
