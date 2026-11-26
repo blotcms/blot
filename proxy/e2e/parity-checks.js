@@ -1360,7 +1360,8 @@ function diff(spec, ra, rb) {
     da.equals(db) && ra.status === rb.status && spec.method !== "HEAD";
   const offline =
     OFFLINE_STATUSES.has(ra.status) ||
-    spec.path === "/error-upstream-offline.html";
+    // the node-down passes add ?fresh=1
+    spec.path.split("?")[0] === "/error-upstream-offline.html";
   const names = new Set([...ra.raw, ...rb.raw].map(([k]) => k));
   for (const name of [...names].sort()) {
     if (name === "date") continue;
