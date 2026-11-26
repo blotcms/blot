@@ -1,6 +1,7 @@
 const client = require("models/client");
 const { randomUUID } = require("crypto");
 const clfdate = require("helper/clfdate");
+const servesOnly = require("helper/servesOnly");
 
 // A per-blog mutex held in Redis so that it works across processes and hosts
 // without a shared disk. The value is a random token so that a holder whose
@@ -206,6 +207,18 @@ async function lock(blogID, options = {}) {
   const lockKey = key(blogID);
   const cancelLockKey = cancelKey(blogID);
   const token = randomUUID() + ":" + Date.now();
+
+  // node-a in a unit only serves (helper/servesOnly, #2990): whatever takes
+  // a folder lock there is a path that should have gone to node-b. Logged
+  // with its stack, so it can be found and moved; to be refused once none
+  // remain.
+  if (servesOnly())
+    console.error(
+      clfdate(),
+      "[LOCK] taken in a serving-only process",
+      blogID,
+      new Error("Folder lock taken here").stack
+    );
 
   setupProbe();
 
