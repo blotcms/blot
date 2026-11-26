@@ -1,0 +1,10 @@
+{
+  "name": "Intel One Mono",
+  "tags": [
+    "mono"
+  ],
+  "stack": "'Intel One Mono'",
+  "line_height": 1.5,
+  "line_width": 39,
+  "font_size": 16
+}
