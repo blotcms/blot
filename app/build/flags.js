@@ -87,6 +87,10 @@ function fromError(err) {
     return { code: "BUILD_TIMEOUT", step };
   }
 
+  // Its last builds crashed the process or blocked the event loop
+  // (sync/update/stalledBuilds.js), so it wasn't built
+  if (code === "BUILD_STALLED") return { code: "BUILD_TIMEOUT", step: "build" };
+
   if (code === "SANDBOX_KILLED") return { code: "BUILD_TOO_COMPLEX", step };
 
   if (

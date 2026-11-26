@@ -1,6 +1,7 @@
 var Entry = require("models/entry");
 var build = require("build");
 var buildFlags = require("build/flags");
+var stalledBuilds = require("./stalledBuilds");
 var storeBuildFlags = require("./storeBuildFlags");
 var folderPostSource = require("./folderPostSourceFolder");
 
@@ -18,7 +19,7 @@ module.exports = async function rebuildEntry(blog, entry) {
   var buildPath = folderSource || entry.path;
 
   var { result: updated, flags } = await buildFlags.collect(() =>
-    build(blog, buildPath)
+    stalledBuilds(blog, buildPath, () => build(blog, buildPath))
   );
 
   // What the build found replaces the file's build flags, so a rebuild for

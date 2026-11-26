@@ -12,6 +12,7 @@ var path = require("path");
 var folder = require("storage/folder");
 var postSourceSize = require("build/converters/post-source-size");
 var buildFlags = require("build/flags");
+var stalledBuilds = require("./stalledBuilds");
 var storeBuildFlags = require("./storeBuildFlags");
 var isUnsafeFolderPostPreview = require("./isUnsafeFolderPostPreview");
 var folderPostSourceFolder = require("./folderPostSourceFolder");
@@ -172,7 +173,7 @@ async function buildAndSet(blog, path, multiInfo, state, track) {
 
   try {
     ({ result: entry, flags: found } = await buildFlags.collect(() =>
-      build(blog, path)
+      stalledBuilds(blog, path, () => build(blog, path))
     ));
   } catch (err) {
     if (err && err.code === "WRONGTYPE") {
