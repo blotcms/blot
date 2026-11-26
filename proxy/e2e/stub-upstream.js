@@ -378,6 +378,16 @@ const handler = (req, res) => {
     res.end(JSON.stringify(counts));
     return;
   }
+  // OpenResty's node-a probe (config/node_health.lua), every second: answered
+  // as Node answers it, and not counted, so the counts are only requests
+  if (
+    url.pathname === "/health" &&
+    /^localhost(:\d+)?$/.test(req.headers.host || "")
+  ) {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("OK");
+    return;
+  }
   counts[url.pathname] = (counts[url.pathname] || 0) + 1;
 
   // --- routes for proxy/e2e/request-matrix.js and diskcache-checks.js ---

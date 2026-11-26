@@ -35,6 +35,8 @@ const config = {
   },
   node: {
     port: 8788,
+    // A second upstream, for specs of failover between two
+    peerPort: 8789,
   },
 };
 

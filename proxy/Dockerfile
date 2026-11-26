@@ -350,4 +350,5 @@ COPY build/data/latest/cdn-ips.conf /etc/openresty/cdn-ips.default.conf
 COPY build/data/latest/wildcard_cert.lua /etc/openresty/wildcard_cert.lua
 COPY build/data/latest/ban.lua /etc/openresty/ban.lua
 COPY build/data/latest/diskcache.lua /etc/openresty/diskcache.lua
+COPY build/data/latest/node_health.lua /etc/openresty/node_health.lua
 COPY build/data/latest/html /etc/openresty/html
