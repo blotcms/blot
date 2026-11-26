@@ -3,6 +3,7 @@ const clfdate = require("helper/clfdate");
 const references = require("./references");
 const cache = require("./cache");
 const bucket = require("./s3");
+const pendingRebuilds = require("sync/pendingRebuilds");
 
 // The sweep of generated files nothing uses any more (#2688, #2745): images
 // from deleted posts, stale thumbnails, versions of photos replaced or edited
@@ -34,6 +35,21 @@ const bucket = require("./s3");
 // (candidatesKey), and the second pass deletes the ones still unreferenced,
 // still more than a day old and that no cache entry points at again (a build
 // made it again since: kept, and recorded again).
+//
+// A cache entry that points at a directory missing from the bucket is
+// deleted too, whatever its age. The builds don't check that a cached
+// result's files are still stored before linking them (a bucket request per
+// image per build was most of a cached rebuild's time), because every
+// routine removal deletes the cache entries first: this is the backstop for
+// a file lost some other way. The saved entries that mention such a
+// directory link files that aren't there, so they are queued to be built
+// again (sync/pendingRebuilds), which, with the cache entry gone, makes the
+// files again. Only a directory the cache pointed at is a reason to rebuild:
+// once its entries are deleted nothing finds it again, so a rebuild that
+// doesn't help (an entry quoting another blog's image URL) is not repeated
+// every run. An entry built between the loss and the run that finds it
+// links the missing files until then; a blog that changes nothing in that
+// time is only seen by the monthly full run (./index).
 //
 // Accepted gap, decided by the maintainer in #2745, so review need not raise
 // it: bookmark screenshots aren't in the transformer cache; the plugin
@@ -110,8 +126,13 @@ async function run(blogID, options) {
   }
 
   for (const name of unreferenced) doom(held.pointers.get(name) || []);
+  const missing = [];
+
   for (const [name, entries] of held.pointers)
-    if (!dirs.has(name)) doom(entries);
+    if (!dirs.has(name)) {
+      missing.push(name);
+      doom(entries);
+    }
   doom(held.stale);
 
   const legacyKeys = Array.from(doomed.values()).filter((e) => e.legacy).length;
@@ -119,13 +140,19 @@ async function run(blogID, options) {
   const sum = (names) =>
     names.reduce((bytes, name) => bytes + dirs.get(name).bytes, 0);
 
+  // Read before anything is written, so a failure leaves the step undone
+  const rebuild = missing.length
+    ? await references.entriesMentioning(blogID, missing)
+    : [];
+
   if (candidates.length || toDelete.length || doomed.size)
     log(
       `sweep generated ${blogID}: ${candidates.length} candidates ` +
         `(${sum(candidates)} bytes), ${toDelete.length} directories ` +
         `${apply ? "deleted" : "to delete"} (${sum(toDelete)} bytes), ` +
         `${doomed.size} cache keys ${apply ? "deleted" : "to delete"} ` +
-        `(${legacyKeys} legacy)` +
+        `(${legacyKeys} legacy), ${missing.length} directories missing, ` +
+        `${rebuild.length} entries ${apply ? "queued" : "to queue"} to rebuild` +
         (apply ? "" : " (report only)")
     );
 
@@ -140,6 +167,12 @@ async function run(blogID, options) {
     //     only delays a directory by a run, whereas writing it before the
     //     deletes could hide a directory still in the bucket.
     await cache.remove(blogID, Array.from(doomed.values()));
+
+    // After the cache entries have gone, so the rebuild makes the files again
+    // rather than linking the missing ones. A kill between the two leaves
+    // these entries until they next change: the cache no longer points at
+    // the directory, so no later run finds them.
+    await pendingRebuilds.queuePaths(blogID, rebuild);
 
     await bucket.deleteDirs(
       blogID,
@@ -168,6 +201,8 @@ async function run(blogID, options) {
   totals.deletedBytes += sum(toDelete);
   totals.cacheKeysDeleted += doomed.size;
   totals.legacyCacheKeys += legacyKeys;
+  totals.missingDirs += missing.length;
+  totals.rebuildsQueued += rebuild.length;
 
   return files;
 }

@@ -73,7 +73,13 @@ module.exports = async function main(blogID, options = {}) {
   // whose cacheID hasn't moved (storage/sweep)
   await Blog.set(blogID, { cacheID: Date.now() });
 
-  const paths = await walk(blog.id);
+  // options.paths rebuilds just those (the sweep's, for entries linking
+  // generated files that have gone: storage/sweep/generated.js). One no
+  // longer in the folder is left out: building it would remove its entry,
+  // which is Fix()'s call, not this one's.
+  const paths = options.paths
+    ? await existing(blog.id, options.paths)
+    : await walk(blog.id);
 
   if (options.thumbnails) {
     await wipeCache({
@@ -187,6 +193,15 @@ module.exports = async function main(blogID, options = {}) {
   // https://github.com/blotcms/blot/issues/1844
   await Blog.set(blogID, { cacheID: Date.now() });
 };
+
+async function existing(blogID, paths) {
+  const found = [];
+
+  for (const path of new Set(paths))
+    if (await storage.exists(blogID, path)) found.push(path);
+
+  return found;
+}
 
 async function wipeCache({ blogID, label, directory }) {
   const store = new Transformer(blogID, label);

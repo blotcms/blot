@@ -132,6 +132,8 @@ function newTotals() {
     deletedBytes: 0,
     cacheKeysDeleted: 0,
     legacyCacheKeys: 0,
+    missingDirs: 0,
+    rebuildsQueued: 0,
     generatedFailed: 0,
     secondPassBlogs: 0,
     skippedUnchanged: 0,

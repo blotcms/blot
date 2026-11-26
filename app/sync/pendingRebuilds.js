@@ -23,6 +23,9 @@ const folderLock = require("./lock");
 //   imageCache  with rebuild, wipe the cached images first
 //   fix         run Fix() afterwards (the dashboard's Rebuild)
 //
+// or, with queuePaths, single paths to build again (members "path:<path>"),
+// which a whole rebuild queued with them already covers.
+//
 // Keys, under the blog's namespace so deleting the blog removes them:
 //   blog:<id>:rebuild:pending   flags queued and not yet started
 //   blog:<id>:rebuild:running   flags a run has taken; left by a killed run
@@ -30,6 +33,7 @@ const folderLock = require("./lock");
 // and the alarm alarm:due:pending-rebuilds, one per blog, which any process
 // claims (helper/alarm) to run what is waiting once the lock is free.
 const FLAGS = ["resave", "rebuild", "thumbnails", "imageCache", "fix"];
+const PATH = "path:";
 
 // A run killed this many times in a row (by a deploy, or by the rebuild
 // itself crashing the process) is given up on rather than tried forever
@@ -87,6 +91,24 @@ async function queue(blogID, flags) {
   await alarms.queueSet(multi, blogID, Date.now()).exec();
 }
 
+// Queues single paths of the blog to build again, as queue does flags
+async function queuePaths(blogID, paths) {
+  paths = (paths || []).filter(Boolean);
+
+  for (const path of paths) {
+    if (typeof path !== "string" || path[0] !== "/")
+      throw new TypeError("pendingRebuilds: not a path " + path);
+  }
+
+  if (!paths.length) return;
+
+  const multi = client.multi().sAdd(
+    pendingKey(blogID),
+    paths.map((path) => PATH + path)
+  );
+  await alarms.queueSet(multi, blogID, Date.now()).exec();
+}
+
 // Takes what is queued for the blog, together with anything a killed run
 // left, and does it. The caller must hold the blog's folder lock (see run),
 // which is what keeps two runs apart. folder is the sync's { status, log }.
@@ -111,7 +133,16 @@ async function runLocked(blogID, folder) {
     return clear(blogID);
   }
 
-  log(blogID, "running", [...flags], "attempt", Number(attempts));
+  const named = [...flags].filter((flag) => !flag.startsWith(PATH));
+  const paths = flags.size - named.length;
+
+  log(
+    blogID,
+    "running",
+    paths ? [...named, paths + " paths"] : named,
+    "attempt",
+    Number(attempts)
+  );
 
   try {
     await work(blogID, flags, folder);
@@ -153,6 +184,13 @@ async function work(blogID, flags, folder) {
       console.log(err);
     }
   }
+
+  const paths = [...flags]
+    .filter((flag) => flag.startsWith(PATH))
+    .map((flag) => flag.slice(PATH.length));
+
+  if (paths.length && !rebuild)
+    await require("./rebuild")(blogID, { paths, status, log: folderLog });
 
   if (flags.has("fix")) {
     status("Checking your site for issues");
@@ -261,6 +299,7 @@ async function pending(blogID) {
 
 module.exports = {
   queue,
+  queuePaths,
   request,
   run,
   runLocked,

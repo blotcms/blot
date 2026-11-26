@@ -54,6 +54,36 @@ describe("pending rebuilds", function () {
     expect(await pendingRebuilds.pending(this.blog.id)).toEqual([]);
   });
 
+  it("rebuilds only the paths queued, and skips one no longer in the folder", async function () {
+    const other = "/other.txt";
+
+    await this.blog.write({ path: other, content: "Title: Other" });
+    await pendingRebuilds.queuePaths(this.blog.id, [path, "/gone.txt"]);
+
+    expect(await pendingRebuilds.pending(this.blog.id)).toEqual([
+      "path:/gone.txt",
+      "path:" + path,
+    ]);
+
+    await pendingRebuilds.run(this.blog.id);
+
+    expect(await this.built()).toBe(true);
+    expect(await Entry.get(this.blog.id, other)).toBeFalsy();
+    expect(await Entry.get(this.blog.id, "/gone.txt")).toBeFalsy();
+    expect(await pendingRebuilds.pending(this.blog.id)).toEqual([]);
+  });
+
+  it("rejects a queued path that isn't one", async function () {
+    let error;
+    try {
+      await pendingRebuilds.queuePaths(this.blog.id, ["hello.txt"]);
+    } catch (err) {
+      error = err;
+    }
+    expect(error instanceof TypeError).toBe(true);
+    expect(await pendingRebuilds.pending(this.blog.id)).toEqual([]);
+  });
+
   it("rebuilds the blog and clears the record", async function () {
     await pendingRebuilds.queue(this.blog.id, ["rebuild"]);
     await pendingRebuilds.run(this.blog.id);

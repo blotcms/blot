@@ -4,6 +4,7 @@ const Entry = require("models/entry");
 const Template = require("models/template");
 const templateKey = require("models/template/key");
 const Blog = require("models/blog");
+const folderPostSource = require("sync/update/folderPostSourceFolder");
 
 // What the sweep of generated files (./generated, #2688 section 7, #2745)
 // treats as in use: images from deleted posts, stale thumbnails, versions of
@@ -102,4 +103,39 @@ async function inUse(blogID, pattern) {
 
   return used;
 }
-module.exports = { inUse, referencesIn, SCOPES, ASSET_REFERENCE };
+// The paths to build again for the saved entries (not deleted) that mention
+// any of names
+// ("<scope>/<id>"): each entry's source, for the sweep to rebuild when those
+// directories have gone from the bucket (./generated)
+async function entriesMentioning(blogID, names) {
+  const wanted = new Set(names);
+  const paths = [];
+  const ids = wanted.size ? await Entries.getAllIDs(blogID) : [];
+
+  for (let i = 0; i < ids.length; i += ENTRY_BATCH) {
+    for (const entry of await Entry.get(
+      blogID,
+      ids.slice(i, i + ENTRY_BATCH)
+    )) {
+      if (!entry || entry.deleted || !entry.path) continue;
+
+      // A folder post is stored at its "+" folder's path without the "+"
+      // (/album for /album+), which isn't in the folder: rebuild its source
+      for (const name of referencesIn(entry, new Set()))
+        if (wanted.has(name)) {
+          paths.push(folderPostSource(entry) || entry.path);
+          break;
+        }
+    }
+  }
+
+  return paths;
+}
+
+module.exports = {
+  inUse,
+  referencesIn,
+  entriesMentioning,
+  SCOPES,
+  ASSET_REFERENCE,
+};
