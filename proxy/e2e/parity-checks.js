@@ -944,6 +944,7 @@ function corpus() {
     "/sites/sign-up",
     "/sites/account/password",
     "/sites/account",
+    "/sites/account/subscription/delete",
     "/sites/example",
     "/sites/example/templates",
     "/sites/example/import",
