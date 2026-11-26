@@ -208,18 +208,6 @@ async function lock(blogID, options = {}) {
   const cancelLockKey = cancelKey(blogID);
   const token = randomUUID() + ":" + Date.now();
 
-  // node-a in a unit only serves (helper/servesOnly, #2990): whatever takes
-  // a folder lock there is a path that should have gone to node-b. Logged
-  // with its stack, so it can be found and moved; to be refused once none
-  // remain.
-  if (servesOnly())
-    console.error(
-      clfdate(),
-      "[LOCK] taken in a serving-only process",
-      blogID,
-      new Error("Folder lock taken here").stack
-    );
-
   setupProbe();
 
   let acquired = false;
@@ -393,6 +381,18 @@ async function lock(blogID, options = {}) {
       throw cancelledError(lockKey, reason);
     }
   }
+
+  // node-a in a unit only serves (helper/servesOnly, #2990): whatever takes
+  // a folder lock there is a path that should have gone to node-b. Logged
+  // with its stack, so it can be found and moved; to be refused once none
+  // remain.
+  if (servesOnly())
+    console.error(
+      clfdate(),
+      "[LOCK] taken in a serving-only process",
+      blogID,
+      new Error("Folder lock taken here").stack
+    );
 
   held.add(handle);
   return handle;
