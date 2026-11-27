@@ -5,7 +5,7 @@ const mustache = require("mustache");
 const { marked } = require("marked");
 const { execFileSync } = require("child_process");
 const html = require("./html");
-const renderFolder = require("../tools/finder/render_folder");
+const pane = require("helper/pane");
 
 const viewsDirectory = path.join(__dirname, "../../views/templates");
 const outputDirectory = path.join(config.views_directory, "templates");
@@ -190,12 +190,15 @@ const folderPreviewForTemplate = (template, manifest = loadManifest()) => {
     : DEFAULT_FOLDER_PREVIEW;
 };
 
+// One "now" per build, so the folder windows' dates are as fresh as the deploy (pane PLAN.md, "Fresh dates").
+const BUILD_NOW = pane.isoNow();
+
+// The homepage card's folder window (shown on hover over the template's screenshot).
 const folderHTMLForTemplate = (template, manifest) =>
-  renderFolder(
-    folderPreviewForTemplate(template, manifest),
-    ["folder", "home-folder-preview"],
-    template.name
-  );
+  pane.folder(folderPreviewForTemplate(template, manifest), {
+    title: template.name,
+    now: BUILD_NOW,
+  }).html;
 
 const loadPartials = async () => {
   const partials = {};

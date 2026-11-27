@@ -413,15 +413,10 @@ a.bordered-button {
   overflow-y: auto;
 }
 
-.template-folder-wrapper .finder {
-  width: 100%;
-  max-width: 300px;
-  min-width: 0;
-  margin: 0;
-}
-
-.template-folder-wrapper .finder.folder-preview {
-  margin-left: 0;
+/* the template's folder, a pane window (app/helper/pane) */
+.template-folder-wrapper .pane {
+  --pane-w: 100%;
+  max-width: 400px;
 }
 
 .template-folder-wrapper .template-folder-download {
@@ -1419,11 +1414,6 @@ body.watch-page .main-section {
 .template-readme {
   max-width: 600px;
   margin: 48px auto;
-}
-
-.folder-preview {
-  width: 400px;
-  max-width: 100%;
 }
 
 @media screen and (max-width: 768px) {

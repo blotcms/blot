@@ -151,18 +151,14 @@
   pointer-events: none;
 }
 
-.home-template-folder .finder.window {
-  display: flex;
-  flex-direction: column;
+/* the template's folder, a pane window (app/helper/pane) in the visitor's OS look */
+.home-template-folder .pane {
+  --pane-w: 100%;
+  --pane-max: none;
   aspect-ratio: 1.4;
-  margin: 0;
-  box-shadow: 0 8px 22px rgb(0 0 0 / 23%), 0 3px 7px rgb(0 0 0 / 14%);
 }
 
-.home-template-folder .finder .contents {
-  flex: 1;
-  height: auto;
-  min-height: 0;
+.home-template-folder .pane-tree {
   overflow: hidden;
 }
 
