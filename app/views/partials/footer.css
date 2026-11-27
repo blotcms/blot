@@ -58,10 +58,12 @@ footer:not(.site-footer) a:hover {
   line-height: 1.5;
 }
 
+/* Four columns with the homepage's gutter: the intro in the first, the
+   link columns in the other three */
 .site-footer-top {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
-  gap: 3rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 3rem 24px;
   padding: 3rem 0 4rem;
 }
 
@@ -85,9 +87,10 @@ footer:not(.site-footer) a:hover {
 }
 
 .site-footer-columns {
+  grid-column: 2 / span 3;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 2rem;
+  gap: 2rem 24px;
 }
 
 .site-footer h2 {
@@ -176,6 +179,10 @@ footer:not(.site-footer) a:hover {
     grid-template-columns: minmax(0, 1fr);
     gap: 2.5rem;
     padding: 2.5rem 0 3rem;
+  }
+
+  .site-footer-columns {
+    grid-column: 1;
   }
 }
 
