@@ -34,9 +34,9 @@ describe("pane runner OS guard", function () {
   });
 
   it("passes on the recorded versions and ignores patch releases", function () {
-    expect(compare(expected, { os: "macos", version: "26.6" })).toEqual([]);
+    expect(compare(expected, { os: "macos", version: "26.7" })).toEqual([]);
     expect(
-      compare(expected, observe("darwin", { sh: () => "26.6.9" }))
+      compare(expected, observe("darwin", { sh: () => "26.7.9" }))
     ).toEqual([]);
     expect(compare(expected, { os: "windows", build: "26100" })).toEqual([]);
   });
