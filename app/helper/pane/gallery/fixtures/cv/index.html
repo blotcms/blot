@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Clara Xiao</title>
+    <style>
+      :root { color-scheme: light dark; --fg: #222; --head: #101010; --dim: #6e6e6e; --faint: #b3b3b3; --chip: #ececec; --chip-fg: #626262; --bg: #fff; }
+      @media (prefers-color-scheme: dark) {
+        :root { --fg: #e4e4e4; --head: #f5f5f5; --dim: #9b9b9b; --faint: #666; --chip: #2a2a2a; --chip-fg: #b5b5b5; --bg: #161616; }
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; color: var(--fg); background: var(--bg); font: 15px/1.55 -apple-system, "Segoe UI", system-ui, sans-serif; }
+      main { max-width: 620px; margin: 0 auto; padding: 72px 24px 96px; }
+      .profile { display: flex; align-items: center; gap: 20px; }
+      .profile img { width: 88px; height: 88px; border-radius: 50%; object-fit: cover; }
+      h1 { margin: 0 0 4px; color: var(--head); font-size: 24px; letter-spacing: -0.025em; line-height: 1.15; }
+      .profile p { margin: 0; color: var(--dim); }
+      .links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+      .links span { padding: 3px 12px; border-radius: 999px; color: var(--chip-fg); background: var(--chip); font-size: 12px; }
+      nav { display: flex; gap: 28px; margin-top: 48px; color: var(--faint); }
+      nav .current { color: var(--head); border-bottom: 1px solid currentColor; }
+      nav span { padding-bottom: 6px; }
+      h2 { margin: 48px 0 0; color: var(--head); font-size: 15px; }
+      .entry { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 12px; margin-top: 20px; }
+      time { color: var(--faint); font-size: 13px; }
+      h3 { margin: 0; color: var(--head); font-size: 15px; font-weight: 400; }
+      .entry p { margin: 2px 0 0; color: var(--dim); }
+      .gallery { display: flex; gap: 10px; margin-top: 14px; }
+      .gallery img { height: 84px; width: auto; border-radius: 4px; }
+      @media (max-width: 480px) { .entry { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="profile">
+        <img src="clara-profile.png" alt="Portrait of Clara Xiao" />
+        <div>
+          <h1>Clara Xiao</h1>
+          <p>Mathematician and computer scientist</p>
+          <div class="links"><span>Email</span><span>LinkedIn</span><span>GitHub</span></div>
+        </div>
+      </header>
+      <nav><span class="current">About</span><span>Writing</span></nav>
+      <p>I specialize in developing mathematical models and computational tools to solve complex problems in data science and artificial intelligence.</p>
+      <h2>Work Experience</h2>
+      <article class="entry">
+        <time>2025 — Now</time>
+        <div>
+          <h3>Data Science at QuantumCompute Labs</h3>
+          <p>Designed and implemented machine learning models to optimize quantum circuit simulations, reducing computation time by 30%. Conducted statistical analyses on experimental data, improving model performance accuracy by 15%.</p>
+          <div class="gallery">
+            <img src="work-house.png" alt="White coastal research building" />
+            <img src="work-coast.png" alt="Tree on a rocky coast" />
+            <img src="work-building.png" alt="Light-filled modern interior" />
+          </div>
+        </div>
+      </article>
+      <h2>Education</h2>
+      <article class="entry">
+        <time>2021 — 2025</time>
+        <div>
+          <h3>Computer Science and Mathematics</h3>
+          <p>Research in statistical learning, optimization, and computational methods.</p>
+        </div>
+      </article>
+      <h2>Selected writing</h2>
+      <p>Notes on models, data, and building useful tools.</p>
+    </main>
+  </body>
+</html>
