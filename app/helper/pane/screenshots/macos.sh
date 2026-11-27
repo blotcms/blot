@@ -38,6 +38,8 @@ win.orderFront(null);
 $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(600));
 JXA
 sleep 3
+# a sleeping display makes Safari stop painting its pages, so keep it awake
+caffeinate -dimsu >/dev/null 2>&1 &
 defaults write -g AppleShowScrollBars -string WhenScrolling
 # Trim the Finder toolbar to just back/forward (the window title stays): drop
 # the view switcher, search, arrange, share, tag and action buttons. Identifiers are Finder's own.
@@ -276,17 +278,28 @@ OSA
 # The runner's Safari sometimes shows its window blank (the page loaded, the server log has the requests, but
 # nothing painted). A page with photos is far bigger as a PNG than white, so measure that, and reload
 # (Cmd-R) until it paints; the log records each try.
-painted() {  # 0 when the page area has the page in it
-  screencapture -x -R$((L + 60)),$((T + 70)),$((R - L - 120)),$((B - T - 90)) /tmp/pane-painted.png 2>>"$OUT/browser.log"
+painted() {  # 0 when the page area has the page in it (below the toolbar's shadow, which is not blank either)
+  screencapture -x -R$((L + 60)),$((T + 150)),$((R - L - 120)),$((B - T - 170)) /tmp/pane-painted.png 2>>"$OUT/browser.log"
   local n; n=$(stat -f %z /tmp/pane-painted.png); echo "page png bytes: $n" >>"$OUT/browser.log"
-  [ "$n" -gt 30000 ]
+  [ "$n" -gt 12000 ]
 }
+safari_keys() { osascript -e 'tell application "System Events" to tell process "Safari" to set frontmost to true' -e "tell application \"System Events\" to $1" >>"$OUT/browser.log" 2>&1; }
+# Remedies, one per try: wait, reload (Cmd-R), nudge the window's size (a relayout), a new window on the
+# page (Cmd-N, then the old one closed), and a fresh Safari. Each failed try leaves a debug screenshot.
 wait_painted() {
   local i
-  for i in 1 2 3 4; do
+  for i in 1 2 3 4 5; do
     sleep 8
-    painted && return 0
-    osascript -e 'tell application "System Events" to tell process "Safari" to set frontmost to true' -e 'tell application "System Events" to keystroke "r" using command down' >>"$OUT/browser.log" 2>&1
+    painted && { echo "painted at try $i" >>"$OUT/browser.log"; return 0; }
+    screencapture -x "$OUT/debug-safari-unpainted-$i.png"
+    case $i in
+      1) safari_keys 'keystroke "r" using command down' ;;
+      2) osascript -e 'tell application "System Events" to tell process "Safari" to set size of window 1 to {780, 470}' >>"$OUT/browser.log" 2>&1; sleep 2; place ;;
+      3) safari_keys 'keystroke "n" using command down'; sleep 3
+         safari_keys 'keystroke "l" using command down'; safari_keys "keystroke \"https://$BROWSER_HOST/\""; safari_keys 'key code 36'; sleep 6
+         osascript -e 'tell application "System Events" to tell process "Safari" to click button 1 of window 2' >>"$OUT/browser.log" 2>&1; place ;;
+      4) pkill -x Safari; sleep 3; open -a Safari "https://$BROWSER_HOST/"; sleep 12; place ;;
+    esac
   done
   echo "page never painted" >>"$OUT/browser.log"; return 1
 }
