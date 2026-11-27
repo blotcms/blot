@@ -34,7 +34,9 @@ document
       var tab = document.createElement("li");
 
       // Generate a unique ID for the code block
-      var id = lang + "-" + blockIndex + "-" + i;
+      // (letters, digits and dashes only, so it is safe in the tab's href)
+      var id =
+        String(lang).replace(/[^a-z0-9-]/gi, "") + "-" + blockIndex + "-" + i;
 
       // Get the display name for the language from the dictionary, or use the language code itself if not found
       var text = dictionary[lang] || lang;
