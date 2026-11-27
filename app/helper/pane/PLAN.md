@@ -184,7 +184,7 @@ enough to judge by eye and by metric. Built; see `qa/README.md`.
 GitHub-hosted runners (light and dark) and commits the results to `reference/`.
 Scripts are in `screenshots/`. Findings from the first runs:
 
-- **macOS: works.** `macos-latest` is macOS 26.6.2 (Tahoe); `screencapture` and
+- **macOS: works.** `macos-latest` was macOS 26.6.2 (Tahoe) at the first runs, 26.7.2 since the 2026-11-27 update; `screencapture` and
   Finder AppleScript both work. Light/dark toggles via System Events. 1024x768,
   1x by default; Retina comes from a HiDPI virtual display (see below).
 - **Linux: works.** `ubuntu-latest` is Ubuntu 24.04 (GNOME Files 46,
