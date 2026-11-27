@@ -50,8 +50,17 @@
 // is safe for writes at once only while no two of them share a field: if two
 // paths are the same once folded as it folds them (names which differ in
 // case or Unicode form, or a file and a directory of one name), the writes
-// run one at a time, in order, as they always did, so the last one wins. At
-// most WRITE_CONCURRENCY blobs of SKIP_CHECK_BYTES are held at once.
+// run one at a time, in order, as they always did, so the last one wins.
+//
+// What the writes hold at once: a blob of up to SKIP_CHECK_BYTES is buffered
+// whole, and a delta-stored one of up to IN_MEMORY_DELTA_BYTES is built in
+// memory with its base (each up to that size too), so the writes hold under
+// about 100 MB however many files a push has. A bigger delta-stored blob is
+// built in the reader's scratch space instead, which the reader does
+// one at a time. A blob over SKIP_CHECK_BYTES goes to a spool file in the
+// tmp directory before its upload (storage/folder), up to WRITE_CONCURRENCY
+// of them at once, so tmp may hold that many large files together; the push
+// limit bounds their total.
 //
 // A failure part way leaves the folder part applied and rejects; the sync
 // runs the same range again, which ends where an uninterrupted run would.
@@ -71,6 +80,12 @@ const SKIP_CHECK_BYTES = 1024 * 1024;
 
 // How many files are written into the folder at once
 const WRITE_CONCURRENCY = 8;
+
+// The largest blob stored as a delta which a write builds in memory. Building
+// one holds its base, its deltas and the result at once, and WRITE_CONCURRENCY
+// writes may do so together, so a bigger one is built in the reader's scratch
+// space instead, which the reader does one at a time
+const IN_MEMORY_DELTA_BYTES = 4 * SKIP_CHECK_BYTES;
 
 function safeParts(file) {
   const parts = file.split("/");
@@ -197,7 +212,7 @@ async function bufferOf(stream) {
 
 // Writes a blob to the file at `parts`, in place of whatever is there
 async function writeBlob(blogID, reader, parts, oid, stats, made) {
-  const blob = await reader.stream(oid);
+  const blob = await reader.stream(oid, { maxSize: IN_MEMORY_DELTA_BYTES });
 
   if (!blob)
     throw new NotFoundError(
@@ -460,4 +475,5 @@ async function materialize({
 module.exports = materialize;
 module.exports.SKIP_CHECK_BYTES = SKIP_CHECK_BYTES;
 module.exports.WRITE_CONCURRENCY = WRITE_CONCURRENCY;
+module.exports.IN_MEMORY_DELTA_BYTES = IN_MEMORY_DELTA_BYTES;
 module.exports.EMPTY_TREE = EMPTY_TREE;

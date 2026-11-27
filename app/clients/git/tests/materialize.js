@@ -203,6 +203,9 @@ describe("git client: materialize", function () {
       scratch: cache,
     });
 
+    // The reader's scratch space, for a spec to watch
+    if (spec.watchScratch) spec.watchScratch(cache);
+
     return materialize({
       blogID: spec.blog.id,
       reader: reader,
@@ -772,6 +775,35 @@ describe("git client: materialize", function () {
     expect(await folder.read(this.blog.id, "/Å/two.txt")).toEqual(
       Buffer.from("Two")
     );
+  });
+
+  // Three files alike, so the pack stores two of them as deltas, each built
+  // from more than a write may build in memory at once
+  it("builds a large file stored as a delta in scratch space, not in memory", async function () {
+    var size = materialize.IN_MEMORY_DELTA_BYTES + 2 * 1024 * 1024;
+    var base = crypto.randomBytes(size);
+    var files = {};
+
+    for (var i = 0; i < 3; i++) {
+      var copy = Buffer.from(base);
+      copy.write("Edit " + i, i * 1024 * 1024);
+      files["copy-" + i + ".bin"] = copy;
+    }
+
+    var first = await commit(this, files);
+    var reserve = null;
+
+    this.watchScratch = function (scratch) {
+      reserve = spyOn(scratch, "reserve").and.callThrough();
+    };
+
+    await apply(this, EMPTY_TREE, first);
+
+    expect(reserve.calls.count()).toBeGreaterThanOrEqual(2);
+    for (var name of Object.keys(files))
+      expect(
+        Buffer.compare(await folder.read(this.blog.id, "/" + name), files[name])
+      ).toBe(0);
   });
 
   it(
