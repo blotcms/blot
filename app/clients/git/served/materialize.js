@@ -441,12 +441,15 @@ async function materialize({
   }
 
   const pending = writes.filter((write) => !write.moved);
-  const made = new Map();
+  // Overlapping names run one at a time, as they always did, and check each
+  // directory afresh: one write may replace a directory an earlier one made
+  // with a file (Å and Å/one.txt in another Unicode form), so a record of
+  // directories already made would be stale
+  const serial = overlapping(pending);
+  const made = serial ? undefined : new Map();
 
-  await mapLimit(
-    pending,
-    overlapping(pending) ? 1 : WRITE_CONCURRENCY,
-    (write) => writeBlob(blogID, reader, write.parts, write.oid, stats, made)
+  await mapLimit(pending, serial ? 1 : WRITE_CONCURRENCY, (write) =>
+    writeBlob(blogID, reader, write.parts, write.oid, stats, made)
   );
 
   log("Applied from the store: " + JSON.stringify(stats));

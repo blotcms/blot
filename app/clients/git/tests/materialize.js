@@ -753,6 +753,25 @@ describe("git client: materialize", function () {
     });
   });
 
+  // Three spellings of one name once in NFC, written in tree order: a
+  // directory, then a file in its place, then the directory again. Each write
+  // has to find the folder as the one before left it.
+  it("checks each directory afresh when a file replaces one in the same run", async function () {
+    var first = await commitExactly(this, {
+      "Å/one.txt": "One",
+      Å: "File",
+      "Å/two.txt": "Two",
+    });
+
+    watchWrites(this);
+    await apply(this, EMPTY_TREE, first);
+
+    expect(this.mostAtOnce).toBe(1);
+    expect(await folder.read(this.blog.id, "/Å/two.txt")).toEqual(
+      Buffer.from("Two")
+    );
+  });
+
   it(
     "writes a large file byte for byte, without holding it in memory",
     async function () {
