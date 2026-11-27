@@ -59,16 +59,25 @@ between runs; spellcheck is switched off. `pkill -f gnome-text-editor` kills the
 script itself (its command line contains the string), use `pkill -x gnome-text-edit`.
 
 ## Browser window (`-browser`)
-GNOME Web (Epiphany 46, `epiphany-browser`, a deb: Firefox and Chromium are snaps on this image) on
-`https://example.com/`, 720x400 logical px. It needs software rendering under Xvfb
+GNOME Web (Epiphany 46, `epiphany-browser`, a deb: Firefox and Chromium are snaps on this image) on the study's page
+(`fixture-assets/browser-page`), 720x400 logical px, loaded as `https://preview-of-cv-on-clara.blot.im/` so the address bar
+shows a padlock. The host is an `/etc/hosts` entry for 127.0.0.1 and `browser-server.py` (the macOS capture's server) serves the
+page on 443 as root. The certificate is self-signed with that name and `CA:TRUE`, copied to
+`/usr/local/share/ca-certificates/pane-browser.crt` and added with `update-ca-certificates`: WebKitGTK's TLS backend
+(glib-networking, GnuTLS) reads the system store (`/etc/ssl/certs`), not NSS. `capture-logs/*/browser.log` records the `curl` check
+("verify result 0" when the certificate is trusted). Epiphany needs software rendering under Xvfb
 (`WEBKIT_DISABLE_COMPOSITING_MODE=1`, `WEBKIT_DISABLE_DMABUF_RENDERER=1`,
 `WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1`, `GSK_RENDERER=cairo`) and its own `--profile` so nothing is
 restored. Traps found: (1) at 600px wide or less Epiphany switches to its phone layout with the toolbar at
 the bottom, so this window is wider than the 600px of macOS and Windows; (2) passing `--new-window` together
 with a URL opened two windows (the one that was resized and captured showed the start page); (3) a "Set as
 Default Browser?" dialog is a window of its own over the browser's corner: `org.gnome.Epiphany
-ask-for-default false`. `capture` takes a `keep` argument to skip its Ctrl-Shift-A (that key means something
-in a browser). `clear_stage` runs before each window; `stage.log` lists what was on screen.
+ask-for-default false`; (4) `pkill -f browser-server.py` inside the script kills the script itself (the function text is on
+the `bash -c` command line): the server is stopped with `sudo pkill -x python3`. `capture` takes a `keep` argument to skip its
+Ctrl-Shift-A (that key means something in a browser). `clear_stage` runs before each window; `stage.log` lists what was on screen.
+What the capture shows: the address bar reads `https://preview-of-cv-on-clara.blot.im/` cut off at the field's text area
+(about `https://preview-of-cv-on`, no ellipsis), dimmed (GNOME Web dims all but the registered domain, `blot.im`, which is past the
+cut), with the padlock on the left and the bookmark star on the right; no reader-mode button (the page is not an article).
 
 ## Desktop icons (`-desktop`)
 Stock GNOME has no desktop icons. Ubuntu's Desktop Icons NG (DING,

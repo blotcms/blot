@@ -163,6 +163,9 @@ jobs:
           Invoke-WebRequest "$base/os-versions.json" -OutFile os-versions.json
           New-Item -ItemType Directory -Force fixture-assets | Out-Null
           foreach ($f in "checker.png", "checker.gif", "checker.jpg", "checker.html", "notes.md", "draft.md", "report.docx", "text-sample.txt", "code-sample.html") { Invoke-WebRequest "$base/fixture-assets/$f" -OutFile "fixture-assets/$f" }
+          Invoke-WebRequest "$base/browser-server.py" -OutFile browser-server.py
+          New-Item -ItemType Directory -Force fixture-assets/browser-page/images | Out-Null
+          foreach ($f in "index.html", "images/clara-profile.png", "images/work-coast.png", "images/work-house.png", "images/work-building.png") { Invoke-WebRequest "$base/fixture-assets/browser-page/$f" -OutFile "fixture-assets/browser-page/$f" }
       - name: Check the runner's OS version
         shell: pwsh
         run: node check-os.js

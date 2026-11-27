@@ -305,7 +305,10 @@ try {
     Start-Sleep -Seconds 2
   }
 } catch { "editors failed: $_" | Out-File $log -Append }
-# Browser: Microsoft Edge (on the runner) on https://example.com, a small window (600x400
+# Browser: Microsoft Edge (on the runner) on the study's page (fixture-assets/browser-page), served over
+# HTTPS at https://preview-of-cv-on-clara.blot.im/ so the address bar reads that host with a padlock (as in
+# macos.sh): a hosts entry for 127.0.0.1, a self-signed certificate with that name trusted in the machine's
+# Root store, and browser-server.py on port 443. A small window (600x400
 # logical px). A separate profile with first-run, sync and the default-browser prompt off, so the
 # window is just the browser. Best-effort: debug screenshots show what the runner allowed.
 try {
@@ -313,6 +316,24 @@ try {
   $edge = Join-Path ${env:ProgramFiles(x86)} "Microsoft\Edge\Application\msedge.exe"
   if (-not (Test-Path $edge)) { $edge = "msedge.exe" }
   $edgeProfile = Join-Path $env:TEMP "pane-edge"
+  $browserHost = "preview-of-cv-on-clara.blot.im"
+  $browserDir = Join-Path $env:TEMP "pane-browser"
+  $blog = "$Out\browser.log"
+  Remove-Item -Recurse -Force $browserDir -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $browserDir | Out-Null
+  Copy-Item (Join-Path $assets "browser-page\*") $browserDir -Recurse -Force
+  $openssl = "C:\Program Files\Git\usr\bin\openssl.exe"
+  if (-not (Test-Path $openssl)) { $openssl = "openssl" }
+  $crt = Join-Path $env:TEMP "pane-browser.pem"; $key = Join-Path $env:TEMP "pane-browser.key"
+  & $openssl req -x509 -newkey rsa:2048 -nodes -days 30 -sha256 -subj "/CN=$browserHost" `
+    -addext "subjectAltName=DNS:$browserHost" -addext "extendedKeyUsage=serverAuth" -keyout $key -out $crt 2>&1 | Out-File $blog -Append
+  Add-Content -Path "$env:SystemRoot\System32\drivers\etc\hosts" -Value "127.0.0.1 $browserHost"
+  certutil -addstore -f Root $crt 2>&1 | Out-File $blog -Append
+  $py = if (Get-Command python -ErrorAction SilentlyContinue) { "python" } else { "python3" }
+  Start-Process $py -ArgumentList @("`"$(Join-Path $PSScriptRoot 'browser-server.py')`"", "`"$browserDir`"", "`"$crt`"", "`"$key`"") -WindowStyle Hidden `
+    -RedirectStandardError "$Out\browser-server.log" -RedirectStandardOutput "$Out\browser-server.out.log"
+  Start-Sleep -Seconds 3
+  "page: $(try { (Invoke-WebRequest -UseBasicParsing "https://$browserHost/").StatusCode } catch { "failed: $_" })" | Out-File $blog -Append
   Remove-Item -Recurse -Force $edgeProfile -ErrorAction SilentlyContinue
   # Toolbar clutter off, by policy (more reliable than driving the UI): the Copilot "Chat" button
   # and the sidebar, the sign-in / profile avatar with its red dot, first-run and the shopping and
@@ -324,7 +345,7 @@ try {
       @("EdgeCollectionsEnabled", 0), @("SyncDisabled", 1), @("PromotionalTabsEnabled", 0), @("ShowRecommendationsEnabled", 0))) {
     Set-ItemProperty -Path $pol -Name $kv[0] -Value $kv[1] -Type DWord
   }
-  Start-Process $edge -ArgumentList @("--user-data-dir=`"$edgeProfile`"", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--new-window", "https://example.com/")
+  Start-Process $edge -ArgumentList @("--user-data-dir=`"$edgeProfile`"", "--no-first-run", "--no-default-browser-check", "--disable-sync", "--new-window", "https://$browserHost/")
   Start-Sleep -Seconds 12
   $eg = Get-Process msedge -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object -First 1
   if (-not $eg) { "no edge window" | Out-File $log -Append } else {
@@ -343,6 +364,7 @@ try {
   }
 } catch { "browser failed: $_" | Out-File $log -Append }
 Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force
+Get-CimInstance Win32_Process -Filter "Name like 'python%'" -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*browser-server.py*" } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force }
 Clear-Stage "before the desktop icons"
 # Desktop icons: the "Your site" contents (files and the Fruits folder) as icons on the
 # desktop itself, on the grey desktop; the capture stops above the taskbar.

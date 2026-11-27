@@ -234,7 +234,7 @@ describe("pane Type cell and extension hiding", function () {
     expect(out).toContain(".pane-t{display:none}");
     expect(out).not.toContain("}.pane-x{display:none}");
     expect(out).toContain(
-      "[data-pin=win]:not([data-view=icons]):not([data-view=desktop]):not([data-view=browser]):not([data-view=text]):not([data-view=code])) .pane-x{display:none}"
+      "[data-pin=win]:not([data-view=icons]):not([data-view=desktop]):not([data-view=text]):not([data-view=code])) .pane-x{display:none}"
     );
   });
 });

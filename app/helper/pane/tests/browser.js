@@ -29,6 +29,21 @@ describe("pane browser window", function () {
     expect(fig.children(".pane-page").children("iframe").length).toBe(1);
   });
 
+  it("marks the subdomain, which GNOME Web dims, inside the host", function () {
+    const sub = (url) => dom(pane.browser({ url }).html)(".pane-u-b").text();
+    expect(sub("https://preview-of-cv-on-clara.blot.im/")).toBe(
+      "preview-of-cv-on-clara."
+    );
+    expect(sub("https://a.b.example.co.uk:8080/")).toBe("a.b.");
+    expect(sub("https://www.example.com/")).toBe("");
+    expect(sub("https://example.com/")).toBe("");
+    expect(sub("http://127.0.0.1:8000/")).toBe("");
+    expect(sub("http://localhost/")).toBe("");
+    expect(
+      dom(pane.browser({ url: "https://a.blot.im/" }).html)(".pane-u-h").text()
+    ).toBe("a.blot.im");
+  });
+
   it("splits the address into parts a skin can show or hide", function () {
     const $ = dom(
       pane.browser({ url: "https://www.example.com:8080/a/b?x=1#y" }).html
@@ -160,33 +175,40 @@ describe("pane browser window", function () {
   });
 
   describe("skins", function () {
-    it("is built for macOS; Windows and Linux fall back to the macOS look", function () {
+    it("is built for macOS, Windows and Linux, so none falls back to another", function () {
       expect(css.viewsOf("mac")).toContain("browser");
-      expect(css.viewsOf("win")).not.toContain("browser");
-      expect(css.viewsOf("linux")).not.toContain("browser");
-      expect(css.group("mac")).toContain(
+      expect(css.viewsOf("win")).toContain("browser");
+      expect(css.viewsOf("linux")).toContain("browser");
+      expect(css.group("mac")).not.toContain(
         "html[data-os=win] .pane[data-view=browser]:not([data-pin])"
       );
-      expect(css.group("mac")).toContain(
+      expect(css.group("mac")).not.toContain(
         "html[data-os=linux] .pane[data-view=browser]:not([data-pin])"
       );
-      expect(css.group("win")).toContain(":not([data-view=browser])");
-      expect(css.group("linux")).toContain(":not([data-view=browser])");
+      expect(css.group("win")).not.toContain(":not([data-view=browser])");
+      expect(css.group("linux")).not.toContain(":not([data-view=browser])");
     });
 
-    it("drops an os pin that has no browser skin, and keeps mac", function () {
-      let $ = dom(pane.browser({ url: "a.com", os: "win" }).html);
+    it("keeps an os pin that has a browser skin (mac, win, linux) and drops an unknown one", function () {
+      let $ = dom(pane.browser({ url: "a.com", os: "beos" }).html);
       expect($("figure").attr("data-pin")).toBeUndefined();
       expect(warn).toHaveBeenCalled();
       $ = dom(pane.browser({ url: "a.com", os: "mac" }).html);
       expect($("figure").attr("data-pin")).toBe("mac");
+      $ = dom(pane.browser({ url: "a.com", os: "win" }).html);
+      expect($("figure").attr("data-pin")).toBe("win");
+      $ = dom(pane.browser({ url: "a.com", os: "linux" }).html);
+      expect($("figure").attr("data-pin")).toBe("linux");
     });
 
-    it("ships the macOS skin's rules and glyphs in the one stylesheet", function () {
+    it("ships the macOS, Windows and Linux skins' rules and glyphs in the one stylesheet", function () {
       const { css: out } = pane.assets();
       expect(out).toContain(".pane-url");
       expect(out).toContain("--br-bar:");
+      expect(out).toContain("--br-strip:");
       expect(out).not.toContain("icon:mac");
+      expect(out).not.toContain("icon:win");
+      expect(out).not.toContain("icon:linux");
     });
   });
 

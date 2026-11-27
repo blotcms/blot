@@ -33,7 +33,9 @@ const EDITORS = {
 // fixture-assets/browser-page as https://preview-of-cv-on-clara.blot.im/; the other captures
 // are still on example.com until recaptured). The images are inlined: a srcdoc page has no base URL.
 const BROWSER_URL = "https://preview-of-cv-on-clara.blot.im/";
-const browserPage = () => {
+// The page's font is system-ui: GNOME Web resolves it to Cantarell, the runner's Chrome to DejaVu Sans, so the
+// Linux case names Cantarell (a visitor's own browser shows their own system-ui, which is the point of it).
+const browserPage = (os) => {
   const dir = path.join(
     __dirname,
     "..",
@@ -43,6 +45,7 @@ const browserPage = () => {
   );
   return fs
     .readFileSync(path.join(dir, "index.html"), "utf8")
+    .replace("system-ui", os === "linux" ? "Cantarell,system-ui" : "system-ui")
     .replace(/src="(images\/[\w-]+\.png)"/g, (m, file) => {
       const data = fs.readFileSync(path.join(dir, file)).toString("base64");
       return `src="data:image/png;base64,${data}"`;
@@ -127,7 +130,7 @@ async function render(caseId, c) {
       c.os === "windows" ? (await referenceGeometry(c)).size : c.windowSize;
     const result = pane.browser({
       url: BROWSER_URL,
-      html: browserPage(),
+      html: browserPage(c.os),
       title: "Clara Xiao",
       width: `${size.width}px`,
       height: `${size.height}px`,

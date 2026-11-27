@@ -1,0 +1,42 @@
+/* Windows 11 Microsoft Edge: a square window, a 39px tab strip (the tab list button, the active tab with its globe, title and
+   close, a new-tab plus, and the three caption buttons), a 39px toolbar (back, reload, the address field with its padlock and
+   star, favourites, the profile picture and the menu) and the page in a rounded, hairline-bordered frame. Coordinates are CSS px
+   from the window's top-left (the capture is 2x). The strip is .pane-bar (its background is the tab shapes, ::after the glyphs),
+   the toolbar's right group .pane-head (absolute, 105px, so the address field has a node to keep clear of), the address field .pane-url; .pane::before is the caption buttons and .pane::after the back and
+   reload glyphs. Glyphs are masks painted with --br-fg. A skin for another OS places the same nodes itself (DESIGN.md,
+   Browser windows). */
+@light{--br-strip:#e3e3e3;--br-tool:#fff;--br-fg:#1b1b1b;--br-dim:#5f5f5f;--br-lock:#636363;--br-field:#fff;--br-ring:#d1d1d1;--br-frame:#e3e3e3;--br-tab:url(icon:win/br-tab)}
+@dark{--br-strip:#000;--br-tool:#333;--br-fg:#fff;--br-dim:#9c9c9c;--br-lock:#9c9c9c;--br-field:#242424;--br-ring:#4b4b4b;--br-frame:#3f3f3f;--br-tab:url(icon:win/br-tab-d);.pane.pane-br .pane-frame{color-scheme:dark}}
+.pane.pane-br{--pane-w:600px;--pane-h:400px;padding-bottom:0;background:var(--br-tool);color:var(--br-fg);font:12px/16px "Segoe UI Variable Text","Segoe UI Variable","Segoe UI",system-ui,sans-serif;border-radius:0;box-shadow:none}
+.pane.pane-br::before{content:"";z-index:1;left:auto;right:0;top:0;width:138px;height:39px;background:var(--br-fg);-webkit-mask:url(icon:win/br-caption) 0 0/138px 39px no-repeat;mask:url(icon:win/br-caption) 0 0/138px 39px no-repeat}
+.pane.pane-br::after{content:"";position:absolute;z-index:1;left:0;top:39px;width:76px;height:39px;background:var(--br-fg);-webkit-mask:url(icon:win/br-left) 0 0/76px 39px no-repeat;mask:url(icon:win/br-left) 0 0/76px 39px no-repeat}
+.pane.pane-br .pane-bar{height:39px;padding:0;box-sizing:border-box;line-height:16px;font-weight:400;font-size:12px;overflow:visible;background:var(--br-tab) 0 0/288px 39px no-repeat,var(--br-strip)}
+.pane.pane-br .pane-bar::before{display:none}
+.pane.pane-br .pane-bar::after{content:"";position:absolute;left:0;top:0;width:320px;height:39px;background:var(--br-fg);-webkit-mask:url(icon:win/br-strip) 0 0/320px 39px no-repeat;mask:url(icon:win/br-strip) 0 0/320px 39px no-repeat}
+.pane.pane-br .pane-tab{display:block;position:absolute;left:72px;top:3px;width:170px;height:32px;line-height:32px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--br-fg)}
+.pane.pane-br .pane-bar{margin-bottom:39px}
+.pane.pane-br .pane-head{position:absolute;right:0;top:39px;width:105px;height:39px;margin:0;background:none}
+.pane.pane-br .pane-head::before{content:"";position:absolute;left:0;top:0;width:105px;height:39px;background:var(--br-fg);-webkit-mask:url(icon:win/br-right) 0 0/105px 39px no-repeat;mask:url(icon:win/br-right) 0 0/105px 39px no-repeat}
+.pane.pane-br .pane-head::after{content:"";position:absolute;left:auto;right:44.5px;top:8.5px;bottom:auto;width:23px;height:23px;background:url(icon:win/br-avatar) 0 0/23px 23px no-repeat}
+.pane.pane-br .pane-url{z-index:1;left:76.5px;right:112.5px;top:43px;height:32px;padding:0 34px 0 31.5px;border-radius:16px;background:var(--br-field);box-shadow:inset 0 0 0 1px var(--br-ring);font:14px/32px "Segoe UI Variable Text","Segoe UI Variable","Segoe UI",system-ui,sans-serif;color:var(--br-fg)}
+.pane.pane-br .pane-url::before{content:"";position:absolute;left:10px;top:9.5px;width:11px;height:13px;background:var(--br-lock);-webkit-mask:url(icon:win/br-lock) center/11px 13px no-repeat;mask:url(icon:win/br-lock) center/11px 13px no-repeat}
+.pane.pane-br .pane-url::after{content:"";position:absolute;right:8px;top:8px;width:16px;height:16px;background:var(--br-lock);-webkit-mask:url(icon:win/br-star) center/16px 16px no-repeat;mask:url(icon:win/br-star) center/16px 16px no-repeat}
+.pane.pane-br .pane-u-s{color:var(--br-dim)}
+.pane.pane-br .pane-u-w{display:none}
+.pane.pane-br .pane-u-r{display:none}
+.pane.pane-br[data-secure=false] .pane-url::before{-webkit-mask-image:url(icon:win/br-warn);mask-image:url(icon:win/br-warn);width:14px;height:14px;top:9px;left:8px;-webkit-mask-size:14px 14px;mask-size:14px 14px}
+.pane.pane-br[data-secure=false] .pane-u-s::before{content:"Not secure";color:var(--br-fg);margin:0 12px 0 0}
+.pane.pane-br[data-secure=false] .pane-url{padding-left:31px}
+.pane.pane-br .pane-page{margin:0 3px 2.5px;border:.5px solid var(--br-frame);border-radius:8px;box-sizing:border-box;overflow:hidden}
+@container (max-width:519px){
+.pane.pane-br .pane-head{display:none}
+.pane.pane-br .pane-url{right:10px}
+}
+@container (max-width:419px){
+.pane.pane-br::before{display:none}
+.pane.pane-br .pane-tab{width:calc(100% - 140px)}
+}
+@container (max-width:339px){
+.pane.pane-br::after{display:none}
+.pane.pane-br .pane-url{left:10px}
+}

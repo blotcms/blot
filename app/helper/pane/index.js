@@ -8,7 +8,7 @@
 //   pane.folder(tree, opts) -> { html } | null     markup for one folder window
 //   pane.text(text, opts)   -> { html }            text editor window (macOS built)
 //   pane.code(code, opts)   -> { html }            code editor window: highlighted, no wrapping (macOS built)
-//   pane.browser(opts)      -> { html }            browser window: address field + a page (macOS built)
+//   pane.browser(opts)      -> { html }            browser window: address field + a page (macOS, Windows, Linux built)
 //   pane.assets()           -> { css, js }         once per page (static, cacheable)
 //   pane.transform($, { now })                     cheerio: replaces pre.folder|text|code|browser
 //   pane.isoNow()                                  "now" in the form `now` takes (UTC)
