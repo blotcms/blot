@@ -5,7 +5,21 @@
 //
 // Fixture URLs ("/fixtures/...") are served by the gallery from ./fixtures.
 
+const fs = require("fs");
+const path = require("path");
+
 const NOW = "2026-09-20T15:38:00";
+
+// The CV page as static HTML (pane shows it in a sandboxed srcdoc iframe), its images inlined as data
+// URIs so the page needs no requests of its own (some embedded browsers block a sandboxed frame's loads).
+const CV_DIR = path.join(__dirname, "fixtures/cv");
+const CV_HTML = fs
+  .readFileSync(path.join(CV_DIR, "index.html"), "utf8")
+  .replace(
+    /src="([\w.-]+\.png)"/g,
+    (m, file) =>
+      `src="data:image/png;base64,${fs.readFileSync(path.join(CV_DIR, file)).toString("base64")}"`
+  );
 
 // A realistic Blot site folder, for the list view.
 const SITE_TREE = `Posts
@@ -41,9 +55,9 @@ const SITE_FILES = {
 
 // The software-hero study: a Finder icons view titled "Blot".
 const HERO_TREE = `Blot/
-weaver-long-name-finishes.jpg
-Toucan.jpg
-fly-with-even-longer-name-that-gets-truncated.jpg
+weaver-long-name-finishes.jpg | [img=/fixtures/weaver-long-name-finishes.jpg]
+Toucan.jpg | [img=/fixtures/Toucan.jpg]
+fly-with-even-longer-name-that-gets-truncated.jpg | [img=/fixtures/fly-with-even-longer-name-that-gets-truncated.jpg]
 Post.md
 Atlas.html`;
 
@@ -74,36 +88,23 @@ module.exports = {
     files: SITE_FILES,
   },
 
-  // Thumbnails: `thumbnails` is what the pane-blot-icons branch is expected to take (file name -> image URL);
-  // pane ignores it until then and the gallery shows plain icons. Rename it here when the name is fixed.
+  // The software-hero study: Finder's icons view with the photos as their own icons ([img=URL] row
+  // attribute) and the view-mode button in the toolbar, as the study's screenshot has it.
   finderIcons: {
-    options: {
-      title: "Blot",
-      view: "icons",
-      now: NOW,
-      thumbnails: {
-        "weaver-long-name-finishes.jpg":
-          "/fixtures/weaver-long-name-finishes.jpg",
-        "Toucan.jpg": "/fixtures/Toucan.jpg",
-        "fly-with-even-longer-name-that-gets-truncated.jpg":
-          "/fixtures/fly-with-even-longer-name-that-gets-truncated.jpg",
-      },
-    },
+    options: { title: "Blot", view: "icons", toolbar: "view", now: NOW },
     tree: HERO_TREE,
     // true when a render carries the thumbnails (an <img> in the window): the gallery notes it otherwise
     expectsImages: true,
   },
 
-  // The pane-browser branch's window. `render` is the one place that knows its signature.
+  // The software-browser study: Safari on the CV page (./fixtures/cv, also served at /fixtures/cv/).
   browser: {
     url: "preview-of-cv-on-clara.blot.im",
     src: "/fixtures/cv/",
     title: "Clara Xiao",
+    html: CV_HTML,
     render: (pane, theme, fx) =>
-      pane.browser(
-        { url: fx.url, src: fx.src, title: fx.title },
-        { theme, title: fx.title, url: fx.url, src: fx.src }
-      ),
+      pane.browser({ url: fx.url, html: fx.html, title: fx.title, theme }),
   },
 
   desktop: {
@@ -115,21 +116,32 @@ Toucan.jpg
 Notes.txt`,
   },
 
-  // The logos study: the Blot folder icon. Every variant is rendered through the same call; a variant
-  // whose options pane does not know yet renders like the plain one, and the gallery says so.
+  // The logos study: the Blot folder icon. A variant may replace the tree (selection is a row
+  // attribute, "Blot | [selected]") and add options; one that renders like the plain icon is flagged.
   logos: {
-    tree: "Blot/",
+    tree: "Blot",
     base: { view: "desktop", title: "Blot folder", now: NOW },
     variants: [
       { id: "default", label: "Default", options: {} },
-      { id: "selected", label: "Selected", options: { selected: ["Blot"] } },
-      { id: "large", label: "Large", options: { size: "large" } },
+      {
+        id: "selected",
+        label: "Selected",
+        tree: "Blot | [selected]",
+        options: {},
+      },
+      { id: "large", label: "Large", options: { iconSize: "large" } },
       {
         id: "large-selected",
         label: "Large, selected",
-        options: { size: "large", selected: ["Blot"] },
+        tree: "Blot | [selected]",
+        options: { iconSize: "large" },
       },
-      { id: "small", label: "Small", options: { size: "small" } },
+      {
+        id: "small",
+        label: "Small, selected (list row)",
+        tree: "Blot | [selected]",
+        options: { view: "list" },
+      },
     ],
   },
 
