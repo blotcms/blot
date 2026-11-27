@@ -6,7 +6,7 @@
    reload glyphs. Glyphs are masks painted with --br-fg. A skin for another OS places the same nodes itself (DESIGN.md,
    Browser windows). */
 @light{--br-strip:#e3e3e3;--br-tool:#fff;--br-fg:#1b1b1b;--br-dim:#5f5f5f;--br-lock:#636363;--br-field:#fff;--br-ring:#d1d1d1;--br-frame:#e3e3e3;--br-tab:url(icon:win/br-tab)}
-@dark{--br-strip:#000;--br-tool:#333;--br-fg:#fff;--br-dim:#9c9c9c;--br-lock:#9c9c9c;--br-field:#242424;--br-ring:#4b4b4b;--br-frame:#3f3f3f;--br-tab:url(icon:win/br-tab-d)}
+@dark{--br-strip:#000;--br-tool:#333;--br-fg:#fff;--br-dim:#9c9c9c;--br-lock:#9c9c9c;--br-field:#242424;--br-ring:#4b4b4b;--br-frame:#3f3f3f;--br-tab:url(icon:win/br-tab-d);.pane.pane-br .pane-frame{color-scheme:dark}}
 .pane.pane-br{--pane-w:600px;--pane-h:400px;padding-bottom:0;background:var(--br-tool);color:var(--br-fg);font:12px/16px "Segoe UI Variable Text","Segoe UI Variable","Segoe UI",system-ui,sans-serif;border-radius:0;box-shadow:none}
 .pane.pane-br::before{content:"";z-index:1;left:auto;right:0;top:0;width:138px;height:39px;background:var(--br-fg);-webkit-mask:url(icon:win/br-caption) 0 0/138px 39px no-repeat;mask:url(icon:win/br-caption) 0 0/138px 39px no-repeat}
 .pane.pane-br::after{content:"";position:absolute;z-index:1;left:0;top:39px;width:76px;height:39px;background:var(--br-fg);-webkit-mask:url(icon:win/br-left) 0 0/76px 39px no-repeat;mask:url(icon:win/br-left) 0 0/76px 39px no-repeat}
@@ -27,7 +27,7 @@
 .pane.pane-br[data-secure=false] .pane-url::before{-webkit-mask-image:url(icon:win/br-warn);mask-image:url(icon:win/br-warn);width:14px;height:14px;top:9px;left:8px;-webkit-mask-size:14px 14px;mask-size:14px 14px}
 .pane.pane-br[data-secure=false] .pane-u-s::before{content:"Not secure";color:var(--br-fg);margin:0 12px 0 0}
 .pane.pane-br[data-secure=false] .pane-url{padding-left:31px}
-.pane.pane-br .pane-page{margin:0 3px 2.5px 3.5px;border:.5px solid var(--br-frame);border-radius:8px;box-sizing:border-box;overflow:hidden}
+.pane.pane-br .pane-page{margin:0 3px 2.5px;border:.5px solid var(--br-frame);border-radius:8px;box-sizing:border-box;overflow:hidden}
 @container (max-width:519px){
 .pane.pane-br .pane-head{display:none}
 .pane.pane-br .pane-url{right:10px}
