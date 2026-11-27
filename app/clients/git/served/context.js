@@ -25,9 +25,12 @@ const STORES = 1000;
 
 // The object store for a blog: the storage bucket, under <blogID>/git/. The
 // S3 client is asked for on each request, because storage/s3 replaces it if
-// its configuration changes. Each request it sends is counted (counting.js):
-// a large pack's put is several, and a long list several pages. Specs replace
-// this with _setObjectStore.
+// its configuration changes. It is storage/s3's client for this store: the
+// same bucket and credentials, but a socket which has gone quiet gives up
+// after config.git_store.s3_socket_timeout_ms, sooner than for the other users
+// of the bucket (a push or a sync is waiting, holding a lock). Each request it
+// sends is counted (counting.js): a large pack's put is several, and a long
+// list several pages. Specs replace this with _setObjectStore.
 function s3ObjectStore(blogID) {
   const s3 = require("storage/s3");
 
@@ -37,7 +40,9 @@ function s3ObjectStore(blogID) {
     client: {
       send: (command) => {
         counting.sent();
-        return s3.client().send(command);
+        return s3
+          .client({ socketTimeout: config.git_store.s3_socket_timeout_ms })
+          .send(command);
       },
     },
     bucket: config.storage.bucket,

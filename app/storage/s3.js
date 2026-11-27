@@ -32,6 +32,11 @@ const CACHE_CONTROL = "public, max-age=31536000, immutable";
 const UPLOAD_ATTEMPTS = 3;
 const UPLOAD_RETRY_DELAY_MS = 200;
 
+// How long a socket may sit with no bytes before the request fails with a
+// TimeoutError. It is idle time, not the length of a request.
+const SOCKET_TIMEOUT_MS = 120000;
+
+// The clients built for the current configuration, one per socket timeout
 let current = null;
 
 const NOT_CONFIGURED =
@@ -59,18 +64,25 @@ function key(blogID, relPath) {
 }
 
 // The client is created on first use, from config.storage as it is then, and
-// replaced if that configuration changes.
-function client() {
+// replaced if that configuration changes. options.socketTimeout (ms of
+// silence on a socket) gives a caller which can't wait as long as the others
+// a client of its own, kept alongside the shared one; reset() drops them all.
+function client(options) {
+  const socketTimeout = (options && options.socketTimeout) || SOCKET_TIMEOUT_MS;
   const { region, endpoint } = config.storage;
   const signature = [region, endpoint, config.aws.key, config.aws.secret].join(
     "|"
   );
 
-  if (current && current.signature === signature) return current.client;
+  if (current && current.signature !== signature) reset();
 
-  if (current) current.client.destroy();
+  if (!current) current = { signature, clients: new Map() };
 
-  const options = {
+  if (current.clients.has(socketTimeout)) {
+    return current.clients.get(socketTimeout);
+  }
+
+  const settings = {
     region,
     // The default of calculating a CRC32 for every request isn't supported by
     // every S3-compatible store (B2, older MinIO). Only do it where required.
@@ -80,30 +92,34 @@ function client() {
       connectionTimeout: 5000,
       // idle time on the socket, not the length of a request. requestTimeout
       // is the length of a request, and only logs unless told to throw.
-      socketTimeout: 120000,
+      socketTimeout,
     },
   };
 
   if (endpoint) {
-    options.endpoint = endpoint;
-    options.forcePathStyle = true;
+    settings.endpoint = endpoint;
+    settings.forcePathStyle = true;
   }
 
   if (config.aws.key && config.aws.secret) {
-    options.credentials = {
+    settings.credentials = {
       accessKeyId: config.aws.key,
       secretAccessKey: config.aws.secret,
     };
   }
 
-  current = { signature, client: new (SDK().S3Client)(options) };
+  const created = new (SDK().S3Client)(settings);
 
-  return current.client;
+  current.clients.set(socketTimeout, created);
+
+  return created;
 }
 
 // Forgets the client so the next call builds one from the current config.
 function reset() {
-  if (current) current.client.destroy();
+  if (current) {
+    for (const created of current.clients.values()) created.destroy();
+  }
   current = null;
 }
 
