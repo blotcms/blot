@@ -203,6 +203,9 @@ describe("git client: materialize", function () {
       scratch: cache,
     });
 
+    // The reader's scratch space, for a spec to watch
+    if (spec.watchScratch) spec.watchScratch(cache);
+
     return materialize({
       blogID: spec.blog.id,
       reader: reader,
@@ -671,6 +674,136 @@ describe("git client: materialize", function () {
       "two/copy.txt": Buffer.from("Same"),
       "three.txt": Buffer.from("Same"),
     });
+  });
+
+  // Each write held for a moment, so writes running at once overlap. Resolves
+  // the most that were running at once, and counts storage.mkdir's calls.
+  function watchWrites(spec) {
+    var write = storage.write;
+    var mkdir = storage.mkdir;
+    var running = 0;
+
+    spec.mostAtOnce = 0;
+    spec.made = {};
+
+    spyOn(storage, "write").and.callFake(async function () {
+      running++;
+      spec.mostAtOnce = Math.max(spec.mostAtOnce, running);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return await write.apply(storage, arguments);
+      } finally {
+        running--;
+      }
+    });
+
+    spyOn(storage, "mkdir").and.callFake(function (blogID, directory) {
+      spec.made[directory] = (spec.made[directory] || 0) + 1;
+      return mkdir.apply(storage, arguments);
+    });
+  }
+
+  it("writes several files at once, making each directory once", async function () {
+    var changes = {};
+    var expected = { "posts/": true };
+
+    for (var i = 0; i < 30; i++) {
+      var name = "posts/" + (i % 3) + "/post-" + i + ".txt";
+      changes[name] = "Post " + i;
+      expected[name] = Buffer.from("Post " + i);
+      expected["posts/" + (i % 3) + "/"] = true;
+    }
+
+    var first = await commit(this, changes);
+
+    // A file in the way of the directory every write needs, which only one
+    // of them may clear
+    await folder.write(this.blog.id, "/posts", "In the way");
+    watchWrites(this);
+
+    expect((await apply(this, EMPTY_TREE, first)).length).toBe(30);
+    expect(await listBlog(this)).toEqual(expected);
+    expect(this.mostAtOnce).toBeGreaterThan(1);
+    expect(this.mostAtOnce).toBeLessThanOrEqual(materialize.WRITE_CONCURRENCY);
+    expect(this.made).toEqual({
+      "/posts": 1,
+      "/posts/0": 1,
+      "/posts/1": 1,
+      "/posts/2": 1,
+    });
+    expect(this.logs).toContain(
+      'Applied from the store: {"written":30,"unchanged":0,"moved":0,"removed":0}'
+    );
+  });
+
+  it("writes one file at a time when two names differ only in case", async function () {
+    var first = await commitExactly(this, {
+      "a.txt": "Lower",
+      "A.txt": "Upper",
+      "b.txt": "B",
+      "c.txt": "C",
+    });
+
+    watchWrites(this);
+    await apply(this, EMPTY_TREE, first);
+
+    expect(this.mostAtOnce).toBe(1);
+    expect(await listBlog(this)).toEqual({
+      "A.txt": Buffer.from("Upper"),
+      "a.txt": Buffer.from("Lower"),
+      "b.txt": Buffer.from("B"),
+      "c.txt": Buffer.from("C"),
+    });
+  });
+
+  // Three spellings of one name once in NFC, written in tree order: a
+  // directory, then a file in its place, then the directory again. Each write
+  // has to find the folder as the one before left it.
+  // The three names below look alike but are A with a combining ring (NFD),
+  // U+00C5 (NFC) and U+212B, the Angstrom sign: keep their bytes.
+  it("checks each directory afresh when a file replaces one in the same run", async function () {
+    var first = await commit(this, {
+      "Å/one.txt": "One",
+      Å: "File",
+      "Å/two.txt": "Two",
+    });
+
+    watchWrites(this);
+    await apply(this, EMPTY_TREE, first);
+
+    expect(this.mostAtOnce).toBe(1);
+    expect(await folder.read(this.blog.id, "/Å/two.txt")).toEqual(
+      Buffer.from("Two")
+    );
+  });
+
+  // Three files alike, so the pack stores two of them as deltas, each built
+  // from more than a write may build in memory at once
+  it("builds a large file stored as a delta in scratch space, not in memory", async function () {
+    var size = materialize.IN_MEMORY_DELTA_BYTES + 2 * 1024 * 1024;
+    var base = crypto.randomBytes(size);
+    var files = {};
+
+    for (var i = 0; i < 3; i++) {
+      var copy = Buffer.from(base);
+      copy.write("Edit " + i, i * 1024 * 1024);
+      files["copy-" + i + ".bin"] = copy;
+    }
+
+    var first = await commit(this, files);
+    var reserve = null;
+
+    this.watchScratch = function (scratch) {
+      reserve = spyOn(scratch, "reserve").and.callThrough();
+    };
+
+    await apply(this, EMPTY_TREE, first);
+
+    expect(reserve.calls.count()).toBeGreaterThanOrEqual(2);
+    for (var name of Object.keys(files))
+      expect(
+        Buffer.compare(await folder.read(this.blog.id, "/" + name), files[name])
+      ).toBe(0);
   });
 
   it(
