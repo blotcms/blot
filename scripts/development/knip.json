@@ -34,7 +34,14 @@
     "app/blog/static/syntax-highlighter/build.js",
     "app/build/plugins/katex/preview.js",
     "app/build/plugins/katex/build-css.js",
-    "scripts/benchmarks/spec/build-render.spec.js"
+    "scripts/benchmarks/spec/build-render.spec.js",
+    "app/helper/pane/qa/index.js",
+    "app/helper/pane/qa/diff.js",
+    "app/helper/pane/qa/render.js",
+    "app/helper/pane/qa/backdrop.js",
+    "app/helper/pane/qa/a11y.js",
+    "app/helper/pane/qa/pane-adapter.js",
+    "app/helper/pane/qa/public/app.js"
   ],
   "paths": {
     "blog": ["app/blog"],

@@ -1,0 +1,24 @@
+/* macOS Finder (Tahoe), icon view. (.pane-icon.pane-k-x beats the dark list icons in mac.css.) The window chrome is mac.css; this is the grid, the 64px
+   icons and the two-line labels. Rooted at .pane[data-view=icons] so list rules never mix. */
+@light{--ish:drop-shadow(0 1px 1.5px rgba(0,0,0,.18))}
+@dark{--ish:none}
+.pane[data-view=icons] .pane-head{display:none}
+.pane[data-view=icons] .pane-tree{display:grid;grid-template-columns:repeat(auto-fill,112px);grid-auto-rows:112px;justify-content:start;padding:14px 0 8px 10px}
+.pane[data-view=icons] .pane-tree>li{display:flex;flex-direction:column;align-items:center;min-width:0}
+.pane[data-view=icons] .pane-icon{position:relative;top:auto;left:auto;flex:none;width:64px;height:64px;margin:0;filter:var(--ish)}
+.pane[data-view=icons] .pane-label{flex:none;box-sizing:border-box;width:104px;margin-top:7px;padding:0;height:32px;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:anywhere;
+display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font:12px/16px -apple-system,"SF Pro Text",system-ui,sans-serif;color:var(--fg)}
+.pane[data-view=icons] .pane-icon.pane-k-folder{background-image:url(icon:mac/big-folder)}
+.pane[data-view=icons] .pane-icon.pane-k-text{background-image:url(icon:mac/big-page)}
+.pane[data-view=icons] .pane-icon.pane-k-md{background-image:url(icon:mac/big-md)}
+.pane[data-view=icons] .pane-icon.pane-k-doc{background-image:url(icon:mac/big-doc)}
+.pane[data-view=icons] .pane-icon.pane-k-html{background-image:url(icon:mac/big-html)}
+.pane[data-view=icons] .pane-icon.pane-k-generic{background-image:url(icon:mac/big-generic)}
+.pane[data-view=icons] .pane-icon.pane-k-link{background-image:url(icon:mac/big-link)}
+.pane[data-view=icons] .pane-icon.pane-k-image{background-image:url(icon:mac/big-image)}
+.pane[data-view=icons] .pane-k-generic::after,.pane[data-view=icons] .pane-k-link::after{position:absolute;left:11px;width:42px;top:47px;overflow:hidden;text-align:center;font:500 8.5px/10px -apple-system,"SF Pro Text",system-ui,sans-serif;color:#c6c6c6}
+.pane[data-view=icons] .pane-k-generic::after{content:attr(data-ext)}
+.pane[data-view=icons] .pane-k-link::after{content:"HTTP"}
+@media (forced-colors:active){
+.pane[data-view=icons] .pane-icon{filter:none}
+}

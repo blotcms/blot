@@ -202,6 +202,21 @@ module.exports = [
     },
   },
 
+  // pane's QA viewer runs in the browser, and its audit, renderer and Chrome specs pass
+  // functions to puppeteer's page.evaluate, which run there too
+  {
+    files: [
+      "app/helper/pane/qa/public/**/*.js",
+      "app/helper/pane/qa/lib/audit.js",
+      "app/helper/pane/qa/lib/render.js",
+      "app/helper/pane/tests/editor-chrome.js",
+      "app/helper/pane/tests/icons.js",
+    ],
+    languageOptions: {
+      globals: { ...globals.browser },
+    },
+  },
+
   // Jasmine specs
   {
     files: [

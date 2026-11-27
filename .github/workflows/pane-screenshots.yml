@@ -1,0 +1,232 @@
+# Spike for app/helper/pane: can hosted runners screenshot a real Finder,
+# File Explorer and GNOME Files window? Uploads whatever we manage to capture
+# as artifacts. Every capture step is best-effort so one failing platform
+# doesn't hide the others' results. See app/helper/pane/PLAN.md.
+name: pane-screenshots
+
+on:
+  # Manual only: reference captures should never run on a normal push (they commit
+  # new reference PNGs, which should be a deliberate act, not a side effect of a push).
+  workflow_dispatch:
+    inputs:
+      os:
+        description: "Which OS to capture"
+        type: choice
+        options: [all, macos, windows, linux]
+        default: all
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pane-screenshots-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Homebrew: don't self-update or clean up (slow), it only installs cliclick
+  HOMEBREW_NO_AUTO_UPDATE: 1
+  HOMEBREW_NO_INSTALL_CLEANUP: 1
+
+jobs:
+  # Works out which OSes need capturing, so a change to macos.sh doesn't spend
+  # Windows and Linux minutes. Shared files (the fixture, its assets, this file) run
+  # everything. The commit job only replaces the OSes that ran.
+  plan:
+    runs-on: ubuntu-latest
+    outputs:
+      macos: ${{ steps.plan.outputs.macos }}
+      windows: ${{ steps.plan.outputs.windows }}
+      linux: ${{ steps.plan.outputs.linux }}
+    steps:
+      - id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          CHOICE: ${{ inputs.os }}
+          BEFORE: ${{ github.event.before }}
+        run: |
+          macos=false; windows=false; linux=false
+          all() { macos=true; windows=true; linux=true; }
+          if [ "$EVENT" = workflow_dispatch ]; then
+            case "$CHOICE" in
+              macos) macos=true ;; windows) windows=true ;; linux) linux=true ;; *) all ;;
+            esac
+          elif files="$(gh api "repos/${{ github.repository }}/compare/$BEFORE...${{ github.sha }}" --jq '.files[].filename' 2>/dev/null)" && [ -n "$files" ]; then
+            while read -r f; do
+              case "$f" in
+                app/helper/pane/screenshots/macos.sh|app/helper/pane/screenshots/hidpi.m) macos=true ;;
+                app/helper/pane/screenshots/windows.ps1) windows=true ;;
+                app/helper/pane/screenshots/linux.sh) linux=true ;;
+                app/helper/pane/screenshots/*|.github/workflows/pane-screenshots.yml) all ;;
+              esac
+            done <<< "$files"
+          else
+            all   # a new branch or an API error: capture everything
+          fi
+          echo "macos=$macos" >> "$GITHUB_OUTPUT"
+          echo "windows=$windows" >> "$GITHUB_OUTPUT"
+          echo "linux=$linux" >> "$GITHUB_OUTPUT"
+          echo "capturing: macos=$macos windows=$windows linux=$linux"
+
+  # The runner labels are pinned (not -latest) to the versions in
+  # app/helper/pane/screenshots/os-versions.json, and check-os.js fails the job when the OS
+  # is not what the references were captured on. To move to a new OS see UPDATING-OS.md.
+  linux:
+    needs: plan
+    if: needs.plan.outputs.linux == 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [light, dark]
+        scale: [2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # the workflow file is included so hashFiles() below can see it
+          sparse-checkout: |
+            app/helper/pane/screenshots
+            .github/workflows
+      # apt downloads dominate this job: keep the .deb files between runs
+      - uses: actions/cache@v4
+        with:
+          path: ~/apt-archives
+          key: apt-${{ runner.os }}-${{ hashFiles('.github/workflows/pane-screenshots.yml') }}
+      - name: Install GNOME Files and screenshot tools
+        run: |
+          sudo mkdir -p "$HOME/apt-archives/partial"
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends -o Dir::Cache::archives="$HOME/apt-archives" \
+            nautilus gnome-text-editor openbox x11-xserver-utils libglib2.0-bin xvfb xdotool imagemagick dbus-x11 dconf-gsettings-backend \
+            gsettings-desktop-schemas adwaita-icon-theme gnome-themes-extra \
+            fonts-cantarell libadwaita-1-0 librsvg2-common adwaita-icon-theme-full shared-mime-info \
+            gnome-shell-extension-desktop-icons-ng gjs xcompmgr x11-utils epiphany-browser
+      # after the install: it also reads the Nautilus and libadwaita versions
+      - name: Check the runner's OS version
+        run: node app/helper/pane/screenshots/check-os.js
+      - name: Screenshot
+        run: xvfb-run -a -s "-screen 0 2560x2400x24 +extension Composite" bash app/helper/pane/screenshots/linux.sh ${{ matrix.theme }} out ${{ matrix.scale }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pane-linux-${{ matrix.theme }}-${{ matrix.scale }}x
+          path: out
+          if-no-files-found: warn
+
+  macos:
+    needs: plan
+    if: needs.plan.outputs.macos == 'true'
+    runs-on: macos-26
+    strategy:
+      fail-fast: false
+      matrix:
+        theme: [light, dark]
+        scale: [2]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: app/helper/pane/screenshots
+      # cliclick's Homebrew bottle
+      - uses: actions/cache@v4
+        with:
+          path: ~/Library/Caches/Homebrew
+          key: brew-${{ runner.os }}-cliclick-1
+      - name: Check the runner's OS version
+        run: node app/helper/pane/screenshots/check-os.js
+      - name: Screenshot
+        run: bash app/helper/pane/screenshots/macos.sh ${{ matrix.theme }} out ${{ matrix.scale }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pane-macos-${{ matrix.theme }}-${{ matrix.scale }}x
+          path: out
+          if-no-files-found: warn
+
+  windows:
+    needs: plan
+    if: needs.plan.outputs.windows == 'true'
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [windows-2025]
+        theme: [light, dark]
+        scale: [2]
+    steps:
+      # the repo contains filenames Windows can't check out, so fetch just the script
+      - name: Fetch script
+        shell: pwsh
+        run: |
+          $base = "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/app/helper/pane/screenshots"
+          Invoke-WebRequest "$base/windows.ps1" -OutFile windows.ps1
+          Invoke-WebRequest "$base/check-os.js" -OutFile check-os.js
+          Invoke-WebRequest "$base/os-versions.json" -OutFile os-versions.json
+          New-Item -ItemType Directory -Force fixture-assets | Out-Null
+          foreach ($f in "checker.png", "checker.gif", "checker.jpg", "checker.html", "notes.md", "draft.md", "report.docx", "text-sample.txt", "code-sample.html") { Invoke-WebRequest "$base/fixture-assets/$f" -OutFile "fixture-assets/$f" }
+      - name: Check the runner's OS version
+        shell: pwsh
+        run: node check-os.js
+      - name: Screenshot
+        shell: pwsh
+        run: ./windows.ps1 -Theme ${{ matrix.theme }} -Out out -Label windows -Scale ${{ matrix.scale }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: pane-windows-${{ matrix.theme }}-${{ matrix.scale }}x
+          path: out
+          if-no-files-found: warn
+
+  # Commits the captures to app/helper/pane/reference so they show up in the
+  # pull request. Pushes made with GITHUB_TOKEN don't trigger new workflow runs.
+  commit:
+    needs: [plan, linux, macos, windows]
+    if: ${{ !cancelled() && github.ref_type == 'branch' && github.ref != 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: captured
+      - name: Commit images
+        run: |
+          REF=app/helper/pane/reference
+          # only the OSes that ran: the others keep their committed screenshots
+          seen=""
+          for dir in captured/pane-*; do
+            [ -d "$dir" ] || continue
+            name="${dir#captured/pane-}"     # e.g. macos-light-2x
+            os="${name%%-*}"
+            case " $seen " in *" $os "*) ;; *) seen="$seen $os" ;; esac
+          done
+          for os in $seen; do
+            rm -f "$REF/$os"/*.png
+            rm -rf "$REF/resources/$os/capture-logs"
+            mkdir -p "$REF/$os" "$REF/resources/$os/capture-logs"
+          done
+          for dir in captured/pane-*; do
+            [ -d "$dir" ] || continue
+            name="${dir#captured/pane-}"
+            os="${name%%-*}"
+            for f in "$dir"/*; do
+              base="$(basename "$f")"
+              case "$base" in
+                # the screenshots are named <os>-<theme>[@2x][-view].png
+                "$os"-*.png) cp "$f" "$REF/$os/" ;;
+                debug-*.png) ;;  # debug images stay in the run's artifacts, not the repo
+                # everything else (logs, versions) is a resource
+                *) mkdir -p "$REF/resources/$os/capture-logs/$name"; cp "$f" "$REF/resources/$os/capture-logs/$name/" ;;
+              esac
+            done
+          done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f "$REF"
+          git diff --cached --quiet && exit 0
+          git commit -m "Update pane reference screenshots"
+          # other pushes (people, agents, the pane-qa bot) can land in between
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin "${{ github.ref_name }}" && git push origin "HEAD:${{ github.ref_name }}" && break
+            sleep $((attempt * 5))
+          done
