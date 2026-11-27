@@ -756,8 +756,10 @@ describe("git client: materialize", function () {
   // Three spellings of one name once in NFC, written in tree order: a
   // directory, then a file in its place, then the directory again. Each write
   // has to find the folder as the one before left it.
+  // The three names below look alike but are A with a combining ring (NFD),
+  // U+00C5 (NFC) and U+212B, the Angstrom sign: keep their bytes.
   it("checks each directory afresh when a file replaces one in the same run", async function () {
-    var first = await commitExactly(this, {
+    var first = await commit(this, {
       "Å/one.txt": "One",
       Å: "File",
       "Å/two.txt": "Two",
