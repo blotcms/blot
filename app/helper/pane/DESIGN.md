@@ -642,11 +642,11 @@ measured off a wallpaper is later work, gated on the two-backdrop capture plan i
     for the whole build) adds `pane-hl` to a highlighted code window; `mac-editor.css` then sets an Xcode-like `--tok-*`
     palette (light and dark). Off by default: TextEdit shows plain text.
 
-### Browser windows (`pane.browser`), macOS and Windows built; the contract for the other skins
+### Browser windows (`pane.browser`), macOS, Windows and Linux built
 
 `pane.browser({ url, html | src, title, tint, sandbox, os, theme, width, height })` (`lib/browser.js`, skin
 `css/mac-browser.css`, structure in `css/base.css`). One DOM for all three OSes, so the Windows (Edge) and Linux (GNOME Web)
-skins are CSS only: `css/win-browser.css` (built), `css/linux-browser.css`. Until one exists, that OS's visitors get the macOS look
+skins are CSS only: `css/win-browser.css` and `css/linux-browser.css`. An OS without a `css/<os>-browser.css` would get the macOS look
 (`lib/css.js`: `browser` is in `VIEWS`, so a skin without `css/<os>-browser.css` is excluded from `.pane[data-view=browser]`
 and the default skin takes them, exactly as with the icons view; an `os` pin for it is dropped with a warning).
 
@@ -708,13 +708,26 @@ and the default skin takes them, exactly as with the icons view; an `os` pin for
   `data-secure=false` a warning glyph and "Not secure" before it. Tokens are `--br-strip`, `--br-tool`, `--br-field` and so on
   (`win-browser.css`); dark has a black strip, `#333` toolbar and tab, `#242424` field. Below 520px the toolbar's right group
   goes, below 420px the caption buttons, below 340px back and reload.
-- **QA.** Cases `macos-{light,dark}-browser` (region `titlebar` is the top 52px), `windows-{light,dark}-browser` (Edge) and, for the
-  next skin, `linux-{light,dark}-browser` (GNOME Web, informational in `qa/thresholds.json` until its skin exists: drop the
-  flag and tighten with it). `qa/pane-adapter.js` renders every OS's case with the capture's page
-  (`screenshots/fixture-assets/browser-page`, images inlined) at the reference's window size. The macOS and Windows captures load
-  that page, the study's, from a local HTTPS server as `https://preview-of-cv-on-clara.blot.im/` (`screenshots/macos.sh`,
-  `screenshots/windows.ps1`: hosts entry, trusted self-signed certificate, `browser-server.py`), so Edge shows the host with a
-  padlock; the Linux reference is still on example.com until its capture script follows. The Windows cases are tight except
+- **Linux (GNOME Web, Epiphany 46, libadwaita)** measures to the 2x capture (`css/linux-browser.css`): window 720x400 with the
+  folder window's frame (border, 3px ring, 1px inner line, 12px radius, no shadow: the capture has no compositor), one 46px header
+  bar. GNOME Web shows no tab strip with one tab, so `.pane-tab` stays hidden. The bar draws its glyphs as two mask sprites
+  (`icons/linux/br-l.svg` back, forward, reload, new tab, left-anchored; `br-r.svg` apps, library, main menu and the window
+  buttons, right-anchored) over the three window-button discs (as in the folder skin); back and forward are `--off`. The address
+  field is `.pane-url`, 224x34, radius 6, centred between the two glyph groups; its padlock (from `data-secure`) and bookmark star
+  are background images (`br-lock-*`, `br-star-*`, one per theme: coloured files, because a mask would be clipped with the text),
+  and the text is clipped 32px from the right by a transparent border, with no ellipsis, as the capture is. The scheme, `www.` and
+  the path are dim (50%), the host is not. GNOME Web dims every part but the registered domain, so a subdomain such as
+  `preview-of-cv-on-clara.` is dim in the capture and dark here. Under 620px the apps and library buttons go, under 440px the
+  forward, reload, new tab and main menu buttons too (GNOME Web itself moves its toolbar to the bottom below 600px). The capture
+  (`screenshots/linux.sh`) loads the study's page over HTTPS from `browser-server.py` at `https://preview-of-cv-on-clara.blot.im/`
+  (an `/etc/hosts` entry; a self-signed CA:TRUE certificate added with `update-ca-certificates`, which GNOME Web's TLS backend, GnuTLS,
+  reads), so the field shows the padlock.
+- **QA.** Cases `macos-{light,dark}-browser` (region `titlebar` is the top 52px), `windows-{light,dark}-browser` (Edge) and
+  `linux-{light,dark}-browser` (GNOME Web). `qa/pane-adapter.js` renders every OS's case with the capture's page
+  (`screenshots/fixture-assets/browser-page`, images inlined) at the reference's window size. All three captures load that page,
+  the study's, from a local HTTPS server as `https://preview-of-cv-on-clara.blot.im/` (`screenshots/macos.sh`,
+  `screenshots/windows.ps1`, `screenshots/linux.sh`: hosts entry, trusted self-signed certificate, `browser-server.py`), so each
+  browser shows the host with a padlock. The Windows cases are tight except
   for one gap: Edge's dark page has a dark scrollbar, the rendered iframe keeps a light one (the sandboxed page's colour scheme
   is its own), so `windows-dark-browser` has a loose `rowYOffset` (see the note in `thresholds.json`). `qa/lib/audit.js` has browser
   samples (static, live, long address, empty) for every skin.
