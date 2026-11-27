@@ -417,6 +417,13 @@ html[data-auth="in"] .signed-in {
   }
 
   .public-nav-links a {
-    padding-inline: 11px;
+    padding-inline: 8px;
+  }
+}
+
+/* Five links don't fit a phone's width: About stays in the footer */
+@media (max-width: 400px) {
+  .public-nav-links li:nth-child(4) {
+    display: none;
   }
 }
