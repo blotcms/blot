@@ -147,14 +147,36 @@ CSS
   done
 
   # Browser: GNOME Web (Epiphany, WebKitGTK; a deb, unlike Firefox and Chromium which are snaps
-  # on this image) on https://example.com, a small window (720x400 logical px). A profile of its
-  # own so nothing is restored; WebKit and GTK are told to render in software (no GPU under Xvfb).
+  # on this image), a small window (720x400 logical px) on the study's page (fixture-assets/browser-page),
+  # served over HTTPS at https://preview-of-cv-on-clara.blot.im/ so the address bar reads that host with a
+  # padlock. The host is an /etc/hosts entry for 127.0.0.1; the certificate is self-signed with that name
+  # (CA:TRUE, so it can be its own trust anchor) and added to the system store with update-ca-certificates,
+  # which is what WebKitGTK's TLS backend (glib-networking, GnuTLS) reads; browser-server.py serves the
+  # directory on 443 (the runner has passwordless sudo). browser.log records the curl check of the trust.
+  # A profile of its own so nothing is restored; WebKit and GTK are told to render in software (no GPU under Xvfb).
+  BROWSER_HOST="preview-of-cv-on-clara.blot.im"
+  BROWSER_DIR="/tmp/pane-browser"
+  {
+    rm -rf "$BROWSER_DIR"; mkdir -p "$BROWSER_DIR"
+    cp -R "$HERE/fixture-assets/browser-page/." "$BROWSER_DIR/"
+    openssl req -x509 -newkey rsa:2048 -nodes -days 30 -sha256 -subj "/CN=$BROWSER_HOST" \
+      -addext "subjectAltName=DNS:$BROWSER_HOST" -addext "extendedKeyUsage=serverAuth" \
+      -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,digitalSignature,keyCertSign" \
+      -keyout /tmp/pane-browser.key -out /tmp/pane-browser.pem
+    grep -q "$BROWSER_HOST" /etc/hosts || echo "127.0.0.1 $BROWSER_HOST" | sudo tee -a /etc/hosts
+    sudo cp /tmp/pane-browser.pem /usr/local/share/ca-certificates/pane-browser.crt
+    sudo update-ca-certificates
+    sudo pkill -x python3 || true
+    sudo python3 "$HERE/browser-server.py" "$BROWSER_DIR" /tmp/pane-browser.pem /tmp/pane-browser.key >"$OUT/browser-server.log" 2>&1 &
+    sleep 2
+    curl -sS -o /dev/null -w "page: %{http_code} (verify result %{ssl_verify_result}, 0 when the certificate is trusted)\n" "https://$BROWSER_HOST/"
+  } >>"$OUT/browser.log" 2>&1
   clear_stage "browser"
   rm -rf "$HOME/pane-epiphany"
   # no "Set as Default Browser?" dialog (a window of its own, over the browser's corner)
   gsettings set org.gnome.Epiphany ask-for-default false || true
   WEBKIT_DISABLE_COMPOSITING_MODE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 GSK_RENDERER=cairo \
-    epiphany --profile="$HOME/pane-epiphany" https://example.com/ >"$OUT/epiphany.log" 2>&1 &
+    epiphany --profile="$HOME/pane-epiphany" "https://$BROWSER_HOST/" >"$OUT/epiphany.log" 2>&1 &
   sleep 20
   WID=""; BEST=0
   for w in $(xdotool search --class epiphany) $(xdotool search --class Epiphany); do
@@ -175,6 +197,7 @@ CSS
     echo "no epiphany window" >> "$OUT/geometry.txt"
     import -window root "$OUT/debug-epiphany.png"
   fi
+  sudo pkill -x python3 >>"$OUT/browser.log" 2>&1
   clear_stage "before the desktop icons"
 
   # Desktop icons: stock GNOME has none. Ubuntu ships Desktop Icons NG (DING), a GJS app
