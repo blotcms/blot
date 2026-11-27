@@ -23,7 +23,10 @@ async function main() {
       args.all ||
       args.view ||
       ["default", "text", "code"].includes(c.view) ||
-      (c.view === "icons" && c.os === "macos")
+      (["icons", "hero", "iconssel", "large", "largesel", "listsel"].includes(
+        c.view
+      ) &&
+        c.os === "macos")
   );
   if (!cases.length) {
     console.error("No cases match.");

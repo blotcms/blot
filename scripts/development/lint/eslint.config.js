@@ -211,6 +211,7 @@ module.exports = [
       "app/helper/pane/qa/lib/render.js",
       "app/helper/pane/tests/editor-chrome.js",
       "app/helper/pane/tests/icons.js",
+      "app/helper/pane/tests/blot-icons.js",
     ],
     languageOptions: {
       globals: { ...globals.browser },

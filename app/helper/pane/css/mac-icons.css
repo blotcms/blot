@@ -1,13 +1,17 @@
 /* macOS Finder (Tahoe), icon view. (.pane-icon.pane-k-x beats the dark list icons in mac.css.) The window chrome is mac.css; this is the grid, the 64px
-   icons and the two-line labels. Rooted at .pane[data-view=icons] so list rules never mix. */
-@light{--ish:drop-shadow(0 1px 1.5px rgba(0,0,0,.18))}
-@dark{--ish:none}
+   icons and the two-line labels. Rooted at .pane[data-view=icons] so list rules never mix. --is is the icon size (64px; 128px with .pane-lg, the
+   large icons), --k the same as a plain number for the pieces drawn in px (the file-type captions). Selection (li.pane-sel): a grey backing 1/8 larger
+   than the icon and a blue pill round the name. Thumbnails (.pane-th): the picture itself, in an <img>. */
+@light{--ish:drop-shadow(0 1px 1.5px rgba(0,0,0,.18));--selbg:#e6e6e6;--selpill:#0064e1;--thsh:0 0 0 .5px rgba(0,0,0,.22),0 1px 2.5px rgba(0,0,0,.34)}
+@dark{--ish:none;--selbg:#313131;--selpill:#0059d2;--thsh:0 0 0 .5px rgba(255,255,255,.18),0 1px 2.5px rgba(0,0,0,.6)}
+.pane[data-view=icons]{--is:64px;--k:1;--cw:112px;--lw:104px}
+.pane[data-view=icons].pane-lg{--is:128px;--k:2;--cw:176px;--lw:168px}
 .pane[data-view=icons] .pane-head{display:none}
-.pane[data-view=icons] .pane-tree{display:grid;grid-template-columns:repeat(auto-fill,112px);grid-auto-rows:112px;justify-content:start;padding:14px 0 8px 10px}
-.pane[data-view=icons] .pane-tree>li{display:flex;flex-direction:column;align-items:center;min-width:0}
-.pane[data-view=icons] .pane-icon{position:relative;top:auto;left:auto;flex:none;width:64px;height:64px;margin:0;filter:var(--ish)}
-.pane[data-view=icons] .pane-label{flex:none;box-sizing:border-box;width:104px;margin-top:7px;padding:0;height:32px;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:anywhere;
-display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font:12px/16px -apple-system,"SF Pro Text",system-ui,sans-serif;color:var(--fg)}
+.pane[data-view=icons] .pane-tree{display:grid;grid-template-columns:repeat(auto-fill,var(--cw));grid-auto-rows:var(--cw);justify-content:start;padding:14px 0 8px 10px}
+.pane[data-view=icons] .pane-tree>li{position:relative;display:flex;flex-direction:column;align-items:center;min-width:0}
+.pane[data-view=icons] .pane-icon{position:relative;top:auto;left:auto;flex:none;width:var(--is);height:var(--is);margin:0;filter:var(--ish)}
+.pane[data-view=icons] .pane-label{flex:none;box-sizing:border-box;width:var(--lw);margin-top:7px;padding:0;height:32px;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:anywhere;
+display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font:12px/16px -apple-system,"SF Pro Text",system-ui,sans-serif;color:var(--fg);--pr:0px;--pb:0px}
 .pane[data-view=icons] .pane-icon.pane-k-folder{background-image:url(icon:mac/big-folder)}
 .pane[data-view=icons] .pane-icon.pane-k-text{background-image:url(icon:mac/big-page)}
 .pane[data-view=icons] .pane-icon.pane-k-md{background-image:url(icon:mac/big-md)}
@@ -16,9 +20,31 @@ display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:
 .pane[data-view=icons] .pane-icon.pane-k-generic{background-image:url(icon:mac/big-generic)}
 .pane[data-view=icons] .pane-icon.pane-k-link{background-image:url(icon:mac/big-link)}
 .pane[data-view=icons] .pane-icon.pane-k-image{background-image:url(icon:mac/big-image)}
-.pane[data-view=icons] .pane-k-generic::after,.pane[data-view=icons] .pane-k-link::after{position:absolute;left:11px;width:42px;top:47px;overflow:hidden;text-align:center;font:500 8.5px/10px -apple-system,"SF Pro Text",system-ui,sans-serif;color:#c6c6c6}
+.pane[data-view=icons] .pane-k-generic::after,.pane[data-view=icons] .pane-k-link::after{position:absolute;left:calc(11px*var(--k));width:calc(42px*var(--k));top:calc(47px*var(--k));overflow:hidden;text-align:center;font:500 calc(8.5px*var(--k))/calc(10px*var(--k)) -apple-system,"SF Pro Text",system-ui,sans-serif;color:#c6c6c6}
 .pane[data-view=icons] .pane-k-generic::after{content:attr(data-ext)}
 .pane[data-view=icons] .pane-k-link::after{content:"HTTP"}
+/* a thumbnail: the picture, kept in proportion inside the icon box, in a thin white frame */
+.pane[data-view=icons] .pane-icon.pane-th[class]{display:flex;align-items:center;justify-content:center;background:none}
+.pane[data-view=icons] .pane-th img{display:block;box-sizing:border-box;width:auto;height:auto;max-width:calc(var(--is)*.875);max-height:calc(var(--is)*.875);padding:calc(2px*var(--k));background:#fff;box-shadow:var(--thsh)}
+/* a name too long for two lines keeps its start on the first line and its end (the extension) at the end of the second: the
+   start (.pane-m) is clipped to two lines, a float (its shape starts at the second line) reserves the room of the end (.pane-e, --n characters),
+   and the end is drawn there after an ellipsis. */
+.pane[data-view=icons] .pane-m{display:block;max-height:32px;overflow:hidden}
+.pane[data-view=icons] .pane-m::before{content:"";float:right;width:calc(var(--n)*6.2px + 10px);height:32px;shape-outside:inset(16px 0 0 0)}
+.pane[data-view=icons] .pane-e{position:absolute;right:var(--pr);bottom:var(--pb);white-space:nowrap}
+.pane[data-view=icons] .pane-e::before{content:"\2026"}
+/* selected */
+.pane[data-view=icons] .pane-sel::before{content:"";position:absolute;left:calc((var(--cw) - var(--is)*1.125)/2);top:calc(var(--is)*-.0625);width:calc(var(--is)*1.125);height:calc(var(--is)*1.125);box-sizing:border-box;border-radius:calc(var(--is)*.14);background:var(--selbg)}
+.pane[data-view=icons] .pane-sel .pane-label{width:fit-content;height:auto;max-height:34px;padding:1px 5px;border-radius:5px;background:var(--selpill);color:#fff;--pr:5px;--pb:1px}
 @media (forced-colors:active){
 .pane[data-view=icons] .pane-icon{filter:none}
+.pane[data-view=icons] .pane-sel::before{background:Highlight}
+.pane[data-view=icons] .pane-sel .pane-label{background:Highlight;color:HighlightText}
+}
+/* the view-mode button of Finder's toolbar (grid icon and chevron), on request (toolbar:"view"). It is the chrome node .pane-head. */
+.pane.pane-vb[data-view=icons] .pane-head{display:block;position:absolute;right:12px;top:8px;width:60px;height:36px;box-sizing:border-box;border-radius:18px;background:var(--pill);box-shadow:inset 0 0 0 1px var(--pill-ring),0 4px 32px var(--pill-sh)}
+.pane.pane-vb[data-view=icons] .pane-head i{display:none}
+.pane.pane-vb[data-view=icons] .pane-head::after{content:"";position:absolute;inset:0;background:var(--nav);-webkit-mask:url(icon:mac/view) center/60px 36px no-repeat;mask:url(icon:mac/view) center/60px 36px no-repeat}
+@container (max-width:439px){
+.pane.pane-vb[data-view=icons] .pane-head{display:none}
 }

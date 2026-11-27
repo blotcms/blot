@@ -63,7 +63,41 @@ Photo.jpg
 Tasks.org`;
 
 // the harness names the default view "default"; the module calls it "list"
-const VIEW = { default: "list" };
+const VIEW = { default: "list", listsel: "list" };
+
+// The Blot study captures (screenshots/macos.sh "hero"): a folder named "Blot" in icon view with the
+// study's toolbar, in Finder's by-name order, the photos as real thumbnails (the fixture's own files, as
+// data URIs so the page needs no server). hero/iconssel are 64pt icons, large/largesel 128pt; the
+// "sel" ones have the folder (and Toucan.jpg at 64pt) selected.
+const photo = (name) =>
+  `data:image/jpeg;base64,${fs
+    .readFileSync(
+      path.join(__dirname, "..", "screenshots", "fixture-assets", "hero", name)
+    )
+    .toString("base64")}`;
+const STUDY = {
+  hero: { selected: [] },
+  iconssel: { selected: ["Blot", "Toucan.jpg"] },
+  large: { selected: [], iconSize: "large" },
+  largesel: { selected: ["Blot"], iconSize: "large" },
+};
+const studyTree = (selected) =>
+  [
+    "Atlas.html",
+    "Blot",
+    "fly-with-even-longer-name-that-gets-truncated.jpg",
+    "Post.md",
+    "Toucan.jpg",
+    "weaver-long-name-finishes.jpg",
+  ]
+    .map((name) => {
+      const attrs = [
+        selected.includes(name) && "[selected]",
+        name.endsWith(".jpg") && `[img=${photo(name)}]`,
+      ].filter(Boolean);
+      return [name, ...attrs].join(" | ");
+    })
+    .join("\n");
 
 // The QA windows have the reference's fixed size and are never pinned: the harness
 // chooses the skin with <html data-os> and the theme with prefers-color-scheme.
@@ -76,6 +110,20 @@ async function render(caseId, c) {
     });
     return { html: result.html, ...pane.assets() };
   }
+  if (STUDY[c.view]) {
+    if (c.os !== "macos") return null;
+    const { selected, iconSize } = STUDY[c.view];
+    const result = pane.folder(studyTree(selected), {
+      title: "Blot",
+      view: "icons",
+      toolbar: "view",
+      iconSize,
+      width: `${c.windowSize.width}px`,
+      height: `${c.windowSize.height}px`,
+    });
+    return { html: result.html, ...pane.assets() };
+  }
+  if (c.view === "listsel" && c.os !== "macos") return null;
   if (c.os === "windows" && c.view !== "default") return null; // a view study: fixtures
   // Only the mac skin has an icons view so far; the others use their fixtures. Finder's capture
   // lays its icons out by hand (a fifth column is cut by the window edge, index.html and
@@ -90,7 +138,9 @@ async function render(caseId, c) {
   const tree =
     c.view === "icons"
       ? ICONS_TREE
-      : { windows: FLAT, linux: LINUX_TREE }[c.os] || TREE;
+      : c.view === "listsel"
+        ? TREE.replace("Fruits", "Fruits | [selected]")
+        : { windows: FLAT, linux: LINUX_TREE }[c.os] || TREE;
   const result = pane.folder(tree, {
     title: sample.title,
     view: VIEW[c.view] || c.view,
