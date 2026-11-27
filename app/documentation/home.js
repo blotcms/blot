@@ -28,6 +28,26 @@ const position = new Map(
   [...audiences.keys()].map((slug, index) => [slug, index])
 );
 
+// The editors and apps the homepage's tools section shows, each with a
+// guide under /how/tools and an icon in views/how/tools/icons
+const tools = [
+  ["word", "Word", "word.png"],
+  ["google-docs", "Google Docs", "google-docs.png"],
+  ["obsidian", "Obsidian", "obsidian.png"],
+  ["ia-writer", "iA Writer", "ia-writer.png"],
+  ["ulysses", "Ulysses", "ulysses.png"],
+  ["bear", "Bear", "bear.png"],
+  ["typora", "Typora", "typora.png"],
+  ["sublime-text", "Sublime Text", "sublime-text.ico"],
+  ["emacs", "Emacs", "emacs.png"],
+  ["vim", "Vim", "vim.ico"],
+  ["lightroom", "Lightroom", "lightroom.png"],
+  ["darktable", "darktable", "darktable.ico"],
+].map(([slug, name, icon]) => ({ slug, name, icon }));
+
+// How many finished items the homepage shows
+const DONE = 5;
+
 module.exports = async function home(req, res) {
   const templates = await loadTemplates();
   const order = (slug) => position.get(slug) ?? position.size;
@@ -44,5 +64,8 @@ module.exports = async function home(req, res) {
       ...template,
       audience: audiences.get(template.slug),
     }));
+  res.locals.homeTools = tools;
+  res.locals.homeDone = (res.locals.recent_commits || []).slice(0, DONE);
+  res.locals.homeHasDone = res.locals.homeDone.length > 0;
   res.render("index");
 };

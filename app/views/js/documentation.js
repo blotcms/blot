@@ -5,6 +5,8 @@ require("./tagify.js");
 require("./examples.js");
 require("./home-intro.js");
 require("./home-folder-carousel.js");
+require("./home-carousel.js");
+require("./home-preview.js");
 require("./templates.js");
 require("./questions-ask.js");
 require("./questions-textarea.js");

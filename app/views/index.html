@@ -1,17 +1,77 @@
-<section class="home-portfolio">
-  <div class="home-intro">
-    <h1>
-      Blot is a tool for building websites. It turns a folder into a website. Blot publishes files directly, so you can create a
-      <span class="visually-hidden">photo blog in Photoshop.</span><span class="home-example" aria-hidden="true"><span data-home-example>photo blog in Photoshop</span><span class="home-caret"></span>.</span>
-    </h1>
-    <a class="home-video-link" href="/watch" data-watch-trigger>
-      <span class="icon-play icon-inline" aria-hidden="true"></span>Watch the video
-    </a>
-  </div>
+<div class="home">
+  <section class="home-hero home-grid" aria-labelledby="home-heading">
+    <h1 id="home-heading">Turn a folder into a website</h1>
+    <div class="home-hero-preview">
+      {{> home-preview}}
+    </div>
+    <p class="home-example-line">
+      Create a <span class="visually-hidden">photo blog in Photoshop.</span><span class="home-example" aria-hidden="true"><span data-home-example>photo blog in Photoshop</span><span class="home-caret"></span>.</span>
+    </p>
+    <p class="home-lede">Instantly turn files in a folder into a website that updates as you edit. Use your favorite tools. No coding required.</p>
+    <div class="home-hero-actions">
+      <a class="home-button home-button--primary signed-out" href="/sites/sign-up">Sign up</a>
+      <a class="home-button home-button--primary signed-in" href="/sites">Open your dashboard</a>
+      <a class="home-text-link" href="/watch" data-watch-trigger>
+        <span class="icon-play icon-inline" aria-hidden="true"></span>Watch the video
+      </a>
+    </div>
+  </section>
 
-  <section class="home-templates" aria-labelledby="home-template-heading">
-    <h2 id="home-template-heading"><a href="/templates">Templates</a></h2>
-    <ul class="home-template-grid">
+  <section class="home-row home-grid" aria-labelledby="home-steps-heading">
+    <h2 id="home-steps-heading">How it works</h2>
+    <p class="home-row-intro">Files become posts and pages on your website. Drag-and-drop to publish. Use your favorite tools.</p>
+    <ol class="home-steps">
+      <li>
+        <div class="home-step-art" aria-hidden="true">
+          <img src="{{#cdn}}/images/sync/icloud.svg{{/cdn}}" alt="" width="24" height="24">
+          <img src="{{#cdn}}/images/sync/dropbox.svg{{/cdn}}" alt="" width="24" height="24">
+          <img src="{{#cdn}}/images/sync/google-drive.svg{{/cdn}}" alt="" width="24" height="24">
+          <img src="{{#cdn}}/images/sync/git.svg{{/cdn}}" alt="" width="24" height="24">
+        </div>
+        <span class="home-step-number">1</span>
+        <h3>Choose a folder</h3>
+        <p>Sync a folder from <a href="/how/sync/icloud">iCloud</a>, <a href="/how/sync/dropbox">Dropbox</a>, <a href="/how/sync/google-drive">Google Drive</a> or <a href="/how/sync/git">Git</a>. It becomes your site.</p>
+      </li>
+      <li>
+        <div class="home-step-art home-step-art--types" aria-hidden="true">
+          <span>.txt</span><span>.md</span><span>.docx</span><span>.jpg</span>
+        </div>
+        <span class="home-step-number">2</span>
+        <h3>Add files</h3>
+        <p>Text, Markdown, Word documents, Google Docs and images. Each file in the folder becomes a <a href="/how/files">post or page</a>.</p>
+      </li>
+      <li>
+        <div class="home-step-art" aria-hidden="true">
+          <span class="home-step-cursor">Draft</span>
+        </div>
+        <span class="home-step-number">3</span>
+        <h3>Edit as you go</h3>
+        <p>Update your site by adding, removing or editing files. There is no editor to log in to.</p>
+      </li>
+      <li>
+        <div class="home-step-art" aria-hidden="true">
+          <code><span>{</span><span>{</span>title<span>}</span><span>}</span></code>
+        </div>
+        <span class="home-step-number">4</span>
+        <h3>Pick a template</h3>
+        <p>Choose one of the <a href="/templates">templates</a>, then change its HTML, CSS and JavaScript as much as you like.</p>
+      </li>
+    </ol>
+  </section>
+
+  <section class="home-row home-grid home-templates" aria-labelledby="home-template-heading">
+    <h2 id="home-template-heading">Templates</h2>
+    <p class="home-row-intro">Designs for writers, photographers, artists, designers, researchers and developers.</p>
+    <div class="home-carousel-controls">
+      <a class="home-text-link" href="/templates">See all templates</a>
+      <button class="home-carousel-button" type="button" data-home-carousel-prev aria-label="Previous templates" hidden>
+        <span aria-hidden="true">&larr;</span>
+      </button>
+      <button class="home-carousel-button" type="button" data-home-carousel-next aria-label="Next templates" hidden>
+        <span aria-hidden="true">&rarr;</span>
+      </button>
+    </div>
+    <ul class="home-template-grid" data-home-carousel>
       {{#homeTemplates}}
       <li>
         <a class="home-template" href="/templates/{{slug}}">
@@ -19,7 +79,7 @@
             <img class="home-template-screenshot"
               src="{{#cdn}}/images/examples/{{slug}}/0-card.webp{{/cdn}}"
               srcset="{{#cdn}}/images/examples/{{slug}}/0-thumb.png{{/cdn}} 320w, {{#cdn}}/images/examples/{{slug}}/0-card.webp{{/cdn}} 840w"
-              sizes="(max-width: 768px) calc((100vw - 40px) * .7), (max-width: 991px) calc((100vw - 60px) * .7), (max-width: 1300px) calc((100vw - 90px) * .35), calc((100vw - 120px) * .2333)"
+              sizes="(max-width: 768px) calc((100vw - 52px) / 2), calc((100vw - 152px) / 4)"
               width="1200" height="883" loading="lazy" decoding="async" alt="">
             <div class="home-template-folder">{{{folder_html}}}</div>
           </div>
@@ -32,7 +92,118 @@
       {{/homeTemplates}}
     </ul>
   </section>
-</section>
+
+  <section class="home-row home-grid" aria-labelledby="home-tools-heading">
+    <h2 id="home-tools-heading">Tools</h2>
+    <p class="home-row-intro">Get started with the tools you already use. Because Blot publishes files, it works with your favorite text editor, word processor and photo app.</p>
+    <ul class="home-tool-list">
+      {{#homeTools}}
+      <li><a href="/how/tools/{{slug}}"><img src="{{#cdn}}/how/tools/icons/{{icon}}{{/cdn}}" alt="" width="16" height="16" loading="lazy">{{name}}</a></li>
+      {{/homeTools}}
+      <li><a class="home-text-link" href="/how/tools">All tools</a></li>
+    </ul>
+  </section>
+
+  <section class="home-row home-grid" aria-labelledby="home-ai-heading">
+    <h2 id="home-ai-heading">Pairs well with AI</h2>
+    <p class="home-col-2">Your site is a folder of plain files, so an AI assistant can read and edit your posts, pages and template like any other files on your computer.</p>
+    <p class="home-col-3">Add an <code>AGENTS.md</code> file to your template to describe its structure and conventions to the assistant.</p>
+    <p class="home-col-4"><a class="home-text-link" href="/developers/guides/working-with-ai">Working with AI</a></p>
+  </section>
+
+  <section class="home-row home-grid" aria-labelledby="home-specs-heading">
+    <h2 id="home-specs-heading">Technical details</h2>
+    <dl class="home-specs">
+      <div>
+        <dt>Hosting and domains</dt>
+        <dd>Every site includes hosting and a CDN, a <a href="/how/configure/domain">custom domain</a> and SSL.</dd>
+      </div>
+      <div>
+        <dt>Respectful image handling</dt>
+        <dd>Blot does not compress your original image files or reduce their dimensions. Thumbnails are separate, resized images; they do not replace the original file.</dd>
+      </div>
+      <div>
+        <dt>File formats</dt>
+        <dd>Images in formats not widely supported on the web, such as TIFF, WebP and AVIF, are converted into PNG when published; the source file in your folder is not modified.</dd>
+      </div>
+      <div>
+        <dt>Your files stay yours</dt>
+        <dd>Your files always remain in your site’s folder, and Blot offers various export formats, including WordPress.</dd>
+      </div>
+      <div>
+        <dt>Moving to Blot</dt>
+        <dd>Import your posts from <a href="/how/configure/import/wordpress">WordPress</a>, <a href="/how/configure/import/squarespace">Squarespace</a>, <a href="/how/configure/import/blogger">Blogger</a> or <a href="/how/configure/import/arena">Are.na</a>. If you get stuck, email <a href="mailto:support@blot.im">support@blot.im</a>.</dd>
+      </div>
+      <div>
+        <dt>Open source</dt>
+        <dd>Blot’s <a href="/source-code">source code</a> is public, and you can self-host it.</dd>
+      </div>
+    </dl>
+  </section>
+
+  {{#homeHasDone}}
+  <section class="home-row home-grid" aria-labelledby="home-done-heading">
+    <h2 id="home-done-heading">Recently done</h2>
+    <p class="home-row-intro">Blot is an active project. <a class="home-text-link" href="/news">All updates</a></p>
+    <ul class="home-done">
+      {{#homeDone}}
+      <li>
+        <a href="https://github.com/blotcms/blot/commit/{{hash}}" rel="nofollow"><span class="icon-checkbox home-check" aria-hidden="true"></span>{{message}}</a>
+        <span class="home-done-when">{{fromNow}}</span>
+      </li>
+      {{/homeDone}}
+    </ul>
+  </section>
+  {{/homeHasDone}}
+
+  <section class="home-row home-grid" aria-labelledby="home-faq-heading">
+    <h2 id="home-faq-heading">Questions</h2>
+    <p class="home-row-intro"><a class="home-text-link" href="/questions">See what others have asked</a></p>
+    <div class="home-faq">
+      <details>
+        <summary>What is Blot?</summary>
+        <p>Blot turns a folder into a website. Files in the folder become posts or pages on your site. Update your site by adding, removing or editing files.</p>
+      </details>
+      <details>
+        <summary>How does this differ from other site builders?</summary>
+        <p>There is no editor to log in to: publishing is just saving a file. You write in the tools you already use, and your files always remain in your folder.</p>
+      </details>
+      <details>
+        <summary>Who should use this?</summary>
+        <p>Writers, photographers, artists, designers, researchers and developers. The <a href="/templates">templates</a> show what each can make.</p>
+      </details>
+      <details>
+        <summary>Do I need to know how to code?</summary>
+        <p>No. You can start with just a Word document or a text file. When you want to, you can use the full power of HTML, CSS and JavaScript.</p>
+      </details>
+      <details>
+        <summary>Can I publish my own template?</summary>
+        <p>Yes. You can inspect and edit any template’s HTML, CSS and JavaScript, or write your own. The <a href="/developers">developer documentation</a> explains how.</p>
+      </details>
+      <details>
+        <summary>Where can I get help with my site?</summary>
+        <p>Email <a href="mailto:support@blot.im">support@blot.im</a>, read the <a href="/how">documentation</a>, or browse the <a href="/questions">questions</a> others have asked.</p>
+      </details>
+      <details>
+        <summary>How much does creating a site cost?</summary>
+        <p>{{price}} per month per site, including hosting, a CDN, all templates, a custom domain, SSL and support. If you close your account during your first month, your payment is refunded in full.</p>
+      </details>
+      <details>
+        <summary>Can I use this for a client?</summary>
+        <p>Yes. Sync a client’s folder with Dropbox, Git, iCloud or Google Drive, and connect a custom domain under your own or your client’s name.</p>
+      </details>
+    </div>
+  </section>
+
+  <section class="home-row home-grid home-pricing" aria-labelledby="home-pricing-heading">
+    <h2 id="home-pricing-heading">Pricing</h2>
+    <p class="home-price">{{price}} per month per site</p>
+    <div class="home-col-4">
+      <a class="home-button home-button--primary signed-out" href="/sites/sign-up">Sign up</a>
+      <a class="home-button home-button--primary signed-in" href="/sites">Open your dashboard</a>
+    </div>
+  </section>
+</div>
 
 <section class="watch-screen" data-watch-screen aria-label="Blot video" aria-hidden="true">
   {{> video}}

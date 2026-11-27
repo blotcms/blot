@@ -1,0 +1,40 @@
+<!-- The homepage's mini player: a hand-drawn scene of a folder beside the
+     site it publishes, drawn at 1280 x 720 and scaled into a 220 x 124 card.
+     js/home-preview.js plays the loop, moves the card with scroll and lets it
+     be dragged; without it (or with reduced motion) this is a still frame.
+     It's all in this partial so a renderer such as pane can replace it. -->
+<div class="home-preview" data-home-preview>
+  <button type="button" class="home-preview-hit" aria-label="Pause the preview" aria-pressed="false"></button>
+  <div class="home-preview-scene" aria-hidden="true">
+    <div class="home-preview-win home-preview-finder">
+      <div class="home-preview-bar"><i></i><i></i><i></i><b>My site</b></div>
+      <div class="home-preview-files">
+        <div class="home-preview-file"><span class="home-preview-ico"></span>Pages</div>
+        <div class="home-preview-file"><span class="home-preview-ico"></span>Drafts</div>
+        <div class="home-preview-file" data-home-preview-file><span class="home-preview-ico home-preview-ico--doc"></span>Trip to France.docx</div>
+        <div class="home-preview-file"><span class="home-preview-ico home-preview-ico--image"></span>Apple.jpeg</div>
+      </div>
+    </div>
+    <div class="home-preview-win home-preview-browser">
+      <div class="home-preview-bar"><i></i><i></i><i></i><b class="home-preview-url">Your site</b></div>
+      <div class="home-preview-viewport">
+        <div class="home-preview-page" data-home-preview-page>
+          <div class="home-preview-nav"><span>My site</span><span>Archive</span><span>About</span></div>
+          <div class="home-preview-post">
+            <h4>Trip to France</h4>
+            <p class="home-preview-date">Today</p>
+            <p class="home-preview-line"></p>
+            <p class="home-preview-line"></p>
+            <p class="home-preview-line home-preview-line--short"></p>
+          </div>
+          <div class="home-preview-image"></div>
+          <div class="home-preview-post">
+            <h4>Apple</h4>
+            <div class="home-preview-image home-preview-image--small"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <svg class="home-preview-pointer" data-home-preview-pointer viewBox="0 0 16 20" width="22" height="28"><path d="M1 1v15l4-3.5 3 6.5 2.5-1.2-3-6.3H14z" fill="#fff" stroke="#121212" stroke-width="1.2" stroke-linejoin="round"/></svg>
+  </div>
+</div>
