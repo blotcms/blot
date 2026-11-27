@@ -706,10 +706,13 @@ and the default skin takes them, exactly as with the icons view; an `os` pin for
   `data-secure=false` a warning glyph and "Not secure" before it. Tokens are `--br-strip`, `--br-tool`, `--br-field` and so on
   (`win-browser.css`); dark has a black strip, `#333` toolbar and tab, `#242424` field. Below 520px the toolbar's right group
   goes, below 420px the caption buttons, below 340px back and reload.
-- **QA.** Cases `macos-{light,dark}-browser` (region `titlebar` is the top 52px), and for the next skins
-  `windows-{light,dark}-browser` (Edge) and `linux-{light,dark}-browser` (GNOME Web), informational in `qa/thresholds.json`
-  until their skins exist (drop the flag and tighten with the skin). `qa/pane-adapter.js` renders every OS's case with the
-  capture's page (`screenshots/fixture-assets/browser-page`, images inlined) at the reference's window size. The macOS capture
-  loads that page, the study's, from a local HTTPS server as `https://preview-of-cv-on-clara.blot.im/` (`screenshots/macos.sh`);
-  the Windows and Linux references are still on example.com until their capture scripts follow. `qa/lib/audit.js` has browser
+- **QA.** Cases `macos-{light,dark}-browser` (region `titlebar` is the top 52px), `windows-{light,dark}-browser` (Edge) and, for the
+  next skin, `linux-{light,dark}-browser` (GNOME Web, informational in `qa/thresholds.json` until its skin exists: drop the
+  flag and tighten with it). `qa/pane-adapter.js` renders every OS's case with the capture's page
+  (`screenshots/fixture-assets/browser-page`, images inlined) at the reference's window size. The macOS and Windows captures load
+  that page, the study's, from a local HTTPS server as `https://preview-of-cv-on-clara.blot.im/` (`screenshots/macos.sh`,
+  `screenshots/windows.ps1`: hosts entry, trusted self-signed certificate, `browser-server.py`), so Edge shows the host with a
+  padlock; the Linux reference is still on example.com until its capture script follows. The Windows cases are tight except
+  for one gap: Edge's dark page has a dark scrollbar, the rendered iframe keeps a light one (the sandboxed page's colour scheme
+  is its own), so `windows-dark-browser` has a loose `rowYOffset` (see the note in `thresholds.json`). `qa/lib/audit.js` has browser
   samples (static, live, long address, empty) for every skin.
