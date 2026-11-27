@@ -160,18 +160,18 @@ describe("pane browser window", function () {
   });
 
   describe("skins", function () {
-    it("is built for macOS; Windows and Linux fall back to the macOS look", function () {
+    it("is built for macOS and Linux; Windows falls back to the macOS look", function () {
       expect(css.viewsOf("mac")).toContain("browser");
       expect(css.viewsOf("win")).not.toContain("browser");
-      expect(css.viewsOf("linux")).not.toContain("browser");
+      expect(css.viewsOf("linux")).toContain("browser");
       expect(css.group("mac")).toContain(
         "html[data-os=win] .pane[data-view=browser]:not([data-pin])"
       );
-      expect(css.group("mac")).toContain(
+      expect(css.group("mac")).not.toContain(
         "html[data-os=linux] .pane[data-view=browser]:not([data-pin])"
       );
       expect(css.group("win")).toContain(":not([data-view=browser])");
-      expect(css.group("linux")).toContain(":not([data-view=browser])");
+      expect(css.group("linux")).not.toContain(":not([data-view=browser])");
     });
 
     it("drops an os pin that has no browser skin, and keeps mac", function () {

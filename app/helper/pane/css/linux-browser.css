@@ -1,0 +1,34 @@
+/* GNOME Web (Epiphany 46, libadwaita 1.5, stock Adwaita): one header bar with back, forward, reload and new tab on the left, the
+   address field (padlock, URL, bookmark star) after them, then apps, library, main menu and the window buttons. GNOME Web
+   shows no tab strip with one tab. The window frame (border, ring, inner line) is the folder window's (linux.css); the header bar
+   draws its glyphs as two mask sprites (br-l left-anchored, br-r right-anchored), .pane-head is unused and .pane-url is the field.
+   Measured from the 2x references in CSS px. Epiphany dims everything but the registered domain; here the scheme, "www." and the
+   path are dim. */
+@light{--br-lock:url(icon:linux/br-lock-light);--br-star:url(icon:linux/br-star-light);--br-btn:#ebebeb;--br-dim:rgba(0,0,0,.5);.pane.pane-br{--o2:#ddd}}
+@dark{--br-lock:url(icon:linux/br-lock-dark);--br-star:url(icon:linux/br-star-dark);--br-btn:#444;--br-dim:rgba(255,255,255,.5);.pane.pane-br{--o2:#454545}}
+.pane.pane-br{--pane-w:720px;--pane-h:400px}
+.pane.pane-br::before,.pane.pane-br::after{content:none}
+.pane.pane-br .pane-head{display:none}
+/* the bar: the three window buttons' discs as in the folder window's header bar, then the glyph sprites */
+.pane.pane-br .pane-bar{isolation:auto;height:46px;padding:0;
+background:radial-gradient(circle 12px at calc(100% - 97px) 23px,var(--br-btn) 11.9px,transparent 12px),radial-gradient(circle 12px at calc(100% - 60px) 23px,var(--br-btn) 11.9px,transparent 12px),radial-gradient(circle 12px at calc(100% - 23px) 23px,var(--br-btn) 11.9px,transparent 12px),var(--ring)}
+.pane.pane-br .pane-bar::before,.pane.pane-br .pane-bar::after{content:"";position:absolute;top:0;bottom:0;height:auto;padding:0;border-radius:0;z-index:auto;line-height:0}
+.pane.pane-br .pane-bar::before{left:0;right:auto;width:160px;background:linear-gradient(90deg,var(--off) 80px,var(--fg) 80px);-webkit-mask:url(icon:linux/br-l) left top no-repeat;mask:url(icon:linux/br-l) left top no-repeat}
+.pane.pane-br .pane-bar::after{left:auto;right:0;width:230px;background:var(--fg);-webkit-mask:url(icon:linux/br-r) right top no-repeat;mask:url(icon:linux/br-r) right top no-repeat}
+/* the field: its fill, padlock and star are backgrounds, so the text can be clipped at 32px from the right (a border, outside the
+   padding box that overflow clips at) without clipping them; GNOME Web cuts a long address off there, with no ellipsis */
+.pane.pane-br .pane-url{z-index:1;left:calc(50% - 149px);top:10px;width:224px;height:34px;padding:0 0 0 32px;border-right:32px solid transparent;border-radius:6px;background:var(--br-star) right 9px top 9px/16px 16px no-repeat,var(--br-btn);background-origin:border-box;color:var(--fg);text-overflow:clip;font:14.67px/34px Cantarell,"Adwaita Sans",system-ui,sans-serif}
+.pane.pane-br[data-secure=true] .pane-url{background:var(--br-lock) left 11px top 10px/12px 14px no-repeat,var(--br-star) right 9px top 9px/16px 16px no-repeat,var(--br-btn);background-origin:border-box}
+.pane.pane-br .pane-u-s,.pane.pane-br .pane-u-w,.pane.pane-br .pane-u-p{color:var(--br-dim)}
+.pane.pane-br .pane-page{background:#fff}
+/* narrower windows lose the apps and library buttons, then the forward, reload and new tab buttons and the main menu
+   (container widths are of the window's content box; GNOME Web itself moves its toolbar to the bottom below 600px) */
+@container (max-width:619px){
+.pane.pane-br .pane-bar::after{width:150px}
+.pane.pane-br .pane-url{left:160px;right:156px;width:auto}
+}
+@container (max-width:439px){
+.pane.pane-br .pane-bar::before{width:40px}
+.pane.pane-br .pane-bar::after{width:116px}
+.pane.pane-br .pane-url{left:44px;right:120px}
+}
