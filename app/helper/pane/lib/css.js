@@ -65,7 +65,7 @@ const unbuilt = (skins) =>
 // The views a skin has (the folder views an author can ask for, see index.js VIEWS): list is
 // the skin's own file, another view is css/<os>-<view>.css. A window in a view its skin lacks
 // is styled by the default skin instead (which has them all), so it is never half-styled.
-const VIEWS = ["list", "icons", "desktop"];
+const VIEWS = ["list", "icons", "desktop", "browser"];
 const lacks = (os) =>
   VIEWS.filter(
     (v) =>

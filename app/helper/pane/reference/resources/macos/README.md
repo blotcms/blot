@@ -62,10 +62,15 @@ through System Events. TextEdit renders `.html` files as rich text whatever
 `IgnoreHTML` says, so the code sample is `Snippet.txt`.
 
 ## Browser window (`-browser`)
-Safari, sized 600x400pt (deliberately small; a browser window is mostly chrome), on
-`https://example.com/` (the runner has internet; it is a stable page). A local page did not
-work well: an HTTP server made macOS ask "Allow Python to find devices on local networks?"
-(the dialog landed in the capture), and a `file://` address is long and ugly. Safari's compact
+Safari, sized 600x400pt (deliberately small; a browser window is mostly chrome), on the design
+study's page (`screenshots/fixture-assets/browser-page`, from template-patterns `software-browser`)
+served by `screenshots/browser-server.py` over HTTPS as `https://preview-of-cv-on-clara.blot.im/`:
+a `/etc/hosts` entry for 127.0.0.1, a self-signed certificate for that name trusted in the System
+keychain, so the address field shows the host with a padlock. The toolbar carries the study's items in
+its order: lights, back/forward, the address field, then New Tab, Share, Tab Overview. (The first
+capture was example.com, with Share before New Tab and no padlock. An earlier plain-HTTP local server
+made macOS ask "Allow Python to find devices on local networks?" and the dialog landed in the
+capture: check `browser.log` for whether the HTTPS one did.) Safari's compact
 layout (Tahoe) has no tab bar. Extra Safari windows are closed and Finder's windows are closed
 right before the capture, and TextEdit is force-quit (its two editor windows stay open at the same position and showed
 behind Safari; closing them through AppleScript times out). The sidebar / tab group button is dragged off the toolbar through
