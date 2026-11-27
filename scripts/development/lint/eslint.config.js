@@ -207,6 +207,7 @@ module.exports = [
   {
     files: [
       "app/helper/pane/qa/public/**/*.js",
+      "app/helper/pane/gallery/public/**/*.js",
       "app/helper/pane/qa/lib/audit.js",
       "app/helper/pane/qa/lib/render.js",
       "app/helper/pane/tests/editor-chrome.js",
