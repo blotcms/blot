@@ -1,0 +1,109 @@
+/*
+  Colour roles and light/dark mode for the brochure and documentation pages.
+  Only documentation.min.css includes this file; dashboard pages keep their
+  light colours (base.css and dashboard/css/tokens.css).
+
+  :root outranks the `html` selector in base.css, so these win whatever
+  order the build concatenates the files in.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --background-color: var(--blot-paper);
+  --surface-muted-color: var(--blot-surface);
+  --surface-strong-color: var(--blot-surface-strong);
+  --text-color: var(--blot-ink);
+  --medium-text-color: var(--blot-ink-secondary);
+  --light-text-color: var(--blot-ink-secondary);
+  --border-color: var(--blot-hairline);
+
+  --accent-color: var(--blot-blue-text);
+  --brochure-accent-color: var(--blot-blue);
+  --light-accent-color: var(--blot-blue);
+  --dark-accent-color: var(--blot-blue-hover);
+  --light-background-color: var(--blot-surface);
+
+  --code-background-color: #fbfbfa;
+  --raised-background-color: var(--blot-paper);
+  --control-background-color: #f0f0ee;
+  --control-hover-background-color: #e5e5e2;
+  --selection-color: #b4d5fe;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --blot-paper: #0c0c0d;
+    --blot-surface: #161618;
+    --blot-surface-strong: #222225;
+    --blot-ink: #f2f2f0;
+    --blot-ink-secondary: #a1a1a8;
+    --blot-hairline: #2a2a2e;
+    --blot-blue: #0a84ff;
+    --blot-blue-hover: #3d9bff;
+    --blot-blue-text: #4da3ff;
+    --blot-green: #34c759;
+    --blot-amber: #ffb340;
+    --blot-red: #ff6b5a;
+
+    --dark-border-color: #3a3a3f;
+    --light-border-color: #1a1a1c;
+    --medium-background-color: #1d2a3f;
+    --warning-text-color: #ffb340;
+    --error-text-color: #ff8a75;
+    --error-background-color: #2e1612;
+    --success-text-color: #4cd964;
+    --success-background-color: #0f2414;
+
+    --code-background-color: #131315;
+    --raised-background-color: #1c1c1f;
+    --control-background-color: #1f1f22;
+    --control-hover-background-color: #2a2a2e;
+    --selection-color: #1f4f8a;
+  }
+
+  /* Rules elsewhere that hard-code a light colour */
+  p code,
+  td code,
+  li code {
+    background: var(--code-background-color);
+  }
+
+  h2,
+  h3 {
+    border-bottom-color: var(--border-color);
+  }
+
+  .home-avatar-card,
+  .bordered-button {
+    background: var(--raised-background-color);
+    color: var(--text-color);
+  }
+
+  .home-tool-button {
+    border-color: var(--border-color);
+    color: var(--text-color);
+  }
+
+  .home-tool-button:hover,
+  .home-tool-button:focus-visible {
+    color: var(--text-color);
+  }
+
+  .home-tools-cta {
+    background: var(--control-background-color);
+  }
+
+  .home-tools-cta:hover,
+  .home-tools-cta:focus-visible {
+    background: var(--control-hover-background-color);
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Black logos (Squarespace, Are.na, Git's) would vanish on the dark page */
+  img[src*="squarespace.svg"],
+  img[src*="are.na.svg"] {
+    filter: invert(1);
+  }
+}

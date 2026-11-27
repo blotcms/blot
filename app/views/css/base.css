@@ -42,6 +42,23 @@ html {
   --spacing: 1rem;
 
   --max-width: 840px;
+
+  /* Blot's palette, shared by the brochure and the dashboard. The brochure
+     maps its colour roles onto these in css/theme.css, which also holds the
+     dark values; the dashboard uses them as plain light colours for now. */
+  --blot-paper: #fff;
+  --blot-surface: #f5f5f3;
+  --blot-surface-strong: #ebebe8;
+  --blot-ink: #0a0a0a;
+  --blot-ink-secondary: #5f6470;
+  --blot-hairline: #e7e7e4;
+  --blot-blue: #0071e3; /* fills: buttons, bubbles, the blue band */
+  --blot-blue-hover: #0062c4;
+  --blot-blue-text: #0066de; /* links and blue text on paper */
+  --blot-on-blue: #fff;
+  --blot-green: #1f9d55;
+  --blot-amber: #c27c00;
+  --blot-red: #d93a26;
 }
 
 html,
