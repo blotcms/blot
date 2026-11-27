@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Clara Xiao</title>
+<style>
+/* The study's recreated page (template-patterns/patterns/brochure/software-browser), standalone: the
+   study sized everything in cqw of a 1103px stage, here it is vw of the window, so the page scales with it.
+   Served by screenshots/macos.sh as https://preview-of-cv-on-clara.blot.im/ for the Safari capture, and
+   shown by the QA harness through pane.browser (qa/pane-adapter.js inlines the images). */
+*{box-sizing:border-box}
+html,body{margin:0;background:#fff;color:#171717;font-family:system-ui,-apple-system,"SF Pro Text",sans-serif;-webkit-font-smoothing:antialiased}
+.site-content { width: 55%; max-width: 720px; margin: 0 auto; padding: 8.8vw 0 8vw; }
+.profile-header { display: flex; align-items: center; gap: 1.78vw; }
+.profile-photo { display: block; flex: none; width: 8.43vw; height: 8.43vw; border-radius: 50%; object-fit: cover; user-select: none; }
+.profile-copy { min-width: 0; }
+.profile-copy h1 { margin: 0 0 .65vw; color: #101010; font-size: clamp(12px, 1.87vw, 24px); font-weight: 700; letter-spacing: -.025em; line-height: 1.12; }
+.profile-description { margin: 0; color: #666; font-size: clamp(9px, 1.48vw, 18px); line-height: 1.35; white-space: nowrap; }
+.social-links { display: flex; gap: .68vw; margin-top: .75vw; }
+.social-links span { display: inline-flex; min-height: 2.28vw; align-items: center; padding: 0 1.32vw; border-radius: 999px; color: #626262; background: #ececec; font-size: clamp(8px, 1.16vw, 14px); line-height: 1; }
+.page-tabs { display: flex; align-items: center; gap: 3.2vw; margin-top: 5.7vw; color: #b4b4b4; font-size: clamp(10px, 1.38vw, 17px); line-height: 1.55; }
+.page-tabs span { display: block; padding: 0 0 .78vw; white-space: nowrap; }
+.page-tabs .is-current { position: relative; color: #242424; }
+.page-tabs .is-current::after { position: absolute; right: 0; bottom: 0; left: 0; height: max(1px, .12vw); background: #353535; content: ""; }
+.about-copy { width: 104%; margin: 2.75vw 0 0; color: #222; font-size: clamp(9px, 1.4vw, 17px); line-height: 1.55; }
+.experience-section { margin-top: 5.45vw; }
+.experience-section h2, .lower-content h2 { margin: 0; color: #171717; font-size: clamp(10px, 1.37vw, 16px); font-weight: 700; line-height: 1.35; }
+.experience-entry { display: grid; grid-template-columns: 19.5% minmax(0, 1fr); column-gap: 1.2vw; margin-top: 2.45vw; }
+.experience-entry time { color: #b3b3b3; font-size: clamp(8px, 1.35vw, 16px); line-height: 1.55; white-space: nowrap; }
+.experience-copy { min-width: 0; }
+.experience-copy h3 { margin: 0; color: #202020; font-size: clamp(9px, 1.43vw, 17px); font-weight: 400; line-height: 1.45; }
+.external-mark { display: inline-flex; width: 1.4em; height: 1.4em; align-items: center; justify-content: center; margin-left: .14em; border-radius: 50%; color: #333; background: #ededed; font-size: .78em; font-weight: 700; vertical-align: .08em; }
+.experience-copy > p { width: 102%; margin: .2vw 0 0; color: #6e6e6e; font-size: clamp(9px, 1.39vw, 17px); line-height: 1.56; }
+.work-gallery { display: flex; gap: 1.3vw; margin-top: 1.25vw; }
+.work-gallery img { display: block; width: auto; height: 8.2vw; flex: none; border-radius: .42vw; object-fit: cover; user-select: none; }
+.lower-content { padding: 7vw 0 0; }
+.lower-content .experience-entry { margin-bottom: 6vw; }
+.lower-content > h2:not(:first-child) { margin-top: 6vw; }
+.lower-content > p { color: #6e6e6e; font-size: clamp(9px, 1.39vw, 17px); }
+</style>
+</head>
+<body>
+<div class="site-content">
+<header class="profile-header">
+  <img class="profile-photo" src="images/clara-profile.png" alt="Portrait of Clara Xiao" draggable="false">
+  <div class="profile-copy">
+    <h1>Clara Xiao</h1>
+    <p class="profile-description">Mathematician and computer scientist</p>
+    <div class="social-links" aria-label="Contact links">
+      <span>Email</span><span>LinkedIn</span><span>GitHub</span>
+    </div>
+  </div>
+</header>
+
+<nav class="page-tabs" aria-label="Portfolio pages">
+  <span class="is-current">About</span>
+  <span>Writing</span>
+</nav>
+
+<p class="about-copy">I specialize in developing mathematical models and computational tools to solve complex problems in data science and artificial intelligence.</p>
+
+<section class="experience-section">
+  <h2>Work Experience</h2>
+  <article class="experience-entry">
+    <time datetime="2025">2025 — Now</time>
+    <div class="experience-copy">
+      <h3>Data Science at QuantumCompute Labs <span class="external-mark" aria-hidden="true">↗</span></h3>
+      <p>Designed and implemented machine learning models to optimize quantum circuit simulations, reducing computation time by 30%. Conducted statistical analyses on experimental data, improving model performance accuracy by 15%.</p>
+      <div class="work-gallery" aria-label="Project photographs">
+        <img src="images/work-house.png" alt="White coastal research building" draggable="false">
+        <img src="images/work-coast.png" alt="Tree on a rocky coast" draggable="false">
+        <img src="images/work-building.png" alt="Light-filled modern interior" draggable="false">
+      </div>
+    </div>
+  </article>
+</section>
+
+<section class="lower-content">
+  <h2>Education</h2>
+  <article class="experience-entry">
+    <time>2021 — 2025</time>
+    <div class="experience-copy"><h3>Computer Science and Mathematics</h3><p>Research in statistical learning, optimization, and computational methods.</p></div>
+  </article>
+  <h2>Selected writing</h2>
+  <p>Notes on models, data, and building useful tools.</p>
+</section>
+                  </div>
+</body>
+</html>

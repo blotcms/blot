@@ -1,0 +1,24 @@
+<!-- Crude GNOME Files fixture (list view, tree expanded). Dates are frozen constants. -->
+<style>
+.gnome{--bg:#fff;--fg:#2e3436;--dim:#8f8f8f;--bar:#fafafa;--line:#dcdcdc;
+  width:490px;height:520px;box-sizing:border-box;border-radius:12px;overflow:hidden;background:var(--bg);color:var(--fg);position:relative;
+  font:14px/20px Cantarell,"Adwaita Sans",system-ui,sans-serif}
+@media (prefers-color-scheme:dark){.gnome{--bg:#242424;--fg:#fff;--dim:#9a9a9a;--bar:#303030;--line:#3d3d3d}}
+.gnome .header{height:48px;background:var(--bar);display:flex;align-items:center;padding:0 16px;font-weight:700}
+.gnome .cols{height:32px;display:flex;align-items:center;color:var(--dim);font-weight:700;font-size:13px;padding-left:35px}
+.gnome .row{height:52px;display:flex;align-items:center;padding-left:85px}
+.gnome .row.child{padding-left:105px}
+.gnome .n{width:190px}.gnome .s{width:80px;color:var(--dim)}.gnome .m{color:var(--dim)}
+.gnome .footer{position:absolute;left:0;right:0;bottom:0;height:56px;border-top:1px solid var(--line);background:var(--bar)}
+</style>
+<div class="gnome">
+  <div class="header">Home / Your site</div>
+  <div class="cols"><span style="width:180px"></span><span style="width:80px">Size</span><span>Modified</span></div>
+  <div class="row"><span class="n">About.txt</span><span class="s">6 bytes</span><span class="m">Today 15:38</span></div>
+  <div class="row"><span class="n">Animation.gif</span><span class="s">2.7 kB</span><span class="m">14 Aug 2026</span></div>
+  <div class="row"><span class="n">Blot.webloc</span><span class="s">128 bytes</span><span class="m">25 Apr 2026</span></div>
+  <div class="row"><span class="n">Draft.md</span><span class="s">109 bytes</span><span class="m">22 Oct 2025</span></div>
+  <div class="row"><span class="n">Fruits</span><span class="s">1 item</span><span class="m">5 Feb 2025</span></div>
+  <div class="row child"><span class="n">Apple.md</span><span class="s">6 bytes</span><span class="m">Today 0:00</span></div>
+  <div class="footer"></div>
+</div>
