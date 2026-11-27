@@ -41,10 +41,14 @@ display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:
 .pane[data-view=icons] .pane-sel::before{background:Highlight}
 .pane[data-view=icons] .pane-sel .pane-label{background:Highlight;color:HighlightText}
 }
-/* the view-mode button of Finder's toolbar (grid icon and chevron), on request (toolbar:"view"). It is the chrome node .pane-head. */
-.pane.pane-vb[data-view=icons] .pane-head{display:block;position:absolute;right:12px;top:8px;width:60px;height:36px;box-sizing:border-box;border-radius:18px;background:var(--pill);box-shadow:inset 0 0 0 1px var(--pill-ring),0 4px 32px var(--pill-sh)}
+/* the view-mode switcher of Finder's toolbar on Tahoe (four segments: icons, list, columns, gallery; icons selected), on request
+   (toolbar:"view"). It is the chrome node .pane-head: a pill with the selected segment behind the first glyph (::before) and the glyphs (::after). */
+@light{--vbsel:rgba(0,0,0,.11)}
+@dark{--vbsel:rgba(255,255,255,.17)}
+.pane.pane-vb[data-view=icons] .pane-head{display:block;position:absolute;right:8px;top:8px;width:148px;height:36px;box-sizing:border-box;border-radius:18px;background:var(--pill);box-shadow:inset 0 0 0 1px var(--pill-ring),0 4px 32px var(--pill-sh)}
 .pane.pane-vb[data-view=icons] .pane-head i{display:none}
-.pane.pane-vb[data-view=icons] .pane-head::after{content:"";position:absolute;inset:0;background:var(--nav);-webkit-mask:url(icon:mac/view) center/60px 36px no-repeat;mask:url(icon:mac/view) center/60px 36px no-repeat}
+.pane.pane-vb[data-view=icons] .pane-head::before{content:"";position:absolute;left:3px;top:3px;width:32px;height:30px;border-radius:15px;background:var(--vbsel)}
+.pane.pane-vb[data-view=icons] .pane-head::after{content:"";position:absolute;inset:0;background:var(--nav);-webkit-mask:url(icon:mac/view) center/148px 36px no-repeat;mask:url(icon:mac/view) center/148px 36px no-repeat}
 @container (max-width:439px){
 .pane.pane-vb[data-view=icons] .pane-head{display:none}
 }
