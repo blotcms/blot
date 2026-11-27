@@ -1,7 +1,7 @@
 /* Structure shared by every skin: no colours, fonts or OS names (see DESIGN.md). */
 .pane{margin:0;position:relative;box-sizing:border-box;display:flex;flex-direction:column;overflow:hidden;
 width:var(--pane-w,490px);max-width:100%;height:var(--pane-h,auto);max-height:var(--pane-h,var(--pane-max,360px));
-container-type:inline-size;-webkit-text-size-adjust:none}
+container-type:inline-size;-webkit-text-size-adjust:none;text-size-adjust:none}
 .pane-bar,.pane-head,.pane-icon,.pane-cell,.pane-head i{user-select:none;-webkit-user-select:none}
 .pane-bar,.pane-head{flex:none;position:relative}
 .pane-head{display:flex}

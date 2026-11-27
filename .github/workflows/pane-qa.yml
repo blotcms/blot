@@ -136,26 +136,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           path: rendered-artifacts
-      - name: Commit images
-        run: |
-          OUT=app/helper/pane/rendered
-          for os in macos windows linux; do
-            [ -d "rendered-artifacts/pane-qa-$os" ] || continue   # keep the old images if a job failed
-            rm -rf "$OUT/$os"
-            mkdir -p "$OUT/$os"
-            cp rendered-artifacts/pane-qa-$os/*.png "$OUT/$os/" 2>/dev/null || true
-          done
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f "$OUT"
-          git diff --cached --quiet && exit 0
-          git commit -m "Update pane rendered images"
-          # other pushes (people, the screenshots bot) can land in between
-          for attempt in 1 2 3 4; do
-            git pull --rebase origin "${{ github.ref_name }}" && git push origin "HEAD:${{ github.ref_name }}" && break
-            sleep $((attempt * 5))
-          done
-      # Informational: the thresholds don't gate CI until the module exists.
+      # the QA dependencies, also for restore-identical.js (sharp) in the next step
       - name: Work out dependencies
         id: deps
         run: |
@@ -174,10 +155,33 @@ jobs:
         run: |
           mkdir -p tools && cd tools && npm init -y >/dev/null
           npm install --no-audit --no-fund ${{ steps.deps.outputs.pkgs }}
+      - name: Commit images
+        run: |
+          OUT=app/helper/pane/rendered
+          for os in macos windows linux; do
+            [ -d "rendered-artifacts/pane-qa-$os" ] || continue   # keep the old images if a job failed
+            rm -rf "$OUT/$os"
+            mkdir -p "$OUT/$os"
+            cp rendered-artifacts/pane-qa-$os/*.png "$OUT/$os/" 2>/dev/null || true
+          done
+          # a render whose pixels equal the committed image is not a change: keep the committed bytes,
+          # so a push whose renders are all unchanged makes no commit (and holds no CI run)
+          NODE_PATH="$PWD/tools/node_modules" node app/helper/pane/qa/restore-identical.js "$OUT" || echo "could not compare pixels; committing the renders as they are"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f "$OUT"
+          git diff --cached --quiet && exit 0
+          git commit -m "Update pane rendered images"
+          # other pushes (people, the screenshots bot) can land in between
+          for attempt in 1 2 3 4; do
+            git pull --rebase origin "${{ github.ref_name }}" && git push origin "HEAD:${{ github.ref_name }}" && break
+            sleep $((attempt * 5))
+          done
       # the module's and the QA harness's unit tests (nothing else in this branch runs them)
       - name: Unit tests
         run: |
           NODE_PATH="$PWD/tools/node_modules" node tools/node_modules/jasmine/bin/jasmine.js "app/helper/pane/tests/*.js" "app/helper/pane/qa/tests/*.js"
+      # Informational: the thresholds don't gate CI until the module exists.
       - name: Summarise differences
         run: |
           NODE_PATH="$PWD/tools/node_modules" node app/helper/pane/qa/smoke.js

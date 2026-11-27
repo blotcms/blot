@@ -60,11 +60,16 @@
     })
   );
 
+  // The layout keeps changing until the reference captures have loaded: keep the #fragment's
+  // section in view until the reader scrolls.
+  const anchor = window.paneKeepAnchor(window, document);
+
   // References are 2x captures, shown at half size.
   document.querySelectorAll(".ref img").forEach((img) => {
     const size = () => {
       if (img.naturalWidth) img.style.width = `${img.naturalWidth / 2}px`;
       fitAll();
+      anchor.go();
     };
     img.addEventListener("load", size);
     size();
@@ -89,6 +94,10 @@
         section.style.setProperty("--blend", slider.value / 100)
       );
   });
+
+  anchor.go();
+  window.addEventListener("load", anchor.go);
+  setTimeout(anchor.stop, 5000);
 
   if (window.EventSource) {
     const events = new EventSource("/events");

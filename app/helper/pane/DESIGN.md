@@ -546,7 +546,7 @@ so `lib/markup.js`'s `folder()` skips them outright for this view rather than hi
 (DESIGN.md's usual `pane-bare`/`chrome:false` pattern hides chrome the visitor could otherwise see;
 here there is truly nothing there). The body is `items()`, unchanged from the icons view.
 
-**Positioning is the caller's job, not pane's.** `.pane[data-view=desktop]` resets the window box
+**Positioning is the caller's job, not pane's.** That includes the width: the icons are an auto-fill grid, so a wrapper that shrinks to fit (inline-block, a flex item, a float) gets one column; give the wrapper a width. `.pane[data-view=desktop]` resets the window box
 (`position:static`, `width/height:auto`, no shadow/border/background, `overflow:visible`) so the
 element carries no leftover Finder-card geometry, but it does not lay itself over anything — a docs
 page composing icons behind another window (as `/how` does) must position a *wrapper* around the

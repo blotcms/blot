@@ -38,6 +38,8 @@
 //   width, height   CSS lengths, set as --pane-w / --pane-h (default: the reference size)
 //   iconSize "large": the icons view (and desktop) at 128px icons instead of 64px (macOS Finder's large icons)
 //   toolbar  "view": the icons view's toolbar also shows Finder's view-mode button (icon grid and chevron)
+// An option a function doesn't take is ignored with one console.warn per function and key (never a
+// throw); the accepted keys per function are listed in lib/options.js.
 //
 // A row of the tree may carry attributes in square brackets after a pipe, which are not columns:
 //   Blot | [selected]                  drawn selected: the grey icon backing and blue name (icons view),
@@ -89,6 +91,7 @@ const { expand } = require("./lib/names");
 const { editor } = require("./lib/editor");
 const browserWindow = require("./lib/browser");
 const { resolve: resolveLanguage } = require("./lib/highlight");
+const paneOptions = require("./lib/options");
 
 // what an author can ask for; the QA harness has more views (see the header)
 const VIEWS = ["list", "icons", "desktop"];
@@ -96,22 +99,28 @@ const SUPPORTED_VIEWS = ["list", "icons", "desktop"];
 
 function folder(tree, options = {}) {
   const view = options.view === "tree" ? "list" : options.view || "list"; // the list view is a tree
+  paneOptions.check("folder", options);
   if (!SUPPORTED_VIEWS.includes(view)) return null;
   return { html: renderFolder(tree, options) };
 }
 
 // Editor windows (DESIGN.md "Editor windows"). `chrome: false` shows the text panel alone,
 // without the title bar and traffic lights.
-const text = (source, options = {}) => ({
-  html: editor("text", source, options),
-});
-const code = (source, options = {}) => ({
-  html: editor("code", source, options),
-});
+const text = (source, options = {}) => {
+  paneOptions.check("text", options);
+  return { html: editor("text", source, options) };
+};
+const code = (source, options = {}) => {
+  paneOptions.check("code", options);
+  return { html: editor("code", source, options) };
+};
 
 // Browser window (DESIGN.md "Browser windows"): the address field shows `url`, the viewport holds either
 // static `html` or a live `src`.
-const browser = (options = {}) => ({ html: browserWindow.browser(options) });
+const browser = (options = {}) => {
+  paneOptions.check("browser", options);
+  return { html: browserWindow.browser(options) };
+};
 
 // Sets data-os unless the page already chose one (the QA harness does).
 const JS =
@@ -145,27 +154,32 @@ function transform($, options = {}) {
     const chrome = dataChrome
       ? dataChrome !== "false"
       : kind === "code" || classes.includes("with-chrome");
-    const result = kinds[kind](source.text().replace(/^\n+|\s+$/g, ""), {
-      now: options.now,
-      title: ($(el).attr("title") || "").trim() || undefined,
-      view: $(el).attr("data-view") || undefined,
-      os: $(el).attr("data-os") || undefined,
-      theme: $(el).attr("data-theme") || undefined,
-      chrome,
-      highlight: options.highlight || $(el).attr("data-highlight") === "true",
-      // a class naming a language ("javascript") picks it; the default is html, as the old renderer had
-      language:
-        $(el).attr("data-language") ||
-        classes.find(
-          (c) =>
-            c !== "code" && resolveLanguage(c) && resolveLanguage(c) !== "plain"
-        ) ||
-        undefined,
-      iconSize: $(el).attr("data-icon-size") || undefined,
-      toolbar: $(el).attr("data-toolbar") || undefined,
-      width: $(el).attr("data-width") || undefined,
-      height: $(el).attr("data-height") || undefined,
-    });
+    const result = kinds[kind](
+      source.text().replace(/^\n+|\s+$/g, ""),
+      paneOptions.pick(kind, {
+        now: options.now,
+        title: ($(el).attr("title") || "").trim() || undefined,
+        view: $(el).attr("data-view") || undefined,
+        os: $(el).attr("data-os") || undefined,
+        theme: $(el).attr("data-theme") || undefined,
+        chrome,
+        highlight: options.highlight || $(el).attr("data-highlight") === "true",
+        // a class naming a language ("javascript") picks it; the default is html, as the old renderer had
+        language:
+          $(el).attr("data-language") ||
+          classes.find(
+            (c) =>
+              c !== "code" &&
+              resolveLanguage(c) &&
+              resolveLanguage(c) !== "plain"
+          ) ||
+          undefined,
+        iconSize: $(el).attr("data-icon-size") || undefined,
+        toolbar: $(el).attr("data-toolbar") || undefined,
+        width: $(el).attr("data-width") || undefined,
+        height: $(el).attr("data-height") || undefined,
+      })
+    );
     if (result) $(el).replaceWith(result.html);
   });
   browserWindow.transform($, browser);
