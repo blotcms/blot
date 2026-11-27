@@ -199,10 +199,19 @@ html[data-auth="in"] .signed-in {
   border: 0;
 }
 
+/* The brochure's masthead: the desktop-icon logo on the left, the main links
+   in a centred cluster, Log in and Sign up (or Dashboard) on the right. On
+   phones the links move to a second row. */
+
+.public-header {
+  position: relative;
+  z-index: 10;
+}
+
 .public-header .public-masthead {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: minmax(70px, 1fr) auto minmax(70px, 1fr);
+  align-items: start;
   gap: 12px;
   padding: 20px 22px 12px 17px;
 }
@@ -219,6 +228,11 @@ html[data-auth="in"] .signed-in {
   font: 400 12px / 1 Arial, sans-serif;
 }
 
+.public-header .site-brand:hover,
+.public-header .site-brand:focus-visible {
+  background: transparent;
+}
+
 .public-header .site-brand-folder {
   position: relative;
   display: grid;
@@ -231,7 +245,7 @@ html[data-auth="in"] .signed-in {
   position: absolute;
   inset: -9px -5px;
   border-radius: 6px;
-  background: #e6e6e6;
+  background: var(--surface-strong-color, #e6e6e6);
   opacity: 0;
   transition: opacity 140ms ease;
   content: "";
@@ -263,33 +277,114 @@ html[data-auth="in"] .signed-in {
 }
 
 .public-header .public-navigation {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  align-items: flex-start;
-  gap: 4px;
+  flex: none;
+  margin-top: 6px;
 }
 
-.public-header .public-navigation a {
+.public-nav-links {
+  display: flex;
+  align-items: center;
+  max-width: none;
+  margin: 0;
+  padding: 3px;
+  border-radius: 999px;
+  background: var(--surface-muted-color, #f5f5f3);
+  list-style: none;
+}
+
+.public-nav-links li {
+  margin: 0;
+  padding: 0;
+}
+
+.public-nav-links a {
   display: block;
-  padding: 4px 8px;
-  border-radius: 9999px;
-  background: #f5f5f5;
-  color: #111;
-  font: 400 13px / 19.5px system-ui, sans-serif;
+  padding: 6px 14px;
+  border-radius: 999px;
+  color: var(--text-color);
+  font: 500 13px / 18px var(--font-family);
   text-decoration: none;
   white-space: nowrap;
-  transition: background-color 150ms ease;
+  transition: color 200ms ease, background-color 200ms ease;
 }
 
-.public-header .public-navigation a:hover,
-.public-header .public-navigation a.selected {
-  background: #e9e9e9;
+/* Hovering one link dims the others (as on ploy.ai) */
+.public-nav-links:hover a {
+  color: var(--medium-text-color);
 }
 
-.public-header .public-navigation a:focus-visible {
+.public-nav-links a:hover,
+.public-nav-links a:focus-visible {
+  color: var(--text-color);
+}
+
+.public-nav-links a.selected {
+  background: var(--background-color);
+  color: var(--text-color);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 8%);
+}
+
+.public-nav-links a:focus-visible,
+.public-action:focus-visible {
   outline: 2px solid var(--accent-color);
   outline-offset: 2px;
+}
+
+/* The label rolls up and its copy, a text shadow one line below, takes its
+   place (as on ploy.ai): one text node, so screen readers read it once */
+.nav-roll {
+  display: block;
+  height: 18px;
+  overflow: hidden;
+}
+
+.nav-roll > span {
+  display: block;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .nav-roll > span {
+    text-shadow: 0 18px 0 currentColor;
+    transition: transform 360ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+
+  .public-nav-links a:hover .nav-roll > span {
+    transform: translateY(-18px);
+  }
+}
+
+.public-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.public-action {
+  display: block;
+  padding: 6px 14px;
+  border-radius: 999px;
+  color: var(--text-color);
+  font: 500 13px / 18px var(--font-family);
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 200ms ease, color 200ms ease, transform 200ms ease;
+}
+
+.public-action:hover {
+  background: var(--surface-muted-color, #f5f5f3);
+  color: var(--text-color);
+}
+
+.public-action--primary {
+  background: var(--blot-blue, #0071e3);
+  color: var(--blot-on-blue, #fff);
+}
+
+.public-action--primary:hover {
+  background: var(--blot-blue-hover, #0062c4);
+  color: var(--blot-on-blue, #fff);
 }
 
 @media (max-width: 768px) {
@@ -298,15 +393,30 @@ html[data-auth="in"] .signed-in {
   }
 
   .public-header .public-masthead {
+    grid-template-columns: auto 1fr;
+    row-gap: 14px;
     padding-right: 12px;
     padding-left: 7px;
   }
 
   .header.public-header .public-navigation {
+    grid-column: 1 / -1;
+    grid-row: 2;
     display: flex;
-    flex: 1;
+    justify-content: center;
     width: auto;
+    margin: 0;
     padding: 0;
     border: 0;
+  }
+
+  .public-nav-links {
+    max-width: 100%;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+
+  .public-nav-links a {
+    padding-inline: 11px;
   }
 }

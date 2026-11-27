@@ -10,12 +10,17 @@
     </a>
 
     <nav class="site-navigation public-navigation" aria-label="Main navigation">
-      {{> navigation}}
-      {{^user}}
-      <a class="signed-out" href="/sites/sign-up">Sign up</a>
-      <a class="signed-out" href="/sites/log-in">Log in</a>
-      {{/user}}
-      <a class="signed-in" href="/sites">Dashboard</a>
+      <ul class="public-nav-links">
+        {{> navigation}}
+      </ul>
     </nav>
+
+    <div class="public-actions">
+      {{^user}}
+      <a class="public-action signed-out" href="/sites/log-in">Log in</a>
+      <a class="public-action public-action--primary signed-out" href="/sites/sign-up">Sign up</a>
+      {{/user}}
+      <a class="public-action public-action--primary signed-in" href="/sites">Dashboard</a>
+    </div>
   </div>
 </header>
