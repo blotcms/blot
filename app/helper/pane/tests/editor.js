@@ -314,4 +314,29 @@ describe("pane editor windows", function () {
       expect(() => css.skin("mac", source)).not.toThrow();
     });
   });
+
+  describe("on a skin without editors", function () {
+    it("styles them with the macOS skin, never the visitor's folder skin", function () {
+      for (const os of ["win", "linux"]) {
+        if (css.viewsOf(os).includes("text")) continue; // that skin has its editors now
+        const group = css.group(os);
+        expect(group).toContain(":not([data-view=text]):not([data-view=code])");
+        expect(css.group("mac")).toContain(
+          `html[data-os=${os}] .pane[data-view=text]:not([data-pin])`
+        );
+        expect(css.group("mac")).toContain(
+          `html[data-os=${os}] .pane[data-view=code]:not([data-pin])`
+        );
+      }
+    });
+
+    it("drops an os pin it can't honour, with a warning", function () {
+      spyOn(console, "warn");
+      if (css.viewsOf("win").includes("text")) return;
+      expect(pane.text("Hi", { os: "win" }).html).not.toContain("data-pin=");
+      expect(pane.code("Hi", { os: "win" }).html).not.toContain("data-pin=");
+      expect(console.warn).toHaveBeenCalled();
+      expect(pane.text("Hi", { os: "mac" }).html).toContain('data-pin="mac"');
+    });
+  });
 });

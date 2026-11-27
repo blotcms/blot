@@ -62,14 +62,17 @@ const minify = (css) =>
 const unbuilt = (skins) =>
   `html:not(:is(${skins.map((s) => `[data-os=${s}]`).join(",")}))`;
 
-// The views a skin has (the folder views an author can ask for, see index.js VIEWS): list is
-// the skin's own file, another view is css/<os>-<view>.css. A window in a view its skin lacks
-// is styled by the default skin instead (which has them all), so it is never half-styled.
-const VIEWS = ["list", "icons", "desktop", "browser"];
+// The views a skin has (the data-view values): list is the skin's own file, another view is
+// css/<os>-<file>.css, where the text and code editors share <os>-editor.css. A window in a
+// view its skin lacks is styled by the default skin instead (which has them all), so it is
+// never half-styled.
+const VIEWS = ["list", "icons", "desktop", "browser", "text", "code"];
+const FILE = { text: "editor", code: "editor" };
 const lacks = (os) =>
   VIEWS.filter(
     (v) =>
-      v !== "list" && !fs.existsSync(path.join(ROOT, "css", `${os}-${v}.css`))
+      v !== "list" &&
+      !fs.existsSync(path.join(ROOT, "css", `${os}-${FILE[v] || v}.css`))
   );
 const viewsOf = (os) => VIEWS.filter((v) => !lacks(os).includes(v));
 

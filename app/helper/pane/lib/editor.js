@@ -22,12 +22,14 @@ const DEFAULT_TITLE = { text: "Text", code: "Code" };
 function editor(kind, source, options) {
   options = options || {};
   const pin =
-    OS_KEYS.includes(options.os) && css.SKINS.includes(options.os)
+    OS_KEYS.includes(options.os) &&
+    css.SKINS.includes(options.os) &&
+    css.viewsOf(options.os).includes(kind)
       ? options.os
       : null;
   if (options.os && !pin)
     console.warn(
-      `pane: ignoring os pin "${String(options.os)}" (no skin built for it); the window follows the visitor`
+      `pane: ignoring os pin "${String(options.os)}" (no ${kind} editor built for it); the window follows the visitor`
     );
   const theme = ["light", "dark"].includes(options.theme)
     ? options.theme

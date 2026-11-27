@@ -24,7 +24,7 @@ describe("pane css build", function () {
     expect(skin).toContain(`${group}::before{content:""}`);
     // the visitor's-OS path excludes every pinned window
     expect(css.group("win")).toBe(
-      ":is(html[data-os=win] .pane:not([data-pin]):not([data-view=icons]):not([data-view=desktop]):not([data-view=browser]),.pane[data-pin=win]:not([data-view=icons]):not([data-view=desktop]):not([data-view=browser]))"
+      ":is(html[data-os=win] .pane:not([data-pin]):not([data-view=icons]):not([data-view=desktop]):not([data-view=browser]):not([data-view=text]):not([data-view=code]),.pane[data-pin=win]:not([data-view=icons]):not([data-view=desktop]):not([data-view=browser]):not([data-view=text]):not([data-view=code]))"
     );
   });
 
