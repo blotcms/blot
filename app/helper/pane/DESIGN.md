@@ -701,7 +701,8 @@ and the default skin takes them, exactly as with the icons view; an `os` pin for
   `.pane-bar` (background: the tab-list button and the active tab with its concave feet, `icons/win/br-tab.svg`, `br-tab-d.svg`;
   `::after` the globe, chevron, close and plus as one mask, `br-strip.svg`; `.pane-tab` is the tab's title at x=72), the
   caption buttons are `.pane::before` (`br-caption.svg`), back and reload are `.pane::after` (`br-left.svg`), the toolbar's
-  right group (favourites, menu) is `.pane-head::before` (`br-right.svg`) and the profile picture `.pane-head::after`
+  right group is `.pane-head` itself (absolute, 105px wide; the toolbar row is otherwise the window background): favourites and
+  the menu are its `::before` (`br-right.svg`) and the profile picture `.pane-head::after`
   (`br-avatar.svg`, coloured, not a mask). The address field is a 32px pill at x=76.5 (`.pane-url`; `::before` the padlock,
   `::after` the star): it shows the whole address with the scheme dimmed (`.pane-u-w` and `.pane-u-r` hidden), and for
   `data-secure=false` a warning glyph and "Not secure" before it. Tokens are `--br-strip`, `--br-tool`, `--br-field` and so on
