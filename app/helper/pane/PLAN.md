@@ -272,6 +272,7 @@ no window). The macOS icons view also has the Blot study features (DESIGN.md, "T
 `toolbar:"view"`. Their macOS reference captures (`hero`, `iconssel`, `large`, `largesel`, `listsel`) are in
 `screenshots/macos.sh` but not yet captured (held until the macOS 26.7 references land), so their QA cases and
 thresholds do not exist yet.
+Browser windows (`pane.browser`) have macOS (Safari) and Linux (GNOME Web) skins; Windows (Edge) gets the macOS look until its skin lands.
 Not built: Windows/Linux skins for the icons view, desktop view and editor windows (visitors on those
 OSes see the macOS look, by design); retiring `tools/finder`. Open decisions: whether docs code blocks should be coloured (GNOME highlights;
 TextEdit/Notepad are plain), whether to keep `pane-name` (nothing in the docs uses it yet). Later items: the
