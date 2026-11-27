@@ -84,7 +84,12 @@ Rules:
   macOS; `max-height` in the skin). The build knows the row count, so it adds `tabindex="0"`
   to `.pane-tree` only when the rows can exceed the cap (a scroller must be keyboard
   reachable). An explicit `height` (`--pane-h`) fixes the height instead. The QA adapter
-  passes the reference height.
+  passes the reference height. In the macOS list the stripes carry on below the last row when the
+  window is taller than its rows, as in Finder (a background on `.pane-tree`, so a page can add
+  empty rows with height, e.g. a `.pane-tree::after` spacer, as the docs do).
+- **macOS list columns.** A page may set `--pane-name-w` (Name, including the row's left margin;
+  Finder's 262.5px) and `--pane-size-w` (Size; Finder's 90.5px) on the window; the cells and the
+  header's dividers follow them. Date Modified stays 92px. The QA cases use Finder's widths.
 - **Icons.** `<i class="pane-icon pane-k-doc">`: `pane-k-<kind>` where kind comes from the
   extension via one table (`folder`, `text`, `doc`, `image`, `html`, `md`, `link`, `generic`, …).
   The folder disclosure chevron and the row's sr text are not extra nodes: the chevron is
