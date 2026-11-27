@@ -353,10 +353,50 @@
       "rowYOffset": 48
     },
     "linux-light-browser": {
-      "informational": true
+      "diffPercent": {
+        "overall": 1.6,
+        "chrome": 0.9,
+        "text": 1.75
+      },
+      "inkPercent": {
+        "chrome": 11,
+        "text": 32
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.45,
+        "chrome": 0.4,
+        "text": 0.5
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 2.2
     },
     "linux-dark-browser": {
-      "informational": true
+      "diffPercent": {
+        "overall": 1.6,
+        "chrome": 0.9,
+        "text": 1.75
+      },
+      "inkPercent": {
+        "chrome": 12,
+        "text": 26
+      },
+      "flatDeltaE": {
+        "chrome": 0.3,
+        "text": 0.3
+      },
+      "blurMae": {
+        "overall": 0.45,
+        "chrome": 0.4,
+        "text": 0.5
+      },
+      "shadowError": 1,
+      "sizeDelta": 1,
+      "rowYOffset": 2.2
     }
   }
 }

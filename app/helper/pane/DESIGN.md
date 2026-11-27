@@ -728,7 +728,10 @@ and the default skin takes them, exactly as with the icons view; an `os` pin for
   (`screenshots/fixture-assets/browser-page`, images inlined) at the reference's window size. All three captures load that page,
   the study's, from a local HTTPS server as `https://preview-of-cv-on-clara.blot.im/` (`screenshots/macos.sh`,
   `screenshots/windows.ps1`, `screenshots/linux.sh`: hosts entry, trusted self-signed certificate, `browser-server.py`), so each
-  browser shows the host with a padlock. The Windows cases are tight except
+  browser shows the host with a padlock. The Linux case (header bar 51px incl. the frame, then the page) differs by about 0.7% of the
+  header bar and 1.5% of the page, the page because WebKit and Blink lay the same text out up to 1px apart vertically; it names
+  Cantarell as the page's font (`qa/pane-adapter.js`): GNOME Web resolves `system-ui` to it, the runner's Chrome to DejaVu Sans.
+  The Windows cases are tight except
   for one gap: Edge's dark page has a dark scrollbar, the rendered iframe keeps a light one (the sandboxed page's colour scheme
   is its own), so `windows-dark-browser` has a loose `rowYOffset` (see the note in `thresholds.json`). `qa/lib/audit.js` has browser
   samples (static, live, long address, empty) for every skin.
