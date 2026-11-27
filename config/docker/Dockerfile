@@ -43,17 +43,14 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 # This is system config, so it applies to every git process in the container,
 # including the git upload-pack / index-pack / pack-objects processes the git
 # client spawns for clones and pushes (app/clients/git). pack.threads 1 stops
-# index-pack and pack-objects taking every core. receive.maxInputSize caps a
-# push just under the 2000M the proxy accepts for /clients/git/end/ (see
-# proxy/config/blot-site.conf); receivePack.js reads it and passes it to
-# index-pack, so one that is too big fails with a message the user can read
-# rather than nginx's bare 413. Keep the two in step.
+# index-pack and pack-objects taking every core. The push size limit is not
+# git's: it is config.git_store.max_push_bytes (see
+# app/clients/git/served/receive.js).
 RUN apk add --no-cache git tini curl ca-certificates \
  && git config --system pack.threads 1 \
  && git config --system pack.windowMemory 32m \
  && git config --system pack.deltaCacheSize 32m \
- && git config --system pack.window 5 \
- && git config --system receive.maxInputSize 1900m
+ && git config --system pack.window 5
 
 # Use tini as the init process so git child processes are reaped instead of becoming zombies.
 ENTRYPOINT ["/sbin/tini", "--"]

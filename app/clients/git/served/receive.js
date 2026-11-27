@@ -32,8 +32,8 @@
 //   [git-store-served] blog=<id> op=push outcome=ok|refused|failed|unknown|...
 //     ms=... bytesUp=... objects=... basesFetched=...
 const zlib = require("zlib");
-const { execFile } = require("child_process");
 const clfdate = require("helper/clfdate");
+const config = require("config");
 const receivePack = require("../receivePack");
 const limiter = require("../limiter");
 const receive = require("../store/receive");
@@ -48,45 +48,17 @@ const MASTER = "refs/heads/master";
 // streamed into scratch space reserved from the cache, and is completed and
 // indexed there, so a push needs about its own size again on top; half the
 // budget leaves room for the clones and fetches the cache serves meanwhile.
-// The limit is the smaller of this, MAX_PUSH and receive.maxInputSize, git's
-// limit in the Docker image (agreed with the maintainer, 3 Nov 2026: 512 MiB,
-// and no larger cache for this). The host's one cache is far larger than the
-// 1 GiB each process had then, so MAX_PUSH keeps the limit where it was.
+// The limit is the smaller of this and git_store.max_push_bytes, the ceiling,
+// which the proxy's body limit for git requests is derived from
+// (proxy/build/locals.js).
 const PUSH_CACHE_SHARE = 0.5;
-const MAX_PUSH = 512 * 1024 * 1024;
-
-// receive.maxInputSize, from git's config (the Docker image sets it for every
-// git process), read once per process. 0 when it is not set.
-let maxInputSize = null;
-
-function readMaxInputSize() {
-  if (!maxInputSize) {
-    maxInputSize = limiter.run("interactive", function () {
-      return new Promise(function (resolve) {
-        execFile(
-          "git",
-          ["config", "--get", "receive.maxInputSize"],
-          { timeout: 30 * 1000 },
-          function (err, stdout) {
-            resolve(err ? 0 : receivePack.parseSize(String(stdout).trim()));
-          }
-        );
-      });
-    });
-  }
-
-  return maxInputSize;
-}
 
 // The most bytes of pack a push to the store may carry
-async function pushLimit(cache) {
-  const share = Math.min(
-    MAX_PUSH,
+function pushLimit(cache) {
+  return Math.min(
+    config.git_store.max_push_bytes,
     Math.floor(cache.maxBytes * PUSH_CACHE_SHARE)
   );
-  const configured = await readMaxInputSize();
-
-  return configured > 0 ? Math.min(configured, share) : share;
 }
 
 // The request's body, decompressed if it was sent gzipped
@@ -182,7 +154,7 @@ async function push(req, res, blog, hooks, fields) {
 
   const store = context.storeFor(blogID);
   const cache = context.cache();
-  const limit = await pushLimit(cache);
+  const limit = pushLimit(cache);
   const master =
     commands.find(
       (command) => command.ref === MASTER && command.old !== command.new
