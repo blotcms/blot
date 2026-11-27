@@ -9,6 +9,7 @@ rather than repeating them.
 | `DESIGN.md` | how it is built: DOM contract, CSS architecture, per-OS formats, a11y, implementation notes. **Wins over PLAN.md.** |
 | `index.js` header | the public API contract |
 | `qa/README.md` | the comparison harness (cases, metrics, viewer, adapter) |
+| `gallery/` | the local gallery (`node app/helper/pane/gallery`): live windows next to the reference captures, below |
 | `reference/README.md`, `reference/resources/<os>/README.md` | what the reference screenshots are and how each OS was captured |
 | `screenshots/README.md` | the capture pipeline and CI (workflows, runners, gotchas) |
 | `screenshots/UPDATING-OS.md` | **procedure for moving to a newer macOS/Windows/Ubuntu**; the CI guard (`check-os.js`) points here when a runner's OS changes |
@@ -41,6 +42,15 @@ first. Details per OS: `screenshots/README.md` (principle) and `reference/resour
   edit or regenerate them by hand; bot commits land on the branch at any time.
 - `app/documentation/tools/finder` (the module this replaces) stays untouched until every
   view has migrated.
+
+## The gallery (looking at pane, not measuring it)
+`node app/helper/pane/gallery [--port 8040]` serves http://127.0.0.1:8040: every kind of window (Finder list and
+icons, browser, desktop icons, logos, editors) for one OS at a time (`?os=mac|win|linux`, `&theme=light|dark|both`),
+each next to the reference capture of that OS at 50% (side by side, or overlaid with an opacity slider). Each page
+request clears `require.cache` for pane's files and renders again, and a file watch reloads open pages, so edits
+show without a restart. What each section shows lives in `gallery/fixtures.js`: a new pane option is wired in
+there (a section whose option pane doesn't know yet says so). It is a visual comparison, not the QA diff (`qa/`).
+Spec: `tests/gallery.js` (no Chrome).
 
 ## Working loop (and its traps)
 1. Install `puppeteer sharp pixelmatch express jasmine cheerio` at the versions in the

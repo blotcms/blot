@@ -1,0 +1,153 @@
+/* The gallery's own chrome. pane's windows are styled by pane's stylesheet, not by this file. */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f6f4;
+  --panel: #ffffff;
+  --fg: #1d1d1f;
+  --dim: #6e6e73;
+  --line: #dcdcd8;
+  --accent: #0a64d8;
+  --seg: #e8e8e4;
+  --seg-on: #ffffff;
+  --wall-a: #5b7391;
+  --wall-b: #9bb0c8;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161617;
+    --panel: #1f1f21;
+    --fg: #f2f2f4;
+    --dim: #9a9aa1;
+    --line: #333336;
+    --accent: #5aa2ff;
+    --seg: #2a2a2d;
+    --seg-on: #4a4a4f;
+  }
+}
+
+* { box-sizing: border-box; }
+html { scroll-padding-top: 120px; scroll-behavior: smooth; }
+body {
+  margin: 0;
+  color: var(--fg);
+  background: var(--bg);
+  font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* header: title, OS tabs, theme control, section nav */
+.top {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+}
+.bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 20px;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 12px 24px 8px;
+}
+.bar h1 { margin: 0 auto 0 0; font-size: 17px; font-weight: 650; letter-spacing: -0.01em; }
+.bar h1 span { color: var(--dim); font-weight: 400; }
+.tabs, .modes, .compare {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: var(--seg);
+  border-radius: 9px;
+}
+.tabs a, .modes button, .compare button {
+  padding: 4px 14px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--dim);
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tabs a[aria-selected="true"], .modes button[aria-pressed="true"], .compare button[aria-pressed="true"] {
+  color: var(--fg);
+  background: var(--seg-on);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+:is(.tabs a, .modes button, .compare button, nav a):focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+nav {
+  display: flex;
+  gap: 18px;
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 0 24px 10px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+nav a { color: var(--dim); font-size: 13px; text-decoration: none; }
+nav a:hover { color: var(--fg); }
+
+/* sections */
+main { max-width: 1500px; margin: 0 auto; padding: 8px 24px 80px; }
+section { padding-top: 36px; }
+.grid .items { margin-top: 22px; }
+section > header { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
+section h2 { margin: 0; font-size: 24px; letter-spacing: -0.02em; }
+section header p { margin: 2px 0 0; max-width: 60ch; color: var(--dim); }
+.compare { align-items: center; }
+.blend { display: inline-flex; align-items: center; gap: 8px; padding: 0 10px; color: var(--dim); font-size: 13px; }
+.blend[hidden] { display: none; }
+.blend input { width: 120px; accent-color: var(--accent); }
+
+.item { margin-top: 22px; padding: 18px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.item h3 { margin: 0 0 12px; color: var(--dim); font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
+.pairs { display: flex; flex-wrap: wrap; gap: 24px 36px; }
+.pair { min-width: 0; max-width: 100%; }
+.stage { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; max-width: 100%; overflow-x: auto; padding: 2px; }
+.render { min-width: 0; }
+.ref { min-width: 0; }
+.ref img { display: block; max-width: 100%; height: auto; }
+.note { margin: 0; padding: 10px 12px; color: var(--dim); background: var(--seg); border-radius: 8px; font-size: 13px; }
+.note[hidden], .ref img[hidden] { display: none; }
+.caption { margin: 8px 0 0; color: var(--dim); font-size: 12px; }
+.caption:empty { display: none; }
+
+/* theme control */
+html[data-mode="light"] .pair[data-theme="dark"],
+html[data-mode="dark"] .pair[data-theme="light"] { display: none; }
+
+/* overlay: the reference lies over the render at the chosen opacity. Captures have a desktop margin
+   around the window (96px; 80px on Windows), so the render gets the same padding to line up. */
+html[data-os="win"] { --pad: 80px; }
+section[data-compare="overlay"]:not(.flush) .render { padding: var(--pad, 96px); }
+section[data-compare="overlay"] .stage { display: block; position: relative; width: fit-content; max-width: 100%; }
+section[data-compare="overlay"] .ref { position: absolute; top: 2px; left: 2px; opacity: var(--blend, 0.5); pointer-events: none; }
+section[data-compare="overlay"] .ref img { max-width: none; }
+section[data-compare="overlay"] .ref .note { width: max-content; }
+
+/* wallpaper-like backdrop for views with no window */
+.wallpaper {
+  width: 540px;
+  max-width: calc(100vw - 80px);
+  min-height: 260px;
+  padding: 24px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, var(--wall-a), var(--wall-b));
+}
+.wallpaper.compact { width: 200px; min-height: 150px; }
+.grid .items { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 480px), 1fr)); gap: 16px; }
+.grid .item { margin-top: 0; }
+.pair[data-theme="dark"] .wallpaper { --wall-a: #1f2937; --wall-b: #4b5563; }
+
+@media (max-width: 640px) {
+  .bar, nav, main { padding-left: 16px; padding-right: 16px; }
+  .top { position: static; }
+  html { scroll-padding-top: 16px; }
+  .bar h1 { flex-basis: 100%; }
+  .item { padding: 12px; border-radius: 12px; }
+  .pairs { gap: 20px; }
+}
