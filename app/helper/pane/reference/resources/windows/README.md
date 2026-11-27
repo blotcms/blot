@@ -68,7 +68,10 @@ squiggles and a notification dot on the feedback icon; there is no setting to hi
 from a script.
 
 ## Browser window (`-browser`)
-Microsoft Edge (preinstalled), a 600x400 logical px window on `https://example.com/`, in a fresh profile
+Microsoft Edge (preinstalled), a 600x400 logical px window on the study's page (`screenshots/fixture-assets/browser-page`),
+served over HTTPS as `https://preview-of-cv-on-clara.blot.im/` so the address bar shows that host with a padlock
+(as in `macos.sh`: a `hosts` entry for 127.0.0.1, a self-signed certificate with that name added to the machine's Root
+store with `certutil`, and `screenshots/browser-server.py` on port 443; `browser.log` records the page fetch), in a fresh profile
 (`--user-data-dir`, `--no-first-run`, `--no-default-browser-check`, `--disable-sync`). The toolbar
 clutter is switched off by machine policy under `HKLM:\SOFTWARE\Policies\Microsoft\Edge`:
 `Microsoft365CopilotChatIconEnabled` (the Copilot "Chat" button) and `HubsSidebarEnabled`,

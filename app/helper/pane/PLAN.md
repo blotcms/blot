@@ -265,7 +265,7 @@ Built and passing: reference screenshots for all three OSes (folder views, text 
 desktop icons), pinned runner OS versions with a CI guard, the QA harness (pixel diff, backdrop matte
 check, accessibility and mobile audit), the folder list view, icons view and desktop view for macOS in
 light and dark, the folder list view for Windows 11 and GNOME Files in light and dark, editor windows
-(macOS skin; Windows and Linux get the macOS look), fresh build-time dates, and the docs build rendering
+(macOS skin; Windows and Linux get the macOS look), browser windows (`pane.browser`: Safari for macOS and Edge for Windows; Linux gets the macOS look until GNOME Web lands), fresh build-time dates, and the docs build rendering
 `pre.folder`, `pre.text` and `pre.code` with pane (`data-view="desktop"` on `pre.folder` for loose icons,
 no window). The macOS icons view also has the Blot study features (DESIGN.md, "The Blot study"): row attributes
 `[selected]` and `[img=URL]` (selection, picture thumbnails), names cut in the middle, `iconSize:"large"` and

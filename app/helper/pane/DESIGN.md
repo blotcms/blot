@@ -642,11 +642,11 @@ measured off a wallpaper is later work, gated on the two-backdrop capture plan i
     for the whole build) adds `pane-hl` to a highlighted code window; `mac-editor.css` then sets an Xcode-like `--tok-*`
     palette (light and dark). Off by default: TextEdit shows plain text.
 
-### Browser windows (`pane.browser`), macOS built; the contract for the other skins
+### Browser windows (`pane.browser`), macOS and Windows built; the contract for the other skins
 
 `pane.browser({ url, html | src, title, tint, sandbox, os, theme, width, height })` (`lib/browser.js`, skin
 `css/mac-browser.css`, structure in `css/base.css`). One DOM for all three OSes, so the Windows (Edge) and Linux (GNOME Web)
-skins are CSS only: `css/win-browser.css`, `css/linux-browser.css`. Until one exists, that OS's visitors get the macOS look
+skins are CSS only: `css/win-browser.css` (built), `css/linux-browser.css`. Until one exists, that OS's visitors get the macOS look
 (`lib/css.js`: `browser` is in `VIEWS`, so a skin without `css/<os>-browser.css` is excluded from `.pane[data-view=browser]`
 and the default skin takes them, exactly as with the icons view; an `os` pin for it is dropped with a warning).
 
@@ -696,6 +696,17 @@ and the default skin takes them, exactly as with the icons view; an `os` pin for
   window's tokens (`--pill`, `--pill-ring`, `--pill-sh`). Light: the toolbar is transparent over the page, so `.pane`'s
   background is `--br-tint`; dark: solid `#1e1e1e`, and the page sits above the pills' shadow. Below 560px the glyph pill goes,
   below 440px the back/forward pill goes (`mac.css`) and the field takes the row.
+- **Windows (Edge, Windows 11)** measures to the 2x capture: a square 600x400 window with no shadow, a 39px tab strip and a
+  39px toolbar, the page below in a frame inset 3.5px (3px at the bottom) with a 1px hairline and 8px corners. The strip is
+  `.pane-bar` (background: the tab-list button and the active tab with its concave feet, `icons/win/br-tab.svg`, `br-tab-d.svg`;
+  `::after` the globe, chevron, close and plus as one mask, `br-strip.svg`; `.pane-tab` is the tab's title at x=72), the
+  caption buttons are `.pane::before` (`br-caption.svg`), back and reload are `.pane::after` (`br-left.svg`), the toolbar's
+  right group (favourites, menu) is `.pane-head::before` (`br-right.svg`) and the profile picture `.pane-head::after`
+  (`br-avatar.svg`, coloured, not a mask). The address field is a 32px pill at x=76.5 (`.pane-url`; `::before` the padlock,
+  `::after` the star): it shows the whole address with the scheme dimmed (`.pane-u-w` and `.pane-u-r` hidden), and for
+  `data-secure=false` a warning glyph and "Not secure" before it. Tokens are `--br-strip`, `--br-tool`, `--br-field` and so on
+  (`win-browser.css`); dark has a black strip, `#333` toolbar and tab, `#242424` field. Below 520px the toolbar's right group
+  goes, below 420px the caption buttons, below 340px back and reload.
 - **QA.** Cases `macos-{light,dark}-browser` (region `titlebar` is the top 52px), and for the next skins
   `windows-{light,dark}-browser` (Edge) and `linux-{light,dark}-browser` (GNOME Web), informational in `qa/thresholds.json`
   until their skins exist (drop the flag and tighten with the skin). `qa/pane-adapter.js` renders every OS's case with the
