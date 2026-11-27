@@ -97,14 +97,27 @@ module.exports = {
     expectsImages: true,
   },
 
-  // The software-browser study: Safari on the CV page (./fixtures/cv, also served at /fixtures/cv/).
+  // The software-browser study (Safari, Edge, GNOME Web) on the CV page (./fixtures/cv, also served at /fixtures/cv/).
   browser: {
     url: "preview-of-cv-on-clara.blot.im",
     src: "/fixtures/cv/",
     title: "Clara Xiao",
     html: CV_HTML,
-    render: (pane, theme, fx) =>
-      pane.browser({ url: fx.url, html: fx.html, title: fx.title, theme }),
+    // each OS's window at the size of its capture (qa/lib/cases.js), so the overlay lines up
+    sizes: {
+      mac: { width: "600px", height: "400px" },
+      win: { width: "601.5px", height: "340px" },
+      linux: { width: "720px", height: "400px" },
+    },
+    render: (pane, theme, fx, os) =>
+      pane.browser({
+        url: fx.url,
+        html: fx.html,
+        title: fx.title,
+        theme,
+        os,
+        ...fx.sizes[os],
+      }),
   },
 
   desktop: {
