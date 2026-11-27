@@ -268,6 +268,13 @@ module.exports = {
     secret: process.env.BLOT_YOUTUBE_SECRET,
   },
 
+  // A read-only updown.io API key, so the brochure's footer can show the
+  // status of the checks behind status.blot.im (app/documentation/status.js).
+  // Without one the footer just links to the status page.
+  updown: {
+    key: process.env.BLOT_UPDOWN_READ_KEY || "",
+  },
+
   // Credentials for the S3 client in app/storage/s3.js. When these aren't
   // set the AWS SDK's default provider chain is used instead.
   aws: {

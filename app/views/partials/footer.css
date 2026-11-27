@@ -1,4 +1,4 @@
-footer {
+footer:not(.site-footer) {
   display: flex;
   justify-content: space-between;
   flex-wrap: wrap;
@@ -7,7 +7,7 @@ footer {
   padding: var(--spacing) 0 0;
 }
 
-footer ul {
+footer:not(.site-footer) ul {
     list-style-type: none;
     margin: 0;
     padding: 0 var(--spacing);
@@ -15,23 +15,23 @@ footer ul {
     flex-wrap: wrap;
 }
 
-footer li {
+footer:not(.site-footer) li {
     margin: 0;
     padding: 0
 }
 
-footer ul:first-of-type,
-footer ul:first-of-type li:first-child a 
+footer:not(.site-footer) ul:first-of-type,
+footer:not(.site-footer) ul:first-of-type li:first-child a 
  {
     padding-left: 0;
 }
 
-footer ul:last-of-type,
-footer ul:last-of-type li:last-child a {
+footer:not(.site-footer) ul:last-of-type,
+footer:not(.site-footer) ul:last-of-type li:last-child a {
     padding-right: 0;
 }
 
-footer a {
+footer:not(.site-footer) a {
     text-decoration: none;
     font-size: var(--small-font-size);
     color: var(--light-text-color);
@@ -39,6 +39,148 @@ footer a {
     padding: 0 calc(var(--spacing)*0.5);
 }
 
-footer a:hover {
+footer:not(.site-footer) a:hover {
     color: var(--accent-color);
+}
+
+
+/* The brochure's footer: a short intro, three columns of links, then the
+   status of status.blot.im (app/documentation/status.js) and the legal links.
+   Dashboard pages keep the plain footer above. */
+
+.site-footer {
+  max-width: 1200px;
+  margin: 8rem auto 0;
+  padding: 0 0 2.5rem;
+  border-top: 1px solid var(--border-color);
+  color: var(--medium-text-color);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.site-footer-top {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  gap: 3rem;
+  padding: 3rem 0 4rem;
+}
+
+.site-footer-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-color);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.site-footer-brand svg {
+  width: 22px;
+  height: auto;
+}
+
+.site-footer-intro p {
+  max-width: 260px;
+  margin: 12px 0 0;
+}
+
+.site-footer-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2rem;
+}
+
+.site-footer h2 {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+  color: var(--text-color);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.site-footer ul {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.site-footer li {
+  margin: 0 0 6px;
+}
+
+.site-footer a {
+  color: var(--medium-text-color);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.site-footer a:hover {
+  color: var(--text-color);
+}
+
+.site-footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px 24px;
+  font-size: 13px;
+}
+
+.site-footer-bottom ul {
+  display: flex;
+  gap: 20px;
+}
+
+.site-footer-bottom li {
+  margin: 0;
+}
+
+.site-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 4px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+}
+
+.site-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dark-border-color);
+}
+
+.site-status--up .site-status-dot {
+  background: var(--blot-green, #1f9d55);
+  box-shadow: 0 0 0 3px rgb(31 157 85 / 18%);
+}
+
+.site-status--partial .site-status-dot {
+  background: var(--blot-amber, #c27c00);
+}
+
+.site-status--down .site-status-dot {
+  background: var(--blot-red, #d93a26);
+}
+
+@media (max-width: 768px) {
+  .site-footer {
+    margin-top: 5rem;
+  }
+
+  .site-footer-top {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2.5rem;
+    padding: 2.5rem 0 3rem;
+  }
+}
+
+@media (max-width: 420px) {
+  .site-footer-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }

@@ -75,7 +75,10 @@ documentation.get(
 
 documentation.use(require("./selected"));
 
-documentation.get("/", home);
+documentation.use(require("./status"));
+
+// The homepage lists the latest finished work, as the Updates page does
+documentation.get("/", require("./tools/git-commits").middleware, home);
 
 // The old examples page, the featured sites with their profession filters,
 // is at /discover/people
