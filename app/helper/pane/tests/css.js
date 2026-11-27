@@ -108,3 +108,26 @@ describe("pane skins spanning several css files", function () {
     expect(css.build({ skins: ["win"] })).not.toContain("zz-only");
   });
 });
+
+describe("pane desktop view in a shrink-wrapped parent", function () {
+  const built = pane.assets().css;
+
+  it("gives the grid an intrinsic width of two columns (small and large icons)", function () {
+    // an auto-fill grid collapses to one column inside inline-block, a flex item or a float
+    expect(built).toContain(
+      ".pane[data-view=desktop] .pane-tree:has(>li:nth-child(2)){min-width:calc(var(--pane-col)*2 + var(--pane-gap))}"
+    );
+    expect(built).toContain(".pane[data-view=desktop]{--pane-col:88px;");
+    expect(built).toContain(
+      ".pane[data-view=desktop].pane-lg{--pane-col:152px}"
+    );
+  });
+
+  it("keeps the structure in base.css, not in a skin", function () {
+    const fs = require("fs");
+    const file = (name) =>
+      fs.readFileSync(`${__dirname}/../css/${name}`, "utf8");
+    expect(file("base.css")).toContain("--pane-col");
+    expect(file("mac-desktop.css")).not.toContain("--pane-col");
+  });
+});

@@ -110,7 +110,8 @@ section header p { margin: 2px 0 0; max-width: 60ch; color: var(--dim); }
 .stage { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 16px; max-width: 100%; overflow-x: auto; padding: 2px; }
 .render { min-width: 0; }
 .ref { min-width: 0; }
-.ref img { display: block; max-width: 100%; height: auto; }
+/* real half size, scrolling inside the stage: shrunk to a phone's width, the capture made the live window look scaled up */
+.ref img { display: block; max-width: none; height: auto; }
 .note { margin: 0; padding: 10px 12px; color: var(--dim); background: var(--seg); border-radius: 8px; font-size: 13px; }
 .note[hidden], .ref img[hidden] { display: none; }
 .caption { margin: 8px 0 0; color: var(--dim); font-size: 12px; }
@@ -151,3 +152,8 @@ section[data-compare="overlay"] .ref .note { width: max-content; }
   .item { padding: 12px; border-radius: 12px; }
   .pairs { gap: 20px; }
 }
+
+/* an item rendered once per OS shows the window of the selected tab */
+html[data-os="mac"] .only:not([data-only="mac"]),
+html[data-os="win"] .only:not([data-only="win"]),
+html[data-os="linux"] .only:not([data-only="linux"]) { display: none; }

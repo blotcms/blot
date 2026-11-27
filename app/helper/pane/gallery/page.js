@@ -101,12 +101,13 @@ function sections(pane, fx) {
         "The CV page from the software-browser study, in pane's browser window.",
       items: [
         {
-          label: "Safari-style window",
+          label: "Browser window",
           ref: "-browser",
-          render: (theme) =>
+          // one window per OS (pinned, at the capture's size); the tab picks which one shows
+          perOs: (theme, os) =>
             typeof pane.browser === "function"
               ? windowHtml(
-                  () => fx.browser.render(pane, theme, fx.browser),
+                  () => fx.browser.render(pane, theme, fx.browser, os),
                   "pane.browser"
                 )
               : { note: "pane.browser is not built on this branch yet." },
@@ -180,8 +181,22 @@ function sections(pane, fx) {
   ];
 }
 
+// An item with perOs renders once per OS; the CSS shows the one for the selected tab.
+function renderItem(item, theme) {
+  if (!item.perOs) return item.render(theme);
+  const outs = OSES.map((o) => ({ os: o.key, out: item.perOs(theme, o.key) }));
+  const wrap = (os, inner) =>
+    `<div class="only" data-only="${os}">${inner}</div>`;
+  return {
+    html: outs
+      .map(({ os, out }) => wrap(os, out.html || note(out.note)))
+      .join(""),
+    caption: outs.map(({ out }) => out.caption).find(Boolean),
+  };
+}
+
 function pairHtml(section, item, theme, osKey) {
-  const out = item.render(theme);
+  const out = renderItem(item, theme);
   const refs = OSES.map((os) => referenceUrl(os, theme, item.ref));
   const dataRefs = OSES.map(
     (os, i) => ` data-ref-${os.key}="${esc(refs[i])}"`
@@ -272,6 +287,7 @@ function page({ pane, fixtures, os: osQuery, theme: themeQuery }) {
   <nav aria-label="Sections">${nav}</nav>
 </header>
 <main>${secs.map((s) => sectionHtml(s, osKey)).join("\n")}</main>
+<script src="/_gallery/anchor.js" defer></script>
 <script src="/_gallery/gallery.js" defer></script>
 </body>
 </html>`;
