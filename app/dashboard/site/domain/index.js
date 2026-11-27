@@ -9,6 +9,7 @@ const identifyNameServers = require("./identifyNameServers");
 // triggerAutoSSL() below pokes a user-set hostname; fetch it in the sandbox like
 // the other user-controlled URLs. See app/sandbox/README.md.
 const sandboxFetch = require("sandbox/fetch");
+const { rateLimit } = require("express-rate-limit");
 const Domain = express.Router();
 
 const ip = config.ip;
@@ -94,7 +95,21 @@ function normalizeHostname(hostname) {
   return asciiHostname.toLowerCase();
 }
 
-Domain.route("/").post(async (req, res) => {
+// Each save looks up DNS and may fetch the domain, so a few a minute per
+// account is plenty. The count is per process, which is enough to stop a
+// loop of requests.
+const saveLimit = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  keyGenerator: (req) => req.user.uid,
+  handler: (req, res) =>
+    res.message(
+      res.locals.domainBase + "/custom",
+      new Error("Too many changes to your domain. Please wait a minute.")
+    ),
+});
+
+Domain.route("/").post(saveLimit, async (req, res) => {
   const blogID = req.blog.id;
   const domainInput =
     typeof req.body.domain === "string" ? req.body.domain : "";

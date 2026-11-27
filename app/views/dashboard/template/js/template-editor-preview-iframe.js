@@ -140,8 +140,17 @@ if (previewIframeContainer) {
 
   // The server renders the saved page into the iframe's address when the
   // cookie has it; this covers a path only localStorage holds
-  if (storedPath && iframe.src !== new URL(previewOrigin + storedPath).href) {
-    iframe.setAttribute("src", previewOrigin + storedPath);
+  if (storedPath) {
+    // A path on the preview host only, whatever localStorage holds
+    var storedUrl = null;
+    try {
+      storedUrl = new URL(storedPath, previewOrigin);
+    } catch (err) {}
+    if (!storedUrl || storedUrl.origin !== previewOrigin) {
+      storedPath = "";
+      currentPath = pathname;
+    } else if (iframe.src !== storedUrl.href)
+      iframe.setAttribute("src", storedUrl.href);
   }
 
   updatePreviewLink(storedPath);

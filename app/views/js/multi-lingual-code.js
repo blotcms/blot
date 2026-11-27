@@ -40,7 +40,10 @@ document
       var text = dictionary[lang] || lang;
 
       // Set the tab's HTML content
-      tab.innerHTML = '<a href="#' + id + '">' + text + "</a>";
+      var link = document.createElement("a");
+      link.href = "#" + id;
+      link.textContent = text;
+      tab.appendChild(link);
 
       // Append the tab to the tabs list
       tabs.appendChild(tab);

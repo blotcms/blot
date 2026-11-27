@@ -430,7 +430,13 @@
   function triggerDownload(relativeUrl) {
     var encodedPath = encodePathSegments(relativeUrl);
     if (!encodedPath) return;
-    window.location.href = folderBase + "/folder-download/" + encodedPath;
+    // Only ever a download from this site
+    var url = new URL(
+      folderBase + "/folder-download/" + encodedPath,
+      window.location.href
+    );
+    if (url.origin !== window.location.origin) return;
+    window.location.href = url.href;
   }
 
   function handleRemoveMenuClick(event) {

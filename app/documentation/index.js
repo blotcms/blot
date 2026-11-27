@@ -80,9 +80,10 @@ documentation.get("/", home);
 // The old examples page, the featured sites with their profession filters,
 // is at /discover/people
 documentation.get(["/examples", "/examples/:category"], (req, res) => {
+  const category = req.params.category;
   res.redirect(
     301,
-    req.originalUrl.replace(/^\/examples/i, "/discover/people")
+    "/discover/people" + (category ? "/" + encodeURIComponent(category) : "")
   );
 });
 

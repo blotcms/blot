@@ -5,10 +5,18 @@
 const puppeteer = require("puppeteer");
 const postcss = require("postcss");
 const { target, loginURL } = require("./login");
-const { execSync } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const ROOT = path.join(__dirname, "../../../app/views");
+
+// The .js files under dir, leaving out built views, specs and pickr
+function jsFiles(dir) {
+  return fs
+    .readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".js"))
+    .map((entry) => path.join(entry.parentPath, entry.name))
+    .filter((file) => !/\/(views-built|tests|pickr)\//.test(file));
+}
 const args = process.argv.slice(2);
 const opt = (k, d) => {
   const i = args.indexOf(k);
@@ -152,10 +160,10 @@ function base(sel) {
     }
   }
   await browser.close();
-  const jsText = execSync(
-    `cat $(find ${ROOT} ${ROOT}/../dashboard -name '*.js' -not -path '*/views-built/*' -not -path '*/tests/*' -not -path '*/pickr/*')`,
-    { maxBuffer: 1 << 28 }
-  ).toString();
+  const jsText = [ROOT, path.join(ROOT, "../dashboard")]
+    .flatMap((dir) => jsFiles(dir))
+    .map((file) => fs.readFileSync(file, "utf8"))
+    .join("\n");
   const report = {};
   rules.forEach((r) => {
     const f = (report[r.file] = report[r.file] || {
