@@ -46,7 +46,7 @@ Source of truth: the table in
 per-image release notes are its GitHub releases; the "Set up job → Runner Image" group in
 any job log shows the exact image version used.
 
-- **macOS:** `macos-26` = macOS 26.x Tahoe on Apple Silicon (arm64); `macos-latest` points
+- **macOS:** `macos-26` = macOS 26.x Tahoe on Apple Silicon (arm64; 26.7.2, build 25G332, on 2026-11-27); `macos-latest` points
   at it. macOS 15 is also offered. Fonts: SF (system).
 - **Windows:** `windows-2025` = Windows Server 2025, build 26100, the 24H2 code base, the
   newest x64 Windows image. There is no Windows 11 client x64 runner; `windows-11-arm`
