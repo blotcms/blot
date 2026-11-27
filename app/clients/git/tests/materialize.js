@@ -673,6 +673,86 @@ describe("git client: materialize", function () {
     });
   });
 
+  // Each write held for a moment, so writes running at once overlap. Resolves
+  // the most that were running at once, and counts storage.mkdir's calls.
+  function watchWrites(spec) {
+    var write = storage.write;
+    var mkdir = storage.mkdir;
+    var running = 0;
+
+    spec.mostAtOnce = 0;
+    spec.made = {};
+
+    spyOn(storage, "write").and.callFake(async function () {
+      running++;
+      spec.mostAtOnce = Math.max(spec.mostAtOnce, running);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return await write.apply(storage, arguments);
+      } finally {
+        running--;
+      }
+    });
+
+    spyOn(storage, "mkdir").and.callFake(function (blogID, directory) {
+      spec.made[directory] = (spec.made[directory] || 0) + 1;
+      return mkdir.apply(storage, arguments);
+    });
+  }
+
+  it("writes several files at once, making each directory once", async function () {
+    var changes = {};
+    var expected = { "posts/": true };
+
+    for (var i = 0; i < 30; i++) {
+      var name = "posts/" + (i % 3) + "/post-" + i + ".txt";
+      changes[name] = "Post " + i;
+      expected[name] = Buffer.from("Post " + i);
+      expected["posts/" + (i % 3) + "/"] = true;
+    }
+
+    var first = await commit(this, changes);
+
+    // A file in the way of the directory every write needs, which only one
+    // of them may clear
+    await folder.write(this.blog.id, "/posts", "In the way");
+    watchWrites(this);
+
+    expect((await apply(this, EMPTY_TREE, first)).length).toBe(30);
+    expect(await listBlog(this)).toEqual(expected);
+    expect(this.mostAtOnce).toBeGreaterThan(1);
+    expect(this.mostAtOnce).toBeLessThanOrEqual(materialize.WRITE_CONCURRENCY);
+    expect(this.made).toEqual({
+      "/posts": 1,
+      "/posts/0": 1,
+      "/posts/1": 1,
+      "/posts/2": 1,
+    });
+    expect(this.logs).toContain(
+      'Applied from the store: {"written":30,"unchanged":0,"moved":0,"removed":0}'
+    );
+  });
+
+  it("writes one file at a time when two names differ only in case", async function () {
+    var first = await commitExactly(this, {
+      "a.txt": "Lower",
+      "A.txt": "Upper",
+      "b.txt": "B",
+      "c.txt": "C",
+    });
+
+    watchWrites(this);
+    await apply(this, EMPTY_TREE, first);
+
+    expect(this.mostAtOnce).toBe(1);
+    expect(await listBlog(this)).toEqual({
+      "A.txt": Buffer.from("Upper"),
+      "a.txt": Buffer.from("Lower"),
+      "b.txt": Buffer.from("B"),
+      "c.txt": Buffer.from("C"),
+    });
+  });
+
   it(
     "writes a large file byte for byte, without holding it in memory",
     async function () {

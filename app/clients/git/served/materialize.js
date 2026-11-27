@@ -26,20 +26,32 @@
 // folder's own .git directory is never touched. A symbolic link or file in
 // the way of a path is replaced, never followed.
 //
-// Every change goes through storage/folder, one call at a time, straight
-// from app/clients/git (not app/clients/folder.js, which would come back
-// here), so the folder may be on disk or in the bucket (#2258):
+// Every change goes through storage/folder, straight from app/clients/git
+// (not app/clients/folder.js, which would come back here), so the folder may
+// be on disk or in the bucket (#2258):
 //
 //   - an exact rename (the same blob removed at one path and added at
 //     another) is one move(), if neither path is inside the other and the
 //     file there is still the old blob (its git blob ID, read back);
 //     anything else is a removal and a write;
-//   - then the removals;
+//   - then the removals, one at a time;
 //   - then the writes, each streamed from the store's packs (reader.stream,
 //     checked against the blob's ID as it goes, no temporary file). A blob
 //     of up to SKIP_CHECK_BYTES is buffered first, and not written if the
 //     file there already has its bytes: stat() for the size, and only when
 //     that matches, stat({ sha1: true }), which on S3 costs nothing.
+//
+// The writes run WRITE_CONCURRENCY at a time, since each is an upload to the
+// bucket and a few index reads, and one after another a push of 150 files
+// spent most of its sync waiting on them. Their paths are all different, and
+// each directory they need is made once, by whichever write gets there first
+// (ensureDirectory's `made`), so two writes never both clear the same file
+// out of a directory's way. models/file reads then writes its records, which
+// is safe for writes at once only while no two of them share a field: if two
+// paths are the same once folded as it folds them (names which differ in
+// case or Unicode form, or a file and a directory of one name), the writes
+// run one at a time, in order, as they always did, so the last one wins. At
+// most WRITE_CONCURRENCY blobs of SKIP_CHECK_BYTES are held at once.
 //
 // A failure part way leaves the folder part applied and rejects; the sync
 // runs the same range again, which ends where an uninterrupted run would.
@@ -49,12 +61,16 @@ const storage = require("storage/folder");
 const { parseCommit } = require("../store/objects");
 const { diffTrees, EMPTY_TREE } = require("../store/treediff");
 const { NotFoundError, CorruptError } = require("../store/errors");
+const { mapLimit } = require("../store/limit");
 
 const MODES = { 100644: true, 100755: true };
 const SYMLINK = "120000";
 
 // Blobs up to this size are compared with the file before being written
 const SKIP_CHECK_BYTES = 1024 * 1024;
+
+// How many files are written into the folder at once
+const WRITE_CONCURRENCY = 8;
 
 function safeParts(file) {
   const parts = file.split("/");
@@ -87,18 +103,32 @@ async function kind(blogID, file) {
   }
 }
 
+async function makeDirectory(blogID, directory) {
+  const found = await kind(blogID, directory);
+
+  if (found === "directory") return;
+  if (found) await storage.remove(blogID, directory);
+
+  await storage.mkdir(blogID, directory);
+}
+
 // Makes the directory for the first parts of a path, with each directory made
 // if it is missing. Something else in its place (a file, or a symbolic link,
-// which is not followed) is removed to make room.
-async function ensureDirectory(blogID, parts) {
+// which is not followed) is removed to make room. `made` (optional) maps each
+// directory this run has made sure of, by its name in NFC, to the promise
+// doing so, so writes running at once make each one once.
+async function ensureDirectory(blogID, parts, made) {
   for (let i = 1; i <= parts.length; i++) {
     const directory = join(parts.slice(0, i));
-    const found = await kind(blogID, directory);
 
-    if (found === "directory") continue;
-    if (found) await storage.remove(blogID, directory);
+    if (!made) {
+      await makeDirectory(blogID, directory);
+      continue;
+    }
 
-    await storage.mkdir(blogID, directory);
+    const key = directory.normalize("NFC");
+    if (!made.has(key)) made.set(key, makeDirectory(blogID, directory));
+    await made.get(key);
   }
 }
 
@@ -166,7 +196,7 @@ async function bufferOf(stream) {
 }
 
 // Writes a blob to the file at `parts`, in place of whatever is there
-async function writeBlob(blogID, reader, parts, oid, stats) {
+async function writeBlob(blogID, reader, parts, oid, stats, made) {
   const blob = await reader.stream(oid);
 
   if (!blob)
@@ -179,12 +209,13 @@ async function writeBlob(blogID, reader, parts, oid, stats) {
     );
 
   const file = join(parts);
-  let body = Readable.from(blob.data, { objectMode: false });
+  const stream = Readable.from(blob.data, { objectMode: false });
+  let body = stream;
 
   try {
     if (blob.size <= SKIP_CHECK_BYTES) {
       // Read whole, which also checks it against its ID
-      const bytes = await bufferOf(body);
+      const bytes = await bufferOf(stream);
       const found = await statOf(blogID, file);
 
       if (found && !found.isDirectory && found.size === bytes.length) {
@@ -198,15 +229,16 @@ async function writeBlob(blogID, reader, parts, oid, stats) {
         }
       }
 
-      body = Readable.from([bytes]);
+      // A Buffer is uploaded as it is, with no spool file
+      body = bytes;
     }
 
-    await ensureDirectory(blogID, parts.slice(0, -1));
+    await ensureDirectory(blogID, parts.slice(0, -1), made);
     if (await kind(blogID, file)) await storage.remove(blogID, file);
     await storage.write(blogID, file, body);
     stats.written++;
   } finally {
-    body.destroy();
+    stream.destroy();
   }
 }
 
@@ -220,6 +252,38 @@ function nested(a, b) {
   return shorter.every(
     (part, i) => longer[i].normalize("NFC") === part.normalize("NFC")
   );
+}
+
+// Whether two writes name the same file or directory once their names are
+// folded as models/file folds them for its lowercased lookup (NFC, then lower
+// case), other than as the same directory spelled the same way: a file and a
+// directory at one path, two spellings of a name, or one path twice
+function overlapping(writes) {
+  const seen = new Map();
+
+  function clashes(names, isFile) {
+    const exact = names.join("/");
+    const folded = exact.toLowerCase();
+    const found = seen.get(folded);
+
+    if (!found) {
+      seen.set(folded, { exact, isFile });
+      return false;
+    }
+
+    return found.exact !== exact || found.isFile || isFile;
+  }
+
+  for (const { parts } of writes) {
+    const names = parts.map((part) => part.normalize("NFC"));
+
+    for (let i = 1; i < names.length; i++)
+      if (clashes(names.slice(0, i), false)) return true;
+
+    if (clashes(names, true)) return true;
+  }
+
+  return false;
 }
 
 // Whether the file at `parts` holds exactly the blob `oid`: its git blob ID,
@@ -376,10 +440,14 @@ async function materialize({
     stats.removed++;
   }
 
-  for (const write of writes) {
-    if (write.moved) continue;
-    await writeBlob(blogID, reader, write.parts, write.oid, stats);
-  }
+  const pending = writes.filter((write) => !write.moved);
+  const made = new Map();
+
+  await mapLimit(
+    pending,
+    overlapping(pending) ? 1 : WRITE_CONCURRENCY,
+    (write) => writeBlob(blogID, reader, write.parts, write.oid, stats, made)
+  );
 
   log("Applied from the store: " + JSON.stringify(stats));
 
@@ -388,4 +456,5 @@ async function materialize({
 
 module.exports = materialize;
 module.exports.SKIP_CHECK_BYTES = SKIP_CHECK_BYTES;
+module.exports.WRITE_CONCURRENCY = WRITE_CONCURRENCY;
 module.exports.EMPTY_TREE = EMPTY_TREE;
