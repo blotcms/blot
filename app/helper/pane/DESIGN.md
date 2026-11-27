@@ -675,7 +675,8 @@ and the default skin takes them, exactly as with the icons view; an `os` pin for
   own origin could otherwise lift the sandbox). `src` must be http(s) or relative; anything else is dropped. The frame's `title`
   is "<title>, page"; the figure's `aria-label` is the title; chrome (`bar`, `head`, `url`) is `aria-hidden`.
 - **The address is split** so each skin shows its own form: `.pane-u-s` scheme, `.pane-u-w` a leading `www.`, `.pane-u-h`
-  host (and port), `.pane-u-p` path+query+hash, with `.pane-u-r` on the path when it is only `/`. Safari shows the host alone
+  host (and port; a subdomain is wrapped in `.pane-u-b` inside it, "preview-of-cv-on-clara." in preview-of-cv-on-clara.blot.im, by a
+  rough rule rather than the public suffix list), `.pane-u-p` path+query+hash, with `.pane-u-r` on the path when it is only `/`. Safari shows the host alone
   (`.pane-u-s`, `.pane-u-w`, `.pane-u-p` hidden), Edge `https://example.com` (hide `.pane-u-r`), GNOME Web
   `https://example.com/` with the scheme dimmed. `data-secure` is `true` for https: a skin draws its padlock (or "Not secure")
   from it. An address that is not http(s) is one `.pane-u-h` holding the text.
@@ -702,8 +703,8 @@ and the default skin takes them, exactly as with the icons view; an `os` pin for
   field is `.pane-url`, 224x34, radius 6, centred between the two glyph groups; its padlock (from `data-secure`) and bookmark star
   are background images (`br-lock-*`, `br-star-*`, one per theme: coloured files, because a mask would be clipped with the text),
   and the text is clipped 32px from the right by a transparent border, with no ellipsis, as the capture is. The scheme, `www.` and
-  the path are dim (50%), the host is not. GNOME Web dims every part but the registered domain, so a subdomain such as
-  `preview-of-cv-on-clara.` is dim in the capture and dark here. Under 620px the apps and library buttons go, under 440px the
+  the path and the subdomain (`.pane-u-b`) are dim (50%), the rest of the host is not: GNOME Web dims every part but the
+  registered domain, so the capture's visible text, all subdomain, is dim. Under 620px the apps and library buttons go, under 440px the
   forward, reload, new tab and main menu buttons too (GNOME Web itself moves its toolbar to the bottom below 600px). The capture
   (`screenshots/linux.sh`) loads the study's page over HTTPS from `browser-server.py` at `https://preview-of-cv-on-clara.blot.im/`
   (an `/etc/hosts` entry; a self-signed CA:TRUE certificate added with `update-ca-certificates`, which GNOME Web's TLS backend, GnuTLS,

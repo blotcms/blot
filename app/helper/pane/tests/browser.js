@@ -29,6 +29,21 @@ describe("pane browser window", function () {
     expect(fig.children(".pane-page").children("iframe").length).toBe(1);
   });
 
+  it("marks the subdomain, which GNOME Web dims, inside the host", function () {
+    const sub = (url) => dom(pane.browser({ url }).html)(".pane-u-b").text();
+    expect(sub("https://preview-of-cv-on-clara.blot.im/")).toBe(
+      "preview-of-cv-on-clara."
+    );
+    expect(sub("https://a.b.example.co.uk:8080/")).toBe("a.b.");
+    expect(sub("https://www.example.com/")).toBe("");
+    expect(sub("https://example.com/")).toBe("");
+    expect(sub("http://127.0.0.1:8000/")).toBe("");
+    expect(sub("http://localhost/")).toBe("");
+    expect(
+      dom(pane.browser({ url: "https://a.blot.im/" }).html)(".pane-u-h").text()
+    ).toBe("a.blot.im");
+  });
+
   it("splits the address into parts a skin can show or hide", function () {
     const $ = dom(
       pane.browser({ url: "https://www.example.com:8080/a/b?x=1#y" }).html
