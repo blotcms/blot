@@ -8,7 +8,7 @@ body .pane {
 
 /* a window on a coloured desktop (<background>): inset from its edges */
 background {
-  padding: 2.8rem 1.4rem;
+  padding: 4.2rem 2.8rem;
 }
 
 background .pane {
@@ -19,7 +19,21 @@ background .pane {
 /* the editors' text, inset from the window's edges a little more than TextEdit's own
    (pane's --ed-pad; the skin's default is TextEdit's 0 10px) */
 body .pane-ed {
-  --ed-pad: 6px 16px 14px;
+  --ed-pad: 6px 16px 4.5em;
+}
+
+/* folders: four empty rows below the files, as a Finder window has (the macOS skin carries its
+   stripes on into them), and on macOS a narrower Size column whose width goes to Name (pane's
+   column properties; Finder's are 262.5px and 90.5px) */
+body .pane[data-view="list"] {
+  --pane-name-w: 289px;
+  --pane-size-w: 64px;
+}
+
+body .pane[data-view="list"] .pane-tree::after {
+  content: "";
+  display: block;
+  height: 80px;
 }
 
 .pane + h2 {
@@ -31,6 +45,12 @@ body .pane-ed {
 .home-template-folder .pane,
 .template-folder-wrapper .pane {
   margin: 0;
+}
+
+/* (as specific as the spacer rule above, so they win) */
+body .home-template-folder .pane[data-view] .pane-tree::after,
+body .template-folder-wrapper .pane[data-view] .pane-tree::after {
+  display: none;
 }
 
 @media screen and (max-width: 600px) {
