@@ -90,7 +90,7 @@ describe("pane icons view skins", function () {
       "code",
     ]);
     expect(css.viewsOf("win")).toEqual(["list", "browser"]);
-    expect(css.viewsOf("linux")).toEqual(["list"]);
+    expect(css.viewsOf("linux")).toEqual(["list", "browser"]);
     const mac = css.group("mac");
     expect(mac).toContain(
       "html[data-os=win] .pane[data-view=icons]:not([data-pin])"

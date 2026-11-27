@@ -160,37 +160,40 @@ describe("pane browser window", function () {
   });
 
   describe("skins", function () {
-    it("is built for macOS and Windows; Linux falls back to the macOS look", function () {
+    it("is built for macOS, Windows and Linux, so none falls back to another", function () {
       expect(css.viewsOf("mac")).toContain("browser");
       expect(css.viewsOf("win")).toContain("browser");
-      expect(css.viewsOf("linux")).not.toContain("browser");
+      expect(css.viewsOf("linux")).toContain("browser");
       expect(css.group("mac")).not.toContain(
         "html[data-os=win] .pane[data-view=browser]:not([data-pin])"
       );
-      expect(css.group("mac")).toContain(
+      expect(css.group("mac")).not.toContain(
         "html[data-os=linux] .pane[data-view=browser]:not([data-pin])"
       );
       expect(css.group("win")).not.toContain(":not([data-view=browser])");
-      expect(css.group("linux")).toContain(":not([data-view=browser])");
+      expect(css.group("linux")).not.toContain(":not([data-view=browser])");
     });
 
-    it("keeps an os pin that has a browser skin (mac, win) and drops one that has not (linux)", function () {
-      let $ = dom(pane.browser({ url: "a.com", os: "linux" }).html);
+    it("keeps an os pin that has a browser skin (mac, win, linux) and drops an unknown one", function () {
+      let $ = dom(pane.browser({ url: "a.com", os: "beos" }).html);
       expect($("figure").attr("data-pin")).toBeUndefined();
       expect(warn).toHaveBeenCalled();
       $ = dom(pane.browser({ url: "a.com", os: "mac" }).html);
       expect($("figure").attr("data-pin")).toBe("mac");
       $ = dom(pane.browser({ url: "a.com", os: "win" }).html);
       expect($("figure").attr("data-pin")).toBe("win");
+      $ = dom(pane.browser({ url: "a.com", os: "linux" }).html);
+      expect($("figure").attr("data-pin")).toBe("linux");
     });
 
-    it("ships the macOS and Windows skins' rules and glyphs in the one stylesheet", function () {
+    it("ships the macOS, Windows and Linux skins' rules and glyphs in the one stylesheet", function () {
       const { css: out } = pane.assets();
       expect(out).toContain(".pane-url");
       expect(out).toContain("--br-bar:");
       expect(out).toContain("--br-strip:");
       expect(out).not.toContain("icon:mac");
       expect(out).not.toContain("icon:win");
+      expect(out).not.toContain("icon:linux");
     });
   });
 
