@@ -133,6 +133,13 @@ function defaultRegions(os, view) {
       },
     ];
   }
+  if (view === "browser") {
+    // GNOME Web: one header bar (the frame's 5px and the 46px bar), then the page; no footer
+    return [
+      { name: "headerbar", kind: "chrome", x: 0, y: 0, w: null, h: 51 },
+      { name: "content", kind: "text", x: 0, y: 51, w: null, h: null },
+    ];
+  }
   return [
     { name: "headerbar", kind: "chrome", x: 0, y: 0, w: null, h: 48 },
     { name: "content", kind: "text", x: 0, y: 48, w: null, h: 412 },

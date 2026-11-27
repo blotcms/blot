@@ -17,7 +17,7 @@ background:radial-gradient(circle 12px at calc(100% - 97px) 23px,var(--br-btn) 1
 .pane.pane-br .pane-bar::after{left:auto;right:0;width:230px;background:var(--fg);-webkit-mask:url(icon:linux/br-r) right top no-repeat;mask:url(icon:linux/br-r) right top no-repeat}
 /* the field: its fill, padlock and star are backgrounds, so the text can be clipped at 32px from the right (a border, outside the
    padding box that overflow clips at) without clipping them; GNOME Web cuts a long address off there, with no ellipsis */
-.pane.pane-br .pane-url{z-index:1;left:calc(50% - 149px);top:10px;width:224px;height:34px;padding:0 0 0 32px;border-right:32px solid transparent;border-radius:6px;background:var(--br-star) right 9px top 9px/16px 16px no-repeat,var(--br-btn);background-origin:border-box;color:var(--fg);text-overflow:clip;font:14.67px/34px Cantarell,"Adwaita Sans",system-ui,sans-serif}
+.pane.pane-br .pane-url{z-index:1;left:calc(50% - 149px);top:10px;width:224px;height:34px;padding:0 0 0 30.5px;border-right:32px solid transparent;border-radius:6px;background:var(--br-star) right 9px top 9px/16px 16px no-repeat,var(--br-btn);background-origin:border-box;color:var(--fg);text-overflow:clip;font:14.67px/34px Cantarell,"Adwaita Sans",system-ui,sans-serif}
 .pane.pane-br[data-secure=true] .pane-url{background:var(--br-lock) left 11px top 10px/12px 14px no-repeat,var(--br-star) right 9px top 9px/16px 16px no-repeat,var(--br-btn);background-origin:border-box}
 .pane.pane-br .pane-u-s,.pane.pane-br .pane-u-w,.pane.pane-br .pane-u-p{color:var(--br-dim)}
 .pane.pane-br .pane-page{background:#fff}
