@@ -54,7 +54,7 @@ function sections(pane, fx) {
 
   const logoRender = (variant, theme) => {
     const options = { ...fx.logos.base, ...variant.options };
-    const out = folder(fx.logos.tree, options, theme);
+    const out = folder(variant.tree || fx.logos.tree, options, theme);
     if (variant.id === "default" || !out.html) return out;
     const plain = folder(fx.logos.tree, fx.logos.base, theme);
     if (plain.html === out.html)

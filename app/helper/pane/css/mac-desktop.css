@@ -10,6 +10,9 @@
 .pane[data-view=desktop] .pane-icon{position:relative;top:auto;left:auto;flex:none;width:56px;height:56px;margin:0;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))}
 .pane[data-view=desktop] .pane-label{flex:none;box-sizing:border-box;width:88px;margin-top:6px;padding:1px 4px;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:anywhere;
 display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font:12px/15px -apple-system,"SF Pro Text",system-ui,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.8),0 0 1px rgba(0,0,0,.6)}
+.pane[data-view=desktop].pane-lg .pane-tree{grid-template-columns:repeat(auto-fill,152px);grid-auto-rows:176px}
+.pane[data-view=desktop].pane-lg .pane-icon{width:128px;height:128px}
+.pane[data-view=desktop].pane-lg .pane-label{width:152px}
 .pane[data-view=desktop] .pane-icon.pane-k-folder{background-image:url(icon:mac/big-folder)}
 .pane[data-view=desktop] .pane-icon.pane-k-text{background-image:url(icon:mac/big-page)}
 .pane[data-view=desktop] .pane-icon.pane-k-md{background-image:url(icon:mac/big-md)}
@@ -31,6 +34,8 @@ display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:
 .pane[data-view=desktop] .pane-tree>li{position:relative}
 .pane[data-view=desktop] .pane-sel::before{content:"";position:absolute;left:14px;top:-4px;width:60px;height:60px;border-radius:8px;background:rgba(255,255,255,.22)}
 .pane[data-view=desktop] .pane-sel .pane-label{width:fit-content;max-width:88px;margin-left:auto;margin-right:auto;background:#0064e1;border-radius:5px;text-shadow:none}
+.pane[data-view=desktop].pane-lg .pane-sel::before{left:6px;top:-6px;width:140px;height:140px;border-radius:14px}
+.pane[data-view=desktop].pane-lg .pane-sel .pane-label{max-width:152px}
 @media (forced-colors:active){
 .pane[data-view=desktop] .pane-icon{filter:none}
 .pane[data-view=desktop] .pane-label{text-shadow:none}
