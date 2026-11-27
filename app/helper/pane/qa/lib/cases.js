@@ -60,7 +60,7 @@ function defaultMasks(os, view) {
   // Safari on the macos-26 runner (26.7) loads the page (the capture's server logs every request) but
   // never paints it, so the capture's page area is blank; the window's chrome is what this case judges.
   if (os === "macos" && view === "browser")
-    return [{ name: "page", kind: "artifact", x: 0, y: 56, w: null, h: null }];
+    return [{ name: "page", kind: "artifact", x: 0, y: 52, w: null, h: null }];
   if (os === "macos" && view === "default") {
     return [
       { name: "date-column", kind: "time", x: 264, y: 84, w: 74, h: null },

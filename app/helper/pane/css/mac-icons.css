@@ -5,12 +5,12 @@
 @light{--ish:drop-shadow(0 1px 1.5px rgba(0,0,0,.18));--selbg:#e6e6e6;--selpill:#0064e1;--thsh:0 0 0 .5px rgba(0,0,0,.22),0 1px 2.5px rgba(0,0,0,.34)}
 @dark{--ish:none;--selbg:#313131;--selpill:#0059d2;--thsh:0 0 0 .5px rgba(255,255,255,.18),0 1px 2.5px rgba(0,0,0,.6)}
 .pane[data-view=icons]{--is:64px;--k:1;--cw:112px;--lw:104px}
-.pane[data-view=icons].pane-lg{--is:128px;--k:2;--cw:176px;--lw:168px}
+.pane[data-view=icons].pane-lg{--is:128px;--k:2;--cw:178px;--lw:144px;--rh:192px;--gt:27px;--gl:15px;--lt:10px}
 .pane[data-view=icons] .pane-head{display:none}
-.pane[data-view=icons] .pane-tree{display:grid;grid-template-columns:repeat(auto-fill,var(--cw));grid-auto-rows:var(--cw);justify-content:start;padding:14px 0 8px 10px;margin-right:-6px}
+.pane[data-view=icons] .pane-tree{display:grid;grid-template-columns:repeat(auto-fill,var(--cw));grid-auto-rows:var(--rh,var(--cw));justify-content:start;padding:var(--gt,14px) 0 8px var(--gl,10px);margin-right:-6px}
 .pane[data-view=icons] .pane-tree>li{position:relative;display:flex;flex-direction:column;align-items:center;min-width:0}
 .pane[data-view=icons] .pane-icon{position:relative;top:auto;left:auto;flex:none;width:var(--is);height:var(--is);margin:0;filter:var(--ish)}
-.pane[data-view=icons] .pane-label{flex:none;box-sizing:border-box;width:var(--lw);margin-top:7px;padding:0;height:32px;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:anywhere;
+.pane[data-view=icons] .pane-label{flex:none;box-sizing:border-box;width:var(--lw);margin-top:var(--lt,7px);padding:0;height:32px;text-align:center;white-space:normal;overflow:hidden;overflow-wrap:anywhere;
 display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2;font:12px/16px -apple-system,"SF Pro Text",system-ui,sans-serif;color:var(--fg);--pr:0px;--pb:0px}
 .pane[data-view=icons] .pane-icon.pane-k-folder{background-image:url(icon:mac/big-folder)}
 .pane[data-view=icons] .pane-icon.pane-k-text{background-image:url(icon:mac/big-page)}
