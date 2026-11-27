@@ -73,7 +73,14 @@ RUN : "${PANDOC_VERSION:?}" \
 #    is what gives `car.heic` (HEVC-coded) a working decoder; sharp's own
 #    prebuilt libvips ships without HEVC.
 #  - exiftool pulls in the perl runtime it needs; used for image/file metadata.
-# One layer, no apk cache left behind.
+# One layer, no apk cache left behind. The vips-cpp it installed is written to
+# /usr/local/share/blot/vips-cpp (e.g. vips-cpp-8.18.8-r0): `deps` compiles
+# sharp against exactly that version. Edge moves on, and a build may reuse this
+# layer from the cache while running `deps` afresh, so `deps` would otherwise
+# get newer headers than the libvips here. An addon built against a newer
+# libvips doesn't load (a missing symbol), and sharp then quietly falls back to
+# its prebuilt libvips, which can't decode HEIC. The check in `dev` and `unit`
+# fails the build if that happens anyway.
 RUN apk add --no-cache --upgrade $ALPINE_EDGE \
     vips \
     vips-cpp \
@@ -85,7 +92,10 @@ RUN apk add --no-cache --upgrade $ALPINE_EDGE \
     libde265 \
     libwebp \
     exiftool \
- && exiftool -ver
+ && exiftool -ver \
+ && mkdir -p /usr/local/share/blot \
+ && apk list -I vips-cpp | cut -d' ' -f1 > /usr/local/share/blot/vips-cpp \
+ && grep -q '^vips-cpp-' /usr/local/share/blot/vips-cpp
 
 # The lockfile records sharp's optional @img/* binaries for every platform, so
 # the same one installs here (linux-musl arm64) and on macOS. sharp's prebuilt
@@ -101,7 +111,11 @@ COPY package.json package-lock.json ./
 FROM base AS deps
 ARG ALPINE_EDGE
 
-RUN apk add --no-cache --upgrade $ALPINE_EDGE build-base python3 pkgconfig vips-dev
+# vips-dev at the version of base's vips-cpp (see base): it fails if edge no
+# longer has it, and then the build needs base rebuilt (--no-cache)
+RUN VIPS="$(sed 's/^vips-cpp-//' /usr/local/share/blot/vips-cpp)" \
+ && apk add --no-cache --upgrade $ALPINE_EDGE build-base python3 pkgconfig "vips-dev=$VIPS" \
+ && [ "$(apk list -I vips-cpp | cut -d' ' -f1)" = "$(cat /usr/local/share/blot/vips-cpp)" ]
 
 # Build sharp against the system libvips rather than its bundled prebuilt, so
 # HEIC/HEVC decode (car.heic in app/build) works - the prebuilt libvips omits
@@ -185,8 +199,9 @@ ENV PATH=/usr/src/app/node_modules/.bin:$PATH
 COPY --from=dev-deps /usr/src/app/node_modules ./node_modules
 
 # Fail the build here rather than in a test shard if the runtime libvips
-# closure copied into base can't satisfy the system-linked sharp addon.
-RUN node -e "require('sharp'); console.log('sharp loads against libvips ' + require('sharp').versions.vips)"
+# closure copied into base can't satisfy the system-linked sharp addon: sharp
+# then loads its prebuilt libvips instead, which reports an `aom` version
+RUN node -e "const s=require('sharp'); const want=require('fs').readFileSync('/usr/local/share/blot/vips-cpp','utf8').trim(); if ('aom' in s.versions || !want.startsWith('vips-cpp-'+s.versions.vips+'-')) { console.error('sharp is not on the system libvips ('+want+'), got '+JSON.stringify(s.versions)); process.exit(1) } console.log('sharp loads against libvips '+s.versions.vips)"
 
 # The test suite (app/site/tests) and scripts/development/translate launch a
 # local headless Chromium via Puppeteer. Production runs Chromium only in the
@@ -359,6 +374,9 @@ RUN apk add --no-cache --upgrade $ALPINE_EDGE protobuf libnl3 \
     passt nftables setpriv \
  && rm -rf /usr/lib/libLLVM* /usr/lib/libgallium-*.so /usr/lib/dri \
  && chromium-browser --version
+# sharp still loads its system-linked build, as in `dev`, after the upgrade
+# above (verify-container decodes car.heic at deploy, this fails sooner)
+RUN node -e "const s=require('sharp'); const want=require('fs').readFileSync('/usr/local/share/blot/vips-cpp','utf8').trim(); if ('aom' in s.versions || !want.startsWith('vips-cpp-'+s.versions.vips+'-')) { console.error('sharp is not on the system libvips ('+want+'), got '+JSON.stringify(s.versions)); process.exit(1) } console.log('sharp loads against libvips '+s.versions.vips)"
 COPY --from=nsjail /nsjail/nsjail /usr/local/bin/nsjail
 # The broker runs as root, so its files are root-owned and read-only to the
 # app (uid 1000 rewrites /usr/src/app, so root must never load code from there)
