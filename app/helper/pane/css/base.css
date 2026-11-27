@@ -36,12 +36,6 @@ container-type:inline-size;-webkit-text-size-adjust:none;text-size-adjust:none}
 .pane-br .pane-tab{display:none}
 .pane-br .pane-page{position:relative;flex:1;min-height:0;background:#fff}
 .pane-br .pane-frame{display:block;width:100%;height:100%;border:0;background:#fff}
-/* desktop view: an auto-fill grid is one column wide when its parent shrink-wraps it (inline-block, a flex
-   item, a float, fit-content). Give the grid an intrinsic width of up to two columns, as many as it has
-   icons; a roomier parent still fills it with more. --pane-col is the skin's column (88px, 152px large). */
-.pane[data-view=desktop]{--pane-col:88px;--pane-gap:8px}
-.pane[data-view=desktop].pane-lg{--pane-col:152px}
-.pane[data-view=desktop] .pane-tree:has(>li:nth-child(2)){min-width:calc(var(--pane-col)*2 + var(--pane-gap))}
 @media (forced-colors:active){
 .pane{box-shadow:none;border:1px solid CanvasText;background:Canvas;color:CanvasText}
 .pane::before,.pane-bar::before,.pane-bar::after,.pane-head{background:none}
