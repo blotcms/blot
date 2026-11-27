@@ -13,6 +13,7 @@ RUN=$(gh run list --repo blotcms/blot --workflow pane-qa.yml --branch "$BRANCH" 
   --status completed --limit 1 --json databaseId --jq '.[0].databaseId // empty')
 [ -n "$RUN" ] || { echo "no pane-qa run for $BRANCH" >&2; exit 1; }
 echo "pane-qa run $RUN ($BRANCH)"
+FAILED=""
 for os in $OSES; do
   TMP=$(mktemp -d)
   if gh run download "$RUN" --repo blotcms/blot -n "pane-qa-$os" -D "$TMP"; then
@@ -21,7 +22,10 @@ for os in $OSES; do
     cp "$TMP"/*.png "app/helper/pane/rendered/$os/"
     echo "  $os: $(ls "$TMP"/*.png | wc -l | tr -d ' ') images"
   else
-    echo "  $os: no artifact in run $RUN" >&2
+    echo "  $os: no artifact in run $RUN; rendered/$os is unchanged (stale)" >&2
+    FAILED="$FAILED $os"
   fi
   rm -rf "$TMP"
 done
+# diff.js would otherwise compare an earlier revision's images without saying so
+[ -z "$FAILED" ] || { echo "could not fetch:$FAILED" >&2; exit 1; }
