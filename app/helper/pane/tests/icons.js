@@ -81,7 +81,7 @@ describe("pane icons view markup", function () {
 
 describe("pane icons view skins", function () {
   it("is built for macOS only for now, so other skins fall back to it", function () {
-    expect(css.viewsOf("mac")).toEqual(["list", "icons", "desktop"]);
+    expect(css.viewsOf("mac")).toEqual(["list", "icons", "desktop", "browser"]);
     expect(css.viewsOf("win")).toEqual(["list"]);
     expect(css.viewsOf("linux")).toEqual(["list"]);
     const mac = css.group("mac");
@@ -132,8 +132,8 @@ describe("pane icons view skins", function () {
 
   it("joins the tokens of the skin's files instead of gluing them together", function () {
     const out = pane.assets().css;
-    // mac.css, mac-editor.css, mac-icons.css, in name order: each block's last token is followed by the next block's first
-    expect(out).toContain("--pill-sh:rgba(0,0,0,.13);--ed-fg:");
+    // mac.css, mac-browser.css, mac-editor.css, mac-icons.css, in name order: each block's last token is followed by the next block's first
+    expect(out).toContain("--pill-sh:rgba(0,0,0,.13);--br-bar:");
     expect(out).toContain("--tok-v:currentColor;--ish:");
     expect(out).not.toContain(";;");
   });

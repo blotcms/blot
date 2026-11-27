@@ -8,8 +8,9 @@
 //   pane.folder(tree, opts) -> { html } | null     markup for one folder window
 //   pane.text(text, opts)   -> { html }            text editor window (macOS built)
 //   pane.code(code, opts)   -> { html }            code editor window: highlighted, no wrapping (macOS built)
+//   pane.browser(opts)      -> { html }            browser window: address field + a page (macOS built)
 //   pane.assets()           -> { css, js }         once per page (static, cacheable)
-//   pane.transform($, { now })                     cheerio: replaces pre.folder|text|code
+//   pane.transform($, { now })                     cheerio: replaces pre.folder|text|code|browser
 //   pane.isoNow()                                  "now" in the form `now` takes (UTC)
 //
 // Markup and assets are separate on purpose: a page with 20 windows has one stylesheet
@@ -44,6 +45,22 @@
 //   highlight true: colour the syntax where the OS's own editor doesn't (macOS TextEdit is plain); class
 //             pane-hl on the window, palette in the skin. transform() takes it as an option (one value per
 //             build) or from data-highlight="true".
+// Browser windows: pane.browser({ url, html | src, title, tint, sandbox, os, theme, width, height }). No
+// first argument: the page is either static or live, so both are options.
+//   url      the address the field shows, in the OS's own way (Safari: the host alone; Edge and GNOME Web
+//            the whole address). A bare host gets https://. Defaults to src. Never fetched.
+//   html     the page, static: shown in a sandboxed iframe (srcdoc) so the docs' CSS does not reach it,
+//            no scripts, links open in a new tab. A fragment is wrapped in a minimal document.
+//   src      the page, live: a lazy-loaded iframe, sandboxed (scripts, forms, popups; never same-origin).
+//            Only http(s) or a relative address. If html is also given, html wins (with a warning).
+//   title    the tab title (Edge) and the window's accessible name; the iframe's title is "<title>, page".
+//            Default: the address's host.
+//   tint     light theme, macOS: the colour of the page's top, which Safari's toolbar takes on
+//            (default white). A CSS colour.
+//   sandbox  replaces a live iframe's sandbox attribute
+// The window is 600x400 by default (a skin may choose its own default); the page scrolls inside it.
+// The docs block is <pre class="browser" data-url="https://example.com" title="Example Domain"
+// [data-src] [data-tint]> with the page's HTML as its text.
 // Text is shown exactly as given (whitespace and line breaks kept, everything escaped, never
 // interpreted). The text editor wraps long lines; the code editor scrolls sideways.
 //
@@ -60,6 +77,7 @@ const {
 const css = require("./lib/css");
 const { expand } = require("./lib/names");
 const { editor } = require("./lib/editor");
+const browserWindow = require("./lib/browser");
 const { resolve: resolveLanguage } = require("./lib/highlight");
 
 // what an author can ask for; the QA harness has more views (see the header)
@@ -80,6 +98,10 @@ const text = (source, options = {}) => ({
 const code = (source, options = {}) => ({
   html: editor("code", source, options),
 });
+
+// Browser window (DESIGN.md "Browser windows"): the address field shows `url`, the viewport holds either
+// static `html` or a live `src`.
+const browser = (options = {}) => ({ html: browserWindow.browser(options) });
 
 // Sets data-os unless the page already chose one (the QA harness does).
 const JS =
@@ -134,12 +156,14 @@ function transform($, options = {}) {
     });
     if (result) $(el).replaceWith(result.html);
   });
+  browserWindow.transform($, browser);
 }
 
 module.exports = {
   folder,
   text,
   code,
+  browser,
   assets,
   transform,
   isoNow,

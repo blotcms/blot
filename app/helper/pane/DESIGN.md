@@ -584,3 +584,65 @@ measured off a wallpaper is later work, gated on the two-backdrop capture plan i
   - **Colourful code where the OS is plain:** `highlight:true` (or `data-highlight="true"`, or `transform($, {highlight:true})`
     for the whole build) adds `pane-hl` to a highlighted code window; `mac-editor.css` then sets an Xcode-like `--tok-*`
     palette (light and dark). Off by default: TextEdit shows plain text.
+
+### Browser windows (`pane.browser`), macOS built; the contract for the other skins
+
+`pane.browser({ url, html | src, title, tint, sandbox, os, theme, width, height })` (`lib/browser.js`, skin
+`css/mac-browser.css`, structure in `css/base.css`). One DOM for all three OSes, so the Windows (Edge) and Linux (GNOME Web)
+skins are CSS only: `css/win-browser.css`, `css/linux-browser.css`. Until one exists, that OS's visitors get the macOS look
+(`lib/css.js`: `browser` is in `VIEWS`, so a skin without `css/<os>-browser.css` is excluded from `.pane[data-view=browser]`
+and the default skin takes them, exactly as with the icons view; an `os` pin for it is dropped with a warning).
+
+```html
+<figure class="pane pane-br" data-view="browser" data-secure="true|false" [data-pin] [data-theme]
+        aria-label="Example Domain" [style="--pane-w:…;--pane-h:…;--br-tint:…"]>
+  <div class="pane-bar" aria-hidden="true"><span class="pane-tab">Example Domain</span></div>   <!-- first chrome row -->
+  <div class="pane-head" aria-hidden="true"></div>                                                <!-- second chrome row, empty -->
+  <span class="pane-url" aria-hidden="true">                                                      <!-- the address field -->
+    <span class="pane-u-s">https://</span><span class="pane-u-w">www.</span><span class="pane-u-h">example.com</span><span class="pane-u-p pane-u-r">/</span>
+  </span>
+  <div class="pane-page"><iframe class="pane-frame" title="Example Domain, page" sandbox="…" srcdoc="…"|src="…" loading="lazy"></iframe></div>
+</figure>
+```
+
+- **Options.** `url` is what the field shows (never fetched; a bare host gets `https://`; defaults to `src`); `html` the static
+  page, `src` the live one (both: html wins, with a warning); `title` the tab title and the accessible name (default the host);
+  `tint` the page's top colour, which Safari's toolbar takes on in the light theme (default white); `sandbox` overrides a live
+  frame's sandbox; `os`, `theme`, `width`, `height` as for the other windows (default size is the skin's: macOS 600x400).
+  Never throws: bad input is shown as typed or dropped with a warning. `transform` turns
+  `<pre class="browser" data-url title [data-src] [data-tint] [data-width] [data-height] [data-os] [data-theme]>` into one, the
+  page being the pre's text (its `code` child's, if any), as the editor windows take their text; `data-src` wins over the text.
+- **The page** is an iframe, not inlined markup: a static page is a `srcdoc` document, so the docs' own `h1`/`p`/`a`/`pre` CSS
+  cannot reach it, `vw`/`vh` units refer to the window, and it scrolls inside the window. Static pages are sandboxed with
+  `allow-popups allow-popups-to-escape-sandbox` only (no scripts) and get `<base target="_blank">`, so a click opens a new tab
+  instead of replacing the mock page. A live `src` is `loading="lazy"`, `referrerpolicy="no-referrer"` and sandboxed with
+  `allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox`; never `allow-same-origin` (a page on the docs'
+  own origin could otherwise lift the sandbox). `src` must be http(s) or relative; anything else is dropped. The frame's `title`
+  is "<title>, page"; the figure's `aria-label` is the title; chrome (`bar`, `head`, `url`) is `aria-hidden`.
+- **The address is split** so each skin shows its own form: `.pane-u-s` scheme, `.pane-u-w` a leading `www.`, `.pane-u-h`
+  host (and port), `.pane-u-p` path+query+hash, with `.pane-u-r` on the path when it is only `/`. Safari shows the host alone
+  (`.pane-u-s`, `.pane-u-w`, `.pane-u-p` hidden), Edge `https://example.com` (hide `.pane-u-r`), GNOME Web
+  `https://example.com/` with the scheme dimmed. `data-secure` is `true` for https: a skin draws its padlock (or "Not secure")
+  from it. An address that is not http(s) is one `.pane-u-h` holding the text.
+- **Chrome budget.** Three nodes (`.pane-bar`, `.pane-head`, `.pane-url`), everything else pseudo-elements: `.pane::before/::after`,
+  `.pane-bar::…`, `.pane-head::…`, `.pane-url::…`. `.pane-tab` is `display:none` in `base.css`; the Windows skin shows it as the
+  tab's title. A skin places `.pane-url` itself (it is `position:absolute` in `base.css`; size and offsets are the skin's) and
+  chooses whether `.pane-head` is a second row in the flow (Edge's toolbar under the tab strip) or an absolutely placed pill
+  (Safari's tool buttons). `.pane-page` is the flexible remainder (`flex:1`), white by default; a skin may inset or round it
+  (Edge's page has a rounded border). The skin sets the default size with `.pane.pane-br{--pane-w:…;--pane-h:…}` (an inline
+  `style` wins) and the folder skin's `.pane::before`, `.pane-bar` and `.pane-head` rules must be overridden, as for the editors.
+- **macOS (Safari, Tahoe, compact layout)** measures to the 2x capture: window 600x400, radius 26 and the folder window's
+  shadow, a 52px toolbar row; the lights and the back/forward pill are the folder window's (`mac.css`: `.pane::before`,
+  `.pane-bar::before/::after`); the address field is a 36px pill at x=185 (`.pane-url`; its `::before` is the reader/page-menu
+  icon, `::after` reload, the padlock is `.pane-u-h::before`), the glyph pill is `.pane-head` at right:10px, 108.5px wide, one
+  mask (`icons/mac/br-tools.svg`: New Tab, Share, Tab Overview, in the study's order). Pill fill, ring and shadow are the folder
+  window's tokens (`--pill`, `--pill-ring`, `--pill-sh`). Light: the toolbar is transparent over the page, so `.pane`'s
+  background is `--br-tint`; dark: solid `#1e1e1e`, and the page sits above the pills' shadow. Below 560px the glyph pill goes,
+  below 440px the back/forward pill goes (`mac.css`) and the field takes the row.
+- **QA.** Cases `macos-{light,dark}-browser` (region `titlebar` is the top 52px), and for the next skins
+  `windows-{light,dark}-browser` (Edge) and `linux-{light,dark}-browser` (GNOME Web), informational in `qa/thresholds.json`
+  until their skins exist (drop the flag and tighten with the skin). `qa/pane-adapter.js` renders every OS's case with the
+  capture's page (`screenshots/fixture-assets/browser-page`, images inlined) at the reference's window size. The macOS capture
+  loads that page, the study's, from a local HTTPS server as `https://preview-of-cv-on-clara.blot.im/` (`screenshots/macos.sh`);
+  the Windows and Linux references are still on example.com until their capture scripts follow. `qa/lib/audit.js` has browser
+  samples (static, live, long address, empty) for every skin.
