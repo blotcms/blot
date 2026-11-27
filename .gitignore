@@ -36,3 +36,6 @@ package-lock.json
 node_modules/*
 app/clients/icloud/macserver/node_modules
 app/documentation/latest-commits.json
+
+# pane QA output written by qa/diff.js and qa/render.js locally (CI uploads its own as artifacts)
+app/helper/pane/qa/out/
