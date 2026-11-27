@@ -61,9 +61,16 @@ function defaultMasks(os, view) {
   // never paints it, so the capture's page area is blank; the window's chrome is what this case judges.
   if (os === "macos" && view === "browser")
     return [{ name: "page", kind: "artifact", x: 0, y: 56, w: null, h: null }];
-  if (os === "macos" && (view === "default" || view === "listsel")) {
+  if (os === "macos" && view === "default") {
     return [
       { name: "date-column", kind: "time", x: 264, y: 84, w: 74, h: null },
+    ];
+  }
+  // the same column; "artifact" rather than "time" because the selected row's blue band runs across the
+  // mask's edges, which tests/masks.js would read as cut text (the default case checks the column's place)
+  if (os === "macos" && view === "listsel") {
+    return [
+      { name: "date-column", kind: "artifact", x: 264, y: 84, w: 74, h: null },
     ];
   }
   // TextEdit's capture shows a text caret and a spell-check squiggle under one word. Both are runner
