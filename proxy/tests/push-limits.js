@@ -49,6 +49,17 @@ describe("proxy git push limits", function () {
     ]);
   });
 
+  it("takes the git body limit from Blot's push ceiling, with a margin", function () {
+    // Blot refuses a push over its limit in words git shows; nginx's limit
+    // must be above it, or the client sees a bare 413 instead
+    const git = location("/clients/git/end/");
+    const megabytes = Number(/client_max_body_size (\d+)M;/.exec(git)[1]);
+
+    expect(megabytes * 1024 * 1024).toBeGreaterThan(
+      config.git_store.max_push_bytes
+    );
+  });
+
   it("uses the same upstream and transfer settings as /clients", function () {
     const git = location("/clients/git/end/");
     const clients = location("/clients");

@@ -309,6 +309,12 @@ module.exports = {
     // The budget of the host's cache, scratch space for pushes included,
     // across every process
     cache_bytes: 50 * 1024 * 1024 * 1024,
+    // The most bytes of pack one push may carry, the ceiling of the push
+    // limit: a push may also be at most half of cache_bytes
+    // (app/clients/git/served/receive.js). The proxy's body limit for git
+    // requests is this plus a margin (proxy/build/locals.js), so a push over
+    // it is refused by Blot, in words git shows, before nginx's bare 413.
+    max_push_bytes: 1900 * 1024 * 1024,
     // Besides its budget, the cache gives space back, and refuses new
     // entries and scratch, while the disk it is on has less free than this
     // (as folder_cache does)
