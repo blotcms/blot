@@ -175,6 +175,156 @@ describe("template", function () {
     expect(view.content).toEqual("body {color:pink}");
   });
 
+  describe("a view whose file hasn't changed", function () {
+    const viewReads = (dir) =>
+      folder.read.calls
+        .allArgs()
+        .filter((args) => args[1] === dir + "/style.css").length;
+
+    it("is not read again", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      await readFromFolder(this.blog.id, this.dir);
+
+      spyOn(folder, "read").and.callThrough();
+      var template = await readFromFolder(this.blog.id, this.dir);
+
+      expect(viewReads(this.dir)).toEqual(0);
+      expect((await get(template.id, "style.css")).content).toEqual(
+        "body {color:pink}"
+      );
+    });
+
+    it("is read again once the file changes", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      await readFromFolder(this.blog.id, this.dir);
+      await this.put("/style.css", "body {color:red}");
+
+      spyOn(folder, "read").and.callThrough();
+      var template = await readFromFolder(this.blog.id, this.dir);
+
+      expect(viewReads(this.dir)).toEqual(1);
+      expect((await get(template.id, "style.css")).content).toEqual(
+        "body {color:red}"
+      );
+    });
+
+    it("is read again after the view was saved elsewhere", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      var template = await readFromFolder(this.blog.id, this.dir);
+
+      await setView(template.id, { name: "style.css", content: "edited" });
+      await readFromFolder(this.blog.id, this.dir);
+
+      expect((await get(template.id, "style.css")).content).toEqual(
+        "body {color:pink}"
+      );
+    });
+
+    it("is read again when its settings in package.json change", async function () {
+      const pkg = (colour) =>
+        this.put(
+          "/package.json",
+          JSON.stringify({ views: { "style.css": { locals: { colour } } } })
+        );
+
+      await this.put("/style.css", "body {color:{{colour}}}");
+      await pkg("pink");
+      await readFromFolder(this.blog.id, this.dir);
+      await pkg("red");
+
+      var template = await readFromFolder(this.blog.id, this.dir);
+      expect((await get(template.id, "style.css")).locals.colour).toEqual(
+        "red"
+      );
+    });
+  });
+
+  describe("the CDN manifest", function () {
+    var reloaded = ["readFromFolder", "setView", "setMetadata", "package"];
+    var originals = {};
+    var updateCdnManifest;
+
+    // readFromFolder and the modules it saves with, loaded again with a spy
+    // in place of util/updateCdnManifest
+    function readFromFolderCounting() {
+      var real = require("../util/updateCdnManifest");
+      updateCdnManifest = jasmine
+        .createSpy("updateCdnManifest")
+        .and.callFake((id) => real(id));
+
+      var stubbed = require.resolve("../util/updateCdnManifest");
+      originals[stubbed] = require.cache[stubbed];
+      require.cache[stubbed] = {
+        id: stubbed,
+        filename: stubbed,
+        loaded: true,
+        exports: updateCdnManifest,
+      };
+
+      reloaded.forEach(function (name) {
+        var path = require.resolve("../" + name);
+        originals[path] = require.cache[path];
+        delete require.cache[path];
+      });
+
+      return require("../readFromFolder");
+    }
+
+    afterEach(function () {
+      Object.keys(originals).forEach(function (path) {
+        if (originals[path]) require.cache[path] = originals[path];
+        else delete require.cache[path];
+      });
+      originals = {};
+    });
+
+    it("is updated once for a build which changed several views", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      await this.put("/entries.html", "{{#cdn}}/style.css{{/cdn}}");
+      await this.put("/entry.html", "one");
+      await readFromFolder(this.blog.id, this.dir);
+
+      await this.put("/style.css", "body {color:red}");
+      await this.put("/entry.html", "two");
+      await readFromFolderCounting()(this.blog.id, this.dir);
+
+      expect(updateCdnManifest).toHaveBeenCalledTimes(1);
+    });
+
+    it("is updated again by the next build after an update failed", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      await readFromFolder(this.blog.id, this.dir);
+      await this.put("/style.css", "body {color:red}");
+
+      var read = readFromFolderCounting();
+      updateCdnManifest.and.callFake(() => Promise.reject(new Error("Redis")));
+
+      try {
+        await read(this.blog.id, this.dir);
+        fail("should have thrown");
+      } catch (err) {
+        expect(err.message).toEqual("Redis");
+      }
+
+      // Nothing changed since, but the manifest is still out of date
+      updateCdnManifest.and.callFake(() => Promise.resolve({}));
+      await read(this.blog.id, this.dir);
+      expect(updateCdnManifest).toHaveBeenCalledTimes(2);
+
+      await read(this.blog.id, this.dir);
+      expect(updateCdnManifest).toHaveBeenCalledTimes(2);
+    });
+
+    it("is left alone by a build which changed nothing", async function () {
+      await this.put("/style.css", "body {color:pink}");
+      await readFromFolder(this.blog.id, this.dir);
+
+      await readFromFolderCounting()(this.blog.id, this.dir);
+
+      expect(updateCdnManifest).not.toHaveBeenCalled();
+    });
+  });
+
   // A sync waits on buildFromFolder, which waits on this readFromFolder call,
   // before it releases the blog's folder lock. If an error (e.g. Redis
   // rejecting writes during a host cutover) never rejects the call the blog

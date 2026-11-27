@@ -1,7 +1,11 @@
 const folder = require("storage/folder");
+const client = require("models/client");
+const database = require("../../../database");
 
 const uploadPath = require.resolve("../upload");
 const establishSyncLockPath = require.resolve("sync/establishSyncLock");
+const stillConnectedPath = require.resolve("../stillConnected");
+const liveLagPath = require.resolve("../../../util/liveLag");
 
 describe("icloud upload route", function () {
   const originals = new Map();
@@ -41,9 +45,19 @@ describe("icloud upload route", function () {
   };
 
   let blogID;
+  let updateCalls;
+  // What the route finds once it holds the lock
+  let connected;
 
-  const fakeReq = ({ blogID, filePath, body, modifiedTime }) => ({
+  const fakeReq = ({
+    blogID,
+    filePath,
+    body,
+    modifiedTime,
+    fromDirectoryWalk,
+  }) => ({
     header(name) {
+      if (name === "fromDirectoryWalk") return fromDirectoryWalk;
       if (name === "blogID") return blogID;
       if (name === "pathBase64")
         return Buffer.from(filePath).toString("base64");
@@ -84,10 +98,15 @@ describe("icloud upload route", function () {
       Math.random() * 10000
     )}`;
 
-    let updateCalls = [];
+    updateCalls = [];
+    connected = true;
+    mockModule(stillConnectedPath, async () => connected);
     mockModule(establishSyncLockPath, async () => ({
       folder: {
         status: () => {},
+        signal: new AbortController().signal,
+        run: (fn) => fn(),
+        drainDependents: async () => {},
         update: async (path) => {
           updateCalls.push(path);
         },
@@ -100,6 +119,95 @@ describe("icloud upload route", function () {
   afterEach(async () => {
     restoreModules();
     await folder.removeAll(blogID);
+    await client.del(database._pendingUploadsKey(blogID));
+  });
+
+  it("builds a file already on disk whose earlier upload never built it", async () => {
+    const filePath = "/post.txt";
+    const contents = "hello world";
+    // The process died after writing the file and before building it
+    await database.markUploadPending(blogID, filePath);
+    await folder.write(blogID, filePath, contents);
+
+    const res = fakeRes();
+    await require(uploadPath)(
+      fakeReq({ blogID, filePath, body: Buffer.from(contents) }),
+      res
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("successfully uploaded");
+    expect(updateCalls).toEqual([filePath]);
+    expect(await database.isUploadPending(blogID, filePath)).toBe(false);
+  });
+
+  it("marks an upload only until it is built", async () => {
+    const filePath = "/new.txt";
+    let pendingDuringUpdate = null;
+    mockModule(establishSyncLockPath, async () => ({
+      folder: {
+        status: () => {},
+        signal: new AbortController().signal,
+        run: (fn) => fn(),
+        drainDependents: async () => {},
+        update: async (path) => {
+          pendingDuringUpdate = await database.isUploadPending(blogID, path);
+          updateCalls.push(path);
+        },
+      },
+      done: async () => {},
+    }));
+
+    const res = fakeRes();
+    await require(uploadPath)(
+      fakeReq({ blogID, filePath, body: Buffer.from("new") }),
+      res
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(pendingDuringUpdate).toBe(true);
+    expect(updateCalls).toEqual([filePath]);
+    expect(await database.isUploadPending(blogID, filePath)).toBe(false);
+  });
+
+  it("leaves the mark when the build fails, so a retry builds the file", async () => {
+    const filePath = "/fails.txt";
+    mockModule(establishSyncLockPath, async () => ({
+      folder: {
+        status: () => {},
+        signal: new AbortController().signal,
+        run: (fn) => fn(),
+        drainDependents: async () => {},
+        update: async () => {
+          throw new Error("process died");
+        },
+      },
+      done: async () => {},
+    }));
+
+    const res = fakeRes();
+    await require(uploadPath)(
+      fakeReq({ blogID, filePath, body: Buffer.from("x") }),
+      res
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(await database.isUploadPending(blogID, filePath)).toBe(true);
+  });
+
+  it("writes nothing for a blog disconnected while it waited for the lock", async function () {
+    const filePath = "/late.txt";
+    connected = false;
+
+    const res = fakeRes();
+    await require(uploadPath)(
+      fakeReq({ blogID, filePath, body: Buffer.from("late") }),
+      res
+    );
+
+    expect(res.statusCode).toBe(410);
+    expect(updateCalls).toEqual([]);
+    expect(await folder.exists(blogID, filePath)).toBe(false);
   });
 
   it("treats identical contents as already current regardless of mtime, without setting mtime", async () => {
@@ -124,6 +232,7 @@ describe("icloud upload route", function () {
 
     expect(res.statusCode).toBe(200);
     expect(res.body).toContain("already up to date");
+    expect(updateCalls).toEqual([]);
 
     const after = await folder.stat(blogID, filePath);
     expect(after.modified).toBe(before.modified);
@@ -153,5 +262,44 @@ describe("icloud upload route", function () {
     // The file was written just now; it must not have been backdated to
     // the modifiedTime header.
     expect(stat.modified).toBeGreaterThanOrEqual(beforeUpload - 1000);
+  });
+
+  describe("live lag", function () {
+    let recorded;
+
+    beforeEach(function () {
+      recorded = [];
+      mockModule(liveLagPath, {
+        record: async (modifiedTime) => recorded.push(modifiedTime),
+      });
+    });
+
+    const push = async (fromDirectoryWalk) => {
+      const res = fakeRes();
+      await require(uploadPath)(
+        fakeReq({
+          blogID,
+          filePath: "/post.txt",
+          body: Buffer.from("hello"),
+          modifiedTime: "2026-11-23T14:00:00.000Z",
+          fromDirectoryWalk,
+        }),
+        res
+      );
+      expect(res.statusCode).toBe(200);
+    };
+
+    it("records the delay of a file the watcher saw change", async function () {
+      await push(undefined);
+
+      expect(recorded).toEqual(["2026-11-23T14:00:00.000Z"]);
+    });
+
+    // A folder moved or copied in: its files keep the mtimes they had
+    it("leaves out a file pushed by the walk of a directory that appeared", async function () {
+      await push("true");
+
+      expect(recorded).toEqual([]);
+    });
   });
 });

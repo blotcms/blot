@@ -16,10 +16,17 @@ describe("icloud routes stamp lastSync", function () {
     fix: require.resolve("sync/fix"),
     getHealth: require.resolve("../../../getHealth"),
     validateBlog: require.resolve("../../../sync/validateBlog"),
+    stillConnected: require.resolve("../stillConnected"),
   };
   routeNames.forEach((name) => (paths[name] = require.resolve("../" + name)));
 
   const originals = {};
+  // The upload route marks each upload until it is built
+  const uploadMarks = {
+    markUploadPending: async () => {},
+    clearUploadPending: async () => {},
+    isUploadPending: async () => false,
+  };
   let blogID;
   let stamped;
   let walked;
@@ -76,10 +83,17 @@ describe("icloud routes stamp lastSync", function () {
 
     stub("stamp", async (id) => stamped.push(id));
     stub("lock", async () => ({
-      folder: { status: () => {}, update: async () => {} },
+      folder: {
+        status: () => {},
+        update: async () => {},
+        signal: new AbortController().signal,
+        run: (fn) => fn(),
+        drainDependents: async () => {},
+      },
       done: async () => {},
     }));
     stub("database", {
+      ...uploadMarks,
       store: async () => {},
       get: async () => ({
         sharingLink: "https://www.icloud.com/iclouddrive/x",
@@ -96,6 +110,7 @@ describe("icloud routes stamp lastSync", function () {
       get: async ({ id }) => ({ id, client: "icloud" }),
     });
     stub("entries", { getAllTotal: async () => 0 });
+    stub("stillConnected", async () => true);
     stub("fix", async () => ({}));
     stub("getHealth", async () => ({ issues: [] }));
     // Reload each route, and the walk and Fix() it runs, bound to the stubs
@@ -166,6 +181,7 @@ describe("icloud routes stamp lastSync", function () {
   it("a failing stamp doesn't fail the route", async function () {
     delete require.cache[paths.stamp];
     stub("database", {
+      ...uploadMarks,
       stampLastSync: async () => {
         throw new Error("redis down");
       },

@@ -26,7 +26,12 @@ starts `SANDBOX_`, and it never falls back to in-process.
 
 ## Jobs
 
-- `metadata` format, size and orientation of an image.
+- `metadata` format, size and orientation of an image. `metadata`, `thumbnail`,
+  `resize` and `to-png` refuse an image of more than 100M pixels (`limitInputPixels`
+  in `jobs/encode.js`; sharp's default is 268M, about 1 GiB decoded). That fails
+  as an image sharp can't decode does: the job errors, and the caller carries on
+  as it does for a corrupt file (no thumbnail; an image left as it was written,
+  reported as `IMAGE_OPTIMIZE_FAILED`).
 - `thumbnail` the thumbnail sizes of one image, static or animated; one output per size.
   With `accept` (formats and minimum sizes) it first checks the image can be a
   thumbnail and makes none if not, so a candidate costs one jail, not two.
@@ -34,12 +39,25 @@ starts `SANDBOX_`, and it never falls back to in-process.
   (about 5M pixels a second in a production jail, on Graviton2 and Alpine's
   libvips). So its thumbnails may encode at most 50M pixels, every frame of
   every size counted, about 10s; past that they are of the first frame
-  (`meta.firstFrame`). A GIF size that comes out the GIF's own size (up to
+  (`meta.firstFrame`). So are those of an animation whose frames would take
+  more than 40M pixels to decode together (width x height x frames, about
+  160 MB of raw RGBA), read from its header before any frame is. A GIF size that comes out the GIF's own size (up to
   8 MiB) is its bytes as they are, and the other sizes are made largest first,
   each from the smallest already made that covers it. The jail has 20s, as long
   as the build waits (`build/thumbnail/create.js`).
-- `resize` shrinks an image to fit inside a square, in its own format.
-- `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG.
+- `resize` shrinks an image to fit inside a square, in its own format. With
+  `{ thumbnail: <the thumbnail job's args> }` it also makes the thumbnails of the
+  image it has just encoded, from those bytes (`meta.thumbnail`, outputs after the
+  first), unless the result is over 16M pixels or 24 MiB. The image plugin asks
+  this of a post's first image (`build/thumbnail/seed.js` stores the result where
+  `build/thumbnail` looks), so that image needs one jail, not two; a resize that
+  can't make them still succeeds and `build/thumbnail` runs its own job.
+- `to-png` converts an image (HEIC, AVIF, TIFF...) to PNG. With `{ exif: [fields] }`
+  it also reads the image's EXIF from the same bytes (`meta.exif`, as the `exif`
+  job returns it, or null; a failing exiftool never fails the conversion), so a
+  conversion that runs needs one jail and one read of the file, not two. A small
+  image is decoded with exiftool running beside it; one over 25M pixels is read for
+  its EXIF first, so their memory is never held together in the jail's 512 MiB.
 - `exif` exiftool on stdin, reduced to the fields asked for. It spawns
   `/usr/bin/perl /usr/bin/exiftool` directly; in-process it honours `EXIFTOOL_PATH`.
 - `template-image` a template image setting: a decode check, then the original
@@ -73,7 +91,7 @@ starts `SANDBOX_`, and it never falls back to in-process.
   the specs run, does with the CLI; `tests/pandoc-worker.js` runs every
   converter fixture through both, so a change to the options in one must be
   made in the other. It has the usual 512 MiB and 128 MiB `/tmp`, under the
-  unit's sandbox subtree's cap, and caps pandoc's heap at 400M. A document gets
+  unit's sandbox subtree's cap, and caps pandoc's heap at 256M. A document gets
   15s, after which the broker kills its worker: the caller fails that document
   with "Pandoc exited ... (timed out)", and `alerts.js` logs it instead of
   emailing. pandoc killed by the jail's memory limit is `SANDBOX_KILLED`, which
@@ -230,7 +248,10 @@ One connection is one job, on `/run/blot-sandbox/broker.sock` (0660, root and gr
    bytes. The client checks it against N and the lengths; the broker never
    reads it.
 
-The broker runs at most 4 jails, fewer of a job with its own `maxRunning` or `cgroups`, and queues 32 more, then answers `busy`. It
+The broker runs at most 4 jails, fewer of a job with its own `maxRunning` or `cgroups`, and queues 32 more, then answers `busy`. `thumbnail`, `resize` and
+`to-png` share one `maxRunning` of 2 (their `group` in `jail.js`), so two of
+them decode at once per unit, however they mix; the rest wait in the queue, which
+drops a request after 60s. It
 takes no paths, and logs one line per failed job with no input data. A client
 that vanishes after ending its input is not noticed until the jail finishes,
 which is at most its time limit.
@@ -263,7 +284,7 @@ speed, as screenshot batches accept it for their pages; the jail boundary
 itself is unchanged.
 
 Memory: at most 4 busy workers (the broker's limit across all jobs) and
-`maxIdle` (2) idle ones, all in the unit's sandbox subtree. An idle pandoc
+`maxIdle` (1) idle one, all in the unit's sandbox subtree. An idle pandoc
 worker holds about 20-40 MiB of its own; the ~85 MiB of pandoc's binary is page
 cache that every pandoc jail shares.
 
@@ -292,8 +313,8 @@ protected by the jail boundary itself: no secrets or env vars, no data mount, th
 seccomp. That is the same for one page or eight. The rule: keep the boundary intact above all; isolation between
 jobs inside one jail is not a goal, so don't split batches by site or customer.
 
-`fetch-image` and `fetch` fetch with Node's `http` and `https`, not through the
-proxy jail: their own jail is behind the same filter.
+`fetch-image` and `fetch` fetch with Node's `http` and `https`: their own jail is behind the egress filter. (A
+forward proxy in a jail of its own, tinyproxy, carried these fetches until they became jobs; it is retired.)
 
 Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js`):
 
@@ -306,40 +327,28 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   nsjail. So nsjail can't make cgroups: the broker's shell joins the job to a
   free one of the job's `cgroups` first, whose limits are the job's, and the
   broker kills what is left in it afterwards. So each holds one jail at a time.
-  The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/blot-sandbox/<unit>-browser`
+  The browser's is `/sandbox-browser-cgroup` (`/sys/fs/cgroup/system.slice/system-blot.slice/system-blot-<unit>.slice/browser`
   on the host), so one screenshot runs at a time per unit. `fetch-image`'s is
-  `/sandbox-cgroup/fetch`, 256 MiB and 64 pids, which the broker makes when it
-  starts (`proxy/unit/sandbox/cgroup.js`), as the proxy jail makes its own. So
-  one fetch runs at a time per unit, and a slow server holds the rest up for
-  as long as 20s. That is background build work. A fetch waits in a queue of
+  `/sandbox-cgroup/fetch-image`, 256 MiB and 64 pids, and `fetch`'s is
+  `/sandbox-cgroup/fetch`, 256 MiB and 64 pids; the broker makes both when it
+  starts (`proxy/unit/sandbox/cgroup.js`). So one `fetch-image` and one `fetch`
+  run at a time per unit, and a slow server holds the rest of its own job up for
+  as long as 20s. That is background build work. A fetch-image waits in a queue of
   its own, at most 8, inside the broker's, so a backlog of them never fills
   the queue the dashboard's jobs wait in: past it, or after a minute queued,
   the answer is `busy` (logged, not emailed: see Alerts) and the post keeps its remote link.
-- **`fetch` is in the same cgroup, with a queue of its own.** An import's
-  files, the domain checks and the featured-site checks take turns with the
-  post builds' images in the one slot, and add no memory. What keeps them from
-  blocking each other is the queues and the broker's turn-taking: each job's
-  queue is its own (`fetch` 16, `fetch-image` 8), and when a cgroup is free the
-  broker starts the oldest request, except that a job that ran last in it yields
-  to a waiting job of the other name. So a big import's batches, however many
-  are queued ahead, alternate with the post build's images, and a post build's
-  image waits behind at most one batch (75s at most, usually a few seconds); and
-  the import waits behind at most one image (30s),
-  not behind the build's whole backlog. `busy` for either is logged, and the
-  caller carries on without that file or link. A second cgroup for imports was
-  weighed and left. It would have to be 128 MiB or less (the proxy jail's 128 +
-  `fetch-image`'s 256 + 128 is the whole 512 MiB), so the image jobs would have
-  nothing when all three were busy, and 128 MiB can't hold a 50 MiB file in the
-  jail together with the copy made when it is joined (measured, in a real jail:
-  a 50 MiB file peaks at about 170 MiB), nor an image's decode.
-  The cost of one slot is that a domain check, which waits in the same queue,
-  can wait for an import batch that is running (the verification's 5s covers the
+- **`fetch` has a cgroup and a queue of its own.** An import's files, the
+  domain checks and the featured-site checks run beside the post builds'
+  images, not in turn with them, so an image never waits behind a batch (which
+  took up to 1.5s in production while the sync held the blog's lock). Each
+  job's queue is its own (`fetch` 16, `fetch-image` 8). A domain check can still
+  wait for an import batch that is running (the verification's 5s covers the
   request, not the wait).
-- **The fetch shares the unit's sandbox subtree** (`blot-sandbox/<unit>`,
-  512 MiB) with the proxy jail (128 MiB at most) and the image jobs (each up
-  to 512 MiB, four at once). The fetch jobs and the proxy together take at most
-  384 MiB of it (256 + 128), whichever fetch job is running; the image jobs have
-  the rest and whatever those two aren't using. The subtree's final size is for
+- **The fetch shares the unit's sandbox subtree** (`system-blot-<unit>.slice/sandbox`,
+  512 MiB) with the image jobs (each up to 512 MiB, but two at once for the three sharp jobs that decode a whole image). The fetch
+  jobs' cgroups are in it, so their 256 + 256 MiB are limited by its 512 MiB, not added to it: the image jobs
+  have whatever the fetch jobs aren't using. (The retired proxy jail's
+  128 MiB cgroup is gone from it.) The subtree's final size is for
   the unit memory work (TODO) to set from measured peaks.
 - **`/proc` is the container's, read-only, for the browser job only.** Chromium aborts without a real one.
   A job can read the unit's process list and command lines, so no secret may
@@ -375,6 +384,36 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
   deferred. If the job as a whole is killed (the 1 GiB browser cgroup's OOM kill
   takes the group) or times out, `helper/screenshot` sends each page of that
   batch on its own, so a heavy page costs only itself.
+- **A memory watchdog gives up on a heavy page before the cgroup's OOM kill
+  takes the batch** (`jobs/screenshot-memory.js`). While a page loads and
+  renders, the job reads its total memory every 250 ms and, once it reaches 85%
+  of the browser cgroup's `memory.max`, closes that page's context and answers
+  `{ retryable: false, tooHeavy: true, host, peakBytes, meter }` for it, then
+  goes on with the next page. The limit comes from the broker, which reads
+  `memory.max` when it spawns the job and passes it in
+  `BLOT_BROWSER_MEMORY_MAX` (`jail.js`; no bind is added: the jail can't see
+  the cgroup); `max` (unlimited or unreadable) means 430 MiB, and without the variable (development, specs) the job judges no page. The reading is the sum of
+  PSS (`smaps_rollup`, which splits shared pages between the processes that map
+  them, so it is close to what the cgroup is charged) over the processes in the
+  jail's cgroup; RSS replaces it for a process whose `smaps_rollup` can't be
+  read. The jail's `/proc` is the container's (`--disable_proc` and a bind), in
+  a pid namespace of its own, so the job's `process.pid` is not a pid in it; but
+  nsjail also gives the jail a cgroup namespace, whose root is the browser
+  cgroup (the job joins it first), so the job's processes are exactly those whose
+  `/proc/<pid>/cgroup` reads `0::/` and every other process reads `0::/../...`.
+  Where none is found the meter reads nothing and the page is not judged (as
+  before the watchdog). The client treats the answer as a final failure (no single-page
+  retry, which would fail again), so a link preview falls back as it does for any
+  failed screenshot, and logs one `Page too heavy for the browser` line with the
+  host (never the query), the peak and which meter read it (the job's own stderr
+  is not logged). Every screenshot that is taken is unchanged: pages that need
+  more than the budget get none.
+- **The Chromium flags change no pixels** (`jobs/screenshot-args.js`). The
+  one `--disable-features` flag (Chromium honours only the last) also turns off
+  `BackForwardCache`, `MediaRouter`, `OptimizationHints` and `Translate`, and
+  `--renderer-process-limit=1` shares one renderer, which site isolation being off
+  already allows. Device scale factor, viewport, fonts, images and media
+  loading are untouched.
 - **`helper/screenshot` coalesces requests** from every caller (bookmark links,
   the template gallery): a request waits at most 150 ms for company, a batch
   goes at 8, only one batch is out at a time per process, and what arrives
@@ -388,24 +427,6 @@ Their jails differ from the others (`networkArgs` in `proxy/unit/sandbox/jail.js
 A page that can't be screenshotted comes back as its entry in `meta.results` (`error`
 and `retryable`); only a broken job is a job failure.
 
-## The proxy jail
-
-Nothing in the app fetches through it now: the fetches of user-supplied URLs are the `fetch` and `fetch-image`
-jobs, and `helper/egress` is left with the screenshot job's fail-closed check. tinyproxy still runs, in a long-running
-jail in the unit, whenever the unit has a sandbox, until it is retired (TODO). It isn't a job, so the broker has no part in it: the supervisor
-keeps `proxy/unit/sandbox/proxy.js` running, which is root like the broker, makes
-`/sandbox-cgroup/proxy` (128 MiB, 128 pids) and starts the jail.
-
-It uses the same pasta network, `egress.nft` and capability drop as the browser
-job, and binds much less: no Node, app code or `/proc`. pasta forwards one port on
-the unit's loopback to it (`network-proxy-<unit>.cfg`, which must match
-`sandboxProxyPort` in `scripts/deploy/constants.js`), and `egress-proxy.nft`
-lets that port through the jail's loopback interface. pasta delivers connections
-from the jail's own address, `10.255.255.2`, which is the one client tinyproxy
-allows. A URL for `127.0.0.1:8888` gets a refusal from tinyproxy. pasta shares
-the job's uid outside the namespace, so the filter can't tell the two apart, and
-the most a URL can do is hold one of its 64 connections, as any slow server can.
-
 ## Node's filter
 
 With the sandbox on, the unit's seccomp profile gives the whole container `clone`
@@ -415,8 +436,8 @@ creating a user namespace is the usual first step of a kernel exploit. So the
 supervisor starts Node under a second filter (`proxy/unit/sandbox/node-filter.js`,
 written when the image is built) that refuses them, and refuses 32-bit calls and
 `clone3`, whose flags seccomp can't read. Everything Node spawns inherits it, and
-no-new-privs comes with it, so no setuid program works under Node. The broker and
-the proxy jail start separately, as they must. OpenResty isn't filtered, and
+no-new-privs comes with it, so no setuid program works under Node. The broker
+starts separately, as it must. OpenResty isn't filtered, and
 neither is anything run by `docker exec`.
 
 ## Markup from the network
@@ -446,9 +467,7 @@ bytes, and why:
 
 `alerts.js` emails the admin (`SANDBOX_ALERT`) when a job is killed, times out,
 is cut short or answers nonsense, when the broker can't be reached or its queue
-is full, and, checked every five minutes from each web process, when the unit's
-fetch proxy jail stops answering or lets the metadata
-address through. A job that fails on bad input isn't reported, except
+is full. A job that fails on bad input isn't reported, except
 `fetch-image` and `fetch`, which answer bad input with `meta.error`, so their
 failing means the jail is broken. A busy `fetch-image` or `fetch` is the other
 way round: their short queues fill by design when builds have many remote
@@ -486,14 +505,17 @@ time: the file's build flag tells them.
   directly; `#!/usr/bin/env` scripts won't start. pandoc is a static binary,
   bound on its own: never `/usr/local/bin`.
 - **The environment is empty** except `NODE_PATH`, so `require("sharp")` resolves.
-- **Job cgroups are outside the unit's.** The host makes
-  `/sys/fs/cgroup/blot-sandbox/<unit>` (`config/host/host/setup.sh`) and the
-  deploy binds it at `/sandbox-cgroup` with `--cgroupns=host`; `--cgroupns=private`
-  can't move a job into it. So their limits add to the units' on the host.
+- **Job cgroups are inside the unit's slice.** The host makes
+  `sandbox/` and `browser/` in `system-blot-<unit>.slice`
+  (`config/host/scripts/unit-cgroups`), beside the unit's container, and the
+  deploy binds them at `/sandbox-cgroup` and `/sandbox-browser-cgroup` with
+  `--cgroupns=host`; `--cgroupns=private` can't move a job into them. Their own
+  limits stop one job, and the slice's limit bounds the unit and its jobs
+  together (#2795).
 - **Jobs go first when the host runs out of memory.** The broker's shell sets
   `oom_score_adj` to 1000 before it execs nsjail, so a job is killed before the
   units' Node: `node-b` sets itself to 900 (`app/index.js`) and `node-a` stays
-  at 0. Only Redis's BGSAVE child, also 1000 and larger, goes ahead of it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
+  at 0 (OpenResty is at -900 and a `docker exec` script at 1000: "Kill order" in `proxy/unit/supervisor.sh`). Only Redis's BGSAVE child, also 1000 and larger, goes ahead of it. Set as root, the job's uid can't lower it. The proxy jail is left alone.
 - **The seccomp profile** (`proxy/deploy/sandbox-seccomp.json`) is Docker's
   default plus `clone`, `mount`, `umount2`, `pivot_root` and `sethostname`, so
   nsjail can build the jail, and `setns` and `unshare` for pasta. Nothing else is added: not `--privileged`, not

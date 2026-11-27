@@ -10,6 +10,7 @@ const http = require("http");
 const net = require("net");
 const { execFile } = require("child_process");
 const { promisify } = require("util");
+const nodeRole = require("./nodeRole");
 
 const execFileAsync = promisify(execFile);
 
@@ -35,9 +36,8 @@ const REQUIRED_ENV = [
   "BLOT_SESSION_SECRET",
   "BLOT_STRIPE_SECRET",
   "BLOT_STRIPE_WEBHOOK_SECRET",
-  // the sandbox: production has no other browser or egress proxy
+  // the sandbox: production has no other browser or way to fetch a URL
   "BLOT_SANDBOX_SOCKET",
-  "BLOT_EGRESS_PROXY_URL",
 ];
 
 // Where this process serves: 127.0.0.1:<port>, or its socket when it has no
@@ -328,30 +328,9 @@ async function sandboxParseHtmlWorks() {
   return "the jail scanned, rewrote and converted a post";
 }
 
-// The proxy jail, whenever there is a sandbox. A forward-proxy request for the
-// metadata address must not get through: tinyproxy answers 500 when the filter
-// refuses it, which also proves the proxy answers at all.
-async function sandboxProxyWorks({ config }) {
-  if (!process.env.BLOT_SANDBOX_SOCKET)
-    return "skipped, BLOT_SANDBOX_SOCKET is not set";
-
-  const { hostname, port } = new URL(config.egress.proxy);
-  const metadata = "http://169.254.169.254/latest/meta-data/";
-  const res = await request({
-    url: metadata,
-    host: "169.254.169.254",
-    options: { hostname, port, path: metadata },
-  });
-  if (res.status !== 500)
-    throw new Error(
-      `the metadata address answered ${res.status} through the proxy`
-    );
-  return `the metadata address was refused through ${config.egress.proxy}`;
-}
-
 // The host's firewall for the units (blot-app-firewall.service, from
 // config/host/host/setup.sh) refuses uid 1000 the metadata service, so a fetch
-// that misses the proxy jail can't reach it. The deploy runs this as uid 1000,
+// that misses the sandbox's egress filter can't reach it. The deploy runs this as uid 1000,
 // in the unit's cgroup, which is what the rule matches. Refused at once: a
 // connection or a timeout means the rule is not loaded.
 async function hostFirewall() {
@@ -405,7 +384,7 @@ async function nodeFilter() {
     const command = await fs
       .readFile(`/proc/${pid}/cmdline`, "utf8")
       .catch(() => "");
-    if (command !== "node\0app/index.js\0") continue;
+    if (nodeRole(command) !== "node-a") continue;
     const status = await fs.readFile(`/proc/${pid}/status`, "utf8");
     if (filters(status) <= own || !/^NoNewPrivs:\s*1/m.test(status)) {
       throw new Error(`node pid ${pid} is not under the filter`);
@@ -414,6 +393,44 @@ async function nodeFilter() {
   }
   if (!checked) throw new Error("did not find node-a");
   return `node-a has more seccomp filters than a docker exec (${own})`;
+}
+
+// The kill order under memory pressure (see "Kill order" in
+// proxy/unit/supervisor.sh): a script run with docker exec, like this one, is
+// killed first, then sandbox jobs and node-b, and OpenResty last.
+async function oomScores() {
+  const score = async (pid) =>
+    Number(await fs.readFile(`/proc/${pid}/oom_score_adj`, "utf8"));
+  const expected = {
+    "a script (this docker exec)": ["self", 1000],
+    tini: [1, 0],
+    "node-a": [null, 0],
+    "node-b": [null, 900],
+    OpenResty: [null, -900],
+  };
+
+  for (const pid of (await fs.readdir("/proc")).filter((name) =>
+    /^\d+$/.test(name)
+  )) {
+    const command = await fs
+      .readFile(`/proc/${pid}/cmdline`, "utf8")
+      .catch(() => "");
+    const role = nodeRole(command);
+    if (role) expected[role][0] = pid;
+    else if (command.startsWith("nginx: master process"))
+      expected["OpenResty"][0] = pid;
+  }
+
+  const found = [];
+  for (const [name, [pid, want]] of Object.entries(expected)) {
+    if (pid === null) throw new Error(`did not find ${name}`);
+    const got = await score(pid);
+    if (got !== want) {
+      throw new Error(`${name} has oom_score_adj ${got}, not ${want}`);
+    }
+    found.push(`${name} ${want}`);
+  }
+  return found.join(", ");
 }
 
 async function requiredEnv() {
@@ -477,8 +494,8 @@ module.exports = [
   { name: "sandbox fetch", run: sandboxFetchWorks },
   { name: "sandbox parse-html", run: sandboxParseHtmlWorks },
   { name: "node filter", run: nodeFilter },
+  { name: "oom kill order", run: oomScores },
   { name: "required environment", run: requiredEnv },
-  { name: "sandbox proxy", run: sandboxProxyWorks },
   { name: "host firewall", run: hostFirewall },
   { name: "canary blog render", run: canaryBlog },
   { name: "dashboard log-in render", run: loginPage },

@@ -9,6 +9,7 @@ const email = require("helper/email");
 const notificationCap = require("../../util/notificationCap");
 const syncReport = require("clients/util/syncReport");
 const stampLastSync = require("./stampLastSync");
+const messenger = require("sync/messenger");
 
 const RESYNC_DEDUP_WINDOW_MS = 10 * 1000;
 // Process-local resync deduplication: if multiple Node processes handle requests,
@@ -64,6 +65,73 @@ module.exports = async function (req, res) {
 
   if (!blogID || !status) {
     return res.status(400).send("Missing blogID or status");
+  }
+
+  // Progress while the macserver joins a folder ("Opening the sharing
+  // link", ...): shown on the dashboard's live status line, never stored on
+  // the account. Only while a setup is under way, so a late message can't
+  // reappear after a cancel or a finished setup.
+  if (
+    typeof status.setupStage === "string" &&
+    Object.keys(status).length === 1
+  ) {
+    res.send("ok");
+    try {
+      const account = await database.get(blogID);
+      const blog = await Blog.get({ id: blogID });
+      if (blog && account && account.sharingLink && !account.setupComplete) {
+        messenger(blog).status(status.setupStage.slice(0, 200));
+      }
+    } catch (err) {
+      console.error("Failed to publish setup progress", blogID, err.message);
+    }
+    return;
+  }
+
+  // The folder's new name, after the owner renamed it (macserver's watcher).
+  // Only for a blog still connected: storing it would otherwise bring back
+  // an account that was just disconnected.
+  if (
+    typeof status.folderName === "string" &&
+    Object.keys(status).length === 1
+  ) {
+    try {
+      const account = await database.get(blogID);
+      if (account && account.sharingLink) {
+        await database.store(blogID, { folderName: status.folderName });
+      }
+    } catch (err) {
+      return handle("Failed to store the folder's name", err);
+    }
+    return res.send("ok");
+  }
+
+  // The share's permission (macserver/permissionCheck.js): "readOnly" when
+  // the owner shares the folder View only. Only for a blog still connected,
+  // as with folderName.
+  if (
+    typeof status.permission === "string" &&
+    Object.keys(status).length === 1
+  ) {
+    try {
+      const account = await database.get(blogID);
+      if (account && account.sharingLink) {
+        const readOnly = status.permission === "readOnly";
+        if (readOnly && account.permission !== "readOnly")
+          await database.store(blogID, {
+            permission: "readOnly",
+            permissionSince: Date.now(),
+          });
+        else if (!readOnly && account.permission)
+          await database.store(blogID, {
+            permission: null,
+            permissionSince: null,
+          });
+      }
+    } catch (err) {
+      return handle("Failed to store the share's permission", err);
+    }
+    return res.send("ok");
   }
 
   // Not part of the account: it only goes into the resync report.

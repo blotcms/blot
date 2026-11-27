@@ -10,6 +10,7 @@ const fixPath = require.resolve("sync/fix");
 const getHealthPath = require.resolve("../../../getHealth");
 const validateBlogPath = require.resolve("../../../sync/validateBlog");
 const stampLastSyncPath = require.resolve("../stampLastSync");
+const messengerPath = require.resolve("sync/messenger");
 
 describe("icloud status route", function () {
   // The resync email cap counts in Redis, so its counts outlive a spec
@@ -80,6 +81,8 @@ describe("icloud status route", function () {
         bind: () => (line) => events.push("status: " + line),
       }),
       update() {},
+      signal: new AbortController().signal,
+      run: (fn) => fn(),
     },
     done: async () => {
       releases.count += 1;
@@ -308,6 +311,51 @@ describe("icloud status route", function () {
     expect(events[events.length - 1]).toBe("status: Resync complete");
   });
 
+  it("puts setup progress on the status line without storing it", async function () {
+    const published = [];
+    mockModule(messengerPath, () => ({
+      status: (line) => published.push(line),
+    }));
+    mockModule(databasePath, {
+      store: async (blogID, status) => stored.push(status),
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        acceptedSharingLink: false,
+      }),
+    });
+    const status = require(statusPath);
+
+    await status(
+      {
+        header: () => "blog_a",
+        body: { setupStage: "Opening the sharing link" },
+      },
+      fakeRes()
+    );
+
+    expect(published).toEqual(["Opening the sharing link"]);
+    expect(stored).toEqual([]);
+  });
+
+  it("drops setup progress once setup is over", async function () {
+    const published = [];
+    mockModule(messengerPath, () => ({
+      status: (line) => published.push(line),
+    }));
+    const status = require(statusPath);
+
+    await status(
+      {
+        header: () => "blog_a",
+        body: { setupStage: "Opening the sharing link" },
+      },
+      fakeRes()
+    );
+
+    expect(published).toEqual([]);
+    expect(stored).toEqual([]);
+  });
+
   it("doesn't store the reason on the account", async function () {
     const status = require(statusPath);
 
@@ -519,5 +567,38 @@ describe("icloud status route", function () {
     expect(lockAttempts).toBe(2);
     expect(retry.statusCode).toBeUndefined();
     expect(syncs).toEqual(["blog_a"]);
+  });
+
+  it("stores a View only share's permission once, and clears it when it can make changes", async function () {
+    const status = require(statusPath);
+    const post = (body) => status({ header: () => "blog_a", body }, fakeRes());
+
+    await post({ permission: "readOnly" });
+    expect(stored.length).toBe(1);
+    expect(stored[0].permission).toBe("readOnly");
+    expect(typeof stored[0].permissionSince).toBe("number");
+    expect(syncs).toEqual([]);
+
+    mockModule(databasePath, {
+      store: async (blogID, value) => stored.push(value),
+      get: async () => ({
+        sharingLink: "https://www.icloud.com/iclouddrive/x",
+        setupComplete: true,
+        permission: "readOnly",
+      }),
+    });
+    delete require.cache[statusPath];
+    delete require.cache[validateBlogPath];
+    delete require.cache[stampLastSyncPath];
+    const reloaded = require(statusPath);
+    const postAgain = (body) =>
+      reloaded({ header: () => "blog_a", body }, fakeRes());
+
+    // Already known: nothing new to store
+    await postAgain({ permission: "readOnly" });
+    expect(stored.length).toBe(1);
+
+    await postAgain({ permission: "readWrite" });
+    expect(stored[1]).toEqual({ permission: null, permissionSince: null });
   });
 });

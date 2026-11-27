@@ -5,6 +5,7 @@
 //   node scripts/discover/manage.js list [--all]
 //   node scripts/discover/manage.js remove <post URL or ID> [...]
 //   node scripts/discover/manage.js text <post URL or ID> on|off
+//   node scripts/discover/manage.js set-text <post URL or ID> "<text>"
 //   node scripts/discover/manage.js remove-site <host, handle or blog ID>
 //
 // list prints the posts newest first, with their IDs; --all includes the
@@ -21,6 +22,7 @@ function usage(message) {
     "Usage: node scripts/discover/manage.js list [--all]\n" +
       "       node scripts/discover/manage.js remove <post URL or ID> [...]\n" +
       "       node scripts/discover/manage.js text <post URL or ID> on|off\n" +
+      '       node scripts/discover/manage.js set-text <post URL or ID> "<text>"\n' +
       "       node scripts/discover/manage.js remove-site <host, handle or blog ID>"
   );
   process.exit(2);
@@ -104,6 +106,17 @@ async function main(argv) {
       throw new Error("Not on Discover: " + args[0]);
     await Discover.setShowText(id, args[1] === "on");
     console.log("Text", args[1], "for", id);
+    return;
+  }
+
+  // The card's own text in place of the post's; "" goes back to the post's
+  if (command === "set-text") {
+    if (args.length !== 2) usage();
+    const id = await postID(args[0]);
+    if (!(await Discover.get(id)))
+      throw new Error("Not on Discover: " + args[0]);
+    const post = await Discover.setText(id, args[1]);
+    console.log(post.text ? "Text set for" : "Text cleared for", id);
     return;
   }
 

@@ -1,5 +1,6 @@
 const { docs, auth: googleAuth } = require("@googleapis/docs");
 const config = require("config");
+const cachedAuth = require("./cachedAuth");
 
 module.exports = async (serviceAccountId) => {
   const credentials = config.google_drive.service_accounts.find(
@@ -12,10 +13,9 @@ module.exports = async (serviceAccountId) => {
     );
   }
 
-  const auth = new googleAuth.GoogleAuth({
-    credentials,
-    scopes: ["https://www.googleapis.com/auth/documents.readonly"],
-  });
+  const auth = cachedAuth(googleAuth.GoogleAuth, credentials, [
+    "https://www.googleapis.com/auth/documents.readonly",
+  ]);
 
   return docs({ version: "v1", auth });
 };

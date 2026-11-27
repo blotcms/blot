@@ -9,6 +9,7 @@ module.exports = {
   getStatuses: require("./getStatuses"),
   key: require("./key"),
   remove: require("./remove"),
+  RESUME_AFTER_MS: require("./remove").RESUME_AFTER_MS,
   scheme: require("./scheme"),
   serial: require("./serial"),
   set: require("./set"),

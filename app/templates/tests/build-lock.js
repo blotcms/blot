@@ -95,8 +95,8 @@ describe("templates startup build locks", function () {
   });
 
   describe("folders()", function () {
-    const foldersPath = require.resolve("templates/folders");
-    const setupUserPath = require.resolve("templates/folders/setupUser");
+    const foldersPath = require.resolve("templates/demo");
+    const setupUserPath = require.resolve("templates/demo/setupUser");
     let originalFolders;
     let originalSetupUser;
     let setupUser;
@@ -124,7 +124,7 @@ describe("templates startup build locks", function () {
     });
 
     it("waits for a held lock, then runs", async function () {
-      const folders = require("templates/folders");
+      const folders = require("templates/demo");
       const held = await lock("templates:folders", { ttl: 10000 });
       let released = false;
 

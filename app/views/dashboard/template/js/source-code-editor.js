@@ -23,8 +23,14 @@ function initializeSourceEditor() {
 
   var baseMode = sourceElement.getAttribute("data-mode") || "htmlmixed";
 
+  // A README is plain text: no Mustache highlighting
+  var mode =
+    baseMode === "text/plain"
+      ? baseMode
+      : { name: "handlebars", base: baseMode };
+
   var editor = CodeMirror.fromTextArea(sourceElement, {
-    mode: { name: "handlebars", base: baseMode },
+    mode: mode,
     lineNumbers: true,
     screenReaderLabel: "Source code",
     lineWrapping: true,
@@ -98,6 +104,24 @@ function initializeSourceEditor() {
     return new URLSearchParams(new FormData(formEl)).toString();
   }
 
+  // Gzip the body when the browser can, so a large file uploads in a fraction
+  // of the time. The server inflates it with the same size limit as an
+  // uncompressed body. Anything that goes wrong falls back to the plain body.
+  async function compress(text) {
+    if (typeof CompressionStream !== "function") return null;
+    // Small bodies upload quickly anyway
+    if (text.length < 4096) return null;
+
+    try {
+      const stream = new Blob([text])
+        .stream()
+        .pipeThrough(new CompressionStream("gzip"));
+      return await new Response(stream).blob();
+    } catch (err) {
+      return null;
+    }
+  }
+
   async function handleSave(event) {
     if (event && typeof event.preventDefault === "function")
       event.preventDefault();
@@ -119,13 +143,16 @@ function initializeSourceEditor() {
     hideError();
 
     try {
-      const body = serializeForm(form);
+      const text = serializeForm(form);
+      const compressed = await compress(text);
+      const headers = {
+        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+      };
+      if (compressed) headers["Content-Encoding"] = "gzip";
       const res = await fetch(form.getAttribute("action"), {
         method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        },
-        body,
+        headers,
+        body: compressed || text,
         credentials: "same-origin",
       });
 
@@ -207,7 +234,11 @@ function initializeSourceSidebarMenu() {
       },
       config: function (dataset) {
         var baseUrl = cleanBase(dataset);
-        return baseUrl ? baseUrl + "/configure" : null;
+        var disabled = dataset.disableConfig === "true";
+        return {
+          href: baseUrl ? baseUrl + "/configure" : null,
+          disabled: disabled || !baseUrl,
+        };
       },
       rename: function (dataset) {
         var baseUrl = cleanBase(dataset);

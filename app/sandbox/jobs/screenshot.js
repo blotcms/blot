@@ -14,7 +14,9 @@
 // Returns meta.results, one entry per page in order, and outputs, one buffer
 // per page (empty where there is no screenshot). An entry is {} for a PNG, or
 // { error, retryable }: a page that can't be screenshotted is an answer, not a
-// failure of the job, and retryable says if trying again could help. Pages the
+// failure of the job, and retryable says if trying again could help. A page
+// that took the browser past its memory budget is
+// { error, retryable: false, tooHeavy: true, host, peakBytes, meter }. Pages the
 // batch didn't reach (it ran out of time or output room, or Chromium died) are
 // { error, retryable: true, deferred: true }, for the caller to send again.
 //
@@ -34,6 +36,7 @@
 
 const sharp = require("sharp");
 const ARGS = require("./screenshot-args");
+const memory = require("./screenshot-memory");
 
 sharp.cache(false);
 
@@ -112,6 +115,16 @@ function isAllowed(url) {
 
 class StalledError extends Error {}
 
+// The page took the browser's memory past what one page may, and was given up
+// on (./screenshot-memory.js). Final: it would take as much on every attempt.
+class TooHeavyError extends Error {
+  constructor(bytes, meter = "") {
+    super("the page needed more memory than the browser has");
+    this.bytes = bytes;
+    this.meter = meter; // "pss" or "rss": which reading it was
+  }
+}
+
 // Gives up on a promise that doesn't settle in time. What it guards is left to
 // finish, or to be killed with Chromium.
 function within(promise, ms) {
@@ -122,7 +135,12 @@ function within(promise, ms) {
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
-async function capture(browser, puppeteer, { url, width, height, mobile }) {
+async function capture(
+  browser,
+  puppeteer,
+  { url, width, height, mobile },
+  meter
+) {
   const defaults = mobile ? VIEWPORT.mobile : VIEWPORT.desktop;
   const viewport = {
     width: dimension(width, defaults.width),
@@ -132,61 +150,84 @@ async function capture(browser, puppeteer, { url, width, height, mobile }) {
   // Its own incognito context: nothing from the page before it (cookies,
   // storage, cache), and closing it takes the page's processes with it
   const context = await browser.createBrowserContext();
+
+  // While the page loads and renders, give up on it if the browser's memory
+  // reaches the budget: closing its context frees what it holds and fails the
+  // calls waiting on it, and the batch goes on with the next page
+  let overBudget;
+  const heavy = new Promise((resolve) => (overBudget = resolve));
+  const watcher = memory.watch(meter, (bytes) => {
+    overBudget(new TooHeavyError(bytes, meter.source));
+    within(context.close(), CLOSE_TIMEOUT).catch(() => {});
+  });
+
   try {
-    const page = await context.newPage();
-    await page.setUserAgent(DEFAULT_USER_AGENT);
-    await page.setViewport({
-      ...viewport,
-      deviceScaleFactor: DEVICE_SCALE_FACTOR,
-    });
-
-    await page.setRequestInterception(true);
-    page.on("request", (request) => {
-      let pathname = "";
-      try {
-        pathname = new URL(request.url()).pathname;
-      } catch (e) {}
-      if (pathname === PREVIEW_RELOAD_PATH) return request.abort();
-      return request.continue();
-    });
-
-    await page.goto(url, {
-      waitUntil: "domcontentloaded",
-      timeout: PAGE_TIMEOUT,
-    });
-
-    // A string, not an arrow function: puppeteer serializes functions with
-    // toString(), and under nyc (CI coverage) that source carries counters which
-    // do not exist in the page.
-    const deadline = Date.now() + RENDER_GRACE;
-    try {
-      await page.waitForFunction('document.readyState === "complete"', {
-        timeout: RENDER_GRACE,
-      });
-      await page.waitForNetworkIdle({
-        idleTime: 500,
-        timeout: Math.max(1, deadline - Date.now()),
-        concurrency: 0,
-      });
-    } catch (error) {
-      if (!(error instanceof puppeteer.TimeoutError)) throw error;
-    }
-
-    return {
-      png: Buffer.from(
-        await page.screenshot({
-          type: "png",
-          omitBackground: true,
-          timeout: SCREENSHOT_TIMEOUT,
-        })
-      ),
-      // What the viewport was, in the pixels of the screenshot
-      maxWidth: viewport.width * DEVICE_SCALE_FACTOR,
-      maxHeight: viewport.height * DEVICE_SCALE_FACTOR,
-    };
+    const work = render(context, puppeteer, url, viewport);
+    work.catch(() => {}); // when the watchdog wins, the work's failure is not news
+    return await Promise.race([
+      work,
+      heavy.then((error) => {
+        throw error;
+      }),
+    ]);
   } finally {
+    watcher.stop();
     await within(context.close(), CLOSE_TIMEOUT).catch(() => {});
   }
+}
+
+async function render(context, puppeteer, url, viewport) {
+  const page = await context.newPage();
+  await page.setUserAgent(DEFAULT_USER_AGENT);
+  await page.setViewport({
+    ...viewport,
+    deviceScaleFactor: DEVICE_SCALE_FACTOR,
+  });
+
+  await page.setRequestInterception(true);
+  page.on("request", (request) => {
+    let pathname = "";
+    try {
+      pathname = new URL(request.url()).pathname;
+    } catch (e) {}
+    if (pathname === PREVIEW_RELOAD_PATH) return request.abort();
+    return request.continue();
+  });
+
+  await page.goto(url, {
+    waitUntil: "domcontentloaded",
+    timeout: PAGE_TIMEOUT,
+  });
+
+  // A string, not an arrow function: puppeteer serializes functions with
+  // toString(), and under nyc (CI coverage) that source carries counters which
+  // do not exist in the page.
+  const deadline = Date.now() + RENDER_GRACE;
+  try {
+    await page.waitForFunction('document.readyState === "complete"', {
+      timeout: RENDER_GRACE,
+    });
+    await page.waitForNetworkIdle({
+      idleTime: 500,
+      timeout: Math.max(1, deadline - Date.now()),
+      concurrency: 0,
+    });
+  } catch (error) {
+    if (!(error instanceof puppeteer.TimeoutError)) throw error;
+  }
+
+  return {
+    png: Buffer.from(
+      await page.screenshot({
+        type: "png",
+        omitBackground: true,
+        timeout: SCREENSHOT_TIMEOUT,
+      })
+    ),
+    // What the viewport was, in the pixels of the screenshot
+    maxWidth: viewport.width * DEVICE_SCALE_FACTOR,
+    maxHeight: viewport.height * DEVICE_SCALE_FACTOR,
+  };
 }
 
 // Chromium's bytes come from a process that ran a hostile page, so decode them
@@ -205,7 +246,25 @@ async function reencode(png, maxWidth, maxHeight) {
     .toBuffer();
 }
 
-function pageFailure(error, puppeteer) {
+function hostOf(url) {
+  try {
+    return new URL(url).host.slice(0, 100);
+  } catch (e) {
+    return "";
+  }
+}
+
+function pageFailure(error, puppeteer, url) {
+  if (error instanceof TooHeavyError) {
+    return {
+      error: String(error.message),
+      retryable: false,
+      tooHeavy: true,
+      host: hostOf(url),
+      peakBytes: error.bytes,
+      meter: error.meter,
+    };
+  }
   const retryable = !(
     error.permanent ||
     error instanceof StalledError ||
@@ -267,6 +326,8 @@ async function run(args) {
     handleSIGHUP: false,
   });
 
+  const meter = memory.createMeter();
+
   let outputBytes = 0;
   let ran = false;
   let stalled = false;
@@ -290,12 +351,12 @@ async function run(args) {
       let shot;
       try {
         shot = await within(
-          capture(browser, puppeteer, pages[i]),
+          capture(browser, puppeteer, pages[i], meter),
           PAGE_WORST_CASE
         );
       } catch (error) {
         if (error instanceof StalledError) stalled = true;
-        results[i] = pageFailure(error, puppeteer);
+        results[i] = pageFailure(error, puppeteer, pages[i].url);
         continue;
       }
 
@@ -333,4 +394,13 @@ async function run(args) {
   return answer();
 }
 
-module.exports = { run, reencode, limits, MAX_PAGES, PAGE_WORST_CASE };
+module.exports = {
+  run,
+  reencode,
+  limits,
+  pageFailure,
+  capture,
+  TooHeavyError,
+  MAX_PAGES,
+  PAGE_WORST_CASE,
+};

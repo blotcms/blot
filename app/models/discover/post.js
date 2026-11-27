@@ -24,6 +24,8 @@ function deserialize(id, hash) {
     added: parseInt(hash.added, 10) || 0,
     // Whether the card shows the post's text above its photos
     showText: hash.showText === "1",
+    // Text the maintainer wrote for the card, shown in place of the post's
+    text: hash.text || "",
   };
 }
 
@@ -105,6 +107,24 @@ async function setShowText(id, show) {
   return get(id);
 }
 
+// Sets the card's own text, shown in place of the post's: above the photos,
+// or as the excerpt of a card without them. An empty text goes back to the
+// post's. Re-adding the post keeps it. Resolves to the post, or null when it
+// isn't on Discover.
+async function setText(id, text) {
+  ensure(id, "string").and(text, "string");
+  if (!(await client.exists(key.post(id)))) return null;
+  // Paragraphs are kept, split by a blank line; other whitespace is folded
+  text = text
+    .split(/\n\s*\n/)
+    .map((paragraph) => paragraph.replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .join("\n\n");
+  if (text) await client.hSet(key.post(id), "text", text);
+  else await client.hDel(key.post(id), "text");
+  return get(id);
+}
+
 // Removes a post and its derived photos. Resolves to true if it was there.
 async function remove(id) {
   ensure(id, "string");
@@ -135,4 +155,13 @@ async function removeBlog(blogID) {
   return ids.length;
 }
 
-module.exports = { get, getMany, has, add, setShowText, remove, removeBlog };
+module.exports = {
+  get,
+  getMany,
+  has,
+  add,
+  setShowText,
+  setText,
+  remove,
+  removeBlog,
+};

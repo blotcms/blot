@@ -24,6 +24,10 @@ set -euo pipefail
 #   scripts/prod/read.sh host                       uptime, disk, memory, overcommit
 #   scripts/prod/read.sh dmesg-oom                  kernel OOM kills
 #   scripts/prod/read.sh tcpmem                     socket memory against tcp_mem, and its 5-minute log
+#   scripts/prod/read.sh unit-mem [--since <window>] the memory sampler's peaks per cgroup (unit-mem-summary.sh):
+#                                                   node-a, node-b, broker, OpenResty, git, oom_kill, host
+#                                                   mem_available; whole history by default
+#   scripts/prod/read.sh unit-mem --tail <n>        the sampler's last n raw lines
 #   scripts/prod/read.sh cron-logs [lines]          tails of the Redis host's cron logs, and the cron file
 #   scripts/prod/read.sh backups                    the backup disk, its mount and service, and the backup log
 #   scripts/prod/read.sh redis-info [section]       redis6-cli INFO (server, clients, memory, ...)
@@ -127,22 +131,28 @@ filtered() {
   printf '%s' "$PATTERN" | remote_stdin "pattern=\$(cat); { $command; }$filters"
 }
 
-# The remote command that prints app.log from SINCE (as parse_options leaves it)
-# on: every file, rotated or not, written to since then, oldest first, and of
-# those only the lines from then on. Lines start with an RFC 3339 time, so a
-# string comparison does. With no SINCE, today's file.
-app_log_since() {
+# The remote command that sets e (epoch seconds) and c (an RFC 3339 time without
+# the zone, to compare log lines' leading times against) to SINCE.
+since_cutoff() {
   local when
-  if [[ -z "$SINCE" ]]; then
-    echo "cat $LOG_DIRECTORY/app.log"
-    return
-  fi
   if [[ "$SINCE" =~ ^([0-9]+)([smh])$ ]]; then
     case "${BASH_REMATCH[2]}" in s) when="${BASH_REMATCH[1]} seconds ago" ;; m) when="${BASH_REMATCH[1]} minutes ago" ;; h) when="${BASH_REMATCH[1]} hours ago" ;; esac
   else
     when="$SINCE"
   fi
-  echo "e=\$(date -u -d '$when' +%s); c=\$(date -u -d @\$e +%Y-%m-%dT%H:%M:%S); find $LOG_DIRECTORY -maxdepth 1 -name 'app.log*' -newermt @\$e -printf '%T@ %p\\n' | sort -n | cut -d' ' -f2 | while read -r f; do zcat -f \$f; done | awk -v c=\$c '\$1 >= c'"
+  echo "e=\$(date -u -d '$when' +%s); c=\$(date -u -d @\$e +%Y-%m-%dT%H:%M:%S)"
+}
+
+# The remote command that prints app.log from SINCE (as parse_options leaves it)
+# on: every file, rotated or not, written to since then, oldest first, and of
+# those only the lines from then on. Lines start with an RFC 3339 time, so a
+# string comparison does. With no SINCE, today's file.
+app_log_since() {
+  if [[ -z "$SINCE" ]]; then
+    echo "cat $LOG_DIRECTORY/app.log"
+    return
+  fi
+  echo "$(since_cutoff); find $LOG_DIRECTORY -maxdepth 1 -name 'app.log*' -newermt @\$e -printf '%T@ %p\\n' | sort -n | cut -d' ' -f2 | while read -r f; do zcat -f \$f; done | awk -v c=\$c '\$1 >= c'"
 }
 
 [[ $# -ge 1 ]] || usage
@@ -217,6 +227,20 @@ case "$command" in
     remote "sudo -n dmesg -T | grep -i -E 'oom|killed process' | tail -n 50" ;;
   tcpmem)
     remote "grep TCP: /proc/net/sockstat; cat /proc/sys/net/ipv4/tcp_mem; nstat -az TcpExtTCPMemoryPressures TcpExtTCPMemoryPressuresChrono TcpExtPruneCalled TcpExtTCPRcvQDrop TcpExtTCPOFODrop; echo; tail -n 30 ~/tcpmem.log" ;;
+  unit-mem)
+    # The sampler (config/host/scripts/unit-mem-log.sh) logs every cgroup each
+    # minute; logrotate keeps daily copies in /var/lib/blot-unit-mem. With
+    # --since, the lines from then on go to the summary on its stdin.
+    parse_options "$@"
+    [[ -z "$PATTERN$YESTERDAY$DAY$ROTATED" ]] || fail "unit-mem takes only --since or --tail"
+    if [[ -n "$TAIL" ]]; then
+      [[ -z "$SINCE" ]] || fail "unit-mem takes --since or --tail, not both"
+      remote "tail -n $TAIL $LOG_DIRECTORY/unit-mem.log"
+    elif [[ -z "$SINCE" ]]; then
+      remote "unit-mem-summary.sh"
+    else
+      remote "$(since_cutoff); { for f in /var/lib/blot-unit-mem/unit-mem.log-*.gz; do [ -f \"\$f\" ] && gzip -dc \"\$f\"; done; cat $LOG_DIRECTORY/unit-mem.log; } | awk -v c=\$c '\$1 >= c' | unit-mem-summary.sh /dev/stdin"
+    fi ;;
   cron-logs)
     lines="${1:-10}"; number "$lines"
     remote "for f in ~/tcpmem.log ~/redis-mem.log ~/backup.log; do echo \"== \$f\"; tail -n $lines \"\$f\"; done; echo '== /etc/cron.d/blot-redis'; cat /etc/cron.d/blot-redis; systemctl is-active crond" ;;

@@ -1,15 +1,14 @@
-import {
-  remoteServer,
-  Authorization,
-  iCloudDriveDirectory,
-  maxFileSize,
-} from "../config.js";
+import { remoteServer, Authorization, maxFileSize } from "../config.js";
 import clfdate from "../util/clfdate.js";
 import fs from "fs-extra";
 import * as brctl from "../brctl/index.js";
+import { rootOf } from "../blogFolder.js";
 import fetch from "./rateLimitedFetchWithRetriesAndTimeout.js";
 import { isUnchanged, recordPushed } from "../pushedFiles.js";
+import { fileVersion, diskMatches } from "../birdState.js";
+import downloadBirdsVersion from "../downloadBirdsVersion.js";
 import { join } from "path";
+import { pushInTurn } from "../limiters.js";
 
 class FileTooLargeError extends Error {
   constructor({ path, size, maxFileSize, mtime }) {
@@ -36,7 +35,21 @@ class FileMissingError extends Error {
 
 const isMissingCode = (e) => e?.code === "ENOENT" || e?.code === "ENOTDIR";
 
-export default async (blogID, path) => {
+// Once a file has been pushed its contents are in Blot and in iCloud, so the
+// local copy is evicted: FileProvider applies a remote edit to a file that is
+// not downloaded at once (a tenth of a second), but holds an edit to a
+// downloaded file until it has fetched the new contents (up to tens of
+// seconds). Best effort; a failure only means the next edit is slower.
+const evictAfterPush = (filePath) => {
+  brctl.evict(filePath).catch((error) => {
+    console.warn(clfdate(), `Could not evict after push: ${filePath}`, error);
+  });
+};
+
+// fromWalk: pushed by the walk of a directory that appeared (a folder moved
+// or copied in), whose files keep their old mtimes, so Blot doesn't count
+// mtime-to-now as sync delay (app/clients/icloud/util/liveLag.js)
+export default async (blogID, path, { fromWalk = false } = {}) => {
   // Input validation
   if (!blogID || typeof blogID !== "string") {
     console.error(clfdate(), "Invalid blogID for upload client request", {
@@ -54,7 +67,7 @@ export default async (blogID, path) => {
     throw new Error("Invalid path");
   }
 
-  const filePath = join(iCloudDriveDirectory, blogID, path);
+  const filePath = join(rootOf(blogID), path);
   const pathBase64 = Buffer.from(path).toString("base64");
 
   console.log(clfdate(), `Preparing to upload file: ${filePath}`);
@@ -68,18 +81,20 @@ export default async (blogID, path) => {
 
     let response;
     try {
-      response = await fetch(`${remoteServer}/upload`, {
-        timeout: 60 * 1000,
-        method: "POST",
-        headers: {
-          Authorization,
-          blogID,
-          pathBase64,
-          modifiedTime,
-          "x-placeholder": "true",
-          "x-original-size": String(size),
-        },
-      });
+      response = await pushInTurn(blogID, () =>
+        fetch(`${remoteServer}/upload`, {
+          timeout: 60 * 1000,
+          method: "POST",
+          headers: {
+            Authorization,
+            blogID,
+            pathBase64,
+            modifiedTime,
+            "x-placeholder": "true",
+            "x-original-size": String(size),
+          },
+        })
+      );
     } catch (error) {
       console.error(
         clfdate(),
@@ -119,12 +134,21 @@ export default async (blogID, path) => {
   // Checked before the download: an evicted file is reported as changed each
   // time iCloud evicts or re-materialises it, and downloading it to find out
   // nothing changed is what can time out.
+  // Unless bird already has a newer version: the event can fire before
+  // FileProvider has updated the file, which then still looks unchanged
   if (isUnchanged(blogID, path, preStat)) {
+    const version = await fileVersion(blogID, path);
+    if (!version || diskMatches(version, preStat)) {
+      console.log(
+        clfdate(),
+        `Skipping upload: unchanged since last push: ${filePath}`
+      );
+      return;
+    }
     console.log(
       clfdate(),
-      `Skipping upload: unchanged since last push: ${filePath}`
+      `Disk unchanged since last push but bird has a newer version: ${filePath}`
     );
-    return;
   }
 
   if (preStat.size > maxFileSize) {
@@ -144,7 +168,7 @@ export default async (blogID, path) => {
   // Download and check file
   let stat;
   try {
-    stat = await brctl.download(filePath);
+    stat = await downloadBirdsVersion(blogID, path, filePath);
   } catch (e) {
     // brctl reports a vanished file as a generic command failure with no code
     if (isMissingCode(e) || !(await fs.pathExists(filePath))) {
@@ -174,55 +198,67 @@ export default async (blogID, path) => {
 
   const modifiedTime = stat.mtime.toISOString();
 
-  // Read entire file into memory
-  console.log(clfdate(), `Reading file into memory: ${filePath}`);
+  // Read in its turn to push, so a blog holds one file in memory however
+  // many it is downloading. Beware: if you try and rewrite this to use streams
+  // you also have to update rateLimitedFetchWithRetriesAndTimeout to re-create
+  // the stream correctly for subsequent retries otherwise the stream will be
+  // in a bad state and will not work correctly
+  const response = await pushInTurn(blogID, async () => {
+    console.log(clfdate(), `Reading file into memory: ${filePath}`);
 
-  // Beware: if you try and rewrite this to use streams you also have to
-  // update rateLimitedFetchWithRetriesAndTimeout to re-create the stream
-  // correctly for subsequent retries otherwise the stream will be in a
-  // bad state and will not work correctly
-  let fileBuffer;
-  try {
-    fileBuffer = await fs.readFile(filePath);
-  } catch (error) {
-    if (isMissingCode(error)) throw new FileMissingError(path);
-    console.error(
+    let fileBuffer;
+    try {
+      fileBuffer = await fs.readFile(filePath);
+    } catch (error) {
+      if (isMissingCode(error)) throw new FileMissingError(path);
+      console.error(
+        clfdate(),
+        `Failed to read file for upload: ${filePath}`,
+        error
+      );
+      throw new Error(`Failed to read file: ${error.message}`, {
+        cause: error,
+      });
+    }
+
+    // The file changed between the download and its turn: retried from the
+    // start (see withRetries in watcher/actions.js), which downloads it again
+    if (fileBuffer.length !== stat.size) {
+      throw new Error(
+        `File changed while waiting to push: ${filePath} (${stat.size} bytes downloaded, ${fileBuffer.length} read)`
+      );
+    }
+
+    console.log(
       clfdate(),
-      `Failed to read file for upload: ${filePath}`,
-      error
+      `Issuing HTTP /upload request to remote server: ${path}`
     );
-    throw new Error(`Failed to read file: ${error.message}`, { cause: error });
-  }
 
-  console.log(
-    clfdate(),
-    `Issuing HTTP /upload request to remote server: ${path}`
-  );
-
-  let response;
-  try {
-    response = await fetch(`${remoteServer}/upload`, {
-      // we use a larger timeout for uploads since they involve building a potentially expensive entry
-      // even if the upload itself is fast
-      timeout: 60 * 1000,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/octet-stream",
-        Authorization,
-        blogID,
-        pathBase64,
-        modifiedTime,
-      },
-      body: fileBuffer,
-    });
-  } catch (error) {
-    console.error(
-      clfdate(),
-      `Failed to upload file to remote server: ${filePath}`,
-      error
-    );
-    throw error;
-  }
+    try {
+      return await fetch(`${remoteServer}/upload`, {
+        // we use a larger timeout for uploads since they involve building a potentially expensive entry
+        // even if the upload itself is fast
+        timeout: 60 * 1000,
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          Authorization,
+          blogID,
+          pathBase64,
+          modifiedTime,
+          ...(fromWalk && { fromDirectoryWalk: "true" }),
+        },
+        body: fileBuffer,
+      });
+    } catch (error) {
+      console.error(
+        clfdate(),
+        `Failed to upload file to remote server: ${filePath}`,
+        error
+      );
+      throw error;
+    }
+  });
 
   const text = await response.text();
 
@@ -237,4 +273,5 @@ export default async (blogID, path) => {
 
   recordPushed(blogID, path, stat);
   console.log(clfdate(), "Upload successful:", text);
+  evictAfterPush(filePath);
 };

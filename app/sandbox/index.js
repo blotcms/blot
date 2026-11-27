@@ -196,7 +196,19 @@ function viaBroker(socketPath, job, args, input) {
   });
 }
 
+// The jobs that need the jail's network (see proxy/unit/sandbox/jail.js)
+const NETWORK_JOBS = ["fetch", "fetch-image", "screenshot"];
+
 async function run(job, args, input) {
+  // scripts/prod/run-script.js sets BLOT_SCRIPT_RUNNER in its own container,
+  // which has no broker. The other jobs run in-process there, but these would
+  // fail closed or degrade, so the script stops at the first one
+  if (process.env.BLOT_SCRIPT_RUNNER && NETWORK_JOBS.includes(job)) {
+    throw sandboxError(
+      "UNAVAILABLE",
+      `the script runner has no sandbox for the ${job} job: run the script inside a unit with docker exec, or in smaller runs`
+    );
+  }
   const socketPath = config.sandbox.socket;
   if (!socketPath) return inProcess(job, args, input);
   try {

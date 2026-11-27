@@ -173,19 +173,18 @@ jobs:
             [ "$(docker inspect -f '{{.State.Running}}' blot-$u)" = true ]
             [ "$(docker inspect -f '{{.HostConfig.RestartPolicy.Name}}' blot-$u)" = unless-stopped ]
             [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' blot-$u)" = host ]
-            [ "$(docker inspect -f '{{.HostConfig.Memory}}' blot-$u)" = 3460300800 ]
+            [ "$(docker inspect -f '{{.HostConfig.Memory}}' blot-$u)" = 3758096384 ]
             [ "$(docker inspect -f '{{len .HostConfig.PortBindings}}' blot-$u)" = 0 ]
             docker exec blot-$u printenv PROXY_UNIT | grep -qx "$u"
             docker exec blot-$u printenv BLOT_UNIT | grep -qx "$u"
             docker exec blot-$u printenv BLOT_SOCKET | grep -qx "/run/blot/$u-a.sock"
-            docker exec blot-$u printenv BLOT_WORKER_MAX_OLD_SPACE_SIZE | grep -qx 750
+            docker exec blot-$u printenv BLOT_WORKER_MAX_OLD_SPACE_SIZE | grep -qx 512
             docker exec blot-$u printenv BLOT_RELEASE_ID | grep -qx e2e
           done
-          # no airlock any more (#2257), and without BLOT_SANDBOX no proxy or browser
+          # no airlock any more (#2257), and without BLOT_SANDBOX no browser
           if docker inspect blot-blue-airlock >/dev/null 2>&1 \
-            || docker exec blot-blue printenv BLOT_AIRLOCK_BROWSER_URL \
-            || docker exec blot-green printenv BLOT_EGRESS_PROXY_URL; then
-            echo "an airlock, or a browser or proxy URL without the sandbox" >&2; exit 1
+            || docker exec blot-blue printenv BLOT_AIRLOCK_BROWSER_URL; then
+            echo "an airlock, or a browser URL without the sandbox" >&2; exit 1
           fi
           code=$(curl -sS -o /dev/null -w '%{http_code}' --connect-to "$BLOT_HOST:443:127.0.0.1:443" "https://$BLOT_HOST/")
           [ "$code" = 200 ]

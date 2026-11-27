@@ -41,8 +41,12 @@ module.exports = async (blogID, publish, options = {}) => {
 
   const account = await database.blog.get(blogID);
   const { folderId, serviceAccountId } = account;
-  const drive = await createDriveClient(serviceAccountId);
-  const checkWeCanContinue = CheckWeCanContinue(blogID, account);
+  // options.signal is the folder lock's (routes/setup.js): once a disconnect
+  // aborts it (sync/seize.js), uploads in flight are cut off and the copy
+  // stops at its next step
+  const { signal } = options;
+  const drive = await createDriveClient(serviceAccountId, { signal });
+  const checkWeCanContinue = CheckWeCanContinue(blogID, account, signal);
   const { reset, set, getAllApplied } = database.folder(folderId, blogID);
 
   // .gdoc files have no md5Checksum, so we fall back to comparing
@@ -78,7 +82,7 @@ module.exports = async (blogID, publish, options = {}) => {
 
     // Since we reset the database of file ids
     // we need to restore this now
-    await set(dirId, dir, { isDirectory: true });
+    await set(dirId, dir);
 
     for (const { name, id } of remoteContents) {
       if (!localContents.find((item) => item.name === name)) {
@@ -89,7 +93,7 @@ module.exports = async (blogID, publish, options = {}) => {
     }
 
     for (const entry of localContents) {
-      const { name, isDirectory, modifiedTime, size } = entry;
+      const { name, isDirectory, size } = entry;
       const path = join(dir, name);
 
       if (shouldIgnoreFile(path)) continue;
@@ -180,10 +184,7 @@ module.exports = async (blogID, publish, options = {}) => {
         if (existsOnRemote && !identicalOnRemote) {
           await checkWeCanContinue();
           publishTransferStatus(progress, publish, "Updating", path);
-          await set(existsOnRemote.id, path, {
-            modifiedTime,
-            isDirectory: false,
-          });
+          await set(existsOnRemote.id, path);
           await drive.files.update({
             fileId: existsOnRemote.id,
             supportsAllDrives: true,
@@ -191,7 +192,12 @@ module.exports = async (blogID, publish, options = {}) => {
               body: folder.createReadStream(blogID, path),
             },
           });
-        } else if (!existsOnRemote) {
+        } else if (existsOnRemote) {
+          // Already on Drive: a setup that was interrupted part way and run
+          // again (routes/setup.js) finds the files it copied the first time.
+          // reset() above dropped their mapping, so record it again.
+          await set(existsOnRemote.id, path);
+        } else {
           await checkWeCanContinue();
           publishTransferStatus(progress, publish, "Transferring", path);
           const { data } = await drive.files.create({
@@ -205,7 +211,7 @@ module.exports = async (blogID, publish, options = {}) => {
             },
             fields: "id",
           });
-          await set(data.id, path, { modifiedTime, isDirectory: false });
+          await set(data.id, path);
         }
       }
     }

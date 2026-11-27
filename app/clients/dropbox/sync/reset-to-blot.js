@@ -28,8 +28,11 @@ const {
 const tagSource = require("../util/tagSource");
 const retryRequest = require("../util/retryRequest");
 const loadClient = require("../util/loadClient");
-const createClient = async (blogID) => {
-  const { error, client, account } = await loadClient(blogID);
+const cancelled = require("../util/cancelled");
+const hashes = require("../util/hashes");
+const localContentHash = require("../util/localContentHash");
+const createClient = async (blogID, signal) => {
+  const { error, client, account } = await loadClient(blogID, { signal });
   if (error) throw error;
   return [client, account];
 };
@@ -63,8 +66,11 @@ async function mapLimit(items, limit, iterator) {
 // update(path) is called as each file or directory changes on disk, so the
 // database follows the folder even if the walk fails part way through. It is
 // the same (blogID, publish, update) contract the iCloud and Drive clients
-// use, and callers should hold the folder lock while it runs.
-async function resetToBlot(blogID, publish, update) {
+// use, and callers should hold the folder lock while it runs. An optional
+// signal (an AbortSignal, the sync's folder.signal) stops the walk between
+// files and folders, rejecting with an AbortError (as reset-from-blot.js
+// does), and cuts off its requests and downloads in flight.
+async function resetToBlot(blogID, publish, update, signal) {
   if (!publish)
     publish = (...args) => {
       console.log(clfdate() + " Dropbox:", args.join(" "));
@@ -87,9 +93,9 @@ async function resetToBlot(blogID, publish, update) {
 
   let client, account;
   try {
-    [client, account] = await createClient(blogID);
+    [client, account] = await createClient(blogID, signal);
   } catch (err) {
-    await persistError(blogID, err, SOURCES.AUTH);
+    if (!cancelled(err, signal)) await persistError(blogID, err, SOURCES.AUTH);
     throw err;
   }
 
@@ -100,9 +106,11 @@ async function resetToBlot(blogID, publish, update) {
       client,
       account,
       updatePath,
-      startedAt
+      startedAt,
+      signal
     );
   } catch (err) {
+    if (cancelled(err, signal)) throw err;
     await persistError(blogID, err, SOURCES.APPLY);
     throw err;
   }
@@ -114,7 +122,8 @@ async function resetToBlotWithClient(
   client,
   account,
   updatePath,
-  startedAt
+  startedAt,
+  signal
 ) {
   // Guard this at the source rather than only in each caller: resetToBlot
   // treats Dropbox as the source of truth and deletes any local file with no
@@ -134,6 +143,9 @@ async function resetToBlotWithClient(
   }
 
   let dropboxRoot = "/";
+  // The root's path as Dropbox lowercases it, which the recursive listing's
+  // path_lower values start with. Null if Dropbox didn't give one.
+  let rootLower = "";
 
   // Load the path to the blog folder root position in Dropbox
   if (account.folder_id) {
@@ -144,7 +156,8 @@ async function resetToBlotWithClient(
         "filesGetMetadata"
       )
     );
-    const { path_display } = result;
+    const { path_display, path_lower } = result;
+    rootLower = path_lower || null;
     if (path_display) {
       dropboxRoot = path_display;
       await set(blogID, { folder: path_display });
@@ -216,16 +229,32 @@ async function resetToBlotWithClient(
 
   const progress = createProgress(await countLocalFiles(blogID, "/"), publish);
 
-  await walk(
-    blogID,
-    client,
-    publish,
-    updatePath,
-    dropboxRoot,
-    "/",
-    summary,
-    progress
-  );
+  const readdir = await createReaddir(client, dropboxRoot, rootLower, publish);
+
+  // Files whose content_hash is known from their SHA-1 aren't read to hash
+  // them (util/hashes.js). A walk that saw every file keeps only what it used.
+  const known = await hashes.load(blogID);
+  let walked = false;
+
+  try {
+    await walk(
+      blogID,
+      client,
+      publish,
+      updatePath,
+      dropboxRoot,
+      "/",
+      summary,
+      progress,
+      readdir,
+      "/",
+      signal,
+      known
+    );
+    walked = true;
+  } finally {
+    await known.save({ complete: walked && !summary.failed });
+  }
 
   const changed =
     summary.changedPaths.length || summary.vanished.length
@@ -258,7 +287,9 @@ async function resetToBlotWithClient(
 
   // This means that future syncs will be fast
   // A download-only pass can't show that Dropbox has room for uploads,
-  // so it leaves a quota error in place.
+  // so it leaves a quota error in place. Not once a disconnect has dropped
+  // the account, which this would bring back.
+  abortIfRequested(signal);
   await set(
     blogID,
     keepsErrorAfterDownload(account) ? { cursor } : { cursor, error_code: 0 }
@@ -267,6 +298,14 @@ async function resetToBlotWithClient(
   progress.finish("Finished processing folder");
 
   return summary;
+}
+
+function abortIfRequested(signal) {
+  if (signal && signal.aborted) {
+    const error = new Error("Dropbox reset aborted");
+    error.name = "AbortError";
+    throw error;
+  }
 }
 
 function recordFailure(summary, path, err) {
@@ -282,19 +321,29 @@ const walk = async (
   dropboxRoot,
   dir,
   summary,
-  progress
+  progress,
+  readdir,
+  key,
+  signal,
+  known
 ) => {
+  abortIfRequested(signal);
   publish("Checking", dir);
-  const remoteReading = remoteReaddir(client, join(dropboxRoot, dir)).catch(
-    (err) => {
-      if (dir === "/" || !vanishedFolder(err)) throw err;
+  const remoteReading = readdir(dir, key).catch((err) => {
+    if (dir === "/" || !(err && err.status === 409)) throw err;
+    if (vanishedFolder(err)) {
       summary.vanished.push({ dir, tag: dropboxTag(err) });
-      return null;
+    } else {
+      // Dropbox refuses this one folder (restricted content, say): note it
+      // and leave Blot's copy of it alone, rather than stop the whole walk
+      publish("Failed to list", dir, dropboxTag(err));
+      recordFailure(summary, dir, new Error("409 " + dropboxTag(err)));
     }
-  );
+    return null;
+  });
   const [remoteContents, localContents] = await Promise.all([
     remoteReading,
-    localReaddir(blogID, dir, remoteReading),
+    localReaddir(blogID, dir, remoteReading, known),
   ]);
 
   // Dropbox no longer has this folder: remove nothing, and check once the
@@ -302,6 +351,7 @@ const walk = async (
   if (!remoteContents) return;
 
   for (const { name, path_display, is_directory } of localContents) {
+    abortIfRequested(signal);
     const pathOnBlot = join(dir, name);
     // A directory removed in one fs.remove call still accounts for every
     // file total counted inside it, so current must advance by that many.
@@ -362,6 +412,7 @@ const walk = async (
   progress.discover(newFileCount);
 
   for (const remoteItem of remoteContents) {
+    abortIfRequested(signal);
     const localCounterpart = localContents.find(
       (localItem) => localItem.name === remoteItem.name
     );
@@ -416,7 +467,11 @@ const walk = async (
         dropboxRoot,
         join(dir, name),
         summary,
-        progress
+        progress,
+        readdir,
+        remoteItem.path_lower,
+        signal,
+        known
       );
     } else {
       if (hasUnsupportedExtension(pathOnDropbox)) {
@@ -485,7 +540,14 @@ const walk = async (
           localCounterpart.is_directory
         );
         try {
-          await download(client, pathOnDropbox, blogID, pathOnBlot);
+          const pair = await download(
+            client,
+            pathOnDropbox,
+            blogID,
+            pathOnBlot,
+            { signal }
+          );
+          if (pair) known.set(pair.sha1, pair.content_hash);
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -493,6 +555,7 @@ const walk = async (
             summary.modifiedPaths.push(pathOnBlot);
           } else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
+          if (cancelled(e, signal)) throw e;
           // A file can end up with a destination path longer than the
           // filesystem allows – seen in production when a Dropbox account
           // got stuck wrapping the same file in nested "(Conflict met
@@ -511,7 +574,14 @@ const walk = async (
         // Already added to total by the discover() pass above.
         progress.publish("Downloading", pathOnBlot, false);
         try {
-          await download(client, pathOnDropbox, blogID, pathOnBlot);
+          const pair = await download(
+            client,
+            pathOnDropbox,
+            blogID,
+            pathOnBlot,
+            { signal }
+          );
+          if (pair) known.set(pair.sha1, pair.content_hash);
           summary.downloaded += 1;
           await updatePath(pathOnBlot);
           if (modifiedSince(remoteItem, summary.startedAt)) {
@@ -519,6 +589,7 @@ const walk = async (
             summary.modifiedPaths.push(pathOnBlot);
           } else summary.changedPaths.push(pathOnBlot);
         } catch (e) {
+          if (cancelled(e, signal)) throw e;
           if (e.code === "ENAMETOOLONG") summary.skipped += 1;
           else recordFailure(summary, pathOnBlot, e);
           // Revoked access fails every remaining file: fail the resync.
@@ -650,27 +721,14 @@ const excuseRecentChanges = async (client, changed, dropboxRoot, summary) => {
   }
 };
 
-// A file's hash is undefined if it can't be read, which never matches Dropbox's.
-// Hashing can mean reading the whole file, so when Dropbox's size for the file
-// is known it is compared first, from the index: files of different sizes
-// can't have the same bytes.
-const contentHash = async (blogID, path, size) => {
-  try {
-    const stat = await storage.stat(blogID, path);
-    if (stat.isDirectory) return undefined;
-    // A placeholder's bytes aren't the file's, so they never match Dropbox's,
-    // even when the file there is now really empty too
-    if (stat.placeholder) return undefined;
-    if (typeof size === "number" && stat.size !== size) return undefined;
-    return (await storage.stat(blogID, path, { hash: true })).hash;
-  } catch (e) {
-    return undefined;
-  }
-};
+// Dropbox's content_hash of a local file, looked up by its SHA-1 in the
+// walk's stored hashes where it can be (util/localContentHash.js)
+const contentHash = (blogID, path, size, remoteHash, known) =>
+  localContentHash(blogID, path, { size, remoteHash, known });
 
 // remoteContentsPromise is the same folder's listing in Dropbox (null if it
-// is gone), for the sizes
-const localReaddir = async (blogID, dir, remoteContentsPromise) => {
+// is gone), for the sizes and hashes. known is the walk's util/hashes.js.
+const localReaddir = async (blogID, dir, remoteContentsPromise, known) => {
   const [contents, remoteContents] = await Promise.all([
     storage.listNames(blogID, dir),
     remoteContentsPromise,
@@ -691,7 +749,13 @@ const localReaddir = async (blogID, dir, remoteContentsPromise) => {
         : await contentHash(
             blogID,
             path_display,
-            remoteItem && !remoteItem.is_directory ? remoteItem.size : undefined
+            remoteItem && !remoteItem.is_directory
+              ? remoteItem.size
+              : undefined,
+            remoteItem && !remoteItem.is_directory
+              ? remoteItem.content_hash
+              : undefined,
+            known
           ),
     };
   });
@@ -703,33 +767,105 @@ const vanishedFolder = (err) =>
   err.status === 409 &&
   /^path\/(not_found|not_folder)\b/.test(dropboxTag(err));
 
-const remoteReaddir = async (client, dir) => {
-  let items = [];
+// Lists a folder in Dropbox, following the cursor until has_more is false.
+// args are the filesListFolder arguments. Each entry gets is_directory.
+const listPages = async (client, args, label) => {
+  const items = [];
   let cursor;
   let has_more;
-
-  //path: Specify the root folder as an empty string rather than as "/".'
-  if (dir === "/") dir = "";
 
   do {
     const { result } = await retryRequest(
       () =>
         cursor
           ? client.filesListFolderContinue({ cursor })
-          : client.filesListFolder({ path: dir }),
-      "remoteReaddir"
+          : client.filesListFolder(args),
+      label
     );
     has_more = result.has_more;
     cursor = result.cursor;
-    items = items.concat(
-      result.entries.map((i) => {
-        i.is_directory = i[".tag"] === "folder";
-        return i;
-      })
-    );
+    for (const entry of result.entries) {
+      entry.is_directory = entry[".tag"] === "folder";
+      items.push(entry);
+    }
   } while (has_more);
 
   return items;
 };
 
+const remoteReaddir = (client, dir) =>
+  //path: Specify the root folder as an empty string rather than as "/".'
+  listPages(client, { path: dir === "/" ? "" : dir }, "remoteReaddir");
+
+// Returns readdir(dir, pathLower), which resolves to the listing of a folder
+// in Dropbox: dir is its path on Blot ("/" or "/Sub/Folder"), and pathLower
+// the folder's path_lower as Dropbox gave it ("/" for the root). A big blog has
+// over a thousand folders, so a request per folder holds its lock for minutes.
+// The whole tree is listed once instead, recursively, and each folder's
+// listing is read from that, grouped by parent folder through Dropbox's own
+// path_lower values. JavaScript's lowercasing is never used to match them: it
+// differs from Dropbox's (a final sigma, say), so it could match a different
+// folder. A folder that can't be matched is listed by itself, never taken for
+// empty, which would remove its files from Blot. Dropbox returns at most 2,000
+// entries a page, and the entries are held for the walk, a few hundred bytes
+// each. It is a snapshot, so a folder deleted since is still listed, as an
+// edit made during the walk is anyway (see excuseRecentChanges).
+// If Dropbox answers the recursive listing with a 409 (a folder it won't list
+// recursively, or a cursor that expired), or the root's path_lower is unknown,
+// each folder is listed as before.
+const createReaddir = async (client, dropboxRoot, rootLower, publish) => {
+  const perFolder = (dir) => remoteReaddir(client, join(dropboxRoot, dir));
+
+  if (rootLower === null || rootLower === undefined) return perFolder;
+
+  const byParent = new Map();
+  const folders = new Set(["/"]);
+
+  try {
+    const entries = await listPages(
+      client,
+      // The path as Dropbox gave it, not lowercased here
+      {
+        path: dropboxRoot === "/" ? "" : dropboxRoot,
+        recursive: true,
+        limit: 2000,
+      },
+      "remoteReaddir recursive"
+    );
+
+    for (const entry of entries) {
+      const path = entry.path_lower;
+      if (!path || !path.startsWith(rootLower + "/")) continue;
+      const relative = path.slice(rootLower.length);
+      const parent = relative.slice(0, relative.lastIndexOf("/")) || "/";
+      if (entry.is_directory) folders.add(relative);
+      if (!byParent.has(parent)) byParent.set(parent, []);
+      byParent.get(parent).push(entry);
+    }
+  } catch (err) {
+    if (!err || err.status !== 409) throw err;
+    publish(
+      "Could not list the folder recursively, listing each folder",
+      dropboxTag(err)
+    );
+    return perFolder;
+  }
+
+  return async (dir, pathLower) => {
+    const key =
+      pathLower === "/"
+        ? "/"
+        : typeof pathLower === "string" && pathLower.startsWith(rootLower + "/")
+          ? pathLower.slice(rootLower.length)
+          : null;
+
+    if (key !== null && byParent.has(key)) return byParent.get(key);
+    if (key !== null && folders.has(key)) return [];
+    return perFolder(dir);
+  };
+};
+
 module.exports = resetToBlot;
+
+// For specs
+module.exports.createReaddir = createReaddir;

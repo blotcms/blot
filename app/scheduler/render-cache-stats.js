@@ -1,4 +1,9 @@
 const clfdate = require("helper/clfdate");
+const heapStats = require("helper/heapStats");
+const heapEstimate = require("models/cache/heapEstimate");
+
+// Counts garbage collections from boot, since setup requires this module then
+heapStats.start();
 
 // Each of these render-path LRU caches exports a _stats() accessor
 // (see models/cache/stats.js) returning current size/calculatedSize
@@ -32,8 +37,19 @@ function uncachedBy(reasons) {
 }
 
 module.exports = function () {
+  // Measures more cached values for the next line, off the request path
+  heapEstimate
+    .measureSome()
+    .catch((err) =>
+      console.error(clfdate(), "[STATS] heap estimate failed", err)
+    );
   try {
     const mem = process.memoryUsage();
+    const all = caches.map((stats) => stats());
+    // The render caches' own byte counts summed. Production's heap has run
+    // at about twice this (#2795), so it undercounts what they hold.
+    const cacheBytes = all.reduce((sum, c) => sum + (c.calculatedSize || 0), 0);
+    const cacheHeapBytes = all.reduce((sum, c) => sum + (c.heapBytes || 0), 0);
 
     console.log(
       clfdate(),
@@ -42,11 +58,13 @@ module.exports = function () {
       "process_heapTotal=" + mem.heapTotal,
       "process_heapUsed=" + mem.heapUsed,
       "process_external=" + mem.external,
-      "process_arrayBuffers=" + mem.arrayBuffers
+      "process_arrayBuffers=" + mem.arrayBuffers,
+      "render_cache_totalBytes=" + cacheBytes,
+      "render_cache_totalHeapBytes=" + cacheHeapBytes,
+      ...heapStats.fields()
     );
 
-    for (const stats of caches) {
-      const cache = stats();
+    for (const cache of all) {
       const c = cache.counters;
       console.log(
         clfdate(),
@@ -56,6 +74,10 @@ module.exports = function () {
         "render_cache_max=" + cache.max,
         "render_cache_calculatedSize=" + cache.calculatedSize,
         "render_cache_maxSize=" + cache.maxSize,
+        "render_cache_heapBytes=" + (cache.heapBytes || 0),
+        "render_cache_twoByteBytes=" + (cache.twoByteBytes || 0),
+        "render_cache_wideObjects=" + (cache.wideObjects || 0),
+        "render_cache_heapMeasured=" + (cache.heapMeasured ?? 1).toFixed(2),
         ...(c
           ? [
               "render_cache_hits=" + c.hit,

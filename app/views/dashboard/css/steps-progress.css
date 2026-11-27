@@ -1,0 +1,213 @@
+/* A setup checklist: <div class="steps steps-progress"><ol>…</ol></div>
+
+   Each step has a ring rather than a number, joined to the next by a dotted
+   line. A step's state is a class on its <li>:
+   - none: an instruction the person follows, in full-strength text
+   - todo: waiting, faint
+   - active: running, faint, with <span class="step-icon"><span
+     class="steps-spinner"></span></span> as an arc round its ring
+   - done: a check in a filled ring, text at full strength
+   - problem: <span class="step-icon problem"><span
+     class="icon-small-alert"></span></span> in place of its ring
+   Inside a step: .step-title, then .step-text or .step-problem. An
+   instruction's .step-text, or a problem step's, is full strength; a status
+   step's is quieter.
+
+   Give each <li> a data-step name and js/steps-progress.js animates a step
+   that has finished since the page last showed it (the check fades in, the
+   title comes up from faint). It remembers steps per page path, or per
+   data-steps-key on the .steps-progress element.
+
+   Used by the iCloud client's setup page (clients/icloud/views/index.html) */
+
+.steps-progress > ol {
+  padding-left: 26px;
+  /* In a dashboard .line, the first title sits on the label's baseline */
+  margin-top: 3px;
+}
+
+.steps-progress > ol > li {
+  margin-bottom: 1.2em;
+}
+
+.steps-progress > ol > li::before {
+  content: "";
+  left: -26px;
+  box-sizing: border-box;
+  top: 1px;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--border-color);
+  background: var(--background-color) center / 10px no-repeat;
+}
+
+.steps-progress > ol > li::after {
+  left: calc(7px - 26px);
+  top: 21px;
+  bottom: calc(-1.2em + 4px);
+  width: 0;
+  background: none;
+  border-left: 2px dotted
+    color-mix(in srgb, var(--light-text-color) 45%, transparent);
+}
+
+.steps-progress > ol > li.done::before {
+  border-color: var(--accent-color);
+  background-color: var(--accent-color);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 6.2l2.3 2.3 4.7-4.9' fill='none' stroke='white' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+/* Hierarchy by size and colour rather than weight */
+.steps-progress .step-title {
+  display: block;
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--text-color);
+}
+
+.steps-progress .step-text,
+.steps-progress .step-problem {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--medium-text-color);
+  max-width: 520px;
+}
+
+.steps-progress .step-problem {
+  color: #c25e00;
+  margin: 4px 0 10px;
+  max-width: 480px;
+  text-wrap: pretty;
+}
+
+/* An instruction step (no state class), or one with a problem to fix: its
+   detail is read and followed */
+.steps-progress > ol > li:not(.todo):not(.active):not(.done) .step-text {
+  color: var(--text-color);
+}
+
+/* Waiting and running steps are faint until they finish */
+.steps-progress > ol > li.todo .step-title,
+.steps-progress > ol > li.active .step-title {
+  color: var(--light-text-color);
+}
+
+.steps-progress > ol > li.todo .step-text {
+  color: var(--light-text-color);
+}
+
+/* A failing step shows an alert in place of its ring */
+.steps-progress > ol > li.problem::before {
+  visibility: hidden;
+}
+
+.steps-progress .step-icon {
+  position: absolute;
+  top: 1px;
+  left: -26px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.steps-progress .step-icon.problem {
+  color: #c25e00;
+}
+
+/* The running step's arc round its ring */
+.steps-spinner {
+  display: inline-block;
+  box-sizing: border-box;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid transparent;
+  border-top-color: var(--accent-color);
+  border-right-color: var(--accent-color);
+  border-radius: 50%;
+  animation: steps-spin 0.8s linear infinite;
+}
+
+@keyframes steps-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A step that finished since the page last showed it */
+.steps-progress > ol > li.became-done::before {
+  animation: steps-check-in 0.25s ease-out both;
+  animation-delay: var(--step-delay, 0s);
+}
+
+.steps-progress > ol > li.became-done .step-title {
+  animation: steps-text-in 0.4s ease-out both;
+  animation-delay: var(--step-delay, 0s);
+}
+
+@keyframes steps-check-in {
+  from {
+    border-color: var(--border-color);
+    background-color: var(--background-color);
+    background-size: 0;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes steps-text-in {
+  from {
+    color: var(--light-text-color);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .steps-spinner,
+  .steps-progress > ol > li.became-done::before,
+  .steps-progress > ol > li.became-done .step-title {
+    animation: none;
+  }
+}
+
+/* A value to carry somewhere else, with its Copy button:
+   <span class="copy-box"><span class="copy-box-value">…</span>
+   <button class="copy" data-copy="…">…</button></span>
+   For a command or URL, .copy-box-value.code is monospace and wraps, with
+   Copy kept beside it */
+.copy-box {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  margin: 8px 0 2px;
+  padding: 6px 6px 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--background-color);
+  max-width: 100%;
+}
+
+.copy-box-value {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.copy-box .copy {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.copy-box:has(.copy-box-value.code) {
+  flex-wrap: nowrap;
+}
+
+.copy-box-value.code {
+  min-width: 0;
+  font-family: "IA Writer Duospace", Consolas, monaco, monospace;
+  font-size: 13px;
+  font-weight: normal;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}

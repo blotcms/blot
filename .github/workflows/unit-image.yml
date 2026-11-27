@@ -58,6 +58,11 @@ jobs:
           fetch-depth: 0
           filter: blob:none
 
+      # The docs build in the image reads the demo folders (their trees and
+      # ZIP hashes) from the build context; the image doesn't keep them
+      - name: Check out the demo folders
+        run: git submodule update --init --depth 1 app/templates/folders
+
       - id: versions
         uses: ./.github/actions/versions
 

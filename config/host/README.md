@@ -28,6 +28,7 @@ On a new host run `deploy.sh` directly (see [Moving to a new host](#moving-to-a-
 | `scripts/unit-mem-log.sh`, `scripts/unit-mem-summary.sh` | `/usr/local/bin/` |
 | (written by `deploy.sh`) | `/etc/cron.d/blot-unit-mem` (runs `unit-mem-log.sh` every minute as root) |
 | `scripts/mount-instance-store.service` | `/etc/systemd/system/mount-instance-store.service` (enabled; started only if `/var/instance-ssd` is not mounted yet) |
+| `scripts/unit-cgroups/*.slice`, `scripts/unit-cgroups/blot-unit-cgroups.service`, `scripts/unit-cgroups/blot-unit-cgroups.sh` | `/etc/systemd/system/`, the script in `/usr/local/sbin/` (enabled and restarted each run). Each unit's slice, `system-blot-<unit>.slice` in `system.slice`, holds its container and its two sandbox jails (`sandbox/`, `browser/`, which the script makes) under one `MemoryMax`, the unit's memory (#2795). Its value must equal `UNIT.memory` in `scripts/deploy/constants.js`: the unit deploy checks |
 | `scripts/docker.service.d/*.conf` | `/etc/systemd/system/docker.service.d/` (`10-instance-store.conf`, and `20-rsyslog.conf`: docker starts after rsyslog, whose socket the units log to) |
 | `fail2ban/filter.d/*.conf`, `fail2ban/jail.local`, `fail2ban/fail2ban.local` | `/etc/fail2ban/` (then creates any `logpath` in `jail.local` that is missing and restarts fail2ban) |
 | `scripts/fail2ban.service.d/10-instance-store.conf` | `/etc/systemd/system/fail2ban.service.d/10-instance-store.conf` |
@@ -49,7 +50,14 @@ used could not reach ssh, and deploys hung on their first `ssh`.
 ## Unit memory log
 
 `unit-mem-log.sh` appends to `/var/instance-ssd/logs/unit-mem.log` (instance
-store, so it survives deploys; about 30 days are kept). Each cron run takes four
+store, so it survives deploys; about 30 days are kept). The instance store is
+wiped by a stop/start and by a host cycle, so `logrotate/unit-mem` also copies
+the log once a day (`copytruncate`, compressed, 90 days) to
+`/var/lib/blot-unit-mem/unit-mem.log-<date>.gz` on the root disk. That survives
+a reboot and a stop/start, but not a host cycle, which starts on a new root
+disk and carries over only Redis, the env files and the Elastic IP (blog folders
+are in S3); copy the directory across by hand before a cycle if the history
+matters. Nothing is uploaded to S3. Each cron run takes four
 samples 15 seconds apart. Per sample there is one line per container
 (`blot-blue`, `blot-green`, and the sandbox cgroups) with `anon`, `file`, `shmem`,
 `limit` and `oom_kill` from the container's cgroup (v1 or v2), `node_max` (the
@@ -57,20 +65,49 @@ biggest node process), `node_a`, `node_b` and `node_other` (the two app
 processes and any other node, such as a script run with `docker exec`), `git`
 and `git_n` (the summed RSS and count of the unit's git processes, which share
 its limit) and `top=comm:bytes` (the biggest other process, i.e. a
-pandoc/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), and
-one `name=host` line with `mem_available`. Where the host has a sandbox subtree
+pandoc/exiftool spike), `peak` (the cgroup's high-water mark, v2 only), then
+`broker` and `proxy` (the sandbox broker, a long-lived node process that used
+to be counted in `node_other`, which is now only the `docker exec` scripts; and
+the proxy jail, retired, so `proxy` reads 0 and is kept to keep the lines'
+shape) and `openresty` and `openresty_n` (the summed RSS and
+count of the unit's nginx/openresty processes). Lines from before these four
+fields lack them. Last, on cgroup v2, how hard the limit squeezes the page
+cache, each cumulative for the cgroup: `refault` (file pages read back in after
+the kernel dropped them), `pressure_some` and `pressure_full` (microseconds
+some or all of its tasks waited on memory) and `at_max` (times it reached its
+limit). The summary adds up their rises over the window, so a lower limit that
+starts costing renders disk reads shows there first. Plus one `name=host` line with `mem_available`, `mem_total`
+and `swap_used`. Where the host has a sandbox subtree
 (#2257) there are also `name=blot-sandbox-<unit>` and
 `name=blot-sandbox-<unit>-browser` lines: jobs are short, so read their `peak`
 and `oom_kill`.
 `anon+shmem` is the memory that can't be reclaimed; the cgroup limit also counts
-page cache. Summarise it with:
+page cache.
+
+Each run also stores its last sample in Redis at `blot:unit-mem:latest` (no
+TTL; `redis6-cli SET` with a 5 second timeout, errors dropped): one line per
+container and sandbox cgroup with `anon`, `shmem`, `limit` and `oom_kill`, and no
+host line. The app's scheduler (`app/scheduler/check-unit-memory.js`, every 5
+minutes, emails the admin as "Unit memory: ...") alerts when an `oom_kill` counter
+rises (at most once an hour per cgroup), when a unit's `anon+shmem` passes 85%
+of its limit (and when it falls back under 80%), and when the key has not been
+updated for 10 minutes (two checks in a row). Host `mem_available` under 10% of
+`mem_total` is alerted by the Redis host check ("Host memory low"). The key is
+written by the sampler on the host, so the units and the host can be deployed in
+either order: until the host script is updated the key is missing and the
+check says nothing. Summarise the log with:
 
 ```
 unit-mem-summary.sh [logfile]
 ```
 
-(per container: max and p99 anon+shmem, max node_max, max oom_kill, top 5 child
-processes; host: lowest mem_available.)
+(per container: max and p99 anon+shmem, max node_max, max oom_kill, max and p99
+of the broker, the retired proxy jail and OpenResty, top 5 child processes; host:
+lowest mem_available.) With no argument it reads the live log and the daily
+copies in `/var/lib/blot-unit-mem`. From a checkout, `scripts/prod/read.sh unit-mem
+[--since 12h]` runs it over `ssh blot` (read-only, so it needs no approval), and
+`--tail <n>` prints the raw lines. `config/host/tests/unit-mem.sh` tests both
+scripts against a fake `/proc` and cgroup tree.
 
 ## Permanent bans
 
@@ -162,14 +199,6 @@ upgrades a package. It:
   `redis6-cli` as `/usr/local/bin/redis-cli`;
 - enables docker without starting it, checks cgroup v2, and adds a drop-in that
   orders docker after `redis6.service`; `ec2-user` joins the `docker` group;
-- installs `blot-sandbox-cgroup.service`, ordered before docker, which makes
-  `/sys/fs/cgroup/blot-sandbox/{blue,green}` for the units' nsjail sandbox
-  (`app/sandbox`). Each is capped at 512M of memory (no swap), 256 pids and a
-  `cpu.weight` of 25. Nothing uses them until `BLOT_SANDBOX=1` is set in the
-  proxy env file (`proxy/deploy/proxy.env.example`). It also makes
-  `{blue,green}-browser` for the browser job, one Chromium at a time, capped at
-  1G (no swap, the whole job killed at the limit), 512 pids, a `cpu.weight` of
-  25 and 1.5 CPUs;
 - creates the `deploy` user (`scripts/deploy/setup-deploy-user.sh`);
 - with `BLOT_SSH_PORT`, sets sshd's port in `/etc/ssh/sshd_config.d/11-blot-port.conf`
   (sshd then listens on that port only);
@@ -495,7 +524,7 @@ come back with `--bans-file`.
   backup and restore"). `host/setup.sh` installs `rclone` (from the Amazon
   Linux 2023 repository), the scripts in `config/storage-bucket/bin` at
   `/usr/local/lib/blot-storage/`, `blot-storage-offsite.service` (as
-  `ec2-user`, `MemoryMax=2G`, `OOMPolicy=continue`, low CPU and IO priority, logging to
+  `ec2-user`, `MemoryMax=512M` (one blog at a time), `OOMPolicy=continue`, low CPU and IO priority, logging to
   `~ec2-user/storage-offsite.log`, rotated monthly by
   `/etc/logrotate.d/blot-storage-offsite`) and `blot-storage-offsite.timer`
   (daily at 02:10 UTC, enabled on every host). It does nothing until the host

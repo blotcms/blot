@@ -18,16 +18,46 @@
 #              on): the root process that starts nsjail jails for the app
 #              (proxy/unit/sandbox/broker.js), under its own restart loop. It
 #              never stops the unit: while it is down, sandbox jobs fail closed.
-#   proxy jail with the broker: the forward proxy the app's
-#              fetches of user-supplied URLs go through, in a jail
-#              (proxy/unit/sandbox/proxy.js), under its own restart loop. While
-#              it is down those fetches fail.
 #
 # SIGTERM, SIGQUIT and SIGINT drain them, OpenResty first: `-s quit` lets it
 # finish what it has accepted (up to worker_shutdown_timeout), which may still
 # be waiting on node-a, and only once it has exited is node-a sent SIGTERM
-# (helper/drain), which stops node-b first, and then the broker and the proxy
-# jail. Then this exits 0.
+# (helper/drain), which stops node-b first, and then the broker. Then this exits 0.
+#
+# Kill order under memory pressure (the container is started with
+# --oom-score-adj 1000 and --cap-add SYS_RESOURCE, proxy/deploy/common.sh).
+# The kernel kills the process with the highest badness, roughly
+# rss + oom_score_adj x limit / 1000, where limit is that of the cgroup that ran
+# out: the container's, or on the production host the unit's slice, which holds
+# the container and its sandbox jails under the same limit (#2795,
+# config/host/scripts/unit-cgroups). Every process a `docker exec` starts
+# inherits the container's 1000, so a script is the first victim. At startup, while this shell (root) still holds
+# CAP_SYS_RESOURCE, it sets:
+#
+#   tini (pid 1), this supervisor, node-a:                  0
+#       tini must not stay at 1000: killing pid 1 takes the whole container
+#   the broker                                                           500
+#       above node-a, which is far larger: at 0 the broker would outlive it.
+#       While it is down sandbox jobs fail closed, and it is started again
+#   OpenResty                                                           -900
+#       the unit dies with it, and the other one takes over
+#   node-b                                                               900
+#       raised by the app itself (app/index.js)
+#   sandbox jobs                                                        1000
+#       raised by the broker (proxy/unit/sandbox/jail.js)
+#
+# With node-b at 900, a script at 1000 is killed before it whenever its resident
+# memory is larger than node-b's minus a tenth of the limit (node-b scores
+# R + 0.9 x limit, a script of S scores S + limit). node-a goes only once
+# everything above it is gone, and OpenResty last. That order is what lets a
+# unit's limit be less than the sum of its processes' limits
+# (scripts/deploy/constants.js): only node-a and OpenResty must fit.
+# Raising a score needs no privilege, so the app can do it; lowering one below
+# what the container started with needs CAP_SYS_RESOURCE, so everything this
+# supervisor starts loses that capability (setpriv, the bounding and
+# inheritable sets): only this shell and a root `docker exec` keep it. A
+# process the supervisor starts therefore cannot lower its own score, and a
+# script run as the app user never had the capability.
 #
 # Environment: BLOT_UNIT (blue or green) is required. Everything else defaults
 # from it: the sockets in /run/blot (<unit>-a.sock for node-a, <unit>-b.sock for
@@ -36,6 +66,7 @@
 
 OPENRESTY=/usr/local/openresty/bin/openresty
 BROKER_BACKOFF=2
+BROKER_MAX_OLD_SPACE_SIZE=64
 NODE_FILTER=/usr/local/lib/blot-sandbox/node.seccomp
 MIN_BACKOFF=1
 MAX_BACKOFF=30
@@ -56,6 +87,18 @@ export PROXY_UNIT_WORKER="${PROXY_UNIT_WORKER:-unix:$BLOT_WORKER_SOCKET}"
 export PROXY_PEER_MAIN="${PROXY_PEER_MAIN:-unix:/run/blot/$peer-a.sock}"
 export PROXY_PEER_WORKER="${PROXY_PEER_WORKER:-unix:/run/blot/$peer-b.sock}"
 
+# What every child the supervisor starts runs under: no CAP_SYS_RESOURCE, which
+# the kernel needs to lower an oom_score_adj (see "Kill order" above)
+DROP_CAP="/bin/setpriv --bounding-set -sys_resource --inh-caps -sys_resource"
+
+# Sets the score of this process (inherited by what it starts) or of another
+# one. A failure is only reported: a host that did not give the container the
+# capability, such as a local container, has no use for the order either.
+set_oom() { # set_oom <pid or self> <score>
+  echo "$2" > "/proc/$1/oom_score_adj" 2>/dev/null \
+    || echo "supervisor: could not set oom_score_adj of $1 to $2" >&2
+}
+
 # Waits for a child to exit and sets $status. A trapped signal cuts a wait
 # short, so wait again until the child has really gone.
 reap() {
@@ -72,9 +115,15 @@ reap() {
 run_node() {
   # Left unquoted below, so with the sandbox off it adds nothing. A filter that
   # won't load stops Node, which the deploy's checks then catch.
-  filter=
+  filter="$DROP_CAP"
   if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
-    filter="/bin/setpriv --no-new-privs --seccomp-filter $NODE_FILTER"
+    filter="$DROP_CAP --no-new-privs --seccomp-filter $NODE_FILTER"
+  fi
+
+  # the container's NODE_OPTIONS is the small default heap for scripts run with
+  # docker exec; only node-a (and node-b, which forks from it) gets its own
+  if [ -n "${BLOT_NODE_A_OPTIONS:-}" ]; then
+    export NODE_OPTIONS="$BLOT_NODE_A_OPTIONS"
   fi
 
   child=
@@ -102,21 +151,29 @@ run_node() {
   exit 0
 }
 
-# Keeps a sandbox root process running: the broker, or the proxy jail (app/sandbox,
-# only when the host turned them on). It is root, and the app can't rewrite its
+# Keeps a sandbox root process running: the broker (app/sandbox, only when
+# the host turned the sandbox on). It is root, and the app can't rewrite its
 # files (they are root-owned under /usr/local/lib/blot-sandbox), so it starts with
 # nothing from this environment: no secrets, no NODE_OPTIONS, and not in the app's
 # directory. One that dies is started again after a fixed delay and never stops
-# the unit: while it is down the app's jobs and fetches fail closed.
+# the unit: while it is down the app's jobs fail closed. Its heap is capped
+# (BROKER_MAX_OLD_SPACE_SIZE): without NODE_OPTIONS V8 would size it from the
+# container's limit, and the broker only holds request headers and job
+# bookkeeping there (job bodies are Buffers, outside the heap). In production
+# its whole resident memory peaked at about 140 MB.
 run_sandbox() { # run_sandbox <file> <description>
   cd /
   child=
   stopping=
   trap 'stopping=1; [ -n "$child" ] && kill -TERM "$child" 2>/dev/null' TERM
 
+  # above node-a (see "Kill order"); raising a score needs no capability
+  set_oom self 500
+
   while [ -z "$stopping" ]; do
     env -i PATH=/usr/local/bin:/usr/bin:/bin BLOT_UNIT="$BLOT_UNIT" \
-      /usr/local/bin/node "/usr/local/lib/blot-sandbox/$1" &
+      $DROP_CAP /usr/local/bin/node --max-old-space-size="$BROKER_MAX_OLD_SPACE_SIZE" \
+      "/usr/local/lib/blot-sandbox/$1" &
     child=$!
     echo "supervisor: started the $2 pid=$child"
     reap "$child"
@@ -129,6 +186,10 @@ run_sandbox() { # run_sandbox <file> <description>
   done
   exit 0
 }
+
+# tini must outlive everything, so it is not left at the container's 1000
+set_oom 1 0
+set_oom self 0
 
 stopping=
 stop() {
@@ -147,14 +208,8 @@ if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
   broker_loop=$!
 fi
 
-proxy_loop=
-if [ -n "${BLOT_SANDBOX_SOCKET:-}" ]; then
-  run_sandbox proxy.js "proxy jail" &
-  proxy_loop=$!
-fi
-
 # proxy-start (proxy/start.sh) prepares the container, then becomes OpenResty
-/usr/local/bin/proxy-start "$OPENRESTY" -g "daemon off;" &
+( set_oom self -900; exec $DROP_CAP /usr/local/bin/proxy-start "$OPENRESTY" -g "daemon off;" ) &
 reap $!
 
 # A signal cuts the wait short and stop has begun the drain; otherwise
@@ -171,9 +226,8 @@ fi
 kill -TERM "$node_loop" 2>/dev/null
 reap "$node_loop"
 # and no job is running without the app that asked for it
-for loop in "$broker_loop" "$proxy_loop"; do
-  [ -n "$loop" ] || continue
-  kill -TERM "$loop" 2>/dev/null
-  reap "$loop"
-done
+if [ -n "$broker_loop" ]; then
+  kill -TERM "$broker_loop" 2>/dev/null
+  reap "$broker_loop"
+fi
 exit "$exit_status"

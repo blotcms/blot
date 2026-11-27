@@ -84,7 +84,8 @@ var prerenderers = loaded.prerenderers;
 // Takes a string and based on the user's
 // plugins converts it into an HTML string. Resolves to
 // [html, dependencies]. extra.caption is the caption of a post made from
-// an image file, for the Caption plugin.
+// an image file, for the Caption plugin. extra.seedThumbnail is for the Image
+// plugin (see ./image).
 async function convert(blog, path, contents, extra = {}) {
   ensure(contents, "string").and(path, "string").and(blog, "object");
 
@@ -105,6 +106,9 @@ async function convert(blog, path, contents, extra = {}) {
   };
 
   if (extra.caption) globalOptions.caption = extra.caption;
+
+  // The image plugin makes the post's first image's thumbnails with the image
+  if (extra.seedThumbnail) globalOptions.seedThumbnail = true;
 
   for (const plugin of prerenderers) {
     const id = plugin.id;

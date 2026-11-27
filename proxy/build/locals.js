@@ -70,6 +70,14 @@ function container({ env = process.env, config }) {
     config.webhooks.client_max_body_size / 1000000
   }M`;
 
+  // The body limit for git requests (/clients/git/end/): the push ceiling,
+  // config.git_store.max_push_bytes, plus 100M for the commands and framing
+  // around the pack and as a margin, so Blot refuses a push over its limit,
+  // with a message git shows, before nginx answers with a bare 413
+  const git_client_max_body_size = `${
+    Math.ceil(config.git_store.max_push_bytes / (1024 * 1024)) + 100
+  }M`;
+
   return {
     // HTTP/2 and HTTP/3 on the public servers: proxy/build/protocols.js.
     // DISABLE_HTTP2 also turns HTTP/2 off when protocols.js has it on.
@@ -78,6 +86,9 @@ function container({ env = process.env, config }) {
 
     // The maximum size of webhooks bodies forwarded to the node server
     webhooks_client_max_body_size,
+
+    // The maximum size of git request bodies, pushes
+    git_client_max_body_size,
 
     config_directory:
       env.OPENRESTY_CONFIG_DIRECTORY || "/home/ec2-user/openresty",

@@ -48,7 +48,7 @@ describe("sandbox broker and jail", function () {
     assert.deepStrictEqual(j.command, [
       "/usr/local/bin/pandoc",
       "+RTS",
-      "-M400M",
+      "-M256M",
       "-RTS",
       "lua",
       "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",
@@ -180,7 +180,7 @@ describe("sandbox broker and jail", function () {
         /unknown cgroup/
       );
       assert.throws(
-        () => jail.command(name, jail.PROXY_CGROUP),
+        () => jail.command(name, "/sandbox-cgroup/proxy"),
         /unknown cgroup/
       );
     }
@@ -190,11 +190,13 @@ describe("sandbox broker and jail", function () {
     assert.strictEqual(jail.JOBS.screenshot.maxOutputBytes, 60 * 1024 * 1024);
   });
 
-  test("jail: the fetch-image job has one cgroup of its own, in the unit's subtree, and a short queue", () => {
+  test("jail: the fetch-image job has a cgroup of its own, in the unit's subtree, and a short queue", () => {
     const j = jail.JOBS["fetch-image"];
-    assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
-    assert.strictEqual(path.dirname(jail.FETCH_CGROUP), "/sandbox-cgroup");
-    assert.notStrictEqual(jail.FETCH_CGROUP, jail.PROXY_CGROUP);
+    assert.deepStrictEqual(j.cgroups, [jail.FETCH_IMAGE_CGROUP]);
+    assert.strictEqual(
+      path.dirname(jail.FETCH_IMAGE_CGROUP),
+      "/sandbox-cgroup"
+    );
     assert.deepStrictEqual(j.cgroupLimits, {
       memoryBytes: 256 * 1024 * 1024,
       pids: 64,
@@ -202,17 +204,20 @@ describe("sandbox broker and jail", function () {
     assert.strictEqual(j.maxQueued, 8);
   });
 
-  test("jail: the fetch job takes turns in fetch-image's cgroup, adds no memory, and has a queue of its own", () => {
+  test("jail: the fetch job has a cgroup of its own, in the unit's subtree, and a queue of its own", () => {
     const j = jail.JOBS.fetch;
     assert.deepStrictEqual(j.cgroups, [jail.FETCH_CGROUP]);
-    // the limits are made once, from fetch-image's: no second cgroup, no more memory
-    assert.strictEqual(j.cgroupLimits, undefined);
+    assert.strictEqual(path.dirname(jail.FETCH_CGROUP), "/sandbox-cgroup");
+    assert.deepStrictEqual(j.cgroupLimits, {
+      memoryBytes: 256 * 1024 * 1024,
+      pids: 64,
+    });
     const cgroups = new Set(
       Object.values(jail.JOBS).flatMap((job) => job.cgroups || [])
     );
     assert.deepStrictEqual(
       [...cgroups].sort(),
-      [jail.BROWSER_CGROUP, jail.FETCH_CGROUP].sort()
+      [jail.BROWSER_CGROUP, jail.FETCH_CGROUP, jail.FETCH_IMAGE_CGROUP].sort()
     );
     assert.strictEqual(j.maxQueued, 16);
     // a batch has up to 60s of fetching (jobs/fetch.js) and a few seconds to start and end
@@ -220,15 +225,6 @@ describe("sandbox broker and jail", function () {
     // 32 requests, and a body or more of up to 50 MiB back (the client's reply limit is 64 MiB)
     assert.strictEqual(j.maxInputBytes, 256 * 1024);
     assert.strictEqual(j.maxOutputBytes, 52 * 1024 * 1024);
-  });
-
-  test("jail: the unit's sandbox subtree holds the proxy jail, the fetch cgroup and the image jobs' share", () => {
-    const MiB = 1024 * 1024;
-    const subtree = 512 * MiB;
-    const proxy = 128 * MiB; // proxy.js
-    const fetch = jail.JOBS["fetch-image"].cgroupLimits.memoryBytes;
-    assert(proxy + fetch <= subtree);
-    assert.strictEqual(subtree - proxy - fetch, 128 * MiB);
   });
 
   test("jail: a job with a network never binds keys, data or /usr", () => {
@@ -286,35 +282,7 @@ describe("sandbox broker and jail", function () {
     }
   });
 
-  test("jail: the proxy jail is its own uid, in its cgroup, behind the filter, with no time limit", () => {
-    const { file, args } = jail.proxyCommand("blue");
-    assert.strictEqual(file, "/bin/sh");
-    assert.strictEqual(args[3], jail.PROXY_CGROUP);
-    assert.deepStrictEqual(args.slice(4, 7), [
-      "/sbin/su-exec",
-      "65001:65001",
-      jail.NSJAIL,
-    ]);
-    assert.strictEqual(args[args.indexOf("--time_limit") + 1], "0");
-    assert.strictEqual(
-      path.basename(args[args.indexOf("--") + 2]),
-      "enter-network.sh"
-    );
-    assert(args.includes("BLOT_PROXY_JAIL=1"));
-  });
-
-  test("jail: the proxy jail binds no app, data, keys or /proc", () => {
-    const { args } = jail.proxyCommand("blue");
-    // Its own scripts are a bind. In the image they are under /usr/local/lib.
-    const own = path.dirname(require.resolve("../jail"));
-    const binds = args.filter((a, i) => args[i - 1] === "-R" && a !== own);
-    for (const bind of binds) {
-      assert(!/^\/(proc|etc\/ssl|usr\/src|usr$|$)/.test(bind), bind);
-    }
-    assert(!args.some((a) => /^(-B|--bindmount)/.test(a)), "no writable binds");
-  });
-
-  test("jail: every job raises its OOM score before nsjail starts, the proxy jail doesn't", () => {
+  test("jail: every job raises its OOM score before nsjail starts", () => {
     const raise = `echo ${jail.OOM_SCORE_ADJ} > /proc/self/oom_score_adj && `;
     assert.strictEqual(jail.OOM_SCORE_ADJ, 1000);
     for (const name of Object.keys(jail.JOBS)) {
@@ -325,7 +293,30 @@ describe("sandbox broker and jail", function () {
     const { args } = jail.command("metadata");
     assert.deepStrictEqual(args.slice(2, 4), ["sh", jail.NSJAIL]);
     assert.deepStrictEqual(args.slice(4), jail.args("metadata"));
-    assert(!jail.proxyCommand("blue").args[1].includes("oom_score_adj"));
+  });
+
+  test("jail: the screenshot job is told its cgroup's memory limit, and nothing else changes", function () {
+    const real = fs.readFileSync;
+    const limitOf = (text) => {
+      fs.readFileSync = (file, ...rest) => {
+        if (file === jail.BROWSER_CGROUP + "/memory.max") return text;
+        return real.call(fs, file, ...rest);
+      };
+      try {
+        return jail.command("screenshot").args.join(" ");
+      } finally {
+        fs.readFileSync = real;
+      }
+    };
+    const without = jail.command("screenshot").args.join(" ");
+    assert(without.includes("-E BLOT_BROWSER_MEMORY_MAX=max"));
+
+    const set = limitOf("536870912\n");
+    assert(set.includes("-E BLOT_BROWSER_MEMORY_MAX=536870912"));
+    assert.strictEqual(set.replace("=536870912", "=max"), without);
+    // Unlimited, or not a number: the job uses its own fixed limit
+    assert.strictEqual(limitOf("max\n"), without);
+    assert.strictEqual(limitOf("12 -E X=1"), without);
   });
 
   test("jail: the OOM score a job's shell sets reaches the program it execs", function () {
@@ -342,51 +333,6 @@ describe("sandbox broker and jail", function () {
       "/proc/self/oom_score_adj",
     ]);
     assert.strictEqual(out.toString().trim(), String(jail.OOM_SCORE_ADJ));
-  });
-
-  test("jail: the proxy jail only starts for a unit", () => {
-    for (const unit of ["red", "", undefined, "../blue"]) {
-      assert.throws(() => jail.proxyCommand(unit), /unknown unit/);
-    }
-  });
-
-  test("jail: each proxy config forwards the port the deploy gives that unit, on loopback only", () => {
-    const { SANDBOX } = require("../../../../scripts/deploy/constants");
-    for (const unit of ["blue", "green"]) {
-      const { args } = jail.proxyCommand(unit);
-      const config = fs.readFileSync(
-        args[args.indexOf("--config") + 1],
-        "utf8"
-      );
-      assert(
-        config.includes(
-          `tcp_ports: "127.0.0.1/${SANDBOX.units[unit].proxyPort}:8888"`
-        ),
-        unit
-      );
-    }
-  });
-
-  test("proxy: makes its cgroup, with limits, and clears what an old jail left", () => {
-    const { prepareCgroup } = require("../proxy");
-    const directory = path.join(
-      fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-proxy-")),
-      "proxy"
-    );
-    prepareCgroup(directory);
-    prepareCgroup(directory);
-    assert.strictEqual(
-      fs.readFileSync(directory + "/memory.max", "utf8"),
-      String(128 * 1024 * 1024)
-    );
-    assert.strictEqual(
-      fs.readFileSync(directory + "/memory.oom.group", "utf8"),
-      "1"
-    );
-    assert.strictEqual(
-      fs.readFileSync(directory + "/cgroup.kill", "utf8"),
-      "1"
-    );
   });
 
   // ---- node-filter.js ----------------------------------------------------------
@@ -518,6 +464,7 @@ describe("sandbox broker and jail", function () {
       log: options.log || (() => {}),
       clearCgroup: options.clearCgroup,
       prepareCgroup: options.prepareCgroup,
+      cgroupOf: options.cgroupOf,
       spawnJail: (name, cgroup) => {
         counter++;
         if (options.spawned) options.spawned.push(cgroup);
@@ -819,6 +766,30 @@ describe("sandbox broker and jail", function () {
     );
   });
 
+  test("broker: jobs in one group share its maxRunning", async () => {
+    const jobs = {
+      ...JOBS(),
+      a: { ...JOBS().echo, group: "g", maxRunning: 1 },
+      b: { ...JOBS().echo, group: "g", maxRunning: 1 },
+    };
+    const { script, release } = hold();
+    await withBroker(
+      { jobs, maxRunning: 4, script },
+      async (socket, broker) => {
+        const first = request(socket, line("a"), "");
+        await until(() => broker.running.size === 1);
+        const second = request(socket, line("b"), "");
+        await until(() => broker.queue.length === 1);
+        assert.strictEqual(broker.running.size, 1);
+
+        release();
+        for (const reply of await Promise.all([first, second])) {
+          assert.strictEqual(reply.header.ok, true);
+        }
+      }
+    );
+  });
+
   test("broker: what a job leaves in its cgroup is cleared when it ends, and failing to is logged", async () => {
     const cleared = [];
     const jobs = JOBS({ cgroups: ["/some/cgroup"] });
@@ -995,6 +966,33 @@ describe("sandbox broker and jail", function () {
       }
     );
     assert.deepStrictEqual(started, ["batch", "images", "batch", "batch"]);
+  });
+
+  test("broker: a job runs while another holds a different cgroup, each cgroup with one slot", async () => {
+    const jobs = {
+      ...JOBS(),
+      images: { ...JOBS().echo, cgroups: ["/c/images"] },
+      batch: { ...JOBS().echo, cgroups: ["/c/batch"] },
+    };
+    const { script, release } = hold();
+    await withBroker(
+      { jobs, maxRunning: 4, maxQueued: 8, script, clearCgroup: () => {} },
+      async (socket, broker) => {
+        const batch = request(socket, line("batch"), "");
+        await until(() => broker.running.size === 1);
+        // the batch holds its slot; an image still starts at once
+        const image = request(socket, line("images"), "");
+        await until(() => broker.running.size === 2);
+        assert.strictEqual(broker.queue.length, 0);
+        // but a second batch waits for the first
+        const batch2 = request(socket, line("batch"), "");
+        await until(() => broker.queue.length === 1);
+        assert.strictEqual(broker.running.size, 2);
+        release();
+        for (const reply of await Promise.all([batch, image, batch2]))
+          assert.strictEqual(reply.header.ok, true);
+      }
+    );
   });
 
   test("broker: makes the cgroups jobs ask for when it listens, and logs one it can't", async () => {
@@ -1306,6 +1304,236 @@ function answer(text) {
         });
         assert.notStrictEqual((await ask(socket, "y")).pid, before.pid);
       }
+    );
+  });
+
+  // ---- one log line per job -----------------------------------------------------
+
+  const peaks = require("../peak");
+  const cgroupWithPeak = (value) => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-peak-"));
+    if (value !== undefined)
+      fs.writeFileSync(directory + "/memory.peak", value + "\n");
+    return directory;
+  };
+
+  test("broker: a job that succeeds logs its duration, peak and wait", async () => {
+    const logged = [];
+    const directory = cgroupWithPeak(4096);
+    await withBroker(
+      { log: (line) => logged.push(line), cgroupOf: () => directory },
+      async (socket) => {
+        assert.strictEqual((await request(socket, job, "x")).header.ok, true);
+      }
+    );
+    assert.strictEqual(logged.length, 1);
+    assert(
+      /^broker: job=echo ok ms=\d+ peak=4096 peak_sampled=1 queued_ms=\d+$/.test(
+        logged[0]
+      ),
+      logged[0]
+    );
+  });
+
+  test("broker: a job that fails still logs its line, with peak=unknown when its cgroup can't be read", async () => {
+    const logged = [];
+    await withBroker(
+      {
+        script: "exit 3",
+        log: (line) => logged.push(line),
+        cgroupOf: () => "/nonexistent/NSJAIL.1",
+      },
+      async (socket) => {
+        assert.deepStrictEqual((await request(socket, job, "x")).header, {
+          ok: false,
+          error: "failed",
+        });
+      }
+    );
+    assert.strictEqual(logged.length, 1);
+    assert(
+      /^broker: job=echo error=failed code=3 signal=null ms=\d+ peak=unknown queued_ms=\d+$/.test(
+        logged[0]
+      ),
+      logged[0]
+    );
+  });
+
+  test("broker: a job that was queued logs how long it waited", async () => {
+    const logged = [];
+    const gate = hold();
+    await withBroker(
+      {
+        script: gate.script,
+        maxRunning: 1,
+        log: (line) => logged.push(line),
+      },
+      async (socket, broker) => {
+        const first = request(socket, job, "a");
+        await until(() => broker.running.size === 1);
+        const second = request(socket, job, "b");
+        await until(() => broker.queue.length === 1);
+        await sleep(60);
+        gate.release();
+        await Promise.all([first, second]);
+      }
+    );
+    const waits = logged.map((line) => Number(/queued_ms=(\d+)/.exec(line)[1]));
+    // the first job never queued; a slow runner can still take a millisecond or two
+    assert(waits[0] < 50, logged.join("\n"));
+    assert(waits[1] >= 50, logged.join("\n"));
+  });
+
+  test("broker: a job in a cgroup of the broker's own has its peak reset and read before the cgroup is cleared", async () => {
+    const logged = [];
+    const cleared = [];
+    const directory = cgroupWithPeak(999999);
+    const jobs = { echo: { ...JOBS().echo, cgroups: [directory] } };
+    await withBroker(
+      {
+        jobs,
+        // the stub's own use of memory, after the reset, which a real kernel
+        // does and a plain file doesn't
+        script: `sleep 0.1; echo 777 > ${directory}/memory.peak; cat`,
+        log: (line) => logged.push(line),
+        clearCgroup: (dir) => {
+          cleared.push([
+            dir,
+            fs.readFileSync(directory + "/memory.peak", "utf8").trim(),
+          ]);
+        },
+      },
+      async (socket) => {
+        assert.strictEqual((await request(socket, job, "x")).header.ok, true);
+      }
+    );
+    assert.deepStrictEqual(cleared, [[directory, "777"]]);
+    assert.strictEqual(logged.length, 1);
+    assert(
+      /^broker: job=echo ok ms=\d+ peak=777 queued_ms=\d+$/.test(logged[0]),
+      logged[0]
+    );
+  });
+
+  test("peak: finds the cgroup nsjail names after the process it cloned", async () => {
+    if (process.platform !== "linux") return;
+    const mount = fs.mkdtempSync(path.join(os.tmpdir(), "sandbox-mount-"));
+    // stands in for nsjail: a process whose one child is the jailed process
+    const parent = spawn("sh", ["-c", "sleep 5 & wait"], { stdio: "ignore" });
+    try {
+      let child = null;
+      for (let i = 0; i < 50 && !child; i++) {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        try {
+          child = fs
+            .readFileSync(
+              `/proc/${parent.pid}/task/${parent.pid}/children`,
+              "utf8"
+            )
+            .trim();
+        } catch (e) {}
+      }
+      assert.ok(child, "the stand-in's child started");
+      assert.strictEqual(peaks.nsjailCgroup(mount, parent.pid), null);
+      fs.mkdirSync(`${mount}/NSJAIL.${parent.pid}`);
+      assert.strictEqual(peaks.nsjailCgroup(mount, parent.pid), null);
+      fs.mkdirSync(`${mount}/NSJAIL.${child}`);
+      assert.strictEqual(
+        peaks.nsjailCgroup(mount, parent.pid),
+        `${mount}/NSJAIL.${child}`
+      );
+    } finally {
+      parent.kill("SIGKILL");
+    }
+  });
+
+  test("peak: a cgroup that appears after tracking starts keeps its peak since it was made", () => {
+    const directory = cgroupWithPeak(500);
+    let exists = false;
+    const tracker = peaks.track(() => (exists ? directory : null), {
+      reset: true,
+      shared: true,
+      interval: 10,
+    });
+    exists = true;
+    // a reset would make the file read back less; here it must stay at 500
+    const measured = tracker.finish();
+    assert.strictEqual(measured.peak, 500);
+    assert.strictEqual(measured.reset, true);
+    assert.strictEqual(
+      fs.readFileSync(directory + "/memory.peak", "utf8").trim(),
+      "500"
+    );
+  });
+
+  test("peak: a cgroup given as a function is looked up until it exists", () => {
+    const directory = cgroupWithPeak(64);
+    let exists = false;
+    const tracker = peaks.track(() => (exists ? directory : null), {
+      interval: 10,
+    });
+    tracker.sample();
+    exists = true;
+    tracker.sample();
+    assert.strictEqual(tracker.finish().peak, 64);
+  });
+
+  test("peak: says what a peak is worth when the kernel can't reset it", () => {
+    assert.strictEqual(
+      peaks.words({ peak: 5, reset: true, sampled: false, shared: true }),
+      "peak=5"
+    );
+    assert.strictEqual(
+      peaks.words({ peak: 5, reset: false, sampled: false, shared: true }),
+      "peak=unknown peak_since_create=5"
+    );
+    assert.strictEqual(
+      peaks.words({
+        peak: null,
+        reset: false,
+        sampled: true,
+        shared: false,
+      }),
+      "peak=unknown"
+    );
+    // a cgroup that goes with its jail: the highest value seen
+    const directory = cgroupWithPeak(10);
+    const tracker = peaks.track(directory, { interval: 10 });
+    fs.writeFileSync(directory + "/memory.peak", "30\n");
+    tracker.sample();
+    fs.writeFileSync(directory + "/memory.peak", "20\n");
+    assert.strictEqual(tracker.finish().peak, 30);
+  });
+
+  test("broker: a worker logs a line per request and one when it exits", async () => {
+    const logged = [];
+    const directory = cgroupWithPeak(2048);
+    await withBroker(
+      {
+        jobs: WORKER({ requests: 2 }),
+        script: fakeWorker,
+        log: (line) => logged.push(line),
+        cgroupOf: () => directory,
+      },
+      async (socket) => {
+        await ask(socket, "a");
+        await ask(socket, "b");
+        await until(() => logged.some((line) => line.includes("worker=echo")));
+      }
+    );
+    const jobs = logged.filter((line) =>
+      line.startsWith("broker: job=echo ok")
+    );
+    assert.strictEqual(jobs.length, 2);
+    assert(
+      /worker_requests=1 /.test(jobs[0]) && /worker_requests=2 /.test(jobs[1])
+    );
+    const exit = logged.find((line) => line.startsWith("broker: worker=echo"));
+    assert(
+      /^broker: worker=echo exit code=\S+ signal=\S+ requests=2 age_ms=\d+ peak=2048$/.test(
+        exit
+      ),
+      exit
     );
   });
 

@@ -9,7 +9,7 @@ are not under any blog.
 | Key | Type | What |
 |-----|------|------|
 | `discover:posts` | sorted set | Post IDs, scored by each post's date (ms), or when it was added if it has none. The page reads it newest first. |
-| `discover:post:<id>` | hash | `blogID`, `entryID` (the entry's path), `photos` (JSON) and `added`. |
+| `discover:post:<id>` | hash | `blogID`, `entryID` (the entry's path), `photos` (JSON), `added`, `showText` and `text`, the card's own text if the maintainer set one. |
 | `discover:blog:<blogID>` | set | A blog's post IDs, so they can be removed together. |
 | `discover:profile:<blogID>` | hash | `name`, `bio` and `avatar` (an asset path) shown in place of the site's own. |
 | `discover:token:<token>` | string | `{ blogID, entryID }` for an "Add to Discover" link, expiring after 24 hours. |
@@ -51,14 +51,16 @@ Set them with
 
 ## Tokens
 
-`token.create` is called by the daily update email for each new post from a
-site with the setting on. `token.read` does not use the token up, because
+`token.create` is called by the daily update email for each new post. The
+confirm page says when the post is already on Discover or its site has the
+setting off; adding the post turns the setting on, as `add.js` does. `token.read` does not use the token up, because
 mail scanners open links; `token.consume` deletes it with `GETDEL`, so only
 one request can add the post.
 
 ## Adding and editing posts
 
-The daily email's "Add to Discover" links are the only page for it. Anything
+The daily email's "Add to Discover" links are the only page for it. Its
+preview is the card as `/discover` renders it, updated as photos are chosen. Anything
 else is done by an agent running these in the node container
 (`docker exec -u 1000 blot-blue …` on production, a production command which
 needs the maintainer's go-ahead; `blot-node-<slot>` for a local preview):
@@ -69,8 +71,14 @@ needs the maintainer's go-ahead; `blot-node-<slot>` for a local preview):
     node scripts/discover/manage.js list [--all]
     node scripts/discover/manage.js remove <post URL or ID> [...]
     node scripts/discover/manage.js text <post URL or ID> on|off
+    node scripts/discover/manage.js set-text <post URL or ID> "<text>"
     node scripts/discover/manage.js remove-site <site>
     node scripts/discover/profile.js <site> --name … --bio … --avatar <URL or file>
+
+`set-text` replaces the post's own text and title on its card with the text
+given, with a blank line between paragraphs: above the photos, or as the
+excerpt of a card without them. `""` goes back to the post's. Re-adding the
+post keeps it.
 
 `add.js` puts each post on Discover with up to 3 of its photos (`--photos 0`
 for a text card, `--text` for its text above the photos; `--list-photos`

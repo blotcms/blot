@@ -14,6 +14,7 @@ describe("scheduler", function () {
     "renew-wildcard-ssl",
     "check-ssl-certificates",
     "check-redis-host",
+    "check-unit-memory",
     "sweep-git",
     "prune-tmp",
     "git-store-maintenance",
@@ -22,6 +23,7 @@ describe("scheduler", function () {
     "subscription-emails",
     "welcome-email-reconcile",
     "scheduled-entries-reconcile",
+    "resume-blog-removal",
   ];
 
   describe("registering jobs", function () {
@@ -58,8 +60,13 @@ describe("scheduler", function () {
     it("keeps the every-minute diagnostics job as a plain per-process job", function () {
       require("../index")();
 
-      // Every lock.cron job makes one scheduleJob call, plus the minute job
-      const rules = schedule.scheduleJob.calls.allArgs().map((args) => args[0]);
+      // Every lock.cron job makes one scheduleJob call, plus the minute job.
+      // Left out: helper/lock's own job that re-runs killed fires, which it
+      // schedules once per process, so only in the first spec to register.
+      const rules = schedule.scheduleJob.calls
+        .allArgs()
+        .filter((args) => !(args[1] && args[1].name === "recover"))
+        .map((args) => args[0]);
       expect(rules.length).toEqual(JOBS.length + 1);
       expect(rules.filter((rule) => rule === "* * * * *").length).toEqual(1);
       expect(

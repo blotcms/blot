@@ -141,63 +141,6 @@ else
   echo "    WARNING: user $APP_USER does not exist; it was not added to the docker group"
 fi
 
-say "Sandbox cgroups"
-# The units' nsjail sandbox (BLOT_SANDBOX, app/sandbox) puts each job in a
-# cgroup outside the unit's own, so a runaway job can't use the unit's memory.
-# The host makes one subtree per unit, which proxy/deploy/common.sh binds into
-# the unit when BLOT_SANDBOX=1. Inert until then. Before docker, so the
-# directories exist when a unit starts.
-put /usr/local/sbin/blot-sandbox-cgroup.sh 0755 root:root <<'EOF2'
-#!/bin/sh
-# Installed by config/host/host/setup.sh (blot-sandbox-cgroup.service).
-# Safe to run again.
-set -eu
-root=/sys/fs/cgroup
-tree=$root/blot-sandbox
-controllers="+memory +pids +cpu"
-
-echo "$controllers" > "$root/cgroup.subtree_control"
-mkdir -p "$tree/blue" "$tree/green"
-echo "$controllers" > "$tree/cgroup.subtree_control"
-for unit in blue green; do
-  dir=$tree/$unit
-  echo "$controllers" > "$dir/cgroup.subtree_control"
-  echo 512M > "$dir/memory.max"
-  echo 0 > "$dir/memory.swap.max"
-  echo 256 > "$dir/pids.max"
-  echo 25 > "$dir/cpu.weight"
-  # One Chromium at a time (proxy/unit/sandbox/jail.js), which lives here itself,
-  # so no subtree. oom.group: a page over the limit ends the whole job at once,
-  # rather than leaving a browser hanging until its time limit.
-  dir=$tree/$unit-browser
-  mkdir -p "$dir"
-  echo 1G > "$dir/memory.max"
-  echo 0 > "$dir/memory.swap.max"
-  echo 1 > "$dir/memory.oom.group"
-  echo 512 > "$dir/pids.max"
-  echo 25 > "$dir/cpu.weight"
-  echo "150000 100000" > "$dir/cpu.max"
-done
-EOF2
-put /etc/systemd/system/blot-sandbox-cgroup.service 0644 root:root <<'EOF2'
-[Unit]
-Description=Cgroup subtrees for the units' sandbox jobs
-Before=docker.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStart=/usr/local/sbin/blot-sandbox-cgroup.sh
-
-[Install]
-WantedBy=multi-user.target
-EOF2
-sd daemon-reload
-sd enable blot-sandbox-cgroup.service
-# started again on a re-run, so a changed limit is applied; it only writes files.
-# Not fatal: nothing needs it until BLOT_SANDBOX=1, and the deploy refuses then
-sd restart blot-sandbox-cgroup.service || echo "    WARNING: blot-sandbox-cgroup.service failed"
-
 say "Deploy user"
 # With a key the script rewrites authorized_keys only if the key is missing;
 # without one it leaves an existing file alone.
@@ -269,11 +212,16 @@ Nice=19
 IOSchedulingClass=idle
 CPUWeight=20
 # rclone holds a blog's whole listing (--fast-list), so the largest blogs need
-# a few hundred MB each. GOMEMLIMIT makes each rclone collect garbage before
-# it grows past that, and OOMPolicy=continue means a kill fails only that
-# blog (retried by the next run) rather than the whole run.
-MemoryMax=2G
-Environment=GOMEMLIMIT=400MiB
+# a few hundred MB each. One blog at a time, its rclone collecting garbage
+# before it passes 300 MiB (GOMEMLIMIT), fits in 512M; OOMPolicy=continue means
+# a kill fails only that blog (retried by the next run) rather than the whole
+# run. --fast-list stays: listing directory by directory would cost far more
+# in list requests than this memory is worth. One at a time makes the run
+# slower, which is fine: it has 20 hours and carries on where it got. The
+# memory is the host's, beside Redis (#2795), and each run logs its peak.
+MemoryMax=512M
+Environment=GOMEMLIMIT=300MiB
+Environment=BLOT_STORAGE_OFFSITE_PARALLEL=1
 OOMPolicy=continue
 # Stopped before the next day's run. The next run carries on from where it got.
 TimeoutStartSec=20h
@@ -418,14 +366,14 @@ fi
 say "Firewall for the app"
 # The units run with --network host as uid 1000, so without this Node and
 # OpenResty reach the instance metadata service (and the role's credentials)
-# and anything in the VPC directly. Untrusted fetches go through the sandbox's
-# proxy jail, whose own filter refuses these; this catches a code path that
+# and anything in the VPC directly. Untrusted fetches run as sandbox jobs, whose
+# jail has its own filter refusing these; this catches a code path that
 # misses it (#2257). Refused, not dropped, so such a request fails at once.
 # Only sockets in system.slice, where docker puts the units' scopes: ec2-user is
 # uid 1000 on the host too, and its ssh sessions and cron jobs (user.slice)
 # still need the metadata service (cycle.sh, instance-profile
 # backups). The jails run as other uids. Loopback stays open: the purge
-# listener, the proxy jails' ports and the resolved stub are on it. The VPC's
+# listener and the resolved stub are on it. The VPC's
 # resolver is the one private address the units need, for DNS (docker gives a
 # host-network container the host's upstream resolvers, not the stub).
 # Its own file and unit, so a failure here never keeps Redis from starting.

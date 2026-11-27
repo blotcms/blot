@@ -208,6 +208,33 @@ describe("transformer", function () {
     expect(firstResult).toEqual(secondResult);
   });
 
+  it("finds a cached result by the index's SHA-1, without reading the file", async function () {
+    await this.transformer.lookup(this.path, this.transform);
+
+    spyOn(folder, "withLocal").and.callThrough();
+    spyOn(folder, "ensureLocal").and.callThrough();
+    var spy = jasmine.createSpy().and.callFake(this.transform);
+
+    const result = await this.transformer.lookup(this.path, spy);
+
+    expect(result).toEqual(jasmine.any(Object));
+    expect(spy).not.toHaveBeenCalled();
+    expect(folder.withLocal).not.toHaveBeenCalled();
+    expect(folder.ensureLocal).not.toHaveBeenCalled();
+  });
+
+  it("finds a cached result by the index's SHA-1 for a path in another case", async function () {
+    await this.transformer.lookup(this.path, this.transform);
+
+    spyOn(folder, "withLocal").and.callThrough();
+    var spy = jasmine.createSpy().and.callFake(this.transform);
+
+    await this.transformer.lookup(this.path.toUpperCase(), spy);
+
+    expect(spy).not.toHaveBeenCalled();
+    expect(folder.withLocal).not.toHaveBeenCalled();
+  });
+
   it("re-transforms the file if its contents changes", async function () {
     var spy = jasmine.createSpy().and.callFake(this.transform);
 

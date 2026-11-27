@@ -1,5 +1,6 @@
 const { runChecks } = require("../index");
 const checks = require("../checks");
+const nodeRole = require("../nodeRole");
 
 async function rejection(promise) {
   try {
@@ -242,6 +243,26 @@ describe("deploy verify-container", function () {
       expect(
         await rejection(find("dashboard log-in render").run({ config }))
       ).not.toBe(null);
+    });
+  });
+
+  describe("nodeRole", function () {
+    it("finds node-a by its relative script path", function () {
+      expect(nodeRole("node\0app/index.js\0")).toBe("node-a");
+    });
+
+    it("finds node-b by its absolute script path and heap flag", function () {
+      expect(
+        nodeRole(
+          "/usr/local/bin/node\0--max-old-space-size=1024\0/usr/src/app/app/index.js\0"
+        )
+      ).toBe("node-b");
+    });
+
+    it("ignores other processes", function () {
+      expect(nodeRole("node\0scripts/foo.js\0")).toBe(null);
+      expect(nodeRole("nginx: master process\0")).toBe(null);
+      expect(nodeRole("")).toBe(null);
     });
   });
 });

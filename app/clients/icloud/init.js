@@ -1,113 +1,19 @@
+const crypto = require("crypto");
 const Blog = require("models/blog");
 const clfdate = require("helper/clfdate");
+const drain = require("helper/drain");
 const email = require("helper/email");
 const monitorMacServerStats = require("./util/monitorMacServerStats");
-const establishSyncLock = require("sync/establishSyncLock");
-const initialTransfer = require("./sync/initialTransfer");
+const resumeTransfers = require("./sync/resumeTransfers");
 const database = require("./database");
 const getHealth = require("./getHealth");
 const { shouldSkipBackgroundSync } = require("./error");
-const syncFromiCloud = require("./sync/fromiCloud");
 const validateBlog = require("./sync/validateBlog");
 const syncReport = require("clients/util/syncReport");
 const { exclusive, schedule } = require("clients/util/scheduleExclusive");
 const onceAtStartup = require("clients/util/onceAtStartup");
 
 const ONE_HOUR_IN_MS = 60 * 60 * 1000;
-const RESYNC_WINDOW = 1000 * 60 * 10; // 10 minutes
-
-const getLastSyncDateStamp = async (blogID) => {
-  const res = await Blog.getStatuses(blogID, { pageSize: 1 });
-  const statuses = res.statuses;
-
-  if (!statuses || statuses.length === 0) {
-    return null;
-  }
-
-  return statuses[0].datestamp;
-};
-
-const resyncRecentlySynced = async (options = {}) => {
-  const windowMs =
-    typeof options.windowMs === "number" ? options.windowMs : RESYNC_WINDOW;
-  const notify = options.notify !== undefined ? options.notify : false;
-  const resyncContext = notify ? "hourly validation" : "startup resync";
-
-  console.log(
-    clfdate(),
-    "Resyncing recently synced blogs",
-    `(${resyncContext})`
-  );
-
-  await database.iterate(async (blogID, account) => {
-    if (shouldSkipBackgroundSync(account)) {
-      console.log(
-        clfdate(),
-        "Skipping resync (setup incomplete or stored error): ",
-        blogID
-      );
-      return;
-    }
-
-    const lastSync = await getLastSyncDateStamp(blogID);
-
-    if (!lastSync) {
-      console.log(clfdate(), "No last sync date found for blogID: ", blogID);
-      return;
-    }
-
-    const minutesAgo = Math.floor((Date.now() - lastSync) / 1000 / 60);
-
-    // if the blog last synced within the last 10 minutes, we want to resync
-    // because we might have missed some events
-    if (Date.now() - lastSync < windowMs) {
-      console.log(clfdate(), "Resyncing blog: ", blogID);
-
-      // Ensure the hourly sync check is always gated by the sync
-      // lock to prevent files from being removed from Blot
-      // during an initial setup. This prevents data loss.
-      let folder;
-      let done;
-
-      try {
-        ({ folder, done } = await establishSyncLock(blogID));
-      } catch (error) {
-        console.warn(
-          clfdate(),
-          "Blog is currently syncing elsewhere, skipping resync:",
-          blogID
-        );
-        return;
-      }
-      try {
-        // We don't sync to iCloud here because we want to respect
-        // the state of the iCloud folder. It's possible that Blot
-        // has made some folder changes which are unsynced but we
-        // prefer to destroy those rather than re-upload files
-        // which were deleted on iCloud.
-        await syncFromiCloud(blogID, folder.status, folder.update);
-        console.log(clfdate(), "Finished resyncing blog: ", blogID);
-      } catch (error) {
-        console.error(clfdate(), "Error resyncing blog: ", blogID, error);
-      } finally {
-        await done();
-      }
-    } else {
-      console.log(
-        clfdate(),
-        "Skipping resync of blog which last synced",
-        minutesAgo,
-        "minutes ago"
-      );
-    }
-  });
-
-  console.log(
-    clfdate(),
-    "Finished resyncing recently synced blogs",
-    `(${resyncContext})`
-  );
-};
 
 // Eligible for the sweep only if the macserver pushed something in the last
 // hour (routes/site stamp lastSync). Not Blog.getStatuses: taking the folder
@@ -118,14 +24,46 @@ const hasRecentSync = (account) => {
   return Date.now() - account.lastSync <= ONE_HOUR_IN_MS;
 };
 
-const validateAllBlogs = async () => {
-  console.log(clfdate(), "iCloud: Running hourly sync validation");
+// Blogs the macserver hasn't pushed to are checked too, a twenty-fourth of
+// them each hour (by a hash of the blog ID), so every blog is walked once a
+// day. A change the macserver missed on a quiet blog was otherwise never
+// repaired: one blog kept stale versions of five files for six weeks. Spread
+// across the day it is a handful of extra walks an hour, not one burst.
+const IDLE_SLICES = 24;
+
+const idleSliceOf = (blogID) =>
+  parseInt(
+    crypto.createHash("sha1").update(blogID).digest("hex").slice(0, 8),
+    16
+  ) % IDLE_SLICES;
+
+// { idleSlice }: also walk the idle blogs in that slice (0-23); without it
+// only blogs with a recent push are walked
+const validateAllBlogs = async ({ idleSlice } = {}) => {
+  console.log(
+    clfdate(),
+    "iCloud: Running hourly sync validation",
+    idleSlice === undefined ? "" : `(idle slice ${idleSlice})`
+  );
 
   const report = syncReport.create();
   let checkedBlogs = 0;
+  let stopped = false;
 
   try {
     await database.iterate(async (blogID, account) => {
+      // Every lock is refused while draining; the next hour's run covers the rest
+      if (stopped || drain.isDraining()) {
+        if (!stopped) {
+          console.log(
+            clfdate(),
+            "iCloud: Stopped sync validation for the drain"
+          );
+        }
+        stopped = true;
+        return;
+      }
+
       let blog;
       let phase = "validation";
 
@@ -150,7 +88,9 @@ const validateAllBlogs = async () => {
         if (await syncReport.recordStuckLock(report, blog)) return;
 
         if (shouldSkipBackgroundSync(account)) return;
-        if (!hasRecentSync(account)) return;
+        if (!hasRecentSync(account) && idleSliceOf(blogID) !== idleSlice) {
+          return;
+        }
 
         checkedBlogs += 1;
 
@@ -192,116 +132,36 @@ const validateAllBlogs = async () => {
   );
 };
 
-// Not scheduled (see init()). Reports through the same digest as the hourly
-// sweep so the ICLOUD_SYNC_ISSUE template still renders if it is turned back on.
-const resyncAllConnected = async ({ notify = true } = {}) => {
-  console.log(clfdate(), "iCloud: Running daily resync for connected accounts");
-
-  const report = syncReport.create();
-  let checkedBlogs = 0;
-
-  try {
-    await database.iterate(async (blogID, account) => {
-      if (shouldSkipBackgroundSync(account)) {
-        console.log(
-          clfdate(),
-          "iCloud: Daily resync skipped (setup incomplete or stored error)",
-          blogID,
-          account && account.error
-        );
-        return;
-      }
-
-      try {
-        const blog = await Blog.get({ id: blogID });
-        if (!blog || blog.client !== "icloud") return;
-
-        checkedBlogs += 1;
-
-        let folder;
-        let done;
-
-        try {
-          ({ folder, done } = await establishSyncLock(blogID));
-        } catch (error) {
-          console.warn(
-            clfdate(),
-            "iCloud: Daily resync skipped (already syncing)",
-            blogID
-          );
-          return;
-        }
-
-        let summary;
-
-        try {
-          summary = await syncFromiCloud(blogID, folder.status, folder.update);
-        } catch (error) {
-          console.error(
-            clfdate(),
-            "iCloud: Error during daily resync for blog",
-            blogID,
-            error
-          );
-        } finally {
-          await done();
-        }
-
-        if (!summary) return;
-
-        syncReport.recordChanges(report, blog, summary);
-      } catch (error) {
-        console.error(
-          clfdate(),
-          "iCloud: Error iterating daily resync for blog",
-          blogID,
-          error
-        );
-      }
-    });
-  } catch (error) {
-    console.error(clfdate(), "iCloud: Failed to iterate accounts", error);
-    return;
-  }
-
-  console.log(
-    clfdate(),
-    "iCloud: Daily resync complete",
-    `checked=${checkedBlogs}`,
-    `issues=${syncReport.view(report).blogs.length}`
-  );
-
-  if (!notify) return;
-
-  // No `client`: the once-per-occurrence memory belongs to the hourly sweep.
-  await syncReport.send(report, email.ICLOUD_SYNC_ISSUE, "iCloud:", {
-    getHealth,
-  });
-};
-
 // The sweep is sequential and a slow macserver can stretch it past an hour, so
 // a run is skipped if one is still going in any process.
-const runValidation = exclusive("icloud-validation", validateAllBlogs);
+const runValidation = exclusive("icloud-validation", () =>
+  validateAllBlogs({ idleSlice: new Date().getUTCHours() % IDLE_SLICES })
+);
 
-const resumeInitialTransfers = () =>
-  database.iterate(async (blogID, account) => {
-    if (!account.transferringToiCloud) {
-      return;
-    }
-
-    try {
-      console.log("Resuming initial transfer for", blogID);
-      await initialTransfer(blogID);
-    } catch (error) {
-      console.error("Error resuming initial transfer for", blogID, error);
-    }
-  });
+// Startup's resume does not count as done while a transfer it skipped was
+// locked: that transfer may be running in a process the deploy is about to
+// stop, and the next process to start in this release should try it again.
+const resumeInitialTransfers = async () => {
+  const busy = await resumeTransfers();
+  if (busy > 0) {
+    throw new Error(`${busy} initial transfer(s) locked, not marking done`);
+  }
+};
 
 const init = async () => {
   // At :45 because the Dropbox sweep runs at :00 and Google Drive's at :30,
   // and all three share the Redis connection. One process runs each sweep.
   console.log(clfdate(), "iCloud: Scheduling hourly sync validation");
   schedule("icloud-validation", "45 * * * *", runValidation);
+
+  // Startup's resume runs once per release, so a transfer killed after it
+  // (the second unit of a deploy, or a crash) is picked up here instead. A
+  // resume can take hours, so runs never overlap.
+  schedule(
+    "icloud-resume-transfers-hourly",
+    "15 * * * *",
+    exclusive("icloud-resume-transfers-hourly", resumeTransfers)
+  );
 
   // Resuming can take a long time, so the sweep is scheduled first. Once per
   // deploy across all processes, not once per process.
@@ -311,18 +171,17 @@ const init = async () => {
     console.error(clfdate(), "iCloud: Error resuming initial transfers", error);
   }
 
-  // The daily full resync (resyncAllConnected) and the startup/"/started"
-  // resync (resyncRecentlySynced) stay disabled: both walk every connected
-  // (or recently synced) blog in one burst, a lot of load for the macserver
-  // and Redis at once. Only the hourly sweep, which skips idle blogs, runs.
+  // Only the hourly sweep runs, and it skips idle blogs: a full resync of
+  // every connected blog in one burst is a lot of load for the macserver and
+  // Redis at once.
 
   monitorMacServerStats();
 };
 
-init.resyncRecentlySynced = resyncRecentlySynced;
-init.resyncAllConnected = resyncAllConnected;
 // Exposed for tests
 init.validateAllBlogs = validateAllBlogs;
+init.idleSliceOf = idleSliceOf;
 init.runValidation = runValidation;
+init.resumeInitialTransfers = resumeInitialTransfers;
 
 module.exports = init;

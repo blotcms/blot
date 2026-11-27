@@ -29,11 +29,10 @@ function harness(files) {
         }),
       },
       folder: () => ({
+        get: async () => null,
         getByPath: async () => null,
         set: async () => {},
         remove: async () => {},
-        getVerifiedContents: async (ids) => ids.map(() => undefined),
-        setVerifiedContent: async () => {},
         getApplied: async () => null,
         setApplied: async () => {},
       }),
@@ -69,6 +68,7 @@ function harness(files) {
     "./util/localReaddir": async () => local,
     "./util/transformDriveItems": require("../sync/util/transformDriveItems"),
     "./util/truncateToSecond": require("../sync/util/truncateToSecond"),
+    "./util/limiter": require("../sync/util/limiter"),
     "./util/comparePaths": require("../sync/util/comparePaths"),
   };
 

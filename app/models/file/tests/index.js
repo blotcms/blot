@@ -186,6 +186,35 @@ describe("models/file", function () {
     });
   });
 
+  describe("fillSha1", function () {
+    var unhashed = { type: "file", size: 5, modified: MODIFIED, sha1: "" };
+    var other = "b".repeat(40);
+
+    it("keeps a SHA-1 for a file whose record has none", async function () {
+      await File.set(this.blog.id, "/a.txt", unhashed);
+
+      expect(await File.fillSha1(this.blog.id, "/a.txt", unhashed, other)).toBe(
+        true
+      );
+      expect((await File.get(this.blog.id, "/a.txt")).sha1).toBe(other);
+    });
+
+    it("leaves a record which changed since the file was read, or has a SHA-1", async function () {
+      await File.set(this.blog.id, "/a.txt", unhashed);
+      await File.set(this.blog.id, "/b.txt", file(5));
+
+      var read = Object.assign({}, unhashed, { size: 4 });
+      expect(await File.fillSha1(this.blog.id, "/a.txt", read, other)).toBe(
+        false
+      );
+      expect(await File.fillSha1(this.blog.id, "/b.txt", file(5), other)).toBe(
+        false
+      );
+      expect((await File.get(this.blog.id, "/a.txt")).sha1).toBeFalsy();
+      expect((await File.get(this.blog.id, "/b.txt")).sha1).toBe(SHA1);
+    });
+  });
+
   describe("totals", function () {
     it("counts files and bytes, replacing and removing", async function () {
       await File.set(this.blog.id, "/a.txt", file(10));

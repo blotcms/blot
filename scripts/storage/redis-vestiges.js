@@ -20,7 +20,21 @@
 //                    have no info and are not in the blogs set (a removal which
 //                    failed part way); the bucket and Bunny are not touched
 //   dropbox-members  removes blog IDs from clients:dropbox:<account> sets
-//                    when the blog is gone (the set vanishes when empty)
+//                    when the blog is gone, is on another client, or its
+//                    Dropbox account is another or missing (webhooks only
+//                    sync a member whose account matches, so it is never
+//                    used). The set vanishes when empty: so does the legacy
+//                    clients:dropbox:undefined, whose members can match no
+//                    account
+//   dropbox-accounts deletes blog:<id>:dropbox:account and :access-token of
+//                    blogs which still exist but are on another client (a
+//                    disconnect which failed part way), and the blog's
+//                    membership of its account's set: the tokens they hold
+//                    are never used again. Looked at again 5 seconds later,
+//                    since disconnect clears the client just before the
+//                    account
+//   dropbox-legacy   deletes the dropbox:<user id> sets of the old Dropbox
+//                    client (API v1 user IDs), which no code reads
 //   template-shares  deletes template:share:<id> when the template it names
 //                    has no metadata (the template was dropped)
 //   permalinks       deletes blog:<id>:url:<url> keys whose entry key is gone,
@@ -357,11 +371,25 @@ async function deletedBlogs({ apply = false, only = "*" } = {}) {
 
 // ---- dropbox-members ----
 
-async function goneBlogs(ids) {
-  const gone = [];
-  for (const id of ids)
-    if (!(await client.exists("blog:" + id + ":info"))) gone.push(id);
-  return gone;
+const DROPBOX_RECHECK_MS = 5000;
+
+// The members of the set of accountID which no webhook would sync
+async function staleMembers(accountID, ids) {
+  const stale = [];
+  for (const id of ids) {
+    if (!(await client.exists("blog:" + id + ":info"))) {
+      stale.push(id);
+      continue;
+    }
+    const blog = await Blog.get({ id }).catch(() => null);
+    const account = await client.hGet(
+      "blog:" + id + ":dropbox:account",
+      "account_id"
+    );
+    if (!blog || blog.client !== "dropbox" || account !== accountID)
+      stale.push(id);
+  }
+  return stale;
 }
 
 async function dropboxMembers({ apply = false, only = "*" } = {}) {
@@ -369,8 +397,9 @@ async function dropboxMembers({ apply = false, only = "*" } = {}) {
 
   for await (const page of scan("clients:dropbox:" + only)) {
     for (const key of await ofType(page, "set")) {
+      const accountID = key.slice("clients:dropbox:".length);
       const members = await client.sMembers(key);
-      const stale = await goneBlogs(members);
+      const stale = await staleMembers(accountID, members);
 
       result.sets++;
       result.members += members.length;
@@ -378,10 +407,11 @@ async function dropboxMembers({ apply = false, only = "*" } = {}) {
 
       if (!apply || !stale.length) continue;
 
-      // Checked again, so a blog created since the read is kept
-      const again = await goneBlogs(stale);
+      // Checked again, so a blog connected since the read is kept
+      const again = await staleMembers(accountID, stale);
 
-      if (again.length) result.removed += await client.sRem(key, again);
+      for (let i = 0; i < again.length; i += BATCH)
+        result.removed += await client.sRem(key, again.slice(i, i + BATCH));
     }
   }
 
@@ -392,8 +422,99 @@ async function dropboxMembers({ apply = false, only = "*" } = {}) {
       result.members +
       " members of " +
       result.sets +
-      " sets name blogs which are gone. " +
+      " sets name blogs which no webhook would sync. " +
       verb(apply, "Removed " + result.removed, "Would remove them")
+  );
+
+  return result;
+}
+
+// ---- dropbox-accounts ----
+
+const ACCOUNT_KEY = /^blog:(blog_[a-f0-9]+):dropbox:account$/;
+
+// The account_id of a blog's account left behind on another client, or null
+async function leftAccount(key) {
+  const blogID = key.match(ACCOUNT_KEY)[1];
+  if (!(await client.exists("blog:" + blogID + ":info"))) return null;
+  const blog = await Blog.get({ id: blogID }).catch(() => null);
+  if (!blog || blog.client === "dropbox") return null;
+  return { blogID, accountID: await client.hGet(key, "account_id") };
+}
+
+async function dropboxAccounts({
+  apply = false,
+  only = "*",
+  recheckMs = DROPBOX_RECHECK_MS,
+} = {}) {
+  const result = { accounts: 0, left: 0, deleted: 0 };
+  const left = [];
+
+  for await (const page of scan("blog:" + only + ":dropbox:account")) {
+    for (const key of await ofType(page, "hash")) {
+      if (!ACCOUNT_KEY.test(key)) continue;
+      result.accounts++;
+      if (await leftAccount(key)) left.push(key);
+    }
+  }
+
+  result.left = left.length;
+
+  if (apply && left.length) {
+    await pause(recheckMs);
+
+    for (const key of left) {
+      const found = await leftAccount(key);
+      if (!found) continue;
+
+      const multi = client.multi();
+      multi.del(key);
+      multi.del("blog:" + found.blogID + ":dropbox:access-token");
+      if (found.accountID)
+        multi.sRem("clients:dropbox:" + found.accountID, found.blogID);
+      await multi.exec();
+      result.deleted++;
+    }
+  }
+
+  console.log(
+    "dropbox-accounts: " +
+      result.left +
+      " of " +
+      result.accounts +
+      " Dropbox accounts belong to blogs on another client. " +
+      verb(apply, "Deleted " + result.deleted, "Would delete them")
+  );
+
+  return result;
+}
+
+// ---- dropbox-legacy ----
+
+const LEGACY_DROPBOX_SET = /^dropbox:[0-9]+$/;
+
+async function dropboxLegacy({ apply = false, only = "*" } = {}) {
+  const result = { found: 0, deleted: 0 };
+  const sample = sampler();
+
+  for await (const page of scan("dropbox:" + only)) {
+    const keys = (await ofType(page, "set")).filter((key) =>
+      LEGACY_DROPBOX_SET.test(key)
+    );
+
+    result.found += keys.length;
+    for (const key of keys) await sample.add(key);
+
+    if (apply && keys.length) result.deleted += await client.del(keys);
+  }
+
+  console.log(
+    "dropbox-legacy: " +
+      result.found +
+      " sets of the old Dropbox client, about " +
+      size(sample.estimate(result.found)) +
+      ". " +
+      verb(apply, "Deleted " + result.deleted, "Would delete them")
   );
 
   return result;
@@ -720,6 +841,8 @@ const SUBCOMMANDS = {
   "deleted-entries": deletedEntries,
   "deleted-blogs": deletedBlogs,
   "dropbox-members": dropboxMembers,
+  "dropbox-accounts": dropboxAccounts,
+  "dropbox-legacy": dropboxLegacy,
   "template-shares": templateShares,
   permalinks,
   rendered,
@@ -767,6 +890,8 @@ module.exports = {
   deletedEntries,
   deletedBlogs,
   dropboxMembers,
+  dropboxAccounts,
+  dropboxLegacy,
   templateShares,
   permalinks,
   rendered,

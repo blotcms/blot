@@ -63,7 +63,8 @@ module.exports = {
 
     return Package;
   },
-  save: async function (id, metadata) {
+  // Resolves to the views' settings. options are setMetadata's.
+  save: async function (id, metadata, options) {
     let views = {};
     let changes = {};
 
@@ -86,7 +87,7 @@ module.exports = {
     }
 
     try {
-      await setMetadata(id, changes);
+      await setMetadata(id, changes, options);
     } catch (err) {
       // The views from the package are still wanted by a caller reporting
       // the failure (readFromFolder)

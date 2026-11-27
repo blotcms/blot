@@ -361,6 +361,25 @@ describe("storage/assets", function () {
     });
   });
 
+  describe("existsRecently", function () {
+    it("remembers a yes, and never a no", async function () {
+      var test = this;
+      var rel = "_image_cache/recently/" + Date.now() + ".txt";
+
+      expect(await assets.existsRecently(test.blog.id, rel)).toBe(false);
+
+      await assets.write(test.blog.id, rel, "hello");
+      expect(await assets.existsRecently(test.blog.id, rel)).toBe(true);
+
+      // Removed behind its back: the yes is remembered, so no request
+      await assets.remove(test.blog.id, rel);
+      spyOn(s3, "head").and.callThrough();
+      expect(await assets.existsRecently(test.blog.id, rel)).toBe(true);
+      expect(s3.head).not.toHaveBeenCalled();
+      expect(await assets.exists(test.blog.id, rel)).toBe(false);
+    });
+  });
+
   describe("write and read", function () {
     it("writes a string to the bucket, leaving nothing staged", async function () {
       var test = this;

@@ -171,6 +171,45 @@ describe("models/discover", function () {
     expect((await Discover.list()).posts).toEqual([]);
   });
 
+  it("shows the card's own text in place of the post's, and keeps it when re-added", async function () {
+    const blogID = this.blog.id;
+    const src = await image(blogID, "_image_cache/three.jpg");
+    const post = await entry(blogID, "/three.txt", {
+      html: `<p>The post's own words</p><img src="${src}">`,
+    });
+    const id = Discover.postID(blogID, post.id);
+    const derive = () =>
+      Discover.photos.derive(blogID, id, ["_image_cache/three.jpg"]);
+
+    await Discover.add(blogID, post.id, await derive());
+    expect((await Discover.list()).posts[0].text).toEqual([]);
+
+    await Discover.setText(id, "  Written   for the card ");
+    expect((await Discover.list()).posts[0].text).toEqual([
+      "Written for the card",
+    ]);
+
+    await Discover.setText(id, "One\nparagraph.\n \n\nAnother one.");
+    expect((await Discover.list()).posts[0].text).toEqual([
+      "One paragraph.",
+      "Another one.",
+    ]);
+
+    await Discover.setText(id, "  Written   for the card ");
+    expect((await Discover.list()).posts[0].ownText).toBe(true);
+
+    await Discover.add(blogID, post.id, await derive());
+    expect((await Discover.list()).posts[0].text).toEqual([
+      "Written for the card",
+    ]);
+
+    await Discover.setText(id, "");
+    expect((await Discover.get(id)).text).toBe("");
+    expect((await Discover.list()).posts[0].text).toEqual([]);
+
+    expect(await Discover.setText("0123456789abcdef0123", "x")).toBe(null);
+  });
+
   it("shows a post without photos as a text card and drops deleted posts", async function () {
     const blogID = this.blog.id;
     const post = await entry(blogID, "/text.txt");

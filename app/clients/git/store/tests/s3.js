@@ -8,7 +8,7 @@ const fx = require("./helpers/fixture");
 const cases = require("./helpers/contract");
 const timeout = require("./helpers/timeout");
 const createReader = require("../reader");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const manifest = require("../manifest");
 const { readRanges } = require("../ranges");
 
@@ -20,6 +20,7 @@ const MIB = 1024 * 1024;
   function () {
     timeout(120 * 1000);
 
+    const each = workspace.each();
     const sdk = endpoint ? require("@aws-sdk/client-s3") : null;
     const bucket = "git-store-" + crypto.randomBytes(6).toString("hex");
     let client;
@@ -240,58 +241,52 @@ const MIB = 1024 * 1024;
     });
 
     it("imports a repository whose pack is larger than a part, in a multipart upload, and clones it back", async function () {
-      const workDir = fx.tempDir();
-      try {
-        const dir = workDir + "/repo";
-        fx.buildFixture(dir, { commits: 6, large: false });
-        require("fs").writeFileSync(
-          dir + "/large.bin",
-          crypto.randomBytes(12 * MIB)
-        );
-        fx.git(dir, ["add", "-A"]);
-        fx.git(dir, ["commit", "-q", "-m", "A large file"]);
+      const workDir = each.dir();
+      const dir = workDir + "/repo";
+      fx.buildFixture(dir, { commits: 6, large: false });
+      require("fs").writeFileSync(
+        dir + "/large.bin",
+        crypto.randomBytes(12 * MIB)
+      );
+      fx.git(dir, ["add", "-A"]);
+      fx.git(dir, ["commit", "-q", "-m", "A large file"]);
 
-        const store = newStore();
-        const cache = createCache({
-          dir: workDir + "/cache",
-          maxBytes: 256 * MIB,
-        });
-        const before = sent.parts;
-        const importRepo = require("../import");
-        const result = await importRepo({
-          store,
-          cache,
-          lock: (fn) => fn(),
-          gitDir: dir + "/.git",
-        });
+      const store = newStore();
+      const cache = each.cache({
+        dir: workDir + "/cache",
+        maxBytes: 256 * MIB,
+      });
+      const before = sent.parts;
+      const importRepo = require("../import");
+      const result = await importRepo({
+        store,
+        cache,
+        lock: (fn) => fn(),
+        gitDir: dir + "/.git",
+      });
 
-        expect(result.outcome).toBe("imported");
-        expect(result.pack.size).toBeGreaterThan(12 * MIB);
-        expect(sent.parts - before).toBe(
-          Math.ceil(result.pack.size / (5 * MIB))
-        );
-        expect(
-          (await store.head("packs/" + result.pack.name + ".pack")).size
-        ).toBe(result.pack.size);
-        expect(
-          (await manifest.read(store)).packs.map((pack) => pack.name)
-        ).toEqual([result.pack.name]);
-        expect(
-          (
-            await importRepo.verifyImport({
-              store,
-              cache,
-              gitDir: dir + "/.git",
-            })
-          ).refs
-        ).toBe(2);
-      } finally {
-        await createCache.closeAll();
-        fx.remove(workDir);
-      }
+      expect(result.outcome).toBe("imported");
+      expect(result.pack.size).toBeGreaterThan(12 * MIB);
+      expect(sent.parts - before).toBe(Math.ceil(result.pack.size / (5 * MIB)));
+      expect(
+        (await store.head("packs/" + result.pack.name + ".pack")).size
+      ).toBe(result.pack.size);
+      expect(
+        (await manifest.read(store)).packs.map((pack) => pack.name)
+      ).toEqual([result.pack.name]);
+      expect(
+        (
+          await importRepo.verifyImport({
+            store,
+            cache,
+            gitDir: dir + "/.git",
+          })
+        ).refs
+      ).toBe(2);
     });
 
     describe("a repository read by range", function () {
+      const all = workspace.all();
       let workDir;
       let fixture;
       let store;
@@ -299,7 +294,7 @@ const MIB = 1024 * 1024;
       let oracle;
 
       beforeAll(async function () {
-        workDir = fx.tempDir();
+        workDir = all.dir();
         fixture = fx.buildFixture(workDir + "/repo", {
           commits: 14,
           large: true,
@@ -322,14 +317,9 @@ const MIB = 1024 * 1024;
 
         reader = createReader({
           store,
-          cache: createCache({ dir: workDir + "/cache", maxBytes: 4 * MIB }),
+          cache: all.cache({ dir: workDir + "/cache", maxBytes: 4 * MIB }),
           packs: (await manifest.read(store)).packs,
         });
-      });
-
-      afterAll(async function () {
-        await createCache.closeAll();
-        fx.remove(workDir);
       });
 
       it("reads the manifest back", async function () {

@@ -1,5 +1,5 @@
 import fs from "fs-extra";
-import { basename, dirname, resolve } from "path";
+import { basename, dirname, join, resolve } from "path";
 import exec from "../exec.js";
 
 // Takes a blog's shared folder off this Mac without touching the owner's copy.
@@ -20,13 +20,29 @@ import exec from "../exec.js";
 
 const BLOG_FOLDER = /^blog_[a-zA-Z0-9]+$/;
 
-// Refuses anything but <iCloud Drive>/blog_<id>: a slip here must never reach
-// iCloud Drive itself or a folder that isn't a blog's.
+// Written into a blog folder (blogFolder.js; not imported, so this module
+// stays free of the config)
+const NESTED_MARKER = ".blot-nested";
+
+// Refuses anything but a blog's shared folder: the folder inside a marked
+// <iCloud Drive>/blog_<id>. A slip here must never reach iCloud Drive itself
+// or a folder that isn't a blog's. blog_<id> itself is refused too: it is
+// Blot's own folder, and sending it to the Trash would take the shared folder
+// inside with it.
 export function checkPath(path, root) {
   const full = resolve(path);
-  if (dirname(full) !== resolve(root) || !BLOG_FOLDER.test(basename(full)))
+  const parent = dirname(full);
+  const name = basename(full);
+
+  const shared =
+    dirname(parent) === resolve(root) &&
+    BLOG_FOLDER.test(basename(parent)) &&
+    fs.existsSync(join(parent, NESTED_MARKER)) &&
+    !name.startsWith(".");
+
+  if (!shared)
     throw new Error(
-      `Refusing to remove ${path}: not a blog folder in iCloud Drive`
+      `Refusing to remove ${path}: not a blog's shared folder in iCloud Drive`
     );
   return full;
 }

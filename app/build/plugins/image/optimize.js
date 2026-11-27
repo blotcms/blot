@@ -10,6 +10,7 @@ var debug = require("debug")("blot:entry:build:plugins:image");
 var makeSlug = require("helper/makeSlug");
 var removeDiacritics = require("helper/removeDiacritics");
 var Url = require("url");
+var Thumbnails = require("build/thumbnail/seed");
 
 // Only cache images with the following file extensions
 // We only resize and optimize JPG and PNG.
@@ -60,7 +61,13 @@ function truncateSlug(slug) {
   return chars.join("");
 }
 
-module.exports = function (blogID, originalSrc) {
+// options.thumbnail: the image is the post's first thumbnail candidate, so its
+// thumbnails are made by the same sandbox job as the resize, and stored where
+// build/thumbnail looks for them (build/thumbnail/seed.js), instead of by a job
+// of their own afterwards.
+module.exports = function (blogID, originalSrc, options) {
+  var withThumbnails = !!(options && options.thumbnail);
+
   // helper/transformer calls this with a path and waits for the promise
   return async function optimizeImage(path) {
     // Extnames can sometimes be uppercase, we want to ensure that
@@ -120,7 +127,14 @@ module.exports = function (blogID, originalSrc) {
       await fs.copy(path, finalPath);
 
       debug("Resizing", finalPath);
-      var info = await resize(finalPath);
+      var info, made;
+
+      if (withThumbnails) {
+        made = await resize(finalPath, Thumbnails.args(finalPath));
+        info = made.info;
+      } else {
+        info = await resize(finalPath);
+      }
 
       if (!info.width || !info.height) throw new Error("No width or height");
 
@@ -129,6 +143,15 @@ module.exports = function (blogID, originalSrc) {
       info.src = src;
 
       await assets.commit(blogID, assetPath);
+
+      // A failure here leaves the thumbnails to build/thumbnail, as before
+      if (made && made.thumbnail) {
+        try {
+          await Thumbnails.seed(blogID, made.hash, finalPath, made.thumbnail);
+        } catch (err) {
+          debug("Could not store thumbnails:", err);
+        }
+      }
 
       return info;
     } catch (err) {

@@ -1,5 +1,6 @@
 const ensure = require("helper/ensure");
 const Update = require("./update");
+const dependents = require("./update/dependents");
 const storage = require("storage/folder");
 const messenger = require("./messenger");
 const assets = require("storage/assets");
@@ -72,7 +73,13 @@ module.exports = async function main(blogID, options = {}) {
   // whose cacheID hasn't moved (storage/sweep)
   await Blog.set(blogID, { cacheID: Date.now() });
 
-  const paths = await walk(blog.id);
+  // options.paths rebuilds just those (the sweep's, for entries linking
+  // generated files that have gone: storage/sweep/generated.js). One no
+  // longer in the folder is left out: building it would remove its entry,
+  // which is Fix()'s call, not this one's.
+  const paths = options.paths
+    ? await existing(blog.id, options.paths)
+    : await walk(blog.id);
 
   if (options.thumbnails) {
     await wipeCache({
@@ -123,20 +130,7 @@ module.exports = async function main(blogID, options = {}) {
   // One at a time on purpose: Entry.set is not safe for two paths of a
   // blog at once (URL claims in models/entry/_setUrl.js and the blog
   // menu in models/entry/_assign.js are read-then-write), see #2258.
-  // options.shouldStop, if given, is asked before each path. When it
-  // says a newer rebuild is on its way, the rest is left to that one
-  // (the dashboard's settings rebuilds: dashboard/site/save/rebuild-settings.js)
   for (const path of updatePaths) {
-    if (options.shouldStop) {
-      const stop = await Promise.resolve(options.shouldStop()).catch(
-        () => false
-      );
-      if (stop) {
-        log("Rebuild stopped before", path, "for a newer one");
-        break;
-      }
-    }
-
     current += updatePathCounts.get(path);
     status(`(${current}/${total}) Rebuilding ${path}`);
 
@@ -168,6 +162,22 @@ module.exports = async function main(blogID, options = {}) {
     }
   }
 
+  // What depends on the rebuilt files, once each (update/dependents.js), as
+  // a sync does when it ends: a rebuild may run without the folder lock, and
+  // then no sync's end comes after it. An entry this rebuild saved after the
+  // files it depends on is skipped, so most are not built twice.
+  try {
+    const rebuilt = await dependents.drain(blogID, {
+      track: update.track,
+      status,
+      log,
+    });
+    if (rebuilt) log("Rebuilt " + rebuilt + " dependent entries");
+  } catch (err) {
+    if (isRedisUnavailableError(err)) throw err;
+    log("Error rebuilding dependent entries", err.message);
+  }
+
   if (failed) {
     log(
       `Rebuild finished but ${failed} of ${updatePaths.length} paths failed to build, e.g. ${firstError.message || firstError}`
@@ -183,6 +193,15 @@ module.exports = async function main(blogID, options = {}) {
   // https://github.com/blotcms/blot/issues/1844
   await Blog.set(blogID, { cacheID: Date.now() });
 };
+
+async function existing(blogID, paths) {
+  const found = [];
+
+  for (const path of new Set(paths))
+    if (await storage.exists(blogID, path)) found.push(path);
+
+  return found;
+}
 
 async function wipeCache({ blogID, label, directory }) {
   const store = new Transformer(blogID, label);

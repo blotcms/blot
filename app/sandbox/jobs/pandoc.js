@@ -31,7 +31,7 @@ const EXTENSION = /^\.[A-Za-z0-9]{1,16}$/;
 // pandoc's own heap and time limits. The heap sits below the jail's 512 MiB
 // (proxy/unit/sandbox/jail.js), which Node, the document and its media share,
 // so a document too large for it is usually a pandoc error, not a killed jail.
-const MAX_HEAP = "400M";
+const MAX_HEAP = "256M";
 const TIMEOUT_MS = 10 * 1000;
 
 // Matches maxOutputBytes in proxy/unit/sandbox/jail.js

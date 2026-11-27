@@ -1,7 +1,7 @@
 import fs from "fs-extra";
-import { resolve, join, sep } from "path";
-import { iCloudDriveDirectory } from "../config.js";
-import { watch, unwatch } from "../watcher/index.js";
+import { resolve, join, sep, dirname } from "path";
+import { rootOf } from "../blogFolder.js";
+import { expectBlotChange } from "../blotWrites.js";
 import clfdate from "../util/clfdate.js";
 
 export default async (req, res) => {
@@ -18,7 +18,7 @@ export default async (req, res) => {
   }
 
   // Validate path
-  const basePath = resolve(join(iCloudDriveDirectory, blogID));
+  const basePath = resolve(rootOf(blogID));
   const dirPath = resolve(join(basePath, path));
 
   // Check if the resolved path is inside the allowed directory
@@ -46,6 +46,8 @@ export default async (req, res) => {
     return res.sendStatus(200);
   } else if (stat) {
     try {
+      // a file where Blot wants a folder: its removal is Blot's too
+      expectBlotChange(blogID, dirPath.slice(basePath.length + 1), "remove");
       await fs.remove(dirPath);
     } catch (error) {
       console.error(
@@ -62,12 +64,14 @@ export default async (req, res) => {
     `Received mkdir request for blogID: ${blogID}, path: ${path}`
   );
 
-  // first unwatch the blogID to prevent further events from being triggered
-  try {
-    await unwatch(blogID);
-  } catch (error) {
-    console.error(clfdate(), `Failed to unwatch blogID (${blogID}):`, error);
-    return res.status(500).send("Failed to unwatch blog folder");
+  // The watcher keeps running (see blotWrites.js): this folder and any
+  // missing parents are Blot's own, so their events are not sent back
+  for (
+    let dir = dirPath;
+    dir.startsWith(`${basePath}${sep}`) && !(await fs.pathExists(dir));
+    dir = dirname(dir)
+  ) {
+    expectBlotChange(blogID, dir.slice(basePath.length + 1), "mkdir");
   }
 
   let success = false;
@@ -90,14 +94,6 @@ export default async (req, res) => {
         ); // True exponential backoff
       }
     }
-  }
-
-  // re-watch the blogID
-  try {
-    await watch(blogID);
-  } catch (error) {
-    console.error(clfdate(), `Failed to rewatch blogID (${blogID}):`, error);
-    return res.status(500).send("Failed to rewatch blog folder");
   }
 
   if (!success) {

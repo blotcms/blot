@@ -16,7 +16,7 @@ const { startServer, runGit } = require("./helpers/upload-server");
 const manifest = require("../manifest");
 const compact = require("../compact");
 const commit = require("../commit");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const createReader = require("../reader");
 const { readHistory } = require("../history");
@@ -259,47 +259,44 @@ describe("git store compaction plan", function () {
 });
 
 describe("git store compaction of snapshots alone", function () {
+  const ws = workspace.each();
+
   it("swaps in a trimmed manifest without reading a pack, and then has nothing to do", async function () {
     const store = createMemoryStore();
     const lock = createLock();
-    const dir = fx.tempDir();
-    try {
-      const cache = createCache({ dir, maxBytes: 1024 });
-      for (let i = 1; i <= 12; i++) {
-        const base = await manifest.read(store);
-        const next = manifest.advance(base, {
-          refs: { [MASTER]: String(i % 10).repeat(40) },
-          head: MASTER,
-        });
-        await manifest.swap({ store, lock, base, next });
-      }
-
-      const before = { ...store.stats };
-      const result = await compact({
-        store,
-        cache,
-        lock,
-        maxSnapshots: 10,
-        minSnapshots: 2,
+    const dir = ws.dir();
+    const cache = ws.cache({ dir, maxBytes: 1024 });
+    for (let i = 1; i <= 12; i++) {
+      const base = await manifest.read(store);
+      const next = manifest.advance(base, {
+        refs: { [MASTER]: String(i % 10).repeat(40) },
+        head: MASTER,
       });
-      expect(result.outcome).toBe("compacted");
-      expect(result.merged).toEqual([]);
-      expect(result.into).toBe(null);
-      expect(result.stats.snapshotsTrimmed).toBe(2);
-      expect(store.stats.reads - before.reads).toBe(0);
-
-      const latest = await manifest.read(store);
-      expect(latest.seq).toBe(13);
-      expect(latest.snapshots.map((snapshot) => snapshot.seq)).toEqual([
-        3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
-      ]);
-      expect(
-        (await compact({ store, cache, lock, maxSnapshots: 10 })).outcome
-      ).toBe("nothing");
-    } finally {
-      await createCache.closeAll();
-      fx.remove(dir);
+      await manifest.swap({ store, lock, base, next });
     }
+
+    const before = { ...store.stats };
+    const result = await compact({
+      store,
+      cache,
+      lock,
+      maxSnapshots: 10,
+      minSnapshots: 2,
+    });
+    expect(result.outcome).toBe("compacted");
+    expect(result.merged).toEqual([]);
+    expect(result.into).toBe(null);
+    expect(result.stats.snapshotsTrimmed).toBe(2);
+    expect(store.stats.reads - before.reads).toBe(0);
+
+    const latest = await manifest.read(store);
+    expect(latest.seq).toBe(13);
+    expect(latest.snapshots.map((snapshot) => snapshot.seq)).toEqual([
+      3, 4, 5, 6, 7, 8, 9, 10, 11, 12,
+    ]);
+    expect(
+      (await compact({ store, cache, lock, maxSnapshots: 10 })).outcome
+    ).toBe("nothing");
   });
 });
 
@@ -382,6 +379,7 @@ describe("git store manifest.compacted", function () {
 describe("git store compaction", function () {
   timeout(180 * 1000);
 
+  const ws = workspace.each();
   let dir;
   let work;
   let inner;
@@ -394,14 +392,14 @@ describe("git store compaction", function () {
   let counter;
 
   async function setup({ maxBytes = 64 * MiB } = {}) {
-    dir = fx.tempDir();
+    dir = ws.dir();
     work = path.join(dir, "work");
     counter = 0;
     fx.buildFixture(work, { commits: 5, large: false });
 
     inner = createMemoryStore();
     store = faults(inner);
-    cache = createCache({ dir: path.join(dir, "cache"), maxBytes });
+    cache = ws.cache({ dir: path.join(dir, "cache"), maxBytes });
     lock = createLock();
     received = await createReceiveServer({ store, cache, lock: createLock() });
     server = await startServer({ store, cache, manifest: () => latest });
@@ -412,8 +410,6 @@ describe("git store compaction", function () {
     if (server) await server.close();
     if (received) await received.close();
     server = received = null;
-    await createCache.closeAll();
-    fx.remove(dir);
   }
 
   const refresh = async () => (latest = await manifest.read(store));
@@ -914,7 +910,7 @@ describe("git store compaction", function () {
 
     it("fails with NoRoomError, changing nothing, when the cache has no room for its scratch space", async function () {
       const before = await manifest.read(store);
-      const small = createCache({
+      const small = ws.cache({
         dir: path.join(dir, "small"),
         maxBytes: 1024,
       });
@@ -947,7 +943,7 @@ describe("git store compaction", function () {
       expect(chosen.packs.length).toBeGreaterThan(1);
       expect(chosen.history).toBe(true);
 
-      const small = createCache({
+      const small = ws.cache({
         dir: path.join(dir, "small"),
         maxBytes: 4 * maxBytes + 64 * 1024,
       });
@@ -978,7 +974,7 @@ describe("git store compaction", function () {
       );
 
       // Room for the packs' scratch and not much more
-      const small = createCache({
+      const small = ws.cache({
         dir: path.join(dir, "small"),
         maxBytes: 2 * packBytes + 64 * 1024 + 100,
       });
@@ -1034,7 +1030,7 @@ describe("git store compaction", function () {
 
       // A quarter of a 1 MiB cache: the big pack can never be an input, though
       // the geometric split alone (with a factor large enough) would take it
-      const small = createCache({
+      const small = ws.cache({
         dir: path.join(dir, "small"),
         maxBytes: 1 * MiB,
       });

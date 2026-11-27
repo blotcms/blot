@@ -103,6 +103,7 @@ The maintainer's priorities, in order: pages that load fast and work without bug
 - `scripts/prod/read.sh` is the exception: its subcommands (container status and logs, the access and error logs, host disk and memory, Redis INFO, slowlog and logs, fail2ban status) are read-only and may run without asking. Prefer it to hand-written `ssh blot` reads, and filter its output locally. Add a subcommand to it rather than asking for a one-off read you expect to repeat.
 - Run scripts that touch blog folders as the app user: `docker exec -u 1000 blot-blue ...`. As root, git fails its ownership check.
 - For a one-off read-only scan, write the script outside the repo, `docker cp` it into the unit, run it and delete it. Only scripts that write data (migrations, backfills with `--apply`) go in a PR.
+- A script run with `docker exec` in a unit gets a 256 MB heap by default (the container's `NODE_OPTIONS`) and starts at `oom_score_adj` 1000, so it is killed first under memory pressure. Never raise the heap above 256 MB inside a unit (`node --max-old-space-size=N` included). Anything heavier goes through the runner, one at a time in its own 512 MiB container with a 384 MB heap and the data directory read-write: `node scripts/prod/run-script.js scripts/some/backfill.js --apply` (it asks for confirmation; `--wait` queues behind a run in progress). The runner has no sandbox, so a script that fetches remote URLs or takes screenshots stops with an error there: run it inside a unit with `docker exec` under the 256 MB default, or split it into smaller runs.
 - Before reading keys from a broad Redis pattern, check their `TYPE`. WRONGTYPE errors from scripts count towards the Redis host alert.
 
 # Autonomy grants
@@ -118,6 +119,7 @@ Any session or subagent working on that goal reads the Grant first and acts only
 
 # Working in this repo
 
+- `app/templates/folders` is a git submodule, the blotcms/demo-folders repository, and a new worktree has it empty. Check it out with `git submodule update --init --depth 1 app/templates/folders` only when a task needs the demo folders. See `app/templates/AGENTS.md`.
 - Check changes on GitHub CI: push, open a draft PR and watch its checks. Don't run the local Docker test suite (`npm test`) unless the maintainer asks.
 - After a merge, resolve every file `git diff --name-only --diff-filter=U` lists, and check `git grep -nE '^(<<<<<<<|>>>>>>>) '` prints nothing before committing.
 - Don't write to another session's or subagent's worktree, even through a shell. Message its owner, or check its branch out in your own worktree.

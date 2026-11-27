@@ -42,7 +42,8 @@
             aria-label="Actions for {{name}}"
             data-baseurl="{{{base}}}/source-code/{{name}}"
             data-name="{{name}}"
-            {{#isPackageJSON}}data-disable-rename="true" data-disable-delete="true"{{/isPackageJSON}}
+            {{#isPackageJSON}}data-disable-config="true" data-disable-rename="true" data-disable-delete="true"{{/isPackageJSON}}
+            {{#isReadme}}data-disable-config="true"{{/isReadme}}
           >
             <span class="icon-dots" aria-hidden="true"></span>
           </button>

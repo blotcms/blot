@@ -1,8 +1,11 @@
 #!/bin/sh
 # Samples the memory of each app container and the host into
-# /var/instance-ssd/logs/unit-mem.log, to size the host from long-run peaks
-# (blotcms/blot#2261). The log is on the instance store, so unlike the
-# `[STATS] process_rss=` line in container logs it survives deploys.
+# /var/instance-ssd/logs/unit-mem.log, to size the host and the units' memory
+# limits from long-run peaks (blotcms/blot#2261, #2795). The log is on the
+# instance store, so unlike the `[STATS] process_rss=` line in container logs it
+# survives deploys. logrotate/unit-mem copies it daily to
+# /var/lib/blot-unit-mem on the root disk (see README.md), which survives a
+# reboot but not a host cycle.
 #
 # Run by /etc/cron.d/blot-unit-mem as root, once a minute. One run takes 4
 # samples 15 seconds apart and then exits, so a run never overlaps the next
@@ -11,13 +14,21 @@
 #
 # One line per container per sample:
 #   2026-10-30T07:20:15Z name=blot-blue anon=B file=B shmem=B limit=B oom_kill=N \
-#     node_max=B node_sum=B node_a=B node_b=B node_other=B git=B git_n=N top=comm:B
+#     node_max=B node_sum=B node_a=B node_b=B node_other=B git=B git_n=N top=comm:B \
+#     [peak=B] broker=B proxy=B openresty=B openresty_n=N
 # anon+shmem is the memory that cannot be reclaimed; the cgroup limit also
 # counts page cache (file), so usage against limit overstates the need.
 # node_max is the biggest node process (node_sum can't tell one from two; a
 # node process shows up in comm as MainThread); node_a and node_b are the
 # unit's two app processes (node-b is the one forked with BLOT_WORKER_CHILD),
 # node_other any other node in the unit, such as a script run with docker exec;
+# broker is the long-lived sandbox broker (blot-sandbox/broker.js), which used
+# to be counted in node_other, so node_other is now only the exec'd scripts
+# (all are still in node_sum). proxy was the sandbox's proxy jail
+# (blot-sandbox/proxy.js), which is retired: the field stays so lines keep their
+# shape, and reads 0. openresty is the summed RSS of the unit's nginx/openresty master
+# and workers and openresty_n how many there are. The fields from broker on
+# were added later than the rest, so older lines lack them;
 # git is the summed RSS of the unit's git processes and git_n how many there
 # are, since a burst of them shares the unit's limit with node;
 # top is the biggest process that is not node/nginx/openresty/tini/sh/su-exec
@@ -26,12 +37,32 @@
 # falls between samples. Plus one `name=host mem_available mem_total swap_used`
 # line per sample.
 #
-# The units' sandbox jobs (#2257) run in cgroups outside the unit's, so each
-# unit's subtree, where the host has made one, gets a line of its own as
-# name=blot-sandbox-<unit>. Jobs last under a second, so read peak and oom_kill
-# there, not anon.
+# Then, on cgroup v2, how hard the limit squeezes the page cache, all
+# cumulative for the cgroup: refault=N pages of file read back in after the
+# kernel had dropped them (workingset_refault_file), pressure_some=us and
+# pressure_full=us of time some or all of its tasks waited on memory
+# (memory.pressure), and at_max=N times it reached its limit (memory.events
+# max). A unit whose limit is too low for its page cache re-reads blog files
+# from disk and waits on it, which slows renders; these show that before
+# render times do (#2795). Older lines lack them, and cgroup v1 logs 0.
+#
+# The units' sandbox jobs (#2257) run in two jails beside the container in the
+# unit's slice (#2795), and each jail gets a line of its own, as
+# name=blot-sandbox-<unit> and name=blot-sandbox-<unit>-browser. Jobs last
+# under a second, so read peak and oom_kill there, not anon. The slice gets a
+# line too, name=blot-unit-<unit>: the container and both jails under the one
+# limit that bounds the whole unit.
 # Works on cgroup v1 (Amazon Linux 2) and v2 (Amazon Linux 2023).
 # Read it with unit-mem-summary.sh.
+#
+# It also stores the last sample of each run in Redis at blot:unit-mem:latest
+# (no TTL), for the app's scheduler to alert from
+# (app/scheduler/check-unit-memory.js): one line per container and sandbox
+# cgroup, "<time> name=N anon=B shmem=B limit=B oom_kill=N", without the host
+# line (the Redis host check alerts on host memory). It emails when an
+# oom_kill counter rises, when a container's anon+shmem passes 85% of its
+# limit, and when the key stops being updated. A write that fails or times out
+# is dropped silently: a sampler that stops writing is itself the alert.
 #
 # The paths and counts below can be overridden by env vars for testing.
 LOG="${UNIT_MEM_LOG:-/var/instance-ssd/logs/unit-mem.log}"
@@ -41,6 +72,7 @@ DOCKER="${DOCKER:-docker}"
 SAMPLES="${SAMPLES:-4}"
 INTERVAL="${INTERVAL:-15}"
 CONTAINERS="${CONTAINERS:-blot-blue blot-green}"
+REDIS_CLI="${REDIS_CLI:-$(command -v redis6-cli || command -v valkey-cli || command -v redis-cli)}"
 
 # Cron mails any output, so stay quiet; a missing log directory means the
 # instance store isn't mounted, which is not ours to fix.
@@ -66,16 +98,25 @@ for name in $CONTAINERS; do
   id=$($DOCKER inspect -f '{{.Id}}' "$name") || continue
   [ -n "$id" ] || continue
   for dir in \
+    "$CGROUP_ROOT/system.slice/system-blot.slice/system-blot-${name#blot-}.slice/docker-$id.scope" \
     "$CGROUP_ROOT/system.slice/docker-$id.scope" "$CGROUP_ROOT/docker/$id" \
     "$CGROUP_ROOT/memory/docker/$id" "$CGROUP_ROOT/memory/system.slice/docker-$id.scope"; do
     if [ -r "$dir/memory.stat" ]; then targets="$targets $name=$dir"; break; fi
   done
 done
+# A unit runs in a slice of its own (#2795), with its jails beside its
+# container in it. The slice is the whole unit and gets a line of its own,
+# name=blot-unit-<unit>, in the log only: its oom_kill counts the same kills as
+# the container's and the jails', which the app already alerts on.
+slices=""
 for unit in blue green; do
-  dir="$CGROUP_ROOT/blot-sandbox/$unit"
+  slice="$CGROUP_ROOT/system.slice/system-blot.slice/system-blot-$unit.slice"
+  case "$targets " in
+    *"=$slice/"*) slices="$slices blot-unit-$unit=$slice" ;;
+  esac
+  dir=$slice/sandbox browser=$slice/browser
   [ -r "$dir/memory.stat" ] && targets="$targets blot-sandbox-$unit=$dir"
-  dir="$CGROUP_ROOT/blot-sandbox/$unit-browser"
-  [ -r "$dir/memory.stat" ] && targets="$targets blot-sandbox-$unit-browser=$dir"
+  [ -r "$browser/memory.stat" ] && targets="$targets blot-sandbox-$unit-browser=$browser"
 done
 
 # Prints the VmRSS of a pid in bytes; nothing if it has gone.
@@ -103,14 +144,19 @@ container_fields() {
   # "max" (v2) or a huge number (v1, 2^63 less a page) means unlimited
   case "$limit" in *[!0-9]* | "") limit=0 ;; esac
   [ "${#limit}" -ge 16 ] && limit=0
-  node_max=0 node_sum=0 node_a=0 node_b=0 node_other=0 git=0 git_n=0 top_comm="-" top_rss=0
+  node_max=0 node_sum=0 node_a=0 node_b=0 node_other=0 broker=0 proxy=0
+  openresty=0 openresty_n=0 git=0 git_n=0 top_comm="-" top_rss=0
   for pid in $(cat "$dir/cgroup.procs"); do
     comm=""; read -r comm < "$PROC/$pid/comm" || continue
     bytes=$(rss "$pid"); [ -n "$bytes" ] || continue
     case "$comm" in
       node | MainThread)
         node_sum=$((node_sum + bytes)); [ "$bytes" -gt "$node_max" ] && node_max=$bytes
-        if ! tr '\0' ' ' < "$PROC/$pid/cmdline" | grep -q 'app/index\.js'; then
+        cmdline=$(tr '\0' ' ' < "$PROC/$pid/cmdline")
+        case "$cmdline" in
+          *blot-sandbox/broker.js*) broker=$((broker + bytes)); continue ;;
+        esac
+        if ! printf %s "$cmdline" | grep -q 'app/index\.js'; then
           node_other=$((node_other + bytes))
         elif tr '\0' '\n' < "$PROC/$pid/environ" | grep -qx 'BLOT_WORKER_CHILD=true'; then
           node_b=$((node_b + bytes))
@@ -118,7 +164,8 @@ container_fields() {
           node_a=$((node_a + bytes))
         fi ;;
       git | git-*) git=$((git + bytes)); git_n=$((git_n + 1)) ;;
-      nginx | openresty | tini | sh | su-exec) ;;
+      nginx | openresty) openresty=$((openresty + bytes)); openresty_n=$((openresty_n + 1)) ;;
+      tini | sh | su-exec) ;;
       *) if [ "$bytes" -gt "$top_rss" ]; then
            top_rss=$bytes; top_comm=$(printf %s "$comm" | tr ' ' _)
          fi ;;
@@ -126,20 +173,42 @@ container_fields() {
   done
   peak=""
   [ -r "$dir/memory.peak" ] && peak=" peak=$(cat "$dir/memory.peak")"
+  refault=0 some=0 full=0 at_max=0
+  if [ "$V" = 2 ]; then
+    refault=$(awk '$1 == "workingset_refault_file" {print $2}' "$dir/memory.stat")
+    # "some avg10=0.00 avg60=0.00 avg300=0.00 total=893541", then "full ..."
+    some=$(awk '$1 == "some" {sub(/.*total=/, ""); print}' "$dir/memory.pressure")
+    full=$(awk '$1 == "full" {sub(/.*total=/, ""); print}' "$dir/memory.pressure")
+    at_max=$(awk '$1 == "max" {print $2}' "$dir/memory.events")
+  fi
   echo "anon=$1 file=$2 shmem=$3 limit=$limit oom_kill=${oom:-0}" \
     "node_max=$node_max node_sum=$node_sum node_a=$node_a node_b=$node_b node_other=$node_other" \
-    "git=$git git_n=$git_n top=$top_comm:$top_rss$peak"
+    "git=$git git_n=$git_n top=$top_comm:$top_rss$peak" \
+    "broker=$broker proxy=$proxy openresty=$openresty openresty_n=$openresty_n" \
+    "refault=${refault:-0} pressure_some=${some:-0} pressure_full=${full:-0} at_max=${at_max:-0}"
 }
 
+latest=""
 sample=0
 while [ "$sample" -lt "$SAMPLES" ]; do
   [ "$sample" -gt 0 ] && sleep "$INTERVAL"
   sample=$((sample + 1))
   now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   out=""
+  latest=""
   for target in $targets; do
     fields=$(container_fields "${target#*=}") || continue
-    [ -n "$fields" ] && out="$out$now name=${target%%=*} $fields
+    [ -n "$fields" ] || continue
+    out="$out$now name=${target%%=*} $fields
+"
+    # anon, shmem, limit and oom_kill: fields 1, 3, 4 and 5
+    latest="$latest$now name=${target%%=*} $(printf %s "$fields" | cut -d' ' -f1,3-5)
+"
+  done
+  for target in $slices; do
+    fields=$(container_fields "${target#*=}") || continue
+    [ -n "$fields" ] || continue
+    out="$out$now name=${target%%=*} $fields
 "
   done
   host=$(awk '$1 == "MemTotal:" {t = $2} $1 == "MemAvailable:" {a = $2}
@@ -149,6 +218,13 @@ while [ "$sample" -lt "$SAMPLES" ]; do
 "
   printf %s "$out" >> "$LOG"
 done
+
+# Latest state for the app. Errors are dropped (cron has nowhere to send them)
+# and the timeout keeps a stalled Redis from holding up the next run.
+if [ -n "$latest" ] && [ -n "$REDIS_CLI" ]; then
+  TIMEOUT=$(command -v timeout > /dev/null && echo "timeout 5")
+  $TIMEOUT "$REDIS_CLI" SET blot:unit-mem:latest "$latest" > /dev/null 2>&1 || true
+fi
 
 if [ "$trim" = 1 ] && [ "$(wc -l < "$LOG")" -gt 1250000 ]; then
   tail -n 1200000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"

@@ -23,7 +23,7 @@ function load(accounts, syncResult) {
             },
             folder: function () {
               return {
-                pruneVerifiedContents: async function () {
+                pruneApplied: async function () {
                   calls.prune++;
                 },
               };
@@ -80,11 +80,13 @@ describe("google drive resetFromDrive", function () {
     const summary = { changed: 2 };
     const t = load([{ folderId: "folder" }], summary);
 
-    expect(await t.resetFromDrive("blog")).toBe(summary);
+    const signal = new AbortController().signal;
+
+    expect(await t.resetFromDrive("blog", null, null, signal)).toBe(summary);
     expect(t.calls.prune).toBe(1);
     expect(t.calls.sync.length).toBe(1);
     expect(t.calls.sync[0][0]).toBe("blog");
-    expect(t.calls.sync[0][3]).toEqual({ reset: true });
+    expect(t.calls.sync[0][3]).toEqual({ reset: true, signal });
   });
 
   it("throws folder-missing when the failed sync found the folder gone", async function () {

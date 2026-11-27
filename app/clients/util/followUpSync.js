@@ -1,4 +1,5 @@
 const alarm = require("helper/alarm");
+const client = require("models/client");
 const folderLock = require("sync/lock");
 const clfdate = require("helper/clfdate");
 
@@ -10,6 +11,22 @@ const RETRY_MS = 5000;
 // process runs it. The change normally syncs straight away and takes the
 // follow-up back, so this only has to be longer than a typical sync.
 const ARM_MS = 15 * 1000;
+
+// A blog's dirty flag (see run) is a safety net, not state: if nothing reads
+// it, it goes away on its own after this long.
+const DIRTY_TTL_SECONDS = 5 * 60;
+
+// How many times in a row run() syncs again straight away because changes
+// arrived during the sync, before leaving the rest to the follow-up alarm
+const MAX_REPEATS = 5;
+
+// A follow-up whose sync fails for another reason than the lock (Redis or the
+// store unreachable while a deploy restarts things) is tried again after each
+// of these waits in turn, then dropped until the next change. The count of
+// failures in a row expires by itself, so an old one never shortens the
+// retries of a later failure.
+const FAILURE_RETRY_MS = [30 * 1000, 60 * 1000, 2 * 60 * 1000, 4 * 60 * 1000];
+const FAILURES_TTL_SECONDS = 60 * 60;
 
 const instances = [];
 
@@ -29,8 +46,11 @@ function isLocked(err) {
 //   const followUps = followUpSync("dropbox", (blogID) => syncBlog(blogID));
 //   await followUps.run(blogID);
 //
-// syncBlog(blogID) must return a promise which rejects with sync's "Failed
-// to acquire folder lock" error when the blog's folder is locked. Every
+// syncBlog(blogID, context) must return a promise which rejects with sync's
+// "Failed to acquire folder lock" error when the blog's folder is locked.
+// context is what the caller passed run() (what started the sync, say, for
+// the client's log), for the sync run() starts straight away; a follow-up
+// run later has none. Every
 // instance polls once startAll() is called, which setup does in every
 // process.
 function followUpSync(name, syncBlog) {
@@ -42,10 +62,41 @@ function followUpSync(name, syncBlog) {
     name + "-follow-up-sync",
     async function (blogID) {
       log("Running follow-up sync", blogID);
-      await attempt(blogID);
+      if ((await attempt(blogID)) === "failed") await retry(blogID);
     },
     { pollMs: 2000 }
   );
+
+  // sync:follow-up:failures:<name>:<blogID> counts the follow-ups in a row
+  // whose sync failed
+  function failuresKey(blogID) {
+    return "sync:follow-up:failures:" + name + ":" + blogID;
+  }
+
+  // Sets the follow-up again for after the next wait, or drops it once the
+  // waits are used up. Setting it while it is being handled keeps the new
+  // time (helper/alarm). If Redis can't take it this rejects, and the alarm,
+  // still in place, is retried once its lease runs out.
+  async function retry(blogID) {
+    const [failures] = await client
+      .multi()
+      .incr(failuresKey(blogID))
+      .expire(failuresKey(blogID), FAILURES_TTL_SECONDS)
+      .exec();
+    const wait = FAILURE_RETRY_MS[Number(failures) - 1];
+
+    if (wait === undefined) {
+      log(
+        "Follow-up sync keeps failing, leaving it to the next change",
+        blogID
+      );
+      await client.del(failuresKey(blogID));
+      return;
+    }
+
+    log("Retrying follow-up sync in " + wait / 1000 + "s", blogID);
+    await alarms.set(blogID, Date.now() + wait);
+  }
 
   async function later(blogID) {
     // Setting the alarm again while it is being handled keeps the new time,
@@ -53,15 +104,54 @@ function followUpSync(name, syncBlog) {
     await alarms.set(blogID, Date.now() + RETRY_MS);
   }
 
-  // Resolves true if the sync ran
-  async function attempt(blogID) {
+  // sync:follow-up:dirty:<name>:<blogID> exists while a request has found the
+  // blog's lock held and not yet been caught up with by a sync
+  function dirtyKey(blogID) {
+    return "sync:follow-up:dirty:" + name + ":" + blogID;
+  }
+
+  // The lock is held: set the dirty flag and the follow-up in one MULTI. The
+  // flag holds the time the alarm is due, so it always names the alarm the
+  // last request set.
+  async function queue(blogID) {
+    const due = Date.now() + RETRY_MS;
+    const multi = client
+      .multi()
+      .set(dirtyKey(blogID), String(due), { EX: DIRTY_TTL_SECONDS });
+    await alarms.queueSet(multi, blogID, due).exec();
+  }
+
+  // Reads and clears the dirty flag. Resolves the due time of the alarm the
+  // requests which set it left behind, or null if there was no flag. It leaves
+  // the alarm alone: run() takes that back only once the sync run again has
+  // succeeded.
+  async function takeDirty(blogID) {
+    const flag = await client.getDel(dirtyKey(blogID));
+    if (flag === null || flag === undefined) return null;
+    const due = Number(flag);
+    return Number.isFinite(due) ? due : null;
+  }
+
+  // Resolves "synced" if the sync ran, "locked" if it found the lock taken
+  // (a follow-up is queued) and "failed" if it threw anything else. The
+  // follow-up alarm retries a failed sync (retry); a sync that runs clears
+  // the count of failures.
+  async function attempt(blogID, context) {
     try {
-      await syncBlog(blogID);
-      return true;
+      // Called as before when there's no context
+      if (context === undefined) await syncBlog(blogID);
+      else await syncBlog(blogID, context);
+      await client
+        .del(failuresKey(blogID))
+        .catch((err) => log("Could not clear failures", blogID, err));
+      return "synced";
     } catch (err) {
-      if (isLocked(err)) await later(blogID);
-      else log("Sync failed", blogID, err);
-      return false;
+      if (isLocked(err)) {
+        await later(blogID);
+        return "locked";
+      }
+      log("Sync failed", blogID, err);
+      return "failed";
     }
   }
 
@@ -75,9 +165,11 @@ function followUpSync(name, syncBlog) {
   async function arm(blogID) {
     if ((await alarms.when(blogID)) !== null) return undefined;
 
-    // The fraction makes the time ours alone, so run() can take back only
-    // this follow-up and not one written since
-    const due = Date.now() + ARM_MS + Math.random();
+    // The random milliseconds make the time ours alone, so run() can take
+    // back only this follow-up and not one written since. Whole milliseconds,
+    // not a fraction: Redis can hand a fractional score back a hair different
+    // from the one written, and cancelIf compares them exactly.
+    const due = Date.now() + ARM_MS + Math.floor(Math.random() * 1000);
     await alarms.set(blogID, due);
     return due;
   }
@@ -89,21 +181,58 @@ function followUpSync(name, syncBlog) {
   //
   // If the change was armed, its token is passed too, and once the sync has
   // run the follow-up is taken back, unless another has been written since.
-  async function run(blogID, armed) {
+  // context goes to syncBlog for this sync only.
+  async function run(blogID, armed, context, repeats = 0) {
     const { held } = await folderLock.inspect(blogID);
 
     if (held) {
       log("Sync already running, queueing follow-up", blogID);
-      return later(blogID);
+      return queue(blogID);
     }
 
-    const synced = await attempt(blogID);
+    const result = await attempt(blogID, context);
 
-    if (synced && armed !== undefined) {
+    if (result !== "synced") return;
+
+    if (armed !== undefined) {
       await alarms
         .cancelIf(blogID, armed)
         .catch((err) => log("Could not take back follow-up", blogID, err));
     }
+
+    // The sync has released the lock. Requests which found it held while it
+    // ran may have been walked past by it, so rather than leave them to the
+    // follow-up alarm, which waits RETRY_MS, sync again now.
+    //
+    // The sync run again takes over the alarm those requests set, and takes it
+    // back (cancelIf, as for an armed change) only once it has succeeded. If it
+    // fails, or the process dies, the alarm is still there to retry it. A
+    // request which arrives later moves the alarm and sets the flag again, so
+    // the alarm is kept and the next takeDirty sees the flag; a Git arm moves
+    // it to its own time, so it is kept too. If the alarm fires while the sync
+    // run again still holds the lock, its follow-up finds the lock held and
+    // queues again, which costs at most one more cycle, within MAX_REPEATS. A
+    // failed first sync never gets here, so its alarm retries it.
+    let due;
+    try {
+      due = await takeDirty(blogID);
+    } catch (err) {
+      log("Could not read dirty flag", blogID, err);
+      return;
+    }
+
+    if (due === null) return;
+
+    if (repeats >= MAX_REPEATS) {
+      log(
+        "Changes keep arriving during syncs, leaving the rest to a follow-up",
+        blogID
+      );
+      return later(blogID);
+    }
+
+    log("Changes arrived during the sync, syncing again", blogID);
+    return run(blogID, due, undefined, repeats + 1);
   }
 
   // For the clients' test-only syncs-finished routes: whether a follow-up is
@@ -127,5 +256,7 @@ followUpSync.startAll = function () {
 followUpSync.stopAll = function () {
   return Promise.all(instances.map(({ alarm }) => alarm.stop()));
 };
+
+followUpSync.FAILURE_RETRY_MS = FAILURE_RETRY_MS;
 
 module.exports = followUpSync;

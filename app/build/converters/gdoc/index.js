@@ -14,6 +14,8 @@ const linebreaks = require("./linebreaks");
 const restoreDisplayMath = require("./restore-display-math");
 const processImages = require("./images");
 const cleanupSpans = require("./cleanup-spans");
+const removeComments = require("./comments");
+const renderJSON = require("./json");
 const {
   normalizeLiteralDollarMath,
 } = require("build/math/normalizeLiteralDollars");
@@ -71,6 +73,26 @@ function convertCodeTables($) {
   });
 }
 
+// The steps the HTML export also goes through that still apply: quotes
+// marked with >, display math and literal dollars, and the metadata as
+// front matter. Images were stored when the Doc was fetched, and the
+// renderer already handles line breaks, footnotes and code tables.
+async function fromJSON(contents) {
+  const { html: rendered, metadata } = renderJSON(JSON.parse(contents));
+  const $ = cheerio.load(rendered, { decodeEntities: false }, false);
+
+  blockquotes($);
+  restoreDisplayMath($);
+  normalizeLiteralDollarMath($);
+
+  let html = $.html();
+  if (Object.keys(metadata).length)
+    html = "---\n" + yaml.stringify(metadata) + "---\n" + html;
+  return tidy(
+    html.replace(/(<\/(?:h[1-6]|p|blockquote|ul|ol|li)>|<(?:hr|br)>)\n/g, "$1")
+  );
+}
+
 function is(path) {
   return [".gdoc"].indexOf(extname(path).toLowerCase()) > -1;
 }
@@ -88,7 +110,13 @@ async function read(blog, path) {
 
   const contents = (await folder.read(blog.id, path)).toString("utf-8");
 
+  // A Doc fetched through the Docs API: its JSON (./json.js)
+  if (renderJSON.isDocJSON(contents)) return [await fromJSON(contents), stat];
+
   const $ = cheerio.load(contents, { decodeEntities: false });
+
+  // Comments are never published (./comments.js)
+  removeComments($);
 
   // replaces google docs 'titles' with true h1 tags
   $("p.title").each(function (i, elem) {
@@ -235,14 +263,16 @@ async function read(blog, path) {
     html = "---\n" + yaml.stringify(metadata) + "---\n" + html;
   }
 
-  // make output more readable by inserting new lines after block elements
-  // handle hr and br separately as it is self-closing
-  html = html
+  return [tidy(html), stat];
+}
+
+// make output more readable by inserting new lines after block elements
+// handle hr and br separately as it is self-closing
+function tidy(html) {
+  return html
     .replace(/<\/(h1|h2|h3|h4|h5|h6|p|blockquote|ul|ol|li)>/g, "</$1>\n")
     .replace(/<(hr|br)[^>]*>/g, "<$1>\n")
     .trim();
-
-  return [html, stat];
 }
 
 // Called back with (err, html, stat); without a callback it resolves to

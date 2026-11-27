@@ -12,4 +12,9 @@ async function hash(path) {
   return digest;
 }
 
+// The same hash, of bytes held in memory
+hash.buffer = function (buffer) {
+  return crypto.createHash("sha1").update(buffer).digest("hex");
+};
+
 module.exports = hash;

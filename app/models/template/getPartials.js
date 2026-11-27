@@ -1,4 +1,5 @@
 var getView = require("./getView");
+var isReadme = require("./util/isReadme");
 var ensure = require("helper/ensure");
 var parseTemplate = require("./parseTemplate");
 var mergeRetrieve = require("./util/mergeRetrieve");
@@ -191,10 +192,11 @@ module.exports = async function getPartials(
 
       // If the partial's name doesn't start with a slash,
       // it is the name of a tempalte view. A failed read is the same
-      // as no view.
+      // as no view, and a README is never a partial (util/isReadme).
       var view = await getView(templateID, partial).catch(function () {});
 
-      if (!view) {
+      // Checked on the view found, since {{> readme}} can be readme.html
+      if (!view || isReadme(view.name)) {
         allPartials[partial] = "";
         continue;
       }

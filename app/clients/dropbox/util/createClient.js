@@ -5,11 +5,22 @@
 const { Dropbox } = require("dropbox");
 const database = require("../database");
 const config = require("config");
+const accessTokenCache = require("./accessTokenCache");
+const fetch = require("./fetch");
+const guard = require("storage/folder/guard");
 
 // Resolves to { error, client, account } and never rejects, since the caller
 // sometimes needs the account even when there is an error with the client
 // (during disconnection, say). client is null whenever there is an error.
-module.exports = async function createClient(blogID) {
+// options.signal (an AbortSignal, the sync's folder.signal) goes into every
+// request the client makes, the token refresh included, so a disconnect cuts
+// off a transfer in flight. Once it has aborted, the refreshed token isn't
+// saved: the account may have been dropped meanwhile. The same goes for a
+// caller without the signal that runs inside a sync a disconnect has
+// stopped, such as a dashboard write (storage/folder/guard.js).
+module.exports = async function createClient(blogID, options = {}) {
+  const { signal } = options;
+
   let account;
 
   try {
@@ -26,7 +37,9 @@ module.exports = async function createClient(blogID) {
     };
   }
 
-  const client = new Dropbox();
+  const client = new Dropbox({
+    fetch: signal ? (url, init) => fetch(url, { ...init, signal }) : fetch,
+  });
 
   client.auth.setAccessToken(account.access_token);
 
@@ -48,6 +61,15 @@ module.exports = async function createClient(blogID) {
   client.auth.setClientSecret(clientSecret);
   client.auth.setRefreshToken(account.refresh_token);
 
+  // Use the access token cached with its expiry, if there is one, so the SDK
+  // only asks Dropbox for a new one when it is near expiry
+  const cached = await accessTokenCache.get(blogID, account);
+
+  if (cached) {
+    client.auth.setAccessToken(cached.access_token);
+    client.auth.setAccessTokenExpiresAt(new Date(cached.expires_at));
+  }
+
   try {
     await client.auth.checkAndRefreshAccessToken();
   } catch (error) {
@@ -59,11 +81,29 @@ module.exports = async function createClient(blogID) {
 
   let latestToken = client.auth.getAccessToken();
 
-  if (latestToken === account.access_token) {
+  if (latestToken === (cached ? cached.access_token : account.access_token)) {
     return { error: null, client, account };
   }
 
+  const expiresAt = client.auth.getAccessTokenExpiresAt();
+
+  if (expiresAt) {
+    await accessTokenCache
+      .set(blogID, account, latestToken, expiresAt.getTime())
+      .catch((err) => console.log("Could not cache Dropbox token", err));
+  }
+
   account.access_token = latestToken;
+
+  if (signal && signal.aborted) {
+    return { error: signal.reason, client: null, account };
+  }
+
+  try {
+    guard.check(blogID);
+  } catch (error) {
+    return { error, client: null, account };
+  }
 
   try {
     await database.set(blogID, account);

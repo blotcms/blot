@@ -19,7 +19,7 @@
     {{#text.length}}
     <a class="discover-text" href="{{{url}}}" target="_blank" rel="noopener">
       <span class="discover-text-clip">
-        <p>{{title}}</p>
+        {{^ownText}}<p>{{title}}</p>{{/ownText}}
         {{#text}}<p>{{.}}</p>{{/text}}
       </span>
       <span class="discover-see-more">See more</span>
@@ -41,7 +41,7 @@
 
     {{^photos.length}}
     <a class="discover-post discover-link-card" href="{{{url}}}" target="_blank" rel="noopener">
-      <span class="discover-link-title">{{title}}</span>
+      {{^ownText}}<span class="discover-link-title">{{title}}</span>{{/ownText}}
       {{#excerpt}}<span class="discover-excerpt">{{excerpt}}</span>{{/excerpt}}
       <span class="discover-link-site">
         {{site.address}}

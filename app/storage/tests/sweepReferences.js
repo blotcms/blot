@@ -41,6 +41,39 @@ describe("storage/sweep/references and s3", function () {
     expect(used.has("_image_cache/gone")).toBe(false);
   });
 
+  it("lists the saved entries that mention a directory", async function () {
+    spyOn(Entries, "getAllIDs").and.callFake(async () => ["/a.txt"]);
+    spyOn(Entry, "get").and.callFake(async () => [
+      { path: "/a.txt", html: `<img src="/_image_cache/lost/a.jpg">` },
+      { path: "/b.txt", html: `<img src="/_image_cache/here/a.jpg">` },
+      {
+        path: "/c.txt",
+        thumbnail: { small: { path: "/_thumbnails/lost-too/small.jpg" } },
+      },
+      { path: "/d.txt", deleted: true, html: `/_image_cache/lost/a.jpg` },
+      {
+        path: "/album",
+        html:
+          '<section class="multi-file-post" data-folder="/album+">' +
+          '<img src="/_image_cache/lost/b.jpg"></section>',
+      },
+    ]);
+
+    const paths = await references.entriesMentioning(this.blog.id, [
+      "_image_cache/lost",
+      "_thumbnails/lost-too",
+    ]);
+
+    expect(paths).toEqual(["/a.txt", "/c.txt", "/album+"]);
+  });
+
+  it("reads no entries when no directory is asked about", async function () {
+    spyOn(Entries, "getAllIDs");
+
+    expect(await references.entriesMentioning(this.blog.id, [])).toEqual([]);
+    expect(Entries.getAllIDs).not.toHaveBeenCalled();
+  });
+
   it("fails a blog's references when a read fails, rather than undercounting", async function () {
     spyOn(Entries, "getAllIDs").and.callFake(async () => ["/a.txt"]);
     spyOn(Entry, "get").and.callFake(async () => {

@@ -1,6 +1,7 @@
 import { remoteServer, Authorization } from "../config.js";
 import fetch from "./rateLimitedFetchWithRetriesAndTimeout.js";
 import clfdate from "../util/clfdate.js";
+import { isNotSyncing } from "./notSyncing.js";
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const RESYNC_MAX_ATTEMPTS = 20;
@@ -86,14 +87,13 @@ export default async (blogID, reason) => {
         );
         return;
       } catch (error) {
-        // Blot answers 400 when the blog is not connected to iCloud Drive
-        // (e.g. disconnected while actions were queued), which retrying
+        // Blot won't sync the blog at all (notSyncing.js), which retrying
         // cannot fix. 409 (setup incomplete), 423 (locked) and 5xx are
         // deliberate "try again later" replies, so those keep retrying.
-        if (error.status === 400) {
+        if (isNotSyncing(error)) {
           console.log(
             clfdate(),
-            `Resync not needed: blog ${blogID} is no longer connected`
+            `Resync not needed: Blot isn't syncing blog ${blogID} (${error.status})`
           );
           return;
         }
@@ -129,18 +129,17 @@ export default async (blogID, reason) => {
   try {
     await resyncPromise;
   } finally {
+    // No return in here: it would replace the outcome of the resync
     const entry = resyncDebounceRegistry.get(blogID);
-    if (!entry) {
-      // eslint-disable-next-line no-unsafe-finally -- see TODO: this swallows a failed resync
-      return;
+    if (entry) {
+      if (entry.cleanupTimeout) {
+        clearTimeout(entry.cleanupTimeout);
+      }
+      entry.promise = null;
+      entry.cooldownUntil = Date.now() + RESYNC_DEDUP_WINDOW_MS;
+      entry.cleanupTimeout = setTimeout(() => {
+        resyncDebounceRegistry.delete(blogID);
+      }, RESYNC_DEDUP_WINDOW_MS);
     }
-    if (entry.cleanupTimeout) {
-      clearTimeout(entry.cleanupTimeout);
-    }
-    entry.promise = null;
-    entry.cooldownUntil = Date.now() + RESYNC_DEDUP_WINDOW_MS;
-    entry.cleanupTimeout = setTimeout(() => {
-      resyncDebounceRegistry.delete(blogID);
-    }, RESYNC_DEDUP_WINDOW_MS);
   }
 };

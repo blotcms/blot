@@ -73,6 +73,20 @@ describe("Blog.remove", function () {
     expect((await folderLock.inspect(blogID)).held).toBe(false);
   });
 
+  it("leaves the keys a disconnect's seize left behind", async function () {
+    var folderLock = require("sync/lock");
+    var client = require("models/client");
+    var blogID = this.blog.id;
+
+    await client.set(folderLock.seizedKey(blogID), "1", { PX: 30000 });
+
+    await remove(blogID);
+
+    // A holder the seize took the lock from still finds it seized
+    expect(await folderLock.wasSeized(blogID)).toBe(true);
+    await client.del(folderLock.seizedKey(blogID));
+  });
+
   describe("templates", function () {
     var client = require("models/client");
     var Template = require("models/template");
@@ -135,6 +149,99 @@ describe("Blog.remove", function () {
       expect(count).toBeGreaterThan(1);
       expect(logged).toHaveBeenCalled();
       expect(await getAllIDs()).not.toContain(this.blog.id);
+      expect(await redisSearch(this.blog.id)).toEqual([]);
+    });
+  });
+
+  describe("when interrupted", function () {
+    var client = require("models/client");
+    var key = require("../key");
+    var Blog = require("../index");
+    var User = require("models/user");
+    var discover = require("models/discover");
+
+    // Fails the step after the user is updated, as a kill there would
+    function interrupt() {
+      return spyOn(discover, "removeBlog").and.callFake(() =>
+        Promise.reject(new Error("killed"))
+      );
+    }
+
+    // An interrupted removal keeps the handle claimed, so finish it or the
+    // next spec can't create its blog
+    afterEach(async function () {
+      var purgeQueue = require("cdn/purgeQueue");
+      [discover.removeBlog, purgeQueue.blog].forEach(function (fn) {
+        if (jasmine.isSpy(fn)) fn.and.callThrough();
+      });
+      await remove(this.blog.id).catch(function () {});
+      await client.zRem(key.removing, this.blog.id);
+      await client.hDel(key.removalAttempts, this.blog.id);
+    });
+
+    it("records the blog while it is being removed and drops it at the end", async function () {
+      interrupt();
+
+      await expectAsync(remove(this.blog.id)).toBeRejected();
+
+      expect(await client.zScore(key.removing, this.blog.id)).toBeGreaterThan(
+        Date.now()
+      );
+
+      discover.removeBlog.and.callThrough();
+      await remove(this.blog.id);
+
+      expect(await client.zScore(key.removing, this.blog.id)).toBeNull();
+    });
+
+    it("stops the site serving while the removal is unfinished", async function () {
+      interrupt();
+
+      await expectAsync(remove(this.blog.id)).toBeRejected();
+
+      var blog = await Blog.get({ id: this.blog.id });
+
+      expect(blog.isDisabled).toBe(true);
+      expect((await User.getById(this.user.uid)).blogs).not.toContain(blog.id);
+    });
+
+    it("finishes a blog the owner no longer lists and discover has dropped", async function () {
+      var folder = require("storage/folder");
+
+      await folder.write(this.blog.id, "/a.txt", "Hello");
+      interrupt();
+      await expectAsync(remove(this.blog.id)).toBeRejected();
+
+      discover.removeBlog.and.callThrough();
+      await remove(this.blog.id);
+      await remove(this.blog.id).then(
+        function () {
+          throw new Error("Expected the finished blog to be gone");
+        },
+        function (err) {
+          expect(err.message).toEqual("No blog");
+        }
+      );
+
+      expect(await folder.exists(this.blog.id, "/a.txt")).toBe(false);
+      expect(await redisSearch(this.blog.id)).toEqual([]);
+    });
+
+    it("finishes a removal whose blog record is already deleted", async function () {
+      var purgeQueue = require("cdn/purgeQueue");
+      var purge = spyOn(purgeQueue, "blog").and.callFake(() =>
+        Promise.reject(new Error("killed"))
+      );
+
+      await expectAsync(remove(this.blog.id)).toBeRejected();
+
+      expect(await Blog.get({ id: this.blog.id })).toBeUndefined();
+      expect(await client.zScore(key.removing, this.blog.id)).not.toBeNull();
+
+      purge.and.returnValue(Promise.resolve());
+      await remove(this.blog.id);
+
+      expect(purge).toHaveBeenCalledTimes(2);
       expect(await redisSearch(this.blog.id)).toEqual([]);
     });
   });

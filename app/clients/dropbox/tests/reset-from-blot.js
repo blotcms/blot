@@ -16,10 +16,12 @@ describe("dropbox resetFromBlot", function () {
   const originals = {};
   let saved;
   let uploadCalls;
+  let deleteCalls;
 
   beforeEach(async function () {
     saved = [];
     uploadCalls = [];
+    deleteCalls = [];
     [
       resetPath,
       createClientPath,
@@ -41,6 +43,29 @@ describe("dropbox resetFromBlot", function () {
     }
     if (originals[resetPath]) require.cache[resetPath] = originals[resetPath];
     await storage.removeAll(blogID);
+    await require("../util/hashes").drop(blogID);
+  });
+
+  it("stores Dropbox's content_hash of each file it uploads, by its SHA-1", async function () {
+    const crypto = require("crypto");
+    const contentHash = crypto.createHash("sha256").update("x").digest("hex");
+    await storage.write(blogID, "/a.txt", "hello");
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {},
+      uploadBehavior: (callback) => callback(null, contentHash),
+    });
+
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
+
+    const sha1 = crypto.createHash("sha1").update("hello").digest("hex");
+    const known = await require("../util/hashes").load(blogID);
+    expect(uploadCalls.length).toEqual(1);
+    expect(known.get(sha1)).toEqual(contentHash.slice(0, 24));
   });
 
   // Mirrors the shape of an error the Dropbox SDK throws for a filesUpload
@@ -60,6 +85,10 @@ describe("dropbox resetFromBlot", function () {
           error: null,
           client: {
             filesCreateFolder: async () => ({ result: {} }),
+            filesDelete: async ({ path }) => {
+              deleteCalls.push(path);
+              return { result: {} };
+            },
             usersGetSpaceUsage: async () => ({ result: spaceUsage }),
             filesListFolderGetLatestCursor: async () => ({
               result: { cursor: "new-cursor" },
@@ -96,7 +125,9 @@ describe("dropbox resetFromBlot", function () {
       exports: function (client, source, destination) {
         uploadCalls.push(destination);
         return new Promise((resolve, reject) =>
-          uploadBehavior((err) => (err ? reject(err) : resolve()))
+          uploadBehavior((err, contentHash) =>
+            err ? reject(err) : resolve(contentHash)
+          )
         );
       },
     };
@@ -123,7 +154,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -151,7 +182,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -178,7 +209,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -200,7 +231,7 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false });
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
 
     expect(uploadCalls.length).toEqual(1);
     expect(
@@ -236,7 +267,7 @@ describe("dropbox resetFromBlot", function () {
     await resetFromBlot(
       blogID,
       () => {},
-      { aborted: false },
+      new AbortController().signal,
       require("util").promisify(folderUpdate)
     );
 
@@ -265,7 +296,7 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false });
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
 
     expect(
       (await storage.listNames(blogID, "/.git/refs/heads"))
@@ -288,7 +319,7 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false });
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
 
     const top = (await storage.listNames(blogID, "/"))
       .map((e) => e.name)
@@ -307,6 +338,183 @@ describe("dropbox resetFromBlot", function () {
       );
     }
     expect(contents.sort()).toEqual(["one", "two"]);
+  });
+
+  // A resume runs unattended, after the person may have written on Dropbox
+  it("with keepDropbox, only uploads what Dropbox lacks", async function () {
+    await storage.write(blogID, "/edited.txt", Buffer.from("Blot's copy"));
+    await storage.write(blogID, "/new.txt", Buffer.from("not on Dropbox"));
+
+    const file = (name) => ({
+      ".tag": "file",
+      name,
+      path_display: "/" + name,
+      content_hash: "dropbox-hash-" + name,
+      size: 10,
+      server_modified: "2026-01-01T00:00:00Z",
+    });
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: { "/": [file("edited.txt"), file("added-on-dropbox.txt")] },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(
+      blogID,
+      () => {},
+      new AbortController().signal,
+      undefined,
+      {
+        keepDropbox: true,
+      }
+    );
+
+    expect(uploadCalls).toEqual(["/new.txt"]);
+    expect(deleteCalls).toEqual([]);
+    expect(saved.some((values) => values.transfer_pending === false)).toBe(
+      true
+    );
+  });
+
+  it("with keepDropbox, stays incomplete when Dropbox has a folder where Blot has a file", async function () {
+    await storage.write(blogID, "/post.txt", Buffer.from("never uploaded"));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {
+        "/": [
+          { ".tag": "folder", name: "post.txt", path_display: "/post.txt" },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await expectAsync(
+      resetFromBlot(blogID, () => {}, new AbortController().signal, undefined, {
+        keepDropbox: true,
+      })
+    ).toBeRejectedWith(
+      jasmine.objectContaining({ code: "DROPBOX_TRANSFER_INCOMPLETE" })
+    );
+    expect(uploadCalls).toEqual([]);
+    expect(deleteCalls).toEqual([]);
+    expect(saved.some((values) => values.transfer_pending === false)).toBe(
+      false
+    );
+  });
+
+  it("with keepDropbox, keeps a file renamed only in case on Dropbox", async function () {
+    await storage.write(blogID, "/post.txt", Buffer.from("Blot's older copy"));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {
+        "/": [
+          {
+            ".tag": "file",
+            name: "Post.txt",
+            path_display: "/Post.txt",
+            path_lower: "/post.txt",
+            content_hash: "edited-on-dropbox",
+            size: 20,
+            server_modified: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(
+      blogID,
+      () => {},
+      new AbortController().signal,
+      undefined,
+      {
+        keepDropbox: true,
+      }
+    );
+
+    expect(uploadCalls).toEqual([]);
+    expect(deleteCalls).toEqual([]);
+  });
+
+  it("with keepDropbox, doesn't count a file Dropbox keeps against the quota", async function () {
+    await storage.write(blogID, "/big.txt", Buffer.alloc(5000, "a"));
+
+    const resetFromBlot = load({
+      // Room for nothing more
+      spaceUsage: {
+        used: 1000000,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {
+        "/": [
+          {
+            ".tag": "file",
+            name: "big.txt",
+            path_display: "/big.txt",
+            path_lower: "/big.txt",
+            content_hash: "shorter",
+            size: 10,
+            server_modified: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(
+      blogID,
+      () => {},
+      new AbortController().signal,
+      undefined,
+      {
+        keepDropbox: true,
+      }
+    );
+
+    expect(uploadCalls).toEqual([]);
+    expect(saved.some((values) => values.transfer_pending === false)).toBe(
+      true
+    );
+  });
+
+  it("without keepDropbox, makes Dropbox match Blot", async function () {
+    await storage.write(blogID, "/a.txt", Buffer.from("hello"));
+
+    const resetFromBlot = load({
+      spaceUsage: {
+        used: 0,
+        allocation: { ".tag": "individual", allocated: 1000000 },
+      },
+      remote: {
+        "/": [
+          {
+            ".tag": "file",
+            name: "extra.txt",
+            path_display: "/extra.txt",
+            content_hash: "x",
+            size: 1,
+            server_modified: "2026-01-01T00:00:00Z",
+          },
+        ],
+      },
+      uploadBehavior: (callback) => callback(null),
+    });
+
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
+
+    expect(deleteCalls).toEqual(["/extra.txt"]);
   });
 
   it("skips placeholders, uploads empty files, and never overwrites a remote file with one", async function () {
@@ -340,9 +548,11 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, (...args) => messages.push(args.join(" ")), {
-      aborted: false,
-    });
+    await resetFromBlot(
+      blogID,
+      (...args) => messages.push(args.join(" ")),
+      new AbortController().signal
+    );
 
     expect(uploadCalls.sort()).toEqual(["/a.txt", "/new-empty.txt"]);
     expect(messages.some((m) => /Skipped 1 placeholder /.test(m))).toEqual(
@@ -382,7 +592,7 @@ describe("dropbox resetFromBlot", function () {
       uploadBehavior: (callback) => callback(null),
     });
 
-    await resetFromBlot(blogID, () => {}, { aborted: false });
+    await resetFromBlot(blogID, () => {}, new AbortController().signal);
 
     expect(uploadCalls.length).toEqual(1);
     expect(saved.some((values) => values.error_code === 507)).toEqual(false);
@@ -415,7 +625,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -444,7 +654,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -483,7 +693,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -519,7 +729,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }
@@ -548,7 +758,7 @@ describe("dropbox resetFromBlot", function () {
 
     let error;
     try {
-      await resetFromBlot(blogID, () => {}, { aborted: false });
+      await resetFromBlot(blogID, () => {}, new AbortController().signal);
     } catch (err) {
       error = err;
     }

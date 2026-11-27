@@ -3,7 +3,7 @@
 
 {{> status-line}}
 
-{{#account.setupFailed}}
+{{#setup.failed}}
 <p class="error">Google Drive setup didn't finish. Retry setup to share a folder with Blot again, or cancel to disconnect Google Drive.</p>
 
 <form action="{{{base}}}/disconnect" method="POST">
@@ -13,138 +13,194 @@
     <button type="submit">Cancel</button>
   </div>
 </form>
-{{/account.setupFailed}}
+{{/setup.failed}}
 
-{{^account.setupFailed}}
+{{! Once setup is done, the folder and account in place of the steps }}
+{{#setup.complete}}
+{{#folderId}}
+<div class="line drive-folder-line">
+  <span class="label">Folder on Google Drive</span>
+  <span class="center">
+    <span class="drive-folder-name"><span class="icon-folder"></span> {{#folderName}}{{folderName}}{{/folderName}}{{^folderName}}Your shared folder{{/folderName}}</span>
+    <a class="drive-open" href="https://drive.google.com/drive/folders/{{folderId}}" target="_blank" rel="noopener">Open in Google Drive <span class="icon-small-chevron-right"></span></a>
+    <span class="drive-note">You can rename, share and move this folder.</span>
+  </span>
+</div>
 
-  {{#folderId}}
-  <a class="line" href="https://drive.google.com/drive/folders/{{folderId}}" target="_blank">
-    <span class="label">Folder on Google Drive</span>
-    <span class="center">
-        {{#folderName}}
-        <span><span class="icon-folder"></span> {{folderName}}</span>
-             <span class="btn btn-sm btn-soft folder-sync-open" href="https://drive.google.com/drive/my-drive" target="_blank">Open on Google Drive <svg style="fill:currentColor;transform:rotate(-45deg);position:relative;top:3px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l2.97-2.97H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"></path></svg></span>
+<a class="line" href="{{{base}}}/setup">
+  <span class="label">Account on Google Drive</span>
+  <span class="center"><span>{{email}}</span><span class="link">Edit</span></span>
+</a>
+{{/folderId}}
 
-          <span class="folder-sync-note">
-            {{#preparing}}
-          Please wait to make any changes to this folder until the set-up is complete.
-        {{/preparing}}
-        {{^preparing}}
-          You can rename, share and move this folder.
-        {{/preparing}}
-        </span> 
+{{> disconnect-line}}
+{{/setup.complete}}
 
-      
-
-
- 
-        {{/folderName}}
-      </span>
-    
-    
-      </a>
-  {{/folderId}}
-
-  {{^folderId}}
-  {{#preparing}}
-  {{#serviceAccount.user}}
-  <div class="line">
-    <div class="label">Set up folder</div>
-    <div class="center">
-      <div class="steps google-drive-setup-steps">
-      <style>
-        .google-drive-setup-steps ol li.complete::before {
-          display: none;
-        }
-      </style>
+{{#setup.inProgress}}
+<div class="line drive-setup-line">
+  <span class="label">Folder on Google Drive</span>
+  <div class="center">
+    <div class="steps steps-progress">
       <ol>
-        <li class="complete">
-           <span style="color:green;font-size: 14px;position: absolute;top:5px;left:-28px;width:1.25rem;height:1.25rem;display:flex;align-items:center;justify-content:center;" class="icon-small-check"></span>
-           <span style="font-size:14px;color:var(--medium-text-color)">Add your Google Drive account</span><br>
-                 <a href="{{{base}}}/setup" style="margin-top:4px;display: block;">
-    <span class="center">{{email}}</span>
-    <span class="link">Edit</span>
-   </a>
-</li>
-{{#nonEditorPermissions}}
-    <li class="complete">
-      <span style="color: orange; font-size: 14px; position: absolute;top:5px;left:-28px;width:1.25rem;height:1.25rem;display:flex;align-items:center;justify-content:center;" class="icon-small-alert"></span>
 
-            <span style="font-size:14px;color:var(--medium-text-color)">The permissions granted to Blot are not sufficient. </span><br>
-      <span class="center">Please give Blot 'Editor' permissions.</span>
-    </li>
-  {{/nonEditorPermissions}}
-{{#nonEmptyFolderShared}}
-   <li class="complete">
-     <span style="color: orange; font-size: 14px; position: absolute;top:5px;left:-28px;width:1.25rem;height:1.25rem;display:flex;align-items:center;justify-content:center;" class="icon-small-alert"></span>
+        <li data-step="account" class="done">
+          <span class="step-title">Add your Google account</span>
+          <span class="step-text">{{email}} · <a href="{{{base}}}/setup">Edit</a></span>
+        </li>
 
-           <span style="font-size:14px;color:var(--medium-text-color)">The folder on Google Drive which you shared has items inside. </span><br>
-    <span class="center">Please share an empty folder.</span>
-  </li>
-{{/nonEmptyFolderShared}}
-<li>
-   <span style="font-size:14px;color:var(--medium-text-color)">Create a folder in Google Drive and share the folder with:</span><br style="margin-bottom: 4px;">
-    <span>{{emailAddress}}</span> <button class="copy" data-copy="{{emailAddress}}"><span class="icon-copy"></span> Copy</button>
+        {{#setup.share}}
+        <li data-step="share" class="{{#setup.shareProblem}}problem{{/setup.shareProblem}}">
+          {{#setup.shareProblem}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/setup.shareProblem}}
+          <span class="step-title">Share an empty folder with Blot</span>
+          {{#setup.shareProblem}}<span class="step-problem">{{setup.shareProblem}}</span>{{/setup.shareProblem}}
+          <span class="step-text">Create a folder in Google Drive, then share it with this address as an Editor:</span>
+          {{#serviceAccount.user}}
+          <span class="copy-box">
+            <span class="copy-box-value code">{{emailAddress}}</span>
+            <button class="copy" data-copy="{{emailAddress}}"><span class="icon-copy"></span> Copy</button>
+          </span>
+          {{/serviceAccount.user}}
+          <a class="drive-open" href="https://drive.google.com/drive/my-drive" target="_blank" rel="noopener">Open Google Drive <span class="icon-small-chevron-right"></span></a>
+        </li>
+        {{/setup.share}}
+        {{#setup.copying}}
+        <li data-step="share" class="done">
+          <span class="step-title">Share an empty folder with Blot</span>
+        </li>
+        {{/setup.copying}}
 
-    <br><Br style="margin-bottom:6px">
-        <a style="border-radius: 5px;
-  background-color: #e4eafb;
-  color: #2c00ff;
-  font-size: 14px;
-  font-weight: 600;
-  right: 0;
-  border: none;
-  padding: 10px 13px;
-" href="https://drive.google.com/drive/my-drive" target="_blank">Open Google Drive <svg style="fill:currentColor;transform:rotate(-45deg);position:relative;top:3px;" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16"><path d="M8.22 2.97a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.751.751 0 0 1-1.042-.018.751.751 0 0 1-.018-1.042l2.97-2.97H3.75a.75.75 0 0 1 0-1.5h7.44L8.22 4.03a.75.75 0 0 1 0-1.06Z"></path></svg></a>
+        <li data-step="folder" class="{{#setup.share}}todo{{/setup.share}}{{#setup.copying}}done{{/setup.copying}}">
+          <span class="step-title">Set up the folder</span>
+          {{#setup.copying}}{{#folderName}}<span class="step-text"><span class="icon-folder"></span> {{folderName}}</span>{{/folderName}}{{/setup.copying}}
+        </li>
 
-</li>
+        <li data-step="copy" class="{{#setup.share}}todo{{/setup.share}}{{#setup.copying}}active{{/setup.copying}}">
+          {{#setup.copying}}<span class="step-icon"><span class="steps-spinner" aria-hidden="true"></span></span>{{/setup.copying}}
+          <span class="step-title">Copy your site’s files</span>
+          {{#setup.copying}}<span class="step-text">Please wait to change the folder until this is done.</span>{{/setup.copying}}
+        </li>
+
       </ol>
-      </div>
-
     </div>
   </div>
-  {{/serviceAccount.user}}
-  {{/preparing}}
-  {{/folderId}}
+</div>
 
+{{! The status line where it will be once setup is done }}
+<a class="line sync-status-line" href="{{{dashboardBase}}}/activity">
+  <span class="label">Status</span>
+  <span class="center sync-status-center">
+    {{#setup.copying}}{{> sync-status}}{{/setup.copying}}
+    {{#setup.share}}
+    {{! Until Blot finds the folder, an old "Synced" would mislead. The
+      hidden partial keeps the page listening for status messages }}
+    <span class="drive-waiting"><span class="loading"></span>Waiting for a shared folder</span>
+    <span hidden>{{> sync-status}}</span>
+    {{/setup.share}}
+  </span>
+</a>
 
-  {{#folderId}}
-   <a class="line" href="{{{base}}}/setup">
-    <span class="label">Account on Google Drive</span>
-    <span class="center"><span>{{email}}</span><span class="link">Edit</span>
-</span>
-   </a>
-  {{/folderId}}
-
-  {{^folderId}}
-  {{#preparing}}
-  <div class="line">
-    <span class="label">Status</span>
-    <span class="center">
-      {{> sync-status}}
-    </span>
-  </div>
-
-  <form action="{{{base}}}/disconnect" method="POST">
-    <input type="hidden" name="_csrf" value="{{csrftoken}}">
-    <div class="buttons">
-        <button type="submit">Cancel</button>
-    </div>
+{{! Cancel setup goes where Disconnect will be once setup is done }}
+<form action="{{{base}}}/disconnect" method="POST">
+  <input type="hidden" name="_csrf" value="{{csrftoken}}">
+  <button type="submit" class="line drive-cancel-line">
+    <span class="label">Disconnect</span>
+    <span class="link">Cancel setup</span>
+  </button>
 </form>
-  {{/preparing}}
-  {{/folderId}}
-
-  {{#folderId}}
-  {{> disconnect-line}}
-  {{/folderId}}
-
-  {{^folderId}}
-  {{^preparing}}
-  {{> disconnect-line}}
-  {{/preparing}}
-  {{/folderId}}
-
-{{/account.setupFailed}}
+{{/setup.inProgress}}
 
 </div>
 {{/account}}
+
+<style>
+.drive-setup-line .label,
+.drive-folder-line .label {
+  flex-basis: 30%;
+}
+
+.drive-setup-line .center,
+.drive-folder-line .center {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+@media (max-width: 600px) {
+  .drive-setup-line .label,
+  .drive-setup-line .center,
+  .drive-folder-line .label,
+  .drive-folder-line .center {
+    flex-basis: 100%;
+  }
+}
+
+.drive-folder-name,
+.drive-note {
+  display: block;
+}
+
+.drive-note {
+  margin-top: 8px;
+  font-size: 14px;
+  color: var(--medium-text-color);
+}
+
+.drive-open {
+  display: table;
+  margin: 10px 0 2px;
+  padding: 8px 12px;
+  border-radius: 5px;
+  background: #e4eafb;
+  color: #2c00ff;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.drive-open .icon-small-chevron-right {
+  width: 10px;
+  height: 10px;
+  mask-size: 10px;
+  -webkit-mask-size: 10px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.drive-waiting {
+  color: var(--text-color);
+}
+
+.drive-waiting .loading {
+  width: 0.5em;
+  height: 0.5em;
+  display: inline-block;
+  border-radius: 50%;
+  position: relative;
+  top: -1px;
+  margin-right: 9px;
+  background: var(--medium-text-color);
+  animation: l1 1s infinite ease-in-out;
+}
+
+.drive-cancel-line {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-color);
+  border-radius: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  box-shadow: none;
+  background: none;
+}
+
+.drive-cancel-line:hover {
+  background: var(--light-background-color);
+}
+
+.drive-cancel-line:hover .link {
+  text-decoration: underline;
+}
+</style>

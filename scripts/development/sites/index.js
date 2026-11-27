@@ -21,7 +21,7 @@ const { join, relative } = require("path");
 const config = require("config");
 const Blog = require("models/blog");
 const client = require("models/client");
-const setupUser = require("templates/folders/setupUser");
+const setupUser = require("templates/demo/setupUser");
 const source = require("clients/local/source");
 const material = require("./material");
 const setProfileImage = require("./profile-image");
@@ -175,8 +175,8 @@ async function up(handles) {
     // The demo folder build puts their blogs on no client while it syncs
     // them; apply() puts them back on the Local client, and the message
     // starts each one's watcher in the running server
-    await require("templates/folders")();
-    await require("templates/folders/local").apply();
+    await require("templates/demo")();
+    await require("templates/demo/local").apply();
     for (const handle of demoFolderHandles()) {
       const blog = await Blog.get({ handle });
       if (blog && blog.owner === user.uid) await setProfileImage(blog);

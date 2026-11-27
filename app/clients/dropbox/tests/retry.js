@@ -46,6 +46,29 @@ describe("dropbox retry", function () {
     expect(error.status).toEqual(503);
   });
 
+  it("logs only the failures it will try again", async function () {
+    spyOn(console, "log");
+    const fn = retry(
+      async () => {
+        throw fail(401);
+      },
+      { times: 3, interval: () => 1 }
+    );
+
+    await fn().catch(() => {});
+    expect(console.log).not.toHaveBeenCalled();
+
+    const flaky = retry(
+      async () => {
+        throw fail(503);
+      },
+      { times: 2, interval: () => 1 }
+    );
+
+    await flaky().catch(() => {});
+    expect(console.log).toHaveBeenCalledTimes(1);
+  });
+
   it("does not try again when the error filter refuses", async function () {
     let calls = 0;
     const fn = retry(

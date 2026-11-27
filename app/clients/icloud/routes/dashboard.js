@@ -2,17 +2,29 @@ const database = require("../database");
 const disconnect = require("../disconnect");
 const express = require("express");
 const fetch = require("../util/rateLimitedFetchWithRetriesAndTimeout");
-const isValidSharingLink = require("../util/isValidSharingLink");
+const normalizeSharingLink = require("../util/normalizeSharingLink");
+const setupState = require("../util/setupState");
+const initialTransfer = require("../sync/initialTransfer");
 const dashboard = new express.Router();
 const parseBody = require("helper/bodyParser").urlencoded({ extended: false });
 const config = require("config"); // For accessing configuration values
 const establishSyncLock = require("sync/establishSyncLock");
+const seize = require("sync/seize");
 const { handleSyncLockError } = require("./lock");
-const Blog = require("models/blog");
+const setClient = require("clients/util/setClient");
 const health = require("clients/health");
-const { SETUP_FAILED, isSetupError, isSetupInProgress } = require("../error");
+const { SETUP_FAILED, isSetupInProgress } = require("../error");
+const storageFolder = require("storage/folder");
 
 const VIEWS = require("path").resolve(__dirname + "/../views") + "/";
+
+// Whether the site has a file for setup to copy to iCloud: stops at the
+// first one, so it's quick however big the folder is. Asked when the link
+// is sent, since the setup later brings the iCloud folder's own files in
+const hasFilesToCopy = async (blogID) => {
+  for await (const _ of storageFolder.walk(blogID, "/")) return true;
+  return false;
+};
 
 const MACSERVER_URL = config.icloud.server_address; // The Macserver base URL from config
 const MACSERVER_AUTH = config.icloud.secret; // The Macserver Authorization secret from config
@@ -26,36 +38,44 @@ dashboard.use(async function (req, res, next) {
   }
 });
 
-dashboard.get("/", function (req, res) {
-  if (!res.locals.account) {
-    return res.redirect(req.baseUrl + "/connect");
-  }
+// The iCloud page: a checklist while setting up (util/setupState.js), the
+// folder's status once it is done. options as for setupState.
+const render = (req, res, options = {}) => {
+  const account = res.locals.account || null;
 
-  // Setup failures are not health issues (see ../error.js), so the view
-  // shows them itself with retry/cancel.
-  res.locals.account.setupFailed = isSetupError(res.locals.account);
+  res.locals.blotiCloudAccount = config.icloud.email;
+  res.locals.setup = setupState(
+    account,
+    Object.assign({ email: config.icloud.email }, options)
+  );
 
   // The health read before this route ran may predate the write that began
   // a new setup attempt, so don't show its stale error beside the progress.
   if (
-    isSetupInProgress(res.locals.account) &&
+    account &&
+    isSetupInProgress(account) &&
     !health.isPaused(res.locals.blog.health)
   ) {
     res.locals.blog.healthIssue = undefined;
     res.locals.blog.health = health.syncing();
   }
 
-  res.locals.blotiCloudAccount = config.icloud.email;
   res.render(VIEWS + "index");
+};
+
+dashboard.get("/", function (req, res) {
+  render(req, res);
 });
 
-dashboard.route("/connect").get(function (req, res) {
-  res.render(VIEWS + "connect");
+// Older links: the checklist starts on the page itself now
+dashboard.get("/connect", function (req, res) {
+  res.redirect(req.baseUrl);
 });
 
-dashboard.route("/setup").get(function (req, res) {
-  res.locals.blotiCloudAccount = config.icloud.email;
-  res.render(VIEWS + "setup");
+// Steps 1 and 2 again: to retry, to share a new folder after the old one went
+// missing, or to change the folder
+dashboard.get("/setup", function (req, res) {
+  render(req, res, { share: true });
 });
 
 dashboard
@@ -97,57 +117,70 @@ dashboard
           return next(disconnectError);
         }
 
-        return next();
+        return res.redirect(res.locals.dashboardBase + "/sync");
+      }
+
+      const blogID = req.blog.id;
+      const pasted =
+        typeof req.body.sharingLink === "string" ? req.body.sharingLink : "";
+      const blotiCloudAccount = config.icloud.email;
+
+      // Check the link before anything changes, so a mistyped link leaves
+      // the site as it was, and say what's wrong beside the box with the
+      // pasted text still in it
+      if (!pasted.trim()) {
+        res.status(400);
+        return render(req, res, { linkError: "empty", sharingLink: "" });
+      }
+
+      const sharingLink = normalizeSharingLink(pasted);
+
+      if (!sharingLink) {
+        res.status(400);
+        return render(req, res, {
+          linkError: "format",
+          sharingLink: pasted.trim(),
+        });
       }
 
       try {
-        await Blog.set(req.blog.id, { client: "icloud" });
+        await setClient(req.blog, "icloud");
       } catch (setClientError) {
         return next(setClientError);
       }
 
-      const blogID = req.blog.id;
-      const sharingLink = req.body.sharingLink;
-      const blotiCloudAccount = req.body.blotiCloudAccount;
-
-      // Store the sharingLink in the database if provided
-      if (sharingLink) {
-        // validate the sharing link format
-        // it should look like: https://www.icloud.com/iclouddrive/08d83wAt2lMHc46hEEi0D5zcQ
-        // or: https://www.icloud.com/iclouddrive/08d83wAt2lMHc46hEEi0D5zcQ#example
-        if (!isValidSharingLink(sharingLink)) {
-          return next(new Error("Invalid sharing link format"));
-        }
-
-        // If a setup for this exact link is already under way, don't start a
-        // second Macserver run – it would race the first and can clobber its
-        // result. The window lets a genuinely stuck setup be retried.
-        const existing = await database.get(blogID);
-        if (
-          existing &&
-          existing.sharingLink === sharingLink &&
-          !existing.error &&
-          !existing.setupComplete &&
-          existing.setupStartedAt &&
-          Date.now() - existing.setupStartedAt < 1000 * 90
-        ) {
-          console.log(
-            `Setup already in progress for blogID: ${blogID}, ignoring duplicate request`
-          );
-          return res.redirect(req.baseUrl);
-        }
-
-        await database.store(blogID, {
-          sharingLink,
-          blotiCloudAccount,
-          error: null,
-          acceptedSharingLink: false,
-          setupComplete: false,
-          setupStartedAt: Date.now(),
-        });
-      } else {
-        return next(new Error("Paste the sharing link into the box"));
+      // If a setup for this exact link is already under way, don't start a
+      // second Macserver run – it would race the first and can clobber its
+      // result. The window lets a genuinely stuck setup be retried.
+      const existing = await database.get(blogID);
+      if (
+        existing &&
+        existing.sharingLink === sharingLink &&
+        !existing.error &&
+        !existing.setupComplete &&
+        existing.setupStartedAt &&
+        Date.now() - existing.setupStartedAt < 1000 * 90
+      ) {
+        console.log(
+          `Setup already in progress for blogID: ${blogID}, ignoring duplicate request`
+        );
+        return res.redirect(req.baseUrl);
       }
+
+      // The checklist leaves out "Copying your site's files" with nothing to
+      // copy. If the check fails, the step shows as before
+      const nothingToCopy = !(await hasFilesToCopy(blogID).catch(() => true));
+
+      await database.store(blogID, {
+        sharingLink,
+        blotiCloudAccount,
+        nothingToCopy,
+        error: null,
+        setupErrorReason: null,
+        acceptedSharingLink: false,
+        setupComplete: false,
+        setupStartedAt: Date.now(),
+      });
 
       // Seed the dashboard status line. The Macserver creates the folder
       // asynchronously and reports progress back via POST /status, which the
@@ -195,7 +228,8 @@ dashboard
             `Error recording setup failure for blogID ${blogID}: ${statusError.message}`
           );
         }
-        return next(new Error(message));
+        // The checklist shows the stored error with the link still in the box
+        return res.redirect(req.baseUrl);
       }
 
       console.log(`Macserver accepted setup request for blogID: ${blogID}`);
@@ -219,9 +253,43 @@ dashboard
     }
   });
 
+// Copy the site's files into a folder Blot already joined, after that copy
+// failed. Setting up again wouldn't help: the macserver already has the
+// folder, so accepting the same link again brings no new folder to claim
+dashboard.post("/retry-transfer", async function (req, res) {
+  const account = res.locals.account;
+
+  if (
+    !account ||
+    account.acceptedSharingLink !== true ||
+    account.setupComplete === true
+  ) {
+    return res.redirect(req.baseUrl);
+  }
+
+  res.redirect(req.baseUrl);
+
+  // It takes the sync lock and records its own progress and failure, which
+  // the checklist shows
+  try {
+    await initialTransfer(req.blog.id);
+  } catch (error) {
+    console.error(
+      `iCloud transfer retry failed for blogID: ${req.blog.id}`,
+      error.message
+    );
+  }
+});
+
 dashboard.post("/cancel", async function (req, res, next) {
   try {
-    await database.delete(req.blog.id);
+    // The Mac server stops setting up or watching the folder first. Then,
+    // under the folder lock, taken from a transfer still running, which is
+    // stopped and so can't write the account back (sync/seize.js)
+    await disconnect.notifyMacserver(req.blog.id);
+    await seize(req.blog.id, () => database.delete(req.blog.id), {
+      reason: "disconnect",
+    });
 
     res.message(req.baseUrl, "Cancelled the creation of your new folder");
   } catch (error) {

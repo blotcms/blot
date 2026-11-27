@@ -9,6 +9,8 @@ const CLASSES = [
   ["template", /^template:[^:]+:[^:]+:info$/], // template IDs are owner:slug
   ["patterns", /^template:[^:]+:[^:]+:url_patterns$/],
   ["owners", /^template:owned_by:[^:]+$/],
+  ["view", /^template:[^:]+:[^:]+:view:/],
+  ["views", /^template:[^:]+:[^:]+:all_views$/],
   ["session", /^sess:/],
   ["readonly", /^blot:read-only$/],
   ["user", /^user:[^:]+:info$/],
@@ -20,6 +22,9 @@ const CLASSES = [
 
 // Small, hot keys read on nearly every blog or dashboard request, rarely
 // written, and no more numerous than blogs, templates, users or sessions.
+// Template views and their lists are read on every fullView fill (several
+// round trips, one after another, on the request that misses), written only
+// when a template is built, and named by template files, never by requests.
 // The read-only freeze (helper/readOnly) is one key, read by every dashboard
 // page and almost always missing; Redis tracks a missing key too, so "not
 // frozen" is served locally until an operator sets it.
@@ -34,6 +39,8 @@ const ALLOWED = new Set([
   "template",
   "patterns",
   "owners",
+  "view",
+  "views",
   "session",
   "user",
   "readonly",
@@ -46,17 +53,116 @@ const ALLOWED = new Set([
 // plus every blog's hot keys, so a full capped class never makes the cache
 // evict anything else. URL patterns are read on every render too, but there is
 // a set for every template, installed or not, so previews could flood it.
+// Views are a few KB on average but unbounded (a view can inline a whole
+// stylesheet), so their class is bounded by bytes too (CLASS_BYTE_CAPS).
+// Each fill reads many views, partial lookups and names which don't exist
+// (cached empty), so their cap is generous: at 2,000 the class was full
+// within the hour and evicting while it held under a fifth of its bytes.
 const CLASS_CAPS = {
   patterns: 2000,
   owners: 500,
+  view: 8000,
+  views: 500,
   session: 500,
   user: 500,
+};
+
+// Rough value bytes (approxBytes) a capped class may hold before it evicts
+// its least recently used entries, whatever its entry count
+const CLASS_BYTE_CAPS = {
+  view: 16 * 1024 * 1024,
 };
 
 function classify(key) {
   key = String(key);
   for (const [name, pattern] of CLASSES) if (pattern.test(key)) return name;
   return "other";
+}
+
+// A key's shape with its IDs and paths starred out, to count reads and
+// writes per kind of key: blog:<id>:entry:/a/b is blog:*:entry:*, and
+// user:<id>:info is user:*:info. The first segment is kept, a blog key's
+// third (its kind) and a fourth that ends it, and another key's last segment
+// after an ID. Only words are kept, so handles and paths are never logged.
+const WORD = /^[a-z_]{1,24}$/i;
+function keyPattern(key) {
+  const parts = String(key).split(":");
+  const word = (part) => (WORD.test(part) ? part : "*");
+  if (parts.length === 1) return word(parts[0]);
+  if (parts[0] === "blog" && parts.length > 2) {
+    const kept = ["blog", "*", word(parts[2])];
+    if (parts.length === 4) kept.push(word(parts[3]));
+    else if (parts.length > 4) kept.push("*");
+    return kept.join(":");
+  }
+  if (parts.length === 2) return parts[0] + ":*";
+  return parts[0] + ":*:" + word(parts[parts.length - 1]);
+}
+
+// Commands whose first key is written, to count writes per key pattern beside
+// the uncached reads: a key read often but written rarely is a candidate for
+// the allowlist.
+const WRITES = new Set(
+  (
+    "APPEND DEL DECR DECRBY EXPIRE EXPIREAT GETDEL GETSET HDEL HINCRBY HMSET " +
+    "HSET HSETNX INCR INCRBY LPOP LPUSH LREM LSET LTRIM MSET PERSIST PEXPIRE " +
+    "RENAME RPOP RPUSH SADD SET SETEX SETNX SMOVE SPOP SREM UNLINK ZADD " +
+    "ZINCRBY ZREM ZREMRANGEBYRANK ZREMRANGEBYSCORE ZPOPMIN ZPOPMAX"
+  ).split(" ")
+);
+
+// Bounds the pattern counters: a key format nobody expected lands in "~more"
+// rather than growing the map.
+const MAX_PATTERNS = 300;
+
+function countPattern(map, name, bytes) {
+  let entry = map.get(name);
+  if (!entry) {
+    if (map.size >= MAX_PATTERNS) name = "~more";
+    entry = map.get(name);
+    if (!entry) map.set(name, (entry = { count: 0, bytes: 0 }));
+  }
+  entry.count++;
+  entry.bytes += bytes;
+}
+
+// Rough heap bytes of a reply: one byte per character of a string (as V8
+// stores Latin-1 strings) plus a header per string, array and object. An
+// estimate to compare classes and patterns by, not a measurement. It runs on
+// every uncached read, so it looks at most 32 items of an array, map or
+// object, two levels deep, and scales up from them: a list of every entry in
+// a blog costs as little to size as a short one.
+const SAMPLE = 32;
+function approxBytes(value, depth = 0) {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "string") return 16 + value.length;
+  if (typeof value === "number" || typeof value === "boolean") return 8;
+  if (Buffer.isBuffer(value)) return 16 + value.length;
+  if (typeof value !== "object" || depth > 1) return 16;
+  const next = depth + 1;
+  let count;
+  let sampled = 0;
+  let total = 0;
+  if (Array.isArray(value)) {
+    count = value.length;
+    sampled = Math.min(count, SAMPLE);
+    for (let i = 0; i < sampled; i++) total += 8 + approxBytes(value[i], next);
+  } else if (value instanceof Map) {
+    count = value.size;
+    for (const [k, v] of value) {
+      if (sampled === SAMPLE) break;
+      sampled++;
+      total += 16 + approxBytes(k, next) + approxBytes(v, next);
+    }
+  } else {
+    // An object's keys are listed in full, once: a hash's fields, a few dozen
+    const keys = Object.keys(value);
+    count = keys.length;
+    sampled = Math.min(count, SAMPLE);
+    for (let i = 0; i < sampled; i++)
+      total += 16 + keys[i].length + approxBytes(value[keys[i]], next);
+  }
+  return 16 + (sampled ? Math.round((total / sampled) * count) : 0);
 }
 
 // A command is cached only if it has keys and every one is allowlisted. The
@@ -91,10 +197,46 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
     // True while a read is being sent, so it is not mistaken for a write
     this.sendingRead = false;
     this.classCaps = (options && options.classCaps) || CLASS_CAPS;
+    this.classByteCaps = (options && options.classByteCaps) || CLASS_BYTE_CAPS;
+    // Per byte-capped class, its listed entries' rough bytes in total, and
+    // each listed cache key's bytes
+    this.classBytes = new Map();
+    this.entryBytes = new Map();
     // Per capped class, its cache keys from least to most recently used,
     // and each listed cache key's class
     this.cappedOrder = new Map();
     this.cappedClassOf = new Map();
+    // Per "COMMAND|key pattern", the reads that bypass the cache and the
+    // writes this process sends: { count, bytes } (bytes only for reads)
+    this.bypassPatterns = new Map();
+    this.writePatterns = new Map();
+  }
+
+  // Entries and rough value bytes per class of what the cache holds now.
+  // Walks node-redis's debugging iterators, which neither touch the LRU order
+  // nor copy values; about 10,000 entries, once a minute.
+  classSizes() {
+    // Internal to node-redis: an upgrade without them loses only this figure
+    const sizes = {};
+    if (
+      typeof this.keySetEntries !== "function" ||
+      typeof this.entryEntries !== "function"
+    )
+      return sizes;
+    const classOf = new Map();
+    for (const [key, cacheKeys] of this.keySetEntries()) {
+      const className = classify(key);
+      for (const cacheKey of cacheKeys) classOf.set(cacheKey, className);
+    }
+    for (const [cacheKey, entry] of this.entryEntries()) {
+      const className = classOf.get(cacheKey) || "other";
+      const size =
+        sizes[className] || (sizes[className] = { entries: 0, bytes: 0 });
+      size.entries++;
+      // A read still in flight is a promise entry, with no value yet
+      if ("value" in entry) size.bytes += approxBytes(entry.value);
+    }
+    return sizes;
   }
 
   // The base class stores every entry through set() and reads it through
@@ -117,6 +259,43 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
     order.delete(cacheKey);
     order.set(cacheKey, true);
     this.cappedClassOf.set(cacheKey, className);
+
+    // The base class sets a promise entry as it sends the read, then the
+    // value entry once the reply is in: only the value has a size
+    const byteCap = this.classByteCaps[className];
+    if (byteCap) {
+      const bytes = "value" in cacheEntry ? approxBytes(cacheEntry.value) : 0;
+      this.addBytes(className, cacheKey, bytes);
+      if (this.classBytes.get(className) > byteCap)
+        this.trimClassBytes(className, order, byteCap);
+    }
+  }
+
+  addBytes(className, cacheKey, bytes) {
+    const before = this.entryBytes.get(cacheKey) || 0;
+    if (bytes) this.entryBytes.set(cacheKey, bytes);
+    else this.entryBytes.delete(cacheKey);
+    this.classBytes.set(
+      className,
+      (this.classBytes.get(className) || 0) + bytes - before
+    );
+  }
+
+  // Forgets entries the base class already dropped (see trimClass), then
+  // evicts the class's least recently used entries until it fits. An entry
+  // bigger than the whole cap is evicted too, once everything older is gone.
+  trimClassBytes(className, order, byteCap) {
+    for (const cacheKey of order.keys()) {
+      if (this.has(cacheKey)) continue;
+      order.delete(cacheKey);
+      this.cappedClassOf.delete(cacheKey);
+      this.addBytes(className, cacheKey, 0);
+    }
+    while (this.classBytes.get(className) > byteCap && order.size) {
+      this.delete(order.keys().next().value);
+      this.recordEvictions(1);
+      this.count(className, "evictions");
+    }
   }
 
   get(cacheKey) {
@@ -136,12 +315,15 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
     if (!className) return;
     this.cappedOrder.get(className).delete(cacheKey);
     this.cappedClassOf.delete(cacheKey);
+    if (this.entryBytes.has(cacheKey)) this.addBytes(className, cacheKey, 0);
   }
 
   clear(resetStats) {
     super.clear(resetStats);
     this.cappedOrder.clear();
     this.cappedClassOf.clear();
+    this.classBytes.clear();
+    this.entryBytes.clear();
   }
 
   // Entries the base class dropped without going through delete() (an
@@ -153,6 +335,7 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
       if (this.has(cacheKey)) continue;
       order.delete(cacheKey);
       this.cappedClassOf.delete(cacheKey);
+      if (this.entryBytes.has(cacheKey)) this.addBytes(className, cacheKey, 0);
     }
     while (order.size > cap) {
       this.delete(order.keys().next().value);
@@ -168,10 +351,24 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
   // a read sent afterwards reaches Redis behind the write on this connection.
   forgetWrittenKeys(args) {
     if (this.sendingRead || !Array.isArray(args)) return;
+    this.countWrite(args);
     for (const arg of args) {
       if (typeof arg === "string" && ALLOWED.has(classify(arg)))
         redis.BasicClientSideCache.prototype.invalidate.call(this, arg);
     }
+  }
+
+  // Counts a write by its command and first key's pattern. A script's keys
+  // follow its key count: EVALSHA <sha> <numkeys> <key>...
+  countWrite(args) {
+    const command = typeof args[0] === "string" ? args[0].toUpperCase() : "";
+    let key = args[1];
+    if (command === "EVAL" || command === "EVALSHA") {
+      if (!(Number(args[2]) > 0)) return;
+      key = args[3];
+    } else if (!WRITES.has(command)) return;
+    if (typeof key !== "string") return;
+    countPattern(this.writePatterns, command + "|" + keyPattern(key), 0);
   }
 
   sendRead(fn) {
@@ -207,6 +404,16 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
       // Same as the base class's miss path: transform the raw reply, but
       // neither read from nor write to the cache.
       const reply = await this.sendRead(fn);
+      const command = parser.redisArgs && String(parser.redisArgs[0]);
+      countPattern(
+        this.bypassPatterns,
+        String(command).toUpperCase() +
+          "|" +
+          (parser.keys && parser.keys.length
+            ? keyPattern(parser.keys[0])
+            : "(no key)"),
+        approxBytes(reply)
+      );
       return transformReply
         ? transformReply(reply, parser.preserve, typeMapping)
         : reply;
@@ -243,5 +450,8 @@ class AllowlistClientSideCache extends redis.BasicClientSideCache {
 AllowlistClientSideCache.classify = classify;
 AllowlistClientSideCache.classifyKeys = classifyKeys;
 AllowlistClientSideCache.CLASS_CAPS = CLASS_CAPS;
+AllowlistClientSideCache.CLASS_BYTE_CAPS = CLASS_BYTE_CAPS;
+AllowlistClientSideCache.keyPattern = keyPattern;
+AllowlistClientSideCache.approxBytes = approxBytes;
 
 module.exports = AllowlistClientSideCache;

@@ -5,16 +5,20 @@ const localFile = require("./localFile");
 const colors = require("colors/safe");
 const { join, dirname, sep } = require("path");
 const debug = require("debug")("blot:clients:google-drive:download");
+const clfdate = require("helper/clfdate");
 const tempDir = require("helper/tempDir")();
 const guid = require("helper/guid");
 const verifyContent = require("./verifyContent");
-const localState = require("./localState");
 const assets = require("storage/assets");
 const hash = require("helper/hash");
 const cheerio = require("cheerio");
+const removeComments = require("build/converters/gdoc/comments");
+const fetchDoc = require("./fetchDoc");
+
 const sandbox = require("sandbox");
 const hotDocPoller = require("../serviceAccount/hotDocPoller");
 const database = require("../database");
+const prefetch = require("./prefetch");
 
 const isExportSizeLimitError = (err) => {
   // Try to parse err.message if it's a JSON string
@@ -34,6 +38,18 @@ const isExportSizeLimitError = (err) => {
     errorData?.error?.code === 403 &&
     errorData?.error?.message?.includes("too large to be exported")
   );
+};
+
+// How a download publishes into the blog folder. A caller running several
+// downloads at once passes its own publish(fn), which runs fn when the folder
+// is free to take another write; by default fn runs straight away.
+const run = (fn) => fn();
+
+// Whether Drive's modifiedTime is within the last half hour, or unknown
+const HOT_WINDOW_MS = 30 * 60 * 1000;
+const editedRecently = (modifiedTime) => {
+  const at = Date.parse(modifiedTime);
+  return !Number.isFinite(at) || Date.now() - at < HOT_WINDOW_MS;
 };
 
 const ensurePlaceholder = async (blogID, path, flag) => {
@@ -71,36 +87,27 @@ const statOnBlot = async (blogID, path, options) => {
   }
 };
 
-// The record of a verified file: Drive's md5Checksum paired with the state
-// of the file Blot holds (util/localState.js), { checksum, sha1, size,
-// modified }, or null if the file at path in the blog's folder doesn't have
-// that md5. Reads the file (on S3, into the content cache); its state before
-// and after must agree, so a file changed while it was read is not vouched
-// for.
+// { checksum, sha1 } of the file at path in the blog's folder, if it has
+// Drive's md5Checksum, or null. Reads the file (on S3, into the content
+// cache) to hash it, and vouches for it only while the folder's index holds
+// the same SHA-1, so a file changed while it was read is not vouched for.
+// The pair is what the walk remembers (clients/util/remoteHashes.js).
 const verifyOnBlot = async (blogID, path, md5Checksum) => {
   if (!md5Checksum) return null;
-  const before = localState.stamp(await statOnBlot(blogID, path));
-  if (!before) return null;
+  const stat = await statOnBlot(blogID, path, { sha1: true });
+  if (!stat) return null;
   const file = await localFile(blogID, path);
   const hashes = file ? await verifyContent(file, md5Checksum) : null;
-  if (!hashes) return null;
-  const after = localState.stamp(await statOnBlot(blogID, path));
-  return after &&
-    after.size === before.size &&
-    after.modified === before.modified
-    ? { ...hashes, ...after }
-    : null;
+  return hashes && stat.sha1 === hashes.sha1 ? hashes : null;
 };
 
 // After download() has published a file it verified in its tmp file: the
-// record of the file now in the blog's folder, if it holds those bytes. The
-// SHA-1 is free from the index on S3; on disk this reads the file, as the
-// MD5 check it replaces did.
+// pair, if the file now in the blog's folder holds those bytes. The SHA-1 is
+// free from the index.
 const verifyPublished = async (blogID, path, hashes) => {
   if (!hashes) return null;
   const stat = await statOnBlot(blogID, path, { sha1: true });
-  const after = localState.stamp(stat);
-  return after && stat.sha1 === hashes.sha1 ? { ...hashes, ...after } : null;
+  return stat && stat.sha1 === hashes.sha1 ? hashes : null;
 };
 
 const streamToFile = (readStream, filePath) =>
@@ -182,9 +189,18 @@ const downloadGoogleDocAsZip = async ({
   path,
   blogID,
   zipStream,
+  publish = run,
 }) => {
   const zipPath = join(tempDir, guid());
   const extractDir = join(tempDir, guid());
+  // Each stage's time, logged once the Doc is published (#2975)
+  const timings = {};
+  let stageStart = Date.now();
+  const stage = (name) => {
+    timings[name] = Date.now() - stageStart;
+    stageStart = Date.now();
+  };
+  let imageCount = 0;
 
   try {
     const stream =
@@ -201,7 +217,9 @@ const downloadGoogleDocAsZip = async ({
       ).data;
 
     await streamToFile(stream, zipPath);
+    stage("export_ms");
     await extractZip(zipPath, extractDir);
+    stage("unzip_ms");
     const { htmlPath, imagesDir } = await resolveHtmlAndImagesDir(extractDir);
     const docHash = hash(path);
     const assetDir = "_assets/" + docHash;
@@ -212,13 +230,20 @@ const downloadGoogleDocAsZip = async ({
         const srcPath = join(imagesDir, name);
         const st = await fs.stat(srcPath);
         if (st.isFile()) {
-          await assets.writeFrom(blogID, assetDir + "/" + name, srcPath);
+          imageCount += 1;
+          await publish(() =>
+            assets.writeFrom(blogID, assetDir + "/" + name, srcPath)
+          );
         }
       }
     }
+    stage("images_ms");
 
     const html = await fs.readFile(htmlPath, "utf-8");
     const $ = cheerio.load(html, { decodeEntities: false });
+    // The folder's copy is served as is, so the Doc's comments, private to
+    // its editors, come out before it is written
+    removeComments($);
     $("img").each(function () {
       const src = $(this).attr("src");
       if (!src) return;
@@ -229,7 +254,16 @@ const downloadGoogleDocAsZip = async ({
       }
     });
 
-    await folder.write(blogID, path, $.html().trim());
+    await publish(() => folder.write(blogID, path, $.html().trim()));
+    stage("write_ms");
+    console.log(
+      clfdate(),
+      "Google Drive: exported Doc",
+      blogID,
+      path,
+      `images=${imageCount}`,
+      ...Object.entries(timings).map(([name, ms]) => `${name}=${ms}`)
+    );
   } finally {
     await fs.remove(zipPath).catch(() => {});
     await fs.remove(extractDir).catch(() => {});
@@ -240,8 +274,8 @@ module.exports = async (
   blogID,
   drive,
   path,
-  { id, md5Checksum, mimeType },
-  { serviceAccountId, folderId, skipHotEnqueue } = {}
+  { id, md5Checksum, mimeType, modifiedTime },
+  { serviceAccountId, folderId, skipHotEnqueue, publish = run } = {}
 ) => {
   const tempPath = join(tempDir, guid());
 
@@ -280,6 +314,7 @@ module.exports = async (
               path,
               blogID,
               zipStream,
+              publish,
             });
 
             debug("ZIP export fallback download SUCCEEDED");
@@ -299,15 +334,24 @@ module.exports = async (
       }
     }
 
-    await ensurePlaceholder(blogID, path, { code: "SYNC_EXPORT_TOO_LARGE" });
+    await publish(() =>
+      ensurePlaceholder(blogID, path, { code: "SYNC_EXPORT_TOO_LARGE" })
+    );
     debug("   created empty file at:", colors.green(path));
     return "placeholder";
   };
   try {
+    // Only a Doc edited recently is watched for more edits. A walk exports
+    // every Doc it finds changed in its records, which after a deploy or a
+    // backfill can be hundreds untouched for days; watching them all
+    // squeezed the poll rate of a Doc being typed in from 500ms to ~37s
+    // (24 Nov 2026). An edit to an older Doc reaches the poller through
+    // changes.list, the search or the recent-folders poller instead.
     if (
       !skipHotEnqueue &&
       id &&
-      mimeType === "application/vnd.google-apps.document"
+      mimeType === "application/vnd.google-apps.document" &&
+      editedRecently(modifiedTime)
     ) {
       let accountServiceAccountId = serviceAccountId;
       let accountFolderId = folderId;
@@ -334,7 +378,7 @@ module.exports = async (
     }
 
     if (mimeType === "application/vnd.google-apps.folder") {
-      await folder.mkdir(blogID, path);
+      await publish(() => folder.mkdir(blogID, path));
       debug("MKDIR folder");
       debug("   to:", colors.green(path));
       return { updated: false };
@@ -348,10 +392,12 @@ module.exports = async (
       mimeType.startsWith("application/vnd.google-apps.") &&
       mimeType !== "application/vnd.google-apps.document"
     ) {
-      await ensurePlaceholder(blogID, path, {
-        code: "SYNC_UNSUPPORTED",
-        kind: mimeType,
-      });
+      await publish(() =>
+        ensurePlaceholder(blogID, path, {
+          code: "SYNC_UNSUPPORTED",
+          kind: mimeType,
+        })
+      );
       debug(
         "SKIP download of file because it is a Google App file type",
         mimeType
@@ -373,6 +419,33 @@ module.exports = async (
     debug("DOWNLOAD file");
     debug("   to:", colors.green(path));
 
+    // Through the Docs API where it's switched on (#2975): its JSON, and
+    // only the images that changed. The zip export below stays for a Doc
+    // the API can't give whole, and if the API fails.
+    if (mimeType === "application/vnd.google-apps.document") {
+      try {
+        const fetched = await fetchDoc(
+          blogID,
+          path,
+          { id },
+          {
+            serviceAccountId,
+            acquireSlot: (account) => hotDocPoller.acquireDocsSlot(account),
+            publish,
+          }
+        );
+        if (fetched) return fetched;
+      } catch (err) {
+        console.error(
+          clfdate(),
+          "Google Drive: Docs API fetch failed, using the zip export",
+          blogID,
+          path,
+          err.message
+        );
+      }
+    }
+
     if (mimeType === "application/vnd.google-apps.document") {
       try {
         debug("getting Google Doc as zip from Drive");
@@ -381,6 +454,7 @@ module.exports = async (
           id,
           path,
           blogID,
+          publish,
         });
         debug("DOWNLOAD file SUCCEEDED");
         return { updated: true };
@@ -396,6 +470,38 @@ module.exports = async (
         // already handled here
         return Promise.reject(err);
       }
+    }
+
+    // Downloaded already, outside the folder lock, by the detection walk
+    // (util/prefetch.js): the same bytes, checked against the same md5
+    const prefetched =
+      mimeType !== "application/vnd.google-apps.document"
+        ? await prefetch.take(id, md5Checksum)
+        : null;
+    if (prefetched) {
+      console.log(
+        "Google Drive Sync: using the prefetched download of",
+        path,
+        `ms_ago=${Date.now() - prefetched.downloadedAt}`
+      );
+      try {
+        await publish(() =>
+          folder.writeFrom(blogID, path, prefetched.tempPath, { move: true })
+        );
+      } finally {
+        await fs.remove(prefetched.tempPath).catch(() => {});
+      }
+      const verified = await verifyPublished(
+        blogID,
+        path,
+        prefetched.hashes
+      ).catch(() => null);
+      return {
+        updated: true,
+        verifiedContent: verified,
+        prefetched: true,
+        downloadedAt: prefetched.downloadedAt,
+      };
     }
 
     debug("getting file from Drive");
@@ -436,7 +542,9 @@ module.exports = async (
         "Downloaded content does not match the listed Drive checksum"
       );
     }
-    await folder.writeFrom(blogID, path, tempPath, { move: true });
+    await publish(() =>
+      folder.writeFrom(blogID, path, tempPath, { move: true })
+    );
     // Publication has succeeded. A concurrent local write (or stat failure)
     // must not suppress the caller's rebuild; simply decline to cache it.
     const verified = await verifyPublished(blogID, path, hashes).catch(

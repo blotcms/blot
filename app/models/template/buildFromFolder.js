@@ -14,8 +14,20 @@ var defaults = require("models/blog/defaults");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var clfdate = require("helper/clfdate");
 
-module.exports = async function buildFromFolder(blogID) {
+// Resolves { failed }: how many templates in the folder could not be read,
+// plus one if removing those no longer in it failed. The caller retries the
+// build while it is not zero.
+//
+// options.only, a Set of template directory names (NFC, lowercased, as
+// sync/index.js gets them from the paths it updated), reads just
+// those templates (the ones a sync updated). The rest of the folder is still
+// listed, so templates whose directories are gone are removed as usual.
+module.exports = async function buildFromFolder(blogID, options = {}) {
   ensure(blogID, "string");
+
+  const only = options.only || null;
+
+  let failed = 0;
 
   var templateDirs = ["/templates", "/Templates"];
 
@@ -52,6 +64,11 @@ module.exports = async function buildFromFolder(blogID) {
 
       const dir = templateDir + "/" + template;
 
+      if (only && !only.has(template.normalize().toLowerCase())) {
+        templatesInFolder.push(template);
+        continue;
+      }
+
       console.log(
         clfdate(),
         blogID.slice(0, 12),
@@ -76,6 +93,7 @@ module.exports = async function buildFromFolder(blogID) {
         await readFromFolder(blogID, dir);
       } catch (err) {
         readFailed = true;
+        failed++;
 
         // we need to expose this error
         // on the design page!
@@ -147,7 +165,12 @@ module.exports = async function buildFromFolder(blogID) {
       "buildFromFolder: failed to remove templates",
       err
     );
+    // Counted as a failure so the caller builds again: a removal that failed
+    // before it was recorded as pending would otherwise never be retried
+    failed++;
   }
+
+  return { failed };
 };
 
 // Removes local templates whose folder has gone missing. The installed one
@@ -175,7 +198,11 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
   );
 
   // Folders and templates are matched by id, not slug: makeID lowercases, so a
-  // folder renamed only in case is still the same template
+  // folder renamed only in case is still the same template. Orphans are
+  // dropped by id too: a template made before create() kept slug and id in
+  // step can have a slug that makeID maps to another id, which is the
+  // template its folder is now read as. Dropping by slug deleted that one,
+  // every sync, and left the orphan.
   const idsInFolder = templatesInFolder.map((name) => makeID(blogID, name));
   const orphans = local.filter(
     (template) => !idsInFolder.includes(template.id)
@@ -187,7 +214,7 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
   )) {
     try {
       log("removing template", orphan.slug);
-      await drop(blogID, orphan.slug);
+      await drop.byID(blogID, orphan.id);
     } catch (err) {
       console.error(
         clfdate(),
@@ -263,7 +290,7 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
       // Something else was installed in the meantime (e.g. the new folder's
       // package.json said `enabled`), so nothing points at this one
       log("removing template", installed.slug);
-      await drop(blogID, installed.slug);
+      await drop.byID(blogID, installed.id);
       await folderRenames.clear(blogID, installed.id);
     } else if (now - record.since >= folderRenames.RENAME_WINDOW) {
       log(
@@ -276,7 +303,7 @@ async function removeMissing(blogID, templatesInFolder, installedBefore) {
       // (a local edit of the default theme) the fork would reuse and then
       // delete it, leaving the blog pointing at nothing.
       try {
-        await drop(blogID, installed.slug);
+        await drop.byID(blogID, installed.id);
       } catch (dropErr) {
         // drop can fail after it has deleted the template (its last step
         // bumps the blog's cacheID). If the template is gone the blog must

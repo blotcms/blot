@@ -2,6 +2,7 @@
 // starts nothing. The broker (./broker.js) runs as root and is the only caller.
 // See app/sandbox/README.md for why each flag is what it is.
 
+const fs = require("fs");
 const path = require("path");
 
 const MiB = 1024 * 1024;
@@ -22,12 +23,12 @@ const ENTER_NETWORK = path.join(__dirname, "enter-network.sh");
 
 // The unit's browser cgroup, which the host binds in (proxy/deploy/common.sh)
 const BROWSER_CGROUP = "/sandbox-browser-cgroup";
-// The proxy jail's, in the unit's subtree. ./proxy.js makes it.
-const PROXY_CGROUP = CGROUP_MOUNT + "/proxy";
-// The fetch-image job's, in the unit's subtree too, so it shares that budget
-// with the image jobs and the proxy jail. The broker makes it (./cgroup.js),
-// with the job's cgroupLimits. The fetch job runs in it too, so the two take
-// turns and add no memory.
+// The fetch-image and fetch jobs' cgroups, in the unit's subtree too, so they
+// share that budget (its limit, not theirs, is the unit's worst case) with the
+// image jobs. The broker makes them (./cgroup.js), with their jobs'
+// cgroupLimits. Each job has its own, so one of each runs at once: a post
+// build's image never waits behind a batch of fetches.
+const FETCH_IMAGE_CGROUP = CGROUP_MOUNT + "/fetch-image";
 const FETCH_CGROUP = CGROUP_MOUNT + "/fetch";
 
 // pasta can't start from a root nsjail, so a jail with a network is started by
@@ -40,6 +41,13 @@ const node = (name) => [
   "/usr/src/app/app/sandbox/jobs/main.js",
   name,
 ];
+
+// The sharp jobs that decode a whole image (thumbnail, resize, to-png) share one
+// limit: two of them at once per unit, however they mix. One takes up to about
+// 4 bytes a pixel of a 100 MP image (app/sandbox/jobs/encode.js), so more would
+// not fit the unit's sandbox subtree. Jobs wait their turn in the broker's
+// queue, which answers busy after 32 and drops what has waited 60s.
+const HEAVY_IMAGE = { group: "heavy-image", maxRunning: 2 };
 
 // A job is a name from this table, never a path or a command from the client
 const JOBS = {
@@ -55,6 +63,7 @@ const JOBS = {
   // The broker can't tell the client has gone (see the README's Protocol).
   thumbnail: {
     command: node("thumbnail"),
+    ...HEAVY_IMAGE,
     memoryBytes: 512 * MiB,
     timeSeconds: 20,
     maxInputBytes: 256 * MiB,
@@ -62,6 +71,7 @@ const JOBS = {
   },
   resize: {
     command: node("resize"),
+    ...HEAVY_IMAGE,
     memoryBytes: 512 * MiB,
     timeSeconds: 60,
     maxInputBytes: 256 * MiB,
@@ -69,6 +79,7 @@ const JOBS = {
   },
   "to-png": {
     command: node("to-png"),
+    ...HEAVY_IMAGE,
     memoryBytes: 512 * MiB,
     timeSeconds: 60,
     maxInputBytes: 256 * MiB,
@@ -99,13 +110,13 @@ const JOBS = {
   // pandoc's start-up (~30 ms of it reading our markdown extensions) each
   // time. timeSeconds is a worker's whole life, which the broker ends sooner
   // (worker.maxAgeSeconds); one document has worker.requestSeconds, after which
-  // the broker kills the worker. pandoc caps its own heap at 400M, so most
+  // the broker kills the worker. pandoc caps its own heap at 256M, so most
   // documents too large for the jail exit pandoc rather than the jail.
   pandoc: {
     command: [
       "/usr/local/bin/pandoc",
       "+RTS",
-      "-M400M",
+      "-M256M",
       "-RTS",
       "lua",
       "/usr/src/app/app/sandbox/jobs/pandoc-worker.lua",
@@ -119,7 +130,7 @@ const JOBS = {
       requests: 500,
       maxAgeSeconds: 300,
       idleSeconds: 60,
-      maxIdle: 2,
+      maxIdle: 1,
       // A worker that took more than this (a big document) is retired rather
       // than kept, so an idle worker's heap stays small (~20-40 MiB)
       heavyInputBytes: 1 * MiB,
@@ -199,7 +210,7 @@ const JOBS = {
   "fetch-image": {
     command: node("fetch-image"),
     network: true,
-    cgroups: [FETCH_CGROUP],
+    cgroups: [FETCH_IMAGE_CGROUP],
     cgroupLimits: { memoryBytes: 256 * MiB, pids: 64 },
     maxQueued: 8,
     timeSeconds: 30,
@@ -208,15 +219,15 @@ const JOBS = {
   },
   // A batch of up to 32 URLs fetched one after the other in one jail: an
   // import's images, audio and PDFs, domain and featured-site checks. The same
-  // jail as fetch-image and the same cgroup, which fetch-image's entry makes
-  // and sizes, so the two take turns on one slot and no memory is added. Its
-  // own queue (the broker queues oldest first across both) is what keeps a big
-  // import from filling fetch-image's, and the reverse. A batch is at most 60s,
+  // jail as fetch-image, in a cgroup of its own, so a big import never holds up
+  // a post build's images. Its own queue keeps a big import from filling
+  // fetch-image's, and the reverse. A batch is at most 60s,
   // its bodies together at most 50 MiB (app/sandbox/jobs/fetch.js).
   fetch: {
     command: node("fetch"),
     network: true,
     cgroups: [FETCH_CGROUP],
+    cgroupLimits: { memoryBytes: 256 * MiB, pids: 64 },
     maxQueued: 16,
     timeSeconds: 75,
     maxInputBytes: 256 * 1024,
@@ -264,9 +275,6 @@ const BROWSER_BINDS = [
   "/etc/fonts",
   "/etc/ssl/certs",
 ];
-
-// The proxy needs no Node, app code or /proc
-const PROXY_BINDS = ["/lib", "/usr/lib", "/usr/bin"];
 
 // What each job with a network adds to BINDS and NETWORK_BINDS, how many files
 // it may hold open, and its environment
@@ -410,8 +418,7 @@ function networkArgs({ config, binds, timeSeconds, nofile, env, command }) {
 // score. A job fails closed and is cheap to lose, so it goes before the units'
 // Node (node-b 900, app/index.js; node-a 0), level with Redis's BGSAVE child
 // (1000, config/redis/redis.conf), which is larger and so still goes first. Raising it needs no privilege, the
-// jail inherits it, and the job's uid can't lower it again. The proxy jail
-// keeps the unit's: it is small and serves every fetch.
+// jail inherits it, and the job's uid can't lower it again.
 const OOM_SCORE_ADJ = 1000;
 const RAISE_OOM_SCORE = `echo ${OOM_SCORE_ADJ} > /proc/self/oom_score_adj`;
 
@@ -438,6 +445,20 @@ function inCgroup(cgroup, args, { raiseOomScore }) {
   };
 }
 
+// The screenshot job can't see its cgroup, so the broker passes it the limit
+// (memory.max, in bytes, or "max" where it is unlimited or can't be read) for
+// its per-page memory watchdog (app/sandbox/jobs/screenshot-memory.js), which
+// gives up on a page at a share of it. The variable also tells the job it is in
+// the jail: it never judges pages anywhere else. Only digits or "max" are passed.
+function browserMemoryEnv(directory) {
+  let limit = "max";
+  try {
+    const text = fs.readFileSync(directory + "/memory.max", "utf8").trim();
+    if (/^\d{1,15}$/.test(text)) limit = text;
+  } catch (e) {}
+  return ["BLOT_BROWSER_MEMORY_MAX=" + limit];
+}
+
 // The program and arguments that start a job's jail; for a job with a
 // network, in one of its cgroups, the first unless the broker picks another
 function command(name, cgroup) {
@@ -453,6 +474,10 @@ function command(name, cgroup) {
   const directory = cgroup || j.cgroups[0];
   if (!j.cgroups.includes(directory)) throw new Error("unknown cgroup");
   const extra = NETWORK_JOBS[name];
+  const env =
+    name === "screenshot"
+      ? extra.env.concat(browserMemoryEnv(directory))
+      : extra.env;
   return inCgroup(
     directory,
     networkArgs({
@@ -460,46 +485,22 @@ function command(name, cgroup) {
       binds: BINDS.concat(NETWORK_BINDS, extra.binds),
       timeSeconds: j.timeSeconds,
       nofile: extra.nofile,
-      env: extra.env,
+      env,
       command: j.command,
     }),
     { raiseOomScore: true }
   );
 }
 
-// The program and arguments that start a unit's proxy jail, which runs until it
-// is stopped: no time limit. Its port is in its config, so it isn't passed in.
-function proxyCommand(unit) {
-  if (unit !== "blue" && unit !== "green") throw new Error("unknown unit");
-  return inCgroup(
-    PROXY_CGROUP,
-    networkArgs({
-      config: path.join(__dirname, `network-proxy-${unit}.cfg`),
-      binds: PROXY_BINDS.concat(NETWORK_BINDS),
-      timeSeconds: 0,
-      // A connection each way for each of tinyproxy's MaxClients
-      nofile: 256,
-      env: ["BLOT_PROXY_JAIL=1"],
-      command: [
-        "/usr/bin/tinyproxy",
-        "-d",
-        "-c",
-        path.join(__dirname, "tinyproxy.conf"),
-      ],
-    }),
-    { raiseOomScore: false }
-  );
-}
-
 module.exports = {
   JOBS,
   NSJAIL,
+  CGROUP_MOUNT,
   BROWSER_CGROUP,
-  PROXY_CGROUP,
   FETCH_CGROUP,
+  FETCH_IMAGE_CGROUP,
   OOM_SCORE_ADJ,
   job,
   args,
   command,
-  proxyCommand,
 };

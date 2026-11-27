@@ -45,11 +45,28 @@ function parseSyncStatusMessage(message) {
   };
 }
 
+// Status messages that name a file carry its whole path; the status line
+// shows just the file's name, with a plainer verb where the message has
+// one. The activity log keeps the full message.
+var SHORT_VERBS = [
+  ["Transferring to iCloud ", "Copying "],
+  ["Creating directory in iCloud ", "Creating folder "],
+  ["Removing from iCloud ", "Removing "],
+  ["Removing local item ", "Removing "],
+  ["Syncing ", "Syncing "],
+  ["Transferring ", "Copying "],
+  ["Downloading ", "Downloading "],
+  ["Checking ", "Checking "],
+  ["Removing ", "Removing "],
+];
+
 function shortenSyncingFilename(message) {
-  if (message.startsWith("Syncing /")) {
-    var path = message.slice("Syncing ".length);
-    var filename = path.split("/").pop();
-    return "Syncing " + filename;
+  for (var i = 0; i < SHORT_VERBS.length; i++) {
+    var prefix = SHORT_VERBS[i][0];
+    if (message.startsWith(prefix + "/")) {
+      var path = message.slice(prefix.length).replace(/\/+$/, "");
+      return SHORT_VERBS[i][1] + path.split("/").pop();
+    }
   }
 
   return message;
@@ -103,8 +120,16 @@ function renderSyncStatusMessage(message) {
     var roundedPercent = Math.round(Math.max(0, Math.min(100, parsed.percent)));
 
     statusContainer.classList.add("has-progress");
-    if (progressBar) progressBar.style.width = roundedPercent + "%";
-    if (progressLabel) progressLabel.innerText = roundedPercent + "% complete";
+    if (progressBar) setProgressWidth(progressBar, roundedPercent);
+    // The bar shows the proportion; the label says how much work that is
+    if (progressLabel)
+      progressLabel.innerText =
+        parsed.total > 0
+          ? parsed.current.toLocaleString() +
+            " of " +
+            parsed.total.toLocaleString() +
+            (parsed.total === 1 ? " file" : " files")
+          : "";
   } else {
     statusContainer.classList.remove("has-progress");
     if (progressBar) progressBar.style.width = "0%";
@@ -112,6 +137,22 @@ function renderSyncStatusMessage(message) {
   }
 
   updateContainerClass();
+}
+
+// A bar the page has just swapped in (a live re-render) starts at 0%; put it
+// straight at its width, so it doesn't slide up from nothing on every
+// re-render, and animate only the moves after that
+function setProgressWidth(bar, percent) {
+  if (!bar.hasAttribute("data-shown")) {
+    bar.setAttribute("data-shown", "");
+    bar.style.transition = "none";
+    bar.style.width = percent + "%";
+    void bar.offsetWidth;
+    bar.style.transition = "";
+    return;
+  }
+
+  bar.style.width = percent + "%";
 }
 
 function updateContainerClass() {
@@ -133,19 +174,31 @@ function updateContainerClass() {
   }
 }
 
+// A page whose live region changes in a few big steps (the iCloud setup)
+// can ask to re-render sooner than a folder listing would, with
+// data-throttle (ms) on its .live-updates
+function throttleDelay() {
+  var live = q(".live-updates");
+  var ms = live && parseInt(live.getAttribute("data-throttle"), 10);
+  return ms > 0 ? ms : THROTTLE_DELAY;
+}
+
 function scheduleLoad() {
   if (document.visibilityState === "hidden") {
     pendingWhileHidden = true;
     return;
   }
 
-  var now = Date.now();
-  var when = Math.max(nextAt, now);
-
-  if (timerId) {
+  // A load already running or already scheduled picks this up afterwards.
+  // Without this, a message that arrived mid-load set a 0 ms timer whose
+  // runLoad() returned at once, and the re-render it asked for was lost
+  if (timerId || inFlight) {
     shouldReload = true;
     return;
   }
+
+  var now = Date.now();
+  var when = Math.max(nextAt, now);
 
   if (!inFlight && now >= nextAt) {
     runLoad();
@@ -164,7 +217,7 @@ function runLoad() {
 
   loadFolder(function done() {
     inFlight = false;
-    nextAt = started + THROTTLE_DELAY;
+    nextAt = started + throttleDelay();
     // If events piled up, one schedule() coalesces them.
     if (shouldReload) {
       shouldReload = false;

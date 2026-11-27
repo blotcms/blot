@@ -14,6 +14,7 @@ const net = require("net");
 const { spawn } = require("child_process");
 const cgroup = require("./cgroup");
 const jail = require("./jail");
+const peak = require("./peak");
 
 const DIRECTORY = "/run/blot-sandbox";
 const SOCKET = DIRECTORY + "/broker.sock";
@@ -58,6 +59,21 @@ function createBroker(options = {}) {
   // A job whose cgroup is in the unit's subtree, which nsjail can't make for
   // a jail with a network, has its cgroup made here (./cgroup.js)
   const prepareCgroup = options.prepareCgroup || cgroup.prepare;
+  // Where a jail's memory is counted: its broker-made cgroup, or the one nsjail
+  // makes for it, named after the process nsjail cloned (child.pid is nsjail
+  // itself: the shell that starts it execs it), found once it exists. Tests
+  // replace it.
+  const cgroupOf =
+    options.cgroupOf ||
+    ((child, directory) =>
+      directory ||
+      (child.pid
+        ? () => peak.nsjailCgroup(jail.CGROUP_MOUNT, child.pid)
+        : null));
+  // One line per job when it is done, for sizing each job's memory
+  const jobLine = (name, error, ms, measured, queuedMs, extra = "") =>
+    `broker: job=${name} ${error ? "error=" + error : "ok"}${extra} ms=${ms} ` +
+    `${peak.words(measured)} queued_ms=${queuedMs}`;
 
   const running = new Set();
   const queue = [];
@@ -131,12 +147,15 @@ function createBroker(options = {}) {
 
   // A job may have its own limit, below the broker's, and a jail in its own
   // cgroup needs one of them free
+  // A job's limit counts the jobs of its group (job.group, which jobs that
+  // share a memory cost name alike), or itself if it has none
   function hasRoom({ name, job }) {
     if (running.size >= maxRunning) return false;
     if (job.cgroups && !freeCgroup(job)) return false;
     if (!job.maxRunning) return true;
+    const group = job.group || name;
     let same = 0;
-    for (const entry of running) if (entry.name === name) same++;
+    for (const entry of running) if (entry.group === group) same++;
     return same < job.maxRunning;
   }
 
@@ -148,6 +167,7 @@ function createBroker(options = {}) {
   }
 
   function admit(request) {
+    request.arrived = Date.now();
     if (hasRoom(request)) return start(request);
     if (queueIsFull(request)) return fail(request.socket, "busy");
     request.queued = Date.now();
@@ -211,9 +231,24 @@ function createBroker(options = {}) {
     } catch (e) {
       return fail(socket, "failed");
     }
-    const entry = { child, name, cgroup: directory };
+    const entry = { child, name, group: job.group || name, cgroup: directory };
     running.add(entry);
     if (directory) lastNameIn.set(directory, name);
+    const queuedMs = started - request.arrived;
+    // A broker-made cgroup is shared, so it is reset first and read before
+    // it is cleared; nsjail's own goes with the jail, so it is read as the
+    // jail runs and when its output ends
+    const where = cgroupOf(child, directory);
+    const tracker = where
+      ? peak.track(
+          where,
+          directory
+            ? { reset: true, shared: true }
+            : { interval: peak.SAMPLE_MS }
+        )
+      : null;
+    const measure = () =>
+      tracker ? tracker.finish() : { peak: null, shared: false };
 
     const kill = (error) => {
       if (!failure) failure = error || "disconnected";
@@ -233,6 +268,8 @@ function createBroker(options = {}) {
       finished = true;
       clearTimeout(limit);
       running.delete(entry);
+      // before the cgroup is cleared, which would drop what it holds
+      const measured = measure();
       if (directory) {
         try {
           clearCgroup(directory);
@@ -253,10 +290,17 @@ function createBroker(options = {}) {
         if (ms >= job.timeSeconds * 1000 - TIME_LIMIT_EARLY_MS)
           error = "timeout";
       }
+      log(
+        jobLine(
+          name,
+          error,
+          ms,
+          measured,
+          queuedMs,
+          error ? ` code=${code} signal=${signal}` : ""
+        )
+      );
       if (error) {
-        log(
-          `broker: job=${name} error=${error} code=${code} signal=${signal} ms=${ms}`
-        );
         fail(socket, error);
       } else {
         const body = Buffer.concat(output, outputBytes);
@@ -293,6 +337,8 @@ function createBroker(options = {}) {
       if (!failure) output.push(chunk);
     });
     child.stdout.on("error", () => {});
+    // The jail has exited by now but nsjail has not yet removed its cgroup
+    child.stdout.on("end", () => tracker && tracker.sample());
 
     child.stdin.on("error", () => {});
     const feed = (chunk) => {
@@ -340,7 +386,11 @@ function createBroker(options = {}) {
       bytes: 0,
       onData: null,
       onExit: null,
+      where: cgroupOf(child, null),
+      tracker: null,
     };
+    // Its whole life's peak, read when a request ends, as it is gone at exit
+    if (worker.where) worker.tracker = peak.track(worker.where);
     child.stdout.on("data", (chunk) => {
       worker.chunks.push(chunk);
       worker.bytes += chunk.length;
@@ -353,6 +403,14 @@ function createBroker(options = {}) {
       if (worker.exited) return;
       worker.exited = true;
       unidle(worker);
+      const measured = worker.tracker
+        ? worker.tracker.finish()
+        : { peak: null, shared: false };
+      log(
+        `broker: worker=${worker.name} exit code=${code} signal=${signal} ` +
+          `requests=${worker.requests} age_ms=${Date.now() - worker.started} ` +
+          `${peak.words(measured)}`
+      );
       if (worker.onExit) worker.onExit(code, signal);
     };
     child.on("error", () => exited(null, null));
@@ -419,7 +477,8 @@ function createBroker(options = {}) {
     worker.idleTimer.unref();
   }
 
-  function startOnWorker({ socket, name, job, rest }) {
+  function startOnWorker(request) {
+    const { socket, name, job, rest } = request;
     const started = Date.now();
     let worker;
     try {
@@ -432,6 +491,18 @@ function createBroker(options = {}) {
     running.add(entry);
     let done = false;
     let inputBytes = 0;
+    const queuedMs = started - request.arrived;
+    // This request's peak: the worker's cgroup is its own, so on a kernel that
+    // can reset memory.peak it is reset here, and otherwise it is the worker's
+    // whole life so far
+    if (worker.tracker) worker.tracker.sample();
+    const tracker = worker.where
+      ? peak.track(worker.where, {
+          reset: true,
+          shared: true,
+          interval: peak.SAMPLE_MS,
+        })
+      : null;
 
     const finish = (error, body) => {
       if (done) return;
@@ -439,8 +510,21 @@ function createBroker(options = {}) {
       clearTimeout(limit);
       running.delete(entry);
       socket.removeListener("data", feed);
+      const measured = tracker
+        ? tracker.finish()
+        : { peak: null, shared: false };
+      if (worker.tracker) worker.tracker.sample();
+      log(
+        jobLine(
+          name,
+          error,
+          Date.now() - started,
+          measured,
+          queuedMs,
+          ` worker_requests=${worker.requests}`
+        )
+      );
       if (error) {
-        log(`broker: job=${name} error=${error} ms=${Date.now() - started}`);
         fail(socket, error);
       } else {
         reply(socket, JSON.stringify({ ok: true, length: body.length }), body);

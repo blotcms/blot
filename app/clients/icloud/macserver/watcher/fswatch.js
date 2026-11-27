@@ -26,7 +26,8 @@ const startFsWatch = (reconcileFsWatchEvent) => {
       const blogID = extractBlogID(fullPath);
       const pathInBlogDirectory = extractPathInBlogDirectory(fullPath);
 
-      if (!blogID || !pathInBlogDirectory) {
+      // an empty path is the blog folder itself (deleted or unshared?)
+      if (!blogID || pathInBlogDirectory === null) {
         return;
       }
 

@@ -7,7 +7,7 @@ const fx = require("./helpers/fixture");
 const timeout = require("./helpers/timeout");
 const { createReceiveServer, push } = require("./helpers/receiveServer");
 const manifest = require("../manifest");
-const createCache = require("./helpers/caches");
+const workspace = require("./helpers/workspace");
 const createMemoryStore = require("../objectStore/memory");
 const { advertise } = require("../advertise");
 const { split } = require("../pktline");
@@ -26,17 +26,18 @@ function createLock() {
 describe("git store peeled tags", function () {
   timeout(60 * 1000);
 
+  const ws = workspace.each();
   let dir;
   let work;
   let store;
   let received;
 
   beforeEach(async function () {
-    dir = fx.tempDir();
+    dir = ws.dir();
     work = path.join(dir, "work");
     fx.buildFixture(work, { commits: 3, large: false });
     store = createMemoryStore();
-    const cache = createCache({
+    const cache = ws.cache({
       dir: path.join(dir, "cache"),
       maxBytes: 64 * MiB,
     });
@@ -45,8 +46,6 @@ describe("git store peeled tags", function () {
 
   afterEach(async function () {
     await received.close();
-    await createCache.closeAll();
-    fx.remove(dir);
   });
 
   it("records the target of an annotated tag when it is pushed, and advertises it", async function () {

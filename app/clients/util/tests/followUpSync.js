@@ -22,6 +22,7 @@ describe("followUpSync", function () {
     await client.del([
       "alarm:due:" + name + "-follow-up-sync",
       "alarm:claims:" + name + "-follow-up-sync",
+      "sync:follow-up:failures:" + name + ":" + blogID,
     ]);
   });
 
@@ -47,6 +48,26 @@ describe("followUpSync", function () {
 
     expect(syncBlog.calls.allArgs()).toEqual([[blogID]]);
     expect(await followUps.alarm.when(blogID)).toBe(null);
+  });
+
+  it("passes the caller's context to the sync it starts, not to a follow-up", async function () {
+    const syncBlog = jasmine
+      .createSpy("syncBlog")
+      .and.returnValue(Promise.resolve());
+    const followUps = followUpSync(name, syncBlog);
+
+    await followUps.run(blogID, undefined, { trigger: "activity" });
+    expect(syncBlog.calls.allArgs()).toEqual([
+      [blogID, { trigger: "activity" }],
+    ]);
+
+    syncBlog.calls.reset();
+    await holdLock();
+    await followUps.run(blogID, undefined, { trigger: "activity" });
+    await releaseLock();
+    await makeDue(followUps);
+    await followUps.alarm.poll();
+    expect(syncBlog.calls.allArgs()).toEqual([[blogID]]);
   });
 
   it("collapses requests during a running sync into one follow-up, run once the lock is free", async function () {
@@ -112,18 +133,71 @@ describe("followUpSync", function () {
     expect(await followUps.alarm.when(blogID)).toBeGreaterThan(Date.now());
   });
 
-  it("logs other sync errors without retrying", async function () {
+  it("logs other sync errors from a push's own sync, leaving no follow-up", async function () {
     const syncBlog = jasmine
       .createSpy("syncBlog")
       .and.callFake(() => Promise.reject(new Error("boom")));
     const followUps = followUpSync(name, syncBlog);
 
     await followUps.run(blogID);
+
+    expect(syncBlog).toHaveBeenCalledTimes(1);
     expect(await followUps.alarm.when(blogID)).toBe(null);
+  });
+
+  it("retries a follow-up whose sync fails, after longer waits, then drops it", async function () {
+    const waits = followUpSync.FAILURE_RETRY_MS;
+    const syncBlog = jasmine
+      .createSpy("syncBlog")
+      .and.callFake(() => Promise.reject(new Error("Redis blip")));
+    const followUps = followUpSync(name, syncBlog);
+
+    for (const wait of waits) {
+      await makeDue(followUps);
+      const before = Date.now();
+      await followUps.alarm.poll();
+      const due = await followUps.alarm.when(blogID);
+      expect(due).toBeGreaterThanOrEqual(before + wait);
+      expect(due).toBeLessThan(Date.now() + wait + 1000);
+    }
 
     await makeDue(followUps);
     await followUps.alarm.poll();
-    expect(syncBlog).toHaveBeenCalledTimes(2);
+
+    expect(syncBlog).toHaveBeenCalledTimes(waits.length + 1);
     expect(await followUps.alarm.when(blogID)).toBe(null);
+    expect(
+      await client.exists("sync:follow-up:failures:" + name + ":" + blogID)
+    ).toBe(0);
+  });
+
+  it("starts the waits again once a retried follow-up syncs", async function () {
+    let fail = true;
+    const syncBlog = jasmine
+      .createSpy("syncBlog")
+      .and.callFake(() =>
+        fail ? Promise.reject(new Error("Redis blip")) : Promise.resolve()
+      );
+    const followUps = followUpSync(name, syncBlog);
+
+    await makeDue(followUps);
+    await followUps.alarm.poll();
+    expect(await followUps.alarm.when(blogID)).not.toBe(null);
+
+    fail = false;
+    await makeDue(followUps);
+    await followUps.alarm.poll();
+    expect(await followUps.alarm.when(blogID)).toBe(null);
+    expect(
+      await client.exists("sync:follow-up:failures:" + name + ":" + blogID)
+    ).toBe(0);
+
+    fail = true;
+    await makeDue(followUps);
+    const before = Date.now();
+    await followUps.alarm.poll();
+    expect(await followUps.alarm.when(blogID)).toBeLessThan(
+      before + followUpSync.FAILURE_RETRY_MS[1]
+    );
   });
 });

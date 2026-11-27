@@ -31,7 +31,7 @@ describe("dropbox createFolder moveExistingFiles", function () {
     const { moveExistingFiles } = require("../../routes/setup/createFolder");
 
     await expectAsync(
-      moveExistingFiles({}, { id: "blog-1", title: "Other blog" })
+      moveExistingFiles({}, { id: "blog-1", title: "Other blog" }, { tries: 1 })
     ).toBeRejectedWith(new Error("Failed to acquire folder lock"));
   });
 });

@@ -42,16 +42,13 @@ describe("git store local directory object store", function () {
   timeout(30 * 1000);
 
   const fs = require("fs");
-  const fx = require("./helpers/fixture");
+  const workspace = require("./helpers/workspace");
   const createFsStore = require("../objectStore/fs");
+  const ws = workspace.each();
   let dir;
 
   beforeEach(function () {
-    dir = fx.tempDir();
-  });
-
-  afterEach(function () {
-    fx.remove(dir);
+    dir = ws.dir();
   });
 
   for (const [name, run] of cases) {

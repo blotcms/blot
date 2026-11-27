@@ -5,7 +5,6 @@ const path = require("path");
 const client = require("models/client");
 const documentation = require("./documentation/build");
 const templates = require("./templates");
-const folders = require("./templates/folders");
 const clfdate = require("helper/clfdate");
 const scheduler = require("./scheduler");
 const logRedisCacheStats = require("./scheduler/redis-cache-stats");
@@ -15,6 +14,7 @@ const flush = require("documentation/tools/flush-cache");
 const configureLocalBlogs = require("./configure-local-blogs");
 const purgeCdnUrlsOnce = require("helper/purgeCdnUrlsOnce");
 const { assertConfigured: assertStorageBucket } = require("storage/s3");
+const servesOnly = require("helper/servesOnly");
 
 // The offline queue is still on while we boot, so a command sent while Redis
 // is unreachable waits for the connection instead of failing. Don't let that
@@ -84,38 +84,50 @@ async function runPostListenTasks() {
     logError("Failed to start render time metric flushing", err);
   }
 
+  // The background jobs below run in every process except node-a in a unit,
+  // which only serves (helper/servesOnly, #2990). Each is shared out between
+  // the processes that run it by Redis locks and leases.
+  const runsJobs = !servesOnly();
+  if (!runsJobs) log("Serving only: background jobs run in the worker child");
+
   try {
-    // Every container polls for scheduled entries that have come due
-    log("Starting scheduled entry publication asynchronously");
-    const { alarm } = require("models/entry/scheduled");
-    alarm.start();
-    // Claim nothing new once draining; an unfinished one is retried elsewhere
-    require("helper/drain").onStart(() => {
-      alarm
-        .stop()
-        .catch((err) =>
-          logError("Failed to stop scheduled entry publication", err)
-        );
-    });
+    // Every process that runs jobs polls for scheduled entries that have
+    // come due
+    if (runsJobs) {
+      log("Starting scheduled entry publication asynchronously");
+      const { alarm } = require("models/entry/scheduled");
+      alarm.start();
+      // Claim nothing new once draining; an unfinished one is retried elsewhere
+      require("helper/drain").onStart(() => {
+        alarm
+          .stop()
+          .catch((err) =>
+            logError("Failed to stop scheduled entry publication", err)
+          );
+      });
+    }
   } catch (err) {
     logError("Failed to start scheduled entry publication", err);
   }
 
   try {
-    // Any container may claim a due alarm, so every container polls
-    log("Starting welcome email alarm");
-    const welcomeEmailAlarm = require("models/user/scheduleWelcomeEmail").alarm;
-    welcomeEmailAlarm.start();
-    require("helper/drain").onStart(() => welcomeEmailAlarm.stop());
+    // Any process may claim a due alarm, so every one that runs jobs polls
+    if (runsJobs) {
+      log("Starting welcome email alarm");
+      const welcomeEmailAlarm =
+        require("models/user/scheduleWelcomeEmail").alarm;
+      welcomeEmailAlarm.start();
+      require("helper/drain").onStart(() => welcomeEmailAlarm.stop());
+    }
   } catch (err) {
     logError("Failed to start welcome email alarm", err);
   }
 
   try {
     // Webhooks that arrived while their blog was syncing leave a follow-up
-    // sync which any container may run. Previews share the dev Redis and skip
-    // them, as they skip the clients.
-    if (!config.preview) {
+    // sync which any process that runs jobs may run. Previews share the dev
+    // Redis and skip them, as they skip the clients.
+    if (!config.preview && runsJobs) {
       log("Starting follow-up syncs");
       const followUpSync = require("clients/util/followUpSync");
       // Loads each client's routes, which create their follow-up syncs
@@ -131,10 +143,47 @@ async function runPostListenTasks() {
     logError("Failed to start follow-up syncs", err);
   }
 
-  // Cron jobs and client jobs take Redis locks, so every container runs them.
+  try {
+    // Whole-blog rebuilds a settings change or the dashboard queued, and any
+    // a killed process left part done. Any process that runs jobs may run
+    // them. Previews share the dev Redis and skip them.
+    if (!config.preview && runsJobs) {
+      log("Starting pending rebuilds");
+      const pendingRebuilds = require("sync/pendingRebuilds");
+      pendingRebuilds.start();
+      require("helper/drain").onStart(() => {
+        pendingRebuilds
+          .stop()
+          .catch((err) => logError("Failed to stop pending rebuilds", err));
+      });
+    }
+  } catch (err) {
+    logError("Failed to start pending rebuilds", err);
+  }
+
+  try {
+    // Rebuilds of dependent entries a killed sync left pending, for blogs
+    // which don't sync again (sync/dependentsAlarm). Any process that runs
+    // jobs may run them; previews share the dev Redis and skip them.
+    if (!config.preview && runsJobs) {
+      log("Starting the dependents alarm");
+      const dependentsAlarm = require("sync/dependentsAlarm");
+      dependentsAlarm.start();
+      require("helper/drain").onStart(() => {
+        dependentsAlarm
+          .stop()
+          .catch((err) => logError("Failed to stop the dependents alarm", err));
+      });
+    }
+  } catch (err) {
+    logError("Failed to start the dependents alarm", err);
+  }
+
+  // Cron jobs and client jobs take Redis locks, so every process that runs
+  // jobs runs them.
   // Worktree previews share the dev Redis and skip them.
   try {
-    if (!config.preview) {
+    if (!config.preview && runsJobs) {
       log("Starting scheduler asynchronously");
       scheduler();
     }
@@ -145,15 +194,15 @@ async function runPostListenTasks() {
   // Blogs named like a demo folder follow it: settings from its config.js and
   // files through the Local client. Before the clients start, so they're on it.
   try {
-    if (!config.preview && config.environment === "development") {
-      await require("./templates/folders/local").start();
+    if (!config.preview && runsJobs && config.environment === "development") {
+      await require("./templates/demo/local").start();
     }
   } catch (err) {
     logError("Failed to sync demo folder blogs", err);
   }
 
   try {
-    if (!config.preview) {
+    if (!config.preview && runsJobs) {
       const clients = Object.values(require("clients"));
       for (const { init, display_name } of clients) {
         if (init) {
@@ -199,18 +248,8 @@ async function runPostListenTasks() {
     logError("Failed to configure local blogs", err);
   }
 
-  if (config.environment === "production") {
-    log("Building folders asynchronously");
-
-    setImmediate(async () => {
-      try {
-        await folders();
-        log("Built folders asynchronously");
-      } catch (err) {
-        logError("Error building folders", err);
-      }
-    });
-  }
+  // The production demo blogs are synced by the deploy, not here: the image
+  // doesn't carry their folders (scripts/deploy/demo-folders.js, #2940).
 
   try {
     const cdnURL = require("documentation/tools/cdn-url-helper")({

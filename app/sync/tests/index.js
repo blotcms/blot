@@ -364,6 +364,26 @@ describe("sync cacheID", function () {
     expect(after.cacheID).toBeGreaterThan(before.cacheID);
   });
 
+  // A deploy's drain lets the process exit once it holds no folder locks, so
+  // a bump after the release could be lost
+  it("bumps the cacheID before releasing the lock", async function () {
+    const blogID = this.blog.id;
+    const bumpCacheID = Blog.bumpCacheID;
+    const held = [];
+
+    // The update bumps it too, as it saves the file; the last bump is done's
+    spyOn(Blog, "bumpCacheID").and.callFake(async function () {
+      held.push((await folderLock.inspect(blogID)).held);
+      return bumpCacheID.apply(Blog, arguments);
+    });
+
+    await syncChange(blogID);
+
+    expect(Blog.bumpCacheID).toHaveBeenCalled();
+    expect(held[held.length - 1]).toBe(true);
+    expect((await folderLock.inspect(blogID)).held).toBe(false);
+  });
+
   // Syncs a.txt with these contents, resolving the update's result
   function syncContents(blogID, contents) {
     return sync(blogID, async function (folder) {
@@ -397,6 +417,26 @@ describe("sync cacheID", function () {
     const result = await syncContents(blogID, "Hello, world");
     expect(result.changed).not.toBe(false);
     expect(Blog.bumpCacheID).toHaveBeenCalled();
+  });
+
+  // The entry lists pages render from are cached per cacheID, so a change is
+  // only live once the cacheID moves: that must happen when the file is
+  // saved, not when the whole sync ends (which can be seconds later)
+  it("bumps the cacheID as soon as an update changes a file", async function () {
+    const blogID = this.blog.id;
+
+    await syncContents(blogID, "Hello");
+
+    const before = await Blog.get({ id: blogID });
+    let during;
+
+    await sync(blogID, async function (folder) {
+      await storage.write(blogID, "/a.txt", Buffer.from("Hello, world"));
+      await folder.update("/a.txt");
+      during = await Blog.get({ id: blogID });
+    });
+
+    expect(during.cacheID).toBeGreaterThan(before.cacheID);
   });
 
   // A file which changes while it builds is synced again. The first pass has

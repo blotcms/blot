@@ -1,6 +1,7 @@
 import { remoteServer, Authorization } from "../config.js";
 import fetch from "./rateLimitedFetchWithRetriesAndTimeout.js";
 import clfdate from "../util/clfdate.js";
+import { pushInTurn } from "../limiters.js";
 
 export default async (...args) => {
   const [blogID, path] = args;
@@ -38,14 +39,16 @@ export default async (...args) => {
   const pathBase64 = Buffer.from(path).toString("base64");
 
   try {
-    await fetch(`${remoteServer}/delete`, {
-      method: "POST",
-      headers: {
-        Authorization,
-        blogID,
-        pathBase64,
-      },
-    });
+    await pushInTurn(blogID, () =>
+      fetch(`${remoteServer}/delete`, {
+        method: "POST",
+        headers: {
+          Authorization,
+          blogID,
+          pathBase64,
+        },
+      })
+    );
   } catch (error) {
     console.error(
       clfdate(),

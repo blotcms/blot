@@ -94,6 +94,25 @@ describe("local client source directory", function () {
         ).toBe(true);
       });
 
+      it("syncs a batch on the retry when the folder lock could not be taken", async function () {
+        const id = this.blog.id;
+        const sync = require("sync");
+        const original = sync.establishSyncLock;
+        let attempts = 0;
+        spyOn(console, "error");
+        spyOn(sync, "establishSyncLock").and.callFake(async (blogID) => {
+          attempts++;
+          if (attempts === 1) throw new Error("Failed to acquire folder lock");
+          return original(blogID);
+        });
+
+        await fs.outputFile(join(dir, "locked.txt"), "kept");
+        expect(
+          await until(async () => (await text(id, "/locked.txt")) === "kept")
+        ).toBe(true);
+        expect(attempts).toBeGreaterThan(1);
+      });
+
       it("removes from the folder what is removed from the source", async function () {
         const id = this.blog.id;
         await fs.outputFile(join(dir, "gone.txt"), "x");

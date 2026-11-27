@@ -1,0 +1,80 @@
+describe("google drive dirty directories", function () {
+  const client = require("models/client");
+  const dirty = require("clients/google-drive/database/dirty");
+
+  const BLOG = "blog_dirty_test";
+
+  afterEach(async function () {
+    await client.del([
+      dirty.key(BLOG),
+      dirty.movesKey(BLOG),
+      dirty.seenKey(BLOG),
+    ]);
+  });
+
+  it("keeps where moved folders went, for an hour", async function () {
+    await dirty.hintMoves(BLOG, [{ id: "F", parentId: "P" }]);
+
+    expect(await dirty.moveHint(BLOG, "F")).toBe("P");
+    expect(await dirty.moveHint(BLOG, "G")).toBe(null);
+    expect(await client.ttl(dirty.movesKey(BLOG))).toBeGreaterThan(3500);
+  });
+
+  it("takes every directory added, once", async function () {
+    await dirty.add(BLOG, ["a", "b"]);
+    await dirty.add(BLOG, ["b", "c"]);
+
+    expect(await dirty.count(BLOG)).toBe(3);
+    expect((await dirty.take(BLOG)).sort()).toEqual(["a", "b", "c"]);
+    expect(await dirty.take(BLOG)).toEqual([]);
+    expect(await dirty.count(BLOG)).toBe(0);
+  });
+
+  it("leaves what is added after a take for the next one", async function () {
+    await dirty.add(BLOG, ["a"]);
+    await dirty.take(BLOG);
+    await dirty.add(BLOG, [dirty.FULL]);
+
+    expect(await dirty.take(BLOG)).toEqual([dirty.FULL]);
+  });
+
+  it("lists what is waiting without taking it", async function () {
+    await dirty.add(BLOG, ["a", "b"]);
+
+    expect((await dirty.members(BLOG)).sort()).toEqual(["a", "b"]);
+    expect(await dirty.count(BLOG)).toBe(2);
+  });
+
+  it("expires a set nobody takes", async function () {
+    await dirty.add(BLOG, ["a"]);
+
+    expect(await client.ttl(dirty.key(BLOG))).toBeGreaterThan(0);
+  });
+
+  it("adds nothing for no directories", async function () {
+    await dirty.add(BLOG, []);
+
+    expect(await client.exists(dirty.key(BLOG))).toBe(0);
+  });
+
+  it("keeps the first sighting of each directory until it is read", async function () {
+    const before = Date.now();
+    await dirty.add(BLOG, ["a"], "changes");
+    await dirty.add(BLOG, ["a", "b"], "walk:webhook");
+
+    const seen = await dirty.seen(BLOG, ["a", "b", "c"]);
+    expect(seen.a.source).toBe("changes");
+    expect(seen.a.at).not.toBeLessThan(before);
+    expect(seen.b.source).toBe("walk:webhook");
+    expect(seen.c).toBeUndefined();
+
+    // Read once: the next change is timed afresh
+    expect(await dirty.seen(BLOG, ["a"])).toEqual({});
+  });
+
+  it("records no sighting for a put back", async function () {
+    await dirty.add(BLOG, ["a"]);
+
+    expect(await dirty.seen(BLOG, ["a"])).toEqual({});
+  });
+});

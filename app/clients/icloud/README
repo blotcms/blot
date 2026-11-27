@@ -35,9 +35,9 @@ The architecture separates concerns:
 
 - `resync.js` - The client's `resync`. Refuses (with a `code` the dashboard recognises) when the folder was deleted or the initial transfer hasn't finished, since resyncing would remove local files iCloud doesn't have; otherwise runs `sync/fromiCloud.js`.
 
-- `init.js` - Initialization and background job orchestration. On startup, resumes any interrupted initial transfers. Schedules the hourly validation sweep (`:45`; Dropbox runs at `:00`, Google Drive at `:30`): for each blog whose `lastSync` is within the last hour it walks the folder under the sync lock and runs Fix() if the walk succeeded (both in `sync/validateBlog.js`), and emails one `ICLOUD_SYNC_ISSUE` digest (`clients/util/syncReport.js`) listing changes it had to pull, Fix() repairs, errors (including walks that swallowed failures) and stuck locks. Blogs with a user-side issue (folder deleted, storage full) are skipped silently, and an ongoing error or stuck lock is emailed once per occurrence. The daily full resync and the startup resync are exported but not scheduled. Monitors macro server health.
+- `init.js` - Initialization and background job orchestration. Resumes interrupted initial transfers (`sync/resumeTransfers.js`) on startup and hourly at `:15`, so a transfer a deploy or crash killed after startup's run is still finished. Schedules the hourly validation sweep (`:45`; Dropbox runs at `:00`, Google Drive at `:30`): for each blog whose `lastSync` is within the last hour, and for a twenty-fourth of the other blogs (chosen by a hash of the blog ID, so every blog is walked once a day), it walks the folder under the sync lock and runs Fix() if the walk succeeded (both in `sync/validateBlog.js`), and emails one `ICLOUD_SYNC_ISSUE` digest (`clients/util/syncReport.js`) listing changes it had to pull, Fix() repairs, errors (including walks that swallowed failures) and stuck locks. Blogs with a user-side issue (folder deleted, storage full) are skipped silently, and an ongoing error or stuck lock is emailed once per occurrence. Monitors macro server health.
 
-- `disconnect.js` - Handles client disconnection. Notifies the remote macserver to disconnect (best-effort), then locally removes the blog's database entry and clears the blog's client assignment.
+- `disconnect.js` - Handles client disconnection. Notifies the remote macserver to disconnect (best-effort), then, under the folder lock taken from any sync still running (`sync/seize.js`, reason `disconnect`), removes the blog's database entry and clears the blog's client assignment, then removes its placeholders in a sync of their own. The running sync is stopped through its lock's `folder.signal`, which every macserver request is given, and writes nothing to the account or the folder afterwards.
 
 - `remove.js` - File removal handler. Deletes a file from both the local Blot storage and the remote iCloud folder.
 
@@ -51,7 +51,7 @@ Core bidirectional sync logic. All sync operations acquire and hold a sync lock 
 
 - `validateBlog.js` - The per-blog check shared by the hourly validation and the macserver-requested resync: walks under the sync lock (taking it, or using one the caller already holds), records the walk in a `syncReport`, releases the lock, then runs Fix() on a freshly loaded blog and records it. Walk and Fix() failures are recorded, not thrown.
 
-- `fromiCloud.js` - Syncs remote iCloud folder state down to local Blot storage. Recursively walks the remote folder tree, comparing sizes to detect changes, downloading new/modified files, removing local files that don't exist remotely, and creating local directories as needed. Skips ignored files and oversized files (creating empty placeholders instead). Returns a summary of changes, including `failed`/`firstError` for the failures it swallows rather than throws.
+- `fromiCloud.js` - Syncs remote iCloud folder state down to local Blot storage. Recursively walks the remote folder tree, comparing sizes to detect changes, downloading new/modified files (four at a time, applied in order), removing local files that don't exist remotely, and creating local directories as needed. Skips ignored files and oversized files (creating empty placeholders instead). Returns a summary of changes, including `failed`/`firstError` for the failures it swallows rather than throws.
 
 - `toiCloud.js` - Syncs local Blot folder state up to remote iCloud. Recursively walks the local folder tree, comparing sizes, uploading new/modified files, creating remote directories, and removing remote files not present locally (unless skipDeletions is true). Implements retry logic with exponential backoff for failed operations. Can abort on error or continue.
 
@@ -107,7 +107,7 @@ Web UI endpoints for dashboard and folder setup:
 
 #### `/routes/lock.js` - Sync Lock Utilities
 
-- `handleSyncLockError()` - Detects and handles sync lock acquisition failures, returning HTTP 423 with Retry-After header.
+- `handleSyncLockError()` - Detects and handles sync lock acquisition failures, returning HTTP 423 with Retry-After header. A request refused or stopped because the blog is being disconnected (`seize`'s reason `disconnect`) gets a 410 instead, so the macserver drops the change.
 
 ### `/util`
 
@@ -122,8 +122,7 @@ Contains the remote macOS helper service (separate from this Node.js process). I
 ### `/views`
 
 HTML templates for the dashboard UI:
-- `index.html` - Main status page.
-- `connect.html` - Sharing link entry form.
+- `index.html` - The setup checklist (share a folder with Blot, paste its link, Blot sets the folder up: joins it, then copies the site's files in), then the folder's status once set up. `util/setupState.js` works out which step the account is on and puts each setup failure on the step that fixes it.
 - `disconnect.html` - Disconnection confirmation.
 
 ## Public API

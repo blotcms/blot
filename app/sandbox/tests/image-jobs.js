@@ -2,7 +2,7 @@ describe("sandbox image jobs", function () {
   const sharp = require("sharp");
   const config = require("config");
   const sandbox = require("../");
-  const { BUDGET } = require("../jobs/thumbnail");
+  const { BUDGET, DECODE_BUDGET } = require("../jobs/thumbnail");
 
   let socket;
 
@@ -31,6 +31,24 @@ describe("sandbox image jobs", function () {
       return e;
     }
     return null;
+  }
+
+  // 100,010,000 pixels, one over sharp's limit in these jobs (100 million),
+  // two colours so the PNG is small and sharp streams it
+  let hugeImage;
+  async function huge() {
+    if (!hugeImage)
+      hugeImage = await sharp({
+        create: {
+          width: 10001,
+          height: 10001,
+          channels: 3,
+          background: "#fff",
+        },
+      })
+        .png({ palette: true, colours: 2, compressionLevel: 9 })
+        .toBuffer();
+    return hugeImage;
   }
 
   describe("thumbnail", function () {
@@ -213,6 +231,65 @@ describe("sandbox image jobs", function () {
       });
     });
 
+    it("refuses an image of more than 100 million pixels, as it does one it can't decode", async function () {
+      const error = await rejection(
+        sandbox.run("thumbnail", valid, await huge())
+      );
+      expect(error).not.toBeNull();
+      expect(String(error.message)).toMatch(/pixel limit/);
+      expect(
+        await rejection(sandbox.run("thumbnail", valid, Buffer.from("nope")))
+      ).not.toBeNull();
+    });
+
+    describe("animated past the decode budget", function () {
+      it("makes the first frame, from the header alone", async function () {
+        const frames = 6;
+        // each frame a different grey, or the encoder merges them into one
+        const pixels = 200 * 100 * 3;
+        const raw = Buffer.alloc(pixels * frames);
+        for (let i = 0; i < frames; i++)
+          raw.fill(40 * i, i * pixels, (i + 1) * pixels);
+        const input = await sharp(raw, {
+          raw: {
+            width: 200,
+            height: 100 * frames,
+            channels: 3,
+            pageHeight: 100,
+          },
+        })
+          .gif({ delay: new Array(frames).fill(50), loop: 0 })
+          .toBuffer();
+        const args = {
+          extension: ".gif",
+          animated: true,
+          sizes: [{ size: 50, crop: false }],
+        };
+        const total = 200 * 100 * frames;
+
+        const over = await sandbox.run(
+          "thumbnail",
+          { ...args, decodeBudget: total - 1 },
+          input
+        );
+        expect(over.meta.firstFrame).toBe(true);
+        expect(over.meta.thumbnails).toEqual([
+          { width: 50, height: 25, format: "gif" },
+        ]);
+        expect((await sharp(over.outputs[0]).metadata()).pages).toEqual(1);
+
+        const within = await sandbox.run(
+          "thumbnail",
+          { ...args, decodeBudget: total },
+          input
+        );
+        expect(within.meta.firstFrame).toBeUndefined();
+        expect((await sharp(within.outputs[0]).metadata()).pages).toEqual(
+          frames
+        );
+      });
+    });
+
     describe("with accept", function () {
       const accept = {
         formats: ["png", "jpeg", "gif"],
@@ -320,6 +397,9 @@ describe("sandbox image jobs", function () {
         { ...valid, budget: 1.5 },
         { ...valid, budget: "1000" },
         { ...valid, budget: BUDGET + 1 },
+        { ...valid, decodeBudget: 0 },
+        { ...valid, decodeBudget: DECODE_BUDGET + 1 },
+        { ...valid, decodeBudget: "1000" },
       ];
       for (const args of bad) {
         expect(
@@ -351,6 +431,12 @@ describe("sandbox image jobs", function () {
       );
       expect(meta.width).toEqual(40);
       expect(meta.height).toEqual(20);
+    });
+
+    it("refuses an image of more than 100 million pixels", async function () {
+      expect(
+        await rejection(sandbox.run("resize", { max: 100 }, await huge()))
+      ).not.toBeNull();
     });
 
     it("rejects a max it does not expect", async function () {
@@ -387,10 +473,68 @@ describe("sandbox image jobs", function () {
       expect((await sharp(outputs[0]).metadata()).format).toEqual("png");
     });
 
+    it("refuses an image of more than 100 million pixels", async function () {
+      expect(
+        await rejection(sandbox.run("to-png", {}, await huge()))
+      ).not.toBeNull();
+    });
+
     it("rejects bytes that are not an image", async function () {
       expect(
         await rejection(sandbox.run("to-png", {}, Buffer.from("nope")))
       ).not.toBeNull();
+    });
+
+    describe("with exif", function () {
+      const fs = require("fs");
+      const path = require("path");
+      const fields = ["Make", "Model", "FNumber", "FocalLength"];
+      const photo = fs.readFileSync(
+        path.join(__dirname, "../../build/converters/img/tests/exif.jpg")
+      );
+
+      it("returns what the exif job does, with the same conversion", async function () {
+        const separate = await sandbox.run("exif", { fields }, photo);
+        const plain = await sandbox.run("to-png", {}, photo);
+        const both = await sandbox.run("to-png", { exif: fields }, photo);
+
+        expect(separate.meta.Make).toEqual("SONY");
+        expect(both.meta).toEqual({ ...plain.meta, exif: separate.meta });
+        expect(both.outputs[0].equals(plain.outputs[0])).toBe(true);
+      });
+
+      it("returns the same as the exif job for an image with no exif, and still converts it", async function () {
+        const input = await image(30, 20, "webp");
+        const separate = await sandbox.run("exif", { fields }, input);
+        const { meta, outputs } = await sandbox.run(
+          "to-png",
+          { exif: fields },
+          input
+        );
+
+        expect(meta.width).toEqual(30);
+        expect(meta.exif).toEqual(separate.meta);
+        expect(Object.keys(meta.exif || {})).toEqual([]);
+        expect((await sharp(outputs[0]).metadata()).format).toEqual("png");
+      });
+
+      it("rejects fields it does not expect", async function () {
+        for (const exif of [[], ["-all"], "Make", [1], null]) {
+          expect(
+            await rejection(
+              sandbox.run("to-png", { exif }, await image(10, 10, "webp"))
+            )
+          ).not.toBeNull();
+        }
+      });
+
+      it("still rejects bytes that are not an image", async function () {
+        expect(
+          await rejection(
+            sandbox.run("to-png", { exif: fields }, Buffer.from("nope"))
+          )
+        ).not.toBeNull();
+      });
     });
   });
 

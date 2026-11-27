@@ -25,16 +25,22 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
       require.cache[createFolderPath] = originals[createFolderPath];
   });
 
-  function load(existingAccount) {
+  // others maps the IDs of other blogs on the Dropbox account to their
+  // accounts; previous is what the blog's last disconnect left behind
+  function load(existingAccount, { previous = null, others = {} } = {}) {
     require.cache[databasePath] = {
       exports: {
-        get: async function () {
-          return existingAccount;
+        get: async function (id) {
+          return id === blogID ? existingAccount : others[id];
+        },
+        getPrevious: async function () {
+          return previous;
         },
         listBlogs: async function () {
-          // No other blogs on this Dropbox account - keeps checkAppFolder's
-          // fall-through path (used when reuse doesn't apply) simple.
-          return [];
+          // No other blogs on this Dropbox account by default - keeps
+          // checkAppFolder's fall-through path (used when reuse doesn't
+          // apply) simple.
+          return Object.keys(others).map((id) => ({ id }));
         },
         set: async function () {},
       },
@@ -80,6 +86,8 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
     expect(filesCreateFolderCalled).toEqual(false);
     expect(result.folder).toEqual("/My Blog");
     expect(result.folder_id).toEqual("id:existingfolder");
+    // A retried transfer runs the normal reset, not the keepDropbox one
+    expect(result.reused_folder).toBeUndefined();
   });
 
   // Mirrors the shape of an error the Dropbox SDK throws for a
@@ -278,5 +286,122 @@ describe("dropbox createFolder reuses a partially-transferred folder on retry", 
     expect(error).toBeDefined();
     expect(error.message).toEqual("redis blip");
     expect(filesCreateFolderCalled).toEqual(false);
+  });
+
+  describe("on reconnect", function () {
+    const previous = { account_id: "abc123", folder_id: "id:oldfolder" };
+
+    // paths maps folder ids to their current path_display. The old folder
+    // was renamed while the blog was disconnected.
+    function reconnect(
+      options,
+      { account_id = "abc123", existing = null, paths = {} } = {}
+    ) {
+      paths = Object.assign({ "id:oldfolder": "/Renamed" }, paths);
+      const calls = { metadata: [], create: [] };
+      const createFolder = load(existing, options);
+      const account = {
+        blog: { id: blogID, title: "My Blog" },
+        account_id,
+        full_access: true,
+        client: {
+          filesGetMetadata: async ({ path }) => {
+            calls.metadata.push(path);
+            if (!paths[path]) throw notFoundSdkError();
+            return { result: { ".tag": "folder", path_display: paths[path] } };
+          },
+          filesCreateFolder: async ({ path }) => {
+            calls.create.push(path);
+            return { result: { id: "id:newfolder", path_display: path } };
+          },
+        },
+      };
+      return createFolder(account).then((result) => ({ result, calls }));
+    }
+
+    it("reuses the folder the blog used before it disconnected, at its current path", async function () {
+      const { result, calls } = await reconnect({ previous });
+
+      expect(calls.metadata).toEqual(["id:oldfolder"]);
+      expect(calls.create).toEqual([]);
+      expect(result.folder).toEqual("/Renamed");
+      expect(result.folder_id).toEqual("id:oldfolder");
+      expect(result.reused_folder).toBe(true);
+    });
+
+    it("keeps the reconnect's keepDropbox mode when retrying its failed transfer", async function () {
+      // The account row setup saved before the reconnect's transfer failed
+      const existing = {
+        account_id: "abc123",
+        full_access: true,
+        folder_id: "id:oldfolder",
+        transfer_pending: true,
+        reused_folder: true,
+        error_code: 0,
+      };
+      const { result, calls } = await reconnect({}, { existing });
+
+      expect(calls.create).toEqual([]);
+      expect(result.folder_id).toEqual("id:oldfolder");
+      expect(result.reused_folder).toBe(true);
+    });
+
+    it("creates a new folder on a different Dropbox account", async function () {
+      const { result, calls } = await reconnect(
+        { previous },
+        { account_id: "other-account" }
+      );
+
+      expect(calls.metadata).toEqual([]);
+      expect(result.folder_id).toEqual("id:newfolder");
+      expect(result.reused_folder).toBeUndefined();
+    });
+
+    it("creates a new folder when another blog on the account uses the old one", async function () {
+      const others = {
+        blog_other: {
+          full_access: true,
+          folder: "/x",
+          folder_id: "id:oldfolder",
+        },
+      };
+      const { result } = await reconnect({ previous, others });
+
+      expect(result.folder_id).toEqual("id:newfolder");
+      expect(result.reused_folder).toBeUndefined();
+    });
+
+    it("creates a new folder when the old one is inside another blog's folder", async function () {
+      const others = {
+        blog_other: {
+          full_access: true,
+          folder: "/Other",
+          folder_id: "id:other",
+        },
+      };
+      const { result } = await reconnect(
+        { previous, others },
+        { paths: { "id:oldfolder": "/Other/Renamed", "id:other": "/Other" } }
+      );
+
+      expect(result.folder_id).toEqual("id:newfolder");
+      expect(result.reused_folder).toBeUndefined();
+    });
+
+    it("creates a new folder when another blog syncs the root of the app folder", async function () {
+      const others = {
+        blog_other: { full_access: false, folder: "", folder_id: "" },
+      };
+      const { result } = await reconnect({ previous, others });
+
+      expect(result.folder_id).toEqual("id:newfolder");
+      expect(result.reused_folder).toBeUndefined();
+    });
+
+    it("creates a new folder when there is no previous folder", async function () {
+      const { result } = await reconnect({});
+
+      expect(result.folder_id).toEqual("id:newfolder");
+    });
   });
 });

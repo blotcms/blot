@@ -53,7 +53,7 @@ async function write(blogID, path, input) {
   if (account.folderId) {
     console.log(prefix(), "will save remote file");
 
-    const { getByPath } = database.folder(account.folderId);
+    const { getByPath, set } = database.folder(account.folderId);
 
     const fileId = await getByPath(path);
 
@@ -76,7 +76,7 @@ async function write(blogID, path, input) {
         (await getByPath(pathParent)) ||
         (await establishParentDirectories(drive, pathParent, account.folderId));
 
-      await drive.files.create({
+      const { data } = await drive.files.create({
         resource: {
           name: basename(path),
           parents: [parentID],
@@ -87,6 +87,11 @@ async function write(blogID, path, input) {
         },
         fields: "id",
       });
+
+      // Record the new file straight away, so a save retried before the
+      // next sync updates it rather than creating a second file of the
+      // same name
+      await set(data.id, path);
     }
   }
 

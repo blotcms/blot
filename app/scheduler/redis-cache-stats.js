@@ -32,6 +32,17 @@ async function logTrackingStats() {
   }
 }
 
+// "COMMAND|pattern:count:bytes" for the 40 most frequent, comma-separated
+function topPatterns(patterns) {
+  return (
+    (patterns || [])
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 40)
+      .map((p) => p.pattern + ":" + p.count + ":" + p.bytes)
+      .join(",") || "none"
+  );
+}
+
 module.exports = function () {
   logTrackingStats();
 
@@ -62,9 +73,22 @@ module.exports = function () {
         );
       });
 
+      // What each class holds now: entries and rough value bytes (heap use
+      // is about this plus 300 bytes an entry, see models/redis)
+      const sizes = cacheStats.classSizes || {};
+      let valueBytes = 0;
+      Object.keys(sizes).forEach(function (name) {
+        valueBytes += sizes[name].bytes;
+        classCounts.push(
+          "redis_cache_" + name + "_entries=" + sizes[name].entries,
+          "redis_cache_" + name + "_valueBytes=" + sizes[name].bytes
+        );
+      });
+
       console.log(
         clfdate(),
         "[STATS]",
+        "redis_cache_valueBytes=" + valueBytes,
         "redis_cache_hitCount=" + cacheStats.hitCount,
         "redis_cache_missCount=" + cacheStats.missCount,
         "redis_cache_hitRate=" + cacheStats.hitRate(),
@@ -84,6 +108,16 @@ module.exports = function () {
         "redis_cache_entryCount=" + cacheStats.entryCount,
         "redis_cache_maxEntries=" + cacheStats.maxEntries,
         ...classCounts
+      );
+
+      // The most read uncached key patterns, with the bytes they returned,
+      // and the most written, to find keys worth adding to the allowlist:
+      // read often, written rarely, few and small. Cumulative, as above.
+      console.log(
+        clfdate(),
+        "[STATS]",
+        "redis_bypass_top=" + topPatterns(cacheStats.bypassPatterns),
+        "redis_write_top=" + topPatterns(cacheStats.writePatterns)
       );
     }
   } catch (err) {

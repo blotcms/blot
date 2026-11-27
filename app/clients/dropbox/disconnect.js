@@ -2,41 +2,45 @@ var loadClient = require("./util/loadClient");
 var database = require("./database");
 var Blog = require("models/blog");
 var debug = require("debug")("blot:clients:dropbox");
-var Sync = require("sync");
+var seize = require("sync/seize");
 var placeholders = require("clients/util/placeholders");
+var hashes = require("./util/hashes");
 
 // Dont write tests for this or you'll need to regenerate
 // an access token for Travis and it'll be annoying. Just
 // test it on the development server.
+//
+// The account is dropped under the blog's folder lock, taken from any sync
+// or setup still running (sync/seize.js): that sync is stopped, its requests
+// to Dropbox are cut off, and it writes nothing to the account or the folder
+// afterwards.
 module.exports = async function disconnect(blogID) {
-  // Make sure we don't create something unexpected
-  // by messing with a blog mid-sync. This might fail
-  // we need to surface a clear error message to the user.
-  await Sync(blogID, function (folder) {
-    return remove(blogID, folder);
+  await seize(blogID, ({ signal }) => remove(blogID, signal), {
+    reason: "disconnect",
   });
+
+  // Their bytes are only in Dropbox, which Blot can no longer reach. Once
+  // seize has released the lock: removeAtDisconnect syncs each removal, so
+  // it takes the lock itself. The account is gone by now, so no webhook
+  // sync can bring a placeholder back meanwhile.
+  await placeholders.removeAtDisconnect(blogID);
 };
 
-async function remove(blogID, folder) {
+async function remove(blogID, signal) {
   debug("getting account info");
-  const { error, client, account } = await loadClient(blogID);
+  const { error, client, account } = await loadClient(blogID, { signal });
 
   // Invalid credentials might cause an error here
   // we still want to be able to disconnect
   if (error) debug("error createClient", error);
 
-  folder.status("Disconnecting from Dropbox");
-
-  // Their bytes are only in Dropbox, which Blot can no longer reach
-  await placeholders.removeAtDisconnect(blogID, folder);
-
   debug("resetting client setting");
   await Blog.set(blogID, { client: "" });
 
   debug("dropping blog from database");
-
-  folder.status("Removing Dropbox credentials");
   await database.drop(blogID);
+  // Only a cache: a failure must not stop the disconnect
+  await hashes.drop(blogID).catch((err) => debug("dropping hashes", err));
 
   if (!account) {
     debug("the user chose Dropbox but did not connect their account");

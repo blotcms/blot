@@ -1,80 +1,139 @@
 const fs = require("fs");
 const vm = require("vm");
 
-function load(stubs) {
+function load(file, stubs) {
   const module = { exports: {} };
-  vm.runInNewContext(
-    fs.readFileSync(require.resolve("../disconnect"), "utf8"),
-    {
-      module,
-      exports: module.exports,
-      require: (name) =>
-        Object.prototype.hasOwnProperty.call(stubs, name)
-          ? stubs[name]
-          : require(name),
-    }
-  );
+  vm.runInNewContext(fs.readFileSync(require.resolve(file), "utf8"), {
+    module,
+    exports: module.exports,
+    require: (name) =>
+      Object.prototype.hasOwnProperty.call(stubs, name)
+        ? stubs[name]
+        : require(name),
+  });
   return module.exports;
 }
 
-describe("Drive disconnect", function () {
-  it("resets the folder's verified-content cache and cursor, scoped to the blog", async function () {
-    let resetArgs = null;
-    const disconnect = load({
-      "clients/util/placeholders": { removeAtDisconnect: async () => [] },
-      "models/blog": {
-        set(blogID, data, callback) {
-          callback();
-        },
+// database stubbed with the accounts given ({ blogID: account }), recording
+// what is deleted and reset
+function fakeDatabase(accounts) {
+  const calls = {
+    deleted: [],
+    dirtyForgotten: [],
+    reset: [],
+    forgotOwn: [],
+    hashesDropped: [],
+    order: [],
+  };
+  const database = {
+    blog: {
+      get: async (blogID) => accounts[blogID] || null,
+      delete: async (blogID) => {
+        calls.order.push("delete");
+        calls.deleted.push(blogID);
+        delete accounts[blogID];
       },
-      "./database": {
-        blog: {
-          get: async () => ({
-            folderId: "folder-1",
-            serviceAccountId: "account",
-          }),
-          delete: async () => {},
-        },
-        folder: (folderId, blogID) => ({
-          reset: async (options) => {
-            resetArgs = { folderId, blogID, options };
-          },
-        }),
+      iterate: async (callback) => {
+        for (const [blogID, account] of Object.entries(accounts))
+          await callback(blogID, account);
       },
-    });
+    },
+    dirty: {
+      forget: async (blogID) => {
+        calls.order.push("dirty");
+        calls.dirtyForgotten.push(blogID);
+      },
+    },
+    folder: (folderId, blogID) => ({
+      reset: async (options) => {
+        calls.order.push("reset");
+        calls.reset.push({ folderId, blogID, options });
+      },
+      forgetOwn: async () => calls.forgotOwn.push({ folderId, blogID }),
+    }),
+    calls,
+  };
+  return { database, calls };
+}
 
-    await disconnect("blog-1");
-
-    expect(resetArgs).toEqual({
-      folderId: "folder-1",
-      blogID: "blog-1",
-      options: undefined,
-    });
+const loadForget = (database) =>
+  load("../forget", {
+    "./database": database,
+    "./database/docImages": { drop: async () => {} },
+    "./util/hashes": {
+      drop: async (blogID) => {
+        database.calls.hashesDropped.push(blogID);
+        database.calls.order.push("hashes");
+      },
+    },
   });
 
-  it("does not try to reset a folder when the blog had none", async function () {
-    let folderCalled = false;
-    const disconnect = load({
-      "clients/util/placeholders": { removeAtDisconnect: async () => [] },
-      "models/blog": {
-        set(blogID, data, callback) {
-          callback();
-        },
+describe("Drive disconnect", function () {
+  it("forgets the blog's records, removes its placeholders and clears its client", async function () {
+    const { database, calls } = fakeDatabase({
+      "blog-1": { folderId: "folder-1", serviceAccountId: "account" },
+    });
+    const removed = [];
+    const set = [];
+    const disconnect = load("../disconnect", {
+      "./forget": loadForget(database),
+      "clients/util/placeholders": {
+        removeAtDisconnect: async (blogID) => removed.push(blogID),
       },
-      "./database": {
-        blog: {
-          get: async () => null,
-          delete: async () => {},
-        },
-        folder: () => {
-          folderCalled = true;
-          return { reset: async () => {} };
-        },
-      },
+      "models/blog": { set: async (blogID, data) => set.push([blogID, data]) },
     });
 
     await disconnect("blog-1");
 
-    expect(folderCalled).toBe(false);
+    expect(calls.deleted).toEqual(["blog-1"]);
+    expect(calls.reset).toEqual([
+      { folderId: "folder-1", blogID: "blog-1", options: undefined },
+    ]);
+    expect(removed).toEqual(["blog-1"]);
+    expect(set).toEqual([["blog-1", { client: "" }]]);
+  });
+});
+
+describe("Drive forget", function () {
+  it("deletes the account, its dirty directories and its folder's mapping", async function () {
+    const { database, calls } = fakeDatabase({
+      "blog-1": { folderId: "folder-1", serviceAccountId: "account" },
+    });
+
+    await loadForget(database)("blog-1");
+
+    expect(calls.deleted).toEqual(["blog-1"]);
+    expect(calls.dirtyForgotten).toEqual(["blog-1"]);
+    expect(calls.hashesDropped).toEqual(["blog-1"]);
+    expect(calls.reset).toEqual([
+      { folderId: "folder-1", blogID: "blog-1", options: undefined },
+    ]);
+    // The account names the folder, so it goes last
+    expect(calls.order).toEqual(["reset", "dirty", "hashes", "delete"]);
+  });
+
+  it("keeps a folder's mapping another blog's account still names", async function () {
+    const { database, calls } = fakeDatabase({
+      "blog-1": { folderId: "folder-1" },
+      "blog-2": { folderId: "folder-1" },
+    });
+
+    await loadForget(database)("blog-1");
+
+    expect(calls.deleted).toEqual(["blog-1"]);
+    expect(calls.reset).toEqual([]);
+    expect(calls.forgotOwn).toEqual([
+      { folderId: "folder-1", blogID: "blog-1" },
+    ]);
+  });
+
+  it("does nothing more for a blog with no Drive account", async function () {
+    const { database, calls } = fakeDatabase({});
+
+    await loadForget(database)("blog-1");
+
+    expect(calls.deleted).toEqual(["blog-1"]);
+    expect(calls.dirtyForgotten).toEqual(["blog-1"]);
+    expect(calls.reset).toEqual([]);
   });
 });

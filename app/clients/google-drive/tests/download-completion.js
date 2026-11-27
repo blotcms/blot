@@ -5,6 +5,8 @@ const vm = require("vm");
 const { Readable, Writable, PassThrough } = require("stream");
 
 function load(stubs) {
+  // Nothing prefetched, unless a spec says otherwise
+  stubs = { "./prefetch": { take: async () => null }, ...stubs };
   const module = {
     exports: {},
   };
@@ -69,7 +71,6 @@ describe("Drive download completion", function () {
         },
       },
       "./localFile": async () => "/test-blog/file.txt",
-      "./localState": require("../util/localState"),
       "colors/safe": {
         green: (x) => x,
       },
@@ -134,8 +135,6 @@ describe("Drive download completion", function () {
       verifiedContent: {
         checksum: "new",
         sha1: "sha",
-        size: 12,
-        modified: 1000,
       },
     });
     expect(moved).toBe(true);
@@ -200,7 +199,6 @@ describe("Drive download checksum optimization", function () {
         stat: async () => stats.shift(),
       },
       "./localFile": async () => "/test-blog/file.txt",
-      "./localState": require("../util/localState"),
       "colors/safe": {
         green: (x) => x,
       },
@@ -241,25 +239,17 @@ describe("Drive download checksum optimization", function () {
   }
 
   it("does not request content when the local checksum matches", async function () {
-    const stat = { isDirectory: false, size: 4, modified: 1000.4 };
-    stats = [stat, stat];
+    stats = [{ isDirectory: false, size: 4, modified: 1000.4, sha1: "sha" }];
     expect(await start()).toEqual({
       updated: false,
-      verifiedContent: {
-        checksum: "same",
-        sha1: "sha",
-        size: 4,
-        modified: 1000,
-      },
+      verifiedContent: { checksum: "same", sha1: "sha" },
     });
     expect(requested).toBe(false);
   });
 
-  it("does not vouch for a file which changed while it was hashed", async function () {
-    stats = [
-      { isDirectory: false, size: 4, modified: 1000 },
-      { isDirectory: false, size: 4, modified: 2000 },
-    ];
+  it("does not vouch for a file whose bytes aren't the ones the index has", async function () {
+    // Changed while it was hashed, say: the index has the new SHA-1
+    stats = [{ isDirectory: false, size: 4, modified: 1000, sha1: "other" }];
     let error;
     try {
       await start();
@@ -268,5 +258,75 @@ describe("Drive download checksum optimization", function () {
     }
     expect(error && error.message).toBe("requested");
     expect(requested).toBe(true);
+  });
+});
+
+describe("Drive download of a prefetched file", function () {
+  it("publishes the file the detection walk downloaded, without fetching it", async function () {
+    const written = [];
+    const download = load({
+      "fs-extra": { remove: async () => {} },
+      "storage/folder": {
+        writeFrom: async (blogID, path, from, options) =>
+          written.push([path, from, options]),
+        stat: async (blogID, path, options) => {
+          if (!written.length)
+            throw Object.assign(new Error("missing"), { code: "ENOENT" });
+          return {
+            isDirectory: false,
+            size: 12,
+            modified: 1000,
+            sha1: options && options.sha1 ? "sha" : undefined,
+          };
+        },
+      },
+      "./prefetch": {
+        take: async (id, md5) =>
+          id === "file" && md5 === "new"
+            ? {
+                tempPath: "/test-temp/prefetched",
+                hashes: { checksum: "new", sha1: "sha" },
+                downloadedAt: 42,
+              }
+            : null,
+      },
+      "./localFile": async () => null,
+      "colors/safe": { green: (x) => x },
+      debug: () => () => {},
+      "helper/tempDir": () => "/test-temp",
+      "helper/guid": () => "download",
+      "./verifyContent": async () => null,
+      config: {},
+      "helper/hash": () => {},
+      cheerio: {},
+      "../serviceAccount/hotDocPoller": {},
+      "../database": {},
+    });
+
+    const result = await download(
+      "blog",
+      {
+        files: {
+          get: async () => {
+            throw new Error("should not be fetched");
+          },
+        },
+      },
+      "/file.txt",
+      { id: "file", mimeType: "text/plain", md5Checksum: "new" }
+    );
+
+    expect(written).toEqual([
+      ["/file.txt", "/test-temp/prefetched", { move: true }],
+    ]);
+    expect(result).toEqual({
+      updated: true,
+      prefetched: true,
+      downloadedAt: 42,
+      verifiedContent: {
+        checksum: "new",
+        sha1: "sha",
+      },
+    });
   });
 });

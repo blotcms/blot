@@ -1,18 +1,18 @@
 const express = require("express");
 const Delete = new express.Router();
 const pretty = require("helper/prettyPrice");
-const Email = require("helper/email");
 
 const checkPassword = require("dashboard/account/util/checkPassword");
 
-const User = require("models/user");
 const Blog = require("models/blog");
 const Entries = require("models/entries");
 const Template = require("models/template");
 const punycode = require("helper/punycode");
 
 const config = require("config");
-const stripe = require("stripe")(config.stripe.secret);
+const decreaseSubscription = require("helper/decreaseSubscription");
+const alertBlogRemoval = require("helper/alertBlogRemoval");
+const removalBilling = require("models/blog/removalBilling");
 
 // Save any changes to the user's subscription
 // then remove the blogID from the list of blogs
@@ -25,6 +25,9 @@ const deleteSite = [
   checkPassword,
   async function (req, res, next) {
     try {
+      // Before the removal starts, so a kill from here on leaves the
+      // reduction of the subscription to the scheduler
+      await removalBilling.record(req.blog.id, req.user.uid);
       await Blog.remove(req.blog.id);
     } catch (err) {
       return next(err);
@@ -32,8 +35,20 @@ const deleteSite = [
 
     next();
   },
-  calculateSubscriptionChange,
-  decreaseSubscription,
+  async function (req, res, next) {
+    try {
+      await decreaseSubscription(req.user.uid);
+      await removalBilling.clear(req.blog.id);
+    } catch (err) {
+      // The blog is gone and the record stays for the scheduler to retry
+      await alertBlogRemoval(
+        "could not reduce the subscription of " + req.user.uid,
+        "After " + req.blog.id + " was deleted: " + err.message
+      );
+    }
+
+    next();
+  },
   function (req, res) {
     // In order to decrease the quantity of a PayPal
     // subscription we need to redirect the user to
@@ -148,30 +163,6 @@ function calculateSubscriptionChange(req, res, next) {
   req.newQuantity = newQuantity;
 
   return next();
-}
-
-async function decreaseSubscription(req, res, next) {
-  var subscription = req.user.subscription;
-  var quantity = req.newQuantity;
-
-  if (!quantity || !subscription) return next();
-
-  try {
-    var updated = await stripe.customers.updateSubscription(
-      subscription.customer,
-      subscription.id,
-      { quantity: quantity, prorate: false }
-    );
-
-    if (!updated) throw new Error("No subscription");
-
-    await User.set(req.user.uid, { subscription: updated });
-  } catch (err) {
-    return next(err);
-  }
-
-  Email.SUBSCRIPTION_DECREASE(req.user.uid);
-  next();
 }
 
 module.exports = Delete;

@@ -26,6 +26,21 @@ describe("sandbox metadata job", function () {
       .toBuffer();
   }
 
+  it("refuses an image of more than 100 million pixels", async function () {
+    const input = await sharp({
+      create: { width: 10001, height: 10001, channels: 3, background: "#fff" },
+    })
+      .png({ palette: true, colours: 2, compressionLevel: 9 })
+      .toBuffer();
+    let error = null;
+    try {
+      await sandbox.run("metadata", {}, input);
+    } catch (e) {
+      error = e;
+    }
+    expect(error).not.toBeNull();
+  });
+
   it("reads an image from a buffer", async function () {
     const { meta, outputs } = await sandbox.run("metadata", {}, await image());
 

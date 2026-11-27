@@ -194,13 +194,10 @@ console.log(clfdate(), `Starting server env=${config.environment}`);
     }
 
     // Warms the host's git store cache a little after startup, in the
-    // background; one process on the host does it (clients/git/served/warm.js)
-    if (!config.preview) require("clients/git/served/warm").start();
-
-    // Emails if the unit's fetch proxy stops answering or filtering
-    // (app/sandbox/alerts.js). The worker child shares the proxy, so one check.
-    if (!config.preview && !config.worker_child)
-      require("sandbox/alerts").watchProxy();
+    // background; one process on the host does it (clients/git/served/warm.js).
+    // Not node-a, which only serves (helper/servesOnly, #2990).
+    if (!config.preview && !require("helper/servesOnly")())
+      require("clients/git/served/warm").start();
 
     // Send an email notification if the server starts or restarts
     // Worktree preview sidecars (scripts/development/preview.sh) and forked

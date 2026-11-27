@@ -19,12 +19,14 @@ const subscriptionLifecycleJob = require("./subscription-lifecycle");
 const checkSSLCertificates = require("./check-ssl-certificates");
 const renewWildcardSSL = require("./renew-wildcard-ssl");
 const checkRedisHost = require("./check-redis-host");
+const checkUnitMemory = require("./check-unit-memory");
 const readHostMemory = require("./host-memory");
 const sweepGit = require("./sweep-git");
 const sweep = require("storage/sweep");
 const purgeQueue = require("cdn/purgeQueue");
 const pruneTmp = require("./prune-tmp");
 const gitStoreMaintenance = require("./git-store-maintenance");
+const resumeBlogRemoval = require("./resume-blog-removal");
 const sweepICloudOrphans = require("clients/icloud/sweepOrphans");
 
 // If a disk has less than 2GB of space, we should notify the admin.
@@ -389,38 +391,69 @@ module.exports = function () {
   // Two minutes after each of the Redis host's 5-minute samples. During a
   // Redis outage this only logs: /redis-health reports the outage itself.
   console.log(clfdate(), "Scheduled check of the Redis host's memory limits");
-  lock.cron("check-redis-host", "2-59/5 * * * *", async function () {
-    try {
-      const checkedAt = await client.get(REDIS_HOST_CHECKED_AT_KEY);
-      const stored = checkedAt === null ? null : Number(checkedAt);
-      const redisHostCheckedAt =
-        stored === null || Number.isNaN(stored)
-          ? redisHostCheckedAtInMemory
-          : Math.max(stored, redisHostCheckedAtInMemory || 0);
-      const { sent, report } = await checkRedisHost({
-        lastCheckAt: redisHostCheckedAt,
-        hostMemory: readHostMemory,
-        sendEmail: (view) => email.REDIS_HOST_ALERT(null, view),
-      });
-      redisHostCheckedAtInMemory = report.now;
+  lock.cron(
+    "check-redis-host",
+    "2-59/5 * * * *",
+    async function () {
       try {
-        await client.set(REDIS_HOST_CHECKED_AT_KEY, String(report.now));
+        const checkedAt = await client.get(REDIS_HOST_CHECKED_AT_KEY);
+        const stored = checkedAt === null ? null : Number(checkedAt);
+        const redisHostCheckedAt =
+          stored === null || Number.isNaN(stored)
+            ? redisHostCheckedAtInMemory
+            : Math.max(stored, redisHostCheckedAtInMemory || 0);
+        const { sent, report } = await checkRedisHost({
+          lastCheckAt: redisHostCheckedAt,
+          hostMemory: readHostMemory,
+          sendEmail: (view) => email.REDIS_HOST_ALERT(null, view),
+        });
+        redisHostCheckedAtInMemory = report.now;
+        try {
+          await client.set(REDIS_HOST_CHECKED_AT_KEY, String(report.now));
+        } catch (err) {
+          console.log(
+            clfdate(),
+            "Error: Saving Redis host check time",
+            err.message
+          );
+        }
+        if (sent) console.log(clfdate(), "Sent Redis host alert email");
       } catch (err) {
-        console.log(
-          clfdate(),
-          "Error: Saving Redis host check time",
-          err.message
-        );
+        if (isRedisUnavailableError(err)) {
+          console.log(clfdate(), "Redis host check skipped: Redis unavailable");
+        } else {
+          console.log(clfdate(), "Error: Checking Redis host", err);
+        }
       }
-      if (sent) console.log(clfdate(), "Sent Redis host alert email");
-    } catch (err) {
-      if (isRedisUnavailableError(err)) {
-        console.log(clfdate(), "Redis host check skipped: Redis unavailable");
-      } else {
-        console.log(clfdate(), "Error: Checking Redis host", err);
+    },
+    { rerunIfKilled: false }
+  );
+
+  // The units' OOM kills and memory near the limit, from the host's sampler
+  // (config/host/scripts/unit-mem-log.sh), which writes every minute.
+  console.log(clfdate(), "Scheduled check of the units' memory");
+  lock.cron(
+    "check-unit-memory",
+    "1-59/5 * * * *",
+    async function () {
+      try {
+        const { sent } = await checkUnitMemory({
+          sendEmail: (view) => email.UNIT_MEMORY_ALERT(null, view),
+        });
+        if (sent) console.log(clfdate(), "Sent unit memory alert email");
+      } catch (err) {
+        if (isRedisUnavailableError(err)) {
+          console.log(
+            clfdate(),
+            "Unit memory check skipped: Redis unavailable"
+          );
+        } else {
+          console.log(clfdate(), "Error: Checking unit memory", err);
+        }
       }
-    }
-  });
+    },
+    { rerunIfKilled: false }
+  );
 
   // Git processes running far longer than a push or clone can take belong to
   // a request that is gone. Once a day across all containers (lock.cron).
@@ -501,22 +534,41 @@ module.exports = function () {
     clfdate(),
     "Scheduled hourly reconcile of scheduled entry alarms"
   );
-  lock.cron("scheduled-entries-reconcile", "20 * * * *", async function () {
-    try {
-      const counts = await require("models/entry/scheduled").reconcile();
+  lock.cron(
+    "scheduled-entries-reconcile",
+    "20 * * * *",
+    async function () {
+      try {
+        const counts = await require("models/entry/scheduled").reconcile();
 
-      if (counts.set || counts.failed)
+        if (counts.set || counts.failed)
+          console.log(
+            clfdate(),
+            "Scheduled entries: reconciled",
+            counts.blogs,
+            "blogs, set",
+            counts.set,
+            "alarms" +
+              (counts.failed ? ", " + counts.failed + " blogs failed" : "")
+          );
+      } catch (err) {
         console.log(
           clfdate(),
-          "Scheduled entries: reconciled",
-          counts.blogs,
-          "blogs, set",
-          counts.set,
-          "alarms" +
-            (counts.failed ? ", " + counts.failed + " blogs failed" : "")
+          "Error: Reconciling scheduled entry alarms",
+          err
         );
+      }
+    },
+    { rerunIfKilled: false }
+  );
+
+  // Finish blog removals a deploy interrupted
+  console.log(clfdate(), "Scheduled resuming of interrupted blog removals");
+  lock.cron("resume-blog-removal", "*/15 * * * *", async function () {
+    try {
+      await resumeBlogRemoval();
     } catch (err) {
-      console.log(clfdate(), "Error: Reconciling scheduled entry alarms", err);
+      console.log(clfdate(), "Error: Resuming blog removals", err);
     }
   });
 

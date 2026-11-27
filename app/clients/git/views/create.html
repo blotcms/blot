@@ -1,21 +1,85 @@
 
-<p>
-  Sync folder with <strong>Git</strong> 
-</p>
-<ul>
-  <li>Blot will create a Git repository for this site.</li>
-  <li>Blot will publish changes when you push.</li>
-  <li>You can switch from Git to another sync method at any time.</li>
-</ul>
-<form method='post' class="dashboard-form" >
-  <input type="hidden" name="_csrf" value="{{csrftoken}}">
-  <div class="buttons">
-    <button type="submit">Sync with Git</button>
-    {{^blog.client}}<a href="{{{dashboardBase}}}/sync">Cancel</a>{{/blog.client}}
-    {{#blog.client}}<button type="submit" name="cancel" value="cancel">Cancel</button>{{/blog.client}}
+{{> status-line}}
+
+{{! Inside .live-updates, so a page that showed the setup running and
+  reloads when it fails swaps this in }}
+<div class="live-updates">
+<div class="line git-setup-line">
+  <span class="label">Repository</span>
+  <div class="center">
+    <div class="steps steps-progress git-steps" data-steps-key="git-steps:{{{base}}}">
+      <ol>
+
+        <li data-step="create" class="{{#failed}}problem{{/failed}}">
+          {{#failed}}<span class="step-icon problem"><span class="icon-small-alert"></span></span>{{/failed}}
+          <span class="step-title">Create a repository on Blot</span>
+          {{#failed}}<span class="step-problem">{{failed}}</span>{{/failed}}
+          <span class="step-text">Blot makes a Git repository from your site’s folder, with a username and password to clone it.</span>
+          <form method="post" action="{{{base}}}/create" class="dashboard-form git-create-form">
+            <input type="hidden" name="_csrf" value="{{csrftoken}}">
+            <div class="buttons">
+              <button type="submit">{{#failed}}Try again{{/failed}}{{^failed}}Create repository{{/failed}}</button>
+              {{^blog.client}}<a href="{{{dashboardBase}}}/sync">Cancel</a>{{/blog.client}}
+              {{#blog.client}}<button type="submit" name="cancel" value="cancel">Cancel</button>{{/blog.client}}
+            </div>
+          </form>
+        </li>
+
+        <li data-step="clone" class="todo">
+          <span class="step-title">Clone it to your computer</span>
+        </li>
+
+        <li data-step="add" class="todo">
+          <span class="step-title">Add your files</span>
+        </li>
+
+        <li data-step="push" class="todo">
+          <span class="step-title">Push to publish</span>
+        </li>
+
+      </ol>
+    </div>
+    <p class="git-note">You can switch from Git to another way of syncing at any time.</p>
   </div>
-</form>
+</div>
+</div>
 
+<style>
+/* Beside its label like every other line, and above it on a phone */
+.git-setup-line .label {
+  flex-basis: 30%;
+}
 
+.git-setup-line .center {
+  display: block;
+  flex: 1 1 0;
+  min-width: 0;
+}
 
+@media (max-width: 600px) {
+  .git-setup-line .label,
+  .git-setup-line .center {
+    flex-basis: 100%;
+  }
+}
 
+.git-steps form.git-create-form {
+  margin-top: 10px;
+  width: auto;
+}
+
+.git-steps form.git-create-form .buttons {
+  margin: 0;
+}
+
+.git-steps form.git-create-form .buttons > * {
+  flex-grow: 0;
+  white-space: nowrap;
+}
+
+.git-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--medium-text-color);
+}
+</style>

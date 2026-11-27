@@ -1,7 +1,6 @@
-var resaveEntries = require("models/entries").resave;
 var safeRedirect = require("dashboard/util/safe-redirect");
 var Blog = require("models/blog");
-var requestRebuild = require("./rebuild-settings");
+var pendingRebuilds = require("sync/pendingRebuilds");
 var assets = require("storage/assets");
 var avatar = require("./avatar");
 
@@ -63,29 +62,24 @@ async function saveAndFinish(req, res, next) {
   if (changes && changes.indexOf("avatar") > -1)
     await avatar.removeReplaced(req.blog.id, previousAvatar, updates.avatar);
 
-  // We now need to save every entry so that
-  // changes to permalink format take effect.
-  if (changes.indexOf("permalink") > -1) {
-    resaveEntries(req.blog.id).catch(function () {});
-  }
+  // We now need to save every entry so that changes to permalink format
+  // take effect, and build all the blog's entries if the user has changed
+  // any of the plugins or the image metadata preference so the stored EXIF
+  // matches their setting. Thumbnails and cached images are kept. The work
+  // is queued in Redis first, so it finishes even if a deploy kills the
+  // process running it (sync/pendingRebuilds); the page doesn't wait for it.
+  var flags = [];
 
-  // We need to build all the blog's entries if the user
-  // has changed any of the plugins or the image metadata
-  // preference so the stored EXIF matches their setting.
+  if (changes.indexOf("permalink") > -1) flags.push("resave");
+
   if (
-    changes &&
-    (changes.indexOf("plugins") > -1 ||
-      changes.indexOf("imageExif") > -1 ||
-      changes.indexOf("converters") > -1)
-  ) {
-    // One rebuild at a time per site; see rebuild-settings.js. The status
-    // is stored before the response, so the next page shows the rebuild.
-    try {
-      await requestRebuild(req.blog.id);
-    } catch (err) {
-      console.log("Failed to start settings rebuild", req.blog.id, err.message);
-    }
-  }
+    changes.indexOf("plugins") > -1 ||
+    changes.indexOf("imageExif") > -1 ||
+    changes.indexOf("converters") > -1
+  )
+    flags.push("rebuild");
+
+  if (flags.length) await pendingRebuilds.request(req.blog.id, flags);
 
   // Add success message if we're going to the settings page
   // and successful changes were made

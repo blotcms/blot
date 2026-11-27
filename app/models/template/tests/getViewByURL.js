@@ -220,18 +220,18 @@ describe("template", function () {
     });
 
     it("prefers an exact pattern to an exact-URL key for another view", async function () {
-      await this.setView({ name: "README", url: ["/readme"] });
-      await this.setLegacyURL("/readme", "readme");
+      await this.setView({ name: "ABOUT", url: ["/about"] });
+      await this.setLegacyURL("/about", "about");
 
-      expect((await this.getViewByURL("/readme")).viewName).toEqual("README");
+      expect((await this.getViewByURL("/about")).viewName).toEqual("ABOUT");
     });
 
     it("breaks a tie between exact patterns of views named in different case by view name", async function () {
-      await this.setView({ name: "readme", url: ["/readme"] });
-      await this.setView({ name: "README", url: ["/readme"] });
+      await this.setView({ name: "about", url: ["/about"] });
+      await this.setView({ name: "ABOUT", url: ["/about"] });
 
-      expect((await this.getViewByURL("/readme")).viewName).toEqual(
-        "readme".localeCompare("README") < 0 ? "readme" : "README"
+      expect((await this.getViewByURL("/about")).viewName).toEqual(
+        "about".localeCompare("ABOUT") < 0 ? "about" : "ABOUT"
       );
     });
 

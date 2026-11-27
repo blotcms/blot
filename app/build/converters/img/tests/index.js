@@ -4,6 +4,7 @@ const folder = require("storage/folder");
 const path = require("path");
 const hash = require("helper/hash");
 const assets = require("storage/assets");
+const s3 = require("storage/s3");
 
 describe("img converter", function () {
   global.test.blog();
@@ -38,6 +39,24 @@ describe("img converter", function () {
       if (err) throw err;
       expect(result).toEqual(expected);
     });
+  });
+
+  it("asks the bucket about a converted image once, not on every build", async function () {
+    const test = this;
+    const path = "/laptop.tiff";
+
+    await folder.writeFrom(test.blog.id, path, __dirname + path);
+    await img.read(test.blog, path);
+
+    const key = test.blog.id + "/_assets/" + hash(path) + "/";
+    spyOn(s3, "head").and.callThrough();
+
+    await img.read(test.blog, path);
+
+    const asked = s3.head.calls
+      .allArgs()
+      .filter(([k]) => typeof k === "string" && k.startsWith(key));
+    expect(asked).toEqual([]);
   });
 
   it("extracts EXIF data by default", async function () {
@@ -174,6 +193,49 @@ describe("img converter", function () {
 
     expect(secondResult).toEqual(firstResult);
     expect(assets.commit).not.toHaveBeenCalled();
+  });
+
+  it("reads the EXIF of an image it converts in the same job", async function () {
+    const test = this;
+    const sandbox = require("sandbox");
+    const relativePath = "/car.heic";
+
+    await folder.writeFrom(
+      test.blog.id,
+      relativePath,
+      __dirname + relativePath
+    );
+
+    spyOn(sandbox, "run").and.callThrough();
+    const jobs = () => sandbox.run.calls.allArgs().map((args) => args[0]);
+
+    const [, , first] = await img.read(test.blog, relativePath);
+
+    expect(jobs()).toEqual(["to-png"]);
+    expect(sandbox.run.calls.argsFor(0)[1].exif).toContain("Make");
+
+    // The conversion is cached now, so only the EXIF is read, on its own
+    sandbox.run.calls.reset();
+
+    const [, , second] = await img.read(test.blog, relativePath);
+
+    expect(jobs()).toEqual(["exif"]);
+    expect(second).toEqual(first);
+  });
+
+  it("reads the EXIF of an image it does not convert with the exif job", async function () {
+    const test = this;
+    const sandbox = require("sandbox");
+
+    await folder.writeFrom(test.blog.id, "/exif.jpg", __dirname + "/exif.jpg");
+
+    spyOn(sandbox, "run").and.callThrough();
+
+    await img.read(test.blog, "/exif.jpg");
+
+    expect(sandbox.run.calls.allArgs().map((args) => args[0])).toEqual([
+      "exif",
+    ]);
   });
 
   it("converts a copy of a cached image into its own directory, whatever became of the first", async function () {

@@ -125,7 +125,7 @@ describe("linkScreenshot plugin, on rebuilds", function () {
 
   const cheerio = require("cheerio");
   const fs = require("fs-extra");
-  const assets = require("storage/assets");
+  const s3 = require("storage/s3");
   const screenshotPath = require.resolve("helper/screenshot");
   const pluginPath = require.resolve("./index.js");
 
@@ -175,18 +175,19 @@ describe("linkScreenshot plugin, on rebuilds", function () {
     expect(srcOf(second)).toBe(srcOf(first));
   });
 
-  it("takes another once the screenshot is gone from the bucket", async function () {
-    const first = await build(this.blog.id, "https://example.com/");
-    const path = srcOf(first).slice(
-      srcOf(first).indexOf("_bookmark_screenshots/")
-    );
+  it("asks the bucket about an existing screenshot once, not on every build", async function () {
+    // The first build finds none and takes one; the second finds it, and
+    // that yes is remembered
+    await build(this.blog.id, "https://example.com/");
+    await build(this.blog.id, "https://example.com/");
 
-    await assets.remove(this.blog.id, path);
+    spyOn(s3, "head").and.callThrough();
 
-    const second = await build(this.blog.id, "https://example.com/");
+    await build(this.blog.id, "https://example.com/");
+    await build(this.blog.id, "https://example.com/");
 
-    expect(taken.length).toBe(2);
-    expect(srcOf(second)).toBe(srcOf(first));
+    expect(s3.head).not.toHaveBeenCalled();
+    expect(taken.length).toBe(1);
   });
 
   it("takes one per link", async function () {

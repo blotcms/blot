@@ -25,13 +25,16 @@ describe("icloud macserver leaveFolder", function () {
 
   beforeEach(async function () {
     root = await fs.mkdtemp(path.join(os.tmpdir(), "leave-folder-"));
-    await fs.outputFile(path.join(root, "blog_abc", "post.txt"), "hello");
+    // A blog folder: blog_<id> holds the marker and the shared folder
+    await fs.outputFile(path.join(root, "blog_abc", ".blot-nested"), "");
+    await fs.outputFile(path.join(shared(), "post.txt"), "hello");
   });
 
   afterEach(async function () {
     await fs.remove(root);
   });
 
+  const shared = () => path.join(root, "blog_abc", "My site");
   const options = (run) => ({ run, root, waitMs: 50, pollMs: 10 });
 
   // What Finder does once the sheet is confirmed: the folder leaves whole
@@ -42,24 +45,34 @@ describe("icloud macserver leaveFolder", function () {
     });
 
   describe("checkPath", function () {
-    it("accepts a blog folder directly in iCloud Drive", function () {
-      expect(checkPath(path.join(root, "blog_abc"), root)).toBe(
-        path.join(root, "blog_abc")
-      );
+    it("accepts the shared folder inside a blog folder", function () {
+      expect(checkPath(shared(), root)).toBe(shared());
     });
 
     [
       ["iCloud Drive itself", ""],
       ["a folder that isn't a blog's", "Sites"],
-      ["a folder inside a blog", "blog_abc/drafts"],
+      ["blog_<id> itself, which holds the shared folder", "blog_abc"],
+      ["the marker", "blog_abc/.blot-nested"],
+      ["a folder inside the shared folder", "blog_abc/My site/posts"],
       ["a path that climbs out", "blog_abc/../../etc"],
-      ["a blog ID with other characters", "blog_ab c"],
+      ["a blog ID with other characters", "blog_ab c/My site"],
     ].forEach(function ([name, relative]) {
       it(`refuses ${name}`, function () {
         expect(() => checkPath(path.join(root, relative), root)).toThrowError(
           /Refusing to remove/
         );
       });
+    });
+
+    it("refuses a blog_ folder without the marker, and any folder in it", async function () {
+      await fs.outputFile(path.join(root, "blog_old", "drafts", "a.md"), "");
+      expect(() => checkPath(path.join(root, "blog_old"), root)).toThrowError(
+        /Refusing to remove/
+      );
+      expect(() =>
+        checkPath(path.join(root, "blog_old", "drafts"), root)
+      ).toThrowError(/Refusing to remove/);
     });
   });
 
@@ -79,12 +92,12 @@ describe("icloud macserver leaveFolder", function () {
 
   it("confirms Finder's sheet for a shared folder, leaving the Trash alone", async function () {
     const run = finder("confirmed");
-    const target = path.join(root, "blog_abc");
+    const target = shared();
 
     expect(await leaveFolder(target, options(run))).toBe(true);
 
     expect(run.calls.count()).toBe(1);
-    expect(run.calls.argsFor(0)[1]).toEqual(["-e", script, "blog_abc", target]);
+    expect(run.calls.argsFor(0)[1]).toEqual(["-e", script, "My site", target]);
     // the files left with the folder, not one by one
     expect(await fs.pathExists(path.join(root, "gone", "post.txt"))).toBe(true);
   });
@@ -92,7 +105,7 @@ describe("icloud macserver leaveFolder", function () {
   it("empties the Trash after a folder that wasn't shared", async function () {
     const run = finder("no sheet");
 
-    await leaveFolder(path.join(root, "blog_abc"), options(run));
+    await leaveFolder(shared(), options(run));
 
     expect(run.calls.count()).toBe(2);
     expect(run.calls.argsFor(1)[1][1]).toContain("empty the trash");
@@ -105,15 +118,13 @@ describe("icloud macserver leaveFolder", function () {
     let error;
 
     try {
-      await leaveFolder(path.join(root, "blog_abc"), options(run));
+      await leaveFolder(shared(), options(run));
     } catch (err) {
       error = err;
     }
 
     expect(error.message).toContain("abort: 2 items selected");
-    expect(await fs.pathExists(path.join(root, "blog_abc", "post.txt"))).toBe(
-      true
-    );
+    expect(await fs.pathExists(path.join(shared(), "post.txt"))).toBe(true);
   });
 
   it("throws when the folder is still there after Finder", async function () {
@@ -123,7 +134,7 @@ describe("icloud macserver leaveFolder", function () {
     let error;
 
     try {
-      await leaveFolder(path.join(root, "blog_abc"), options(run));
+      await leaveFolder(shared(), options(run));
     } catch (err) {
       error = err;
     }
@@ -135,9 +146,9 @@ describe("icloud macserver leaveFolder", function () {
   it("does nothing for a folder that isn't there", async function () {
     const run = jasmine.createSpy("run");
 
-    expect(await leaveFolder(path.join(root, "blog_gone"), options(run))).toBe(
-      false
-    );
+    expect(
+      await leaveFolder(path.join(root, "blog_abc", "Gone"), options(run))
+    ).toBe(false);
     expect(run).not.toHaveBeenCalled();
   });
 

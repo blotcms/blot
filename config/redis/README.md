@@ -145,9 +145,37 @@ with `CONFIG SET` (never `CONFIG REWRITE`) and lists the settings that need a
 restart (for example `tcp-backlog`, and `LimitNOFILE` of the running process).
 It will not lower `maxmemory` below the memory in use. On the production
 host, which Redis shares with the units, always pass the shared limit
-(`REDIS_MAXMEMORY=6gb`): without it setup applies 70% of RAM. It prints a warning if
+(`REDIS_MAXMEMORY=5gb`, from the budget below): without it setup applies 70% of RAM. It prints a warning if
 an existing sysctl file (e.g. `99-sysctl.conf`) sets a key that would override
 `90-blot-redis.conf` at boot.
+
+The production host's memory budget (#2795) is a sum of enforced limits, so
+the host can't run out of memory however busy the units get. In MiB of the
+host's 15,608 (no swap):
+
+| | MiB |
+| --- | --- |
+| two units, each 3,584: its slice's `MemoryMax`, shared by its container and its sandbox and browser jails (`UNIT.memory` in `scripts/deploy/constants.js`, `config/host/scripts/unit-cgroups`) | 7,168 |
+| the host itself (sshd, docker, journald, rsyslog, fail2ban, cron) | 768 |
+| offsite-sync (`MemoryMax` in `config/host/host/setup.sh`) | 512 |
+| the script runner, one at a time (`SCRIPT_RUNNER` in `scripts/deploy/constants.js`) | 512 |
+| Redis above its `maxmemory` (allocator overhead, client buffers) | 512 |
+| Redis `maxmemory` | 5,120 |
+| margin | 1,016 |
+
+A unit's 3,584 is not the sum of its processes' limits: the kernel kills in
+an order inside it (jobs, scripts and node-b first, OpenResty last; "Kill
+order" in `proxy/unit/supervisor.sh`), so only what must not be killed has to
+fit (`scripts/deploy/constants.js`). The host's sum is what can't be
+overcommitted.
+
+A BGSAVE child's copy-on-write pages are not in this sum: the child runs at
+`oom_score_adj` 1000 (`oom-score-adj-values` in `redis.conf`, relative to the
+service's -900), the highest on the host, so under pressure a save fails, not
+the host or a unit. Raise `maxmemory` only after lowering a limit above
+has been deployed (units) or applied (`bootstrap.sh`), never before. The
+target margin is 1,024 MiB; #2795 has the options for lowering the units'
+memory, which is what gives Redis more.
 
 To change a setting: edit `redis.conf`, run `bootstrap.sh`, restart Redis if
 it says so. `maxmemory` is about 70% of RAM, computed at bootstrap
@@ -424,22 +452,27 @@ on `hourly/*`, `daily/*` and `weekly/*` (restore), and `s3:PutObject` on the sam
 The app's shared client (`app/models/redis.js`) keeps a small client-side cache
 of an allowlist of keys, using RESP3 `CLIENT TRACKING` in OPTIN mode
 (`app/models/redis-cache.js`): blog info, domain, handle, template metadata
-and URL patterns, template owner sets, dashboard sessions and user records.
+and URL patterns, template owner sets, template views and their lists,
+dashboard sessions and user records.
 The render path reads the blog record, the template metadata and URL patterns,
 and the cacheIDs the render caches are keyed on, on every blog request; the
 dashboard reads the session and the user on every request. Most of those reads
 are served locally. A write through the same client drops the keys it names
 from that client's cache as it is sent, because Redis pushes the
 invalidation after the write's reply; every other process's cache learns of
-the write from that push. Keys named after a request path (entries, entry and
+the write from that push. Template views are read only when a render cache
+misses (`fullView`), but then a dozen times one after another on the request
+that missed. Keys named after a request path (entries, entry and
 template URLs, redirects) stay out: Redis tracks every key a client reads,
 even a missing one, until it is written, so crawler and scanner paths would
 refill the tracking table.
 
 The cache is bounded by entry count, so the classes share its room in a way
-that keeps the blog keys in: URL patterns, template owner sets, sessions and
-users each have their own cap (`CLASS_CAPS` in `app/models/redis-cache.js`) and
-evict only their own least recently used entries, and the cache's `maxEntries`
+that keeps the blog keys in: URL patterns, template owner sets, template views
+and view lists, sessions and users each have their own cap (`CLASS_CAPS` in
+`app/models/redis-cache.js`) and evict only their own least recently used
+entries; views, whose size is unbounded, are capped by rough bytes too
+(`CLASS_BYTE_CAPS`), and the cache's `maxEntries`
 leaves room above those caps for a few hot keys per blog (its handle or domain,
 info, template metadata). A full capped class then never makes the cache evict
 a blog record. The `[STATS]` lines log each class's evictions

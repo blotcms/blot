@@ -5,11 +5,13 @@ var setMetadata = require("./setMetadata");
 var getView = require("./getView");
 var makeID = require("./util/makeID");
 var setView = require("./setView");
+var updateCdnManifest = require("./util/updateCdnManifest");
 const shouldIgnoreFile = require("clients/util/shouldIgnoreFile");
 var MAX_SIZE = 2.5 * 1000 * 1000; // 2.5mb
 var PACKAGE = "package.json";
 var savePackage = require("./package").save;
 var client = require("models/client");
+var hash = require("helper/hash");
 var key = require("./key");
 var dropView = require("./dropView");
 const Blog = require("models/blog");
@@ -59,6 +61,23 @@ module.exports = async function readFromFolder(blogID, dir) {
     // todo handle these
   }
 
+  // What each view was last read from, and the views that exist now: a view
+  // whose file and package.json settings are as they were when it was last
+  // saved from the folder is left as it is, without reading the file
+  var sources = {};
+  var existing = new Set();
+
+  try {
+    var [storedSources, viewNames] = await Promise.all([
+      client.hGetAll(key.viewSources(id)),
+      client.sMembers(key.allViews(id)),
+    ]);
+    sources = storedSources || {};
+    existing = new Set(viewNames);
+  } catch (err) {
+    // read every file
+  }
+
   for (var name of contents) {
     // Skip ignored files or Package.json or dotfiles
     if (name === PACKAGE || shouldIgnoreFile(name) || name.startsWith("."))
@@ -67,13 +86,17 @@ module.exports = async function readFromFolder(blogID, dir) {
     var stat;
 
     try {
-      stat = await folder.stat(blogID, dir + "/" + name);
+      stat = await folder.stat(blogID, dir + "/" + name, { sha1: true });
     } catch (err) {
       continue;
     }
 
     // Skip folders, or files which are too large
     if (!stat || stat.size > MAX_SIZE || stat.isDirectory) continue;
+
+    var source = fingerprint(stat, views && views[name]);
+
+    if (source && sources[name] === source && existing.has(name)) continue;
 
     var buffer;
 
@@ -113,7 +136,7 @@ module.exports = async function readFromFolder(blogID, dir) {
     view.url = view.url || "/" + view.name;
 
     try {
-      await setView(id, view);
+      await setView(id, view, { source, skipManifest: true });
     } catch (err) {
       // we expose this error to the developer on
       // the preview subdomain
@@ -125,14 +148,42 @@ module.exports = async function readFromFolder(blogID, dir) {
   // or without a package.json: every sync rebuilds it from these
   // files, so dashboard saves must be written back to them
   // (dashboard/site/template/save/writeChangeToFolder.js)
-  await setMetadata(id, { errors, localEditing: true });
+  await setMetadata(id, { errors, localEditing: true }, { skipManifest: true });
 
   if (enabled === true) {
     await Blog.set(blogID, { template: id });
   }
 
-  return getMetadata(id);
+  // The CDN manifest renders and minifies every view it links, so it is
+  // updated once, here, rather than after each view saved. setView and
+  // setMetadata give the template a new cacheID whenever they change it. An
+  // update that fails leaves its key behind, so the next build updates the
+  // manifest again even when nothing else has changed by then.
+  var after = await getMetadata(id);
+  var pendingKey = key.manifestPending(id);
+
+  if (
+    !template ||
+    after.cacheID !== template.cacheID ||
+    (await client.exists(pendingKey)) > 0
+  ) {
+    await client.set(pendingKey, "1");
+    await updateCdnManifest(id);
+    await client.del(pendingKey);
+    after = await getMetadata(id);
+  }
+
+  return after;
 };
+
+// The file's bytes (its SHA-1, from the folder's index) and the view's
+// settings in package.json, which together make the view. Null when the index
+// has no hash, so the file is read.
+function fingerprint(stat, settings) {
+  if (!stat.sha1) return null;
+
+  return stat.sha1 + ":" + hash(JSON.stringify(settings || null));
+}
 
 // Never rejects: resolves to { error, views, enabled }, where views and
 // enabled are set whenever the package.json could be read, even if saving
@@ -161,7 +212,7 @@ async function loadPackage(blogID, id, dir) {
   }
 
   try {
-    var views = await savePackage(id, metadata);
+    var views = await savePackage(id, metadata, { skipManifest: true });
     return { views: views, enabled: metadata.enabled };
   } catch (err) {
     return { error: err, views: err.views, enabled: metadata.enabled };

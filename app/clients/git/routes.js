@@ -5,6 +5,7 @@ var disconnect = require("./disconnect");
 var repo = require("./repo");
 var sync = require("./sync");
 var Blog = require("models/blog");
+var setClient = require("clients/util/setClient");
 var debug = require("debug")("blot:clients:git:routes");
 var Express = require("express");
 var dashboard = Express.Router();
@@ -25,27 +26,32 @@ var followUps = followUpSync("git", async function (blogID) {
   await sync(blogID, blog.handle);
 });
 
-// Whether the blog has a repository in the store, or one is being set up for
-// it: the blog's own mark, set by create.js, which expires by itself, so a
-// setup cut off by a crash or a deploy doesn't leave the blog, or the owner's
-// other blogs, stuck "in progress"
-async function hasRepository(blog) {
-  if (await repo.exists(blog.id)) return true;
+// "ready" if the blog has a repository in the store, "creating" if one is
+// being set up for it (the blog's own mark, set by create.js, which expires by
+// itself, so a setup cut off by a crash or a deploy doesn't leave the blog, or
+// the owner's other blogs, stuck "in progress"), or null
+async function repositoryState(blog) {
+  if (await repo.exists(blog.id)) return "ready";
 
-  return await database.isCreating(blog.id);
+  return (await database.isCreating(blog.id)) ? "creating" : null;
+}
+
+async function hasRepository(blog) {
+  return (await repositoryState(blog)) !== null;
 }
 
 dashboard.get("/", async function (req, res, next) {
-  var exists;
+  var state;
 
   try {
-    exists = await hasRepository(req.blog);
+    state = await repositoryState(req.blog);
   } catch (err) {
     return next(err);
   }
 
-  if (exists) {
+  if (state) {
     res.locals.repo = true;
+    res.locals.createInProgress = state === "creating";
     return next();
   }
 
@@ -54,13 +60,7 @@ dashboard.get("/", async function (req, res, next) {
 
 dashboard.get("/", async function (req, res, next) {
   // A failed lookup renders the page without it, as before
-  var status, token;
-
-  try {
-    status = await database.getStatus(req.blog.owner);
-  } catch (err) {
-    status = undefined;
-  }
+  var token;
 
   try {
     token = await database.getToken(req.blog.owner);
@@ -72,8 +72,6 @@ dashboard.get("/", async function (req, res, next) {
     res.render(__dirname + "/views/index.html", {
       title: "Git",
       token: token,
-      createFailed: status === "createFailed",
-      createInProgress: status === "createInProgress",
       host,
     });
   } catch (err) {
@@ -81,11 +79,26 @@ dashboard.get("/", async function (req, res, next) {
   }
 });
 
-dashboard.get("/create", function (req, res) {
-  res.locals.breadcrumbs.add("Git", "git");
-  res.render(__dirname + "/views/create.html", {
-    title: "Git",
-  });
+dashboard.get("/create", async function (req, res, next) {
+  // Why the last setup failed, if it did. A failed lookup shows the page
+  // without it.
+  var failed;
+
+  try {
+    failed = await database.getFailed(req.blog.id);
+  } catch (err) {
+    failed = null;
+  }
+
+  try {
+    res.locals.breadcrumbs.add("Git", "git");
+    res.render(__dirname + "/views/create.html", {
+      title: "Git",
+      failed: failed,
+    });
+  } catch (err) {
+    next(err);
+  }
 });
 
 dashboard.post("/create", async function (req, res, next) {
@@ -117,7 +130,7 @@ dashboard.post("/create", async function (req, res, next) {
       );
     }
 
-    await Blog.set(req.blog.id, { client: "git" });
+    await setClient(req.blog, "git");
 
     // Marked before the redirect, so the page it lands on shows the setup
     // (create.js marks it too, and clears it when the setup ends). A failure

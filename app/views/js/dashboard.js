@@ -9,6 +9,7 @@ require("./copy-buttons.js");
 require("./code-copy-buttons.js");
 require("./folder-toast.js");
 require("./folder-directory.js");
+require("./steps-progress.js");
 require("./new-template-files.js");
 require("./form-buttons.js");
 require("./form-changes.js");

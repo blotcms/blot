@@ -19,6 +19,25 @@ var addToSchedule = require("./scheduled");
 var notifyDrafts = require("./_notifyDrafts");
 var assignToLists = require("./_assign");
 var { DELETED_ENTRY_TTL_SECONDS } = require("../entries/sweepExpiredDeleted");
+var serialByKey = require("helper/serialByKey");
+
+// One blog's saves run one at a time in this process, each from its first
+// read to the last linked entry's backlinks. A save reads shared state and
+// writes it back later: the url keys (_setUrl.js claims a url it has just
+// seen free), the blog's menu (_assign.js), other entries' backlinks (read
+// by _backlinksToUpdate.js, written by the save of each linked entry) and,
+// when two saves of one entry overlap, the entry itself. Queueing the whole
+// save, rather than each of those steps, keeps every save's result the same
+// as if the saves had been made one after another. The save is Redis round
+// trips only, a few milliseconds, while the build before it takes far
+// longer, so a sync can build several files at once and still queue here.
+//
+// This is not a lock between processes. A sync holds the blog's folder lock
+// and calls Entry.set from the process which holds it, so saves within a
+// sync are all queued here. Saves from elsewhere (a scheduled entry's
+// publication, a rebuild started from the dashboard's settings) can still
+// overlap with a sync in another process, as they could before.
+var queue = serialByKey();
 
 // Set is a private method which takes any valid
 // properties in the updates param and then overwrites those.
@@ -29,6 +48,14 @@ var { DELETED_ENTRY_TTL_SECONDS } = require("../entries/sweepExpiredDeleted");
 async function set(blogID, path, updates) {
   ensure(blogID, "string").and(path, "string").and(updates, "object");
 
+  return queue(blogID, function () {
+    return save(blogID, path, updates);
+  });
+}
+
+// The save itself, run inside the blog's queue. It updates linked entries by
+// calling itself, not set(), which would wait for this save to finish.
+async function save(blogID, path, updates) {
   var entryKey = key.entry(blogID, path);
 
   debug("set", blogID, path);
@@ -236,32 +263,32 @@ async function set(blogID, path, updates) {
   if (backlinksMoved)
     console.log(clfdate(), blogID.slice(0, 12), "updating backlinks:", path);
 
-  // All the linked entries are updated in parallel. A failure to update one
-  // is logged and doesn't fail this save.
-  await Promise.all(
-    Object.keys(changes).map(async function (linkedEntryPath) {
+  // The linked entries are updated one at a time: each is a save like any
+  // other, which can move the menu or a url claim, so two at once would race
+  // inside the queue. A failure to update one is logged and doesn't fail
+  // this save.
+  for (const linkedEntryPath of Object.keys(changes)) {
+    console.log(
+      clfdate(),
+      blogID.slice(0, 12),
+      "    - linked entry:",
+      linkedEntryPath
+    );
+
+    try {
+      await save(blogID, linkedEntryPath, {
+        backlinks: changes[linkedEntryPath],
+      });
+    } catch (err) {
       console.log(
         clfdate(),
         blogID.slice(0, 12),
-        "    - linked entry:",
+        "    - error updating linked entry:",
         linkedEntryPath
       );
-
-      try {
-        await set(blogID, linkedEntryPath, {
-          backlinks: changes[linkedEntryPath],
-        });
-      } catch (err) {
-        console.log(
-          clfdate(),
-          blogID.slice(0, 12),
-          "    - error updating linked entry:",
-          linkedEntryPath
-        );
-        console.log(err);
-      }
-    })
-  );
+      console.log(err);
+    }
+  }
 
   if (entry.deleted) {
     console.log(clfdate(), blogID.slice(0, 12), "delete", path);

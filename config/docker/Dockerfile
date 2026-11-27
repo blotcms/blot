@@ -43,17 +43,14 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 # This is system config, so it applies to every git process in the container,
 # including the git upload-pack / index-pack / pack-objects processes the git
 # client spawns for clones and pushes (app/clients/git). pack.threads 1 stops
-# index-pack and pack-objects taking every core. receive.maxInputSize caps a
-# push just under the 2000M the proxy accepts for /clients/git/end/ (see
-# proxy/config/blot-site.conf); receivePack.js reads it and passes it to
-# index-pack, so one that is too big fails with a message the user can read
-# rather than nginx's bare 413. Keep the two in step.
+# index-pack and pack-objects taking every core. The push size limit is not
+# git's: it is config.git_store.max_push_bytes (see
+# app/clients/git/served/receive.js).
 RUN apk add --no-cache git tini curl ca-certificates \
  && git config --system pack.threads 1 \
  && git config --system pack.windowMemory 32m \
  && git config --system pack.deltaCacheSize 32m \
- && git config --system pack.window 5 \
- && git config --system receive.maxInputSize 1900m
+ && git config --system pack.window 5
 
 # Use tini as the init process so git child processes are reaped instead of becoming zombies.
 ENTRYPOINT ["/sbin/tini", "--"]
@@ -227,6 +224,10 @@ RUN apk add --no-cache openresty sudo procps \
 # This gets our source code into builder for use in next two stages
 # It gets its own stage so we don't have to copy twice
 # this stage starts from `base` and skips the dev-only stages
+FROM base AS app-source
+COPY ./app /src/app
+RUN rm -rf /src/app/templates/folders && mkdir /src/app/templates/folders
+
 FROM base AS source
 
 WORKDIR /usr/src/app
@@ -239,9 +240,17 @@ COPY --from=deps /usr/src/app/node_modules ./node_modules
 # recursive chown rewrites every inode, so it would duplicate the whole ~380MB
 # `app` tree into an extra layer that every deploy then has to pull. config,
 # scripts and node_modules stay root-owned (the app only reads them).
+#
+# The demo folders (app/templates/folders, the blotcms/demo-folders
+# submodule) stay out of the image (#2940): the deploy syncs them into the
+# demo blogs and uploads their ZIPs (scripts/deploy/demo-folders.js). They are
+# removed in the throwaway app-source stage, so no layer of this image ever
+# holds them; the docs build below reads them from the build context with a
+# bind mount. A build without the submodule checked out still works, with no
+# folder previews or ZIP links on the template pages.
 COPY ./config ./config
 COPY ./scripts ./scripts
-COPY --chown=1000:1000 ./app ./app
+COPY --from=app-source --chown=1000:1000 /src/app ./app
 COPY ./TODO ./TODO
 
 ## Stage 6 (production)
@@ -262,8 +271,10 @@ USER 1000
 # Re-configuring git for the non-root user
 RUN git config --global user.email "you@example.com" && git config --global user.name "Your Name"
 
-# Build the documentation
-RUN node app/documentation/build
+# Build the documentation. It reads the demo folders (their trees, and the
+# hash in each ZIP's URL) from the build context: they aren't in the image.
+RUN --mount=type=bind,source=app/templates/folders,target=/usr/src/app/app/templates/folders \
+  node app/documentation/build
 
 CMD ["node", "/usr/src/app/app/index.js"]
 
@@ -345,19 +356,17 @@ RUN mkdir -p /etc/resty-auto-ssl/storage /etc/resty-auto-ssl/letsencrypt/conf \
 # replaces busybox's, which can't clear the bounding set.
 RUN apk add --no-cache --upgrade $ALPINE_EDGE protobuf libnl3 \
     chromium nss freetype harfbuzz ttf-freefont font-noto-emoji \
-    passt nftables setpriv tinyproxy \
+    passt nftables setpriv \
  && rm -rf /usr/lib/libLLVM* /usr/lib/libgallium-*.so /usr/lib/dri \
  && chromium-browser --version
 COPY --from=nsjail /nsjail/nsjail /usr/local/bin/nsjail
 # The broker runs as root, so its files are root-owned and read-only to the
 # app (uid 1000 rewrites /usr/src/app, so root must never load code from there)
-COPY proxy/unit/sandbox/broker.js proxy/unit/sandbox/jail.js proxy/unit/sandbox/proxy.js \
+COPY proxy/unit/sandbox/broker.js proxy/unit/sandbox/jail.js \
      proxy/unit/sandbox/policy.kafel proxy/unit/sandbox/policy-browser.kafel \
-     proxy/unit/sandbox/network.cfg proxy/unit/sandbox/network-proxy-blue.cfg \
-     proxy/unit/sandbox/network-proxy-green.cfg proxy/unit/sandbox/tinyproxy.conf \
-     proxy/unit/sandbox/egress.nft proxy/unit/sandbox/egress-proxy.nft \
+     proxy/unit/sandbox/network.cfg proxy/unit/sandbox/egress.nft \
      proxy/unit/sandbox/enter-network.sh proxy/unit/sandbox/node-filter.js \
-     proxy/unit/sandbox/cgroup.js \
+     proxy/unit/sandbox/cgroup.js proxy/unit/sandbox/peak.js \
      /usr/local/lib/blot-sandbox/
 RUN node /usr/local/lib/blot-sandbox/node-filter.js > /usr/local/lib/blot-sandbox/node.seccomp \
  && chmod -R go-w /usr/local/lib/blot-sandbox \
@@ -393,8 +402,10 @@ FROM dev AS dev-unit
 
 # The unit stage's runtime packages and user (see there). The dev image has no
 # USER, so git is configured again for ec2-user, who runs node-a; bind mounts
-# can be owned by anyone, hence the wildcard safe.directory.
-RUN apk add --no-cache bash openssl gettext brotli findutils libgcc zlib su-exec \
+# can be owned by anyone, hence the wildcard safe.directory. setpriv is
+# util-linux's, which the supervisor wraps its children in (BusyBox's can't
+# clear the bounding set), so the dev unit needs it as the unit stage does.
+RUN apk add --no-cache bash openssl gettext brotli findutils libgcc zlib su-exec setpriv \
  && deluser node \
  && addgroup -g 1000 ec2-user \
  && adduser -S -u 1000 -G ec2-user -h /home/node -H ec2-user \

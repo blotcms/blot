@@ -69,7 +69,63 @@ server.get("/clients/dropbox/webhook", (req, res, next) => {
   res.send(String(req.query.challenge));
 });
 
+// A relayed body is held in memory while it is read and published. The relay
+// only serves development, so one at a time per process is plenty: past it
+// the relay answers 503 rather than queueing bodies.
+const MAX_IN_FLIGHT = 1;
+let inFlight = 0;
+
+// Messages are base64 text which the client joins before decoding. Each
+// chunk must therefore encode a multiple of 3 bytes, or padding would land
+// in the middle of the joined string. 48 KB of bytes is 64 KB of base64.
+const CHUNK_BYTES = (CHUNK_SIZE / 4) * 3;
+
+// Only buffer the body when a development client is listening. PUBSUB NUMSUB
+// counts subscribers in every process, so it covers any Node process serving
+// /connect. When nobody is, or Redis can't say, the body is read and dropped.
+async function hasSubscribers() {
+  try {
+    return (await client.pubSubNumSub([CHANNEL]))[CHANNEL] > 0;
+  } catch (err) {
+    console.error(clfdate(), "Webhooks error counting subscribers", err);
+    return false;
+  }
+}
+
+async function admit(req, res, next) {
+  if (!(await hasSubscribers())) {
+    // Dropbox and Google must always get OK or they stop sending webhooks.
+    // Reply once the body has been read and discarded, without keeping it.
+    req.on("end", () => res.send("OK"));
+    req.on("error", () => {});
+    req.resume();
+    return;
+  }
+
+  if (inFlight >= MAX_IN_FLIGHT) {
+    res.set("Retry-After", "5");
+    res.set("Connection", "close");
+    return res.status(503).send("Relay busy");
+  }
+
+  inFlight++;
+  let released = false;
+  req.releaseRelaySlot = function () {
+    if (released) return;
+    released = true;
+    inFlight--;
+  };
+
+  // Covers a body that is aborted or rejected before relay() takes over
+  res.once("close", () => {
+    if (!req.relaying) req.releaseRelaySlot();
+  });
+
+  next();
+}
+
 server.use(
+  admit,
   bodyParser.raw({
     inflate: true,
     limit: maxFileSize,
@@ -78,6 +134,8 @@ server.use(
   (req, res) => {
     res.send("OK");
 
+    req.relaying = true;
+
     const headers = req.headers;
 
     delete headers.host;
@@ -85,7 +143,8 @@ server.use(
     delete headers["x-forwarded-for"];
     delete headers["x-forwarded-proto"];
 
-    const body = req.body ? req.body.toString("base64") : null;
+    // body-parser leaves {} when the request had no body it parsed
+    const body = Buffer.isBuffer(req.body) && req.body.length ? req.body : null;
 
     const requestId = Date.now() + Math.random();
 
@@ -94,12 +153,15 @@ server.use(
       headers,
       requestId,
       method: req.method,
-      bodySize: body ? body.length : 0, // Include the size of the body
+      // The size of the base64 text the chunks add up to
+      bodySize: body ? Math.ceil(body.length / 3) * 4 : 0,
     };
 
-    publish(message, body).catch((err) => {
-      console.error(clfdate(), "Webhooks error publishing", requestId, err);
-    });
+    publish(message, body)
+      .catch((err) => {
+        console.error(clfdate(), "Webhooks error publishing", requestId, err);
+      })
+      .finally(req.releaseRelaySlot);
   }
 );
 
@@ -116,15 +178,18 @@ async function publish(message, body) {
 
   if (!body || !receivers) return;
 
-  // Send the body in chunks so no single message is large. Commands on one
+  // Send the body in chunks so no single message is large, encoding each
+  // as it goes so the whole base64 string never exists. Commands on one
   // connection are handled in order, so the chunks arrive in sequence
-  const totalChunks = Math.ceil(body.length / CHUNK_SIZE);
+  const totalChunks = Math.ceil(body.length / CHUNK_BYTES);
 
   for (let i = 0; i < totalChunks; i++) {
     await client.publish(
       CHANNEL,
       JSON.stringify({
-        chunk: body.substring(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE),
+        chunk: body
+          .subarray(i * CHUNK_BYTES, (i + 1) * CHUNK_BYTES)
+          .toString("base64"),
         requestId: message.requestId,
         chunkIndex: i,
         totalChunks,
@@ -274,6 +339,18 @@ function listen({ host }) {
         options.body = Buffer.from(metadata.body, "base64");
       }
 
+      // To the worker child's socket when there is one, since it, not this
+      // process, syncs (helper/servesOnly, #2990)
+      if (config.worker_socket) {
+        console.log(
+          clfdate(),
+          "Webhooks forwarding to",
+          config.worker_socket + path
+        );
+        await requestSocket(config.worker_socket, path, options);
+        return;
+      }
+
       const localURL = "http://" + config.host + ":" + config.port + path;
 
       console.log(clfdate(), "Webhooks forwarding to", localURL);
@@ -283,6 +360,23 @@ function listen({ host }) {
       console.log(clfdate(), "Webhooks error forwarding request", e);
     }
   }
+}
+
+// Sends a request to the HTTP server on a Unix socket, and resolves once its
+// response has been read
+function requestSocket(socketPath, path, { method, headers, body }) {
+  return new Promise((resolve, reject) => {
+    const req = require("http").request(
+      { socketPath, path, method, headers },
+      (res) => {
+        res.resume();
+        res.on("end", resolve);
+        res.on("error", reject);
+      }
+    );
+    req.on("error", reject);
+    req.end(body);
+  });
 }
 
 // node-a only: node-b would forward every notification a second time

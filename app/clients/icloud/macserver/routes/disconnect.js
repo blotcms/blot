@@ -1,10 +1,13 @@
-import { join } from "path";
 import { iCloudDriveDirectory } from "../config.js";
 import { removeLimiterForBlogID } from "../limiters.js";
 import { forgetBlog } from "../pushedFiles.js";
+import { forgetBlotChanges } from "../blotWrites.js";
 import { unwatch } from "../watcher/index.js";
 import clfdate from "../util/clfdate.js";
 import leaveFolder from "../util/leaveFolder.js";
+import { containerPath, refresh, removeContainer } from "../blogFolder.js";
+import fs from "fs-extra";
+import { forgetRoot } from "../birdState.js";
 import finderLimiter from "../util/finderLimiter.js";
 
 export default async (req, res) => {
@@ -31,14 +34,25 @@ export default async (req, res) => {
   // remove it recursively: that deletes the owner's files (util/leaveFolder.js)
   removeLimiterForBlogID(blogID);
   forgetBlog(blogID);
+  forgetBlotChanges(blogID);
 
   try {
     await unwatch(blogID);
-    await finderLimiter.schedule(() =>
-      leaveFolder(join(iCloudDriveDirectory, blogID), {
-        root: iCloudDriveDirectory,
-      })
-    );
+    if (await fs.pathExists(containerPath(blogID))) {
+      // Leave the shared folder inside (if it's still there), then remove
+      // blog_<id>, Blot's own folder, now empty but for the marker
+      const { root } = await refresh(blogID);
+      if (root)
+        await finderLimiter.schedule(() =>
+          leaveFolder(root, { root: iCloudDriveDirectory })
+        );
+      if (!(await removeContainer(blogID)))
+        console.error(
+          clfdate(),
+          `Left ${blogID} in iCloud Drive: it is not a nested blog folder`
+        );
+    }
+    forgetRoot(blogID);
   } catch (error) {
     console.error(clfdate(), `Failed to disconnect blogID ${blogID}:`, error);
     return res.status(500).send(error.message);

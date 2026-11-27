@@ -183,4 +183,89 @@ describe("webhooks relay", function () {
     // Give the background publish a moment to finish
     await new Promise((resolve) => setTimeout(resolve, 100));
   });
+
+  it("relays a large body whose size is not a multiple of 3", async function () {
+    const stream = await connectAndSubscribe();
+    const body = crypto.randomBytes(512 * 1024 + 1);
+
+    const response = await fetch(url + "/clients/test/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body,
+    });
+    expect(await response.text()).toBe("OK");
+
+    await until(function () {
+      const metadata = stream.messages.find((m) => m.chunk === undefined);
+      const chunks = stream.messages.filter((m) => m.chunk !== undefined);
+      return metadata && chunks.length === Math.ceil(metadata.bodySize / 65536);
+    });
+
+    const metadata = stream.messages.find((m) => m.chunk === undefined);
+    const chunks = stream.messages.filter((m) => m.chunk !== undefined);
+    const joined = chunks.map((chunk) => chunk.chunk).join("");
+
+    expect(metadata.bodySize).toBe(joined.length);
+    expect(Buffer.from(joined, "base64").equals(body)).toBe(true);
+  });
+
+  it("does not relay a body when no client is connected", async function () {
+    expect(await subscribers()).toBe(0);
+    spyOn(client, "publish").and.callThrough();
+
+    const response = await fetch(url + "/clients/test/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: crypto.randomBytes(200 * 1024),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.text()).toBe("OK");
+    expect(client.publish).not.toHaveBeenCalled();
+  });
+
+  it("answers 503 past the concurrent limit instead of queueing", async function () {
+    const stream = await connectAndSubscribe();
+    const held = [];
+
+    // Requests whose bodies never finish hold a slot while being read
+    function hold() {
+      return new Promise(function (resolve) {
+        const req = http.request(url + "/clients/test/webhook", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": 1000,
+          },
+        });
+        req.on("error", () => {});
+        req.write("x", () => resolve());
+        held.push(req);
+      });
+    }
+
+    await hold();
+
+    // Let the server's handlers take their slots
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const response = await fetch(url + "/clients/test/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: "second",
+    });
+    expect(response.status).toBe(503);
+    expect(stream.messages.length).toBe(0);
+
+    // Slots are released when the held requests go away
+    held.forEach((req) => req.destroy());
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const after = await fetch(url + "/clients/test/webhook", {
+      method: "POST",
+      headers: { "Content-Type": "application/octet-stream" },
+      body: "third",
+    });
+    expect(after.status).toBe(200);
+  });
 });

@@ -49,17 +49,25 @@ unit gets:
 - these arguments: `/etc/blot/secrets.env` then `proxy.env` as
   env files (a key set differently in the two is refused before anything is
   touched), `BLOT_UNIT`, the data directory with `rslave`, the tmp directory,
-  `/run/blot`, `BLOT_RELEASE_ID`, `NODE_OPTIONS` (node-a's heap and the crash
-  report) and `BLOT_WORKER_MAX_OLD_SPACE_SIZE` (node-b), the memory and cpu
-  limits, `--stop-timeout`. The numbers are in `scripts/deploy/constants.js`
+  `/run/blot`, `BLOT_RELEASE_ID`, `BLOT_NODE_A_OPTIONS` (node-a's heap and the crash
+  report, which the supervisor passes to node-a alone),
+  `BLOT_WORKER_MAX_OLD_SPACE_SIZE` (node-b), `NODE_OPTIONS` (a 256 MB heap,
+  which only scripts run with `docker exec` inherit), the memory and cpu
+  limits, `--stop-timeout`, `--oom-score-adj 1000` (so a `docker exec`
+  script is the first thing killed under memory pressure) and
+  `--cap-add SYS_RESOURCE` (so the supervisor can set the scores of tini,
+  node-a and OpenResty, then drops the capability from everything it starts:
+  "Kill order" in `proxy/unit/supervisor.sh`). Scripts that need more than
+  256 MB run with `scripts/prod/run-script.js` instead, in a container of their
+  own. The numbers are in `scripts/deploy/constants.js`
   (`UNIT`), which `scripts/deploy/units.sh` writes to `unit-settings.env` beside
   these scripts;
 - no TCP port: node-a serves on its socket alone (two units on the host network
   would both want 8080), so everything talks to the sockets;
 - with `BLOT_SANDBOX=1`, the sandbox in place of the airlock containers units
-  had until #2257: its browser jail takes screenshots and its proxy jail, on the
-  unit's own loopback port, carries the app's fetches of user-supplied URLs (see
-  below). A deploy removes any `blot-<unit>-airlock` container a host still has;
+  had until #2257: its browser jail takes screenshots and its fetch jobs, each in a
+  jail with its own network and egress filter, carry the app's fetches of
+  user-supplied URLs (see below). A deploy removes any `blot-<unit>-airlock` container a host still has;
 - health: the proxy's health socket, node-a and node-b `/health` on their sockets;
 - blue, deployed first, runs `scripts/deploy/verify-container` before green is
   touched; a failure rolls blue back and leaves green alone;
@@ -205,15 +213,18 @@ mounts at `/var/cache/openresty`. It must exist and belong to uid 1000
 ## The sandbox (`BLOT_SANDBOX=1`)
 
 Required in production: without `BLOT_SANDBOX=1` in the proxy env file a unit
-has no browser and no egress proxy, so screenshots, remote images and domain
+has no browser and no way to fetch a user-supplied URL, so screenshots, remote images and domain
 checks fail closed, and verify-container refuses the deploy. With it a unit
-gets `--cgroupns=host`, `--security-opt seccomp=sandbox-seccomp.json`, binds of
-`/sys/fs/cgroup/blot-sandbox/<unit>` at `/sandbox-cgroup` and
-`/sys/fs/cgroup/blot-sandbox/<unit>-browser` at `/sandbox-browser-cgroup`,
-`--device /dev/net/tun` for pasta, `BLOT_SANDBOX_SOCKET`, and
-`BLOT_EGRESS_PROXY_URL` pointing at its proxy jail on the unit's own port. The
-deploy refuses, before touching anything, if the host has not made those
-directories (`config/host/host/setup.sh`, Amazon Linux 2023). See
+gets `--cgroup-parent system-blot-<unit>.slice`, `--cgroupns=host`,
+`--security-opt seccomp=sandbox-seccomp.json`, binds of
+`/sys/fs/cgroup/system.slice/system-blot.slice/system-blot-<unit>.slice/sandbox` at `/sandbox-cgroup` and
+`/sys/fs/cgroup/system.slice/system-blot.slice/system-blot-<unit>.slice/browser` at `/sandbox-browser-cgroup`,
+`--device /dev/net/tun` for pasta, and `BLOT_SANDBOX_SOCKET`. The slice holds
+the container and both jails under one memory limit, the unit's (#2795,
+`UNIT.memory` in `scripts/deploy/constants.js`). The deploy refuses, before
+touching anything, if the host has not made the slice and the two directories
+or the slice's limit is not `UNIT.memory` (`npm run deploy-host`,
+`config/host/scripts/unit-cgroups`, Amazon Linux 2023). See
 `app/sandbox/README.md`.
 
 `sandbox-seccomp.json` is moby's `profiles/seccomp/default.json` at v25.0.14

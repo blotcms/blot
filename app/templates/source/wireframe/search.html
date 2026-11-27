@@ -1,27 +1,28 @@
 <!DOCTYPE html>
-<html>
+<html dir="auto">
   {{> head}}
   <body>
     {{> header}}
+    <main>
+      <h1>Search</h1>
 
-    <div class="container">
-    <br>
-    <form>
-      <input placeholder="Search for an entry..." value="{{#query}}{{query}}{{/query}}" name="q" id="search" type="text" /><input type="submit" value="Go"/>
-    </form>
-    <br>
+      <form role="search">
+        <label for="q">Search for</label>
+        <input type="search" id="q" name="q" value="{{query}}">
+        <button type="submit">Search</button>
+      </form>
 
-    {{#query}}
-      {{^entries}}
-      <p>Sorry, no results for “{{query}}”</p>
-      {{/entries}}
-    {{/query}}
-
-    {{#entries}}
-      <a href="{{{url}}}">{{title}}</a>{{#date}} {{date}}{{/date}}<br>
-    {{/entries}}
-    </div>
-
+      {{#query}}
+      {{#entries.length}}
+      <ul>
+        {{#entries}}{{> post}}{{/entries}}
+      </ul>
+      {{/entries.length}}
+      {{^entries.length}}
+      <p>Nothing matches “{{query}}”.</p>
+      {{/entries.length}}
+      {{/query}}
+    </main>
     {{> footer}}
   </body>
 </html>

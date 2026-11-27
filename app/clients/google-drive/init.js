@@ -6,6 +6,11 @@ const prefix = () => `${clfdate()} Google Drive client:`;
 const createDriveActivityClient = require("./serviceAccount/createDriveActivityClient");
 const refreshServiceAccounts = require("./serviceAccount/refreshServiceAccounts");
 const pollDriveActivity = require("./serviceAccount/pollDriveActivity");
+const readChanges = require("./serviceAccount/readChanges");
+const searchEdits = require("./serviceAccount/searchEdits");
+const pollRecentFolders = require("./serviceAccount/pollRecentFolders");
+const syncChanges = require("./serviceAccount/syncChanges");
+const createDriveClient = require("./serviceAccount/createDriveClient");
 const hotDocPoller = require("./serviceAccount/hotDocPoller");
 const { restartSetupProcesses } = require("./routes/setup");
 const scheduleValidation = require("./validate");
@@ -39,6 +44,44 @@ const startActivityPolling = () => {
   return leases;
 };
 
+// One process at a time reads each service account's changes.list, runs
+// its search for recent edits and lists its recently changed folders
+// (serviceAccount/readChanges.js, searchEdits.js and pollRecentFolders.js),
+// with takeover like the activity polling. Each syncs the
+// blogs a change belongs to (serviceAccount/syncChanges.js), beside the
+// changes.watch webhook, which is often seconds late (#2847).
+const startChangesReading = () => {
+  const leases = getServiceAccounts().flatMap(
+    ({ client_id: serviceAccountId }) => [
+      lock.lease("google-drive-changes:" + serviceAccountId, async (signal) => {
+        const drive = await createDriveClient(serviceAccountId);
+        console.log(prefix(), "Reading changes for", serviceAccountId);
+        await readChanges(serviceAccountId, drive, signal, {
+          onChanges: syncChanges,
+        });
+      }),
+      lock.lease("google-drive-search:" + serviceAccountId, async (signal) => {
+        const drive = await createDriveClient(serviceAccountId);
+        console.log(prefix(), "Searching for edits for", serviceAccountId);
+        await searchEdits(serviceAccountId, drive, signal, {
+          onChanges: syncChanges,
+        });
+      }),
+      lock.lease("google-drive-recent:" + serviceAccountId, async (signal) => {
+        const drive = await createDriveClient(serviceAccountId);
+        console.log(prefix(), "Listing recent folders for", serviceAccountId);
+        await pollRecentFolders(serviceAccountId, drive, signal, {
+          onChanged: syncChanges.syncDirectories,
+        });
+      }),
+    ]
+  );
+
+  drain.onStart(() => Promise.all(leases.map((lease) => lease.stop())));
+
+  return leases;
+};
+
 module.exports = async () => {
   if (getServiceAccounts().length === 0) {
     console.log(prefix(), "No service accounts found in the configuration.");
@@ -58,7 +101,8 @@ module.exports = async () => {
     .then((first) => first && refresh())
     .catch((err) => console.error(prefix(), "Startup refresh failed", err));
 
-  // Re-watch for new folders for sites in the middle of the setup process.
+  // Re-watch for new folders for sites in the middle of the setup process,
+  // and resume copies of site files that a restart interrupted.
   // Once per deploy across all processes.
   onceAtStartup("google-drive-restart-setup", () =>
     restartSetupProcesses()
@@ -69,6 +113,7 @@ module.exports = async () => {
   hotDocPoller.start();
   scheduleValidation();
   startActivityPolling();
+  startChangesReading();
 };
 
 module.exports.refresh = refresh;

@@ -4,12 +4,31 @@ var optimize = require("./optimize");
 var url = require("url");
 var isURL = require("helper/transformer/isURL");
 var { report } = require("build/flags");
-var assets = require("storage/assets");
-var config = require("config");
 
-// Images looked up at once for one entry. Each lookup is a sandbox job (a
-// fresh jail, ~70ms before any work), so two at a time overlap their start-up.
-var CONCURRENCY = 2;
+// Images looked up at once for one entry. A lookup whose result is cached
+// costs a few Redis reads, so several overlap. One that isn't runs a sandbox
+// job (a fresh jail, ~70ms before any work) through the broker, which runs
+// two image decodes a unit at once and refuses jobs once its queue is full,
+// so an entry still transforms only TRANSFORMS at a time.
+var CONCURRENCY = 8;
+var TRANSFORMS = 2;
+
+// Runs fn with at most `limit` calls of one limiter in flight
+function limiter(limit) {
+  var running = 0;
+  var waiting = [];
+
+  return async function (fn) {
+    if (running >= limit) await new Promise((resolve) => waiting.push(resolve));
+    running++;
+    try {
+      return await fn();
+    } finally {
+      running--;
+      if (waiting.length) waiting.shift()();
+    }
+  };
+}
 
 // What went wrong fetching a remote image. The downloader's error for an
 // HTTP failure is just the status, e.g. "404".
@@ -20,32 +39,36 @@ function describeDownloadError(err) {
   return message || "could not be downloaded";
 }
 
-async function render($, { blogID }) {
-  var cache = new Transformer(blogID, "image-cache");
+// The src of the image that will be the post's first thumbnail candidate
+// (build/thumbnail/candidates.js: the first <img> with a src, unless a video
+// embed comes first), or null if the thumbnail isn't taken from the post's
+// images. Only a guess: a wrong one costs thumbnails nobody uses, since they
+// are kept by the image's bytes, never a wrong thumbnail.
+function firstCandidateSrc($) {
+  var found = null;
 
-  // A cached result is found by the image's bytes, so it may be one built long
-  // ago, whose file has since gone from storage (removed, or never uploaded).
-  // If so, the image is made again rather than linked. The result holds the
-  // file's CDN URL, not its path, so the path is taken back out of it. A
-  // result which isn't one of ours counts as valid.
-  var urlPrefix = config.cdn.origin + "/" + blogID + "/";
+  $("img, .videoContainer iframe").each(function (i, el) {
+    if (found !== null) return false;
 
-  async function isValid(result) {
-    if (!result || typeof result.src !== "string") return true;
-    if (result.src.indexOf(urlPrefix) !== 0) return true;
-
-    var relativePath;
-
-    try {
-      relativePath = decodeURIComponent(result.src.slice(urlPrefix.length));
-    } catch (e) {
-      return true;
+    if (el.name !== "img") {
+      found = "";
+      return false;
     }
 
-    if (!relativePath) return true;
+    var src = $(el).attr("src");
+    if (src) found = src;
+  });
 
-    return assets.exists(blogID, relativePath);
-  }
+  return found || null;
+}
+
+async function render($, { blogID, seedThumbnail }) {
+  var cache = new Transformer(blogID, "image-cache");
+
+  // A cached result is linked without asking the bucket whether its file is
+  // still there: every routine removal deletes the cache entry first, and
+  // the weekly sweep deletes any left pointing at a missing file and
+  // rebuilds the entries that link it (storage/sweep/generated.js)
 
   // First collect each <img> with a cacheable src. The same src is looked up
   // once however often it appears in the entry, and distinct srcs run
@@ -56,6 +79,7 @@ async function render($, { blogID }) {
   // does not de-duplicate in-flight lookups by design.
   var els = [];
   var srcs = [];
+  var thumbnailSrc = seedThumbnail ? firstCandidateSrc($) : null;
 
   $("img").each(function (i, el) {
     if (!el || el.name !== "img") return;
@@ -87,26 +111,25 @@ async function render($, { blogID }) {
 
   // Keyed by src, which is any string, so no inherited keys (e.g. "constructor")
   var infos = Object.create(null);
+  var transforming = limiter(TRANSFORMS);
 
   // Looks up one src. A failed lookup is logged and the image left alone.
   async function lookupSrc(src) {
     // Pass in the `pathname` component of the image src (no URL params or hash)
     // Also pass the original src so we can include the filename in the CDN URL
-    var transform = optimize(blogID, src);
+    var transform = optimize(blogID, src, {
+      thumbnail: src === thumbnailSrc,
+    });
 
     try {
-      infos[src] = await cache.lookup(
-        src,
-        async function () {
-          try {
-            return await transform.apply(this, arguments);
-          } catch (err) {
-            if (err && typeof err === "object") err.fromTransform = true;
-            throw err;
-          }
-        },
-        { isValid }
-      );
+      infos[src] = await cache.lookup(src, async function () {
+        try {
+          return await transforming(() => transform.apply(this, arguments));
+        } catch (err) {
+          if (err && typeof err === "object") err.fromTransform = true;
+          throw err;
+        }
+      });
     } catch (err) {
       debug(src, "Optimize failed with Error:", err);
 

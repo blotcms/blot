@@ -14,6 +14,7 @@ module.exports = async function dropView(templateID, viewName) {
   multi.del(key.view(templateID, viewName));
   multi.hDel(key.urlPatterns(templateID), viewName);
   multi.sRem(key.allViews(templateID), viewName);
+  multi.hDel(key.viewSources(templateID), viewName);
   multi.hSet(key.metadata(templateID), "cacheID", cacheID.create());
 
   if (view) {

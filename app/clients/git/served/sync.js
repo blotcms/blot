@@ -16,6 +16,7 @@
 const database = require("../database");
 const manifest = require("../store/manifest");
 const createReader = require("../store/reader");
+const { parseCommit } = require("../store/objects");
 const isRedisUnavailableError =
   require("helper/redisUnavailable").isRedisUnavailableError;
 const materialize = require("./materialize");
@@ -28,6 +29,21 @@ const MASTER = "refs/heads/master";
 const getApplied = (...args) => database.getApplied(...args);
 const setApplied = (...args) => database.setApplied(...args);
 
+// The commit's committer time in ms, so the sync can log how long its changes
+// took to go live. It counts from the commit, not the push, so it includes
+// any time the commit waited before it was pushed. Undefined if the commit
+// can't be read or parsed: the sync goes on without the measure.
+async function committerTime(reader, oid) {
+  try {
+    const found = await reader.read(oid);
+    const { committer } = parseCommit(found.data);
+    const seconds = Number(/ (\d+) [+-]\d{4}$/.exec(committer)[1]);
+    return Number.isFinite(seconds) ? seconds * 1000 : undefined;
+  } catch (err) {
+    return undefined;
+  }
+}
+
 async function hasCommit(reader, oid) {
   try {
     const found = await reader.read(oid);
@@ -38,7 +54,14 @@ async function hasCommit(reader, oid) {
   }
 }
 
-// folder is what the sync lock gives: { log, update(path) }
+// Stops a sync a disconnect has seized the lock from (sync.seize) before it
+// writes anything more: the disconnect removes the applied commit, and one
+// recorded after it would be where a later connection starts
+function stopIfCancelled(folder) {
+  if (folder.signal) folder.signal.throwIfAborted();
+}
+
+// folder is what the sync lock gives: { log, update(path), signal }
 async function sync(blogID, folder) {
   const store = context.storeFor(blogID);
   const cache = context.cache();
@@ -71,6 +94,7 @@ async function sync(blogID, folder) {
 
   if (!base) {
     base = EMPTY_TREE;
+    stopIfCancelled(folder);
     await setApplied(blogID, base);
   }
 
@@ -92,13 +116,17 @@ async function sync(blogID, folder) {
   folder.log(`Found ${paths.length} changes to git repo`);
   paths.forEach((path) => folder.log("/" + path, "changed"));
 
+  const committed = await committerTime(reader, commit);
+
   // In series until entry.set is atomic: changes to the blog's menu cannot be
   // made concurrently
   for (const path of paths) {
     let err = null;
 
+    stopIfCancelled(folder);
+
     try {
-      await folder.update(path);
+      await folder.update(path, { modified: committed, since: "git-commit" });
     } catch (e) {
       err = e;
     }
@@ -118,6 +146,7 @@ async function sync(blogID, folder) {
   }
 
   folder.log(`Processed ${paths.length} changes`);
+  stopIfCancelled(folder);
   await setApplied(blogID, commit);
 }
 

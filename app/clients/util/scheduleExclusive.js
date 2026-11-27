@@ -34,9 +34,10 @@ function exclusive(name, fn) {
 
 // A cron job run by one process per fire date (see helper/lock cron), which
 // stops being scheduled when this process starts draining. Returns the
-// node-schedule job.
+// node-schedule job. These jobs repeat every few minutes or hours, so a fire a
+// deploy killed is not re-run late (rerunIfKilled false); the next one covers it.
 function schedule(name, rule, fn, options) {
-  const job = lock.cron(name, rule, fn, options);
+  const job = lock.cron(name, rule, fn, { rerunIfKilled: false, ...options });
   drain.onStart(() => job.cancel());
   return job;
 }

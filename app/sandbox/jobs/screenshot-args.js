@@ -44,6 +44,12 @@ module.exports = [
   // A page runaway crashes its own tab. Site isolation gives every cross-site
   // iframe its own renderer, and with --no-sandbox it isolates nothing.
   "--js-flags=--max-old-space-size=128",
-  "--disable-features=IsolateOrigins,site-per-process",
+  // One flag: Chromium honours only the last --disable-features. The extras
+  // switch off features a one-shot screenshot never uses and that hold memory
+  // (a page's back/forward cache, casting, hints, translation); none changes
+  // what is rendered.
+  "--disable-features=IsolateOrigins,site-per-process,BackForwardCache,MediaRouter,OptimizationHints,Translate",
   "--disable-site-isolation-trials",
+  // With site isolation off, every page can share one renderer process
+  "--renderer-process-limit=1",
 ];

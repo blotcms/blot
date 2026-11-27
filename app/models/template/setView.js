@@ -17,10 +17,18 @@ var cacheID = require("./util/cacheID");
 var serializeRedisHashValues = require("models/redisHashSerializer");
 var clfdate = require("helper/clfdate");
 var applyUserRetrieveOptions = require("./util/applyUserRetrieveOptions");
+var isReadme = require("./util/isReadme");
 const MAX_VIEW_PAYLOAD_SIZE = 2 * 1024 * 1024;
 
-module.exports = async function setView(templateID, updates) {
+// options.source is the fingerprint of the folder file the view was read
+// from (readFromFolder), stored so a later build can skip the file while it is
+// unchanged. Any other save of a view clears it, so the next build reads the
+// file again. options.skipManifest leaves the template's CDN manifest for the
+// caller to update once it has saved every view (readFromFolder).
+module.exports = async function setView(templateID, updates, options = {}) {
   ensure(templateID, "string").and(updates, "object");
+
+  var source = options.source;
 
   if (updates.partials !== undefined && type(updates.partials) !== "object") {
     updates.partials = {};
@@ -43,6 +51,13 @@ module.exports = async function setView(templateID, updates) {
     throw new Error("View names cannot contain slashes");
   }
 
+  // A README is stored as written, with no URL, and is never parsed as
+  // Mustache (util/isReadme). Saving one also clears any URL it was given
+  // before READMEs stopped being pages.
+  var readme = isReadme(name);
+
+  if (readme) updates.url = [];
+
   const serializedUpdates = JSON.stringify(updates);
   const payloadSize = Buffer.byteLength(serializedUpdates);
 
@@ -50,7 +65,7 @@ module.exports = async function setView(templateID, updates) {
     throw new Error("View payload exceeds maximum size of 2 MB");
   }
 
-  if (updates.content !== undefined) {
+  if (updates.content !== undefined && !readme) {
     Mustache.render(updates.content, {});
   }
 
@@ -164,7 +179,7 @@ module.exports = async function setView(templateID, updates) {
     if (contentUnchanged && view.content) {
       // Content unchanged, so parse it to get the same parseResult.partials
       // that would be merged with updates.partials
-      var parseResultForComparison = parseTemplate(view.content);
+      var parseResultForComparison = readme ? {} : parseTemplate(view.content);
       var expectedPartials = {};
       // Start with updates.partials (normalized to object)
       if (type(updates.partials, "object")) {
@@ -207,6 +222,7 @@ module.exports = async function setView(templateID, updates) {
       "setView: short-circuit",
       name
     );
+    if (source) await client.hSet(key.viewSources(templateID), name, source);
     return;
   } else {
     console.log(
@@ -262,7 +278,9 @@ module.exports = async function setView(templateID, updates) {
   view.retrieve = view.retrieve || {};
   view.partials = view.partials || {};
 
-  var parseResult = parseTemplate(view.content);
+  var parseResult = readme
+    ? { partials: {}, retrieve: {} }
+    : parseTemplate(view.content);
 
   // TO DO REMOVE THIS
   if (type(view.partials, "array")) {
@@ -296,7 +314,8 @@ module.exports = async function setView(templateID, updates) {
 
   extend(view.partials).and(parseResult.partials);
 
-  await detectInfinitePartialDependency(templateID, view, parseResult);
+  if (!readme)
+    await detectInfinitePartialDependency(templateID, view, parseResult);
 
   // Parser output is the source of truth for retrieve locals.
   // Keep user-provided retrieve options (includeDraft, filters)
@@ -322,21 +341,25 @@ module.exports = async function setView(templateID, updates) {
   if (changes) {
     multi.hSet(key.metadata(templateID), "cacheID", cacheID.create());
   }
+  if (source) multi.hSet(key.viewSources(templateID), name, source);
+  else multi.hDel(key.viewSources(templateID), name);
 
   await multi.exec();
 
   if (changes) {
     await cacheID.bumpBlogIfInstalled(metadata.owner, templateID);
-    await updateCdnManifest(templateID);
+    if (!options.skipManifest) await updateCdnManifest(templateID);
   }
 
   // Clear this view from template metadata.errors when saving
   // via the dashboard so fixing a view clears its error state.
   if (metadata.errors && metadata.errors[name]) {
     delete metadata.errors[name];
-    return setMetadata(templateID, {
-      errors: metadata.errors,
-    });
+    await setMetadata(
+      templateID,
+      { errors: metadata.errors },
+      { skipManifest: options.skipManifest }
+    );
   }
 };
 
@@ -452,7 +475,9 @@ async function detectInfinitePartialDependency(templateID, view, parseResult) {
       }
     }
 
-    if (!fetchedView) {
+    // A README renders as an empty partial (getPartials), so it has no
+    // dependencies, whatever tags it mentions
+    if (!fetchedView || isReadme(fetchedView.name)) {
       cache[name] = { deps: [], inlinePartials: {}, cacheable: true };
       return cache[name];
     }

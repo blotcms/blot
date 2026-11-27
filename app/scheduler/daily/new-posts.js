@@ -5,12 +5,10 @@ const config = require("config");
 
 const ADD = "https://" + config.host + "/sites/discover/add/";
 
-// A one-time "Add to Discover" link for a post from a site that allows it,
-// unless the post is already on Discover. These links are only in the
-// maintainer's daily email.
+// A one-time "Add to Discover" link for each post. These links are only in
+// the maintainer's daily email. The page they open says when the post is
+// already on Discover or its site has the setting off, which adding turns on.
 async function discoverLink(blog, entry) {
-  if (blog.includeInDiscover !== true) return "";
-  if (await Discover.has(blog.id, entry.id)) return "";
   const token = await Discover.token.create(blog.id, entry.id);
   return ADD + token;
 }

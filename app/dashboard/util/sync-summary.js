@@ -2,7 +2,7 @@
 // (partials/global-sync.html, js/global-sync.js keeps it live). One of:
 //   synced    "Synced 3 min ago"
 //   syncing   "Syncing Imagination.md", or with progress "Rebuilding" and
-//             "3 of 120" ("Applying settings" for settings rebuilds)
+//             "3 of 120"
 //   error     a client health issue's label, or "Sync failed"
 //   off       "No folder connected"
 // js/global-sync.js formats live messages the same way; keep the two in step.
@@ -46,7 +46,7 @@ module.exports = function syncSummary(blog) {
 
   if (/^error/i.test(message)) return { state: "error", label: "Sync failed" };
 
-  // "(3/120) Rebuilding /Essays/x.md" or "(3/120) Applying settings": the
+  // "(3/120) Rebuilding /Essays/x.md": the
   // text, without a path, and the count apart, so the text can be cut short
   // and the count still shows
   const progress = message.match(PROGRESS);

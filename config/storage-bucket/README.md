@@ -23,6 +23,10 @@ directory under the app's tmp directory, `{tmp}/storage-assets-staging/
 {blogID}/...`; `assets.commit()` uploads it and deletes what it uploaded. The
 daily tmp prune removes staged files a week after they were last written.
 
+## Demo folder ZIPs: `folders/`
+
+The download ZIPs of the demo folders (#2940) are kept at `folders/<name>-<hash>.zip`, outside `blog_*`, so they aren't public in the bucket. `app/cdn` serves them at `cdn.blot.im/folders/<name>-<hash>.zip`, and Bunny pulls them from the origin like the documentation. The deploy uploads them (`scripts/deploy/demo-folders.js`, `app/templates/folders/publishZip.js`). It keeps each folder's previous ZIP for a rollback and deletes any older ones. The weekly Perma-Cache sweep deletes the CDN's copies of ZIPs that the image no longer links.
+
 ## Git repositories: `{blogID}/git/`, and what is not public under `blog_*`
 
 The git client's store (`app/clients/git/store`, [#2259](https://github.com/blotcms/blot/issues/2259))
@@ -141,8 +145,8 @@ of another key to look after. No rclone.conf is written: the remotes are set
 up in the environment (`bin/offsite-lib.sh`), and no key is printed.
 
 **The sync.** `blot-storage-offsite.timer` runs it daily at 02:10 UTC, as
-`ec2-user`, with low CPU and IO priority and `MemoryMax=2G` (each rclone
-with `GOMEMLIMIT=400MiB`; with `OOMPolicy=continue` a blog whose listing still
+`ec2-user`, with low CPU and IO priority and `MemoryMax=512M`, one blog at a time (each rclone
+with `GOMEMLIMIT=300MiB`; each run logs its memory peak; with `OOMPolicy=continue` a blog whose listing still
 runs out of memory fails on its own, and the next run retries it). The log is
 `~ec2-user/storage-offsite.log` (rotated monthly). Each blog's top-level
 directory is synced on its own, four at a time, each with `--fast-list`: a
@@ -547,9 +551,9 @@ Blot no longer owns the domain.
     allowlist mirrors `app/cdn/index.js` plus the top level of
     `app/blog/static`: `/`, `/health`, `/favicon.ico`, `/robots.txt`,
     `/fonts/`, `/icons/`, `/katex/`, `/plugins/`, `/syntax-highlighter/`,
-    `/html2canvas.min.js` (stale: #2661 removed it; drop it next time the rule is
-    edited), `/layout.css`, `/documentation/v-`, `/folder/v-`,
-    `/template/`, `/blog_`. **A new top-level path on the CDN must be added
+    `/folders/` (the demo folder ZIPs, #2940: it took the slot of the stale
+    `/html2canvas.min.js` on 23 Nov 2026), `/layout.css`, `/documentation/v-`,
+    `/folder/v-`, `/template/`, `/blog_`. **A new top-level path on the CDN must be added
     to this rule or Bunny will 403 it.** Bunny allows 5 patterns per
     condition, so the allowlist is split over several "match none"
     conditions; `*` matches across `/`, so every pattern names the host (a

@@ -85,9 +85,8 @@ async function main() {
     // caches to the storage bucket (its scratch files, and the staging area
     // for those uploads, go in the tmp mount run.js adds).
     writableData: true,
-    // Builds fetch remote images through blot-blue's proxy jail. A probe has
-    // no browser, so link screenshots fail (scripts/probe/run.js).
-    egressProxy: true,
+    // A probe has no sandbox, so a build that fetches a remote image or takes
+    // a link screenshot stops with SANDBOX_UNAVAILABLE (scripts/probe/run.js).
     nodeFlags: [
       "--expose-gc",
       ...(mode === "build"

@@ -1,0 +1,68 @@
+The _Wireframe_ template is a starting point for building your own. It shows everything Blot can put on a page as plain, semantic HTML, with almost no CSS and no JavaScript of its own, so you can see each feature working and style it however you like.
+
+## What it aims to be
+
+- **Plain HTML first.** Every page uses ordinary elements: `header`, `nav`, `main`, `article`, `footer`, `time`, `ul`. Nothing is laid out with CSS that HTML can already express.
+- **Almost no CSS.** `style.css` holds the font, the colours, the code-block theme, and the few rules that stop long words, wide images and tables from pushing the page sideways. Headings, lists and spacing are the browser's defaults.
+- **No JavaScript of its own.** `script.js` only outputs `{{{app_js}}}`, the scripts of the plugins the blog has turned on (analytics, KaTeX, image zoom and so on). Keep it, and keep `{{> pluginHTML}}` on the post page, which is where plugins such as comments add their HTML; without them those plugins silently do nothing.
+- **Few settings.** Colours, the font, the code-block theme and font, the profile photo, and how many posts a page lists. Add your own in `package.json` as your design needs them.
+- **Every feature on show.** Each feature below is wrapped in a section, so it disappears when there's nothing to show. Delete what you don't need rather than hunting for what's missing.
+
+## Files
+
+| File | What it is |
+| --- | --- |
+| `entries.html` | The home page: the latest posts, a page at a time (`/page/2`...) |
+| `entry.html` | One post or page |
+| `tagged.html` | Posts with a tag (`/tagged/<tag>`) |
+| `archives.html` | Every post by month, the post count and every tag (`/archives`) |
+| `search.html` | Search (`/search?q=...`) |
+| `error.html` | The page shown for a missing page or an error |
+| `_head.html` | `<head>`: title, description, favicon, feed, social preview tags |
+| `_header.html` | The site title, profile photo and menu |
+| `_footer.html` | Links to the archives, search and feed, and the plugins' `script.js` |
+| `_post.html` | One post in a list, shared by every list |
+| `_pages.html`, `_tag-pages.html` | The pager on the home page and on tag pages |
+| `style.css`, `script.js` | See above |
+| `feed.rss`, `sitemap.xml`, `robots.txt` | The RSS feed, the sitemap and robots.txt |
+| `package.json` | The settings (`locals`) and each view's URL and title |
+
+A file whose name starts with `_` is a partial: `{{> post}}` includes `_post.html`. This README is kept with the template's files but is never served as a page.
+
+## Features and where they are
+
+| Feature | Variables | Used in |
+| --- | --- | --- |
+| Post title, when the post has no heading of its own (photos, files) | `{{^titleTag}}`, `{{title}}` | `entry.html` |
+| The post, title heading included | `{{{html}}}` (`{{{body}}}` leaves the title out) | `entry.html` |
+| Published and updated dates | `{{date}}`, `{{#formatDate}}`, `{{#formatUpdated}}` | `entry.html`, `_post.html` |
+| Tags | `{{#tags}}`, `{{name}}`, `{{slug}}` | `entry.html`, `_post.html` |
+| Every tag | `{{#all_tags}}` | `archives.html` |
+| Camera details of a photo | `{{#exif}}`, `{{Model}}`, `{{LensModel}}`, `{{ISO}}`... | `entry.html` |
+| Pages that link to this one | `{{#backlinks}}` | `entry.html` |
+| Newer and older posts | `{{#adjacent}}`, `{{#next}}`, `{{#previous}}` | `entry.html` |
+| Thumbnails | `{{#thumbnail.small}}` (also `medium`, `large`) | `_post.html` |
+| Lists of posts | `{{#posts}}` (home and tag pages, where it follows the tag), `{{#entries}}` (search results), `{{#archives}}{{#months}}{{#entries}}` | each list view |
+| Pagination | `{{#posts.pagination}}`: `current`, `total`, `next`, `previous` | `entries.html`, `tagged.html` |
+| Post count | `{{total_posts}}` | `archives.html` |
+| Search | `{{query}}`, `{{#entries}}` | `search.html` |
+| Menu | `{{#menu}}`, `{{{url}}}`, `{{label}}` | `_header.html` |
+| Profile photo | `{{#profile_image.thumbnails.small}}` | `_header.html`, `_head.html` (favicon) |
+| Settings | `{{background_color}}`, `{{text_color}}`, `{{link_color}}`, `{{#font}}`, `{{#syntax_highlighter_font}}` | `style.css` |
+
+A post's own metadata (the `Key: value` lines at the top of its file) is in `{{entry.metadata.key}}`, for example `{{entry.metadata.author}}`.
+
+## Things to keep when you change it
+
+- Use `{{{url}}}`, with three braces, for links, and `{{title}}`, with two, for text, so URLs aren't escaped and titles are.
+- The profile photo's thumbnails already have the shape chosen in the dashboard cut out. Don't round or clip them with CSS. Set `sizes` in `_header.html` to the width you draw the photo at, in pixels.
+- Don't use the profile photo for social previews (`og:image`): its thumbnails are transparent WebP.
+- Keep a `<nav>` around the pager only when there is another page. The views do this with `{{#next}}...{{/next}}{{^next}}{{#previous}}...{{/previous}}{{/next}}`.
+- A comment (`{{! ... }}`) ends at its first `}}`, so don't put a tag inside one: the rest of it shows on the page.
+- `{{#date}}` is empty on pages (as opposed to posts), so dates and newer/older links only appear on posts.
+
+## Checking your changes
+
+Try your template on posts that are hard to lay out: a very long title or unbroken word, a wide table, a tall and a very wide image, a post with no title, a site with a single post, and writing in a right-to-left language. Check each at phone width as well as on a desktop.
+
+Working on Blot itself? `npm run folder` builds a local test site for each of those cases (`torture`, `huge`, `tiny`, `empty`, `arabic`, `japanese`), shown with this template at `https://preview-of-wireframe-on-<site>.blot.localhost`. `app/templates/AGENTS.md` has the conventions shared by every bundled template.

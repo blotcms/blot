@@ -1,6 +1,7 @@
 const client = require("models/client");
 const { randomUUID } = require("crypto");
 const clfdate = require("helper/clfdate");
+const servesOnly = require("helper/servesOnly");
 
 // A per-blog mutex held in Redis so that it works across processes and hosts
 // without a shared disk. The value is a random token so that a holder whose
@@ -162,9 +163,36 @@ function key(blogID) {
   return "blog:" + blogID + ":folder-lock";
 }
 
+// Set by seize() (./seize.js) to the reason the blog's lock is wanted, e.g.
+// "disconnect", while it waits for the holder to stop. The holder's
+// heartbeat reads it and calls onCancel(reason), and nothing else may take
+// the lock while it is set.
+function cancelKey(blogID) {
+  return key(blogID) + ":cancel";
+}
+
+// Left by forceRelease() for a while after it takes a lock from a holder
+// that didn't stop in time. A holder which later finds its lock gone while
+// this or the cancel key is set was seized, not compromised.
+function seizedKey(blogID) {
+  return key(blogID) + ":seized";
+}
+
+const SEIZED_TTL_MS = 10 * 60 * 1000;
+
+function cancelledError(lockKey, reason) {
+  const err = new Error("Lock is wanted for " + reason + ": " + lockKey);
+  err.code = "ELOCKED";
+  err.reason = reason;
+  return err;
+}
+
 // Resolves to { release, token } or rejects with code ELOCKED once retries
 // are exhausted. onCompromised(err) fires at most once if the heartbeat finds
 // the lock is no longer ours (expired, or Redis unreachable for a full TTL).
+// onCancel(reason) fires at most once if the heartbeat finds seize() wants
+// the lock; the holder should then stop and release it. While seize() wants
+// it, the lock can't be taken, except by seize itself (ignoreCancel).
 async function lock(blogID, options = {}) {
   const {
     ttl = 10 * 1000,
@@ -172,9 +200,12 @@ async function lock(blogID, options = {}) {
     retries = 0,
     minTimeout = 750,
     onCompromised = () => {},
+    onCancel = () => {},
+    ignoreCancel = false,
   } = options;
 
   const lockKey = key(blogID);
+  const cancelLockKey = cancelKey(blogID);
   const token = randomUUID() + ":" + Date.now();
 
   setupProbe();
@@ -198,6 +229,7 @@ async function lock(blogID, options = {}) {
 
   let released = false;
   let compromised = false;
+  let cancelled = false;
   let lastExtended = Date.now();
   let lastTickAt = lastExtended;
   // At most one EXTEND is ever outstanding: a tick that finds the previous
@@ -261,6 +293,18 @@ async function lock(blogID, options = {}) {
       }
       if (ok) {
         lastExtended = attemptedAt;
+        if (!cancelled && !ignoreCancel) {
+          let reason = null;
+          try {
+            reason = await client.get(cancelLockKey);
+          } catch (e) {
+            // Read again on the next tick
+          }
+          if (reason && !released && !compromised) {
+            cancelled = true;
+            onCancel(reason);
+          }
+        }
         return;
       }
       err = new Error("Lock was lost: " + lockKey);
@@ -323,6 +367,33 @@ async function lock(blogID, options = {}) {
     throw drainError(lockKey);
   }
 
+  // seize() wants the lock and is waiting for it: give it straight back, so
+  // a new sync can't slip in between the old holder and seize
+  if (!ignoreCancel) {
+    let reason = null;
+    try {
+      reason = await client.get(cancelLockKey);
+    } catch (e) {
+      // Redis trouble: the heartbeat will read the key again
+    }
+    if (reason) {
+      await handle.release().catch(() => {});
+      throw cancelledError(lockKey, reason);
+    }
+  }
+
+  // node-a in a unit only serves (helper/servesOnly, #2990): whatever takes
+  // a folder lock there is a path that should have gone to node-b. Logged
+  // with its stack, so it can be found and moved; to be refused once none
+  // remain.
+  if (servesOnly())
+    console.error(
+      clfdate(),
+      "[LOCK] taken in a serving-only process",
+      blogID,
+      new Error("Folder lock taken here").stack
+    );
+
   held.add(handle);
   return handle;
 }
@@ -346,6 +417,32 @@ async function heldSince(blogID) {
   const holder = await client.get(key(blogID));
   const match = typeof holder === "string" && /^[^:]+:(\d{10,})$/.exec(holder);
   return match ? Number(match[1]) : null;
+}
+
+// Whether the lock's holder should consider itself seized rather than
+// compromised: seize() wants the lock, or took it by force a while ago.
+// Resolves to false on Redis trouble, so a real loss still counts as one.
+async function wasSeized(blogID) {
+  try {
+    const [reason, seized] = await client.mGet([
+      cancelKey(blogID),
+      seizedKey(blogID),
+    ]);
+    return Boolean(reason || seized);
+  } catch (e) {
+    return false;
+  }
+}
+
+// For seize(): marks the lock seized, then deletes it whoever holds it. The
+// holder's next heartbeat finds it gone and, seeing the marker, stops
+// quietly instead of crashing its process (see hold.js).
+async function forceRelease(blogID) {
+  await client
+    .multi()
+    .set(seizedKey(blogID), "1", { PX: SEIZED_TTL_MS })
+    .del(key(blogID))
+    .exec();
 }
 
 function heldCount() {
@@ -372,6 +469,10 @@ module.exports = {
   inspect,
   heldSince,
   key,
+  cancelKey,
+  seizedKey,
+  wasSeized,
+  forceRelease,
   heldCount,
   releaseAll,
   stopAcquiring,

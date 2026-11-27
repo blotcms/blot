@@ -25,6 +25,19 @@ module.exports = {
     return "template:" + name + ":all_views";
   },
 
+  // A HASH of view name to the fingerprint of the folder file the view was
+  // last read from (readFromFolder), so a build can skip files which haven't
+  // changed. Cleared for a view whenever it is saved or dropped otherwise.
+  viewSources: function viewSources(name) {
+    return "template:" + name + ":view_sources";
+  },
+
+  // Set while readFromFolder updates the template's CDN manifest, so a failed
+  // update is retried by the next build even if nothing else changed
+  manifestPending: function manifestPending(name) {
+    return "template:" + name + ":manifest_pending";
+  },
+
   blogTemplates: function blogTemplates(blogID) {
     return "template:owned_by:" + blogID;
   },
@@ -36,6 +49,13 @@ module.exports = {
 
   folderFresh: function folderFresh(blogID) {
     return "template:folder_fresh:" + blogID;
+  },
+
+  // Set by sync when a path in the blog's templates folder was updated, and
+  // cleared once buildFromFolder has read every template without a failure, so
+  // a failed read is retried by the next sync
+  needsBuild: function needsBuild(blogID) {
+    return "template:needs_build:" + blogID;
   },
 
   renderedOutput: function renderedOutput(hash) {

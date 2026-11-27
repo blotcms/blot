@@ -26,7 +26,7 @@ const buildJS = require("./js")({
   destination: DESTINATION_DIRECTORY,
 });
 
-const zip = require("templates/folders/zip");
+const zip = require("templates/demo/zip");
 const tools = require("./tools");
 const templates = require("./templates");
 const generateThumbnail = require("./generate-thumbnail");

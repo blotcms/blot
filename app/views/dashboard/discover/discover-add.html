@@ -14,11 +14,15 @@
 <p>This post is already on Discover. Adding it again replaces its photos and keeps its place.</p>
 {{/already}}
 
-<ul class="discover-preview">
-  {{#preview}}{{> discover-card}}{{/preview}}
-</ul>
+{{#settingOff}}
+<p class="error">
+  {{#turnedOff}}This site turned Discover off in its settings.{{/turnedOff}}
+  {{^turnedOff}}This site doesn't have Discover turned on yet.{{/turnedOff}}
+  Adding the post turns the site's Discover setting on.
+</p>
+{{/settingOff}}
 
-<form method="post" class="dashboard-form">
+<form method="post" class="dashboard-form" id="discover-add-form">
   <input type="hidden" name="_csrf" value="{{csrftoken}}" />
 
   {{#candidates.length}}
@@ -31,21 +35,33 @@
     </label>
     {{/candidates}}
   </div>
+
+  <label class="discover-show-text">
+    <input type="checkbox" name="showText" value="1" {{#showText}}checked{{/showText}} />
+    Show the post's text above the photos
+  </label>
   {{/candidates.length}}
 
   {{^candidates.length}}
   <p>This post has no photos, so it will be shown as a text card.</p>
   {{/candidates.length}}
 
-  {{#candidates.length}}
-  <label class="discover-show-text">
-    <input type="checkbox" name="showText" value="1" />
-    Show the post's text above the photos
-  </label>
-  {{/candidates.length}}
+  <section class="discover-preview-section" id="discover-preview-section" aria-live="polite">
+    <h2>Preview</h2>
+    {{#tooMany}}
+    <p class="error">Choose at most {{maxPhotos}} photos. The preview shows the first {{maxPhotos}}.</p>
+    {{/tooMany}}
+    <p class="discover-preview-note">The card as it will appear on <a href="/discover" target="_blank" rel="noopener">Discover</a>.</p>
+    <ul class="discover-grid discover-preview">
+      {{#preview}}{{> discover-card}}{{/preview}}
+    </ul>
+  </section>
 
   <div class="buttons">
     <button type="submit">Add to Discover</button>
+    {{#candidates.length}}
+    <button type="submit" class="discover-update-preview" formmethod="get" name="preview" value="1">Update preview</button>
+    {{/candidates.length}}
     <a href="/discover">Cancel</a>
   </div>
 </form>

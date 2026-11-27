@@ -134,15 +134,22 @@ function defaultScratchDir() {
 
 // Removes what a killed import, verify, rewrite or setup left in the scratch
 // directory (a deploy replacing a container mid-import), judged by age alone:
-// the directory is shared by processes which cannot see each other. Logs one
-// line, without paths. Never throws.
+// the directory is shared by processes which cannot see each other. prefixes
+// narrows it to some kinds (store/leftovers.js). Logs one line, without paths.
+// Never throws.
 async function scratch({
   scratchDir = defaultScratchDir(),
   minAge,
+  prefixes,
   now = Date.now(),
 } = {}) {
   try {
-    const result = await sweepScratch({ dir: scratchDir, minAge, now });
+    const result = await sweepScratch({
+      dir: scratchDir,
+      minAge,
+      prefixes,
+      now,
+    });
     log({
       op: "sweep",
       source: "scratch",

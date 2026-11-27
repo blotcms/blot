@@ -44,13 +44,10 @@ const reverse_proxies = process.env.BLOT_REVERSE_PROXY_URLS
 // than falling back to an unprotected fetch. The warning just flags that this
 // container was deployed without BLOT_SANDBOX=1 (proxy/deploy/common.sh), so
 // those features are broken until it is redeployed with it.
-if (
-  environment === "production" &&
-  !(process.env.BLOT_EGRESS_PROXY_URL && process.env.BLOT_SANDBOX_SOCKET)
-) {
+if (environment === "production" && !process.env.BLOT_SANDBOX_SOCKET) {
   console.warn(
-    "WARNING: this production container has no sandbox (BLOT_SANDBOX_SOCKET, " +
-      "BLOT_EGRESS_PROXY_URL). Bookmark-link screenshots, remote-image " +
+    "WARNING: this production container has no sandbox (BLOT_SANDBOX_SOCKET). " +
+      "Bookmark-link screenshots, remote-image " +
       "downloads and user-domain checks fail closed until it is redeployed " +
       "with BLOT_SANDBOX=1. See app/sandbox/README.md."
   );
@@ -75,6 +72,8 @@ module.exports = {
   // the worker child it forks. Otherwise map 'blot-container-<container-name>'
   // to 'container-name'; a forked worker child shares its parent's
   // CONTAINER_NAME, so gets a suffix.
+  // Which unit (blue or green) this process runs in, empty outside a unit
+  unit: BLOT_UNIT,
   container: BLOT_UNIT
     ? BLOT_UNIT + (BLOT_WORKER_CHILD ? "/node-b" : "/node-a")
     : (process.env.CONTAINER_NAME || "").split("-").slice(2).join("-") +
@@ -92,7 +91,10 @@ module.exports = {
     parseInt(process.env.BLOT_WORKER_MAX_OLD_SPACE_SIZE) || null,
 
   webhooks: {
-    client_max_body_size: 1e8, // 100MB
+    // The relay forwards Dropbox and Google Drive webhooks and OAuth redirects
+    // to the maintainer's development machine, all small, and each relayed
+    // body is held in memory (#2795)
+    client_max_body_size: 1e6, // 1MB
     // ensure the reverse proxy supports SSE
     // on this host otherwise we can't relay webhooks
     server_host: "webhooks." + BLOT_HOST,
@@ -204,12 +206,8 @@ module.exports = {
   // Untrusted, user-supplied URLs (remote images in posts, imports, domain
   // checks) are fetched in the sandbox's fetch and fetch-image jobs, behind the
   // jail's egress filter (app/sandbox/README.md). What is here is for the
-  // fail-closed checks and the proxy jail's health check.
+  // fail-closed checks.
   egress: {
-    // The forward proxy in the sandbox's proxy jail in each unit, e.g.
-    // http://127.0.0.1:18988, which replaced the airlock container (#2257).
-    // Nothing in the app fetches through it now; the alerts still watch it.
-    proxy: process.env.BLOT_EGRESS_PROXY_URL || null,
     // When true (production), a user-controlled fetch or screenshot that
     // can't run in the sandbox fails instead of falling back to a direct one
     // (helper/egress, sandbox/fetch, helper/transformer/download). Read this
@@ -311,10 +309,25 @@ module.exports = {
     // The budget of the host's cache, scratch space for pushes included,
     // across every process
     cache_bytes: 50 * 1024 * 1024 * 1024,
+    // The most bytes of pack one push may carry, the ceiling of the push
+    // limit: a push may also be at most half of cache_bytes
+    // (app/clients/git/served/receive.js). The proxy's body limit for git
+    // requests is this plus a margin (proxy/build/locals.js), so a push over
+    // it is refused by Blot, in words git shows, before nginx's bare 413.
+    max_push_bytes: 1900 * 1024 * 1024,
     // Besides its budget, the cache gives space back, and refuses new
     // entries and scratch, while the disk it is on has less free than this
     // (as folder_cache does)
     min_free_percent: 10,
+    // How long a socket to S3 may go with no bytes before the request fails
+    // (a TimeoutError, which the store retries where it retries a failed
+    // read and otherwise fails the operation with). A push holds the blog's
+    // ref lock and a sync holds its folder lock while they wait on S3, so a
+    // stalled connection must not hold them for the shared client's two
+    // minutes. It is idle time, not the length of a request: a clone's long
+    // ranged reads and a push's packs keep it from firing while bytes move.
+    // S3 answers a request in well under a second and streams steadily.
+    s3_socket_timeout_ms: 45 * 1000,
   },
 
   // The content cache of the S3 backend of storage/folder

@@ -1,0 +1,5 @@
+Blog removal: {{{summary}}}
+
+{{{details}}}
+
+A customer may be paying for a site that is gone, or a deleted site may still be in place. Check the app log for "Blog removal" and "Subscription decrease" around this time.

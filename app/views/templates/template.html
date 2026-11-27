@@ -11,10 +11,12 @@
     <section class="template-folder-wrapper">
         <pre class="folder folder-preview" title="{{name}}"><code>{{folder_preview}}</code></pre>
 
-        <a href="{{#cdn}}{{{zip}}}{{/cdn}}" target="_blank" class="template-button template-folder-download">
+        {{#zip}}
+        <a href="{{{zip}}}" target="_blank" class="template-button template-folder-download">
             <span class="icon-download"></span>&thinsp;
             Download folder
         </a>
+        {{/zip}}
     </section>
 </div>
 

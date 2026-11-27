@@ -55,20 +55,24 @@ function exiftool(input) {
   });
 }
 
-async function run(args, input) {
-  const fields = args && args.fields;
-  if (
-    !Array.isArray(fields) ||
-    !fields.length ||
-    fields.length > MAX_FIELDS ||
-    !fields.every((f) => typeof f === "string" && /^[A-Za-z0-9]{1,64}$/.test(f))
-  ) {
-    throw new Error("invalid fields");
-  }
+function validFields(fields) {
+  return (
+    Array.isArray(fields) &&
+    fields.length > 0 &&
+    fields.length <= MAX_FIELDS &&
+    fields.every((f) => typeof f === "string" && /^[A-Za-z0-9]{1,64}$/.test(f))
+  );
+}
+
+// The asked-for fields of the image's EXIF, or null if it has none. Throws if
+// the fields are not valid or exiftool fails. to-png uses it too, to read the
+// EXIF of an image it is converting from the same bytes.
+async function extract(fields, input) {
+  if (!validFields(fields)) throw new Error("invalid fields");
 
   const parsed = JSON.parse(await exiftool(input));
   const raw = Array.isArray(parsed) && parsed.length ? parsed[0] : null;
-  if (!raw || typeof raw !== "object") return { meta: null, outputs: [] };
+  if (!raw || typeof raw !== "object") return null;
 
   const meta = {};
   for (const field of fields) {
@@ -78,7 +82,11 @@ async function run(args, input) {
     else if (typeof value === "number" || typeof value === "boolean")
       meta[field] = value;
   }
-  return { meta, outputs: [] };
+  return meta;
 }
 
-module.exports = { run };
+async function run(args, input) {
+  return { meta: await extract(args && args.fields, input), outputs: [] };
+}
+
+module.exports = { run, extract, validFields };

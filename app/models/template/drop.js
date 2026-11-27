@@ -7,11 +7,24 @@ var cacheID = require("./util/cacheID");
 var generateCdnUrl = require("./util/generateCdnUrl");
 var purgeQueue = require("cdn/purgeQueue");
 
+// Deletes owner's template named templateName, found by the id makeID gives
+// that name. To delete a template you already have, use drop.byID with its id:
+// an older template's id need not be makeID of its slug.
 module.exports = async function drop(owner, templateName) {
-  var templateID = makeID(owner, templateName);
-  var multi = client.multi();
+  return dropByID(owner, makeID(owner, templateName));
+};
 
+module.exports.byID = dropByID;
+
+// Only owner's own templates: a SITE template (or another blog's) shares no
+// prefix with owner, so it can never be dropped on owner's behalf
+async function dropByID(owner, templateID) {
   ensure(owner, "string").and(templateID, "string");
+
+  if (templateID.indexOf(owner + ":") !== 0)
+    throw new Error("Template " + templateID + " is not owned by " + owner);
+
+  var multi = client.multi();
 
   var views, metadata;
 
@@ -68,6 +81,8 @@ module.exports = async function drop(owner, templateName) {
   multi.del(key.metadata(templateID));
   multi.del(key.urlPatterns(templateID));
   multi.del(key.allViews(templateID));
+  multi.del(key.viewSources(templateID));
+  multi.del(key.manifestPending(templateID));
 
   if (metadata && metadata.shareID) {
     multi.del(key.share(metadata.shareID));
@@ -88,4 +103,4 @@ module.exports = async function drop(owner, templateName) {
   await cacheID.bumpBlogIfInstalled(ownerID, templateID);
 
   return "Deleted " + templateID;
-};
+}

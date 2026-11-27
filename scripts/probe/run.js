@@ -29,7 +29,6 @@ const {
   ENV_FILE_ON_SERVER,
   DATA_DIRECTORY_ON_SERVER,
   DATA_DIRECTORY_ON_CONTAINER,
-  SANDBOX,
   SOCKET_DIRECTORY,
   TMP_DIRECTORY,
 } = require("../deploy/constants");
@@ -41,17 +40,6 @@ const REPO_ROOT = path.resolve(__dirname, "../..");
 // (ghcr.io/blotcms/blot:<sha>, the unit image).
 const UNIT_CONTAINER = "blot-blue";
 const UNIT_IMAGE = "ghcr.io/blotcms/blot";
-// With the egressProxy option the probe sends its fetches of user-supplied URLs
-// through that unit's proxy jail, which listens on the host's loopback only,
-// so the probe joins the host network. It has no browser: the sandbox's is the
-// unit's own, so a probe's screenshots fail closed.
-// A probe can run an image from before the variable was renamed (--release),
-// which reads BLOT_AIRLOCK_PROXY_URL, so it gets both.
-const EGRESS_PROXY_URL = `http://127.0.0.1:${SANDBOX.units.blue.proxyPort}`;
-const EGRESS_ENV = {
-  BLOT_EGRESS_PROXY_URL: EGRESS_PROXY_URL,
-  BLOT_AIRLOCK_PROXY_URL: EGRESS_PROXY_URL,
-};
 const APP_ROOT_IN_CONTAINER = "/usr/src/app";
 const REMOTE_ROOT = "/tmp/blot-probe";
 const OUT = "/out";
@@ -130,8 +118,6 @@ function parseMemoryMB(value) {
 //   heapProf      --heap-prof, written to /out
 //   nodeFlags     extra node flags, e.g. ["--expose-gc"]
 //   writableData  mount the data directory read-write (default read-only)
-//   egressProxy   run on the host network with blot-blue's proxy jail as the
-//                 egress proxy, as a unit has (no browser: see EGRESS_ENV)
 //   mounts        extra -v specs, e.g. ["/var/instance-ssd/logs:/logs:ro"]
 //   env           extra environment variables, { NAME: value }; these come
 //                 last, so they win over the ones set here
@@ -158,7 +144,6 @@ async function runProbe({
   heapProf = false,
   nodeFlags = [],
   writableData = false,
-  egressProxy = false,
   mounts = [],
   env = {},
   overlay = [],
@@ -265,7 +250,10 @@ async function runProbe({
     NODE_OPTIONS: "",
     // Where the app's tmp directory is (config.tmp_directory); mounted below.
     BLOT_TMP_DIRECTORY: TMP_DIRECTORY,
-    ...(egressProxy ? EGRESS_ENV : {}),
+    // A probe has no sandbox and no route for fetching a user-supplied URL, so
+    // the fetch, fetch-image and screenshot jobs stop with a clear error
+    // (app/sandbox/index.js) rather than fetching directly or hanging.
+    BLOT_SCRIPT_RUNNER: "1",
     ...env,
   };
 
@@ -273,7 +261,9 @@ async function runProbe({
     "docker create",
     `--name ${name}`,
     "--restart no",
-    ...(egressProxy ? ["--network host"] : []),
+    // The image's health check asks OpenResty, which a probe doesn't run, so
+    // the host's check_docker_health.sh would restart it every few minutes
+    "--no-healthcheck",
     `--env-file ${ENV_FILE_ON_SERVER}`,
     ...Object.entries(environment).map(
       ([key, value]) => `-e ${shellQuote(`${key}=${value}`)}`
@@ -313,7 +303,7 @@ async function runProbe({
   console.log(`\nImage ${image}${release ? await describePull(image) : ""}`);
   console.log(
     `Container ${name}: memory ${memory}, cpus ${cpus}, heap limit ${oldSpace}MB,` +
-      ` data ${writableData ? "READ-WRITE" : "read-only"}${egressProxy ? ", host network and the proxy jail" : ""}`
+      ` data ${writableData ? "READ-WRITE" : "read-only"}`
   );
   console.log(
     `Host: ${availableMB}MB memory available, ${freeMB}MB free for ${REMOTE_ROOT} (${fsType})`
@@ -377,7 +367,15 @@ async function runProbe({
         `Starting ${name}; the app takes a minute or so to load before the probe prints anything...`
       );
       await new Promise((resolve) => {
-        const child = spawn("ssh", ["blot", remoteCommand], {
+        // Keepalives, so a connection that stalls rather than drops still
+        // ends here within a minute and the probe is checked on below
+        const keepalive = [
+          "-o",
+          "ServerAliveInterval=15",
+          "-o",
+          "ServerAliveCountMax=4",
+        ];
+        const child = spawn("ssh", [...keepalive, "blot", remoteCommand], {
           stdio: ["ignore", "inherit", "inherit"],
         });
         child.on("exit", resolve);
@@ -388,9 +386,26 @@ async function runProbe({
       const running = await sshCommand(
         `docker inspect ${name} --format '{{.State.Running}}' 2>/dev/null || true`
       );
+      // Long-lived ssh sessions from some environments are cut after a few
+      // minutes, while short commands still work: so rather than stop the
+      // probe, check on it with short commands until it finishes by itself
+      // (it has its own memory limit and ends when its requests do). Ctrl-C
+      // still stops it.
       if (running === "true" && !stopping) {
-        console.log(`\nLost the connection to ${name} while it was running.`);
-        stop();
+        console.log(
+          `\nLost the connection to ${name} while it was running; checking on it every 15s until it exits (Ctrl-C stops it).`
+        );
+        while (!stopping) {
+          await new Promise((resolve) => setTimeout(resolve, 15000));
+          const still = await sshCommand(
+            `docker inspect ${name} --format '{{.State.Running}}' 2>/dev/null || true`
+          ).catch(() => "true");
+          if (still !== "true") break;
+          const last = await sshCommand(
+            `docker logs --tail 200 ${name} 2>&1 | grep 'inflight=' | tail -1 || true`
+          ).catch(() => "");
+          if (last) console.log(last);
+        }
       }
       await stopping;
       await sshCommand(`docker wait ${name} > /dev/null 2>&1 || true`);
@@ -504,4 +519,7 @@ module.exports = {
   WRAPPER_OPTIONS,
   fromWrapperOptions,
   OUT,
+  shellQuote,
+  chooseImage,
+  describePull,
 };

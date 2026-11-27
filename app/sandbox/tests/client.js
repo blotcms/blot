@@ -145,4 +145,28 @@ describe("sandbox client", function () {
       "SANDBOX_UNKNOWN_JOB"
     );
   });
+
+  describe("in the script runner", function () {
+    afterEach(function () {
+      delete process.env.BLOT_SCRIPT_RUNNER;
+    });
+
+    it("refuses the jobs that need the jail's network", async function () {
+      process.env.BLOT_SCRIPT_RUNNER = "1";
+      config.sandbox.socket = "";
+      for (const job of ["fetch", "fetch-image", "screenshot"]) {
+        expect(await code(sandbox.run(job, {}, Buffer.alloc(0)))).toBe(
+          "SANDBOX_UNAVAILABLE"
+        );
+      }
+    });
+
+    it("still runs the other jobs in-process", async function () {
+      process.env.BLOT_SCRIPT_RUNNER = "1";
+      config.sandbox.socket = "";
+      expect(
+        await code(sandbox.run("no-such-job", {}, Buffer.alloc(0)))
+      ).not.toBe("SANDBOX_UNAVAILABLE");
+    });
+  });
 });

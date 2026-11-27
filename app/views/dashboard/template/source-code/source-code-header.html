@@ -9,7 +9,9 @@
                 <a class="smallLink {{selected.output}}" href="{{{base}}}/source-code/{{view.name}}/output">Output</a>
                 <a class="smallLink {{selected.json}}" href="{{{base}}}/source-code/{{view.name}}/json">JSON</a>
                 {{/view.previewUrl}}
+                {{^view.isReadme}}
                 <a class="smallLink {{selected.config}}" href="{{{base}}}/source-code/{{view.name}}/configure">Config</a>
+                {{/view.isReadme}}
                 <a class="smallLink {{selected.rename}}" href="{{{base}}}/source-code/{{view.name}}/rename">Rename</a>
                 <a class="smallLink {{selected.fileDelete}}" href="{{{base}}}/source-code/{{view.name}}/delete">Delete</a>
                 {{/view.isPackageJSON}}

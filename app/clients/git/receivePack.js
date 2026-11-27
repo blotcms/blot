@@ -135,24 +135,11 @@ function capability(capabilities, name) {
   return false;
 }
 
-// The sizes git reads from config are written like 1900m
-function parseSize(value) {
-  var match = /^(\d+)([kmg]?)$/i.exec(String(value).trim());
-
-  if (!match) return 0;
-
-  return (
-    Number(match[1]) *
-    Math.pow(1024, " kmg".indexOf((match[2] || " ").toLowerCase()))
-  );
-}
-
 module.exports = {
   readPackets: readPackets,
   parseCommands: parseCommands,
   CAPABILITIES: CAPABILITIES,
   capability: capability,
-  parseSize: parseSize,
   noCache: noCache,
   pktLine: pktLine,
 };
